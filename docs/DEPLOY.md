@@ -42,7 +42,7 @@ Use this with **[GTM-READINESS.md](./GTM-READINESS.md)** (what "ready" means for
 2. Name it `tutoring-notes-audio`, choose **private** access, accept default region.
 3. After creation, click **Connect to Project** → select `tutoring-notes` → keep all three environment scopes (Development / Preview / Production) checked and the default `BLOB` prefix → click **Connect**.
 4. `BLOB_READ_WRITE_TOKEN` is now auto-injected into all three Vercel environments. No manual copy-paste needed for production.
-5. For local dev: run `npx vercel link` then `npx vercel env pull .env.local` from the `pipeline-projects/tutoring-notes` directory.
+5. For local dev: run `npx vercel link` then `npx vercel env pull .env.local` from this repository’s root (your `tutoring-notes` clone, e.g. `…/dev/agentic-projects/tutoring-notes`).
 
 **Cost:** One paying tutor at $20/mo covers ~100 audio sessions (Whisper) or ~6,500 text note generations. Per-request token limits in `src/lib/ai.ts` and `src/lib/transcribe.ts` are the primary safeguard; the monthly cap is the backstop.
 

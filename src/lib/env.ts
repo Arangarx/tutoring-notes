@@ -48,7 +48,8 @@ const EnvSchema = z.object({
    * slash. Optional in dev: when unset, the whiteboard runs in
    * tutor-solo mode (no live student join, recording still works).
    * Production must set this; the workspace UI reflects the missing
-   * URL with a copy hint pointing at `pipeline-projects/whiteboard-sync/README.md`.
+   * URL with a copy hint pointing at the `whiteboard-sync` repo README
+   * (`agentic-projects/whiteboard-sync/README.md` when checked out next to this app).
    */
   WHITEBOARD_SYNC_URL: z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),

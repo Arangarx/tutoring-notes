@@ -1,12 +1,15 @@
 # Whiteboard — phase 1 build status
 
-**Plan:** `~/.cursor/plans/whiteboard_-_match_wyzant_for_sarah_plus_our_wedge_*.plan.md`
-**Reliability bar:** [.cursor/rules/reliability-bar.mdc](../../../.cursor/rules/reliability-bar.mdc)
+**Plan (strategy):** `~/.cursor/plans/whiteboard_-_match_wyzant_for_sarah_plus_our_wedge_*.plan.md`  
+**Plan (engineering W-items + smoke folds):** [WHITEBOARD-IMPROVEMENT-PLAN.md](../../../agenticPipeline/.cursor/plans/WHITEBOARD-IMPROVEMENT-PLAN.md)
+**Reliability bar:** [reliability-bar.mdc](../../../agenticPipeline/.cursor/rules/reliability-bar.mdc)
 **Strategy in one line:** match Wyzant for Sarah's daily flow + add our AI-notes wedge.
 
 This doc is the canonical handoff between sessions. The Cursor plan can
 expire; this doc survives. Update it whenever you finish a sub-section or
 pause mid-flight. For **git root, branch, and parallel-chat process**, also read **`docs/AGENT-BOOTSTRAP.md`**.
+
+**Same-session twins (do not drift):** When smoke, Sarah quotes, or engineering folds change, update **this file** together with **`docs/BACKLOG.md`** (whiteboard rows), **`docs/whiteboard-smoke-log.md`**, and **`../../../agenticPipeline/.cursor/plans/WHITEBOARD-IMPROVEMENT-PLAN.md`** (§ *Smoke + Sarah → backlog folds*, W2 smoke note).
 
 ---
 
@@ -162,7 +165,7 @@ points below are gated as **Phase 1 blockers** unless explicitly tagged
 | 1.2 | Recorder hook + canonical event log + Excalidraw adapter | done | `useWhiteboardRecorder.ts`, `event-log.ts`, `excalidraw-adapter.ts`, `checkpoint-store.ts` + jsdom tests |
 | 1.3 | UI workspace (consent, recorder, banners, mic meter) | done | Consent modal (`ConsentModal.tsx`) + `createWhiteboardSession` action (consent + env-only guard + empty events.json placeholder); workspace page (`/admin/students/[id]/whiteboard/[sessionId]/workspace`) with lazy Excalidraw, recording indicator, live timer, mic meter, Copy student link button; `useWhiteboardRecorder` hook |
 | 1.4 | Storage and replay routes (private + share-token gated) | done | Generalized `/api/upload/blob` + `/api/whiteboard/[id]/checkpoint` done; `<WhiteboardReplay>` component (schema-version dispatch + audio-driven scene + color attribution + asset prefetch + scrollToContent); `/api/whiteboard/[id]/{events,snapshot}` (admin-gated proxy) + `/api/whiteboard/[id]/{public-events,public-snapshot}` (share-token gated proxy); `/admin/students/[id]/whiteboard/[sessionId]` review page; `/s/[token]/whiteboard/[sessionId]` share replay page; `wbsid=` logging on all routes |
-| 1.5 | Live sync host + WS client + join link | done | Sync host (Fly.io) artifacts in `pipeline-projects/whiteboard-sync/`; `sync-client.ts` (13 tests); `issueJoinToken` + `revokeJoinTokensForSession` actions (9 tests); student page `src/app/w/[joinToken]/page.tsx` validates token + extracts encryption key from URL fragment |
+| 1.5 | Live sync host + WS client + join link | done | Sync host (Fly.io) artifacts in `agentic-projects/whiteboard-sync/` (sibling repo); `sync-client.ts` (13 tests); `issueJoinToken` + `revokeJoinTokensForSession` actions (9 tests); student page `src/app/w/[joinToken]/page.tsx` validates token + extracts encryption key from URL fragment |
 | 1.6 | Session timer (Sarah's explicit ask) | done | `bothConnectedAt` stamped idempotently when student opens join link (`StudentWhiteboardPage`); `GET /api/whiteboard/[id]/timer-anchor` (admin-gated); workspace polls every 5 s until anchor set; timer label "(waiting for student)" until student joins |
 | 1.7 | PDF + image upload to canvas | done | `pdfjs-dist` worker copied to `public/pdfjs/` at install; `PdfImageUploadButton` + `insert-asset.ts` (image + tiled-PDF page inserts); 30 pp / 25 MB caps; iOS-Safari memory warning copy |
 | 1.8 | Math equation editor | done | `MathInsertButton` -> MathLive WYSIWYG -> `mathjax-full` lite-adaptor SVG -> Excalidraw image element with `customData.latex` preserved for the AI pipeline (`math-render.ts` + `insertMathSvgOnCanvas`) |
@@ -179,7 +182,7 @@ points below are gated as **Phase 1 blockers** unless explicitly tagged
 | # | Item | Status | Notes |
 |---|---|---|---|
 | C1 | `.cursor/rules/reliability-bar.mdc` | done | 5-axis adversarial review standard |
-| C2 | `pipeline-projects/tutoring-notes/AGENTS.md` pointer to C1 | done | |
+| C2 | `AGENTS.md` (this repo) pointer to C1 | done | |
 | C3 | Recorder + note flow audit (`docs/BACKLOG.md` "Reliability gaps") | done | 15 items, prioritized |
 
 ---
@@ -224,7 +227,7 @@ points below are gated as **Phase 1 blockers** unless explicitly tagged
 The sync host runs `excalidraw-room` (a tiny Express + socket.io
 relay) under our domain so Tutoring Notes doesn't depend on
 Excalidraw's public infrastructure. Deploy artifacts live in
-`pipeline-projects/whiteboard-sync/`.
+`agentic-projects/whiteboard-sync/` (sibling repo next to this app).
 
 ### Phase 1 platform: Fly.io (deferred from CF Workers)
 
@@ -263,7 +266,7 @@ prints the value after `fly certs create`). Same DNS zone as
 ### Deploy steps (one-shot)
 
 ```sh
-cd pipeline-projects/whiteboard-sync
+cd ../whiteboard-sync
 fly auth login
 fly launch --no-deploy --copy-config --name wb-mortensen
 fly certs create wb.mortensenapps.com

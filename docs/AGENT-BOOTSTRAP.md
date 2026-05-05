@@ -7,7 +7,7 @@
 ## 1) Repo and git (non-negotiable)
 
 - **App root (this is its own `git` repository):**  
-  `.../agenticPipeline/pipeline-projects/tutoring-notes`  
+  `.../dev/agentic-projects/tutoring-notes` (sibling folder to `agenticPipeline`, not inside it)  
   **Not** the monorepo root `agenticPipeline` (different remotes, different history).
 - **Default whiteboard / integration branch:** `feature/whiteboard-phase1`  
   **Before a large change:** `git pull origin feature/whiteboard-phase1` in **this** folder so parallel threads (e.g. another Cursor chat) do not clobber work.
@@ -16,13 +16,15 @@
 
 ---
 
-## 2) Sibling repo — `whiteboard-sync` (live relay; **separate git**)
+## 2) Sibling repo — `whiteboard-sync` (live relay; **separate git**, **not** the main product)
 
-Live whiteboard collaboration **does not** run on Vercel. The app’s `sync-client` talks to a long-running **Socket.IO** relay (upstream: `excalidraw-room`). That server is **this** repo — not `tutoring-notes`:
+**tutoring-notes** is the app you ship on Vercel (the **main** folder for day-to-day work). **`whiteboard-sync`** exists only because live collaboration needs a **long-running WebSocket server** (upstream `excalidraw-room`) that **does not** fit the Vercel/Next deployment model. A past agent split it into its own repo for **deploy isolation** (Dockerfile, Fly.io, CORS), not because it is a second user-facing product.
+
+Live whiteboard collaboration **does not** run on Vercel. The app’s `sync-client` talks to that relay. Details:
 
 | | |
 |--|--|
-| **Path (next to tutoring-notes)** | `.../agenticPipeline/pipeline-projects/whiteboard-sync` |
+| **Path (next to tutoring-notes)** | `.../dev/agentic-projects/whiteboard-sync` |
 | **Remote (typical)** | `https://github.com/Arangarx/whiteboard-sync.git` |
 | **Purpose** | Dockerfile + Fly.io deploy of pinned `excalidraw-room`; CORS, certs, `fly deploy` — see its **`README.md`**. |
 | **Connects to the app via** | **`WHITEBOARD_SYNC_URL`** in `tutoring-notes` (e.g. `wss://…`) — the Next app never embeds the relay; it only needs the public WebSocket base URL. |
@@ -36,9 +38,10 @@ Live whiteboard collaboration **does not** run on Vercel. The app’s `sync-clie
 
 ## 3) Authoritative in-repo references
 
+- **Engineering execution order (whiteboard + audio):** **`../../../agenticPipeline/.cursor/plans/WHITEBOARD-IMPROVEMENT-PLAN.md`** relative to this file (read **§ START HERE** first). Cursor **Build** todos: **`../../../agenticPipeline/.cursor/plans/whiteboard_improvement_execution.plan.md`**. Mirrors also under **`../../../agenticPipeline/docs/whiteboard-plan/`** — see that folder’s **README**.
 - **Backlog of record (open work, pilot notes, audit items):** `docs/BACKLOG.md`
 - **Whiteboard phase-1 handoff (guardrails, blockers, status narrative):** `docs/WHITEBOARD-STATUS.md`
-- **Reliability standard (5-axis):** `../../../.cursor/rules/reliability-bar.mdc` (from monorepo root) — apply when changing recorder, uploads, or whiteboard persistence.
+- **Reliability standard (5-axis):** **`../../../agenticPipeline/.cursor/rules/reliability-bar.mdc`** relative to this file — apply when changing recorder, uploads, or whiteboard persistence.
 
 ---
 

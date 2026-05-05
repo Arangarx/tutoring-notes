@@ -1,9 +1,10 @@
 # Tutoring notes — agent context
 
-You are working in the **tutoring-notes** app inside the agenticPipeline
-monorepo. This is the live commercial app Sarah (our pilot tutor) uses for
-real sessions. Reliability matters more than feature speed: every late bug
-we ship costs trust we can't easily rebuild.
+You are working in the **tutoring-notes** app: a **standalone `git` repo** that
+lives next to the **`agenticPipeline`** monorepo under a shared parent (typical
+layout: `…/dev/agentic-projects/tutoring-notes`). Same reliability expectations as
+before — this is the live commercial app Sarah (our pilot tutor) uses for real
+sessions.
 
 ## North star
 
@@ -11,13 +12,14 @@ we ship costs trust we can't easily rebuild.
 > but that won't last forever."*
 
 If a tutor would need to run a backup recorder alongside our app, the
-feature is not done. See [.cursor/rules/reliability-bar.mdc](../../.cursor/rules/reliability-bar.mdc)
+feature is not done. See [reliability-bar.mdc](../../agenticPipeline/.cursor/rules/reliability-bar.mdc)
 for the full reliability standard. **Every feature plan in this app must
 include an adversarial review against the 5 reliability axes, with
 BLOCKERs folded into Phase-1 acceptance — not deferred to follow-ups.**
 
 The whiteboard plan
-([../../docs/whiteboard-plan or ~/.cursor/plans/whiteboard_-_match_wyzant_for_sarah_plus_our_wedge_*.plan.md](../../docs/whiteboard-plan))
+([../../agenticPipeline/docs/whiteboard-plan](../../agenticPipeline/docs/whiteboard-plan)
+or `~/.cursor/plans/whiteboard_-_match_wyzant_for_sarah_plus_our_wedge_*.plan.md`)
 and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
 
 ## Key docs
