@@ -7,6 +7,8 @@ Not in priority order within sections — that comes when items move to a sprint
 
 ## Whiteboard — implementation / design queue
 
+**Roadmap (ordered waves, pilot vs maintenance vs Phase 2 gate):** see **`docs/WHITEBOARD-ROADMAP-NEXT.md`**. Execution YAML for Cursor Build: **`.cursor/plans/whiteboard_backlog_execution.plan.md`**.
+
 Action items not yet built; design where noted. (Live status: `docs/WHITEBOARD-STATUS.md`.) **If you add or change a row here,** update the same session: **`docs/whiteboard-smoke-log.md`**, **`WHITEBOARD-STATUS.md`**, and **`.cursor/plans/WHITEBOARD-IMPROVEMENT-PLAN.md`** (§ *Smoke + Sarah → backlog folds*).
 
 | Item | Type | Notes |

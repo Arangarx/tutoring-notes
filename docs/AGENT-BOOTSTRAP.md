@@ -38,7 +38,7 @@ Live whiteboard collaboration **does not** run on Vercel. The app’s `sync-clie
 
 ## 3) Authoritative in-repo references
 
-- **Engineering execution order (whiteboard + audio):** **`../../../agenticPipeline/.cursor/plans/WHITEBOARD-IMPROVEMENT-PLAN.md`** relative to this file (read **§ START HERE** first). Cursor **Build** todos: **`../../../agenticPipeline/.cursor/plans/whiteboard_improvement_execution.plan.md`**. Mirrors also under **`../../../agenticPipeline/docs/whiteboard-plan/`** — see that folder’s **README**.
+- **Engineering execution order (whiteboard + audio):** **`../.cursor/plans/WHITEBOARD-IMPROVEMENT-PLAN.md`** (W-items + smoke folds). Cursor **Build** YAML todos: **`../.cursor/plans/whiteboard_improvement_execution.plan.md`**. Historical Phase 1 narrative (mostly completed todos): `~/.cursor/plans/whiteboard_-_match_wyzant_for_sarah_plus_our_wedge_*.plan.md`.
 - **Backlog of record (open work, pilot notes, audit items):** `docs/BACKLOG.md`
 - **Whiteboard phase-1 handoff (guardrails, blockers, status narrative):** `docs/WHITEBOARD-STATUS.md`
 - **Reliability standard (5-axis):** **`../../../agenticPipeline/.cursor/rules/reliability-bar.mdc`** relative to this file — apply when changing recorder, uploads, or whiteboard persistence.

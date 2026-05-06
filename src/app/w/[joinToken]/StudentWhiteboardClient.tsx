@@ -202,6 +202,7 @@ export function StudentWhiteboardClient({
 
   const {
     onCanvasChange: studentSyncOnCanvas,
+    syncActivePageElements,
     snapToTutorView,
     getPageBroadcastExtras,
     pageList,
@@ -260,9 +261,12 @@ export function StudentWhiteboardClient({
             fileIdToAssetUrl: studentNativeImageFileIdToAssetUrlRef.current,
             inFlight: studentNativeImageUploadInFlightRef.current,
           });
-            if (patched) {
+          if (patched) {
             const live = excalidrawAPIRef.current;
             if (live) {
+              syncActivePageElements(
+                patched as ReadonlyArray<ExcalidrawLikeElement>
+              );
               live.updateScene({ elements: patched });
               syncClient?.broadcastScene(
                 patched as ReadonlyArray<ExcalidrawLikeElement>,
@@ -278,7 +282,7 @@ export function StudentWhiteboardClient({
         }
       })();
     },
-    [studentSyncOnCanvas, whiteboardSessionId, studentId, pathJoinToken, syncClient, getPageBroadcastExtras]
+    [studentSyncOnCanvas, syncActivePageElements, whiteboardSessionId, studentId, pathJoinToken, syncClient, getPageBroadcastExtras]
   );
 
   if (keyMissing) {

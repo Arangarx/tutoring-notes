@@ -811,6 +811,92 @@ export async function generateNotesFromWhiteboardSessionAction(
   });
 }
 
+export type RegisterWhiteboardSessionAudioSegmentResult =
+  | { ok: true; recordingId: string; orderIndex: number }
+  | { ok: false; error: string; debugId?: string };
+
+/**
+ * After `uploadAudioDirect` stores a segment in Blob, the workspace calls this
+ * to attach the row to the whiteboard session for transcription / replay.
+ *
+ * Trust: `assertOwnsWhiteboardSession`; blob URL must look like our Vercel
+ * Blob host (same defence as the regular session transcription path).
+ */
+export async function registerWhiteboardSessionAudioSegmentAction(
+  whiteboardSessionId: string,
+  segment: { blobUrl: string; mimeType: string; sizeBytes: number }
+): Promise<RegisterWhiteboardSessionAudioSegmentResult> {
+  const rid = createActionCorrelationId();
+  try {
+    const scope = await requireStudentScope();
+    if (scope.kind === "env") {
+      return {
+        ok: false,
+        error: "Audio features require a DB-backed tutor account.",
+        debugId: rid,
+      };
+    }
+
+    if (!segment.blobUrl.includes("blob.vercel-storage.com")) {
+      return { ok: false, error: "Invalid audio URL.", debugId: rid };
+    }
+
+    const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
+    if (session.endedAt) {
+      return {
+        ok: false,
+        error: "This whiteboard session has already ended.",
+        debugId: rid,
+      };
+    }
+
+    const last = await withDbRetry(
+      () =>
+        db.sessionRecording.findFirst({
+          where: { whiteboardSessionId },
+          orderBy: { orderIndex: "desc" },
+          select: { orderIndex: true },
+        }),
+      { label: "registerWbAudio.findLastOrder" }
+    );
+    const orderIndex = (last?.orderIndex ?? -1) + 1;
+
+    const row = await withDbRetry(
+      () =>
+        db.sessionRecording.create({
+          data: {
+            adminUserId: session.adminUserId,
+            studentId: session.studentId,
+            whiteboardSessionId,
+            blobUrl: segment.blobUrl,
+            mimeType: segment.mimeType.split(";")[0].trim(),
+            sizeBytes: segment.sizeBytes,
+            orderIndex,
+          },
+          select: { id: true },
+        }),
+      { label: "registerWbAudio.create" }
+    );
+
+    console.log(
+      `[registerWhiteboardSessionAudioSegment] rid=${rid} wbsid=${whiteboardSessionId} recordingId=${row.id} orderIndex=${orderIndex}`
+    );
+
+    return { ok: true, recordingId: row.id, orderIndex };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[registerWhiteboardSessionAudioSegment] rid=${rid} wbsid=${whiteboardSessionId} thrown:`,
+      msg
+    );
+    return {
+      ok: false,
+      error: `Could not save recording metadata: ${msg}`,
+      debugId: rid,
+    };
+  }
+}
+
 /**
  * Attach a whiteboard session to a session note (or detach by passing
  * null). Creates the note if `newNoteFromDate` is provided.

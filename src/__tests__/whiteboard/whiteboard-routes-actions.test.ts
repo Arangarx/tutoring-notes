@@ -2,8 +2,9 @@
  * @jest-environment node
  *
  * Unit tests for the whiteboard API routes (events, snapshot,
- * public-events, public-snapshot) and the two new server actions
- * (generateNotesFromWhiteboardSessionAction, attachWhiteboardToNoteAction).
+ * public-events, public-snapshot) and server actions
+ * (`generateNotesFromWhiteboardSessionAction`, `registerWhiteboardSessionAudioSegmentAction`,
+ * `attachWhiteboardToNoteAction`).
  *
  * All DB + network I/O is mocked so the tests run in any environment,
  * including CI without Postgres or Vercel Blob connectivity.
@@ -39,6 +40,7 @@ type DbMock = {
   };
   sessionRecording: {
     findMany: jest.Mock;
+    findFirst: jest.Mock;
     update: jest.Mock;
     create: jest.Mock;
   };
@@ -65,6 +67,7 @@ jest.mock("@/lib/db", () => {
     },
     sessionRecording: {
       findMany: jest.fn(),
+      findFirst: jest.fn(),
       update: jest.fn(),
       create: jest.fn(),
     },
@@ -141,6 +144,7 @@ jest.mock("@vercel/blob", () => ({ __esModule: true, put: jest.fn() }));
 import {
   generateNotesFromWhiteboardSessionAction,
   attachWhiteboardToNoteAction,
+  registerWhiteboardSessionAudioSegmentAction,
 } from "@/app/admin/students/[id]/whiteboard/actions";
 
 dbMock = (globalThis as unknown as DbMockSidechannel).__dbMock!;
@@ -179,6 +183,12 @@ const mockSession = {
   consentAcknowledged: true,
   eventsBlobUrl: "https://blob.vercel-storage.com/events.json",
   endedAt: new Date("2026-04-01T18:00:00Z"),
+};
+
+/** Live session row for actions that reject `endedAt`. */
+const mockLiveSession = {
+  ...mockSession,
+  endedAt: null,
 };
 
 beforeEach(() => {
@@ -303,6 +313,74 @@ describe("generateNotesFromWhiteboardSessionAction", () => {
       expect(result.warning).toMatch(/couldn't auto-organize/i);
       expect(result.warningKind).toBe("ai-fallback");
     }
+  });
+});
+
+describe("registerWhiteboardSessionAudioSegmentAction", () => {
+  it("returns ok:false when scope is env-only", async () => {
+    requireStudentScopeMock.mockResolvedValue({
+      kind: "env",
+      email: "tutor@example.com",
+    });
+    const result = await registerWhiteboardSessionAudioSegmentAction("ws-1", {
+      blobUrl: "https://blob.vercel-storage.com/x.webm",
+      mimeType: "audio/webm",
+      sizeBytes: 100,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/DB-backed tutor account/i);
+    }
+  });
+
+  it("returns ok:false for non-blob URLs", async () => {
+    const result = await registerWhiteboardSessionAudioSegmentAction("ws-1", {
+      blobUrl: "https://evil.example.com/a.webm",
+      mimeType: "audio/webm",
+      sizeBytes: 100,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/Invalid audio URL/i);
+  });
+
+  it("returns ok:false when session already ended", async () => {
+    assertOwnsWhiteboardSessionMock.mockResolvedValueOnce(mockSession);
+    const result = await registerWhiteboardSessionAudioSegmentAction("ws-1", {
+      blobUrl: "https://blob.vercel-storage.com/x.webm",
+      mimeType: "audio/webm",
+      sizeBytes: 100,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/already ended/i);
+    }
+  });
+
+  it("creates SessionRecording with next orderIndex on happy path", async () => {
+    assertOwnsWhiteboardSessionMock.mockResolvedValueOnce(mockLiveSession);
+    dbMock.sessionRecording.findFirst.mockResolvedValue({ orderIndex: 2 });
+    dbMock.sessionRecording.create.mockResolvedValue({ id: "rec-new" });
+
+    const result = await registerWhiteboardSessionAudioSegmentAction("ws-1", {
+      blobUrl: "https://blob.vercel-storage.com/seg.webm",
+      mimeType: "audio/webm; codecs=opus",
+      sizeBytes: 2048,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.recordingId).toBe("rec-new");
+      expect(result.orderIndex).toBe(3);
+    }
+    expect(dbMock.sessionRecording.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          whiteboardSessionId: "ws-1",
+          orderIndex: 3,
+          mimeType: "audio/webm",
+          sizeBytes: 2048,
+        }),
+      })
+    );
   });
 });
 

@@ -28,10 +28,10 @@
  *   - PDF/image upload toolbar (separate todo `phase1-pdf-upload`).
  *   - Math equation popover (`phase1-math-equations`).
  *   - Desmos embed (`phase1-graphing`).
- *   - Audio recorder mic meter — wired in via `useAudioRecorder` but
- *     the visual meter component re-uses the existing one from
- *     `RecordView`. For Phase 1 skeleton we use the simpler "elapsed
- *     seconds" display; the full mic meter UI lift is a follow-up.
+ *   - Audio capture for the whiteboard — `WhiteboardWorkspaceAudioBridge`
+ *     mounts `useAudioRecorder` headlessly and registers Blob segments with
+ *     this session. Toolbar is still Start/Pause only (meter / device picker
+ *     reuse from RecordView is a follow-up).
  *
  * Failure-mode contract: this component NEVER lets a hook callback
  * throw into the React tree. Every async boundary maps errors to
@@ -96,6 +96,10 @@ import {
   loadTutorSessionRecoveryDraft,
   saveSessionBoardDocument,
 } from "@/lib/whiteboard/session-scene-draft";
+import {
+  WhiteboardWorkspaceAudioBridge,
+  type WhiteboardWorkspaceAudioBridgeHandle,
+} from "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceAudioBridge";
 
 type Props = {
   whiteboardSessionId: string;
@@ -395,25 +399,16 @@ export function WhiteboardWorkspaceClient({
   // Recording lifecycle (audio + whiteboard composed)
   // ---------------------------------------------------------------
   //
-  // For the Phase 1 skeleton the workspace's "Start recording" button
-  // gates BOTH the audio recorder and the whiteboard recorder via a
-  // single `recordingActive` flag. This avoids two separate Start
-  // buttons that could drift out of sync (e.g., audio capturing but
-  // whiteboard event log empty). The audio recorder integration lift
-  // (full mic meter, gain slider, device picker) is deferred — for
-  // now we use a minimal "Start / Stop" pair and treat audio capture
-  // as a follow-up integration. The recorder hook is fully working;
-  // it just isn't visualized in the toolbar yet.
+  // The workspace "Start recording" / "Pause recording" buttons gate BOTH
+  // `WhiteboardWorkspaceAudioBridge` (real mic → Blob → SessionRecording rows)
+  // and `useWhiteboardRecorder` via the same `recordingActive` presence gate.
   //
-  // What's wired today:
-  //   - `recordingActive` → useWhiteboardRecorder gate ✔
-  //   - `getAudioMs`      → performance.now()-based surrogate ✔
-  //   - useAudioRecorder  → NOT mounted yet (separate integration)
-  //
-  // The whiteboard event log produced is fully valid; it just won't
-  // align to an audio file until we land the audio integration. That
-  // means replay shows strokes correctly (with the t timeline) but
-  // there's no audio to play alongside.
+  // What's wired:
+  //   - `recordingActive` → useWhiteboardRecorder + audio pause/resume ✔
+  //   - `getAudioMs`      → performance.now()-based surrogate (clock tracks
+  //                         the same pauses as strokes; optional refinement:
+  //                         read live elapsed from the audio hook).
+  //   - Mic meter / device UI → still deferred (headless bridge only).
 
   // `userWantsRecording` is the tutor's explicit intent (Start / Pause
   // button). The actual `recordingActive` we hand to the recorder hook
@@ -565,6 +560,39 @@ export function WhiteboardWorkspaceClient({
       };
     }, [getTutorDocumentPagesSnapshot]);
 
+  /** W6: persist immediately on tab hide / refresh — do not rely only on the 800ms debounced `onChange` draft save. */
+  const flushSessionBoardDocumentNow = useCallback(() => {
+    try {
+      const doc = buildBoardDocumentForCheckpoint();
+      if (doc) {
+        saveSessionBoardDocument(whiteboardSessionId, doc);
+      }
+    } catch {
+      // sessionStorage quota / private mode
+    }
+  }, [buildBoardDocumentForCheckpoint, whiteboardSessionId]);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState !== "hidden") return;
+      flushSessionBoardDocumentNow();
+    };
+    const onPageHide = () => {
+      flushSessionBoardDocumentNow();
+    };
+    const onBeforeUnload = () => {
+      flushSessionBoardDocumentNow();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+  }, [flushSessionBoardDocumentNow]);
+
   const getTutorLiveFollow = useCallback((): WhiteboardWireFollow => {
     const api = excalidrawAPIRef.current;
     if (!api) {
@@ -610,7 +638,8 @@ export function WhiteboardWorkspaceClient({
     includeLiveSyncBroadcast: !sync,
     getBoardDocumentForCheckpoint: buildBoardDocumentForCheckpoint,
   });
-  const { flushThrottledFrameNow } = recorder;
+  const { flushThrottledFrameNow, onCanvasChange: recorderOnCanvasChange } =
+    recorder;
   tutorResyncOnNewRemotePeerRef.current = async () => {
     flushThrottledFrameNow();
     flushDocumentBroadcastNow();
@@ -949,6 +978,9 @@ export function WhiteboardWorkspaceClient({
     "idle"
   );
   const [endingError, setEndingError] = useState<string | null>(null);
+  const audioBridgeRef = useRef<WhiteboardWorkspaceAudioBridgeHandle | null>(
+    null
+  );
 
   const handleEndSession = useCallback(async () => {
     setEndingState("ending");
@@ -957,6 +989,9 @@ export function WhiteboardWorkspaceClient({
       // Stop recording first so the buildFinalEventsJson call captures
       // the post-pause state including any in-flight diff frames.
       setUserWantsRecording(false);
+      // Let the audio bridge effect run stopAndUpload + Blob registration.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      await audioBridgeRef.current?.waitForPendingUploads();
       // Tiny tick to let the recorder's recordingActive effect run + flush.
       await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
@@ -1194,7 +1229,7 @@ export function WhiteboardWorkspaceClient({
       // structural fields we declared. We keep the parameter typed as
       // unknown[] so a future Excalidraw upgrade with a stricter type
       // doesn't break the call site.
-      recorder.onCanvasChange(elements as ReadonlyArray<ExcalidrawLikeElement>);
+      recorderOnCanvasChange(elements as ReadonlyArray<ExcalidrawLikeElement>);
       if (sync && syncUrl) {
         scheduleDocumentBroadcast();
       }
@@ -1223,8 +1258,19 @@ export function WhiteboardWorkspaceClient({
               inFlight: tutorNativeImageUploadInFlightRef.current,
             });
             if (patched && excalidrawAPIRef.current) {
+              // `getTutorDocumentPagesSnapshot` trusts `pageDataRef` over
+              // `getSceneElements()`. `onChange` may not run before the next
+              // flush, so sync the cache + recorder with the patched scene
+              // (customData.assetUrl) before broadcasting — fixes native
+              // drag/drop images missing URLs for the student + event log.
+              const curPage = activePageIdRef.current;
+              pageDataRef.current[curPage] =
+                patched as ReadonlyArray<ExcalidrawLikeElement>;
               excalidrawAPIRef.current.updateScene({ elements: patched });
-              // Push full v3 document as soon as `customData.assetUrl` exists.
+              recorderOnCanvasChange(
+                patched as ReadonlyArray<ExcalidrawLikeElement>
+              );
+              flushThrottledFrameNow();
               if (sync && syncUrl) {
                 flushDocumentBroadcastNow();
               }
@@ -1241,8 +1287,9 @@ export function WhiteboardWorkspaceClient({
     [
       buildBoardDocumentForCheckpoint,
       flushDocumentBroadcastNow,
+      flushThrottledFrameNow,
       onLocalElementSnapshot,
-      recorder,
+      recorderOnCanvasChange,
       scheduleDocumentBroadcast,
       studentId,
       sync,
@@ -1257,6 +1304,13 @@ export function WhiteboardWorkspaceClient({
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
+      <WhiteboardWorkspaceAudioBridge
+        ref={audioBridgeRef}
+        studentId={studentId}
+        whiteboardSessionId={whiteboardSessionId}
+        userWantsRecording={userWantsRecording}
+        recordingActive={recordingActive}
+      />
       {/* Board pages — own row so it isn’t buried in the recording/toolbar cluster */}
       <div
         className="card"

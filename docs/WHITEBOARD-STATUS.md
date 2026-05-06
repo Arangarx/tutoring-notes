@@ -1,7 +1,7 @@
 # Whiteboard — phase 1 build status
 
 **Plan (strategy):** `~/.cursor/plans/whiteboard_-_match_wyzant_for_sarah_plus_our_wedge_*.plan.md`  
-**Plan (engineering W-items + smoke folds):** [WHITEBOARD-IMPROVEMENT-PLAN.md](../../../agenticPipeline/.cursor/plans/WHITEBOARD-IMPROVEMENT-PLAN.md)
+**Plan (engineering W-items + smoke folds):** [.cursor/plans/WHITEBOARD-IMPROVEMENT-PLAN.md](../.cursor/plans/WHITEBOARD-IMPROVEMENT-PLAN.md) · **Cursor Build (YAML):** [.cursor/plans/whiteboard_improvement_execution.plan.md](../.cursor/plans/whiteboard_improvement_execution.plan.md)
 **Reliability bar:** [reliability-bar.mdc](../../../agenticPipeline/.cursor/rules/reliability-bar.mdc)
 **Strategy in one line:** match Wyzant for Sarah's daily flow + add our AI-notes wedge.
 
@@ -9,7 +9,7 @@ This doc is the canonical handoff between sessions. The Cursor plan can
 expire; this doc survives. Update it whenever you finish a sub-section or
 pause mid-flight. For **git root, branch, and parallel-chat process**, also read **`docs/AGENT-BOOTSTRAP.md`**.
 
-**Same-session twins (do not drift):** When smoke, Sarah quotes, or engineering folds change, update **this file** together with **`docs/BACKLOG.md`** (whiteboard rows), **`docs/whiteboard-smoke-log.md`**, and **`../../../agenticPipeline/.cursor/plans/WHITEBOARD-IMPROVEMENT-PLAN.md`** (§ *Smoke + Sarah → backlog folds*, W2 smoke note).
+**Same-session twins (do not drift):** When smoke, Sarah quotes, or engineering folds change, update **this file** together with **`docs/BACKLOG.md`** (whiteboard rows), **`docs/whiteboard-smoke-log.md`**, and **`.cursor/plans/WHITEBOARD-IMPROVEMENT-PLAN.md`** (§ *Smoke + Sarah → backlog folds*, W2 smoke note).
 
 ---
 
@@ -172,7 +172,7 @@ points below are gated as **Phase 1 blockers** unless explicitly tagged
 | 1.9 | Desmos graphing embed | done | `DesmosInsertButton` (blank-graph or saved-URL) -> `insertDesmosEmbedOnCanvas` -> Excalidraw `embeddable` element; `validateDesmosUrl` only accepts `*.desmos.com` over https; `validateExcalidrawEmbeddable` mirrors the allowlist. **Replay caveat:** see "Desmos replay caveat" section below |
 | 1.10 | AI integration — the wedge | done | `generateNotesFromWhiteboardSessionAction` (transcribes WB audio → `generateSessionNote`, reuses full transcription pipeline); `attachWhiteboardToNoteAction` (link existing / create-blank / detach); `WhiteboardNotesPanel` client component on admin review page; flows into existing `createNote` + student detail page for edit + save |
 | 1.11 | CSP updates | done | `next.config.ts` ships a full CSP: `frame-src 'self' https://www.desmos.com https://desmos.com`, `connect-src 'self' https: wss:` (covers `WHITEBOARD_SYNC_URL`), `img-src 'self' data: blob: https:`, `worker-src 'self' blob:` (pdfjs), `frame-ancestors 'none'` + `X-Frame-Options: DENY` |
-| 1.12 | Tests (unit + jsdom + Playwright) | partial | 376 Jest tests pass (10 new: `generateNotesFromWhiteboardSessionAction` + `attachWhiteboardToNoteAction` coverage); existing suites: checkpoint-store (jsdom), excalidraw-adapter, insert-asset (PDF+math+Desmos), joinToken, math-render, pdf-render, replay (schema dispatch + reconstructSceneAt), sync-client (13 tests). Playwright E2E not yet wired (tracked separately). |
+| 1.12 | Tests (unit + jsdom + Playwright) | partial | Jest whiteboard suites pass on CI. **Playwright:** `tests/smoke/whiteboard-workspace.spec.ts` (workspace mount + optional consent path); see **`docs/whiteboard-smoke-log.md`** § *Pending manual smoke*. |
 | 1.13 | Acceptance criteria | pending | See plan doc |
 
 ---
@@ -409,9 +409,13 @@ to know when to revisit.
 
 1. **Read this doc top-to-bottom.** Especially the Phase 1 sub-section
    status table to know where work stopped.
-2. **Read `~/.cursor/plans/whiteboard_-_match_wyzant_for_sarah_plus_our_wedge_*.plan.md`**
-   for the full breakdown.
-3. **Run the test suite** to confirm green baseline:
+2. **Read `.cursor/plans/whiteboard_improvement_execution.plan.md`** for
+   **Cursor Build** todos (W2/W6/playwright); **`~/.cursor/plans/whiteboard_-_match_wyzant_for_sarah_plus_our_wedge_*.plan.md`**
+   for the historical Phase 1 breakdown.
+3. **Remaining whiteboard work (ordered waves, pilot vs maintenance):** read
+   **`docs/WHITEBOARD-ROADMAP-NEXT.md`**; optional Cursor Build YAML in
+   **`.cursor/plans/whiteboard_backlog_execution.plan.md`**.
+4. **Run the test suite** to confirm green baseline:
 
    ```powershell
    npx jest
@@ -419,6 +423,6 @@ to know when to revisit.
 
    Current baseline (pre-whiteboard-Phase-1): **246 jest tests pass + 8
    pre-existing DB failures** (auth/email/etc; unrelated to whiteboard).
-4. **Pick up at the next pending sub-section** in the table above.
-5. **Update the table as you finish each sub-section** + add a one-line
+5. **Pick up at the next pending sub-section** in the table above.
+6. **Update the table as you finish each sub-section** + add a one-line
    note with the commit hash or PR link.

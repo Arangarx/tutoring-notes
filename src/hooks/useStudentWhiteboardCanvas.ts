@@ -401,6 +401,13 @@ export function useStudentWhiteboardCanvas(
     return off;
   }, [runV2Apply, runV3Apply, sync]);
 
+  const syncActivePageElements = useCallback(
+    (elements: ReadonlyArray<ExcalidrawLikeElement>) => {
+      pageDataRef.current[activePageIdRef.current] = elements;
+    },
+    []
+  );
+
   const onCanvasChange = useCallback(
     (
       elements: ReadonlyArray<unknown>,
@@ -428,6 +435,7 @@ export function useStudentWhiteboardCanvas(
 
   return {
     onCanvasChange,
+    syncActivePageElements,
     snapToTutorView,
     getPageBroadcastExtras,
     pageList,
