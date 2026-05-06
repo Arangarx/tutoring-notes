@@ -35,6 +35,9 @@ type Props = {
   joinToken: string;
   syncUrl: string;
   tutorName: string;
+  /** Server snapshot for the pill — mirrors tutor workspace hydration. */
+  initialActiveMs: number;
+  initialLastActiveAtIso: string | null;
 };
 
 function formatSessionDuration(ms: number): string {
@@ -64,6 +67,8 @@ export function StudentWhiteboardClient({
   joinToken: joinTokenFromServer,
   syncUrl,
   tutorName,
+  initialActiveMs,
+  initialLastActiveAtIso,
 }: Props) {
   const params = useParams<{ joinToken: string }>();
   const joinToken =
@@ -81,10 +86,18 @@ export function StudentWhiteboardClient({
   );
   const excalidrawAPIRef = useRef<ExcalidrawApiLike | null>(null);
   const [otherPeerCount, setOtherPeerCount] = useState(0);
-  const [serverActiveMs, setServerActiveMs] = useState(0);
+  const [relayShowsCollaborator, setRelayShowsCollaborator] =
+    useState(false);
+  const [serverActiveMs, setServerActiveMs] = useState(
+    Math.max(0, initialActiveMs)
+  );
   const [serverLastActiveAtMs, setServerLastActiveAtMs] = useState<
     number | null
-  >(null);
+  >(
+    initialLastActiveAtIso
+      ? new Date(initialLastActiveAtIso).getTime()
+      : null
+  );
   const [now, setNow] = useState(() => Date.now());
   const excalidrawTheme = useExcalidrawThemeFromSystem();
 
@@ -110,19 +123,26 @@ export function StudentWhiteboardClient({
     setSyncClient(client);
     setConnected(client.isConnected());
     const offConnect = client.onConnect(() => setConnected(true));
-    const offDisconnect = client.onDisconnect(() => setConnected(false));
+    const offDisconnect = client.onDisconnect(() => {
+      setConnected(false);
+      setRelayShowsCollaborator(false);
+    });
     const offPeers = client.onPeerCountChange((n) => setOtherPeerCount(n));
+    const offRemote = client.onRemoteScene(() => setRelayShowsCollaborator(true));
     return () => {
       offConnect();
       offDisconnect();
       offPeers();
+      offRemote();
       client.disconnect();
       setSyncClient(null);
       setConnected(false);
     };
   }, [encryptionKey, syncUrl, whiteboardSessionId]);
 
-  const bothPresent = connected && otherPeerCount >= 1;
+  /** Peer roster can lag relay broadcasts; tutor strokes still prove overlap. */
+  const bothPresentForTimer =
+    connected && (otherPeerCount >= 1 || relayShowsCollaborator);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -135,7 +155,7 @@ export function StudentWhiteboardClient({
       try {
         const res = await fetch(
           `/api/whiteboard/${encodeURIComponent(whiteboardSessionId)}/join-timer?token=${encodeURIComponent(pathJoinToken)}`,
-          { cache: "no-store" }
+          { cache: "no-store", credentials: "same-origin" }
         );
         if (!res.ok) return;
         const data = (await res.json()) as {
@@ -167,14 +187,14 @@ export function StudentWhiteboardClient({
         nowMs: now,
         serverActiveMs,
         serverLastActiveAtMs,
-        clientActiveNow: bothPresent,
+        clientActiveNow: bothPresentForTimer,
         staleThresholdMs: ACTIVE_PING_STALE_MS,
       }),
-    [now, serverActiveMs, serverLastActiveAtMs, bothPresent]
+    [now, serverActiveMs, serverLastActiveAtMs, bothPresentForTimer]
   );
 
   const showWaitingForOther =
-    serverActiveMs === 0 && !bothPresent && connected;
+    serverActiveMs === 0 && !bothPresentForTimer && connected;
 
   const [materialNotice, setMaterialNotice] = useState<
     "none" | "load" | "missing"

@@ -59,6 +59,8 @@ export default async function StudentWhiteboardPage({
           id: true,
           studentId: true,
           endedAt: true,
+          activeMs: true,
+          lastActiveAt: true,
           adminUser: {
             select: { displayName: true, email: true },
           },
@@ -120,6 +122,10 @@ export default async function StudentWhiteboardPage({
       joinToken={joinToken}
       syncUrl={env.WHITEBOARD_SYNC_URL}
       tutorName={tutorName}
+      initialActiveMs={tokenRow.whiteboardSession.activeMs ?? 0}
+      initialLastActiveAtIso={
+        tokenRow.whiteboardSession.lastActiveAt?.toISOString() ?? null
+      }
     />
   );
 }
