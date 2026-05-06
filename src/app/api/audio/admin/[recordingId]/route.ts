@@ -37,7 +37,13 @@ export async function GET(
     return NextResponse.json({ error: "Recording not found" }, { status: 404 });
   }
 
-  const { blobUrl, mimeType } = recording;
+  const { blobUrl, mimeType: rawMime } = recording;
+  const mimeBase =
+    rawMime.split(";")[0].trim().toLowerCase() || "audio/mpeg";
+  const contentType =
+    mimeBase.startsWith("audio/") && mimeBase.includes("/")
+      ? mimeBase
+      : "audio/mpeg";
   const token = process.env.BLOB_READ_WRITE_TOKEN ?? "";
 
   const blobRes = await fetch(blobUrl, {
@@ -51,7 +57,7 @@ export async function GET(
   return new Response(blobRes.body, {
     status: 200,
     headers: {
-      "Content-Type": mimeType || "audio/mpeg",
+      "Content-Type": contentType,
       "Cache-Control": "private, max-age=3600",
     },
   });

@@ -18,6 +18,7 @@
 
 These are **not** re-smoked in CI yet; run in a real browser when touching whiteboard reliability.
 
+**Solo rehearsal with live sync configured:** Set `NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT=1` in `.env.local`. Recording can start before anyone joins until the first peer has **ever** connected this session after that tutor opened the workspace — then Sarah’s disconnect pause rules apply again.
 | Track | What changed in code | What to verify manually |
 |-------|----------------------|-------------------------|
 | **W-audio** — workspace mic → Blob → DB | Tutor workspace mounts **`WhiteboardWorkspaceAudioBridge`**: `useAudioRecorder` uploads via **`uploadAudioDirect`**, then **`registerWhiteboardSessionAudioSegmentAction`** links each segment to **`whiteboardSessionId`**. Recording **pauses** when live sync is on and the student drops (**`MediaRecorder.pause`**); **resume** on reconnect. Manual **Pause** / **End session** flushes a final segment; end flow **awaits** pending register calls before building events JSON. Mic **meter / device picker** not in the toolbar yet (headless). | **Solo (no sync URL):** Start recording → speak → Pause → confirm **Generate notes from whiteboard** (or DB) sees ≥1 **`SessionRecording`** for this session. **With sync:** two clients → Start → both present → audio level/time advances → disconnect student → recording **pauses** (no endless capture) → reconnect → resumes. **End session** shortly after speaking → replay / notes path still has audio. |

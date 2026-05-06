@@ -153,7 +153,10 @@ export function StudentWhiteboardClient({
       }
     };
     void refresh();
-    const POLL_MS = 10_000;
+    // Poll often enough that the student's session pill advances smoothly
+    // between tutor heartbeats (~10 s); tutor UI ticks locally from server
+    // `lastActiveAt` but the student's server snapshot was only 10 s behind.
+    const POLL_MS = 3_500;
     const t = setInterval(() => void refresh(), POLL_MS);
     return () => clearInterval(t);
   }, [pathJoinToken, whiteboardSessionId]);

@@ -427,16 +427,6 @@ export function WhiteboardWorkspaceClient({
 
   const sync = syncReady ? syncClientRef.current : null;
 
-  // We need `bothPresent` to drive both the active-ping heartbeat AND
-  // the recording gate, but `bothPresent` itself depends on
-  // `recorder.syncConnected` (set by the hook). To break the cycle we
-  // compute `bothPresent` from a peerCount state + sync-client
-  // connection state below, then re-derive recording presence, then
-  // pass the gated `recordingActive` into the recorder. The recorder
-  // hook treats the resulting transitions as ordinary pause/resume —
-  // it already emits the right event-log markers (`pause`, `resume`,
-  // `sync-disconnect`, `sync-reconnect`) for replay attribution.
-
   // Peer count (= number of OTHER peers; >=1 means a student joined).
   const [peerCount, setPeerCount] = useState(0);
 
@@ -448,10 +438,7 @@ export function WhiteboardWorkspaceClient({
     return off;
   }, [sync]);
 
-  // Tutor's own socket state. We poll the sync client directly here
-  // rather than via `recorder.syncConnected` because the recorder
-  // hook receives the gated `recordingActive` and we'd create a
-  // dependency cycle. The polling cost is trivial (1 boolean read /s).
+  // Tutor's own socket state (independent of gated recording).
   const [tutorSyncConnected, setTutorSyncConnected] = useState(false);
 
   useEffect(() => {
@@ -468,20 +455,36 @@ export function WhiteboardWorkspaceClient({
     };
   }, [sync]);
 
-  const bothPresent = tutorSyncConnected && peerCount >= 1;
+  // We compute `bothPartiesInRoom` from sync-client peer count + tutor socket
+  // state. That feeds billing pings, pills, and the session timer — not the same
+  // as the **recording gate** when `NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT` lets
+  // tutors rehearse with sync configured but nobody in the room yet (smoke /
+  // practice only; resets once anyone has joined this session).
+
+  const bothPartiesInRoom = tutorSyncConnected && peerCount >= 1;
 
   // Sticky latch: once both parties have ever met this session, we
   // know future "auto-pauses" are reconnect waits, not first-join
   // waits. Lets the banner say "we'll resume automatically" instead
   // of "we'll start when they join" after the first meet.
   const everBothPresentRef = useRef(false);
-  if (bothPresent && !everBothPresentRef.current) {
+  if (bothPartiesInRoom && !everBothPresentRef.current) {
     everBothPresentRef.current = true;
   }
 
+  const allowRecordSoloUntilStudentJoin =
+    typeof process !== "undefined" &&
+    process.env.NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT === "1";
+
+  const bothPresentForRecording =
+    bothPartiesInRoom ||
+    (allowRecordSoloUntilStudentJoin &&
+      tutorSyncConnected &&
+      !everBothPresentRef.current);
+
   const presence = deriveRecordingPresence({
     userWantsRecording,
-    bothPresent,
+    bothPresent: bothPresentForRecording,
     syncEnabled: !!syncUrl,
     everBothPresent: everBothPresentRef.current,
   });
@@ -786,9 +789,9 @@ export function WhiteboardWorkspaceClient({
     number | null
   >(initialLastActiveAtIso ? new Date(initialLastActiveAtIso).getTime() : null);
 
-  // `bothPresent` and `peerCount` are computed above so the recording
-  // gate (`deriveRecordingPresence`) can read them. They drive both
-  // the heartbeat below and the "Student connected" pill.
+  // `bothPartiesInRoom` (peer count + tutor socket) drives active-ping /
+  // billable anchors. Recording presence may additionally allow solo rehearsal
+  // via `NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT` — see `deriveRecordingPresence`.
 
   // POST a single ping. Returns the server's new state on success.
   const pingActive = useCallback(
@@ -822,18 +825,18 @@ export function WhiteboardWorkspaceClient({
     [whiteboardSessionId]
   );
 
-  // Fire a ping immediately whenever bothPresent flips, and run a
+  // Fire a ping immediately whenever overlap flips, and run a
   // ~10s heartbeat while it stays true.
   useEffect(() => {
     if (!syncUrl) return; // tutor-solo mode — no billable timer
-    void pingActive(bothPresent);
-    if (!bothPresent) return;
+    void pingActive(bothPartiesInRoom);
+    if (!bothPartiesInRoom) return;
     const HEARTBEAT_MS = 10_000;
     const id = setInterval(() => {
       void pingActive(true);
     }, HEARTBEAT_MS);
     return () => clearInterval(id);
-  }, [bothPresent, pingActive, syncUrl]);
+  }, [bothPartiesInRoom, pingActive, syncUrl]);
 
   // Best-effort "I'm leaving" beacon. sendBeacon is the only way to
   // get a reliable POST off during pagehide on most browsers; we fall
@@ -920,10 +923,10 @@ export function WhiteboardWorkspaceClient({
         nowMs: now,
         serverActiveMs,
         serverLastActiveAtMs,
-        clientActiveNow: bothPresent,
+        clientActiveNow: bothPartiesInRoom,
         staleThresholdMs: ACTIVE_PING_STALE_MS,
       }),
-    [now, serverActiveMs, serverLastActiveAtMs, bothPresent]
+    [now, serverActiveMs, serverLastActiveAtMs, bothPartiesInRoom]
   );
 
   // Whether to show the "(waiting for student)" qualifier. True until
@@ -931,7 +934,7 @@ export function WhiteboardWorkspaceClient({
   // both-present. (Once any time is on the clock, we just show the
   // number — pausing is implied by the digits not advancing.)
   const showWaitingForStudent =
-    !!syncUrl && serverActiveMs === 0 && !bothPresent;
+    !!syncUrl && serverActiveMs === 0 && !bothPartiesInRoom;
 
   // ---------------------------------------------------------------
   // Copy student link
@@ -1425,14 +1428,14 @@ export function WhiteboardWorkspaceClient({
           {syncUrl && (
             <StatusPill
               color={
-                bothPresent
+                bothPartiesInRoom
                   ? "green"
                   : tutorSyncConnected
                     ? "amber"
                     : "grey"
               }
               label={
-                bothPresent
+                bothPartiesInRoom
                   ? "Student connected"
                   : tutorSyncConnected
                     ? "Awaiting student"

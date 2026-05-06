@@ -29,10 +29,9 @@
  *   5. Mount an audio element. While `playing`, drive a rAF loop
  *      that maps `audio.currentTime * 1000` → reconstructed scene
  *      → Excalidraw `updateScene`.
- *   6. Per-`clientId` color attribution: each unique `clientId` in
- *      the event log gets a stable palette color; we override
- *      `strokeColor` on the way out so a parent watching the replay
- *      can tell tutor strokes from student strokes apart.
+ *   6. Replay uses **the same stroke/fill colours** persisted in the
+ *      canonical log (`strokeColor`) so tutors see parity with live
+ *      mode; `clientId` remains on elements for diagnostics only.
  *
  * What this component does NOT do:
  *
@@ -53,6 +52,7 @@ import {
   type WBEventLog,
 } from "@/lib/whiteboard/event-log";
 import { toExcalidraw } from "@/lib/whiteboard/excalidraw-adapter";
+import { useExcalidrawThemeFromSystem } from "@/hooks/useExcalidrawThemeFromSystem";
 
 /**
  * Excalidraw is heavy (>1 MB gzipped) and grabs a number of browser
@@ -92,16 +92,6 @@ type ReplayApi = {
   ) => void;
 };
 
-/** Stable palette for `clientId`-based stroke color attribution.
- * Tutor (the first observed clientId) always lands on `palette[0]`. */
-const CLIENT_COLOR_PALETTE: ReadonlyArray<string> = [
-  "#1d4ed8", // tutor — blue
-  "#dc2626", // student 1 — red
-  "#16a34a", // student 2 — green
-  "#9333ea", // future — purple
-  "#ea580c", // future — orange
-];
-
 export type WhiteboardReplayProps = {
   /** Public-or-signed URL to the events.json on Vercel Blob. */
   eventsBlobUrl: string;
@@ -134,6 +124,15 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   const [audioReady, setAudioReady] = useState(false);
   const [audioElapsedMs, setAudioElapsedMs] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const excalidrawTheme = useExcalidrawThemeFromSystem();
+  const viewBackground =
+    excalidrawTheme === "dark" ? "#121212" : "#ffffff";
+
+  const replayAudioMime = useMemo(
+    () => audioMimeType?.split(";")[0].trim().toLowerCase(),
+    [audioMimeType]
+  );
 
   // -----------------------------------------------------------------
   // 1. Fetch + parse + schema-version dispatch
@@ -228,26 +227,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   }, [loadState]);
 
   // -----------------------------------------------------------------
-  // 3. Build a stable client-id → color map. Order is "first observed
-  // wins palette[0]" so the tutor (who emits the snapshot at t=0)
-  // always gets the tutor color.
-  // -----------------------------------------------------------------
-
-  const clientColorMap = useMemo(() => {
-    if (loadState.kind !== "ready") return new Map<string, string>();
-    const map = new Map<string, string>();
-    for (const event of loadState.log.events) {
-      if (event.type === "snapshot") {
-        for (const el of event.elements) addClient(el, map);
-      } else if (event.type === "add") {
-        addClient(event.element, map);
-      }
-    }
-    return map;
-  }, [loadState]);
-
-  // -----------------------------------------------------------------
-  // 4. Apply scene at currentTime — both at first paint AND when the
+  // 3. Apply scene at currentTime — both at first paint AND when the
   // audio element seeks/plays.
   //
   // We compute a fresh canonical Map<id, WBElement> via
@@ -277,15 +257,14 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       const excalidrawElements: unknown[] = [];
       const newAssetUrls: string[] = [];
       for (const el of scene.values()) {
-        const colored = applyColorAttribution(el, clientColorMap);
-        const ex = toExcalidraw(colored);
+        const ex = toExcalidraw(el);
         excalidrawElements.push(ex);
         if (
-          colored.assetUrl &&
-          !registeredAssetUrlsRef.current.has(colored.assetUrl)
+          el.assetUrl &&
+          !registeredAssetUrlsRef.current.has(el.assetUrl)
         ) {
-          newAssetUrls.push(colored.assetUrl);
-          registeredAssetUrlsRef.current.add(colored.assetUrl);
+          newAssetUrls.push(el.assetUrl);
+          registeredAssetUrlsRef.current.add(el.assetUrl);
         }
       }
       api.updateScene({ elements: excalidrawElements });
@@ -296,7 +275,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
         void registerImageAssets(api, scene, newAssetUrls);
       }
     },
-    [api, clientColorMap, loadState]
+    [api, loadState]
   );
 
   // First paint after Excalidraw mount. With **audio**, start at t=0 — the
@@ -385,6 +364,21 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     };
   }, [audioBlobUrl, applySceneAt, loadState]);
 
+  /** Keep replay canvas chrome aligned with prefers-color-scheme. */
+  useEffect(() => {
+    if (!api) return;
+    try {
+      api.updateScene({
+        appState: {
+          theme: excalidrawTheme,
+          viewBackgroundColor: viewBackground,
+        },
+      });
+    } catch {
+      /* ignore */
+    }
+  }, [api, excalidrawTheme, viewBackground]);
+
   // -----------------------------------------------------------------
   // 6. Render
   // -----------------------------------------------------------------
@@ -458,6 +452,9 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
             controls
             preload="metadata"
             src={audioBlobUrl ?? undefined}
+            {...(replayAudioMime
+              ? { type: replayAudioMime }
+              : {})}
             data-testid="wb-replay-audio"
             style={{ width: "100%" }}
           />
@@ -470,9 +467,11 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       )}
 
       <div className="muted" style={{ fontSize: 11, textAlign: "right" }}>
-        t={formatDurationMs(audioElapsedMs)} ·{" "}
-        {clientColorMap.size > 0 && (
-          <ColorLegend clientColorMap={clientColorMap} />
+        Replay time · t={formatDurationMs(audioElapsedMs)}
+        {hasAudio && (
+          <span className="muted" style={{ marginLeft: 8 }}>
+            Session log span · {formatDurationMs(log.durationMs)}
+          </span>
         )}
       </div>
 
@@ -480,6 +479,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
         <Excalidraw
           viewModeEnabled
           gridModeEnabled={false}
+          theme={excalidrawTheme}
           // `name` is shown in the menu — keep it neutral so it
           // doesn't read like an editor.
           name="whiteboard-replay"
@@ -496,8 +496,8 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
             // updateScene lands.
             elements: [],
             appState: {
-              viewBackgroundColor: "#ffffff",
-              theme: "light",
+              viewBackgroundColor: viewBackground,
+              theme: excalidrawTheme,
               currentItemFontFamily: 1,
             },
           }}
@@ -658,42 +658,6 @@ function collectAssetUrls(log: WBEventLog): string[] {
   return Array.from(urls);
 }
 
-function addClient(el: WBElement, map: Map<string, string>) {
-  if (!el.clientId) return;
-  if (map.has(el.clientId)) return;
-  const idx = map.size % CLIENT_COLOR_PALETTE.length;
-  map.set(el.clientId, CLIENT_COLOR_PALETTE[idx]);
-}
-
-/**
- * Apply the per-clientId color override to the element on its way
- * out to Excalidraw. Returns a new element so we don't mutate the
- * canonical log in place (the same `WBElement` reference is reused
- * across reconstructions when nothing changes, so mutation would
- * compound across paints).
- */
-function applyColorAttribution(
-  el: WBElement,
-  map: Map<string, string>
-): WBElement {
-  if (!el.clientId) return el;
-  const color = map.get(el.clientId);
-  if (!color) return el;
-  // Only override stroke for stroke-bearing element types; leave
-  // images / desmos alone.
-  if (
-    el.type === "freehand" ||
-    el.type === "line" ||
-    el.type === "arrow" ||
-    el.type === "rectangle" ||
-    el.type === "ellipse" ||
-    el.type === "diamond"
-  ) {
-    return { ...el, strokeColor: color };
-  }
-  return el;
-}
-
 /**
  * Fetch + register image assets in Excalidraw's BinaryFiles map.
  * Best-effort — failures are logged but never thrown into the React
@@ -721,7 +685,9 @@ async function registerImageAssets(
   }> = [];
   for (const url of newAssetUrls) {
     try {
-      const res = await fetch(url, { credentials: "omit" });
+      const res = await fetch(url, {
+        credentials: url.startsWith("/") ? "include" : "omit",
+      });
       if (!res.ok) continue;
       const blob = await res.blob();
       const dataURL = await blobToDataUrl(blob);
@@ -802,36 +768,4 @@ function formatDurationMs(ms: number): string {
   return h > 0
     ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
     : `${m}:${String(s).padStart(2, "0")}`;
-}
-
-function ColorLegend({
-  clientColorMap,
-}: {
-  clientColorMap: Map<string, string>;
-}) {
-  const entries = Array.from(clientColorMap.entries());
-  if (entries.length === 0) return null;
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-      stroke colors:
-      {entries.map(([clientId, color], i) => (
-        <span
-          key={clientId}
-          style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
-        >
-          <span
-            aria-hidden="true"
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: "50%",
-              background: color,
-              display: "inline-block",
-            }}
-          />
-          {i === 0 ? "tutor" : `client ${i}`}
-        </span>
-      ))}
-    </span>
-  );
 }

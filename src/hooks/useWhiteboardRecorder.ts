@@ -541,13 +541,16 @@ export function useWhiteboardRecorder(
         );
       }
     }
+
+    const next = canonicalizeScene(frame);
+    // Keep prevElements aligned with what's on-screen even **before** recording
+    // starts. Previously we returned early while idle, so prev stayed [] forever
+    // and the off→on snapshot emitted `snapshot([])` despite strokes already on
+    // the board — replay played an empty timeline (Apr 2026 pilot repro).
     if (!recordingActiveRef.current) {
-      // No recording / no log events — the pre-recording canvas is
-      // captured on the first false→true snapshot when the tutor
-      // starts.
+      prevElementsRef.current = next;
       return;
     }
-    const next = canonicalizeScene(frame);
     const t = Math.max(0, Math.floor(getAudioMsRef.current()));
     const events = diffScenes(prevElementsRef.current, next, t);
     for (const ev of events) {

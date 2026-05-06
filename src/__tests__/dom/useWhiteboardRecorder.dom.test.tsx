@@ -89,6 +89,34 @@ afterEach(() => {
 });
 
 describe("useWhiteboardRecorder", () => {
+  test("recording start captures strokes already drawn before pressing Start", () => {
+    jest.useFakeTimers();
+    const bag: Bag = { now: 0 };
+    const { result, rerender } = renderHook(
+      (p: { active: boolean }) =>
+        useWhiteboardRecorder(defaultProps(bag, { recordingActive: p.active })),
+      { initialProps: { active: false } }
+    );
+
+    bag.now = 100;
+    act(() => {
+      result.current.onCanvasChange([makeRect("r1", 5, 5)]);
+    });
+    act(() => {
+      jest.advanceTimersByTime(120);
+    });
+
+    act(() => {
+      rerender({ active: true });
+    });
+
+    const log = JSON.parse(result.current.buildFinalEventsJson()) as WBEventLog;
+    expect(log.events[0]?.type).toBe("snapshot");
+    if (log.events[0]?.type === "snapshot") {
+      expect(log.events[0].elements.length).toBeGreaterThanOrEqual(1);
+    }
+  });
+
   test("onCanvasChange emits a snapshot then diff events while recording is active", async () => {
     jest.useFakeTimers();
     const bag: Bag = { now: 0 };
