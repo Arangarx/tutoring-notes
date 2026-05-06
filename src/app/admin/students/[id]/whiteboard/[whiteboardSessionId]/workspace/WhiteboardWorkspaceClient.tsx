@@ -485,6 +485,7 @@ export function WhiteboardWorkspaceClient({
   const presence = deriveRecordingPresence({
     userWantsRecording,
     bothPresent: bothPresentForRecording,
+    studentPeerPresent: bothPartiesInRoom,
     syncEnabled: !!syncUrl,
     everBothPresent: everBothPresentRef.current,
   });
@@ -1008,13 +1009,29 @@ export function WhiteboardWorkspaceClient({
         throw new Error(upload.error);
       }
       await endWhiteboardSession(whiteboardSessionId, upload.blobUrl);
-      // Belt-and-suspenders — `endWhiteboardSession` already revokes,
-      // but if it succeeded but the redirect failed we want tokens
-      // killed before the user can retry.
+      // Revoke is idempotent with the transaction above; don't block navigation.
       await revokeJoinTokensForSession(whiteboardSessionId).catch(() => undefined);
-      await recorder.markPersisted();
-      clearSessionSceneDraft(whiteboardSessionId);
-      router.push(`/admin/students/${studentId}/whiteboard/${whiteboardSessionId}`);
+
+      const reviewHref = `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}`;
+      router.replace(reviewHref);
+      router.refresh();
+
+      try {
+        await recorder.markPersisted();
+      } catch (persistErr) {
+        console.warn(
+          `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} markPersisted after end:`,
+          (persistErr as Error)?.message ?? persistErr
+        );
+      }
+      try {
+        clearSessionSceneDraft(whiteboardSessionId);
+      } catch (draftErr) {
+        console.warn(
+          `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} clearSceneDraft after end:`,
+          (draftErr as Error)?.message ?? draftErr
+        );
+      }
     } catch (err) {
       setEndingState("error");
       setEndingError((err as Error)?.message ?? "Could not end the session.");

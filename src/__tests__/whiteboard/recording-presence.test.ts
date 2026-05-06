@@ -89,12 +89,27 @@ describe("deriveRecordingPresence", () => {
         bothPresent: true,
         syncEnabled: true,
         everBothPresent: true,
+        studentPeerPresent: true,
       });
       expect(r.recordingActive).toBe(true);
       expect(r.autoPaused).toBe(false);
       expect(r.bannerMessage).toBe("");
       expect(r.pillLabel).toBe("Recording");
       expect(r.pillColor).toBe("red");
+    });
+
+    it("solo-rehearsal gate: hook active but no peer in roster → amber solo pill + banner", () => {
+      const r = deriveRecordingPresence({
+        userWantsRecording: true,
+        bothPresent: true,
+        studentPeerPresent: false,
+        syncEnabled: true,
+        everBothPresent: false,
+      });
+      expect(r.recordingActive).toBe(true);
+      expect(r.pillColor).toBe("amber");
+      expect(r.pillLabel).toBe("Solo rehearsal");
+      expect(r.bannerMessage).toMatch(/Solo rehearsal/i);
     });
 
     it("Start before student joined: amber 'Waiting for student' + 'will start' banner", () => {

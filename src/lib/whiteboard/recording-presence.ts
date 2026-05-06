@@ -81,12 +81,22 @@ export type RecordingPresenceContext = RecordingPresenceInputs & {
    * the copy back to the pre-start phrasing.
    */
   everBothPresent: boolean;
+  /**
+   * True when the sync roster shows another peer (the student). When
+   * `NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT` makes `bothPresent`
+   * true before anyone joins, this stays false so the recording pill
+   * doesn't read "Recording" in red.
+   *
+   * Defaults to `bothPresent` when omitted (legacy behavior).
+   */
+  studentPeerPresent?: boolean;
 };
 
 export function deriveRecordingPresence(
   ctx: RecordingPresenceContext
 ): RecordingPresenceState {
   const { userWantsRecording, bothPresent, syncEnabled, everBothPresent } = ctx;
+  const studentPeerPresent = ctx.studentPeerPresent ?? bothPresent;
 
   // Tutor-solo mode: no presence gating. `recordingActive` mirrors
   // `userWantsRecording` exactly. The banner never shows because
@@ -108,6 +118,17 @@ export function deriveRecordingPresence(
   const awaitingStart = autoPaused && !everBothPresent;
 
   if (recordingActive) {
+    if (!studentPeerPresent) {
+      return {
+        recordingActive: true,
+        autoPaused: false,
+        awaitingStart: false,
+        bannerMessage:
+          "Solo rehearsal: strokes are being logged while you wait. The session timer stays at 0 until your student joins.",
+        pillLabel: "Solo rehearsal",
+        pillColor: "amber",
+      };
+    }
     return {
       recordingActive: true,
       autoPaused: false,
