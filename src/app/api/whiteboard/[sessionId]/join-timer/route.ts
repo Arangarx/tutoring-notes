@@ -9,6 +9,13 @@ import { db, withDbRetry } from "@/lib/db";
  * Auth: the join token in the query string. Same gate as `GET /w/[token]`.
  * The logged-in timer-anchor route is tutor-only; this exists so the
  * student can display the same billable clock without a session cookie.
+ *
+ * **Session end / revoke:** when the tutor finishes the room, join tokens
+ * are revoked and/or `WhiteboardSession.endedAt` is set. Returning **404**
+ * made the student's poll silently ignore failures — tabs stayed “live”.
+ * Closed states now respond with **`200`** and `{ live: false, reason }`
+ * so the SPA can disconnect sync + show tutor-ended copy **without**
+ * weakening the gate for genuinely unknown tokens (still **404**).
  */
 export async function GET(
   req: Request,
@@ -45,14 +52,37 @@ export async function GET(
   if (tokenRow.whiteboardSessionId !== sessionId) {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
-  if (tokenRow.revokedAt) {
-    return NextResponse.json({ error: "Not found." }, { status: 404 });
+
+  const sessionEnded = Boolean(tokenRow.whiteboardSession?.endedAt);
+  const tokenExpired = tokenRow.expiresAt.getTime() <= now.getTime();
+  const tokenRevoked = Boolean(tokenRow.revokedAt);
+
+  if (tokenExpired) {
+    return NextResponse.json(
+      { live: false as const, reason: "token_expired" as const },
+      {
+        status: 200,
+        headers: { "Cache-Control": "no-store" },
+      }
+    );
   }
-  if (tokenRow.expiresAt.getTime() <= now.getTime()) {
-    return NextResponse.json({ error: "Not found." }, { status: 404 });
+  if (sessionEnded) {
+    return NextResponse.json(
+      { live: false as const, reason: "session_ended" as const },
+      {
+        status: 200,
+        headers: { "Cache-Control": "no-store" },
+      }
+    );
   }
-  if (tokenRow.whiteboardSession?.endedAt) {
-    return NextResponse.json({ error: "Not found." }, { status: 404 });
+  if (tokenRevoked) {
+    return NextResponse.json(
+      { live: false as const, reason: "token_revoked" as const },
+      {
+        status: 200,
+        headers: { "Cache-Control": "no-store" },
+      }
+    );
   }
 
   const row = await withDbRetry(
@@ -66,6 +96,7 @@ export async function GET(
 
   return NextResponse.json(
     {
+      live: true as const,
       activeMs: row?.activeMs ?? 0,
       lastActiveAt: row?.lastActiveAt?.toISOString() ?? null,
     },

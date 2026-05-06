@@ -124,6 +124,8 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   const [audioReady, setAudioReady] = useState(false);
   const [audioElapsedMs, setAudioElapsedMs] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  /** Excalidraw may clear scene on `updateScene({ appState })`; re-send last paint. */
+  const lastSceneElementsRef = useRef<readonly unknown[]>([]);
 
   const excalidrawTheme = useExcalidrawThemeFromSystem();
   const viewBackground =
@@ -140,6 +142,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
 
   useEffect(() => {
     let cancelled = false;
+    lastSceneElementsRef.current = [];
     setLoadState({ kind: "loading" });
     (async () => {
       try {
@@ -267,6 +270,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
           registeredAssetUrlsRef.current.add(el.assetUrl);
         }
       }
+      lastSceneElementsRef.current = excalidrawElements;
       api.updateScene({ elements: excalidrawElements });
       // Kick off image fetches in the background — Excalidraw will
       // call `getFiles()` or look in `BinaryFiles` on next render
@@ -369,6 +373,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     if (!api) return;
     try {
       api.updateScene({
+        elements: lastSceneElementsRef.current as unknown[],
         appState: {
           theme: excalidrawTheme,
           viewBackgroundColor: viewBackground,

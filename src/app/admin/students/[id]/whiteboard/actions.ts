@@ -416,6 +416,14 @@ export async function endWhiteboardSession(
     `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} endedAt=${updated.endedAt?.toISOString()} duration=${updated.durationSeconds}s`
   );
 
+  revalidatePath(`/admin/students/${session.studentId}`);
+  revalidatePath(
+    `/admin/students/${session.studentId}/whiteboard/${whiteboardSessionId}`
+  );
+  revalidatePath(
+    `/admin/students/${session.studentId}/whiteboard/${whiteboardSessionId}/workspace`
+  );
+
   return {
     endedAt: updated.endedAt!.toISOString(),
     durationSeconds: updated.durationSeconds ?? 0,

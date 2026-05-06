@@ -28,6 +28,40 @@ import { ensureNativeImageAssetUrlsForSync } from "@/lib/whiteboard/ensure-nativ
 import type { BinaryFileFromExcalidraw } from "@/lib/whiteboard/ensure-native-image-asset-urls-for-sync";
 import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter";
 
+type JoinUnavailableReason =
+  | "session_ended"
+  | "token_revoked"
+  | "token_expired"
+  | "link_invalid";
+
+function joinUnavailableCopy(
+  reason: JoinUnavailableReason,
+  tutorName: string
+): { title: string; body: string } {
+  switch (reason) {
+    case "session_ended":
+      return {
+        title: "Session has ended",
+        body: `Your tutor ended this whiteboard. You can close this tab. If you still need something from the lesson, reach out to ${tutorName}.`,
+      };
+    case "token_revoked":
+      return {
+        title: "This invite link was closed",
+        body: `Ask ${tutorName} for a new whiteboard link if you still need the room.`,
+      };
+    case "token_expired":
+      return {
+        title: "This invite link has expired",
+        body: `Ask ${tutorName} for a new link.`,
+      };
+    default:
+      return {
+        title: "This link isn’t usable anymore",
+        body: `The session may have ended, or the link was copied incorrectly. Ask ${tutorName} for a fresh link.`,
+      };
+  }
+}
+
 type Props = {
   whiteboardSessionId: string;
   /** For namespaced Vercel Blob paths + native image upload (paste/drop). */
@@ -75,6 +109,10 @@ export function StudentWhiteboardClient({
     typeof params?.joinToken === "string" ? params.joinToken : "";
   const pathJoinToken = joinToken || joinTokenFromServer;
 
+  const [joinUnavailableReason, setJoinUnavailableReason] = useState<
+    JoinUnavailableReason | null
+  >(null);
+
   const [encryptionKey, setEncryptionKey] = useState<string | null>(null);
   const [keyMissing, setKeyMissing] = useState(false);
   const [syncClient, setSyncClient] = useState<WhiteboardSyncClient | null>(
@@ -114,6 +152,7 @@ export function StudentWhiteboardClient({
 
   useEffect(() => {
     if (!encryptionKey) return;
+    if (joinUnavailableReason !== null) return;
     const client = createWhiteboardSyncClient({
       url: syncUrl,
       roomId: whiteboardSessionId,
@@ -138,7 +177,7 @@ export function StudentWhiteboardClient({
       setSyncClient(null);
       setConnected(false);
     };
-  }, [encryptionKey, syncUrl, whiteboardSessionId]);
+  }, [encryptionKey, syncUrl, whiteboardSessionId, joinUnavailableReason]);
 
   /** Peer roster can lag relay broadcasts; tutor strokes still prove overlap. */
   const bothPresentForTimer =
@@ -151,17 +190,42 @@ export function StudentWhiteboardClient({
 
   useEffect(() => {
     if (!pathJoinToken) return;
+    if (joinUnavailableReason !== null) return;
     const refresh = async () => {
       try {
         const res = await fetch(
           `/api/whiteboard/${encodeURIComponent(whiteboardSessionId)}/join-timer?token=${encodeURIComponent(pathJoinToken)}`,
           { cache: "no-store", credentials: "same-origin" }
         );
-        if (!res.ok) return;
+        if (!res.ok) {
+          if (res.status === 404) {
+            setJoinUnavailableReason((prev) => prev ?? "link_invalid");
+          }
+          return;
+        }
         const data = (await res.json()) as {
+          live?: boolean;
+          reason?: string;
           activeMs?: number;
           lastActiveAt?: string | null;
         };
+        if (data.live === false) {
+          const r = data.reason;
+          const mapped: JoinUnavailableReason =
+            r === "token_expired"
+              ? "token_expired"
+              : r === "token_revoked"
+                ? "token_revoked"
+                : r === "session_ended"
+                  ? "session_ended"
+                  : "link_invalid";
+          setJoinUnavailableReason(mapped);
+          return;
+        }
+        const treatAsLive =
+          data.live === true ||
+          (data.live === undefined && typeof data.activeMs === "number");
+        if (!treatAsLive) return;
         if (typeof data.activeMs === "number") setServerActiveMs(data.activeMs);
         if (data.lastActiveAt !== undefined) {
           setServerLastActiveAtMs(
@@ -179,7 +243,7 @@ export function StudentWhiteboardClient({
     const POLL_MS = 3_500;
     const t = setInterval(() => void refresh(), POLL_MS);
     return () => clearInterval(t);
-  }, [pathJoinToken, whiteboardSessionId]);
+  }, [pathJoinToken, whiteboardSessionId, joinUnavailableReason]);
 
   const liveTimerMs = useMemo(
     () =>
@@ -323,6 +387,21 @@ export function StudentWhiteboardClient({
             The part after <code>#</code> is required and never gets sent to
             the server, so it can&apos;t be recovered.
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (joinUnavailableReason) {
+    const { title: closedTitle, body: closedBody } = joinUnavailableCopy(
+      joinUnavailableReason,
+      tutorName
+    );
+    return (
+      <div className="container" style={{ maxWidth: 720 }}>
+        <div className="card" role="status">
+          <h1 style={{ marginTop: 0 }}>{closedTitle}</h1>
+          <p style={{ marginBottom: 0 }}>{closedBody}</p>
         </div>
       </div>
     );
