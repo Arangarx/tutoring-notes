@@ -21,6 +21,7 @@ Action items not yet built; design where noted. (Live status: `docs/WHITEBOARD-S
 | **Replay: time scrub / play without audio** | Build | `WhiteboardReplay` when `audioBlobUrl` is null: UI to scrub or play `t` off the event log (ms), not only final frame. |
 | **Event log + replay: multi-page** | Build | Per–board–page diffs in `WBEventLog` and replay, not only the tutor’s active tab at a given `t` (intersects PDF workbook and long sessions). |
 | **Student: follow vs independent view** | Product + verify | Modes: live follow, one-shot match, independent — confirm shipped behavior matches pilot copy; close gaps. |
+| **Local dev — student `/w/[token]#k=…` link parity** | DevEx + reliability | Smoke **2026-05:** “Copy student link” / join URL isn’t reliably correct for **local** runs: absolute host may assume **deployed origin** while **`WHITEBOARD_SYNC_URL`** points elsewhere; student tab + tutor tab + relay triangle breaks (blank board, stale room, CSP). Product fix: deterministic **same-origin relative** links for dev, **document `NEXT_PUBLIC_*` env overrides** where needed (sync host vs app host), smoke steps in **`docs/LOCAL-DEV.md`**, possibly a tiny **“Local join URL”** dev-only panel. Until then: tutor smoke on **hosted preview/prod**. |
 
 ## Pilot — Sarah (iPhone Safari, ~Apr 2026)
 
