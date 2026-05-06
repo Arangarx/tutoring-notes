@@ -75,7 +75,7 @@ const Excalidraw = dynamic(
  */
 type ReplayApi = {
   updateScene: (data: {
-    elements: ReadonlyArray<unknown>;
+    elements?: ReadonlyArray<unknown>;
     appState?: Record<string, unknown>;
   }) => void;
   addFiles: (
