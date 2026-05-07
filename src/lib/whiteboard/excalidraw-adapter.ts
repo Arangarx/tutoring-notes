@@ -221,20 +221,26 @@ function patchRestoredLinearElementPoints(raw: unknown): unknown {
   next.lastCommittedPoint = points.length > 0 ? [...points[points.length - 1]!] : null;
 
   if (type === "freedraw") {
-    let press = el.pressures;
+    const rawPressures = el.pressures;
     let needsSim = false;
-    if (!Array.isArray(press) || press.length !== points.length) {
+    let press: number[];
+    if (!Array.isArray(rawPressures) || rawPressures.length !== points.length) {
       needsSim = true;
       press = points.map(() => 1);
     } else {
+      const prev = rawPressures as unknown[];
       press = points.map((_pt, i) =>
-        finiteNum(press![i]) ? (press![i] as number) : 1
+        finiteNum(prev[i]) ? (prev[i] as number) : 1
       );
-      if (!(press as number[]).every((x, i) => x === (el.pressures as number[])?.[i])) {
+      if (
+        !press.every((x, i) =>
+          finiteNum(prev[i]) ? x === (prev[i] as number) : false
+        )
+      ) {
         needsSim = true;
       }
     }
-    next.pressures = press as number[];
+    next.pressures = press;
     if (needsSim || el.simulatePressure === true) {
       next.simulatePressure = true;
     }
