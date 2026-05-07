@@ -163,6 +163,35 @@ export function sanitizeRestoredExcalidrawElementsForReplay(
   return elements.map(patchRestoredLinearElementPoints);
 }
 
+function finiteNum(x: unknown): boolean {
+  return typeof x === "number" && Number.isFinite(x);
+}
+
+/** Elbow arrows with missing/invalid `fixedSegments` crash shape generation (`segment[0]`). */
+function arrowElbowDataLooksValid(raw: Record<string, unknown>): boolean {
+  if (raw.elbowed !== true) return true;
+  const segs = raw.fixedSegments;
+  if (!Array.isArray(segs) || segs.length === 0) return false;
+  for (const s of segs) {
+    if (!s || typeof s !== "object") return false;
+    const seg = s as Record<string, unknown>;
+    const st = seg.start;
+    const en = seg.end;
+    const si =
+      Array.isArray(st) &&
+      st.length >= 2 &&
+      finiteNum(st[0]) &&
+      finiteNum(st[1]);
+    const ei =
+      Array.isArray(en) &&
+      en.length >= 2 &&
+      finiteNum(en[0]) &&
+      finiteNum(en[1]);
+    if (!si || !ei) return false;
+  }
+  return true;
+}
+
 function patchRestoredLinearElementPoints(raw: unknown): unknown {
   if (!raw || typeof raw !== "object") return raw;
   const el = raw as Record<string, unknown>;
@@ -187,7 +216,38 @@ function patchRestoredLinearElementPoints(raw: unknown): unknown {
   };
 
   const points = linearPointsForExcalidrawFromWB(src);
-  return { ...el, points };
+  const next: Record<string, unknown> = { ...el, points };
+
+  next.lastCommittedPoint = points.length > 0 ? [...points[points.length - 1]!] : null;
+
+  if (type === "freedraw") {
+    let press = el.pressures;
+    let needsSim = false;
+    if (!Array.isArray(press) || press.length !== points.length) {
+      needsSim = true;
+      press = points.map(() => 1);
+    } else {
+      press = points.map((_pt, i) =>
+        finiteNum(press![i]) ? (press![i] as number) : 1
+      );
+      if (!(press as number[]).every((x, i) => x === (el.pressures as number[])?.[i])) {
+        needsSim = true;
+      }
+    }
+    next.pressures = press as number[];
+    if (needsSim || el.simulatePressure === true) {
+      next.simulatePressure = true;
+    }
+  }
+
+  if (type === "arrow" && !arrowElbowDataLooksValid(next)) {
+    next.elbowed = false;
+    delete next.fixedSegments;
+    delete next.startIsSpecial;
+    delete next.endIsSpecial;
+  }
+
+  return next;
 }
 
 /** Translate an Excalidraw element type string into our canonical type. */

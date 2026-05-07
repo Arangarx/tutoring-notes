@@ -374,6 +374,47 @@ describe("sanitizeRestoredExcalidrawElementsForReplay", () => {
     ]);
   });
 
+  test("drops invalid elbow-arrow metadata so geometry falls back to `points`", () => {
+    const out = sanitizeRestoredExcalidrawElementsForReplay([
+      {
+        id: "elbow-oops",
+        type: "arrow",
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+        elbowed: true,
+        fixedSegments: [],
+        points: [
+          [0, 0],
+          [10, 10],
+        ],
+      },
+    ]);
+    expect((out[0] as { elbowed?: boolean }).elbowed).toBe(false);
+    expect((out[0] as { fixedSegments?: unknown }).fixedSegments).toBeUndefined();
+  });
+
+  test("fixes freedraw pressure array length mismatched to repaired points", () => {
+    const out = sanitizeRestoredExcalidrawElementsForReplay([
+      {
+        id: "press",
+        type: "freedraw",
+        x: 0,
+        y: 0,
+        width: 2,
+        height: 3,
+        points: [[0, 0]],
+        pressures: [],
+      },
+    ]);
+    expect((out[0] as { pressures: unknown[] }).pressures?.length).toBe(2);
+    expect((out[0] as { simulatePressure: boolean }).simulatePressure).toBe(true);
+    expect((out[0] as { lastCommittedPoint: unknown }).lastCommittedPoint).toEqual(
+      [2, 0]
+    );
+  });
+
   test("leaves rectangles untouched", () => {
     const rect = {
       id: "r",
