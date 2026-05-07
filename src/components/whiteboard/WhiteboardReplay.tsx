@@ -47,6 +47,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   WB_EVENT_LOG_SCHEMA_VERSION,
+  maxEventTimestampMs,
   reconstructSceneAt,
   type WBElement,
   type WBEventLog,
@@ -126,6 +127,15 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   /** Excalidraw may clear scene on `updateScene({ appState })`; re-send last paint. */
   const lastSceneElementsRef = useRef<readonly unknown[]>([]);
+  /**
+   * Which `excalidrawAPI` instance has received the “initial” scene apply.
+   * Reset when the event log URL changes so a new recording repaints even if
+   * Excalidraw reuses the same API object reference.
+   */
+  const initialPaintApiRef = useRef<ReplayApi | null>(null);
+  /** Coalesce replay ticks; reset when switching recordings. */
+  const lastBuiltAtMsRef = useRef<number>(-1);
+  const registeredAssetUrlsRef = useRef<Set<string>>(new Set());
 
   const excalidrawTheme = useExcalidrawThemeFromSystem();
   const viewBackground =
@@ -143,6 +153,9 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   useEffect(() => {
     let cancelled = false;
     lastSceneElementsRef.current = [];
+    initialPaintApiRef.current = null;
+    registeredAssetUrlsRef.current.clear();
+    lastBuiltAtMsRef.current = -1;
     setLoadState({ kind: "loading" });
     (async () => {
       try {
@@ -245,9 +258,6 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   // the bounding box but no bitmap.)
   // -----------------------------------------------------------------
 
-  const lastBuiltAtMsRef = useRef<number>(-1);
-  const registeredAssetUrlsRef = useRef<Set<string>>(new Set());
-
   const applySceneAt = useCallback(
     (timeMs: number) => {
       if (loadState.kind !== "ready" || !api) return;
@@ -282,20 +292,23 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     [api, loadState]
   );
 
-  // First paint after Excalidraw mount. With **audio**, start at t=0 — the
-  // <audio> element will drive the clock on play. With **no audio**, the
-  // “final only” effect used to run before `excalidrawAPI` existed, so
-  // `applySceneAt(durationMs)` was a no-op; this effect then only applied
-  // t=0, which is often an empty pre-snapshot scene → blank canvas.
-  const didInitialPaintRef = useRef(false);
+  // First paint after Excalidraw mount **for this API instance**.
+  //
+  // Excalidraw may invoke `excalidrawAPI` more than once (internal remounts).
+  // A single `didInitialPaintRef=true` wrongly skipped subsequent instances,
+  // leaving a blank canvas despite a loaded log.
+  //
+  // With **audio**, start at t=0 — the `<audio>` element drives the clock.
+  // With **no audio**, show the **final** frame: use `max(durationMs,
+  // latest event t)` so a stale/wrong top-level duration never clips strokes.
   useEffect(() => {
-    if (didInitialPaintRef.current) return;
     if (loadState.kind !== "ready" || !api) return;
-    didInitialPaintRef.current = true;
+    if (initialPaintApiRef.current === api) return;
+    initialPaintApiRef.current = api;
     const noSessionAudio = !audioBlobUrl;
-    const initialT = noSessionAudio
-      ? loadState.log.durationMs
-      : 0;
+    const log = loadState.log;
+    const finalClockMs = Math.max(log.durationMs, maxEventTimestampMs(log));
+    const initialT = noSessionAudio ? finalClockMs : 0;
     lastBuiltAtMsRef.current = -1;
     applySceneAt(initialT);
     setAudioElapsedMs(initialT);
@@ -401,6 +414,11 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
 
   const log = loadState.log;
   const hasAudio = !!audioBlobUrl;
+  /** Wall clock for “end of log” — never below the last event `t`. */
+  const finalReplayClockMs = Math.max(
+    log.durationMs,
+    maxEventTimestampMs(log)
+  );
 
   // Empty-events case: the session row exists and the events.json is
   // valid (schemaVersion + startedAt + events array), but no events
@@ -435,7 +453,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
           {title}
           <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>
             schema v{log.schemaVersion} · {(log.events.length).toLocaleString()}{" "}
-            events · {formatDurationMs(log.durationMs)}
+            events · {formatDurationMs(finalReplayClockMs)}
           </span>
         </h2>
       )}
@@ -444,7 +462,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
         <p className="muted" style={{ margin: 0, fontSize: 13, maxWidth: 720 }}>
           No session audio is attached, so there is no play/seek control. The
           board below shows the <strong>final</strong> whiteboard at the end of
-          the log (t={formatDurationMs(log.durationMs)}). When we record
+          the log (t={formatDurationMs(finalReplayClockMs)}). When we record
           classroom audio, the bar above will provide play/pause and drive the
           scene in sync.
         </p>
@@ -475,7 +493,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
         Replay time · t={formatDurationMs(audioElapsedMs)}
         {hasAudio && (
           <span className="muted" style={{ marginLeft: 8 }}>
-            Session log span · {formatDurationMs(log.durationMs)}
+            Session log span · {formatDurationMs(finalReplayClockMs)}
           </span>
         )}
       </div>

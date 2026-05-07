@@ -12,6 +12,7 @@
 import { parseEventLogBySchema } from "@/components/whiteboard/WhiteboardReplay";
 import {
   WB_EVENT_LOG_SCHEMA_VERSION,
+  maxEventTimestampMs,
   reconstructSceneAt,
   type WBEventLog,
 } from "@/lib/whiteboard/event-log";
@@ -163,5 +164,21 @@ describe("reconstructSceneAt timeline behavior (replay player contract)", () => 
     const scene = reconstructSceneAt(log, Number.MAX_SAFE_INTEGER);
     expect(scene.size).toBe(1);
     expect(scene.get("a")!.x).toBe(10);
+  });
+
+  it("maxEventTimestampMs finds latest event clock", () => {
+    expect(maxEventTimestampMs(log)).toBe(4000);
+    expect(maxEventTimestampMs({ ...log, events: [] })).toBe(0);
+  });
+
+  it("stale durationMs below last event still reconstructs via max(..., maxEventTs)", () => {
+    const stale: WBEventLog = {
+      ...log,
+      durationMs: 500,
+    };
+    expect(reconstructSceneAt(stale, stale.durationMs).size).toBe(0);
+    const endT = Math.max(stale.durationMs, maxEventTimestampMs(stale));
+    expect(reconstructSceneAt(stale, endT).size).toBe(1);
+    expect(reconstructSceneAt(stale, endT).get("a")!.x).toBe(10);
   });
 });

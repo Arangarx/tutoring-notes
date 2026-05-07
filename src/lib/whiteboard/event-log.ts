@@ -197,6 +197,23 @@ export function appendEvent(log: WBEventLog, event: WBEvent): WBEventLog {
 }
 
 /**
+ * Latest `t` among all events — independent of {@link WBEventLog.durationMs}.
+ *
+ * Writers normally keep `durationMs` in sync via {@link appendEvent}, but blobs
+ * built by migrations, manual repair, or a race on session end can have
+ * `durationMs` trailing the final scene events. Replay uses `max(durationMs,
+ * maxEventTimestampMs)` for the no-audio “final frame” so we never clip the
+ * last strokes off.
+ */
+export function maxEventTimestampMs(log: WBEventLog): number {
+  let maxT = 0;
+  for (const e of log.events) {
+    if (e.t > maxT) maxT = e.t;
+  }
+  return maxT;
+}
+
+/**
  * Type guard: is this event one that affects the replay scene shape?
  * Used by the replay player to filter pure-debug markers
  * (`tab-hidden`, `sync-*`) when reconstructing the canvas at time T.
