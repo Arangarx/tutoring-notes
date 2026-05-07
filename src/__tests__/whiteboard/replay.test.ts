@@ -9,7 +9,7 @@
  * end-to-end.
  */
 
-import { parseEventLogBySchema } from "@/components/whiteboard/WhiteboardReplay";
+import { parseEventLogBySchema } from "@/lib/whiteboard/replay-parse";
 import {
   WB_EVENT_LOG_SCHEMA_VERSION,
   maxEventTimestampMs,

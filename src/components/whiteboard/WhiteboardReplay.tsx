@@ -27,8 +27,9 @@
  *   4. Lazy-load Excalidraw (`ssr: false`) in `viewModeEnabled` mode
  *      so the canvas is read-only with pan + pinch-zoom enabled.
  *   5. Mount an audio element. While `playing`, drive a rAF loop
- *      that maps `audio.currentTime * 1000` → reconstructed scene
- *      → Excalidraw `updateScene`.
+ *      that maps `audio.currentTime * 1000` → reconstructed scene →
+ *      `restoreElements` (parity with IndexedDB resume) →
+ *      Excalidraw `updateScene`.
  *   6. Replay uses **the same stroke/fill colours** persisted in the
  *      canonical log (`strokeColor`) so tutors see parity with live
  *      mode; `clientId` remains on elements for diagnostics only.
@@ -46,12 +47,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
-  WB_EVENT_LOG_SCHEMA_VERSION,
   maxEventTimestampMs,
   reconstructSceneAt,
   type WBElement,
   type WBEventLog,
 } from "@/lib/whiteboard/event-log";
+import { parseEventLogBySchema } from "@/lib/whiteboard/replay-parse";
 import { toExcalidraw } from "@/lib/whiteboard/excalidraw-adapter";
 import { useExcalidrawThemeFromSystem } from "@/hooks/useExcalidrawThemeFromSystem";
 
@@ -68,6 +69,14 @@ const Excalidraw = dynamic(
   },
   { ssr: false, loading: () => <PlayerPlaceholder label="Loading whiteboard…" /> }
 );
+
+/**
+ * Filled by a preload effect once we know we need replay + Excalidraw.
+ * Kept separate from lightweight `replay-parse.ts` so Jest never imports Excali ESM.
+ */
+let replayCachedRestoreElements:
+  | (typeof import("@excalidraw/excalidraw"))["restoreElements"]
+  | null = null;
 
 /**
  * Minimal structural type for the bits of `ExcalidrawImperativeAPI`
@@ -124,6 +133,13 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   const [api, setApi] = useState<ReplayApi | null>(null);
   const [audioReady, setAudioReady] = useState(false);
   const [audioElapsedMs, setAudioElapsedMs] = useState(0);
+  /**
+   * `restoreElements` lives in `@excalidraw/excalidraw` ESM. We preload once we
+   * know the replay surface needs canvas + parse is done — before mounting
+   * `<Excalidraw />`, so every `applySceneAt` runs synchronously.
+   */
+  const [replayExcaliRestoreReady, setReplayExcaliRestoreReady] =
+    useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   /** Excalidraw may clear scene on `updateScene({ appState })`; re-send last paint. */
   const lastSceneElementsRef = useRef<readonly unknown[]>([]);
@@ -133,8 +149,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
    * Excalidraw reuses the same API object reference.
    */
   const initialPaintApiRef = useRef<ReplayApi | null>(null);
-  /** Coalesce replay ticks; reset when switching recordings. */
-  const lastBuiltAtMsRef = useRef<number>(-1);
+  /** Image URLs already passed to Excalidraw `addFiles` for this loaded log. */
   const registeredAssetUrlsRef = useRef<Set<string>>(new Set());
 
   const excalidrawTheme = useExcalidrawThemeFromSystem();
@@ -155,7 +170,6 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     lastSceneElementsRef.current = [];
     initialPaintApiRef.current = null;
     registeredAssetUrlsRef.current.clear();
-    lastBuiltAtMsRef.current = -1;
     setLoadState({ kind: "loading" });
     (async () => {
       try {
@@ -242,6 +256,29 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     return () => cleanups.forEach((c) => c());
   }, [loadState]);
 
+  // Preload `restoreElements` before we mount Excalidraw (same library chunk,
+  // but `dynamic()` defers ours until first paint scheduling).
+  useEffect(() => {
+    if (loadState.kind !== "ready") {
+      setReplayExcaliRestoreReady(false);
+      return undefined;
+    }
+    const needsExcalCanvas =
+      loadState.log.events.length > 0 || !!audioBlobUrl;
+    if (!needsExcalCanvas) {
+      setReplayExcaliRestoreReady(false);
+      return undefined;
+    }
+    let cancelled = false;
+    void import("@excalidraw/excalidraw").then((m) => {
+      replayCachedRestoreElements = m.restoreElements;
+      if (!cancelled) setReplayExcaliRestoreReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [audioBlobUrl, loadState]);
+
   // -----------------------------------------------------------------
   // 3. Apply scene at currentTime — both at first paint AND when the
   // audio element seeks/plays.
@@ -261,17 +298,13 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   const applySceneAt = useCallback(
     (timeMs: number) => {
       if (loadState.kind !== "ready" || !api) return;
-      // Coalesce — if the audio element ticks twice within the same
-      // millisecond bucket we skip work.
-      if (lastBuiltAtMsRef.current === timeMs) return;
-      lastBuiltAtMsRef.current = timeMs;
 
       const scene = reconstructSceneAt(loadState.log, timeMs);
-      const excalidrawElements: unknown[] = [];
+      const rough: unknown[] = [];
       const newAssetUrls: string[] = [];
       for (const el of scene.values()) {
         const ex = toExcalidraw(el);
-        excalidrawElements.push(ex);
+        rough.push(ex);
         if (
           el.assetUrl &&
           !registeredAssetUrlsRef.current.has(el.assetUrl)
@@ -280,8 +313,24 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
           registeredAssetUrlsRef.current.add(el.assetUrl);
         }
       }
-      lastSceneElementsRef.current = excalidrawElements;
-      api.updateScene({ elements: excalidrawElements });
+      // Same path as IndexedDB crash-resume (`WhiteboardWorkspaceClient`):
+      // canonical log elements omit Excalidraw-required defaults (seed, version,
+      // etc.). Without `restoreElements`, strokes silently fail to paint.
+      let painted: unknown[];
+      try {
+        const rs = replayCachedRestoreElements;
+        if (rs) {
+          painted = rs(rough as never, null, {
+            refreshDimensions: true,
+          }) as unknown as unknown[];
+        } else {
+          painted = rough;
+        }
+      } catch {
+        painted = rough;
+      }
+      lastSceneElementsRef.current = painted;
+      api.updateScene({ elements: painted });
       // Kick off image fetches in the background — Excalidraw will
       // call `getFiles()` or look in `BinaryFiles` on next render
       // tick, and addFiles is what populates that.
@@ -309,7 +358,6 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     const log = loadState.log;
     const finalClockMs = Math.max(log.durationMs, maxEventTimestampMs(log));
     const initialT = noSessionAudio ? finalClockMs : 0;
-    lastBuiltAtMsRef.current = -1;
     applySceneAt(initialT);
     setAudioElapsedMs(initialT);
     const id = setTimeout(() => {
@@ -443,6 +491,14 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
             : "The session was ended before any drawing or audio was captured."}
         </p>
       </div>
+    );
+  }
+
+  const needsReplayExcalCanvas =
+    log.events.length > 0 || hasAudio;
+  if (needsReplayExcalCanvas && !replayExcaliRestoreReady) {
+    return (
+      <PlayerPlaceholder label="Preparing whiteboard replay engine…" />
     );
   }
 
@@ -617,49 +673,6 @@ function PlayerPlaceholder({ label }: { label: string }) {
   );
 }
 
-/**
- * Schema-version dispatch. Every `schemaVersion` we accept must
- * appear in this switch — adding a new version is a deliberate
- * action that requires a code change, so an old player can never
- * silently misinterpret a future log format.
- *
- * For v1 (current) the on-disk shape is exactly `WBEventLog`, so
- * the parsed JSON IS the log. Future versions will need migration
- * functions that lift the older shape into the current one.
- */
-export function parseEventLogBySchema(raw: unknown): WBEventLog {
-  const candidate = raw as { schemaVersion?: unknown };
-  switch (candidate.schemaVersion) {
-    case 1:
-      // Validate the bare-minimum top-level shape. We don't deep-
-      // validate every WBEvent — the writer is our own code and
-      // we already test it heavily. A malformed event would surface
-      // as a missing-field render glitch, not a crash, because
-      // `reconstructSceneAt` synthesises minimum elements for stray
-      // updates.
-      return validateV1Shape(candidate);
-    default:
-      throw new Error(
-        `Unsupported whiteboard events schemaVersion: ${String(candidate.schemaVersion)}. ` +
-          `This player understands schemaVersion=${WB_EVENT_LOG_SCHEMA_VERSION}.`
-      );
-  }
-}
-
-function validateV1Shape(raw: unknown): WBEventLog {
-  const v = raw as Partial<WBEventLog>;
-  if (typeof v.startedAt !== "string") {
-    throw new Error("Events file missing `startedAt`.");
-  }
-  if (typeof v.durationMs !== "number") {
-    throw new Error("Events file missing `durationMs`.");
-  }
-  if (!Array.isArray(v.events)) {
-    throw new Error("Events file missing `events` array.");
-  }
-  return v as WBEventLog;
-}
-
 /** Walk the log and collect every distinct `assetUrl` so we can
  * pre-warm them as `<img>` decodes. */
 function collectAssetUrls(log: WBEventLog): string[] {
@@ -792,3 +805,6 @@ function formatDurationMs(ms: number): string {
     ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
     : `${m}:${String(s).padStart(2, "0")}`;
 }
+
+/** Re-export for callers that intentionally avoid parsing through the replay UI. */
+export { parseEventLogBySchema } from "@/lib/whiteboard/replay-parse";

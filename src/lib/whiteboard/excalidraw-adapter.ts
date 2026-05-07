@@ -193,9 +193,8 @@ export function toCanonical(
 
 /**
  * Convert our canonical element back into the structural Excalidraw
- * shape. The replay player wraps this with full Excalidraw defaults
- * (seed, version, versionNonce, groupIds, etc.) before pushing into
- * `excalidrawAPI.updateScene`.
+ * shape. `restoreElements` from `@excalidraw/excalidraw` supplies required
+ * defaults before `updateScene` (replay player + IndexedDB crash-resume).
  */
 export function toExcalidraw(src: WBElement): ExcalidrawLikeElement {
   const customData: NonNullable<ExcalidrawLikeElement["customData"]> = {};
