@@ -268,6 +268,92 @@ describe("excalidraw-adapter -- toExcalidraw round-trip", () => {
   });
 });
 
+describe("excalidraw-adapter -- toExcalidraw linear point repair", () => {
+  test("freehand missing points gets bbox diagonal fallback", () => {
+    const wb: WBElement = {
+      id: "broken",
+      type: "freehand",
+      x: 100,
+      y: 200,
+      width: 154,
+      height: 288,
+      strokeColor: "#000",
+    };
+    const ex = toExcalidraw(wb);
+    expect(ex.points).toEqual([
+      [0, 0],
+      [154, 288],
+    ]);
+    expect(ex.type).toBe("freedraw");
+  });
+
+  test("freehand zero-sized bbox falls back to unit segment", () => {
+    const wb: WBElement = {
+      id: "z",
+      type: "freehand",
+      x: 494.5,
+      y: 486.22,
+      width: 0,
+      height: 0,
+    };
+    const ex = toExcalidraw(wb);
+    expect(ex.points).toEqual([
+      [0, 0],
+      [1, 0],
+    ]);
+  });
+
+  test("single valid point repeats with bbox-based second point", () => {
+    const wb: WBElement = {
+      id: "onept",
+      type: "freehand",
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 0,
+      points: [[5, 5]],
+    };
+    const ex = toExcalidraw(wb);
+    expect(ex.points).toEqual([
+      [5, 5],
+      [15, 5],
+    ]);
+  });
+
+  test("malformed tuples are stripped then bbox fallback applies", () => {
+    const wb: WBElement = {
+      id: "bad",
+      type: "freehand",
+      x: 0,
+      y: 0,
+      width: 3,
+      height: 4,
+      points: [[Number.NaN, Number.NaN]],
+    };
+    const ex = toExcalidraw(wb);
+    expect(ex.points).toEqual([
+      [0, 0],
+      [3, 4],
+    ]);
+  });
+
+  test("line type without persisted points receives fallback", () => {
+    const line: WBElement = {
+      id: "ln",
+      type: "line",
+      x: 0,
+      y: 0,
+      width: 2,
+      height: 0,
+      strokeWidth: 1,
+    };
+    expect(toExcalidraw(line).points).toEqual([
+      [0, 0],
+      [2, 0],
+    ]);
+  });
+});
+
 describe("excalidraw-adapter -- diffElement", () => {
   test("identical references return undefined", () => {
     const wb = toCanonical(freedraw())!;

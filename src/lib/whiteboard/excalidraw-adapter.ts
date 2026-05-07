@@ -83,6 +83,55 @@ function r2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+function isLinearWBType(type: WBElement["type"]): boolean {
+  return type === "freehand" || type === "line" || type === "arrow";
+}
+
+/**
+ * Linear Excalidraw elements must end up with ≥2 finite relative points —
+ * otherwise `generateElementShape` crashes (`points[0]` undefined). Older logs
+ * and race-time recorder frames can omit `points` while still carrying a bbox.
+ */
+function linearPointsForExcalidrawFromWB(src: WBElement): [number, number][] {
+  const cleaned: [number, number][] = [];
+  if (src.points?.length) {
+    for (const p of src.points) {
+      if (!Array.isArray(p) || p.length < 2) continue;
+      const x = Number(p[0]);
+      const y = Number(p[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      cleaned.push([r2(x), r2(y)]);
+    }
+  }
+  if (cleaned.length >= 2) return cleaned;
+  if (cleaned.length === 1) {
+    const ax = cleaned[0][0];
+    const ay = cleaned[0][1];
+    return [
+      cleaned[0],
+      [r2(ax + Math.max(Number.isFinite(src.width) ? Math.abs(src.width) : 0, 1)), ay],
+    ];
+  }
+
+  const w = Number.isFinite(src.width) ? Math.abs(src.width) : 0;
+  const h = Number.isFinite(src.height) ? Math.abs(src.height) : 0;
+  if (w <= 0 && h <= 0) return [[0, 0], [1, 0]];
+  if (w > 0 && h <= 0)
+    return [
+      [0, 0],
+      [r2(Math.max(w, 1)), 0],
+    ];
+  if (h > 0 && w <= 0)
+    return [
+      [0, 0],
+      [0, r2(Math.max(h, 1))],
+    ];
+  return [
+    [0, 0],
+    [r2(Math.max(w, 1)), r2(Math.max(h, 1))],
+  ];
+}
+
 /** Translate an Excalidraw element type string into our canonical type. */
 function mapExcalidrawTypeToWB(
   type: string,
@@ -229,7 +278,11 @@ export function toExcalidraw(src: WBElement): ExcalidrawLikeElement {
   if (src.strokeWidth !== undefined) out.strokeWidth = src.strokeWidth;
   if (src.opacity !== undefined) out.opacity = src.opacity;
   if (src.angle !== undefined) out.angle = src.angle;
-  if (src.points) out.points = src.points;
+  if (isLinearWBType(src.type)) {
+    out.points = linearPointsForExcalidrawFromWB(src);
+  } else if (src.points) {
+    out.points = src.points;
+  }
   if (src.text !== undefined) out.text = src.text;
   if (src.fontSize !== undefined) out.fontSize = src.fontSize;
   if (typeof src.fontFamily === "number") out.fontFamily = src.fontFamily;
