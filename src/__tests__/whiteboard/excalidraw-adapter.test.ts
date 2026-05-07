@@ -27,6 +27,7 @@ import {
   canonicalizeScene,
   diffElement,
   diffScenes,
+  sanitizeRestoredExcalidrawElementsForReplay,
   snapshotEvent,
   toCanonical,
   toExcalidraw,
@@ -350,6 +351,40 @@ describe("excalidraw-adapter -- toExcalidraw linear point repair", () => {
     expect(toExcalidraw(line).points).toEqual([
       [0, 0],
       [2, 0],
+    ]);
+  });
+});
+
+describe("sanitizeRestoredExcalidrawElementsForReplay", () => {
+  test("injects diagonal points onto freedraw missing points after imaginary restore output", () => {
+    const out = sanitizeRestoredExcalidrawElementsForReplay([
+      {
+        id: "a",
+        type: "freedraw",
+        x: 337,
+        y: 307.22,
+        width: 159,
+        height: 85,
+        strokeWidth: 1,
+      },
+    ]);
+    expect((out[0] as { points: unknown }).points).toEqual([
+      [0, 0],
+      [159, 85],
+    ]);
+  });
+
+  test("leaves rectangles untouched", () => {
+    const rect = {
+      id: "r",
+      type: "rectangle",
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+    };
+    expect(sanitizeRestoredExcalidrawElementsForReplay([rect])).toEqual([
+      rect,
     ]);
   });
 });

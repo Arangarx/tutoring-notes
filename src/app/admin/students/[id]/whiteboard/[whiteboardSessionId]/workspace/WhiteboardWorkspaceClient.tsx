@@ -89,7 +89,7 @@ import {
   updateSceneMergingWithRemote,
 } from "@/lib/whiteboard/apply-reconciled-remote-scene";
 import type { RemoteSceneIngestLogHint } from "@/hooks/useWhiteboardRecorder";
-import { toExcalidraw } from "@/lib/whiteboard/excalidraw-adapter";
+import { sanitizeRestoredExcalidrawElementsForReplay, toExcalidraw } from "@/lib/whiteboard/excalidraw-adapter";
 import type { WhiteboardBoardDocumentV1 } from "@/lib/whiteboard/board-document-snapshot";
 import {
   clearSessionSceneDraft,
@@ -1100,7 +1100,8 @@ export function WhiteboardWorkspaceClient({
       const restored = restoreElements(rough as never, null, {
         refreshDimensions: true,
       });
-      let toPaint: ReadonlyArray<unknown> = restored as ReadonlyArray<unknown>;
+      let toPaint: ReadonlyArray<unknown> =
+        sanitizeRestoredExcalidrawElementsForReplay(restored as unknown[]);
       await hydrateTutorImageAssetsForElements(
         api,
         toPaint as ReadonlyArray<ExcalidrawLikeElement>
@@ -1137,7 +1138,8 @@ export function WhiteboardWorkspaceClient({
       const restored = restoreElements(rough as never, null, {
         refreshDimensions: true,
       });
-      let toPaint: ReadonlyArray<unknown> = restored as ReadonlyArray<unknown>;
+      let toPaint: ReadonlyArray<unknown> =
+        sanitizeRestoredExcalidrawElementsForReplay(restored as unknown[]);
       if (toPaint.length === 0) {
         const recovery = loadTutorSessionRecoveryDraft(whiteboardSessionId);
         if (recovery) {

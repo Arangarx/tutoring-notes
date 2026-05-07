@@ -53,7 +53,7 @@ import {
   type WBEventLog,
 } from "@/lib/whiteboard/event-log";
 import { parseEventLogBySchema } from "@/lib/whiteboard/replay-parse";
-import { toExcalidraw } from "@/lib/whiteboard/excalidraw-adapter";
+import { sanitizeRestoredExcalidrawElementsForReplay, toExcalidraw } from "@/lib/whiteboard/excalidraw-adapter";
 import { useExcalidrawThemeFromSystem } from "@/hooks/useExcalidrawThemeFromSystem";
 
 /**
@@ -329,6 +329,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       } catch {
         painted = rough;
       }
+      painted = sanitizeRestoredExcalidrawElementsForReplay(painted);
       lastSceneElementsRef.current = painted;
       api.updateScene({ elements: painted });
       // Kick off image fetches in the background — Excalidraw will

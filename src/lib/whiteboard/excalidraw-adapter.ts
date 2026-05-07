@@ -132,6 +132,64 @@ function linearPointsForExcalidrawFromWB(src: WBElement): [number, number][] {
   ];
 }
 
+const EXCALIDRAW_LINEAR_SCENE_TYPES = new Set(["freedraw", "line", "arrow"]);
+
+function coerceTuplePointsFromRestored(
+  pts: unknown,
+): WBElement["points"] | undefined {
+  if (!Array.isArray(pts)) return undefined;
+  const out: [number, number][] = [];
+  for (const row of pts) {
+    if (!Array.isArray(row) || row.length < 2) continue;
+    const x = Number(row[0]);
+    const y = Number(row[1]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    out.push([r2(x), r2(y)]);
+  }
+  return out.length ? out : undefined;
+}
+
+/**
+ * Re-run linear `points` repair on whatever `restoreElements` emitted.
+ *
+ * Replay + crash-resume call `restoreElements` after `toExcalidraw`. In practice
+ * the library occasionally returns freedraw / line / arrow shapes **without**
+ * a usable points array (`generateElementShape` then dereferences `undefined[0]`
+ * and the whole canvas fails). Idempotent when points are already valid.
+ */
+export function sanitizeRestoredExcalidrawElementsForReplay(
+  elements: readonly unknown[],
+): unknown[] {
+  return elements.map(patchRestoredLinearElementPoints);
+}
+
+function patchRestoredLinearElementPoints(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object") return raw;
+  const el = raw as Record<string, unknown>;
+  const type = el.type;
+  if (typeof type !== "string" || !EXCALIDRAW_LINEAR_SCENE_TYPES.has(type)) {
+    return raw;
+  }
+  const wbType: WBElement["type"] =
+    type === "freedraw" ? "freehand" : type === "line" ? "line" : "arrow";
+
+  const w = Number(el.width);
+  const h = Number(el.height);
+
+  const src: WBElement = {
+    id: String(el.id ?? ""),
+    type: wbType,
+    x: Number(el.x) || 0,
+    y: Number(el.y) || 0,
+    width: Number.isFinite(w) ? w : 0,
+    height: Number.isFinite(h) ? h : 0,
+    points: coerceTuplePointsFromRestored(el.points),
+  };
+
+  const points = linearPointsForExcalidrawFromWB(src);
+  return { ...el, points };
+}
+
 /** Translate an Excalidraw element type string into our canonical type. */
 function mapExcalidrawTypeToWB(
   type: string,
