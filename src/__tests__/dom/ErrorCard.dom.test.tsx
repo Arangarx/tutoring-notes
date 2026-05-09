@@ -4,7 +4,7 @@
 
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import ErrorCard from "@/app/admin/students/[id]/recorder/ErrorCard";
+import ErrorCard from "@/components/recording/ErrorCard";
 
 describe("ErrorCard", () => {
   test("renders the error in a role=alert region", () => {

@@ -4,8 +4,8 @@
 
 import { createRef } from "react";
 import { render, screen } from "@testing-library/react";
-import UploadingPanel from "@/app/admin/students/[id]/recorder/UploadingPanel";
-import type { MicControlsProps } from "@/app/admin/students/[id]/recorder/MicControls";
+import UploadingPanel from "@/components/recording/UploadingPanel";
+import type { MicControlsProps } from "@/components/recording/MicControls";
 
 function micControlsFixture(): MicControlsProps {
   return {

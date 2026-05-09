@@ -5,8 +5,8 @@
 import { createRef } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import MainPanel from "@/app/admin/students/[id]/recorder/MainPanel";
-import type { MicControlsProps } from "@/app/admin/students/[id]/recorder/MicControls";
+import MainPanel from "@/components/recording/MainPanel";
+import type { MicControlsProps } from "@/components/recording/MicControls";
 
 function micControlsFixture(): MicControlsProps {
   return {

@@ -4,11 +4,11 @@ import {
   useAudioRecorder,
   type RecordedAudio,
 } from "@/hooks/useAudioRecorder";
-import DoneCard from "./recorder/DoneCard";
-import ErrorCard from "./recorder/ErrorCard";
-import MainPanel from "./recorder/MainPanel";
-import UploadingPanel from "./recorder/UploadingPanel";
-import type { MicControlsProps } from "./recorder/MicControls";
+import DoneCard from "@/components/recording/DoneCard";
+import ErrorCard from "@/components/recording/ErrorCard";
+import MainPanel from "@/components/recording/MainPanel";
+import UploadingPanel from "@/components/recording/UploadingPanel";
+import type { MicControlsProps } from "@/components/recording/MicControls";
 
 export type { RecordedAudio };
 
@@ -24,8 +24,7 @@ type Props = {
 /**
  * Thin shell over `useAudioRecorder`. Owns ZERO recording logic — picks one
  * of {DoneCard, UploadingPanel, ErrorCard, MainPanel} based on `state` +
- * `uploadMode` from the hook. Each subcomponent lives in `./recorder/` and
- * has its own jsdom RTL test.
+ * `uploadMode` from the hook. Each subcomponent lives in `@/components/recording/`.
  */
 export default function AudioRecordInput({
   studentId,
@@ -35,8 +34,6 @@ export default function AudioRecordInput({
 }: Props) {
   const r = useAudioRecorder({ studentId, onRecorded, onRecordingActive });
 
-  // The MicControls cluster is reused by both MainPanel and UploadingPanel
-  // (segment mode), so we build the props once.
   const micControls: MicControlsProps = {
     meterBarRef: r.meterBarRef,
     devices: r.devices,
@@ -77,7 +74,6 @@ export default function AudioRecordInput({
     return <ErrorCard error={r.error} onReset={r.handleReset} />;
   }
 
-  // idle / acquiring / ready / recording / paused
   const hint =
     r.state === "idle"
       ? r.permissionState === "denied"
@@ -98,8 +94,6 @@ export default function AudioRecordInput({
       onStart={r.handleStartRecording}
       onPause={r.pauseRecording}
       onResume={r.resumeRecording}
-      // Wrap stopAndUpload so the MouseEvent isn't passed as the `mode` arg
-      // (regression we already shipped a fix for; preserved here intentionally).
       onStop={() => r.stopAndUpload("final")}
       onReset={r.handleReset}
     />
