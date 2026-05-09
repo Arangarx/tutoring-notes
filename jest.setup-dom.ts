@@ -10,6 +10,21 @@
 
 import "@testing-library/jest-dom";
 
+// jsdom has no `window.matchMedia`; hooks like `useExcalidrawThemeFromSystem`
+// and dom suites such as `WhiteboardReplay.dom.test.tsx` expect a minimal stub.
+if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
+  window.matchMedia = ((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  })) as typeof window.matchMedia;
+}
+
 // jsdom (under jest-environment-jsdom@29) does not expose
 // `structuredClone` on the jsdom global even though Node 18+ has it.
 // `fake-indexeddb` 6.x (used by IDB-touching tests like the
