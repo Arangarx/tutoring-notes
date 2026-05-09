@@ -11,6 +11,11 @@ export type RecordingControlPanelProps = {
   recorder: UseAudioRecorderReturn;
   /** Passed to MainPanel — e.g. transcribe-in-progress or workspace guardrails. */
   disabled?: boolean;
+  /**
+   * Live label offset — set when the host already shows prior segments (e.g.
+   * pending list) while the hook reset `segmentNumber` to 1 for a new take.
+   */
+  segmentDisplayBase?: number;
 };
 
 /**
@@ -21,6 +26,7 @@ export type RecordingControlPanelProps = {
 export default function RecordingControlPanel({
   recorder: r,
   disabled,
+  segmentDisplayBase = 0,
 }: RecordingControlPanelProps) {
   const micControls: MicControlsProps = {
     meterBarRef: r.meterBarRef,
@@ -50,6 +56,7 @@ export default function RecordingControlPanel({
           hint: "Saving this segment — recording will resume automatically.",
         }}
         segmentNumber={r.segmentNumber}
+        segmentDisplayBase={segmentDisplayBase}
       />
     );
   }
@@ -76,6 +83,7 @@ export default function RecordingControlPanel({
       state={r.state}
       disabled={disabled}
       segmentNumber={r.segmentNumber}
+      segmentDisplayBase={segmentDisplayBase}
       elapsed={r.elapsed}
       isWarning={r.isWarning}
       micControls={{ ...micControls, hint }}

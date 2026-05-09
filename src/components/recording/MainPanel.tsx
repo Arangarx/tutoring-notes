@@ -14,6 +14,11 @@ export type MainPanelProps = {
   disabled?: boolean;
   /** 1-based segment index — shown in the recording header. */
   segmentNumber: number;
+  /**
+   * Added to `segmentNumber` for UI labels only (e.g. AI panel already has
+   * segments in the pending list when the hook resets to part 1 after Re-record).
+   */
+  segmentDisplayBase?: number;
   /** Elapsed seconds of the current segment. */
   elapsed: number;
   /** True when within the warning window before auto-rollover. */
@@ -39,6 +44,7 @@ export default function MainPanel({
   state,
   disabled,
   segmentNumber,
+  segmentDisplayBase = 0,
   elapsed,
   isWarning,
   micControls,
@@ -48,6 +54,7 @@ export default function MainPanel({
   onStop,
   onReset,
 }: MainPanelProps) {
+  const displayPart = segmentNumber + segmentDisplayBase;
   return (
     <div data-testid="audio-record-panel">
       <MicControls {...micControls} />
@@ -91,7 +98,7 @@ export default function MainPanel({
             />
             <span
               aria-live="polite"
-              aria-label={`Segment ${segmentNumber}, duration ${formatDuration(elapsed)}`}
+              aria-label={`Segment ${displayPart}, duration ${formatDuration(elapsed)}`}
               style={{
                 fontVariantNumeric: "tabular-nums",
                 fontWeight: 600,
@@ -99,7 +106,7 @@ export default function MainPanel({
                 color: isWarning ? "var(--color-error, #dc2626)" : undefined,
               }}
             >
-              Part {segmentNumber} · {formatDuration(elapsed)}
+              Part {displayPart} · {formatDuration(elapsed)}
             </span>
             {isWarning && (
               <span role="alert" style={{ fontSize: 12, color: "var(--color-error, #dc2626)" }}>

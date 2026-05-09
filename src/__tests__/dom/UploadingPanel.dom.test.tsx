@@ -45,6 +45,18 @@ describe("UploadingPanel", () => {
     expect(screen.getByText(/saving segment 3/i)).toBeInTheDocument();
   });
 
+  test("segment mode respects segmentDisplayBase in copy", () => {
+    render(
+      <UploadingPanel
+        mode="segment"
+        micControls={micControlsFixture()}
+        segmentNumber={1}
+        segmentDisplayBase={2}
+      />
+    );
+    expect(screen.getByText(/saving segment 3/i)).toBeInTheDocument();
+  });
+
   test("segment mode without micControls throws (programmer error)", () => {
     // Suppress the React error log for this expected throw.
     const spy = jest.spyOn(console, "error").mockImplementation(() => {});

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useCallback, useRef, useState, useTransition } from "react";
 import { formatUserFacingActionError } from "@/lib/action-correlation";
 import { generateNoteFromTextAction, transcribeAndGenerateAction } from "./actions";
 import type { NewNoteFormHandle } from "./NewNoteForm";
@@ -24,6 +24,10 @@ export default function AiAssistPanel({ studentId, formRef, enabled, blobEnabled
   const [activeTab, setActiveTab] = useState<Tab>("text");
   const [sessionText, setSessionText] = useState("");
   const [pendingAudios, setPendingAudios] = useState<AudioResult[]>([]);
+  const pendingAudiosRef = useRef(pendingAudios);
+  pendingAudiosRef.current = pendingAudios;
+  /** Pending list length when the mic arms for capture — keeps "Part N" in sync after Re-record. */
+  const [segmentDisplayBase, setSegmentDisplayBase] = useState(0);
   const [isRecordingActive, setIsRecordingActive] = useState(false);
   const [panelState, setPanelState] = useState<PanelState>("idle");
   const [audioTabsKey, setAudioTabsKey] = useState(0);
@@ -137,6 +141,7 @@ export default function AiAssistPanel({ studentId, formRef, enabled, blobEnabled
     setWarning(null);
     setWarningKind(null);
     setPendingAudios([]);
+    setSegmentDisplayBase(0);
     setIsRecordingActive(false);
     setAudioTabsKey((k) => k + 1);
     formRef.current?.clear();
@@ -158,6 +163,13 @@ export default function AiAssistPanel({ studentId, formRef, enabled, blobEnabled
   function handleRemoveSegment(index: number) {
     setPendingAudios((prev) => prev.filter((_, i) => i !== index));
   }
+
+  const handleRecordingActive = useCallback((active: boolean) => {
+    if (active) {
+      setSegmentDisplayBase(pendingAudiosRef.current.length);
+    }
+    setIsRecordingActive(active);
+  }, []);
 
   if (!enabled) {
     return (
@@ -258,7 +270,8 @@ export default function AiAssistPanel({ studentId, formRef, enabled, blobEnabled
             onTabChange={setActiveTab}
             onAudioReady={handleAudioReady}
             onAudioCleared={() => {/* segments list handles removal */}}
-            onRecordingActive={setIsRecordingActive}
+            onRecordingActive={handleRecordingActive}
+            segmentDisplayBase={segmentDisplayBase}
             disabled={isPending}
             blobEnabled={blobEnabled}
           />

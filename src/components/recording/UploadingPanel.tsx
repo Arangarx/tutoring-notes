@@ -14,6 +14,8 @@ export type UploadingPanelProps = {
   micControls?: MicControlsProps;
   /** 1-based segment index — only used when mode === "segment". */
   segmentNumber?: number;
+  /** Optional offset for the "Saving segment …" line (same as MainPanel). */
+  segmentDisplayBase?: number;
 };
 
 /**
@@ -28,17 +30,19 @@ export default function UploadingPanel({
   mode,
   micControls,
   segmentNumber,
+  segmentDisplayBase = 0,
 }: UploadingPanelProps) {
   if (mode === "segment") {
     if (!micControls) {
       throw new Error("UploadingPanel mode='segment' requires micControls prop");
     }
+    const displayPart = (segmentNumber ?? 1) + segmentDisplayBase;
     return (
       <div data-testid="audio-record-panel">
         <MicControls {...micControls} />
         <div data-testid="audio-record-uploading-segment" style={{ marginTop: 10 }}>
           <p style={{ margin: "0 0 8px", fontSize: 13, color: "var(--color-muted, #6b7280)" }}>
-            Saving segment {segmentNumber}… you&apos;ll keep recording in a moment.
+            Saving segment {displayPart}… you&apos;ll keep recording in a moment.
           </p>
           <div style={{ height: 6, background: "var(--color-border, #e5e7eb)", borderRadius: 3, overflow: "hidden" }}>
             <div

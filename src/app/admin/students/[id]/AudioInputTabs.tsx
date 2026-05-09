@@ -25,6 +25,8 @@ type Props = {
   onRecordingActive?: (active: boolean) => void;
   disabled?: boolean;
   blobEnabled: boolean;
+  /** Live "Part N" label offset — see `RecordingControlPanel`. */
+  segmentDisplayBase?: number;
 };
 
 /**
@@ -55,6 +57,7 @@ export default function AudioInputTabs({
   onRecordingActive,
   disabled,
   blobEnabled,
+  segmentDisplayBase = 0,
 }: Props) {
   const [hasAudio, setHasAudio] = useState(false);
   const [recordingActive, setRecordingActive] = useState(false);
@@ -176,6 +179,7 @@ export default function AudioInputTabs({
               onRecorded={handleRecorded}
               onRecordingActive={handleRecordingActive}
               disabled={disabled}
+              segmentDisplayBase={segmentDisplayBase}
             />
           </div>
         </>

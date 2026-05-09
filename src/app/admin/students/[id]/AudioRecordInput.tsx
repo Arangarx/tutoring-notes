@@ -15,6 +15,8 @@ type Props = {
   /** Called whenever the recording active state changes (acquiring/ready/recording/paused/uploading = true). */
   onRecordingActive?: (active: boolean) => void;
   disabled?: boolean;
+  /** Added to on-screen "Part N" labels only; filenames / hook `segmentNumber` unchanged. */
+  segmentDisplayBase?: number;
 };
 
 /**
@@ -27,7 +29,14 @@ export default function AudioRecordInput({
   onRecorded,
   onRecordingActive,
   disabled,
+  segmentDisplayBase = 0,
 }: Props) {
   const r = useAudioRecorder({ studentId, onRecorded, onRecordingActive });
-  return <RecordingControlPanel recorder={r} disabled={disabled} />;
+  return (
+    <RecordingControlPanel
+      recorder={r}
+      disabled={disabled}
+      segmentDisplayBase={segmentDisplayBase}
+    />
+  );
 }
