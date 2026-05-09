@@ -28,10 +28,10 @@
  *   - PDF/image upload toolbar (separate todo `phase1-pdf-upload`).
  *   - Math equation popover (`phase1-math-equations`).
  *   - Desmos embed (`phase1-graphing`).
- *   - Audio capture for the whiteboard — `WhiteboardWorkspaceAudioBridge`
- *     mounts `useAudioRecorder` headlessly and registers Blob segments with
- *     this session. Toolbar is still Start/Pause only (meter / device picker
- *     reuse from RecordView is a follow-up).
+ *   - Audio capture — one shared `useAudioRecorder` feeds
+ *     `WhiteboardWorkspaceAudioBridge`, which renders `RecordingControlPanel`
+ *     (same mic UI as the recorder tab) and registers Blob segments with this
+ *     session alongside the toolbar Start/Pause presence gate.
  *
  * Failure-mode contract: this component NEVER lets a hook callback
  * throw into the React tree. Every async boundary maps errors to
@@ -64,8 +64,10 @@ import { uploadWhiteboardEvents } from "@/lib/whiteboard/upload";
 import {
   endWhiteboardSession,
   issueJoinToken,
+  registerWhiteboardSessionAudioSegmentAction,
   revokeJoinTokensForSession,
 } from "@/app/admin/students/[id]/whiteboard/actions";
+import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter";
 import { PdfImageUploadButton } from "@/components/whiteboard/PdfImageUploadButton";
 import { MathInsertButton } from "@/components/whiteboard/MathInsertButton";
@@ -408,7 +410,7 @@ export function WhiteboardWorkspaceClient({
   //   - `getAudioMs`      → performance.now()-based surrogate (clock tracks
   //                         the same pauses as strokes; optional refinement:
   //                         read live elapsed from the audio hook).
-  //   - Mic meter / device UI → still deferred (headless bridge only).
+  //   - Mic picker / meter / timer → `RecordingControlPanel` in the bridge ✔
 
   // `userWantsRecording` is the tutor's explicit intent (Start / Pause
   // button). The actual `recordingActive` we hand to the recorder hook
@@ -490,6 +492,46 @@ export function WhiteboardWorkspaceClient({
     everBothPresent: everBothPresentRef.current,
   });
   const recordingActive = presence.recordingActive;
+
+  const wbAudioSegmentPendingRef = useRef<Promise<void>[]>([]);
+  const onWorkspaceAudioRecorded = useCallback(
+    async (
+      audioSeg: { blobUrl: string; mimeType: string; sizeBytes: number },
+      _meta?: { autoRollover?: boolean }
+    ) => {
+      const task = (async () => {
+        const result = await registerWhiteboardSessionAudioSegmentAction(
+          whiteboardSessionId,
+          {
+            blobUrl: audioSeg.blobUrl,
+            mimeType: audioSeg.mimeType,
+            sizeBytes: audioSeg.sizeBytes,
+          }
+        );
+        if (!result.ok) {
+          console.error(
+            `[WhiteboardWorkspaceAudioBridge] register segment failed wbsid=${whiteboardSessionId}`,
+            result.error,
+            result.debugId ?? ""
+          );
+        }
+      })();
+      wbAudioSegmentPendingRef.current.push(task);
+      try {
+        await task;
+      } finally {
+        wbAudioSegmentPendingRef.current = wbAudioSegmentPendingRef.current.filter(
+          (p) => p !== task
+        );
+      }
+    },
+    [whiteboardSessionId]
+  );
+
+  const workspaceAudio = useAudioRecorder({
+    studentId,
+    onRecorded: onWorkspaceAudioRecorded,
+  });
 
   const getAudioMs = useAudioMsClock(recordingActive);
 
@@ -1328,10 +1370,11 @@ export function WhiteboardWorkspaceClient({
     <div style={{ display: "grid", gap: 12 }}>
       <WhiteboardWorkspaceAudioBridge
         ref={audioBridgeRef}
-        studentId={studentId}
-        whiteboardSessionId={whiteboardSessionId}
+        audio={workspaceAudio}
+        pendingSegmentTasksRef={wbAudioSegmentPendingRef}
         userWantsRecording={userWantsRecording}
         recordingActive={recordingActive}
+        panelDisabled={endingState === "ending" || !userWantsRecording}
       />
       {/* Board pages — own row so it isn’t buried in the recording/toolbar cluster */}
       <div

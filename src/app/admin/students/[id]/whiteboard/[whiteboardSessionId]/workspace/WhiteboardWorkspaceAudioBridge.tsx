@@ -2,19 +2,22 @@
 
 import {
   forwardRef,
-  useCallback,
   useEffect,
   useImperativeHandle,
   useRef,
 } from "react";
-import { useAudioRecorder } from "@/hooks/useAudioRecorder";
-import { registerWhiteboardSessionAudioSegmentAction } from "@/app/admin/students/[id]/whiteboard/actions";
+import type { UseAudioRecorderReturn } from "@/hooks/useAudioRecorder";
+import RecordingControlPanel from "@/components/recording/RecordingControlPanel";
 
 type Props = {
-  studentId: string;
-  whiteboardSessionId: string;
+  /** Shared `useAudioRecorder` instance — same hook feeds this bridge and the visible panel. */
+  audio: UseAudioRecorderReturn;
+  /** Pending `registerWhiteboardSessionAudioSegmentAction` tasks; mirrored for `waitForPendingUploads`. */
+  pendingSegmentTasksRef: React.MutableRefObject<Promise<void>[]>;
   userWantsRecording: boolean;
   recordingActive: boolean;
+  /** Disables standalone Start (etc.) — e.g. until the workspace toolbar arms recording. */
+  panelDisabled?: boolean;
 };
 
 export type WhiteboardWorkspaceAudioBridgeHandle = {
@@ -22,63 +25,23 @@ export type WhiteboardWorkspaceAudioBridgeHandle = {
 };
 
 /**
- * Headless bridge: same Blob upload as the main recorder (`uploadAudioDirect`
- * inside `useAudioRecorder`), then registers each segment via
- * `registerWhiteboardSessionAudioSegmentAction` so note generation can find
- * audio for this whiteboard session.
- *
- * Presence: when `recordingActive` toggles false while the tutor still wants
- * recording (student dropped), we **pause** the MediaRecorder; when active
- * again we **resume**. Manual Pause clears `userWantsRecording` and we
- * `stopAndUpload("final")`.
+ * Whiteboard audio: orchestrates pause/resume/start against presence flags using
+ * the host's `useAudioRecorder` instance, renders the same `RecordingControlPanel`
+ * as the recorder tab, and tracks in-flight segment registration for end-session.
  */
 export const WhiteboardWorkspaceAudioBridge = forwardRef<
   WhiteboardWorkspaceAudioBridgeHandle,
   Props
 >(function WhiteboardWorkspaceAudioBridge(
-  { studentId, whiteboardSessionId, userWantsRecording, recordingActive },
+  {
+    audio,
+    pendingSegmentTasksRef,
+    userWantsRecording,
+    recordingActive,
+    panelDisabled,
+  },
   ref
 ) {
-  const pendingRef = useRef<Promise<void>[]>([]);
-
-  const onRecorded = useCallback(
-    async (
-      audio: {
-        blobUrl: string;
-        mimeType: string;
-        sizeBytes: number;
-      },
-      _meta?: { autoRollover?: boolean }
-    ) => {
-      const task = (async () => {
-        const result = await registerWhiteboardSessionAudioSegmentAction(
-          whiteboardSessionId,
-          {
-            blobUrl: audio.blobUrl,
-            mimeType: audio.mimeType,
-            sizeBytes: audio.sizeBytes,
-          }
-        );
-        if (!result.ok) {
-          console.error(
-            `[WhiteboardWorkspaceAudioBridge] register segment failed wbsid=${whiteboardSessionId}`,
-            result.error,
-            result.debugId ?? ""
-          );
-        }
-      })();
-      pendingRef.current.push(task);
-      try {
-        await task;
-      } finally {
-        pendingRef.current = pendingRef.current.filter((p) => p !== task);
-      }
-    },
-    [whiteboardSessionId]
-  );
-
-  const audio = useAudioRecorder({ studentId, onRecorded });
-
   const audioRef = useRef(audio);
   audioRef.current = audio;
 
@@ -109,12 +72,14 @@ export const WhiteboardWorkspaceAudioBridge = forwardRef<
     ref,
     () => ({
       waitForPendingUploads: async () => {
-        const pending = [...pendingRef.current];
+        const pending = [...pendingSegmentTasksRef.current];
         await Promise.all(pending);
       },
     }),
-    []
+    [pendingSegmentTasksRef]
   );
 
-  return null;
+  return (
+    <RecordingControlPanel recorder={audio} disabled={panelDisabled} />
+  );
 });
