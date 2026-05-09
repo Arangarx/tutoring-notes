@@ -540,13 +540,7 @@ export function useAudioRecorder({
     teardownMicStream();
     setRecordState("acquiring");
 
-    let stream: MediaStream;
-    try {
-      const constraints: MediaStreamConstraints = {
-        audio: opts.deviceId ? { deviceId: { exact: opts.deviceId } } : true,
-      };
-      stream = await navigator.mediaDevices.getUserMedia(constraints);
-    } catch (err) {
+    const applyGetUserMediaFailure = (err: unknown, exactDeviceId?: string) => {
       const name = err instanceof Error ? (err as DOMException).name : "";
       console.error("[useAudioRecorder] getUserMedia failed:", err);
       let msg: string;
@@ -559,7 +553,7 @@ export function useAudioRecorder({
         msg =
           "Microphone is in use by another app (e.g. Discord, Teams). Close that app or switch its audio device, then try again.";
       } else if (name === "OverconstrainedError" || name === "ConstraintNotSatisfiedError") {
-        if (opts.deviceId) {
+        if (exactDeviceId) {
           saveStoredDeviceId("");
           setSelectedDeviceId("");
           msg =
@@ -572,7 +566,42 @@ export function useAudioRecorder({
       }
       setError(msg);
       setRecordState("error");
-      return;
+    };
+
+    let stream: MediaStream;
+    try {
+      const constraints: MediaStreamConstraints = {
+        audio: opts.deviceId ? { deviceId: { exact: opts.deviceId } } : true,
+      };
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (err) {
+      const name = err instanceof Error ? (err as DOMException).name : "";
+      const stalePreferredDevice =
+        Boolean(opts.deviceId) &&
+        (name === "OverconstrainedError" || name === "ConstraintNotSatisfiedError");
+
+      // `deviceId: { exact }` + a stale id from localStorage (USB unplugged,
+      // Bluetooth profile change, OS default swap) yields OverconstrainedError
+      // before any audio reaches the graph. Clear the preference and acquire
+      // the default mic in one step so the meter/recorder works without an
+      // extra Start click and without a scary console.error on the happy path.
+      if (stalePreferredDevice) {
+        console.warn(
+          "[useAudioRecorder] stored mic device unavailable; clearing preference and using default input",
+          err
+        );
+        saveStoredDeviceId("");
+        setSelectedDeviceId("");
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (err2) {
+          applyGetUserMediaFailure(err2, undefined);
+          return;
+        }
+      } else {
+        applyGetUserMediaFailure(err, opts.deviceId);
+        return;
+      }
     }
 
     streamRef.current = stream;

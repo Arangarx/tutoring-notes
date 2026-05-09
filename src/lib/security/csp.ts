@@ -69,15 +69,16 @@ export type CspOptions = {
  *     WHITEBOARD_SYNC_URL. socket.io tries websocket then falls back
  *     to https long-polling, so both schemes must be allowed.
  *
- *   - `font-src 'self' data: blob:` — Excalidraw 0.18 bundles custom
+ *   - `font-src 'self' data: blob: https:` — Excalidraw 0.18 bundles custom
  *     fonts (Cascadia, Virgil, Assistant, etc.) as base64 `data:` URIs
  *     in its CSS, and some paths / runtime paths register `@font-face`
  *     with `blob:` URLs (e.g. after fetch + object URL). Without `data:`
  *     and `blob:` the browser blocks them — Chrome still logs
  *     "font-src 'self' data:" when the request is a third category
  *     (e.g. blob:) — and the canvas falls back to system fonts.
- *     `data:` and `blob:` for fonts are in-page; no new network
- *     third-party by themselves.
+ *     `https:` matches `img-src` / other deps that load webfont files from
+ *     CDNs (e.g. MathJax / bundled tooling) — required when two CSP headers
+ *     combine with the stricter policy from `next.config.ts`.
  *
  *   - `frame-ancestors 'none'` — clickjacking protection. Don't relax.
  */
@@ -95,7 +96,7 @@ export function buildContentSecurityPolicy(opts: CspOptions = {}): string {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "media-src 'self' blob: https://*.public.blob.vercel-storage.com",
-    "font-src 'self' data: blob:",
+    "font-src 'self' data: blob: https:",
     `connect-src ${connectSrc}`,
     "frame-ancestors 'none'",
   ].join("; ");

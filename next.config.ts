@@ -27,10 +27,11 @@ import type { NextConfig } from "next";
  *     assets uploaded to Vercel Blob render. Tightening this further
  *     would require enumerating each blob host, which churns.
  *
- *   font-src 'self' data: blob:
+ *   font-src 'self' data: blob: https:
  *     `data:` for MathJax + Excalidraw base64 fonts; `blob:` for
- *     @font-face / object URLs. Must match `src/lib/security/csp.ts`
- *     (middleware also sets CSP; policies combine — keep in sync).
+ *     @font-face / object URLs; `https:` for dependency webfonts from CDNs.
+ *     Must match `src/lib/security/csp.ts` (middleware also sets CSP;
+ *     policies combine — keep in sync).
  *
  *   connect-src 'self' https: wss:
  *     Whisper API, Vercel Blob client uploads, the WHITEBOARD_SYNC_URL
@@ -70,7 +71,7 @@ const CONTENT_SECURITY_POLICY = [
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
-  "font-src 'self' data: blob:",
+  "font-src 'self' data: blob: https:",
   "connect-src 'self' https: wss:",
   "frame-src 'self' https://www.desmos.com https://desmos.com",
   "worker-src 'self' blob:",
@@ -82,6 +83,9 @@ const CONTENT_SECURITY_POLICY = [
 
 const nextConfig: NextConfig = {
   eslint: { ignoreDuringBuilds: false },
+  async rewrites() {
+    return [{ source: "/favicon.ico", destination: "/icon" }];
+  },
   /**
    * Keep ffmpeg-static out of the webpack bundle so it resolves at runtime
    * from node_modules (required for native binary execution).

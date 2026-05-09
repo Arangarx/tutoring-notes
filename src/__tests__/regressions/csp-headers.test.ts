@@ -87,6 +87,10 @@ describe("buildContentSecurityPolicy — directive guards", () => {
     expect(getDirective(csp, "font-src")).toMatch(/'self'/);
   });
 
+  test("font-src includes https: (dependency CDN webfonts; dual CSP headers)", () => {
+    expect(getDirective(csp, "font-src")).toMatch(/\bhttps:/);
+  });
+
   test("frame-ancestors 'none' is preserved (clickjacking protection)", () => {
     expect(getDirective(csp, "frame-ancestors")).toBe("'none'");
   });
