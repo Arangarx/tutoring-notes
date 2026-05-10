@@ -150,4 +150,54 @@ describe("WhiteboardReplay initial viewport (Phase 0e)", () => {
       )
     ).toBe(true);
   });
+
+  /**
+   * Regression: share-replay route reproduced a layout race where
+   * `getBoundingClientRect()` returned 0×0 on the synchronous first attempt
+   * (Excalidraw hadn't measured yet). Camera math then returned null and
+   * the canvas stayed at default position. We now retry on rAF until a
+   * non-zero measurement lands.
+   */
+  it("retries on requestAnimationFrame when initial measurement is zero", async () => {
+    let measurementCalls = 0;
+    gbcrSpy.mockImplementation(function (this: HTMLElement) {
+      if (this.hasAttribute("data-replay-viewport-metrics")) {
+        measurementCalls += 1;
+        // First call (synchronous attempt) returns 0×0 → null fit, no scroll.
+        // Second call (rAF retry) returns real dimensions → fit succeeds.
+        if (measurementCalls === 1) return new DOMRectReadOnly(0, 0, 0, 0);
+        return new DOMRectReadOnly(0, 0, 800, 600);
+      }
+      return new DOMRect(0, 0, 640, 480);
+    });
+
+    render(
+      <WhiteboardReplay
+        eventsBlobUrl="/api/whiteboard/wb-vp-retry/events"
+        title="Viewport race test"
+      />
+    );
+
+    await screen.findByTestId("wb-replay");
+
+    type AppCrop = {
+      scrollX?: number;
+      scrollY?: number;
+      zoom?: { value: number };
+    };
+
+    await waitFor(() => {
+      const fits = updateSceneMock.mock.calls
+        .map((call) => (call[0] as { appState?: AppCrop }).appState)
+        .filter(
+          (app): app is AppCrop & { scrollX: number; scrollY: number } =>
+            !!app &&
+            typeof app.scrollX === "number" &&
+            typeof app.scrollY === "number"
+        );
+      expect(fits.length).toBeGreaterThan(0);
+    });
+
+    expect(measurementCalls).toBeGreaterThanOrEqual(2);
+  });
 });

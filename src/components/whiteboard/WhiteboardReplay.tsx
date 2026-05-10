@@ -380,38 +380,81 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     setAudioElapsedMs(initialT);
 
     const zoomValue = 1;
-    try {
-      const rect = excalCanvasContainerRef.current?.getBoundingClientRect();
-      const cw = rect ? rect.width : 0;
-      const ch = rect ? rect.height : 0;
+    /**
+     * Camera fit can lose to Excalidraw's internal layout race: the canvas
+     * container is mounted but `getBoundingClientRect()` may return 0 width
+     * or height before Excalidraw has measured. When that happens, the
+     * synchronous attempt's `scrollFit` is null and the camera stays at
+     * default (off-center). The share replay reproduced this consistently
+     * even when the admin replay won the race. Retry on a couple of
+     * animation frames is cheap and deterministic — we bail as soon as a
+     * fit produces real numbers.
+     */
+    let rafIds: number[] = [];
+    const attemptCameraFit = (): boolean => {
+      if (!excalCanvasContainerRef.current) return false;
+      const rect = excalCanvasContainerRef.current.getBoundingClientRect();
+      const cw = rect.width;
+      const ch = rect.height;
       const scrollFit = computeReplayViewportScroll({
         elements: lastSceneElementsRef.current,
         containerWidth: cw,
         containerHeight: ch,
         zoom: zoomValue,
       });
+      if (!scrollFit) return false;
+      try {
+        api.updateScene({
+          elements: lastSceneElementsRef.current as unknown[],
+          appState: {
+            theme: excalidrawTheme,
+            viewBackgroundColor: viewBackground,
+            scrollX: scrollFit.scrollX,
+            scrollY: scrollFit.scrollY,
+            zoom: { value: zoomValue },
+          },
+        });
+      } catch {
+        return false;
+      }
+      replayCameraReadyRef.current = true;
+      setReplayViewportSeq((n) => n + 1);
+      return true;
+    };
 
-      api.updateScene({
-        elements: lastSceneElementsRef.current as unknown[],
-        appState: {
-          theme: excalidrawTheme,
-          viewBackgroundColor: viewBackground,
-          ...(scrollFit
-            ? {
-                scrollX: scrollFit.scrollX,
-                scrollY: scrollFit.scrollY,
-                zoom: { value: zoomValue },
-              }
-            : {}),
-        },
-      });
-    } catch {
-      /* ignore cosmetic camera math */
+    // Synchronous attempt — wins for admin in most cases, may lose on share.
+    if (!attemptCameraFit()) {
+      // Schedule retries on the next two animation frames. Excalidraw uses
+      // a ResizeObserver internally and finishes its first measure pass
+      // by the second frame in practice. Stop as soon as one succeeds.
+      const tryAgain = () => {
+        if (replayCameraReadyRef.current) return;
+        if (attemptCameraFit()) return;
+        rafIds.push(window.requestAnimationFrame(tryAgain));
+      };
+      rafIds.push(window.requestAnimationFrame(tryAgain));
     }
-    replayCameraReadyRef.current = true;
-    setReplayViewportSeq((n) => n + 1);
 
-    return undefined;
+    // Theme + viewBackground must land even when no elements / no fit, so
+    // dark mode background applies even on an empty replay.
+    if (!replayCameraReadyRef.current) {
+      try {
+        api.updateScene({
+          elements: lastSceneElementsRef.current as unknown[],
+          appState: {
+            theme: excalidrawTheme,
+            viewBackgroundColor: viewBackground,
+          },
+        });
+      } catch {
+        /* cosmetic */
+      }
+    }
+
+    return () => {
+      for (const id of rafIds) window.cancelAnimationFrame(id);
+      rafIds = [];
+    };
   }, [api, audioBlobUrl, loadState, applySceneAt, excalidrawTheme, viewBackground]);
 
   // -----------------------------------------------------------------
