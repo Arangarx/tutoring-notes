@@ -151,6 +151,10 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
    * Excalidraw reuses the same API object reference.
    */
   const initialPaintApiRef = useRef<ReplayApi | null>(null);
+  /** After the delayed viewport fit, scene updates preserve Excal scroll. */
+  const replayCameraReadyRef = useRef(false);
+  /** Bumps after initial fit so the theme-only effect can merge without clobbering early. */
+  const [replayViewportSeq, setReplayViewportSeq] = useState(0);
   /** Image URLs already passed to Excalidraw `addFiles` for this loaded log. */
   const registeredAssetUrlsRef = useRef<Set<string>>(new Set());
 
@@ -172,6 +176,8 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     lastSceneElementsRef.current = [];
     initialPaintApiRef.current = null;
     registeredAssetUrlsRef.current.clear();
+    replayCameraReadyRef.current = false;
+    setReplayViewportSeq(0);
     setLoadState({ kind: "loading" });
     (async () => {
       try {
@@ -333,7 +339,9 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       }
       painted = sanitizeRestoredExcalidrawElementsForReplay(painted);
       lastSceneElementsRef.current = painted;
-      const preserveScroll = replayScrollPreserve(api);
+      const preserveScroll = replayCameraReadyRef.current
+        ? replayScrollPreserve(api)
+        : null;
       api.updateScene({
         elements: painted,
         appState: {
@@ -365,33 +373,58 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     if (loadState.kind !== "ready" || !api) return;
     if (initialPaintApiRef.current === api) return;
     initialPaintApiRef.current = api;
+    replayCameraReadyRef.current = false;
+
     const noSessionAudio = !audioBlobUrl;
     const log = loadState.log;
     const finalClockMs = Math.max(log.durationMs, maxEventTimestampMs(log));
     const initialT = noSessionAudio ? finalClockMs : 0;
     applySceneAt(initialT);
     setAudioElapsedMs(initialT);
-    const paintedAfterApply = lastSceneElementsRef.current;
+
+    /** Two paint delays + timeout so container metrics + restored image bounds settle before we lock scroll. */
+    const REPLAY_VIEWPORT_REFIT_MS = 120;
     let cancelled = false;
-    let rafInner = 0;
-    const rafOuter = window.requestAnimationFrame(() => {
-      rafInner = window.requestAnimationFrame(() => {
+    const rafHandles: number[] = [];
+    let fitTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const runFit = () => {
+      try {
+        api.refresh?.();
+        api.scrollToContent?.(undefined, {
+          fitToContent: true,
+          animate: false,
+        });
+      } catch {
+        /* ignore — cosmetic */
+      }
+    };
+
+    const schedule = (fn: FrameRequestCallback) => {
+      rafHandles.push(window.requestAnimationFrame(fn));
+    };
+
+    schedule(() => {
+      schedule(() => {
         if (cancelled) return;
-        try {
-          api.refresh?.();
-          api.scrollToContent?.(paintedAfterApply as ReadonlyArray<unknown>, {
-            fitToContent: true,
-            animate: false,
-          });
-        } catch {
-          /* ignore — cosmetic */
-        }
+        runFit();
+        fitTimeout = window.setTimeout(() => {
+          if (cancelled) return;
+          runFit();
+          replayCameraReadyRef.current = true;
+          setReplayViewportSeq((n) => n + 1);
+        }, REPLAY_VIEWPORT_REFIT_MS);
       });
     });
+
     return () => {
       cancelled = true;
-      window.cancelAnimationFrame(rafOuter);
-      window.cancelAnimationFrame(rafInner);
+      for (const h of rafHandles) {
+        window.cancelAnimationFrame(h);
+      }
+      if (fitTimeout !== null) {
+        window.clearTimeout(fitTimeout);
+      }
     };
   }, [api, audioBlobUrl, loadState, applySceneAt]);
 
@@ -455,7 +488,9 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   useEffect(() => {
     if (!api) return;
     try {
-      const preserveScroll = replayScrollPreserve(api);
+      const preserveScroll = replayCameraReadyRef.current
+        ? replayScrollPreserve(api)
+        : null;
       api.updateScene({
         elements: lastSceneElementsRef.current as unknown[],
         appState: {
@@ -467,7 +502,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     } catch {
       /* ignore */
     }
-  }, [api, excalidrawTheme, viewBackground]);
+  }, [api, excalidrawTheme, viewBackground, replayViewportSeq]);
 
   // -----------------------------------------------------------------
   // 6. Render

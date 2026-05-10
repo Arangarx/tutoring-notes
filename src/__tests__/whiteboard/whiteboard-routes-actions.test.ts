@@ -140,6 +140,11 @@ jest.mock("@/lib/date-only", () => ({
 // ── Blob mock (used by actions) ───────────────────────────────────────
 jest.mock("@vercel/blob", () => ({ __esModule: true, put: jest.fn() }));
 
+jest.mock("@/lib/revalidateStudentSharePages", () => ({
+  __esModule: true,
+  revalidateStudentSharePages: jest.fn().mockResolvedValue(undefined),
+}));
+
 // ── Imports (after all mocks) ─────────────────────────────────────────
 import {
   generateNotesFromWhiteboardSessionAction,

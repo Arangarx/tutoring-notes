@@ -90,7 +90,7 @@ afterAll(() => {
 });
 
 describe("WhiteboardReplay initial viewport fit (Phase 0d)", () => {
-  it("calls scrollToContent with painted elements and double-rAF scheduling", async () => {
+  it("calls scrollToContent after layout settles (RAF ×2 + delayed refit)", async () => {
     const rafFns: FrameRequestCallback[] = [];
     const origRaf = window.requestAnimationFrame;
     window.requestAnimationFrame = ((cb: FrameRequestCallback): number => {
@@ -113,25 +113,25 @@ describe("WhiteboardReplay initial viewport fit (Phase 0d)", () => {
 
       expect(scrollToContentMock).not.toHaveBeenCalled();
 
-      const lastElements = (
-        updateSceneMock.mock.calls.at(-1)?.[0] as { elements?: unknown[] }
-      )?.elements;
-      expect(Array.isArray(lastElements)).toBe(true);
-      expect(lastElements!.length).toBeGreaterThan(0);
-
       let guard = 0;
-      while (scrollToContentMock.mock.calls.length === 0 && guard++ < 40) {
-        expect(rafFns.length).toBeGreaterThan(0);
+      while (rafFns.length > 0 && guard++ < 40) {
         const cb = rafFns.shift()!;
         cb(performance.now());
       }
 
-      expect(scrollToContentMock).toHaveBeenCalledTimes(1);
-      expect(scrollToContentMock.mock.calls[0]?.[0]).toEqual(lastElements);
-      expect(scrollToContentMock.mock.calls[0]?.[1]).toEqual({
-        fitToContent: true,
-        animate: false,
-      });
+      await waitFor(() => expect(scrollToContentMock.mock.calls.length).toBeGreaterThanOrEqual(1));
+
+      await new Promise((r) => setTimeout(r, 200));
+
+      expect(scrollToContentMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(scrollToContentMock.mock.calls[0]?.[0]).toBeUndefined();
+      expect(scrollToContentMock.mock.calls.at(-1)?.[0]).toBeUndefined();
+      for (const call of scrollToContentMock.mock.calls) {
+        expect(call[1]).toEqual({
+          fitToContent: true,
+          animate: false,
+        });
+      }
     } finally {
       window.requestAnimationFrame = origRaf;
     }

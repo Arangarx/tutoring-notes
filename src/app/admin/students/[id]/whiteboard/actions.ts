@@ -16,6 +16,7 @@ import {
 } from "@/app/admin/students/[id]/transcribe-result";
 import { looksLikeSilenceHallucination } from "@/lib/whisper-guardrails";
 import { parseDateOnlyInput } from "@/lib/date-only";
+import { revalidateStudentSharePages } from "@/lib/revalidateStudentSharePages";
 
 /**
  * Whiteboard session lifecycle server actions.
@@ -951,6 +952,7 @@ export async function attachWhiteboardToNoteAction(
       `[attachWhiteboardToNote] rid=${rid} wbsid=${whiteboardSessionId} detached`
     );
     revalidatePath(`/admin/students/${session.studentId}`);
+    await revalidateStudentSharePages(session.studentId);
     return { ok: true, noteId: "" };
   }
 
@@ -1021,6 +1023,7 @@ export async function attachWhiteboardToNoteAction(
   revalidatePath(
     `/admin/students/${session.studentId}/whiteboard/${whiteboardSessionId}`
   );
+  await revalidateStudentSharePages(session.studentId);
 
   return { ok: true, noteId: targetNoteId! };
 }

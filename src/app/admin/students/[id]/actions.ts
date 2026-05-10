@@ -17,6 +17,7 @@ import {
   type TranscribeAndGenerateResult,
 } from "./transcribe-result";
 import { createActionCorrelationId } from "@/lib/action-correlation";
+import { revalidateStudentSharePages } from "@/lib/revalidateStudentSharePages";
 import { looksLikeSilenceHallucination } from "@/lib/whisper-guardrails";
 
 const HALLUCINATION_MIC_MESSAGE =
@@ -165,6 +166,32 @@ export async function createNote(
       )
     );
 
+    const wbFromRecordings = await withDbRetry(
+      () =>
+        db.sessionRecording.findMany({
+          where: { id: { in: recordingIds } },
+          select: { whiteboardSessionId: true },
+        }),
+      { label: "createNote.whiteboardIdsFromRecordings" }
+    );
+    const wbIds = [
+      ...new Set(
+        wbFromRecordings
+          .map((r) => r.whiteboardSessionId)
+          .filter((x): x is string => typeof x === "string" && x.length > 0)
+      ),
+    ];
+    if (wbIds.length > 0) {
+      await withDbRetry(
+        () =>
+          db.whiteboardSession.updateMany({
+            where: { id: { in: wbIds }, noteId: null },
+            data: { noteId: note.id },
+          }),
+        { label: "createNote.linkWhiteboardsFromRecordings" }
+      );
+    }
+
     // Auto-fill missing times from recording timestamps when the tutor left them blank.
     if (!startTime || !endTime) {
       const recs = await db.sessionRecording.findMany({
@@ -191,6 +218,9 @@ export async function createNote(
   }
 
   revalidatePath(`/admin/students/${studentId}`);
+  if (recordingIds.length > 0 || shareRecordingInEmail) {
+    await revalidateStudentSharePages(studentId);
+  }
   return { id: note.id };
 }
 
