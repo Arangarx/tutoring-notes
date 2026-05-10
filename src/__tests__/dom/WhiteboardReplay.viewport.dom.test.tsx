@@ -23,6 +23,12 @@ jest.mock("@excalidraw/excalidraw", () => ({
         updateScene: updateSceneMock,
         addFiles: jest.fn(),
         scrollToContent: scrollToContentMock,
+        getAppState: jest.fn(() => ({
+          scrollX: 0,
+          scrollY: 0,
+          zoom: { value: 1 },
+        })),
+        refresh: jest.fn(),
       });
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -123,7 +129,8 @@ describe("WhiteboardReplay initial viewport fit (Phase 0d)", () => {
       expect(scrollToContentMock).toHaveBeenCalledTimes(1);
       expect(scrollToContentMock.mock.calls[0]?.[0]).toEqual(lastElements);
       expect(scrollToContentMock.mock.calls[0]?.[1]).toEqual({
-        fitToContent: true,
+        fitToViewport: true,
+        viewportZoomFactor: 0.82,
         animate: false,
       });
     } finally {

@@ -100,7 +100,12 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
         endTime: true,
         recordings: {
           orderBy: { orderIndex: "asc" },
-          select: { id: true, mimeType: true, durationSeconds: true },
+          select: {
+            id: true,
+            mimeType: true,
+            durationSeconds: true,
+            whiteboardSessionId: true,
+          },
         },
         whiteboardSessions: {
           orderBy: { startedAt: "desc" },

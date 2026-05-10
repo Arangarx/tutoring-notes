@@ -22,6 +22,12 @@ jest.mock("@excalidraw/excalidraw", () => ({
         updateScene: updateSceneMock,
         addFiles: jest.fn(),
         scrollToContent: jest.fn(),
+        getAppState: jest.fn(() => ({
+          scrollX: 12,
+          scrollY: -5,
+          zoom: { value: 1 },
+        })),
+        refresh: jest.fn(),
       });
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);

@@ -57,6 +57,36 @@ describe("ParentShareNoteCard (Phase 0d)", () => {
     expect(audio).toHaveAttribute("src", "/api/audio/rec-1?token=tok-xyz");
   });
 
+  it("shows whiteboard share link from recording.whiteboardSessionId when sessions relation is empty", () => {
+    render(
+      <ParentShareNoteCard
+        token="tok-xyz"
+        dateLabel="May 9, 2026"
+        note={{
+          ...baseNote,
+          whiteboardSessions: [],
+          recordings: [
+            {
+              id: "rec-wb-path",
+              mimeType: "audio/webm",
+              durationSeconds: 8,
+              orderIndex: 0,
+              whiteboardSessionId: "wb-from-rec-share",
+            },
+          ],
+        }}
+        isNew={false}
+      />
+    );
+
+    expect(
+      screen.getByRole("link", { name: /watch the whiteboard recording/i })
+    ).toHaveAttribute(
+      "href",
+      "/s/tok-xyz/whiteboard/wb-from-rec-share"
+    );
+  });
+
   it("shows whiteboard share link when note has linked whiteboard sessions", () => {
     render(
       <ParentShareNoteCard

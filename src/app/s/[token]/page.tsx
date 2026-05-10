@@ -38,6 +38,7 @@ export default async function SharePage({
                   mimeType: true,
                   durationSeconds: true,
                   orderIndex: true,
+                  whiteboardSessionId: true,
                 },
               },
               whiteboardSessions: {

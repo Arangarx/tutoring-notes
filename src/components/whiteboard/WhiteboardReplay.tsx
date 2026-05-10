@@ -88,6 +88,8 @@ type ReplayApi = {
     elements?: ReadonlyArray<unknown>;
     appState?: Record<string, unknown>;
   }) => void;
+  getAppState?: () => Record<string, unknown>;
+  refresh?: () => void;
   addFiles: (
     files: Array<{
       id: string;
@@ -98,7 +100,13 @@ type ReplayApi = {
   ) => void;
   scrollToContent?: (
     target?: ReadonlyArray<unknown>,
-    opts?: { fitToContent?: boolean; animate?: boolean }
+    opts?:
+      | { fitToContent?: boolean; animate?: boolean }
+      | {
+          fitToViewport?: boolean;
+          viewportZoomFactor?: number;
+          animate?: boolean;
+        }
   ) => void;
 };
 
@@ -331,9 +339,11 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       }
       painted = sanitizeRestoredExcalidrawElementsForReplay(painted);
       lastSceneElementsRef.current = painted;
+      const preserveCam = cameraAppSlice(api);
       api.updateScene({
         elements: painted,
         appState: {
+          ...(preserveCam ?? {}),
           theme: excalidrawTheme,
           viewBackgroundColor: viewBackground,
         },
@@ -374,8 +384,10 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       rafInner = window.requestAnimationFrame(() => {
         if (cancelled) return;
         try {
+          api.refresh?.();
           api.scrollToContent?.(paintedAfterApply as ReadonlyArray<unknown>, {
-            fitToContent: true,
+            fitToViewport: true,
+            viewportZoomFactor: 0.82,
             animate: false,
           });
         } catch {
@@ -450,9 +462,11 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   useEffect(() => {
     if (!api) return;
     try {
+      const preserveCam = cameraAppSlice(api);
       api.updateScene({
         elements: lastSceneElementsRef.current as unknown[],
         appState: {
+          ...(preserveCam ?? {}),
           theme: excalidrawTheme,
           viewBackgroundColor: viewBackground,
         },
@@ -622,9 +636,27 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   );
 }
 
-// -------------------------------------------------------------------
-// Helpers
-// -------------------------------------------------------------------
+/**
+ * Replay calls `updateScene` often while the camera was positioned by
+ * `scrollToContent`. Without merging scroll + zoom, Excalidraw snaps back to
+ * defaults and the viewport drifts away from the strokes.
+ */
+function cameraAppSlice(api: ReplayApi): Record<string, unknown> | null {
+  try {
+    const st = api.getAppState?.();
+    if (!st) return null;
+    const sx = st.scrollX;
+    const sy = st.scrollY;
+    const zm = st.zoom;
+    const out: Record<string, unknown> = {};
+    if (sx !== undefined) out.scrollX = sx;
+    if (sy !== undefined) out.scrollY = sy;
+    if (zm !== undefined) out.zoom = zm;
+    return Object.keys(out).length > 0 ? out : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Admin review uses a same-origin API route that authenticates via cookie.

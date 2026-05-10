@@ -76,6 +76,7 @@ export default async function ShareAllPage({ params, searchParams }: PageProps) 
             mimeType: true,
             durationSeconds: true,
             orderIndex: true,
+            whiteboardSessionId: true,
           },
         },
         whiteboardSessions: {

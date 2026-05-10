@@ -18,6 +18,32 @@ describe("TutorStudentNoteExpandedBody (Phase 0d)", () => {
     recordings: [],
   };
 
+  it("shows WB replay link from recording.whiteboardSessionId when note row lacks sessions", () => {
+    render(
+      <TutorStudentNoteExpandedBody
+        {...baseProps}
+        studentId="stu-42"
+        whiteboardSessions={[]}
+        recordings={[
+          {
+            id: "rec-9",
+            mimeType: "audio/webm",
+            durationSeconds: 8,
+            whiteboardSessionId: "wb-from-rec",
+          },
+        ]}
+      />
+    );
+
+    const link = screen.getByRole("link", {
+      name: /watch the whiteboard recording/i,
+    });
+    expect(link).toHaveAttribute(
+      "href",
+      "/admin/students/stu-42/whiteboard/wb-from-rec"
+    );
+  });
+
   it("shows whiteboard replay link when whiteboardSessions is non-empty", () => {
     render(
       <TutorStudentNoteExpandedBody

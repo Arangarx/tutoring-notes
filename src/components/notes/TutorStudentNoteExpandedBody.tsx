@@ -4,11 +4,24 @@ export type TutorNoteRecordingStub = {
   id: string;
   mimeType: string;
   durationSeconds: number | null;
+  /** When set, this segment was captured during a WB session even if note↔WB link lagged. */
+  whiteboardSessionId?: string | null;
 };
 
 export type TutorNoteWhiteboardSessionStub = {
   id: string;
 };
+
+function orderedUnique(ids: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of ids) {
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
 
 function safeJsonArray(value: string): string[] {
   try {
@@ -46,6 +59,10 @@ export function TutorStudentNoteExpandedBody(props: {
   const links = safeJsonArray(linksJson);
   const hasRecordings = recordings.length > 0;
   const totalSegments = recordings.length;
+  const whiteboardReplayIds = orderedUnique([
+    ...whiteboardSessions.map((w) => w.id),
+    ...recordings.map((r) => r.whiteboardSessionId ?? null),
+  ]);
 
   return (
     <div style={{ display: "grid", gap: 10 }}>
@@ -86,17 +103,17 @@ export function TutorStudentNoteExpandedBody(props: {
         </div>
       )}
 
-      {whiteboardSessions.length > 0 && (
+      {whiteboardReplayIds.length > 0 && (
         <div data-testid="tutor-note-wb-links">
           <div className="muted" style={{ fontSize: 12 }}>
             Whiteboard
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 6 }}>
-            {whiteboardSessions.map((wb) => (
+            {whiteboardReplayIds.map((wbId) => (
               <Link
-                key={wb.id}
+                key={wbId}
                 className="btn"
-                href={`/admin/students/${studentId}/whiteboard/${wb.id}`}
+                href={`/admin/students/${studentId}/whiteboard/${wbId}`}
               >
                 Watch the whiteboard recording
               </Link>

@@ -6,6 +6,7 @@ export type ShareNoteRecordingStub = {
   mimeType: string;
   durationSeconds: number | null;
   orderIndex: number;
+  whiteboardSessionId?: string | null;
 };
 
 export type ShareNoteWhiteboardSessionStub = {
@@ -38,6 +39,17 @@ function safeJsonArray(value: string): string[] {
   }
 }
 
+function orderedUnique(ids: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of ids) {
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
 function formatDuration(seconds: number | null): string {
   if (!seconds) return "";
   const m = Math.floor(seconds / 60);
@@ -67,7 +79,11 @@ export function ParentShareNoteCard(props: {
   const { token, dateLabel, note, isNew } = props;
   const links = safeJsonArray(note.linksJson);
 
-  const hasLinkedWhiteboard = note.whiteboardSessions.length > 0;
+  const whiteboardReplayIds = orderedUnique([
+    ...note.whiteboardSessions.map((w) => w.id),
+    ...note.recordings.map((r) => r.whiteboardSessionId ?? null),
+  ]);
+  const hasLinkedWhiteboard = whiteboardReplayIds.length > 0;
   const exposeRecordingToParent =
     note.shareRecordingInEmail || hasLinkedWhiteboard;
   const audioUrls =
@@ -156,11 +172,11 @@ export function ParentShareNoteCard(props: {
               Whiteboard
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start" }}>
-              {note.whiteboardSessions.map((wb) => (
+              {whiteboardReplayIds.map((wbId) => (
                 <Link
-                  key={wb.id}
+                  key={wbId}
                   className="btn"
-                  href={`/s/${token}/whiteboard/${wb.id}`}
+                  href={`/s/${token}/whiteboard/${wbId}`}
                 >
                   Watch the whiteboard recording
                 </Link>
