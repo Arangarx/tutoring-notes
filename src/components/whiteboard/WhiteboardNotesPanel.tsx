@@ -3,31 +3,28 @@
 /**
  * Panel on the whiteboard review page that provides:
  *
- *   1. "Generate notes from this session" — calls
- *      `generateNotesFromWhiteboardSessionAction`, then redirects to
- *      the student page pre-focused on the new draft note. THIS IS
- *      THE AI WEDGE.
+ *   1. "Generate notes from this session" — transcribes WB audio +
+ *      runs AI, then fills `NewNoteForm` for tutor review — same cue as the
+ *      student-detail AI assistant ("Form filled — review and save.").
  *
  *   2. "Attach to note" — links the whiteboard session to an existing
  *      note (or a new blank one).
  *
- * Why redirect to the student page instead of rendering a note form
- * inline here?  The `NewNoteForm` + `AiAssistPanel` combo on the
- * student detail page already handles populate / edit / save reliably.
- * Duplicating that on the review page would create two code paths for
- * the same task.  Instead we:
- *   a. Generate + create a draft note server-side.
- *   b. `redirect` to `/admin/students/[id]` which renders the draft
- *      note in the edit form.
+ * `createNote` links `WhiteboardSession` rows when recordings carry
+ * `whiteboardSessionId`, so Save does not need a separate attach call.
  */
 
-import { useTransition, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   generateNotesFromWhiteboardSessionAction,
   attachWhiteboardToNoteAction,
 } from "@/app/admin/students/[id]/whiteboard/actions";
-import { createNote } from "@/app/admin/students/[id]/actions";
+import NewNoteForm, {
+  type NewNoteFormHandle,
+  type PopulatePayload,
+} from "@/app/admin/students/[id]/NewNoteForm";
+import AiGeneratedNoteReviewGate from "@/components/notes/AiGeneratedNoteReviewGate";
 import { formatUserFacingActionError } from "@/lib/action-correlation";
 
 type Props = {
@@ -52,12 +49,42 @@ export default function WhiteboardNotesPanel({
   hasAudio,
 }: Props) {
   const router = useRouter();
+  const formRef = useRef<NewNoteFormHandle>(null);
+  const draftPayloadRef = useRef<PopulatePayload | null>(null);
+  const [draftGeneration, setDraftGeneration] = useState(0);
+  const [hasDraftReview, setHasDraftReview] = useState(false);
+  const [prefillWarning, setPrefillWarning] = useState<string | null>(
+    null
+  );
+  const [prefillWarningKind, setPrefillWarningKind] = useState<
+    "skipped-only" | "ai-fallback" | null
+  >(null);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
+  const sessionDateSlash = sessionDate.slice(0, 10);
+
+  useLayoutEffect(() => {
+    if (!hasDraftReview) return;
+    const payload = draftPayloadRef.current;
+    if (!payload) return;
+    formRef.current?.populate(payload);
+  }, [draftGeneration, hasDraftReview]);
+
+  const dismissDraftReview = useCallback(() => {
+    formRef.current?.clear();
+    draftPayloadRef.current = null;
+    setHasDraftReview(false);
+    setPrefillWarning(null);
+    setPrefillWarningKind(null);
+    setStatus(null);
+  }, []);
+
   function handleGenerateNotes() {
     setError(null);
+    setPrefillWarning(null);
+    setPrefillWarningKind(null);
     setStatus("Transcribing session audio…");
     startTransition(async () => {
       try {
@@ -71,54 +98,26 @@ export default function WhiteboardNotesPanel({
           return;
         }
 
-        // Create a draft note with the generated fields, link it to the
-        // whiteboard session, then redirect.
-        setStatus("Creating draft note…");
+        if (result.warning) setPrefillWarning(result.warning);
+        if (result.warningKind) setPrefillWarningKind(result.warningKind);
 
-        // Build a FormData that matches the `createNote` server action signature.
-        const fd = new FormData();
-        fd.set("date", sessionDate.slice(0, 10));
-        fd.set("topics", result.topics);
-        fd.set("homework", result.homework);
-        fd.set("assessment", result.assessment);
-        fd.set("plan", result.plan);
-        fd.set("links", result.links);
-        fd.set("aiGenerated", "true");
-        fd.set("aiPromptVersion", result.promptVersion ?? "");
-        fd.set("shareRecordingInEmail", "true");
-        for (const id of result.recordingIds) {
-          fd.append("recordingId", id);
-        }
-        if (result.sessionStartedAt) {
-          const t = new Date(result.sessionStartedAt);
-          fd.set(
-            "startTime",
-            `${String(t.getUTCHours()).padStart(2, "0")}:${String(t.getUTCMinutes()).padStart(2, "0")}`
-          );
-        }
-        if (result.sessionEndedAt) {
-          const t = new Date(result.sessionEndedAt);
-          fd.set(
-            "endTime",
-            `${String(t.getUTCHours()).padStart(2, "0")}:${String(t.getUTCMinutes()).padStart(2, "0")}`
-          );
-        }
-        fd.set("timezoneOffsetMinutes", "0");
-
-        const { id: draftNoteId } = await createNote(studentId, fd);
-
-        const attached = await attachWhiteboardToNoteAction(whiteboardSessionId, {
-          mode: "existing",
-          noteId: draftNoteId,
-        });
-        if (!attached.ok) {
-          setError(attached.error);
-          setStatus(null);
-          return;
-        }
-
-        setStatus("Done! Redirecting…");
-        router.push(`/admin/students/${studentId}`);
+        draftPayloadRef.current = {
+          topics: result.topics,
+          homework: result.homework,
+          assessment: result.assessment,
+          plan: result.plan,
+          links: result.links,
+          promptVersion: result.promptVersion,
+          recordingIds: result.recordingIds,
+          sessionStartedAt: result.sessionStartedAt,
+          sessionEndedAt: result.sessionEndedAt,
+          noteDate: sessionDateSlash,
+        };
+        setHasDraftReview(true);
+        setDraftGeneration((g) => g + 1);
+        setStatus(
+          'Review the AI-filled note below — click "Save note" when ready.'
+        );
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         setError(msg);
@@ -134,7 +133,7 @@ export default function WhiteboardNotesPanel({
       try {
         const result = await attachWhiteboardToNoteAction(whiteboardSessionId, {
           mode: "new",
-          newNoteFromDate: sessionDate.slice(0, 10),
+          newNoteFromDate: sessionDateSlash,
         });
         if (!result.ok) {
           setError(result.error);
@@ -193,48 +192,70 @@ export default function WhiteboardNotesPanel({
         </div>
       )}
 
-      <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-        {aiEnabled && hasAudio && (
-          <button
-            type="button"
-            className="btn primary"
-            disabled={isPending}
-            onClick={handleGenerateNotes}
-            data-testid="wb-generate-notes"
-          >
-            {isPending && status?.startsWith("Transcrib")
-              ? "Transcribing…"
-              : isPending
-              ? "Working…"
-              : "Generate notes from session"}
-          </button>
-        )}
+      {hasDraftReview && (
+        <>
+          <AiGeneratedNoteReviewGate
+            warning={prefillWarning}
+            warningKind={prefillWarningKind}
+            dismissButtonLabel="Cancel"
+            onDismiss={dismissDraftReview}
+          />
+          <NewNoteForm
+            ref={formRef}
+            studentId={studentId}
+            initialNoteDate={sessionDateSlash}
+            onSaved={() => {
+              dismissDraftReview();
+              router.push(`/admin/students/${studentId}`);
+            }}
+          />
+        </>
+      )}
 
-        {!aiEnabled && (
-          <span className="muted" style={{ fontSize: 12 }}>
-            AI note generation requires an OpenAI API key.
-          </span>
-        )}
+      {!hasDraftReview && (
+        <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+          {aiEnabled && hasAudio && (
+            <button
+              type="button"
+              className="btn primary"
+              disabled={isPending}
+              onClick={handleGenerateNotes}
+              data-testid="wb-generate-notes"
+            >
+              {isPending && status?.startsWith("Transcrib")
+                ? "Transcribing…"
+                : isPending
+                ? "Working…"
+                : "Generate notes from session"}
+            </button>
+          )}
 
-        {!hasAudio && aiEnabled && (
-          <span className="muted" style={{ fontSize: 12 }}>
-            No audio was recorded — generate notes from{" "}
-            <a href={`/admin/students/${studentId}`}>the student page</a>.
-          </span>
-        )}
+          {!aiEnabled && (
+            <span className="muted" style={{ fontSize: 12 }}>
+              AI note generation requires an OpenAI API key.
+            </span>
+          )}
 
-        {!attachedNoteId && (
-          <button
-            type="button"
-            className="btn"
-            disabled={isPending}
-            onClick={handleAttachNewBlank}
-            data-testid="wb-attach-blank-note"
-          >
-            Create blank note for this session
-          </button>
-        )}
-      </div>
+          {!hasAudio && aiEnabled && (
+            <span className="muted" style={{ fontSize: 12 }}>
+              No audio was recorded — generate notes from{" "}
+              <a href={`/admin/students/${studentId}`}>the student page</a>.
+            </span>
+          )}
+
+          {!attachedNoteId && (
+            <button
+              type="button"
+              className="btn"
+              disabled={isPending}
+              onClick={handleAttachNewBlank}
+              data-testid="wb-attach-blank-note"
+            >
+              Create blank note for this session
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

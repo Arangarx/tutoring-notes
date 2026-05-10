@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState, useTransition } from "react";
 import { formatUserFacingActionError } from "@/lib/action-correlation";
 import { generateNoteFromTextAction, transcribeAndGenerateAction } from "./actions";
+import AiGeneratedNoteReviewGate from "@/components/notes/AiGeneratedNoteReviewGate";
 import type { NewNoteFormHandle } from "./NewNoteForm";
 import AudioInputTabs, { type AudioResult } from "./AudioInputTabs";
 import PendingSegmentList from "./PendingSegmentList";
@@ -187,57 +188,12 @@ export default function AiAssistPanel({ studentId, formRef, enabled, blobEnabled
       <h3 style={{ marginTop: 0 }}>Auto-fill from session</h3>
 
       {panelState === "filled" ? (
-        <div
-          style={{
-            padding: "12px 14px",
-            background: warning
-              ? "var(--color-warning-bg, #fefce8)"
-              : "var(--color-success-bg, #f0fdf4)",
-            borderRadius: 6,
-            border: warning
-              ? "1px solid var(--color-warning-border, #fde68a)"
-              : "1px solid var(--color-success-border, #bbf7d0)",
-          }}
-          data-testid="ai-filled-hint"
-        >
-          <span
-            style={{
-              color: warning
-                ? "var(--color-warning, #a16207)"
-                : "var(--color-success, #16a34a)",
-              fontWeight: 600,
-              display: "block",
-              marginBottom: warning ? 6 : 10,
-            }}
-            role="status"
-          >
-            {!warning
-              ? "Form filled — review and save."
-              : warningKind === "ai-fallback"
-              ? "Form needs your edits — please review."
-              : "Form filled — heads up below."}
-          </span>
-          {warning && (
-            <p
-              style={{
-                margin: "0 0 10px",
-                fontSize: 13,
-                color: "var(--color-warning, #a16207)",
-                lineHeight: 1.4,
-              }}
-              data-testid="ai-warning"
-            >
-              {warning}
-            </p>
-          )}
-          <button
-            type="button"
-            className="btn"
-            style={{ fontSize: 13 }}
-            onClick={handleRegenerate}
-          >
-            Start over
-          </button>
+        <div data-testid="ai-filled-hint">
+          <AiGeneratedNoteReviewGate
+            warning={warning}
+            warningKind={warningKind}
+            onDismiss={handleRegenerate}
+          />
         </div>
       ) : (
         <>
