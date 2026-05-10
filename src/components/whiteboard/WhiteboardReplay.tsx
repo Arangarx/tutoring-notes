@@ -386,7 +386,8 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     const REPLAY_VIEWPORT_REFIT_MS = 120;
     let cancelled = false;
     const rafHandles: number[] = [];
-    let fitTimeout: ReturnType<typeof setTimeout> | null = null;
+    /** Browser timeouts are numeric handles; avoids NodeJS `Timer` vs DOM mismatch during `next build`. */
+    let fitTimeout: number | null = null;
 
     const runFit = () => {
       try {
