@@ -85,7 +85,7 @@ export default function WhiteboardNotesPanel({
         fd.set("links", result.links);
         fd.set("aiGenerated", "true");
         fd.set("aiPromptVersion", result.promptVersion ?? "");
-        fd.set("shareRecordingInEmail", "false");
+        fd.set("shareRecordingInEmail", "true");
         for (const id of result.recordingIds) {
           fd.append("recordingId", id);
         }
@@ -105,14 +105,18 @@ export default function WhiteboardNotesPanel({
         }
         fd.set("timezoneOffsetMinutes", "0");
 
-        await createNote(studentId, fd);
+        const { id: draftNoteId } = await createNote(studentId, fd);
 
-        // Now that the note exists, attach the whiteboard session to
-        // the most-recent note (the one just created). We find it by
-        // querying server-side via the attach action.
-        // Shortcut: revalidatePath is called by createNote, so the
-        // student page renders fresh. We navigate there now and let
-        // the tutor see/edit the draft.
+        const attached = await attachWhiteboardToNoteAction(whiteboardSessionId, {
+          mode: "existing",
+          noteId: draftNoteId,
+        });
+        if (!attached.ok) {
+          setError(attached.error);
+          setStatus(null);
+          return;
+        }
+
         setStatus("Done! Redirecting…");
         router.push(`/admin/students/${studentId}`);
       } catch (err) {

@@ -80,7 +80,10 @@ export async function revokeShareLink(studentId: string) {
   revalidatePath(`/admin/students/${studentId}`);
 }
 
-export async function createNote(studentId: string, formData: FormData) {
+export async function createNote(
+  studentId: string,
+  formData: FormData
+): Promise<{ id: string }> {
   await assertOwnsStudent(studentId);
   const dateStr = String(formData.get("date") ?? "");
   const date = parseDateOnlyInput(dateStr);
@@ -188,6 +191,7 @@ export async function createNote(studentId: string, formData: FormData) {
   }
 
   revalidatePath(`/admin/students/${studentId}`);
+  return { id: note.id };
 }
 
 // ---------------------------------------------------------------------------

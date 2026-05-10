@@ -129,8 +129,7 @@ describe("WhiteboardReplay initial viewport fit (Phase 0d)", () => {
       expect(scrollToContentMock).toHaveBeenCalledTimes(1);
       expect(scrollToContentMock.mock.calls[0]?.[0]).toEqual(lastElements);
       expect(scrollToContentMock.mock.calls[0]?.[1]).toEqual({
-        fitToViewport: true,
-        viewportZoomFactor: 0.82,
+        fitToContent: true,
         animate: false,
       });
     } finally {

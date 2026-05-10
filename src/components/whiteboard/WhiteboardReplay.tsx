@@ -100,13 +100,7 @@ type ReplayApi = {
   ) => void;
   scrollToContent?: (
     target?: ReadonlyArray<unknown>,
-    opts?:
-      | { fitToContent?: boolean; animate?: boolean }
-      | {
-          fitToViewport?: boolean;
-          viewportZoomFactor?: number;
-          animate?: boolean;
-        }
+    opts?: { fitToContent?: boolean; animate?: boolean }
   ) => void;
 };
 
@@ -339,11 +333,11 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       }
       painted = sanitizeRestoredExcalidrawElementsForReplay(painted);
       lastSceneElementsRef.current = painted;
-      const preserveCam = cameraAppSlice(api);
+      const preserveScroll = replayScrollPreserve(api);
       api.updateScene({
         elements: painted,
         appState: {
-          ...(preserveCam ?? {}),
+          ...(preserveScroll ?? {}),
           theme: excalidrawTheme,
           viewBackgroundColor: viewBackground,
         },
@@ -386,8 +380,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
         try {
           api.refresh?.();
           api.scrollToContent?.(paintedAfterApply as ReadonlyArray<unknown>, {
-            fitToViewport: true,
-            viewportZoomFactor: 0.82,
+            fitToContent: true,
             animate: false,
           });
         } catch {
@@ -462,11 +455,11 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   useEffect(() => {
     if (!api) return;
     try {
-      const preserveCam = cameraAppSlice(api);
+      const preserveScroll = replayScrollPreserve(api);
       api.updateScene({
         elements: lastSceneElementsRef.current as unknown[],
         appState: {
-          ...(preserveCam ?? {}),
+          ...(preserveScroll ?? {}),
           theme: excalidrawTheme,
           viewBackgroundColor: viewBackground,
         },
@@ -637,21 +630,17 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
 }
 
 /**
- * Replay calls `updateScene` often while the camera was positioned by
- * `scrollToContent`. Without merging scroll + zoom, Excalidraw snaps back to
- * defaults and the viewport drifts away from the strokes.
+ * Replay calls `updateScene` frequently; Excalidraw resets scroll if we omit it.
+ * We intentionally do **not** merge `zoom` — spreading `zoom` across ticks while
+ * also using fit-to-* APIs produced runaway percentages (e.g. 3000%) in pilots.
  */
-function cameraAppSlice(api: ReplayApi): Record<string, unknown> | null {
+function replayScrollPreserve(api: ReplayApi): Record<string, unknown> | null {
   try {
     const st = api.getAppState?.();
     if (!st) return null;
-    const sx = st.scrollX;
-    const sy = st.scrollY;
-    const zm = st.zoom;
     const out: Record<string, unknown> = {};
-    if (sx !== undefined) out.scrollX = sx;
-    if (sy !== undefined) out.scrollY = sy;
-    if (zm !== undefined) out.zoom = zm;
+    if (st.scrollX !== undefined) out.scrollX = st.scrollX;
+    if (st.scrollY !== undefined) out.scrollY = st.scrollY;
     return Object.keys(out).length > 0 ? out : null;
   } catch {
     return null;

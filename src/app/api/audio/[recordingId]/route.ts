@@ -10,8 +10,10 @@ import { db } from "@/lib/db";
  * Validates:
  *   1. The share link exists and is not revoked.
  *   2. The recording belongs to the share link's student.
- *   3. Either the tutor enabled `shareRecordingInEmail`, or audio is tied to that
- *    student's whiteboard session (`SessionRecording.whiteboardSessionId`).
+ *   3. One of these sharing gates passes:
+ *      - `shareRecordingInEmail` on the note; or
+ *      - the note has any linked WhiteboardSession; or
+ *      - audio was captured against a WB session (`SessionRecording.whiteboardSessionId`).
  */
 export async function GET(
   _req: Request,
@@ -40,6 +42,11 @@ export async function GET(
       studentId: link.studentId,
       OR: [
         { note: { shareRecordingInEmail: true } },
+        {
+          note: {
+            whiteboardSessions: { some: { studentId: link.studentId } },
+          },
+        },
         {
           whiteboardSession: {
             studentId: link.studentId,
