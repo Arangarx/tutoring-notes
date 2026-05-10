@@ -339,13 +339,17 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       const preserveScroll = replayCameraReadyRef.current
         ? replayScrollPreserve(api)
         : null;
+      // Intentionally DO NOT push `theme` or `viewBackgroundColor` here.
+      // The audio rAF loop calls applySceneAt every frame; pushing
+      // appState.viewBackgroundColor on every tick was causing Excalidraw
+      // to drop the dark background mid-playback (Andrew repro 2026-05-09:
+      // initial paint was dark, hitting Play turned the canvas white and
+      // kept it white). Theme + bg are driven by the `theme` prop alone
+      // (mirrors the workspace canvas) and re-asserted by the dedicated
+      // theme effect when `excalidrawTheme` actually changes.
       api.updateScene({
         elements: painted,
-        appState: {
-          ...(preserveScroll ?? {}),
-          theme: excalidrawTheme,
-          viewBackgroundColor: viewBackground,
-        },
+        ...(preserveScroll ? { appState: preserveScroll } : {}),
       });
       // Kick off image fetches in the background — Excalidraw will
       // call `getFiles()` or look in `BinaryFiles` on next render
@@ -354,7 +358,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
         void registerImageAssets(api, scene, newAssetUrls);
       }
     },
-    [api, loadState, excalidrawTheme, viewBackground]
+    [api, loadState]
   );
 
   // First paint after Excalidraw mount **for this API instance**.

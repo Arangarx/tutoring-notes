@@ -93,8 +93,8 @@ afterAll(() => {
   global.fetch = originalFetch;
 });
 
-describe("WhiteboardReplay dark theme (Phase 0c)", () => {
-  it("applies dark theme + #121212 on updateScene after initial paint when system hook is dark", async () => {
+describe("WhiteboardReplay dark theme (Phase 0c + post-2026-05-09 play-turns-white fix)", () => {
+  it("at least one updateScene call carries dark theme + #121212 background when system hook is dark", async () => {
     render(
       <WhiteboardReplay
         eventsBlobUrl="/api/whiteboard/wb-theme-test/events"
@@ -111,22 +111,75 @@ describe("WhiteboardReplay dark theme (Phase 0c)", () => {
       expect(updateSceneMock.mock.calls.length).toBeGreaterThan(0);
     });
 
-    const firstPayload = updateSceneMock.mock.calls.at(0)?.[0] as {
+    type ScenePayload = {
       appState?: { theme?: string; viewBackgroundColor?: string };
       elements?: unknown[];
     };
 
-    expect(firstPayload?.appState?.theme).toBe("dark");
-    expect(firstPayload?.appState?.viewBackgroundColor).toBe("#121212");
+    const calls = updateSceneMock.mock.calls.map(
+      (call) => call[0] as ScenePayload
+    );
 
-    const lastPayload = updateSceneMock.mock.calls.at(-1)?.[0] as {
+    // Theme effect / first-paint effect MUST push dark theme + bg at least once.
+    const themeCallExists = calls.some(
+      (p) =>
+        p.appState?.theme === "dark" &&
+        p.appState?.viewBackgroundColor === "#121212"
+    );
+    expect(themeCallExists).toBe(true);
+
+    // Final scene call MUST carry the painted elements.
+    const lastWithElements = [...calls]
+      .reverse()
+      .find((p) => Array.isArray(p.elements));
+    expect(lastWithElements).toBeDefined();
+    expect((lastWithElements!.elements as unknown[]).length).toBeGreaterThan(0);
+  });
+
+  /**
+   * Regression: per-frame applySceneAt was pushing
+   * appState.viewBackgroundColor on every audio rAF tick. Excalidraw
+   * dropped the dark background mid-playback (Andrew repro 2026-05-09:
+   * canvas dark on initial paint, hitting Play turned it white). Theme +
+   * bg must come from the `theme` prop and the dedicated theme effect
+   * only — NOT from per-frame scene paints.
+   */
+  it("per-frame scene paints do NOT push viewBackgroundColor", async () => {
+    render(
+      <WhiteboardReplay
+        eventsBlobUrl="/api/whiteboard/wb-theme-tick/events"
+        title="Per-frame regression"
+      />
+    );
+
+    await screen.findByTestId("wb-replay");
+
+    await waitFor(() => {
+      expect(updateSceneMock.mock.calls.length).toBeGreaterThan(0);
+    });
+
+    type ScenePayload = {
       appState?: { theme?: string; viewBackgroundColor?: string };
       elements?: unknown[];
     };
+    const calls = updateSceneMock.mock.calls.map(
+      (call) => call[0] as ScenePayload
+    );
 
-    expect(lastPayload?.appState?.theme).toBe("dark");
-    expect(lastPayload?.appState?.viewBackgroundColor).toBe("#121212");
-    expect(Array.isArray(lastPayload?.elements)).toBe(true);
-    expect((lastPayload?.elements as unknown[]).length).toBeGreaterThan(0);
+    // applySceneAt's own updateScene call must NOT carry
+    // viewBackgroundColor (post-fix). It carries elements and at most a
+    // scrollPreserve appState. The first-paint and theme-transition
+    // effects DO push theme + viewBackgroundColor, but those are
+    // one-time and not what triggered the play-turns-white regression.
+    //
+    // Concretely: at least one updateScene call must have elements
+    // without viewBackgroundColor. Before the fix, every applySceneAt
+    // call carried bg, so no such call would have existed.
+    const cleanScenePaint = calls.some(
+      (p) =>
+        Array.isArray(p.elements) &&
+        p.appState?.viewBackgroundColor === undefined
+    );
+    expect(cleanScenePaint).toBe(true);
   });
 });
