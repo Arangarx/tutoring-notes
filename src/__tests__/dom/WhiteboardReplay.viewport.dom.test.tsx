@@ -11,7 +11,6 @@ jest.mock("@/hooks/useExcalidrawThemeFromSystem", () => ({
 }));
 
 const updateSceneMock = jest.fn();
-const scrollToContentMock = jest.fn();
 
 jest.mock("@excalidraw/excalidraw", () => ({
   __esModule: true,
@@ -22,7 +21,6 @@ jest.mock("@excalidraw/excalidraw", () => ({
       props.excalidrawAPI?.({
         updateScene: updateSceneMock,
         addFiles: jest.fn(),
-        scrollToContent: scrollToContentMock,
         getAppState: jest.fn(() => ({
           scrollX: 0,
           scrollY: 0,
@@ -41,6 +39,7 @@ jest.mock("@excalidraw/excalidraw/index.css", () => ({}), { virtual: true });
 const originalFetch = global.fetch;
 const fetchMock = jest.fn();
 
+/** Rectangle at (−40,−28)+30×20 → bbox center (−25, −18); Phase 0e deterministic camera. */
 const EVENT_LOG_JSON = JSON.stringify({
   schemaVersion: 1,
   startedAt: "2026-05-09T10:00:00.000Z",
@@ -77,63 +76,78 @@ function fakeResponse(body: string, init: { status?: number } = {}): Response {
   } as unknown as Response;
 }
 
-beforeEach(() => {
-  updateSceneMock.mockClear();
-  scrollToContentMock.mockClear();
-  fetchMock.mockReset();
-  global.fetch = fetchMock as unknown as typeof fetch;
-  fetchMock.mockResolvedValue(fakeResponse(EVENT_LOG_JSON));
-});
+describe("WhiteboardReplay initial viewport (Phase 0e)", () => {
+  let gbcrSpy: jest.SpyInstance;
 
-afterAll(() => {
-  global.fetch = originalFetch;
-});
+  beforeEach(() => {
+    updateSceneMock.mockClear();
+    fetchMock.mockReset();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    fetchMock.mockResolvedValue(fakeResponse(EVENT_LOG_JSON));
 
-describe("WhiteboardReplay initial viewport fit (Phase 0d)", () => {
-  it("calls scrollToContent after layout settles (RAF ×2 + delayed refit)", async () => {
-    const rafFns: FrameRequestCallback[] = [];
-    const origRaf = window.requestAnimationFrame;
-    window.requestAnimationFrame = ((cb: FrameRequestCallback): number => {
-      rafFns.push(cb);
-      return rafFns.length;
-    }) as typeof window.requestAnimationFrame;
-    try {
-      render(
-        <WhiteboardReplay
-          eventsBlobUrl="/api/whiteboard/wb-vp-fit/events"
-          title="Viewport test"
-        />
+    const viewportRect = new DOMRectReadOnly(0, 0, 800, 600);
+    gbcrSpy = jest
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        if (this.hasAttribute("data-replay-viewport-metrics")) {
+          return viewportRect as DOMRect;
+        }
+        return new DOMRect(0, 0, 640, 480);
+      });
+  });
+
+  afterEach(() => {
+    gbcrSpy.mockRestore();
+  });
+
+  afterAll(() => {
+    global.fetch = originalFetch;
+  });
+
+  it("centers scrollX/scrollY from bbox math via updateScene", async () => {
+    render(
+      <WhiteboardReplay
+        eventsBlobUrl="/api/whiteboard/wb-vp-fit/events"
+        title="Viewport test"
+      />
+    );
+
+    await screen.findByTestId("wb-replay");
+
+    await waitFor(() => {
+      expect(updateSceneMock.mock.calls.length).toBeGreaterThan(1);
+    });
+
+    type AppCrop = {
+      scrollX?: number;
+      scrollY?: number;
+      zoom?: { value: number };
+    };
+
+    const appStates = updateSceneMock.mock.calls
+      .map((call) => (call[0] as { appState?: AppCrop }).appState)
+      .filter(
+        (
+          app
+        ): app is AppCrop & {
+          scrollX: number;
+          scrollY: number;
+        } =>
+          !!app &&
+          typeof app.scrollX === "number" &&
+          typeof app.scrollY === "number"
       );
 
-      await screen.findByTestId("wb-replay");
+    expect(appStates.some((app) => app.zoom?.value === 1)).toBe(true);
 
-      await waitFor(() => {
-        expect(updateSceneMock.mock.calls.length).toBeGreaterThan(0);
-      });
-
-      expect(scrollToContentMock).not.toHaveBeenCalled();
-
-      let guard = 0;
-      while (rafFns.length > 0 && guard++ < 40) {
-        const cb = rafFns.shift()!;
-        cb(performance.now());
-      }
-
-      await waitFor(() => expect(scrollToContentMock.mock.calls.length).toBeGreaterThanOrEqual(1));
-
-      await new Promise((r) => setTimeout(r, 200));
-
-      expect(scrollToContentMock.mock.calls.length).toBeGreaterThanOrEqual(2);
-      expect(scrollToContentMock.mock.calls[0]?.[0]).toBeUndefined();
-      expect(scrollToContentMock.mock.calls.at(-1)?.[0]).toBeUndefined();
-      for (const call of scrollToContentMock.mock.calls) {
-        expect(call[1]).toEqual({
-          fitToContent: true,
-          animate: false,
-        });
-      }
-    } finally {
-      window.requestAnimationFrame = origRaf;
-    }
+    const expectedSx = 800 / 2 - (-25); // −40 + width/2
+    const expectedSy = 600 / 2 - (-18); // −28 + height/2
+    expect(
+      appStates.some(
+        (app) =>
+          Math.abs(app.scrollX - expectedSx) < 1e-6 &&
+          Math.abs(app.scrollY - expectedSy) < 1e-6
+      )
+    ).toBe(true);
   });
 });

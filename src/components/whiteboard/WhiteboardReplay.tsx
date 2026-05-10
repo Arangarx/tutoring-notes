@@ -98,10 +98,6 @@ type ReplayApi = {
       created: number;
     }>
   ) => void;
-  scrollToContent?: (
-    target?: ReadonlyArray<unknown>,
-    opts?: { fitToContent?: boolean; animate?: boolean }
-  ) => void;
 };
 
 export type WhiteboardReplayProps = {
@@ -157,6 +153,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   const [replayViewportSeq, setReplayViewportSeq] = useState(0);
   /** Image URLs already passed to Excalidraw `addFiles` for this loaded log. */
   const registeredAssetUrlsRef = useRef<Set<string>>(new Set());
+  const excalCanvasContainerRef = useRef<HTMLDivElement | null>(null);
 
   const excalidrawTheme = useExcalidrawThemeFromSystem();
   const viewBackground =
@@ -382,52 +379,40 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     applySceneAt(initialT);
     setAudioElapsedMs(initialT);
 
-    /** Two paint delays + timeout so container metrics + restored image bounds settle before we lock scroll. */
-    const REPLAY_VIEWPORT_REFIT_MS = 120;
-    let cancelled = false;
-    const rafHandles: number[] = [];
-    /** Browser timeouts are numeric handles; avoids NodeJS `Timer` vs DOM mismatch during `next build`. */
-    let fitTimeout: number | null = null;
-
-    const runFit = () => {
-      try {
-        api.refresh?.();
-        api.scrollToContent?.(undefined, {
-          fitToContent: true,
-          animate: false,
-        });
-      } catch {
-        /* ignore — cosmetic */
-      }
-    };
-
-    const schedule = (fn: FrameRequestCallback) => {
-      rafHandles.push(window.requestAnimationFrame(fn));
-    };
-
-    schedule(() => {
-      schedule(() => {
-        if (cancelled) return;
-        runFit();
-        fitTimeout = window.setTimeout(() => {
-          if (cancelled) return;
-          runFit();
-          replayCameraReadyRef.current = true;
-          setReplayViewportSeq((n) => n + 1);
-        }, REPLAY_VIEWPORT_REFIT_MS);
+    const zoomValue = 1;
+    try {
+      const rect = excalCanvasContainerRef.current?.getBoundingClientRect();
+      const cw = rect ? rect.width : 0;
+      const ch = rect ? rect.height : 0;
+      const scrollFit = computeReplayViewportScroll({
+        elements: lastSceneElementsRef.current,
+        containerWidth: cw,
+        containerHeight: ch,
+        zoom: zoomValue,
       });
-    });
 
-    return () => {
-      cancelled = true;
-      for (const h of rafHandles) {
-        window.cancelAnimationFrame(h);
-      }
-      if (fitTimeout !== null) {
-        window.clearTimeout(fitTimeout);
-      }
-    };
-  }, [api, audioBlobUrl, loadState, applySceneAt]);
+      api.updateScene({
+        elements: lastSceneElementsRef.current as unknown[],
+        appState: {
+          theme: excalidrawTheme,
+          viewBackgroundColor: viewBackground,
+          ...(scrollFit
+            ? {
+                scrollX: scrollFit.scrollX,
+                scrollY: scrollFit.scrollY,
+                zoom: { value: zoomValue },
+              }
+            : {}),
+        },
+      });
+    } catch {
+      /* ignore cosmetic camera math */
+    }
+    replayCameraReadyRef.current = true;
+    setReplayViewportSeq((n) => n + 1);
+
+    return undefined;
+  }, [api, audioBlobUrl, loadState, applySceneAt, excalidrawTheme, viewBackground]);
 
   // -----------------------------------------------------------------
   // 5. Audio-driven scene loop. We use rAF (not setInterval) so the
@@ -614,7 +599,11 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
         )}
       </div>
 
-      <div style={{ height: "calc(100vh - 320px)", minHeight: 420 }}>
+      <div
+        ref={excalCanvasContainerRef}
+        data-replay-viewport-metrics=""
+        style={{ height: "calc(100vh - 320px)", minHeight: 420 }}
+      >
         <Excalidraw
           viewModeEnabled
           gridModeEnabled={false}
@@ -666,9 +655,63 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
 }
 
 /**
+ * Center the camera on painted elements without Excalidraw `scrollToContent`
+ * timing (deterministic bbox math — Phase 0e).
+ */
+function computeReplayViewportScroll(args: {
+  elements: readonly unknown[];
+  containerWidth: number;
+  containerHeight: number;
+  zoom: number;
+}): { scrollX: number; scrollY: number } | null {
+  const { elements, containerWidth: cw, containerHeight: ch, zoom } = args;
+  if (elements.length === 0 || !(cw > 0 && ch > 0)) return null;
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const raw of elements) {
+    const el = raw as { x?: unknown; y?: unknown; width?: unknown; height?: unknown };
+    const x = typeof el.x === "number" ? el.x : Number(el.x);
+    const y = typeof el.y === "number" ? el.y : Number(el.y);
+    const w = typeof el.width === "number" ? el.width : Number(el.width);
+    const h = typeof el.height === "number" ? el.height : Number(el.height);
+    if (
+      !Number.isFinite(x) ||
+      !Number.isFinite(y) ||
+      !Number.isFinite(w) ||
+      !Number.isFinite(h)
+    ) {
+      continue;
+    }
+    const xe = x + w;
+    const ye = y + h;
+    minX = Math.min(minX, x, xe);
+    minY = Math.min(minY, y, ye);
+    maxX = Math.max(maxX, x, xe);
+    maxY = Math.max(maxY, y, ye);
+  }
+
+  if (!Number.isFinite(minX) || minX >= maxX || minY >= maxY) {
+    return null;
+  }
+
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+  const zoomValue = zoom > 0 ? zoom : 1;
+  return {
+    scrollX: cw / 2 / zoomValue - centerX,
+    scrollY: ch / 2 / zoomValue - centerY,
+  };
+}
+
+/**
  * Replay calls `updateScene` frequently; Excalidraw resets scroll if we omit it.
- * We intentionally do **not** merge `zoom` — spreading `zoom` across ticks while
- * also using fit-to-* APIs produced runaway percentages (e.g. 3000%) in pilots.
+ * We intentionally do **not** merge `zoom` in `replayScrollPreserve` — ticking
+ * zoom alongside scene updates blew up percentages in pilots. Phase 0e sets zoom once
+ * in the deterministic initial camera patch.
  */
 function replayScrollPreserve(api: ReplayApi): Record<string, unknown> | null {
   try {
