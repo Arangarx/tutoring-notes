@@ -8,6 +8,7 @@ import { NotesSearchBar } from "@/components/notes/NotesSearchBar";
 import { PageSizeSelect } from "@/components/notes/PageSizeSelect";
 import { formatDateOnlyDisplay, formatDateOnlyInput } from "@/lib/date-only";
 import { formatUtcTimeSnapped } from "@/lib/time/snap";
+import { TutorStudentNoteExpandedBody } from "@/components/notes/TutorStudentNoteExpandedBody";
 
 export const dynamic = "force-dynamic";
 
@@ -100,6 +101,10 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
         recordings: {
           orderBy: { orderIndex: "asc" },
           select: { id: true, mimeType: true, durationSeconds: true },
+        },
+        whiteboardSessions: {
+          orderBy: { startedAt: "desc" },
+          select: { id: true },
         },
       },
     }),
@@ -203,13 +208,8 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
         <p className="muted">{q ? "No notes match your search." : "No notes yet."}</p>
       ) : (
         <div style={{ display: "grid", gap: 12 }}>
-          {notes.map((n) => {
-            const links = safeJsonArray(n.linksJson);
-            const hasRecordings = n.recordings.length > 0;
-            const totalSegments = n.recordings.length;
-
-            return (
-              <div key={n.id} className="card">
+          {notes.map((n) => (
+            <div key={n.id} className="card">
                 <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
                   <div>
                     <div style={{ fontWeight: 700 }}>
@@ -247,86 +247,18 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
 
                 <div className="divider" />
 
-                <div style={{ display: "grid", gap: 10 }}>
-                  <div>
-                    <div className="muted" style={{ fontSize: 12 }}>Topics</div>
-                    <div style={{ whiteSpace: "pre-wrap" }}>
-                      {n.topics || <span className="muted">—</span>}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="muted" style={{ fontSize: 12 }}>Homework</div>
-                    <div style={{ whiteSpace: "pre-wrap" }}>
-                      {n.homework || <span className="muted">—</span>}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="muted" style={{ fontSize: 12 }}>Assessment</div>
-                    <div style={{ whiteSpace: "pre-wrap" }}>
-                      {n.assessment || <span className="muted">—</span>}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="muted" style={{ fontSize: 12 }}>Plan</div>
-                    <div style={{ whiteSpace: "pre-wrap" }}>
-                      {n.nextSteps || <span className="muted">—</span>}
-                    </div>
-                  </div>
-                  {links.length > 0 && (
-                    <div>
-                      <div className="muted" style={{ fontSize: 12 }}>Links</div>
-                      <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
-                        {links.map((u) => (
-                          <li key={u}>
-                            <a href={u} target="_blank" rel="noreferrer">{u}</a>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {hasRecordings && (
-                    <div>
-                      <div className="muted" style={{ fontSize: 12 }}>
-                        Recording{totalSegments > 1 ? `s (${totalSegments} segments)` : ""}
-                      </div>
-                      <div style={{ display: "grid", gap: 6, marginTop: 4 }}>
-                        {n.recordings.map((rec, idx) => (
-                          <div key={rec.id}>
-                            {totalSegments > 1 && (
-                              <div className="muted" style={{ fontSize: 11, marginBottom: 2 }}>
-                                Part {idx + 1} of {totalSegments}
-                                {rec.durationSeconds
-                                  ? ` · ${Math.round(rec.durationSeconds)}s`
-                                  : ""}
-                              </div>
-                            )}
-                            {totalSegments === 1 && rec.durationSeconds && (
-                              <div className="muted" style={{ fontSize: 11, marginBottom: 2 }}>
-                                {Math.round(rec.durationSeconds)}s
-                              </div>
-                            )}
-                            {/* Audio caption provided via aria-label on the element */}
-                            <audio
-                              controls
-                              preload="none"
-                              src={`/api/audio/admin/${rec.id}`}
-                              style={{ width: "100%", maxWidth: 480 }}
-                              aria-label={
-                                totalSegments > 1
-                                  ? `Recording part ${idx + 1} of ${totalSegments}`
-                                  : "Session recording"
-                              }
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <TutorStudentNoteExpandedBody
+                  studentId={student.id}
+                  topics={n.topics}
+                  homework={n.homework}
+                  assessment={n.assessment}
+                  nextSteps={n.nextSteps}
+                  linksJson={n.linksJson}
+                  recordings={n.recordings}
+                  whiteboardSessions={n.whiteboardSessions}
+                />
               </div>
-            );
-          })}
+          ))}
         </div>
       )}
 
