@@ -108,6 +108,7 @@ export default async function WhiteboardReviewPage({
           durationSeconds: true,
           noteId: true,
           eventsSchemaVersion: true,
+          snapshotBlobUrl: true,
           student: { select: { id: true, name: true } },
           audioRecordings: {
             select: { id: true, mimeType: true, durationSeconds: true },
@@ -228,7 +229,7 @@ export default async function WhiteboardReviewPage({
         eventsBlobUrl={eventsApiUrl}
         audioBlobUrl={audioApiUrl}
         audioMimeType={firstAudio?.mimeType ?? null}
-        snapshotBlobUrl={session.eventsBlobUrl ? snapshotApiUrl : null}
+        snapshotBlobUrl={detail.snapshotBlobUrl ? snapshotApiUrl : null}
         title={sessionLabel}
       />
 
