@@ -11,9 +11,16 @@ function getSnapshot(): ExcalidrawTheme {
     : "light";
 }
 
-/** SSR / first paint: prefer light so we never default the whiteboard to dark. */
+/**
+ * Hydration MUST use the visitor's actual `prefers-color-scheme` on the browser.
+ * Returning a constant `"light"` here left client components (replay, workspace shells)
+ * on a stale light snapshot until a later passive effect — Excalidraw then painted white
+ * on first frame for dark‑mode tutors.
+ *
+ * SSR still returns `"light"` from `getSnapshot()` when `window` is undefined.
+ */
 function getServerSnapshot(): ExcalidrawTheme {
-  return "light";
+  return getSnapshot();
 }
 
 function subscribe(onStoreChange: () => void): () => void {
