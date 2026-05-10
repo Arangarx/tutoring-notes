@@ -5,6 +5,10 @@ import { db } from "@/lib/db";
 import { formatDateOnlyDisplay } from "@/lib/date-only";
 import { ParentShareNoteCard } from "@/components/notes/ParentShareNoteCard";
 import { parentShareNoteInclude } from "@/lib/share/parentShareNotePayload";
+import {
+  loadWhiteboardReplayIdsByNoteIds,
+  mergeWhiteboardStubsForShareCard,
+} from "@/lib/share/loadWhiteboardReplayIdsForNotes";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +43,9 @@ export default async function SharePage({
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     include: parentShareNoteInclude,
   });
+  const whiteboardIdsByNote = await loadWhiteboardReplayIdsByNoteIds(
+    notes.map((n) => n.id)
+  );
   const totalNotes = notes.length;
 
   // Which notes has this visitor already seen?
@@ -106,7 +113,10 @@ export default async function SharePage({
           linksJson: note.linksJson,
           shareRecordingInEmail: note.shareRecordingInEmail,
           recordings: note.recordings,
-          whiteboardSessions: note.whiteboardSessions,
+          whiteboardSessions: mergeWhiteboardStubsForShareCard(
+            note,
+            whiteboardIdsByNote.get(note.id)
+          ),
         }}
         isNew={isNew}
       />

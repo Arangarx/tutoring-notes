@@ -11,6 +11,8 @@ const mockSessionNoteFindMany = jest.fn();
 const mockNoteViewFindMany = jest.fn();
 const mockCreateMany = jest.fn();
 const mockAdminFindFirst = jest.fn();
+const mockWbSessionFindMany = jest.fn();
+const mockSessionRecordingFindMany = jest.fn();
 
 jest.mock("next/navigation", () => ({
   notFound: jest.fn(() => {
@@ -31,6 +33,12 @@ jest.mock("@/lib/db", () => ({
       createMany: (...a: unknown[]) => mockCreateMany(...a),
     },
     adminUser: { findFirst: (...a: unknown[]) => mockAdminFindFirst(...a) },
+    whiteboardSession: {
+      findMany: (...a: unknown[]) => mockWbSessionFindMany(...a),
+    },
+    sessionRecording: {
+      findMany: (...a: unknown[]) => mockSessionRecordingFindMany(...a),
+    },
   },
 }));
 
@@ -81,6 +89,8 @@ describe("SharePage /s/[token] (Phase 0f)", () => {
       student: { id: "stu-1", name: "Alex" },
     });
     mockAdminFindFirst.mockResolvedValue(null);
+    mockWbSessionFindMany.mockResolvedValue([]);
+    mockSessionRecordingFindMany.mockResolvedValue([]);
   });
 
   it("renders whiteboard replay link when Prisma returns recording.whiteboardSessionId only", async () => {
@@ -148,5 +158,37 @@ describe("SharePage /s/[token] (Phase 0f)", () => {
       screen.queryByRole("link", { name: /watch the whiteboard recording/i })
     ).toBeNull();
     expect(screen.getByTestId("share-page-audio")).toBeInTheDocument();
+  });
+
+  it("renders WB link when batch WB query finds sessions but nested include is empty", async () => {
+    const note = prismaLikeNote({
+      recordings: [
+        {
+          id: "rec-1",
+          mimeType: "audio/webm",
+          durationSeconds: 30,
+          orderIndex: 0,
+          whiteboardSessionId: null,
+        },
+      ],
+      whiteboardSessions: [],
+    });
+    mockSessionNoteFindMany.mockResolvedValue([note]);
+    mockNoteViewFindMany.mockResolvedValue([{ noteId: note.id }]);
+    mockWbSessionFindMany.mockResolvedValue([
+      {
+        id: "wb-batch-only",
+        noteId: note.id,
+        startedAt: new Date("2026-05-09T15:00:00Z"),
+      },
+    ]);
+    mockSessionRecordingFindMany.mockResolvedValue([]);
+
+    const ui = await SharePage({ params: Promise.resolve({ token: "tok-batch" }) });
+    render(ui);
+
+    expect(
+      screen.getByRole("link", { name: /watch the whiteboard recording/i })
+    ).toHaveAttribute("href", "/s/tok-batch/whiteboard/wb-batch-only");
   });
 });

@@ -11,6 +11,10 @@ import {
   parentShareRecordingsArgs,
   parentShareWhiteboardSessionsArgs,
 } from "@/lib/share/parentShareNotePayload";
+import {
+  loadWhiteboardReplayIdsByNoteIds,
+  mergeWhiteboardStubsForShareCard,
+} from "@/lib/share/loadWhiteboardReplayIdsForNotes";
 
 export const dynamic = "force-dynamic";
 
@@ -79,6 +83,10 @@ export default async function ShareAllPage({ params, searchParams }: PageProps) 
     }),
     db.sessionNote.count({ where: { studentId: student.id, ...searchFilter } }),
   ]);
+
+  const whiteboardIdsByNote = await loadWhiteboardReplayIdsByNoteIds(
+    notes.map((n) => n.id)
+  );
 
   const totalPages = Math.ceil(totalCount / pageSize);
 
@@ -183,7 +191,10 @@ export default async function ShareAllPage({ params, searchParams }: PageProps) 
                   linksJson: n.linksJson,
                   shareRecordingInEmail: n.shareRecordingInEmail,
                   recordings: n.recordings,
-                  whiteboardSessions: n.whiteboardSessions,
+                  whiteboardSessions: mergeWhiteboardStubsForShareCard(
+                    n,
+                    whiteboardIdsByNote.get(n.id)
+                  ),
                 }}
                 isNew={false}
               />
