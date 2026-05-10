@@ -17,6 +17,7 @@ import {
   type TranscribeAndGenerateResult,
 } from "./transcribe-result";
 import { createActionCorrelationId } from "@/lib/action-correlation";
+import { revalidateStudentSharePages } from "@/lib/revalidateStudentSharePages";
 import { looksLikeSilenceHallucination } from "@/lib/whisper-guardrails";
 
 const HALLUCINATION_MIC_MESSAGE =
@@ -80,7 +81,10 @@ export async function revokeShareLink(studentId: string) {
   revalidatePath(`/admin/students/${studentId}`);
 }
 
-export async function createNote(studentId: string, formData: FormData) {
+export async function createNote(
+  studentId: string,
+  formData: FormData
+): Promise<{ id: string }> {
   await assertOwnsStudent(studentId);
   const dateStr = String(formData.get("date") ?? "");
   const date = parseDateOnlyInput(dateStr);
@@ -162,6 +166,32 @@ export async function createNote(studentId: string, formData: FormData) {
       )
     );
 
+    const wbFromRecordings = await withDbRetry(
+      () =>
+        db.sessionRecording.findMany({
+          where: { id: { in: recordingIds } },
+          select: { whiteboardSessionId: true },
+        }),
+      { label: "createNote.whiteboardIdsFromRecordings" }
+    );
+    const wbIds = [
+      ...new Set(
+        wbFromRecordings
+          .map((r) => r.whiteboardSessionId)
+          .filter((x): x is string => typeof x === "string" && x.length > 0)
+      ),
+    ];
+    if (wbIds.length > 0) {
+      await withDbRetry(
+        () =>
+          db.whiteboardSession.updateMany({
+            where: { id: { in: wbIds } },
+            data: { noteId: note.id },
+          }),
+        { label: "createNote.linkWhiteboardsFromRecordings" }
+      );
+    }
+
     // Auto-fill missing times from recording timestamps when the tutor left them blank.
     if (!startTime || !endTime) {
       const recs = await db.sessionRecording.findMany({
@@ -188,6 +218,10 @@ export async function createNote(studentId: string, formData: FormData) {
   }
 
   revalidatePath(`/admin/students/${studentId}`);
+  if (recordingIds.length > 0 || shareRecordingInEmail) {
+    await revalidateStudentSharePages(studentId);
+  }
+  return { id: note.id };
 }
 
 // ---------------------------------------------------------------------------
@@ -699,6 +733,33 @@ export async function deleteStudent(studentId: string) {
   await assertOwnsStudent(studentId);
   await db.student.delete({ where: { id: studentId } });
   revalidatePath("/admin/students");
+}
+
+/**
+ * Persist the per-student default for the whiteboard "Start recording"
+ * toggle. Sarah's pilot ask (Apr 2026): some students decline being
+ * recorded, so the workspace toggle should remember that across
+ * sessions. The tutor can still flip the toggle per session — this
+ * just biases the initial value.
+ *
+ * Trust posture mirrors `renameStudent`:
+ *   - `assertOwnsStudent` is the multi-tenant gate.
+ *   - We don't touch any session-in-progress state; the workspace
+ *     reads this on its NEXT mount, not retroactively. That's
+ *     intentional — flipping the default mid-session must NOT silently
+ *     stop recording for the active session (the tutor would be
+ *     mid-lesson and not expect that).
+ */
+export async function setStudentRecordingDefault(
+  studentId: string,
+  enabled: boolean
+): Promise<void> {
+  await assertOwnsStudent(studentId);
+  await db.student.update({
+    where: { id: studentId },
+    data: { recordingDefaultEnabled: enabled },
+  });
+  revalidatePath(`/admin/students/${studentId}`);
 }
 
 export async function updateNote(noteId: string, studentId: string, formData: FormData) {

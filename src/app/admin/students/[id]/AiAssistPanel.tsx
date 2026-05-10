@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useCallback, useRef, useState, useTransition } from "react";
 import { formatUserFacingActionError } from "@/lib/action-correlation";
 import { generateNoteFromTextAction, transcribeAndGenerateAction } from "./actions";
+import AiGeneratedNoteReviewGate from "@/components/notes/AiGeneratedNoteReviewGate";
 import type { NewNoteFormHandle } from "./NewNoteForm";
 import AudioInputTabs, { type AudioResult } from "./AudioInputTabs";
 import PendingSegmentList from "./PendingSegmentList";
@@ -24,6 +25,10 @@ export default function AiAssistPanel({ studentId, formRef, enabled, blobEnabled
   const [activeTab, setActiveTab] = useState<Tab>("text");
   const [sessionText, setSessionText] = useState("");
   const [pendingAudios, setPendingAudios] = useState<AudioResult[]>([]);
+  const pendingAudiosRef = useRef(pendingAudios);
+  pendingAudiosRef.current = pendingAudios;
+  /** Pending list length when the mic arms for capture — keeps "Part N" in sync after Re-record. */
+  const [segmentDisplayBase, setSegmentDisplayBase] = useState(0);
   const [isRecordingActive, setIsRecordingActive] = useState(false);
   const [panelState, setPanelState] = useState<PanelState>("idle");
   const [audioTabsKey, setAudioTabsKey] = useState(0);
@@ -137,6 +142,7 @@ export default function AiAssistPanel({ studentId, formRef, enabled, blobEnabled
     setWarning(null);
     setWarningKind(null);
     setPendingAudios([]);
+    setSegmentDisplayBase(0);
     setIsRecordingActive(false);
     setAudioTabsKey((k) => k + 1);
     formRef.current?.clear();
@@ -159,6 +165,13 @@ export default function AiAssistPanel({ studentId, formRef, enabled, blobEnabled
     setPendingAudios((prev) => prev.filter((_, i) => i !== index));
   }
 
+  const handleRecordingActive = useCallback((active: boolean) => {
+    if (active) {
+      setSegmentDisplayBase(pendingAudiosRef.current.length);
+    }
+    setIsRecordingActive(active);
+  }, []);
+
   if (!enabled) {
     return (
       <div className="card" style={{ opacity: 0.6 }}>
@@ -175,57 +188,12 @@ export default function AiAssistPanel({ studentId, formRef, enabled, blobEnabled
       <h3 style={{ marginTop: 0 }}>Auto-fill from session</h3>
 
       {panelState === "filled" ? (
-        <div
-          style={{
-            padding: "12px 14px",
-            background: warning
-              ? "var(--color-warning-bg, #fefce8)"
-              : "var(--color-success-bg, #f0fdf4)",
-            borderRadius: 6,
-            border: warning
-              ? "1px solid var(--color-warning-border, #fde68a)"
-              : "1px solid var(--color-success-border, #bbf7d0)",
-          }}
-          data-testid="ai-filled-hint"
-        >
-          <span
-            style={{
-              color: warning
-                ? "var(--color-warning, #a16207)"
-                : "var(--color-success, #16a34a)",
-              fontWeight: 600,
-              display: "block",
-              marginBottom: warning ? 6 : 10,
-            }}
-            role="status"
-          >
-            {!warning
-              ? "Form filled — review and save."
-              : warningKind === "ai-fallback"
-              ? "Form needs your edits — please review."
-              : "Form filled — heads up below."}
-          </span>
-          {warning && (
-            <p
-              style={{
-                margin: "0 0 10px",
-                fontSize: 13,
-                color: "var(--color-warning, #a16207)",
-                lineHeight: 1.4,
-              }}
-              data-testid="ai-warning"
-            >
-              {warning}
-            </p>
-          )}
-          <button
-            type="button"
-            className="btn"
-            style={{ fontSize: 13 }}
-            onClick={handleRegenerate}
-          >
-            Start over
-          </button>
+        <div data-testid="ai-filled-hint">
+          <AiGeneratedNoteReviewGate
+            warning={warning}
+            warningKind={warningKind}
+            onDismiss={handleRegenerate}
+          />
         </div>
       ) : (
         <>
@@ -258,7 +226,8 @@ export default function AiAssistPanel({ studentId, formRef, enabled, blobEnabled
             onTabChange={setActiveTab}
             onAudioReady={handleAudioReady}
             onAudioCleared={() => {/* segments list handles removal */}}
-            onRecordingActive={setIsRecordingActive}
+            onRecordingActive={handleRecordingActive}
+            segmentDisplayBase={segmentDisplayBase}
             disabled={isPending}
             blobEnabled={blobEnabled}
           />

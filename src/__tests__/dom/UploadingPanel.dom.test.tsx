@@ -4,8 +4,8 @@
 
 import { createRef } from "react";
 import { render, screen } from "@testing-library/react";
-import UploadingPanel from "@/app/admin/students/[id]/recorder/UploadingPanel";
-import type { MicControlsProps } from "@/app/admin/students/[id]/recorder/MicControls";
+import UploadingPanel from "@/components/recording/UploadingPanel";
+import type { MicControlsProps } from "@/components/recording/MicControls";
 
 function micControlsFixture(): MicControlsProps {
   return {
@@ -42,6 +42,18 @@ describe("UploadingPanel", () => {
     );
     expect(screen.getByTestId("audio-record-uploading-segment")).toBeInTheDocument();
     expect(screen.getByTestId("mic-controls")).toBeInTheDocument();
+    expect(screen.getByText(/saving segment 3/i)).toBeInTheDocument();
+  });
+
+  test("segment mode respects segmentDisplayBase in copy", () => {
+    render(
+      <UploadingPanel
+        mode="segment"
+        micControls={micControlsFixture()}
+        segmentNumber={1}
+        segmentDisplayBase={2}
+      />
+    );
     expect(screen.getByText(/saving segment 3/i)).toBeInTheDocument();
   });
 

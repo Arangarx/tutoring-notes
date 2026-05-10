@@ -96,6 +96,31 @@ export async function seedTestStudent(adminUserId: string): Promise<{
 }
 
 /**
+ * Insert an open whiteboard session row for E2E (Excalidraw mount smoke).
+ * Avoids Vercel Blob — uses a placeholder `eventsBlobUrl` (not fetched on workspace mount).
+ */
+export async function seedOpenWhiteboardSession(args: {
+  adminUserId: string;
+  studentId: string;
+}): Promise<string> {
+  const prisma = new PrismaClient();
+  try {
+    const session = await prisma.whiteboardSession.create({
+      data: {
+        adminUserId: args.adminUserId,
+        studentId: args.studentId,
+        consentAcknowledged: true,
+        eventsBlobUrl: "https://pw.local/placeholder-whiteboard-events.json",
+      },
+      select: { id: true },
+    });
+    return session.id;
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+/**
  * Log in as the test admin via the login form.
  * Navigates to /login, fills credentials, submits, waits for redirect to /admin.
  */

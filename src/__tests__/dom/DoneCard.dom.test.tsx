@@ -4,7 +4,7 @@
 
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import DoneCard from "@/app/admin/students/[id]/recorder/DoneCard";
+import DoneCard from "@/components/recording/DoneCard";
 
 describe("DoneCard", () => {
   test("renders saved duration in MM:SS form", () => {

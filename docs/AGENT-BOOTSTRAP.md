@@ -1,0 +1,79 @@
+# New session bootstrap (tutoring-notes)
+
+**Paste this file (or the block below) at the start of a new agent chat** when you will touch `tutoring-notes`, especially whiteboard or recorder work.
+
+---
+
+## 1) Repo and git (non-negotiable)
+
+- **App root (this is its own `git` repository):**  
+  `.../dev/agentic-projects/tutoring-notes` (sibling folder to `agenticPipeline`, not inside it)  
+  **Not** the monorepo root `agenticPipeline` (different remotes, different history).
+- **Default whiteboard / integration branch:** `feature/whiteboard-phase1`  
+  **Before a large change:** `git pull origin feature/whiteboard-phase1` in **this** folder so parallel threads (e.g. another Cursor chat) do not clobber work.
+- **If `git push` fails** (DNS, timeout): retry **2–3 times** with **2–5s backoff** before treating push as failed. The commit is still local.
+- **Latest shipped tip (verify with `git log -1` after pull):** `d4dbbfa` — *Whiteboard: private blob read proxies; wire v2 follow+page; student follow UI* (plus earlier: live sync, resume/draft, etc.).
+
+---
+
+## 2) Sibling repo — `whiteboard-sync` (live relay; **separate git**, **not** the main product)
+
+**tutoring-notes** is the app you ship on Vercel (the **main** folder for day-to-day work). **`whiteboard-sync`** exists only because live collaboration needs a **long-running WebSocket server** (upstream `excalidraw-room`) that **does not** fit the Vercel/Next deployment model. A past agent split it into its own repo for **deploy isolation** (Dockerfile, Fly.io, CORS), not because it is a second user-facing product.
+
+Live whiteboard collaboration **does not** run on Vercel. The app’s `sync-client` talks to that relay. Details:
+
+| | |
+|--|--|
+| **Path (next to tutoring-notes)** | `.../dev/agentic-projects/whiteboard-sync` |
+| **Remote (typical)** | `https://github.com/Arangarx/whiteboard-sync.git` |
+| **Purpose** | Dockerfile + Fly.io deploy of pinned `excalidraw-room`; CORS, certs, `fly deploy` — see its **`README.md`**. |
+| **Connects to the app via** | **`WHITEBOARD_SYNC_URL`** in `tutoring-notes` (e.g. `wss://…`) — the Next app never embeds the relay; it only needs the public WebSocket base URL. |
+| **When to open this repo** | Changing relay version, CORS, Fly app name, or debugging “live sync won’t connect” (tail `fly logs`, compare to client in `src/lib/whiteboard/sync-client.ts`). |
+
+**Parallel chats:** a session that only reads `tutoring-notes` docs will not see this folder unless you **paste this section** or point the agent at `whiteboard-sync/README.md`. That is a documentation gap, not proof another thread “forgot” the relay — there was nothing in the last bootstrap that named it.
+
+**Cost / deploy notes** (Fly, DNS, CORS list): `docs/WHITEBOARD-STATUS.md` — *“Sync host deploy notes”* in `tutoring-notes`.
+
+---
+
+## 3) Authoritative in-repo references
+
+- **Engineering execution order (whiteboard + audio):** **`../.cursor/plans/WHITEBOARD-IMPROVEMENT-PLAN.md`** (W-items + smoke folds). Cursor **Build** YAML todos: **`../.cursor/plans/whiteboard_improvement_execution.plan.md`**. Historical Phase 1 narrative (mostly completed todos): `~/.cursor/plans/whiteboard_-_match_wyzant_for_sarah_plus_our_wedge_*.plan.md`.
+- **Backlog of record (open work, pilot notes, audit items):** `docs/BACKLOG.md`
+- **Whiteboard phase-1 handoff (guardrails, blockers, status narrative):** `docs/WHITEBOARD-STATUS.md`
+- **Reliability standard (5-axis):** **`../../../agenticPipeline/.cursor/rules/reliability-bar.mdc`** relative to this file — apply when changing recorder, uploads, or whiteboard persistence.
+
+---
+
+## 4) Not in git on every machine (local-only)
+
+**Untracked / not pushed (as of 2026-04-24):** `docs/eval/`, `scripts/build-b3b4-transcript-doc.mjs` — do not assume they exist on another clone until someone adds and commits them. Also reflected under **Operational follow-ups** in `docs/BACKLOG.md`.
+
+---
+
+## 5) Whiteboard — quick code map (post–wire v2)
+
+| Concern | Where to look |
+|--------|----------------|
+| Encrypted live sync, wire message shape, **broadcast extras** (follow + page) | `src/lib/whiteboard/sync-client.ts` |
+| Apply remote scene without a **blank remote** stomping local / rebroadcast issues | `src/lib/whiteboard/apply-reconciled-remote-scene.ts` |
+| **Private Vercel Blob** in the browser: same-origin read proxies, path scoping | `src/lib/whiteboard/blob-asset-in-scope.ts`, `src/lib/whiteboard/resolve-asset-read-url.ts`, `src/lib/whiteboard/hydrate-remote-files.ts` |
+| HTTP routes for assets | `src/app/api/w/[joinToken]/wb-asset/route.ts` (student), `src/app/api/whiteboard/[sessionId]/tutor-asset/route.ts` (tutor) |
+| Tutor workspace, wiring **extras** into recorder | `src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceClient.tsx`, `src/hooks/useWhiteboardRecorder.ts` |
+| Student joiner, follow UX | `src/app/w/[joinToken]/StudentWhiteboardClient.tsx`, `src/hooks/useStudentWhiteboardCanvas.ts` |
+| **Double resume** (stale room gate + IndexedDB): one-shot skip | `src/lib/whiteboard/resume-prompt-flags.ts`, `WorkspaceResumeGate.tsx`, `useWhiteboardRecorder.ts` |
+
+**Still a known gap (see BACKLOG):** full **binary file** parity on the student canvas (images/PDFs in `fileId` / `BinaryFiles`) may need more mirroring of tutor `addFiles` — not the same as wire v2 follow/page.
+
+---
+
+## 6) Process
+
+- **Cross-session / parallel chat:** same branch + pull first; do not treat `agenticPipeline` root as the app’s `git` remote.
+- **Day-to-day tickets** are fine; if **BACKLOG** and a ticket disagree, **BACKLOG wins** for “what is still open for this app” (per BACKLOG’s own rules).
+
+---
+
+## 7) One-line mission (from product docs)
+
+Solo- and small-practice **tutors** first; **multi-tenant** scoping is mandatory on every admin/API path. Pilot feedback in BACKLOG (Sarah) is the main prioritization input until broader usage exists.

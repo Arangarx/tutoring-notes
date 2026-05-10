@@ -1,7 +1,14 @@
 "use client";
 
-import { useTransition, useState, useImperativeHandle, forwardRef } from "react";
+import {
+  useTransition,
+  useState,
+  useImperativeHandle,
+  forwardRef,
+  useMemo,
+} from "react";
 import { createNote } from "./actions";
+import { formatLocalTimeSnapped, TIME_INPUT_STEP_SECONDS } from "@/lib/time/snap";
 
 export type PopulatePayload = {
   topics: string;
@@ -12,6 +19,8 @@ export type PopulatePayload = {
   plan: string;
   links: string;
   promptVersion: string;
+  /** `YYYY-MM-DD` — e.g. whiteboard session day on the replay page. */
+  noteDate?: string;
   /** Set when the note was generated from one or more audio recordings. */
   recordingIds?: string[];
   /**
@@ -24,13 +33,15 @@ export type PopulatePayload = {
   sessionEndedAt?: string;
 };
 
-/** Format a UTC ISO timestamp as `HH:MM` in the browser's local timezone. */
+/**
+ * Format a UTC ISO timestamp as `HH:MM` in the browser's local timezone,
+ * snapped to the nearest 5-minute grid (matches `step={300}` on the
+ * inputs below — see lib/time/snap.ts for the full rationale).
+ */
 function formatLocalTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${hh}:${mm}`;
+  return formatLocalTimeSnapped(d);
 }
 
 export type NewNoteFormHandle = {
@@ -45,6 +56,8 @@ type Props = {
   studentId: string;
   /** Called after a note is successfully saved, so parent can reset dependent panels. */
   onSaved?: () => void;
+  /** When set, initializes the `<input type="date">`; still editable. */
+  initialNoteDate?: string;
 };
 
 const TEMPLATES = [
@@ -62,10 +75,14 @@ function formatDateInput(d: Date) {
 }
 
 const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
-  { studentId, onSaved },
+  { studentId, onSaved, initialNoteDate },
   ref
 ) {
-  const [date] = useState(() => formatDateInput(new Date()));
+  const baselineNoteDate = useMemo(
+    () => initialNoteDate ?? formatDateInput(new Date()),
+    [initialNoteDate]
+  );
+  const [noteDate, setNoteDate] = useState(() => baselineNoteDate);
   const [template, setTemplate] = useState("");
   const [topics, setTopics] = useState("");
   const [homework, setHomework] = useState("");
@@ -92,6 +109,7 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
       setAssessment(payload.assessment);
       setPlan(payload.plan);
       if (payload.links) setLinks(payload.links);
+      if (payload.noteDate) setNoteDate(payload.noteDate);
       setAiGenerated(true);
       setAiPromptVersion(payload.promptVersion);
       if (payload.recordingIds && payload.recordingIds.length > 0) {
@@ -116,6 +134,7 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
       setAssessment("");
       setPlan("");
       setLinks("");
+      setNoteDate(baselineNoteDate);
       setStartTime("");
       setEndTime("");
       setAiGenerated(false);
@@ -126,7 +145,7 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
     hasUserContent() {
       return !!(topics.trim() || homework.trim() || assessment.trim() || plan.trim());
     },
-  }));
+  }), [baselineNoteDate, startTime, endTime, topics, homework, assessment, plan]);
 
   const hasContent = !!(topics.trim() || homework.trim() || assessment.trim() || plan.trim() || links.trim());
 
@@ -136,6 +155,7 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
     setAssessment("");
     setPlan("");
     setLinks("");
+    setNoteDate(baselineNoteDate);
     setStartTime("");
     setEndTime("");
     setAiGenerated(false);
@@ -165,6 +185,7 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
         setAiPromptVersion("");
         setRecordingIds([]);
         setShareRecordingInEmail(false);
+        setNoteDate(baselineNoteDate);
         onSaved?.();
       } finally {
         setSubmitting(false);
@@ -186,7 +207,13 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
       <div className="row">
         <div style={{ flex: 1, minWidth: 200 }}>
           <label htmlFor="note-date">Date</label>
-          <input id="note-date" name="date" type="date" defaultValue={date} />
+        <input
+          id="note-date"
+          name="date"
+          type="date"
+          value={noteDate}
+          onChange={(e) => setNoteDate(e.target.value)}
+        />
         </div>
         <div style={{ flex: 1, minWidth: 200 }}>
           <label htmlFor="note-template">Template (optional)</label>
@@ -212,6 +239,12 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
             id="note-start-time"
             name="startTime"
             type="time"
+            // 5-minute increments — Sarah's explicit ask. Matches Wyzant's
+            // time picker and her own habit of rounding to the nearest 5.
+            // Pairs with the formatLocalTime() snap above so AI-prefilled
+            // times don't land off-grid and trigger HTML5 step validation
+            // on submit.
+            step={TIME_INPUT_STEP_SECONDS}
             value={startTime}
             onChange={(e) => setStartTime(e.target.value)}
           />
@@ -222,6 +255,7 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
             id="note-end-time"
             name="endTime"
             type="time"
+            step={TIME_INPUT_STEP_SECONDS}
             value={endTime}
             onChange={(e) => setEndTime(e.target.value)}
           />

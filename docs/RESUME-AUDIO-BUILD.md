@@ -24,7 +24,8 @@ Plan file (Cursor-local, not in repo): `~/.cursor/plans/audio_session_capture_72
 ### 1. Finish `vercel link`
 
 ```powershell
-cd pipeline-projects/tutoring-notes
+# From agenticPipeline monorepo root, or adjust to your clone path.
+cd ..\agentic-projects\tutoring-notes
 npx vercel link
 ```
 

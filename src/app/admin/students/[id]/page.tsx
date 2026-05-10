@@ -11,8 +11,12 @@ import { ShareLinkRow } from "./ShareLinkRow";
 import { SubmitButton } from "@/components/SubmitButton";
 import { StudentActions } from "./StudentActions";
 import NoteEntrySection from "./NoteEntrySection";
+import { ActiveWhiteboardSessionsList } from "./whiteboard/ActiveWhiteboardSessionsList";
+import { StartWhiteboardSession } from "./whiteboard/StartWhiteboardSession";
+import { StudentRecordingDefaultToggle } from "./StudentRecordingDefaultToggle";
 import { env } from "@/lib/env";
 import { formatDateOnlyDisplay } from "@/lib/date-only";
+import { getRequestBaseUrl } from "@/lib/public-url";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +56,15 @@ export default async function StudentDetailPage({
       shareLinks: { where: { revokedAt: null }, orderBy: { createdAt: "desc" } },
       _count: { select: { notes: true } },
       notes: { orderBy: { date: "desc" }, take: 1, select: { date: true } },
+      // Still-running whiteboard rooms (endedAt = null) — surfaced under
+      // the "Start" button so tutors can continue or end stragglers
+      // without multiple forgotten live sessions piling up in the DB.
+      whiteboardSessions: {
+        where: { endedAt: null },
+        orderBy: { startedAt: "desc" },
+        take: 20,
+        select: { id: true, startedAt: true },
+      },
     },
   });
 
@@ -59,6 +72,11 @@ export default async function StudentDetailPage({
   if (!canAccessStudentRow(scope, student)) notFound();
 
   const activeShare = student.shareLinks[0] ?? null;
+  // Tutor-displayed share URL follows the deployment serving the request so
+  // smoke-testing on a Vercel preview surfaces the preview host (not the
+  // hardcoded production NEXTAUTH_URL). Email send still uses the production
+  // URL via `baseUrl()` in the action so parents always get the stable host.
+  const shareDisplayBaseUrl = activeShare ? await getRequestBaseUrl() : null;
 
   return (
     <div className="card">
@@ -87,7 +105,7 @@ export default async function StudentDetailPage({
               This link does not require login. You can revoke/regenerate anytime.
             </p>
             {(() => {
-              const url = `${process.env.NEXTAUTH_URL ?? "http://localhost:3000"}/s/${activeShare.token}`;
+              const url = `${shareDisplayBaseUrl ?? "http://localhost:3000"}/s/${activeShare.token}`;
               return (
                 <>
                   <ShareLinkRow url={url} />
@@ -118,6 +136,31 @@ export default async function StudentDetailPage({
       <div className="divider" />
 
       <NoteEntrySection studentId={student.id} aiEnabled={!!env.OPENAI_API_KEY} blobEnabled={!!env.BLOB_READ_WRITE_TOKEN} />
+
+      <div className="divider" />
+
+      <div className="card">
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+          <div>
+            <h3 style={{ margin: 0 }}>Whiteboard session</h3>
+            <p className="muted" style={{ margin: "4px 0 0", fontSize: 13 }}>
+              Live whiteboard with audio recording for tutoring sessions.
+              Generates session notes from what you wrote and said.
+            </p>
+          </div>
+          <StartWhiteboardSession studentId={student.id} />
+        </div>
+        <ActiveWhiteboardSessionsList
+          studentId={student.id}
+          sessions={student.whiteboardSessions}
+        />
+        <div style={{ marginTop: 10 }}>
+          <StudentRecordingDefaultToggle
+            studentId={student.id}
+            initialEnabled={student.recordingDefaultEnabled}
+          />
+        </div>
+      </div>
 
       <div className="divider" />
 

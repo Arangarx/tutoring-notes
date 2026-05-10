@@ -6,6 +6,15 @@ import { db } from "@/lib/db";
 import { formatDateOnlyDisplay } from "@/lib/date-only";
 import { NotesSearchBar } from "@/components/notes/NotesSearchBar";
 import { PageSizeSelect } from "@/components/notes/PageSizeSelect";
+import { ParentShareNoteCard } from "@/components/notes/ParentShareNoteCard";
+import {
+  parentShareRecordingsArgs,
+  parentShareWhiteboardSessionsArgs,
+} from "@/lib/share/parentShareNotePayload";
+import {
+  loadWhiteboardReplayIdsByNoteIds,
+  mergeWhiteboardStubsForShareCard,
+} from "@/lib/share/loadWhiteboardReplayIdsForNotes";
 
 export const dynamic = "force-dynamic";
 
@@ -17,24 +26,6 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 const DEFAULT_PAGE_SIZE = 20;
-
-function safeJsonArray(value: string): string[] {
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-function formatTimeDisplay(d: Date | null): string {
-  if (!d) return "";
-  const h = d.getUTCHours();
-  const m = d.getUTCMinutes();
-  const ampm = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 || 12;
-  return `${h12}:${m.toString().padStart(2, "0")} ${ampm}`;
-}
 
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -86,14 +77,16 @@ export default async function ShareAllPage({ params, searchParams }: PageProps) 
         startTime: true,
         endTime: true,
         shareRecordingInEmail: true,
-        recordings: {
-          orderBy: { orderIndex: "asc" },
-          select: { id: true, durationSeconds: true },
-        },
+        recordings: parentShareRecordingsArgs,
+        whiteboardSessions: parentShareWhiteboardSessionsArgs,
       },
     }),
     db.sessionNote.count({ where: { studentId: student.id, ...searchFilter } }),
   ]);
+
+  const whiteboardIdsByNote = await loadWhiteboardReplayIdsByNoteIds(
+    notes.map((n) => n.id)
+  );
 
   const totalPages = Math.ceil(totalCount / pageSize);
 
@@ -180,94 +173,32 @@ export default async function ShareAllPage({ params, searchParams }: PageProps) 
           <p className="muted">{q ? "No notes match your search." : "No notes yet."}</p>
         ) : (
           <div style={{ display: "grid", gap: 12 }}>
-            {notes.map((n) => {
-              const links = safeJsonArray(n.linksJson);
-              const audioUrls = n.shareRecordingInEmail
-                ? n.recordings.map((r) => `/api/audio/${r.id}?token=${token}`)
-                : [];
-
-              return (
-                <div key={n.id} className="card">
-                  <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-                    <div>
-                      <div style={{ fontWeight: 800 }}>
-                        {formatDateOnlyDisplay(n.date)}
-                      </div>
-                      {(n.startTime || n.endTime) && (
-                        <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-                          {formatTimeDisplay(n.startTime)}
-                          {n.startTime && n.endTime && " – "}
-                          {formatTimeDisplay(n.endTime)}
-                        </div>
-                      )}
-                    </div>
-                    {n.template && (
-                      <span className="muted" style={{ fontSize: 12 }}>{n.template}</span>
-                    )}
-                  </div>
-
-                  <div className="divider" />
-
-                  <div style={{ display: "grid", gap: 10 }}>
-                    <section>
-                      <div className="muted" style={{ fontSize: 12 }}>Topics covered</div>
-                      <div style={{ whiteSpace: "pre-wrap" }}>{n.topics || "—"}</div>
-                    </section>
-                    <section>
-                      <div className="muted" style={{ fontSize: 12 }}>Homework</div>
-                      <div style={{ whiteSpace: "pre-wrap" }}>{n.homework || "—"}</div>
-                    </section>
-                    <section>
-                      <div className="muted" style={{ fontSize: 12 }}>Assessment</div>
-                      <div style={{ whiteSpace: "pre-wrap" }}>{n.assessment || "—"}</div>
-                    </section>
-                    <section>
-                      <div className="muted" style={{ fontSize: 12 }}>Plan</div>
-                      <div style={{ whiteSpace: "pre-wrap" }}>{n.nextSteps || "—"}</div>
-                    </section>
-                    {links.length > 0 && (
-                      <section>
-                        <div className="muted" style={{ fontSize: 12 }}>Links</div>
-                        <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
-                          {links.map((u) => (
-                            <li key={u}>
-                              <a href={u} target="_blank" rel="noreferrer">{u}</a>
-                            </li>
-                          ))}
-                        </ul>
-                      </section>
-                    )}
-                    {audioUrls.length > 0 && (
-                      <section>
-                        <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-                          Session recording{audioUrls.length > 1 ? "s" : ""}
-                        </div>
-                        {audioUrls.map((audioUrl, idx) => {
-                          const durationLabel = n.recordings[idx]?.durationSeconds
-                            ? ` · ${Math.floor(n.recordings[idx].durationSeconds! / 60)}:${String(n.recordings[idx].durationSeconds! % 60).padStart(2, "0")}`
-                            : "";
-                          return (
-                            <div key={audioUrl} style={{ marginBottom: idx < audioUrls.length - 1 ? 8 : 0 }}>
-                              {audioUrls.length > 1 && (
-                                <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>
-                                  Part {idx + 1} of {audioUrls.length}{durationLabel}
-                                </div>
-                              )}
-                              <audio
-                                controls
-                                src={audioUrl}
-                                aria-label={audioUrls.length > 1 ? `Part ${idx + 1} of ${audioUrls.length}` : "Session recording"}
-                                style={{ width: "100%", maxWidth: 480, display: "block" }}
-                              />
-                            </div>
-                          );
-                        })}
-                      </section>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            {notes.map((n) => (
+              <ParentShareNoteCard
+                key={n.id}
+                token={token}
+                dateLabel={formatDateOnlyDisplay(n.date)}
+                note={{
+                  id: n.id,
+                  date: n.date,
+                  startTime: n.startTime,
+                  endTime: n.endTime,
+                  template: n.template,
+                  topics: n.topics,
+                  homework: n.homework,
+                  assessment: n.assessment,
+                  nextSteps: n.nextSteps,
+                  linksJson: n.linksJson,
+                  shareRecordingInEmail: n.shareRecordingInEmail,
+                  recordings: n.recordings,
+                  whiteboardSessions: mergeWhiteboardStubsForShareCard(
+                    n,
+                    whiteboardIdsByNote.get(n.id)
+                  ),
+                }}
+                isNew={false}
+              />
+            ))}
           </div>
         )}
 

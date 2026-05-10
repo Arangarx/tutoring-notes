@@ -9,8 +9,11 @@ import { db } from "@/lib/db";
  *
  * Validates:
  *   1. The share link exists and is not revoked.
- *   2. The recording belongs to a note on that share link's student.
- *   3. shareRecordingInEmail is true on the note.
+ *   2. The recording belongs to the share link's student.
+ *   3. One of these sharing gates passes:
+ *      - `shareRecordingInEmail` on the note; or
+ *      - the note has any linked WhiteboardSession; or
+ *      - audio was captured against a WB session (`SessionRecording.whiteboardSessionId`).
  */
 export async function GET(
   _req: Request,
@@ -33,12 +36,23 @@ export async function GET(
     return NextResponse.json({ error: "Invalid or expired link" }, { status: 403 });
   }
 
-  // Verify the recording exists, belongs to this student, and its note has sharing enabled.
   const recording = await db.sessionRecording.findFirst({
     where: {
       id: recordingId,
       studentId: link.studentId,
-      note: { shareRecordingInEmail: true },
+      OR: [
+        { note: { shareRecordingInEmail: true } },
+        {
+          note: {
+            whiteboardSessions: { some: { studentId: link.studentId } },
+          },
+        },
+        {
+          whiteboardSession: {
+            studentId: link.studentId,
+          },
+        },
+      ],
     },
     select: { blobUrl: true, mimeType: true },
   });

@@ -4,7 +4,7 @@
 
 import { createRef } from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
-import MicControls, { meterColor } from "@/app/admin/students/[id]/recorder/MicControls";
+import MicControls, { meterColor } from "@/components/recording/MicControls";
 
 function baseProps(overrides: Partial<React.ComponentProps<typeof MicControls>> = {}) {
   return {

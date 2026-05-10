@@ -5,8 +5,8 @@
 import { createRef } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import MainPanel from "@/app/admin/students/[id]/recorder/MainPanel";
-import type { MicControlsProps } from "@/app/admin/students/[id]/recorder/MicControls";
+import MainPanel from "@/components/recording/MainPanel";
+import type { MicControlsProps } from "@/components/recording/MicControls";
 
 function micControlsFixture(): MicControlsProps {
   return {
@@ -31,6 +31,7 @@ function baseProps(
   return {
     state: "idle",
     segmentNumber: 1,
+    segmentDisplayBase: 0,
     elapsed: 0,
     isWarning: false,
     micControls: micControlsFixture(),
@@ -93,6 +94,21 @@ describe("MainPanel recording/paused", () => {
     // Header shows part + duration (65s -> 01:05)
     expect(screen.getByText(/part 2/i)).toBeInTheDocument();
     expect(screen.getByText(/01:05/)).toBeInTheDocument();
+  });
+
+  test("recording: segmentDisplayBase offsets the live Part label", () => {
+    render(
+      <MainPanel
+        {...baseProps({
+          state: "recording",
+          segmentNumber: 1,
+          segmentDisplayBase: 1,
+          elapsed: 10,
+        })}
+      />
+    );
+    expect(screen.getByText(/part 2/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Segment 2, duration 00:10/i)).toBeInTheDocument();
   });
 
   test("paused: Resume replaces Pause, status text says Paused", () => {
