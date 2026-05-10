@@ -331,7 +331,13 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       }
       painted = sanitizeRestoredExcalidrawElementsForReplay(painted);
       lastSceneElementsRef.current = painted;
-      api.updateScene({ elements: painted });
+      api.updateScene({
+        elements: painted,
+        appState: {
+          theme: excalidrawTheme,
+          viewBackgroundColor: viewBackground,
+        },
+      });
       // Kick off image fetches in the background — Excalidraw will
       // call `getFiles()` or look in `BinaryFiles` on next render
       // tick, and addFiles is what populates that.
@@ -339,7 +345,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
         void registerImageAssets(api, scene, newAssetUrls);
       }
     },
-    [api, loadState]
+    [api, loadState, excalidrawTheme, viewBackground]
   );
 
   // First paint after Excalidraw mount **for this API instance**.
