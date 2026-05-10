@@ -980,7 +980,6 @@ export async function attachWhiteboardToNoteAction(
     if (!date) {
       return { ok: false, error: "Invalid date for new note." };
     }
-    const scope = await requireStudentScope();
     const note = await withDbRetry(
       () =>
         db.sessionNote.create({
@@ -994,7 +993,6 @@ export async function attachWhiteboardToNoteAction(
             linksJson: "[]",
             status: "DRAFT",
             aiGenerated: false,
-            ...(scope.kind === "admin" ? { adminUserId: scope.adminId } : {}),
           },
           select: { id: true },
         }),
@@ -1014,6 +1012,36 @@ export async function attachWhiteboardToNoteAction(
       }),
     { label: "attachWhiteboardToNote.update" }
   );
+
+  const noteIdForAudio = targetNoteId!;
+  const maxOrder = await withDbRetry(
+    () =>
+      db.sessionRecording.aggregate({
+        where: { noteId: noteIdForAudio },
+        _max: { orderIndex: true },
+      }),
+    { label: "attachWhiteboardToNote.maxOrder" }
+  );
+  let nextOrder = (maxOrder._max.orderIndex ?? -1) + 1;
+  const orphanSegments = await withDbRetry(
+    () =>
+      db.sessionRecording.findMany({
+        where: { whiteboardSessionId, noteId: null },
+        orderBy: [{ orderIndex: "asc" }, { createdAt: "asc" }],
+        select: { id: true },
+      }),
+    { label: "attachWhiteboardToNote.listOrphanSegments" }
+  );
+  for (const row of orphanSegments) {
+    await withDbRetry(
+      () =>
+        db.sessionRecording.update({
+          where: { id: row.id },
+          data: { noteId: noteIdForAudio, orderIndex: nextOrder++ },
+        }),
+      { label: "attachWhiteboardToNote.linkOrphanSegment" }
+    );
+  }
 
   console.log(
     `[attachWhiteboardToNote] rid=${rid} wbsid=${whiteboardSessionId} linked to note=${targetNoteId}`

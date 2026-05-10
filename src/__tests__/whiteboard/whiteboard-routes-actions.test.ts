@@ -43,6 +43,7 @@ type DbMock = {
     findFirst: jest.Mock;
     update: jest.Mock;
     create: jest.Mock;
+    aggregate: jest.Mock;
   };
   sessionNote: {
     findFirst: jest.Mock;
@@ -70,6 +71,7 @@ jest.mock("@/lib/db", () => {
       findFirst: jest.fn(),
       update: jest.fn(),
       create: jest.fn(),
+      aggregate: jest.fn(),
     },
     sessionNote: {
       findFirst: jest.fn(),
@@ -394,6 +396,13 @@ describe("registerWhiteboardSessionAudioSegmentAction", () => {
 // ─────────────────────────────────────────────────────────────────────
 
 describe("attachWhiteboardToNoteAction", () => {
+  beforeEach(() => {
+    dbMock.sessionRecording.aggregate.mockResolvedValue({
+      _max: { orderIndex: null as number | null },
+    });
+    dbMock.sessionRecording.findMany.mockResolvedValue([]);
+  });
+
   it("detach mode — clears noteId and returns ok:true", async () => {
     dbMock.whiteboardSession.update.mockResolvedValue({});
     const result = await attachWhiteboardToNoteAction("ws-1", {

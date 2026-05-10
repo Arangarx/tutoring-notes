@@ -7,6 +7,10 @@ import { formatDateOnlyDisplay } from "@/lib/date-only";
 import { NotesSearchBar } from "@/components/notes/NotesSearchBar";
 import { PageSizeSelect } from "@/components/notes/PageSizeSelect";
 import { ParentShareNoteCard } from "@/components/notes/ParentShareNoteCard";
+import {
+  parentShareRecordingsArgs,
+  parentShareWhiteboardSessionsArgs,
+} from "@/lib/share/parentShareNotePayload";
 
 export const dynamic = "force-dynamic";
 
@@ -69,20 +73,8 @@ export default async function ShareAllPage({ params, searchParams }: PageProps) 
         startTime: true,
         endTime: true,
         shareRecordingInEmail: true,
-        recordings: {
-          orderBy: { orderIndex: "asc" },
-          select: {
-            id: true,
-            mimeType: true,
-            durationSeconds: true,
-            orderIndex: true,
-            whiteboardSessionId: true,
-          },
-        },
-        whiteboardSessions: {
-          orderBy: { startedAt: "desc" },
-          select: { id: true },
-        },
+        recordings: parentShareRecordingsArgs,
+        whiteboardSessions: parentShareWhiteboardSessionsArgs,
       },
     }),
     db.sessionNote.count({ where: { studentId: student.id, ...searchFilter } }),

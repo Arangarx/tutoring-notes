@@ -135,6 +135,34 @@ describe("ParentShareNoteCard (Phase 0d)", () => {
     );
   });
 
+  it("matches server payload: only selected recording fields + explicit null whiteboardSessionId", () => {
+    render(
+      <ParentShareNoteCard
+        token="tok-xyz"
+        dateLabel="May 9, 2026"
+        note={{
+          ...baseNote,
+          shareRecordingInEmail: true,
+          recordings: [
+            {
+              id: "rec-1",
+              mimeType: "audio/webm",
+              durationSeconds: 10,
+              orderIndex: 0,
+              whiteboardSessionId: null,
+            },
+          ],
+        }}
+        isNew={false}
+      />
+    );
+
+    expect(screen.getByTestId("share-page-audio")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /watch the whiteboard recording/i })
+    ).toBeNull();
+  });
+
   it("plain note: no audio section and no whiteboard section", () => {
     render(
       <ParentShareNoteCard

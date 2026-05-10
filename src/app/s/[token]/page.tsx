@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { formatDateOnlyDisplay } from "@/lib/date-only";
 import { ParentShareNoteCard } from "@/components/notes/ParentShareNoteCard";
+import { parentShareNoteInclude } from "@/lib/share/parentShareNotePayload";
 
 export const dynamic = "force-dynamic";
 
@@ -26,36 +27,19 @@ export default async function SharePage({
   const link = await db.shareLink.findUnique({
     where: { token },
     include: {
-      student: {
-        include: {
-          notes: {
-            orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-            include: {
-              recordings: {
-                orderBy: { orderIndex: "asc" },
-                select: {
-                  id: true,
-                  mimeType: true,
-                  durationSeconds: true,
-                  orderIndex: true,
-                  whiteboardSessionId: true,
-                },
-              },
-              whiteboardSessions: {
-                orderBy: { startedAt: "desc" },
-                select: { id: true },
-              },
-            },
-          },
-        },
-      },
+      student: { select: { id: true, name: true } },
     },
   });
 
   if (!link || link.revokedAt) notFound();
 
   const student = link.student;
-  const totalNotes = student.notes.length;
+  const notes = await db.sessionNote.findMany({
+    where: { studentId: student.id },
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+    include: parentShareNoteInclude,
+  });
+  const totalNotes = notes.length;
 
   // Which notes has this visitor already seen?
   const viewedRows = await db.noteView.findMany({
@@ -69,15 +53,15 @@ export default async function SharePage({
   // new notes. Without this, notes created before the seen-tracking feature was
   // deployed (or before this share link was ever opened) would all appear as "NEW"
   // on the second visit, which is misleading.
-  if (seenNoteIds.size === 0 && student.notes.length > 0) {
+  if (seenNoteIds.size === 0 && notes.length > 0) {
     await db.noteView.createMany({
-      data: student.notes.map((n) => ({
+      data: notes.map((n) => ({
         shareToken: token,
         noteId: n.id,
       })),
       skipDuplicates: true,
     });
-    student.notes.forEach((n) => seenNoteIds.add(n.id));
+    notes.forEach((n) => seenNoteIds.add(n.id));
   }
 
   const isReturningVisitor = seenNoteIds.size > 0;
@@ -88,11 +72,11 @@ export default async function SharePage({
   // Split notes into unseen and seen for layout purposes.
   // On first visit, treat everything as "seen" (no NEW labels — nothing to compare against).
   const unseenNotes = isReturningVisitor
-    ? student.notes.filter((n) => !seenNoteIds.has(n.id))
+    ? notes.filter((n) => !seenNoteIds.has(n.id))
     : [];
   const seenNotes = isReturningVisitor
-    ? student.notes.filter((n) => seenNoteIds.has(n.id))
-    : student.notes;
+    ? notes.filter((n) => seenNoteIds.has(n.id))
+    : notes;
 
   // Seen notes: show first SEEN_NOTES_SHOWN expanded, rest inside <details>.
   const seenTop = seenNotes.slice(0, SEEN_NOTES_SHOWN);
@@ -102,7 +86,7 @@ export default async function SharePage({
     note,
     isNew,
   }: {
-    note: (typeof student.notes)[number];
+    note: (typeof notes)[number];
     isNew: boolean;
   }) {
     return (

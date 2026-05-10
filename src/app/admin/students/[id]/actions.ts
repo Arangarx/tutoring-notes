@@ -185,7 +185,7 @@ export async function createNote(
       await withDbRetry(
         () =>
           db.whiteboardSession.updateMany({
-            where: { id: { in: wbIds }, noteId: null },
+            where: { id: { in: wbIds } },
             data: { noteId: note.id },
           }),
         { label: "createNote.linkWhiteboardsFromRecordings" }
