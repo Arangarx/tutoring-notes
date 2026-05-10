@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { formatDateOnlyDisplay } from "@/lib/date-only";
-import { SeenTracker } from "./SeenTracker";
+import { ParentShareNoteCard } from "@/components/notes/ParentShareNoteCard";
 
 export const dynamic = "force-dynamic";
 
@@ -12,31 +12,6 @@ export async function generateMetadata(): Promise<Metadata> {
     title: "Session notes",
     robots: { index: false, follow: false },
   };
-}
-
-function safeJsonArray(value: string): string[] {
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-function formatDuration(seconds: number | null): string {
-  if (!seconds) return "";
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
-
-function formatTimeDisplay(d: Date | null): string {
-  if (!d) return "";
-  const h = d.getUTCHours();
-  const m = d.getUTCMinutes();
-  const ampm = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 || 12;
-  return `${h12}:${m.toString().padStart(2, "0")} ${ampm}`;
 }
 
 const SEEN_NOTES_SHOWN = 5;
@@ -57,7 +32,6 @@ export default async function SharePage({
             orderBy: [{ date: "desc" }, { createdAt: "desc" }],
             include: {
               recordings: {
-                where: { note: { shareRecordingInEmail: true } },
                 orderBy: { orderIndex: "asc" },
                 select: {
                   id: true,
@@ -65,6 +39,10 @@ export default async function SharePage({
                   durationSeconds: true,
                   orderIndex: true,
                 },
+              },
+              whiteboardSessions: {
+                orderBy: { startedAt: "desc" },
+                select: { id: true },
               },
             },
           },
@@ -126,130 +104,27 @@ export default async function SharePage({
     note: (typeof student.notes)[number];
     isNew: boolean;
   }) {
-    const links = safeJsonArray(note.linksJson);
-    const audioUrls = note.shareRecordingInEmail
-      ? note.recordings.map((r) => `/api/audio/${r.id}?token=${token}`)
-      : [];
-
     return (
-      <div
-        className="card"
-        style={{ position: "relative" }}
-        data-note-id={note.id}
-      >
-        {/* SeenTracker fires a POST when this card enters the viewport */}
-        <SeenTracker noteId={note.id} token={token} />
-
-        <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
-          <div>
-            <div style={{ fontWeight: 800 }}>
-              {formatDateOnlyDisplay(note.date)}
-            </div>
-            {(note.startTime || note.endTime) && (
-              <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-                {formatTimeDisplay(note.startTime)}
-                {note.startTime && note.endTime && " – "}
-                {formatTimeDisplay(note.endTime)}
-              </div>
-            )}
-          </div>
-          <div className="row" style={{ gap: 8, alignItems: "center" }}>
-            {note.template && (
-              <span className="muted" style={{ fontSize: 12 }}>{note.template}</span>
-            )}
-            {isNew && (
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  padding: "2px 8px",
-                  borderRadius: 12,
-                  background: "var(--color-primary, #2563eb)",
-                  color: "#fff",
-                  letterSpacing: "0.04em",
-                }}
-              >
-                NEW
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="divider" />
-
-        <div style={{ display: "grid", gap: 12 }}>
-          <section>
-            <div className="muted" style={{ fontSize: 12 }}>Topics covered</div>
-            <div style={{ whiteSpace: "pre-wrap" }}>{note.topics || "—"}</div>
-          </section>
-          <section>
-            <div className="muted" style={{ fontSize: 12 }}>Homework</div>
-            <div style={{ whiteSpace: "pre-wrap" }}>{note.homework || "—"}</div>
-          </section>
-          <section>
-            <div className="muted" style={{ fontSize: 12 }}>Assessment</div>
-            <div style={{ whiteSpace: "pre-wrap" }}>{note.assessment || "—"}</div>
-          </section>
-          <section>
-            <div className="muted" style={{ fontSize: 12 }}>Plan</div>
-            <div style={{ whiteSpace: "pre-wrap" }}>{note.nextSteps || "—"}</div>
-          </section>
-
-          {links.length > 0 && (
-            <section>
-              <div className="muted" style={{ fontSize: 12 }}>Links</div>
-              <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
-                {links.map((u) => (
-                  <li key={u}>
-                    <a href={u} target="_blank" rel="noreferrer">{u}</a>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          {audioUrls.length > 0 && (
-            <section data-testid="share-page-audio">
-              <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-                Session recording{audioUrls.length > 1 ? "s" : ""}
-              </div>
-              {audioUrls.map((audioUrl, idx) => {
-                const rec = note.recordings[idx];
-                const durationLabel = rec?.durationSeconds
-                  ? ` · ${formatDuration(rec.durationSeconds)}`
-                  : "";
-                return (
-                  <div key={audioUrl} style={{ marginBottom: idx < audioUrls.length - 1 ? 10 : 0 }}>
-                    {audioUrls.length > 1 && (
-                      <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>
-                        Part {idx + 1} of {audioUrls.length}{durationLabel}
-                      </div>
-                    )}
-                    {audioUrls.length === 1 && durationLabel && (
-                      <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>
-                        {durationLabel.trim()}
-                      </div>
-                    )}
-                    <audio
-                      controls
-                      src={audioUrl}
-                      aria-label={
-                        audioUrls.length > 1
-                          ? `Session recording part ${idx + 1} of ${audioUrls.length}`
-                          : "Session recording shared by your tutor"
-                      }
-                      style={{ width: "100%", maxWidth: 480, display: "block" }}
-                    />
-                  </div>
-                );
-              })}
-              <p style={{ margin: "6px 0 0", fontSize: 11, color: "var(--color-muted, #6b7280)" }}>
-                Recording shared by your tutor for your review.
-              </p>
-            </section>
-          )}
-        </div>
-      </div>
+      <ParentShareNoteCard
+        token={token}
+        dateLabel={formatDateOnlyDisplay(note.date)}
+        note={{
+          id: note.id,
+          date: note.date,
+          startTime: note.startTime,
+          endTime: note.endTime,
+          template: note.template,
+          topics: note.topics,
+          homework: note.homework,
+          assessment: note.assessment,
+          nextSteps: note.nextSteps,
+          linksJson: note.linksJson,
+          shareRecordingInEmail: note.shareRecordingInEmail,
+          recordings: note.recordings,
+          whiteboardSessions: note.whiteboardSessions,
+        }}
+        isNew={isNew}
+      />
     );
   }
 
