@@ -9,6 +9,12 @@ import {
 import type { UseAudioRecorderReturn } from "@/hooks/useAudioRecorder";
 import RecordingControlPanel from "@/components/recording/RecordingControlPanel";
 
+export type WhiteboardWorkspaceAudioBridgeState = {
+  kind: "idle" | "recording" | "uploading" | "registering";
+  inFlightCount: number;
+  lastError: string | null;
+};
+
 type Props = {
   /** Shared `useAudioRecorder` instance — same hook feeds this bridge and the visible panel. */
   audio: UseAudioRecorderReturn;
@@ -22,6 +28,7 @@ type Props = {
 
 export type WhiteboardWorkspaceAudioBridgeHandle = {
   waitForPendingUploads: () => Promise<void>;
+  getState: () => WhiteboardWorkspaceAudioBridgeState;
 };
 
 /**
@@ -74,6 +81,21 @@ export const WhiteboardWorkspaceAudioBridge = forwardRef<
       waitForPendingUploads: async () => {
         const pending = [...pendingSegmentTasksRef.current];
         await Promise.all(pending);
+      },
+      getState: (): WhiteboardWorkspaceAudioBridgeState => {
+        const a = audioRef.current;
+        const inFlightCount = pendingSegmentTasksRef.current.length;
+        const lastError: string | null = a.error ?? null;
+        if (a.state === "recording") {
+          return { kind: "recording", inFlightCount, lastError };
+        }
+        if (a.state === "uploading") {
+          return { kind: "uploading", inFlightCount, lastError };
+        }
+        if (inFlightCount > 0) {
+          return { kind: "registering", inFlightCount, lastError };
+        }
+        return { kind: "idle", inFlightCount: 0, lastError };
       },
     }),
     [pendingSegmentTasksRef]

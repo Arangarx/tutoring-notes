@@ -532,6 +532,8 @@ export function WhiteboardWorkspaceClient({
     studentId,
     onRecorded: onWorkspaceAudioRecorded,
   });
+  const workspaceAudioRef = useRef(workspaceAudio);
+  workspaceAudioRef.current = workspaceAudio;
 
   const getAudioMs = useAudioMsClock(recordingActive);
 
@@ -1020,27 +1022,53 @@ export function WhiteboardWorkspaceClient({
   // End-session flow
   // ---------------------------------------------------------------
 
-  const [endingState, setEndingState] = useState<"idle" | "ending" | "error">(
-    "idle"
-  );
+  const [endingState, setEndingState] = useState<
+    "idle" | "finalizing" | "ending" | "error"
+  >("idle");
+  const [finalizingSegmentCount, setFinalizingSegmentCount] = useState(0);
   const [endingError, setEndingError] = useState<string | null>(null);
   const audioBridgeRef = useRef<WhiteboardWorkspaceAudioBridgeHandle | null>(
     null
   );
 
   const handleEndSession = useCallback(async () => {
-    setEndingState("ending");
+    setEndingState("finalizing");
     setEndingError(null);
+    setFinalizingSegmentCount(0);
     try {
-      // Stop recording first so the buildFinalEventsJson call captures
-      // the post-pause state including any in-flight diff frames.
       setUserWantsRecording(false);
-      // Let the audio bridge effect run stopAndUpload + Blob registration.
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      await audioBridgeRef.current?.waitForPendingUploads();
-      // Tiny tick to let the recorder's recordingActive effect run + flush.
-      await new Promise<void>((resolve) => setTimeout(resolve, 50));
+      const deadline = Date.now() + 30_000;
+      while (true) {
+        const bridge = audioBridgeRef.current;
+        const st =
+          bridge?.getState?.() ?? {
+            kind: "idle" as const,
+            inFlightCount: 0,
+            lastError: null,
+          };
+        const audioState = workspaceAudioRef.current.state;
+        const stillBusy =
+          st.kind !== "idle" ||
+          audioState === "recording" ||
+          audioState === "uploading";
+        if (!stillBusy) {
+          break;
+        }
+        setFinalizingSegmentCount(st.inFlightCount);
+        if (Date.now() >= deadline) {
+          console.warn(
+            `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} end-session finalize poll timed out bridgeKind=${st.kind} audioState=${audioState} inFlight=${st.inFlightCount}`
+          );
+          setEndingState("error");
+          setEndingError(
+            "Couldn't finalize — your session is still saving. Try again in a moment, your data isn't lost."
+          );
+          return;
+        }
+        await new Promise<void>((resolve) => setTimeout(resolve, 250));
+      }
 
+      setEndingState("ending");
       const eventsJson = recorder.buildFinalEventsJson();
       const upload = await uploadWhiteboardEvents({
         whiteboardSessionId,
@@ -1076,7 +1104,10 @@ export function WhiteboardWorkspaceClient({
       }
     } catch (err) {
       setEndingState("error");
-      setEndingError((err as Error)?.message ?? "Could not end the session.");
+      const msg = (err as Error)?.message ?? "Could not end the session.";
+      setEndingError(
+        `Could not end session: ${msg}. Your work is still in progress — retry "End session".`
+      );
       // Don't auto-retry — the tutor decides whether to retry End or
       // keep the session open and try again.
     }
@@ -1366,6 +1397,8 @@ export function WhiteboardWorkspaceClient({
   // Render
   // ---------------------------------------------------------------
 
+  const endingBusy = endingState === "ending" || endingState === "finalizing";
+
   return (
     <div style={{ display: "grid", gap: 12 }}>
       <WhiteboardWorkspaceAudioBridge
@@ -1374,7 +1407,7 @@ export function WhiteboardWorkspaceClient({
         pendingSegmentTasksRef={wbAudioSegmentPendingRef}
         userWantsRecording={userWantsRecording}
         recordingActive={recordingActive}
-        panelDisabled={endingState === "ending" || !userWantsRecording}
+        panelDisabled={endingBusy || !userWantsRecording}
       />
       {/* Board pages — own row so it isn’t buried in the recording/toolbar cluster */}
       <div
@@ -1418,7 +1451,7 @@ export function WhiteboardWorkspaceClient({
               type="button"
               className="btn"
               onClick={() => void selectTutorPage(p.id)}
-              disabled={endingState === "ending" || p.id === activePageId}
+              disabled={endingBusy || p.id === activePageId}
               style={
                 p.id === activePageId
                   ? { fontWeight: 700, borderWidth: 2, borderColor: "var(--border-strong, #999)" }
@@ -1432,7 +1465,7 @@ export function WhiteboardWorkspaceClient({
             type="button"
             className="btn primary"
             onClick={addTutorPage}
-            disabled={endingState === "ending" || pageList.length >= 20}
+            disabled={endingBusy || pageList.length >= 20}
           >
             + Add page
           </button>
@@ -1455,7 +1488,7 @@ export function WhiteboardWorkspaceClient({
               type="button"
               className="btn primary"
               onClick={() => setUserWantsRecording(true)}
-              disabled={endingState === "ending"}
+              disabled={endingBusy}
               data-testid="wb-start-recording"
             >
               Start recording
@@ -1474,10 +1507,14 @@ export function WhiteboardWorkspaceClient({
             type="button"
             className="btn danger"
             onClick={handleEndSession}
-            disabled={endingState === "ending"}
+            disabled={endingBusy}
             data-testid="wb-end-session"
           >
-            {endingState === "ending" ? "Ending…" : "End session"}
+            {endingState === "finalizing"
+              ? `Saving last ${finalizingSegmentCount} segment${finalizingSegmentCount === 1 ? "" : "s"}…`
+              : endingState === "ending"
+                ? "Ending…"
+                : "End session"}
           </button>
         </div>
         <div style={{ flex: 1 }} />
@@ -1516,24 +1553,24 @@ export function WhiteboardWorkspaceClient({
             testId="wb-timer"
           />
         </div>
-        <UndoRedoButtons disabled={endingState === "ending"} />
+        <UndoRedoButtons disabled={endingBusy} />
         <PdfImageUploadButton
           excalidrawAPI={excalidrawAPI}
           whiteboardSessionId={whiteboardSessionId}
           studentId={studentId}
-          disabled={endingState === "ending"}
+          disabled={endingBusy}
         />
         <MathInsertButton
           excalidrawAPI={excalidrawAPI}
           whiteboardSessionId={whiteboardSessionId}
           studentId={studentId}
-          disabled={endingState === "ending"}
+          disabled={endingBusy}
         />
         <DesmosInsertButton
           excalidrawAPI={excalidrawAPI}
           whiteboardSessionId={whiteboardSessionId}
           studentId={studentId}
-          disabled={endingState === "ending"}
+          disabled={endingBusy}
         />
         <button
           type="button"
@@ -1584,9 +1621,14 @@ export function WhiteboardWorkspaceClient({
         </Banner>
       )}
       {endingState === "error" && endingError && (
-        <Banner tone="error" onDismiss={() => setEndingState("idle")}>
-          Could not end session: {endingError}. Your work is still in progress;
-          retry &quot;End session&quot;.
+        <Banner
+          tone="error"
+          onDismiss={() => {
+            setEndingState("idle");
+            setEndingError(null);
+          }}
+        >
+          {endingError}
         </Banner>
       )}
       {recorder.checkpointStatus === "error" && recorder.checkpointError && (
