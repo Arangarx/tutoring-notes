@@ -436,6 +436,12 @@ export function useWhiteboardRecorder(
   const logRef = useRef<WBEventLog>(createEmptyEventLog(startedAtIso));
   // Last canonicalised scene — input to `diffScenes` on the next change.
   const prevElementsRef = useRef<WBElement[]>([]);
+  /**
+   * Latest scene flushed while **not** recording — mirrors `prevElementsRef` for
+   * flushes that complete before `recordingActiveRef` flips true, so an off→on
+   * snapshot never loses to an effect-order race (Phase 0c).
+   */
+  const preRecordingScratchRef = useRef<WBElement[] | null>(null);
   // Throttle Excalidraw's per-frame onChange to one diff per
   // DIFF_INTERVAL_MS. We keep the most recent payload and flush it on
   // a trailing-edge timer.
@@ -549,6 +555,7 @@ export function useWhiteboardRecorder(
     // the board — replay played an empty timeline (Apr 2026 pilot repro).
     if (!recordingActiveRef.current) {
       prevElementsRef.current = next;
+      preRecordingScratchRef.current = next;
       return;
     }
     const t = Math.max(0, Math.floor(getAudioMsRef.current()));
@@ -688,6 +695,14 @@ export function useWhiteboardRecorder(
     const t = Math.max(0, Math.floor(getAudioMsRef.current()));
 
     if (!wasActive && recordingActive) {
+      // Drain the trailing-edge timer **before** opening the recording
+      // gate so the last pre-Start frame updates prev/scratch (same
+      // pattern as on→off pause).
+      if (diffTimerRef.current !== null) {
+        clearTimeout(diffTimerRef.current);
+        diffTimerRef.current = null;
+        flushPendingDiff();
+      }
       // Off → on. Update the ref FIRST so flush gates open before we
       // emit the snapshot. (Snapshot emission goes through pushEvent
       // directly, but follow-up onCanvasChange flushes need the gate
@@ -696,7 +711,10 @@ export function useWhiteboardRecorder(
       // Snapshot the current scene so replay starts from the visible
       // state, not a blank canvas. If the canvas is empty, snapshot
       // is just `{ elements: [] }` which is fine.
-      pushEvent(snapshotEvent(prevElementsRef.current, t));
+      const snapSource =
+        preRecordingScratchRef.current ?? prevElementsRef.current;
+      preRecordingScratchRef.current = null;
+      pushEvent(snapshotEvent(snapSource, t));
       // The first-flip case (start of recording) also looks like a
       // "resume" semantically (audio just woke up) — but emitting a
       // resume marker on the very first start is misleading. Use the
