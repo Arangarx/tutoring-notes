@@ -464,14 +464,44 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     const el = audioRef.current;
     if (!el) return;
 
+    /**
+     * applySceneAt does meaningful per-call work: walks the event log to
+     * reconstruct the scene at `ms`, runs Excalidraw's `restoreElements`,
+     * runs sanitize, then `updateScene` triggers an Excalidraw repaint.
+     * Running this at 60Hz starves the main thread on longer recordings —
+     * the audio scrubber's pointer events get dropped and feel
+     * unresponsive, AND seek events take too long to land
+     * (Andrew repro 2026-05-09 on a two-party session).
+     *
+     * Throttle the play loop to ~20Hz (every ~50ms). Audio scrub feel is
+     * indistinguishable from 60Hz at this rate; main thread gets ~50ms
+     * of headroom per cycle for pointer events. Seek/pause events bypass
+     * the throttle and run immediately so user-initiated state changes
+     * are always responsive.
+     */
+    const PLAY_LOOP_MIN_INTERVAL_MS = 50;
     let rafId: number | null = null;
-    const tick = () => {
-      const ms = Math.floor(el.currentTime * 1000);
+    let lastAppliedMs = -1;
+    let lastTickWallClock = 0;
+
+    const applyAt = (ms: number) => {
+      if (ms === lastAppliedMs) return;
+      lastAppliedMs = ms;
       setAudioElapsedMs(ms);
       applySceneAt(ms);
+    };
+
+    const tick = () => {
+      const now = performance.now();
+      if (now - lastTickWallClock >= PLAY_LOOP_MIN_INTERVAL_MS) {
+        lastTickWallClock = now;
+        const ms = Math.floor(el.currentTime * 1000);
+        applyAt(ms);
+      }
       rafId = window.requestAnimationFrame(tick);
     };
     const onPlay = () => {
+      lastTickWallClock = 0; // run immediately on play
       if (rafId === null) rafId = window.requestAnimationFrame(tick);
     };
     const onPause = () => {
@@ -479,16 +509,19 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
         window.cancelAnimationFrame(rafId);
         rafId = null;
       }
-      // One trailing tick so the visible scene matches the audio's
-      // final position (rAF cancellation can drop the last paint).
+      // Trailing apply so the visible scene matches the audio's final
+      // position (rAF cancellation can drop the last paint). Bypasses the
+      // throttle since this is a user-initiated state change.
       const ms = Math.floor(el.currentTime * 1000);
-      setAudioElapsedMs(ms);
-      applySceneAt(ms);
+      lastAppliedMs = -1; // force the apply
+      applyAt(ms);
     };
     const onSeeked = () => {
+      // Seeks bypass the throttle — user drag must update the canvas
+      // immediately or the scrubber feels broken.
       const ms = Math.floor(el.currentTime * 1000);
-      setAudioElapsedMs(ms);
-      applySceneAt(ms);
+      lastAppliedMs = -1; // force the apply even if ms == previous
+      applyAt(ms);
     };
     el.addEventListener("play", onPlay);
     el.addEventListener("pause", onPause);
