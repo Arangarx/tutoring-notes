@@ -17,6 +17,7 @@
     "test": "jest",
     "test:regression": "jest --testPathPatterns=regressions",
     "test:e2e": "playwright test",
+    "test:integration": "playwright test --project=integration",
     "test:e2e:smoke": "playwright test tests/smoke",
     "test:visual:update": "playwright test tests/visual --update-snapshots",
     "test:all": "npm run test && npm run test:e2e"

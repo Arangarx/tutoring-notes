@@ -8,6 +8,9 @@ test.db
 pw.db
 test-results/
 
+# Playwright integration tutor auth (cookies) — generated locally / CI by auth.setup.ts
+tests/integration/.auth/
+
 .vercel
 .env*.local
 *.tsbuildinfo
