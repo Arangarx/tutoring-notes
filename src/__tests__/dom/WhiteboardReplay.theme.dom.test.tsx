@@ -105,6 +105,14 @@ describe("WhiteboardReplay dark theme (Phase 0c)", () => {
       expect(updateSceneMock.mock.calls.length).toBeGreaterThan(0);
     });
 
+    const firstPayload = updateSceneMock.mock.calls.at(0)?.[0] as {
+      appState?: { theme?: string; viewBackgroundColor?: string };
+      elements?: unknown[];
+    };
+
+    expect(firstPayload?.appState?.theme).toBe("dark");
+    expect(firstPayload?.appState?.viewBackgroundColor).toBe("#121212");
+
     const lastPayload = updateSceneMock.mock.calls.at(-1)?.[0] as {
       appState?: { theme?: string; viewBackgroundColor?: string };
       elements?: unknown[];

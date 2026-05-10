@@ -367,17 +367,27 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     const initialT = noSessionAudio ? finalClockMs : 0;
     applySceneAt(initialT);
     setAudioElapsedMs(initialT);
-    const id = setTimeout(() => {
-      try {
-        api.scrollToContent?.(undefined, {
-          fitToContent: true,
-          animate: false,
-        });
-      } catch {
-        // ignore — cosmetic
-      }
-    }, 0);
-    return () => clearTimeout(id);
+    const paintedAfterApply = lastSceneElementsRef.current;
+    let cancelled = false;
+    let rafInner = 0;
+    const rafOuter = window.requestAnimationFrame(() => {
+      rafInner = window.requestAnimationFrame(() => {
+        if (cancelled) return;
+        try {
+          api.scrollToContent?.(paintedAfterApply as ReadonlyArray<unknown>, {
+            fitToContent: true,
+            animate: false,
+          });
+        } catch {
+          /* ignore — cosmetic */
+        }
+      });
+    });
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(rafOuter);
+      window.cancelAnimationFrame(rafInner);
+    };
   }, [api, audioBlobUrl, loadState, applySceneAt]);
 
   // -----------------------------------------------------------------
