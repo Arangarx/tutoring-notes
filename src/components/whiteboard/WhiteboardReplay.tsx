@@ -665,10 +665,18 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
             // Provide a never-rendered placeholder so Excalidraw
             // doesn't show its empty-state graphic before our first
             // updateScene lands.
+            //
+            // Intentionally OMIT `theme` and `viewBackgroundColor` from
+            // initialData.appState — Excalidraw treats initialData as
+            // the canonical first appState and sticks the viewBackground
+            // even when later updateScene calls try to change it. The
+            // workspace canvas correctly responds to the `theme` prop
+            // alone (no initialData appState theme/bg), so we mirror
+            // that pattern here. Reproduced 2026-05-09: Andrew on
+            // dark-mode OS saw a white replay canvas while the live
+            // workspace canvas was correctly dark.
             elements: [],
             appState: {
-              viewBackgroundColor: viewBackground,
-              theme: excalidrawTheme,
               currentItemFontFamily: 1,
             },
           }}
