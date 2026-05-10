@@ -156,8 +156,6 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   const excalCanvasContainerRef = useRef<HTMLDivElement | null>(null);
 
   const excalidrawTheme = useExcalidrawThemeFromSystem();
-  const viewBackground =
-    excalidrawTheme === "dark" ? "#121212" : "#ffffff";
 
   const replayAudioMime = useMemo(
     () => audioMimeType?.split(";")[0].trim().toLowerCase(),
@@ -408,11 +406,16 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       });
       if (!scrollFit) return false;
       try {
+        // Camera fit only — DO NOT push theme/viewBackgroundColor here.
+        // Excalidraw resets viewBackgroundColor when elements transition
+        // empty→non-empty in view mode, even if the appState says
+        // otherwise (Andrew repro 2026-05-09: canvas dark while empty,
+        // turned white the moment the first stroke arrived). The `theme`
+        // prop is the canonical theme channel; let Excalidraw derive the
+        // background from it.
         api.updateScene({
           elements: lastSceneElementsRef.current as unknown[],
           appState: {
-            theme: excalidrawTheme,
-            viewBackgroundColor: viewBackground,
             scrollX: scrollFit.scrollX,
             scrollY: scrollFit.scrollY,
             zoom: { value: zoomValue },
@@ -439,27 +442,11 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       rafIds.push(window.requestAnimationFrame(tryAgain));
     }
 
-    // Theme + viewBackground must land even when no elements / no fit, so
-    // dark mode background applies even on an empty replay.
-    if (!replayCameraReadyRef.current) {
-      try {
-        api.updateScene({
-          elements: lastSceneElementsRef.current as unknown[],
-          appState: {
-            theme: excalidrawTheme,
-            viewBackgroundColor: viewBackground,
-          },
-        });
-      } catch {
-        /* cosmetic */
-      }
-    }
-
     return () => {
       for (const id of rafIds) window.cancelAnimationFrame(id);
       rafIds = [];
     };
-  }, [api, audioBlobUrl, loadState, applySceneAt, excalidrawTheme, viewBackground]);
+  }, [api, audioBlobUrl, loadState, applySceneAt]);
 
   // -----------------------------------------------------------------
   // 5. Audio-driven scene loop. We use rAF (not setInterval) so the
@@ -517,25 +504,21 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     };
   }, [audioBlobUrl, applySceneAt, loadState]);
 
-  /** Keep replay canvas chrome aligned with prefers-color-scheme. */
+  /**
+   * Theme is driven entirely by the `theme` prop on `<Excalidraw />`.
+   * We deliberately do NOT push `theme` or `viewBackgroundColor` via
+   * `updateScene` — Excalidraw resets `viewBackgroundColor` whenever
+   * elements transition empty→non-empty in view mode, which causes a
+   * dark canvas to flash white at the first stroke (Andrew repro
+   * 2026-05-09). Mirrors the workspace, which never pushes these via
+   * updateScene either and stays correctly themed throughout a session.
+   *
+   * `replayViewportSeq` increment from the camera-fit effect is kept as
+   * a hook for future scroll-preservation needs; no side-effect today.
+   */
   useEffect(() => {
-    if (!api) return;
-    try {
-      const preserveScroll = replayCameraReadyRef.current
-        ? replayScrollPreserve(api)
-        : null;
-      api.updateScene({
-        elements: lastSceneElementsRef.current as unknown[],
-        appState: {
-          ...(preserveScroll ?? {}),
-          theme: excalidrawTheme,
-          viewBackgroundColor: viewBackground,
-        },
-      });
-    } catch {
-      /* ignore */
-    }
-  }, [api, excalidrawTheme, viewBackground, replayViewportSeq]);
+    void replayViewportSeq;
+  }, [api, replayViewportSeq]);
 
   // -----------------------------------------------------------------
   // 6. Render

@@ -11,12 +11,15 @@ jest.mock("@/hooks/useExcalidrawThemeFromSystem", () => ({
 }));
 
 const updateSceneMock = jest.fn();
+const themePropSpy = jest.fn();
 
 jest.mock("@excalidraw/excalidraw", () => ({
   __esModule: true,
   Excalidraw: function MockExcalidraw(props: {
     excalidrawAPI?: (api: unknown) => void;
+    theme?: string;
   }) {
+    themePropSpy(props.theme);
     React.useEffect(() => {
       props.excalidrawAPI?.({
         updateScene: updateSceneMock,
@@ -84,6 +87,7 @@ function fakeResponse(
 
 beforeEach(() => {
   updateSceneMock.mockClear();
+  themePropSpy.mockClear();
   fetchMock.mockReset();
   global.fetch = fetchMock as unknown as typeof fetch;
   fetchMock.mockResolvedValue(fakeResponse(EVENT_LOG_JSON));
@@ -93,8 +97,8 @@ afterAll(() => {
   global.fetch = originalFetch;
 });
 
-describe("WhiteboardReplay dark theme (Phase 0c + post-2026-05-09 play-turns-white fix)", () => {
-  it("at least one updateScene call carries dark theme + #121212 background when system hook is dark", async () => {
+describe("WhiteboardReplay dark theme (post-2026-05-09 play-turns-white fix)", () => {
+  it("passes dark theme via the Excalidraw `theme` prop when system hook is dark", async () => {
     render(
       <WhiteboardReplay
         eventsBlobUrl="/api/whiteboard/wb-theme-test/events"
@@ -108,47 +112,32 @@ describe("WhiteboardReplay dark theme (Phase 0c + post-2026-05-09 play-turns-whi
     expect(screen.queryByText(/Preparing whiteboard replay engine/i)).toBeNull();
 
     await waitFor(() => {
-      expect(updateSceneMock.mock.calls.length).toBeGreaterThan(0);
+      expect(themePropSpy).toHaveBeenCalled();
     });
 
-    type ScenePayload = {
-      appState?: { theme?: string; viewBackgroundColor?: string };
-      elements?: unknown[];
-    };
-
-    const calls = updateSceneMock.mock.calls.map(
-      (call) => call[0] as ScenePayload
+    // Excalidraw must receive theme="dark" via prop.
+    const themePropCalls = themePropSpy.mock.calls.map(
+      (c) => c[0] as string | undefined
     );
-
-    // Theme effect / first-paint effect MUST push dark theme + bg at least once.
-    const themeCallExists = calls.some(
-      (p) =>
-        p.appState?.theme === "dark" &&
-        p.appState?.viewBackgroundColor === "#121212"
-    );
-    expect(themeCallExists).toBe(true);
-
-    // Final scene call MUST carry the painted elements.
-    const lastWithElements = [...calls]
-      .reverse()
-      .find((p) => Array.isArray(p.elements));
-    expect(lastWithElements).toBeDefined();
-    expect((lastWithElements!.elements as unknown[]).length).toBeGreaterThan(0);
+    expect(themePropCalls.some((t) => t === "dark")).toBe(true);
   });
 
   /**
-   * Regression: per-frame applySceneAt was pushing
-   * appState.viewBackgroundColor on every audio rAF tick. Excalidraw
-   * dropped the dark background mid-playback (Andrew repro 2026-05-09:
-   * canvas dark on initial paint, hitting Play turned it white). Theme +
-   * bg must come from the `theme` prop and the dedicated theme effect
-   * only — NOT from per-frame scene paints.
+   * Regression (Andrew repro 2026-05-09): pushing `viewBackgroundColor`
+   * via `updateScene` causes Excalidraw to reset its background when
+   * elements transition empty→non-empty in view mode. Canvas was
+   * correctly dark on initial paint, then the first stroke arriving
+   * flipped the background to white and kept it white.
+   *
+   * Fix: NEVER push `viewBackgroundColor` via `updateScene`. Theme is
+   * driven entirely by the `theme` prop on `<Excalidraw />`. The
+   * workspace canvas works correctly with this pattern.
    */
-  it("per-frame scene paints do NOT push viewBackgroundColor", async () => {
+  it("never pushes viewBackgroundColor via updateScene", async () => {
     render(
       <WhiteboardReplay
         eventsBlobUrl="/api/whiteboard/wb-theme-tick/events"
-        title="Per-frame regression"
+        title="No-bg-push regression"
       />
     );
 
@@ -166,20 +155,12 @@ describe("WhiteboardReplay dark theme (Phase 0c + post-2026-05-09 play-turns-whi
       (call) => call[0] as ScenePayload
     );
 
-    // applySceneAt's own updateScene call must NOT carry
-    // viewBackgroundColor (post-fix). It carries elements and at most a
-    // scrollPreserve appState. The first-paint and theme-transition
-    // effects DO push theme + viewBackgroundColor, but those are
-    // one-time and not what triggered the play-turns-white regression.
-    //
-    // Concretely: at least one updateScene call must have elements
-    // without viewBackgroundColor. Before the fix, every applySceneAt
-    // call carried bg, so no such call would have existed.
-    const cleanScenePaint = calls.some(
-      (p) =>
-        Array.isArray(p.elements) &&
-        p.appState?.viewBackgroundColor === undefined
-    );
-    expect(cleanScenePaint).toBe(true);
+    for (const p of calls) {
+      expect(p.appState?.viewBackgroundColor).toBeUndefined();
+    }
+
+    // Sanity: still pushed at least one scene with elements.
+    const hadScenePush = calls.some((p) => Array.isArray(p.elements));
+    expect(hadScenePush).toBe(true);
   });
 });
