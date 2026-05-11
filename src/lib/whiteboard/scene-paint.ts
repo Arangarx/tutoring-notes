@@ -78,11 +78,20 @@ import {
  * pushes appState through restoreElements; theme is owned by the host
  * Excalidraw prop) and `{refreshDimensions: true}` so freedraw
  * pressures + arrow elbow data get repaired.
+ *
+ * Inputs are typed as `any` so the upstream Excalidraw function
+ * (`(elements: readonly ExcalidrawElement[] | null | undefined,
+ * localElements, opts) => OrderedExcalidrawElement[]`) is assignable
+ * without forcing a cast at every call site. The engine wraps the
+ * call in try/catch and falls back to the raw adapter output if the
+ * function throws on malformed input, so `any` here is intentional.
  */
 export type RestoreElementsFn = (
-  rough: ReadonlyArray<unknown>,
-  appState: unknown,
-  opts?: { refreshDimensions?: boolean }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rough: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  appState: any,
+  opts?: { refreshDimensions?: boolean; repairBindings?: boolean }
 ) => unknown[];
 
 /**
@@ -543,6 +552,13 @@ export type CameraFitterDeps = {
   zoom?: number;
   /** Maximum number of rAF retries before giving up. Defaults to 4. */
   maxRetries?: number;
+  /**
+   * Optional — called when an attempt (sync or async) successfully fits the
+   * camera. Runs at most once per fitter; subsequent retries are skipped.
+   * Use to flip a host-owned `cameraReady` flag so subsequent paints know
+   * to preserve scroll.
+   */
+  onFit?: () => void;
   /** Inject for tests. */
   raf?: (cb: () => void) => number;
   cancelRaf?: (id: number) => void;
@@ -579,6 +595,7 @@ export function createCameraFitter(deps: CameraFitterDeps): CameraFitter {
     getElements,
     zoom = 1,
     maxRetries = 4,
+    onFit,
     raf = (cb) => window.requestAnimationFrame(cb),
     cancelRaf = (id) => window.cancelAnimationFrame(id),
   } = deps;
@@ -612,6 +629,14 @@ export function createCameraFitter(deps: CameraFitterDeps): CameraFitter {
       return false;
     }
     success = true;
+    if (onFit) {
+      try {
+        onFit();
+      } catch {
+        // Host-supplied callbacks shouldn't crash the fitter; the engine
+        // has already pushed the camera fit successfully.
+      }
+    }
     return true;
   }
 

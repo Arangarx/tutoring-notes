@@ -110,15 +110,20 @@ describe("buildSceneAt", () => {
     const log = logWith([
       { id: "r1", type: "rectangle", x: 0, y: 0, width: 10, height: 10 },
     ]);
-    const restored = jest.fn((rough: ReadonlyArray<unknown>) => [...rough]);
+    const restored: jest.Mock<unknown[], [unknown, unknown, unknown?]> =
+      jest.fn(
+        (rough: unknown, _appState: unknown, _opts?: unknown) =>
+          [...(rough as ReadonlyArray<unknown>)]
+      );
     const built = buildSceneAt(log, 0, restored);
     expect(restored).toHaveBeenCalledTimes(1);
     expect(built.elements).toHaveLength(1);
     // Args: rough array, appState=null, opts.refreshDimensions=true.
     expect(restored.mock.calls[0][1]).toBeNull();
-    expect((restored.mock.calls[0][2] as { refreshDimensions?: boolean }).refreshDimensions).toBe(
-      true
-    );
+    expect(
+      (restored.mock.calls[0][2] as { refreshDimensions?: boolean })
+        .refreshDimensions
+    ).toBe(true);
   });
 
   test("falls back to raw adapter output when restoreElements throws", () => {
@@ -563,9 +568,9 @@ describe("createCameraFitter", () => {
     const api: ScenePaintApi = { updateScene };
     const elements = [{ x: 0, y: 0, width: 100, height: 100 }];
 
-    let pendingCb: (() => void) | null = null;
+    const cbBox: { current: (() => void) | null } = { current: null };
     const raf = jest.fn((cb: () => void) => {
-      pendingCb = cb;
+      cbBox.current = cb;
       return 1;
     });
     const cancelRaf = jest.fn();
@@ -592,9 +597,69 @@ describe("createCameraFitter", () => {
 
     // Run the queued retry — this time the measurement returns real
     // dimensions and the fit succeeds.
-    pendingCb?.();
+    cbBox.current?.();
     expect(updateScene).toHaveBeenCalledTimes(1);
     expect(measureCalls).toBeGreaterThanOrEqual(2);
+  });
+
+  test("onFit fires once on the first successful attempt (sync + async)", () => {
+    // Sync win: onFit should fire on the synchronous fit().
+    const onFitSync = jest.fn();
+    const fitterSync = createCameraFitter({
+      api: { updateScene: jest.fn() },
+      container: { getBoundingClientRect: () => rect(800, 600) },
+      getElements: () => [{ x: 0, y: 0, width: 100, height: 100 }],
+      zoom: 1,
+      onFit: onFitSync,
+      raf: jest.fn(),
+      cancelRaf: jest.fn(),
+    });
+    expect(fitterSync.fit()).toBe(true);
+    expect(onFitSync).toHaveBeenCalledTimes(1);
+
+    // Async win: 0×0 first, then real dims on the rAF retry. onFit should
+    // fire exactly once when the async retry succeeds.
+    const onFitAsync = jest.fn();
+    let measureCalls = 0;
+    const cbBox: { current: (() => void) | null } = { current: null };
+    const fitterAsync = createCameraFitter({
+      api: { updateScene: jest.fn() },
+      container: {
+        getBoundingClientRect: () => {
+          measureCalls += 1;
+          return measureCalls === 1 ? rect(0, 0) : rect(800, 600);
+        },
+      },
+      getElements: () => [{ x: 0, y: 0, width: 100, height: 100 }],
+      zoom: 1,
+      onFit: onFitAsync,
+      raf: (cb) => {
+        cbBox.current = cb;
+        return 1;
+      },
+      cancelRaf: jest.fn(),
+    });
+    expect(fitterAsync.fit()).toBe(false);
+    expect(onFitAsync).not.toHaveBeenCalled();
+    cbBox.current?.();
+    expect(onFitAsync).toHaveBeenCalledTimes(1);
+  });
+
+  test("onFit thrown error doesn't crash the fitter", () => {
+    const updateScene = jest.fn();
+    const fitter = createCameraFitter({
+      api: { updateScene },
+      container: { getBoundingClientRect: () => rect(800, 600) },
+      getElements: () => [{ x: 0, y: 0, width: 100, height: 100 }],
+      zoom: 1,
+      onFit: () => {
+        throw new Error("host callback boom");
+      },
+      raf: jest.fn(),
+      cancelRaf: jest.fn(),
+    });
+    expect(() => fitter.fit()).not.toThrow();
+    expect(updateScene).toHaveBeenCalledTimes(1);
   });
 
   test("dispose cancels pending rAF retries", () => {
