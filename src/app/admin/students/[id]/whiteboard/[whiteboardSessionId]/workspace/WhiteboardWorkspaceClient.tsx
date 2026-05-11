@@ -91,7 +91,10 @@ import {
   updateSceneMergingWithRemote,
 } from "@/lib/whiteboard/apply-reconciled-remote-scene";
 import type { RemoteSceneIngestLogHint } from "@/hooks/useWhiteboardRecorder";
-import { sanitizeRestoredExcalidrawElementsForReplay, toExcalidraw } from "@/lib/whiteboard/excalidraw-adapter";
+import {
+  adaptWBElementsToExcalidraw,
+  restoreAndSanitizeForPaint,
+} from "@/lib/whiteboard/scene-paint";
 import type { WhiteboardBoardDocumentV1 } from "@/lib/whiteboard/board-document-snapshot";
 import {
   clearSessionSceneDraft,
@@ -1167,14 +1170,18 @@ export function WhiteboardWorkspaceClient({
         ) as ExcalidrawLikeElement[];
       }
       const activeEls = doc.pages[doc.activePageId] ?? [];
+      // Board-document elements are already Excalidraw-shaped (the
+      // sender adapted from WBElement before broadcasting). Pass them
+      // through the engine's restore + sanitize pipeline so the
+      // workspace inherits the same theme/zoom/scroll invariants and
+      // restoreElements-failure fallback as the replay player.
       const rough = (activeEls as ExcalidrawLikeElement[]).map((e) => ({
         ...e,
       }));
-      const restored = restoreElements(rough as never, null, {
-        refreshDimensions: true,
-      });
-      let toPaint: ReadonlyArray<unknown> =
-        sanitizeRestoredExcalidrawElementsForReplay(restored as unknown[]);
+      let toPaint: ReadonlyArray<unknown> = restoreAndSanitizeForPaint(
+        rough,
+        restoreElements
+      );
       await hydrateTutorImageAssetsForElements(
         api,
         toPaint as ReadonlyArray<ExcalidrawLikeElement>
@@ -1207,12 +1214,15 @@ export function WhiteboardWorkspaceClient({
         return;
       }
       const { restoreElements } = await import("@excalidraw/excalidraw");
-      const rough = result.elements.map((el) => toExcalidraw(el));
-      const restored = restoreElements(rough as never, null, {
-        refreshDimensions: true,
-      });
-      let toPaint: ReadonlyArray<unknown> =
-        sanitizeRestoredExcalidrawElementsForReplay(restored as unknown[]);
+      // Resume path: canonical WBElements → Excalidraw-shaped roughs
+      // (`adaptWBElementsToExcalidraw`) → engine restore + sanitize. Same
+      // pipeline the replay player runs on every paint, so resume can
+      // never silently drift on Excalidraw-required-defaults handling.
+      const { rough } = adaptWBElementsToExcalidraw(result.elements);
+      let toPaint: ReadonlyArray<unknown> = restoreAndSanitizeForPaint(
+        rough,
+        restoreElements
+      );
       if (toPaint.length === 0) {
         const recovery = loadTutorSessionRecoveryDraft(whiteboardSessionId);
         if (recovery) {

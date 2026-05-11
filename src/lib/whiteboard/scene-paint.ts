@@ -122,6 +122,67 @@ export type BuiltScene = {
 };
 
 /**
+ * Adapt canonical `WBElement`s to Excalidraw-shaped roughs, in the
+ * same order they appear in the input. Returns the distinct
+ * `assetUrl` values (ordered by first appearance) alongside the
+ * roughs.
+ *
+ * Exposed separately from {@link buildSceneAt} so the workspace's
+ * resume path can adapt elements it already has on hand without
+ * synthesising a single-snapshot WBEventLog.
+ */
+export function adaptWBElementsToExcalidraw(
+  elements: Iterable<WBElement>
+): { rough: unknown[]; assetUrls: string[] } {
+  const rough: unknown[] = [];
+  const assetUrls: string[] = [];
+  const seenAssetUrls = new Set<string>();
+  for (const el of elements) {
+    rough.push(toExcalidraw(el));
+    if (el.assetUrl && !seenAssetUrls.has(el.assetUrl)) {
+      seenAssetUrls.add(el.assetUrl);
+      assetUrls.push(el.assetUrl);
+    }
+  }
+  return { rough, assetUrls };
+}
+
+/**
+ * Run `restoreElements` (best-effort) + the linear-points-repair
+ * sanitizer on Excalidraw-shaped elements. Returns the paint-ready
+ * elements array.
+ *
+ * - `restoreElements` is optional. When present, it's invoked with
+ *   the engine's safe defaults (`null` appState,
+ *   `{refreshDimensions: true}` so freedraw pressures + arrow elbow
+ *   data get repaired); when absent, the input is used unchanged
+ *   (jsdom tests, server-side calls).
+ * - Failures inside `restoreElements` are swallowed — the input is
+ *   always a valid fallback (replay/workspace won't crash; the
+ *   canvas will render with default Excalidraw defaults). We've
+ *   seen `restoreElements` throw on certain malformed legacy logs.
+ *
+ * Used by both {@link buildSceneAt} (replay) and the workspace's
+ * draft-restore + resume paths to share the same pipeline.
+ */
+export function restoreAndSanitizeForPaint(
+  rough: ReadonlyArray<unknown>,
+  restoreElements?: RestoreElementsFn
+): unknown[] {
+  let restored: ReadonlyArray<unknown>;
+  if (restoreElements) {
+    try {
+      restored = restoreElements(rough, null, { refreshDimensions: true });
+    } catch {
+      restored = rough;
+    }
+  } else {
+    restored = rough;
+  }
+  return sanitizeRestoredExcalidrawElementsForReplay(restored as unknown[]);
+}
+
+/**
  * Build the painted-elements array for a single replay time.
  *
  * - `restoreElements` is optional. When present, it's run on the
@@ -138,33 +199,8 @@ export function buildSceneAt(
   restoreElements?: RestoreElementsFn
 ): BuiltScene {
   const scene = reconstructSceneAt(log, atTimeMs);
-  const rough: unknown[] = [];
-  const assetUrls: string[] = [];
-  const seenAssetUrls = new Set<string>();
-
-  for (const el of scene.values()) {
-    rough.push(toExcalidraw(el));
-    if (el.assetUrl && !seenAssetUrls.has(el.assetUrl)) {
-      seenAssetUrls.add(el.assetUrl);
-      assetUrls.push(el.assetUrl);
-    }
-  }
-
-  let restored: unknown[];
-  if (restoreElements) {
-    try {
-      restored = restoreElements(rough, null, { refreshDimensions: true });
-    } catch {
-      // Fall back to the raw adapter output. We've seen Excalidraw's
-      // restoreElements throw on certain malformed legacy logs; never
-      // let that crash the player.
-      restored = rough;
-    }
-  } else {
-    restored = rough;
-  }
-
-  const elements = sanitizeRestoredExcalidrawElementsForReplay(restored);
+  const { rough, assetUrls } = adaptWBElementsToExcalidraw(scene.values());
+  const elements = restoreAndSanitizeForPaint(rough, restoreElements);
   return { elements, assetUrls, scene };
 }
 
