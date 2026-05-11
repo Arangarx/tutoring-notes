@@ -35,12 +35,14 @@
 
 import {
   createUploadOutbox,
+  type DrainResult,
   type OutboxObserverState,
   type OutboxRow,
   type OutboxUploadResult,
   type UploadOutbox,
 } from "@/lib/recording/upload-outbox";
 import { uploadAudioDirect, uploadAudioWithRetry } from "@/lib/recording/upload";
+import type { EndSessionSegment } from "@/app/admin/students/[id]/whiteboard/actions";
 
 export type { OutboxObserverState };
 
@@ -119,6 +121,107 @@ function extForMime(mimeType: string): string {
   if (base === "audio/mpeg") return "mp3";
   if (base === "audio/wav") return "wav";
   return base.split("/")[1] ?? "bin";
+}
+
+// ----------------------------------------------------------------
+// End-session helpers (Phase 1b — Pillar 3 client-side glue)
+// ----------------------------------------------------------------
+
+/**
+ * Default drain budget used by the End-session flow. The plan
+ * recommends 15s (long enough to land a few retries on a 30s
+ * cellular hiccup, short enough that a tutor doesn't sit on a
+ * spinner) — surfaced as a constant so tests can override it.
+ */
+export const DEFAULT_END_SESSION_DRAIN_TIMEOUT_MS = 15_000;
+
+/**
+ * Wrap `outbox.drainAndAwait` with logging and a sensible default
+ * timeout. The End-session flow calls this exactly once before
+ * uploading events.json and calling the atomic end-session action.
+ *
+ * Returns the same `DrainResult` the outbox returns:
+ *   - `timedOut`     — true if rows are still uploading at deadline
+ *   - `remainingCount` / `remainingByStream` — for tutor-facing copy
+ *   - `lastError`    — most recent upload error, if any
+ */
+export async function drainOutboxOrTimeout(
+  whiteboardSessionId: string,
+  timeoutMs: number = DEFAULT_END_SESSION_DRAIN_TIMEOUT_MS
+): Promise<DrainResult> {
+  if (typeof window === "undefined" || !globalThis.indexedDB) {
+    // No outbox available — treat as already-drained. Workspace SSR
+    // never reaches this path; this branch is a defensive no-op for
+    // anything that imports this module from a Node context.
+    return {
+      timedOut: false,
+      remainingCount: 0,
+      remainingByStream: new Map<string, number>(),
+      lastError: null,
+    };
+  }
+  const outbox = getOrCreateUploadOutbox();
+  const result = await outbox.drainAndAwait(whiteboardSessionId, { timeoutMs });
+  if (result.timedOut) {
+    console.warn(
+      `[upload-outbox-instance] wbsid=${whiteboardSessionId} drainOutboxOrTimeout TIMED OUT remaining=${result.remainingCount} lastError=${result.lastError ?? "<none>"}`
+    );
+  } else {
+    console.log(
+      `[upload-outbox-instance] wbsid=${whiteboardSessionId} drainOutboxOrTimeout ok`
+    );
+  }
+  return result;
+}
+
+/**
+ * Read every uploaded outbox row for `whiteboardSessionId` and
+ * convert it into the `EndSessionSegment` payload the atomic
+ * `endWhiteboardSession` action consumes.
+ *
+ * Trust posture: the SERVER re-validates each `blobUrl` against the
+ * Vercel Blob namespace before any DB write (see `actions.ts`
+ * `validateEndSessionSegments`). This helper just shapes the payload.
+ *
+ * Rows without a `blobRemoteUrl` (i.e. uploads that never landed) are
+ * skipped — drainOutboxOrTimeout's caller already decided whether to
+ * abort or proceed in that case.
+ */
+export async function assembleEndSessionSegments(
+  whiteboardSessionId: string
+): Promise<EndSessionSegment[]> {
+  if (typeof window === "undefined" || !globalThis.indexedDB) return [];
+  const outbox = getOrCreateUploadOutbox();
+  const rows = await outbox.listUploadedSegments(whiteboardSessionId);
+  return rows
+    .filter((r): r is OutboxRow & { blobRemoteUrl: string } =>
+      typeof r.blobRemoteUrl === "string" && r.blobRemoteUrl.length > 0
+    )
+    .map((r) => ({
+      blobUrl: r.blobRemoteUrl,
+      mimeType: r.mimeType,
+      sizeBytes: r.sizeBytes,
+      audioStartedAtMs: r.audioStartedAtMs,
+      streamId: r.streamId,
+      segmentId: r.segmentId,
+    }));
+}
+
+/**
+ * Delete every outbox row for the session — called after the atomic
+ * `endWhiteboardSession` action returns success. Wraps the outbox's
+ * `finalize` with the same "no outbox in this environment is OK"
+ * guard as the other helpers.
+ */
+export async function finalizeOutboxAfterEnd(
+  whiteboardSessionId: string
+): Promise<void> {
+  if (typeof window === "undefined" || !globalThis.indexedDB) return;
+  const outbox = getOrCreateUploadOutbox();
+  await outbox.finalize(whiteboardSessionId);
+  console.log(
+    `[upload-outbox-instance] wbsid=${whiteboardSessionId} finalizeOutboxAfterEnd ok`
+  );
 }
 
 // ----------------------------------------------------------------
