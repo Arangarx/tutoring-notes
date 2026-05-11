@@ -256,21 +256,38 @@ export function useAudioRecorder({
   const pendingUploadsRef = useRef<Set<Promise<void>>>(new Set());
 
   /**
-   * Wrap an async upload chain so its Promise is tracked in
-   * `pendingUploadsRef`. The wrapper swallows errors (caller is
-   * responsible for `setError` / logging) so `flushPendingUploads`
-   * never rejects — it only signals "no more work in flight",
-   * regardless of which way each individual chain settled.
+   * Synchronously add a deferred Promise to `pendingUploadsRef` and
+   * return a resolver. Used by `stopAndUpload` and
+   * `rolloverSegmentGapless` to pre-register tracking BEFORE the
+   * browser fires `recorder.onstop` — otherwise a caller that
+   * immediately awaits `flushPendingUploads()` after `stopAndUpload()`
+   * sees an empty set (onstop hasn't fired yet), returns instantly,
+   * and races past the trailing segment.
+   *
+   * The errored-recorder-state branches (recorder is `inactive`, or
+   * we bail with an empty blob) MUST call the returned resolver
+   * themselves or `flushPendingUploads()` would hang.
+   *
+   * Design tradeoff: an earlier draft kept the registration inline
+   * with the onstop body (one closure, no helper). That was simpler
+   * but had the synchronisation bug above — the smoke test re-
+   * surfaced the Phase 1b race after we shipped it. Splitting
+   * "register" from "settle" makes the timing explicit and easy to
+   * audit.
    */
-  function trackUploadChain(body: () => Promise<unknown>): void {
-    const wrapped: Promise<void> = body().then(
-      () => undefined,
-      () => undefined
-    );
-    pendingUploadsRef.current.add(wrapped);
-    void wrapped.finally(() => {
-      pendingUploadsRef.current.delete(wrapped);
+  function registerPendingStop(): {
+    settle: () => void;
+    promise: Promise<void>;
+  } {
+    let settle!: () => void;
+    const promise: Promise<void> = new Promise((resolve) => {
+      settle = resolve;
     });
+    pendingUploadsRef.current.add(promise);
+    void promise.finally(() => {
+      pendingUploadsRef.current.delete(promise);
+    });
+    return { settle, promise };
   }
 
   async function flushPendingUploads(): Promise<void> {
@@ -537,76 +554,87 @@ export function useAudioRecorder({
 
     // Step 5: background upload of the OLD segment.
     //
-    // Tracked via `trackUploadChain` so `flushPendingUploads()` can await
-    // the rollover's onRecorded → outbox.enqueue chain. Critical when a
-    // rollover fires close to End-session: without the tracking the
-    // rollover segment would race the End-session drain the same way
-    // the final-stop segment used to.
+    // Pre-register the tracking Promise SYNCHRONOUSLY (before
+    // oldRecorder.stop()) so a caller that awaits flushPendingUploads
+    // right after a rollover doesn't race past this segment the way
+    // the End-session flow used to race past the final segment.
+    const rolloverTracking = registerPendingStop();
     oldRecorder.onstop = () => {
-      trackUploadChain(async () => {
-        const blob = new Blob(oldChunks, { type: oldMimeType });
-        if (blob.size === 0) {
-          // Empty segment is non-fatal during a rollover — the new segment is
-          // already running. Log and clear the in-progress flag.
-          console.warn(
-            "[useAudioRecorder] rollover: old segment was empty, skipping upload"
-          );
-          rolloverInProgressRef.current = false;
-          return;
-        }
-
-        const ext = fileExtension(oldMimeType);
-        const filename = `session-${Date.now()}-part${oldPartIndex}.${ext}`;
-
+      void (async () => {
         try {
-          const result = await uploadAudioWithRetry(
-            uploadAudioDirect,
-            studentId,
-            blob,
-            filename,
-            oldMimeType
-          );
-
-          if (!result.ok) {
-            // Surface but keep the live recorder running. Tutor can read the
-            // error and decide whether to stop; in the meantime we don't lose
-            // the current capture.
-            setError(formatUserFacingActionError(result.error, result.debugId));
+          const blob = new Blob(oldChunks, { type: oldMimeType });
+          if (blob.size === 0) {
+            // Empty segment is non-fatal during a rollover — the new segment is
+            // already running. Log and clear the in-progress flag.
+            console.warn(
+              "[useAudioRecorder] rollover: old segment was empty, skipping upload"
+            );
             rolloverInProgressRef.current = false;
             return;
           }
 
-          const previewUrl = URL.createObjectURL(blob);
-          // `await` so flushPendingUploads truly waits for the consumer
-          // (workspace outbox enqueue) to land before returning.
-          await onRecorded(
-            {
-              blobUrl: result.blobUrl,
-              mimeType: oldMimeType,
-              sizeBytes: blob.size,
-              filename,
-              previewUrl,
+          const ext = fileExtension(oldMimeType);
+          const filename = `session-${Date.now()}-part${oldPartIndex}.${ext}`;
+
+          try {
+            const result = await uploadAudioWithRetry(
+              uploadAudioDirect,
+              studentId,
               blob,
-            },
-            { autoRollover: true }
-          );
-          rolloverInProgressRef.current = false;
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : "Upload failed";
-          console.error("[useAudioRecorder] rollover upload failed:", err);
-          setError(msg);
-          rolloverInProgressRef.current = false;
+              filename,
+              oldMimeType
+            );
+
+            if (!result.ok) {
+              // Surface but keep the live recorder running. Tutor can read the
+              // error and decide whether to stop; in the meantime we don't lose
+              // the current capture.
+              setError(formatUserFacingActionError(result.error, result.debugId));
+              rolloverInProgressRef.current = false;
+              return;
+            }
+
+            const previewUrl = URL.createObjectURL(blob);
+            // `await` so flushPendingUploads truly waits for the consumer
+            // (workspace outbox enqueue) to land before returning.
+            await onRecorded(
+              {
+                blobUrl: result.blobUrl,
+                mimeType: oldMimeType,
+                sizeBytes: blob.size,
+                filename,
+                previewUrl,
+                blob,
+              },
+              { autoRollover: true }
+            );
+            rolloverInProgressRef.current = false;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : "Upload failed";
+            console.error("[useAudioRecorder] rollover upload failed:", err);
+            setError(msg);
+            rolloverInProgressRef.current = false;
+          }
+          // oldSegmentSeconds is captured for parity with the legacy path's
+          // doneSegmentSeconds; auto-rollover doesn't surface it in the UI
+          // (state never goes to "done"), but keeping the snapshot makes
+          // future telemetry trivial.
+          void oldSegmentSeconds;
+        } finally {
+          rolloverTracking.settle();
         }
-        // oldSegmentSeconds is captured for parity with the legacy path's
-        // doneSegmentSeconds; auto-rollover doesn't surface it in the UI
-        // (state never goes to "done"), but keeping the snapshot makes
-        // future telemetry trivial.
-        void oldSegmentSeconds;
-      });
+      })();
     };
 
     if (oldRecorder.state !== "inactive") {
       oldRecorder.stop();
+    } else {
+      // Defensive: oldRecorder is somehow already inactive (e.g. a
+      // double-stop from an earlier rolloverSegmentGapless). onstop
+      // won't fire, so settle the pre-registered tracking Promise
+      // ourselves — otherwise flushPendingUploads() would hang on
+      // it forever.
+      rolloverTracking.settle();
     }
   }
 
@@ -847,111 +875,122 @@ export function useAudioRecorder({
     setUploadMode(isRollover ? "segment" : "final");
     setRecordState("uploading");
 
-    // Tracked via `trackUploadChain` so `flushPendingUploads()` can await
-    // the full upload + onRecorded(→ outbox.enqueue) chain. This is the
-    // synchronization point the workspace's End-session flow needs in
-    // order to drain the outbox AFTER the trailing segment has landed —
-    // without it the End-session race in the Phase 1b smoke test would
-    // re-surface.
+    // Pre-register the tracking Promise SYNCHRONOUSLY (before
+    // recorder.stop()) so a caller that awaits flushPendingUploads()
+    // immediately after stopAndUpload() sees the in-flight chain.
+    // Without this synchronisation, the End-session flow drains the
+    // outbox while MediaRecorder.onstop is still queued — exactly the
+    // bug the Phase 1b smoke test hit on master.
+    const stopTracking = registerPendingStop();
+
     recorder.onstop = () => {
-      trackUploadChain(async () => {
-        const mimeType = recorder.mimeType || chooseMimeType();
-        const blob = new Blob(chunksRef.current, { type: mimeType });
-        chunksRef.current = [];
-        const segmentSeconds = elapsedRef.current;
-        // Read the live segment number via ref; the closure captured at
-        // setInterval-creation time would otherwise see the stale value
-        // from the render where startTimer() was first called.
-        const partIndex = segmentNumberRef.current;
-
+      void (async () => {
         try {
-          if (!isRollover) {
-            teardownMicStream();
-          }
+          const mimeType = recorder.mimeType || chooseMimeType();
+          const blob = new Blob(chunksRef.current, { type: mimeType });
+          chunksRef.current = [];
+          const segmentSeconds = elapsedRef.current;
+          // Read the live segment number via ref; the closure captured at
+          // setInterval-creation time would otherwise see the stale value
+          // from the render where startTimer() was first called.
+          const partIndex = segmentNumberRef.current;
 
-          if (blob.size === 0) {
-            setError("Recording appears empty. Please try again.");
-            setUploadMode(null);
-            if (isRollover) teardownMicStream();
-            setRecordState("error");
-            rolloverInProgressRef.current = false;
-            return;
-          }
+          try {
+            if (!isRollover) {
+              teardownMicStream();
+            }
 
-          const ext = fileExtension(mimeType);
-          const filename = `session-${Date.now()}-part${partIndex}.${ext}`;
+            if (blob.size === 0) {
+              setError("Recording appears empty. Please try again.");
+              setUploadMode(null);
+              if (isRollover) teardownMicStream();
+              setRecordState("error");
+              rolloverInProgressRef.current = false;
+              return;
+            }
 
-          const result = await uploadAudioWithRetry(
-            uploadAudioDirect,
-            studentId,
-            blob,
-            filename,
-            mimeType
-          );
+            const ext = fileExtension(mimeType);
+            const filename = `session-${Date.now()}-part${partIndex}.${ext}`;
 
-          if (!result.ok) {
-            setError(formatUserFacingActionError(result.error, result.debugId));
-            setUploadMode(null);
-            teardownMicStream();
-            setRecordState("error");
-            rolloverInProgressRef.current = false;
-            return;
-          }
-
-          const previewUrl = URL.createObjectURL(blob);
-
-          if (isRollover) {
-            // `await` so flushPendingUploads waits for the consumer to
-            // finish enqueueing this segment before signalling drained.
-            await onRecorded(
-              {
-                blobUrl: result.blobUrl,
-                mimeType,
-                sizeBytes: blob.size,
-                filename,
-                previewUrl,
-                blob,
-              },
-              { autoRollover: true }
+            const result = await uploadAudioWithRetry(
+              uploadAudioDirect,
+              studentId,
+              blob,
+              filename,
+              mimeType
             );
-            setUploadMode(null);
-            mediaRecorderRef.current = null;
-            // Update both state (for UI) and ref (for the next rollover's onstop closure).
-            segmentNumberRef.current = partIndex + 1;
-            setSegmentNumber(partIndex + 1);
-            startMediaRecorder({ continuation: true });
-            rolloverInProgressRef.current = false;
-            return;
-          }
 
-          setDoneSegmentSeconds(segmentSeconds);
-          setUploadMode(null);
-          setRecordState("done");
-          // `await` so flushPendingUploads correctly blocks End-session
-          // until the trailing segment is in the outbox. This is the
-          // root-cause fix for the Phase 1b smoke regression.
-          await onRecorded({
-            blobUrl: result.blobUrl,
-            mimeType,
-            sizeBytes: blob.size,
-            filename,
-            previewUrl,
-            blob,
-          });
-          rolloverInProgressRef.current = false;
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : "Upload failed";
-          setError(msg);
-          setUploadMode(null);
-          teardownMicStream();
-          setRecordState("error");
-          rolloverInProgressRef.current = false;
+            if (!result.ok) {
+              setError(formatUserFacingActionError(result.error, result.debugId));
+              setUploadMode(null);
+              teardownMicStream();
+              setRecordState("error");
+              rolloverInProgressRef.current = false;
+              return;
+            }
+
+            const previewUrl = URL.createObjectURL(blob);
+
+            if (isRollover) {
+              // `await` so flushPendingUploads waits for the consumer to
+              // finish enqueueing this segment before signalling drained.
+              await onRecorded(
+                {
+                  blobUrl: result.blobUrl,
+                  mimeType,
+                  sizeBytes: blob.size,
+                  filename,
+                  previewUrl,
+                  blob,
+                },
+                { autoRollover: true }
+              );
+              setUploadMode(null);
+              mediaRecorderRef.current = null;
+              // Update both state (for UI) and ref (for the next rollover's onstop closure).
+              segmentNumberRef.current = partIndex + 1;
+              setSegmentNumber(partIndex + 1);
+              startMediaRecorder({ continuation: true });
+              rolloverInProgressRef.current = false;
+              return;
+            }
+
+            setDoneSegmentSeconds(segmentSeconds);
+            setUploadMode(null);
+            setRecordState("done");
+            // `await` so flushPendingUploads correctly blocks End-session
+            // until the trailing segment is in the outbox. This is the
+            // root-cause fix for the Phase 1b smoke regression.
+            await onRecorded({
+              blobUrl: result.blobUrl,
+              mimeType,
+              sizeBytes: blob.size,
+              filename,
+              previewUrl,
+              blob,
+            });
+            rolloverInProgressRef.current = false;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : "Upload failed";
+            setError(msg);
+            setUploadMode(null);
+            teardownMicStream();
+            setRecordState("error");
+            rolloverInProgressRef.current = false;
+          }
+        } finally {
+          stopTracking.settle();
         }
-      });
+      })();
     };
 
     if (recorder.state !== "inactive") {
       recorder.stop();
+    } else {
+      // Recorder already inactive — onstop won't fire. Settle the
+      // tracking Promise ourselves so flushPendingUploads() doesn't
+      // wait forever on a callback that will never arrive.
+      stopTracking.settle();
     }
   }
 

@@ -655,6 +655,149 @@ describe("useAudioRecorder — session safety cap", () => {
   });
 });
 
+describe("useAudioRecorder — flushPendingUploads (End-session race fix)", () => {
+  test("regression: tracking Promise is registered SYNCHRONOUSLY by stopAndUpload, before onstop fires", async () => {
+    // The Phase 1b production smoke test surfaced this exact race:
+    // handleEndSession calls audio.stopAndUpload("final") then
+    // immediately awaits audio.flushPendingUploads(). If
+    // flushPendingUploads only sees Promises that were added INSIDE
+    // recorder.onstop, the set is still empty at the moment of the
+    // await (onstop is queued, hasn't fired yet) — so the End-session
+    // flow races past the trailing segment, drains an empty outbox,
+    // finalizes, and then the segment finally enqueues into nothing.
+    //
+    // Console evidence from the affected session:
+    //   drainOutboxOrTimeout ok
+    //   enqueued ... hasRemoteUrl=true
+    //   finalized rowsDeleted=1
+    //
+    // The fix: pre-register a Promise in `pendingUploadsRef`
+    // synchronously inside stopAndUpload (before recorder.stop()),
+    // and have onstop's body settle that Promise. This test pins
+    // that contract — without holding it, the End-session flow
+    // CANNOT correctly synchronise with the trailing segment.
+    let resolveUpload!: (v: {
+      ok: true;
+      blobUrl: string;
+      mimeType: string;
+      sizeBytes: number;
+    }) => void;
+    uploadMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveUpload = resolve as typeof resolveUpload;
+        })
+    );
+
+    let onRecordedCalledAt = -1;
+    let logTick = 0;
+    const onRecorded = jest.fn(async () => {
+      onRecordedCalledAt = ++logTick;
+    });
+    const { result } = renderHook(() =>
+      useAudioRecorder({ studentId: "stu-1", onRecorded })
+    );
+
+    await flushAsync();
+    await act(async () => {
+      await result.current.handleStartRecording();
+    });
+    FakeMediaRecorder.lastInstance().feedData();
+
+    // Kick off the stop. With the fix, flushPendingUploads must
+    // observe an in-flight Promise IMMEDIATELY — even though
+    // recorder.onstop hasn't fired yet (it's microtask-queued) and
+    // the upload hasn't resolved.
+    await act(async () => {
+      result.current.stopAndUpload("final");
+    });
+
+    // Race the assertion: kick off flushPendingUploads(), then
+    // measure when it observed completion vs when onRecorded fired.
+    // With the pre-fix code, flushPendingUploads resolves
+    // IMMEDIATELY (set is empty), so flushCompletedAt < onRecordedCalledAt
+    // and the trailing segment is dropped. With the fix, flush waits.
+    let flushCompletedAt = -1;
+    const flushPromise = result.current
+      .flushPendingUploads()
+      .then(() => {
+        flushCompletedAt = ++logTick;
+      });
+
+    // Yield a couple of microtasks — but NOT enough to let the upload
+    // resolve. The FakeMediaRecorder's onstop queueMicrotask runs; the
+    // upload kicks off; it awaits our deferred resolveUpload. Crucially,
+    // flushPendingUploads must STILL be pending at this point.
+    await act(async () => {
+      for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    });
+
+    expect(flushCompletedAt).toBe(-1); // flush is still pending
+    expect(onRecordedCalledAt).toBe(-1); // onRecorded hasn't fired yet
+
+    // Now resolve the upload. The onstop chain completes, awaits
+    // onRecorded, and only then settles the tracking Promise.
+    await act(async () => {
+      resolveUpload({
+        ok: true,
+        blobUrl: "https://blob.example/race",
+        mimeType: "audio/webm",
+        sizeBytes: 1,
+      });
+      await flushPromise;
+    });
+
+    // Ordering invariant: onRecorded must be called BEFORE flush resolves.
+    // (The pre-fix code would have flushCompletedAt < onRecordedCalledAt.)
+    expect(onRecordedCalledAt).toBeGreaterThan(0);
+    expect(flushCompletedAt).toBeGreaterThan(onRecordedCalledAt);
+  });
+
+  test("flushPendingUploads is a no-op when no upload chain is active", async () => {
+    // Negative case: a tutor who never armed the mic still has
+    // handleEndSession call flushPendingUploads. That must not hang
+    // and must not throw.
+    const { result } = renderRecorder();
+    await flushAsync();
+    // No stopAndUpload was ever called. Set is empty.
+    await expect(result.current.flushPendingUploads()).resolves.toBeUndefined();
+  });
+
+  test("flushPendingUploads settles even if the recorder is already inactive when stopAndUpload is called", async () => {
+    // Edge case: a double-stopAndUpload (e.g. from a buggy effect)
+    // hits a recorder that's already inactive. The fix pre-registers
+    // a Promise before checking, so we must settle it via the
+    // explicit `recorder.state === "inactive"` branch in stopAndUpload
+    // — otherwise flush would hang forever and pin the End-session flow.
+    //
+    // We don't use a setTimeout-based timeout because the test uses
+    // fake timers (doNotFake: ["queueMicrotask"]). If the bug
+    // regresses, jest's default test timeout (5s) catches it.
+    mockUploadOk();
+    const { result } = renderRecorder();
+    await flushAsync();
+    await act(async () => {
+      await result.current.handleStartRecording();
+    });
+    FakeMediaRecorder.lastInstance().feedData();
+
+    // First stop: normal path. State becomes "uploading" then "done".
+    await act(async () => {
+      result.current.stopAndUpload("final");
+      await flushAsync();
+    });
+    expect(result.current.state).toBe("done");
+
+    // Second stop on an already-inactive recorder — must not hang.
+    await act(async () => {
+      result.current.stopAndUpload("final");
+    });
+    // Direct await — if this hangs, jest's test-timeout (5s) catches
+    // the regression with a clear failure.
+    await result.current.flushPendingUploads();
+  });
+});
+
 describe("useAudioRecorder — upload failures", () => {
   test("retry-once succeeds: first upload fails, second succeeds → done", async () => {
     uploadMock
