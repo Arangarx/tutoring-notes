@@ -48,12 +48,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   maxEventTimestampMs,
-  reconstructSceneAt,
   type WBElement,
   type WBEventLog,
 } from "@/lib/whiteboard/event-log";
 import { parseEventLogBySchema } from "@/lib/whiteboard/replay-parse";
-import { sanitizeRestoredExcalidrawElementsForReplay, toExcalidraw } from "@/lib/whiteboard/excalidraw-adapter";
+import {
+  createCameraFitter,
+  createScenePainter,
+  createThrottledPlayLoop,
+  type ScenePainter,
+  type ScenePaintApi,
+} from "@/lib/whiteboard/scene-paint";
 import { useExcalidrawThemeFromSystem } from "@/hooks/useExcalidrawThemeFromSystem";
 
 /**
@@ -154,6 +159,13 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   /** Image URLs already passed to Excalidraw `addFiles` for this loaded log. */
   const registeredAssetUrlsRef = useRef<Set<string>>(new Set());
   const excalCanvasContainerRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * Pillar-4 scene-paint engine instance for the current `(api, log)` pair.
+   * Recreated when either changes; encapsulates the canonical scene
+   * reconstruction + restoreElements + sanitize + scroll-preserve logic
+   * shared with the workspace.
+   */
+  const scenePainterRef = useRef<ScenePainter | null>(null);
 
   const excalidrawTheme = useExcalidrawThemeFromSystem();
 
@@ -298,62 +310,42 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   // the bounding box but no bitmap.)
   // -----------------------------------------------------------------
 
+  // Build (or rebuild) the scene-paint engine when the `(api, log)` pair
+  // changes. The engine encapsulates restoreElements / adapter / sanitize /
+  // scroll-preserve so any whiteboard surface (replay, workspace resume,
+  // future preview-before-start) gets the same paint pipeline. See
+  // `src/lib/whiteboard/scene-paint.ts` for the contract.
+  useEffect(() => {
+    if (loadState.kind !== "ready" || !api) {
+      scenePainterRef.current = null;
+      return;
+    }
+    scenePainterRef.current = createScenePainter({
+      log: loadState.log,
+      api: api as ScenePaintApi,
+      restoreElements: replayCachedRestoreElements ?? undefined,
+      registeredAssetUrls: registeredAssetUrlsRef.current,
+    });
+  }, [api, loadState]);
+
   const applySceneAt = useCallback(
     (timeMs: number) => {
       if (loadState.kind !== "ready" || !api) return;
-
-      const scene = reconstructSceneAt(loadState.log, timeMs);
-      const rough: unknown[] = [];
-      const newAssetUrls: string[] = [];
-      for (const el of scene.values()) {
-        const ex = toExcalidraw(el);
-        rough.push(ex);
-        if (
-          el.assetUrl &&
-          !registeredAssetUrlsRef.current.has(el.assetUrl)
-        ) {
-          newAssetUrls.push(el.assetUrl);
-          registeredAssetUrlsRef.current.add(el.assetUrl);
-        }
-      }
-      // Same path as IndexedDB crash-resume (`WhiteboardWorkspaceClient`):
-      // canonical log elements omit Excalidraw-required defaults (seed, version,
-      // etc.). Without `restoreElements`, strokes silently fail to paint.
-      let painted: unknown[];
-      try {
-        const rs = replayCachedRestoreElements;
-        if (rs) {
-          painted = rs(rough as never, null, {
-            refreshDimensions: true,
-          }) as unknown as unknown[];
-        } else {
-          painted = rough;
-        }
-      } catch {
-        painted = rough;
-      }
-      painted = sanitizeRestoredExcalidrawElementsForReplay(painted);
-      lastSceneElementsRef.current = painted;
-      const preserveScroll = replayCameraReadyRef.current
-        ? replayScrollPreserve(api)
-        : null;
-      // Intentionally DO NOT push `theme` or `viewBackgroundColor` here.
-      // The audio rAF loop calls applySceneAt every frame; pushing
-      // appState.viewBackgroundColor on every tick was causing Excalidraw
-      // to drop the dark background mid-playback (Andrew repro 2026-05-09:
-      // initial paint was dark, hitting Play turned the canvas white and
-      // kept it white). Theme + bg are driven by the `theme` prop alone
-      // (mirrors the workspace canvas) and re-asserted by the dedicated
-      // theme effect when `excalidrawTheme` actually changes.
-      api.updateScene({
-        elements: painted,
-        ...(preserveScroll ? { appState: preserveScroll } : {}),
+      const painter = scenePainterRef.current;
+      if (!painter) return;
+      const result = painter.applyAt(timeMs, {
+        preserveScroll: replayCameraReadyRef.current,
       });
+      lastSceneElementsRef.current = result.paintedElements;
       // Kick off image fetches in the background — Excalidraw will
       // call `getFiles()` or look in `BinaryFiles` on next render
       // tick, and addFiles is what populates that.
-      if (newAssetUrls.length > 0) {
-        void registerImageAssets(api, scene, newAssetUrls);
+      if (result.newAssetUrls.length > 0) {
+        void registerImageAssets(
+          api,
+          result.scene,
+          result.newAssetUrls
+        );
       }
     },
     [api, loadState]
@@ -381,70 +373,29 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     applySceneAt(initialT);
     setAudioElapsedMs(initialT);
 
-    const zoomValue = 1;
-    /**
-     * Camera fit can lose to Excalidraw's internal layout race: the canvas
-     * container is mounted but `getBoundingClientRect()` may return 0 width
-     * or height before Excalidraw has measured. When that happens, the
-     * synchronous attempt's `scrollFit` is null and the camera stays at
-     * default (off-center). The share replay reproduced this consistently
-     * even when the admin replay won the race. Retry on a couple of
-     * animation frames is cheap and deterministic — we bail as soon as a
-     * fit produces real numbers.
-     */
-    let rafIds: number[] = [];
-    const attemptCameraFit = (): boolean => {
-      if (!excalCanvasContainerRef.current) return false;
-      const rect = excalCanvasContainerRef.current.getBoundingClientRect();
-      const cw = rect.width;
-      const ch = rect.height;
-      const scrollFit = computeReplayViewportScroll({
-        elements: lastSceneElementsRef.current,
-        containerWidth: cw,
-        containerHeight: ch,
-        zoom: zoomValue,
-      });
-      if (!scrollFit) return false;
-      try {
-        // Camera fit only — DO NOT push theme/viewBackgroundColor here.
-        // Excalidraw resets viewBackgroundColor when elements transition
-        // empty→non-empty in view mode, even if the appState says
-        // otherwise (Andrew repro 2026-05-09: canvas dark while empty,
-        // turned white the moment the first stroke arrived). The `theme`
-        // prop is the canonical theme channel; let Excalidraw derive the
-        // background from it.
-        api.updateScene({
-          elements: lastSceneElementsRef.current as unknown[],
-          appState: {
-            scrollX: scrollFit.scrollX,
-            scrollY: scrollFit.scrollY,
-            zoom: { value: zoomValue },
-          },
-        });
-      } catch {
-        return false;
-      }
-      replayCameraReadyRef.current = true;
-      setReplayViewportSeq((n) => n + 1);
-      return true;
-    };
+    const container = excalCanvasContainerRef.current;
+    if (!container) return;
 
-    // Synchronous attempt — wins for admin in most cases, may lose on share.
-    if (!attemptCameraFit()) {
-      // Schedule retries on the next two animation frames. Excalidraw uses
-      // a ResizeObserver internally and finishes its first measure pass
-      // by the second frame in practice. Stop as soon as one succeeds.
-      const tryAgain = () => {
-        if (replayCameraReadyRef.current) return;
-        if (attemptCameraFit()) return;
-        rafIds.push(window.requestAnimationFrame(tryAgain));
-      };
-      rafIds.push(window.requestAnimationFrame(tryAgain));
-    }
+    // Phase 1a: camera fit + rAF retry now lives in the scene-paint
+    // engine. Same behaviour as the old inline impl (Phase 0e):
+    // synchronous attempt → if measure returns 0×0, schedule rAF
+    // retries until measure succeeds or `maxRetries` runs out.
+    // `onFit` flips the local "preserve scroll on subsequent paints"
+    // flag whichever attempt wins.
+    const fitter = createCameraFitter({
+      api: api as ScenePaintApi,
+      container,
+      getElements: () => lastSceneElementsRef.current,
+      zoom: 1,
+      onFit: () => {
+        replayCameraReadyRef.current = true;
+        setReplayViewportSeq((n) => n + 1);
+      },
+    });
+    fitter.fit();
 
     return () => {
-      for (const id of rafIds) window.cancelAnimationFrame(id);
-      rafIds = [];
+      fitter.dispose();
     };
   }, [api, audioBlobUrl, loadState, applySceneAt]);
 
@@ -464,76 +415,35 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     const el = audioRef.current;
     if (!el) return;
 
-    /**
-     * applySceneAt does meaningful per-call work: walks the event log to
-     * reconstruct the scene at `ms`, runs Excalidraw's `restoreElements`,
-     * runs sanitize, then `updateScene` triggers an Excalidraw repaint.
-     * Running this at 60Hz starves the main thread on longer recordings —
-     * the audio scrubber's pointer events get dropped and feel
-     * unresponsive, AND seek events take too long to land
-     * (Andrew repro 2026-05-09 on a two-party session).
-     *
-     * Throttle the play loop to ~20Hz (every ~50ms). Audio scrub feel is
-     * indistinguishable from 60Hz at this rate; main thread gets ~50ms
-     * of headroom per cycle for pointer events. Seek/pause events bypass
-     * the throttle and run immediately so user-initiated state changes
-     * are always responsive.
-     */
-    const PLAY_LOOP_MIN_INTERVAL_MS = 50;
-    let rafId: number | null = null;
-    let lastAppliedMs = -1;
-    let lastTickWallClock = 0;
+    // Phase 1a: 20Hz throttled play loop with seek/pause bypass now lives
+    // in the scene-paint engine. The driver throttles paints to ≈50ms so
+    // the audio scrubber stays responsive on long recordings; user-initiated
+    // changes (seek, pause) bypass the throttle. See `createThrottledPlayLoop`.
+    const loop = createThrottledPlayLoop({
+      getTimeMs: () => Math.floor(el.currentTime * 1000),
+      apply: (ms) => {
+        setAudioElapsedMs(ms);
+        applySceneAt(ms);
+      },
+    });
 
-    const applyAt = (ms: number) => {
-      if (ms === lastAppliedMs) return;
-      lastAppliedMs = ms;
-      setAudioElapsedMs(ms);
-      applySceneAt(ms);
-    };
+    const onPlay = () => loop.play();
+    const onPause = () => loop.pause();
+    const onSeeked = () => loop.seek();
+    const onLoadedMeta = () => setAudioReady(true);
 
-    const tick = () => {
-      const now = performance.now();
-      if (now - lastTickWallClock >= PLAY_LOOP_MIN_INTERVAL_MS) {
-        lastTickWallClock = now;
-        const ms = Math.floor(el.currentTime * 1000);
-        applyAt(ms);
-      }
-      rafId = window.requestAnimationFrame(tick);
-    };
-    const onPlay = () => {
-      lastTickWallClock = 0; // run immediately on play
-      if (rafId === null) rafId = window.requestAnimationFrame(tick);
-    };
-    const onPause = () => {
-      if (rafId !== null) {
-        window.cancelAnimationFrame(rafId);
-        rafId = null;
-      }
-      // Trailing apply so the visible scene matches the audio's final
-      // position (rAF cancellation can drop the last paint). Bypasses the
-      // throttle since this is a user-initiated state change.
-      const ms = Math.floor(el.currentTime * 1000);
-      lastAppliedMs = -1; // force the apply
-      applyAt(ms);
-    };
-    const onSeeked = () => {
-      // Seeks bypass the throttle — user drag must update the canvas
-      // immediately or the scrubber feels broken.
-      const ms = Math.floor(el.currentTime * 1000);
-      lastAppliedMs = -1; // force the apply even if ms == previous
-      applyAt(ms);
-    };
     el.addEventListener("play", onPlay);
     el.addEventListener("pause", onPause);
     el.addEventListener("ended", onPause);
     el.addEventListener("seeked", onSeeked);
-    el.addEventListener("loadedmetadata", () => setAudioReady(true));
+    el.addEventListener("loadedmetadata", onLoadedMeta);
     return () => {
-      if (rafId !== null) window.cancelAnimationFrame(rafId);
+      loop.dispose();
       el.removeEventListener("play", onPlay);
       el.removeEventListener("pause", onPause);
       el.removeEventListener("ended", onPause);
       el.removeEventListener("seeked", onSeeked);
+      el.removeEventListener("loadedmetadata", onLoadedMeta);
     };
   }, [audioBlobUrl, applySceneAt, loadState]);
 
@@ -726,78 +636,6 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
 }
 
 /**
- * Center the camera on painted elements without Excalidraw `scrollToContent`
- * timing (deterministic bbox math — Phase 0e).
- */
-function computeReplayViewportScroll(args: {
-  elements: readonly unknown[];
-  containerWidth: number;
-  containerHeight: number;
-  zoom: number;
-}): { scrollX: number; scrollY: number } | null {
-  const { elements, containerWidth: cw, containerHeight: ch, zoom } = args;
-  if (elements.length === 0 || !(cw > 0 && ch > 0)) return null;
-
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-
-  for (const raw of elements) {
-    const el = raw as { x?: unknown; y?: unknown; width?: unknown; height?: unknown };
-    const x = typeof el.x === "number" ? el.x : Number(el.x);
-    const y = typeof el.y === "number" ? el.y : Number(el.y);
-    const w = typeof el.width === "number" ? el.width : Number(el.width);
-    const h = typeof el.height === "number" ? el.height : Number(el.height);
-    if (
-      !Number.isFinite(x) ||
-      !Number.isFinite(y) ||
-      !Number.isFinite(w) ||
-      !Number.isFinite(h)
-    ) {
-      continue;
-    }
-    const xe = x + w;
-    const ye = y + h;
-    minX = Math.min(minX, x, xe);
-    minY = Math.min(minY, y, ye);
-    maxX = Math.max(maxX, x, xe);
-    maxY = Math.max(maxY, y, ye);
-  }
-
-  if (!Number.isFinite(minX) || minX >= maxX || minY >= maxY) {
-    return null;
-  }
-
-  const centerX = (minX + maxX) / 2;
-  const centerY = (minY + maxY) / 2;
-  const zoomValue = zoom > 0 ? zoom : 1;
-  return {
-    scrollX: cw / 2 / zoomValue - centerX,
-    scrollY: ch / 2 / zoomValue - centerY,
-  };
-}
-
-/**
- * Replay calls `updateScene` frequently; Excalidraw resets scroll if we omit it.
- * We intentionally do **not** merge `zoom` in `replayScrollPreserve` — ticking
- * zoom alongside scene updates blew up percentages in pilots. Phase 0e sets zoom once
- * in the deterministic initial camera patch.
- */
-function replayScrollPreserve(api: ReplayApi): Record<string, unknown> | null {
-  try {
-    const st = api.getAppState?.();
-    if (!st) return null;
-    const out: Record<string, unknown> = {};
-    if (st.scrollX !== undefined) out.scrollX = st.scrollX;
-    if (st.scrollY !== undefined) out.scrollY = st.scrollY;
-    return Object.keys(out).length > 0 ? out : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Admin review uses a same-origin API route that authenticates via cookie.
  * Public share pages may pass absolute Blob or token URLs — those still use
  * `omit` so we do not leak cookies cross-site.
@@ -898,7 +736,7 @@ function collectAssetUrls(log: WBEventLog): string[] {
  */
 async function registerImageAssets(
   api: ReplayApi,
-  scene: Map<string, WBElement>,
+  scene: ReadonlyMap<string, WBElement>,
   newAssetUrls: string[]
 ): Promise<void> {
   const filesToRegister: Array<{
