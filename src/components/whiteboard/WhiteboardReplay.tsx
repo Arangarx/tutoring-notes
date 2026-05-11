@@ -60,6 +60,7 @@ import {
   type ScenePaintApi,
 } from "@/lib/whiteboard/scene-paint";
 import { useExcalidrawThemeFromSystem } from "@/hooks/useExcalidrawThemeFromSystem";
+import { attachWebmDurationFix } from "@/lib/audio/webm-duration-fix";
 
 /**
  * Excalidraw is heavy (>1 MB gzipped) and grabs a number of browser
@@ -412,6 +413,10 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       // nothing to drive a play head without session audio.
       return;
     }
+    // `replayExcaliRestoreReady` gates when the audio JSX is rendered
+    // (see render branch below). Bail before that flip; the effect
+    // re-runs once it becomes true and the audio element is in the DOM.
+    if (!replayExcaliRestoreReady) return;
     const el = audioRef.current;
     if (!el) return;
 
@@ -430,22 +435,44 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     const onPlay = () => loop.play();
     const onPause = () => loop.pause();
     const onSeeked = () => loop.seek();
-    const onLoadedMeta = () => setAudioReady(true);
 
     el.addEventListener("play", onPlay);
     el.addEventListener("pause", onPause);
     el.addEventListener("ended", onPause);
     el.addEventListener("seeked", onSeeked);
-    el.addEventListener("loadedmetadata", onLoadedMeta);
+
+    // WebM duration / scrubber fix.
+    //
+    // Sarah-pilot regression (Phase 1b hotfix): on first visit to the
+    // replay page the native `<audio controls>` scrubber was
+    // non-draggable. The cause is the long-known MediaRecorder WebM
+    // streaming bug — the blob has no duration header, so
+    // `<audio>.duration` is `Infinity` and the scrubber renders
+    // inert. The `<AudioPreview>` surface has worked around this for
+    // months but the replay player never had the fix applied.
+    //
+    // The helper is gated on the mime type (no-op for iOS MP4) and
+    // calls `setAudioReady(true)` on `loadedmetadata` so the "Audio
+    // loading…" message disappears at the right moment.
+    const detachDurationFix = attachWebmDurationFix(el, replayAudioMime, {
+      onMetadataLoaded: () => setAudioReady(true),
+    });
+
     return () => {
       loop.dispose();
       el.removeEventListener("play", onPlay);
       el.removeEventListener("pause", onPause);
       el.removeEventListener("ended", onPause);
       el.removeEventListener("seeked", onSeeked);
-      el.removeEventListener("loadedmetadata", onLoadedMeta);
+      detachDurationFix();
     };
-  }, [audioBlobUrl, applySceneAt, loadState]);
+  }, [
+    audioBlobUrl,
+    applySceneAt,
+    loadState,
+    replayAudioMime,
+    replayExcaliRestoreReady,
+  ]);
 
   /**
    * Theme is driven entirely by the `theme` prop on `<Excalidraw />`.
@@ -623,9 +650,9 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       )}
 
       {/* Note about audio mime — drives the Chrome WebM duration hack
-          we use elsewhere; for the replay player the audio file's
-          duration header has been finalized server-side, so the hack
-          isn't needed. We surface the mime in the UI for debugging. */}
+          (see `attachWebmDurationFix` wired into the rAF useEffect
+          above). Surfaced in the UI for debugging when a tutor reports
+          a non-draggable scrubber or wrong duration. */}
       {hasAudio && audioMimeType && (
         <div className="muted" style={{ fontSize: 11 }}>
           Audio mime: {audioMimeType}

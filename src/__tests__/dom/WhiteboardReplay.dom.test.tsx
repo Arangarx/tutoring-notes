@@ -37,7 +37,7 @@
  * doesn't bring in the (huge, JSDOM-incompatible) real module.
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import WhiteboardReplay from "@/components/whiteboard/WhiteboardReplay";
 
 jest.mock("@excalidraw/excalidraw", () => ({
@@ -251,6 +251,147 @@ describe("<WhiteboardReplay />", () => {
     });
     expect(await screen.findByTestId("wb-replay")).toBeInTheDocument();
   });
+
+  it(
+    "wires the WebM duration-fix hack into the replay <audio> element (Sarah scrubber regression)",
+    async () => {
+      // Sarah-pilot scrubber bug, Phase 1b smoke testing.
+      //
+      // Symptom: the native `<audio controls>` scrubber on the
+      // replay page was non-draggable on first load. Hard refresh
+      // temporarily fixed it; the issue came back on subsequent
+      // visits. Root cause was the long-known Chrome MediaRecorder
+      // WebM duration bug (`<audio>.duration === Infinity`) — the
+      // same bug `<AudioPreview>` worked around for months, but the
+      // replay player never had the fix applied.
+      //
+      // This test pins that the helper is actually wired into the
+      // replay surface. If a future refactor moves the audio
+      // element or removes the helper call, this test fails fast
+      // instead of silently regressing in Sarah's browser.
+      fetchMock.mockResolvedValueOnce(
+        fakeResponse(
+          JSON.stringify({
+            schemaVersion: 1,
+            startedAt: "2026-05-11T00:00:00Z",
+            durationMs: 60_000,
+            events: [],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }
+        )
+      );
+
+      render(
+        <WhiteboardReplay
+          eventsBlobUrl="/api/whiteboard/wb_42/events"
+          audioBlobUrl="/api/audio/admin/aud_1"
+          audioMimeType="audio/webm;codecs=opus"
+        />
+      );
+
+      const audio = (await screen.findByTestId(
+        "wb-replay-audio"
+      )) as HTMLAudioElement;
+
+      // jsdom defaults `duration` to NaN; override to mimic the
+      // MediaRecorder WebM blob (Infinity) that triggers the hack.
+      Object.defineProperty(audio, "duration", {
+        configurable: true,
+        get: () => Infinity,
+      });
+
+      fireEvent.loadedMetadata(audio);
+
+      // The helper's seek-to-end hack ran iff currentTime was bumped.
+      // jsdom may clamp 1e101 to a smaller value; >0 is enough to
+      // prove the WebM branch fired (MP4 path leaves it at 0).
+      await waitFor(() => {
+        expect(audio.currentTime).toBeGreaterThan(0);
+      });
+    }
+  );
+
+  it(
+    "scrubber catch-up runs when audio metadata loaded BEFORE listener attached (cached-load race)",
+    async () => {
+      // The actual root cause of the intermittent regression: on
+      // soft navigations (link click, back-button), the audio
+      // response comes from HTTP cache and `loadedmetadata` fires
+      // synchronously when `src=` is assigned. Our React useEffect
+      // attaches the listener one render-tick later — too late.
+      //
+      // The helper's catch-up branch reads `audio.readyState` at
+      // attach time and fires the handlers manually when metadata
+      // is already available. Without this, the WebM hack misses
+      // and the scrubber stays inert until hard refresh slows the
+      // load enough for the listener to win the race.
+      fetchMock.mockResolvedValueOnce(
+        fakeResponse(
+          JSON.stringify({
+            schemaVersion: 1,
+            startedAt: "2026-05-11T00:00:00Z",
+            durationMs: 60_000,
+            events: [],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }
+        )
+      );
+
+      // Pre-populate the audio element's readyState + duration
+      // BEFORE the helper attaches. We accomplish this by
+      // intercepting `addEventListener` — by the time the helper
+      // calls it, the element already looks "loaded".
+      const originalAddEventListener =
+        HTMLAudioElement.prototype.addEventListener;
+      const audios: HTMLAudioElement[] = [];
+      HTMLAudioElement.prototype.addEventListener = function (
+        this: HTMLAudioElement,
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: boolean | AddEventListenerOptions
+      ): void {
+        if (!audios.includes(this)) {
+          audios.push(this);
+          Object.defineProperty(this, "readyState", {
+            configurable: true,
+            get: () => 1 /* HAVE_METADATA */,
+          });
+          Object.defineProperty(this, "duration", {
+            configurable: true,
+            get: () => Infinity,
+          });
+        }
+        return originalAddEventListener.call(this, type, listener, options);
+      };
+
+      try {
+        render(
+          <WhiteboardReplay
+            eventsBlobUrl="/api/whiteboard/wb_42/events"
+            audioBlobUrl="/api/audio/admin/aud_1"
+            audioMimeType="audio/webm;codecs=opus"
+          />
+        );
+
+        const audio = (await screen.findByTestId(
+          "wb-replay-audio"
+        )) as HTMLAudioElement;
+
+        // Catch-up must have fired without us dispatching the event.
+        await waitFor(() => {
+          expect(audio.currentTime).toBeGreaterThan(0);
+        });
+      } finally {
+        HTMLAudioElement.prototype.addEventListener = originalAddEventListener;
+      }
+    }
+  );
 
   it("missing schemaVersion in JSON surfaces a clean schema error", async () => {
     fetchMock.mockResolvedValueOnce(
