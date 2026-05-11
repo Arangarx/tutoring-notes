@@ -565,12 +565,19 @@ export function WhiteboardWorkspaceClient({
   }, [whiteboardSessionId, studentId]);
 
   /**
-   * Pending-task ref kept ALIVE in Phase 1b only so the audio bridge's
-   * `getState` shim from Phase 0c still has a tracked Promise array
-   * during the in-flight refactor. Commit 4 replaces the bridge with
-   * a direct outbox observer and this ref goes away.
+   * Hand `useAudioRecorder` a callback that drops every finished
+   * segment into the IndexedDB outbox. From Commit 4 on, the
+   * workspace doesn't need to track in-flight Promises here — the
+   * outbox owns the segment lifecycle and the audio bridge observes
+   * outbox state directly to drive End-session UI copy.
+   *
+   * The hook already uploaded the Blob to Vercel Blob by the time it
+   * calls us (see `useAudioRecorder.onstop`), so we pass `blobRemoteUrl`
+   * through on enqueue. The local Blob still gets stored in IDB as
+   * the recovery anchor — if the tab refreshes after the outbox row
+   * lands but before End-session, the worker can re-upload from the
+   * persisted Blob rather than losing the segment.
    */
-  const wbAudioSegmentPendingRef = useRef<Promise<void>[]>([]);
   const onWorkspaceAudioRecorded = useCallback(
     async (
       audioSeg: {
@@ -581,49 +588,33 @@ export function WhiteboardWorkspaceClient({
       },
       _meta?: { autoRollover?: boolean }
     ) => {
-      // Mint a stable segmentId per logical segment. We don't reuse
-      // useAudioRecorder's part index because it resets on remount.
-      // crypto.randomUUID is available everywhere we ship; defensive
-      // fallback retained so SSR import doesn't crash if this module
-      // ever runs without the browser polyfill (it shouldn't).
       const segmentId =
         typeof globalThis.crypto?.randomUUID === "function"
           ? globalThis.crypto.randomUUID()
           : `seg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-      const task = (async () => {
-        try {
-          const outbox = getOrCreateUploadOutbox();
-          await outbox.enqueue({
-            sessionId: whiteboardSessionId,
-            // Phase 1b hardcodes the tutor mic stream here — Phase 4
-            // will pass `studentMicStreamId(peerId)` for student
-            // capture by mapping over peer connections, not by
-            // adding a new code path.
-            streamId: TUTOR_MIC_STREAM_ID,
-            segmentId,
-            blobLocalRef: audioSeg.blob ?? null,
-            // The hook already uploaded the blob successfully before
-            // firing onRecorded; pass the URL through so the worker
-            // skips the upload step and the row goes straight to
-            // "registering" (awaiting atomic end-session).
-            blobRemoteUrl: audioSeg.blobUrl,
-            mimeType: audioSeg.mimeType,
-            sizeBytes: audioSeg.sizeBytes,
-            audioStartedAtMs: Date.now(),
-          });
-        } catch (err) {
-          console.error(
-            `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} outbox.enqueue failed`,
-            err
-          );
-        }
-      })();
-      wbAudioSegmentPendingRef.current.push(task);
       try {
-        await task;
-      } finally {
-        wbAudioSegmentPendingRef.current = wbAudioSegmentPendingRef.current.filter(
-          (p) => p !== task
+        const outbox = getOrCreateUploadOutbox();
+        await outbox.enqueue({
+          sessionId: whiteboardSessionId,
+          // Phase 1b hardcodes the tutor mic stream here — Phase 4
+          // will pass `studentMicStreamId(peerId)` for student
+          // capture by mapping over peer connections, not by
+          // adding a new code path.
+          streamId: TUTOR_MIC_STREAM_ID,
+          segmentId,
+          blobLocalRef: audioSeg.blob ?? null,
+          blobRemoteUrl: audioSeg.blobUrl,
+          mimeType: audioSeg.mimeType,
+          sizeBytes: audioSeg.sizeBytes,
+          audioStartedAtMs: Date.now(),
+        });
+      } catch (err) {
+        // Never throw — useAudioRecorder.onRecorded swallows the
+        // return value; surfacing this as a banner would race with
+        // the outbox's own "failed" state. Log + carry on.
+        console.error(
+          `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} outbox.enqueue failed`,
+          err
         );
       }
     },
@@ -1139,18 +1130,37 @@ export function WhiteboardWorkspaceClient({
     setFinalizingSegmentCount(0);
     try {
       setUserWantsRecording(false);
+      // Phase 1b: the outbox is the source of truth for "is any
+      // segment still in flight". We block End on uploads only —
+      // registering rows are awaiting THIS function's
+      // endWhiteboardSession call below, so blocking on them would
+      // deadlock. Failed rows surface an error immediately rather
+      // than burning the full 30s budget (Commit 7 will be even
+      // more surgical and switch to outbox.drainAndAwait directly).
       const deadline = Date.now() + 30_000;
       while (true) {
         const bridge = audioBridgeRef.current;
-        const st =
-          bridge?.getState?.() ?? {
-            kind: "idle" as const,
-            inFlightCount: 0,
-            lastError: null,
-          };
+        const st = bridge?.getState?.() ?? {
+          kind: "idle" as const,
+          inFlightCount: 0,
+          inFlightByStream: new Map<string, number>(),
+          lastError: null,
+        };
         const audioState = workspaceAudioRef.current.state;
+        if (st.kind === "failed") {
+          console.error(
+            `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} end-session aborted because outbox reported failed lastError=${st.lastError ?? "<none>"}`
+          );
+          setEndingState("error");
+          setEndingError(
+            st.lastError
+              ? `Couldn't finalize — an audio segment failed to upload: ${st.lastError}. Your data isn't lost; retry "End session" once your connection is healthy.`
+              : "Couldn't finalize — an audio segment failed to upload. Your data isn't lost; retry \"End session\" once your connection is healthy."
+          );
+          return;
+        }
         const stillBusy =
-          st.kind !== "idle" ||
+          st.inFlightCount > 0 ||
           audioState === "recording" ||
           audioState === "uploading";
         if (!stillBusy) {
@@ -1513,7 +1523,7 @@ export function WhiteboardWorkspaceClient({
       <WhiteboardWorkspaceAudioBridge
         ref={audioBridgeRef}
         audio={workspaceAudio}
-        pendingSegmentTasksRef={wbAudioSegmentPendingRef}
+        whiteboardSessionId={whiteboardSessionId}
         userWantsRecording={userWantsRecording}
         recordingActive={recordingActive}
         panelDisabled={endingBusy || !userWantsRecording}

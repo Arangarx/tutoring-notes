@@ -35,11 +35,14 @@
 
 import {
   createUploadOutbox,
+  type OutboxObserverState,
   type OutboxRow,
   type OutboxUploadResult,
   type UploadOutbox,
 } from "@/lib/recording/upload-outbox";
 import { uploadAudioDirect, uploadAudioWithRetry } from "@/lib/recording/upload";
+
+export type { OutboxObserverState };
 
 let singleton: UploadOutbox | null = null;
 /**

@@ -57,12 +57,12 @@ const mockUpload = jest.fn(() =>
   })
 );
 jest.mock("@/lib/whiteboard/upload", () => ({
-  uploadWhiteboardEvents: (...args: unknown[]) => mockUpload(...args),
+  uploadWhiteboardEvents: (...args: unknown[]) => mockUpload.apply(null, args),
 }));
 
 const mockEnd = jest.fn(() => Promise.resolve());
 jest.mock("@/app/admin/students/[id]/whiteboard/actions", () => ({
-  endWhiteboardSession: (...args: unknown[]) => mockEnd(...args),
+  endWhiteboardSession: (...args: unknown[]) => mockEnd.apply(null, args),
   issueJoinToken: jest.fn(() => Promise.resolve({ token: "tok" })),
   registerWhiteboardSessionAudioSegmentAction: jest.fn(() =>
     Promise.resolve({ ok: true as const, recordingId: "rec1", orderIndex: 0 })
@@ -98,9 +98,17 @@ jest.mock("@/hooks/useWhiteboardRecorder", () => ({
   }),
 }));
 
-const mockGetState = jest.fn(() => ({
-  kind: "idle" as const,
+type MockBridgeState = {
+  kind: "idle" | "recording" | "uploading" | "registering" | "failed";
+  inFlightCount: number;
+  inFlightByStream: ReadonlyMap<string, number>;
+  lastError: string | null;
+};
+
+const mockGetState = jest.fn<MockBridgeState, []>(() => ({
+  kind: "idle",
   inFlightCount: 0,
+  inFlightByStream: new Map<string, number>(),
   lastError: null,
 }));
 
@@ -197,6 +205,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 0c)", () => {
     mockGetState.mockImplementation(() => ({
       kind: "idle",
       inFlightCount: 0,
+      inFlightByStream: new Map<string, number>(),
       lastError: null,
     }));
     window.history.replaceState(
@@ -206,14 +215,20 @@ describe("WhiteboardWorkspaceClient end session (Phase 0c)", () => {
     );
   });
 
-  test("End shows segment-saving copy while bridge is non-idle, then completes", async () => {
+  test("End shows segment-saving copy while uploads are in flight, then completes", async () => {
     mockGetState
       .mockReturnValueOnce({
-        kind: "registering",
+        kind: "uploading",
         inFlightCount: 2,
+        inFlightByStream: new Map([["tutor:mic", 2]]),
         lastError: null,
       })
-      .mockReturnValue({ kind: "idle", inFlightCount: 0, lastError: null });
+      .mockReturnValue({
+        kind: "idle",
+        inFlightCount: 0,
+        inFlightByStream: new Map<string, number>(),
+        lastError: null,
+      });
 
     render(
       <WhiteboardWorkspaceClient
@@ -246,8 +261,9 @@ describe("WhiteboardWorkspaceClient end session (Phase 0c)", () => {
   test("End surfaces error on finalize timeout and does not end session", async () => {
     jest.useFakeTimers();
     mockGetState.mockReturnValue({
-      kind: "registering",
+      kind: "uploading",
       inFlightCount: 1,
+      inFlightByStream: new Map([["tutor:mic", 1]]),
       lastError: null,
     });
 
