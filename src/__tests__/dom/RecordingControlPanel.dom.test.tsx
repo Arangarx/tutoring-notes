@@ -37,6 +37,7 @@ function recorderFixture(
     resumeRecording: jest.fn(),
     stopAndUpload: jest.fn(),
     handleReset: jest.fn(),
+    flushPendingUploads: jest.fn(() => Promise.resolve()),
     ...overrides,
   };
 }

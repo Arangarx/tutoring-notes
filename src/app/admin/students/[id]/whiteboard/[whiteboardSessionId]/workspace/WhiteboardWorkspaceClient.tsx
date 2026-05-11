@@ -1153,15 +1153,46 @@ export function WhiteboardWorkspaceClient({
     setEndingError(null);
     setFinalizingSegmentCount(0);
     try {
-      // Step 1 — stop the recorder. setUserWantsRecording(false)
-      // flips the lifecycle FSM, which propagates to the audio
-      // bridge and stops MediaRecorder. The hook's onstop callback
-      // then uploads + enqueues the trailing segment into the
-      // outbox, so by the time drainOutboxOrTimeout below resolves
-      // we've waited for the LAST audio segment too.
+      // Step 1 — stop the recorder. Two things have to happen here
+      // synchronously, BEFORE we start awaiting anything:
+      //
+      //  a) Flip the FSM so any re-render (and our own visible state)
+      //     stops treating recording as active.
+      //  b) Trigger MediaRecorder.stop() directly. We DO NOT rely on the
+      //     audio bridge's "stop on userWantsRecording=false" useEffect
+      //     because that effect runs after React's render-commit pass —
+      //     which means by the time the bridge calls stopAndUpload, we
+      //     would already have started awaiting drainOutboxOrTimeout
+      //     below. That's the Phase 1b smoke regression we hit on
+      //     master: drain returned ok against an empty outbox, then the
+      //     bridge stopped the recorder, then onstop fired async, then
+      //     the segment finally got enqueued after end-session had
+      //     already finalized. Console evidence:
+      //       drainOutboxOrTimeout ok
+      //       enqueued ... segmentId=26bc... hasRemoteUrl=true
+      //       finalized rowsDeleted=1
+      //     i.e. the segment was uploaded, enqueued, then *deleted* by
+      //     finalize because nothing was waiting on it. Calling
+      //     stopAndUpload here registers the pending-upload Promise
+      //     synchronously, so step 2 below has something to await.
       setUserWantsRecording(false);
+      const audioApi = workspaceAudioRef.current;
+      if (audioApi.state === "recording" || audioApi.state === "paused") {
+        audioApi.stopAndUpload("final");
+      }
 
-      // Step 2 — wait for the outbox to land every pending segment.
+      // Step 2 — wait for the recorder's upload + onRecorded chain.
+      // Resolves once every MediaRecorder.onstop fired by this hook has
+      // finished, including the `await onRecorded(...)` inside, which
+      // is where `onWorkspaceAudioRecorded` does `outbox.enqueue(...)`.
+      // By the time this returns, the trailing segment (and any
+      // rollover segment still in flight) is in IndexedDB with
+      // `hasRemoteUrl=true`. The audio recorder already uploaded the
+      // Blob to Vercel Blob; the outbox just records that fact for
+      // the atomic end-session payload.
+      await audioApi.flushPendingUploads();
+
+      // Step 3 — wait for the outbox to land every pending segment.
       // The plan calls for 15s; we surface the in-flight count so
       // the End button's copy keeps updating during the wait.
       // Failed (permanent-fail) outbox state aborts immediately with
@@ -1184,13 +1215,13 @@ export function WhiteboardWorkspaceClient({
         return;
       }
 
-      // Step 3 — read the (now-stable) uploaded outbox into the
+      // Step 4 — read the (now-stable) uploaded outbox into the
       // atomic end-session payload. listUploadedSegments returns a
       // deterministic order so a retried end call produces the same
       // server-side orderIndex sequence.
       const segments = await assembleEndSessionSegments(whiteboardSessionId);
 
-      // Step 4 — upload the final events.json. We do this AFTER the
+      // Step 5 — upload the final events.json. We do this AFTER the
       // outbox drain (rather than in parallel) so the End button's
       // "Saving last N" copy is honest about what we're waiting on,
       // and so a flaky events upload doesn't double-bill the tutor's
@@ -1206,14 +1237,14 @@ export function WhiteboardWorkspaceClient({
         throw new Error(upload.error);
       }
 
-      // Step 5 — one atomic server transaction: stamp endedAt, swap
+      // Step 6 — one atomic server transaction: stamp endedAt, swap
       // eventsBlobUrl, register every outbox segment, revoke join
       // tokens. Plan Pillar 3.
       await endWhiteboardSession(whiteboardSessionId, upload.blobUrl, {
         segments,
       });
 
-      // Step 6 — drop the persisted outbox rows. Server has them; we
+      // Step 7 — drop the persisted outbox rows. Server has them; we
       // don't want the next mount of this workspace to find them
       // again and ask "are these new?".
       try {

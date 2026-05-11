@@ -239,12 +239,24 @@ jest.mock("@/components/whiteboard/ExcalidrawDynamic", () => ({
   },
 }));
 
+/**
+ * Hook mock the workspace consumes. We expose mutable state via getters so
+ * tests can flip `audioState` / `audioFlush` without remounting the host.
+ * `flushPendingUploads` and `stopAndUpload` are jest mocks so the
+ * regression test below can assert their invocation order against the
+ * outbox helpers.
+ */
+const audioCtl = {
+  state: "ready" as string,
+  stopAndUpload: jest.fn(),
+  flushPendingUploads: jest.fn(() => Promise.resolve()),
+};
+
 jest.mock("@/hooks/useAudioRecorder", () => {
-  const st = { state: "ready" as string };
   return {
     useAudioRecorder: () => ({
       get state() {
-        return st.state;
+        return audioCtl.state;
       },
       uploadMode: null,
       elapsed: 0,
@@ -268,8 +280,9 @@ jest.mock("@/hooks/useAudioRecorder", () => {
       handleDeviceChange: jest.fn(),
       pauseRecording: jest.fn(),
       resumeRecording: jest.fn(),
-      stopAndUpload: jest.fn(),
+      stopAndUpload: audioCtl.stopAndUpload,
       handleReset: jest.fn(),
+      flushPendingUploads: audioCtl.flushPendingUploads,
     }),
   };
 });
@@ -301,6 +314,10 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     mockAssembleEndSessionSegments.mockReset();
     mockFinalizeOutboxAfterEnd.mockReset();
     mockRegisterSessionStudentId.mockReset();
+    audioCtl.state = "ready";
+    audioCtl.stopAndUpload.mockReset();
+    audioCtl.flushPendingUploads.mockReset();
+    audioCtl.flushPendingUploads.mockImplementation(() => Promise.resolve());
     // Default: drain succeeds immediately, no segments to register.
     mockDrainOutboxOrTimeout.mockImplementation(async () => ({
       timedOut: false,
@@ -478,6 +495,158 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     expect(alert.textContent).toMatch(/1 audio segment still saving/i);
     expect(mockEnd).not.toHaveBeenCalled();
     expect(mockFinalizeOutboxAfterEnd).not.toHaveBeenCalled();
+  });
+
+  test("regression: stops recorder + awaits flushPendingUploads BEFORE draining (Phase 1b smoke fix)", async () => {
+    // The Phase 1b smoke regression: when the user clicks End while the
+    // mic is hot, `setUserWantsRecording(false)` was the only stop
+    // trigger. The bridge effect ran AFTER React's commit pass — by
+    // which time `drainOutboxOrTimeout` had already returned ok against
+    // an empty outbox, the atomic action was called with segments: [],
+    // and the trailing segment was then enqueued + finalized into thin
+    // air. Console evidence from the screenshot:
+    //
+    //   drainOutboxOrTimeout ok
+    //   enqueued ... segmentId=26bc... hasRemoteUrl=true
+    //   finalized rowsDeleted=1
+    //
+    // Fix: `handleEndSession` now calls `audio.stopAndUpload("final")`
+    // synchronously and `await audio.flushPendingUploads()` BEFORE
+    // touching the outbox, so the trailing segment is in IDB by the
+    // time we drain.
+    //
+    // This test pins the call ORDER (stopAndUpload + flushPendingUploads
+    // → drainOutboxOrTimeout → assembleEndSessionSegments → end action),
+    // not just the call set, because the bug was purely an ordering
+    // bug — every call was made, just in the wrong order.
+
+    const callLog: string[] = [];
+    audioCtl.state = "recording";
+    audioCtl.stopAndUpload.mockImplementation((mode?: unknown) => {
+      callLog.push(`stopAndUpload:${String(mode)}`);
+    });
+    audioCtl.flushPendingUploads.mockImplementation(async () => {
+      callLog.push("flushPendingUploads");
+    });
+    mockDrainOutboxOrTimeout.mockImplementation(async () => {
+      callLog.push("drainOutboxOrTimeout");
+      return {
+        timedOut: false,
+        remainingCount: 0,
+        remainingByStream: new Map<string, number>(),
+        lastError: null,
+      };
+    });
+    mockAssembleEndSessionSegments.mockImplementation(async () => {
+      callLog.push("assembleEndSessionSegments");
+      return [
+        {
+          blobUrl: "https://abc.blob.vercel-storage.com/seg-final.webm",
+          mimeType: "audio/webm",
+          sizeBytes: 100,
+          audioStartedAtMs: 1_000,
+          streamId: "tutor:mic",
+          segmentId: "seg-final",
+        },
+      ];
+    });
+    mockEnd.mockImplementation(async () => {
+      callLog.push("endWhiteboardSession");
+      return {
+        endedAt: "2026-05-10T00:00:00Z",
+        durationSeconds: 100,
+        registeredSegments: 1,
+      };
+    });
+
+    render(
+      <WhiteboardWorkspaceClient
+        whiteboardSessionId="ws-end-ordering"
+        studentId="stu-1"
+        studentName="Test Student"
+        adminUserId="admin-1"
+        startedAtIso="2026-05-09T10:00:00.000Z"
+        bothConnectedAtIso={null}
+        initialActiveMs={0}
+        initialLastActiveAtIso={null}
+        syncUrl={null}
+        initialUserWantsRecording
+      />
+    );
+
+    await screen.findByTestId("wb-mock-excalidraw-canvas");
+    await userEvent.click(screen.getByTestId("wb-end-session"));
+
+    await waitFor(() => {
+      expect(mockEnd).toHaveBeenCalled();
+    });
+
+    // The pre-fix order would have been:
+    //   ["drainOutboxOrTimeout", "assembleEndSessionSegments",
+    //    "endWhiteboardSession", "stopAndUpload:final",
+    //    "flushPendingUploads"]
+    // Post-fix order must be:
+    expect(callLog).toEqual([
+      "stopAndUpload:final",
+      "flushPendingUploads",
+      "drainOutboxOrTimeout",
+      "assembleEndSessionSegments",
+      "endWhiteboardSession",
+    ]);
+
+    // Specifically the segment from the in-flight recorder lands in
+    // the atomic action payload — i.e. the trailing segment is no
+    // longer dropped.
+    expect(mockEnd).toHaveBeenCalledWith(
+      "ws-end-ordering",
+      "https://abc.blob.vercel-storage.com/blob-events",
+      {
+        segments: [
+          {
+            blobUrl: "https://abc.blob.vercel-storage.com/seg-final.webm",
+            mimeType: "audio/webm",
+            sizeBytes: 100,
+            audioStartedAtMs: 1_000,
+            streamId: "tutor:mic",
+            segmentId: "seg-final",
+          },
+        ],
+      }
+    );
+  });
+
+  test("regression: does NOT call stopAndUpload when recorder is already idle (mic never armed)", async () => {
+    // Negative case: if the tutor never armed the mic, the recorder is
+    // in "ready" state. handleEndSession must NOT spuriously call
+    // stopAndUpload (which would generate an empty-blob error path) —
+    // it should still call flushPendingUploads (which resolves to a
+    // no-op because the set is empty), then drain normally.
+    audioCtl.state = "ready";
+
+    render(
+      <WhiteboardWorkspaceClient
+        whiteboardSessionId="ws-end-noop"
+        studentId="stu-1"
+        studentName="Test Student"
+        adminUserId="admin-1"
+        startedAtIso="2026-05-09T10:00:00.000Z"
+        bothConnectedAtIso={null}
+        initialActiveMs={0}
+        initialLastActiveAtIso={null}
+        syncUrl={null}
+        initialUserWantsRecording={false}
+      />
+    );
+
+    await screen.findByTestId("wb-mock-excalidraw-canvas");
+    await userEvent.click(screen.getByTestId("wb-end-session"));
+
+    await waitFor(() => {
+      expect(mockEnd).toHaveBeenCalled();
+    });
+
+    expect(audioCtl.stopAndUpload).not.toHaveBeenCalled();
+    expect(audioCtl.flushPendingUploads).toHaveBeenCalledTimes(1);
   });
 
   test("drain timeout with an upload error includes the error in the banner copy", async () => {
