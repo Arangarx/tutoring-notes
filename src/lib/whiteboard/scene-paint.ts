@@ -86,10 +86,14 @@ import {
  * call in try/catch and falls back to the raw adapter output if the
  * function throws on malformed input, so `any` here is intentional.
  */
+// `any` for the input parameters is intentional — see the doc comment
+// above. The repo's ESLint config (`next/core-web-vitals`) doesn't
+// load `@typescript-eslint/no-explicit-any`, so no disable directive
+// is needed; in fact a directive for an unloaded rule fails the
+// Vercel build (Phase 1a hotfix, May 2026 — vercel logs at 21:17:20Z
+// pinned this on `phase-1-multi-stream-architecture`).
 export type RestoreElementsFn = (
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   rough: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   appState: any,
   opts?: { refreshDimensions?: boolean; repairBindings?: boolean }
 ) => unknown[];
