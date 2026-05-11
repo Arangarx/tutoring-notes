@@ -54,7 +54,12 @@ import {
   ACTIVE_PING_STALE_MS,
   computeDisplayActiveMs,
 } from "@/lib/whiteboard/active-time";
-import { deriveRecordingPresence } from "@/lib/whiteboard/recording-presence";
+import {
+  derivePresentation,
+  evaluateLifecycle,
+  TUTOR_MIC_STREAM_ID,
+  type StreamHealth,
+} from "@/lib/recording/lifecycle-machine";
 import {
   useWhiteboardRecorder,
   type ResumeResult,
@@ -481,18 +486,67 @@ export function WhiteboardWorkspaceClient({
     typeof process !== "undefined" &&
     process.env.NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT === "1";
 
-  const bothPresentForRecording =
-    bothPartiesInRoom ||
-    (allowRecordSoloUntilStudentJoin &&
-      tutorSyncConnected &&
-      !everBothPresentRef.current);
+  // Phase 1a Pillar 1: replace the Phase-0 `deriveRecordingPresence`
+  // helper with the multi-stream / multi-participant lifecycle FSM.
+  // Same observable behaviour for the 1:1 case Sarah uses today; the
+  // FSM is structurally ready for group sessions and the Phase-1b
+  // outbox. Inputs:
+  //
+  //  - `participants`        — synthesised peer-id Set sized by the
+  //                            sync-client peerCount. Until Phase 4
+  //                            wires real per-peer ids, the ids are
+  //                            stable per-render placeholders; the
+  //                            FSM only consumes `.size`.
+  //  - `everHadParticipants` — driven by the existing
+  //                            `everBothPresentRef` latch.
+  //  - `soloEnabled`         — surfaces the
+  //                            NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT
+  //                            grace window the workspace already
+  //                            honored. The FSM does the AND with
+  //                            `!everHadParticipants` itself.
+  //  - `inputStreams`        — for Phase 1a the only stream the
+  //                            workspace knows about is the tutor
+  //                            mic, and only while the tutor wants
+  //                            recording. Marked `ok` because the
+  //                            audio bridge owns liveness today;
+  //                            Phase 1b/4 will wire real health.
+  //  - `networkOk`           — kept `true` (default) so we don't
+  //                            introduce new pause behaviour in
+  //                            Phase 1a. Phase 1b/4 will plumb
+  //                            `navigator.onLine` + sync-transport
+  //                            health through here.
+  //  - `endIntent`           — undefined (Phase 1b wires the End
+  //                            flow through the FSM).
+  const lifecycleParticipants = useMemo<ReadonlySet<string>>(() => {
+    if (peerCount <= 0) return new Set();
+    const ids = new Set<string>();
+    for (let i = 0; i < peerCount; i += 1) ids.add(`peer-${i}`);
+    return ids;
+  }, [peerCount]);
 
-  const presence = deriveRecordingPresence({
-    userWantsRecording,
-    bothPresent: bothPresentForRecording,
-    studentPeerPresent: bothPartiesInRoom,
+  const lifecycleInputStreams = useMemo<
+    ReadonlyMap<string, StreamHealth>
+  >(() => {
+    if (!userWantsRecording) return new Map();
+    return new Map<string, StreamHealth>([[TUTOR_MIC_STREAM_ID, "ok"]]);
+  }, [userWantsRecording]);
+
+  const lifecycle = evaluateLifecycle({
+    tutorWantsRecording: userWantsRecording,
+    participants: lifecycleParticipants,
+    everHadParticipants: everBothPresentRef.current,
+    soloEnabled: allowRecordSoloUntilStudentJoin,
     syncEnabled: !!syncUrl,
-    everBothPresent: everBothPresentRef.current,
+    inputStreams: lifecycleInputStreams,
+    networkOk: true,
+    audioClockMs: 0,
+  });
+
+  const presence = derivePresentation(lifecycle, {
+    tutorWantsRecording: userWantsRecording,
+    participants: lifecycleParticipants,
+    everHadParticipants: everBothPresentRef.current,
+    syncEnabled: !!syncUrl,
   });
   const recordingActive = presence.recordingActive;
 
