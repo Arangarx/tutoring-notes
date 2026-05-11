@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { streamBlobWithRangeSupport } from "@/lib/audio/proxy-stream";
 
 /**
  * Proxy private Vercel Blob audio to browsers on the share page.
@@ -14,20 +15,23 @@ import { db } from "@/lib/db";
  *      - `shareRecordingInEmail` on the note; or
  *      - the note has any linked WhiteboardSession; or
  *      - audio was captured against a WB session (`SessionRecording.whiteboardSessionId`).
+ *
+ * Range support: forwards the inbound `Range` header to Vercel Blob
+ * via `streamBlobWithRangeSupport` so parents can scrub the share
+ * page audio. See helper docs for the full background.
  */
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ recordingId: string }> }
 ): Promise<Response> {
   const { recordingId } = await params;
-  const url = new URL(_req.url);
+  const url = new URL(req.url);
   const shareToken = url.searchParams.get("token");
 
   if (!shareToken) {
     return NextResponse.json({ error: "Missing token" }, { status: 401 });
   }
 
-  // Verify the share link is valid and not revoked.
   const link = await db.shareLink.findUnique({
     where: { token: shareToken },
     select: { revokedAt: true, studentId: true },
@@ -62,22 +66,5 @@ export async function GET(
   }
 
   const { blobUrl, mimeType } = recording;
-  const token = process.env.BLOB_READ_WRITE_TOKEN ?? "";
-
-  // Fetch from Vercel Blob with auth and stream to the client.
-  const blobRes = await fetch(blobUrl, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (!blobRes.ok) {
-    return NextResponse.json({ error: "Audio unavailable" }, { status: 502 });
-  }
-
-  return new Response(blobRes.body, {
-    status: 200,
-    headers: {
-      "Content-Type": mimeType || "audio/mpeg",
-      "Cache-Control": "private, max-age=3600",
-    },
-  });
+  return streamBlobWithRangeSupport(req, blobUrl, mimeType || "audio/mpeg");
 }
