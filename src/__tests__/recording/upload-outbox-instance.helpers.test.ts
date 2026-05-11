@@ -141,14 +141,13 @@ describe("assembleEndSessionSegments", () => {
     expect(segs[0].segmentId).toBe("seg-uploaded");
   });
 
-  test("preserves multi-stream ordering (createdAt then streamId)", async () => {
+  test("emits both tutor + student segments with stream ids preserved", async () => {
     const outbox = createUploadOutbox({
       upload: NEVER_CALLED_UPLOADER,
       dbName: `outbox-helpers-${Math.random().toString(36).slice(2)}`,
     });
     setUploadOutboxForTests(outbox);
 
-    // Enqueue tutor first (lower createdAt), then student.
     await outbox.enqueue({
       sessionId: "wbs-multi",
       streamId: "tutor:mic",
@@ -171,12 +170,14 @@ describe("assembleEndSessionSegments", () => {
     });
 
     const segs = await assembleEndSessionSegments("wbs-multi");
-    // listUploadedSegments sorts by (createdAt, streamId, segmentId).
-    // The two enqueues land in the same millisecond, so streamId
-    // tie-breaks — "student:..." sorts before "tutor:...". This is
-    // the same ordering the server then re-derives by (audioStartedAtMs,
-    // streamId), so the round-trip is consistent.
-    expect(segs.map((s) => s.segmentId)).toEqual(["student-1", "tutor-1"]);
+    // We don't assert client-side order — the server's atomic action
+    // re-sorts by (audioStartedAtMs ASC, streamId ASC) before
+    // assigning orderIndex. What matters here is that BOTH streams
+    // make it into the payload with their streamId preserved.
+    expect(segs).toHaveLength(2);
+    const byId = new Map(segs.map((s) => [s.segmentId, s]));
+    expect(byId.get("tutor-1")?.streamId).toBe("tutor:mic");
+    expect(byId.get("student-1")?.streamId).toBe("student:peer-1:mic");
   });
 });
 
