@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getStudentScope } from "@/lib/student-scope";
+import { streamBlobWithRangeSupport } from "@/lib/audio/proxy-stream";
 
 /**
  * Proxy private Vercel Blob audio for authenticated admin/tutor users.
@@ -11,6 +12,11 @@ import { getStudentScope } from "@/lib/student-scope";
  * Validates:
  *   1. The request has a valid admin session.
  *   2. The recording belongs to that admin (adminUserId matches).
+ *
+ * Range support: forwards the inbound `Range` header to Vercel Blob
+ * via `streamBlobWithRangeSupport`. Without this, the whiteboard
+ * replay scrubber is non-draggable on first load — see the helper
+ * docs for the full background (Sarah-pilot scrubber regression).
  */
 export async function GET(
   req: Request,
@@ -44,21 +50,6 @@ export async function GET(
     mimeBase.startsWith("audio/") && mimeBase.includes("/")
       ? mimeBase
       : "audio/mpeg";
-  const token = process.env.BLOB_READ_WRITE_TOKEN ?? "";
 
-  const blobRes = await fetch(blobUrl, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (!blobRes.ok) {
-    return NextResponse.json({ error: "Audio unavailable" }, { status: 502 });
-  }
-
-  return new Response(blobRes.body, {
-    status: 200,
-    headers: {
-      "Content-Type": contentType,
-      "Cache-Control": "private, max-age=3600",
-    },
-  });
+  return streamBlobWithRangeSupport(req, blobUrl, contentType);
 }
