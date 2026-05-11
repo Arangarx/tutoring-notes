@@ -69,10 +69,13 @@ import { uploadWhiteboardEvents } from "@/lib/whiteboard/upload";
 import {
   endWhiteboardSession,
   issueJoinToken,
-  registerWhiteboardSessionAudioSegmentAction,
   revokeJoinTokensForSession,
 } from "@/app/admin/students/[id]/whiteboard/actions";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
+import {
+  getOrCreateUploadOutbox,
+  registerSessionStudentId,
+} from "@/lib/recording/upload-outbox-instance";
 import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter";
 import { PdfImageUploadButton } from "@/components/whiteboard/PdfImageUploadButton";
 import { MathInsertButton } from "@/components/whiteboard/MathInsertButton";
@@ -550,26 +553,68 @@ export function WhiteboardWorkspaceClient({
   });
   const recordingActive = presence.recordingActive;
 
+  /**
+   * Register (sessionId, studentId) with the outbox so the production
+   * uploader can scope per-student Blob pathnames the same way
+   * `uploadAudioDirect` does in the legacy path. Idempotent — re-mounts
+   * call it again and it overwrites the same key.
+   */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    registerSessionStudentId(whiteboardSessionId, studentId);
+  }, [whiteboardSessionId, studentId]);
+
+  /**
+   * Pending-task ref kept ALIVE in Phase 1b only so the audio bridge's
+   * `getState` shim from Phase 0c still has a tracked Promise array
+   * during the in-flight refactor. Commit 4 replaces the bridge with
+   * a direct outbox observer and this ref goes away.
+   */
   const wbAudioSegmentPendingRef = useRef<Promise<void>[]>([]);
   const onWorkspaceAudioRecorded = useCallback(
     async (
-      audioSeg: { blobUrl: string; mimeType: string; sizeBytes: number },
+      audioSeg: {
+        blobUrl: string;
+        mimeType: string;
+        sizeBytes: number;
+        blob?: Blob;
+      },
       _meta?: { autoRollover?: boolean }
     ) => {
+      // Mint a stable segmentId per logical segment. We don't reuse
+      // useAudioRecorder's part index because it resets on remount.
+      // crypto.randomUUID is available everywhere we ship; defensive
+      // fallback retained so SSR import doesn't crash if this module
+      // ever runs without the browser polyfill (it shouldn't).
+      const segmentId =
+        typeof globalThis.crypto?.randomUUID === "function"
+          ? globalThis.crypto.randomUUID()
+          : `seg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
       const task = (async () => {
-        const result = await registerWhiteboardSessionAudioSegmentAction(
-          whiteboardSessionId,
-          {
-            blobUrl: audioSeg.blobUrl,
+        try {
+          const outbox = getOrCreateUploadOutbox();
+          await outbox.enqueue({
+            sessionId: whiteboardSessionId,
+            // Phase 1b hardcodes the tutor mic stream here — Phase 4
+            // will pass `studentMicStreamId(peerId)` for student
+            // capture by mapping over peer connections, not by
+            // adding a new code path.
+            streamId: TUTOR_MIC_STREAM_ID,
+            segmentId,
+            blobLocalRef: audioSeg.blob ?? null,
+            // The hook already uploaded the blob successfully before
+            // firing onRecorded; pass the URL through so the worker
+            // skips the upload step and the row goes straight to
+            // "registering" (awaiting atomic end-session).
+            blobRemoteUrl: audioSeg.blobUrl,
             mimeType: audioSeg.mimeType,
             sizeBytes: audioSeg.sizeBytes,
-          }
-        );
-        if (!result.ok) {
+            audioStartedAtMs: Date.now(),
+          });
+        } catch (err) {
           console.error(
-            `[WhiteboardWorkspaceAudioBridge] register segment failed wbsid=${whiteboardSessionId}`,
-            result.error,
-            result.debugId ?? ""
+            `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} outbox.enqueue failed`,
+            err
           );
         }
       })();

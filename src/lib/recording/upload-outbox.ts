@@ -635,19 +635,33 @@ export function createUploadOutbox(config: OutboxConfig): UploadOutbox {
               type: fresh.mimeType,
             });
       const result = await safelyInvokeUpload(fresh, blob);
+      // Re-read the row after the upload completes (or fails) so a
+      // concurrent enqueue that sideloaded `blobRemoteUrl` in the
+      // meantime doesn't get clobbered by the worker's write. Same
+      // pattern as the FSM in lifecycle-machine — read the latest
+      // input before producing the next output.
+      const post = (await getRowById(fresh.id)) ?? fresh;
       if (result.ok) {
         await writeRow({
-          ...fresh,
-          blobRemoteUrl: result.blobUrl,
+          ...post,
+          // Worker's URL wins iff no concurrent setter beat us to it.
+          blobRemoteUrl: post.blobRemoteUrl ?? result.blobUrl,
           lastError: null,
         });
         logger.log?.(
           `[upload-outbox] obx=${shortObx} uploaded sessionId=${sessionId} streamId=${streamId} segmentId=${fresh.segmentId} attempts=${fresh.attempts + 1}`
         );
       } else {
-        const nextAttempts = fresh.attempts + 1;
+        // If a concurrent enqueue sideloaded the URL, the row is
+        // effectively done — don't keep retrying. Otherwise record
+        // the new attempts counter + error.
+        if (post.blobRemoteUrl) {
+          await refreshStateAndNotify(sessionId);
+          continue;
+        }
+        const nextAttempts = post.attempts + 1;
         await writeRow({
-          ...fresh,
+          ...post,
           attempts: nextAttempts,
           lastError: result.error,
         });

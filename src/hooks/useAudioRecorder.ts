@@ -85,6 +85,15 @@ export type RecordedAudio = {
   sizeBytes: number;
   filename: string;
   previewUrl?: string;
+  /**
+   * Local Blob the hook captured before uploading. Phase 1b: the
+   * workspace's outbox writes this into IndexedDB so a crash AFTER
+   * upload succeeds but BEFORE the atomic end-session action runs
+   * never loses the recovery anchor. Recorder-tab consumers ignore
+   * this field (their `onRecorded` keeps the URL as the source of
+   * truth). Optional + backward-compatible.
+   */
+  blob?: Blob;
 };
 
 export type UseAudioRecorderOptions = {
@@ -484,6 +493,7 @@ export function useAudioRecorder({
             sizeBytes: blob.size,
             filename,
             previewUrl,
+            blob,
           },
           { autoRollover: true }
         );
@@ -797,6 +807,7 @@ export function useAudioRecorder({
               sizeBytes: blob.size,
               filename,
               previewUrl,
+              blob,
             },
             { autoRollover: true }
           );
@@ -819,6 +830,7 @@ export function useAudioRecorder({
           sizeBytes: blob.size,
           filename,
           previewUrl,
+          blob,
         });
         rolloverInProgressRef.current = false;
       } catch (err) {
