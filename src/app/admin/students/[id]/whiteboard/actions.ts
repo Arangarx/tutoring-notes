@@ -328,12 +328,94 @@ export async function issueJoinToken(
 }
 
 /**
+ * One audio segment about to be registered as a `SessionRecording`
+ * row by the atomic end-session action.
+ *
+ * Mirrors the outbox row schema (`src/lib/recording/upload-outbox.ts`)
+ * with two intentional reductions:
+ *   - We don't pass `blobLocalRef` — by the time end-session fires,
+ *     the bytes are already in Vercel Blob and `blobUrl` is the
+ *     canonical pointer.
+ *   - We don't pass `attempts`/`lastError` — those are outbox
+ *     diagnostics, not persisted state.
+ *
+ * `segmentId` is forwarded purely for log correlation (we log it
+ * with `wbsid=` + `obx=` so a prod debug session can tie a server
+ * insert to one outbox row). Server-side dedupe keys on `blobUrl`
+ * because the Vercel Blob namespace already guarantees a unique URL
+ * per successful upload; adding a `segmentId` column would be a
+ * separate (non-additive) Prisma migration.
+ */
+export type EndSessionSegment = {
+  blobUrl: string;
+  mimeType: string;
+  sizeBytes: number;
+  audioStartedAtMs: number;
+  streamId: string;
+  segmentId: string;
+};
+
+/**
+ * Vercel Blob hostname guard — same shape `registerWhiteboardSessionAudioSegmentAction`
+ * uses today (`blobUrl.includes("blob.vercel-storage.com")`). Folded
+ * into a regex so the validator below is one branch per segment.
+ */
+const ALLOWED_BLOB_HOST_RE = /(^|\/\/)[\w.-]*blob\.vercel-storage\.com\//i;
+
+function validateEndSessionSegments(
+  segments: ReadonlyArray<EndSessionSegment>
+): { ok: true } | { ok: false; error: string } {
+  for (let i = 0; i < segments.length; i++) {
+    const s = segments[i];
+    if (typeof s.blobUrl !== "string" || !s.blobUrl) {
+      return { ok: false, error: `Segment ${i} is missing blobUrl.` };
+    }
+    if (!/^https?:\/\//i.test(s.blobUrl) || !ALLOWED_BLOB_HOST_RE.test(s.blobUrl)) {
+      return {
+        ok: false,
+        error: `Segment ${i} blobUrl is not in the whiteboard Blob namespace.`,
+      };
+    }
+    if (typeof s.streamId !== "string" || s.streamId.length === 0) {
+      return { ok: false, error: `Segment ${i} has empty streamId.` };
+    }
+    if (typeof s.mimeType !== "string" || s.mimeType.length === 0) {
+      return { ok: false, error: `Segment ${i} has empty mimeType.` };
+    }
+    if (
+      typeof s.sizeBytes !== "number" ||
+      !Number.isFinite(s.sizeBytes) ||
+      s.sizeBytes < 0
+    ) {
+      return { ok: false, error: `Segment ${i} has invalid sizeBytes.` };
+    }
+    if (
+      typeof s.audioStartedAtMs !== "number" ||
+      !Number.isFinite(s.audioStartedAtMs)
+    ) {
+      return { ok: false, error: `Segment ${i} has invalid audioStartedAtMs.` };
+    }
+  }
+  return { ok: true };
+}
+
+/**
  * End the whiteboard session: persist the final events blob URL,
- * stamp `endedAt`, capture duration, and revoke every join token.
+ * stamp `endedAt`, register every passed audio segment, and revoke
+ * every join token — all in one transaction.
+ *
+ * Phase 1b — Pillar 3: the action now accepts an optional `segments`
+ * payload from the client outbox. Inside the same transaction we
+ * upsert `SessionRecording` rows for any segments not already present
+ * (deduped by `(whiteboardSessionId, blobUrl)`). Segments missing
+ * from the payload are NOT touched — the per-segment legacy
+ * `registerWhiteboardSessionAudioSegmentAction` path keeps working
+ * for sessions that already wrote rows before End.
  *
  * The events.json upload happens client-side via `/api/upload/blob`
  * (kind="whiteboard-events"). The client then calls THIS action
- * with the resulting blob URL to atomically finalize the row.
+ * with the resulting blob URL + outbox-derived segments to atomically
+ * finalize the row.
  *
  * Trust posture:
  *   - `assertOwnsWhiteboardSession` re-checks ownership.
@@ -342,12 +424,24 @@ export async function issueJoinToken(
  *   - Token revocation is part of the same transaction so a
  *     successful end always invalidates outstanding links — the
  *     student can't keep drawing on a "finished" board.
+ *   - Every segment's `blobUrl` is validated against our Vercel
+ *     Blob namespace before any DB write so a hand-rolled payload
+ *     can't sneak an attacker-controlled URL into a SessionRecording
+ *     row.
  */
 export async function endWhiteboardSession(
   whiteboardSessionId: string,
   finalEventsBlobUrl: string,
-  opts?: { snapshotBlobUrl?: string | null }
-): Promise<{ endedAt: string; durationSeconds: number }> {
+  opts?: {
+    snapshotBlobUrl?: string | null;
+    segments?: ReadonlyArray<EndSessionSegment>;
+  }
+): Promise<{
+  endedAt: string;
+  durationSeconds: number;
+  /** Count of segments newly-inserted by this call (excludes existing). */
+  registeredSegments: number;
+}> {
   const rid = createActionCorrelationId();
   const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
 
@@ -365,10 +459,22 @@ export async function endWhiteboardSession(
     throw new Error("Final events URL must be an absolute http(s) URL.");
   }
 
+  const segments: ReadonlyArray<EndSessionSegment> = opts?.segments ?? [];
+  if (segments.length > 0) {
+    const valid = validateEndSessionSegments(segments);
+    if (!valid.ok) {
+      console.warn(
+        `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} REJECTED segments: ${valid.error}`
+      );
+      throw new Error(`Could not finalize the whiteboard session: ${valid.error}`);
+    }
+  }
+
   const now = new Date();
-  let updated;
+  let updated: { id: string; endedAt: Date | null; durationSeconds: number | null };
+  let registeredSegments = 0;
   try {
-    updated = await withDbRetry(
+    const txResult = await withDbRetry(
       () =>
         db.$transaction(async (tx) => {
           // Read startedAt first so we can compute durationSeconds in
@@ -394,6 +500,62 @@ export async function endWhiteboardSession(
             },
             select: { id: true, endedAt: true, durationSeconds: true },
           });
+
+          // Atomic multi-track segment registration. Order matters:
+          //   1. read existing segment URLs for this session (so we
+          //      dedupe against any rows the legacy per-segment action
+          //      or a previous failed end attempt already wrote).
+          //   2. compute orderIndex deterministically by
+          //      audioStartedAtMs ASC, then streamId ASC. Two passes
+          //      that share an audioStartedAtMs tie-break the same
+          //      way, so a retried end-session call assigns the same
+          //      indices.
+          //   3. createMany the new rows (skipDuplicates guards
+          //      the in-flight race where two tabs both reach end
+          //      with overlapping payloads — extremely unlikely in
+          //      practice but cheap to defend).
+          let newSegments = 0;
+          if (segments.length > 0) {
+            const existingRows = await tx.sessionRecording.findMany({
+              where: {
+                whiteboardSessionId,
+                blobUrl: { in: segments.map((s) => s.blobUrl) },
+              },
+              select: { blobUrl: true, orderIndex: true },
+            });
+            const seen = new Set(existingRows.map((r) => r.blobUrl));
+            const maxOrder = await tx.sessionRecording.aggregate({
+              where: { whiteboardSessionId },
+              _max: { orderIndex: true },
+            });
+            let nextOrder = (maxOrder._max.orderIndex ?? -1) + 1;
+            const toInsert = segments
+              .filter((s) => !seen.has(s.blobUrl))
+              .slice() // copy so we don't mutate caller's array
+              .sort((a, b) => {
+                if (a.audioStartedAtMs !== b.audioStartedAtMs) {
+                  return a.audioStartedAtMs - b.audioStartedAtMs;
+                }
+                return a.streamId < b.streamId ? -1 : a.streamId > b.streamId ? 1 : 0;
+              });
+            if (toInsert.length > 0) {
+              await tx.sessionRecording.createMany({
+                data: toInsert.map((s) => ({
+                  adminUserId: session.adminUserId,
+                  studentId: session.studentId,
+                  whiteboardSessionId,
+                  blobUrl: s.blobUrl,
+                  mimeType: s.mimeType.split(";")[0].trim(),
+                  sizeBytes: s.sizeBytes,
+                  streamId: s.streamId,
+                  orderIndex: nextOrder++,
+                })),
+                skipDuplicates: true,
+              });
+              newSegments = toInsert.length;
+            }
+          }
+
           await tx.whiteboardJoinToken.updateMany({
             where: {
               whiteboardSessionId,
@@ -401,10 +563,12 @@ export async function endWhiteboardSession(
             },
             data: { revokedAt: now },
           });
-          return row;
+          return { row, newSegments };
         }),
       { label: "endWhiteboardSession" }
     );
+    updated = txResult.row;
+    registeredSegments = txResult.newSegments;
   } catch (err) {
     console.error(
       `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} db.transaction failed:`,
@@ -414,8 +578,15 @@ export async function endWhiteboardSession(
   }
 
   console.log(
-    `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} endedAt=${updated.endedAt?.toISOString()} duration=${updated.durationSeconds}s`
+    `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} endedAt=${updated.endedAt?.toISOString()} duration=${updated.durationSeconds}s segmentsInPayload=${segments.length} newSegments=${registeredSegments}`
   );
+  // Per-segment log line so a future ops grep can correlate an outbox
+  // segmentId to its persisted SessionRecording by blobUrl.
+  for (const s of segments) {
+    console.log(
+      `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} segmentId=${s.segmentId} streamId=${s.streamId} sizeBytes=${s.sizeBytes} blobUrlSuffix=${s.blobUrl.slice(-24)}`
+    );
+  }
 
   revalidatePath(`/admin/students/${session.studentId}`);
   revalidatePath(
@@ -428,6 +599,7 @@ export async function endWhiteboardSession(
   return {
     endedAt: updated.endedAt!.toISOString(),
     durationSeconds: updated.durationSeconds ?? 0,
+    registeredSegments,
   };
 }
 
