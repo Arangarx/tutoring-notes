@@ -135,12 +135,37 @@ model SessionRecording {
   durationSeconds Int?
   transcript      String?
 
+  /**
+   * Capture-stream identifier (Phase 1b — Pillar 2). Today the only
+   * value in production is `"tutor:mic"`; Phase 4 will add
+   * `"student:peer-<id>:mic"` rows for live student audio capture and
+   * (later) `"tutor:cam"` / `"student:peer-<id>:cam"` for video.
+   *
+   * The default backfills every pre-Phase-1b row to `"tutor:mic"` so
+   * existing recordings show up as a single tutor stream in replay,
+   * which matches the pre-Phase-1b mental model exactly. Multi-stream
+   * sessions just become "rows with `streamId !== 'tutor:mic'` exist
+   * for this whiteboardSessionId".
+   *
+   * Kept as a free-form String (rather than an enum) so adding a new
+   * stream kind in Phase 4 is purely a code change — no follow-up
+   * migration to extend the enum.
+   */
+  streamId        String   @default("tutor:mic")
+
   createdAt DateTime @default(now())
 
   @@index([adminUserId])
   @@index([studentId])
   @@index([noteId])
   @@index([whiteboardSessionId])
+  /**
+   * Phase 1b — per-stream lookup for the atomic end-session action and
+   * the multi-track transcribe path in Phase 6. The existing
+   * `whiteboardSessionId` single-column index is kept for backward
+   * compatibility (queries that don't filter by streamId).
+   */
+  @@index([whiteboardSessionId, streamId])
 }
 
 /**

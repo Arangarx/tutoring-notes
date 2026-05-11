@@ -4,6 +4,35 @@
 
 import { createRef } from "react";
 import { render, screen } from "@testing-library/react";
+
+// Stub the outbox singleton BEFORE importing the bridge — the bridge's
+// effect calls `getOrCreateUploadOutbox()` on mount, which would throw
+// without IndexedDB in JSDOM.
+const mockUnsubscribe = jest.fn();
+const mockSubscribe = jest.fn(() => mockUnsubscribe);
+const mockObserve = jest.fn(() => ({
+  getState: () => ({
+    state: "idle" as const,
+    inFlightStreamCount: 0,
+    byStream: new Map<string, number>(),
+    lastError: null,
+  }),
+  subscribe: mockSubscribe,
+}));
+const mockDrainAndAwait = jest.fn(async () => ({
+  timedOut: false,
+  remainingCount: 0,
+  remainingByStream: new Map<string, number>(),
+  lastError: null,
+}));
+
+jest.mock("@/lib/recording/upload-outbox-instance", () => ({
+  getOrCreateUploadOutbox: () => ({
+    observe: mockObserve,
+    drainAndAwait: mockDrainAndAwait,
+  }),
+}));
+
 import { WhiteboardWorkspaceAudioBridge } from "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceAudioBridge";
 import type { UseAudioRecorderReturn } from "@/hooks/useAudioRecorder";
 
@@ -49,14 +78,20 @@ function mockWorkspaceAudio(
 }
 
 describe("WhiteboardWorkspaceAudioBridge", () => {
+  beforeEach(() => {
+    mockObserve.mockClear();
+    mockSubscribe.mockClear();
+    mockUnsubscribe.mockClear();
+    mockDrainAndAwait.mockClear();
+  });
+
   test("mounts RecordingControlPanel — mic picker, meter, segment timer", () => {
-    const pendingRef = { current: [] as Promise<void>[] };
     const audio = mockWorkspaceAudio();
 
     render(
       <WhiteboardWorkspaceAudioBridge
         audio={audio}
-        pendingSegmentTasksRef={pendingRef}
+        whiteboardSessionId="wbs-test-1"
         userWantsRecording
         recordingActive
       />
@@ -67,5 +102,20 @@ describe("WhiteboardWorkspaceAudioBridge", () => {
     expect(
       screen.getByLabelText(/Segment 2, duration 00:42/i)
     ).toBeInTheDocument();
+  });
+
+  test("subscribes to outbox.observe(whiteboardSessionId) on mount", () => {
+    const audio = mockWorkspaceAudio();
+    render(
+      <WhiteboardWorkspaceAudioBridge
+        audio={audio}
+        whiteboardSessionId="wbs-test-observe"
+        userWantsRecording
+        recordingActive
+      />
+    );
+
+    expect(mockObserve).toHaveBeenCalledWith("wbs-test-observe");
+    expect(mockSubscribe).toHaveBeenCalledTimes(1);
   });
 });
