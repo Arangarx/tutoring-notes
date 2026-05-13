@@ -26,10 +26,18 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
 
 - [docs/BACKLOG.md](docs/BACKLOG.md) — pilot feedback, known follow-ups,
   reliability gaps audit.
+- [docs/RECORDER-LIFECYCLE.md](docs/RECORDER-LIFECYCLE.md) — **read
+  before touching `lifecycle-machine.ts`, `upload-outbox.ts`,
+  `endWhiteboardSession`, or workspace `handleEndSession`.** Maps the
+  three pillars (FSM, outbox, atomic end-session) plus Phase 1c
+  surfaces (snapshot PNG, preview-before-Start), the end-session
+  flow diagram, and the cheat sheet for common questions.
 - [docs/RECORDER-REFACTOR-STATUS.md](docs/RECORDER-REFACTOR-STATUS.md) —
   pattern for STATUS docs (per-feature handoff between sessions).
 - [docs/WHITEBOARD-STATUS.md](docs/WHITEBOARD-STATUS.md) — current
   whiteboard build status, guardrails, adversarial review, demo gate.
+- [docs/PHASE-1B-STATUS.md](docs/PHASE-1B-STATUS.md) — outbox + atomic
+  end-session branch handoff (Pillars 2 + 3).
 - [docs/DEPLOY.md](docs/DEPLOY.md) — Vercel + Neon deploy notes.
 - [docs/LOCAL-DEV.md](docs/LOCAL-DEV.md) — local setup.
 
@@ -38,6 +46,11 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
 - **Per-session ID logging is mandatory.** Audio uses `rid=<id>`; whiteboard
   uses `wbsid=<id>`. New capture/sync features pick a 3-letter prefix and
   log every state transition. Without this, prod debugging is impossible.
+  Currently in use: `rid` (audio recorder), `wbsid` (whiteboard session),
+  `obx` (upload-outbox row), `snp` (snapshot generation), `pvw`
+  (workspace preview-before-Start). See
+  [docs/RECORDER-LIFECYCLE.md](docs/RECORDER-LIFECYCLE.md) for the
+  registry.
 - **Migrations are additive.** Production runs on Neon; never drop or
   rename a column without a multi-step migration.
 - **Server actions assert ownership.** `assertOwnsStudent(adminUserId,
