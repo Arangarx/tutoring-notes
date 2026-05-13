@@ -341,101 +341,41 @@ export function WorkspacePreviousSessionPreview(
       );
       return undefined;
     }
-    const rect = container.getBoundingClientRect();
-    console.log(
-      `[preview-before-start] pvw=${pvw} wbsid=${whiteboardSessionId} container rect at fit: w=${Math.round(rect.width)} h=${Math.round(rect.height)}`
-    );
     const fitter = createCameraFitter({
       api,
       container,
       getElements: () => lastSceneElementsRef.current,
       zoom: 1,
-      onFit: () => {
-        console.log(
-          `[preview-before-start] pvw=${pvw} wbsid=${whiteboardSessionId} camera fit succeeded (apiCallbackCount=${apiCallbackCountRef.current})`
-        );
-      },
     });
-    const syncFitOk = fitter.fit();
-    console.log(
-      `[preview-before-start] pvw=${pvw} wbsid=${whiteboardSessionId} fitter.fit sync result=${syncFitOk ? "ok" : "scheduled-retries"}`
-    );
+    fitter.fit();
 
-    // -------- Post-fit probes (Phase 1c blank-canvas diagnostic) --------
+    // NOTE (2026-05-12, Phase 1c, Andrew smoke chain): the canvas
+    // here renders blank in production for sessions with strokes,
+    // even though every diagnostic above logs success — single
+    // Excalidraw mount, restoreElements available, real container
+    // dims, synchronous camera fit ok. Three-checkpoint state
+    // probes (since trimmed) showed Excalidraw HOLDING N elements
+    // synchronously after the fit, then resetting to 0 elements +
+    // default scroll/zoom within one rAF. `useMemo`'d
+    // `initialData` + `UIOptions` did not close the wipe.
     //
-    // 2026-05-12 smoke #4: every diagnostic above logs SUCCESS — single
-    // mount, restoreElements available, 4 elements painted, 758×910
-    // container, sync camera fit ok — but the canvas still renders
-    // blank for sessions with confirmed strokes. The remaining
-    // possibilities are:
+    // The wipe source is Excalidraw-internal (history init, theme
+    // prop transition, or some other post-mount effect). Replay
+    // tolerates the same root cause because its audio play-loop
+    // re-pushes the scene every ~50ms, masking each wipe; this
+    // surface is one-shot.
     //
-    //   A. Excalidraw is HOLDING the elements (api.getSceneElements()
-    //      returns N>0) but not painting them — internal render-loop
-    //      glitch, theme prop change post-mount, etc.
-    //   B. Excalidraw silently DROPPED them after my fit (e.g. some
-    //      internal sanitizer rejected the restored shapes; we'd see
-    //      api.getSceneElements() === 0 after some delay).
-    //   C. The camera state is wildly wrong (e.g. zoom 0.0001, or
-    //      scroll way off-screen) so the elements ARE rendering but
-    //      outside the visible viewport.
-    //
-    // Three checkpoints disambiguate (sync, 2-rAF after Excali's next
-    // render, 1500ms catch-all). All probes log
-    // `sceneElements.length`, scroll/zoom/viewBackgroundColor.
-    type StateProbe = {
-      scrollX?: unknown;
-      scrollY?: unknown;
-      zoom?: { value?: unknown } | unknown;
-      viewBackgroundColor?: unknown;
-      theme?: unknown;
-    };
-    type ApiWithReaders = ScenePaintApi & {
-      getSceneElements?: () => readonly unknown[];
-      getAppState?: () => StateProbe;
-    };
-    const probe = (label: string) => {
-      try {
-        const apiR = api as ApiWithReaders;
-        const els = apiR.getSceneElements?.();
-        const st = apiR.getAppState?.();
-        const zoomVal =
-          st && typeof st.zoom === "object" && st.zoom !== null
-            ? (st.zoom as { value?: unknown }).value
-            : st?.zoom;
-        console.log(
-          `[preview-before-start] pvw=${pvw} wbsid=${whiteboardSessionId} probe(${label}): sceneElements=${els?.length ?? "?"} scrollX=${typeof st?.scrollX === "number" ? st.scrollX.toFixed(1) : st?.scrollX} scrollY=${typeof st?.scrollY === "number" ? st.scrollY.toFixed(1) : st?.scrollY} zoom=${zoomVal} bg=${st?.viewBackgroundColor} theme=${st?.theme}`
-        );
-      } catch (probeErr) {
-        console.warn(
-          `[preview-before-start] pvw=${pvw} wbsid=${whiteboardSessionId} probe(${label}) threw:`,
-          (probeErr as Error)?.message ?? probeErr
-        );
-      }
-    };
-    probe("sync");
-    let raf1: number | null = null;
-    let raf2: number | null = null;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    raf1 = window.requestAnimationFrame(() => {
-      raf1 = null;
-      raf2 = window.requestAnimationFrame(() => {
-        raf2 = null;
-        probe("2-raf");
-      });
-    });
-    timer = setTimeout(() => {
-      timer = null;
-      probe("1500ms");
-    }, 1500);
+    // Deferred to `docs/BACKLOG.md` ("Preview-before-Start canvas
+    // wipe race") because: (a) the surface is reachable only via
+    // pinned tab / direct URL — the notes-list / share-card flows
+    // route to `/review`; (b) the user-facing escape hatches all
+    // work (Start a new whiteboard session, Open full replay, Open
+    // last snapshot); (c) further debugging requires opening up
+    // Excalidraw internals, which is a different shape of work
+    // from the rest of Phase 1c.
 
     return () => {
       fitter.dispose();
-      if (raf1 !== null) window.cancelAnimationFrame(raf1);
-      if (raf2 !== null) window.cancelAnimationFrame(raf2);
-      if (timer !== null) clearTimeout(timer);
-      console.log(
-        `[preview-before-start] pvw=${pvw} wbsid=${whiteboardSessionId} cleanup: fitter disposed + probes cancelled`
-      );
     };
   }, [api, loadState, restoreReady, whiteboardSessionId]);
 
@@ -468,16 +408,39 @@ export function WorkspacePreviousSessionPreview(
           className="muted"
           style={{ margin: "6px 0 10px", fontSize: 13, lineHeight: 1.4 }}
         >
-          This session ended on <FormattedTime iso={endedAtIso} />. The
-          board below is a snapshot of where you and {studentName} left
-          off. Start a new session to begin recording again — the new
+          This session ended on <FormattedTime iso={endedAtIso} />.
+          Use <strong>Open full replay</strong> to scrub through the
+          recorded session{snapshotProxyUrl
+            ? <>, or <strong>Open last snapshot</strong> to see the
+              final frame as a static image</>
+            : null}
+          . Start a new session to begin recording again — the new
           canvas will be empty.
         </p>
-        <div className="row" style={{ gap: 8, alignItems: "center" }}>
+        <div
+          className="row"
+          style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}
+        >
           <StartWhiteboardSession studentId={studentId} />
           <Link href={reviewHref} className="btn">
             Open full replay
           </Link>
+          {snapshotProxyUrl && (
+            // Promoted out of the empty/error fallback states so it's
+            // ALWAYS reachable from the header — the live-canvas
+            // render path has a known wipe race (see backlog
+            // "Preview-before-Start canvas wipe race"); the snapshot
+            // PNG is the always-works visual reminder of the final
+            // frame regardless of canvas behaviour.
+            <a
+              href={snapshotProxyUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="btn"
+            >
+              Open last snapshot
+            </a>
+          )}
         </div>
       </div>
 

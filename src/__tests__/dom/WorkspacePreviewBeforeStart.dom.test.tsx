@@ -25,7 +25,7 @@
  * integration test of the preview shell wiring.
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import * as React from "react";
 
 // -----------------------------------------------------------------
@@ -236,10 +236,20 @@ describe("<WorkspacePreviousSessionPreview />", () => {
 
     const empty = await screen.findByTestId("wb-preview-empty");
     expect(empty).toHaveTextContent(/nothing was drawn/i);
-    expect(screen.getByRole("link", { name: /open last snapshot/i })).toHaveAttribute(
-      "href",
-      baseProps.snapshotProxyUrl
-    );
+    // Snapshot link is rendered in TWO places when a snapshot exists:
+    // (a) promoted into the header card so it's always reachable
+    //     regardless of canvas behaviour (see "Preview-before-Start
+    //     canvas wipe race" entry in BACKLOG.md), and
+    // (b) inside the empty-state fallback card.
+    // Both should point at the same proxied snapshot URL.
+    expect(
+      within(empty).getByRole("link", { name: /open last snapshot/i })
+    ).toHaveAttribute("href", baseProps.snapshotProxyUrl);
+    expect(
+      screen
+        .getAllByRole("link", { name: /open last snapshot/i })
+        .every((el) => el.getAttribute("href") === baseProps.snapshotProxyUrl)
+    ).toBe(true);
     expect(createScenePainterMock).not.toHaveBeenCalled();
     expect(applyAtMock).not.toHaveBeenCalled();
     // Start-new affordance still present.
@@ -263,9 +273,12 @@ describe("<WorkspacePreviousSessionPreview />", () => {
     expect(errCard).not.toHaveTextContent(/at .*\(/);
     expect(createScenePainterMock).not.toHaveBeenCalled();
     expect(screen.getByTestId("start-new-wb-mock")).toBeInTheDocument();
-    // Snapshot fallback link present when a snapshot URL is provided.
+    // Snapshot fallback link present when a snapshot URL is provided —
+    // scoped to the error card itself so we don't accidentally match
+    // the always-on header snapshot link (see "empty event log" test
+    // above for the rationale).
     expect(
-      screen.getByRole("link", { name: /open last snapshot/i })
+      within(errCard).getByRole("link", { name: /open last snapshot/i })
     ).toHaveAttribute("href", baseProps.snapshotProxyUrl);
   });
 
