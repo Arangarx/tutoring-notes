@@ -78,8 +78,26 @@ const mockUpload = jest.fn(() =>
     sizeBytes: 10,
   })
 );
+type SnapshotUploadResult =
+  | { ok: true; blobUrl: string; sizeBytes: number }
+  | { ok: false; error: string };
+const mockSnapshotUpload = jest.fn<Promise<SnapshotUploadResult>, [unknown]>(
+  async () => ({
+    ok: true as const,
+    blobUrl: "https://abc.blob.vercel-storage.com/blob-snapshot.png",
+    sizeBytes: 4_321,
+  })
+);
 jest.mock("@/lib/whiteboard/upload", () => ({
   uploadWhiteboardEvents: (...args: unknown[]) => mockUpload.apply(null, args),
+  uploadWhiteboardSnapshot: (...args: unknown[]) =>
+    mockSnapshotUpload.apply(null, args),
+}));
+
+const mockGenerateSnapshot = jest.fn();
+jest.mock("@/lib/whiteboard/snapshot-png", () => ({
+  generateSessionSnapshotPng: (...args: unknown[]) =>
+    mockGenerateSnapshot(...args),
 }));
 
 const mockEnd = jest.fn(() => Promise.resolve({ endedAt: "2026-05-10T00:00:00Z", durationSeconds: 100, registeredSegments: 0 }));
@@ -309,6 +327,11 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     window.scrollTo = jest.fn();
     mockEnd.mockClear();
     mockUpload.mockClear();
+    mockSnapshotUpload.mockClear();
+    mockGenerateSnapshot.mockReset();
+    // Default: snapshot generation skips (empty scene → null). Tests
+    // that exercise the happy path override this per-test.
+    mockGenerateSnapshot.mockResolvedValue(null);
     mockBuildFinalEventsJson.mockClear();
     mockDrainOutboxOrTimeout.mockReset();
     mockAssembleEndSessionSegments.mockReset();
@@ -647,6 +670,128 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
 
     expect(audioCtl.stopAndUpload).not.toHaveBeenCalled();
     expect(audioCtl.flushPendingUploads).toHaveBeenCalledTimes(1);
+  });
+
+  test("snapshot wiring: generated blob is uploaded and snapshotBlobUrl is forwarded to endWhiteboardSession", async () => {
+    // Phase 1c contract — when the snapshot pipeline succeeds, the
+    // blob URL must reach the atomic end-session action so the
+    // SessionRecording row can render thumbnails on the parent share
+    // and the admin review page's "open as image" link.
+    const fakePng = new Blob(["fake-png-bytes"], { type: "image/png" });
+    mockGenerateSnapshot.mockResolvedValueOnce({
+      blob: fakePng,
+      sizeBytes: fakePng.size,
+      mimeType: "image/png",
+    });
+
+    render(
+      <WhiteboardWorkspaceClient
+        whiteboardSessionId="ws-end-snap"
+        studentId="stu-1"
+        studentName="Test Student"
+        adminUserId="admin-1"
+        startedAtIso="2026-05-09T10:00:00.000Z"
+        bothConnectedAtIso={null}
+        initialActiveMs={0}
+        initialLastActiveAtIso={null}
+        syncUrl={null}
+        initialUserWantsRecording
+      />
+    );
+
+    await screen.findByTestId("wb-mock-excalidraw-canvas");
+    await userEvent.click(screen.getByTestId("wb-end-session"));
+
+    await waitFor(() => {
+      expect(mockSnapshotUpload).toHaveBeenCalledWith({
+        whiteboardSessionId: "ws-end-snap",
+        studentId: "stu-1",
+        png: fakePng,
+      });
+    });
+    await waitFor(() => {
+      expect(mockEnd).toHaveBeenCalledWith(
+        "ws-end-snap",
+        "https://abc.blob.vercel-storage.com/blob-events",
+        {
+          segments: [],
+          snapshotBlobUrl: "https://abc.blob.vercel-storage.com/blob-snapshot.png",
+        }
+      );
+    });
+  });
+
+  test("snapshot wiring: snapshot upload failure does NOT block end-session", async () => {
+    // The reliability rule (snapshot is best-effort) — a snapshot
+    // upload error must still let the session finalize. The atomic
+    // end action is called with no snapshotBlobUrl.
+    mockGenerateSnapshot.mockResolvedValueOnce({
+      blob: new Blob(["fake"], { type: "image/png" }),
+      sizeBytes: 4,
+      mimeType: "image/png",
+    });
+    mockSnapshotUpload.mockResolvedValueOnce({
+      ok: false as const,
+      error: "Vercel Blob 503",
+    });
+
+    render(
+      <WhiteboardWorkspaceClient
+        whiteboardSessionId="ws-end-snap-fail"
+        studentId="stu-1"
+        studentName="Test Student"
+        adminUserId="admin-1"
+        startedAtIso="2026-05-09T10:00:00.000Z"
+        bothConnectedAtIso={null}
+        initialActiveMs={0}
+        initialLastActiveAtIso={null}
+        syncUrl={null}
+        initialUserWantsRecording
+      />
+    );
+
+    await screen.findByTestId("wb-mock-excalidraw-canvas");
+    await userEvent.click(screen.getByTestId("wb-end-session"));
+
+    await waitFor(() => {
+      expect(mockEnd).toHaveBeenCalledWith(
+        "ws-end-snap-fail",
+        "https://abc.blob.vercel-storage.com/blob-events",
+        { segments: [], snapshotBlobUrl: undefined }
+      );
+    });
+  });
+
+  test("snapshot wiring: snapshot generation throwing does NOT block end-session", async () => {
+    // Defense-in-depth — the snapshot module is supposed to never
+    // throw, but if a future regression breaks that contract the
+    // workspace's outer try/catch must absorb it.
+    mockGenerateSnapshot.mockRejectedValueOnce(
+      new Error("snapshot pipeline regression")
+    );
+
+    render(
+      <WhiteboardWorkspaceClient
+        whiteboardSessionId="ws-end-snap-throw"
+        studentId="stu-1"
+        studentName="Test Student"
+        adminUserId="admin-1"
+        startedAtIso="2026-05-09T10:00:00.000Z"
+        bothConnectedAtIso={null}
+        initialActiveMs={0}
+        initialLastActiveAtIso={null}
+        syncUrl={null}
+        initialUserWantsRecording
+      />
+    );
+
+    await screen.findByTestId("wb-mock-excalidraw-canvas");
+    await userEvent.click(screen.getByTestId("wb-end-session"));
+
+    await waitFor(() => {
+      expect(mockEnd).toHaveBeenCalled();
+    });
+    expect(mockSnapshotUpload).not.toHaveBeenCalled();
   });
 
   test("drain timeout with an upload error includes the error in the banner copy", async () => {
