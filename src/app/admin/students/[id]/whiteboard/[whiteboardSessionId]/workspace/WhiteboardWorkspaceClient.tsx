@@ -1311,15 +1311,21 @@ export function WhiteboardWorkspaceClient({
       // Revoke is idempotent with the transaction above; don't block navigation.
       await revokeJoinTokensForSession(whiteboardSessionId).catch(() => undefined);
 
-      // Phase 1c (Pillar 4 Task 6): stay on the `/workspace` URL after
-      // End-session. `router.refresh()` re-fetches the server props,
-      // and the page-level component now branches on `detail.endedAt`
-      // to render `WorkspacePreviousSessionPreview` (read-only final
-      // frame + Start-new affordance). The previous behaviour bounced
-      // the tutor to `/whiteboard/[id]` (review page) the instant
-      // they hit End — which silently defeated the entire
-      // preview-before-Start surface. The Open-full-replay button
-      // inside the preview keeps the old destination one click away.
+      // Post-End-session navigation: bounce to the review page.
+      //
+      // Phase 1c originally tried to stay on `/workspace` so the new
+      // preview-before-Start surface (Pillar 4 Task 6) would take
+      // over the same tab — but that delayed the most common
+      // immediate-post-session actions (AI-generate notes from the
+      // session audio is THE wedge feature, plus replay, snapshot,
+      // share-link copy — all on the review page) by an extra click.
+      // The preview surface still serves its actual purpose for the
+      // re-entry case (pinned tab, browser bookmark, manual URL),
+      // because `workspace/page.tsx` no longer redirects ended
+      // sessions away from `/workspace` — it just renders the
+      // preview component when `detail.endedAt` is set.
+      const reviewHref = `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}`;
+      router.replace(reviewHref);
       router.refresh();
 
       try {
@@ -1347,7 +1353,7 @@ export function WhiteboardWorkspaceClient({
       // Don't auto-retry — the tutor decides whether to retry End or
       // keep the session open and try again.
     }
-  }, [recorder, router, whiteboardSessionId]);
+  }, [recorder, router, studentId, whiteboardSessionId]);
 
   // ---------------------------------------------------------------
   // After refresh: (1) auto-paint after stale-room "Resume session" when

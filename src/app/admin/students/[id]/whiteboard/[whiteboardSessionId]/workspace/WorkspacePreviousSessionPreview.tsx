@@ -45,7 +45,7 @@
  * Tests: `src/__tests__/dom/WorkspacePreviewBeforeStart.dom.test.tsx`.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ExcalidrawDynamic } from "@/components/whiteboard/ExcalidrawDynamic";
 import { useExcalidrawThemeFromSystem } from "@/hooks/useExcalidrawThemeFromSystem";
@@ -153,6 +153,16 @@ export function WorkspacePreviousSessionPreview(
   const lastSceneElementsRef = useRef<readonly unknown[]>([]);
   const initialPaintApiRef = useRef<ScenePaintApi | null>(null);
   const pvwRef = useRef<string>(PVW());
+  /**
+   * Tracks how many times Excalidraw has fired its `excalidrawAPI`
+   * callback for THIS component instance. Replay's source comment
+   * notes Excalidraw "may invoke `excalidrawAPI` more than once
+   * (internal remounts)"; if that happens here, the prior fitter's
+   * pending rAF retries would write into a stale api while the
+   * visible new api stays empty. Diagnostic counter so the next
+   * smoke makes that failure mode visible without guessing.
+   */
+  const apiCallbackCountRef = useRef(0);
 
   const excalidrawTheme = useExcalidrawThemeFromSystem();
 
@@ -233,14 +243,52 @@ export function WorkspacePreviousSessionPreview(
   }, [loadState]);
 
   // -----------------------------------------------------------------
-  // Paint final frame + fit camera (one-shot — preview is static)
+  // First paint + camera fit, mirroring WhiteboardReplay's pattern.
+  //
+  // Reliability invariants (each one is load-bearing — earlier
+  // attempts that skipped any of these reproduced as "log says
+  // painted, canvas stays empty"):
+  //
+  //   1. Single effect (NOT useCallback + naked useEffect). The
+  //      cleanup MUST own the fitter so its pending rAF retries are
+  //      cancelled when this api is replaced. Without this, a
+  //      remount-driven api swap leaves the previous fitter writing
+  //      into a stale api while the visible new api never receives
+  //      the elements + camera fit.
+  //
+  //   2. Re-runs on api / loadState / restoreReady change. The
+  //      `initialPaintApiRef.current === api` guard prevents the
+  //      same api from being painted twice; a fresh api object
+  //      (Excalidraw remount) correctly re-paints into the new
+  //      instance.
+  //
+  //   3. Calls `applyAt(finalT, { preserveScroll: false })` so the
+  //      painter does NOT pull stale scroll from the empty
+  //      `initialData.appState` — the camera fitter pushes the
+  //      correct scrollX / scrollY immediately after.
+  //
+  //   4. Diagnostic logs at every transition (guards, container
+  //      rect, paint, fit success, cleanup) — without these the
+  //      "canvas blank" failure mode is invisible from the outside.
+  //      All logs share the `[preview-before-start] pvw=… wbsid=…`
+  //      prefix so a single search filters everything.
   // -----------------------------------------------------------------
 
-  const paintAndFit = useCallback(() => {
-    if (loadState.kind !== "ready" || !api || !restoreReady) return;
-    if (initialPaintApiRef.current === api) return;
-    initialPaintApiRef.current = api;
+  useEffect(() => {
     const pvw = pvwRef.current;
+    if (loadState.kind !== "ready" || !api || !restoreReady) {
+      console.log(
+        `[preview-before-start] pvw=${pvw} wbsid=${whiteboardSessionId} paint guards: load=${loadState.kind} api=${api ? "ready" : "null"} restoreReady=${restoreReady}`
+      );
+      return undefined;
+    }
+    if (initialPaintApiRef.current === api) {
+      console.log(
+        `[preview-before-start] pvw=${pvw} wbsid=${whiteboardSessionId} paint skipped: same api instance`
+      );
+      return undefined;
+    }
+    initialPaintApiRef.current = api;
 
     const painter = createScenePainter({
       log: loadState.log,
@@ -254,23 +302,43 @@ export function WorkspacePreviousSessionPreview(
     const result = painter.applyAt(finalT, { preserveScroll: false });
     lastSceneElementsRef.current = result.paintedElements;
     console.log(
-      `[preview-before-start] pvw=${pvw} wbsid=${whiteboardSessionId} painted final frame at t=${finalT}ms elements=${result.paintedElements.length}`
+      `[preview-before-start] pvw=${pvw} wbsid=${whiteboardSessionId} painted final frame at t=${finalT}ms elements=${result.paintedElements.length} restoreElementsAvailable=${restoreElementsRef.current ? "yes" : "no"}`
     );
 
     const container = containerRef.current;
-    if (!container) return;
+    if (!container) {
+      console.warn(
+        `[preview-before-start] pvw=${pvw} wbsid=${whiteboardSessionId} containerRef null at fit time — skipping camera fit`
+      );
+      return undefined;
+    }
+    const rect = container.getBoundingClientRect();
+    console.log(
+      `[preview-before-start] pvw=${pvw} wbsid=${whiteboardSessionId} container rect at fit: w=${Math.round(rect.width)} h=${Math.round(rect.height)}`
+    );
     const fitter = createCameraFitter({
       api,
       container,
       getElements: () => lastSceneElementsRef.current,
       zoom: 1,
+      onFit: () => {
+        console.log(
+          `[preview-before-start] pvw=${pvw} wbsid=${whiteboardSessionId} camera fit succeeded (apiCallbackCount=${apiCallbackCountRef.current})`
+        );
+      },
     });
-    fitter.fit();
-  }, [api, loadState, restoreReady, whiteboardSessionId]);
+    const syncFitOk = fitter.fit();
+    console.log(
+      `[preview-before-start] pvw=${pvw} wbsid=${whiteboardSessionId} fitter.fit sync result=${syncFitOk ? "ok" : "scheduled-retries"}`
+    );
 
-  useEffect(() => {
-    paintAndFit();
-  }, [paintAndFit]);
+    return () => {
+      fitter.dispose();
+      console.log(
+        `[preview-before-start] pvw=${pvw} wbsid=${whiteboardSessionId} cleanup: fitter disposed`
+      );
+    };
+  }, [api, loadState, restoreReady, whiteboardSessionId]);
 
   // -----------------------------------------------------------------
   // Render
@@ -318,12 +386,8 @@ export function WorkspacePreviousSessionPreview(
         className="card"
         style={{
           padding: 0,
-          minHeight: 480,
-          height: "max(480px, calc(100vh - 360px))",
           width: "100%",
           position: "relative",
-          display: "flex",
-          flexDirection: "column",
           overflow: "hidden",
         }}
         data-testid="wb-preview-canvas-mount"
@@ -331,7 +395,7 @@ export function WorkspacePreviousSessionPreview(
         {loadState.kind === "loading" && (
           <div
             style={{
-              flex: 1,
+              minHeight: 480,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -344,7 +408,7 @@ export function WorkspacePreviousSessionPreview(
         {loadState.kind === "error" && (
           <div
             style={{
-              flex: 1,
+              minHeight: 480,
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
@@ -376,7 +440,7 @@ export function WorkspacePreviousSessionPreview(
         {loadState.kind === "empty" && (
           <div
             style={{
-              flex: 1,
+              minHeight: 480,
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
@@ -405,31 +469,44 @@ export function WorkspacePreviousSessionPreview(
         )}
 
         {loadState.kind === "ready" && (
+          // Concrete-height container — match WhiteboardReplay.tsx
+          // exactly. The earlier `flex: 1` + `style={{height:100%}}`
+          // pattern was fragile: Excalidraw's internal layout reads
+          // its container's measured height, and a flex child mid-
+          // measure can briefly report 0×0, racing the camera fit's
+          // synchronous attempt and leaving the visible canvas empty.
+          //
+          // We also intentionally do NOT pass `style` through to
+          // Excalidraw (replay doesn't either) — the dynamic-import
+          // wrapper would forward it as an extra prop Excalidraw
+          // does not officially support and we've seen it interfere
+          // with Excalidraw's internal sizing in past pilots.
           <div
             ref={containerRef}
-            style={{ flex: 1, minHeight: 400, width: "100%" }}
+            data-preview-viewport-metrics=""
+            style={{
+              height: "max(480px, calc(100vh - 360px))",
+              minHeight: 480,
+              width: "100%",
+            }}
           >
             <ExcalidrawDynamic
-              style={{ width: "100%", height: "100%" }}
               viewModeEnabled
               gridModeEnabled={false}
               theme={excalidrawTheme}
-              UIOptions={{
-                canvasActions: {
-                  saveToActiveFile: false,
-                  loadScene: false,
-                  changeViewBackgroundColor: false,
-                  toggleTheme: false,
-                },
-              }}
+              name={`whiteboard-preview-${whiteboardSessionId}`}
+              UIOptions={{ canvasActions: { saveToActiveFile: false } }}
               excalidrawAPI={(instance: unknown) => {
+                apiCallbackCountRef.current += 1;
+                console.log(
+                  `[preview-before-start] pvw=${pvwRef.current} wbsid=${whiteboardSessionId} excalidrawAPI fired (count=${apiCallbackCountRef.current})`
+                );
                 setApi(instance as ScenePaintApi);
               }}
               initialData={{
                 elements: [],
                 appState: { currentItemFontFamily: 1 },
               }}
-              name={`whiteboard-preview-${whiteboardSessionId}`}
             />
           </div>
         )}

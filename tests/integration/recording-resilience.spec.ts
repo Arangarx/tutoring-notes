@@ -112,20 +112,19 @@ test.describe("recording resilience (Phase 1c)", () => {
 
       await page.getByTestId("wb-end-session").click();
 
-      // Phase 1c (Pillar 4 Task 6): End-session no longer bounces the
-      // tutor to the review page. The URL stays at `/workspace` and
-      // the page swaps to the read-only preview-before-Start surface.
-      // The Open-full-replay link inside the preview keeps the old
-      // destination one click away.
+      // End-session navigates to the review page (the destination
+      // hasn't changed — Phase 1c briefly tried staying on
+      // `/workspace` but that delayed the immediate-post-session
+      // actions, see WhiteboardWorkspaceClient.handleEndSession
+      // for rationale). The preview-before-Start surface is still
+      // wired up for re-entry to `/workspace` — exercised by the
+      // "reopening workspace URL" test below.
       await page.waitForURL(
         (u) =>
           u.pathname ===
-          `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace`,
+          `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}`,
         { timeout: 120_000 }
       );
-      await expect(
-        page.getByTestId("wb-preview-before-start")
-      ).toBeVisible({ timeout: 30_000 });
 
       // Assert the WhiteboardWorkspaceClient.handleEndSession
       // best-effort warn fired (snp= or "snapshot" string).
