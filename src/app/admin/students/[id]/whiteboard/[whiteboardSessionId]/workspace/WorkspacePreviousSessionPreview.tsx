@@ -332,10 +332,80 @@ export function WorkspacePreviousSessionPreview(
       `[preview-before-start] pvw=${pvw} wbsid=${whiteboardSessionId} fitter.fit sync result=${syncFitOk ? "ok" : "scheduled-retries"}`
     );
 
+    // -------- Post-fit probes (Phase 1c blank-canvas diagnostic) --------
+    //
+    // 2026-05-12 smoke #4: every diagnostic above logs SUCCESS — single
+    // mount, restoreElements available, 4 elements painted, 758×910
+    // container, sync camera fit ok — but the canvas still renders
+    // blank for sessions with confirmed strokes. The remaining
+    // possibilities are:
+    //
+    //   A. Excalidraw is HOLDING the elements (api.getSceneElements()
+    //      returns N>0) but not painting them — internal render-loop
+    //      glitch, theme prop change post-mount, etc.
+    //   B. Excalidraw silently DROPPED them after my fit (e.g. some
+    //      internal sanitizer rejected the restored shapes; we'd see
+    //      api.getSceneElements() === 0 after some delay).
+    //   C. The camera state is wildly wrong (e.g. zoom 0.0001, or
+    //      scroll way off-screen) so the elements ARE rendering but
+    //      outside the visible viewport.
+    //
+    // Three checkpoints disambiguate (sync, 2-rAF after Excali's next
+    // render, 1500ms catch-all). All probes log
+    // `sceneElements.length`, scroll/zoom/viewBackgroundColor.
+    type StateProbe = {
+      scrollX?: unknown;
+      scrollY?: unknown;
+      zoom?: { value?: unknown } | unknown;
+      viewBackgroundColor?: unknown;
+      theme?: unknown;
+    };
+    type ApiWithReaders = ScenePaintApi & {
+      getSceneElements?: () => readonly unknown[];
+      getAppState?: () => StateProbe;
+    };
+    const probe = (label: string) => {
+      try {
+        const apiR = api as ApiWithReaders;
+        const els = apiR.getSceneElements?.();
+        const st = apiR.getAppState?.();
+        const zoomVal =
+          st && typeof st.zoom === "object" && st.zoom !== null
+            ? (st.zoom as { value?: unknown }).value
+            : st?.zoom;
+        console.log(
+          `[preview-before-start] pvw=${pvw} wbsid=${whiteboardSessionId} probe(${label}): sceneElements=${els?.length ?? "?"} scrollX=${typeof st?.scrollX === "number" ? st.scrollX.toFixed(1) : st?.scrollX} scrollY=${typeof st?.scrollY === "number" ? st.scrollY.toFixed(1) : st?.scrollY} zoom=${zoomVal} bg=${st?.viewBackgroundColor} theme=${st?.theme}`
+        );
+      } catch (probeErr) {
+        console.warn(
+          `[preview-before-start] pvw=${pvw} wbsid=${whiteboardSessionId} probe(${label}) threw:`,
+          (probeErr as Error)?.message ?? probeErr
+        );
+      }
+    };
+    probe("sync");
+    let raf1: number | null = null;
+    let raf2: number | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    raf1 = window.requestAnimationFrame(() => {
+      raf1 = null;
+      raf2 = window.requestAnimationFrame(() => {
+        raf2 = null;
+        probe("2-raf");
+      });
+    });
+    timer = setTimeout(() => {
+      timer = null;
+      probe("1500ms");
+    }, 1500);
+
     return () => {
       fitter.dispose();
+      if (raf1 !== null) window.cancelAnimationFrame(raf1);
+      if (raf2 !== null) window.cancelAnimationFrame(raf2);
+      if (timer !== null) clearTimeout(timer);
       console.log(
-        `[preview-before-start] pvw=${pvw} wbsid=${whiteboardSessionId} cleanup: fitter disposed`
+        `[preview-before-start] pvw=${pvw} wbsid=${whiteboardSessionId} cleanup: fitter disposed + probes cancelled`
       );
     };
   }, [api, loadState, restoreReady, whiteboardSessionId]);
