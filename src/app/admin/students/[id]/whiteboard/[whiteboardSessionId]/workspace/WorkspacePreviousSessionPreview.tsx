@@ -96,8 +96,25 @@ export type WorkspacePreviousSessionPreviewProps = {
 
 const PVW = (): string => Math.random().toString(36).slice(2, 7);
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString();
+/**
+ * Client-mount-safe date renderer. Avoids React hydration mismatch
+ * (error #418) caused by `Date.toLocaleString()` returning UTC during
+ * SSR but the user's local TZ during client hydration — that mismatch
+ * was tearing down + remounting this entire subtree, which raced with
+ * the Excalidraw mount + `applyAt` paint and left the preview canvas
+ * blank even though the engine reported `elements=N>0`. See the
+ * 2026-05-12 smoke notes in `docs/BACKLOG.md`.
+ *
+ * The initial render value (`iso`) is the same on server and client,
+ * so hydration is clean. The `useEffect` then swaps to the locally-
+ * formatted string after mount.
+ */
+function FormattedTime({ iso }: { iso: string }) {
+  const [text, setText] = useState<string>(iso);
+  useEffect(() => {
+    setText(new Date(iso).toLocaleString());
+  }, [iso]);
+  return <>{text}</>;
 }
 
 function formatDuration(seconds: number | null): string {
@@ -259,12 +276,10 @@ export function WorkspacePreviousSessionPreview(
   // Render
   // -----------------------------------------------------------------
 
-  const headerSubtitle = useMemo(() => {
-    const dur = formatDuration(durationSeconds);
-    return dur
-      ? `Ended ${formatDate(endedAtIso)} · duration ${dur}`
-      : `Ended ${formatDate(endedAtIso)}`;
-  }, [durationSeconds, endedAtIso]);
+  const durationLabel = useMemo(
+    () => formatDuration(durationSeconds),
+    [durationSeconds]
+  );
 
   return (
     <div
@@ -286,9 +301,10 @@ export function WorkspacePreviousSessionPreview(
           className="muted"
           style={{ margin: "6px 0 10px", fontSize: 13, lineHeight: 1.4 }}
         >
-          This session ended on {formatDate(endedAtIso)}. The board below is
-          a snapshot of where you and {studentName} left off. Start a new
-          session to begin recording again — the new canvas will be empty.
+          This session ended on <FormattedTime iso={endedAtIso} />. The
+          board below is a snapshot of where you and {studentName} left
+          off. Start a new session to begin recording again — the new
+          canvas will be empty.
         </p>
         <div className="row" style={{ gap: 8, alignItems: "center" }}>
           <StartWhiteboardSession studentId={studentId} />
@@ -425,7 +441,9 @@ export function WorkspacePreviousSessionPreview(
         data-testid="wb-preview-meta"
       >
         wbsid={whiteboardSessionId.slice(0, 8)} · started{" "}
-        {formatDate(startedAtIso)} · {headerSubtitle.toLowerCase()}
+        <FormattedTime iso={startedAtIso} /> · ended{" "}
+        <FormattedTime iso={endedAtIso} />
+        {durationLabel ? ` · duration ${durationLabel}` : ""}
       </div>
     </div>
   );

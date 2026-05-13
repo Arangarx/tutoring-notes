@@ -142,12 +142,11 @@ export default async function WhiteboardWorkspacePage({
             <h1 style={{ margin: "6px 0 0" }}>
               Whiteboard with {detail.student.name}
             </h1>
-            <p
-              className="muted"
-              style={{ margin: "4px 0 0", fontSize: 13 }}
-            >
-              Started {detail.startedAt.toLocaleString()}
-            </p>
+            {/* Started/ended timestamps live inside the preview shell
+                so they render in the tutor's local TZ (avoids the
+                UTC-vs-local SSR-vs-client diff that would otherwise
+                trigger a React hydration mismatch — see
+                FormattedTime in WorkspacePreviousSessionPreview). */}
           </div>
         </div>
         <WorkspacePreviousSessionPreview
