@@ -1311,8 +1311,15 @@ export function WhiteboardWorkspaceClient({
       // Revoke is idempotent with the transaction above; don't block navigation.
       await revokeJoinTokensForSession(whiteboardSessionId).catch(() => undefined);
 
-      const reviewHref = `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}`;
-      router.replace(reviewHref);
+      // Phase 1c (Pillar 4 Task 6): stay on the `/workspace` URL after
+      // End-session. `router.refresh()` re-fetches the server props,
+      // and the page-level component now branches on `detail.endedAt`
+      // to render `WorkspacePreviousSessionPreview` (read-only final
+      // frame + Start-new affordance). The previous behaviour bounced
+      // the tutor to `/whiteboard/[id]` (review page) the instant
+      // they hit End — which silently defeated the entire
+      // preview-before-Start surface. The Open-full-replay button
+      // inside the preview keeps the old destination one click away.
       router.refresh();
 
       try {
@@ -1340,7 +1347,7 @@ export function WhiteboardWorkspaceClient({
       // Don't auto-retry — the tutor decides whether to retry End or
       // keep the session open and try again.
     }
-  }, [recorder, router, studentId, whiteboardSessionId]);
+  }, [recorder, router, whiteboardSessionId]);
 
   // ---------------------------------------------------------------
   // After refresh: (1) auto-paint after stale-room "Resume session" when

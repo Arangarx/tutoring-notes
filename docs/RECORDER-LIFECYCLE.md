@@ -263,13 +263,24 @@ on when generation fails best-effort.
 7. finalizeOutboxAfterEnd(wbsid)           # drop IDB rows
         │
         ▼
-8. router.replace(reviewHref)              # navigate to review surface
+8. router.refresh()                        # re-fetch server props on /workspace
+        │      page.tsx now sees `detail.endedAt != null` and
+        │      swaps to <WorkspacePreviousSessionPreview />.
+        ▼      The Open-full-replay button inside the preview keeps
+               the old destination one click away.
 ```
 
 **Order is load-bearing.** Steps 1-4 must happen exactly in that
 order; step 5/5b can fail without affecting steps 6-8; step 7 must
 happen after step 6 succeeds (otherwise a refresh between 6 and 7
 would leak orphan rows and re-upload them on next mount).
+
+**Phase 1c change:** step 8 used to be `router.replace(reviewHref)`,
+which silently bounced the tutor off the workspace URL the instant
+they hit End — defeating the entire preview-before-Start surface
+(Pillar 4 Task 6). The route now stays at `/workspace`; the page
+component branches on `detail.endedAt` to render either the live
+client or the read-only preview.
 
 ---
 

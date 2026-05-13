@@ -112,13 +112,20 @@ test.describe("recording resilience (Phase 1c)", () => {
 
       await page.getByTestId("wb-end-session").click();
 
-      // End must navigate to the review page despite snapshot failure.
+      // Phase 1c (Pillar 4 Task 6): End-session no longer bounces the
+      // tutor to the review page. The URL stays at `/workspace` and
+      // the page swaps to the read-only preview-before-Start surface.
+      // The Open-full-replay link inside the preview keeps the old
+      // destination one click away.
       await page.waitForURL(
         (u) =>
           u.pathname ===
-          `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}`,
+          `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace`,
         { timeout: 120_000 }
       );
+      await expect(
+        page.getByTestId("wb-preview-before-start")
+      ).toBeVisible({ timeout: 30_000 });
 
       // Assert the WhiteboardWorkspaceClient.handleEndSession
       // best-effort warn fired (snp= or "snapshot" string).
