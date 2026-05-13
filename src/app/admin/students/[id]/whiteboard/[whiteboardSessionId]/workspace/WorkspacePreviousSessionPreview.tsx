@@ -166,6 +166,35 @@ export function WorkspacePreviousSessionPreview(
 
   const excalidrawTheme = useExcalidrawThemeFromSystem();
 
+  /**
+   * Stable references for `initialData` and `UIOptions` so subsequent
+   * re-renders of this component (e.g. after `setApi` triggers a
+   * state update) don't pass a NEW inline-object reference into
+   * Excalidraw. Diagnostic probes from the 2026-05-12 smoke proved
+   * that without stable refs, Excalidraw re-applies `initialData` on
+   * every prop-reference change and wipes the just-painted scene
+   * back to its (empty) initial state — the canvas flashes the
+   * strokes for one frame and then goes blank. Hard refresh
+   * reproduced the flash visibly. Replay tolerates the same bug
+   * because the audio play-loop continuously re-paints; this
+   * surface is one-shot, so we have to fix it at the prop layer.
+   *
+   * `WhiteboardReplay.tsx` line 148 has the same warning in code
+   * form: "Excalidraw may clear scene on `updateScene({ appState })`;
+   * re-send last paint." Same root cause, different defense.
+   */
+  const stableInitialData = useMemo(
+    () => ({
+      elements: [],
+      appState: { currentItemFontFamily: 1 },
+    }),
+    []
+  );
+  const stableUIOptions = useMemo(
+    () => ({ canvasActions: { saveToActiveFile: false } }),
+    []
+  );
+
   // -----------------------------------------------------------------
   // Fetch + parse the events log
   // -----------------------------------------------------------------
@@ -565,7 +594,7 @@ export function WorkspacePreviousSessionPreview(
               gridModeEnabled={false}
               theme={excalidrawTheme}
               name={`whiteboard-preview-${whiteboardSessionId}`}
-              UIOptions={{ canvasActions: { saveToActiveFile: false } }}
+              UIOptions={stableUIOptions}
               excalidrawAPI={(instance: unknown) => {
                 apiCallbackCountRef.current += 1;
                 console.log(
@@ -573,10 +602,7 @@ export function WorkspacePreviousSessionPreview(
                 );
                 setApi(instance as ScenePaintApi);
               }}
-              initialData={{
-                elements: [],
-                appState: { currentItemFontFamily: 1 },
-              }}
+              initialData={stableInitialData}
             />
           </div>
         )}
