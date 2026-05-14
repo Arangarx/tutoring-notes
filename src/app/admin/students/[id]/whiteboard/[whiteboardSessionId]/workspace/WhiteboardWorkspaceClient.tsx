@@ -65,7 +65,11 @@ import {
   type ResumeResult,
 } from "@/hooks/useWhiteboardRecorder";
 import { useTutorLiveDocumentWire } from "@/hooks/useTutorLiveDocumentWire";
-import { uploadWhiteboardEvents } from "@/lib/whiteboard/upload";
+import {
+  uploadWhiteboardEvents,
+  uploadWhiteboardSnapshot,
+} from "@/lib/whiteboard/upload";
+import { generateSessionSnapshotPng } from "@/lib/whiteboard/snapshot-png";
 import {
   endWhiteboardSession,
   issueJoinToken,
@@ -1237,11 +1241,56 @@ export function WhiteboardWorkspaceClient({
         throw new Error(upload.error);
       }
 
+      // Step 5b — best-effort snapshot PNG. Phase 1c (Pillar 4
+      // follow-on, Task 5). Generation + upload are wrapped so a
+      // snapshot failure NEVER blocks the atomic end-session — the
+      // tutor's events + audio are already durable at this point and
+      // the parent share's "open as image" link gracefully hides
+      // when `snapshotBlobUrl` is null. See snapshot-png.ts header
+      // for the reliability rationale.
+      let snapshotBlobUrl: string | undefined;
+      try {
+        const snap = await generateSessionSnapshotPng(
+          excalidrawAPIRef.current,
+          { whiteboardSessionId }
+        );
+        if (snap) {
+          const snapUpload = await uploadWhiteboardSnapshot({
+            whiteboardSessionId,
+            studentId,
+            png: snap.blob,
+          });
+          if (snapUpload.ok) {
+            snapshotBlobUrl = snapUpload.blobUrl;
+            console.log(
+              `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} snapshot uploaded sizeBytes=${snap.sizeBytes}`
+            );
+          } else {
+            console.warn(
+              `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} snapshot upload failed, continuing without: ${snapUpload.error}`
+            );
+          }
+        } else {
+          console.log(
+            `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} snapshot generation skipped (see snapshot-png log)`
+          );
+        }
+      } catch (snapErr) {
+        console.warn(
+          `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} snapshot pipeline threw, continuing without:`,
+          (snapErr as Error)?.message ?? snapErr
+        );
+      }
+
       // Step 6 — one atomic server transaction: stamp endedAt, swap
       // eventsBlobUrl, register every outbox segment, revoke join
-      // tokens. Plan Pillar 3.
+      // tokens. Plan Pillar 3. Phase 1c: now also persists
+      // `snapshotBlobUrl` when the snapshot pipeline above produced
+      // one — the action treats it as optional so a null value is
+      // a no-op on the column.
       await endWhiteboardSession(whiteboardSessionId, upload.blobUrl, {
         segments,
+        snapshotBlobUrl,
       });
 
       // Step 7 — drop the persisted outbox rows. Server has them; we
@@ -1262,6 +1311,19 @@ export function WhiteboardWorkspaceClient({
       // Revoke is idempotent with the transaction above; don't block navigation.
       await revokeJoinTokensForSession(whiteboardSessionId).catch(() => undefined);
 
+      // Post-End-session navigation: bounce to the review page.
+      //
+      // Phase 1c originally tried to stay on `/workspace` so the new
+      // preview-before-Start surface (Pillar 4 Task 6) would take
+      // over the same tab — but that delayed the most common
+      // immediate-post-session actions (AI-generate notes from the
+      // session audio is THE wedge feature, plus replay, snapshot,
+      // share-link copy — all on the review page) by an extra click.
+      // The preview surface still serves its actual purpose for the
+      // re-entry case (pinned tab, browser bookmark, manual URL),
+      // because `workspace/page.tsx` no longer redirects ended
+      // sessions away from `/workspace` — it just renders the
+      // preview component when `detail.endedAt` is set.
       const reviewHref = `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}`;
       router.replace(reviewHref);
       router.refresh();

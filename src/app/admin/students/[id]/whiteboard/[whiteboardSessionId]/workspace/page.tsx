@@ -7,6 +7,7 @@ import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import { requireStudentScope } from "@/lib/student-scope";
 import { WhiteboardWorkspaceClient } from "./WhiteboardWorkspaceClient";
 import { WorkspaceResumeGate } from "./WorkspaceResumeGate";
+import { WorkspacePreviousSessionPreview } from "./WorkspacePreviousSessionPreview";
 
 /**
  * Tutor-side live whiteboard workspace.
@@ -68,15 +69,13 @@ export default async function WhiteboardWorkspacePage({
     // Defence-in-depth — the action enforces this on create.
     notFound();
   }
-  if (session.endedAt) {
-    redirect(
-      `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}`
-    );
-  }
 
   // Pull a few extra columns we need for the UI shell. We could push
   // these into the scope helper but keeping them here means the scope
-  // helper stays tight and reusable.
+  // helper stays tight and reusable. `endedAt` + `snapshotBlobUrl` are
+  // included so the previous-session preview branch (Phase 1c) can
+  // surface read-only context above the "Start a new session"
+  // affordance without a second DB round-trip.
   const detail = await withDbRetry(
     () =>
       db.whiteboardSession.findUnique({
@@ -84,6 +83,9 @@ export default async function WhiteboardWorkspacePage({
         select: {
           id: true,
           startedAt: true,
+          endedAt: true,
+          durationSeconds: true,
+          snapshotBlobUrl: true,
           bothConnectedAt: true,
           activeMs: true,
           lastActiveAt: true,
@@ -101,6 +103,66 @@ export default async function WhiteboardWorkspacePage({
     { label: "WhiteboardWorkspacePage.detail" }
   );
   if (!detail) notFound();
+
+  // Phase 1c (Pillar 4 Task 6): a tutor reopening a previously-ended
+  // session's workspace route should see a read-only preview of the
+  // last frame + a "Start a new whiteboard session" affordance,
+  // rather than being silently bounced to the review page. The
+  // review page is still one click away inside the preview shell;
+  // bouncing was hostile when the tutor's intent was almost always
+  // "I want to start a fresh session, just remind me where we were."
+  //
+  // We keep the workspace route alive (rather than redirecting to a
+  // new path) because Sarah's pinned tabs + the existing student
+  // detail "Open whiteboard sessions" list both use this URL — the
+  // route stays stable, the rendered UI just adapts to session
+  // state.
+  if (detail.endedAt) {
+    const eventsProxyUrl = `/api/whiteboard/${whiteboardSessionId}/events`;
+    const snapshotProxyUrl = detail.snapshotBlobUrl
+      ? `/api/whiteboard/${whiteboardSessionId}/snapshot`
+      : null;
+    const reviewHref = `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}`;
+    return (
+      <div className="container" style={{ maxWidth: 1280 }}>
+        <div
+          className="row"
+          style={{
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 12,
+            flexWrap: "wrap",
+            gap: 8,
+          }}
+        >
+          <div>
+            <Link href={`/admin/students/${studentId}`} className="muted">
+              ← Back to {detail.student.name}
+            </Link>
+            <h1 style={{ margin: "6px 0 0" }}>
+              Whiteboard with {detail.student.name}
+            </h1>
+            {/* Started/ended timestamps live inside the preview shell
+                so they render in the tutor's local TZ (avoids the
+                UTC-vs-local SSR-vs-client diff that would otherwise
+                trigger a React hydration mismatch — see
+                FormattedTime in WorkspacePreviousSessionPreview). */}
+          </div>
+        </div>
+        <WorkspacePreviousSessionPreview
+          whiteboardSessionId={detail.id}
+          studentId={detail.student.id}
+          studentName={detail.student.name}
+          startedAtIso={detail.startedAt.toISOString()}
+          endedAtIso={detail.endedAt.toISOString()}
+          durationSeconds={detail.durationSeconds}
+          eventsProxyUrl={eventsProxyUrl}
+          snapshotProxyUrl={snapshotProxyUrl}
+          reviewHref={reviewHref}
+        />
+      </div>
+    );
+  }
 
   const syncEnabled = Boolean(env.WHITEBOARD_SYNC_URL);
 
