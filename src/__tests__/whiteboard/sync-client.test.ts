@@ -24,6 +24,8 @@ import {
   generateEncryptionKeyBase64Url,
   _testing,
   type WhiteboardWireMessage,
+  type WhiteboardWireSignal,
+  type WhiteboardWireSignalPayload,
 } from "@/lib/whiteboard/sync-client";
 import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter";
 
@@ -807,5 +809,530 @@ describe("sync-client peer count (other-peers semantics)", () => {
 
     expect(counts).toEqual([3]);
     client.disconnect();
+  });
+});
+
+// -----------------------------------------------------------------
+// Phase 4a — webrtc-signal envelope (additive)
+// -----------------------------------------------------------------
+//
+// These tests pin the new envelope kind without disturbing the
+// existing scene-message coverage. Both must coexist on the same
+// encrypted Socket.IO channel; that's the entire point of the
+// additive extension.
+
+describe("sync-client webrtc-signal envelope (Phase 4a)", () => {
+  test("broadcastSignal encrypts an envelope that round-trips back to a WhiteboardWireSignal", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+
+    await realTick();
+    await flushMicrotasks(10);
+
+    client.broadcastSignal("student-B", {
+      type: "offer",
+      sdp: "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\n...",
+    });
+    await realTick(20);
+    await flushMicrotasks(15);
+
+    const sock = sockets[0]!;
+    const last = sock.emitted.filter((e) => e.event === "server-broadcast").at(-1)!;
+    expect(last.args[0]).toBe("room-xyz");
+    const data = last.args[1] as ArrayBuffer;
+    const iv = last.args[2] as ArrayBuffer;
+
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const decrypted = await _testing.decryptMessage(aes, data, iv);
+    expect((decrypted as WhiteboardWireSignal).kind).toBe("webrtc-signal");
+    expect((decrypted as WhiteboardWireSignal).v).toBe(1);
+    expect((decrypted as WhiteboardWireSignal).peerId).toBe("tutor-A");
+    expect((decrypted as WhiteboardWireSignal).targetPeerId).toBe("student-B");
+    expect((decrypted as WhiteboardWireSignal).payload).toEqual({
+      type: "offer",
+      sdp: expect.stringContaining("v=0"),
+    });
+
+    client.disconnect();
+  });
+
+  test("broadcastSignal bypasses the scene throttle (no setTimeout wait needed)", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      // Deliberately large scene-throttle window — signal must still
+      // be on the wire without waiting for the trailing-edge timer.
+      broadcastIntervalMs: 5_000,
+      _ioFactory: factory,
+    });
+
+    await realTick();
+    await flushMicrotasks(10);
+
+    const sock = sockets[0]!;
+    const before = sock.emitted.filter((e) => e.event === "server-broadcast").length;
+    client.broadcastSignal("student-B", {
+      type: "ice",
+      candidate: { candidate: "candidate:1 1 udp 2113937151 192.168.1.2 54321 typ host", sdpMid: "0", sdpMLineIndex: 0 },
+    });
+    // Tiny tick — enough for the encrypt microtask, no setTimeout fired.
+    await realTick(20);
+    await flushMicrotasks(15);
+    const after = sock.emitted.filter((e) => e.event === "server-broadcast").length;
+    expect(after - before).toBe(1);
+
+    client.disconnect();
+  });
+
+  test("inbound signal fires onRemoteSignal with from/target/payload", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+
+    const signalCb = jest.fn<
+      void,
+      [string, string, WhiteboardWireSignalPayload]
+    >();
+    client.onRemoteSignal(signalCb);
+
+    await realTick();
+    await flushMicrotasks(10);
+
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const inbound: WhiteboardWireSignal = {
+      v: 1,
+      kind: "webrtc-signal",
+      peerId: "student-B",
+      targetPeerId: "tutor-A",
+      payload: { type: "answer", sdp: "v=0\r\no=answer\r\n..." },
+    };
+    const { data, iv } = await _testing.encryptMessage(aes, inbound);
+
+    sockets[0]!.inject("client-broadcast", data, iv);
+    await realTick(15);
+    await flushMicrotasks(15);
+
+    expect(signalCb).toHaveBeenCalledTimes(1);
+    expect(signalCb).toHaveBeenCalledWith(
+      "student-B",
+      "tutor-A",
+      { type: "answer", sdp: expect.stringContaining("v=0") }
+    );
+
+    client.disconnect();
+  });
+
+  test("inbound signal does NOT fire onRemoteScene (channels are isolated)", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+
+    const sceneCb = jest.fn();
+    const signalCb = jest.fn();
+    client.onRemoteScene(sceneCb);
+    client.onRemoteSignal(signalCb);
+
+    await realTick();
+    await flushMicrotasks(10);
+
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const inbound: WhiteboardWireSignal = {
+      v: 1,
+      kind: "webrtc-signal",
+      peerId: "student-B",
+      targetPeerId: "tutor-A",
+      payload: { type: "leave" },
+    };
+    const { data, iv } = await _testing.encryptMessage(aes, inbound);
+
+    sockets[0]!.inject("client-broadcast", data, iv);
+    await realTick(15);
+    await flushMicrotasks(15);
+
+    expect(signalCb).toHaveBeenCalledTimes(1);
+    expect(sceneCb).not.toHaveBeenCalled();
+
+    client.disconnect();
+  });
+
+  test("inbound scene message does NOT fire onRemoteSignal (channels are isolated)", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+
+    const sceneCb = jest.fn();
+    const signalCb = jest.fn();
+    client.onRemoteScene(sceneCb);
+    client.onRemoteSignal(signalCb);
+
+    await realTick();
+    await flushMicrotasks(10);
+
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const sceneMsg: WhiteboardWireMessage = {
+      v: 1,
+      peerId: "student-B",
+      role: "student",
+      elements: sampleScene("e-from-scene"),
+    };
+    const { data, iv } = await _testing.encryptMessage(aes, sceneMsg);
+
+    sockets[0]!.inject("client-broadcast", data, iv);
+    await realTick(15);
+    await flushMicrotasks(15);
+
+    expect(sceneCb).toHaveBeenCalledTimes(1);
+    expect(signalCb).not.toHaveBeenCalled();
+
+    client.disconnect();
+  });
+
+  test("signal addressed elsewhere still fires onRemoteSignal (sync-client does not demux; signaling.ts does)", async () => {
+    // The wire-layer contract is: every non-self signal is delivered
+    // to onRemoteSignal. signaling.ts is responsible for the
+    // targetPeerId === localPeerId check. This test pins that
+    // separation; if sync-client ever starts demuxing it would have
+    // to coordinate with the signaling layer.
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+
+    const signalCb = jest.fn();
+    client.onRemoteSignal(signalCb);
+
+    await realTick();
+    await flushMicrotasks(10);
+
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const inbound: WhiteboardWireSignal = {
+      v: 1,
+      kind: "webrtc-signal",
+      peerId: "student-B",
+      targetPeerId: "student-C", // not us — we still deliver it
+      payload: { type: "ice", candidate: null },
+    };
+    const { data, iv } = await _testing.encryptMessage(aes, inbound);
+
+    sockets[0]!.inject("client-broadcast", data, iv);
+    await realTick(15);
+    await flushMicrotasks(15);
+
+    expect(signalCb).toHaveBeenCalledTimes(1);
+    expect(signalCb).toHaveBeenCalledWith(
+      "student-B",
+      "student-C",
+      { type: "ice", candidate: null }
+    );
+
+    client.disconnect();
+  });
+
+  test("own signal echo from the relay is suppressed", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+
+    const signalCb = jest.fn();
+    client.onRemoteSignal(signalCb);
+
+    await realTick();
+    await flushMicrotasks(10);
+
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const ownEcho: WhiteboardWireSignal = {
+      v: 1,
+      kind: "webrtc-signal",
+      peerId: "tutor-A", // our own
+      targetPeerId: "student-B",
+      payload: { type: "leave" },
+    };
+    const { data, iv } = await _testing.encryptMessage(aes, ownEcho);
+
+    sockets[0]!.inject("client-broadcast", data, iv);
+    await realTick(15);
+    await flushMicrotasks(15);
+
+    expect(signalCb).not.toHaveBeenCalled();
+
+    client.disconnect();
+  });
+
+  test("an unknown future `kind` is rejected cleanly (no listener fires, no throw)", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const warnLog = jest.fn();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+      _logger: { log: jest.fn(), warn: warnLog, error: jest.fn() },
+    });
+
+    const sceneCb = jest.fn();
+    const signalCb = jest.fn();
+    client.onRemoteScene(sceneCb);
+    client.onRemoteSignal(signalCb);
+
+    await realTick();
+    await flushMicrotasks(10);
+
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    // Hand-craft a future-kind envelope. We can't go through
+    // encryptMessage with a typed wire message (TS would reject the
+    // shape), so we encrypt the raw JSON via crypto.subtle directly.
+    const futureMsg = {
+      v: 1,
+      kind: "future-thing",
+      peerId: "student-B",
+      payload: { whatever: true },
+    };
+    const ivBuf = new ArrayBuffer(12);
+    crypto.getRandomValues(new Uint8Array(ivBuf));
+    const plaintext = new TextEncoder().encode(JSON.stringify(futureMsg));
+    const ct = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: ivBuf },
+      aes,
+      plaintext as unknown as ArrayBuffer
+    );
+
+    expect(() => {
+      sockets[0]!.inject("client-broadcast", ct, ivBuf);
+    }).not.toThrow();
+    await realTick(15);
+    await flushMicrotasks(15);
+
+    expect(sceneCb).not.toHaveBeenCalled();
+    expect(signalCb).not.toHaveBeenCalled();
+    // The validator threw inside the handler, which is caught and
+    // logged as a `decrypt/parse failed` warning. We don't pin the
+    // exact log line text (would couple us to the message) but we
+    // assert that *some* warning fired so a future change that
+    // silently swallows malformed payloads gets caught.
+    expect(warnLog).toHaveBeenCalled();
+
+    client.disconnect();
+  });
+
+  test("malformed signal payload (bad type) is rejected without firing onRemoteSignal", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+      _logger: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
+    });
+
+    const signalCb = jest.fn();
+    client.onRemoteSignal(signalCb);
+
+    await realTick();
+    await flushMicrotasks(10);
+
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const garbled = {
+      v: 1,
+      kind: "webrtc-signal",
+      peerId: "student-B",
+      targetPeerId: "tutor-A",
+      payload: { type: "nope", weird: true },
+    };
+    const ivBuf = new ArrayBuffer(12);
+    crypto.getRandomValues(new Uint8Array(ivBuf));
+    const plaintext = new TextEncoder().encode(JSON.stringify(garbled));
+    const ct = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: ivBuf },
+      aes,
+      plaintext as unknown as ArrayBuffer
+    );
+
+    sockets[0]!.inject("client-broadcast", ct, ivBuf);
+    await realTick(15);
+    await flushMicrotasks(15);
+
+    expect(signalCb).not.toHaveBeenCalled();
+
+    client.disconnect();
+  });
+
+  test("ICE payload with null candidate (end-of-candidates marker) round-trips intact", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+
+    await realTick();
+    await flushMicrotasks(10);
+
+    client.broadcastSignal("student-B", { type: "ice", candidate: null });
+    await realTick(20);
+    await flushMicrotasks(15);
+
+    const sock = sockets[0]!;
+    const last = sock.emitted.filter((e) => e.event === "server-broadcast").at(-1)!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const decrypted = await _testing.decryptMessage(
+      aes,
+      last.args[1] as ArrayBuffer,
+      last.args[2] as ArrayBuffer
+    );
+    expect((decrypted as WhiteboardWireSignal).payload).toEqual({
+      type: "ice",
+      candidate: null,
+    });
+
+    client.disconnect();
+  });
+
+  test("broadcastSignal with empty targetPeerId is rejected (warns; no emit)", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const warnLog = jest.fn();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+      _logger: { log: jest.fn(), warn: warnLog, error: jest.fn() },
+    });
+
+    await realTick();
+    await flushMicrotasks(10);
+
+    const before = sockets[0]!.emitted.filter((e) => e.event === "server-broadcast").length;
+    client.broadcastSignal("", { type: "leave" });
+    await realTick(20);
+    await flushMicrotasks(10);
+    const after = sockets[0]!.emitted.filter((e) => e.event === "server-broadcast").length;
+
+    expect(after).toBe(before);
+    expect(warnLog).toHaveBeenCalled();
+
+    client.disconnect();
+  });
+
+  test("invalid encryption key → broadcastSignal is inert (no emit)", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: "too-short",
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+      _logger: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
+    });
+
+    await realTick();
+    await flushMicrotasks(10);
+
+    const before = sockets[0]!.emitted.filter((e) => e.event === "server-broadcast").length;
+    client.broadcastSignal("student-B", { type: "leave" });
+    await realTick(30);
+    await flushMicrotasks(10);
+    const after = sockets[0]!.emitted.filter((e) => e.event === "server-broadcast").length;
+    expect(after).toBe(before);
+
+    client.disconnect();
+  });
+
+  test("disconnect() clears signal subscribers (no callback after dispose)", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+
+    const signalCb = jest.fn();
+    client.onRemoteSignal(signalCb);
+
+    await realTick();
+    await flushMicrotasks(10);
+
+    client.disconnect();
+    // After disconnect the socket listener is removed; injecting a
+    // signal must not reach the callback.
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const inbound: WhiteboardWireSignal = {
+      v: 1,
+      kind: "webrtc-signal",
+      peerId: "student-B",
+      targetPeerId: "tutor-A",
+      payload: { type: "leave" },
+    };
+    const { data, iv } = await _testing.encryptMessage(aes, inbound);
+    expect(() => {
+      sockets[0]!.inject("client-broadcast", data, iv);
+    }).not.toThrow();
+    await realTick(15);
+    await flushMicrotasks(15);
+    expect(signalCb).not.toHaveBeenCalled();
   });
 });

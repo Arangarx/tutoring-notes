@@ -38,6 +38,8 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   whiteboard build status, guardrails, adversarial review, demo gate.
 - [docs/PHASE-1B-STATUS.md](docs/PHASE-1B-STATUS.md) — outbox + atomic
   end-session branch handoff (Pillars 2 + 3).
+- [docs/PHASE-4A-STATUS.md](docs/PHASE-4A-STATUS.md) — live-A/V peer-mesh
+  + signaling foundation branch handoff (Pillar 6, first of 4 Phase 4 sub-chats).
 - [docs/DEPLOY.md](docs/DEPLOY.md) — Vercel + Neon deploy notes.
 - [docs/LOCAL-DEV.md](docs/LOCAL-DEV.md) — local setup.
 
@@ -48,7 +50,8 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   log every state transition. Without this, prod debugging is impossible.
   Currently in use: `rid` (audio recorder), `wbsid` (whiteboard session),
   `obx` (upload-outbox row), `snp` (snapshot generation), `pvw`
-  (workspace preview-before-Start). See
+  (workspace preview-before-Start), `avx` (live-A/V session — Phase 4a;
+  per-peer events also carry `peer=<peerId>`). See
   [docs/RECORDER-LIFECYCLE.md](docs/RECORDER-LIFECYCLE.md) for the
   registry.
 - **Migrations are additive.** Production runs on Neon; never drop or
