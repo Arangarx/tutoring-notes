@@ -14,6 +14,10 @@ import {
   createWhiteboardSyncClient,
   type WhiteboardSyncClient,
 } from "@/lib/whiteboard/sync-client";
+import { useLiveAV } from "@/hooks/useLiveAV";
+import { AVPermissionsPrompt } from "@/components/av/AVPermissionsPrompt";
+import { AVTilesPanel } from "@/components/av/AVTilesPanel";
+import { AVControls } from "@/components/av/AVControls";
 import {
   ACTIVE_PING_STALE_MS,
   computeDisplayActiveMs,
@@ -119,6 +123,25 @@ export function StudentWhiteboardClient({
     null
   );
   const [connected, setConnected] = useState(false);
+
+  // Phase 4c: one stable peer id per student mount. Threaded into
+  // BOTH `createWhiteboardSyncClient({peerId})` and
+  // `useLiveAV({localPeerId})` so the wire-envelope peerId and the
+  // peer-mesh + signaling identity match. Same pattern as the tutor
+  // workspace; see `WhiteboardWorkspaceClient.tsx` for the
+  // architectural rationale.
+  const localPeerId = useMemo(() => {
+    if (
+      typeof globalThis.crypto !== "undefined" &&
+      typeof globalThis.crypto.randomUUID === "function"
+    ) {
+      return globalThis.crypto.randomUUID();
+    }
+    return `student-${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+  }, []);
+  const localPeerLabel: string | undefined = "You";
   const [excalidrawAPI, setExcalidrawAPI] = useState<ExcalidrawApiLike | null>(
     null
   );
@@ -158,6 +181,9 @@ export function StudentWhiteboardClient({
       roomId: whiteboardSessionId,
       encryptionKeyBase64Url: encryptionKey,
       role: "student",
+      // Phase 4c: same peerId threaded into useLiveAV below.
+      peerId: localPeerId,
+      localPeerLabel,
     });
     setSyncClient(client);
     setConnected(client.isConnected());
@@ -177,7 +203,63 @@ export function StudentWhiteboardClient({
       setSyncClient(null);
       setConnected(false);
     };
-  }, [encryptionKey, syncUrl, whiteboardSessionId, joinUnavailableReason]);
+  }, [
+    encryptionKey,
+    syncUrl,
+    whiteboardSessionId,
+    joinUnavailableReason,
+    localPeerId,
+    localPeerLabel,
+  ]);
+
+  // Phase 4c: live A/V hook. INERT until `requestMic()` / `requestCam()`
+  // are called from the AVPermissionsPrompt below. Identical contract
+  // to the tutor side; no recorder instantiation and no FSM on the
+  // student side — the student is a receive-only consumer of remote
+  // tracks.
+  const liveAv = useLiveAV({
+    syncClient,
+    localPeerId,
+    sessionId: whiteboardSessionId,
+  });
+
+  // Phase 4c: sync-reconnect → mesh.restart for every current peer.
+  // Identical pattern to the workspace client; see that file for the
+  // rationale around suppressing the first-mount onConnect.
+  const sawDisconnectSinceLastConnectRef = useRef(false);
+  useEffect(() => {
+    if (!syncClient) {
+      sawDisconnectSinceLastConnectRef.current = false;
+      return;
+    }
+    const offConnect = syncClient.onConnect(() => {
+      const shouldRestart = sawDisconnectSinceLastConnectRef.current;
+      sawDisconnectSinceLastConnectRef.current = false;
+      if (!shouldRestart) return;
+      const current = liveAv.participants;
+      if (current.length === 0) return;
+      console.log(
+        `[StudentWhiteboardClient] wbsid=${whiteboardSessionId} avx=${whiteboardSessionId} sync-reconnect peers=${current.length}`
+      );
+      for (const p of current) {
+        try {
+          liveAv.reconnectPeer(p.peerId);
+        } catch (err) {
+          console.warn(
+            `[StudentWhiteboardClient] wbsid=${whiteboardSessionId} mesh.restart threw peer=${p.peerId}`,
+            err
+          );
+        }
+      }
+    });
+    const offDisconnect = syncClient.onDisconnect(() => {
+      sawDisconnectSinceLastConnectRef.current = true;
+    });
+    return () => {
+      offConnect();
+      offDisconnect();
+    };
+  }, [syncClient, liveAv, whiteboardSessionId]);
 
   /** Peer roster can lag relay broadcasts; tutor strokes still prove overlap. */
   const bothPresentForTimer =
@@ -519,6 +601,46 @@ export function StudentWhiteboardClient({
             Match tutor’s view now
           </button>
         </div>
+      </div>
+
+      {/* Phase 4c: live A/V (inert until the user clicks Allow) */}
+      <AVPermissionsPrompt
+        hasMicPermission={liveAv.hasMicPermission}
+        hasCamPermission={liveAv.hasCamPermission}
+        hasMicStream={liveAv.localAudioStream !== null}
+        hasCamStream={liveAv.localVideoStream !== null}
+        error={liveAv.error}
+        videoError={liveAv.videoError}
+        requestMic={liveAv.requestMic}
+        requestCam={liveAv.requestCam}
+      />
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 12,
+          alignItems: "flex-start",
+        }}
+      >
+        <AVTilesPanel
+          participants={liveAv.participants}
+          localTile={{
+            peerId: localPeerId,
+            role: "student",
+            label: localPeerLabel,
+            audioStream: liveAv.localAudioStream,
+            videoStream: liveAv.localVideoStream,
+            isMicMuted: liveAv.isMicMuted,
+            isCamMuted: liveAv.isCamMuted,
+          }}
+        />
+        <AVControls
+          isMicMuted={liveAv.isMicMuted}
+          isCamMuted={liveAv.isCamMuted}
+          toggleMic={liveAv.toggleMic}
+          toggleCam={liveAv.toggleCam}
+          disabled={!liveAv.isActive}
+        />
       </div>
 
       <div
