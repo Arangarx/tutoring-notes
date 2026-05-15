@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { rateLimit } from "@/lib/rate-limit";
-import { buildContentSecurityPolicy } from "@/lib/security/csp";
+import {
+  buildContentSecurityPolicy,
+  buildPermissionsPolicy,
+} from "@/lib/security/csp";
 
 // ---------------------------------------------------------------------------
 // Security headers — applied to every response
@@ -12,24 +15,36 @@ import { buildContentSecurityPolicy } from "@/lib/security/csp";
 // / production each emit the right `connect-src` for the live whiteboard
 // relay without code edits. See `src/lib/security/csp.ts` for per-directive
 // rationale (script-src/media-src/connect-src history lives there).
+//
+// `Permissions-Policy` is per-request (Phase 4c): the tutor workspace and
+// student-join routes get `camera=(self), microphone=(self)` so
+// `getUserMedia` is permitted for live A/V; every other route keeps the
+// tighter `camera=(), microphone=(self)` policy. The asymmetry is regression-
+// tested in `src/__tests__/regressions/csp-headers.test.ts`.
 const CONTENT_SECURITY_POLICY = buildContentSecurityPolicy({
   whiteboardSyncUrl: process.env.WHITEBOARD_SYNC_URL,
 });
 
-const securityHeaders: Record<string, string> = {
+const staticSecurityHeaders: Record<string, string> = {
   "X-Frame-Options": "DENY",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "strict-origin-when-cross-origin",
-  "Permissions-Policy": "camera=(), microphone=(self), geolocation=()",
   "X-DNS-Prefetch-Control": "on",
   "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
   "Content-Security-Policy": CONTENT_SECURITY_POLICY,
 };
 
-function addSecurityHeaders(response: NextResponse): NextResponse {
-  for (const [key, value] of Object.entries(securityHeaders)) {
+function addSecurityHeaders(
+  response: NextResponse,
+  pathname: string
+): NextResponse {
+  for (const [key, value] of Object.entries(staticSecurityHeaders)) {
     response.headers.set(key, value);
   }
+  response.headers.set(
+    "Permissions-Policy",
+    buildPermissionsPolicy(pathname)
+  );
   return response;
 }
 
@@ -48,7 +63,10 @@ function getClientIp(req: NextRequest): string {
   );
 }
 
-function rateLimitResponse(retryAfterMs: number): NextResponse {
+function rateLimitResponse(
+  retryAfterMs: number,
+  pathname: string
+): NextResponse {
   return addSecurityHeaders(
     NextResponse.json(
       { error: "Too many requests. Please try again later." },
@@ -56,7 +74,8 @@ function rateLimitResponse(retryAfterMs: number): NextResponse {
         status: 429,
         headers: { "Retry-After": String(Math.ceil(retryAfterMs / 1000)) },
       }
-    )
+    ),
+    pathname
   );
 }
 
@@ -75,13 +94,13 @@ export async function middleware(req: NextRequest) {
     pathname === "/reset-password"
   ) {
     const rl = rateLimit(`auth:${ip}`, AUTH_RATE_LIMIT.max, AUTH_RATE_LIMIT.windowMs);
-    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
+    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);
   } else if (pathname.startsWith("/api/")) {
     const rl = rateLimit(`api:${ip}`, API_RATE_LIMIT.max, API_RATE_LIMIT.windowMs);
-    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
+    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);
   } else if (pathname === "/setup") {
     const rl = rateLimit(`setup:${ip}`, SETUP_RATE_LIMIT.max, SETUP_RATE_LIMIT.windowMs);
-    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
+    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);
   }
 
   // --- Admin route protection ---
@@ -91,12 +110,12 @@ export async function middleware(req: NextRequest) {
       const loginUrl = req.nextUrl.clone();
       loginUrl.pathname = "/login";
       loginUrl.searchParams.set("callbackUrl", pathname);
-      return addSecurityHeaders(NextResponse.redirect(loginUrl));
+      return addSecurityHeaders(NextResponse.redirect(loginUrl), pathname);
     }
   }
 
   // --- All other routes: pass through with security headers ---
-  return addSecurityHeaders(NextResponse.next());
+  return addSecurityHeaders(NextResponse.next(), pathname);
 }
 
 export const config = {

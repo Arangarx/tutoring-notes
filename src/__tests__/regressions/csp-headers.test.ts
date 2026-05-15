@@ -33,6 +33,8 @@
 
 import {
   buildContentSecurityPolicy,
+  buildPermissionsPolicy,
+  LIVE_AV_ROUTE_PATTERNS,
   whiteboardSyncOrigins,
 } from "@/lib/security/csp";
 
@@ -174,5 +176,143 @@ describe("whiteboardSyncOrigins — input shapes", () => {
     // misconfiguration, not something CSP should silently paper over.
     expect(whiteboardSyncOrigins("https://wb.mortensenapps.com")).toEqual([]);
     expect(whiteboardSyncOrigins("http://localhost:3002")).toEqual([]);
+  });
+});
+
+/**
+ * Permissions-Policy regression tests — Phase 4c live A/V.
+ *
+ * Background:
+ *
+ *   Phase 4c (Pillar 6) widens `Permissions-Policy: camera + microphone`
+ *   on the workspace and student-join routes ONLY, so
+ *   `navigator.mediaDevices.getUserMedia` is permitted in the browser
+ *   for live A/V. Every other route keeps the tighter pre-4c policy
+ *   (`camera=()` always; `microphone=(self)` because the tutor's
+ *   primary mic recorder also runs on the student-detail page).
+ *
+ *   The asymmetry is the security property — widening site-wide would
+ *   let any compromised dev page silently request camera/mic. These
+ *   tests pin that down so a future "convenience" refactor that
+ *   collapses the per-path logic doesn't quietly downgrade the
+ *   trust model.
+ *
+ *   Geolocation is `()` everywhere; nothing in the app uses it.
+ */
+describe("buildPermissionsPolicy — workspace + student-join widening (Phase 4c)", () => {
+  function parsePolicy(value: string): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const part of value.split(",")) {
+      const trimmed = part.trim();
+      if (trimmed === "") continue;
+      const eq = trimmed.indexOf("=");
+      if (eq < 0) continue;
+      out[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1).trim();
+    }
+    return out;
+  }
+
+  describe("tutor workspace route", () => {
+    test.each([
+      "/admin/students/abc123/whiteboard/sess-456/workspace",
+      "/admin/students/abc123/whiteboard/sess-456/workspace/",
+      "/admin/students/abc123/whiteboard/sess-456/workspace/some-nested",
+    ])("widens camera=(self) microphone=(self) on %s", (pathname) => {
+      const parsed = parsePolicy(buildPermissionsPolicy(pathname));
+      expect(parsed.camera).toBe("(self)");
+      expect(parsed.microphone).toBe("(self)");
+      expect(parsed.geolocation).toBe("()");
+    });
+  });
+
+  describe("student-join route", () => {
+    test.each([
+      "/w/abcd-1234",
+      "/w/abcd-1234/",
+      "/w/abcd-1234/nested-path",
+    ])("widens camera=(self) microphone=(self) on %s", (pathname) => {
+      const parsed = parsePolicy(buildPermissionsPolicy(pathname));
+      expect(parsed.camera).toBe("(self)");
+      expect(parsed.microphone).toBe("(self)");
+      expect(parsed.geolocation).toBe("()");
+    });
+  });
+
+  describe("non-live-A/V routes keep the tighter policy", () => {
+    test.each([
+      // landing + auth flows
+      "/",
+      "/login",
+      "/setup",
+      "/forgot-password",
+      // admin sibling routes that must NOT inherit camera permission
+      "/admin/students/abc123",
+      "/admin/students/abc123/",
+      "/admin/students/abc123/whiteboard",
+      "/admin/students/abc123/whiteboard/sess-456",
+      // session-review route lives at /admin/students/<id>/whiteboard/<sid>
+      // (no /workspace suffix) — must stay tight even though it shares
+      // the same prefix as the workspace.
+      "/admin/students/abc123/whiteboard/sess-456/review",
+      // API + asset routes
+      "/api/whiteboard/sess-456/join-timer",
+      "/api/audio/upload",
+      // path that LOOKS workspace-ish but isn't (no whiteboardSessionId)
+      "/admin/students/abc123/workspace",
+      // path with /w/ as a substring but not the join route
+      "/admin/workspace/w/something",
+      // student-join lookalike with extra path segment in the route shape
+      "/w",
+    ])("keeps camera=() microphone=(self) on %s", (pathname) => {
+      const parsed = parsePolicy(buildPermissionsPolicy(pathname));
+      expect(parsed.camera).toBe("()");
+      expect(parsed.microphone).toBe("(self)");
+      expect(parsed.geolocation).toBe("()");
+    });
+  });
+
+  test("returned header is a comma-separated list with no trailing comma", () => {
+    // Defensive: Permissions-Policy syntax is comma-separated and a
+    // trailing comma is invalid per the structured-headers RFC. Browsers
+    // mostly tolerate it, but our regression test pins the exact shape so
+    // a future serializer change doesn't drift.
+    const tight = buildPermissionsPolicy("/");
+    const wide = buildPermissionsPolicy(
+      "/admin/students/abc/whiteboard/xyz/workspace"
+    );
+    expect(tight).not.toMatch(/,\s*$/);
+    expect(wide).not.toMatch(/,\s*$/);
+    expect(tight.split(",").length).toBeGreaterThanOrEqual(3);
+    expect(wide.split(",").length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("LIVE_AV_ROUTE_PATTERNS — anchor invariants", () => {
+  test("every pattern is anchored at both ends", () => {
+    for (const re of LIVE_AV_ROUTE_PATTERNS) {
+      const src = re.source;
+      expect(src.startsWith("^")).toBe(true);
+      expect(src.endsWith("$")).toBe(true);
+    }
+  });
+
+  test("workspace pattern does NOT match a /workspace path without /admin/students prefix", () => {
+    const ok = LIVE_AV_ROUTE_PATTERNS.some((re) =>
+      re.test("/foo/bar/workspace")
+    );
+    expect(ok).toBe(false);
+  });
+
+  test("student-join pattern requires a non-empty token segment", () => {
+    const ok = LIVE_AV_ROUTE_PATTERNS.some((re) => re.test("/w/"));
+    // "/w/" matches `^/w/[^/]+...` only if the token is non-empty.
+    expect(ok).toBe(false);
+  });
+
+  test("workspace pattern matches the canonical shape exactly", () => {
+    const ok = LIVE_AV_ROUTE_PATTERNS.some((re) =>
+      re.test("/admin/students/s_123/whiteboard/wb_456/workspace")
+    );
+    expect(ok).toBe(true);
   });
 });

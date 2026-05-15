@@ -82,6 +82,70 @@ export type CspOptions = {
  *
  *   - `frame-ancestors 'none'` — clickjacking protection. Don't relax.
  */
+/**
+ * Per-request `Permissions-Policy` builder. Defense-in-depth: only
+ * routes that actually need camera/microphone get the widened policy.
+ *
+ * Phase 4c (Pillar 6, live A/V): the tutor workspace route and the
+ * student-join route need `camera=(self)` + `microphone=(self)` so
+ * `navigator.mediaDevices.getUserMedia(...)` is allowed in the
+ * browser. Every other route keeps the tighter
+ * `camera=(), microphone=(self)` policy that shipped pre-4c
+ * (microphone=self was already needed for the tutor mic recorder).
+ *
+ * We deliberately do NOT widen `geolocation`; nothing in the app
+ * uses it, so it stays empty everywhere.
+ *
+ * Why route-scoped (vs. site-wide):
+ *
+ *   - The site has many admin + landing routes that should never be
+ *     able to silently call `getUserMedia`. A compromised dev page
+ *     under `/admin/students/[id]` (e.g. the student detail view)
+ *     should not inherit camera permission just because the workspace
+ *     two URL segments deeper needs it.
+ *
+ *   - Permissions-Policy is enforced by the browser per-document, so
+ *     a tab navigated to `/admin/students/X` reading the tight policy
+ *     cannot later "leak" widened permission to a workspace tab even
+ *     if both share the origin.
+ *
+ * The matchers are deliberately strict (regex anchored on the exact
+ * shape) so adding a sibling route doesn't accidentally inherit the
+ * widened policy. If a new route truly needs live A/V, add it
+ * explicitly here and document the expansion in the feature's
+ * STATUS doc per the AGENTS.md CSP-discipline convention.
+ *
+ * @param pathname  The request URL pathname (no querystring, no hash).
+ * @returns A complete `Permissions-Policy` header value.
+ */
+export function buildPermissionsPolicy(pathname: string): string {
+  if (LIVE_AV_ROUTE_PATTERNS.some((re) => re.test(pathname))) {
+    return "camera=(self), microphone=(self), geolocation=()";
+  }
+  return "camera=(), microphone=(self), geolocation=()";
+}
+
+/**
+ * Pathname patterns that need access to `camera` and `microphone`
+ * for live A/V (`getUserMedia`). Anchored with `^` and `$` so a
+ * trailing or leading typo doesn't silently widen the policy on
+ * unrelated routes.
+ *
+ *   - Tutor workspace:
+ *     `/admin/students/<id>/whiteboard/<wbsid>/workspace[/...]`
+ *
+ *   - Student join (encrypted whiteboard + A/V link Sarah shares):
+ *     `/w/<joinToken>[/...]`
+ *
+ * Exported for testability — `src/__tests__/regressions/csp-headers.test.ts`
+ * asserts both the widened-and-tight match sets so a future regex
+ * tightening can't silently lock out a route that needs A/V.
+ */
+export const LIVE_AV_ROUTE_PATTERNS: ReadonlyArray<RegExp> = [
+  /^\/admin\/students\/[^/]+\/whiteboard\/[^/]+\/workspace(?:\/.*)?$/,
+  /^\/w\/[^/]+(?:\/.*)?$/,
+];
+
 export function buildContentSecurityPolicy(opts: CspOptions = {}): string {
   const connectSrc = [
     "'self'",
