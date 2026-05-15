@@ -138,7 +138,8 @@ export type AnyWhiteboardWireMessage =
   | WhiteboardWireMessage
   | WhiteboardWireMessageV2
   | WhiteboardWireMessageV3
-  | WhiteboardWireSignal;
+  | WhiteboardWireSignal
+  | WhiteboardWirePresence;
 
 /** Extras attached to each `broadcastScene` (throttled on the tutor). */
 export type WhiteboardWireBroadcastExtras = {
@@ -200,6 +201,73 @@ export type WhiteboardWireSignal = {
 };
 
 // -----------------------------------------------------------------
+// Phase 4b — presence envelope (additive)
+// -----------------------------------------------------------------
+//
+// Carries the (stable peer id, role, optional label) tuple for every
+// participant in the room. Peers re-broadcast their presence on every
+// `connect` event (initial join AND reconnect) and on every `new-user`
+// arrival (so the newcomer immediately learns about every existing
+// peer). The relay never sees plaintext — the envelope rides the same
+// AES-GCM channel as scene + signal messages.
+//
+// Discriminated from other envelopes by `kind: "presence"`. The
+// validator treats `kind` as a high-priority discriminator (same
+// pattern as `webrtc-signal`), so older sync-client builds that don't
+// understand `presence` reject the frame cleanly (drop+warn) rather
+// than crash.
+//
+// Why a separate envelope (vs. embedding role in scene messages):
+//   - Scene messages are throttled (50ms trailing-edge). Presence
+//     must be delivered without throttle gates: a new-user packet
+//     racing the next scene tick would arrive at the joiner with
+//     no identity attached.
+//   - Joiners that haven't drawn anything yet wouldn't broadcast a
+//     scene message at all (only the tutor does for a typical
+//     session) — students would be invisible to the tutor's
+//     presence map. Presence is a separate flow.
+//   - The 4a peer-mesh module needs stable peer ids BEFORE any
+//     scene-level data races up; presence is the "I exist with id X"
+//     announcement that lets the mesh start `addPeer` calls.
+//
+// Presence is intentionally minimal: no media-state, no mute flags,
+// no cursor positions. Those would belong in a future "live-state"
+// envelope on a faster cadence; presence is identity-only.
+
+/**
+ * Wire envelope announcing a participant's stable identity in the
+ * room. Emitted at least on initial `connect`, on every `new-user`,
+ * and on every reconnect. Never throttled.
+ */
+export type WhiteboardWirePresence = {
+  v: 1;
+  kind: "presence";
+  /** Sender's stable peer id (same field as scene + signal). */
+  peerId: string;
+  /** Sender's role in the session. */
+  role: "tutor" | "student";
+  /**
+   * Optional human-readable label (e.g. "Sarah" or "Student A"). When
+   * absent, UI falls back to "Tutor"/"Student" derived from `role`.
+   * Carried on every broadcast so a late joiner doesn't need a
+   * separate "label changed" event.
+   */
+  label?: string;
+};
+
+/**
+ * Public shape exposed via `onRoomPeersChange`. The internal map
+ * carries an extra `lastSeenMs` for prune bookkeeping; that field is
+ * intentionally NOT in the public surface so consumers can't accidentally
+ * couple to it.
+ */
+export type RoomPeer = {
+  peerId: string;
+  role: "tutor" | "student";
+  label?: string;
+};
+
+// -----------------------------------------------------------------
 // Public API
 // -----------------------------------------------------------------
 
@@ -247,6 +315,30 @@ export type WhiteboardSyncClientOptions = {
    * until the next stroke.
    */
   onNewRemotePeer?: () => void | Promise<void>;
+  /**
+   * Phase 4b — optional human-readable label that travels with every
+   * `WhiteboardWirePresence` we broadcast. Lets the tutor see "Sarah"
+   * instead of "Student" in participant tiles. Absent fields fall
+   * back to role-derived defaults at the UI layer.
+   */
+  localPeerLabel?: string;
+  /**
+   * Phase 4b — override the 5-second grace window applied before a
+   * peer is dropped from the room-peer map after a `room-user-change`
+   * shrink. Production uses the 5s default (covers transient socket
+   * flaps); tests inject a small value to keep the suite snappy. The
+   * grace timer is the only timer in sync-client besides the
+   * broadcast throttle.
+   */
+  presencePruneGraceMs?: number;
+  /**
+   * Test-only: override `setTimeout` so prune-window tests can
+   * advance the timer deterministically without Jest fake timers
+   * (which would also slow the broadcast throttle). Production omits.
+   */
+  _setTimeoutFn?: (cb: () => void, ms: number) => unknown;
+  /** Test-only: matched override for `clearTimeout`. */
+  _clearTimeoutFn?: (id: unknown) => void;
 };
 
 export type WhiteboardSyncClient = {
@@ -327,6 +419,27 @@ export type WhiteboardSyncClient = {
       targetPeerId: string,
       payload: WhiteboardWireSignalPayload
     ) => void
+  ) => () => void;
+  /**
+   * Phase 4b — subscribe to changes in the room's participant set.
+   * Fires once per material change in the per-peer roster (add /
+   * remove / role-or-label edit). Self is EXCLUDED from the emitted
+   * list (same convention as {@link onPeerCountChange}).
+   *
+   * Membership is reconciled from inbound `WhiteboardWirePresence`
+   * envelopes; a `room-user-change` shrink starts a 5-second grace
+   * timer (overridable via {@link WhiteboardSyncClientOptions.presencePruneGraceMs})
+   * before a peer is dropped, so a transient socket flap whose
+   * re-`connect`-presence-broadcast arrives within the window does
+   * NOT fire a remove+re-add cycle.
+   *
+   * The callback receives a fresh array each time; consumers may
+   * keep the reference but MUST treat it as immutable. Ordering is
+   * lexicographic by `peerId` for deterministic snapshot tests +
+   * deterministic React keys.
+   */
+  onRoomPeersChange: (
+    cb: (peers: ReadonlyArray<RoomPeer>) => void
   ) => () => void;
   /** Tear down the WS, drop subscriptions. Idempotent. */
   disconnect: () => void;
@@ -498,6 +611,36 @@ function validateWireSignal(parsed: unknown): WhiteboardWireSignal {
   };
 }
 
+/**
+ * Validate a `presence` envelope. Throws on any malformed shape; the
+ * caller (`validateWireMessage`) is responsible for catching and
+ * surfacing as a `decrypt/parse failed` log warning.
+ */
+function validateWirePresence(parsed: unknown): WhiteboardWirePresence {
+  const p = parsed as Partial<WhiteboardWirePresence>;
+  if (p.v !== 1) {
+    throw new Error("[sync-client] presence envelope: bad v");
+  }
+  if (typeof p.peerId !== "string" || p.peerId.length === 0) {
+    throw new Error("[sync-client] presence envelope: bad peerId");
+  }
+  if (p.role !== "tutor" && p.role !== "student") {
+    throw new Error("[sync-client] presence envelope: bad role");
+  }
+  const out: WhiteboardWirePresence = {
+    v: 1,
+    kind: "presence",
+    peerId: p.peerId,
+    role: p.role,
+  };
+  if (typeof p.label === "string") {
+    out.label = p.label;
+  } else if (typeof p.label !== "undefined") {
+    throw new Error("[sync-client] presence envelope: bad label");
+  }
+  return out;
+}
+
 function validateWireMessage(parsed: unknown): AnyWhiteboardWireMessage {
   if (!parsed || typeof parsed !== "object") {
     throw new Error("[sync-client] decoded payload: not an object");
@@ -511,6 +654,9 @@ function validateWireMessage(parsed: unknown): AnyWhiteboardWireMessage {
   const kind = (parsed as { kind?: unknown }).kind;
   if (kind === "webrtc-signal") {
     return validateWireSignal(parsed);
+  }
+  if (kind === "presence") {
+    return validateWirePresence(parsed);
   }
   if (typeof kind !== "undefined") {
     throw new Error(
@@ -591,6 +737,15 @@ function makeRandomPeerId(): string {
 }
 
 const DEFAULT_BROADCAST_INTERVAL_MS = 50;
+/**
+ * Default grace window before a peer is dropped from the room-peer
+ * map after a `room-user-change` shrink. A socket flap that
+ * reconnects within this window — and re-broadcasts presence on its
+ * own `connect` — restores the entry without firing remove+re-add
+ * callbacks, so consumers (Phase 4b's `useLiveAV`, peer-mesh) see a
+ * stable peer set across brief network blips.
+ */
+const PRESENCE_PRUNE_GRACE_MS_DEFAULT = 5_000;
 
 export function createWhiteboardSyncClient(
   opts: WhiteboardSyncClientOptions
@@ -604,8 +759,19 @@ export function createWhiteboardSyncClient(
     _ioFactory,
     _logger,
     onNewRemotePeer,
+    localPeerLabel,
+    presencePruneGraceMs = PRESENCE_PRUNE_GRACE_MS_DEFAULT,
   } = opts;
   const peerId = opts.peerId ?? makeRandomPeerId();
+  const setTimeoutFn: (cb: () => void, ms: number) => unknown =
+    opts._setTimeoutFn ??
+    ((cb, ms) => globalThis.setTimeout(cb, ms) as unknown);
+  const clearTimeoutFn: (id: unknown) => void =
+    opts._clearTimeoutFn ??
+    ((id) =>
+      globalThis.clearTimeout(
+        id as ReturnType<typeof globalThis.setTimeout>
+      ));
 
   const log = _logger ?? {
     log: (msg: string, ...rest: unknown[]) =>
@@ -630,11 +796,13 @@ export function createWhiteboardSyncClient(
     targetPeerId: string,
     payload: WhiteboardWireSignalPayload
   ) => void;
+  type RoomPeersCb = (peers: ReadonlyArray<RoomPeer>) => void;
   const remoteSceneSubs = new Set<RemoteSceneCb>();
   const remoteSignalSubs = new Set<RemoteSignalCb>();
   const connectSubs = new Set<() => void>();
   const disconnectSubs = new Set<() => void>();
   const peerCountSubs = new Set<(count: number) => void>();
+  const roomPeersSubs = new Set<RoomPeersCb>();
 
   /**
    * Ingest can race AES key import (async IIFE). Dropping a packet here
@@ -710,6 +878,157 @@ export function createWhiteboardSyncClient(
   let outboundChain: Promise<unknown> = Promise.resolve();
 
   // ---------------------------------------------------------------
+  // Presence reconciliation (Phase 4b)
+  // ---------------------------------------------------------------
+  //
+  // `presenceMap` keys on stable peerId — NOT socket.id. Two reasons:
+  //   1. Socket.io's `client-broadcast` doesn't expose the sender's
+  //      socket.id, so there's no clean place to learn the mapping.
+  //   2. peerId is intentionally stable across reconnects (random
+  //      uuid at construction, retained for the client's lifetime).
+  //      socket.id rolls on every reconnect, so a socket-keyed map
+  //      would force a remove+re-add for every flap even when nothing
+  //      semantically changed.
+  //
+  // Disappearance detection is driven by `room-user-change` shrinks:
+  // when the room member count drops, every remote peer in the map
+  // is marked `pendingPrune`. After `presencePruneGraceMs` (5s prod
+  // default), any peer still in `pendingPrune` is removed. A peer
+  // that re-`connect`s within the window broadcasts a fresh presence
+  // frame; we clear them from `pendingPrune` and the prune timer is
+  // a no-op for them — no add/remove churn for transient flaps.
+  type RoomPeerEntry = RoomPeer & { lastSeenMs: number };
+  const presenceMap = new Map<string, RoomPeerEntry>();
+  const pendingPrune = new Set<string>();
+  let pruneTimer: unknown = null;
+  let lastRoomMemberCount = 0;
+  let lastRoomPeersSnapshot: ReadonlyArray<RoomPeer> = [];
+
+  function getRoomPeersSnapshot(): ReadonlyArray<RoomPeer> {
+    const out: RoomPeer[] = [];
+    for (const entry of presenceMap.values()) {
+      if (entry.peerId === peerId) continue; // exclude self
+      const peer: RoomPeer = { peerId: entry.peerId, role: entry.role };
+      if (entry.label !== undefined) peer.label = entry.label;
+      out.push(peer);
+    }
+    out.sort((a, b) =>
+      a.peerId < b.peerId ? -1 : a.peerId > b.peerId ? 1 : 0
+    );
+    return out;
+  }
+
+  function roomPeersEqual(
+    a: ReadonlyArray<RoomPeer>,
+    b: ReadonlyArray<RoomPeer>
+  ): boolean {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      const x = a[i]!;
+      const y = b[i]!;
+      if (x.peerId !== y.peerId || x.role !== y.role || x.label !== y.label) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function fireRoomPeersIfChanged(): void {
+    const next = getRoomPeersSnapshot();
+    if (roomPeersEqual(lastRoomPeersSnapshot, next)) return;
+    lastRoomPeersSnapshot = next;
+    fan(roomPeersSubs, next);
+  }
+
+  function clearPruneTimer(): void {
+    if (pruneTimer !== null) {
+      clearTimeoutFn(pruneTimer);
+      pruneTimer = null;
+    }
+  }
+
+  function handleInboundPresence(msg: WhiteboardWirePresence): void {
+    // Self-echo guard: presence carries our own peerId on the
+    // sender's broadcast, but the caller (`handleDecryptedWireMessage`)
+    // already drops self-echoes upstream. Defensive guard here so a
+    // refactor that bypasses the upstream check still stays clean.
+    if (msg.peerId === peerId) return;
+    pendingPrune.delete(msg.peerId);
+    const existing = presenceMap.get(msg.peerId);
+    const next: RoomPeerEntry = {
+      peerId: msg.peerId,
+      role: msg.role,
+      ...(msg.label !== undefined ? { label: msg.label } : {}),
+      lastSeenMs: Date.now(),
+    };
+    presenceMap.set(msg.peerId, next);
+    if (
+      !existing ||
+      existing.role !== next.role ||
+      existing.label !== next.label
+    ) {
+      log.log(
+        `kind=presence recv peerId=${msg.peerId} role=${msg.role}${
+          msg.label ? ` label=${msg.label}` : ""
+        } total=${presenceMap.size}`
+      );
+      fireRoomPeersIfChanged();
+    }
+  }
+
+  function broadcastPresence(): void {
+    if (disposed) return;
+    if (aesKeyError || !aesKey || !socket) return;
+    const msg: WhiteboardWirePresence = {
+      v: 1,
+      kind: "presence",
+      peerId,
+      role,
+      ...(localPeerLabel !== undefined ? { label: localPeerLabel } : {}),
+    };
+    log.log(
+      `kind=presence send peerId=${peerId} role=${role}${
+        localPeerLabel ? ` label=${localPeerLabel}` : ""
+      }`
+    );
+    void encryptAndEmitImmediate(msg);
+  }
+
+  function schedulePruneIfShrunk(currentMemberCount: number): void {
+    // currentMemberCount includes self. Grew (or stayed the same) →
+    // nothing to prune; new entries are added by inbound presence
+    // frames, not by member count alone.
+    if (currentMemberCount >= lastRoomMemberCount) {
+      lastRoomMemberCount = currentMemberCount;
+      return;
+    }
+    lastRoomMemberCount = currentMemberCount;
+    // Shrunk — mark every remote peer as a prune candidate. Each
+    // peer's own `connect → broadcastPresence` (which the remote
+    // sync-client fires after reconnecting) removes them from this
+    // set before the timer fires, so a clean flap leaves no trace.
+    for (const pid of presenceMap.keys()) {
+      if (pid !== peerId) pendingPrune.add(pid);
+    }
+    clearPruneTimer();
+    pruneTimer = setTimeoutFn(() => {
+      pruneTimer = null;
+      if (disposed) return;
+      let dropped = 0;
+      for (const pid of pendingPrune) {
+        if (presenceMap.delete(pid)) dropped += 1;
+      }
+      pendingPrune.clear();
+      if (dropped > 0) {
+        log.log(
+          `presence prune fired dropped=${dropped} remaining=${presenceMap.size}`
+        );
+        fireRoomPeersIfChanged();
+      }
+    }, presencePruneGraceMs);
+  }
+
+  // ---------------------------------------------------------------
   // Crypto bootstrap (best-effort; failure leaves us in a degraded
   // mode where we never send/receive but the recorder still works.)
   // ---------------------------------------------------------------
@@ -718,8 +1037,18 @@ export function createWhiteboardSyncClient(
     return (msg as Partial<WhiteboardWireSignal>).kind === "webrtc-signal";
   }
 
+  function isWirePresence(
+    msg: AnyWhiteboardWireMessage
+  ): msg is WhiteboardWirePresence {
+    return (msg as Partial<WhiteboardWirePresence>).kind === "presence";
+  }
+
   function handleDecryptedWireMessage(msg: AnyWhiteboardWireMessage): void {
     if (msg.peerId === peerId) return;
+    if (isWirePresence(msg)) {
+      handleInboundPresence(msg);
+      return;
+    }
     if (isWireSignal(msg)) {
       // Phase 4a: signal envelope. Sync-client delivers every non-self
       // signal to its subscribers; the `targetPeerId === localPeerId`
@@ -783,6 +1112,12 @@ export function createWhiteboardSyncClient(
           );
         }
       }
+      // If the connect handler fired before the key was ready, its
+      // broadcastPresence() call no-op'd. Re-fire now so the room
+      // sees our identity.
+      if (!disposed && connected) {
+        broadcastPresence();
+      }
     } catch (err) {
       aesKeyError = (err as Error)?.message ?? String(err);
       pendingClientBroadcasts.length = 0;
@@ -815,6 +1150,11 @@ export function createWhiteboardSyncClient(
     log.log(`connected sid=${socket?.id ?? "?"} role=${role}`);
     socket?.emit("join-room", roomId);
     fan(connectSubs);
+    // Announce our presence on every connect (initial join + every
+    // reconnect). When `aesKey` isn't ready yet, broadcastPresence
+    // no-ops cleanly — the key import IIFE re-fires presence once
+    // ready (see below).
+    broadcastPresence();
     // If we already have a scene to share (reconnect mid-session),
     // re-emit it so the relay propagates and any peer that stayed
     // connected picks it up immediately.
@@ -842,7 +1182,13 @@ export function createWhiteboardSyncClient(
 
   socket.on("new-user", (peerSocketId: string) => {
     if (disposed) return;
-    log.log(`new-user ${peerSocketId} — re-emitting current scene`);
+    log.log(`new-user ${peerSocketId} — re-emitting current scene + presence`);
+    // Re-announce our identity so the newcomer's presence map
+    // populates immediately (their inbound presence frame from us
+    // races their initial scene packet; without this they would
+    // know there's "someone in the room" via room-user-change but
+    // not who).
+    broadcastPresence();
     // Send our current scene so the new joiner doesn't see a blank
     // canvas. Cheap; runs once per join.
     void (async () => {
@@ -883,6 +1229,7 @@ export function createWhiteboardSyncClient(
     // tweak that fires the event mid-handshake).
     if (!Array.isArray(members)) {
       fan(peerCountSubs, 0);
+      schedulePruneIfShrunk(0);
       return;
     }
     const mySocketId = socket?.id;
@@ -890,6 +1237,10 @@ export function createWhiteboardSyncClient(
       ? members.filter((m) => m !== mySocketId).length
       : Math.max(0, members.length - 1);
     fan(peerCountSubs, others);
+    // Total member count (self included) drives the prune scheduler.
+    // Self-only (length === 1) is a shrink to 0 remote peers — prune
+    // every entry that hasn't re-announced within the grace window.
+    schedulePruneIfShrunk(members.length);
   });
 
   socket.on(
@@ -1039,14 +1390,18 @@ export function createWhiteboardSyncClient(
   }
 
   /**
-   * Phase 4a — encrypt and emit a signal envelope immediately. Bypasses
-   * the trailing-edge scene throttle (signals must reach the recipient
-   * ASAP) but stays on the same outbound chain as scene frames so wire
-   * order is deterministic. Never touches `lastBroadcastPayload`:
-   * signals are not scene state and must NOT be re-emitted on
-   * reconnect or on new-user.
+   * Phase 4a/4b — encrypt and emit a non-scene envelope immediately
+   * (signal OR presence). Bypasses the trailing-edge scene throttle
+   * (these messages must reach the recipient ASAP) but stays on the
+   * same outbound chain as scene frames so wire order is
+   * deterministic. Never touches `lastBroadcastPayload`: signals and
+   * presence are not scene state and must NOT be re-emitted on
+   * reconnect or on new-user — sync-client re-fires them via the
+   * connect/new-user handlers explicitly when appropriate.
    */
-  function encryptAndEmitSignal(msg: WhiteboardWireSignal): Promise<void> {
+  function encryptAndEmitImmediate(
+    msg: WhiteboardWireSignal | WhiteboardWirePresence
+  ): Promise<void> {
     const job = (async () => {
       if (!aesKey || !socket) return;
       try {
@@ -1054,7 +1409,7 @@ export function createWhiteboardSyncClient(
         socket.emit("server-broadcast", roomId, data, iv);
       } catch (err) {
         log.warn(
-          "encrypt/emit signal failed:",
+          `encrypt/emit ${msg.kind} failed:`,
           (err as Error)?.message ?? String(err)
         );
       }
@@ -1083,7 +1438,7 @@ export function createWhiteboardSyncClient(
     log.log(
       `kind=webrtc-signal send target=${targetPeerId} type=${payload.type}`
     );
-    void encryptAndEmitSignal(msg);
+    void encryptAndEmitImmediate(msg);
   }
 
   // ---------------------------------------------------------------
@@ -1140,6 +1495,30 @@ export function createWhiteboardSyncClient(
         remoteSignalSubs.delete(cb);
       };
     },
+    onRoomPeersChange: (cb) => {
+      roomPeersSubs.add(cb);
+      // Fire the current snapshot in a microtask so subscribers
+      // registered after the first presence frame already landed
+      // still see the room state. Mirrors the onRemoteScene replay
+      // pattern above.
+      const snap = lastRoomPeersSnapshot;
+      if (snap.length > 0) {
+        queueMicrotask(() => {
+          if (!roomPeersSubs.has(cb)) return;
+          try {
+            cb(snap);
+          } catch (err) {
+            log.warn(
+              "onRoomPeersChange subscriber threw (replay):",
+              (err as Error)?.message ?? String(err)
+            );
+          }
+        });
+      }
+      return () => {
+        roomPeersSubs.delete(cb);
+      };
+    },
     disconnect: () => {
       if (disposed) return;
       disposed = true;
@@ -1147,6 +1526,11 @@ export function createWhiteboardSyncClient(
         clearTimeout(broadcastTimer);
         broadcastTimer = null;
       }
+      clearPruneTimer();
+      presenceMap.clear();
+      pendingPrune.clear();
+      lastRoomPeersSnapshot = [];
+      lastRoomMemberCount = 0;
       pendingClientBroadcasts.length = 0;
       lastRemoteScene = null;
       remoteSceneSubs.clear();
@@ -1154,6 +1538,7 @@ export function createWhiteboardSyncClient(
       connectSubs.clear();
       disconnectSubs.clear();
       peerCountSubs.clear();
+      roomPeersSubs.clear();
       try {
         socket?.removeAllListeners();
         socket?.disconnect();
