@@ -455,6 +455,12 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   // Cloned stream derived from externalAudioStream (so live-AV mute
   // doesn't bleed into the recording's own tracks).
   const externalCloneRef = useRef<MediaStream | null>(null);
+  // Key of the last successful mesh build. Includes syncClient identity,
+  // audio stream id, peerId, sessionId — but NOT video stream id. When
+  // only localVideoStream changes (camera added mid-session), the key is
+  // the same so we skip teardown+rebuild and let getLocalTracks (which
+  // reads from refs) serve new tracks to future peer connections.
+  const meshBuildKeyRef = useRef<string>("");
 
   // ---------------------------------------------------------------
   // Acquisition controls (idempotent)
@@ -833,6 +839,8 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     const hasLocalMedia =
       localAudioStream !== null || localVideoStream !== null;
     if (!syncClient || !hasLocalMedia) {
+      // Reset key so the next build always triggers a full setup.
+      meshBuildKeyRef.current = "";
       setParticipants([]);
       return;
     }
@@ -840,6 +848,25 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       log.error("missing localPeerId — refusing to build mesh");
       return;
     }
+
+    // Build a key from the dimensions that justify full teardown+rebuild.
+    // localVideoStream is intentionally excluded: adding camera mid-session
+    // should NOT tear down existing peer connections. getLocalTracks() reads
+    // from localVideoStreamRef (always current), so the next peer that
+    // connects or reconnects will automatically pick up video tracks.
+    const buildKey = [
+      "s",
+      localAudioStream?.id ?? "",
+      localPeerId,
+      sessionId ?? "",
+    ].join("|");
+
+    if (buildKey === meshBuildKeyRef.current && meshRef.current !== null) {
+      // Only localVideoStream changed — skip teardown and rebuild.
+      log.log("video stream updated; mesh NOT rebuilt (getLocalTracks ref current)");
+      return;
+    }
+    meshBuildKeyRef.current = buildKey;
 
     const signalingFactory = _createSignaling ?? createSignaling;
     const meshFactory = _createPeerMesh ?? createPeerMesh;
@@ -1070,6 +1097,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         );
       }
       meshRef.current = null;
+      meshBuildKeyRef.current = ""; // reset so next audio stream triggers full rebuild
       for (const entry of internal.values()) {
         for (const t of entry.audioStream.getTracks()) {
           try {
