@@ -136,6 +136,17 @@ export type UseAudioRecorderReturn = {
   elapsed: number;
   segmentNumber: number;
   doneSegmentSeconds: number;
+  /**
+   * The raw mic MediaStream while recording is active (non-null from
+   * the moment getUserMedia succeeds until teardown). Expose this so
+   * callers that need to share the same hardware mic — e.g. the live
+   * A/V hook — can clone the stream instead of calling getUserMedia a
+   * second time. Two simultaneous getUserMedia streams from the same
+   * device trigger Chrome's shared audio-processing pipeline in a way
+   * that suppresses the source signal in both streams via echo
+   * cancellation cross-talk.
+   */
+  localMicStream: MediaStream | null;
 
   // Mic + prefs
   devices: MediaDeviceInfo[];
@@ -212,6 +223,7 @@ export function useAudioRecorder({
   const [recordState, setRecordState] = useState<RecordState>("idle");
   const [elapsed, setElapsed] = useState(initialElapsedSeconds);
   const [error, setError] = useState<string | null>(null);
+  const [localMicStream, setLocalMicStream] = useState<MediaStream | null>(null);
 
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
@@ -430,6 +442,7 @@ export function useAudioRecorder({
       /* ignore */
     }
     streamRef.current = null;
+    setLocalMicStream(null);
   }
 
   function startTimer() {
@@ -749,6 +762,7 @@ export function useAudioRecorder({
     }
 
     streamRef.current = stream;
+    setLocalMicStream(stream);
     const audioTrack = stream.getAudioTracks?.()[0];
 
     // Persist the actual deviceId in use (browsers sometimes resolve "default" to a real id).
@@ -1055,6 +1069,7 @@ export function useAudioRecorder({
     elapsed,
     segmentNumber,
     doneSegmentSeconds,
+    localMicStream,
     devices,
     selectedDeviceId,
     gainLinear,

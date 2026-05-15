@@ -45,6 +45,7 @@ function mockWorkspaceAudio(
     elapsed: 42,
     segmentNumber: 2,
     doneSegmentSeconds: 0,
+    localMicStream: null,
     devices: [
       {
         deviceId: "dev-mock-1",

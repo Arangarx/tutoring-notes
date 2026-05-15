@@ -176,8 +176,27 @@ export type UseLiveAVOptions = {
    * Optional MediaTrackConstraints for the local mic. Defaults to
    * `true`. Pass a deviceId here once the workspace exposes a
    * mic-picker control.
+   *
+   * Ignored when `externalAudioStream` is provided.
    */
   audioConstraints?: MediaTrackConstraints | boolean;
+  /**
+   * When provided, the hook skips its own `getUserMedia` call for
+   * audio and instead uses a clone of this stream. This avoids the
+   * double-acquisition problem: two simultaneous `getUserMedia`
+   * streams from the same hardware device trigger Chrome's shared
+   * audio-processing pipeline in a way that can suppress the source
+   * signal in BOTH streams via echo-cancellation cross-talk.
+   *
+   * Pass `workspaceAudio.localMicStream` from the workspace so the
+   * recording mic and live-A/V mic are sourced from the same
+   * hardware acquisition. The hook clones the stream so live-A/V
+   * mute (track.enabled=false) doesn't silence the recording.
+   *
+   * When null (recording not yet started), the hook falls back to its
+   * own `requestMic()` flow.
+   */
+  externalAudioStream?: MediaStream | null;
   /**
    * Optional MediaTrackConstraints for the local camera. Defaults
    * to `true`.
@@ -382,6 +401,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     sessionId,
     audioConstraints = true,
     videoConstraints = true,
+    externalAudioStream,
     _getUserMedia,
     _createPeerMesh,
     _createSignaling,
@@ -432,6 +452,9 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   // Tracks whether the hook is unmounted to suppress late state
   // setters from in-flight acquisition promises.
   const unmountedRef = useRef<boolean>(false);
+  // Cloned stream derived from externalAudioStream (so live-AV mute
+  // doesn't bleed into the recording's own tracks).
+  const externalCloneRef = useRef<MediaStream | null>(null);
 
   // ---------------------------------------------------------------
   // Acquisition controls (idempotent)
@@ -467,7 +490,8 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
   const requestMic = useCallback(
     async (): Promise<void> => {
-      if (localAudioStreamRef.current) return; // already acquired
+      if (localAudioStreamRef.current) return; // already acquired (own or external)
+      if (externalAudioStream) return; // external stream will wire via effect
       if (micInFlightRef.current) return micInFlightRef.current;
 
       const getUM = resolveGetUserMedia();
@@ -538,7 +562,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       return inFlight;
       // eslint-disable-next-line react-hooks/exhaustive-deps
     },
-    [audioConstraints]
+    [audioConstraints, externalAudioStream]
   );
 
   const requestCam = useCallback(
@@ -705,12 +729,17 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     return () => {
       unmountedRef.current = true;
       // Stop and release any acquired local streams on unmount so
-      // the OS frees the device.
+      // the OS frees the device. For externalAudioStream clones we
+      // stop the clone tracks (the originals belong to the recorder).
       const aud = localAudioStreamRef.current;
       if (aud) {
+        const isClone = aud === externalCloneRef.current;
         for (const t of aud.getTracks()) {
           try {
-            t.stop();
+            // Only stop self-acquired tracks — cloned tracks share
+            // the hardware source with the recording stream; stopping
+            // them here would stop the recording mic.
+            if (!isClone) t.stop();
           } catch {
             /* ignore */
           }
@@ -726,10 +755,71 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           }
         }
       }
+      externalCloneRef.current = null;
       localAudioStreamRef.current = null;
       localVideoStreamRef.current = null;
     };
   }, []);
+
+  // ---------------------------------------------------------------
+  // Effect: sync externalAudioStream into localAudioStream as clone
+  //
+  // When the workspace recording mic is acquired by useAudioRecorder,
+  // it passes the stream here so useLiveAV can use it for WebRTC
+  // without a second getUserMedia call. We clone so live-AV mute
+  // (track.enabled=false) doesn't bleed into the recording stream.
+  // ---------------------------------------------------------------
+
+  useEffect(() => {
+    if (!externalAudioStream) {
+      // External stream withdrawn — if we were currently using a
+      // clone, clear it. A self-acquired stream (requestMic path) is
+      // left untouched.
+      const clone = externalCloneRef.current;
+      if (clone && localAudioStreamRef.current === clone) {
+        externalCloneRef.current = null;
+        localAudioStreamRef.current = null;
+        if (!unmountedRef.current) setLocalAudioStream(null);
+      }
+      return;
+    }
+
+    // Release any previous stream (self-acquired OR prior clone).
+    const prev = localAudioStreamRef.current;
+    const prevClone = externalCloneRef.current;
+    if (prev && prev !== prevClone) {
+      // Self-acquired — stop its tracks.
+      for (const t of prev.getTracks()) {
+        try {
+          t.stop();
+        } catch {
+          /* ignore */
+        }
+      }
+    } else if (prevClone) {
+      // Prior clone — release it (don't stop — cloned tracks stop
+      // independently but the source track stays live).
+      externalCloneRef.current = null;
+    }
+
+    // Clone: independent enabled state, same hardware source.
+    const clone = new MediaStream(
+      externalAudioStream.getAudioTracks().map((t) => t.clone())
+    );
+    if (isMicMutedRef.current) {
+      for (const t of clone.getAudioTracks()) t.enabled = false;
+    }
+    externalCloneRef.current = clone;
+    localAudioStreamRef.current = clone;
+    if (!unmountedRef.current) {
+      setLocalAudioStream(clone);
+      setHasMicPermission("granted");
+      log.log(
+        `externalAudioStream wired tracks=${clone.getAudioTracks().length}`
+      );
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalAudioStream]);
 
   // ---------------------------------------------------------------
   // Effect: build mesh + signaling, reconcile peers, collect tracks

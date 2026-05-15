@@ -280,6 +280,7 @@ jest.mock("@/hooks/useAudioRecorder", () => {
       elapsed: 0,
       segmentNumber: 1,
       doneSegmentSeconds: 0,
+      localMicStream: null,
       devices: [],
       selectedDeviceId: "",
       gainLinear: 1,

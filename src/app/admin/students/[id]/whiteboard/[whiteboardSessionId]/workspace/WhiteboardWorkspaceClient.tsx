@@ -584,19 +584,102 @@ export function WhiteboardWorkspaceClient({
   }, [peerCount]);
 
   // ---------------------------------------------------------------
+  // Audio recording hook (must come before liveAv so we can pass
+  // localMicStream to useLiveAV to avoid double getUserMedia)
+  // ---------------------------------------------------------------
+
+  /**
+   * Hand `useAudioRecorder` a callback that drops every finished
+   * segment into the IndexedDB outbox. From Commit 4 on, the
+   * workspace doesn't need to track in-flight Promises here — the
+   * outbox owns the segment lifecycle and the audio bridge observes
+   * outbox state directly to drive End-session UI copy.
+   *
+   * The hook already uploaded the Blob to Vercel Blob by the time it
+   * calls us (see `useAudioRecorder.onstop`), so we pass `blobRemoteUrl`
+   * through on enqueue. The local Blob still gets stored in IDB as
+   * the recovery anchor — if the tab refreshes after the outbox row
+   * lands but before End-session, the worker can re-upload from the
+   * persisted Blob rather than losing the segment.
+   */
+  const onWorkspaceAudioRecorded = useCallback(
+    async (
+      audioSeg: {
+        blobUrl: string;
+        mimeType: string;
+        sizeBytes: number;
+        blob?: Blob;
+      },
+      _meta?: { autoRollover?: boolean }
+    ) => {
+      const segmentId =
+        typeof globalThis.crypto?.randomUUID === "function"
+          ? globalThis.crypto.randomUUID()
+          : `seg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      try {
+        const outbox = getOrCreateUploadOutbox();
+        await outbox.enqueue({
+          sessionId: whiteboardSessionId,
+          // Phase 1b hardcodes the tutor mic stream here — Phase 4
+          // will pass `studentMicStreamId(peerId)` for student
+          // capture by mapping over peer connections, not by
+          // adding a new code path.
+          streamId: TUTOR_MIC_STREAM_ID,
+          segmentId,
+          blobLocalRef: audioSeg.blob ?? null,
+          blobRemoteUrl: audioSeg.blobUrl,
+          mimeType: audioSeg.mimeType,
+          sizeBytes: audioSeg.sizeBytes,
+          audioStartedAtMs: Date.now(),
+        });
+      } catch (err) {
+        // Never throw — useAudioRecorder.onRecorded swallows the
+        // return value; surfacing this as a banner would race with
+        // the outbox's own "failed" state. Log + carry on.
+        console.error(
+          `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} outbox.enqueue failed`,
+          err
+        );
+      }
+    },
+    [whiteboardSessionId]
+  );
+
+  const workspaceAudio = useAudioRecorder({
+    studentId,
+    onRecorded: onWorkspaceAudioRecorded,
+    // Seed the displayed recording timer at the session's already-elapsed
+    // time so a page refresh doesn't reset it to 0 while the session
+    // timer stays at e.g. "12:34". Uses the server-truth value from SSR.
+    initialElapsedSeconds: Math.floor(initialActiveMs / 1000),
+  });
+  const workspaceAudioRef = useRef(workspaceAudio);
+  workspaceAudioRef.current = workspaceAudio;
+
+  // ---------------------------------------------------------------
   // Live-A/V hook (Phase 4c)
   // ---------------------------------------------------------------
   //
   // Threads the same `localPeerId` as the sync-client envelope so
   // peer-mesh's polite/impolite role + signaling's targetPeerId demux
   // see one consistent id. The hook is INERT until the
-  // AVPermissionsPrompt below calls `requestMic()` /  `requestCam()`,
-  // so workspace mount alone does NOT prompt the tutor for
-  // microphone / camera access. This is a 4b realignment contract.
+  // AVPermissionsPrompt below calls `requestMic()` / `requestCam()`,
+  // so workspace mount alone does NOT prompt the tutor for camera
+  // access. This is a 4b realignment contract.
+  //
+  // externalAudioStream: we pass the recording's mic stream here so
+  // useLiveAV doesn't call getUserMedia a second time. Two simultaneous
+  // acquisitions from the same hardware mic trigger Chrome's shared
+  // audio-processing pipeline in a way that can suppress the source
+  // signal in BOTH streams via echo-cancellation cross-talk, causing the
+  // tutor's voice to be missing from both the recording and the WebRTC
+  // send. The hook clones the stream so live-AV mute stays independent
+  // of the recording's own track.
   const liveAv = useLiveAV({
     syncClient: sync,
     localPeerId,
     sessionId: whiteboardSessionId,
+    externalAudioStream: workspaceAudio.localMicStream,
   });
 
   // Phase 4c: per-peer "Don't record this student" moderation. State
@@ -748,74 +831,6 @@ export function WhiteboardWorkspaceClient({
     if (typeof window === "undefined") return;
     registerSessionStudentId(whiteboardSessionId, studentId);
   }, [whiteboardSessionId, studentId]);
-
-  /**
-   * Hand `useAudioRecorder` a callback that drops every finished
-   * segment into the IndexedDB outbox. From Commit 4 on, the
-   * workspace doesn't need to track in-flight Promises here — the
-   * outbox owns the segment lifecycle and the audio bridge observes
-   * outbox state directly to drive End-session UI copy.
-   *
-   * The hook already uploaded the Blob to Vercel Blob by the time it
-   * calls us (see `useAudioRecorder.onstop`), so we pass `blobRemoteUrl`
-   * through on enqueue. The local Blob still gets stored in IDB as
-   * the recovery anchor — if the tab refreshes after the outbox row
-   * lands but before End-session, the worker can re-upload from the
-   * persisted Blob rather than losing the segment.
-   */
-  const onWorkspaceAudioRecorded = useCallback(
-    async (
-      audioSeg: {
-        blobUrl: string;
-        mimeType: string;
-        sizeBytes: number;
-        blob?: Blob;
-      },
-      _meta?: { autoRollover?: boolean }
-    ) => {
-      const segmentId =
-        typeof globalThis.crypto?.randomUUID === "function"
-          ? globalThis.crypto.randomUUID()
-          : `seg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-      try {
-        const outbox = getOrCreateUploadOutbox();
-        await outbox.enqueue({
-          sessionId: whiteboardSessionId,
-          // Phase 1b hardcodes the tutor mic stream here — Phase 4
-          // will pass `studentMicStreamId(peerId)` for student
-          // capture by mapping over peer connections, not by
-          // adding a new code path.
-          streamId: TUTOR_MIC_STREAM_ID,
-          segmentId,
-          blobLocalRef: audioSeg.blob ?? null,
-          blobRemoteUrl: audioSeg.blobUrl,
-          mimeType: audioSeg.mimeType,
-          sizeBytes: audioSeg.sizeBytes,
-          audioStartedAtMs: Date.now(),
-        });
-      } catch (err) {
-        // Never throw — useAudioRecorder.onRecorded swallows the
-        // return value; surfacing this as a banner would race with
-        // the outbox's own "failed" state. Log + carry on.
-        console.error(
-          `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} outbox.enqueue failed`,
-          err
-        );
-      }
-    },
-    [whiteboardSessionId]
-  );
-
-  const workspaceAudio = useAudioRecorder({
-    studentId,
-    onRecorded: onWorkspaceAudioRecorded,
-    // Seed the displayed recording timer at the session's already-elapsed
-    // time so a page refresh doesn't reset it to 0 while the session
-    // timer stays at e.g. "12:34". Uses the server-truth value from SSR.
-    initialElapsedSeconds: Math.floor(initialActiveMs / 1000),
-  });
-  const workspaceAudioRef = useRef(workspaceAudio);
-  workspaceAudioRef.current = workspaceAudio;
 
   const getAudioMs = useAudioMsClock(recordingActive);
 
