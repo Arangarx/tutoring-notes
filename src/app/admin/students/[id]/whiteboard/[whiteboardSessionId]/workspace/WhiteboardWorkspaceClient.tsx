@@ -60,6 +60,12 @@ import {
   TUTOR_MIC_STREAM_ID,
   type StreamHealth,
 } from "@/lib/recording/lifecycle-machine";
+import { useLiveAV } from "@/hooks/useLiveAV";
+import { useRemoteMicRecorders } from "@/hooks/useRemoteMicRecorders";
+import { studentMicStreamId } from "@/lib/recording/remote-stream-recorder";
+import { AVPermissionsPrompt } from "@/components/av/AVPermissionsPrompt";
+import { AVTilesPanel } from "@/components/av/AVTilesPanel";
+import { AVControls } from "@/components/av/AVControls";
 import {
   useWhiteboardRecorder,
   type ResumeResult,
@@ -255,6 +261,38 @@ export function WhiteboardWorkspaceClient({
   const syncClientRef = useRef<WhiteboardSyncClient | null>(null);
   const [syncReady, setSyncReady] = useState(false);
 
+  // ---------------------------------------------------------------
+  // Live-A/V peer-id minting (Phase 4c)
+  // ---------------------------------------------------------------
+  //
+  // ONE stable peer id per workspace mount. We thread it to BOTH
+  // `createWhiteboardSyncClient({peerId})` AND `useLiveAV({localPeerId})`
+  // so the sync-client wire envelopes carry the SAME peerId that
+  // peer-mesh + signaling use for polite/impolite role + targetPeerId
+  // demux. Resolves the open scoping question from PHASE-4B-STATUS:
+  // we mint here (workspace = single source of truth) rather than
+  // having sync-client expose its own minted id.
+  //
+  // `useMemo([])` is stable across renders within the same React
+  // component instance. HMR remounts produce a new id along with a
+  // new sync-client; both layers agree.
+  const localPeerId = useMemo(() => {
+    if (
+      typeof globalThis.crypto !== "undefined" &&
+      typeof globalThis.crypto.randomUUID === "function"
+    ) {
+      return globalThis.crypto.randomUUID();
+    }
+    return `tutor-${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+  }, []);
+  // Display label for the tutor's own presence frame. Server-side
+  // doesn't pass the tutor's display name through props today; fall
+  // back to "Tutor" so we don't block hook usage on the label being
+  // present. Future polish: thread `adminUser.displayName` here.
+  const localPeerLabel: string | undefined = "Tutor";
+
   // Captured from Excalidraw's `excalidrawAPI` callback — the toolbar
   // buttons (Insert PDF/image, etc.) call into this for scene mutation.
   // Stored in state (not just a ref) so children re-render when it
@@ -402,6 +440,11 @@ export function WhiteboardWorkspaceClient({
       roomId: whiteboardSessionId,
       encryptionKeyBase64Url: encryptionKey,
       role: "tutor",
+      // Phase 4c: same peerId is threaded into useLiveAV() below so
+      // the presence + signaling envelopes match the mesh's
+      // polite/impolite role assignment.
+      peerId: localPeerId,
+      localPeerLabel,
       onNewRemotePeer: () => {
         void tutorResyncOnNewRemotePeerRef.current();
       },
@@ -413,7 +456,13 @@ export function WhiteboardWorkspaceClient({
       syncClientRef.current = null;
       setSyncReady(false);
     };
-  }, [encryptionKey, syncUrl, whiteboardSessionId]);
+  }, [
+    encryptionKey,
+    syncUrl,
+    whiteboardSessionId,
+    localPeerId,
+    localPeerLabel,
+  ]);
 
   // ---------------------------------------------------------------
   // Recording lifecycle (audio + whiteboard composed)
@@ -534,12 +583,128 @@ export function WhiteboardWorkspaceClient({
     return ids;
   }, [peerCount]);
 
+  // ---------------------------------------------------------------
+  // Live-A/V hook (Phase 4c)
+  // ---------------------------------------------------------------
+  //
+  // Threads the same `localPeerId` as the sync-client envelope so
+  // peer-mesh's polite/impolite role + signaling's targetPeerId demux
+  // see one consistent id. The hook is INERT until the
+  // AVPermissionsPrompt below calls `requestMic()` /  `requestCam()`,
+  // so workspace mount alone does NOT prompt the tutor for
+  // microphone / camera access. This is a 4b realignment contract.
+  const liveAv = useLiveAV({
+    syncClient: sync,
+    localPeerId,
+    sessionId: whiteboardSessionId,
+  });
+
+  // Phase 4c: per-peer "Don't record this student" moderation. State
+  // is host-owned (workspace) so the recorder hook stays pure. Wire-
+  // level mute (asking the remote peer to actually stop transmitting)
+  // stays post-v1 and out of scope.
+  const [mutedPeerIdsInRecording, setMutedPeerIdsInRecording] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
+  const handleToggleParticipantMod = useCallback(
+    (peerId: string, nextMutedInRecording: boolean) => {
+      setMutedPeerIdsInRecording((prev) => {
+        const next = new Set(prev);
+        if (nextMutedInRecording) next.add(peerId);
+        else next.delete(peerId);
+        console.log(
+          `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} avx=${whiteboardSessionId} peer=${peerId} moderation=${
+            nextMutedInRecording ? "muted-in-recording" : "unmuted"
+          }`
+        );
+        return next;
+      });
+    },
+    [whiteboardSessionId]
+  );
+
+  // Phase 4c: sync-reconnect → mesh.restart(peerId) for each current
+  // peer (the 4b deferral). Sync-client reconnects automatically on
+  // socket-level disconnects; peer-mesh's auto-restart only fires on
+  // ICE-failed (longer timeout). Restarting on sync re-connect
+  // recovers in-flight negotiations that lost their SDP mid-flight.
+  //
+  // We track "saw a disconnect since the last connect" rather than
+  // raw connected state because the FIRST `onConnect` after mount
+  // is the natural socket handshake — peer-mesh is being set up for
+  // the first time and there's no prior in-flight negotiation to
+  // recover. Only the disconnect→reconnect transition needs
+  // mesh.restart.
+  const sawDisconnectSinceLastConnectRef = useRef(false);
+  useEffect(() => {
+    if (!sync) {
+      sawDisconnectSinceLastConnectRef.current = false;
+      return;
+    }
+    const offConnect = sync.onConnect(() => {
+      const shouldRestart = sawDisconnectSinceLastConnectRef.current;
+      sawDisconnectSinceLastConnectRef.current = false;
+      if (!shouldRestart) return;
+      const current = liveAv.participants;
+      if (current.length === 0) return;
+      console.log(
+        `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} avx=${whiteboardSessionId} sync-reconnect peers=${current.length}`
+      );
+      for (const p of current) {
+        try {
+          liveAv.reconnectPeer(p.peerId);
+        } catch (err) {
+          console.warn(
+            `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} mesh.restart threw peer=${p.peerId}`,
+            err
+          );
+        }
+      }
+    });
+    const offDisconnect = sync.onDisconnect(() => {
+      sawDisconnectSinceLastConnectRef.current = true;
+    });
+    return () => {
+      offConnect();
+      offDisconnect();
+    };
+  }, [sync, liveAv, whiteboardSessionId]);
+
   const lifecycleInputStreams = useMemo<
     ReadonlyMap<string, StreamHealth>
   >(() => {
-    if (!userWantsRecording) return new Map();
-    return new Map<string, StreamHealth>([[TUTOR_MIC_STREAM_ID, "ok"]]);
-  }, [userWantsRecording]);
+    const map = new Map<string, StreamHealth>();
+    if (userWantsRecording) {
+      map.set(TUTOR_MIC_STREAM_ID, "ok");
+    }
+    // Phase 4c: one input-stream entry per live participant audio
+    // stream. The FSM's `shouldCapture(streamId)` predicate is what
+    // each `remote-stream-recorder` reads to decide start/stop, so
+    // the recording state and the live-A/V state stay coupled
+    // through one decision point.
+    for (const p of liveAv.participants) {
+      if (!p.audioStream) continue;
+      let health: StreamHealth;
+      switch (p.peerConnectionState) {
+        case "connected":
+          health = "ok";
+          break;
+        case "new":
+        case "connecting":
+        case "disconnected":
+          health = "degraded";
+          break;
+        case "failed":
+        case "closed":
+          health = "failed";
+          break;
+        default:
+          health = "degraded";
+      }
+      map.set(studentMicStreamId(p.peerId), health);
+    }
+    return map;
+  }, [userWantsRecording, liveAv.participants]);
 
   const lifecycle = evaluateLifecycle({
     tutorWantsRecording: userWantsRecording,
@@ -559,6 +724,19 @@ export function WhiteboardWorkspaceClient({
     syncEnabled: !!syncUrl,
   });
   const recordingActive = presence.recordingActive;
+
+  // Phase 4c: per-participant remote-mic recorder lifecycle. The
+  // host orchestrator pattern from `remote-stream-recorder.ts` —
+  // start/stop is gated by `lifecycle.shouldCapture(streamId)` AND
+  // the tutor's per-peer moderation override. The hook itself owns
+  // the recorder map + dispose-on-unmount.
+  useRemoteMicRecorders({
+    participants: liveAv.participants,
+    sessionId: whiteboardSessionId,
+    shouldCapture: lifecycle.shouldCapture,
+    mutedPeerIdsInRecording,
+    outbox: getOrCreateUploadOutbox(),
+  });
 
   /**
    * Register (sessionId, studentId) with the outbox so the production
@@ -1658,6 +1836,56 @@ export function WhiteboardWorkspaceClient({
         recordingActive={recordingActive}
         panelDisabled={endingBusy || !userWantsRecording}
       />
+      {/* Phase 4c — live A/V surface */}
+      <AVPermissionsPrompt
+        hasMicPermission={liveAv.hasMicPermission}
+        hasCamPermission={liveAv.hasCamPermission}
+        hasMicStream={liveAv.localAudioStream !== null}
+        hasCamStream={liveAv.localVideoStream !== null}
+        error={liveAv.error}
+        videoError={liveAv.videoError}
+        requestMic={liveAv.requestMic}
+        requestCam={liveAv.requestCam}
+      />
+      <div
+        className="row"
+        data-testid="wb-tutor-av-row"
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "flex-start",
+          gap: 12,
+        }}
+      >
+        <AVTilesPanel
+          participants={liveAv.participants}
+          localTile={{
+            peerId: localPeerId,
+            role: "tutor",
+            label: localPeerLabel,
+            audioStream: liveAv.localAudioStream,
+            videoStream: liveAv.localVideoStream,
+            isMicMuted: liveAv.isMicMuted,
+            isCamMuted: liveAv.isCamMuted,
+          }}
+        />
+        <AVControls
+          isMicMuted={liveAv.isMicMuted}
+          isCamMuted={liveAv.isCamMuted}
+          toggleMic={liveAv.toggleMic}
+          toggleCam={liveAv.toggleCam}
+          disabled={endingBusy}
+          moderation={
+            liveAv.participants.length > 0
+              ? {
+                  participants: liveAv.participants,
+                  mutedPeerIds: mutedPeerIdsInRecording,
+                  onTogglePeer: handleToggleParticipantMod,
+                }
+              : undefined
+          }
+        />
+      </div>
       {/* Board pages — own row so it isn’t buried in the recording/toolbar cluster */}
       <div
         className="card"
