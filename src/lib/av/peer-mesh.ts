@@ -201,6 +201,13 @@ function candidateToInit(
   candidate: RTCIceCandidate | null
 ): RTCIceCandidateInit | null {
   if (candidate === null) return null;
+  // Some browsers emit `{ candidate: "" }` as the end-of-candidates
+  // sentinel instead of a true `null`. Normalize at the wire boundary
+  // so the receiver never has to special-case it (and so a peer on a
+  // newer client speaking to a peer on an older one still works).
+  if (typeof candidate.candidate === "string" && candidate.candidate.length === 0) {
+    return null;
+  }
   // Modern API exposes .toJSON(); we never assume it because the
   // test double does not implement it. Hand-extract instead.
   return {
@@ -502,16 +509,57 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
         // both work in modern browsers; the empty-init form is the
         // most portable.
         await entry.pc.addIceCandidate();
-      } else {
-        await entry.pc.addIceCandidate(candidate);
+        return;
       }
+      // Treat empty-string candidate as end-of-candidates sentinel.
+      // Some browsers emit `{ candidate: "" }` instead of `null` from
+      // their `onicecandidate` event; passing that empty string to
+      // `addIceCandidate` causes "Error processing ICE candidate" on
+      // Chrome. Normalize here.
+      if (
+        typeof candidate.candidate === "string" &&
+        candidate.candidate.length === 0
+      ) {
+        log.log(
+          `peer=${entry.remotePeerId} event=ice-end-of-candidates-empty-string-normalized`
+        );
+        await entry.pc.addIceCandidate();
+        return;
+      }
+      await entry.pc.addIceCandidate(candidate);
     } catch (err) {
       if (!entry.ignoreOffer) {
         // Ignore-offer is the perfect-negotiation flag for "I'm
         // dropping this peer's offer due to glare-impolite"; ICE
         // failures during that window are expected and silent.
+        //
+        // Include diagnostic fields so we can tell apart different
+        // failure modes (malformed candidate, m-line mismatch, PC
+        // in wrong state, etc.) without re-deploying.
+        const reason = (err as Error)?.message ?? String(err);
+        const sdpMidStr =
+          candidate === null
+            ? "<eoc>"
+            : candidate.sdpMid === null || candidate.sdpMid === undefined
+              ? "null"
+              : `'${candidate.sdpMid}'`;
+        const sdpMLineIndexStr =
+          candidate === null
+            ? "<eoc>"
+            : candidate.sdpMLineIndex === null || candidate.sdpMLineIndex === undefined
+              ? "null"
+              : String(candidate.sdpMLineIndex);
+        const candidateStr =
+          candidate === null
+            ? "<eoc>"
+            : (candidate.candidate ?? "<missing>").slice(0, 80);
         log.warn(
-          `peer=${entry.remotePeerId} event=ice-apply-fail reason=${(err as Error)?.message ?? String(err)}`
+          `peer=${entry.remotePeerId} event=ice-apply-fail reason=${reason}` +
+            ` sdpMid=${sdpMidStr} sdpMLineIndex=${sdpMLineIndexStr}` +
+            ` signalingState=${entry.pc.signalingState}` +
+            ` iceConnectionState=${entry.pc.iceConnectionState}` +
+            ` hasRemoteDescription=${entry.hasRemoteDescription}` +
+            ` candidate='${candidateStr}'`
         );
       }
     }

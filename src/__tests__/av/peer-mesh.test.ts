@@ -678,6 +678,68 @@ describe("createPeerMesh — ICE trickle queuing", () => {
     expect(pc.iceApplied).toEqual([]);
     m.dispose();
   });
+
+  test("sender normalizes empty-string-candidate emitted by onicecandidate to null on the wire", async () => {
+    // Defense-in-depth pair to the receiver-side normalization: if a
+    // browser fires `pc.onicecandidate` with `{ candidate: "" }`
+    // instead of `null`, peer-mesh must NOT forward an empty-string
+    // candidate over the wire — older clients (or strict browsers on
+    // the other side) would reject it. The wire should carry `null`.
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+    });
+    m.addPeer("B");
+    const pc = instances[0]!;
+
+    const emptyStringCandidate = {
+      candidate: "",
+      sdpMid: null,
+      sdpMLineIndex: null,
+      usernameFragment: null,
+    } as unknown as RTCIceCandidate;
+    pc.triggerIce(emptyStringCandidate);
+
+    const lastIce = [...sig.sends].reverse().find((s) => s.kind === "ice");
+    expect(lastIce).toEqual({ kind: "ice", targetPeerId: "B", candidate: null });
+    m.dispose();
+  });
+
+  test("empty-string-candidate sentinel is normalized to null (Chrome compat)", async () => {
+    // Some browsers emit `{ candidate: "" }` instead of `null` as the
+    // end-of-candidates sentinel. Passing the empty string straight
+    // to Chrome's `addIceCandidate` throws "Error processing ICE
+    // candidate" — peer-mesh must normalize it back to null so the
+    // call becomes a no-op.
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+    });
+    m.addPeer("B");
+    const pc = instances[0]!;
+
+    sig.inject("B", { type: "offer", sdp: "remote-offer" });
+    await flush();
+
+    sig.inject("B", {
+      type: "ice",
+      candidate: { candidate: "", sdpMid: null, sdpMLineIndex: null },
+    });
+    await flush();
+
+    // The fake PC records null for the end-of-candidates path, so
+    // the normalized empty-string candidate should land as null
+    // alongside any earlier real candidates (there are none in this
+    // test).
+    expect(pc.iceApplied).toEqual([null]);
+    m.dispose();
+  });
 });
 
 // =================================================================
