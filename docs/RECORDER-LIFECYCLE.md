@@ -351,12 +351,14 @@ explicit precedence, add tests in
 `src/__tests__/recording/lifecycle-machine.test.ts`. Then thread the
 input from the host. Do NOT introduce side effects in the FSM.
 
-**Q: Where do I see the rid / wbsid / obx / pvw / snp prefixes
+**Q: Where do I see the rid / wbsid / obx / pvw / snp / avx prefixes
 documented?**
 A: AGENTS.md "Per-session ID logging is mandatory." section. The
 3-letter prefixes used in this stack are `wbsid` (whiteboard
 session id), `obx` (outbox row), `snp` (snapshot generation),
-`pvw` (preview-before-start), `rid` (audio recorder), and the
+`pvw` (preview-before-start), `rid` (audio recorder), `avx`
+(live-A/V session — Phase 4a `peer-mesh.ts` + `signaling.ts`; per-peer
+events also carry a `peer=<remotePeerId>` subkey), and the
 component-specific ones in `useAudioRecorder` (`aud=`).
 
 ---
