@@ -198,6 +198,12 @@ describe("whiteboardSyncOrigins — input shapes", () => {
  *   trust model.
  *
  *   Geolocation is `()` everywhere; nothing in the app uses it.
+ *
+ *   Do NOT add a second `Permissions-Policy` header in `next.config.ts`
+ *   (or Vercel project settings): the browser merges multiple policy
+ *   headers and can leave `camera` blocked on the workspace even when
+ *   middleware emits `camera=(self)` for that pathname. The middleware
+ *   emitter (`buildPermissionsPolicy`) is the single source of truth.
  */
 describe("buildPermissionsPolicy — workspace + student-join widening (Phase 4c)", () => {
   function parsePolicy(value: string): Record<string, string> {

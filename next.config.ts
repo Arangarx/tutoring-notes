@@ -112,10 +112,14 @@ const nextConfig: NextConfig = {
       {
         source: "/(.*)",
         headers: [
-          {
-            key: "Permissions-Policy",
-            value: "microphone=(self)",
-          },
+          // Permissions-Policy is NOT set here — it must come only from
+          // `src/middleware.ts` via `buildPermissionsPolicy(pathname)` so
+          // workspace + student-join routes can widen `camera=(self)` while
+          // other routes stay tight. A second Permissions-Policy header from
+          // this config merges with middleware in the browser and can block
+          // camera on the workspace (Chromium: "camera is not allowed in
+          // this document") even when middleware already emitted the wide
+          // policy. Phase 4c fix — May 2026.
           {
             key: "Content-Security-Policy",
             value: CONTENT_SECURITY_POLICY,
