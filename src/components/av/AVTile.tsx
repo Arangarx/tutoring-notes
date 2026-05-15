@@ -33,7 +33,7 @@
  * which is the cheapest update path.
  */
 
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AvParticipant } from "@/hooks/useLiveAV";
 
@@ -113,6 +113,18 @@ export function AVTile({
 }: AVTileProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  /**
+   * True when the browser refused to autoplay the remote audio
+   * element. iOS Safari and Chrome Android frequently block
+   * `<audio autoPlay>` for inbound remote streams even after the
+   * user has tapped "Allow mic" on the same page — the gesture
+   * token is per-element on some implementations, and the audio
+   * element is created AFTER the gesture by React. We surface a
+   * one-tap "Tap to hear audio" overlay so the student can recover
+   * without us having to add a global "click anywhere to enable
+   * audio" interstitial.
+   */
+  const [audioBlocked, setAudioBlocked] = useState(false);
 
   // Assign srcObject via effect — see top-of-file note.
   useEffect(() => {
@@ -125,7 +137,54 @@ export function AVTile({
     const el = audioRef.current;
     if (!el) return;
     el.srcObject = participant.audioStream ?? null;
-  }, [participant.audioStream]);
+    setAudioBlocked(false);
+    if (!participant.audioStream) return;
+    // Explicit play() in addition to the autoPlay attribute. Mobile
+    // browsers ignore autoPlay for non-muted media even with a prior
+    // user gesture in many cases; calling play() returns a promise
+    // we can catch on rejection and surface an unblock UI.
+    const playPromise =
+      typeof el.play === "function"
+        ? (el.play() as Promise<void> | undefined)
+        : undefined;
+    if (playPromise && typeof playPromise.catch === "function") {
+      playPromise.catch((err) => {
+        // NotAllowedError / AbortError are the autoplay-block cases;
+        // log so the tutor can see in the student's mobile console
+        // why the audio is silent.
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[av-tile] peer=${participant.peerId} audio autoplay blocked: ${
+            (err as Error)?.name ?? "?"
+          }: ${(err as Error)?.message ?? String(err)}`
+        );
+        setAudioBlocked(true);
+      });
+    }
+  }, [participant.audioStream, participant.peerId]);
+
+  const handleTapToHear = useCallback(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    const playPromise =
+      typeof el.play === "function"
+        ? (el.play() as Promise<void> | undefined)
+        : undefined;
+    if (playPromise && typeof playPromise.then === "function") {
+      playPromise
+        .then(() => setAudioBlocked(false))
+        .catch((err) => {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[av-tile] peer=${participant.peerId} audio tap-to-hear still blocked: ${
+              (err as Error)?.name ?? "?"
+            }: ${(err as Error)?.message ?? String(err)}`
+          );
+        });
+    } else {
+      setAudioBlocked(false);
+    }
+  }, [participant.peerId]);
 
   const isLocalTile = isLocal === true || participant.isLocal === true;
 
@@ -238,6 +297,30 @@ export function AVTile({
             data-testid={`av-tile-audio-${participant.peerId}`}
             style={{ display: "none" }}
           />
+        )}
+        {!isLocalTile && audioBlocked && (
+          <button
+            type="button"
+            data-testid={`av-tile-audio-unblock-${participant.peerId}`}
+            onClick={handleTapToHear}
+            style={{
+              position: "absolute",
+              inset: 0,
+              border: 0,
+              background: "rgba(15,23,42,0.78)",
+              color: "white",
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+              padding: "0 8px",
+              textAlign: "center",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            Tap to hear audio
+          </button>
         )}
         {isLocalTile && localMicMuted === true && (
           <span

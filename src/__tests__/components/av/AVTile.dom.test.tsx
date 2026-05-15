@@ -3,7 +3,7 @@
  */
 
 import React from "react";
-import { render, cleanup, screen } from "@testing-library/react";
+import { render, cleanup, screen, waitFor } from "@testing-library/react";
 
 import { AVTile, type AVTileProps } from "@/components/av/AVTile";
 import type { AvParticipant } from "@/hooks/useLiveAV";
@@ -180,6 +180,45 @@ describe("AVTile — remote participant", () => {
     expect(root.getAttribute("data-peer-id")).toBe("p-attrs");
     expect(root.getAttribute("data-role")).toBe("student");
     expect(root.getAttribute("data-is-local")).toBe("false");
+  });
+
+  test("when remote <audio> autoplay is blocked, shows a tap-to-hear overlay; tapping retries play()", async () => {
+    // Simulate the iOS Safari / Chrome Android case where the
+    // browser refuses to autoplay the remote audio element even
+    // though the user has previously granted mic permission.
+    // First play() rejects with NotAllowedError; the overlay should
+    // appear. A click on the overlay should retry play() — this time
+    // we resolve, and the overlay disappears.
+    const playMock = jest
+      .fn<Promise<void>, []>()
+      .mockRejectedValueOnce(
+        Object.assign(new Error("autoplay blocked"), { name: "NotAllowedError" })
+      )
+      .mockResolvedValueOnce(undefined);
+    const originalPlay = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = playMock;
+    // Silence the console.warn from the AVTile autoplay-block log line.
+    const originalWarn = console.warn;
+    console.warn = jest.fn();
+    try {
+      const p = makeRemoteParticipant({ peerId: "p-block" });
+      render(<AVTile participant={p} />);
+      const btn = (await waitFor(() =>
+        screen.getByTestId("av-tile-audio-unblock-p-block")
+      )) as HTMLButtonElement;
+      expect(btn.textContent).toMatch(/tap to hear/i);
+
+      btn.click();
+      await waitFor(() =>
+        expect(
+          screen.queryByTestId("av-tile-audio-unblock-p-block")
+        ).toBeNull()
+      );
+      expect(playMock).toHaveBeenCalledTimes(2);
+    } finally {
+      HTMLMediaElement.prototype.play = originalPlay;
+      console.warn = originalWarn;
+    }
   });
 });
 
