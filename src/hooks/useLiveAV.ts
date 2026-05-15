@@ -1,23 +1,27 @@
 "use client";
 
 /**
- * Live-A/V session hook — Phase 4b.
+ * Live-A/V session hook — Phase 4b (post-realignment).
  *
  * Orchestrates the three pure-JS modules from Phase 4a (sync-client
  * presence channel + signaling muxer + peer-mesh) into a React
- * lifecycle:
+ * lifecycle. Final 4b contract — supersedes the auto-acquire shape
+ * from commits 7fb9d65 / 7ff7a04. See `docs/PHASE-4B-STATUS.md`.
  *
- *   1. Acquire the local microphone via `getUserMedia`.
- *   2. Construct a single `signaling` + `peerMesh` per session
- *      (re-built when sync-client or stream change).
- *   3. Track room membership via `syncClient.onRoomPeersChange` and
- *      call `mesh.addPeer` / `mesh.removePeer` accordingly. peer-mesh
- *      then handles WebRTC negotiation; this hook is purely the
- *      glue + React state.
- *   4. Collect inbound remote audio tracks into a per-peer
- *      `MediaStream` so callers can wire them into `<audio
- *      autoplay>` (Phase 4c UI) or a `MediaRecorder` for the upload
- *      outbox (Phase 4b commit 4).
+ * Acquisition contract:
+ *   - The hook is INERT on mount. It does NOT call `getUserMedia`.
+ *   - Mic is acquired via `requestMic(): Promise<void>`; camera via
+ *     `requestCam(): Promise<void>`. The two requests are
+ *     independent — Phase 4d's graceful-degradation paths
+ *     (mic-granted-cam-denied, etc.) depend on this.
+ *   - `hasMicPermission` / `hasCamPermission` are populated via
+ *     `navigator.permissions.query()` on mount where supported, so
+ *     the host UI can decide whether to show the request modal
+ *     without prompting.
+ *   - Once `localAudioStream` is non-null AND `syncClient` is
+ *     non-null, the mesh + signaling are built and the hook starts
+ *     reconciling room peers, collecting remote tracks, and tracking
+ *     per-peer connection state.
  *
  * Pillar invariants reused from 4a:
  *   - Encrypted-transport trust model is preserved: this hook only
@@ -25,26 +29,22 @@
  *     already see in 4a.
  *   - peer-mesh stays pure-JS (no DOM); this hook owns every
  *     `navigator.mediaDevices` interaction.
- *   - Multi-participant from day one: `participants` is an
- *     array indexed by peerId, not a single "remote" slot. 1:1
- *     tutoring is `participants.length === 1`.
+ *   - Multi-participant from day one: `participants` is an array
+ *     indexed by peerId, sorted lexicographically. 1:1 tutoring is
+ *     `participants.length === 1`.
  *
- * Camera support (Phase 4b commit 3): opt-in via `cameraEnabled`.
- * Acquisition is two-step (audio first, video second) so a missing
- * camera does not block the mic — the hook stays active with
- * audio-only and surfaces `videoError` separately. `getLocalTracks`
- * reads both refs on every `addPeer`, so toggling camera before
- * peers connect transparently lights up video for the new peers;
- * toggling AFTER existing peers connected only flips the per-track
- * `.enabled` flag (the spec-correct way to "pause" without
- * re-negotiating). Adding/removing tracks on existing PCs is a
- * peer-mesh API extension reserved for Phase 4d.
+ * Cam-after-mic mid-session: peer-mesh's `getLocalTracks` callback
+ * is invoked at `addPeer` time, so toggling camera BEFORE peers
+ * connect transparently lights up video. Toggling AFTER existing
+ * peers connected only flips local `.enabled` flags — adding new
+ * tracks to existing PCs would require renegotiation, which 4b
+ * intentionally does not implement (orchestrator decision; 4c's
+ * permissions UI is expected to grant both up front).
  *
- * Recording integration is deferred to Phase 4b commit 4
- * (`remote-stream-recorder.ts`). That module consumes
- * `participants[i].audioStream` and feeds it into the upload outbox
- * via the existing per-stream `streamId: "student:peer-<id>:mic"`
- * convention.
+ * Recording integration is provided by `remote-stream-recorder.ts`
+ * (Phase 4b commit 4), which consumes `participants[i].audioStream`
+ * and feeds it into the upload outbox via
+ * `streamId: "student:peer-<id>:mic"`.
  *
  * Tests: `src/__tests__/dom/useLiveAV.dom.test.tsx`.
  */
@@ -100,7 +100,7 @@ export type AvParticipant = {
   peerConnectionState: RTCPeerConnectionState;
   /**
    * Latest `RTCPeerConnection.iceConnectionState`. Surfaced
-   * separately because Phase 4c will distinguish "disconnected"
+   * separately because Phase 4d will distinguish "disconnected"
    * (peer paused, recoverable) from "failed" (unrecoverable) for UI
    * copy and the auto-pause banner.
    */
@@ -119,11 +119,41 @@ export type AvAcquireError =
   | { type: "browser-unsupported"; message: string; raw: unknown }
   | { type: "unknown"; message: string; raw: unknown };
 
+/**
+ * Browser Permissions API status, with `"unknown"` for browsers
+ * that don't expose `navigator.permissions` or that throw on the
+ * `"camera"` descriptor (Safari).
+ */
+export type AvPermissionState = "unknown" | "prompt" | "granted" | "denied";
+
+/**
+ * Minimal `PermissionStatus` surface this hook touches. Real
+ * browser type is `PermissionStatus`; we narrow to the methods we
+ * actually use so the test fake can be small and the hook stays
+ * resilient to browsers that omit `addEventListener` in favor of
+ * the legacy `onchange` property.
+ */
+type PermissionStatusLike = {
+  state: "granted" | "prompt" | "denied";
+  addEventListener?: (name: "change", cb: () => void) => void;
+  removeEventListener?: (name: "change", cb: () => void) => void;
+  onchange?: ((this: unknown, ev: Event) => unknown) | null;
+};
+
+/**
+ * Minimal `Permissions` surface. Real type is `navigator.permissions`.
+ */
+type PermissionsLike = {
+  query: (desc: { name: string }) => Promise<PermissionStatusLike>;
+};
+
 export type UseLiveAVOptions = {
   /**
    * Sync-client instance shared with the whiteboard layer. May be
    * `null` while the workspace is in tutor-solo mode (no
-   * `WHITEBOARD_SYNC_URL`). When null, the hook stays fully inert.
+   * `WHITEBOARD_SYNC_URL`). When null, mesh/signaling stay torn
+   * down and `participants` is empty; the local mic streams can
+   * still be acquired (for tutor-solo recording).
    */
   syncClient: WhiteboardSyncClient | null;
   /**
@@ -141,50 +171,29 @@ export type UseLiveAVOptions = {
    */
   sessionId?: string;
   /**
-   * When false the hook does not call `getUserMedia` and does not
-   * build a mesh — everything stays in the inert "off" state.
-   * Defaults to true. Phase 4d will tie this to a tutor-side
-   * "enable live audio" toggle and to permission state.
-   */
-  enabled?: boolean;
-  /**
    * Optional MediaTrackConstraints for the local mic. Defaults to
-   * `{ audio: true }`. Pass a deviceId here once the workspace
-   * exposes a mic-picker control.
+   * `true`. Pass a deviceId here once the workspace exposes a
+   * mic-picker control.
    */
   audioConstraints?: MediaTrackConstraints | boolean;
   /**
-   * Enable the local camera. Defaults to false (audio-only, Sarah-
-   * pilot default). When true, the hook makes a SECOND
-   * `getUserMedia` call after audio acquires; failure of that
-   * second call surfaces as {@link UseLiveAVReturn.videoError}
-   * without invalidating the live audio session. Wire this to a
-   * tutor-side toggle in Phase 4c.
-   */
-  cameraEnabled?: boolean;
-  /**
-   * Optional MediaTrackConstraints for the local camera. Ignored
-   * when `cameraEnabled` is false. Defaults to `true` (let the
-   * browser pick reasonable defaults).
+   * Optional MediaTrackConstraints for the local camera. Defaults
+   * to `true`.
    */
   videoConstraints?: MediaTrackConstraints | boolean;
-  /**
-   * Test-only override of `navigator.mediaDevices.getUserMedia`.
-   * Production omits.
-   */
+  /** Test-only override of `navigator.mediaDevices.getUserMedia`. */
   _getUserMedia?: (
     constraints: MediaStreamConstraints
   ) => Promise<MediaStream>;
-  /**
-   * Test-only factory override of `createPeerMesh`. Production
-   * omits.
-   */
+  /** Test-only factory override of `createPeerMesh`. */
   _createPeerMesh?: (opts: PeerMeshOptions) => PeerMesh;
-  /**
-   * Test-only factory override of `createSignaling`. Production
-   * omits.
-   */
+  /** Test-only factory override of `createSignaling`. */
   _createSignaling?: (opts: SignalingOptions) => Signaling;
+  /**
+   * Test-only override of `navigator.permissions`. Pass `null` to
+   * simulate browsers without the Permissions API.
+   */
+  _permissions?: PermissionsLike | null;
   /**
    * Optional logger override. Defaults to `console` with an
    * `avx=<sessionId>` prefix mirroring 4a's logging contract.
@@ -198,23 +207,77 @@ export type UseLiveAVOptions = {
 
 export type UseLiveAVReturn = {
   /**
-   * Local mic stream. Null while acquiring, or while errored, or
-   * when `enabled === false`.
+   * Sorted (peerId ascending) list of remote participants. EXCLUDES
+   * self. Empty when sync-client is null, no presence frames have
+   * arrived, or mic hasn't been acquired.
    */
+  participants: ReadonlyArray<AvParticipant>;
+  /** Local mic stream. Null until `requestMic()` succeeds. */
   localAudioStream: MediaStream | null;
-  /**
-   * Local camera stream. Null when `cameraEnabled === false`, while
-   * the video step is acquiring, or when video acquisition failed
-   * (see {@link videoError}). Audio is acquired first; this stream
-   * may resolve a few ticks after `localAudioStream`.
-   */
+  /** Local camera stream. Null until `requestCam()` succeeds. */
   localVideoStream: MediaStream | null;
   /**
-   * True while either `getUserMedia` call is in flight (audio +
-   * optional video). Flips false once acquisition has settled —
-   * even if video failed.
+   * True iff the local mic is muted (`track.enabled === false` on
+   * every local audio track). Mute is local-only — wire-level mute
+   * is post-v1.
+   */
+  isMicMuted: boolean;
+  /**
+   * True iff the local camera is muted (`track.enabled === false`
+   * on every local video track). When no video tracks are acquired
+   * (cam never requested or `videoError` set), defaults to true so
+   * UI placeholders render correctly.
+   */
+  isCamMuted: boolean;
+  /** Flip the mute state of every local audio track. */
+  toggleMic: () => void;
+  /**
+   * Flip the camera-mute state. Applies the new state to any
+   * already-acquired video tracks AND is honored by tracks acquired
+   * later (e.g. `requestCam()` called after `toggleCam` flipped
+   * `isCamMuted=true` lands disabled tracks).
+   */
+  toggleCam: () => void;
+  /**
+   * Permissions API state for the microphone, or `"unknown"` if the
+   * browser doesn't expose `navigator.permissions` or threw on the
+   * query. Updates live via `PermissionStatus.onchange` where
+   * supported.
+   */
+  hasMicPermission: AvPermissionState;
+  /**
+   * Permissions API state for the camera. Safari throws on
+   * `navigator.permissions.query({ name: "camera" })` — that case
+   * surfaces as `"unknown"`.
+   */
+  hasCamPermission: AvPermissionState;
+  /**
+   * Request mic access via `getUserMedia({ audio: true })`. On
+   * success, populates `localAudioStream` and (if the mesh + sync
+   * client are also ready) builds the mesh. On error, populates
+   * `error` and updates `hasMicPermission` to `"denied"` for
+   * `NotAllowedError`. Idempotent — calling while a request is in
+   * flight returns the in-flight promise; calling once a stream is
+   * acquired resolves immediately.
+   */
+  requestMic: () => Promise<void>;
+  /**
+   * Request camera access via `getUserMedia({ video: true })`. On
+   * success, populates `localVideoStream`. On error, populates
+   * `videoError` and updates `hasCamPermission` to `"denied"` for
+   * `NotAllowedError`. Independent of `requestMic()`.
+   */
+  requestCam: () => Promise<void>;
+  /**
+   * True while EITHER `requestMic()` or `requestCam()` is in flight.
    */
   isAcquiring: boolean;
+  /**
+   * True iff mic acquisition succeeded AND `syncClient` is non-null.
+   * UIs render the live-A/V panel iff this is true (or while
+   * `isAcquiring` for a loading skeleton).
+   */
+  isActive: boolean;
   /**
    * Latest mic-acquisition error, or null on success / before first
    * attempt. The UI maps `error.type` to copy and an optional
@@ -223,46 +286,11 @@ export type UseLiveAVReturn = {
   error: AvAcquireError | null;
   /**
    * Camera-acquisition error, distinct from {@link error}. Non-null
-   * here means the mic is live but the camera could not be
-   * acquired (most commonly `permission-denied` when the user
-   * declined the second prompt). The live audio session is
-   * unaffected; the UI can surface "video unavailable" without
-   * killing the call.
+   * here means cam acquisition failed (most commonly
+   * `permission-denied`); mic stays unaffected. The UI can surface
+   * "video unavailable" without killing the call.
    */
   videoError: AvAcquireError | null;
-  /**
-   * True iff the mic is currently muted. Toggling flips
-   * `audioTrack.enabled = false` on every local audio track, which
-   * propagates over WebRTC as silence (the remote still receives
-   * RTP, just no audio).
-   */
-  isMicMuted: boolean;
-  /** Flip the mute state of every local audio track. */
-  toggleMic: () => void;
-  /**
-   * True iff the local camera is off — either because no video
-   * track was acquired (cameraEnabled=false, or video acquisition
-   * failed) OR because the user toggled it off via
-   * {@link toggleCamera}. Phase 4d may add a re-acquire path that
-   * flips this back to false; for now it's a track-level
-   * `.enabled = false` toggle just like mute.
-   */
-  isCameraOff: boolean;
-  /**
-   * Flip the camera-off state. No-op when no video tracks were
-   * acquired in the first place. Local preview elements should
-   * read `localVideoStream` (which still references the same
-   * MediaStream) and render a black placeholder when
-   * `isCameraOff` is true.
-   */
-  toggleCamera: () => void;
-  /**
-   * Sorted (peerId ascending) list of remote participants. EXCLUDES
-   * self. Empty when sync-client is null or no presence frames have
-   * arrived. Identity-stable across renders for unchanged peers
-   * (per-field updates only).
-   */
-  participants: ReadonlyArray<AvParticipant>;
   /**
    * Force a WebRTC restart for one peer's connection. Wired to a UI
    * "Reconnect" affordance in Phase 4c. No-op when the peer is no
@@ -270,48 +298,47 @@ export type UseLiveAVReturn = {
    */
   reconnectPeer: (peerId: string) => void;
   /**
-   * Retry `getUserMedia` after a `permission-denied` / `no-device` /
-   * `device-in-use` error. Triggers the acquisition effect to
-   * re-run; resets `error` to null while in flight.
+   * Retry the failed `getUserMedia` calls. If `error` is set,
+   * re-runs `requestMic()`. If `videoError` is set, re-runs
+   * `requestCam()`. No-op when neither error is set. Resolves once
+   * both retries (or the relevant subset) settle.
    */
-  retryAcquire: () => void;
-  /**
-   * True iff acquisition succeeded AND the mesh + signaling are
-   * built AND sync-client is non-null. UIs render the live-A/V
-   * panel iff this is true (or while `isAcquiring` for a "loading"
-   * skeleton).
-   */
-  isActive: boolean;
+  retryAcquire: () => Promise<void>;
 };
 
 // -----------------------------------------------------------------
 // Internal helpers
 // -----------------------------------------------------------------
 
-function classifyMediaError(err: unknown): AvAcquireError {
+function classifyMediaError(
+  err: unknown,
+  kind: "mic" | "cam"
+): AvAcquireError {
   const name =
     err instanceof Error ? (err as DOMException).name : "";
   const raw = err;
+  const device = kind === "mic" ? "Microphone" : "Camera";
   if (name === "NotAllowedError" || name === "PermissionDeniedError") {
     return {
       type: "permission-denied",
       message:
-        "Microphone access denied. Click the icon next to the address bar, set Microphone to Allow, then retry.",
+        kind === "mic"
+          ? "Microphone access denied. Click the icon next to the address bar, set Microphone to Allow, then retry."
+          : "Camera access denied. Click the icon next to the address bar, set Camera to Allow, then retry.",
       raw,
     };
   }
   if (name === "NotFoundError" || name === "DevicesNotFoundError") {
     return {
       type: "no-device",
-      message: "No microphone found. Connect a mic and try again.",
+      message: `No ${device.toLowerCase()} found. Connect a ${device.toLowerCase()} and try again.`,
       raw,
     };
   }
   if (name === "NotReadableError" || name === "TrackStartError") {
     return {
       type: "device-in-use",
-      message:
-        "Microphone is in use by another app (Discord, Teams, …). Close that app, then retry.",
+      message: `${device} is in use by another app (Discord, Teams, …). Close that app, then retry.`,
       raw,
     };
   }
@@ -321,16 +348,14 @@ function classifyMediaError(err: unknown): AvAcquireError {
   ) {
     return {
       type: "constraints-not-met",
-      message:
-        "The configured microphone is not available. Pick a different device.",
+      message: `The configured ${device.toLowerCase()} is not available. Pick a different device.`,
       raw,
     };
   }
   if (name === "TypeError" || name === "NotSupportedError") {
     return {
       type: "browser-unsupported",
-      message:
-        "Your browser does not support live audio. Use the latest Chrome, Safari, or Firefox.",
+      message: `Your browser does not support live ${kind === "mic" ? "audio" : "video"}. Use the latest Chrome, Safari, or Firefox.`,
       raw,
     };
   }
@@ -339,7 +364,7 @@ function classifyMediaError(err: unknown): AvAcquireError {
     message:
       err instanceof Error && err.message
         ? err.message
-        : "Microphone error (unknown). Reload the page and try again.",
+        : `${device} error (unknown). Reload the page and try again.`,
     raw,
   };
 }
@@ -353,13 +378,12 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     syncClient,
     localPeerId,
     sessionId,
-    enabled = true,
     audioConstraints = true,
-    cameraEnabled = false,
     videoConstraints = true,
     _getUserMedia,
     _createPeerMesh,
     _createSignaling,
+    _permissions,
   } = opts;
 
   const sid = sessionId ?? "?";
@@ -381,166 +405,306 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   const [error, setError] = useState<AvAcquireError | null>(null);
   const [videoError, setVideoError] = useState<AvAcquireError | null>(null);
   const [isMicMuted, setIsMicMuted] = useState<boolean>(false);
-  const [isCameraOff, setIsCameraOff] = useState<boolean>(false);
+  // Cam defaults to muted because no track exists until requestCam
+  // succeeds — UI placeholder logic ("Camera off") reads this.
+  const [isCamMuted, setIsCamMuted] = useState<boolean>(true);
+  const [hasMicPermission, setHasMicPermission] =
+    useState<AvPermissionState>("unknown");
+  const [hasCamPermission, setHasCamPermission] =
+    useState<AvPermissionState>("unknown");
   const [participants, setParticipants] = useState<
     ReadonlyArray<AvParticipant>
   >([]);
-  const [retryCount, setRetryCount] = useState<number>(0);
 
   // Refs for things consumed by ref-stable callbacks.
-  const localStreamRef = useRef<MediaStream | null>(null);
+  const localAudioStreamRef = useRef<MediaStream | null>(null);
   const localVideoStreamRef = useRef<MediaStream | null>(null);
   const meshRef = useRef<PeerMesh | null>(null);
   const isMicMutedRef = useRef<boolean>(false);
   isMicMutedRef.current = isMicMuted;
-  const isCameraOffRef = useRef<boolean>(false);
-  isCameraOffRef.current = isCameraOff;
+  const isCamMutedRef = useRef<boolean>(true);
+  isCamMutedRef.current = isCamMuted;
+  const micInFlightRef = useRef<Promise<void> | null>(null);
+  const camInFlightRef = useRef<Promise<void> | null>(null);
+  const acquiringCountRef = useRef<number>(0);
+  // Tracks whether the hook is unmounted to suppress late state
+  // setters from in-flight acquisition promises.
+  const unmountedRef = useRef<boolean>(false);
 
   // ---------------------------------------------------------------
-  // Effect: mic acquisition
+  // Acquisition controls (idempotent)
   // ---------------------------------------------------------------
 
-  useEffect(() => {
-    if (!enabled) {
-      setLocalAudioStream(null);
-      setLocalVideoStream(null);
-      setIsAcquiring(false);
-      setError(null);
-      setVideoError(null);
-      return;
+  function startAcquiring() {
+    acquiringCountRef.current += 1;
+    if (!unmountedRef.current) setIsAcquiring(true);
+  }
+  function endAcquiring() {
+    acquiringCountRef.current = Math.max(
+      0,
+      acquiringCountRef.current - 1
+    );
+    if (!unmountedRef.current) {
+      setIsAcquiring(acquiringCountRef.current > 0);
     }
-    let cancelled = false;
-    setIsAcquiring(true);
-    setError(null);
-    setVideoError(null);
+  }
 
-    const getUM =
-      _getUserMedia ??
-      (typeof navigator !== "undefined" &&
+  function resolveGetUserMedia(): UseLiveAVOptions["_getUserMedia"] | null {
+    if (_getUserMedia) return _getUserMedia;
+    if (
+      typeof navigator !== "undefined" &&
       navigator.mediaDevices &&
       typeof navigator.mediaDevices.getUserMedia === "function"
-        ? navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices)
-        : null);
-
-    if (!getUM) {
-      const noUM: AvAcquireError = {
-        type: "browser-unsupported",
-        message:
-          "Your browser does not expose `navigator.mediaDevices.getUserMedia`. Use the latest Chrome, Safari, or Firefox.",
-        raw: null,
-      };
-      setError(noUM);
-      setIsAcquiring(false);
-      return;
+    ) {
+      return navigator.mediaDevices.getUserMedia.bind(
+        navigator.mediaDevices
+      );
     }
+    return null;
+  }
 
-    log.log(
-      `acquire start retry=${retryCount} audio=${
-        typeof audioConstraints === "boolean"
-          ? String(audioConstraints)
-          : JSON.stringify(audioConstraints)
-      } video=${cameraEnabled ? "on" : "off"}`
-    );
+  const requestMic = useCallback(
+    async (): Promise<void> => {
+      if (localAudioStreamRef.current) return; // already acquired
+      if (micInFlightRef.current) return micInFlightRef.current;
 
-    void (async () => {
-      // Step 1: audio (required). Failure of this step aborts the
-      // session — there's no live A/V without audio.
-      let audioStream: MediaStream;
-      try {
-        audioStream = await getUM({
-          audio: audioConstraints,
-          video: false,
-        });
-      } catch (err) {
-        if (cancelled) return;
-        const classified = classifyMediaError(err);
-        log.warn(
-          `mic acquire failed type=${classified.type} err=${
-            (err as Error)?.message ?? String(err)
-          }`
-        );
-        setError(classified);
-        setIsAcquiring(false);
-        localStreamRef.current = null;
-        setLocalAudioStream(null);
+      const getUM = resolveGetUserMedia();
+      if (!getUM) {
+        const noUM: AvAcquireError = {
+          type: "browser-unsupported",
+          message:
+            "Your browser does not expose `navigator.mediaDevices.getUserMedia`. Use the latest Chrome, Safari, or Firefox.",
+          raw: null,
+        };
+        if (!unmountedRef.current) setError(noUM);
         return;
       }
-      if (cancelled) {
-        for (const t of audioStream.getTracks()) {
-          try {
-            t.stop();
-          } catch {
-            /* ignore */
-          }
-        }
-        return;
-      }
-      if (isMicMutedRef.current) {
-        for (const t of audioStream.getAudioTracks()) t.enabled = false;
-      }
-      localStreamRef.current = audioStream;
-      setLocalAudioStream(audioStream);
+
+      startAcquiring();
+      if (!unmountedRef.current) setError(null);
       log.log(
-        `mic acquired tracks=${audioStream.getAudioTracks().length} muted=${isMicMutedRef.current}`
+        `requestMic start audio=${
+          typeof audioConstraints === "boolean"
+            ? String(audioConstraints)
+            : JSON.stringify(audioConstraints)
+        }`
       );
 
-      // Step 2: video (optional). Failure here surfaces as
-      // `videoError` but does NOT invalidate the audio session.
-      if (cameraEnabled) {
-        let videoStream: MediaStream | null = null;
+      const inFlight = (async () => {
         try {
-          videoStream = await getUM({
-            audio: false,
-            video: videoConstraints,
+          const stream = await getUM({
+            audio: audioConstraints,
+            video: false,
           });
-        } catch (err) {
-          if (cancelled) return;
-          const classified = classifyMediaError(err);
-          log.warn(
-            `camera acquire failed type=${classified.type} err=${
-              (err as Error)?.message ?? String(err)
-            }`
-          );
-          setVideoError(classified);
-          setIsCameraOff(true);
-          localVideoStreamRef.current = null;
-          setLocalVideoStream(null);
-        }
-        if (cancelled) {
-          if (videoStream) {
-            for (const t of videoStream.getTracks()) {
+          if (unmountedRef.current) {
+            for (const t of stream.getTracks()) {
               try {
                 t.stop();
               } catch {
                 /* ignore */
               }
             }
+            return;
           }
-          return;
-        }
-        if (videoStream) {
-          if (isCameraOffRef.current) {
-            for (const t of videoStream.getVideoTracks())
-              t.enabled = false;
+          if (isMicMutedRef.current) {
+            for (const t of stream.getAudioTracks()) t.enabled = false;
           }
-          localVideoStreamRef.current = videoStream;
-          setLocalVideoStream(videoStream);
+          localAudioStreamRef.current = stream;
+          setLocalAudioStream(stream);
+          setHasMicPermission("granted");
           log.log(
-            `camera acquired tracks=${videoStream.getVideoTracks().length} off=${isCameraOffRef.current}`
+            `mic acquired tracks=${stream.getAudioTracks().length} muted=${isMicMutedRef.current}`
           );
+        } catch (err) {
+          if (unmountedRef.current) return;
+          const classified = classifyMediaError(err, "mic");
+          log.warn(
+            `mic acquire failed type=${classified.type} err=${
+              (err as Error)?.message ?? String(err)
+            }`
+          );
+          setError(classified);
+          if (classified.type === "permission-denied") {
+            setHasMicPermission("denied");
+          }
+        } finally {
+          endAcquiring();
+          micInFlightRef.current = null;
         }
-      } else {
-        // cameraEnabled=false → unconditionally mark camera off so
-        // UI can render the placeholder.
-        setIsCameraOff(true);
+      })();
+      micInFlightRef.current = inFlight;
+      return inFlight;
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    [audioConstraints]
+  );
+
+  const requestCam = useCallback(
+    async (): Promise<void> => {
+      if (localVideoStreamRef.current) return;
+      if (camInFlightRef.current) return camInFlightRef.current;
+
+      const getUM = resolveGetUserMedia();
+      if (!getUM) {
+        const noUM: AvAcquireError = {
+          type: "browser-unsupported",
+          message:
+            "Your browser does not expose `navigator.mediaDevices.getUserMedia`.",
+          raw: null,
+        };
+        if (!unmountedRef.current) setVideoError(noUM);
+        return;
       }
 
-      setIsAcquiring(false);
+      startAcquiring();
+      if (!unmountedRef.current) setVideoError(null);
+      log.log(
+        `requestCam start video=${
+          typeof videoConstraints === "boolean"
+            ? String(videoConstraints)
+            : JSON.stringify(videoConstraints)
+        }`
+      );
+
+      const inFlight = (async () => {
+        try {
+          const stream = await getUM({
+            audio: false,
+            video: videoConstraints,
+          });
+          if (unmountedRef.current) {
+            for (const t of stream.getTracks()) {
+              try {
+                t.stop();
+              } catch {
+                /* ignore */
+              }
+            }
+            return;
+          }
+          localVideoStreamRef.current = stream;
+          setLocalVideoStream(stream);
+          setHasCamPermission("granted");
+          // requestCam implies user intent "cam on" — unmute on
+          // success regardless of the placeholder isCamMuted=true
+          // initial state. Tracks land enabled (the default).
+          setIsCamMuted(false);
+          log.log(
+            `cam acquired tracks=${stream.getVideoTracks().length}`
+          );
+        } catch (err) {
+          if (unmountedRef.current) return;
+          const classified = classifyMediaError(err, "cam");
+          log.warn(
+            `cam acquire failed type=${classified.type} err=${
+              (err as Error)?.message ?? String(err)
+            }`
+          );
+          setVideoError(classified);
+          if (classified.type === "permission-denied") {
+            setHasCamPermission("denied");
+          }
+        } finally {
+          endAcquiring();
+          camInFlightRef.current = null;
+        }
+      })();
+      camInFlightRef.current = inFlight;
+      return inFlight;
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    [videoConstraints]
+  );
+
+  // ---------------------------------------------------------------
+  // Effect: query Permissions API on mount (best-effort)
+  // ---------------------------------------------------------------
+
+  useEffect(() => {
+    const perm: PermissionsLike | null =
+      _permissions !== undefined
+        ? _permissions
+        : typeof navigator !== "undefined" &&
+            (navigator as unknown as { permissions?: PermissionsLike })
+              .permissions
+          ? ((navigator as unknown as { permissions: PermissionsLike })
+              .permissions ?? null)
+          : null;
+    if (!perm) return;
+
+    let cancelled = false;
+    let micStatus: PermissionStatusLike | null = null;
+    let camStatus: PermissionStatusLike | null = null;
+    const onMicChange = () => {
+      if (cancelled || !micStatus) return;
+      setHasMicPermission(micStatus.state);
+    };
+    const onCamChange = () => {
+      if (cancelled || !camStatus) return;
+      setHasCamPermission(camStatus.state);
+    };
+
+    void (async () => {
+      try {
+        micStatus = await perm.query({ name: "microphone" });
+        if (cancelled) return;
+        setHasMicPermission(micStatus.state);
+        if (typeof micStatus.addEventListener === "function") {
+          micStatus.addEventListener("change", onMicChange);
+        }
+      } catch {
+        if (!cancelled) setHasMicPermission("unknown");
+      }
+      try {
+        camStatus = await perm.query({ name: "camera" });
+        if (cancelled) return;
+        setHasCamPermission(camStatus.state);
+        if (typeof camStatus.addEventListener === "function") {
+          camStatus.addEventListener("change", onCamChange);
+        }
+      } catch {
+        // Safari throws on `{ name: "camera" }`.
+        if (!cancelled) setHasCamPermission("unknown");
+      }
     })();
 
     return () => {
       cancelled = true;
-      const aud = localStreamRef.current;
+      if (
+        micStatus &&
+        typeof micStatus.removeEventListener === "function"
+      ) {
+        try {
+          micStatus.removeEventListener("change", onMicChange);
+        } catch {
+          /* ignore */
+        }
+      }
+      if (
+        camStatus &&
+        typeof camStatus.removeEventListener === "function"
+      ) {
+        try {
+          camStatus.removeEventListener("change", onCamChange);
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ---------------------------------------------------------------
+  // Effect: track unmount (suppresses late state setters)
+  // ---------------------------------------------------------------
+
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
+      unmountedRef.current = true;
+      // Stop and release any acquired local streams on unmount so
+      // the OS frees the device.
+      const aud = localAudioStreamRef.current;
       if (aud) {
         for (const t of aud.getTracks()) {
           try {
@@ -560,26 +724,17 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           }
         }
       }
-      localStreamRef.current = null;
+      localAudioStreamRef.current = null;
       localVideoStreamRef.current = null;
-      setLocalAudioStream(null);
-      setLocalVideoStream(null);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    enabled,
-    retryCount,
-    audioConstraints,
-    cameraEnabled,
-    videoConstraints,
-  ]);
+  }, []);
 
   // ---------------------------------------------------------------
   // Effect: build mesh + signaling, reconcile peers, collect tracks
   // ---------------------------------------------------------------
 
   useEffect(() => {
-    if (!enabled || !syncClient || !localAudioStream) {
+    if (!syncClient || !localAudioStream) {
       setParticipants([]);
       return;
     }
@@ -604,7 +759,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       sessionId,
       getLocalTracks: () => {
         const tracks: MediaStreamTrack[] = [];
-        const aud = localStreamRef.current;
+        const aud = localAudioStreamRef.current;
         if (aud) tracks.push(...aud.getAudioTracks());
         const vid = localVideoStreamRef.current;
         if (vid) tracks.push(...vid.getVideoTracks());
@@ -612,10 +767,8 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       },
     });
     meshRef.current = mesh;
+    log.log("mesh + signaling built");
 
-    // Internal state — per-peer entry, mutated in-place by the
-    // various callbacks below. `setParticipants` reads this map and
-    // builds a fresh array on every change.
     type Internal = {
       role: "tutor" | "student";
       label?: string;
@@ -677,6 +830,8 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
     const unsubPeers = syncClient.onRoomPeersChange((peers) => {
       if (disposed) return;
+      // Reconcile: addPeer first, then removePeer (so glare
+      // resolution sees the new set).
       const incoming = new Set<string>();
       for (const p of peers) {
         incoming.add(p.peerId);
@@ -685,6 +840,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           entry.addedToMesh = true;
           try {
             mesh.addPeer(p.peerId);
+            log.log(`addPeer peer=${p.peerId} role=${p.role}`);
           } catch (err) {
             log.warn(
               `mesh.addPeer threw peer=${p.peerId} err=${
@@ -698,6 +854,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         if (incoming.has(peerId)) continue;
         try {
           mesh.removePeer(peerId);
+          log.log(`removePeer peer=${peerId}`);
         } catch (err) {
           log.warn(
             `mesh.removePeer threw peer=${peerId} err=${
@@ -705,8 +862,14 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
             }`
           );
         }
-        // Stop any in-flight remote tracks so resources free up.
         for (const t of entry.audioStream.getTracks()) {
+          try {
+            t.stop();
+          } catch {
+            /* ignore */
+          }
+        }
+        for (const t of entry.videoStream.getTracks()) {
           try {
             t.stop();
           } catch {
@@ -738,9 +901,6 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       try {
         targetStream.addTrack(track);
       } catch (err) {
-        // addTrack throws if the same track is added twice. We
-        // tolerate that — the second event from a re-negotiation
-        // simply lands as a no-op.
         log.warn(
           `${track.kind}Stream.addTrack threw peer=${peerId} err=${
             (err as Error)?.message ?? String(err)
@@ -750,6 +910,9 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       }
       if (track.kind === "audio") entry.hasAudioTrack = true;
       else entry.hasVideoTrack = true;
+      log.log(
+        `track received peer=${peerId} kind=${track.kind}`
+      );
       track.addEventListener("ended", () => {
         if (disposed) return;
         try {
@@ -774,6 +937,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       const entry = internal.get(peerId);
       if (!entry) return;
       entry.peerConnectionState = state;
+      log.log(`pcState peer=${peerId} state=${state}`);
       rebuild();
     });
 
@@ -782,6 +946,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       const entry = internal.get(peerId);
       if (!entry) return;
       entry.iceConnectionState = state;
+      log.log(`iceState peer=${peerId} state=${state}`);
       rebuild();
     });
 
@@ -826,14 +991,14 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       setParticipants([]);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, syncClient, localAudioStream, localPeerId, sessionId]);
+  }, [syncClient, localAudioStream, localPeerId, sessionId]);
 
   // ---------------------------------------------------------------
   // Public callbacks
   // ---------------------------------------------------------------
 
   const toggleMic = useCallback(() => {
-    const stream = localStreamRef.current;
+    const stream = localAudioStreamRef.current;
     setIsMicMuted((prev) => {
       const next = !prev;
       if (stream) {
@@ -845,14 +1010,14 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const toggleCamera = useCallback(() => {
+  const toggleCam = useCallback(() => {
     const stream = localVideoStreamRef.current;
-    setIsCameraOff((prev) => {
+    setIsCamMuted((prev) => {
       const next = !prev;
       if (stream) {
         for (const t of stream.getVideoTracks()) t.enabled = !next;
       }
-      log.log(`toggleCamera next=${next ? "off" : "on"}`);
+      log.log(`toggleCam next=${next ? "muted" : "unmuted"}`);
       return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -877,31 +1042,54 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const retryAcquire = useCallback(() => {
-    log.log("retryAcquire");
-    setRetryCount((n) => n + 1);
+  // Refs for retryAcquire to keep its identity stable.
+  const requestMicRef = useRef(requestMic);
+  requestMicRef.current = requestMic;
+  const requestCamRef = useRef(requestCam);
+  requestCamRef.current = requestCam;
+  const errorRef = useRef(error);
+  errorRef.current = error;
+  const videoErrorRef = useRef(videoError);
+  videoErrorRef.current = videoError;
+
+  const retryAcquire = useCallback(async (): Promise<void> => {
+    const tasks: Array<Promise<void>> = [];
+    if (errorRef.current) {
+      log.log("retryAcquire mic");
+      tasks.push(requestMicRef.current());
+    }
+    if (videoErrorRef.current) {
+      log.log("retryAcquire cam");
+      tasks.push(requestCamRef.current());
+    }
+    if (tasks.length === 0) {
+      log.log("retryAcquire no-op");
+      return;
+    }
+    await Promise.all(tasks);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const isActive =
-    enabled &&
-    !!syncClient &&
-    !!localAudioStream &&
-    error === null;
+    !!syncClient && !!localAudioStream && error === null;
 
   return {
+    participants,
     localAudioStream,
     localVideoStream,
+    isMicMuted,
+    isCamMuted,
+    toggleMic,
+    toggleCam,
+    hasMicPermission,
+    hasCamPermission,
+    requestMic,
+    requestCam,
     isAcquiring,
+    isActive,
     error,
     videoError,
-    isMicMuted,
-    toggleMic,
-    isCameraOff,
-    toggleCamera,
-    participants,
     reconnectPeer,
     retryAcquire,
-    isActive,
   };
 }
