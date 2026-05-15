@@ -96,18 +96,34 @@ class FakeMediaStreamTrack {
 (globalThis as unknown as { MediaStream: typeof FakeMediaStream }).MediaStream =
   FakeMediaStream;
 
-function makeFakeStream(numAudio = 1): {
+function makeFakeStream(
+  numAudio = 1,
+  numVideo = 0
+): {
   stream: FakeMediaStream;
   tracks: FakeMediaStreamTrack[];
+  audioTracks: FakeMediaStreamTrack[];
+  videoTracks: FakeMediaStreamTrack[];
 } {
   const stream = new FakeMediaStream();
-  const tracks: FakeMediaStreamTrack[] = [];
+  const audioTracks: FakeMediaStreamTrack[] = [];
+  const videoTracks: FakeMediaStreamTrack[] = [];
   for (let i = 0; i < numAudio; i++) {
     const t = new FakeMediaStreamTrack("audio");
     stream.addTrack(t as unknown as MediaStreamTrack);
-    tracks.push(t);
+    audioTracks.push(t);
   }
-  return { stream, tracks };
+  for (let i = 0; i < numVideo; i++) {
+    const t = new FakeMediaStreamTrack("video");
+    stream.addTrack(t as unknown as MediaStreamTrack);
+    videoTracks.push(t);
+  }
+  return {
+    stream,
+    tracks: [...audioTracks, ...videoTracks],
+    audioTracks,
+    videoTracks,
+  };
 }
 
 function makeFakeSyncClient(): {
@@ -702,7 +718,7 @@ describe("useLiveAV — remote tracks + state", () => {
     unmount();
   });
 
-  test("onRemoteTrack(video): ignored in commit 2 (mic-only)", async () => {
+  test("onRemoteTrack(video): participant.videoStream contains the track (commit 3)", async () => {
     const { sync, emitPeers } = makeFakeSyncClient();
     const meshHandles = makeFakeMesh();
     const sig = makeFakeSignaling();
@@ -724,19 +740,22 @@ describe("useLiveAV — remote tracks + state", () => {
       expect(result.current.participants.length).toBe(1);
     });
 
-    const remoteTrack = new FakeMediaStreamTrack("video");
+    const remoteVideo = new FakeMediaStreamTrack("video");
     act(() => {
       meshHandles.emitTrack(
         "student-B",
-        remoteTrack as unknown as MediaStreamTrack
+        remoteVideo as unknown as MediaStreamTrack
       );
     });
 
-    await act(async () => {
-      await Promise.resolve();
+    await waitFor(() => {
+      expect(result.current.participants[0]?.videoStream).not.toBeNull();
     });
     expect(result.current.participants[0]?.audioStream).toBeNull();
-    expect(result.current.participants[0]?.videoStream).toBeNull();
+    const vs = result.current.participants[0]!
+      .videoStream as unknown as FakeMediaStream;
+    expect(vs.getVideoTracks().length).toBe(1);
+    expect(vs.getVideoTracks()[0]).toBe(remoteVideo);
 
     unmount();
   });
@@ -905,6 +924,236 @@ describe("useLiveAV — mute control + reconnect", () => {
     expect(warnLog).toHaveBeenCalled();
 
     unmount();
+  });
+});
+
+describe("useLiveAV — camera support (Phase 4b commit 3)", () => {
+  test("cameraEnabled=false (default): no video stream, isCameraOff true, no second getUserMedia call", async () => {
+    const getUM = jest.fn(
+      async () => makeFakeStream(1, 0).stream as unknown as MediaStream
+    );
+    const props = makeBaseProps({ _getUserMedia: getUM });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await waitFor(() => {
+      expect(result.current.localAudioStream).not.toBeNull();
+    });
+
+    expect(result.current.localVideoStream).toBeNull();
+    expect(result.current.isCameraOff).toBe(true);
+    expect(result.current.videoError).toBeNull();
+    expect(getUM).toHaveBeenCalledTimes(1);
+    expect(getUM).toHaveBeenLastCalledWith(
+      expect.objectContaining({ video: false })
+    );
+
+    unmount();
+  });
+
+  test("cameraEnabled=true: second getUserMedia for video, localVideoStream populated, isCameraOff false", async () => {
+    const audio = makeFakeStream(1, 0);
+    const video = makeFakeStream(0, 1);
+    const getUM = jest.fn((constraints: MediaStreamConstraints) => {
+      if (constraints.video) {
+        return Promise.resolve(video.stream as unknown as MediaStream);
+      }
+      return Promise.resolve(audio.stream as unknown as MediaStream);
+    });
+    const props = makeBaseProps({
+      cameraEnabled: true,
+      _getUserMedia: getUM,
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await waitFor(() => {
+      expect(result.current.localVideoStream).not.toBeNull();
+    });
+
+    expect(getUM).toHaveBeenCalledTimes(2);
+    const calls = getUM.mock.calls.map((c) => c[0]);
+    expect(calls[0]).toEqual(
+      expect.objectContaining({ audio: true, video: false })
+    );
+    expect(calls[1]).toEqual(
+      expect.objectContaining({ audio: false, video: true })
+    );
+    expect(result.current.isCameraOff).toBe(false);
+    expect(result.current.videoError).toBeNull();
+    expect(result.current.isAcquiring).toBe(false);
+    expect(result.current.isActive).toBe(true);
+    expect(
+      (result.current.localVideoStream as unknown as FakeMediaStream)
+        .getVideoTracks().length
+    ).toBe(1);
+
+    unmount();
+  });
+
+  test("camera acquisition fails: videoError set, audio still live, isActive true", async () => {
+    const audio = makeFakeStream(1, 0);
+    const getUM = jest.fn((constraints: MediaStreamConstraints) => {
+      if (constraints.video) {
+        const e = Object.assign(new Error("denied"), {
+          name: "NotAllowedError",
+        });
+        return Promise.reject(e);
+      }
+      return Promise.resolve(audio.stream as unknown as MediaStream);
+    });
+    const props = makeBaseProps({
+      cameraEnabled: true,
+      _getUserMedia: getUM,
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await waitFor(() => {
+      expect(result.current.videoError?.type).toBe("permission-denied");
+    });
+    expect(result.current.localAudioStream).not.toBeNull();
+    expect(result.current.localVideoStream).toBeNull();
+    expect(result.current.isCameraOff).toBe(true);
+    expect(result.current.error).toBeNull();
+    expect(result.current.isActive).toBe(true);
+
+    unmount();
+  });
+
+  test("cameraEnabled=true: peer-mesh getLocalTracks returns audio + video tracks", async () => {
+    const audio = makeFakeStream(1, 0);
+    const video = makeFakeStream(0, 1);
+    const getUM = jest.fn((constraints: MediaStreamConstraints) => {
+      if (constraints.video) {
+        return Promise.resolve(video.stream as unknown as MediaStream);
+      }
+      return Promise.resolve(audio.stream as unknown as MediaStream);
+    });
+    const meshHandles = makeFakeMesh();
+    const sig = makeFakeSignaling();
+    const props = makeBaseProps({
+      cameraEnabled: true,
+      _getUserMedia: getUM,
+      _createPeerMesh: meshHandles.factory,
+      _createSignaling: sig.factory,
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await waitFor(() => {
+      expect(result.current.localVideoStream).not.toBeNull();
+    });
+
+    const gltrk = meshHandles.capturedOpts[0]?.getLocalTracks;
+    expect(typeof gltrk).toBe("function");
+    const out = gltrk?.("any-remote") ?? [];
+    expect(out.length).toBe(2);
+    const kinds = out.map((t) => t.kind).sort();
+    expect(kinds).toEqual(["audio", "video"]);
+
+    unmount();
+  });
+
+  test("toggleCamera flips video track.enabled and isCameraOff", async () => {
+    const audio = makeFakeStream(1, 0);
+    const video = makeFakeStream(0, 1);
+    const videoTrack = video.videoTracks[0]!;
+    const getUM = jest.fn((constraints: MediaStreamConstraints) => {
+      if (constraints.video) {
+        return Promise.resolve(video.stream as unknown as MediaStream);
+      }
+      return Promise.resolve(audio.stream as unknown as MediaStream);
+    });
+    const props = makeBaseProps({
+      cameraEnabled: true,
+      _getUserMedia: getUM,
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await waitFor(() => {
+      expect(result.current.localVideoStream).not.toBeNull();
+    });
+    expect(result.current.isCameraOff).toBe(false);
+    expect(videoTrack.enabled).toBe(true);
+
+    act(() => {
+      result.current.toggleCamera();
+    });
+    expect(result.current.isCameraOff).toBe(true);
+    expect(videoTrack.enabled).toBe(false);
+
+    act(() => {
+      result.current.toggleCamera();
+    });
+    expect(result.current.isCameraOff).toBe(false);
+    expect(videoTrack.enabled).toBe(true);
+
+    unmount();
+  });
+
+  test("toggleCamera before camera acquired is honored on acquire", async () => {
+    const audio = makeFakeStream(1, 0);
+    const video = makeFakeStream(0, 1);
+    const videoTrack = video.videoTracks[0]!;
+    let resolveVideo: (s: MediaStream) => void = () => undefined;
+    const getUM = jest.fn((constraints: MediaStreamConstraints) => {
+      if (constraints.video) {
+        return new Promise<MediaStream>((resolve) => {
+          resolveVideo = resolve;
+        });
+      }
+      return Promise.resolve(audio.stream as unknown as MediaStream);
+    });
+    const props = makeBaseProps({
+      cameraEnabled: true,
+      _getUserMedia: getUM,
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await waitFor(() => {
+      expect(result.current.localAudioStream).not.toBeNull();
+    });
+
+    // Toggle camera off while video is still acquiring.
+    act(() => {
+      result.current.toggleCamera();
+    });
+    expect(result.current.isCameraOff).toBe(true);
+
+    // Now resolve video acquisition — the track should land disabled.
+    await act(async () => {
+      resolveVideo(video.stream as unknown as MediaStream);
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(result.current.localVideoStream).not.toBeNull();
+    });
+    expect(videoTrack.enabled).toBe(false);
+    expect(result.current.isCameraOff).toBe(true);
+
+    unmount();
+  });
+
+  test("unmount stops local video tracks", async () => {
+    const audio = makeFakeStream(1, 0);
+    const video = makeFakeStream(0, 1);
+    const videoTrack = video.videoTracks[0]!;
+    const getUM = jest.fn((constraints: MediaStreamConstraints) => {
+      if (constraints.video) {
+        return Promise.resolve(video.stream as unknown as MediaStream);
+      }
+      return Promise.resolve(audio.stream as unknown as MediaStream);
+    });
+    const props = makeBaseProps({
+      cameraEnabled: true,
+      _getUserMedia: getUM,
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await waitFor(() => {
+      expect(result.current.localVideoStream).not.toBeNull();
+    });
+    expect(videoTrack.stopped).toBe(false);
+
+    unmount();
+    expect(videoTrack.stopped).toBe(true);
   });
 });
 

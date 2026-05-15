@@ -29,11 +29,16 @@
  *     array indexed by peerId, not a single "remote" slot. 1:1
  *     tutoring is `participants.length === 1`.
  *
- * Camera support is deferred to Phase 4b commit 3 (next commit on
- * this branch). This commit handles mic-only; the public surface is
- * structured so the camera commit only widens the type, never
- * removes fields. Specifically: `participants[i].videoStream` is
- * present as `null` here and `MediaStream | null` after commit 3.
+ * Camera support (Phase 4b commit 3): opt-in via `cameraEnabled`.
+ * Acquisition is two-step (audio first, video second) so a missing
+ * camera does not block the mic — the hook stays active with
+ * audio-only and surfaces `videoError` separately. `getLocalTracks`
+ * reads both refs on every `addPeer`, so toggling camera before
+ * peers connect transparently lights up video for the new peers;
+ * toggling AFTER existing peers connected only flips the per-track
+ * `.enabled` flag (the spec-correct way to "pause" without
+ * re-negotiating). Adding/removing tracks on existing PCs is a
+ * peer-mesh API extension reserved for Phase 4d.
  *
  * Recording integration is deferred to Phase 4b commit 4
  * (`remote-stream-recorder.ts`). That module consumes
@@ -79,10 +84,13 @@ export type AvParticipant = {
    */
   audioStream: MediaStream | null;
   /**
-   * Live remote video stream — always `null` in this commit (mic
-   * only). The field is present so consumers can write the final
-   * UI today and have it light up automatically once commit 3
-   * lands camera support.
+   * Live remote video stream — null until at least one video track
+   * lands on the underlying RTCPeerConnection (which only happens
+   * when the remote peer enabled their camera). Wire into
+   * `<video autoplay playsInline srcObject={p.videoStream} muted />`.
+   * (Always set `muted` on the local-side `<video>` so audio comes
+   * exclusively from the `audioStream` companion — avoids double
+   * playback at different latencies.)
    */
   videoStream: MediaStream | null;
   /**
@@ -146,6 +154,21 @@ export type UseLiveAVOptions = {
    */
   audioConstraints?: MediaTrackConstraints | boolean;
   /**
+   * Enable the local camera. Defaults to false (audio-only, Sarah-
+   * pilot default). When true, the hook makes a SECOND
+   * `getUserMedia` call after audio acquires; failure of that
+   * second call surfaces as {@link UseLiveAVReturn.videoError}
+   * without invalidating the live audio session. Wire this to a
+   * tutor-side toggle in Phase 4c.
+   */
+  cameraEnabled?: boolean;
+  /**
+   * Optional MediaTrackConstraints for the local camera. Ignored
+   * when `cameraEnabled` is false. Defaults to `true` (let the
+   * browser pick reasonable defaults).
+   */
+  videoConstraints?: MediaTrackConstraints | boolean;
+  /**
    * Test-only override of `navigator.mediaDevices.getUserMedia`.
    * Production omits.
    */
@@ -179,14 +202,34 @@ export type UseLiveAVReturn = {
    * when `enabled === false`.
    */
   localAudioStream: MediaStream | null;
-  /** True while the first `getUserMedia` call is in flight. */
+  /**
+   * Local camera stream. Null when `cameraEnabled === false`, while
+   * the video step is acquiring, or when video acquisition failed
+   * (see {@link videoError}). Audio is acquired first; this stream
+   * may resolve a few ticks after `localAudioStream`.
+   */
+  localVideoStream: MediaStream | null;
+  /**
+   * True while either `getUserMedia` call is in flight (audio +
+   * optional video). Flips false once acquisition has settled —
+   * even if video failed.
+   */
   isAcquiring: boolean;
   /**
-   * Latest acquisition error, or null on success / before first
+   * Latest mic-acquisition error, or null on success / before first
    * attempt. The UI maps `error.type` to copy and an optional
    * "Try again" button (wired via {@link retryAcquire}).
    */
   error: AvAcquireError | null;
+  /**
+   * Camera-acquisition error, distinct from {@link error}. Non-null
+   * here means the mic is live but the camera could not be
+   * acquired (most commonly `permission-denied` when the user
+   * declined the second prompt). The live audio session is
+   * unaffected; the UI can surface "video unavailable" without
+   * killing the call.
+   */
+  videoError: AvAcquireError | null;
   /**
    * True iff the mic is currently muted. Toggling flips
    * `audioTrack.enabled = false` on every local audio track, which
@@ -196,6 +239,23 @@ export type UseLiveAVReturn = {
   isMicMuted: boolean;
   /** Flip the mute state of every local audio track. */
   toggleMic: () => void;
+  /**
+   * True iff the local camera is off — either because no video
+   * track was acquired (cameraEnabled=false, or video acquisition
+   * failed) OR because the user toggled it off via
+   * {@link toggleCamera}. Phase 4d may add a re-acquire path that
+   * flips this back to false; for now it's a track-level
+   * `.enabled = false` toggle just like mute.
+   */
+  isCameraOff: boolean;
+  /**
+   * Flip the camera-off state. No-op when no video tracks were
+   * acquired in the first place. Local preview elements should
+   * read `localVideoStream` (which still references the same
+   * MediaStream) and render a black placeholder when
+   * `isCameraOff` is true.
+   */
+  toggleCamera: () => void;
   /**
    * Sorted (peerId ascending) list of remote participants. EXCLUDES
    * self. Empty when sync-client is null or no presence frames have
@@ -295,6 +355,8 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     sessionId,
     enabled = true,
     audioConstraints = true,
+    cameraEnabled = false,
+    videoConstraints = true,
     _getUserMedia,
     _createPeerMesh,
     _createSignaling,
@@ -313,9 +375,13 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
   const [localAudioStream, setLocalAudioStream] =
     useState<MediaStream | null>(null);
+  const [localVideoStream, setLocalVideoStream] =
+    useState<MediaStream | null>(null);
   const [isAcquiring, setIsAcquiring] = useState<boolean>(false);
   const [error, setError] = useState<AvAcquireError | null>(null);
+  const [videoError, setVideoError] = useState<AvAcquireError | null>(null);
   const [isMicMuted, setIsMicMuted] = useState<boolean>(false);
+  const [isCameraOff, setIsCameraOff] = useState<boolean>(false);
   const [participants, setParticipants] = useState<
     ReadonlyArray<AvParticipant>
   >([]);
@@ -323,9 +389,12 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
   // Refs for things consumed by ref-stable callbacks.
   const localStreamRef = useRef<MediaStream | null>(null);
+  const localVideoStreamRef = useRef<MediaStream | null>(null);
   const meshRef = useRef<PeerMesh | null>(null);
   const isMicMutedRef = useRef<boolean>(false);
   isMicMutedRef.current = isMicMuted;
+  const isCameraOffRef = useRef<boolean>(false);
+  isCameraOffRef.current = isCameraOff;
 
   // ---------------------------------------------------------------
   // Effect: mic acquisition
@@ -334,13 +403,16 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   useEffect(() => {
     if (!enabled) {
       setLocalAudioStream(null);
+      setLocalVideoStream(null);
       setIsAcquiring(false);
       setError(null);
+      setVideoError(null);
       return;
     }
     let cancelled = false;
     setIsAcquiring(true);
     setError(null);
+    setVideoError(null);
 
     const getUM =
       _getUserMedia ??
@@ -363,41 +435,22 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     }
 
     log.log(
-      `mic acquire start retry=${retryCount} constraints=${
+      `acquire start retry=${retryCount} audio=${
         typeof audioConstraints === "boolean"
           ? String(audioConstraints)
           : JSON.stringify(audioConstraints)
-      }`
+      } video=${cameraEnabled ? "on" : "off"}`
     );
 
     void (async () => {
+      // Step 1: audio (required). Failure of this step aborts the
+      // session — there's no live A/V without audio.
+      let audioStream: MediaStream;
       try {
-        const stream = await getUM({
+        audioStream = await getUM({
           audio: audioConstraints,
           video: false,
         });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => {
-            try {
-              t.stop();
-            } catch {
-              /* ignore */
-            }
-          });
-          return;
-        }
-        // If the user toggled the mute state before the mic
-        // acquired, honor it.
-        if (isMicMutedRef.current) {
-          for (const t of stream.getAudioTracks()) t.enabled = false;
-        }
-        localStreamRef.current = stream;
-        setLocalAudioStream(stream);
-        setError(null);
-        setIsAcquiring(false);
-        log.log(
-          `mic acquired tracks=${stream.getAudioTracks().length} muted=${isMicMutedRef.current}`
-        );
       } catch (err) {
         if (cancelled) return;
         const classified = classifyMediaError(err);
@@ -410,14 +463,96 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         setIsAcquiring(false);
         localStreamRef.current = null;
         setLocalAudioStream(null);
+        return;
       }
+      if (cancelled) {
+        for (const t of audioStream.getTracks()) {
+          try {
+            t.stop();
+          } catch {
+            /* ignore */
+          }
+        }
+        return;
+      }
+      if (isMicMutedRef.current) {
+        for (const t of audioStream.getAudioTracks()) t.enabled = false;
+      }
+      localStreamRef.current = audioStream;
+      setLocalAudioStream(audioStream);
+      log.log(
+        `mic acquired tracks=${audioStream.getAudioTracks().length} muted=${isMicMutedRef.current}`
+      );
+
+      // Step 2: video (optional). Failure here surfaces as
+      // `videoError` but does NOT invalidate the audio session.
+      if (cameraEnabled) {
+        let videoStream: MediaStream | null = null;
+        try {
+          videoStream = await getUM({
+            audio: false,
+            video: videoConstraints,
+          });
+        } catch (err) {
+          if (cancelled) return;
+          const classified = classifyMediaError(err);
+          log.warn(
+            `camera acquire failed type=${classified.type} err=${
+              (err as Error)?.message ?? String(err)
+            }`
+          );
+          setVideoError(classified);
+          setIsCameraOff(true);
+          localVideoStreamRef.current = null;
+          setLocalVideoStream(null);
+        }
+        if (cancelled) {
+          if (videoStream) {
+            for (const t of videoStream.getTracks()) {
+              try {
+                t.stop();
+              } catch {
+                /* ignore */
+              }
+            }
+          }
+          return;
+        }
+        if (videoStream) {
+          if (isCameraOffRef.current) {
+            for (const t of videoStream.getVideoTracks())
+              t.enabled = false;
+          }
+          localVideoStreamRef.current = videoStream;
+          setLocalVideoStream(videoStream);
+          log.log(
+            `camera acquired tracks=${videoStream.getVideoTracks().length} off=${isCameraOffRef.current}`
+          );
+        }
+      } else {
+        // cameraEnabled=false → unconditionally mark camera off so
+        // UI can render the placeholder.
+        setIsCameraOff(true);
+      }
+
+      setIsAcquiring(false);
     })();
 
     return () => {
       cancelled = true;
-      const stream = localStreamRef.current;
-      if (stream) {
-        for (const t of stream.getTracks()) {
+      const aud = localStreamRef.current;
+      if (aud) {
+        for (const t of aud.getTracks()) {
+          try {
+            t.stop();
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+      const vid = localVideoStreamRef.current;
+      if (vid) {
+        for (const t of vid.getTracks()) {
           try {
             t.stop();
           } catch {
@@ -426,10 +561,18 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         }
       }
       localStreamRef.current = null;
+      localVideoStreamRef.current = null;
       setLocalAudioStream(null);
+      setLocalVideoStream(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, retryCount, audioConstraints]);
+  }, [
+    enabled,
+    retryCount,
+    audioConstraints,
+    cameraEnabled,
+    videoConstraints,
+  ]);
 
   // ---------------------------------------------------------------
   // Effect: build mesh + signaling, reconcile peers, collect tracks
@@ -459,8 +602,14 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       signaling,
       localPeerId,
       sessionId,
-      getLocalTracks: () =>
-        localStreamRef.current?.getAudioTracks() ?? [],
+      getLocalTracks: () => {
+        const tracks: MediaStreamTrack[] = [];
+        const aud = localStreamRef.current;
+        if (aud) tracks.push(...aud.getAudioTracks());
+        const vid = localVideoStreamRef.current;
+        if (vid) tracks.push(...vid.getVideoTracks());
+        return tracks;
+      },
     });
     meshRef.current = mesh;
 
@@ -472,6 +621,8 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       label?: string;
       audioStream: MediaStream;
       hasAudioTrack: boolean;
+      videoStream: MediaStream;
+      hasVideoTrack: boolean;
       peerConnectionState: RTCPeerConnectionState;
       iceConnectionState: RTCIceConnectionState;
       addedToMesh: boolean;
@@ -487,7 +638,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           role: entry.role,
           ...(entry.label !== undefined ? { label: entry.label } : {}),
           audioStream: entry.hasAudioTrack ? entry.audioStream : null,
-          videoStream: null,
+          videoStream: entry.hasVideoTrack ? entry.videoStream : null,
           peerConnectionState: entry.peerConnectionState,
           iceConnectionState: entry.iceConnectionState,
         });
@@ -510,6 +661,8 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           label,
           audioStream: new MediaStream(),
           hasAudioTrack: false,
+          videoStream: new MediaStream(),
+          hasVideoTrack: false,
           peerConnectionState: "new",
           iceConnectionState: "new",
           addedToMesh: false,
@@ -567,13 +720,9 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
     const unsubTrack = mesh.onRemoteTrack((peerId, track) => {
       if (disposed) return;
-      // Commit 3 will add `track.kind === "video"` handling — for
-      // now drop video tracks defensively so a peer that streams
-      // camera (e.g. Chrome user pinned an old useLiveAV build)
-      // doesn't pollute audio capture.
-      if (track.kind !== "audio") {
-        log.log(
-          `onRemoteTrack ignored kind=${track.kind} peer=${peerId} (commit 3 will handle video)`
+      if (track.kind !== "audio" && track.kind !== "video") {
+        log.warn(
+          `onRemoteTrack unknown kind=${track.kind} peer=${peerId} — dropping`
         );
         return;
       }
@@ -584,28 +733,37 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         );
         return;
       }
+      const targetStream =
+        track.kind === "audio" ? entry.audioStream : entry.videoStream;
       try {
-        entry.audioStream.addTrack(track);
+        targetStream.addTrack(track);
       } catch (err) {
         // addTrack throws if the same track is added twice. We
         // tolerate that — the second event from a re-negotiation
         // simply lands as a no-op.
         log.warn(
-          `audioStream.addTrack threw peer=${peerId} err=${
+          `${track.kind}Stream.addTrack threw peer=${peerId} err=${
             (err as Error)?.message ?? String(err)
           }`
         );
         return;
       }
-      entry.hasAudioTrack = true;
+      if (track.kind === "audio") entry.hasAudioTrack = true;
+      else entry.hasVideoTrack = true;
       track.addEventListener("ended", () => {
         if (disposed) return;
         try {
-          entry.audioStream.removeTrack(track);
+          targetStream.removeTrack(track);
         } catch {
           /* ignore */
         }
-        entry.hasAudioTrack = entry.audioStream.getAudioTracks().length > 0;
+        if (track.kind === "audio") {
+          entry.hasAudioTrack =
+            entry.audioStream.getAudioTracks().length > 0;
+        } else {
+          entry.hasVideoTrack =
+            entry.videoStream.getVideoTracks().length > 0;
+        }
         rebuild();
       });
       rebuild();
@@ -656,6 +814,13 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
             /* ignore */
           }
         }
+        for (const t of entry.videoStream.getTracks()) {
+          try {
+            t.stop();
+          } catch {
+            /* ignore */
+          }
+        }
       }
       internal.clear();
       setParticipants([]);
@@ -675,6 +840,19 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         for (const t of stream.getAudioTracks()) t.enabled = !next;
       }
       log.log(`toggleMic next=${next ? "muted" : "unmuted"}`);
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const toggleCamera = useCallback(() => {
+    const stream = localVideoStreamRef.current;
+    setIsCameraOff((prev) => {
+      const next = !prev;
+      if (stream) {
+        for (const t of stream.getVideoTracks()) t.enabled = !next;
+      }
+      log.log(`toggleCamera next=${next ? "off" : "on"}`);
       return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -713,10 +891,14 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
   return {
     localAudioStream,
+    localVideoStream,
     isAcquiring,
     error,
+    videoError,
     isMicMuted,
     toggleMic,
+    isCameraOff,
+    toggleCamera,
     participants,
     reconnectPeer,
     retryAcquire,
