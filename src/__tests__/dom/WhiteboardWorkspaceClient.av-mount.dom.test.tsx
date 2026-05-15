@@ -285,10 +285,17 @@ jest.mock("@/hooks/useWhiteboardRecorder", () => ({
   }),
 }));
 
-jest.mock("@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceAudioBridge", () => ({
-  WhiteboardWorkspaceAudioBridge: React.forwardRef(() => null),
-  __esModule: true,
-}));
+jest.mock(
+  "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceAudioBridge",
+  () => {
+    const WhiteboardWorkspaceAudioBridge = React.forwardRef(() => null);
+    WhiteboardWorkspaceAudioBridge.displayName = "WhiteboardWorkspaceAudioBridge";
+    return {
+      __esModule: true,
+      WhiteboardWorkspaceAudioBridge,
+    };
+  }
+);
 
 jest.mock("@/hooks/useAudioRecorder", () => ({
   useAudioRecorder: () => ({
