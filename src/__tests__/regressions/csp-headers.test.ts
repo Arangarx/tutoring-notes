@@ -65,10 +65,35 @@ describe("buildContentSecurityPolicy — directive guards", () => {
     );
   });
 
-  test("img-src still includes blob: and data:", () => {
+  test("img-src includes blob: and data:", () => {
     const directive = getDirective(csp, "img-src") ?? "";
     expect(directive).toMatch(/\bblob:/);
     expect(directive).toMatch(/\bdata:/);
+  });
+
+  test("img-src allows Vercel Blob public CDN (whiteboard images)", () => {
+    expect(getDirective(csp, "img-src")).toMatch(
+      /https:\/\/\*\.public\.blob\.vercel-storage\.com/
+    );
+  });
+
+  test("img-src allows Vercel Blob private CDN (signed whiteboard image URLs)", () => {
+    // Whiteboard images inserted via the tutor toolbar are stored as
+    // private Blob assets and served from *.private.blob.vercel-storage.com.
+    // Without this, Chrome blocks <img> on the workspace and student page
+    // with "violates img-src … blob:".
+    expect(getDirective(csp, "img-src")).toMatch(
+      /https:\/\/\*\.private\.blob\.vercel-storage\.com/
+    );
+  });
+
+  test("connect-src allows Vercel Blob private CDN (fetch() by replay + student page)", () => {
+    // The whiteboard replay and student page fetch() private Blob URLs to load
+    // image assets. Without this the fetch is blocked by connect-src and
+    // [WhiteboardReplay] logs "Could not load asset … Failed to fetch".
+    expect(getDirective(csp, "connect-src")).toMatch(
+      /https:\/\/\*\.private\.blob\.vercel-storage\.com/
+    );
   });
 
   test("font-src includes data: (Excalidraw 0.18 bundled-font regression guard)", () => {

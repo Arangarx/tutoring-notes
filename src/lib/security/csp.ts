@@ -151,6 +151,9 @@ export function buildContentSecurityPolicy(opts: CspOptions = {}): string {
     "'self'",
     "https://vercel.com",
     "https://*.public.blob.vercel-storage.com",
+    // Private Blob URLs are fetched by the replay + student page to load
+    // whiteboard images/PDFs. Without this, fetch() is blocked by connect-src.
+    "https://*.private.blob.vercel-storage.com",
     ...whiteboardSyncOrigins(opts.whiteboardSyncUrl),
   ].join(" ");
 
@@ -158,7 +161,12 @@ export function buildContentSecurityPolicy(opts: CspOptions = {}): string {
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    // *.private.blob.vercel-storage.com — Vercel Blob private-access URLs
+    // used for whiteboard images/PDFs inserted via the tutor toolbar and
+    // displayed on the student page. The private CDN hostname differs from
+    // the public one; without this Chrome blocks <img> loaded from signed
+    // private Blob URLs with "violates img-src 'self' data: blob:".
+    "img-src 'self' data: blob: https://*.public.blob.vercel-storage.com https://*.private.blob.vercel-storage.com",
     "media-src 'self' blob: https://*.public.blob.vercel-storage.com",
     "font-src 'self' data: blob: https:",
     `connect-src ${connectSrc}`,
