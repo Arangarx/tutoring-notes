@@ -23,7 +23,9 @@ import {
   createWhiteboardSyncClient,
   generateEncryptionKeyBase64Url,
   _testing,
+  type RoomPeer,
   type WhiteboardWireMessage,
+  type WhiteboardWirePresence,
   type WhiteboardWireSignal,
   type WhiteboardWireSignalPayload,
 } from "@/lib/whiteboard/sync-client";
@@ -98,6 +100,37 @@ async function flushMicrotasks(rounds = 5): Promise<void> {
   for (let i = 0; i < rounds; i++) {
     await Promise.resolve();
   }
+}
+
+/**
+ * Phase 4b: presence frames now ride the same `server-broadcast`
+ * channel as scene/document/signal frames. Pre-existing tests that
+ * counted absolute `server-broadcast` emissions need to filter to
+ * scene-only emits — otherwise the connect-time presence broadcast
+ * (plus the re-broadcast on every new-user / reconnect) inflates
+ * the counter. This helper decrypts each emitted frame and counts
+ * only those with no `kind` field (i.e. v1/v2/v3 scene messages).
+ */
+async function countSceneEmits(
+  sock: FakeSocket,
+  aes: CryptoKey
+): Promise<number> {
+  let count = 0;
+  for (const e of sock.emitted) {
+    if (e.event !== "server-broadcast") continue;
+    try {
+      const decrypted = await _testing.decryptMessage(
+        aes,
+        e.args[1] as ArrayBuffer,
+        e.args[2] as ArrayBuffer
+      );
+      const kind = (decrypted as { kind?: unknown }).kind;
+      if (typeof kind === "undefined") count += 1;
+    } catch {
+      // skip undecryptable frames (none expected, but safe)
+    }
+  }
+  return count;
 }
 
 /**
@@ -254,29 +287,24 @@ describe("sync-client lifecycle", () => {
     await flushMicrotasks(10);
 
     const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
     const a = sampleScene("first");
     const b = sampleScene("second");
     client.broadcastScene(a);
-    expect(
-      sock.emitted.filter((e) => e.event === "server-broadcast").length
-    ).toBe(0);
+    expect(await countSceneEmits(sock, aes)).toBe(0);
 
     const flushed1 = client.flushPendingBroadcast();
     expect(flushed1).toBe(true);
     await realTick(10);
     await flushMicrotasks(10);
-    expect(
-      sock.emitted.filter((e) => e.event === "server-broadcast").length
-    ).toBe(1);
+    expect(await countSceneEmits(sock, aes)).toBe(1);
 
     client.broadcastScene(b);
     const flushed2 = client.flushPendingBroadcast();
     expect(flushed2).toBe(true);
     await realTick(10);
     await flushMicrotasks(10);
-    expect(
-      sock.emitted.filter((e) => e.event === "server-broadcast").length
-    ).toBe(2);
+    expect(await countSceneEmits(sock, aes)).toBe(2);
 
     client.disconnect();
   });
@@ -346,19 +374,18 @@ describe("sync-client lifecycle", () => {
     await flushMicrotasks(10);
 
     const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
     client.broadcastScene(sampleScene("a"));
     await realTick(20);
     await flushMicrotasks(10);
 
-    const before = sock.emitted.filter((e) => e.event === "server-broadcast").length;
-    expect(before).toBe(1);
+    expect(await countSceneEmits(sock, aes)).toBe(1);
 
     sock.inject("new-user", "fake-peer-sid");
-    await realTick(10);
-    await flushMicrotasks(10);
+    await realTick(20);
+    await flushMicrotasks(15);
 
-    const after = sock.emitted.filter((e) => e.event === "server-broadcast").length;
-    expect(after).toBe(2);
+    expect(await countSceneEmits(sock, aes)).toBe(2);
 
     client.disconnect();
   });
@@ -379,18 +406,15 @@ describe("sync-client lifecycle", () => {
     await flushMicrotasks(10);
 
     const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
     client.broadcastScene(sampleScene("pending"));
-    expect(
-      sock.emitted.filter((e) => e.event === "server-broadcast").length
-    ).toBe(0);
+    expect(await countSceneEmits(sock, aes)).toBe(0);
 
     sock.inject("new-user", "fake-peer-sid");
-    await realTick(10);
-    await flushMicrotasks(10);
+    await realTick(20);
+    await flushMicrotasks(15);
 
-    expect(
-      sock.emitted.filter((e) => e.event === "server-broadcast").length
-    ).toBe(1);
+    expect(await countSceneEmits(sock, aes)).toBe(1);
 
     client.disconnect();
   });
@@ -555,15 +579,13 @@ describe("sync-client lifecycle", () => {
     await flushMicrotasks(10);
 
     const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
 
     client.broadcastScene(sampleScene("a"));
     await realTick(20);
     await flushMicrotasks(10);
 
-    const broadcastsAfterFirst = sock.emitted.filter(
-      (e) => e.event === "server-broadcast"
-    ).length;
-    expect(broadcastsAfterFirst).toBe(1);
+    expect(await countSceneEmits(sock, aes)).toBe(1);
 
     // socket.io-client keeps the same Socket instance across reconnects
     // and re-fires `connect`. Mirror that here.
@@ -578,10 +600,7 @@ describe("sync-client lifecycle", () => {
     expect(onConnectSpy).toHaveBeenCalledTimes(2);
     expect(client.isConnected()).toBe(true);
 
-    const broadcastsAfterReconnect = sock.emitted.filter(
-      (e) => e.event === "server-broadcast"
-    ).length;
-    expect(broadcastsAfterReconnect).toBe(2);
+    expect(await countSceneEmits(sock, aes)).toBe(2);
 
     client.disconnect();
   });
@@ -1334,5 +1353,675 @@ describe("sync-client webrtc-signal envelope (Phase 4a)", () => {
     await realTick(15);
     await flushMicrotasks(15);
     expect(signalCb).not.toHaveBeenCalled();
+  });
+});
+
+// -----------------------------------------------------------------
+// Phase 4b — presence envelope + onRoomPeersChange + prune timer
+// -----------------------------------------------------------------
+
+/**
+ * Controllable setTimeout/clearTimeout pair so prune-window tests can
+ * advance the grace timer deterministically without disturbing the
+ * real `crypto.subtle` timing the other suites rely on. We can't use
+ * jest fake timers here because the AES-GCM round-trip is libuv-backed.
+ */
+function makeControllableTimer() {
+  type Pending = { id: number; cb: () => void; ms: number };
+  const queue: Pending[] = [];
+  let counter = 0;
+  const setTimeoutFn = (cb: () => void, ms: number) => {
+    counter += 1;
+    queue.push({ id: counter, cb, ms });
+    return counter;
+  };
+  const clearTimeoutFn = (id: unknown) => {
+    const idx = queue.findIndex((t) => t.id === id);
+    if (idx >= 0) queue.splice(idx, 1);
+  };
+  return {
+    setTimeoutFn,
+    clearTimeoutFn,
+    fireAll: () => {
+      const pending = queue.splice(0);
+      for (const t of pending) t.cb();
+    },
+    pendingCount: () => queue.length,
+  };
+}
+
+/** Inject an inbound encrypted presence frame on the fake socket. */
+async function injectPresence(
+  sock: FakeSocket,
+  aes: CryptoKey,
+  presence: WhiteboardWirePresence
+): Promise<void> {
+  const { data, iv } = await _testing.encryptMessage(aes, presence);
+  sock.inject("client-broadcast", data, iv);
+}
+
+/** Decrypt every server-broadcast emitted so far and return the presence frames. */
+async function readEmittedPresence(
+  sock: FakeSocket,
+  aes: CryptoKey
+): Promise<WhiteboardWirePresence[]> {
+  const out: WhiteboardWirePresence[] = [];
+  for (const e of sock.emitted) {
+    if (e.event !== "server-broadcast") continue;
+    const data = e.args[1] as ArrayBuffer;
+    const iv = e.args[2] as ArrayBuffer;
+    try {
+      const msg = await _testing.decryptMessage(aes, data, iv);
+      if ((msg as Partial<WhiteboardWirePresence>).kind === "presence") {
+        out.push(msg as WhiteboardWirePresence);
+      }
+    } catch {
+      // skip non-decryptable / scene frames
+    }
+  }
+  return out;
+}
+
+describe("sync-client presence envelope (Phase 4b)", () => {
+  test("presence message encrypts → decrypts → validates with all fields", async () => {
+    const k = generateEncryptionKeyBase64Url();
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const msg: WhiteboardWirePresence = {
+      v: 1,
+      kind: "presence",
+      peerId: "peer-a",
+      role: "tutor",
+      label: "Sarah",
+    };
+    const { data, iv } = await _testing.encryptMessage(aes, msg);
+    const out = await _testing.decryptMessage(aes, data, iv);
+    expect(out).toEqual(msg);
+  });
+
+  test("presence without label round-trips with label omitted", async () => {
+    const k = generateEncryptionKeyBase64Url();
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const msg: WhiteboardWirePresence = {
+      v: 1,
+      kind: "presence",
+      peerId: "peer-b",
+      role: "student",
+    };
+    const { data, iv } = await _testing.encryptMessage(aes, msg);
+    const out = await _testing.decryptMessage(aes, data, iv);
+    expect(out).toEqual(msg);
+    expect((out as WhiteboardWirePresence).label).toBeUndefined();
+  });
+
+  test("validateWireMessage rejects malformed presence (bad role)", async () => {
+    const k = generateEncryptionKeyBase64Url();
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const bogus = {
+      v: 1,
+      kind: "presence",
+      peerId: "peer-c",
+      role: "moderator",
+    };
+    const ivBuf = new ArrayBuffer(12);
+    crypto.getRandomValues(new Uint8Array(ivBuf));
+    const ct = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: ivBuf },
+      aes,
+      new TextEncoder().encode(JSON.stringify(bogus)) as unknown as ArrayBuffer
+    );
+    await expect(_testing.decryptMessage(aes, ct, ivBuf)).rejects.toThrow(/bad role/);
+  });
+
+  test("validateWireMessage rejects malformed presence (empty peerId)", async () => {
+    const k = generateEncryptionKeyBase64Url();
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const bogus = { v: 1, kind: "presence", peerId: "", role: "tutor" };
+    const ivBuf = new ArrayBuffer(12);
+    crypto.getRandomValues(new Uint8Array(ivBuf));
+    const ct = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: ivBuf },
+      aes,
+      new TextEncoder().encode(JSON.stringify(bogus)) as unknown as ArrayBuffer
+    );
+    await expect(_testing.decryptMessage(aes, ct, ivBuf)).rejects.toThrow(/bad peerId/);
+  });
+
+  test("scene + signal messages still validate after presence extension", async () => {
+    const k = generateEncryptionKeyBase64Url();
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const scene: WhiteboardWireMessage = {
+      v: 1,
+      peerId: "peer-a",
+      role: "tutor",
+      elements: sampleScene("s1"),
+    };
+    const sceneEnc = await _testing.encryptMessage(aes, scene);
+    expect(await _testing.decryptMessage(aes, sceneEnc.data, sceneEnc.iv)).toEqual(scene);
+
+    const signal: WhiteboardWireSignal = {
+      v: 1,
+      kind: "webrtc-signal",
+      peerId: "peer-a",
+      targetPeerId: "peer-b",
+      payload: { type: "leave" },
+    };
+    const sigEnc = await _testing.encryptMessage(aes, signal);
+    expect(await _testing.decryptMessage(aes, sigEnc.data, sigEnc.iv)).toEqual(signal);
+  });
+
+  test("broadcastPresence emits one presence frame on initial connect (no label)", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const presenceFrames = await readEmittedPresence(sock, aes);
+    expect(presenceFrames.length).toBeGreaterThanOrEqual(1);
+    const first = presenceFrames[0]!;
+    expect(first.peerId).toBe("tutor-A");
+    expect(first.role).toBe("tutor");
+    expect(first.label).toBeUndefined();
+
+    client.disconnect();
+  });
+
+  test("broadcastPresence includes localPeerLabel when supplied", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      localPeerLabel: "Sarah",
+      _ioFactory: factory,
+    });
+
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const presenceFrames = await readEmittedPresence(sock, aes);
+    const myFrame = presenceFrames.find((p) => p.peerId === "tutor-A");
+    expect(myFrame?.label).toBe("Sarah");
+
+    client.disconnect();
+  });
+
+  test("re-broadcasts presence when new-user fires", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      localPeerLabel: "Sarah",
+      _ioFactory: factory,
+    });
+
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const baseCount = (await readEmittedPresence(sock, aes)).length;
+
+    sock.inject("new-user", "remote-socket-1");
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    const afterCount = (await readEmittedPresence(sock, aes)).length;
+    expect(afterCount - baseCount).toBeGreaterThanOrEqual(1);
+
+    client.disconnect();
+  });
+
+  test("re-broadcasts presence on reconnect", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const baseCount = (await readEmittedPresence(sock, aes)).length;
+
+    sock.inject("disconnect", "transport close");
+    await flushMicrotasks(5);
+    sock.inject("connect");
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    const afterCount = (await readEmittedPresence(sock, aes)).length;
+    expect(afterCount).toBeGreaterThan(baseCount);
+
+    client.disconnect();
+  });
+
+  test("onRoomPeersChange fires once when a new peer's presence arrives", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const peersCb = jest.fn<void, [ReadonlyArray<RoomPeer>]>();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+    client.onRoomPeersChange(peersCb);
+
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    expect(peersCb).not.toHaveBeenCalled();
+
+    const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    await injectPresence(sock, aes, {
+      v: 1,
+      kind: "presence",
+      peerId: "student-B",
+      role: "student",
+      label: "Alex",
+    });
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    expect(peersCb).toHaveBeenCalledTimes(1);
+    expect(peersCb).toHaveBeenLastCalledWith([
+      { peerId: "student-B", role: "student", label: "Alex" },
+    ]);
+
+    client.disconnect();
+  });
+
+  test("onRoomPeersChange excludes self (own presence echo)", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const peersCb = jest.fn<void, [ReadonlyArray<RoomPeer>]>();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+    client.onRoomPeersChange(peersCb);
+
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    // Inject a presence frame that claims to be from ourselves —
+    // sync-client must ignore it (own echo from the relay's
+    // broadcast loop).
+    await injectPresence(sock, aes, {
+      v: 1,
+      kind: "presence",
+      peerId: "tutor-A",
+      role: "tutor",
+      label: "Sarah",
+    });
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    expect(peersCb).not.toHaveBeenCalled();
+
+    client.disconnect();
+  });
+
+  test("duplicate presence with same fields does NOT re-fire onRoomPeersChange", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const peersCb = jest.fn<void, [ReadonlyArray<RoomPeer>]>();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+    client.onRoomPeersChange(peersCb);
+
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const frame: WhiteboardWirePresence = {
+      v: 1,
+      kind: "presence",
+      peerId: "student-B",
+      role: "student",
+      label: "Alex",
+    };
+    await injectPresence(sock, aes, frame);
+    await realTick(20);
+    await flushMicrotasks(20);
+    expect(peersCb).toHaveBeenCalledTimes(1);
+
+    // Same frame again — no material change, no re-fire.
+    await injectPresence(sock, aes, frame);
+    await realTick(20);
+    await flushMicrotasks(20);
+    expect(peersCb).toHaveBeenCalledTimes(1);
+
+    client.disconnect();
+  });
+
+  test("label change fires onRoomPeersChange with the new label", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const peersCb = jest.fn<void, [ReadonlyArray<RoomPeer>]>();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+    client.onRoomPeersChange(peersCb);
+
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    await injectPresence(sock, aes, {
+      v: 1,
+      kind: "presence",
+      peerId: "student-B",
+      role: "student",
+      label: "Alex",
+    });
+    await realTick(15);
+    await flushMicrotasks(15);
+    expect(peersCb).toHaveBeenCalledTimes(1);
+
+    await injectPresence(sock, aes, {
+      v: 1,
+      kind: "presence",
+      peerId: "student-B",
+      role: "student",
+      label: "Alex M.",
+    });
+    await realTick(15);
+    await flushMicrotasks(15);
+    expect(peersCb).toHaveBeenCalledTimes(2);
+    expect(peersCb).toHaveBeenLastCalledWith([
+      { peerId: "student-B", role: "student", label: "Alex M." },
+    ]);
+
+    client.disconnect();
+  });
+
+  test("multi-peer room: snapshot is sorted by peerId ascending", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const peersCb = jest.fn<void, [ReadonlyArray<RoomPeer>]>();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+    client.onRoomPeersChange(peersCb);
+
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    await injectPresence(sock, aes, {
+      v: 1,
+      kind: "presence",
+      peerId: "student-Z",
+      role: "student",
+    });
+    await injectPresence(sock, aes, {
+      v: 1,
+      kind: "presence",
+      peerId: "student-B",
+      role: "student",
+    });
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    const last = peersCb.mock.calls.at(-1)![0];
+    expect(last.map((p) => p.peerId)).toEqual(["student-B", "student-Z"]);
+
+    client.disconnect();
+  });
+
+  test("room-user-change shrink + prune timer fires drops missing peer", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const peersCb = jest.fn<void, [ReadonlyArray<RoomPeer>]>();
+    const timer = makeControllableTimer();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      presencePruneGraceMs: 50,
+      _setTimeoutFn: timer.setTimeoutFn,
+      _clearTimeoutFn: timer.clearTimeoutFn,
+      _ioFactory: factory,
+    });
+    client.onRoomPeersChange(peersCb);
+
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+
+    // Two students join.
+    sock.inject("room-user-change", ["tutor-sock", "stu-1-sock", "stu-2-sock"]);
+    await injectPresence(sock, aes, {
+      v: 1,
+      kind: "presence",
+      peerId: "student-B",
+      role: "student",
+    });
+    await injectPresence(sock, aes, {
+      v: 1,
+      kind: "presence",
+      peerId: "student-C",
+      role: "student",
+    });
+    await realTick(15);
+    await flushMicrotasks(15);
+    expect(peersCb).toHaveBeenLastCalledWith([
+      { peerId: "student-B", role: "student" },
+      { peerId: "student-C", role: "student" },
+    ]);
+
+    // Member count shrinks — schedule prune for everyone.
+    sock.inject("room-user-change", ["tutor-sock"]);
+    await flushMicrotasks(5);
+    expect(timer.pendingCount()).toBe(1);
+
+    // Fire the grace timer — both students get dropped.
+    timer.fireAll();
+    await realTick(5);
+    await flushMicrotasks(10);
+
+    expect(peersCb).toHaveBeenLastCalledWith([]);
+
+    client.disconnect();
+  });
+
+  test("transient flap: re-broadcast within grace window does NOT cause remove+re-add", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const peersCb = jest.fn<void, [ReadonlyArray<RoomPeer>]>();
+    const timer = makeControllableTimer();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      presencePruneGraceMs: 50,
+      _setTimeoutFn: timer.setTimeoutFn,
+      _clearTimeoutFn: timer.clearTimeoutFn,
+      _ioFactory: factory,
+    });
+    client.onRoomPeersChange(peersCb);
+
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+
+    sock.inject("room-user-change", ["tutor-sock", "stu-1-sock"]);
+    await injectPresence(sock, aes, {
+      v: 1,
+      kind: "presence",
+      peerId: "student-B",
+      role: "student",
+    });
+    await realTick(15);
+    await flushMicrotasks(15);
+    const fireCountAfterFirstAdd = peersCb.mock.calls.length;
+
+    // Simulate flap: members shrink (other socket dropped), then the
+    // student's reconnect-presence lands while the prune is still
+    // pending in the queue.
+    sock.inject("room-user-change", ["tutor-sock"]);
+    await flushMicrotasks(5);
+    expect(timer.pendingCount()).toBe(1);
+
+    await injectPresence(sock, aes, {
+      v: 1,
+      kind: "presence",
+      peerId: "student-B",
+      role: "student",
+    });
+    await realTick(15);
+    await flushMicrotasks(15);
+
+    // Fire the prune — student-B re-confirmed, so nothing drops.
+    timer.fireAll();
+    await realTick(5);
+    await flushMicrotasks(10);
+
+    // No add/remove cycle: the only callback fire was the initial add.
+    expect(peersCb.mock.calls.length).toBe(fireCountAfterFirstAdd);
+    expect(peersCb.mock.calls.at(-1)![0]).toEqual([
+      { peerId: "student-B", role: "student" },
+    ]);
+
+    client.disconnect();
+  });
+
+  test("late onRoomPeersChange subscriber receives current snapshot via microtask", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    await injectPresence(sock, aes, {
+      v: 1,
+      kind: "presence",
+      peerId: "student-B",
+      role: "student",
+      label: "Alex",
+    });
+    await realTick(15);
+    await flushMicrotasks(15);
+
+    // Subscribe after the first presence frame is already inside
+    // the map — the replay microtask should hand us the snapshot.
+    const lateCb = jest.fn<void, [ReadonlyArray<RoomPeer>]>();
+    client.onRoomPeersChange(lateCb);
+    await flushMicrotasks(5);
+    expect(lateCb).toHaveBeenCalledTimes(1);
+    expect(lateCb).toHaveBeenLastCalledWith([
+      { peerId: "student-B", role: "student", label: "Alex" },
+    ]);
+
+    client.disconnect();
+  });
+
+  test("disconnect() clears roomPeers subscribers + presence map (no late callbacks)", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const peersCb = jest.fn<void, [ReadonlyArray<RoomPeer>]>();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+    client.onRoomPeersChange(peersCb);
+
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    client.disconnect();
+
+    // After disconnect, an inbound presence frame must not reach the
+    // (cleared) subscriber.
+    const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const { data, iv } = await _testing.encryptMessage(aes, {
+      v: 1,
+      kind: "presence",
+      peerId: "student-B",
+      role: "student",
+    } as WhiteboardWirePresence);
+    expect(() => sock.inject("client-broadcast", data, iv)).not.toThrow();
+    await realTick(15);
+    await flushMicrotasks(15);
+    expect(peersCb).not.toHaveBeenCalled();
   });
 });
