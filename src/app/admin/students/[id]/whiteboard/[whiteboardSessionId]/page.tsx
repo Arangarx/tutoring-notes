@@ -231,6 +231,7 @@ export default async function WhiteboardReviewPage({
         audioMimeType={firstAudio?.mimeType ?? null}
         snapshotBlobUrl={detail.snapshotBlobUrl ? snapshotApiUrl : null}
         title={sessionLabel}
+        whiteboardSessionId={whiteboardSessionId}
       />
 
       {/* AI wedge: generate notes from this whiteboard session */}

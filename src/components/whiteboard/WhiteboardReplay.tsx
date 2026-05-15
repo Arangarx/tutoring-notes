@@ -61,6 +61,7 @@ import {
 } from "@/lib/whiteboard/scene-paint";
 import { useExcalidrawThemeFromSystem } from "@/hooks/useExcalidrawThemeFromSystem";
 import { attachWebmDurationFix } from "@/lib/audio/webm-duration-fix";
+import { resolveWhiteboardAssetReadUrl } from "@/lib/whiteboard/resolve-asset-read-url";
 
 /**
  * Excalidraw is heavy (>1 MB gzipped) and grabs a number of browser
@@ -117,6 +118,13 @@ export type WhiteboardReplayProps = {
   snapshotBlobUrl?: string | null;
   /** Display label, e.g. "Recording of Liam's session, Apr 23 2026". */
   title?: string;
+  /**
+   * When set, private Vercel Blob image assets are proxied through
+   * `/api/whiteboard/[id]/tutor-asset?u=...` (authenticated via session
+   * cookie) instead of being fetched directly (which returns 403).
+   * Pass the `whiteboardSessionId` from the review page.
+   */
+  whiteboardSessionId?: string;
 };
 
 type LoadState =
@@ -131,7 +139,16 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     audioMimeType,
     snapshotBlobUrl,
     title,
+    whiteboardSessionId,
   } = props;
+
+  const resolveAssetUrl = whiteboardSessionId
+    ? (raw: string) =>
+        resolveWhiteboardAssetReadUrl(raw, {
+          kind: "tutor",
+          whiteboardSessionId,
+        })
+    : undefined;
 
   const [loadState, setLoadState] = useState<LoadState>({ kind: "loading" });
   const [api, setApi] = useState<ReplayApi | null>(null);
@@ -255,8 +272,9 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
 
   useEffect(() => {
     if (loadState.kind !== "ready") return;
-    const urls = collectAssetUrls(loadState.log);
-    if (urls.length === 0) return;
+    const rawUrls = collectAssetUrls(loadState.log);
+    if (rawUrls.length === 0) return;
+    const urls = resolveAssetUrl ? rawUrls.map(resolveAssetUrl) : rawUrls;
     const cleanups: Array<() => void> = [];
     for (const url of urls) {
       const img = new window.Image();
@@ -270,7 +288,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       });
     }
     return () => cleanups.forEach((c) => c());
-  }, [loadState]);
+  }, [loadState, resolveAssetUrl]);
 
   // Preload `restoreElements` before we mount Excalidraw (same library chunk,
   // but `dynamic()` defers ours until first paint scheduling).
@@ -342,14 +360,18 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       // call `getFiles()` or look in `BinaryFiles` on next render
       // tick, and addFiles is what populates that.
       if (result.newAssetUrls.length > 0) {
+        const resolvedAssetUrls = resolveAssetUrl
+          ? result.newAssetUrls.map(resolveAssetUrl)
+          : result.newAssetUrls;
         void registerImageAssets(
           api,
           result.scene,
-          result.newAssetUrls
+          resolvedAssetUrls,
+          result.newAssetUrls,
         );
       }
     },
-    [api, loadState]
+    [api, loadState, resolveAssetUrl]
   );
 
   // First paint after Excalidraw mount **for this API instance**.
@@ -764,7 +786,10 @@ function collectAssetUrls(log: WBEventLog): string[] {
 async function registerImageAssets(
   api: ReplayApi,
   scene: ReadonlyMap<string, WBElement>,
-  newAssetUrls: string[]
+  /** Fetch URLs — may be proxied same-origin routes for private Blob assets. */
+  fetchUrls: string[],
+  /** Original assetUrl values from the event log — used to key scene elements. */
+  originalUrls: string[] = fetchUrls,
 ): Promise<void> {
   const filesToRegister: Array<{
     id: string;
@@ -772,16 +797,20 @@ async function registerImageAssets(
     dataURL: string;
     created: number;
   }> = [];
-  for (const url of newAssetUrls) {
+  for (let i = 0; i < fetchUrls.length; i++) {
+    const fetchUrl = fetchUrls[i]!;
+    const originalUrl = originalUrls[i] ?? fetchUrl;
     try {
-      const res = await fetch(url, {
-        credentials: url.startsWith("/") ? "include" : "omit",
+      const res = await fetch(fetchUrl, {
+        credentials: fetchUrl.startsWith("/") ? "include" : "omit",
       });
       if (!res.ok) continue;
       const blob = await res.blob();
       const dataURL = await blobToDataUrl(blob);
       const mime = normalizeAssetMime(blob.type) ?? "image/png";
-      const fileId = stableHashFileId(url);
+      // Key by original URL so scene elements (which store the raw assetUrl)
+      // can be matched even when the fetch went through a proxy route.
+      const fileId = stableHashFileId(originalUrl);
       filesToRegister.push({
         id: fileId,
         mimeType: mime,
@@ -792,12 +821,12 @@ async function registerImageAssets(
       // Excalidraw renders an image element via the (fileId, files
       // map) pair, so without this it wouldn't pick up the bitmap.
       for (const el of scene.values()) {
-        if (el.assetUrl === url && el.type === "image") {
+        if (el.assetUrl === originalUrl && el.type === "image") {
           (el as unknown as { fileId?: string }).fileId = fileId;
         }
       }
     } catch (err) {
-      console.warn("[WhiteboardReplay] Could not load asset", url, err);
+      console.warn("[WhiteboardReplay] Could not load asset", fetchUrl, err);
     }
   }
   if (filesToRegister.length > 0) {
