@@ -152,6 +152,13 @@ export function AVTile({
   const showCamPlaceholder =
     !hasVideoTrack || (isLocalTile && localCamMuted === true);
 
+  const remote = !isLocalTile ? (participant as AvParticipant) : null;
+  const remoteAwaitingVideo =
+    !!remote &&
+    !hasVideoTrack &&
+    (remote.peerConnectionState === "connecting" ||
+      remote.peerConnectionState === "new");
+
   const palette = {
     green: { bg: "rgba(34,197,94,0.18)", fg: "#16a34a", dot: "#16a34a" },
     amber: { bg: "rgba(234,179,8,0.18)", fg: "#a16207", dot: "#ca8a04" },
@@ -213,9 +220,15 @@ export function AVTile({
               justifyContent: "center",
               color: "rgba(248,250,252,0.55)",
               fontSize: 12,
+              textAlign: "center",
+              padding: "0 6px",
             }}
           >
-            {isLocalTile && localCamMuted ? "Camera off" : "Camera off"}
+            {isLocalTile && localCamMuted
+              ? "Camera off"
+              : remoteAwaitingVideo
+                ? "Waiting for video…"
+                : "Camera off"}
           </div>
         )}
         {!isLocalTile && (

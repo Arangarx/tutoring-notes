@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { rateLimit } from "@/lib/rate-limit";
+import { apiRateBucketForPath } from "@/lib/security/api-rate-buckets";
 import {
   buildContentSecurityPolicy,
   buildPermissionsPolicy,
@@ -52,7 +53,6 @@ function addSecurityHeaders(
 // Rate-limit configurations per route group
 // ---------------------------------------------------------------------------
 const AUTH_RATE_LIMIT = { max: 10, windowMs: 60_000 };  // 10 req/min
-const API_RATE_LIMIT  = { max: 30, windowMs: 60_000 };  // 30 req/min
 const SETUP_RATE_LIMIT = { max: 5, windowMs: 60_000 };  // 5 req/min
 
 function getClientIp(req: NextRequest): string {
@@ -96,7 +96,8 @@ export async function middleware(req: NextRequest) {
     const rl = rateLimit(`auth:${ip}`, AUTH_RATE_LIMIT.max, AUTH_RATE_LIMIT.windowMs);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);
   } else if (pathname.startsWith("/api/")) {
-    const rl = rateLimit(`api:${ip}`, API_RATE_LIMIT.max, API_RATE_LIMIT.windowMs);
+    const bucket = apiRateBucketForPath(pathname);
+    const rl = rateLimit(`${bucket.prefix}:${ip}`, bucket.max, bucket.windowMs);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);
   } else if (pathname === "/setup") {
     const rl = rateLimit(`setup:${ip}`, SETUP_RATE_LIMIT.max, SETUP_RATE_LIMIT.windowMs);

@@ -18,10 +18,11 @@
  *     `navigator.permissions.query()` on mount where supported, so
  *     the host UI can decide whether to show the request modal
  *     without prompting.
- *   - Once `localAudioStream` is non-null AND `syncClient` is
- *     non-null, the mesh + signaling are built and the hook starts
- *     reconciling room peers, collecting remote tracks, and tracking
- *     per-peer connection state.
+ *   - Once `syncClient` is non-null AND at least one of
+ *     `localAudioStream` / `localVideoStream` is non-null, the mesh
+ *     and signaling are built and the hook starts reconciling room
+ *     peers, collecting remote tracks, and tracking per-peer
+ *     connection state.
  *
  * Pillar invariants reused from 4a:
  *   - Encrypted-transport trust model is preserved: this hook only
@@ -56,6 +57,7 @@ import {
   type PeerMesh,
   type PeerMeshOptions,
 } from "@/lib/av/peer-mesh";
+import { getIceServersForBrowser } from "@/lib/av/webrtc-ice-from-env";
 import {
   createSignaling,
   type Signaling,
@@ -734,7 +736,9 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   // ---------------------------------------------------------------
 
   useEffect(() => {
-    if (!syncClient || !localAudioStream) {
+    const hasLocalMedia =
+      localAudioStream !== null || localVideoStream !== null;
+    if (!syncClient || !hasLocalMedia) {
       setParticipants([]);
       return;
     }
@@ -757,6 +761,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       signaling,
       localPeerId,
       sessionId,
+      iceServers: getIceServersForBrowser(),
       getLocalTracks: () => {
         const tracks: MediaStreamTrack[] = [];
         const aud = localAudioStreamRef.current;
@@ -991,7 +996,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       setParticipants([]);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [syncClient, localAudioStream, localPeerId, sessionId]);
+  }, [syncClient, localAudioStream, localVideoStream, localPeerId, sessionId]);
 
   // ---------------------------------------------------------------
   // Public callbacks
@@ -1071,7 +1076,9 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   }, []);
 
   const isActive =
-    !!syncClient && !!localAudioStream && error === null;
+    !!syncClient &&
+    ((localAudioStream !== null && error === null) ||
+      (localVideoStream !== null && videoError === null));
 
   return {
     participants,

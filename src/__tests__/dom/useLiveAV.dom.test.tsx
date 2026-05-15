@@ -22,7 +22,9 @@
  *   - INERT on mount — no getUserMedia, no mesh.
  *   - requestMic() / requestCam() are the only acquisition triggers.
  *   - Permissions API populates hasMicPermission/hasCamPermission.
- *   - Mesh builds once mic + sync-client are both present.
+ *   - Mesh builds once sync-client is present AND at least one of mic
+ *     / camera streams is present; deps include video so cam-after-mic
+ *     rebuilds mesh.
  *   - Reconcile add-then-remove with stable peerId-sorted output.
  */
 
@@ -646,12 +648,18 @@ describe("useLiveAV — requestCam", () => {
     unmount();
   });
 
-  test("requestCam independent of requestMic", async () => {
+  test("requestCam independent of requestMic (cam alone still activates mesh when sync on)", async () => {
     const video = makeFakeStream(0, 1);
     const getUM = jest.fn(
       async () => video.stream as unknown as MediaStream
     );
-    const props = makeBaseProps({ _getUserMedia: getUM });
+    const meshHandles = makeFakeMesh();
+    const sig = makeFakeSignaling();
+    const props = makeBaseProps({
+      _getUserMedia: getUM,
+      _createPeerMesh: meshHandles.factory,
+      _createSignaling: sig.factory,
+    });
 
     const { result, unmount } = renderHook(() => useLiveAV(props));
     await act(async () => {
@@ -660,7 +668,14 @@ describe("useLiveAV — requestCam", () => {
 
     expect(result.current.localVideoStream).not.toBeNull();
     expect(result.current.localAudioStream).toBeNull();
-    expect(result.current.isActive).toBe(false); // no mic yet
+    expect(result.current.isActive).toBe(true);
+    await waitFor(() => {
+      expect(meshHandles.capturedOpts.length).toBe(1);
+    });
+    const gltrk = meshHandles.capturedOpts[0]?.getLocalTracks;
+    const out = gltrk?.("r1") ?? [];
+    expect(out.length).toBe(1);
+    expect(out[0]).toBe(video.videoTracks[0]);
 
     unmount();
   });
@@ -881,6 +896,32 @@ describe("useLiveAV — mesh + signaling lifecycle", () => {
     expect(sig.capturedOpts.length).toBe(0);
     expect(result.current.isActive).toBe(false);
     expect(result.current.localAudioStream).not.toBeNull();
+
+    unmount();
+  });
+
+  test("syncClient null: no mesh even after requestCam", async () => {
+    const video = makeFakeStream(0, 1);
+    const meshHandles = makeFakeMesh();
+    const sig = makeFakeSignaling();
+    const props = makeBaseProps({
+      syncClient: null,
+      _getUserMedia: jest.fn(
+        async () => video.stream as unknown as MediaStream
+      ),
+      _createPeerMesh: meshHandles.factory,
+      _createSignaling: sig.factory,
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await act(async () => {
+      await result.current.requestCam();
+    });
+
+    expect(meshHandles.capturedOpts.length).toBe(0);
+    expect(sig.capturedOpts.length).toBe(0);
+    expect(result.current.isActive).toBe(false);
+    expect(result.current.localVideoStream).not.toBeNull();
 
     unmount();
   });

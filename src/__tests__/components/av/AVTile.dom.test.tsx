@@ -135,15 +135,31 @@ describe("AVTile — remote participant", () => {
     );
   });
 
-  test("camera-off placeholder appears when videoStream has no video tracks", () => {
+  test("camera-off placeholder appears when videoStream has no video tracks (peer connected)", () => {
     const p = makeRemoteParticipant({
       peerId: "p-novid",
       videoStream: makeFakeStream([]), // no video tracks
+      peerConnectionState: "connected",
     });
     render(<AVTile participant={p} />);
     expect(
       screen.getByTestId("av-tile-cam-placeholder-p-novid")
     ).toBeTruthy();
+    expect(screen.getByTestId("av-tile-cam-placeholder-p-novid")).toHaveTextContent(
+      "Camera off"
+    );
+  });
+
+  test("while peer is connecting, empty video shows Waiting for video (not Camera off)", () => {
+    const p = makeRemoteParticipant({
+      peerId: "p-wait",
+      videoStream: makeFakeStream([]),
+      peerConnectionState: "connecting",
+    });
+    render(<AVTile participant={p} />);
+    expect(screen.getByTestId("av-tile-cam-placeholder-p-wait")).toHaveTextContent(
+      "Waiting for video"
+    );
   });
 
   test("re-render with a new MediaStream re-assigns srcObject", () => {

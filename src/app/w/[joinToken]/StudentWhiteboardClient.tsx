@@ -141,7 +141,18 @@ export function StudentWhiteboardClient({
       .toString(36)
       .slice(2, 8)}`;
   }, []);
-  const localPeerLabel: string | undefined = "You";
+  /**
+   * Shown only on this student's own tile. Must NOT be sent on the
+   * sync `presence` wire — that label is visible to the tutor and
+   * other peers (e.g. recording moderation).
+   */
+  const localTileLabel = "You";
+  /** Distinct per tab; travels in encrypted presence for remote UI. */
+  const syncPresenceLabel = useMemo(() => {
+    const compact = localPeerId.replace(/-/g, "");
+    const short = compact.slice(0, 6) || "join";
+    return `Student · ${short}`;
+  }, [localPeerId]);
   const [excalidrawAPI, setExcalidrawAPI] = useState<ExcalidrawApiLike | null>(
     null
   );
@@ -183,7 +194,7 @@ export function StudentWhiteboardClient({
       role: "student",
       // Phase 4c: same peerId threaded into useLiveAV below.
       peerId: localPeerId,
-      localPeerLabel,
+      localPeerLabel: syncPresenceLabel,
     });
     setSyncClient(client);
     setConnected(client.isConnected());
@@ -209,7 +220,7 @@ export function StudentWhiteboardClient({
     whiteboardSessionId,
     joinUnavailableReason,
     localPeerId,
-    localPeerLabel,
+    syncPresenceLabel,
   ]);
 
   // Phase 4c: live A/V hook. INERT until `requestMic()` / `requestCam()`
@@ -627,7 +638,7 @@ export function StudentWhiteboardClient({
           localTile={{
             peerId: localPeerId,
             role: "student",
-            label: localPeerLabel,
+            label: localTileLabel,
             audioStream: liveAv.localAudioStream,
             videoStream: liveAv.localVideoStream,
             isMicMuted: liveAv.isMicMuted,
