@@ -114,6 +114,17 @@ export type UseAudioRecorderOptions = {
   ) => void | Promise<void>;
   /** Called whenever the recording active state changes (acquiring/ready/recording/paused/uploading = true). */
   onRecordingActive?: (active: boolean) => void;
+  /**
+   * Seed the displayed timer with an already-elapsed second count so the
+   * recording timer stays in sync with a server-persisted session timer
+   * after a page refresh. The hook still counts forward from this seed;
+   * the value is only applied once at mount.
+   *
+   * In the workspace, pass `Math.floor(initialActiveMs / 1000)` so that
+   * after a refresh the recording timer resumes at the session's
+   * already-elapsed time rather than restarting from 0.
+   */
+  initialElapsedSeconds?: number;
 };
 
 export type UseAudioRecorderReturn = {
@@ -196,9 +207,10 @@ export function useAudioRecorder({
   studentId,
   onRecorded,
   onRecordingActive,
+  initialElapsedSeconds = 0,
 }: UseAudioRecorderOptions): UseAudioRecorderReturn {
   const [recordState, setRecordState] = useState<RecordState>("idle");
-  const [elapsed, setElapsed] = useState(0);
+  const [elapsed, setElapsed] = useState(initialElapsedSeconds);
   const [error, setError] = useState<string | null>(null);
 
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -225,7 +237,7 @@ export function useAudioRecorder({
   const streamRef = useRef<MediaStream | null>(null);
   const graphRef = useRef<MicAudioGraph | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const elapsedRef = useRef(0);
+  const elapsedRef = useRef(initialElapsedSeconds);
   const rafRef = useRef<number | null>(null);
   const meterBarRef = useRef<HTMLDivElement | null>(null);
   /** Tracks the latest meter colour so we don't thrash style.background every frame. */

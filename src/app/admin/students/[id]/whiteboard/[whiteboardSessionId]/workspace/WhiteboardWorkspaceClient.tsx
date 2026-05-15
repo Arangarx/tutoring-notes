@@ -809,6 +809,10 @@ export function WhiteboardWorkspaceClient({
   const workspaceAudio = useAudioRecorder({
     studentId,
     onRecorded: onWorkspaceAudioRecorded,
+    // Seed the displayed recording timer at the session's already-elapsed
+    // time so a page refresh doesn't reset it to 0 while the session
+    // timer stays at e.g. "12:34". Uses the server-truth value from SSR.
+    initialElapsedSeconds: Math.floor(initialActiveMs / 1000),
   });
   const workspaceAudioRef = useRef(workspaceAudio);
   workspaceAudioRef.current = workspaceAudio;
