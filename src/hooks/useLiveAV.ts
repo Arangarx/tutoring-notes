@@ -772,23 +772,28 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
   useEffect(() => {
     if (!externalAudioStream) {
-      // External stream withdrawn — if we were currently using a
-      // clone, clear it. A self-acquired stream (requestMic path) is
-      // left untouched.
-      const clone = externalCloneRef.current;
-      if (clone && localAudioStreamRef.current === clone) {
-        externalCloneRef.current = null;
-        localAudioStreamRef.current = null;
-        if (!unmountedRef.current) setLocalAudioStream(null);
-      }
+      // External stream is null. This happens transiently during
+      // segment rollover (teardown → new getUserMedia takes ~100ms)
+      // OR permanently on recording stop / unmount.
+      //
+      // We do NOT clear the existing clone here. Clearing would null
+      // localAudioStream → trigger the mesh-building effect → tear
+      // down all WebRTC connections every ~25-min rollover. Instead,
+      // we leave the old clone in place; the old clone's tracks will
+      // produce silence (stopped source) but the connection stays up.
+      // When the new external stream arrives the effect re-runs and
+      // the clone is refreshed with live tracks.
+      //
+      // The only time we want to clear is on unmount — that is handled
+      // in the unmount effect above.
       return;
     }
 
-    // Release any previous stream (self-acquired OR prior clone).
+    // Release any previous self-acquired stream (not a clone).
     const prev = localAudioStreamRef.current;
     const prevClone = externalCloneRef.current;
     if (prev && prev !== prevClone) {
-      // Self-acquired — stop its tracks.
+      // Self-acquired — stop its tracks before replacing.
       for (const t of prev.getTracks()) {
         try {
           t.stop();
@@ -796,11 +801,10 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           /* ignore */
         }
       }
-    } else if (prevClone) {
-      // Prior clone — release it (don't stop — cloned tracks stop
-      // independently but the source track stays live).
-      externalCloneRef.current = null;
     }
+    // Prior clone tracks: don't stop — they're independent from the
+    // source but stopping them explicitly is unnecessary and could
+    // cause brief glitches mid-sentence on rollover.
 
     // Clone: independent enabled state, same hardware source.
     const clone = new MediaStream(
