@@ -137,13 +137,66 @@ export type WhiteboardWireMessageV3 = {
 export type AnyWhiteboardWireMessage =
   | WhiteboardWireMessage
   | WhiteboardWireMessageV2
-  | WhiteboardWireMessageV3;
+  | WhiteboardWireMessageV3
+  | WhiteboardWireSignal;
 
 /** Extras attached to each `broadcastScene` (throttled on the tutor). */
 export type WhiteboardWireBroadcastExtras = {
   follow?: WhiteboardWireFollow;
   page?: WhiteboardWirePage;
   scenePageId?: string;
+};
+
+// -----------------------------------------------------------------
+// Phase 4a — webrtc-signal envelope (additive)
+// -----------------------------------------------------------------
+//
+// Carried inside the same AES-GCM envelope as scene/document messages.
+// The relay never sees plaintext SDP or ICE — same trust model as
+// scene frames. Discriminated from scene messages by the presence of
+// `kind: "webrtc-signal"`; older scene wire messages have no `kind`
+// field, so the validator treats `kind` as the high-priority
+// discriminator and falls through to v1/v2/v3 scene validation when
+// it is absent.
+//
+// `peerId` is the SENDER's stable peer id (same field as scene
+// messages — receivers can suppress own echoes uniformly). The
+// relay broadcasts to ALL room members; demultiplexing to the
+// correct recipient happens at the `signaling.ts` layer via
+// `targetPeerId === localPeerId`. Sync-client just delivers every
+// non-self signal to its subscribers.
+
+/**
+ * SDP / ICE / leave — the only payload shapes legal inside a
+ * `webrtc-signal` envelope. Schema is intentionally minimal so an
+ * older client receiving a signal it doesn't understand can still
+ * reject cleanly (validator drops with a warning log).
+ */
+export type WhiteboardWireSignalPayload =
+  | { type: "offer"; sdp: string }
+  | { type: "answer"; sdp: string }
+  /** `candidate: null` represents end-of-candidates per the WebRTC spec. */
+  | { type: "ice"; candidate: RTCIceCandidateInit | null }
+  | { type: "leave" };
+
+/**
+ * Wire envelope for a single WebRTC signaling exchange between two
+ * peers. `v: 1` here is independent of the scene-message version
+ * line — this is a brand-new schema; if it ever evolves, bump `v`
+ * and branch on read.
+ */
+export type WhiteboardWireSignal = {
+  v: 1;
+  kind: "webrtc-signal";
+  /** Sender's stable peer id. Receivers filter out own echoes by this. */
+  peerId: string;
+  /**
+   * Intended recipient. The relay still broadcasts to all room
+   * members; the recipient-side demux (see `signaling.ts`) drops
+   * signals not addressed to itself.
+   */
+  targetPeerId: string;
+  payload: WhiteboardWireSignalPayload;
 };
 
 // -----------------------------------------------------------------
@@ -247,6 +300,34 @@ export type WhiteboardSyncClient = {
    * instead of waiting for the trailing-edge timer.
    */
   flushPendingBroadcast: () => boolean;
+  /**
+   * Phase 4a — emit a WebRTC signal (offer / answer / ICE / leave)
+   * addressed to a specific peer. Bypasses the scene throttle: signals
+   * are delivered immediately on the same outbound chain as scene
+   * frames, preserving wire-order. The relay never sees plaintext;
+   * the recipient demuxes by `targetPeerId` at the signaling layer.
+   *
+   * Caller does NOT supply their own peerId — sync-client injects it
+   * from the closure's `peerId` so identity-spoofing is impossible
+   * from the client API surface.
+   */
+  broadcastSignal: (
+    targetPeerId: string,
+    payload: WhiteboardWireSignalPayload
+  ) => void;
+  /**
+   * Phase 4a — subscribe to inbound signals. Fires for EVERY non-self
+   * signal observed in the room; the recipient-side filtering by
+   * `targetPeerId` happens in `signaling.ts`, not here. Returns an
+   * unsubscriber.
+   */
+  onRemoteSignal: (
+    cb: (
+      fromPeerId: string,
+      targetPeerId: string,
+      payload: WhiteboardWireSignalPayload
+    ) => void
+  ) => () => void;
   /** Tear down the WS, drop subscriptions. Idempotent. */
   disconnect: () => void;
 };
@@ -332,9 +413,109 @@ function toArrayBuffer(input: ArrayBuffer | Uint8Array): ArrayBuffer {
   return out;
 }
 
+/**
+ * Validate a `webrtc-signal` payload. Throws on any malformed shape;
+ * the caller (`validateWireMessage`) is responsible for catching and
+ * surfacing as a `decrypt/parse failed` log warning.
+ */
+function validateWireSignalPayload(payload: unknown): WhiteboardWireSignalPayload {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("[sync-client] signal payload: not an object");
+  }
+  const type = (payload as { type?: unknown }).type;
+  if (type === "offer" || type === "answer") {
+    const sdp = (payload as { sdp?: unknown }).sdp;
+    if (typeof sdp !== "string") {
+      throw new Error(`[sync-client] signal payload ${type}: bad sdp`);
+    }
+    return { type, sdp };
+  }
+  if (type === "ice") {
+    const candidate = (payload as { candidate?: unknown }).candidate;
+    if (candidate === null) {
+      return { type: "ice", candidate: null };
+    }
+    if (!candidate || typeof candidate !== "object") {
+      throw new Error("[sync-client] signal payload ice: bad candidate");
+    }
+    const c = candidate as {
+      candidate?: unknown;
+      sdpMid?: unknown;
+      sdpMLineIndex?: unknown;
+      usernameFragment?: unknown;
+    };
+    if (typeof c.candidate !== "string") {
+      throw new Error("[sync-client] signal payload ice: bad candidate.candidate");
+    }
+    const out: RTCIceCandidateInit = { candidate: c.candidate };
+    if (c.sdpMid === null || typeof c.sdpMid === "string") {
+      out.sdpMid = c.sdpMid as string | null | undefined;
+    } else if (typeof c.sdpMid !== "undefined") {
+      throw new Error("[sync-client] signal payload ice: bad sdpMid");
+    }
+    if (c.sdpMLineIndex === null || typeof c.sdpMLineIndex === "number") {
+      out.sdpMLineIndex = c.sdpMLineIndex as number | null | undefined;
+    } else if (typeof c.sdpMLineIndex !== "undefined") {
+      throw new Error("[sync-client] signal payload ice: bad sdpMLineIndex");
+    }
+    if (
+      c.usernameFragment === null ||
+      typeof c.usernameFragment === "string" ||
+      typeof c.usernameFragment === "undefined"
+    ) {
+      if (typeof c.usernameFragment !== "undefined") {
+        out.usernameFragment = c.usernameFragment as string | null;
+      }
+    } else {
+      throw new Error("[sync-client] signal payload ice: bad usernameFragment");
+    }
+    return { type: "ice", candidate: out };
+  }
+  if (type === "leave") {
+    return { type: "leave" };
+  }
+  throw new Error(`[sync-client] signal payload: bad type '${String(type)}'`);
+}
+
+function validateWireSignal(parsed: unknown): WhiteboardWireSignal {
+  const p = parsed as Partial<WhiteboardWireSignal>;
+  if (p.v !== 1) {
+    throw new Error("[sync-client] signal envelope: bad v");
+  }
+  if (typeof p.peerId !== "string" || p.peerId.length === 0) {
+    throw new Error("[sync-client] signal envelope: bad peerId");
+  }
+  if (typeof p.targetPeerId !== "string" || p.targetPeerId.length === 0) {
+    throw new Error("[sync-client] signal envelope: bad targetPeerId");
+  }
+  const payload = validateWireSignalPayload(p.payload);
+  return {
+    v: 1,
+    kind: "webrtc-signal",
+    peerId: p.peerId,
+    targetPeerId: p.targetPeerId,
+    payload,
+  };
+}
+
 function validateWireMessage(parsed: unknown): AnyWhiteboardWireMessage {
   if (!parsed || typeof parsed !== "object") {
     throw new Error("[sync-client] decoded payload: not an object");
+  }
+  // Discriminate by `kind` BEFORE `v`: scene messages (v1/v2/v3) have
+  // no `kind` field, so its absence selects the scene-validator path.
+  // A present-but-unknown `kind` rejects cleanly so future-additive
+  // envelopes from a newer client don't crash an older one — they
+  // log a `decrypt/parse failed` warning and the listener doesn't
+  // fire.
+  const kind = (parsed as { kind?: unknown }).kind;
+  if (kind === "webrtc-signal") {
+    return validateWireSignal(parsed);
+  }
+  if (typeof kind !== "undefined") {
+    throw new Error(
+      `[sync-client] decoded payload: unknown kind '${String(kind)}'`
+    );
   }
   const v = (parsed as { v?: unknown }).v;
   if (v === 3) {
@@ -444,7 +625,13 @@ export function createWhiteboardSyncClient(
     elements: ReadonlyArray<ExcalidrawLikeElement>,
     details?: WhiteboardWireRemoteDetails
   ) => void;
+  type RemoteSignalCb = (
+    fromPeerId: string,
+    targetPeerId: string,
+    payload: WhiteboardWireSignalPayload
+  ) => void;
   const remoteSceneSubs = new Set<RemoteSceneCb>();
+  const remoteSignalSubs = new Set<RemoteSignalCb>();
   const connectSubs = new Set<() => void>();
   const disconnectSubs = new Set<() => void>();
   const peerCountSubs = new Set<(count: number) => void>();
@@ -527,8 +714,24 @@ export function createWhiteboardSyncClient(
   // mode where we never send/receive but the recorder still works.)
   // ---------------------------------------------------------------
 
+  function isWireSignal(msg: AnyWhiteboardWireMessage): msg is WhiteboardWireSignal {
+    return (msg as Partial<WhiteboardWireSignal>).kind === "webrtc-signal";
+  }
+
   function handleDecryptedWireMessage(msg: AnyWhiteboardWireMessage): void {
     if (msg.peerId === peerId) return;
+    if (isWireSignal(msg)) {
+      // Phase 4a: signal envelope. Sync-client delivers every non-self
+      // signal to its subscribers; the `targetPeerId === localPeerId`
+      // filter lives in signaling.ts, not here. Logging carries the
+      // wbsync= room tag plus the signal subkeys so prod debugging
+      // can grep `wbsync=… kind=webrtc-signal …` across tabs.
+      log.log(
+        `kind=webrtc-signal from=${msg.peerId} target=${msg.targetPeerId} type=${msg.payload.type}`
+      );
+      fan(remoteSignalSubs, msg.peerId, msg.targetPeerId, msg.payload);
+      return;
+    }
     if (msg.v === 3) {
       const m = msg as WhiteboardWireMessageV3;
       const details: WhiteboardWireRemoteDetails = {
@@ -835,6 +1038,54 @@ export function createWhiteboardSyncClient(
     }
   }
 
+  /**
+   * Phase 4a — encrypt and emit a signal envelope immediately. Bypasses
+   * the trailing-edge scene throttle (signals must reach the recipient
+   * ASAP) but stays on the same outbound chain as scene frames so wire
+   * order is deterministic. Never touches `lastBroadcastPayload`:
+   * signals are not scene state and must NOT be re-emitted on
+   * reconnect or on new-user.
+   */
+  function encryptAndEmitSignal(msg: WhiteboardWireSignal): Promise<void> {
+    const job = (async () => {
+      if (!aesKey || !socket) return;
+      try {
+        const { data, iv } = await encryptMessage(aesKey, msg);
+        socket.emit("server-broadcast", roomId, data, iv);
+      } catch (err) {
+        log.warn(
+          "encrypt/emit signal failed:",
+          (err as Error)?.message ?? String(err)
+        );
+      }
+    })();
+    outboundChain = outboundChain.then(() => job).catch(() => undefined);
+    return job;
+  }
+
+  function broadcastSignal(
+    targetPeerId: string,
+    payload: WhiteboardWireSignalPayload
+  ): void {
+    if (disposed) return;
+    if (aesKeyError) return;
+    if (typeof targetPeerId !== "string" || targetPeerId.length === 0) {
+      log.warn(`broadcastSignal: bad targetPeerId '${String(targetPeerId)}'`);
+      return;
+    }
+    const msg: WhiteboardWireSignal = {
+      v: 1,
+      kind: "webrtc-signal",
+      peerId,
+      targetPeerId,
+      payload,
+    };
+    log.log(
+      `kind=webrtc-signal send target=${targetPeerId} type=${payload.type}`
+    );
+    void encryptAndEmitSignal(msg);
+  }
+
   // ---------------------------------------------------------------
   // Public surface
   // ---------------------------------------------------------------
@@ -882,6 +1133,13 @@ export function createWhiteboardSyncClient(
     broadcastScene,
     broadcastDocument,
     flushPendingBroadcast: tryFlushPendingBroadcastNow,
+    broadcastSignal,
+    onRemoteSignal: (cb) => {
+      remoteSignalSubs.add(cb);
+      return () => {
+        remoteSignalSubs.delete(cb);
+      };
+    },
     disconnect: () => {
       if (disposed) return;
       disposed = true;
@@ -892,6 +1150,7 @@ export function createWhiteboardSyncClient(
       pendingClientBroadcasts.length = 0;
       lastRemoteScene = null;
       remoteSceneSubs.clear();
+      remoteSignalSubs.clear();
       connectSubs.clear();
       disconnectSubs.clear();
       peerCountSubs.clear();
