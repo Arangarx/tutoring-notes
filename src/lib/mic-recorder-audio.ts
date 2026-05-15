@@ -5,8 +5,26 @@
  */
 
 export type MicAudioGraph = {
-  /** Stream to pass to MediaRecorder (processed). */
+  /**
+   * Stream to pass to MediaRecorder (processed: source → gain → recordingDest).
+   * Independent from `publishStream` so muting one (live A/V) does NOT silence
+   * the other (recording).
+   */
   recordingStream: MediaStream;
+  /**
+   * Stream to pass to live-A/V / WebRTC (processed: source → gain → publishDest).
+   *
+   * Web Audio fan-out solves the "two MediaStreamTrack consumers of the same
+   * hardware mic" problem: instead of cloning a getUserMedia track (which can
+   * cause Chrome to send silence on the WebRTC track even though Web Audio
+   * captures fine), we have ONE source feeding TWO MediaStreamDestinations.
+   * Each destination produces its own independent track, but both are driven
+   * by the same Web Audio pipeline — single hardware consumer.
+   *
+   * Muting publishStream's track via `track.enabled = false` for live mute is
+   * safe: the recordingStream destination has its own track that stays live.
+   */
+  publishStream: MediaStream;
   /** Call when done to release the mic and audio context. */
   dispose: () => void;
   /** RMS-ish level 0..1 for UI meter; call from rAF. */
@@ -16,8 +34,8 @@ export type MicAudioGraph = {
 };
 
 /**
- * Build source → gain → destination for recording, plus an analyser tap for metering.
- * `gainLinear` is applied in the digital domain (0.25–2 typical); warn users about OS mic level too.
+ * Build source → gain → (recordingDest + publishDest) plus an analyser tap.
+ * `gainLinear` is applied in the digital domain (0.25–2 typical).
  */
 export async function createMicAudioGraph(
   micStream: MediaStream,
@@ -31,7 +49,8 @@ export async function createMicAudioGraph(
     const gainNode = audioContext.createGain();
     gainNode.gain.value = gainLinear;
 
-    const destination = audioContext.createMediaStreamDestination();
+    const recordingDest = audioContext.createMediaStreamDestination();
+    const publishDest = audioContext.createMediaStreamDestination();
     const analyser = audioContext.createAnalyser();
     analyser.fftSize = 512;
     analyser.smoothingTimeConstant = 0.65;
@@ -39,11 +58,13 @@ export async function createMicAudioGraph(
     const data = new Float32Array(analyser.fftSize);
 
     source.connect(gainNode);
-    gainNode.connect(destination);
+    gainNode.connect(recordingDest);
+    gainNode.connect(publishDest);
     gainNode.connect(analyser);
 
     return {
-      recordingStream: destination.stream,
+      recordingStream: recordingDest.stream,
+      publishStream: publishDest.stream,
       dispose: () => {
         try {
           micStream.getTracks().forEach((t) => t.stop());

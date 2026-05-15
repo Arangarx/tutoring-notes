@@ -452,15 +452,10 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   // Tracks whether the hook is unmounted to suppress late state
   // setters from in-flight acquisition promises.
   const unmountedRef = useRef<boolean>(false);
-  // Cloned stream derived from externalAudioStream (so live-AV mute
-  // doesn't bleed into the recording's own tracks).
-  const externalCloneRef = useRef<MediaStream | null>(null);
-  // Key of the last successful mesh build. Includes syncClient identity,
-  // audio stream id, peerId, sessionId — but NOT video stream id. When
-  // only localVideoStream changes (camera added mid-session), the key is
-  // the same so we skip teardown+rebuild and let getLocalTracks (which
-  // reads from refs) serve new tracks to future peer connections.
-  const meshBuildKeyRef = useRef<string>("");
+  // Tracks whether the current localAudioStream comes from
+  // externalAudioStream (so we don't stop its tracks — those belong to
+  // the recorder hook).
+  const audioFromExternalRef = useRef<boolean>(false);
 
   // ---------------------------------------------------------------
   // Acquisition controls (idempotent)
@@ -735,17 +730,13 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     return () => {
       unmountedRef.current = true;
       // Stop and release any acquired local streams on unmount so
-      // the OS frees the device. For externalAudioStream clones we
-      // stop the clone tracks (the originals belong to the recorder).
+      // the OS frees the device. For externalAudioStream we DON'T
+      // stop the tracks — they belong to the recorder.
       const aud = localAudioStreamRef.current;
-      if (aud) {
-        const isClone = aud === externalCloneRef.current;
+      if (aud && !audioFromExternalRef.current) {
         for (const t of aud.getTracks()) {
           try {
-            // Only stop self-acquired tracks — cloned tracks share
-            // the hardware source with the recording stream; stopping
-            // them here would stop the recording mic.
-            if (!isClone) t.stop();
+            t.stop();
           } catch {
             /* ignore */
           }
@@ -761,45 +752,46 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           }
         }
       }
-      externalCloneRef.current = null;
+      audioFromExternalRef.current = false;
       localAudioStreamRef.current = null;
       localVideoStreamRef.current = null;
     };
   }, []);
 
   // ---------------------------------------------------------------
-  // Effect: sync externalAudioStream into localAudioStream as clone
+  // Effect: wire externalAudioStream into localAudioStream
   //
   // When the workspace recording mic is acquired by useAudioRecorder,
-  // it passes the stream here so useLiveAV can use it for WebRTC
-  // without a second getUserMedia call. We clone so live-AV mute
-  // (track.enabled=false) doesn't bleed into the recording stream.
+  // it passes a DEDICATED publishStream here (one of two Web Audio
+  // destinations downstream of the source+gain pipeline). We use it
+  // directly — no cloning, no second getUserMedia. The recording's
+  // recordingStream is a SEPARATE Web Audio destination, so muting
+  // this stream's track via toggleMic does NOT affect recording.
+  //
+  // Cloning was tried and caused Chrome to send no audio data on the
+  // WebRTC track even though the Web Audio source captured fine — a
+  // known issue with two MediaStreamTrack consumers of the same
+  // hardware mic. Web Audio fan-out avoids that entirely.
   // ---------------------------------------------------------------
 
   useEffect(() => {
     if (!externalAudioStream) {
-      // External stream is null. This happens transiently during
-      // segment rollover (teardown → new getUserMedia takes ~100ms)
-      // OR permanently on recording stop / unmount.
-      //
-      // We do NOT clear the existing clone here. Clearing would null
-      // localAudioStream → trigger the mesh-building effect → tear
-      // down all WebRTC connections every ~25-min rollover. Instead,
-      // we leave the old clone in place; the old clone's tracks will
-      // produce silence (stopped source) but the connection stays up.
-      // When the new external stream arrives the effect re-runs and
-      // the clone is refreshed with live tracks.
-      //
-      // The only time we want to clear is on unmount — that is handled
-      // in the unmount effect above.
+      // External stream withdrawn. Only clear if we're currently using
+      // an external stream. Self-acquired streams (requestMic path) are
+      // left untouched.
+      if (audioFromExternalRef.current) {
+        audioFromExternalRef.current = false;
+        localAudioStreamRef.current = null;
+        if (!unmountedRef.current) setLocalAudioStream(null);
+      }
       return;
     }
 
-    // Release any previous self-acquired stream (not a clone).
+    // Release any previous self-acquired stream before adopting the
+    // external one. (External streams are NOT stopped — they belong
+    // to the recorder hook.)
     const prev = localAudioStreamRef.current;
-    const prevClone = externalCloneRef.current;
-    if (prev && prev !== prevClone) {
-      // Self-acquired — stop its tracks before replacing.
+    if (prev && !audioFromExternalRef.current) {
       for (const t of prev.getTracks()) {
         try {
           t.stop();
@@ -808,24 +800,22 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         }
       }
     }
-    // Prior clone tracks: don't stop — they're independent from the
-    // source but stopping them explicitly is unnecessary and could
-    // cause brief glitches mid-sentence on rollover.
 
-    // Clone: independent enabled state, same hardware source.
-    const clone = new MediaStream(
-      externalAudioStream.getAudioTracks().map((t) => t.clone())
-    );
+    // Apply current mute state to the stream's tracks. Note this is
+    // fine — the recordingStream is a separate Web Audio destination,
+    // so disabling these tracks does NOT silence the MediaRecorder.
     if (isMicMutedRef.current) {
-      for (const t of clone.getAudioTracks()) t.enabled = false;
+      for (const t of externalAudioStream.getAudioTracks()) t.enabled = false;
+    } else {
+      for (const t of externalAudioStream.getAudioTracks()) t.enabled = true;
     }
-    externalCloneRef.current = clone;
-    localAudioStreamRef.current = clone;
+    audioFromExternalRef.current = true;
+    localAudioStreamRef.current = externalAudioStream;
     if (!unmountedRef.current) {
-      setLocalAudioStream(clone);
+      setLocalAudioStream(externalAudioStream);
       setHasMicPermission("granted");
       log.log(
-        `externalAudioStream wired tracks=${clone.getAudioTracks().length}`
+        `externalAudioStream wired tracks=${externalAudioStream.getAudioTracks().length}`
       );
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -839,8 +829,6 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     const hasLocalMedia =
       localAudioStream !== null || localVideoStream !== null;
     if (!syncClient || !hasLocalMedia) {
-      // Reset key so the next build always triggers a full setup.
-      meshBuildKeyRef.current = "";
       setParticipants([]);
       return;
     }
@@ -848,25 +836,6 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       log.error("missing localPeerId — refusing to build mesh");
       return;
     }
-
-    // Build a key from the dimensions that justify full teardown+rebuild.
-    // localVideoStream is intentionally excluded: adding camera mid-session
-    // should NOT tear down existing peer connections. getLocalTracks() reads
-    // from localVideoStreamRef (always current), so the next peer that
-    // connects or reconnects will automatically pick up video tracks.
-    const buildKey = [
-      "s",
-      localAudioStream?.id ?? "",
-      localPeerId,
-      sessionId ?? "",
-    ].join("|");
-
-    if (buildKey === meshBuildKeyRef.current && meshRef.current !== null) {
-      // Only localVideoStream changed — skip teardown and rebuild.
-      log.log("video stream updated; mesh NOT rebuilt (getLocalTracks ref current)");
-      return;
-    }
-    meshBuildKeyRef.current = buildKey;
 
     const signalingFactory = _createSignaling ?? createSignaling;
     const meshFactory = _createPeerMesh ?? createPeerMesh;
@@ -1097,7 +1066,6 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         );
       }
       meshRef.current = null;
-      meshBuildKeyRef.current = ""; // reset so next audio stream triggers full rebuild
       for (const entry of internal.values()) {
         for (const t of entry.audioStream.getTracks()) {
           try {

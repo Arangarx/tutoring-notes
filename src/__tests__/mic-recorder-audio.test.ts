@@ -61,7 +61,13 @@ describe("createMicAudioGraph", () => {
         for (let i = 0; i < arr.length; i++) arr[i] = 0.1;
       }),
     };
-    const destinationStream = { id: "destination-stream" };
+    const recordingStream = { id: "recording-stream" };
+    const publishStream = { id: "publish-stream" };
+    const destinations = [
+      { stream: recordingStream },
+      { stream: publishStream },
+    ];
+    let destIdx = 0;
     const close = jest.fn().mockResolvedValue(undefined);
     const resume = jest.fn().mockResolvedValue(undefined);
 
@@ -69,7 +75,7 @@ describe("createMicAudioGraph", () => {
       createMediaStreamSource: jest.fn(() => sourceNode),
       createGain: jest.fn(() => gainNode),
       createAnalyser: jest.fn(() => analyserNode),
-      createMediaStreamDestination: jest.fn(() => ({ stream: destinationStream })),
+      createMediaStreamDestination: jest.fn(() => destinations[destIdx++]),
       resume,
       close,
     };
@@ -83,12 +89,16 @@ describe("createMicAudioGraph", () => {
     expect(resume).toHaveBeenCalled();
     expect(ctx.createMediaStreamSource).toHaveBeenCalledWith(stream);
     expect(gainParam.value).toBe(1.5);
-    // source -> gain, gain -> destination, gain -> analyser
+    // source -> gain, gain -> recordingDest, gain -> publishDest, gain -> analyser
     expect(sourceNode.connect).toHaveBeenCalledWith(gainNode);
-    expect(gainNode.connect).toHaveBeenCalledTimes(2);
+    expect(gainNode.connect).toHaveBeenCalledTimes(3);
+    // Two destinations created (recording + publish).
+    expect(ctx.createMediaStreamDestination).toHaveBeenCalledTimes(2);
 
-    // recordingStream should be the destination's stream (not the raw mic).
-    expect(graph!.recordingStream).toBe(destinationStream);
+    // recordingStream and publishStream are separate Web Audio destinations.
+    expect(graph!.recordingStream).toBe(recordingStream);
+    expect(graph!.publishStream).toBe(publishStream);
+    expect(graph!.recordingStream).not.toBe(graph!.publishStream);
 
     // Level should reflect the amplitude we injected.
     const level = graph!.getLevel();

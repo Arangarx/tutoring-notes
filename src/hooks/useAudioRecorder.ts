@@ -762,7 +762,12 @@ export function useAudioRecorder({
     }
 
     streamRef.current = stream;
-    setLocalMicStream(stream);
+    // Note: we expose localMicStream AFTER the audio graph is built
+    // (below) so callers like useLiveAV receive the graph's publishStream
+    // (a separate Web Audio destination) rather than the raw mic stream.
+    // Using the raw stream would force WebRTC to clone the mic track,
+    // which causes Chrome to send silence on the WebRTC track in some
+    // configurations.
     const audioTrack = stream.getAudioTracks?.()[0];
 
     // Persist the actual deviceId in use (browsers sometimes resolve "default" to a real id).
@@ -785,6 +790,12 @@ export function useAudioRecorder({
     // or the stream isn't a real MediaStream (test stub) — fall back to raw stream below.
     const graph = await createMicAudioGraph(stream, gainLinear);
     graphRef.current = graph;
+
+    // Expose the stream that downstream consumers (useLiveAV) should use.
+    // Prefer the graph's publishStream (independent destination, fans out
+    // from the same source as recordingStream — no track sharing). Fall
+    // back to the raw mic stream when Web Audio is unavailable (tests).
+    setLocalMicStream(graph?.publishStream ?? stream);
 
     if (graph) {
       startMeter(graph);
