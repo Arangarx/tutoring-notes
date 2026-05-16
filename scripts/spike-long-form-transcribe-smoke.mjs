@@ -220,6 +220,10 @@ async function main() {
       if (outcome === "ok") {
         await page.getByTestId("ai-generated-note-review-dismiss").click();
         await page.getByTestId("ai-session-text").waitFor({ state: "visible", timeout: 10_000 });
+      } else {
+        // Reset UI so pasted-text runs start from a clean panel state.
+        await page.goto(studentUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
+        await page.getByTestId("ai-assist-panel").waitFor({ state: "visible", timeout: 30_000 });
       }
     }
 
