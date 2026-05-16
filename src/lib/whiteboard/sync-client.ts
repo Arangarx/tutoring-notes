@@ -78,7 +78,9 @@ export type WhiteboardWireFollow = {
 /** Page tabs: tutor’s active list + which tab is on screen. */
 export type WhiteboardWirePage = {
   activePageId: string;
-  pageList: { id: string; title: string }[];
+  pageList: { id: string; title: string; section?: string }[];
+  /** Optional registry for grouped strip sections (PDF imports). */
+  sections?: Record<string, { label: string }>;
 };
 
 /**

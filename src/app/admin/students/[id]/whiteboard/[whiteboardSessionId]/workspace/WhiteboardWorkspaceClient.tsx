@@ -97,11 +97,15 @@ import {
 } from "@/lib/recording/upload-outbox-instance";
 import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter";
 import { PdfImageUploadButton } from "@/components/whiteboard/PdfImageUploadButton";
+import { PageStrip } from "@/components/whiteboard/PageStrip";
 import { MathInsertButton } from "@/components/whiteboard/MathInsertButton";
 import { DesmosInsertButton } from "@/components/whiteboard/DesmosInsertButton";
 import { UndoRedoButtons } from "@/components/whiteboard/UndoRedoButtons";
 import { ExcalidrawDynamic } from "@/components/whiteboard/ExcalidrawDynamic";
-import { type ExcalidrawApiLike } from "@/lib/whiteboard/insert-asset";
+import {
+  type ExcalidrawApiLike,
+  type InsertPdfBoardPagesIntegrate,
+} from "@/lib/whiteboard/insert-asset";
 import {
   ensureNativeImageAssetUrlsForSync,
   type BinaryFileFromExcalidraw,
@@ -378,9 +382,13 @@ export function WhiteboardWorkspaceClient({
     () => undefined
   );
 
-  const [pageList, setPageList] = useState(() => [
-    { id: "p1", title: "Page 1" },
-  ]);
+  const [pageList, setPageList] = useState<
+    { id: string; title: string; section?: string }[]
+  >(() => [{ id: "p1", title: "Page 1" }]);
+  const sectionsRegistryRef = useRef<Record<string, { label: string }>>({});
+  const [sectionsRegistry, setSectionsRegistry] = useState<
+    Record<string, { label: string }>
+  >({});
   /**
    * Same rows as `pageList`, updated synchronously before any wire
    * `getWireBroadcastExtras` call. React state lags by one frame — using it in
@@ -1095,7 +1103,14 @@ export function WhiteboardWorkspaceClient({
         // Ref — not React state — so rapid tab switches don’t lag one frame
         // behind the canvas (state updates async; ref updates in selectTutorPage).
         activePageId: activePageIdRef.current,
-        pageList: pageListRef.current.map((p) => ({ id: p.id, title: p.title })),
+        pageList: pageListRef.current.map((p) => ({
+          id: p.id,
+          title: p.title,
+          ...(p.section ? { section: p.section } : {}),
+        })),
+        ...(Object.keys(sectionsRegistryRef.current).length > 0
+          ? { sections: { ...sectionsRegistryRef.current } }
+          : {}),
       },
       // Same ref as throttled flush — immediate broadcast (e.g. native image) stays consistent.
       scenePageId: activePageIdRef.current,
@@ -1139,9 +1154,16 @@ export function WhiteboardWorkspaceClient({
       }
       return {
         v: 1,
-        pageList: pageListRef.current.map((p) => ({ id: p.id, title: p.title })),
+        pageList: pageListRef.current.map((p) => ({
+          id: p.id,
+          title: p.title,
+          ...(p.section ? { section: p.section } : {}),
+        })),
         activePageId: activePageIdRef.current,
         pages,
+        ...(Object.keys(sectionsRegistryRef.current).length > 0
+          ? { sections: { ...sectionsRegistryRef.current } }
+          : {}),
       };
     }, [getTutorDocumentPagesSnapshot]);
 
@@ -1195,6 +1217,10 @@ export function WhiteboardWorkspaceClient({
     () => ({
       pageList: pageListRef.current,
       activePageId: activePageIdRef.current,
+      sections:
+        Object.keys(sectionsRegistryRef.current).length > 0
+          ? { ...sectionsRegistryRef.current }
+          : undefined,
     }),
     []
   );
@@ -1333,6 +1359,91 @@ export function WhiteboardWorkspaceClient({
       flushDocumentBroadcastNow();
     }
   }, [flushDocumentBroadcastNow, flushThrottledFrameNow, pageList]);
+
+  const removeTutorPage = useCallback(
+    (pageId: string) => {
+      if (pageListRef.current.length <= 1) return;
+      const idx = pageListRef.current.findIndex((p) => p.id === pageId);
+      if (idx < 0) return;
+      const api = excalidrawAPIRef.current;
+      const curActive = activePageIdRef.current;
+      if (api && curActive === pageId) {
+        flushThrottledFrameNow();
+      }
+      const nextList = pageListRef.current.filter((p) => p.id !== pageId);
+      pageListRef.current = nextList;
+      setPageList(nextList);
+      const nextData = { ...pageDataRef.current };
+      delete nextData[pageId];
+      pageDataRef.current = nextData;
+
+      const referenced = new Set<string>();
+      for (const p of nextList) {
+        if (p.section) referenced.add(p.section);
+      }
+      const nextSecs: Record<string, { label: string }> = {};
+      for (const [sid, meta] of Object.entries(sectionsRegistryRef.current)) {
+        if (referenced.has(sid)) nextSecs[sid] = meta;
+      }
+      sectionsRegistryRef.current = nextSecs;
+      setSectionsRegistry(nextSecs);
+
+      if (curActive === pageId) {
+        const fallback =
+          nextList[Math.max(0, idx - 1)]?.id ??
+          nextList[0]?.id ??
+          curActive;
+        void selectTutorPage(fallback);
+      } else {
+        flushThrottledFrameNow();
+        flushDocumentBroadcastNow();
+      }
+    },
+    [flushDocumentBroadcastNow, flushThrottledFrameNow, selectTutorPage]
+  );
+
+  const pdfBoardIntegrate = useMemo<InsertPdfBoardPagesIntegrate>(
+    () => ({
+      getActivePageId: () => activePageIdRef.current,
+      seedPdfSection: (sectionId, sectionLabel) => {
+        sectionsRegistryRef.current = {
+          ...sectionsRegistryRef.current,
+          [sectionId]: { label: sectionLabel },
+        };
+        setSectionsRegistry({ ...sectionsRegistryRef.current });
+      },
+      appendBoardPage: ({ pageId, title, sectionId, elements }) => {
+        const next = [
+          ...pageListRef.current,
+          { id: pageId, title, section: sectionId },
+        ];
+        pageListRef.current = next;
+        setPageList(next);
+        pageDataRef.current[pageId] =
+          elements as ReadonlyArray<ExcalidrawLikeElement>;
+        console.info(
+          `[whiteboard] wbsid=${whiteboardSessionId} pdf-page-insert pageId=${pageId} sectionId=${sectionId}`
+        );
+      },
+      registerImageFile: (file) => {
+        excalidrawAPIRef.current?.addFiles([file]);
+      },
+      completePdfImport: ({ firstPageId, anchorActivePageId }) => {
+        flushThrottledFrameNow();
+        if (activePageIdRef.current === anchorActivePageId) {
+          void selectTutorPage(firstPageId);
+        } else {
+          flushDocumentBroadcastNow();
+        }
+      },
+    }),
+    [
+      flushDocumentBroadcastNow,
+      flushThrottledFrameNow,
+      selectTutorPage,
+      whiteboardSessionId,
+    ]
+  );
 
   // ---------------------------------------------------------------
   // Live timer — Wyzant-style "both connected" billable clock
@@ -1837,9 +1948,19 @@ export function WhiteboardWorkspaceClient({
       const api = excalidrawAPIRef.current;
       if (!api) return;
       const { restoreElements } = await import("@excalidraw/excalidraw");
-      const list = doc.pageList.map((p) => ({ id: p.id, title: p.title }));
+      const list = doc.pageList.map((p) => ({
+        id: p.id,
+        title: p.title,
+        ...(p.section ? { section: p.section } : {}),
+      }));
       pageListRef.current = list;
       setPageList(list);
+      const secs =
+        doc.sections && typeof doc.sections === "object"
+          ? { ...doc.sections }
+          : {};
+      sectionsRegistryRef.current = secs;
+      setSectionsRegistry(secs);
       activePageIdRef.current = doc.activePageId;
       setActivePageId(doc.activePageId);
       for (const [pid, raw] of Object.entries(doc.pages)) {
@@ -2182,43 +2303,22 @@ export function WhiteboardWorkspaceClient({
           className="muted"
           style={{ margin: "6px 0 10px", fontSize: 12, lineHeight: 1.45, maxWidth: 720 }}
         >
-          Switch pages like separate worksheets. Inserts (PDF, image) land on
-          the page you have open. When live sync is on, the student sees which
-          page you are on.
+          Switch pages like separate worksheets. PDF worksheets add new pages
+          grouped under the file name; images insert on the page you have open.
+          When live sync is on, the student sees which page you are on.
         </p>
-        <div
-          className="row"
-          style={{
-            gap: 6,
-            flexWrap: "wrap",
-            alignItems: "center",
-          }}
-        >
-          {pageList.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              className="btn"
-              onClick={() => void selectTutorPage(p.id)}
-              disabled={endingBusy || p.id === activePageId}
-              style={
-                p.id === activePageId
-                  ? { fontWeight: 700, borderWidth: 2, borderColor: "var(--border-strong, #999)" }
-                  : undefined
-              }
-            >
-              {p.title}
-            </button>
-          ))}
-          <button
-            type="button"
-            className="btn primary"
-            onClick={addTutorPage}
-            disabled={endingBusy || pageList.length >= 20}
-          >
-            + Add page
-          </button>
-        </div>
+        <PageStrip
+          variant="tutor"
+          sessionId={whiteboardSessionId}
+          pageList={pageList}
+          sections={sectionsRegistry}
+          activePageId={activePageId}
+          disabled={endingBusy}
+          maxPages={20}
+          onSelectPage={(id) => void selectTutorPage(id)}
+          onAddPage={addTutorPage}
+          onRemovePage={removeTutorPage}
+        />
       </div>
 
       {/* Toolbar */}
@@ -2309,6 +2409,7 @@ export function WhiteboardWorkspaceClient({
           whiteboardSessionId={whiteboardSessionId}
           studentId={studentId}
           disabled={endingBusy}
+          integrate={pdfBoardIntegrate}
         />
         <MathInsertButton
           excalidrawAPI={excalidrawAPI}

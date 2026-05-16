@@ -647,7 +647,7 @@ export async function insertPdfPagesAsBoardPages(
   integrate.seedPdfSection(sectionId, sectionLabel);
 
   let firstPageId = "";
-  const insertedIds: string[] = [];
+  let pagesDone = 0;
 
   for (let i = 0; i < pages.length; i++) {
     if (i > 0) {
@@ -664,7 +664,7 @@ export async function insertPdfPagesAsBoardPages(
       assetTag: `pdf-page-${page.pageIndex}`,
     });
     if (!upload.ok) {
-      const done = insertedIds.length;
+      const done = pagesDone;
       if (firstPageId) {
         integrate.completePdfImport({
           firstPageId,
@@ -681,11 +681,15 @@ export async function insertPdfPagesAsBoardPages(
       };
     }
 
+    console.info(
+      `[whiteboard] wbsid=${whiteboardSessionId} pdf-upload page=${page.pageIndex} bytes=${page.pngBlob.size}`
+    );
+
     let dataURL: string;
     try {
       dataURL = await blobToDataUrl(page.pngBlob);
     } catch (err) {
-      const done = insertedIds.length;
+      const done = pagesDone;
       if (firstPageId) {
         integrate.completePdfImport({
           firstPageId,
@@ -735,7 +739,6 @@ export async function insertPdfPagesAsBoardPages(
     if (i === 0) {
       firstPageId = pageId;
     }
-    insertedIds.push(pageId);
 
     integrate.appendBoardPage({
       pageId,
@@ -743,6 +746,7 @@ export async function insertPdfPagesAsBoardPages(
       sectionId,
       elements: [el],
     });
+    pagesDone += 1;
     onProgress?.(i + 1, pages.length);
   }
 

@@ -22,8 +22,9 @@ export function useTutorLiveDocumentWire(options: {
   sync: WhiteboardSyncClient | null;
   getPagesSnapshot: () => Readonly<Record<string, ReadonlyArray<ExcalidrawLikeElement>>>;
   getPageListAndActive: () => {
-    pageList: ReadonlyArray<{ id: string; title: string }>;
+    pageList: ReadonlyArray<{ id: string; title: string; section?: string }>;
     activePageId: string;
+    sections?: Record<string, { label: string }>;
   };
   getFollow: () => WhiteboardWireFollow;
 }) {
@@ -34,7 +35,7 @@ export function useTutorLiveDocumentWire(options: {
   const emitDocument = useCallback(() => {
     if (!enabled || !sync) return;
     revRef.current += 1;
-    const { pageList, activePageId } = getPageListAndActive();
+    const { pageList, activePageId, sections } = getPageListAndActive();
     const raw = getPagesSnapshot();
     const pages: Record<string, ExcalidrawLikeElement[]> = {};
     for (const [k, els] of Object.entries(raw)) {
@@ -42,9 +43,17 @@ export function useTutorLiveDocumentWire(options: {
         (e) => ({ ...e }) as ExcalidrawLikeElement
       );
     }
+    const pageWireRows = pageList.map((p) => ({
+      id: p.id,
+      title: p.title,
+      ...(p.section ? { section: p.section } : {}),
+    }));
     const page: WhiteboardWirePage = {
       activePageId,
-      pageList: pageList.map((p) => ({ id: p.id, title: p.title })),
+      pageList: pageWireRows,
+      ...(sections && Object.keys(sections).length > 0
+        ? { sections: { ...sections } }
+        : {}),
     };
     sync.broadcastDocument({
       rev: revRef.current,

@@ -49,7 +49,8 @@ jest.mock("@/hooks/useStudentWhiteboardCanvas", () => ({
     snapToTutorView: jest.fn(),
     getPageBroadcastExtras: jest.fn(() => null),
     pageList: [],
-    activePageId: null,
+    sectionsRegistry: {},
+    activePageId: "p1",
     tutorStreamReady: true,
   }),
 }));
