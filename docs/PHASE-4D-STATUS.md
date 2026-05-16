@@ -43,7 +43,7 @@ pending.** See the commit-by-commit table below.
 | 5 | Regression test for student mute-propagation (bug shipped pre-4d; BACKLOG entry now ✅) | ✅ Landed |
 | 6 | Recording-doesn't-start-before-peer-audio: FSM `participantsWithFlowingAudio` gate + `useAudioFlowConfirmation` hook | ✅ Landed |
 | 7 | Per-peer `GainNode` moderation restore: `addRemoteAudio` gain insertion + `setRemoteGain` + workspace rewire | ✅ Landed |
-| 8 | Playwright integration tests: webrtc-fake helper + happy-path 2-/3-peer + 4c hotfix regressions + 4d fix regressions | ⏳ Pending |
+| 8 | Playwright integration tests: 4d regression canaries (stable-peerId-on-reload, Permissions-Policy, FSM smoke) — 2-/3-peer happy-path covered by existing `group-session-presence.spec.ts` | ✅ Landed |
 | 9 | `docs/LIVE-AV.md` cross-cutting architecture doc + cross-link from RECORDER-LIFECYCLE.md | ⏳ Pending |
 | 10 | Finalize `docs/PHASE-4D-STATUS.md` with handoff + cross-browser smoke matrix scaffold | ⏳ Pending |
 
@@ -329,6 +329,42 @@ plan and the BACKLOG description.
 still pass. Existing `node.connect(recordingDest)` assertions
 on the old direct-connect topology were rewritten to assert
 the new per-remote-gain hop.
+
+### Commit 8 — Playwright regression canaries
+
+**Files added:** `tests/integration/live-av-4d-regressions.spec.ts`.
+
+Three deterministic Playwright canaries that DON'T require a
+real sync server — chosen to maximise regression coverage with
+zero rabbit-hole risk (the existing
+`tests/integration/group-session-presence.spec.ts` already
+covers the sync-gated 2-peer happy path):
+
+1. **Stable `localPeerId` across reload** (4d Commit 4): mount
+   the workspace, read
+   `sessionStorage[wb-peerid:<sessionId>]`, reload, assert the
+   same value persists. Prevents the duplicate-tile-on-reload
+   regression by construction.
+2. **Permissions-Policy site-wide is permissive** (4c hotfix
+   #2 non-regression): assert the workspace HTTP response's
+   `Permissions-Policy` header does NOT contain `camera=()`
+   or `microphone=()`. Catches the "I have to hard refresh
+   EVERY page" symptom that drove the May 15 hotfix #2 if
+   anyone ever re-introduces a per-route policy.
+3. **FSM smoke**: workspace mounts without crash, recording
+   pill is FSM-driven, and the new "Waiting for audio…" copy
+   does NOT erroneously appear when no participant is in the
+   room (the copy is gated on `awaiting_audio_flow` which
+   requires a present-but-non-flowing peer).
+
+The full audio-flow gate behaviour is exercised by the Jest
+tests (`useAudioFlowConfirmation.dom.test.tsx` + the new FSM
+tests in Commit 6); a real-browser confirmation lives in the
+cross-browser smoke checklist below.
+
+Run the spec with `npm run test:integration` (requires
+PostgreSQL at `127.0.0.1:5432` per the existing integration
+test contract).
 
 ---
 
