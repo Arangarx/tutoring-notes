@@ -28,6 +28,14 @@ Plus the Phase 1c surfaces that the three pillars enable:
    engine that powers replay, embedded into the workspace route for
    ended sessions.
 
+**Companion doc — [LIVE-AV.md](LIVE-AV.md).** The live-A/V stack
+(peer mesh, signaling, Web Audio fan-out, per-peer recording-mute,
+audio-flow gate) is the workspace's other half of the recording
+contract. Phase 4d's `participantsWithFlowingAudio` /
+`everHadAudioFlow` FSM inputs are owned by LIVE-AV but consumed
+by Pillar 1 here. Read LIVE-AV.md BEFORE editing `useLiveAV.ts`,
+`peer-mesh.ts`, or `mic-recorder-audio.ts` `addRemoteAudio`.
+
 > **Reliability rule of thumb:** If you can't draw the data-flow on
 > a napkin from memory, don't change it. The pillars exist *because*
 > Sarah lost real sessions to an earlier flat poll-loop end-flow.
@@ -73,6 +81,9 @@ LifecycleInputs {
   audioClockMs:        number
   inFlightStreamCount?: number       // from outbox observer
   endIntent?:          "stopping"|"uploading"|"done"|"failed"
+  // Phase 4d Commit 6 — see LIVE-AV.md invariant #10
+  participantsWithFlowingAudio?: ReadonlySet<peerId>
+  everHadAudioFlow?:   boolean       // host-owned sticky latch
 }
 ```
 
@@ -82,7 +93,7 @@ LifecycleInputs {
 LifecycleOutputs {
   state:               "idle"|"armed"|"recording"|"paused"|"stopping"|
                        "uploading"|"done"|"failed"
-  armedReason?:        "awaiting_first_participant" | ...
+  armedReason?:        "awaiting_first_participant" | "awaiting_audio_flow" | ...
   pausedReason?:       "all_participants_disconnected" | ...
   shouldCaptureWB:     boolean
   shouldCapture:       (streamId) => boolean   // gate MediaRecorder.start

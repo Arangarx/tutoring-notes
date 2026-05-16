@@ -44,7 +44,7 @@ pending.** See the commit-by-commit table below.
 | 6 | Recording-doesn't-start-before-peer-audio: FSM `participantsWithFlowingAudio` gate + `useAudioFlowConfirmation` hook | ✅ Landed |
 | 7 | Per-peer `GainNode` moderation restore: `addRemoteAudio` gain insertion + `setRemoteGain` + workspace rewire | ✅ Landed |
 | 8 | Playwright integration tests: 4d regression canaries (stable-peerId-on-reload, Permissions-Policy, FSM smoke) — 2-/3-peer happy-path covered by existing `group-session-presence.spec.ts` | ✅ Landed |
-| 9 | `docs/LIVE-AV.md` cross-cutting architecture doc + cross-link from RECORDER-LIFECYCLE.md | ⏳ Pending |
+| 9 | `docs/LIVE-AV.md` cross-cutting architecture doc + cross-link from RECORDER-LIFECYCLE.md | ✅ Landed |
 | 10 | Finalize `docs/PHASE-4D-STATUS.md` with handoff + cross-browser smoke matrix scaffold | ⏳ Pending |
 
 ---
