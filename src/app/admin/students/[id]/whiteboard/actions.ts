@@ -228,10 +228,31 @@ export type IssueJoinTokenResult = {
 };
 
 /**
- * Mint a fresh join token for the given whiteboard session. The
- * caller's encryption key is NOT passed to this action — the key
- * lives only in the tutor's URL fragment, and the tutor's client
- * appends it to the returned `joinPath` before copying to clipboard.
+ * Return a stable, reusable join token for the given whiteboard
+ * session. Same token for repeat calls during the same session —
+ * see the idempotency contract below. The caller's encryption key
+ * is NOT passed to this action — the key lives only in the tutor's
+ * URL fragment, and the tutor's client appends it to the returned
+ * `joinPath` before copying to clipboard.
+ *
+ * Idempotency contract (added May 15 after pilot smoke):
+ *   Calling `issueJoinToken(s)` repeatedly during the same live
+ *   session returns the SAME token. The original design minted a
+ *   fresh row every call, which meant a tutor who clicked "Copy
+ *   link" twice handed out two different URLs — neither was wrong
+ *   server-side (both pointed at the same session), but the
+ *   accumulation muddied debugging and tempted us to revoke an
+ *   earlier link prematurely. Stability is the right default; if
+ *   the tutor ever wants to rotate (e.g. compromised link), that
+ *   gets its own explicit affordance — not implemented yet, see
+ *   BACKLOG.md "Tutor-initiated join-link rotation".
+ *
+ *   Concretely: we look up the most-recent non-revoked, non-expired
+ *   token for the session and return it. Only when none exists do
+ *   we mint a new one. The token's lifetime is NOT extended on
+ *   reuse — the original 24h budget from first mint stays, which
+ *   keeps the "links auto-expire" invariant honest (otherwise a
+ *   tutor copying every hour would keep a link alive forever).
  *
  * Trust posture (re-read before changing):
  *   - `assertOwnsWhiteboardSession` re-checks the session belongs to
@@ -241,7 +262,10 @@ export type IssueJoinTokenResult = {
  *     Stop; after Stop the artifact is the recording, shared via the
  *     separate share-link surface.
  *   - We cap concurrent active tokens per session — see the constant
- *     comment above.
+ *     comment above. After idempotency lands the cap is effectively
+ *     unreachable on the happy path (one active token per session at
+ *     a time), but the check stays as defense-in-depth against
+ *     future code paths that might insert tokens directly.
  *   - The token itself is opaque; the relay never sees it. The relay
  *     just sees the room id (= whiteboard session id) when the
  *     client connects.
@@ -262,6 +286,37 @@ export async function issueJoinToken(
   }
 
   const now = new Date();
+
+  // Idempotency lookup — if there's already an active token for this
+  // session, reuse it. `orderBy createdAt desc` so the freshest one
+  // wins in the unlikely-but-possible "multiple active tokens" case
+  // (e.g. row written by an older client before idempotency landed,
+  // a forthcoming rotateJoinToken admin tool, etc.). The cap check
+  // below is still reached only when this lookup returns null.
+  const existing = await withDbRetry(
+    () =>
+      db.whiteboardJoinToken.findFirst({
+        where: {
+          whiteboardSessionId,
+          revokedAt: null,
+          expiresAt: { gt: now },
+        },
+        orderBy: { createdAt: "desc" },
+        select: { token: true, expiresAt: true },
+      }),
+    { label: "issueJoinToken.findExisting" }
+  );
+  if (existing) {
+    console.log(
+      `[issueJoinToken] rid=${rid} wbsid=${whiteboardSessionId} reused token=${existing.token.slice(0, 8)}... expiresAt=${existing.expiresAt.toISOString()}`
+    );
+    return {
+      token: existing.token,
+      joinPath: `/w/${existing.token}`,
+      expiresAt: existing.expiresAt.toISOString(),
+    };
+  }
+
   const activeCount = await withDbRetry(
     () =>
       db.whiteboardJoinToken.count({
