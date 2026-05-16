@@ -24,7 +24,71 @@ import {
   PDF_MAX_PAGES,
   isLikelyIOSSafari,
   renderPdfFileToPngs,
+  resolvePdfPagesToRender,
 } from "@/lib/whiteboard/pdf-render";
+
+describe("resolvePdfPagesToRender", () => {
+  it("defaults to page 1..cap when undefined", () => {
+    const r = resolvePdfPagesToRender({ totalPagesInPdf: 10 });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.indices).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(r.truncated).toBe(false);
+  });
+
+  it("marks truncated when PDF exceeds cap (default path)", () => {
+    const r = resolvePdfPagesToRender({ totalPagesInPdf: 40 });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.indices).toHaveLength(PDF_MAX_PAGES);
+    expect(r.indices[0]).toBe(1);
+    expect(r.indices[PDF_MAX_PAGES - 1]).toBe(PDF_MAX_PAGES);
+    expect(r.truncated).toBe(true);
+  });
+
+  it("honours explicit selection in sorted order", () => {
+    const r = resolvePdfPagesToRender({
+      totalPagesInPdf: 12,
+      pageIndices: [10, 1, 5, 5],
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.indices).toEqual([1, 5, 10]);
+    expect(r.truncated).toBe(false);
+  });
+
+  it("rejects out-of-range pages", () => {
+    const r = resolvePdfPagesToRender({
+      totalPagesInPdf: 3,
+      pageIndices: [1, 4],
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.message).toBe("Selected pages out of range");
+  });
+
+  it("truncates long explicit selections to PDF_MAX_PAGES", () => {
+    const all = Array.from({ length: 50 }, (_, i) => i + 1);
+    const r = resolvePdfPagesToRender({
+      totalPagesInPdf: 50,
+      pageIndices: all,
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.indices).toHaveLength(PDF_MAX_PAGES);
+    expect(r.truncated).toBe(true);
+  });
+
+  it("rejects empty selection", () => {
+    const r = resolvePdfPagesToRender({
+      totalPagesInPdf: 5,
+      pageIndices: [],
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.message).toBe("No pages selected.");
+  });
+});
 
 describe("PDF render policy constants", () => {
   it("hard-caps at 30 pages", () => {
