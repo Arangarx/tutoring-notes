@@ -31,6 +31,38 @@ deferred to 4d, and the smoke checklist.
 **4c feature-complete. Branch pushed; PR open; awaiting Vercel preview
 smoke before merging to `master`.**
 
+> **🟡 May 15 amendment — recording mixdown replaces per-peer
+> recorders.** Pilot smoke surfaced an inconsistent-replay bug: with
+> per-peer `MediaRecorder` instances (one `tutor:mic` + one
+> `student:peer-<id>:mic` row in `SessionRecording`), the
+> `WhiteboardReplay` UI plays back only the FIRST audio file by
+> `createdAt` — so depending on which segment uploaded first, the
+> replay was either the tutor OR the student, never both, with no
+> ergonomic way to fix that without multi-track sync metadata the
+> schema doesn't carry. v1 redesign: `mic-recorder-audio.ts` now
+> exposes `addRemoteAudio(stream): () => void`, which connects a
+> `MediaStreamAudioSourceNode` from each remote participant's stream
+> into the SAME `MediaStreamAudioDestinationNode` the
+> `MediaRecorder` is already consuming. Web Audio sums implicitly,
+> so the tutor's recording stream contains tutor + every
+> participant in one mixed track — single blob, single DB row,
+> single replay file, everyone audible. `useRemoteMicRecorders` is
+> **no longer mounted** by `WhiteboardWorkspaceClient` (the hook file
+> stays in the tree along with its own unit suite for future
+> reuse); `WhiteboardWorkspaceClient`'s participants-reconcile
+> effect maintains a per-stream unsubscribe map and re-attaches
+> across graph rebuilds (gated on `localMicStream` flipping
+> non-null). The `AVControls` `moderation` prop is no longer passed
+> from the workspace — flipping the per-peer "Don't record" toggle
+> against a mixdown has no effect, so we hide it until we wire
+> per-peer gain into `addRemoteAudio`. See BACKLOG.md
+> "Tutor-side per-peer audio moderation" for the restore path.
+> **publishStream (WebRTC outbound) intentionally stays tutor-mic
+> only** — routing remote audio back into the publish destination
+> would feed every peer's audio back to every other peer through
+> the tutor as a relay, an obvious feedback loop. The mixing happens
+> at recordingStream only.
+
 This sub-chat covers Phase 4 Tasks 4 (UI components), 6 (workspace +
 student mounting), and 7 (CSP / Permissions-Policy unblock — moved up
 from 4d per the orchestrator's revised partitioning since the

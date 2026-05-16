@@ -61,7 +61,6 @@ import {
   type StreamHealth,
 } from "@/lib/recording/lifecycle-machine";
 import { useLiveAV } from "@/hooks/useLiveAV";
-import { useRemoteMicRecorders } from "@/hooks/useRemoteMicRecorders";
 import { studentMicStreamId } from "@/lib/recording/remote-stream-recorder";
 import { AVPermissionsPrompt } from "@/components/av/AVPermissionsPrompt";
 import { AVTilesPanel } from "@/components/av/AVTilesPanel";
@@ -808,18 +807,103 @@ export function WhiteboardWorkspaceClient({
   });
   const recordingActive = presence.recordingActive;
 
-  // Phase 4c: per-participant remote-mic recorder lifecycle. The
-  // host orchestrator pattern from `remote-stream-recorder.ts` —
-  // start/stop is gated by `lifecycle.shouldCapture(streamId)` AND
-  // the tutor's per-peer moderation override. The hook itself owns
-  // the recorder map + dispose-on-unmount.
-  useRemoteMicRecorders({
-    participants: liveAv.participants,
-    sessionId: whiteboardSessionId,
-    shouldCapture: lifecycle.shouldCapture,
-    mutedPeerIdsInRecording,
-    outbox: getOrCreateUploadOutbox(),
-  });
+  // Phase 4c (May 15 redesign): record EVERYONE into a single audio
+  // mixdown rather than one MediaRecorder per peer. Why:
+  //
+  //   - The replay UI plays a single audio file per session (the
+  //     "first audio recording by createdAt"). With per-peer recorders,
+  //     whichever stream's first segment uploaded first won the race
+  //     and became the replay audio, so sessions inconsistently played
+  //     back EITHER the tutor's voice OR the student's voice — never
+  //     both. A mixdown sidesteps the multi-stream-sync problem in the
+  //     replay UI entirely.
+  //   - Web Audio sums implicitly: every node connected to the same
+  //     MediaStreamDestination is mixed automatically. The graph in
+  //     `mic-recorder-audio.ts` already owns recordingStream; we just
+  //     attach each remote participant's audioStream as an additional
+  //     input.
+  //   - Per-peer moderation ("Don't record this student") becomes a
+  //     post-v1 backlog item — see BACKLOG.md "tutor-side per-peer
+  //     audio moderation" entry. v1 falls back to the tutor verbally
+  //     asking the student to mute. The UI moderation toggle still
+  //     renders so it remains discoverable when we wire it back up.
+  //
+  // The reconcile effect below maintains a per-stream unsubscribe
+  // map keyed on `MediaStream` identity. It runs whenever the
+  // participants list changes OR when the audio graph transitions
+  // from null → ready (workspaceAudio.localMicStream changes).
+  const remoteAudioSubsRef = useRef(new Map<MediaStream, () => void>());
+  const workspaceAudioAddRemoteAudio = workspaceAudio.addRemoteAudio;
+  const workspaceAudioLocalMicStream = workspaceAudio.localMicStream;
+  useEffect(() => {
+    const subs = remoteAudioSubsRef.current;
+    if (!workspaceAudioLocalMicStream) {
+      // Graph not ready (mic not acquired yet) or graph just got
+      // disposed. Drop any stale subs — they reference an audio
+      // context that's gone — and wait. The effect will re-run when
+      // the graph rebuilds (workspaceAudio.localMicStream flips
+      // non-null again).
+      for (const u of subs.values()) {
+        try {
+          u();
+        } catch {
+          /* ignore */
+        }
+      }
+      subs.clear();
+      return;
+    }
+    const seen = new Set<MediaStream>();
+    for (const p of liveAv.participants) {
+      if (!p.audioStream) continue;
+      seen.add(p.audioStream);
+      if (subs.has(p.audioStream)) continue;
+      try {
+        const unsub = workspaceAudioAddRemoteAudio(p.audioStream);
+        subs.set(p.audioStream, unsub);
+        console.log(
+          `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} avx=${whiteboardSessionId} mixdown-attach peer=${p.peerId} streamId=${studentMicStreamId(p.peerId)}`
+        );
+      } catch (err) {
+        console.warn(
+          `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} mixdown-attach failed peer=${p.peerId}`,
+          (err as Error)?.message ?? String(err)
+        );
+      }
+    }
+    for (const [stream, unsub] of [...subs.entries()]) {
+      if (seen.has(stream)) continue;
+      try {
+        unsub();
+      } catch {
+        /* ignore */
+      }
+      subs.delete(stream);
+    }
+  }, [
+    liveAv.participants,
+    workspaceAudioAddRemoteAudio,
+    workspaceAudioLocalMicStream,
+    whiteboardSessionId,
+  ]);
+
+  // Drop every sub on unmount as a belt-and-suspenders teardown —
+  // disposing the audio graph already detaches them implicitly, but
+  // calling our own unsubs first keeps the bookkeeping clean if
+  // useAudioRecorder's dispose order ever changes.
+  useEffect(() => {
+    return () => {
+      const subs = remoteAudioSubsRef.current;
+      for (const u of subs.values()) {
+        try {
+          u();
+        } catch {
+          /* ignore */
+        }
+      }
+      subs.clear();
+    };
+  }, []);
 
   /**
    * Register (sessionId, studentId) with the outbox so the production
@@ -1894,15 +1978,19 @@ export function WhiteboardWorkspaceClient({
           toggleMic={liveAv.toggleMic}
           toggleCam={liveAv.toggleCam}
           disabled={endingBusy}
-          moderation={
-            liveAv.participants.length > 0
-              ? {
-                  participants: liveAv.participants,
-                  mutedPeerIds: mutedPeerIdsInRecording,
-                  onTogglePeer: handleToggleParticipantMod,
-                }
-              : undefined
-          }
+          // moderation prop intentionally NOT passed in v1: the
+          // per-peer "Don't record this student" toggle relied on
+          // useRemoteMicRecorders gating each peer's MediaRecorder
+          // by mutedPeerIdsInRecording. That hook is no longer
+          // mounted (May 15 mixdown redesign — every participant is
+          // summed into the tutor's single recording stream), and
+          // wiring per-peer attenuation into addRemoteAudio is its
+          // own ~1hr build. Until then we hide the toggle so the UI
+          // doesn't claim to do something it doesn't. Tutor falls
+          // back to verbally asking the student to mute. See
+          // BACKLOG.md "Tutor-side per-peer audio moderation" entry.
+          // The `mutedPeerIdsInRecording` state + handler stay in
+          // scope above so re-wiring is a one-line prop add.
         />
       </div>
       {/* Board pages — own row so it isn’t buried in the recording/toolbar cluster */}

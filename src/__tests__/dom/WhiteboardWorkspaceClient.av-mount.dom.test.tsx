@@ -234,15 +234,18 @@ jest.mock("@/lib/recording/lifecycle-machine", () => {
   };
 });
 
-// ----- Recorder factory mock: spied for the orchestrator hook -----
+// ----- Remote-stream-recorder mock: kept around so the per-peer
+// recorder primitive itself stays unit-tested via its own suite, but
+// no longer exercised by the workspace (May 15 redesign — see the
+// addRemoteAudio mixdown wiring asserted below). The mock stays so a
+// future re-introduction of useRemoteMicRecorders doesn't accidentally
+// hit the real implementation during this DOM test.
 
-const recorderFactorySpy = jest.fn();
 jest.mock("@/lib/recording/remote-stream-recorder", () => {
   const actual = jest.requireActual("@/lib/recording/remote-stream-recorder");
   return {
     ...actual,
-    createRemoteStreamRecorder: (opts: { streamId: string }) => {
-      recorderFactorySpy(opts);
+    createRemoteStreamRecorder: () => {
       let recording = false;
       return {
         start: () => {
@@ -297,24 +300,48 @@ jest.mock(
   }
 );
 
-jest.mock("@/hooks/useAudioRecorder", () => ({
-  useAudioRecorder: () => ({
-    isRecording: false,
-    isUploading: false,
-    error: null,
-    durationMs: 0,
-    audioBlobs: [],
-    startRecording: jest.fn(),
-    stopRecording: jest.fn(),
-    micPermission: "unknown",
-    deviceId: null,
-    inputDevices: [],
-    selectDevice: jest.fn(),
-    audioLevel: 0,
-    elapsedMs: 0,
-    refresh: jest.fn(),
-  }),
-}));
+// ----- useAudioRecorder mock: spies addRemoteAudio so the mixdown
+// wiring can be asserted directly.
+
+const addRemoteAudioSpy = jest.fn();
+const addRemoteAudioUnsubs: jest.Mock[] = [];
+jest.mock("@/hooks/useAudioRecorder", () => {
+  const fakeLocalMicStream = {
+    id: "fake-local-mic-stream",
+    getAudioTracks: () => [],
+    getVideoTracks: () => [],
+    getTracks: () => [],
+  } as unknown as MediaStream;
+  return {
+    useAudioRecorder: () => ({
+      isRecording: false,
+      isUploading: false,
+      error: null,
+      durationMs: 0,
+      audioBlobs: [],
+      startRecording: jest.fn(),
+      stopRecording: jest.fn(),
+      micPermission: "unknown",
+      deviceId: null,
+      inputDevices: [],
+      selectDevice: jest.fn(),
+      audioLevel: 0,
+      elapsedMs: 0,
+      refresh: jest.fn(),
+      // Mixdown contract — workspace gates the participants-reconcile
+      // effect on localMicStream becoming non-null AND uses
+      // addRemoteAudio to attach each remote participant's stream
+      // to the recording mixdown.
+      localMicStream: fakeLocalMicStream,
+      addRemoteAudio: (stream: MediaStream) => {
+        addRemoteAudioSpy(stream);
+        const unsub = jest.fn();
+        addRemoteAudioUnsubs.push(unsub);
+        return unsub;
+      },
+    }),
+  };
+});
 
 const mockGetOrCreateOutbox = jest.fn(() => ({
   enqueue: jest.fn().mockResolvedValue(undefined),
@@ -419,7 +446,8 @@ beforeEach(() => {
   mockCreateWhiteboardSyncClient.mockClear();
   createdSyncClients.length = 0;
   reconnectPeerSpy.mockClear();
-  recorderFactorySpy.mockClear();
+  addRemoteAudioSpy.mockClear();
+  addRemoteAudioUnsubs.length = 0;
   evaluateLifecycleCalls.length = 0;
   receivedLocalPeerId = undefined;
   liveAvState = {
@@ -451,14 +479,22 @@ describe("WhiteboardWorkspaceClient ↔ live A/V mount", () => {
     expect(screen.getByTestId("av-controls")).toBeTruthy();
   });
 
-  test("3-peer canary: tutor + 2 students render distinct tiles + recorders + FSM streams", async () => {
+  test("3-peer canary: tutor + 2 students render distinct tiles AND each remote audioStream is attached to the tutor's recording mixdown", async () => {
+    // May 15 redesign: instead of one MediaRecorder per peer
+    // (which made the replay UI play whichever stream uploaded
+    // first), every participant's audioStream gets summed into a
+    // single tutor-side mixdown via Web Audio. The workspace's
+    // contract is: for each participant with an audioStream,
+    // call workspaceAudio.addRemoteAudio(stream) exactly once.
+    const streamA = makeFakeAudioStream("stream-peer-A");
+    const streamB = makeFakeAudioStream("stream-peer-B");
     liveAvState = {
       ...liveAvState,
       localAudioStream: makeFakeAudioStream("local"),
       hasMicPermission: "granted",
       participants: [
-        makeParticipant("peer-A", { label: "Alex" }),
-        makeParticipant("peer-B", { label: "Beth" }),
+        makeParticipant("peer-A", { label: "Alex", audioStream: streamA }),
+        makeParticipant("peer-B", { label: "Beth", audioStream: streamB }),
       ],
     };
 
@@ -475,30 +511,14 @@ describe("WhiteboardWorkspaceClient ↔ live A/V mount", () => {
     // Local tile is also present (peerId is the minted localPeerId).
     expect(peerIds).toContain(receivedLocalPeerId);
 
-    // (b) `createRemoteStreamRecorder` was invoked once per
-    // participant with the canonical student-mic streamId.
+    // (b) addRemoteAudio was invoked exactly once per remote
+    // participant with their audioStream. The mixdown contract.
     await waitFor(() => {
-      expect(recorderFactorySpy).toHaveBeenCalledTimes(2);
+      expect(addRemoteAudioSpy).toHaveBeenCalledTimes(2);
     });
-    const streamIds = recorderFactorySpy.mock.calls
-      .map((c) => c[0].streamId)
-      .sort();
-    expect(streamIds).toEqual([
-      "student:peer-peer-A:mic",
-      "student:peer-peer-B:mic",
-    ]);
-
-    // (c) FSM `inputStreams` contains the tutor-mic + both
-    // student-mic entries on the most recent evaluate call.
-    expect(evaluateLifecycleCalls.length).toBeGreaterThan(0);
-    const last =
-      evaluateLifecycleCalls[evaluateLifecycleCalls.length - 1];
-    // userWantsRecording=false initially, so tutor:mic is NOT in
-    // the map (the workspace gates that on the toggle). But the
-    // student-mic entries are unconditionally present whenever a
-    // participant has an audioStream.
-    expect(last.inputStreams.has("student:peer-peer-A:mic")).toBe(true);
-    expect(last.inputStreams.has("student:peer-peer-B:mic")).toBe(true);
+    const attachedStreams = addRemoteAudioSpy.mock.calls.map((c) => c[0]);
+    expect(attachedStreams).toContain(streamA);
+    expect(attachedStreams).toContain(streamB);
   });
 
   test("FSM inputStreams reflects participant peerConnectionState (connected→ok, connecting→degraded, failed→failed)", async () => {
