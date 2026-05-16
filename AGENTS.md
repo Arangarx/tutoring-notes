@@ -72,3 +72,23 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
 3. Re-run the test suite (`npx jest`) to know your baseline before
    making changes.
 4. Update the STATUS doc as you finish each sub-phase.
+
+## Merging convention (solo-tutor pilot stage)
+
+While the pilot is solo (just Andrew + Sarah) and there's no adversarial
+CI agent reviewing PRs automatically:
+
+- Executors deliver a **smokeable branch** with the Vercel Preview URL +
+  a smoke checklist + a clear final report. They do NOT open PRs.
+- Andrew (or the orchestrator after Andrew confirms smoke pass) merges
+  directly to master via `git merge --no-ff <branch>` to keep a clean,
+  revertable merge commit. The branch is preserved (and later cleaned up
+  by the stale-branch sweep utility).
+- **Direct pushes to master WITHOUT a smoked branch are still
+  forbidden** — branch + commit + push + smoke + merge is the
+  discipline; only the PR step is dropped.
+- **When this changes:** revisit the convention if (a) the team grows
+  beyond solo or (b) an adversarial agentic CI pipeline lands that auto-
+  reviews PRs. At that point, PRs become the right shape again. Until
+  then, no notes were being added to PRs anyway — the ceremony was pure
+  overhead.
