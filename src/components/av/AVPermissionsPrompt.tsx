@@ -179,6 +179,29 @@ export function AVPermissionsPrompt({
   );
 }
 
+/**
+ * Phase 4d polish — friendly, short denied-state copy decoupled
+ * from the raw classifier `error.message`. The classifier's
+ * verbose "Microphone access denied. Click the icon next to the
+ * address bar, set Microphone to Allow, then retry." is too dense
+ * for a busy tutor mid-session; this surface gets a tight
+ * 1-line phrase + an explicit Retry button so the user can act
+ * without having to read instructions.
+ *
+ * The "camera icon" reference is intentional — every major
+ * browser surfaces a SINGLE site-permissions icon in the address
+ * bar (Chrome's camera-with-slash, Safari's video badge, Firefox's
+ * camera) regardless of which permission was denied, so calling
+ * it "the camera icon" is correct enough for the typical user
+ * who has not memorised the per-browser glyph nuance.
+ */
+function deniedCopyFor(kind: "microphone" | "camera"): string {
+  if (kind === "microphone") {
+    return "Microphone blocked — click the camera icon in your browser address bar to allow.";
+  }
+  return "Camera blocked — click the camera icon in your browser address bar to allow.";
+}
+
 function PermissionRow({
   kind,
   status,
@@ -192,11 +215,20 @@ function PermissionRow({
   onAllow: () => void;
   testIdSuffix: "mic" | "cam";
 }) {
+  // Non-permission errors (no-device / device-in-use / etc.) keep
+  // the classifier's verbose message — they're rarer and the
+  // verbose copy actually helps in those cases. The polish
+  // exclusively targets the permission-denied path which is the
+  // overwhelming majority of real "Try again" surfaces.
+  const friendlyDenied =
+    !error || error.type === "permission-denied"
+      ? deniedCopyFor(kind)
+      : error.message;
   const labelByStatus: Record<RowStatus, string> = {
     request: `Allow ${kind}`,
     requesting: "Requesting…",
     granted: `${kind === "microphone" ? "Microphone" : "Camera"} allowed`,
-    denied: error?.message ?? `${kind} access denied.`,
+    denied: friendlyDenied,
   };
   return (
     <div

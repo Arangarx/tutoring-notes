@@ -52,6 +52,25 @@ export type AVTilesPanelProps = {
    * `"av-tiles-panel"`.
    */
   testId?: string;
+  /**
+   * Phase 4d: when a remote tile's connection terminally fails,
+   * the tile surfaces a Retry button that invokes this callback
+   * with the failed peer's id. The host passes
+   * `liveAv.reconnectPeer` directly — same shape, same semantic.
+   * When omitted, failed tiles render without a retry affordance
+   * (defensive default; in production both the workspace + the
+   * student client wire this).
+   */
+  onReconnect?: (peerId: string) => void;
+  /**
+   * Phase 4d: when present, overrides the per-participant label
+   * the host sees. Used by the workspace to substitute the
+   * SSR-known `student.name` for the single-student case where
+   * presence-wire labels would otherwise read `Student · a3f7`.
+   * Returning `undefined` falls through to `participant.label`.
+   * Pure read-only — never mutated by the panel.
+   */
+  resolveLabel?: (participant: AvParticipant) => string | undefined;
 };
 
 /**
@@ -65,6 +84,8 @@ export function AVTilesPanel({
   localTile,
   className,
   testId,
+  onReconnect,
+  resolveLabel,
 }: AVTilesPanelProps) {
   const remote = useMemo(() => [...participants], [participants]);
   const isEmpty = !localTile && remote.length === 0;
@@ -111,9 +132,22 @@ export function AVTilesPanel({
           }}
         />
       )}
-      {remote.map((p) => (
-        <AVTile key={p.peerId} participant={p} />
-      ))}
+      {remote.map((p) => {
+        const resolvedLabel = resolveLabel ? resolveLabel(p) : undefined;
+        const decorated: AvParticipant =
+          resolvedLabel !== undefined && resolvedLabel.length > 0
+            ? { ...p, label: resolvedLabel }
+            : p;
+        return (
+          <AVTile
+            key={p.peerId}
+            participant={decorated}
+            onReconnect={
+              onReconnect ? () => onReconnect(p.peerId) : undefined
+            }
+          />
+        );
+      })}
     </div>
   );
 }

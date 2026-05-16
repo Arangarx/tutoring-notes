@@ -103,9 +103,23 @@ describe("AVTile — remote participant", () => {
     expect(screen.getByTestId("av-tile-label-p-5").textContent).toBe("Student");
   });
 
-  test("connection-state pill reflects peerConnectionState (connected → green, connecting → amber, failed → red)", () => {
+  test("Phase 4d pill mapping: connected → no pill; connecting/new → 'Connecting…'; failed → 'Connection failed'; closed → 'Disconnected'", () => {
+    // `connected` deliberately renders NO pill — reduces visual
+    // noise during the steady state. The data-state-kind attribute
+    // on the tile root still reflects "connected" for tests.
+    {
+      const p = makeRemoteParticipant({
+        peerId: "p-connected",
+        peerConnectionState: "connected",
+      });
+      render(<AVTile participant={p} />);
+      expect(screen.queryByTestId("av-tile-state-p-connected")).toBeNull();
+      expect(
+        screen.getByTestId("av-tile-p-connected").getAttribute("data-state-kind")
+      ).toBe("connected");
+      cleanup();
+    }
     for (const [pc, expected] of [
-      ["connected", "Connected"],
       ["connecting", "Connecting…"],
       ["new", "Connecting…"],
       ["failed", "Connection failed"],
@@ -123,43 +137,107 @@ describe("AVTile — remote participant", () => {
     }
   });
 
-  test("disconnected state surfaces the ICE label (4c basic mapping; 4d polishes copy)", () => {
+  test("Phase 4d: disconnected pill reads 'Reconnecting…' (not the raw ICE state)", () => {
     const p = makeRemoteParticipant({
       peerId: "p-disc",
       peerConnectionState: "disconnected",
       iceConnectionState: "checking",
     });
     render(<AVTile participant={p} />);
-    expect(screen.getByTestId("av-tile-state-p-disc").textContent).toMatch(
-      /checking/
-    );
+    const pill = screen.getByTestId("av-tile-state-p-disc");
+    expect(pill.textContent).toMatch(/Reconnecting(\.{1,3}|…)/);
+    // The ICE string must NOT leak into the user-facing copy.
+    expect(pill.textContent).not.toMatch(/checking/);
   });
 
-  test("camera-off placeholder appears when videoStream has no video tracks (peer connected)", () => {
+  test("Phase 4d: failed pill renders a Retry button when onReconnect is supplied; clicking it invokes the callback", () => {
+    const onReconnect = jest.fn();
+    const p = makeRemoteParticipant({
+      peerId: "p-failed-r",
+      peerConnectionState: "failed",
+    });
+    render(<AVTile participant={p} onReconnect={onReconnect} />);
+    const retry = screen.getByTestId(
+      "av-tile-retry-p-failed-r"
+    ) as HTMLButtonElement;
+    expect(retry).toBeTruthy();
+    expect(retry.textContent).toMatch(/Retry/);
+    retry.click();
+    expect(onReconnect).toHaveBeenCalledTimes(1);
+  });
+
+  test("Phase 4d: failed pill omits the Retry button when no onReconnect is supplied", () => {
+    const p = makeRemoteParticipant({
+      peerId: "p-failed-no-cb",
+      peerConnectionState: "failed",
+    });
+    render(<AVTile participant={p} />);
+    expect(screen.queryByTestId("av-tile-retry-p-failed-no-cb")).toBeNull();
+    expect(
+      screen.getByTestId("av-tile-state-p-failed-no-cb").textContent
+    ).toMatch(/Connection failed/);
+  });
+
+  test("Phase 4d: closed and reconnecting pills never show a Retry button (mesh.restart can't help)", () => {
+    for (const pc of ["closed", "disconnected"] as const) {
+      const onReconnect = jest.fn();
+      const p = makeRemoteParticipant({
+        peerId: `p-noretry-${pc}`,
+        peerConnectionState: pc,
+      });
+      render(<AVTile participant={p} onReconnect={onReconnect} />);
+      expect(screen.queryByTestId(`av-tile-retry-p-noretry-${pc}`)).toBeNull();
+      cleanup();
+    }
+  });
+
+  test("Phase 4d: cam-off placeholder renders the initials circle (deterministic colour per peerId)", () => {
     const p = makeRemoteParticipant({
       peerId: "p-novid",
-      videoStream: makeFakeStream([]), // no video tracks
+      label: "Sarah Johnson",
+      videoStream: makeFakeStream([]),
       peerConnectionState: "connected",
     });
     render(<AVTile participant={p} />);
+    const placeholder = screen.getByTestId("av-tile-cam-placeholder-p-novid");
+    expect(placeholder.getAttribute("data-placeholder-kind")).toBe("initials");
     expect(
-      screen.getByTestId("av-tile-cam-placeholder-p-novid")
-    ).toBeTruthy();
-    expect(screen.getByTestId("av-tile-cam-placeholder-p-novid")).toHaveTextContent(
-      "Camera off"
-    );
+      screen.getByTestId("av-tile-initials-p-novid").textContent
+    ).toBe("SJ");
+    // Placeholder must NOT carry the legacy "Camera off" plain-text
+    // copy — initials replace it entirely.
+    expect(placeholder.textContent).not.toMatch(/Camera off/i);
   });
 
-  test("while peer is connecting, empty video shows Waiting for video (not Camera off)", () => {
+  test("Phase 4d: cam-off placeholder for connecting peer keeps the 'Waiting for video…' copy (not initials)", () => {
     const p = makeRemoteParticipant({
       peerId: "p-wait",
       videoStream: makeFakeStream([]),
       peerConnectionState: "connecting",
     });
     render(<AVTile participant={p} />);
-    expect(screen.getByTestId("av-tile-cam-placeholder-p-wait")).toHaveTextContent(
-      "Waiting for video"
+    const placeholder = screen.getByTestId("av-tile-cam-placeholder-p-wait");
+    expect(placeholder.getAttribute("data-placeholder-kind")).toBe(
+      "awaiting-video"
     );
+    expect(placeholder).toHaveTextContent("Waiting for video");
+    // No initials circle in this case — the peer's identity is
+    // ambiguous (still negotiating) so we show the negotiation copy.
+    expect(screen.queryByTestId("av-tile-initials-p-wait")).toBeNull();
+  });
+
+  test("Phase 4d: cam-off placeholder for a connected peer with no label falls back to the role initial", () => {
+    const p = makeRemoteParticipant({
+      peerId: "p-noname",
+      label: undefined,
+      role: "student",
+      videoStream: makeFakeStream([]),
+      peerConnectionState: "connected",
+    });
+    render(<AVTile participant={p} />);
+    expect(
+      screen.getByTestId("av-tile-initials-p-noname").textContent
+    ).toBe("S");
   });
 
   test("re-render with a new MediaStream re-assigns srcObject", () => {
