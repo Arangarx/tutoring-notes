@@ -170,4 +170,111 @@ describe("AVTilesPanel — layout + empty / populated states", () => {
     expect(screen.getByTestId("av-tile-local-mic-muted-self")).toBeTruthy();
     expect(screen.getByTestId("av-tile-cam-placeholder-self")).toBeTruthy();
   });
+
+  test("Phase 4d: resolveLabel overrides the per-tile label (single-student name fallback)", () => {
+    render(
+      <AVTilesPanel
+        participants={[
+          makeParticipant("peer-a", { label: "Student · a3f7" }),
+        ]}
+        resolveLabel={(p) => (p.role === "student" ? "Liam" : undefined)}
+      />
+    );
+    expect(screen.getByTestId("av-tile-label-peer-a").textContent).toBe(
+      "Liam"
+    );
+  });
+
+  test("Phase 4d: resolveLabel returning undefined falls through to participant.label", () => {
+    render(
+      <AVTilesPanel
+        participants={[
+          makeParticipant("peer-a", { label: "Original Label" }),
+          makeParticipant("peer-b"), // no label → role-derived "Student"
+        ]}
+        resolveLabel={() => undefined}
+      />
+    );
+    expect(screen.getByTestId("av-tile-label-peer-a").textContent).toBe(
+      "Original Label"
+    );
+    expect(screen.getByTestId("av-tile-label-peer-b").textContent).toBe(
+      "Student"
+    );
+  });
+
+  test("Phase 4d: resolveLabel applies only to remote tiles, not the local preview tile", () => {
+    render(
+      <AVTilesPanel
+        participants={[makeParticipant("peer-a")]}
+        localTile={{
+          peerId: "self-tutor",
+          role: "tutor",
+          label: "Original Tutor Label",
+          audioStream: makeAudioOnlyStream(),
+          videoStream: makeFakeStream(),
+          isMicMuted: false,
+          isCamMuted: false,
+        }}
+        resolveLabel={() => "REMOTE OVERRIDE"}
+      />
+    );
+    // Local tile keeps its original label — resolveLabel does NOT
+    // see the local descriptor (that's the host's own preview, not
+    // a "participant" in the same semantic sense).
+    expect(screen.getByTestId("av-tile-label-self-tutor").textContent).toBe(
+      "Original Tutor Label"
+    );
+    // Remote tile receives the override.
+    expect(screen.getByTestId("av-tile-label-peer-a").textContent).toBe(
+      "REMOTE OVERRIDE"
+    );
+  });
+
+  test("Phase 4d: empty-string overrides fall through (treated like undefined for safety)", () => {
+    render(
+      <AVTilesPanel
+        participants={[
+          makeParticipant("peer-a", { label: "Fallback Label" }),
+        ]}
+        resolveLabel={() => ""}
+      />
+    );
+    expect(screen.getByTestId("av-tile-label-peer-a").textContent).toBe(
+      "Fallback Label"
+    );
+  });
+
+  test("Phase 4d: onReconnect prop is plumbed to the AVTile Retry button when state is 'failed'", () => {
+    const onReconnect = jest.fn();
+    render(
+      <AVTilesPanel
+        participants={[
+          makeParticipant("peer-fail", {
+            peerConnectionState: "failed",
+          }),
+        ]}
+        onReconnect={onReconnect}
+      />
+    );
+    const retry = screen.getByTestId(
+      "av-tile-retry-peer-fail"
+    ) as HTMLButtonElement;
+    expect(retry).toBeTruthy();
+    retry.click();
+    expect(onReconnect).toHaveBeenCalledWith("peer-fail");
+  });
+
+  test("Phase 4d: when no onReconnect supplied, failed tiles render no Retry button", () => {
+    render(
+      <AVTilesPanel
+        participants={[
+          makeParticipant("peer-fail", {
+            peerConnectionState: "failed",
+          }),
+        ]}
+      />
+    );
+    expect(screen.queryByTestId("av-tile-retry-peer-fail")).toBeNull();
+  });
 });

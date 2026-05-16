@@ -644,6 +644,7 @@ export function StudentWhiteboardClient({
             isMicMuted: liveAv.isMicMuted,
             isCamMuted: liveAv.isCamMuted,
           }}
+          onReconnect={liveAv.reconnectPeer}
         />
         <AVControls
           isMicMuted={liveAv.isMicMuted}

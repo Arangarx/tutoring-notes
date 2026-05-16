@@ -79,6 +79,7 @@ import {
 } from "@/lib/whiteboard/upload";
 import { generateSessionSnapshotPng } from "@/lib/whiteboard/snapshot-png";
 import { deriveSyncPillState } from "@/lib/whiteboard/sync-pill-presentation";
+import { resolveParticipantLabel } from "@/lib/whiteboard/participant-label";
 import {
   endWhiteboardSession,
   issueJoinToken,
@@ -2047,6 +2048,13 @@ export function WhiteboardWorkspaceClient({
             isMicMuted: liveAv.isMicMuted,
             isCamMuted: liveAv.isCamMuted,
           }}
+          onReconnect={liveAv.reconnectPeer}
+          resolveLabel={(participant) =>
+            resolveParticipantLabel(participant, {
+              studentName,
+              totalRemotePeers: liveAv.participants.length,
+            })
+          }
         />
         <AVControls
           isMicMuted={liveAv.isMicMuted}
