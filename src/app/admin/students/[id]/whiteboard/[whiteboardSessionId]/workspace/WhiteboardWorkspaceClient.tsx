@@ -240,6 +240,59 @@ export function WhiteboardWorkspaceClient({
   const syncClientRef = useRef<WhiteboardSyncClient | null>(null);
   const [syncReady, setSyncReady] = useState(false);
 
+  // -----------------------------------------------------------------
+  // Diagnostic: mount-phase timeline
+  //
+  // Logs a single console line each time the workspace transitions
+  // through a major mount phase, with t=Nms relative to first mount.
+  // Purpose: when the pilot reports "I had to hard refresh to make
+  // anything work", the console will show exactly which phase
+  // stalled or fired in the wrong order (e.g. mesh built before mic
+  // acquired, sync-client never reached connected, first peer
+  // joined but never reached ICE-connected, etc.).
+  //
+  // Every line is gated on a Set so the same phase only logs once
+  // per workspace mount — prevents the play-loop or AV reconciler
+  // from flooding the console mid-session. Keep the format
+  // consistent with the rest of the workspace logs:
+  // `[wb-mount] wbsid=<id> phase=<name> t=<ms>ms`.
+  // -----------------------------------------------------------------
+  const mountStartMsRef = useRef<number>(0);
+  const phasesLoggedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    mountStartMsRef.current = performance.now();
+    console.log(
+      `[wb-mount] wbsid=${whiteboardSessionId} phase=mount t=0ms`
+    );
+    return () => {
+      console.log(
+        `[wb-mount] wbsid=${whiteboardSessionId} phase=unmount t=${Math.round(
+          performance.now() - mountStartMsRef.current
+        )}ms`
+      );
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const logMountPhase = useCallback(
+    (phase: string, extra?: string) => {
+      if (phasesLoggedRef.current.has(phase)) return;
+      phasesLoggedRef.current.add(phase);
+      const dt = Math.round(performance.now() - mountStartMsRef.current);
+      console.log(
+        `[wb-mount] wbsid=${whiteboardSessionId} phase=${phase} t=${dt}ms${
+          extra ? ` ${extra}` : ""
+        }`
+      );
+    },
+    [whiteboardSessionId]
+  );
+  useEffect(() => {
+    if (encryptionKey) logMountPhase("encryption-key-ready");
+  }, [encryptionKey, logMountPhase]);
+  useEffect(() => {
+    if (syncReady) logMountPhase("sync-client-ready");
+  }, [syncReady, logMountPhase]);
+
   // ---------------------------------------------------------------
   // Live-A/V peer-id minting (Phase 4c)
   // ---------------------------------------------------------------
@@ -660,6 +713,46 @@ export function WhiteboardWorkspaceClient({
     sessionId: whiteboardSessionId,
     externalAudioStream: workspaceAudio.localMicStream,
   });
+
+  // -----------------------------------------------------------------
+  // Diagnostic: AV mount phases — surfaces the gap between
+  // "AVPermissionsPrompt rendered" and "first peer ICE-connected"
+  // so we can root-cause the "had to hard refresh to allow camera /
+  // got stuck in Connecting…" pilot symptoms.
+  // -----------------------------------------------------------------
+  useEffect(() => {
+    if (liveAv.localAudioStream) {
+      logMountPhase(
+        "av-local-audio-ready",
+        `tracks=${liveAv.localAudioStream.getAudioTracks().length}`
+      );
+    }
+  }, [liveAv.localAudioStream, logMountPhase]);
+  useEffect(() => {
+    if (liveAv.localVideoStream) {
+      logMountPhase(
+        "av-local-video-ready",
+        `tracks=${liveAv.localVideoStream.getVideoTracks().length}`
+      );
+    }
+  }, [liveAv.localVideoStream, logMountPhase]);
+  useEffect(() => {
+    if (liveAv.participants.length > 0) {
+      logMountPhase(
+        "av-first-peer-joined",
+        `peer=${liveAv.participants[0]!.peerId} role=${liveAv.participants[0]!.role}`
+      );
+      const firstConnected = liveAv.participants.find(
+        (p) => p.peerConnectionState === "connected"
+      );
+      if (firstConnected) {
+        logMountPhase(
+          "av-first-peer-connected",
+          `peer=${firstConnected.peerId}`
+        );
+      }
+    }
+  }, [liveAv.participants, logMountPhase]);
 
   // Phase 4c: per-peer "Don't record this student" moderation. State
   // is host-owned (workspace) so the recorder hook stays pure. Wire-

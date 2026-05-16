@@ -142,13 +142,32 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     whiteboardSessionId,
   } = props;
 
-  const resolveAssetUrl = whiteboardSessionId
-    ? (raw: string) =>
-        resolveWhiteboardAssetReadUrl(raw, {
-          kind: "tutor",
-          whiteboardSessionId,
-        })
-    : undefined;
+  // -----------------------------------------------------------------
+  // Memoize resolveAssetUrl. Before May 15 evening, this was created
+  // inline on every render. Every play-loop tick fires
+  // `setAudioElapsedMs(ms)` → React re-render → new `resolveAssetUrl`
+  // identity → new `applySceneAt` identity (it lists resolveAssetUrl
+  // in its deps) → the audio-driven loop useEffect tears down the
+  // existing throttled play loop and creates a fresh IDLE one. The
+  // new loop never receives the `play` event (already fired) so it
+  // sits doing nothing while the audio keeps playing. The scene
+  // stays frozen until the audio's `ended` event fires the
+  // trailing-apply branch of `pause()`, which paints all strokes at
+  // once at t=duration — the "strokes only show up at the end"
+  // pilot symptom. Memoizing here keeps `applySceneAt` stable so
+  // the loop survives across renders.
+  // -----------------------------------------------------------------
+  const resolveAssetUrl = useMemo(
+    () =>
+      whiteboardSessionId
+        ? (raw: string) =>
+            resolveWhiteboardAssetReadUrl(raw, {
+              kind: "tutor",
+              whiteboardSessionId,
+            })
+        : undefined,
+    [whiteboardSessionId]
+  );
 
   const [loadState, setLoadState] = useState<LoadState>({ kind: "loading" });
   const [api, setApi] = useState<ReplayApi | null>(null);
@@ -426,7 +445,22 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   // 5. Audio-driven scene loop. We use rAF (not setInterval) so the
   // scene update lands inside the browser's paint cycle — feels
   // smoother and stays in sync with the audio scrubber's repaint.
+  //
+  // Defensive: stash the latest `applySceneAt` in a ref so the loop's
+  // `apply` closure reads the current implementation without forcing
+  // the effect to re-run when applySceneAt's identity changes. Prior
+  // to May 15 evening, applySceneAt was in this effect's dep array,
+  // which combined with a non-memoized resolveAssetUrl re-created the
+  // throttled play loop on every render. Each newly-minted loop
+  // started in the IDLE state (the audio's `play` event had already
+  // fired and only attaches to the latest loop AFTER its next play
+  // press), so scenes stopped updating mid-playback. The ref pattern
+  // here makes the loop survive any future dep churn upstream.
   // -----------------------------------------------------------------
+  const applySceneAtRef = useRef(applySceneAt);
+  useEffect(() => {
+    applySceneAtRef.current = applySceneAt;
+  }, [applySceneAt]);
 
   useEffect(() => {
     if (loadState.kind !== "ready") return;
@@ -450,7 +484,10 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       getTimeMs: () => Math.floor(el.currentTime * 1000),
       apply: (ms) => {
         setAudioElapsedMs(ms);
-        applySceneAt(ms);
+        // Read via ref so applySceneAt identity churn does NOT force
+        // a teardown of this loop — see the comment above the ref
+        // declaration for the regression history.
+        applySceneAtRef.current(ms);
       },
     });
 
@@ -490,7 +527,10 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     };
   }, [
     audioBlobUrl,
-    applySceneAt,
+    // NOTE: `applySceneAt` intentionally omitted — it is consumed
+    // via `applySceneAtRef.current` (see comment above the loop
+    // definition). Adding it back would re-introduce the "strokes
+    // only show at the end" regression of May 15.
     loadState,
     replayAudioMime,
     replayExcaliRestoreReady,
