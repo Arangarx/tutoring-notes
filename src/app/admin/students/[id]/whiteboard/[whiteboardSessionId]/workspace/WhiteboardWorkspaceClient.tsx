@@ -78,6 +78,7 @@ import {
   uploadWhiteboardSnapshot,
 } from "@/lib/whiteboard/upload";
 import { generateSessionSnapshotPng } from "@/lib/whiteboard/snapshot-png";
+import { deriveSyncPillState } from "@/lib/whiteboard/sync-pill-presentation";
 import {
   endWhiteboardSession,
   issueJoinToken,
@@ -1428,13 +1429,6 @@ export function WhiteboardWorkspaceClient({
     [now, serverActiveMs, serverLastActiveAtMs, bothPartiesInRoom]
   );
 
-  // Whether to show the "(waiting for student)" qualifier. True until
-  // we've ever accumulated billable time AND we're not currently
-  // both-present. (Once any time is on the clock, we just show the
-  // number — pausing is implied by the digits not advancing.)
-  const showWaitingForStudent =
-    !!syncUrl && serverActiveMs === 0 && !bothPartiesInRoom;
-
   // ---------------------------------------------------------------
   // Copy student link
   // ---------------------------------------------------------------
@@ -2190,32 +2184,33 @@ export function WhiteboardWorkspaceClient({
             label={presence.pillLabel}
             testId="wb-recording-pill"
           />
-          {syncUrl && (
-            <StatusPill
-              color={
-                bothPartiesInRoom
-                  ? "green"
-                  : tutorSyncConnected
-                    ? "amber"
-                    : "grey"
-              }
-              label={
-                bothPartiesInRoom
-                  ? "Student connected"
-                  : tutorSyncConnected
-                    ? "Awaiting student"
-                    : "Connecting…"
-              }
-              testId="wb-sync-pill"
-            />
-          )}
+          {syncUrl &&
+            (() => {
+              // Phase 4d dedupe: the sync-pill collapses in the
+              // "awaiting student" state. The autopause banner +
+              // recording-pill already convey "waiting for student"
+              // in the same toolbar — a third indicator just adds
+              // noise. We keep the sync-pill for the two states
+              // it uniquely owns: "Student connected" (positive
+              // green affirmation) and "Sync connecting…" (sync
+              // layer itself unreachable, distinct from
+              // awaiting-student).
+              const sync = deriveSyncPillState({
+                tutorSyncConnected,
+                bothPartiesInRoom,
+              });
+              if (!sync.show) return null;
+              return (
+                <StatusPill
+                  color={sync.color}
+                  label={sync.label}
+                  testId="wb-sync-pill"
+                />
+              );
+            })()}
           <StatusPill
             color="blue"
-            label={
-              showWaitingForStudent
-                ? `Session: ${formatDuration(liveTimerMs)} (waiting for student)`
-                : `Session: ${formatDuration(liveTimerMs)}`
-            }
+            label={`Session: ${formatDuration(liveTimerMs)}`}
             testId="wb-timer"
           />
         </div>

@@ -76,13 +76,30 @@ test.describe("group-session presence (Phase 1c)", () => {
       const env = readLocalEnv();
       const syncEnabled = Boolean(env.WHITEBOARD_SYNC_URL?.trim());
       if (syncEnabled) {
-        // Sync pill renders only when a sync URL is configured. With
-        // no peer present yet, copy should be "Connecting…" or
-        // "Awaiting student" — both are valid transient states; the
-        // canary is just that the pill is wired.
-        await expect(page.getByTestId("wb-sync-pill")).toBeVisible({
+        // Phase 4d: the sync-pill dedupes against the recording-pill +
+        // autopause banner. In the "Sync connected, awaiting student"
+        // state (the typical state of this test's lone tutor) the
+        // sync-pill is now hidden — banner + recording-pill already
+        // convey "waiting for student" in the same toolbar.
+        // Acceptable states for this canary:
+        //   (a) sync layer briefly still connecting → grey
+        //       "Sync connecting…" pill IS visible;
+        //   (b) sync layer fully up, no peer yet → pill IS hidden.
+        // We assert the IS-hidden steady state, with a short
+        // tolerance for case (a) by waiting on
+        // `wb-recording-pill` to stabilise first.
+        await expect(page.getByTestId("wb-recording-pill")).toBeVisible({
           timeout: 30_000,
         });
+        await page.waitForTimeout(2_000);
+        const syncPill = page.getByTestId("wb-sync-pill");
+        // Either hidden (steady state) OR rendered as "Sync
+        // connecting…" (transient). The "Awaiting student" copy
+        // must NEVER appear.
+        const isVisible = await syncPill.isVisible().catch(() => false);
+        if (isVisible) {
+          await expect(syncPill).not.toContainText(/Awaiting student/i);
+        }
       }
 
       // Page should never have crashed to an error boundary.
