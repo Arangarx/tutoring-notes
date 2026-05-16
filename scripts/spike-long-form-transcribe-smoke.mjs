@@ -239,11 +239,11 @@ async function main() {
           content: textRaw.slice(0, 10_000),
         });
         let big = textRaw;
-        while (big.length < 100_000) big += "\n\n" + textRaw;
+        while (big.length < 130_000) big += "\n\n" + textRaw;
         variants.push({
-          id: "text-100k",
-          chars: 100_000,
-          content: big.slice(0, 100_000),
+          id: "text-130k-overcap",
+          chars: 130_000,
+          content: big.slice(0, 130_000),
         });
       }
 

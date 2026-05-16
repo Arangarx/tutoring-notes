@@ -5,7 +5,7 @@
 
 ## TL;DR
 
-Empirical **Vercel Preview** runs for this spike were **not completed from the agent sandbox** (Neon `DATABASE_URL` unreachable from the automation host), so **wall-clock headroom against the real 300s (Pro) / 60s (Hobby) serverless ceiling is not yet measured** in `scripts/spike-long-form-transcribe-smoke-results.json`. The spike still delivers **reproducible fixtures + a Playwright harness** so Andrew can finish the binding run against a **preview URL + `SPIKE_TEST_*` student** before Sarah’s Monday session. From **code inspection**, the dominant risk for Sarah remains **`transcribeAndGenerateAction`**: sequential **Whisper-1** calls (after optional **ffmpeg** splitting for uploads &gt; ~25 MB) plus **`gpt-4o-mini`** form-fill all share **one** `maxDuration = 300` budget on `src/app/admin/students/[id]/page.tsx`. Upload is **client-direct to Vercel Blob** (no 4.5 MB server-action body limit). **Pasted-text** path is usually cheaper server-side but **`estimateTokens` &gt; 30k** still hard-fails in `generateNoteFromTextAction` (`MAX_INPUT_TOKENS` in `src/lib/ai.ts`).
+Empirical **Vercel Preview** runs for this spike were **not completed from the agent sandbox** (Neon `DATABASE_URL` unreachable from the automation host), so **wall-clock headroom against the real 300s (Pro) / 60s (Hobby) serverless ceiling is not yet measured** in `scripts/spike-long-form-transcribe-smoke-results.json`. The spike still delivers **reproducible fixtures + a Playwright harness** so Andrew can finish the binding run against a **preview URL + `SPIKE_TEST_*` student** before Sarah’s Monday session. From **code inspection**, the dominant risk for Sarah remains **`transcribeAndGenerateAction`**: sequential **Whisper-1** calls (after optional **ffmpeg** splitting for uploads &gt; ~25 MB) plus **`gpt-4o-mini`** form-fill all share **one** `maxDuration = 300` budget on `src/app/admin/students/[id]/page.tsx`. Upload is **client-direct to Vercel Blob** (no 4.5 MB server-action body limit). **Pasted-text** path is usually cheaper server-side; the harness includes a **~130k char** variant to force the **`MAX_INPUT_TOKENS` (30 000)** rejection (`estimateTokens` ≈ `ceil(chars/4)`).
 
 ## Test setup
 
@@ -47,13 +47,13 @@ _Client harness measures: (1) browser upload completion (`audio-upload-done`), (
 
 ## Pasted-text results
 
-Runner order: **10k → 48k → 100k** chars (100k built by repeating the fixture).
+Runner order: **10k → 48k → 130k** chars (130k built by repeating the fixture — exceeds `MAX_INPUT_TOKENS` 30 000 because `estimateTokens` ≈ `ceil(chars/4)` → **32 500**).
 
 | Payload | Chars | `estimateTokens` (ceil len/4) | Expected guard | Outcome (live) |
 |---------|-------|----------------------------------|----------------|----------------|
 | text-10k | 10 000 | 10 000 | OK | _Pending_ |
 | text-50k | 48 000 | 48 000 | OK | _Pending_ |
-| text-100k | 100 000 | 100 000 | **`generateNoteFromTextAction` rejects** (`estimateTokens` &gt; `MAX_INPUT_TOKENS` 30 000) | Expect **ok: false** (“too long”) |
+| text-130k-overcap | 130 000 | 32 500 | **`generateNoteFromTextAction` rejects** (“Session text is too long…”) | Expect **ok: false** |
 
 Token **usage** (exact prompt/completion tokens) is **not** surfaced to the browser; pull from OpenAI usage dashboard if needed.
 
@@ -63,7 +63,7 @@ Token **usage** (exact prompt/completion tokens) is **not** surfaced to the brow
 |-------|----------------------|----------------------------------------|----------|
 | Blob upload | Retry-once transient policy (`uploadAudioWithRetry`) | Low for Wi-Fi / wired | Retry upload; smaller file |
 | **Transcribe + AI single action** | **Dominant**: one function must cover download + optional ffmpeg + **N× Whisper** + **LLM** | **High** for 45–60+ min *speech* recordings if total sequential work nears **plan wall** | UI already suggests shorter files / split uploads (`AiAssistPanel` timeout message); tutor re-tries with segments |
-| Pasted long text | Hitting **30k token** cap | Medium only if paste &gt; ~120k chars | Shorten text; future map-reduce (backlog) |
+| Pasted long text | Hitting **30k token** cap (`ceil(chars/4)` guard) | Medium only if paste &gt; **~120k chars** | Shorten text; future map-reduce (backlog) |
 | UI error surfacing | Timeouts surface via **catch** with explicit “server stopped responding…” | N/A | Not silent — **improvement vs generic** failure |
 
 ## Phase 6 prioritization recommendation
