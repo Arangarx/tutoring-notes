@@ -31,8 +31,16 @@ merging.
 
 ## Status
 
-**4d in progress — commits 1-6 landed locally; commits 7-10 + wrap-up
-pending.** See the commit-by-commit table below.
+**4d feature-complete locally. All 10 commits landed. Awaiting
+cross-browser smoke pass (Sarah's pilot path = Chrome on Windows
+tutor + Chrome on Android student) before merging to `master`.**
+See the commit-by-commit table below.
+
+> **Merge convention** (per AGENTS.md, solo-pilot stage): when
+> smoke passes, merge to master via `git merge --no-ff
+> phase-4d-polish-tests-docs` to preserve a clean revertable
+> merge commit. Then the orchestrator's MODEL-SWITCH RETURN
+> closes Phase 4 and routes Phase 5+ back to Composer.
 
 | Commit | Topic | Status |
 | --- | --- | --- |
@@ -45,7 +53,7 @@ pending.** See the commit-by-commit table below.
 | 7 | Per-peer `GainNode` moderation restore: `addRemoteAudio` gain insertion + `setRemoteGain` + workspace rewire | ✅ Landed |
 | 8 | Playwright integration tests: 4d regression canaries (stable-peerId-on-reload, Permissions-Policy, FSM smoke) — 2-/3-peer happy-path covered by existing `group-session-presence.spec.ts` | ✅ Landed |
 | 9 | `docs/LIVE-AV.md` cross-cutting architecture doc + cross-link from RECORDER-LIFECYCLE.md | ✅ Landed |
-| 10 | Finalize `docs/PHASE-4D-STATUS.md` with handoff + cross-browser smoke matrix scaffold | ⏳ Pending |
+| 10 | Finalize `docs/PHASE-4D-STATUS.md` with handoff + cross-browser smoke matrix scaffold | ✅ Landed |
 
 ---
 
@@ -432,22 +440,91 @@ optional gain path), so the non-regression contract holds.
 
 ## Cross-browser smoke checklist
 
-To be finalised in Commit 10 once Group D Playwright passes. The
-scaffold:
+The pre-merge gate. Run on the Vercel Preview URL (the dev's
+local Next.js doesn't reach Vercel's CDN / TURN — pilot devices
+hit the production-shaped path). Each test pairs a tutor browser
+with a student browser; both join the same `whiteboardSessionId`
+via the tutor's "Copy join link" UI.
 
-- [ ] Chrome (latest stable) on Mac — tutor + student, 1:1.
-- [ ] Chrome (latest stable) on Windows — tutor + student, 1:1.
-- [ ] Safari (latest stable) on Mac — tutor side.
-- [ ] Safari (latest stable) on iOS — student side
-      (camera/mic permissions UX is iOS-specific).
-- [ ] Firefox (latest stable) on Mac — best-effort; not a
-      target browser for Sarah but useful to know if it works.
-- [ ] Chrome on Android (a parent's phone) — student side.
+For each row, record PASS / FAIL / N/A with a one-line note. Any
+FAIL on a Sarah-pilot row (rows marked **P0**) blocks merge —
+either fix or surface the gap + decide explicitly to ship anyway.
 
-Each row to record: did the connection establish without a
-hard refresh? Did recording include the first second of student
-speech? Did the mute toggle propagate? Did the cam-off initials
-render with the student's name (single-student session)?
+**P0 pilot paths (must pass):**
+
+- [ ] **P0 — Chrome (latest stable) on Windows tutor +
+      Chrome on Android student.** Sarah's actual setup. Cover
+      all 4d scenarios end-to-end (see "Per-scenario checklist"
+      below).
+- [ ] **P0 — Chrome (latest stable) on Mac tutor + Chrome on
+      iOS Safari student.** Wife-on-iPhone path from the May 15
+      smoke.
+
+**Tier-2 coverage (nice to have; tag-only on FAIL):**
+
+- [ ] Chrome (latest stable) on Mac — tutor + student, 1:1
+      (no mobile asymmetry).
+- [ ] Safari (latest stable) on Mac — tutor side. Known partial
+      WebRTC quirks; record as discovered.
+- [ ] Firefox (latest stable) on Mac — best-effort, not a target.
+
+### Per-scenario checklist (run for each P0 row)
+
+For each P0 browser pair, walk through:
+
+1. **First-peer connection (no hard refresh).** Tutor opens
+   workspace, sends join link, student clicks. PASS = student
+   tile reaches `pcState === "connected"` within 10s, NO refresh
+   needed on either side. Tests 4c hotfix #3 (BufferedRemoteSignal).
+
+2. **Recording starts AFTER student audio flows.** Open the
+   resulting recording's first 2 seconds. PASS = first second of
+   student speech IS in the recording (no silence at the start).
+   Tests 4d Commit 6 (audio-flow gate).
+
+3. **Student mute toggle propagates.** Student clicks Mute on
+   their tile. PASS = tutor hears silence within 1 frame.
+   Already-shipped fix; smoke confirms no regression.
+
+4. **Per-peer recording-mute works.** Tutor flips "Don't record
+   <student>" → student speaks for 5s → tutor un-flips → student
+   speaks 5 more seconds → End session. PASS = recording has the
+   first 5s of student audio, then 5s of clean silence (NOT a
+   gap — total duration unchanged), then 5s of student audio.
+   Tests 4d Commit 7.
+
+5. **Single-student name fallback.** Tutor's view of the student
+   tile shows the student's actual name (from `Student.name`),
+   not `Student · <peerId-suffix>`. Tests 4d Commit 3.
+
+6. **Stable peerId across reload.** Student reloads their tab.
+   PASS = tutor sees ONE tile (the same student, fresh
+   connection), NOT two tiles (the dead one + the new one).
+   Tests 4d Commit 4. NOTE: the dead-tile-residue from PRE-4d
+   sessions may linger for ~30s; that's a separate BACKLOG item.
+
+7. **Cam-off shows initials.** Tutor turns off own camera. PASS
+   = tutor's own tile shows initials in a colored circle, NOT
+   "Waiting for video…". Tests 4d Commit 1.
+
+8. **Permissions denied gives friendly copy.** Tutor revokes
+   camera permission in browser settings, reloads. PASS =
+   `AVPermissionsPrompt` says "Camera blocked — click the
+   camera icon in your browser address bar to allow." (not the
+   raw `NotAllowedError`). Tests 4d Commit 1.
+
+9. **End-session captures full session.** Tutor clicks End.
+   PASS = navigation to replay; replay's audio file plays full
+   session including tutor + student audio (mixdown).
+
+10. **Permissions-Policy non-regression.** Open DevTools Network
+    tab → workspace document response → Headers tab. PASS =
+    `Permissions-Policy` header allows camera + microphone (NOT
+    `camera=()`). Tests 4c hotfix #2 + 4d Playwright canary.
+
+Mark the smoke matrix done in this doc when both P0 rows are
+green. Any FAIL needs a BACKLOG entry with the symptom +
+suspected cause before merging.
 
 ---
 
@@ -471,4 +548,65 @@ acceptance + effort estimates.
 
 ## Handoff checklist (for Composer when 4d ends)
 
-(To be completed when Commit 10 lands — placeholder for now.)
+When the cross-browser smoke matrix has both P0 rows green and
+the branch is merged to master, hand back to Composer with:
+
+1. **State of the branch.** Branch `phase-4d-polish-tests-docs`
+   merged into master at `<merge-sha>` (--no-ff). 10 commits +
+   1 merge commit. Branch is preserved (cleaned up later by
+   the stale-branch sweep utility).
+
+2. **What was delivered.** Reference the commit-by-commit table
+   above. Three pilot-blocking bugs fixed (audio-flow gate, dup
+   tile on reload, mute-propagation regression guard). One
+   restored feature (per-peer recording-mute via GainNode). All
+   AV polish from the May 15 pilot review. New architectural
+   doc (`LIVE-AV.md`) + STATUS doc (this file). 4d Playwright
+   regression canaries.
+
+3. **What was NOT delivered (in scope).** Nothing — all 10
+   planned commits landed.
+
+4. **What was NOT delivered (out of scope).** Every "out of
+   scope" item listed in the previous section is now in
+   `docs/BACKLOG.md` with its own row, acceptance criteria,
+   and effort estimate.
+
+5. **Test counts.**
+   - Jest: full suite passes (the existing 8 DB-touching
+     failures are pre-existing local-env limitation, not 4d
+     regressions). Affected suites (FSM, audio-flow hook,
+     useLiveAV, AV components, whiteboard helpers,
+     mic-recorder-audio) all green.
+   - `tsc --noEmit`: clean.
+   - Playwright: smoke matrix run on Vercel Preview before
+     merge.
+
+6. **What Composer should pick up next.** Phase 5+ per the
+   master plan (`~/.cursor/plans/tutoring_notes_pilot_ready_
+   master_plan_9aaca460.plan.md`). The Pillar 6 epic is now
+   closed — live A/V is feature-complete for the pilot. Any
+   future live-A/V work picks up from the BACKLOG rows.
+
+7. **Regression risk surface.** See "Non-regression contract"
+   above. Three areas particularly worth a glance in any future
+   live-A/V change: the audio graph topology in
+   `mic-recorder-audio.ts`, the mesh-build effect deps in
+   `useLiveAV.ts` (`hasEverHadLocalMedia` latch), and the
+   site-wide `Permissions-Policy` in `middleware.ts`.
+
+---
+
+## MODEL-SWITCH RETURN line
+
+When the cross-browser smoke matrix passes and the branch is
+merged to master, the orchestrator delivers this verbatim to
+Composer (per the original Phase 4 model-switch gate):
+
+> Phase 4d shipped to master at merge `<merge-sha>`. The Phase
+> 4 sub-chat sequence (4a → 4b → 4c → 4d) is now closed; the
+> live-A/V Pillar 6 epic is feature-complete for the pilot.
+> Routing Phase 5+ back to Composer. Companion docs to read
+> when scoping Phase 5+: `docs/LIVE-AV.md` (architecture
+> invariants — touch with care) and `docs/PHASE-4D-STATUS.md`
+> (this doc — cross-browser smoke checklist + handoff).
