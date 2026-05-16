@@ -46,10 +46,13 @@ import { useSyncTombstonedElementIds } from "@/hooks/useSyncTombstonedElementIds
 import { useRouter } from "next/navigation";
 import {
   createWhiteboardSyncClient,
-  generateEncryptionKeyBase64Url,
   type WhiteboardSyncClient,
   type WhiteboardWireFollow,
 } from "@/lib/whiteboard/sync-client";
+import {
+  clearEncryptionKeyForSession,
+  useEncryptionKeyInHash,
+} from "@/lib/whiteboard/encryption-key";
 import {
   ACTIVE_PING_STALE_MS,
   computeDisplayActiveMs,
@@ -164,37 +167,14 @@ function CanvasPlaceholder({ label }: { label: string }) {
   );
 }
 
-/**
- * Read or mint the AES-GCM encryption key in `window.location.hash`.
- *
- * The key never leaves the browser. We park it in the URL hash so a
- * refresh keeps the same key — without that, refresh would lose live
- * collab continuity (the student would be holding an outdated key).
- *
- * Returns the key string or null until we've finished the mount-time
- * client-only code path (server render + first hydration tick).
- */
-function useEncryptionKeyInHash(): string | null {
-  const [key, setKey] = useState<string | null>(null);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const hash = window.location.hash;
-    const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
-    const existing = params.get("k");
-    if (existing && existing.length >= 16) {
-      setKey(existing);
-      return;
-    }
-    const fresh = generateEncryptionKeyBase64Url();
-    params.set("k", fresh);
-    // Use replaceState so we don't push a history entry for every key
-    // mint and so the back button still goes to the student detail page.
-    const newHash = `#${params.toString()}`;
-    window.history.replaceState(null, "", newHash);
-    setKey(fresh);
-  }, []);
-  return key;
-}
+// The `useEncryptionKeyInHash` hook used to live here as an
+// inline helper. It moved to `@/lib/whiteboard/encryption-key` on
+// May 15 after pilot smoke exposed that a tutor opening the
+// workspace via "Continue" (no hash fragment) silently minted a
+// fresh key and broke decryption for every still-connected
+// participant. The new module persists the key to localStorage so
+// any subsequent mount of the same session recovers it. See the
+// module docblock for full lifecycle + threat-model notes.
 
 /**
  * Audio-clock surrogate. The plan calls for `MediaRecorder.getElapsedAudioMs()`
@@ -256,7 +236,7 @@ export function WhiteboardWorkspaceClient({
   // Encryption key + sync client lifecycle
   // ---------------------------------------------------------------
 
-  const encryptionKey = useEncryptionKeyInHash();
+  const encryptionKey = useEncryptionKeyInHash(whiteboardSessionId);
   const syncClientRef = useRef<WhiteboardSyncClient | null>(null);
   const [syncReady, setSyncReady] = useState(false);
 
@@ -1591,6 +1571,15 @@ export function WhiteboardWorkspaceClient({
 
       // Revoke is idempotent with the transaction above; don't block navigation.
       await revokeJoinTokensForSession(whiteboardSessionId).catch(() => undefined);
+
+      // Drop the persisted encryption key for this session — once a
+      // session is ended, a future re-open of its URL should land on
+      // the read-only review surface, not a "ready to reconnect"
+      // workspace state. Leaving the key in localStorage would let a
+      // stale browser tab silently rejoin a dead session. Failure to
+      // clear is non-fatal (it's just a cleanup step; the
+      // session.endedAt server-side gate is the real guard).
+      clearEncryptionKeyForSession(whiteboardSessionId);
 
       // Post-End-session navigation: bounce to the review page.
       //
