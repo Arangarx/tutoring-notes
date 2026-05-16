@@ -205,32 +205,41 @@ describe("whiteboardSyncOrigins — input shapes", () => {
 });
 
 /**
- * Permissions-Policy regression tests — Phase 4c live A/V.
+ * Permissions-Policy regression tests.
  *
  * Background:
  *
- *   Phase 4c (Pillar 6) widens `Permissions-Policy: camera + microphone`
- *   on the workspace and student-join routes ONLY, so
- *   `navigator.mediaDevices.getUserMedia` is permitted in the browser
- *   for live A/V. Every other route keeps the tighter pre-4c policy
- *   (`camera=()` always; `microphone=(self)` because the tutor's
- *   primary mic recorder also runs on the student-detail page).
+ *   Phase 4c (Pillar 6) originally shipped a per-pathname
+ *   Permissions-Policy: workspace + student-join routes got the
+ *   widened `camera=(self), microphone=(self)`; everything else
+ *   stayed `camera=(), microphone=(self)`. The intent was
+ *   defense-in-depth.
  *
- *   The asymmetry is the security property — widening site-wide would
- *   let any compromised dev page silently request camera/mic. These
- *   tests pin that down so a future "convenience" refactor that
- *   collapses the per-path logic doesn't quietly downgrade the
- *   trust model.
+ *   **May 15 2026: widened to site-wide.** Pilot smoke proved the
+ *   per-path design was fundamentally incompatible with the Next.js
+ *   App Router server-action `redirect()` flow: `createWhiteboardSession`
+ *   redirects to the workspace URL, but the redirect is a CLIENT-SIDE
+ *   navigation that reuses the existing document. `Permissions-Policy`
+ *   is a per-document header, so the workspace inherits whatever
+ *   policy the source page (the student-detail page,
+ *   `camera=()`) set. The browser then blocks `getUserMedia({video:true})`
+ *   with "camera is not allowed in this document" until the user
+ *   does a full hard refresh — which Sarah hit every single session.
  *
- *   Geolocation is `()` everywhere; nothing in the app uses it.
+ *   See the `buildPermissionsPolicy` JSDoc in `csp.ts` for the full
+ *   reasoning and the three options that were considered. The
+ *   threat model now relies on (i) the browser's per-origin
+ *   permission prompts and (ii) `frame-ancestors 'none'` +
+ *   `frame-src` allowlist for third-party-embed protection — both
+ *   stronger boundaries than per-route Permissions-Policy ever was.
  *
  *   Do NOT add a second `Permissions-Policy` header in `next.config.ts`
  *   (or Vercel project settings): the browser merges multiple policy
- *   headers and can leave `camera` blocked on the workspace even when
- *   middleware emits `camera=(self)` for that pathname. The middleware
+ *   headers and the strictest value of each feature wins, which would
+ *   silently re-introduce the camera-blocked bug. The middleware
  *   emitter (`buildPermissionsPolicy`) is the single source of truth.
  */
-describe("buildPermissionsPolicy — workspace + student-join widening (Phase 4c)", () => {
+describe("buildPermissionsPolicy — site-wide camera + microphone widening", () => {
   function parsePolicy(value: string): Record<string, string> {
     const out: Record<string, string> = {};
     for (const part of value.split(",")) {
@@ -243,63 +252,61 @@ describe("buildPermissionsPolicy — workspace + student-join widening (Phase 4c
     return out;
   }
 
-  describe("tutor workspace route", () => {
+  // The widened policy must apply to EVERY pathname, regardless of
+  // route shape, because Next.js server-action redirects perform a
+  // client-side navigation and the workspace can be entered from any
+  // page that links to it. Pinning the symmetry here so a future
+  // "let's tighten back up" refactor immediately fails CI with a clear
+  // message rather than re-introducing the camera-blocked bug.
+  describe("EVERY route gets camera=(self) microphone=(self)", () => {
     test.each([
+      // live-A/V routes (always needed)
       "/admin/students/abc123/whiteboard/sess-456/workspace",
       "/admin/students/abc123/whiteboard/sess-456/workspace/",
       "/admin/students/abc123/whiteboard/sess-456/workspace/some-nested",
-    ])("widens camera=(self) microphone=(self) on %s", (pathname) => {
-      const parsed = parsePolicy(buildPermissionsPolicy(pathname));
-      expect(parsed.camera).toBe("(self)");
-      expect(parsed.microphone).toBe("(self)");
-      expect(parsed.geolocation).toBe("()");
-    });
-  });
-
-  describe("student-join route", () => {
-    test.each([
       "/w/abcd-1234",
       "/w/abcd-1234/",
       "/w/abcd-1234/nested-path",
-    ])("widens camera=(self) microphone=(self) on %s", (pathname) => {
-      const parsed = parsePolicy(buildPermissionsPolicy(pathname));
-      expect(parsed.camera).toBe("(self)");
-      expect(parsed.microphone).toBe("(self)");
-      expect(parsed.geolocation).toBe("()");
-    });
-  });
-
-  describe("non-live-A/V routes keep the tighter policy", () => {
-    test.each([
-      // landing + auth flows
+      // pages that redirect to the workspace via Next.js server-action
+      // soft nav — these MUST share the wide policy or the workspace
+      // inherits the wrong one on the destination document. (May 15
+      // regression class.)
+      "/admin/students/abc123",
+      "/admin/students/abc123/whiteboard/sess-456",
+      // landing + auth + admin siblings — kept wide too so any future
+      // entry point that uses `<Link>` or `router.push` to /workspace
+      // doesn't silently re-introduce the bug.
       "/",
       "/login",
       "/setup",
       "/forgot-password",
-      // admin sibling routes that must NOT inherit camera permission
-      "/admin/students/abc123",
-      "/admin/students/abc123/",
       "/admin/students/abc123/whiteboard",
-      "/admin/students/abc123/whiteboard/sess-456",
-      // session-review route lives at /admin/students/<id>/whiteboard/<sid>
-      // (no /workspace suffix) — must stay tight even though it shares
-      // the same prefix as the workspace.
       "/admin/students/abc123/whiteboard/sess-456/review",
-      // API + asset routes
       "/api/whiteboard/sess-456/join-timer",
       "/api/audio/upload",
-      // path that LOOKS workspace-ish but isn't (no whiteboardSessionId)
+      // lookalike paths — these get the wide policy too. Harmless: the
+      // browser permission prompt still gates the actual getUserMedia
+      // call, so a route that has no AV UI cannot silently use the
+      // camera even with the wide policy.
       "/admin/students/abc123/workspace",
-      // path with /w/ as a substring but not the join route
       "/admin/workspace/w/something",
-      // student-join lookalike with extra path segment in the route shape
       "/w",
-    ])("keeps camera=() microphone=(self) on %s", (pathname) => {
+    ])("widens camera=(self) microphone=(self) on %s", (pathname) => {
       const parsed = parsePolicy(buildPermissionsPolicy(pathname));
-      expect(parsed.camera).toBe("()");
+      expect(parsed.camera).toBe("(self)");
       expect(parsed.microphone).toBe("(self)");
       expect(parsed.geolocation).toBe("()");
     });
+  });
+
+  test("zero-arg call returns the same wide policy", () => {
+    // pathname is now optional / ignored — callers that don't have a
+    // pathname handy (e.g. error response paths in middleware) must
+    // still get the correct widened policy.
+    const parsed = parsePolicy(buildPermissionsPolicy());
+    expect(parsed.camera).toBe("(self)");
+    expect(parsed.microphone).toBe("(self)");
+    expect(parsed.geolocation).toBe("()");
   });
 
   test("returned header is a comma-separated list with no trailing comma", () => {
@@ -307,14 +314,9 @@ describe("buildPermissionsPolicy — workspace + student-join widening (Phase 4c
     // trailing comma is invalid per the structured-headers RFC. Browsers
     // mostly tolerate it, but our regression test pins the exact shape so
     // a future serializer change doesn't drift.
-    const tight = buildPermissionsPolicy("/");
-    const wide = buildPermissionsPolicy(
-      "/admin/students/abc/whiteboard/xyz/workspace"
-    );
-    expect(tight).not.toMatch(/,\s*$/);
-    expect(wide).not.toMatch(/,\s*$/);
-    expect(tight.split(",").length).toBeGreaterThanOrEqual(3);
-    expect(wide.split(",").length).toBeGreaterThanOrEqual(3);
+    const sample = buildPermissionsPolicy("/");
+    expect(sample).not.toMatch(/,\s*$/);
+    expect(sample.split(",").length).toBeGreaterThanOrEqual(3);
   });
 });
 

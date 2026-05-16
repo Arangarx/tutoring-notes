@@ -113,13 +113,14 @@ const nextConfig: NextConfig = {
         source: "/(.*)",
         headers: [
           // Permissions-Policy is NOT set here — it must come only from
-          // `src/middleware.ts` via `buildPermissionsPolicy(pathname)` so
-          // workspace + student-join routes can widen `camera=(self)` while
-          // other routes stay tight. A second Permissions-Policy header from
-          // this config merges with middleware in the browser and can block
-          // camera on the workspace (Chromium: "camera is not allowed in
-          // this document") even when middleware already emitted the wide
-          // policy. Phase 4c fix — May 2026.
+          // `src/middleware.ts` via `buildPermissionsPolicy()`. Two
+          // Permissions-Policy headers on the same response merge in the
+          // browser by intersecting feature lists (strictest value wins
+          // per feature), which would silently re-block camera even
+          // though middleware emits `camera=(self)`. The middleware is
+          // the single source of truth. Phase 4c fix — May 2026,
+          // re-validated May 15 hotfix #2 when the per-route emitter was
+          // widened to site-wide.
           {
             key: "Content-Security-Policy",
             value: CONTENT_SECURITY_POLICY,

@@ -83,46 +83,73 @@ export type CspOptions = {
  *   - `frame-ancestors 'none'` — clickjacking protection. Don't relax.
  */
 /**
- * Per-request `Permissions-Policy` builder. Defense-in-depth: only
- * routes that actually need camera/microphone get the widened policy.
+ * `Permissions-Policy` builder.
  *
- * Phase 4c (Pillar 6, live A/V): the tutor workspace route and the
- * student-join route need `camera=(self)` + `microphone=(self)` so
- * `navigator.mediaDevices.getUserMedia(...)` is allowed in the
- * browser. Every other route keeps the tighter
- * `camera=(), microphone=(self)` policy that shipped pre-4c
- * (microphone=self was already needed for the tutor mic recorder).
+ * **May 15 2026 (Andrew, evening pilot smoke): widened to site-wide.**
  *
- * We deliberately do NOT widen `geolocation`; nothing in the app
- * uses it, so it stays empty everywhere.
+ * Previously this function returned a per-pathname policy: workspace +
+ * student-join routes got `camera=(self), microphone=(self)`, every
+ * other route got the tighter `camera=(), microphone=(self)`. The
+ * intent was defense-in-depth — a compromised non-AV admin page
+ * should not be able to silently call `getUserMedia`.
  *
- * Why route-scoped (vs. site-wide):
+ * The pilot symptom that killed this design: the tutor clicks
+ * "Start whiteboard session" on the student detail page. The server
+ * action calls `redirect(workspaceUrl)`. Next.js App Router server-
+ * action redirects perform a **client-side navigation** — the
+ * existing document is reused and only the RSC tree is swapped.
+ * `Permissions-Policy` is a per-DOCUMENT header set on the original
+ * HTTP response, so the workspace inherits the student-detail
+ * page's tight `camera=()` policy. The browser then blocks
+ * `getUserMedia({ video: true })` with "camera is not allowed in
+ * this document" no matter what middleware emits for the workspace
+ * URL — middleware only runs on document loads (and on RSC
+ * payload requests, but those don't change the document policy).
  *
- *   - The site has many admin + landing routes that should never be
- *     able to silently call `getUserMedia`. A compromised dev page
- *     under `/admin/students/[id]` (e.g. the student detail view)
- *     should not inherit camera permission just because the workspace
- *     two URL segments deeper needs it.
+ * Three fixes were on the table:
  *
- *   - Permissions-Policy is enforced by the browser per-document, so
- *     a tab navigated to `/admin/students/X` reading the tight policy
- *     cannot later "leak" widened permission to a workspace tab even
- *     if both share the origin.
+ *   A. Force a hard navigation to the workspace (replace the
+ *      server-action redirect with a client-side
+ *      `window.location.assign`). Brittle — any future entry point
+ *      to /workspace that uses `<Link>` or `router.push` would
+ *      silently re-introduce the bug.
  *
- * The matchers are deliberately strict (regex anchored on the exact
- * shape) so adding a sibling route doesn't accidentally inherit the
- * widened policy. If a new route truly needs live A/V, add it
- * explicitly here and document the expansion in the feature's
- * STATUS doc per the AGENTS.md CSP-discipline convention.
+ *   B. Detect the mismatch in the workspace and auto-reload. Works
+ *      but adds complexity, can race, and relies on the patchy
+ *      browser support for `document.permissionsPolicy.allowsFeature`.
  *
- * @param pathname  The request URL pathname (no querystring, no hash).
+ *   C. Widen site-wide. Loses the documented defense-in-depth, but
+ *      the actual threat model already broke before camera mattered:
+ *      an XSS on an admin page can read the tutor's session cookie
+ *      and exfiltrate every student note, recording URL, and
+ *      transcript. The marginal capability "also access the camera"
+ *      is icing on a disaster, and Permissions-Policy was never
+ *      preventing the bigger problem.
+ *
+ * Picked (C). Every camera-using SaaS we benchmarked (Meet, Zoom,
+ * Slack web client) ships a site-wide widened Permissions-Policy
+ * for the same reason. The two genuine security boundaries that
+ * remain are (i) browser permission prompts (the user still has to
+ * grant camera/mic per-origin), and (ii) `frame-ancestors 'none'` +
+ * CSP `frame-src` allowlist, which prevent any third party from
+ * embedding our pages and inheriting access.
+ *
+ * `geolocation=()` stays empty everywhere; nothing in the app uses
+ * geolocation and there's no symmetric pilot pain story.
+ *
+ * The `pathname` parameter is kept for backward compatibility with
+ * existing callers (and for a future re-tightening if we ever ship
+ * untrusted user content on a non-AV path). It is currently
+ * ignored. The exported `LIVE_AV_ROUTE_PATTERNS` is also kept —
+ * other code (analytics, testing harnesses) may consult it as the
+ * canonical set of "this path renders camera/mic UI".
+ *
+ * @param pathname  Kept for backwards compatibility; currently unused.
  * @returns A complete `Permissions-Policy` header value.
  */
-export function buildPermissionsPolicy(pathname: string): string {
-  if (LIVE_AV_ROUTE_PATTERNS.some((re) => re.test(pathname))) {
-    return "camera=(self), microphone=(self), geolocation=()";
-  }
-  return "camera=(), microphone=(self), geolocation=()";
+export function buildPermissionsPolicy(_pathname?: string): string {
+  void _pathname;
+  return "camera=(self), microphone=(self), geolocation=()";
 }
 
 /**

@@ -17,11 +17,17 @@ import {
 // relay without code edits. See `src/lib/security/csp.ts` for per-directive
 // rationale (script-src/media-src/connect-src history lives there).
 //
-// `Permissions-Policy` is per-request (Phase 4c): the tutor workspace and
-// student-join routes get `camera=(self), microphone=(self)` so
-// `getUserMedia` is permitted for live A/V; every other route keeps the
-// tighter `camera=(), microphone=(self)` policy. The asymmetry is regression-
-// tested in `src/__tests__/regressions/csp-headers.test.ts`.
+// `Permissions-Policy` is widened **site-wide** to
+// `camera=(self), microphone=(self), geolocation=()`. We previously
+// emitted a per-pathname policy (tight on non-AV routes, wide on
+// workspace + student-join), but Next.js App Router server-action
+// redirects perform a CLIENT-SIDE navigation that reuses the existing
+// document — and Permissions-Policy is per-document, so the workspace
+// would inherit whichever policy the source page (e.g. student-detail
+// page, `camera=()`) had set, blocking `getUserMedia({video:true})`
+// until the user did a hard refresh. See `buildPermissionsPolicy`
+// JSDoc in `src/lib/security/csp.ts` for the full reasoning. The
+// regression is pinned in `src/__tests__/regressions/csp-headers.test.ts`.
 const CONTENT_SECURITY_POLICY = buildContentSecurityPolicy({
   whiteboardSyncUrl: process.env.WHITEBOARD_SYNC_URL,
 });

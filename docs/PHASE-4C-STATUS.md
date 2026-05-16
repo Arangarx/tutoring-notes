@@ -104,6 +104,60 @@ smoke before merging to `master`.**
 > assert mesh.dispose is called EXACTLY ONCE per hook lifetime
 > (at unmount) regardless of acquisition order.
 
+> **🔴 May 15 evening hotfix #2 — Permissions-Policy widened
+> site-wide; per-route design was incompatible with Next.js
+> server-action redirects.** Pilot smoke surfaced THE recurring
+> "I have to hard refresh EVERY page" symptom: tutor clicks
+> "Start whiteboard session" on the student-detail page → consent
+> modal → "Start" → `createWhiteboardSession` server action runs →
+> `redirect(workspaceUrl)`. Next.js App Router server-action
+> `redirect()` performs a CLIENT-SIDE navigation that reuses the
+> existing document. Permissions-Policy is a **per-document** header
+> set on the original HTTP response; middleware only re-runs on
+> document loads (and on RSC payload requests, which don't change
+> the document's policy). The workspace therefore inherits the
+> source page's tight `camera=()` policy and the browser blocks
+> `getUserMedia({video: true})` with "camera is not allowed in this
+> document" until the user hits hard refresh.
+>
+> The hotfix #1 mesh-rebuild fix (above) had been masking the
+> visible failure mode for some flows, but every late-cam-grant
+> path on a soft-nav was still broken end-to-end.
+>
+> Three options considered (see `csp.ts` JSDoc for full rationale):
+>   - **A.** Force hard nav from the redirect. Brittle — any
+>     future entry point via `<Link>`/`router.push` silently
+>     re-introduces the bug.
+>   - **B.** Detect mismatch in the workspace and auto-reload.
+>     Adds runtime complexity, depends on patchy browser support
+>     for `document.permissionsPolicy.allowsFeature`.
+>   - **C.** Widen site-wide to
+>     `camera=(self), microphone=(self), geolocation=()`.
+>     **Picked.** The per-route defense-in-depth never actually
+>     prevented anything in our threat model — an XSS on a
+>     non-AV admin page already owns the session cookie, every
+>     student note, every recording URL, and every transcript;
+>     marginal extra "they can read the camera too" is not the
+>     boundary that matters. Meet, Zoom, Slack web client all
+>     ship site-wide widened Permissions-Policy for the same
+>     reason. The real boundaries that remain: (i) per-origin
+>     browser permission prompts (user still has to grant
+>     camera/mic), (ii) `frame-ancestors 'none'` +
+>     `frame-src` allowlist (no third-party embed inheritance).
+>
+> Files: `src/lib/security/csp.ts` (`buildPermissionsPolicy` now
+> returns the wide policy unconditionally; `pathname` arg kept
+> optional / ignored for back-compat); `src/middleware.ts`
+> (comment); `next.config.ts` (comment); `src/__tests__/regressions/
+> csp-headers.test.ts` (asymmetry tests REPLACED with "every route
+> gets wide" — pinning the regression so future re-tightening
+> immediately fails CI).
+>
+> `LIVE_AV_ROUTE_PATTERNS` is still exported in case a future
+> consumer wants the canonical "this path renders AV UI" set
+> (e.g. analytics, smoke harnesses), and its anchor invariants
+> are still tested.
+
 This sub-chat covers Phase 4 Tasks 4 (UI components), 6 (workspace +
 student mounting), and 7 (CSP / Permissions-Policy unblock — moved up
 from 4d per the orchestrator's revised partitioning since the
@@ -413,12 +467,16 @@ into the hook.
 ```ts
 export const CONTENT_SECURITY_POLICY: string;  // unchanged in 4c
 export const LIVE_AV_ROUTE_PATTERNS: ReadonlyArray<RegExp>;
-export function buildPermissionsPolicy(pathname: string): string;
+// pathname arg is kept for back-compat / future re-tightening but is
+// currently ignored — Permissions-Policy is widened site-wide as of
+// the May 15 evening hotfix #2. See JSDoc + hotfix entry above.
+export function buildPermissionsPolicy(pathname?: string): string;
 ```
 
-If 4d (or any future work) needs to widen Permissions-Policy on a new
-route, update `LIVE_AV_ROUTE_PATTERNS`. The middleware picks up the
-change automatically.
+`LIVE_AV_ROUTE_PATTERNS` remains exported as the canonical set of
+"this URL renders camera/mic UI" so future analytics / smoke harnesses
+can consult it without duplicating the regex shapes. The middleware
+itself no longer needs the patterns to decide the policy.
 
 ---
 
@@ -572,9 +630,16 @@ and IN scope of 4d.
   in `lifecycleInputStreams`; if 4d needs to make this configurable,
   move the mapper to a small util but keep the call site in the
   workspace.
-- Permissions-Policy widening is per-route; do NOT widen site-wide.
-  If a new route needs `camera=(self)`, add a pattern to
-  `LIVE_AV_ROUTE_PATTERNS`, don't widen the default.
+- **Permissions-Policy is widened site-wide as of May 15 hotfix #2.**
+  Do NOT re-tighten to a per-route policy without a plan for
+  Next.js soft-nav inheritance (server-action `redirect()` is a
+  client-side navigation that reuses the source document's policy).
+  The regression test in `csp-headers.test.ts` will fail if the
+  per-route asymmetry is re-introduced. If we ever genuinely need
+  to tighten a specific path (e.g. an embedded third-party widget),
+  also widen any page that links to /workspace via `<Link>` /
+  `router.push` / server-action `redirect()`. See the
+  `buildPermissionsPolicy` JSDoc for the full reasoning.
 - AV component props are stable (see "Public API" above). Adding
   optional props is fine; renaming or removing existing ones is a
   breaking change.
