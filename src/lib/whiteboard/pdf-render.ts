@@ -136,6 +136,66 @@ async function loadPdfJs(): Promise<typeof import("pdfjs-dist")> {
   return pdfjsModulePromise;
 }
 
+/**
+ * Read total page count without rasterizing (for the PDF picker UI).
+ */
+export async function readPdfFilePageCount(
+  file: File
+): Promise<
+  | { ok: true; totalPages: number }
+  | {
+      ok: false;
+      reason: "browser-only" | "too-large" | "no-pdfjs" | "load-failed";
+      message: string;
+    }
+> {
+  if (typeof window === "undefined") {
+    return {
+      ok: false,
+      reason: "browser-only",
+      message: "PDF inspection must run in the browser.",
+    };
+  }
+  if (file.size > PDF_MAX_BYTES) {
+    const mb = (file.size / (1024 * 1024)).toFixed(1);
+    return {
+      ok: false,
+      reason: "too-large",
+      message: `PDF is ${mb} MB; the upload limit is ${PDF_MAX_BYTES / (1024 * 1024)} MB.`,
+    };
+  }
+  let pdfjs: typeof import("pdfjs-dist");
+  try {
+    pdfjs = await loadPdfJs();
+  } catch (err) {
+    return {
+      ok: false,
+      reason: "no-pdfjs",
+      message: `Could not load the PDF renderer: ${(err as Error).message}`,
+    };
+  }
+  const arrayBuffer = await file.arrayBuffer();
+  let doc: PDFDocumentProxy;
+  try {
+    const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
+    doc = await loadingTask.promise;
+  } catch (err) {
+    return {
+      ok: false,
+      reason: "load-failed",
+      message: `That doesn't look like a valid PDF (${(err as Error).message}).`,
+    };
+  }
+  const totalPages = doc.numPages;
+  try {
+    await doc.cleanup();
+    doc.destroy();
+  } catch {
+    // best-effort
+  }
+  return { ok: true, totalPages };
+}
+
 function clampScale(s: number | undefined): number {
   const v = typeof s === "number" && Number.isFinite(s) ? s : PDF_RENDER_SCALE;
   return Math.min(3.0, Math.max(0.5, v));
@@ -239,7 +299,8 @@ async function blobFromCanvas(
 
 /**
  * Render a PDF File into one PNG Blob per page. The caller wires the
- * resulting blobs into Excalidraw via `insertPdfPagesOnCanvas`.
+ * resulting blobs into Excalidraw via `insertPdfPagesOnCanvas` or
+ * `insertPdfPagesAsBoardPages`.
  */
 export async function renderPdfFileToPngs(
   file: File,

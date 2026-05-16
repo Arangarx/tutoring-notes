@@ -80,6 +80,33 @@ export type InsertPdfResult =
     }
   | { ok: false; reason: string };
 
+export type InsertPdfBoardPagesIntegrate = {
+  /** Snapshot tutor active tab before inserts — auto-nav only if unchanged at end */
+  getActivePageId: () => string;
+  /** Makes section header label available before rows reference section ids */
+  seedPdfSection: (sectionId: string, sectionLabel: string) => void;
+  appendBoardPage: (args: {
+    pageId: string;
+    title: string;
+    sectionId: string;
+    elements: ReadonlyArray<unknown>;
+  }) => void;
+  registerImageFile: (file: {
+    id: string;
+    mimeType: "image/png";
+    dataURL: string;
+    created: number;
+  }) => void;
+  completePdfImport: (opts: {
+    firstPageId: string;
+    anchorActivePageId: string;
+  }) => void;
+};
+
+export type InsertPdfBoardPagesResult =
+  | { ok: true; pagesInserted: number; sectionId: string; firstPageId: string }
+  | { ok: false; reason: "upload-failed"; message: string };
+
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 const PDF_PAGE_GAP_PX = 32;
 /**
@@ -566,6 +593,169 @@ export async function insertPdfPagesOnCanvas(args: InsertAssetCommonArgs & {
     elementIds,
     assetUrls,
     pagesInserted: pages.length,
+  };
+}
+
+/** Strip title segment for one imported PDF page row (design spec). */
+export function pdfBoardPageTitle(filename: string, pdfPageNumber: number): string {
+  const stripped = filename.replace(/\.pdf$/i, "").trim();
+  const base = stripped.length > 0 ? stripped : "PDF";
+  const short = base.length > 20 ? `${base.slice(0, 20)}\u2026` : base;
+  return `${short} p.${pdfPageNumber}`;
+}
+
+/**
+ * Insert one board tab per rendered PDF page, grouped under a new section.
+ * The workspace supplies {@link InsertPdfBoardPagesIntegrate} so page-list
+ * state stays authoritative in React while uploads + BinaryFiles happen here.
+ */
+export async function insertPdfPagesAsBoardPages(
+  args: InsertAssetCommonArgs & {
+    pages: PdfPageRender[];
+    filename: string;
+    onProgress?: (uploaded: number, total: number) => void;
+    integrate: InsertPdfBoardPagesIntegrate;
+  }
+): Promise<InsertPdfBoardPagesResult> {
+  const {
+    excalidrawAPI,
+    whiteboardSessionId,
+    studentId,
+    pages,
+    filename,
+    onProgress,
+    integrate,
+  } = args;
+
+  if (pages.length === 0) {
+    return {
+      ok: false,
+      reason: "upload-failed",
+      message: "No pages to insert.",
+    };
+  }
+
+  const sectionId =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? `pdf-${crypto.randomUUID()}`
+      : `pdf_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`;
+
+  const sectionLabel =
+    filename.replace(/\.pdf$/i, "").trim() || filename || "PDF";
+
+  const anchorActivePageId = integrate.getActivePageId();
+  integrate.seedPdfSection(sectionId, sectionLabel);
+
+  let firstPageId = "";
+  const insertedIds: string[] = [];
+
+  for (let i = 0; i < pages.length; i++) {
+    if (i > 0) {
+      await new Promise<void>((r) => setTimeout(r, 75));
+    }
+    const page = pages[i]!;
+    const pagePath = `${filename || "document"}-p${page.pageIndex}.png`;
+    const upload = await uploadWhiteboardAsset({
+      whiteboardSessionId,
+      studentId,
+      blob: page.pngBlob,
+      filename: pagePath,
+      contentType: "image/png",
+      assetTag: `pdf-page-${page.pageIndex}`,
+    });
+    if (!upload.ok) {
+      const done = insertedIds.length;
+      if (firstPageId) {
+        integrate.completePdfImport({
+          firstPageId,
+          anchorActivePageId,
+        });
+      }
+      return {
+        ok: false,
+        reason: "upload-failed",
+        message:
+          done === 0
+            ? `Upload failed before any pages were inserted: ${upload.error}`
+            : `Inserted ${done} of ${pages.length} pages; remainder failed: ${upload.error}`,
+      };
+    }
+
+    let dataURL: string;
+    try {
+      dataURL = await blobToDataUrl(page.pngBlob);
+    } catch (err) {
+      const done = insertedIds.length;
+      if (firstPageId) {
+        integrate.completePdfImport({
+          firstPageId,
+          anchorActivePageId,
+        });
+      }
+      return {
+        ok: false,
+        reason: "upload-failed",
+        message:
+          done === 0
+            ? `Inserted 0 of ${pages.length}; ${(err as Error).message}`
+            : `Inserted ${done} of ${pages.length}; remainder failed: ${(err as Error).message}`,
+      };
+    }
+
+    const fileId = makeRandomFileId();
+    integrate.registerImageFile({
+      id: fileId,
+      mimeType: "image/png",
+      dataURL,
+      created: Date.now(),
+    });
+
+    const aspect = page.heightPx / page.widthPx;
+    const width = PDF_PAGE_RENDER_WIDTH;
+    const height = width * aspect;
+    const center = viewportCenter(excalidrawAPI);
+    const x = center.x - width / 2;
+    const y = center.y - height / 2;
+
+    const pageId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : makeRandomElementId();
+
+    const el = buildImageElement({
+      fileId,
+      x,
+      y,
+      width,
+      height,
+      assetUrl: upload.blobUrl,
+      altText: `${filename} page ${page.pageIndex}`,
+    });
+
+    if (i === 0) {
+      firstPageId = pageId;
+    }
+    insertedIds.push(pageId);
+
+    integrate.appendBoardPage({
+      pageId,
+      title: pdfBoardPageTitle(filename, page.pageIndex),
+      sectionId,
+      elements: [el],
+    });
+    onProgress?.(i + 1, pages.length);
+  }
+
+  integrate.completePdfImport({
+    firstPageId,
+    anchorActivePageId,
+  });
+
+  return {
+    ok: true,
+    pagesInserted: pages.length,
+    sectionId,
+    firstPageId,
   };
 }
 

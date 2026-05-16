@@ -22,7 +22,9 @@ import {
   insertDesmosEmbedOnCanvas,
   insertImageOnCanvas,
   insertMathSvgOnCanvas,
+  insertPdfPagesAsBoardPages,
   insertPdfPagesOnCanvas,
+  pdfBoardPageTitle,
   validateDesmosUrl,
   type ExcalidrawApiLike,
 } from "@/lib/whiteboard/insert-asset";
@@ -192,6 +194,119 @@ describe("insertImageOnCanvas", () => {
     expect(result.reason).toContain("network down");
     expect(files).toHaveLength(0);
     expect(scenes).toHaveLength(0);
+  });
+});
+
+describe("pdfBoardPageTitle", () => {
+  it("uses original 1-based PDF page numbers", () => {
+    expect(pdfBoardPageTitle("quiz.pdf", 12)).toMatch(/p\.12$/);
+  });
+
+  it("truncates long filenames to 20 chars with ellipsis", () => {
+    const name = "abcdefghijklmnopqrstuvwxyz.pdf";
+    const t = pdfBoardPageTitle(name, 1);
+    expect(t.startsWith("abcdefghijklmnopqrst")).toBe(true);
+    expect(t).toContain("\u2026");
+  });
+});
+
+describe("insertPdfPagesAsBoardPages", () => {
+  it("seeds section, appends rows, registers files, completes import", async () => {
+    uploadMock.mockResolvedValue({
+      ok: true,
+      blobUrl: "https://blob.example/p.png",
+      sizeBytes: 4,
+    });
+    const { api } = makeFakeApi();
+    const appended: Array<{ title: string; sectionId: string }> = [];
+    const integrate = {
+      getActivePageId: () => "p1",
+      seedPdfSection: jest.fn(),
+      appendBoardPage: (a: {
+        pageId: string;
+        title: string;
+        sectionId: string;
+        elements: ReadonlyArray<unknown>;
+      }) => {
+        appended.push({ title: a.title, sectionId: a.sectionId });
+      },
+      registerImageFile: jest.fn(),
+      completePdfImport: jest.fn(),
+    };
+    const result = await insertPdfPagesAsBoardPages({
+      excalidrawAPI: api,
+      whiteboardSessionId: "wb-1",
+      studentId: "s-1",
+      pages: [
+        {
+          pageIndex: 3,
+          pngBlob: new Blob([new Uint8Array(8)], { type: "image/png" }),
+          widthPx: 720,
+          heightPx: 960,
+        },
+      ],
+      filename: "mixed.pdf",
+      integrate,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.pagesInserted).toBe(1);
+    expect(result.sectionId.startsWith("pdf-")).toBe(true);
+    expect(integrate.seedPdfSection).toHaveBeenCalledWith(
+      result.sectionId,
+      "mixed"
+    );
+    expect(appended).toHaveLength(1);
+    expect(appended[0]?.title).toBe("mixed p.3");
+    expect(appended[0]?.sectionId).toBe(result.sectionId);
+    expect(integrate.registerImageFile).toHaveBeenCalledTimes(1);
+    expect(integrate.completePdfImport).toHaveBeenCalledWith({
+      firstPageId: result.firstPageId,
+      anchorActivePageId: "p1",
+    });
+  });
+
+  it("returns partial failure message after first uploads succeed", async () => {
+    uploadMock
+      .mockResolvedValueOnce({
+        ok: true,
+        blobUrl: "https://blob.example/a.png",
+        sizeBytes: 1,
+      })
+      .mockResolvedValueOnce({ ok: false, error: "quota" });
+    const { api } = makeFakeApi();
+    const integrate = {
+      getActivePageId: () => "tab-a",
+      seedPdfSection: jest.fn(),
+      appendBoardPage: jest.fn(),
+      registerImageFile: jest.fn(),
+      completePdfImport: jest.fn(),
+    };
+    const result = await insertPdfPagesAsBoardPages({
+      excalidrawAPI: api,
+      whiteboardSessionId: "wb",
+      studentId: "s",
+      pages: [
+        {
+          pageIndex: 1,
+          pngBlob: new Blob([new Uint8Array(2)], { type: "image/png" }),
+          widthPx: 100,
+          heightPx: 100,
+        },
+        {
+          pageIndex: 2,
+          pngBlob: new Blob([new Uint8Array(2)], { type: "image/png" }),
+          widthPx: 100,
+          heightPx: 100,
+        },
+      ],
+      filename: "w.pdf",
+      integrate,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.message).toMatch(/Inserted 1 of 2/);
+    expect(integrate.completePdfImport).toHaveBeenCalled();
   });
 });
 
