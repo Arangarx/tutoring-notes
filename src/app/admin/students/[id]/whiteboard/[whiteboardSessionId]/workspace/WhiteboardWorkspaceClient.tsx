@@ -63,6 +63,7 @@ import {
   TUTOR_MIC_STREAM_ID,
   type StreamHealth,
 } from "@/lib/recording/lifecycle-machine";
+import { useAudioFlowConfirmation } from "@/hooks/useAudioFlowConfirmation";
 import { useLiveAV } from "@/hooks/useLiveAV";
 import { studentMicStreamId } from "@/lib/recording/remote-stream-recorder";
 import { AVPermissionsPrompt } from "@/components/av/AVPermissionsPrompt";
@@ -78,6 +79,9 @@ import {
   uploadWhiteboardSnapshot,
 } from "@/lib/whiteboard/upload";
 import { generateSessionSnapshotPng } from "@/lib/whiteboard/snapshot-png";
+import { deriveSyncPillState } from "@/lib/whiteboard/sync-pill-presentation";
+import { resolveParticipantLabel } from "@/lib/whiteboard/participant-label";
+import { getOrCreateLocalPeerId } from "@/lib/whiteboard/local-peer-id";
 import {
   endWhiteboardSession,
   issueJoinToken,
@@ -150,6 +154,11 @@ type Props = {
    */
   initialUserWantsRecording: boolean;
 };
+
+// Phase 4d Commit 6: stable empty Set so the FSM's
+// `participantsWithFlowingAudio` input stays referentially equal
+// when there are no participants — avoids unnecessary re-evaluations.
+const EMPTY_FLOW_SET: ReadonlySet<string> = new Set<string>();
 
 function CanvasPlaceholder({ label }: { label: string }) {
   return (
@@ -297,10 +306,15 @@ export function WhiteboardWorkspaceClient({
   // Live-A/V peer-id minting (Phase 4c)
   // ---------------------------------------------------------------
   //
-  // ONE stable peer id per workspace mount. We thread it to BOTH
-  // `createWhiteboardSyncClient({peerId})` AND `useLiveAV({localPeerId})`
-  // so the sync-client wire envelopes carry the SAME peerId that
-  // peer-mesh + signaling use for polite/impolite role + targetPeerId
+  // ONE stable peer id per workspace mount, persisted in
+  // `sessionStorage[wb-peer-id:<sessionId>]` (Phase 4d Commit 4)
+  // so a tab reload reuses the SAME id and the peer-mesh idempotency
+  // path (`event=add-skip reason=already-present`) handles the
+  // rejoin as a normal re-establish rather than a fresh peer. We
+  // thread it to BOTH `createWhiteboardSyncClient({peerId})` AND
+  // `useLiveAV({localPeerId})` so the sync-client wire envelopes
+  // carry the SAME peerId that peer-mesh + signaling use for
+  // polite/impolite role + targetPeerId
   // demux. Resolves the open scoping question from PHASE-4B-STATUS:
   // we mint here (workspace = single source of truth) rather than
   // having sync-client expose its own minted id.
@@ -308,17 +322,10 @@ export function WhiteboardWorkspaceClient({
   // `useMemo([])` is stable across renders within the same React
   // component instance. HMR remounts produce a new id along with a
   // new sync-client; both layers agree.
-  const localPeerId = useMemo(() => {
-    if (
-      typeof globalThis.crypto !== "undefined" &&
-      typeof globalThis.crypto.randomUUID === "function"
-    ) {
-      return globalThis.crypto.randomUUID();
-    }
-    return `tutor-${Date.now().toString(36)}-${Math.random()
-      .toString(36)
-      .slice(2, 8)}`;
-  }, []);
+  const localPeerId = useMemo(
+    () => getOrCreateLocalPeerId(whiteboardSessionId, "tutor"),
+    [whiteboardSessionId]
+  );
   // Display label for the tutor's own presence frame. Server-side
   // doesn't pass the tutor's display name through props today; fall
   // back to "Tutor" so we don't block hook usage on the label being
@@ -861,6 +868,44 @@ export function WhiteboardWorkspaceClient({
     return map;
   }, [userWantsRecording, liveAv.participants]);
 
+  // Phase 4d Commit 6: audio-flow gate. Detects per-peer whether the
+  // remote audio track is actually carrying frames (not just
+  // negotiated). Threaded into the FSM so the MediaRecorder doesn't
+  // start until the student's audio is live — fixes the pilot bug
+  // where the first 200-2000ms of student speech was lost to silence.
+  //
+  // We map the real WebRTC peer ids back into the synthetic `peer-N`
+  // namespace `lifecycleParticipants` already uses (legacy contract
+  // from Phase 1a — only `.size` matters to the FSM in the
+  // pre-gate path). Mapping is by index in `liveAv.participants`:
+  // synthetic `peer-i` is flowing iff `liveAv.participants[i]` is in
+  // the audio-flow set. For 1:1 sessions (the pilot's only shape)
+  // this is exact; for groups it's a permissive heuristic (any
+  // flowing peer unblocks recording), which is the intended FSM
+  // semantics — see `evaluateLifecycle()` step 4b.
+  const audioFlowingPeerIds = useAudioFlowConfirmation(liveAv.participants);
+  const participantsWithFlowingAudio = useMemo<ReadonlySet<string>>(() => {
+    if (liveAv.participants.length === 0) return EMPTY_FLOW_SET;
+    const flowing = new Set<string>();
+    for (let i = 0; i < liveAv.participants.length; i += 1) {
+      const p = liveAv.participants[i]!;
+      if (audioFlowingPeerIds.has(p.peerId)) {
+        flowing.add(`peer-${i}`);
+      }
+    }
+    return flowing;
+  }, [liveAv.participants, audioFlowingPeerIds]);
+
+  // Sticky latch — once we've seen audio flow this session, we stay
+  // committed to the "recording" path. Same pattern as
+  // `everBothPresentRef`. Prevents a mid-session audio-flow blip
+  // (network hiccup, peer's mic glitches) from causing
+  // record-stop/restart churn inside the FSM.
+  const everHadAudioFlowRef = useRef(false);
+  if (audioFlowingPeerIds.size > 0 && !everHadAudioFlowRef.current) {
+    everHadAudioFlowRef.current = true;
+  }
+
   const lifecycle = evaluateLifecycle({
     tutorWantsRecording: userWantsRecording,
     participants: lifecycleParticipants,
@@ -870,6 +915,8 @@ export function WhiteboardWorkspaceClient({
     inputStreams: lifecycleInputStreams,
     networkOk: true,
     audioClockMs: 0,
+    participantsWithFlowingAudio,
+    everHadAudioFlow: everHadAudioFlowRef.current,
   });
 
   const presence = derivePresentation(lifecycle, {
@@ -956,6 +1003,42 @@ export function WhiteboardWorkspaceClient({
   }, [
     liveAv.participants,
     workspaceAudioAddRemoteAudio,
+    workspaceAudioLocalMicStream,
+    whiteboardSessionId,
+  ]);
+
+  // Phase 4d Commit 7: per-peer recording-mute reconcile. After the
+  // attach effect above ensures every participant's audioStream is
+  // wired into the graph, this effect flips each stream's GainNode
+  // to 0 (muted) or 1 (live) based on `mutedPeerIdsInRecording`.
+  // Replay sees a clean silence during the muted window (not a gap)
+  // because the source stays connected — important for the single-
+  // blob / single-row replay pipeline.
+  //
+  // Wire-level mute (asking the remote peer to stop transmitting)
+  // stays out of scope — the student's voice is still audible in
+  // the tutor's live A/V playback (the `<audio>` element on the
+  // AVTile is independent of the recording graph). Only the
+  // recording mixdown is affected.
+  const workspaceAudioSetRemoteGain = workspaceAudio.setRemoteRecordingGain;
+  useEffect(() => {
+    if (!workspaceAudioLocalMicStream) return;
+    for (const p of liveAv.participants) {
+      if (!p.audioStream) continue;
+      const muted = mutedPeerIdsInRecording.has(p.peerId);
+      try {
+        workspaceAudioSetRemoteGain(p.audioStream, muted ? 0 : 1);
+      } catch (err) {
+        console.warn(
+          `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} setRemoteRecordingGain failed peer=${p.peerId}`,
+          (err as Error)?.message ?? String(err)
+        );
+      }
+    }
+  }, [
+    liveAv.participants,
+    mutedPeerIdsInRecording,
+    workspaceAudioSetRemoteGain,
     workspaceAudioLocalMicStream,
     whiteboardSessionId,
   ]);
@@ -1427,13 +1510,6 @@ export function WhiteboardWorkspaceClient({
       }),
     [now, serverActiveMs, serverLastActiveAtMs, bothPartiesInRoom]
   );
-
-  // Whether to show the "(waiting for student)" qualifier. True until
-  // we've ever accumulated billable time AND we're not currently
-  // both-present. (Once any time is on the clock, we just show the
-  // number — pausing is implied by the digits not advancing.)
-  const showWaitingForStudent =
-    !!syncUrl && serverActiveMs === 0 && !bothPartiesInRoom;
 
   // ---------------------------------------------------------------
   // Copy student link
@@ -2053,6 +2129,13 @@ export function WhiteboardWorkspaceClient({
             isMicMuted: liveAv.isMicMuted,
             isCamMuted: liveAv.isCamMuted,
           }}
+          onReconnect={liveAv.reconnectPeer}
+          resolveLabel={(participant) =>
+            resolveParticipantLabel(participant, {
+              studentName,
+              totalRemotePeers: liveAv.participants.length,
+            })
+          }
         />
         <AVControls
           isMicMuted={liveAv.isMicMuted}
@@ -2060,19 +2143,19 @@ export function WhiteboardWorkspaceClient({
           toggleMic={liveAv.toggleMic}
           toggleCam={liveAv.toggleCam}
           disabled={endingBusy}
-          // moderation prop intentionally NOT passed in v1: the
-          // per-peer "Don't record this student" toggle relied on
-          // useRemoteMicRecorders gating each peer's MediaRecorder
-          // by mutedPeerIdsInRecording. That hook is no longer
-          // mounted (May 15 mixdown redesign — every participant is
-          // summed into the tutor's single recording stream), and
-          // wiring per-peer attenuation into addRemoteAudio is its
-          // own ~1hr build. Until then we hide the toggle so the UI
-          // doesn't claim to do something it doesn't. Tutor falls
-          // back to verbally asking the student to mute. See
-          // BACKLOG.md "Tutor-side per-peer audio moderation" entry.
-          // The `mutedPeerIdsInRecording` state + handler stay in
-          // scope above so re-wiring is a one-line prop add.
+          // Phase 4d Commit 7: per-peer "Don't record this student"
+          // moderation restored on top of the mixdown via per-stream
+          // GainNode in `mic-recorder-audio.ts`. The reconcile effect
+          // below flips each muted peer's gain to 0; replay sees a
+          // clean silence (not a gap) because the source stays
+          // connected. Wire-level mute (asking the remote peer to
+          // stop transmitting) remains post-v1 — only recording-
+          // mute is in play here.
+          moderation={{
+            participants: liveAv.participants,
+            mutedPeerIds: mutedPeerIdsInRecording,
+            onTogglePeer: handleToggleParticipantMod,
+          }}
         />
       </div>
       {/* Board pages — own row so it isn’t buried in the recording/toolbar cluster */}
@@ -2190,32 +2273,33 @@ export function WhiteboardWorkspaceClient({
             label={presence.pillLabel}
             testId="wb-recording-pill"
           />
-          {syncUrl && (
-            <StatusPill
-              color={
-                bothPartiesInRoom
-                  ? "green"
-                  : tutorSyncConnected
-                    ? "amber"
-                    : "grey"
-              }
-              label={
-                bothPartiesInRoom
-                  ? "Student connected"
-                  : tutorSyncConnected
-                    ? "Awaiting student"
-                    : "Connecting…"
-              }
-              testId="wb-sync-pill"
-            />
-          )}
+          {syncUrl &&
+            (() => {
+              // Phase 4d dedupe: the sync-pill collapses in the
+              // "awaiting student" state. The autopause banner +
+              // recording-pill already convey "waiting for student"
+              // in the same toolbar — a third indicator just adds
+              // noise. We keep the sync-pill for the two states
+              // it uniquely owns: "Student connected" (positive
+              // green affirmation) and "Sync connecting…" (sync
+              // layer itself unreachable, distinct from
+              // awaiting-student).
+              const sync = deriveSyncPillState({
+                tutorSyncConnected,
+                bothPartiesInRoom,
+              });
+              if (!sync.show) return null;
+              return (
+                <StatusPill
+                  color={sync.color}
+                  label={sync.label}
+                  testId="wb-sync-pill"
+                />
+              );
+            })()}
           <StatusPill
             color="blue"
-            label={
-              showWaitingForStudent
-                ? `Session: ${formatDuration(liveTimerMs)} (waiting for student)`
-                : `Session: ${formatDuration(liveTimerMs)}`
-            }
+            label={`Session: ${formatDuration(liveTimerMs)}`}
             testId="wb-timer"
           />
         </div>

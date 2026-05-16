@@ -1,16 +1,13 @@
 "use client";
 
 /**
- * Single participant tile — Phase 4c.
+ * Single participant tile — Phase 4c shipped, Phase 4d polished.
  *
  * Renders one entry from `useLiveAV().participants[]` (remote) or a
- * synthetic local-tile descriptor (tutor's own preview). The tile is
- * intentionally minimal in 4c: video + audio elements + label +
- * connection-state pill. Polished placeholder copy, audio-level
- * meters, and the "Reconnecting…" / "Failed" tile state mapping
- * land in Phase 4d.
+ * synthetic local-tile descriptor (tutor's own preview). Audio +
+ * video element wiring, connection-state pill, cam-off placeholder.
  *
- * Audio-doubling avoidance:
+ * Audio-doubling avoidance (unchanged from 4c):
  *
  *   - `<video>` is always rendered with `muted` so its audio track
  *     (which is the same RTP source as the audioStream below) does
@@ -26,6 +23,21 @@
  *     omits the `<audio>` element entirely. Playing one's own mic
  *     back into one's own speakers is a guaranteed feedback loop.
  *
+ * Phase 4d additions:
+ *
+ *   - Connection-state pill mapping moved to
+ *     `connection-state-mapping.ts` (testable in isolation; copy +
+ *     colour updated per the polish bullet — `connected` no longer
+ *     renders a green badge to reduce visual noise; `disconnected`
+ *     reads "Reconnecting…" instead of the raw ICE state; `failed`
+ *     surfaces an explicit Retry button).
+ *
+ *   - Cam-off placeholder now shows initials in a deterministic
+ *     colour circle (via `initials-from-label.ts`) instead of the
+ *     plain "Camera off" text. The "Waiting for video…" copy is
+ *     preserved for the still-connecting case so the tutor can tell
+ *     "their cam is off" from "we're still negotiating".
+ *
  * `srcObject` is assigned via a ref-effect rather than the React
  * `srcObject` prop because (a) React 18 still treats the
  * `srcObject` prop as a string for legacy types in some setups, and
@@ -36,6 +48,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AvParticipant } from "@/hooks/useLiveAV";
+import {
+  getConnectionStatePill,
+  SELF_STATE,
+  shouldHidePill,
+  type ConnectionStateColor,
+} from "@/components/av/connection-state-mapping";
+import {
+  getDeterministicColorFromPeerId,
+  getInitialsFromLabel,
+} from "@/components/av/initials-from-label";
 
 /**
  * Subset of `AvParticipant` the tile actually reads. The host passes
@@ -72,32 +94,19 @@ export type AVTileProps = {
   localMicMuted?: boolean;
   localCamMuted?: boolean;
   /**
+   * Optional callback fired when the user clicks the "Retry" button
+   * on a tile whose connection has terminally failed. Closure over
+   * the peerId, so the host can pass `() => liveAv.reconnectPeer(peerId)`
+   * directly. When omitted, the Retry affordance is hidden (e.g.
+   * tests that render a failed tile without a recovery path).
+   */
+  onReconnect?: () => void;
+  /**
    * Optional data-testid passthrough so workspace + student dom
    * tests can grab a specific tile when multiple are rendered.
    */
   testId?: string;
 };
-
-/**
- * Coarse mapping from `RTCPeerConnectionState` to a label + pill
- * colour. 4c only needs this as a stub — 4d will refine the copy
- * (e.g. "Reconnecting…" vs raw "disconnected"), tone, and the
- * separate ICE-vs-PC distinction.
- */
-function statePillFor(
-  pc: RTCPeerConnectionState | "self",
-  ice: RTCIceConnectionState | "self"
-): { label: string; color: "green" | "amber" | "red" | "grey" } {
-  if (pc === "self") return { label: "You", color: "grey" };
-  if (pc === "connected") return { label: "Connected", color: "green" };
-  if (pc === "failed") return { label: "Connection failed", color: "red" };
-  if (pc === "closed") return { label: "Disconnected", color: "grey" };
-  if (pc === "disconnected") return { label: ice, color: "amber" };
-  if (pc === "connecting" || pc === "new") {
-    return { label: "Connecting…", color: "amber" };
-  }
-  return { label: pc, color: "amber" };
-}
 
 /**
  * Tile component. Encapsulates the audio + video element wiring and
@@ -109,6 +118,7 @@ export function AVTile({
   isLocal,
   localMicMuted,
   localCamMuted,
+  onReconnect,
   testId,
 }: AVTileProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -126,7 +136,6 @@ export function AVTile({
    */
   const [audioBlocked, setAudioBlocked] = useState(false);
 
-  // Assign srcObject via effect — see top-of-file note.
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
@@ -189,9 +198,12 @@ export function AVTile({
   const isLocalTile = isLocal === true || participant.isLocal === true;
 
   const pill = useMemo(() => {
-    if (isLocalTile) return statePillFor("self", "self");
+    if (isLocalTile) return getConnectionStatePill(SELF_STATE, SELF_STATE);
     const remote = participant as AvParticipant;
-    return statePillFor(remote.peerConnectionState, remote.iceConnectionState);
+    return getConnectionStatePill(
+      remote.peerConnectionState,
+      remote.iceConnectionState
+    );
   }, [
     isLocalTile,
     (participant as AvParticipant).peerConnectionState,
@@ -218,13 +230,28 @@ export function AVTile({
     (remote.peerConnectionState === "connecting" ||
       remote.peerConnectionState === "new");
 
-  const palette = {
+  const palette: Record<
+    ConnectionStateColor,
+    { bg: string; fg: string; dot: string }
+  > = {
     green: { bg: "rgba(34,197,94,0.18)", fg: "#16a34a", dot: "#16a34a" },
     amber: { bg: "rgba(234,179,8,0.18)", fg: "#a16207", dot: "#ca8a04" },
     red: { bg: "rgba(220,38,38,0.18)", fg: "#dc2626", dot: "#dc2626" },
     grey: { bg: "rgba(100,116,139,0.18)", fg: "#475569", dot: "#64748b" },
-  } as const;
+    blue: { bg: "rgba(59,130,246,0.18)", fg: "#1d4ed8", dot: "#2563eb" },
+  };
   const p = palette[pill.color];
+
+  const placeholderInitials = useMemo(
+    () => getInitialsFromLabel(labelText, participant.role),
+    [labelText, participant.role]
+  );
+  const placeholderColor = useMemo(
+    () => getDeterministicColorFromPeerId(participant.peerId),
+    [participant.peerId]
+  );
+
+  const pillHidden = shouldHidePill(pill);
 
   return (
     <div
@@ -232,6 +259,7 @@ export function AVTile({
       data-peer-id={participant.peerId}
       data-role={participant.role}
       data-is-local={isLocalTile ? "true" : "false"}
+      data-state-kind={pill.kind}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -268,28 +296,60 @@ export function AVTile({
             display: showCamPlaceholder ? "none" : "block",
           }}
         />
-        {showCamPlaceholder && (
-          <div
-            data-testid={`av-tile-cam-placeholder-${participant.peerId}`}
-            style={{
-              position: "absolute",
-              inset: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "rgba(248,250,252,0.55)",
-              fontSize: 12,
-              textAlign: "center",
-              padding: "0 6px",
-            }}
-          >
-            {isLocalTile && localCamMuted
-              ? "Camera off"
-              : remoteAwaitingVideo
-                ? "Waiting for video…"
-                : "Camera off"}
-          </div>
-        )}
+        {showCamPlaceholder &&
+          (remoteAwaitingVideo ? (
+            <div
+              data-testid={`av-tile-cam-placeholder-${participant.peerId}`}
+              data-placeholder-kind="awaiting-video"
+              style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "rgba(248,250,252,0.55)",
+                fontSize: 12,
+                textAlign: "center",
+                padding: "0 6px",
+              }}
+            >
+              Waiting for video…
+            </div>
+          ) : (
+            <div
+              data-testid={`av-tile-cam-placeholder-${participant.peerId}`}
+              data-placeholder-kind="initials"
+              style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: placeholderColor,
+              }}
+            >
+              <span
+                data-testid={`av-tile-initials-${participant.peerId}`}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 56,
+                  height: 56,
+                  borderRadius: "50%",
+                  background: "rgba(15,23,42,0.28)",
+                  color: "white",
+                  fontSize: 22,
+                  fontWeight: 700,
+                  letterSpacing: "0.04em",
+                  textTransform: "uppercase",
+                  border: "2px solid rgba(255,255,255,0.65)",
+                }}
+              >
+                {placeholderInitials}
+              </span>
+            </div>
+          ))}
         {!isLocalTile && (
           <audio
             ref={audioRef}
@@ -363,32 +423,55 @@ export function AVTile({
         >
           {labelText}
         </span>
-        <span
-          data-testid={`av-tile-state-${participant.peerId}`}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 4,
-            padding: "2px 6px",
-            borderRadius: 999,
-            fontSize: 10,
-            fontWeight: 600,
-            background: p.bg,
-            color: p.fg,
-            flexShrink: 0,
-          }}
-        >
+        {!pillHidden && (
           <span
-            aria-hidden="true"
+            data-testid={`av-tile-state-${participant.peerId}`}
             style={{
-              width: 6,
-              height: 6,
-              borderRadius: "50%",
-              background: p.dot,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              padding: "2px 6px",
+              borderRadius: 999,
+              fontSize: 10,
+              fontWeight: 600,
+              background: p.bg,
+              color: p.fg,
+              flexShrink: 0,
             }}
-          />
-          {pill.label}
-        </span>
+          >
+            <span
+              aria-hidden="true"
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: p.dot,
+              }}
+            />
+            {pill.label}
+            {pill.showRetry && onReconnect ? (
+              <button
+                type="button"
+                onClick={onReconnect}
+                data-testid={`av-tile-retry-${participant.peerId}`}
+                style={{
+                  marginLeft: 4,
+                  padding: "0 6px",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  lineHeight: "16px",
+                  borderRadius: 4,
+                  border: "1px solid rgba(220,38,38,0.55)",
+                  background: "rgba(255,255,255,0.85)",
+                  color: "#b91c1c",
+                  cursor: "pointer",
+                }}
+              >
+                Retry
+              </button>
+            ) : null}
+          </span>
+        )}
       </div>
     </div>
   );

@@ -47,6 +47,7 @@ function mockWorkspaceAudio(
     doneSegmentSeconds: 0,
     localMicStream: null,
     addRemoteAudio: () => () => {},
+    setRemoteRecordingGain: () => {},
     devices: [
       {
         deviceId: "dev-mock-1",

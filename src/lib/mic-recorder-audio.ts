@@ -46,10 +46,11 @@ export type MicAudioGraph = {
   /**
    * Attach a remote audio MediaStream (typically a WebRTC participant's
    * `audioStream` from `useLiveAV`) as an additional input to the
-   * recording mixdown. The remote source is summed into `recordingStream`
-   * via Web Audio's implicit mixing at the shared destination node, so
-   * the resulting MediaRecorder blob contains tutor + every attached
-   * remote.
+   * recording mixdown. The remote source is routed through a per-
+   * stream {@link GainNode} into `recordingStream`, so the resulting
+   * MediaRecorder blob contains tutor + every attached remote and
+   * the workspace can mute individual participants from the recording
+   * by flipping their gain to 0 (see {@link setRemoteGain}).
    *
    * Returns an unsubscribe that disconnects the remote source. Calling
    * the unsubscribe is safe at any time — including after `dispose()` —
@@ -73,6 +74,23 @@ export type MicAudioGraph = {
    *     not break the rest of the recording mixdown.
    */
   addRemoteAudio: (stream: MediaStream) => () => void;
+  /**
+   * Live-update the per-remote-stream gain used in the recording
+   * mixdown (Phase 4d Commit 7 — per-peer moderation restore).
+   * `gainLinear` is clamped to >=0; `0` is a silent "Don't record
+   * this peer" while keeping the source connected so live-A/V
+   * playback (the `<audio>` element on the AVTile) stays unaffected.
+   *
+   * No-op when `stream` is not attached to the graph (already
+   * unsubscribed, or never attached). Idempotent.
+   *
+   * The replay UI sees a clean silence for the muted window
+   * (not a gap) because the source stays connected with zero gain
+   * rather than being disconnected and re-connected on toggle —
+   * that's important for the existing single-blob/single-row
+   * replay pipeline which has no multi-track-sync metadata.
+   */
+  setRemoteGain: (stream: MediaStream, gainLinear: number) => void;
 };
 
 /**
@@ -108,11 +126,18 @@ export async function createMicAudioGraph(
     // explicitly. Detach also happens implicitly when the AudioContext
     // closes, but explicit detach lets unit tests assert disconnect
     // semantics without poking at the context's internal state.
+    //
+    // Phase 4d Commit 7: each entry carries its own GainNode so the
+    // workspace can mute individual participants from the recording
+    // (gain=0) without disconnecting the source — replay then sees
+    // clean silence for the muted window rather than a gap.
     type RemoteEntry = {
       stream: MediaStream;
       source: MediaStreamAudioSourceNode;
+      gain: GainNode;
     };
     const remoteEntries = new Set<RemoteEntry>();
+    const remoteByStream = new Map<MediaStream, RemoteEntry>();
     let disposed = false;
 
     return {
@@ -121,14 +146,20 @@ export async function createMicAudioGraph(
       dispose: () => {
         if (disposed) return;
         disposed = true;
-        for (const entry of remoteEntries) {
+        for (const entry of [...remoteEntries]) {
           try {
             entry.source.disconnect();
           } catch {
             /* ignore */
           }
+          try {
+            entry.gain.disconnect();
+          } catch {
+            /* ignore */
+          }
         }
         remoteEntries.clear();
+        remoteByStream.clear();
         try {
           micStream.getTracks().forEach((t) => t.stop());
         } catch {
@@ -154,6 +185,18 @@ export async function createMicAudioGraph(
         if (disposed) {
           return () => {};
         }
+        // Idempotent: re-attaching the same stream is a no-op
+        // (returns the original entry's unsubscribe semantics via
+        // a fresh detached-aware closure).
+        const existing = remoteByStream.get(remoteStream);
+        if (existing) {
+          let detached = false;
+          return () => {
+            if (detached) return;
+            detached = true;
+            disconnectRemoteEntry(existing);
+          };
+        }
         let remoteSource: MediaStreamAudioSourceNode;
         try {
           remoteSource = audioContext.createMediaStreamSource(remoteStream);
@@ -164,33 +207,71 @@ export async function createMicAudioGraph(
           );
           return () => {};
         }
-        const entry: RemoteEntry = { stream: remoteStream, source: remoteSource };
+        const remoteGain = audioContext.createGain();
+        remoteGain.gain.value = 1;
+        const entry: RemoteEntry = {
+          stream: remoteStream,
+          source: remoteSource,
+          gain: remoteGain,
+        };
         try {
-          // Sum into the RECORDING destination only — publishStream is
-          // intentionally excluded to avoid sending every peer's audio
-          // back to every other peer over WebRTC (feedback loop).
-          remoteSource.connect(recordingDest);
+          // Phase 4d Commit 7: route source → gain → recordingDest
+          // (was: source → recordingDest). The gain stays connected
+          // for the lifetime of the entry; `setRemoteGain` flips its
+          // value live without disconnecting. Sum into the RECORDING
+          // destination only — publishStream is intentionally
+          // excluded to avoid feedback (every peer's audio echoed
+          // back to every other peer over WebRTC).
+          remoteSource.connect(remoteGain);
+          remoteGain.connect(recordingDest);
         } catch (err) {
           console.warn(
             "[mic-recorder-audio] addRemoteAudio: connect failed",
             (err as Error)?.message ?? String(err)
           );
+          try {
+            remoteSource.disconnect();
+          } catch {
+            /* ignore */
+          }
           return () => {};
         }
         remoteEntries.add(entry);
+        remoteByStream.set(remoteStream, entry);
         let detached = false;
         return () => {
           if (detached) return;
           detached = true;
-          remoteEntries.delete(entry);
-          try {
-            remoteSource.disconnect();
-          } catch {
-            /* ignore — context may already be closed */
-          }
+          disconnectRemoteEntry(entry);
         };
       },
+      setRemoteGain: (remoteStream: MediaStream, gainLinear: number) => {
+        const entry = remoteByStream.get(remoteStream);
+        if (!entry) return;
+        const clamped = Math.max(0, gainLinear);
+        try {
+          entry.gain.gain.value = clamped;
+        } catch {
+          // AudioContext closed under us mid-flight. The detach
+          // path will clean the entry; nothing to do here.
+        }
+      },
     };
+
+    function disconnectRemoteEntry(entry: RemoteEntry): void {
+      remoteEntries.delete(entry);
+      remoteByStream.delete(entry.stream);
+      try {
+        entry.source.disconnect();
+      } catch {
+        /* ignore — context may already be closed */
+      }
+      try {
+        entry.gain.disconnect();
+      } catch {
+        /* ignore */
+      }
+    }
   } catch {
     return null;
   }

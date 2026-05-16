@@ -1415,6 +1415,133 @@ describe("useLiveAV — mute control + reconnect", () => {
     unmount();
   });
 
+  /**
+   * Phase 4d Commit 5 — regression guard for BACKLOG.md
+   * "Student-side 'Mute mic' toggle does not propagate to remote
+   * participants" (Andrew, May 15 evening smoke).
+   *
+   * Real-pilot follow-up confirmed the bug was fixed at some
+   * point before the 4c merge (likely as a side effect of the
+   * Web Audio fan-out refactor that landed in `5ac2f76`); the
+   * BACKLOG just never got the ✅ flip. These tests lock the
+   * wire-level contract so a future refactor (e.g. introducing a
+   * separate publish vs preview track on the STUDENT side, which
+   * doesn't have fan-out today but might tomorrow) cannot silently
+   * re-introduce the asymmetric mute that pilot smoke caught.
+   *
+   * Wire-level proof shape:
+   *   - `useLiveAV.toggleMic()` flips `track.enabled = false` on
+   *     EVERY local audio track.
+   *   - The peer-mesh's `getLocalTracks()` closure returns the
+   *     SAME track identity (verified indirectly: the toggled
+   *     track is the one exposed via `result.current.localAudioStream`).
+   *   - When the host passes `externalAudioStream` (the tutor's
+   *     mic-recorder-audio publishStream), the same toggle path
+   *     applies — track.enabled flips on the external stream's
+   *     tracks too. (Recording's separate Web Audio destination
+   *     keeps capturing — that's the desired
+   *     "mute peer but keep recording" asymmetry.)
+   */
+  test("regression guard: toggleMic flips track.enabled on EVERY local audio track (multi-track / stereo capture)", async () => {
+    const { stream, audioTracks } = makeFakeStream(3);
+    const getUM = jest.fn(async () => stream as unknown as MediaStream);
+    const props = makeBaseProps({ _getUserMedia: getUM });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await act(async () => {
+      await result.current.requestMic();
+    });
+
+    for (const t of audioTracks) expect(t.enabled).toBe(true);
+
+    act(() => {
+      result.current.toggleMic();
+    });
+    // Every track must flip — a regression where only the first
+    // track is muted would silently leak audio on the remaining
+    // tracks. The bug pilot smoke caught corresponds to either
+    // (a) flipping zero tracks (UI-only state), or (b) flipping
+    // the wrong stream's tracks. Asserting all-tracks-flipped
+    // covers both.
+    for (const t of audioTracks) expect(t.enabled).toBe(false);
+    expect(result.current.isMicMuted).toBe(true);
+
+    act(() => {
+      result.current.toggleMic();
+    });
+    for (const t of audioTracks) expect(t.enabled).toBe(true);
+    expect(result.current.isMicMuted).toBe(false);
+
+    unmount();
+  });
+
+  test("regression guard: toggled track is the SAME identity as result.current.localAudioStream.getAudioTracks()[i] (peer-mesh getLocalTracks closure can't drift)", async () => {
+    const { stream, audioTracks } = makeFakeStream(2);
+    const getUM = jest.fn(async () => stream as unknown as MediaStream);
+    const props = makeBaseProps({ _getUserMedia: getUM });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await act(async () => {
+      await result.current.requestMic();
+    });
+
+    const exposedTracks =
+      result.current.localAudioStream?.getAudioTracks() ?? [];
+    expect(exposedTracks.length).toBe(2);
+    // Identity check: the exposed tracks ARE the underlying
+    // fake tracks. peer-mesh.getLocalTracks() pulls from the same
+    // ref so muting via `enabled = false` on these will land on
+    // the RTCRtpSender's track and produce wire-silence.
+    expect(exposedTracks[0]).toBe(audioTracks[0]);
+    expect(exposedTracks[1]).toBe(audioTracks[1]);
+
+    act(() => {
+      result.current.toggleMic();
+    });
+    // The same exposed track instance now reads enabled=false.
+    expect(exposedTracks[0]!.enabled).toBe(false);
+    expect(exposedTracks[1]!.enabled).toBe(false);
+
+    unmount();
+  });
+
+  test("regression guard: when externalAudioStream is supplied (tutor recorder publishStream), toggleMic still flips its tracks", async () => {
+    // Build an external stream up-front — the tutor recorder's
+    // mic-recorder-audio.createMicAudioGraph() publishStream
+    // shape: a MediaStream with a single audio track.
+    const external = makeFakeStream(1);
+    const props = makeBaseProps({
+      externalAudioStream: external.stream as unknown as MediaStream,
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    // No requestMic() needed — the externalAudioStream wires
+    // automatically via the effect at hook line ~775.
+    await waitFor(() => {
+      expect(result.current.localAudioStream).not.toBeNull();
+    });
+
+    expect(external.audioTracks[0]!.enabled).toBe(true);
+    expect(result.current.isMicMuted).toBe(false);
+
+    act(() => {
+      result.current.toggleMic();
+    });
+    // External stream's tracks were the ones flipped — the
+    // recording's *separate* Web Audio destination keeps
+    // capturing, which is the desired asymmetry.
+    expect(external.audioTracks[0]!.enabled).toBe(false);
+    expect(result.current.isMicMuted).toBe(true);
+
+    act(() => {
+      result.current.toggleMic();
+    });
+    expect(external.audioTracks[0]!.enabled).toBe(true);
+    expect(result.current.isMicMuted).toBe(false);
+
+    unmount();
+  });
+
   test("reconnectPeer calls mesh.restart", async () => {
     const sync = makeFakeSyncClient();
     const meshHandles = makeFakeMesh();

@@ -100,6 +100,39 @@ export type LifecycleInputs = {
   everHadParticipants: boolean;
 
   /**
+   * Per-peer audio-flow signal (Phase 4d Commit 6). Optional.
+   *
+   * Set of peer ids whose remote audio track is currently flowing
+   * — i.e. WebRTC has negotiated far enough that audio frames are
+   * arriving, confirmed by `MediaStreamTrack.muted === false` for a
+   * minimum debounce window (200ms by host convention; the FSM
+   * doesn't enforce the window, it just reads the resulting set).
+   *
+   * When provided AND `everHadAudioFlow` is still false AND the
+   * intersection with `participants` is empty, the FSM holds in
+   * `armed` with reason `awaiting_audio_flow` instead of
+   * transitioning to `recording`. This fixes the
+   * "recording-starts-2s-before-peer-audio-is-flowing" bug — Sarah
+   * loses any student speech that lands during the gap between
+   * presence flipping and WebRTC convergence.
+   *
+   * When undefined (legacy callers, solo modes, tests that don't
+   * care about the gate), the FSM treats every participant as
+   * audio-flowing — preserving the pre-4d behaviour for backward
+   * compatibility.
+   */
+  participantsWithFlowingAudio?: ReadonlySet<string>;
+
+  /**
+   * Sticky latch — flipped to true the first time the FSM
+   * transitions to `recording` via the audio-flow path. Once true,
+   * a mid-session audio-flow blip does NOT re-arm the FSM (which
+   * would cause record-stop/restart churn). Host responsibility
+   * to maintain — same pattern as `everHadParticipants`.
+   */
+  everHadAudioFlow?: boolean;
+
+  /**
    * If true, the FSM allows recording while `participants.size === 0`
    * provided the tutor wants it AND no participant has ever joined
    * yet. Mirrors today's `NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT`
@@ -212,6 +245,12 @@ export type LifecycleState =
  *
  * - `awaiting_first_participant` — tutor pressed Start, sync mode,
  *   no participant has joined yet.
+ * - `awaiting_audio_flow`        — Phase 4d: at least one
+ *   participant is in the room AND `participantsWithFlowingAudio`
+ *   was provided AND no participant's audio has flowed yet AND
+ *   we have not previously transitioned to recording. Held to
+ *   prevent the MediaRecorder from capturing 200-2000ms of
+ *   empty-remote-channel before WebRTC converges.
  * - `awaiting_solo_grace`        — tutor pressed Start, sync mode,
  *   solo rehearsal allowed but no streams healthy yet (rare; mainly
  *   the sub-second window before the mic acquires).
@@ -220,6 +259,7 @@ export type LifecycleState =
  */
 export type ArmedReason =
   | "awaiting_first_participant"
+  | "awaiting_audio_flow"
   | "awaiting_solo_grace"
   | "awaiting_input_streams";
 
@@ -363,6 +403,8 @@ export function evaluateLifecycle(inputs: LifecycleInputs): LifecycleOutputs {
     audioClockMs,
     inFlightStreamCount = 0,
     endIntent,
+    participantsWithFlowingAudio,
+    everHadAudioFlow = false,
   } = inputs;
 
   // Step 1: end-session lifecycle takes precedence.
@@ -392,6 +434,24 @@ export function evaluateLifecycle(inputs: LifecycleInputs): LifecycleOutputs {
 
   const haveParticipant = participants.size >= 1;
   if (haveParticipant) {
+    // Step 4b (Phase 4d): audio-flow gate on the FIRST transition.
+    // When the host has provided `participantsWithFlowingAudio` AND
+    // none of the present participants are in that set AND we have
+    // never previously transitioned to recording, hold in `armed`
+    // with reason `awaiting_audio_flow`. Prevents the MediaRecorder
+    // from capturing 200-2000ms of empty-remote-channel before
+    // WebRTC convergence.
+    //
+    // Once `everHadAudioFlow` is true (sticky latch the host
+    // maintains), the gate releases — a mid-session audio blip
+    // does NOT re-arm the FSM and cause record-stop/restart churn.
+    if (
+      !everHadAudioFlow &&
+      participantsWithFlowingAudio !== undefined &&
+      !hasIntersection(participants, participantsWithFlowingAudio)
+    ) {
+      return finalize("armed", "awaiting_audio_flow", undefined, inputs);
+    }
     return finalize("recording", undefined, undefined, inputs);
   }
 
@@ -405,6 +465,18 @@ export function evaluateLifecycle(inputs: LifecycleInputs): LifecycleOutputs {
     return finalize("paused", undefined, "all_participants_disconnected", inputs);
   }
   return finalize("armed", "awaiting_first_participant", undefined, inputs);
+}
+
+function hasIntersection(
+  a: ReadonlySet<string>,
+  b: ReadonlySet<string>
+): boolean {
+  if (a.size === 0 || b.size === 0) return false;
+  const [smaller, larger] = a.size <= b.size ? [a, b] : [b, a];
+  for (const x of smaller) {
+    if (larger.has(x)) return true;
+  }
+  return false;
 }
 
 function finalize(
@@ -568,6 +640,24 @@ export function derivePresentation(
         bannerMessage:
           "Waiting for your student to join — recording will start automatically once they connect.",
         pillLabel: "Waiting for student",
+        pillColor: "amber",
+      };
+    }
+    if (armedReason === "awaiting_audio_flow") {
+      // Student is in the room (presence flipped) but their audio
+      // hasn't started arriving yet (WebRTC still converging).
+      // Distinct copy from "Waiting for student" so the tutor can
+      // tell "they haven't shown up" apart from "they're here but
+      // I can't hear them yet" — important because the
+      // troubleshooting actions are different (refresh-the-link vs
+      // wait-a-moment / check-your-mic-on-their-side).
+      return {
+        recordingActive: false,
+        autoPaused: true,
+        awaitingStart: false,
+        bannerMessage:
+          "Student is here — waiting for their audio to start flowing before recording.",
+        pillLabel: "Waiting for audio…",
         pillColor: "amber",
       };
     }

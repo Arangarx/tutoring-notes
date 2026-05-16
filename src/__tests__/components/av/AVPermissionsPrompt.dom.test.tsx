@@ -140,7 +140,7 @@ describe("AVPermissionsPrompt — denied + retry affordance (4b deferral)", () =
     raw: null,
   };
 
-  test("renders Try-again button when hasMicPermission='denied'", () => {
+  test("renders Try-again button when hasMicPermission='denied' with the Phase 4d friendly copy", () => {
     render(
       <AVPermissionsPrompt
         {...baseProps({
@@ -150,11 +150,63 @@ describe("AVPermissionsPrompt — denied + retry affordance (4b deferral)", () =
       />
     );
     expect(screen.getByTestId("av-permissions-retry-mic")).toBeTruthy();
-    // Error copy is surfaced (4d will polish; 4c just shows the
-    // raw classifier message).
+    // Phase 4d polish: the verbose classifier message is replaced
+    // with a short, address-bar-anchored hint regardless of which
+    // permission-denied subtype the classifier returned.
+    const rowText = screen.getByTestId("av-permissions-row-mic").textContent;
+    expect(rowText).toMatch(/Microphone blocked/);
+    expect(rowText).toMatch(/camera icon in your browser address bar/);
+    // The legacy classifier copy must NOT appear — confirms the
+    // decoupling from `error.message`.
+    expect(rowText).not.toMatch(/Microphone access denied/);
+    expect(rowText).not.toMatch(/site settings/);
+  });
+
+  test("Phase 4d: cam denied uses the camera-specific friendly copy", () => {
+    render(
+      <AVPermissionsPrompt
+        {...baseProps({
+          hasMicPermission: "granted",
+          hasMicStream: true,
+          hasCamPermission: "denied" as AvPermissionState,
+          videoError: {
+            type: "permission-denied",
+            message: "Camera access denied. Open site settings to allow.",
+            raw: null,
+          },
+        })}
+      />
+    );
+    const rowText = screen.getByTestId("av-permissions-row-cam").textContent;
+    expect(rowText).toMatch(/Camera blocked/);
+    expect(rowText).toMatch(/camera icon in your browser address bar/);
+    expect(rowText).not.toMatch(/Camera access denied/);
+  });
+
+  test("Phase 4d: non-permission errors (no-device / device-in-use) keep the verbose classifier message", () => {
+    // For the rarer non-permission failure modes the verbose
+    // classifier message actually helps — the polish exclusively
+    // targets the permission-denied path.
+    const noDeviceError: AvAcquireError = {
+      type: "no-device",
+      message:
+        "No microphone found. Connect a microphone in your system settings and click Allow microphone again.",
+      raw: null,
+    };
+    render(
+      <AVPermissionsPrompt
+        {...baseProps({
+          hasMicPermission: "granted",
+          hasMicStream: false,
+          error: noDeviceError,
+          hasCamPermission: "granted",
+          hasCamStream: true,
+        })}
+      />
+    );
     expect(
       screen.getByTestId("av-permissions-row-mic").textContent
-    ).toMatch(/Microphone access denied/);
+    ).toMatch(/No microphone found/);
   });
 
   test("clicking Try again re-invokes requestMic", async () => {

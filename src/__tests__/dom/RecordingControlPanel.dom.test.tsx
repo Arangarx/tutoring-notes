@@ -19,6 +19,7 @@ function recorderFixture(
     doneSegmentSeconds: 0,
     localMicStream: null,
     addRemoteAudio: () => () => {},
+    setRemoteRecordingGain: () => {},
     devices: [],
     selectedDeviceId: "",
     gainLinear: 1,

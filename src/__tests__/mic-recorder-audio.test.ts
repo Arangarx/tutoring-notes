@@ -119,7 +119,7 @@ describe("createMicAudioGraph", () => {
     expect(close).toHaveBeenCalled();
   });
 
-  test("addRemoteAudio mixes remote streams into recordingStream only (NOT publishStream)", async () => {
+  test("addRemoteAudio mixes remote streams into recordingStream only (NOT publishStream), via per-remote GainNode", async () => {
     // Mixdown contract — the whole point of this feature. Tutor audio
     // goes both places (recording + WebRTC out); remote participant
     // audio goes ONLY to recording. Sending remote audio over
@@ -127,8 +127,20 @@ describe("createMicAudioGraph", () => {
     // (every peer hears every other peer's voice via the tutor's
     // outbound track on top of their own direct peer connection),
     // which is why publishStream is intentionally excluded.
+    //
+    // Phase 4d Commit 7: the path is now
+    //   remoteSource → remoteGain → recordingDest
+    // so the workspace can mute individual participants from the
+    // recording by setting `remoteGain.gain.value = 0` without
+    // disconnecting the source (replay then sees a clean silence
+    // instead of a gap).
     const sourceNode = { connect: jest.fn(), disconnect: jest.fn() };
-    const gainNode = { gain: { value: 0 }, connect: jest.fn() };
+    const micGain = { gain: { value: 0 }, connect: jest.fn(), disconnect: jest.fn() };
+    const remoteGains: Array<{
+      gain: { value: number };
+      connect: jest.Mock;
+      disconnect: jest.Mock;
+    }> = [];
     const analyserNode = {
       fftSize: 0,
       smoothingTimeConstant: 0,
@@ -138,32 +150,35 @@ describe("createMicAudioGraph", () => {
     const publishDest = { stream: { id: "publish-stream" } };
     const destinations = [recordingDest, publishDest];
     let destIdx = 0;
+    let gainIdx = 0;
 
     const remoteSourceNodes: Array<{
       connect: jest.Mock;
       disconnect: jest.Mock;
     }> = [];
-    const remoteStreamsHandedToCreate: MediaStream[] = [];
 
     const ctx = {
       createMediaStreamSource: jest.fn((s: MediaStream) => {
-        if (remoteStreamsHandedToCreate.includes(s)) {
-          const node = { connect: jest.fn(), disconnect: jest.fn() };
-          remoteSourceNodes.push(node);
-          return node;
-        }
         if (s === (stream as unknown as MediaStream)) {
           return sourceNode;
         }
-        // Remote sources are created on demand inside addRemoteAudio;
-        // record the stream so the next createMediaStreamSource call
-        // returns a remote-source mock.
-        remoteStreamsHandedToCreate.push(s);
         const node = { connect: jest.fn(), disconnect: jest.fn() };
         remoteSourceNodes.push(node);
         return node;
       }),
-      createGain: jest.fn(() => gainNode),
+      createGain: jest.fn(() => {
+        if (gainIdx === 0) {
+          gainIdx += 1;
+          return micGain;
+        }
+        const g = {
+          gain: { value: 1 },
+          connect: jest.fn(),
+          disconnect: jest.fn(),
+        };
+        remoteGains.push(g);
+        return g;
+      }),
       createAnalyser: jest.fn(() => analyserNode),
       createMediaStreamDestination: jest.fn(() => destinations[destIdx++]),
       resume: jest.fn().mockResolvedValue(undefined),
@@ -183,16 +198,25 @@ describe("createMicAudioGraph", () => {
     expect(ctx.createMediaStreamSource).toHaveBeenCalledWith(remoteA);
     expect(ctx.createMediaStreamSource).toHaveBeenCalledWith(remoteB);
 
-    // Each remote source connects to recordingDest exactly once and
-    // NEVER to publishDest. This is the central feedback-loop guard.
+    // Each remote source connects to ITS OWN gain (NOT directly to
+    // recordingDest); each gain connects to recordingDest.
     expect(remoteSourceNodes).toHaveLength(2);
-    for (const node of remoteSourceNodes) {
-      expect(node.connect).toHaveBeenCalledTimes(1);
-      expect(node.connect).toHaveBeenCalledWith(recordingDest);
-      expect(node.connect).not.toHaveBeenCalledWith(publishDest);
+    expect(remoteGains).toHaveLength(2);
+    for (let i = 0; i < remoteSourceNodes.length; i++) {
+      const sourceN = remoteSourceNodes[i]!;
+      const gainN = remoteGains[i]!;
+      expect(sourceN.connect).toHaveBeenCalledTimes(1);
+      expect(sourceN.connect).toHaveBeenCalledWith(gainN);
+      expect(sourceN.connect).not.toHaveBeenCalledWith(recordingDest);
+      expect(sourceN.connect).not.toHaveBeenCalledWith(publishDest);
+      expect(gainN.connect).toHaveBeenCalledTimes(1);
+      expect(gainN.connect).toHaveBeenCalledWith(recordingDest);
+      // Default gain is 1 (full volume).
+      expect(gainN.gain.value).toBe(1);
     }
 
-    // Unsubscribe detaches one without touching the other.
+    // Unsubscribe detaches the SOURCE for that remote without
+    // touching the other.
     unsubA();
     expect(remoteSourceNodes[0]!.disconnect).toHaveBeenCalledTimes(1);
     expect(remoteSourceNodes[1]!.disconnect).not.toHaveBeenCalled();
@@ -207,6 +231,142 @@ describe("createMicAudioGraph", () => {
 
     // Calling unsub after dispose is a no-op (no throw).
     expect(() => unsubB()).not.toThrow();
+  });
+
+  test("setRemoteGain flips the per-remote GainNode value live (per-peer recording mute)", async () => {
+    // Phase 4d Commit 7 — the workspace flips a peer's gain to 0
+    // when the tutor toggles "Don't record this student". Replay
+    // then sees a clean silence rather than a gap because the
+    // source stays connected.
+    const sourceNode = { connect: jest.fn(), disconnect: jest.fn() };
+    const micGain = { gain: { value: 0 }, connect: jest.fn(), disconnect: jest.fn() };
+    const remoteGains: Array<{
+      gain: { value: number };
+      connect: jest.Mock;
+      disconnect: jest.Mock;
+    }> = [];
+    const analyserNode = {
+      fftSize: 0,
+      smoothingTimeConstant: 0,
+      getFloatTimeDomainData: jest.fn(),
+    };
+    const destinations = [{ stream: { id: "r" } }, { stream: { id: "p" } }];
+    let destIdx = 0;
+    let gainIdx = 0;
+    const ctx = {
+      createMediaStreamSource: jest.fn((s: MediaStream) => {
+        if (s === (stream as unknown as MediaStream)) return sourceNode;
+        return { connect: jest.fn(), disconnect: jest.fn() };
+      }),
+      createGain: jest.fn(() => {
+        if (gainIdx === 0) {
+          gainIdx += 1;
+          return micGain;
+        }
+        const g = {
+          gain: { value: 1 },
+          connect: jest.fn(),
+          disconnect: jest.fn(),
+        };
+        remoteGains.push(g);
+        return g;
+      }),
+      createAnalyser: jest.fn(() => analyserNode),
+      createMediaStreamDestination: jest.fn(() => destinations[destIdx++]),
+      resume: jest.fn().mockResolvedValue(undefined),
+      close: jest.fn().mockResolvedValue(undefined),
+    };
+    (globalThis as { AudioContext?: unknown }).AudioContext = jest.fn(() => ctx);
+
+    const stream = fakeMicStream();
+    const graph = await createMicAudioGraph(stream as unknown as MediaStream, 1);
+    expect(graph).not.toBeNull();
+
+    const remoteA = { id: "remote-a" } as unknown as MediaStream;
+    const remoteB = { id: "remote-b" } as unknown as MediaStream;
+    graph!.addRemoteAudio(remoteA);
+    graph!.addRemoteAudio(remoteB);
+    expect(remoteGains).toHaveLength(2);
+    expect(remoteGains[0]!.gain.value).toBe(1);
+    expect(remoteGains[1]!.gain.value).toBe(1);
+
+    // Mute remote A → its gain flips to 0; remote B stays at 1.
+    graph!.setRemoteGain(remoteA, 0);
+    expect(remoteGains[0]!.gain.value).toBe(0);
+    expect(remoteGains[1]!.gain.value).toBe(1);
+
+    // Unmute remote A → flips back to 1.
+    graph!.setRemoteGain(remoteA, 1);
+    expect(remoteGains[0]!.gain.value).toBe(1);
+
+    // Negative gain clamps to 0 (defensive).
+    graph!.setRemoteGain(remoteA, -0.5);
+    expect(remoteGains[0]!.gain.value).toBe(0);
+
+    // Calling setRemoteGain for an unknown stream is a safe no-op.
+    expect(() =>
+      graph!.setRemoteGain({} as unknown as MediaStream, 0.5)
+    ).not.toThrow();
+
+    graph!.dispose();
+  });
+
+  test("addRemoteAudio is idempotent: re-attaching the same stream does NOT create a second source/gain pair", async () => {
+    // The workspace's reconcile effect already guards against
+    // double-attach with a per-stream sub map, but the graph
+    // itself must also be defensive (e.g. if a future caller skips
+    // the cache).
+    const sourceNode = { connect: jest.fn(), disconnect: jest.fn() };
+    const micGain = { gain: { value: 0 }, connect: jest.fn(), disconnect: jest.fn() };
+    const analyserNode = {
+      fftSize: 0,
+      smoothingTimeConstant: 0,
+      getFloatTimeDomainData: jest.fn(),
+    };
+    const destinations = [{ stream: { id: "r" } }, { stream: { id: "p" } }];
+    let destIdx = 0;
+    let createSourceCalls = 0;
+    let createGainCalls = 0;
+    const ctx = {
+      createMediaStreamSource: jest.fn((s: MediaStream) => {
+        createSourceCalls += 1;
+        if (s === (stream as unknown as MediaStream)) return sourceNode;
+        return { connect: jest.fn(), disconnect: jest.fn() };
+      }),
+      createGain: jest.fn(() => {
+        createGainCalls += 1;
+        if (createGainCalls === 1) return micGain;
+        return {
+          gain: { value: 1 },
+          connect: jest.fn(),
+          disconnect: jest.fn(),
+        };
+      }),
+      createAnalyser: jest.fn(() => analyserNode),
+      createMediaStreamDestination: jest.fn(() => destinations[destIdx++]),
+      resume: jest.fn().mockResolvedValue(undefined),
+      close: jest.fn().mockResolvedValue(undefined),
+    };
+    (globalThis as { AudioContext?: unknown }).AudioContext = jest.fn(() => ctx);
+
+    const stream = fakeMicStream();
+    const graph = await createMicAudioGraph(stream as unknown as MediaStream, 1);
+
+    const remote = { id: "remote-a" } as unknown as MediaStream;
+    const unsub1 = graph!.addRemoteAudio(remote);
+    const sourceCallsAfterFirst = createSourceCalls;
+    const gainCallsAfterFirst = createGainCalls;
+
+    // Re-attach the same stream. Idempotent: no new source/gain.
+    const unsub2 = graph!.addRemoteAudio(remote);
+    expect(createSourceCalls).toBe(sourceCallsAfterFirst);
+    expect(createGainCalls).toBe(gainCallsAfterFirst);
+
+    // Both unsubs are safe.
+    expect(() => unsub1()).not.toThrow();
+    expect(() => unsub2()).not.toThrow();
+
+    graph!.dispose();
   });
 
   test("addRemoteAudio after dispose is a safe no-op", async () => {
