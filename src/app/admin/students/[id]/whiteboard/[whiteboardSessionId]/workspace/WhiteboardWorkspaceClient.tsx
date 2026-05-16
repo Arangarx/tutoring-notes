@@ -63,6 +63,7 @@ import {
   TUTOR_MIC_STREAM_ID,
   type StreamHealth,
 } from "@/lib/recording/lifecycle-machine";
+import { useAudioFlowConfirmation } from "@/hooks/useAudioFlowConfirmation";
 import { useLiveAV } from "@/hooks/useLiveAV";
 import { studentMicStreamId } from "@/lib/recording/remote-stream-recorder";
 import { AVPermissionsPrompt } from "@/components/av/AVPermissionsPrompt";
@@ -153,6 +154,11 @@ type Props = {
    */
   initialUserWantsRecording: boolean;
 };
+
+// Phase 4d Commit 6: stable empty Set so the FSM's
+// `participantsWithFlowingAudio` input stays referentially equal
+// when there are no participants — avoids unnecessary re-evaluations.
+const EMPTY_FLOW_SET: ReadonlySet<string> = new Set<string>();
 
 function CanvasPlaceholder({ label }: { label: string }) {
   return (
@@ -862,6 +868,44 @@ export function WhiteboardWorkspaceClient({
     return map;
   }, [userWantsRecording, liveAv.participants]);
 
+  // Phase 4d Commit 6: audio-flow gate. Detects per-peer whether the
+  // remote audio track is actually carrying frames (not just
+  // negotiated). Threaded into the FSM so the MediaRecorder doesn't
+  // start until the student's audio is live — fixes the pilot bug
+  // where the first 200-2000ms of student speech was lost to silence.
+  //
+  // We map the real WebRTC peer ids back into the synthetic `peer-N`
+  // namespace `lifecycleParticipants` already uses (legacy contract
+  // from Phase 1a — only `.size` matters to the FSM in the
+  // pre-gate path). Mapping is by index in `liveAv.participants`:
+  // synthetic `peer-i` is flowing iff `liveAv.participants[i]` is in
+  // the audio-flow set. For 1:1 sessions (the pilot's only shape)
+  // this is exact; for groups it's a permissive heuristic (any
+  // flowing peer unblocks recording), which is the intended FSM
+  // semantics — see `evaluateLifecycle()` step 4b.
+  const audioFlowingPeerIds = useAudioFlowConfirmation(liveAv.participants);
+  const participantsWithFlowingAudio = useMemo<ReadonlySet<string>>(() => {
+    if (liveAv.participants.length === 0) return EMPTY_FLOW_SET;
+    const flowing = new Set<string>();
+    for (let i = 0; i < liveAv.participants.length; i += 1) {
+      const p = liveAv.participants[i]!;
+      if (audioFlowingPeerIds.has(p.peerId)) {
+        flowing.add(`peer-${i}`);
+      }
+    }
+    return flowing;
+  }, [liveAv.participants, audioFlowingPeerIds]);
+
+  // Sticky latch — once we've seen audio flow this session, we stay
+  // committed to the "recording" path. Same pattern as
+  // `everBothPresentRef`. Prevents a mid-session audio-flow blip
+  // (network hiccup, peer's mic glitches) from causing
+  // record-stop/restart churn inside the FSM.
+  const everHadAudioFlowRef = useRef(false);
+  if (audioFlowingPeerIds.size > 0 && !everHadAudioFlowRef.current) {
+    everHadAudioFlowRef.current = true;
+  }
+
   const lifecycle = evaluateLifecycle({
     tutorWantsRecording: userWantsRecording,
     participants: lifecycleParticipants,
@@ -871,6 +915,8 @@ export function WhiteboardWorkspaceClient({
     inputStreams: lifecycleInputStreams,
     networkOk: true,
     audioClockMs: 0,
+    participantsWithFlowingAudio,
+    everHadAudioFlow: everHadAudioFlowRef.current,
   });
 
   const presence = derivePresentation(lifecycle, {

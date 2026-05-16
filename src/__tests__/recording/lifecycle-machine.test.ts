@@ -155,6 +155,132 @@ describe("evaluateLifecycle — core decision tree", () => {
     expect(out.recordingActive).toBe(true);
   });
 
+  test("Phase 4d audio-flow gate: participant present but no audio flowing yet → armed (awaiting_audio_flow)", () => {
+    const out = evaluateLifecycle(
+      baseInputs({
+        tutorWantsRecording: true,
+        participants: new Set(["peerA"]),
+        everHadParticipants: true,
+        participantsWithFlowingAudio: new Set<string>(),
+      })
+    );
+    expect(out.state).toBe("armed");
+    expect(out.armedReason).toBe("awaiting_audio_flow");
+    expect(out.recordingActive).toBe(false);
+    expect(out.shouldCaptureWB).toBe(false);
+    expect(out.shouldCapture(TUTOR_MIC_STREAM_ID)).toBe(false);
+  });
+
+  test("Phase 4d audio-flow gate: participant present AND their audio is flowing → recording", () => {
+    const out = evaluateLifecycle(
+      baseInputs({
+        tutorWantsRecording: true,
+        participants: new Set(["peerA"]),
+        everHadParticipants: true,
+        participantsWithFlowingAudio: new Set(["peerA"]),
+      })
+    );
+    expect(out.state).toBe("recording");
+    expect(out.recordingActive).toBe(true);
+  });
+
+  test("Phase 4d audio-flow gate: 2 peers present, only 1 audio flowing → recording (any peer's audio is enough)", () => {
+    const out = evaluateLifecycle(
+      baseInputs({
+        tutorWantsRecording: true,
+        participants: new Set(["peerA", "peerB"]),
+        everHadParticipants: true,
+        participantsWithFlowingAudio: new Set(["peerA"]),
+      })
+    );
+    expect(out.state).toBe("recording");
+  });
+
+  test("Phase 4d audio-flow gate: audio-flowing set contains only a NOT-present peer → still armed (intersection is empty)", () => {
+    // Defensive: stale entries in `participantsWithFlowingAudio`
+    // for peers no longer in `participants` must not pretend the
+    // current participants are flowing.
+    const out = evaluateLifecycle(
+      baseInputs({
+        tutorWantsRecording: true,
+        participants: new Set(["peerA"]),
+        everHadParticipants: true,
+        participantsWithFlowingAudio: new Set(["peer-gone"]),
+      })
+    );
+    expect(out.state).toBe("armed");
+    expect(out.armedReason).toBe("awaiting_audio_flow");
+  });
+
+  test("Phase 4d audio-flow gate: everHadAudioFlow=true → gate releases, mid-session audio blip does NOT re-arm", () => {
+    // Real-world: once we've started recording, a transient
+    // audio-flow drop (network blip, peer's mic glitches for 1s)
+    // must NOT cause the FSM to go back to armed and stop the
+    // MediaRecorder. The sticky latch is what protects against
+    // record-stop/restart churn.
+    const out = evaluateLifecycle(
+      baseInputs({
+        tutorWantsRecording: true,
+        participants: new Set(["peerA"]),
+        everHadParticipants: true,
+        participantsWithFlowingAudio: new Set<string>(), // blip — temporarily zero
+        everHadAudioFlow: true, // sticky latch from earlier in the session
+      })
+    );
+    expect(out.state).toBe("recording");
+  });
+
+  test("Phase 4d audio-flow gate: participantsWithFlowingAudio undefined (legacy callers) → recording on presence (backward compat)", () => {
+    // Pre-4d callers (and tests) don't pass the new input; FSM
+    // must still produce the legacy behaviour.
+    const out = evaluateLifecycle(
+      baseInputs({
+        tutorWantsRecording: true,
+        participants: new Set(["peerA"]),
+        everHadParticipants: true,
+        // participantsWithFlowingAudio: undefined
+      })
+    );
+    expect(out.state).toBe("recording");
+  });
+
+  test("Phase 4d audio-flow gate: solo-tutor (sync disabled) bypasses the gate entirely", () => {
+    // Tutor solo recording doesn't have remote peers; the gate
+    // must not block solo mode regardless of what's threaded in.
+    const out = evaluateLifecycle(
+      baseInputs({
+        tutorWantsRecording: true,
+        syncEnabled: false,
+        participants: new Set<string>(),
+        participantsWithFlowingAudio: new Set<string>(),
+      })
+    );
+    expect(out.state).toBe("recording");
+  });
+
+  test("Phase 4d audio-flow gate: derivePresentation surfaces 'Waiting for audio…' copy when awaiting_audio_flow", () => {
+    const out = evaluateLifecycle(
+      baseInputs({
+        tutorWantsRecording: true,
+        participants: new Set(["peerA"]),
+        everHadParticipants: true,
+        participantsWithFlowingAudio: new Set<string>(),
+      })
+    );
+    const pres = derivePresentation(out, {
+      tutorWantsRecording: true,
+      participants: new Set(["peerA"]),
+      everHadParticipants: true,
+      syncEnabled: true,
+      armedReason: out.armedReason,
+    });
+    expect(pres.pillLabel).toBe("Waiting for audio…");
+    expect(pres.pillColor).toBe("amber");
+    expect(pres.bannerMessage).toMatch(/Student is here/);
+    // awaitingStart === false (student IS here; not "awaiting start").
+    expect(pres.awaitingStart).toBe(false);
+  });
+
   test("solo grace expires after first participant has joined", () => {
     // soloEnabled is still true but a student already joined this
     // session and is now gone. We should NOT fall back to solo
