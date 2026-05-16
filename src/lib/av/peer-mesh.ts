@@ -79,11 +79,11 @@ export type PeerMeshOptions = {
    */
   iceServers?: ReadonlyArray<RTCIceServer>;
   /**
-   * Called whenever a peer's `RTCPeerConnection` is created (on
-   * `addPeer` or on first inbound offer if implicit-add is enabled
-   * in a later phase). Return the local tracks that should be
-   * `addTrack`-ed to the PC. Default returns `[]` — peer-mesh
-   * unit tests never attach real tracks.
+   * Called whenever a peer's `RTCPeerConnection` is created — on
+   * explicit `addPeer(peerId)` OR on first inbound offer for an
+   * unknown peer (implicit-add, May 15 hotfix #3). Return the local
+   * tracks that should be `addTrack`-ed to the PC. Default returns
+   * `[]` — peer-mesh unit tests never attach real tracks.
    */
   getLocalTracks?: (remotePeerId: string) => MediaStreamTrack[];
   /**
@@ -135,6 +135,31 @@ export type PeerMesh = {
    * higher-level signal (e.g. UI "Reconnect" button in 4c/4d).
    */
   restart: (peerId: string) => void;
+  /**
+   * Attach a NEW local track to every existing peer connection.
+   * Idempotent on the track id — adding the same track twice is a
+   * no-op on the second call (we check `pc.getSenders()` for an
+   * existing sender bound to the same track).
+   *
+   * Each `pc.addTrack(track)` fires `onnegotiationneeded` on that
+   * PC, which the existing perfect-negotiation handler in
+   * `createPeerEntry` picks up and turns into a fresh offer →
+   * answer → ICE refresh. The peer connection itself is NOT torn
+   * down; remote tracks stay flowing, only the SDP is updated to
+   * include the new media line.
+   *
+   * Used by `useLiveAV` to support the "tutor grants mic first, cam
+   * second" flow without rebuilding the mesh and dropping every
+   * remote peer's media. Before this method existed, the
+   * mesh-build effect's `[localAudioStream, localVideoStream]`
+   * dependency forced a full teardown on every stream identity
+   * change — which manifested in pilot as "clicking Allow camera
+   * mid-session drops son's audio + video for 5+ seconds while the
+   * mesh rebuilds".
+   *
+   * No-op when the mesh is disposed.
+   */
+  addLocalTrackToAllPeers: (track: MediaStreamTrack) => void;
   /**
    * Subscribe to remote `track` events. Multiple subscribers
    * allowed. Returns unsubscriber.
@@ -201,6 +226,13 @@ function candidateToInit(
   candidate: RTCIceCandidate | null
 ): RTCIceCandidateInit | null {
   if (candidate === null) return null;
+  // Some browsers emit `{ candidate: "" }` as the end-of-candidates
+  // sentinel instead of a true `null`. Normalize at the wire boundary
+  // so the receiver never has to special-case it (and so a peer on a
+  // newer client speaking to a peer on an older one still works).
+  if (typeof candidate.candidate === "string" && candidate.candidate.length === 0) {
+    return null;
+  }
   // Modern API exposes .toJSON(); we never assume it because the
   // test double does not implement it. Hand-extract instead.
   return {
@@ -387,17 +419,62 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
 
   const handleSignal: SignalHandler = (fromPeerId, payload) => {
     if (disposed) return;
-    const entry = lifeOf(fromPeerId);
+    let entry = lifeOf(fromPeerId);
     if (!entry) {
-      // No PC for this peer yet. In Phase 4a, the host (`useLiveAV`
-      // in 4b) is responsible for calling `addPeer(fromPeerId)`
-      // before the first inbound signal lands. If we see a signal
-      // without an entry, drop it with a warning — auto-add is
-      // out of scope for 4a.
-      log.warn(
-        `peer=${fromPeerId} event=signal-no-entry type=${payload.type}`
-      );
-      return;
+      // **May 15 hotfix #3 — implicit-add on inbound offer.**
+      //
+      // The original Phase 4a design required the host (`useLiveAV`)
+      // to call `addPeer(fromPeerId)` BEFORE the first signal landed,
+      // and dropped any signal arriving before that. That worked while
+      // both peers reliably mounted their meshes in the same order,
+      // but the realistic pilot race (peer A acquires media + builds
+      // mesh before peer B; A's offer is sent over the relay; B's
+      // mesh hasn't subscribed yet so the signal is fanned to zero
+      // subscribers and dropped; B subscribes later; B's own offer
+      // never round-trips with A's because A's PC is already in
+      // have-local-offer and the missing ICE candidates never
+      // converge) reliably stranded the peer on "Connecting…" until
+      // someone hit refresh.
+      //
+      // Implicit-add closes the race from the receiver side: if an
+      // offer arrives for a peer we don't yet have an entry for, we
+      // create the entry on the spot. Perfect-negotiation handles
+      // the glare that may follow (the host's own `addPeer` call is
+      // idempotent — line 686 `event=add-skip reason=already-present`).
+      // The buffered-replay fix in `sync-client.ts` closes the OTHER
+      // half of the race: signals that arrived before ANY subscriber
+      // (mesh OR signaling) are replayed when the first subscriber
+      // attaches.
+      //
+      // ONLY `offer` triggers implicit-add. `answer` / `ice` /
+      // `leave` arriving without a prior entry are still anomalies
+      // (an answer means we sent an offer for a peer we then lost
+      // state for; an ICE candidate without a description is
+      // meaningless; a leave for a peer we never knew is a no-op).
+      // Drop those with a warning as before.
+      if (payload.type !== "offer") {
+        log.warn(
+          `peer=${fromPeerId} event=signal-no-entry type=${payload.type}`
+        );
+        return;
+      }
+      // Reject self-targeted offers as a defense-in-depth — signaling
+      // already filters but a future relay/test bypass could deliver
+      // a self-echoed offer that would create a self-peer entry.
+      if (fromPeerId === localPeerId) {
+        log.warn(`peer=${fromPeerId} event=signal-no-entry-self-offer`);
+        return;
+      }
+      log.log(`peer=${fromPeerId} event=implicit-add reason=inbound-offer`);
+      try {
+        entry = createPeerEntry(fromPeerId);
+        peers.set(fromPeerId, entry);
+      } catch (err) {
+        log.error(
+          `peer=${fromPeerId} event=implicit-add-fail reason=${(err as Error)?.message ?? String(err)}`
+        );
+        return;
+      }
     }
     void applyInboundSignal(entry, payload);
   };
@@ -502,16 +579,57 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
         // both work in modern browsers; the empty-init form is the
         // most portable.
         await entry.pc.addIceCandidate();
-      } else {
-        await entry.pc.addIceCandidate(candidate);
+        return;
       }
+      // Treat empty-string candidate as end-of-candidates sentinel.
+      // Some browsers emit `{ candidate: "" }` instead of `null` from
+      // their `onicecandidate` event; passing that empty string to
+      // `addIceCandidate` causes "Error processing ICE candidate" on
+      // Chrome. Normalize here.
+      if (
+        typeof candidate.candidate === "string" &&
+        candidate.candidate.length === 0
+      ) {
+        log.log(
+          `peer=${entry.remotePeerId} event=ice-end-of-candidates-empty-string-normalized`
+        );
+        await entry.pc.addIceCandidate();
+        return;
+      }
+      await entry.pc.addIceCandidate(candidate);
     } catch (err) {
       if (!entry.ignoreOffer) {
         // Ignore-offer is the perfect-negotiation flag for "I'm
         // dropping this peer's offer due to glare-impolite"; ICE
         // failures during that window are expected and silent.
+        //
+        // Include diagnostic fields so we can tell apart different
+        // failure modes (malformed candidate, m-line mismatch, PC
+        // in wrong state, etc.) without re-deploying.
+        const reason = (err as Error)?.message ?? String(err);
+        const sdpMidStr =
+          candidate === null
+            ? "<eoc>"
+            : candidate.sdpMid === null || candidate.sdpMid === undefined
+              ? "null"
+              : `'${candidate.sdpMid}'`;
+        const sdpMLineIndexStr =
+          candidate === null
+            ? "<eoc>"
+            : candidate.sdpMLineIndex === null || candidate.sdpMLineIndex === undefined
+              ? "null"
+              : String(candidate.sdpMLineIndex);
+        const candidateStr =
+          candidate === null
+            ? "<eoc>"
+            : (candidate.candidate ?? "<missing>").slice(0, 80);
         log.warn(
-          `peer=${entry.remotePeerId} event=ice-apply-fail reason=${(err as Error)?.message ?? String(err)}`
+          `peer=${entry.remotePeerId} event=ice-apply-fail reason=${reason}` +
+            ` sdpMid=${sdpMidStr} sdpMLineIndex=${sdpMLineIndexStr}` +
+            ` signalingState=${entry.pc.signalingState}` +
+            ` iceConnectionState=${entry.pc.iceConnectionState}` +
+            ` hasRemoteDescription=${entry.hasRemoteDescription}` +
+            ` candidate='${candidateStr}'`
         );
       }
     }
@@ -643,6 +761,55 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
       }
       log.log(`peer=${peerId} event=restart-manual`);
       restartInternal(entry);
+    },
+    addLocalTrackToAllPeers: (track: MediaStreamTrack) => {
+      if (disposed) {
+        log.warn(`addLocalTrackToAllPeers: ignored (disposed) track=${track.id}`);
+        return;
+      }
+      if (!track || track.readyState === "ended") {
+        log.warn(
+          `addLocalTrackToAllPeers: ignored (track ended or null) track=${track?.id ?? "<null>"}`
+        );
+        return;
+      }
+      let attachedCount = 0;
+      let skippedAlreadyPresent = 0;
+      for (const entry of peers.values()) {
+        if (entry.closed) continue;
+        // Idempotency guard: if a sender for this exact track
+        // already exists on the PC, do not re-add. The same track
+        // arriving twice (e.g. a re-fired sync-tracks effect) would
+        // otherwise produce duplicate m-line entries in the SDP and
+        // confuse the remote peer.
+        let already = false;
+        try {
+          const senders = entry.pc.getSenders?.() ?? [];
+          for (const s of senders) {
+            if (s.track && s.track.id === track.id) {
+              already = true;
+              break;
+            }
+          }
+        } catch {
+          /* defensive: some PC stubs in tests don't implement getSenders */
+        }
+        if (already) {
+          skippedAlreadyPresent++;
+          continue;
+        }
+        try {
+          entry.pc.addTrack(track);
+          attachedCount++;
+        } catch (err) {
+          log.warn(
+            `peer=${entry.remotePeerId} event=addtrack-late-fail kind=${track.kind} reason=${(err as Error)?.message ?? String(err)}`
+          );
+        }
+      }
+      log.log(
+        `event=addLocalTrack-fan kind=${track.kind} trackId=${track.id} attached=${attachedCount} skipped=${skippedAlreadyPresent}`
+      );
     },
     onRemoteTrack: (cb) => {
       trackSubs.add(cb);

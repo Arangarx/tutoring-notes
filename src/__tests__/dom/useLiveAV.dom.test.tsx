@@ -22,7 +22,9 @@
  *   - INERT on mount — no getUserMedia, no mesh.
  *   - requestMic() / requestCam() are the only acquisition triggers.
  *   - Permissions API populates hasMicPermission/hasCamPermission.
- *   - Mesh builds once mic + sync-client are both present.
+ *   - Mesh builds once sync-client is present AND at least one of mic
+ *     / camera streams is present; deps include video so cam-after-mic
+ *     rebuilds mesh.
  *   - Reconcile add-then-remove with stable peerId-sorted output.
  */
 
@@ -168,6 +170,7 @@ type MeshHandles = {
   addPeer: jest.Mock;
   removePeer: jest.Mock;
   restart: jest.Mock;
+  addLocalTrackToAllPeers: jest.Mock;
   dispose: jest.Mock;
   emitTrack: (
     peerId: string,
@@ -194,6 +197,7 @@ function makeFakeMesh(): MeshHandles {
     peerSet.delete(peerId);
   });
   const restart = jest.fn();
+  const addLocalTrackToAllPeers = jest.fn();
   const dispose = jest.fn(() => {
     disposed = true;
     trackSubs.clear();
@@ -206,6 +210,7 @@ function makeFakeMesh(): MeshHandles {
     removePeer,
     peers: () => peerSet,
     restart,
+    addLocalTrackToAllPeers,
     onRemoteTrack: (cb) => {
       trackSubs.add(cb);
       return () => {
@@ -238,6 +243,7 @@ function makeFakeMesh(): MeshHandles {
     addPeer,
     removePeer,
     restart,
+    addLocalTrackToAllPeers,
     dispose,
     emitTrack: (peerId, track, streams = []) => {
       for (const cb of trackSubs) cb(peerId, track, streams);
@@ -646,12 +652,18 @@ describe("useLiveAV — requestCam", () => {
     unmount();
   });
 
-  test("requestCam independent of requestMic", async () => {
+  test("requestCam independent of requestMic (cam alone still activates mesh when sync on)", async () => {
     const video = makeFakeStream(0, 1);
     const getUM = jest.fn(
       async () => video.stream as unknown as MediaStream
     );
-    const props = makeBaseProps({ _getUserMedia: getUM });
+    const meshHandles = makeFakeMesh();
+    const sig = makeFakeSignaling();
+    const props = makeBaseProps({
+      _getUserMedia: getUM,
+      _createPeerMesh: meshHandles.factory,
+      _createSignaling: sig.factory,
+    });
 
     const { result, unmount } = renderHook(() => useLiveAV(props));
     await act(async () => {
@@ -660,7 +672,14 @@ describe("useLiveAV — requestCam", () => {
 
     expect(result.current.localVideoStream).not.toBeNull();
     expect(result.current.localAudioStream).toBeNull();
-    expect(result.current.isActive).toBe(false); // no mic yet
+    expect(result.current.isActive).toBe(true);
+    await waitFor(() => {
+      expect(meshHandles.capturedOpts.length).toBe(1);
+    });
+    const gltrk = meshHandles.capturedOpts[0]?.getLocalTracks;
+    const out = gltrk?.("r1") ?? [];
+    expect(out.length).toBe(1);
+    expect(out[0]).toBe(video.videoTracks[0]);
 
     unmount();
   });
@@ -723,6 +742,116 @@ describe("useLiveAV — requestCam", () => {
       await result.current.requestCam();
     });
     expect(getUM).toHaveBeenCalledTimes(1);
+
+    unmount();
+  });
+
+  // -----------------------------------------------------------------
+  // Regression: May 15 evening smoke. Tutor granted mic first → mesh
+  // built. Tutor later clicked "Allow camera" → localVideoStream
+  // changed null→stream. Pre-fix: mesh-build effect's
+  // [localAudioStream, localVideoStream] dep array forced a full
+  // mesh.dispose() + rebuild, dropping son's audio + video for the
+  // entire renegotiation window. Post-fix: the mesh stays up, and
+  // the new cam track is fanned out to every existing peer via
+  // mesh.addLocalTrackToAllPeers — perfect negotiation handles the
+  // SDP refresh in-place.
+  //
+  // This test asserts the contract: mic-then-cam in a real
+  // sequencing produces EXACTLY ONE mesh build + ZERO disposes
+  // (until unmount), and the cam track is routed through
+  // addLocalTrackToAllPeers rather than via getLocalTracks on a
+  // freshly-rebuilt mesh.
+  // -----------------------------------------------------------------
+  test("regression: requestMic then requestCam does NOT dispose+rebuild mesh; cam track fans out via addLocalTrackToAllPeers", async () => {
+    const audio = makeFakeStream(1, 0);
+    const video = makeFakeStream(0, 1);
+    const getUM = jest.fn((constraints: MediaStreamConstraints) => {
+      if (constraints.video) {
+        return Promise.resolve(video.stream as unknown as MediaStream);
+      }
+      return Promise.resolve(audio.stream as unknown as MediaStream);
+    });
+    const meshHandles = makeFakeMesh();
+    const sig = makeFakeSignaling();
+    const props = makeBaseProps({
+      _getUserMedia: getUM,
+      _createPeerMesh: meshHandles.factory,
+      _createSignaling: sig.factory,
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+
+    // Step 1: mic-first acquisition builds the mesh.
+    await act(async () => {
+      await result.current.requestMic();
+    });
+    await waitFor(() => {
+      expect(meshHandles.capturedOpts.length).toBe(1);
+    });
+    expect(meshHandles.dispose).not.toHaveBeenCalled();
+
+    // Step 2: cam acquired mid-session — the late-arriving cam track
+    // must travel through addLocalTrackToAllPeers, NOT through a
+    // mesh rebuild.
+    await act(async () => {
+      await result.current.requestCam();
+    });
+    expect(meshHandles.capturedOpts.length).toBe(1); // STILL ONE
+    expect(meshHandles.dispose).not.toHaveBeenCalled();
+    // The video track was fanned out via addLocalTrackToAllPeers.
+    // (The mic track may have been fanned out too — when there are
+    // 0 peers, the call is a harmless no-op, so we don't assert on
+    // it negatively. The crucial contract is that the mesh wasn't
+    // disposed + rebuilt.)
+    const fannedTracks = meshHandles.addLocalTrackToAllPeers.mock.calls.map(
+      (c: unknown[]) => c[0]
+    );
+    expect(fannedTracks).toContain(video.videoTracks[0]);
+
+    // Cleanup: unmount triggers exactly one dispose.
+    unmount();
+    expect(meshHandles.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  test("regression: requestCam then requestMic ALSO does NOT rebuild; mic track fans out via addLocalTrackToAllPeers", async () => {
+    // Mirror-image of the above — covers the cam-first user flow
+    // (e.g. tutor previewed video before turning mic on).
+    const audio = makeFakeStream(1, 0);
+    const video = makeFakeStream(0, 1);
+    const getUM = jest.fn((constraints: MediaStreamConstraints) => {
+      if (constraints.video) {
+        return Promise.resolve(video.stream as unknown as MediaStream);
+      }
+      return Promise.resolve(audio.stream as unknown as MediaStream);
+    });
+    const meshHandles = makeFakeMesh();
+    const sig = makeFakeSignaling();
+    const props = makeBaseProps({
+      _getUserMedia: getUM,
+      _createPeerMesh: meshHandles.factory,
+      _createSignaling: sig.factory,
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+
+    await act(async () => {
+      await result.current.requestCam();
+    });
+    await waitFor(() => {
+      expect(meshHandles.capturedOpts.length).toBe(1);
+    });
+    expect(meshHandles.dispose).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await result.current.requestMic();
+    });
+    expect(meshHandles.capturedOpts.length).toBe(1);
+    expect(meshHandles.dispose).not.toHaveBeenCalled();
+    const fannedTracks = meshHandles.addLocalTrackToAllPeers.mock.calls.map(
+      (c: unknown[]) => c[0]
+    );
+    expect(fannedTracks).toContain(audio.audioTracks[0]);
 
     unmount();
   });
@@ -881,6 +1010,32 @@ describe("useLiveAV — mesh + signaling lifecycle", () => {
     expect(sig.capturedOpts.length).toBe(0);
     expect(result.current.isActive).toBe(false);
     expect(result.current.localAudioStream).not.toBeNull();
+
+    unmount();
+  });
+
+  test("syncClient null: no mesh even after requestCam", async () => {
+    const video = makeFakeStream(0, 1);
+    const meshHandles = makeFakeMesh();
+    const sig = makeFakeSignaling();
+    const props = makeBaseProps({
+      syncClient: null,
+      _getUserMedia: jest.fn(
+        async () => video.stream as unknown as MediaStream
+      ),
+      _createPeerMesh: meshHandles.factory,
+      _createSignaling: sig.factory,
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await act(async () => {
+      await result.current.requestCam();
+    });
+
+    expect(meshHandles.capturedOpts.length).toBe(0);
+    expect(sig.capturedOpts.length).toBe(0);
+    expect(result.current.isActive).toBe(false);
+    expect(result.current.localVideoStream).not.toBeNull();
 
     unmount();
   });

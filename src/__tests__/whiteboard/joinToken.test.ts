@@ -42,6 +42,7 @@ jest.mock("@vercel/blob", () => ({
 
 const tokenCountMock = jest.fn();
 const tokenCreateMock = jest.fn();
+const tokenFindFirstMock = jest.fn();
 const tokenUpdateManyMock = jest.fn();
 jest.mock("@/lib/db", () => ({
   __esModule: true,
@@ -49,6 +50,7 @@ jest.mock("@/lib/db", () => ({
     whiteboardJoinToken: {
       count: (...args: unknown[]) => tokenCountMock(...args),
       create: (...args: unknown[]) => tokenCreateMock(...args),
+      findFirst: (...args: unknown[]) => tokenFindFirstMock(...args),
       updateMany: (...args: unknown[]) => tokenUpdateManyMock(...args),
     },
     whiteboardSession: {
@@ -67,7 +69,11 @@ beforeEach(() => {
   assertOwnsWhiteboardSessionMock.mockReset();
   tokenCountMock.mockReset();
   tokenCreateMock.mockReset();
+  tokenFindFirstMock.mockReset();
   tokenUpdateManyMock.mockReset();
+  // Default: no existing token. Tests that want idempotency to
+  // return an existing row override this in-line.
+  tokenFindFirstMock.mockResolvedValue(null);
 });
 
 const liveSession = {
@@ -100,6 +106,73 @@ describe("issueJoinToken", () => {
     expect(args.data.whiteboardSessionId).toBe("wb-session-1");
     expect(args.data.token).toBe(result.token);
     expect(args.data.expiresAt.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  test("idempotency: two consecutive calls for the same live session return the SAME token (no second mint)", async () => {
+    // The regression this test pins down: the pilot saw "Copy student
+    // link" mint a NEW token every click, so a tutor who clicked twice
+    // and pasted the second URL accidentally left wife on a stale
+    // copy of the first URL — both worked server-side (same session)
+    // but the proliferation of links muddied debugging.
+    //
+    // Contract: when an active non-revoked non-expired token exists
+    // for the session, issueJoinToken returns it as-is, with NO call
+    // to db.whiteboardJoinToken.create and NO change to expiresAt.
+    assertOwnsWhiteboardSessionMock.mockResolvedValue(liveSession);
+    const futureExpiry = new Date(Date.now() + 23 * 60 * 60 * 1000);
+    tokenFindFirstMock.mockResolvedValue({
+      token: "existing-token-abcdefghij_already_minted_earlier",
+      expiresAt: futureExpiry,
+    });
+
+    const result = await issueJoinToken("wb-session-1");
+
+    expect(result.token).toBe(
+      "existing-token-abcdefghij_already_minted_earlier"
+    );
+    expect(result.joinPath).toBe(
+      `/w/existing-token-abcdefghij_already_minted_earlier`
+    );
+    // No mint, no count check needed when an existing token won.
+    expect(tokenCreateMock).not.toHaveBeenCalled();
+    expect(tokenCountMock).not.toHaveBeenCalled();
+    // expiresAt is the EXISTING expiry — we do NOT extend it. This is
+    // intentional: extending on reuse would let a tutor keep a link
+    // alive indefinitely by re-copying it, breaking the 24h cap.
+    expect(result.expiresAt).toBe(futureExpiry.toISOString());
+  });
+
+  test("idempotency: findFirst filters by non-revoked + non-expired so a stale revoked row never wins", async () => {
+    // If a tutor explicitly revoked the previous token (via End-
+    // session, say) and then a tab somehow re-asks for a token, we
+    // must NOT hand back the revoked one. The query's filter is the
+    // guard; this test pins that filter shape.
+    assertOwnsWhiteboardSessionMock.mockResolvedValue(liveSession);
+    // findFirst with revokedAt=null + expiresAt:gt now returns null
+    // because the only row in this scenario is revoked.
+    tokenFindFirstMock.mockResolvedValue(null);
+    tokenCountMock.mockResolvedValue(0);
+    tokenCreateMock.mockResolvedValue({});
+
+    const result = await issueJoinToken("wb-session-1");
+
+    // findFirst was called WITH the safety filter.
+    const findFirstArgs = tokenFindFirstMock.mock.calls[0]?.[0] as {
+      where: {
+        whiteboardSessionId: string;
+        revokedAt: null;
+        expiresAt: { gt: Date };
+      };
+      orderBy: { createdAt: "desc" };
+    };
+    expect(findFirstArgs.where.whiteboardSessionId).toBe("wb-session-1");
+    expect(findFirstArgs.where.revokedAt).toBeNull();
+    expect(findFirstArgs.where.expiresAt.gt).toBeInstanceOf(Date);
+    expect(findFirstArgs.orderBy.createdAt).toBe("desc");
+
+    // Because findFirst returned null, the existing mint path ran.
+    expect(tokenCreateMock).toHaveBeenCalledTimes(1);
+    expect(result.token).toMatch(/^[A-Za-z0-9_-]{40,}$/);
   });
 
   test("refuses to issue a token for a session that has already ended", async () => {

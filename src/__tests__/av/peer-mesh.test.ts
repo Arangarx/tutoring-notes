@@ -132,7 +132,16 @@ class FakePc {
   addTrack(track: MediaStreamTrack, ..._streams: MediaStream[]): RTCRtpSender {
     this.history.push({ type: "addTrack" });
     this.addedTracks.push(track);
-    return {} as RTCRtpSender;
+    const sender = { track } as unknown as RTCRtpSender;
+    this._senders.push(sender);
+    return sender;
+  }
+
+  /** Senders backing `getSenders()` — populated by `addTrack`. */
+  _senders: RTCRtpSender[] = [];
+
+  getSenders(): RTCRtpSender[] {
+    return [...this._senders];
   }
 
   close(): void {
@@ -678,6 +687,68 @@ describe("createPeerMesh — ICE trickle queuing", () => {
     expect(pc.iceApplied).toEqual([]);
     m.dispose();
   });
+
+  test("sender normalizes empty-string-candidate emitted by onicecandidate to null on the wire", async () => {
+    // Defense-in-depth pair to the receiver-side normalization: if a
+    // browser fires `pc.onicecandidate` with `{ candidate: "" }`
+    // instead of `null`, peer-mesh must NOT forward an empty-string
+    // candidate over the wire — older clients (or strict browsers on
+    // the other side) would reject it. The wire should carry `null`.
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+    });
+    m.addPeer("B");
+    const pc = instances[0]!;
+
+    const emptyStringCandidate = {
+      candidate: "",
+      sdpMid: null,
+      sdpMLineIndex: null,
+      usernameFragment: null,
+    } as unknown as RTCIceCandidate;
+    pc.triggerIce(emptyStringCandidate);
+
+    const lastIce = [...sig.sends].reverse().find((s) => s.kind === "ice");
+    expect(lastIce).toEqual({ kind: "ice", targetPeerId: "B", candidate: null });
+    m.dispose();
+  });
+
+  test("empty-string-candidate sentinel is normalized to null (Chrome compat)", async () => {
+    // Some browsers emit `{ candidate: "" }` instead of `null` as the
+    // end-of-candidates sentinel. Passing the empty string straight
+    // to Chrome's `addIceCandidate` throws "Error processing ICE
+    // candidate" — peer-mesh must normalize it back to null so the
+    // call becomes a no-op.
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+    });
+    m.addPeer("B");
+    const pc = instances[0]!;
+
+    sig.inject("B", { type: "offer", sdp: "remote-offer" });
+    await flush();
+
+    sig.inject("B", {
+      type: "ice",
+      candidate: { candidate: "", sdpMid: null, sdpMLineIndex: null },
+    });
+    await flush();
+
+    // The fake PC records null for the end-of-candidates path, so
+    // the normalized empty-string candidate should land as null
+    // alongside any earlier real candidates (there are none in this
+    // test).
+    expect(pc.iceApplied).toEqual([null]);
+    m.dispose();
+  });
 });
 
 // =================================================================
@@ -955,9 +1026,24 @@ describe("createPeerMesh — 3-peer mesh fan-out", () => {
 // =================================================================
 
 describe("createPeerMesh — signal from unknown peer", () => {
-  test("signal arriving from a peer with no entry warns and drops (no auto-add in 4a)", async () => {
+  test("inbound OFFER from unknown peer triggers implicit-add + answer (May 15 hotfix #3)", async () => {
+    // Pilot race this guards against:
+    //   1. Wife joins a session; her useLiveAV builds the mesh and
+    //      subscribes to onRoomPeersChange.
+    //   2. The presence replay fires `addPeer(Andrew)` on wife's side
+    //      → her negotiationneeded fires → she sends an offer.
+    //   3. Andrew's mesh was already up, but the buffered-replay in
+    //      sync-client delivers wife's offer to Andrew's signaling
+    //      BEFORE Andrew's host has called `addPeer(wife)` (presence
+    //      replay timing differs across tabs).
+    //   4. Pre-hotfix #3: Andrew dropped the offer with
+    //      `event=signal-no-entry`. The PCs never connected.
+    //
+    // With implicit-add, the offer creates the PC, fires
+    // setRemoteDescription, and sends an answer — the connection
+    // proceeds even though the host's addPeer hasn't landed yet.
     const sig = makeFakeSignaling();
-    const { factory } = makePcFactory();
+    const { factory, instances } = makePcFactory();
     const { log, lines } = quietLog();
     const m = createPeerMesh({
       signaling: sig,
@@ -966,14 +1052,114 @@ describe("createPeerMesh — signal from unknown peer", () => {
       log,
     });
 
-    sig.inject("Z", { type: "offer", sdp: "unsolicited" });
+    sig.inject("Z", { type: "offer", sdp: "remote-offer-from-Z" });
+    await flush();
+
+    expect(m.peers().size).toBe(1);
+    expect(m.peers().has("Z")).toBe(true);
+    expect(instances.length).toBe(1);
+    expect(instances[0]!.history.some((h) => h.type === "setRemoteDescription:offer")).toBe(true);
+    expect(instances[0]!.history.some((h) => h.type === "createAnswer")).toBe(true);
+    expect(
+      sig.sends.some(
+        (s) => s.kind === "answer" && s.targetPeerId === "Z" && s.sdp === "fake-answer-sdp"
+      )
+    ).toBe(true);
+    expect(lines.some((l) => /implicit-add.*inbound-offer/.test(l))).toBe(true);
+
+    // Host's later addPeer(Z) must be a no-op (idempotent).
+    m.addPeer("Z");
+    expect(instances.length).toBe(1);
+    expect(lines.some((l) => /add-skip.*already-present/.test(l))).toBe(true);
+
+    m.dispose();
+  });
+
+  test("inbound ANSWER from unknown peer warns and drops (NOT implicit-added — no PC ever sent an offer)", async () => {
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const { log, lines } = quietLog();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      log,
+    });
+
+    sig.inject("Z", { type: "answer", sdp: "spurious-answer" });
     await flush();
 
     expect(m.peers().size).toBe(0);
+    expect(instances.length).toBe(0);
     expect(sig.sends).toEqual([]);
-    expect(
-      lines.some((l) => /signal-no-entry|Z/.test(l))
-    ).toBe(true);
+    expect(lines.some((l) => /signal-no-entry.*type=answer/.test(l))).toBe(true);
+    m.dispose();
+  });
+
+  test("inbound ICE from unknown peer warns and drops (NOT implicit-added — no remote description yet)", async () => {
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const { log, lines } = quietLog();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      log,
+    });
+
+    sig.inject("Z", {
+      type: "ice",
+      candidate: { candidate: "candidate:1 1 udp 1 1.2.3.4 5 typ host", sdpMid: "0", sdpMLineIndex: 0 },
+    });
+    await flush();
+
+    expect(m.peers().size).toBe(0);
+    expect(instances.length).toBe(0);
+    expect(lines.some((l) => /signal-no-entry.*type=ice/.test(l))).toBe(true);
+    m.dispose();
+  });
+
+  test("inbound LEAVE from unknown peer warns and drops (no-op — nothing to clean up)", async () => {
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const { log, lines } = quietLog();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      log,
+    });
+
+    sig.inject("Z", { type: "leave" });
+    await flush();
+
+    expect(m.peers().size).toBe(0);
+    expect(instances.length).toBe(0);
+    expect(lines.some((l) => /signal-no-entry.*type=leave/.test(l))).toBe(true);
+    m.dispose();
+  });
+
+  test("implicit-add ignores a self-targeted offer (defense-in-depth)", async () => {
+    // signaling.ts already filters self-echoes, but if a future
+    // relay/test bypass delivered a self-offer we must NOT create a
+    // self-peer entry (every other peer-mesh invariant assumes
+    // peerId !== localPeerId).
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const { log, lines } = quietLog();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      log,
+    });
+
+    sig.inject("A", { type: "offer", sdp: "self-echo-offer" });
+    await flush();
+
+    expect(m.peers().size).toBe(0);
+    expect(instances.length).toBe(0);
+    expect(lines.some((l) => /signal-no-entry-self-offer/.test(l))).toBe(true);
     m.dispose();
   });
 
@@ -1092,5 +1278,137 @@ describe("createPeerMesh — log shape", () => {
     } finally {
       logSpy.mockRestore();
     }
+  });
+});
+
+// =================================================================
+// addLocalTrackToAllPeers — late-arriving track fan-out
+//
+// Regression: prior to May 15 evening, `useLiveAV`'s mesh-build
+// effect included `localAudioStream` + `localVideoStream` in its
+// dependency array. Acquiring the cam AFTER the mic (the natural
+// flow when the tutor clicks "Allow microphone" → mesh builds →
+// "Allow camera" later) forced a full mesh teardown + rebuild,
+// dropping every remote peer's media for the duration. This
+// method is the in-place alternative: each existing PC gets the
+// new track via `pc.addTrack`, perfect-negotiation handles the
+// rest, and remote peers see only a brief renegotiation pause
+// (no media gap on already-flowing tracks).
+// =================================================================
+
+describe("createPeerMesh — addLocalTrackToAllPeers", () => {
+  test("adds the track to every existing peer connection in one call", () => {
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      // No initial tracks — simulates "cam not granted at mesh build".
+      getLocalTracks: () => [],
+    });
+    m.addPeer("B");
+    m.addPeer("C");
+    expect(instances).toHaveLength(2);
+    const [pcB, pcC] = instances as [FakePc, FakePc];
+    expect(pcB.addedTracks).toEqual([]);
+    expect(pcC.addedTracks).toEqual([]);
+
+    const lateCamTrack = makeFakeTrack("video");
+    m.addLocalTrackToAllPeers(lateCamTrack);
+
+    expect(pcB.addedTracks).toEqual([lateCamTrack]);
+    expect(pcC.addedTracks).toEqual([lateCamTrack]);
+    m.dispose();
+  });
+
+  test("idempotent on the same track id — a second call is a no-op", () => {
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      getLocalTracks: () => [],
+    });
+    m.addPeer("B");
+    const pc = instances[0]! as FakePc;
+
+    const t = makeFakeTrack("video");
+    m.addLocalTrackToAllPeers(t);
+    m.addLocalTrackToAllPeers(t);
+    m.addLocalTrackToAllPeers(t);
+    // Only one addTrack call survived idempotency.
+    expect(pc.addedTracks).toEqual([t]);
+    m.dispose();
+  });
+
+  test("no-op when disposed", () => {
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      getLocalTracks: () => [],
+    });
+    m.addPeer("B");
+    const pc = instances[0]! as FakePc;
+    m.dispose();
+    const t = makeFakeTrack("video");
+    expect(() => m.addLocalTrackToAllPeers(t)).not.toThrow();
+    expect(pc.addedTracks).toEqual([]);
+  });
+
+  test("no-op when track.readyState is 'ended' — never attach a dead track", () => {
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      getLocalTracks: () => [],
+    });
+    m.addPeer("B");
+    const pc = instances[0]! as FakePc;
+    const deadTrack = {
+      kind: "video",
+      id: "dead-1",
+      readyState: "ended" as MediaStreamTrackState,
+    } as unknown as MediaStreamTrack;
+    m.addLocalTrackToAllPeers(deadTrack);
+    expect(pc.addedTracks).toEqual([]);
+    m.dispose();
+  });
+
+  test("triggers onnegotiationneeded on the PC so perfect-negotiation re-runs", async () => {
+    // The real RTCPeerConnection fires negotiationneeded asynchronously
+    // after addTrack. The FakePc does NOT auto-fire, but we can verify
+    // that the event handler the mesh wired up still exists (i.e. the
+    // mesh did NOT detach the PC), so a real browser would correctly
+    // re-negotiate.
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      getLocalTracks: () => [],
+    });
+    m.addPeer("B");
+    const pc = instances[0]! as FakePc;
+    const negNeededBefore = pc.onnegotiationneeded;
+    expect(negNeededBefore).not.toBeNull();
+
+    m.addLocalTrackToAllPeers(makeFakeTrack("video"));
+    expect(pc.onnegotiationneeded).toBe(negNeededBefore);
+
+    // Now simulate the browser firing the event after addTrack; the
+    // existing handler should produce a fresh offer via signaling.
+    pc.triggerNegotiationNeeded();
+    await flush();
+    const offerSends = sig.sends.filter((s) => s.kind === "offer");
+    expect(offerSends).toHaveLength(1);
+    m.dispose();
   });
 });

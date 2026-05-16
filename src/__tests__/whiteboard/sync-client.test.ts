@@ -1357,6 +1357,359 @@ describe("sync-client webrtc-signal envelope (Phase 4a)", () => {
 });
 
 // -----------------------------------------------------------------
+// May 15 hotfix #3 — webrtc-signal buffer for late subscribers
+// -----------------------------------------------------------------
+//
+// Root cause this block guards against: pre-hotfix, an inbound
+// `webrtc-signal` arriving before any `onRemoteSignal` subscriber
+// was attached fanned to a zero-size Set and was silently lost.
+// The late-mounting peer (typically `useLiveAV` subscribing via
+// `signaling.ts` after `getUserMedia` resolved) would only see
+// FUTURE signals, missing the early peer's first offer and
+// stalling on "Connecting…" until refresh. The fix buffers
+// in-TTL signals and replays them on first subscribe via
+// `queueMicrotask`. See `BufferedRemoteSignal` docblock in
+// `sync-client.ts` for the full rationale.
+
+describe("sync-client onRemoteSignal buffer + late-subscribe replay (May 15 hotfix #3)", () => {
+  test("signal arriving BEFORE any onRemoteSignal subscriber is replayed to the first subscriber", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+
+    await realTick();
+    await flushMicrotasks(10);
+
+    // Inject a signal BEFORE any onRemoteSignal subscriber attaches.
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const inbound: WhiteboardWireSignal = {
+      v: 1,
+      kind: "webrtc-signal",
+      peerId: "student-B",
+      targetPeerId: "tutor-A",
+      payload: { type: "offer", sdp: "v=0\r\noffer-from-B\r\n..." },
+    };
+    const { data, iv } = await _testing.encryptMessage(aes, inbound);
+    sockets[0]!.inject("client-broadcast", data, iv);
+    await realTick(15);
+    await flushMicrotasks(15);
+
+    // Now the late subscriber attaches.
+    const signalCb = jest.fn();
+    client.onRemoteSignal(signalCb);
+    // Replay happens in a microtask — wait for it.
+    await flushMicrotasks(10);
+
+    expect(signalCb).toHaveBeenCalledTimes(1);
+    expect(signalCb).toHaveBeenCalledWith(
+      "student-B",
+      "tutor-A",
+      { type: "offer", sdp: expect.stringContaining("offer-from-B") }
+    );
+
+    client.disconnect();
+  });
+
+  test("replay delivers signals in original capture order", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+
+    await realTick();
+    await flushMicrotasks(10);
+
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const inbound1: WhiteboardWireSignal = {
+      v: 1,
+      kind: "webrtc-signal",
+      peerId: "student-B",
+      targetPeerId: "tutor-A",
+      payload: { type: "offer", sdp: "sdp-1" },
+    };
+    const inbound2: WhiteboardWireSignal = {
+      v: 1,
+      kind: "webrtc-signal",
+      peerId: "student-B",
+      targetPeerId: "tutor-A",
+      payload: {
+        type: "ice",
+        candidate: { candidate: "candidate:1 ...", sdpMid: "0", sdpMLineIndex: 0 },
+      },
+    };
+    const inbound3: WhiteboardWireSignal = {
+      v: 1,
+      kind: "webrtc-signal",
+      peerId: "student-B",
+      targetPeerId: "tutor-A",
+      payload: { type: "ice", candidate: null },
+    };
+
+    for (const m of [inbound1, inbound2, inbound3]) {
+      const { data, iv } = await _testing.encryptMessage(aes, m);
+      sockets[0]!.inject("client-broadcast", data, iv);
+    }
+    await realTick(15);
+    await flushMicrotasks(15);
+
+    const signalCb = jest.fn();
+    client.onRemoteSignal(signalCb);
+    await flushMicrotasks(10);
+
+    expect(signalCb).toHaveBeenCalledTimes(3);
+    expect(signalCb.mock.calls[0]![2]).toEqual({ type: "offer", sdp: "sdp-1" });
+    expect(signalCb.mock.calls[1]![2]!.type).toBe("ice");
+    expect((signalCb.mock.calls[1]![2] as { candidate: unknown }).candidate).toEqual(
+      expect.objectContaining({ candidate: expect.stringContaining("candidate:1") })
+    );
+    expect(signalCb.mock.calls[2]![2]).toEqual({ type: "ice", candidate: null });
+
+    client.disconnect();
+  });
+
+  test("replay DOES NOT re-deliver to a second subscriber registered AFTER the first (no echo)", async () => {
+    // Defense-in-depth: each subscriber should see its own replay
+    // window once at attach time, not signals already delivered to
+    // OTHER subscribers via live fan(). The contract is "replay
+    // catches up late subscribers" — once a subscriber is attached,
+    // it sees live signals like any other subscriber.
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+
+    await realTick();
+    await flushMicrotasks(10);
+
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const inbound: WhiteboardWireSignal = {
+      v: 1,
+      kind: "webrtc-signal",
+      peerId: "student-B",
+      targetPeerId: "tutor-A",
+      payload: { type: "offer", sdp: "early-offer" },
+    };
+    const { data, iv } = await _testing.encryptMessage(aes, inbound);
+    sockets[0]!.inject("client-broadcast", data, iv);
+    await realTick(15);
+    await flushMicrotasks(15);
+
+    const subA = jest.fn();
+    client.onRemoteSignal(subA);
+    await flushMicrotasks(10);
+
+    const subB = jest.fn();
+    client.onRemoteSignal(subB);
+    await flushMicrotasks(10);
+
+    // BOTH subscribers should see the buffered signal — sub B is
+    // also a "late subscriber" relative to the inbound message.
+    // (We do not de-dupe via "already delivered to someone else".)
+    expect(subA).toHaveBeenCalledTimes(1);
+    expect(subB).toHaveBeenCalledTimes(1);
+
+    client.disconnect();
+  });
+
+  test("live signals received AFTER subscribe do NOT also fire from the buffer (no double-delivery)", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+
+    await realTick();
+    await flushMicrotasks(10);
+
+    // Subscribe FIRST (no replay needed; buffer is empty).
+    const signalCb = jest.fn();
+    client.onRemoteSignal(signalCb);
+    await flushMicrotasks(10);
+    expect(signalCb).not.toHaveBeenCalled();
+
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const inbound: WhiteboardWireSignal = {
+      v: 1,
+      kind: "webrtc-signal",
+      peerId: "student-B",
+      targetPeerId: "tutor-A",
+      payload: { type: "answer", sdp: "live-answer" },
+    };
+    const { data, iv } = await _testing.encryptMessage(aes, inbound);
+    sockets[0]!.inject("client-broadcast", data, iv);
+    await realTick(15);
+    await flushMicrotasks(15);
+
+    // The signal should be delivered once via fan(), not twice
+    // (once via fan and once via buffer replay).
+    expect(signalCb).toHaveBeenCalledTimes(1);
+
+    client.disconnect();
+  });
+
+  test("signals older than the TTL are not replayed (stale-signal-drop)", async () => {
+    // We can't easily fast-forward Date.now() inside the sync-client
+    // without injecting a clock, so we mock Date.now globally for
+    // this test only.
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+
+    const realNow = Date.now.bind(Date);
+    let nowMs = realNow();
+    const dateSpy = jest.spyOn(Date, "now").mockImplementation(() => nowMs);
+
+    try {
+      const client = createWhiteboardSyncClient({
+        url: "wss://test",
+        roomId: "room-xyz",
+        encryptionKeyBase64Url: k,
+        role: "tutor",
+        peerId: "tutor-A",
+        _ioFactory: factory,
+      });
+
+      await realTick();
+      await flushMicrotasks(10);
+
+      const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+      const inbound: WhiteboardWireSignal = {
+        v: 1,
+        kind: "webrtc-signal",
+        peerId: "student-B",
+        targetPeerId: "tutor-A",
+        payload: { type: "offer", sdp: "ancient-offer" },
+      };
+      const { data, iv } = await _testing.encryptMessage(aes, inbound);
+      sockets[0]!.inject("client-broadcast", data, iv);
+      await realTick(15);
+      await flushMicrotasks(15);
+
+      // Jump the clock forward past the TTL (8s + slop).
+      nowMs = nowMs + 10_000;
+
+      const signalCb = jest.fn();
+      client.onRemoteSignal(signalCb);
+      await flushMicrotasks(10);
+
+      expect(signalCb).not.toHaveBeenCalled();
+
+      client.disconnect();
+    } finally {
+      dateSpy.mockRestore();
+    }
+  });
+
+  test("buffer is bounded — only the most recent 64 signals are retained", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+
+    await realTick();
+    await flushMicrotasks(10);
+
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+
+    // Push 80 signals before any subscriber attaches.
+    for (let i = 0; i < 80; i++) {
+      const inbound: WhiteboardWireSignal = {
+        v: 1,
+        kind: "webrtc-signal",
+        peerId: "student-B",
+        targetPeerId: "tutor-A",
+        payload: { type: "offer", sdp: `sdp-${i}` },
+      };
+      const { data, iv } = await _testing.encryptMessage(aes, inbound);
+      sockets[0]!.inject("client-broadcast", data, iv);
+    }
+    await realTick(50);
+    await flushMicrotasks(30);
+
+    const signalCb = jest.fn();
+    client.onRemoteSignal(signalCb);
+    await flushMicrotasks(20);
+
+    // Cap is 64. Oldest 16 should have been evicted.
+    expect(signalCb).toHaveBeenCalledTimes(64);
+    // First retained signal is sdp-16 (oldest 16 dropped).
+    expect((signalCb.mock.calls[0]![2] as { sdp: string }).sdp).toBe("sdp-16");
+    // Last retained signal is sdp-79 (most recent).
+    expect((signalCb.mock.calls[63]![2] as { sdp: string }).sdp).toBe("sdp-79");
+
+    client.disconnect();
+  });
+
+  test("subscribers that unsubscribe between attach and microtask receive zero replays", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+
+    await realTick();
+    await flushMicrotasks(10);
+
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const inbound: WhiteboardWireSignal = {
+      v: 1,
+      kind: "webrtc-signal",
+      peerId: "student-B",
+      targetPeerId: "tutor-A",
+      payload: { type: "offer", sdp: "buffered" },
+    };
+    const { data, iv } = await _testing.encryptMessage(aes, inbound);
+    sockets[0]!.inject("client-broadcast", data, iv);
+    await realTick(15);
+    await flushMicrotasks(15);
+
+    const signalCb = jest.fn();
+    const unsubscribe = client.onRemoteSignal(signalCb);
+    // Unsubscribe synchronously BEFORE the microtask replay runs.
+    unsubscribe();
+    await flushMicrotasks(20);
+
+    expect(signalCb).not.toHaveBeenCalled();
+
+    client.disconnect();
+  });
+});
+
+// -----------------------------------------------------------------
 // Phase 4b — presence envelope + onRoomPeersChange + prune timer
 // -----------------------------------------------------------------
 

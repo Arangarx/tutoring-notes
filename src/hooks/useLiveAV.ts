@@ -18,10 +18,11 @@
  *     `navigator.permissions.query()` on mount where supported, so
  *     the host UI can decide whether to show the request modal
  *     without prompting.
- *   - Once `localAudioStream` is non-null AND `syncClient` is
- *     non-null, the mesh + signaling are built and the hook starts
- *     reconciling room peers, collecting remote tracks, and tracking
- *     per-peer connection state.
+ *   - Once `syncClient` is non-null AND at least one of
+ *     `localAudioStream` / `localVideoStream` is non-null, the mesh
+ *     and signaling are built and the hook starts reconciling room
+ *     peers, collecting remote tracks, and tracking per-peer
+ *     connection state.
  *
  * Pillar invariants reused from 4a:
  *   - Encrypted-transport trust model is preserved: this hook only
@@ -56,6 +57,7 @@ import {
   type PeerMesh,
   type PeerMeshOptions,
 } from "@/lib/av/peer-mesh";
+import { getIceServersForBrowser } from "@/lib/av/webrtc-ice-from-env";
 import {
   createSignaling,
   type Signaling,
@@ -174,8 +176,27 @@ export type UseLiveAVOptions = {
    * Optional MediaTrackConstraints for the local mic. Defaults to
    * `true`. Pass a deviceId here once the workspace exposes a
    * mic-picker control.
+   *
+   * Ignored when `externalAudioStream` is provided.
    */
   audioConstraints?: MediaTrackConstraints | boolean;
+  /**
+   * When provided, the hook skips its own `getUserMedia` call for
+   * audio and instead uses a clone of this stream. This avoids the
+   * double-acquisition problem: two simultaneous `getUserMedia`
+   * streams from the same hardware device trigger Chrome's shared
+   * audio-processing pipeline in a way that can suppress the source
+   * signal in BOTH streams via echo-cancellation cross-talk.
+   *
+   * Pass `workspaceAudio.localMicStream` from the workspace so the
+   * recording mic and live-A/V mic are sourced from the same
+   * hardware acquisition. The hook clones the stream so live-A/V
+   * mute (track.enabled=false) doesn't silence the recording.
+   *
+   * When null (recording not yet started), the hook falls back to its
+   * own `requestMic()` flow.
+   */
+  externalAudioStream?: MediaStream | null;
   /**
    * Optional MediaTrackConstraints for the local camera. Defaults
    * to `true`.
@@ -380,6 +401,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     sessionId,
     audioConstraints = true,
     videoConstraints = true,
+    externalAudioStream,
     _getUserMedia,
     _createPeerMesh,
     _createSignaling,
@@ -401,6 +423,17 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     useState<MediaStream | null>(null);
   const [localVideoStream, setLocalVideoStream] =
     useState<MediaStream | null>(null);
+  // Latches true the first time EITHER `localAudioStream` or
+  // `localVideoStream` becomes non-null and stays true for the
+  // lifetime of the hook. The mesh-build effect gates on this rather
+  // than on stream identity so adding a SECOND stream (e.g. tutor
+  // grants mic first, cam second) does NOT trigger a mesh teardown +
+  // rebuild — which would otherwise drop every remote peer's media
+  // for ~5s while the new mesh re-negotiates. Late-arriving tracks
+  // are routed through `mesh.addLocalTrackToAllPeers` in a separate
+  // effect; perfect-negotiation handles the SDP refresh in-place.
+  const [hasEverHadLocalMedia, setHasEverHadLocalMedia] =
+    useState<boolean>(false);
   const [isAcquiring, setIsAcquiring] = useState<boolean>(false);
   const [error, setError] = useState<AvAcquireError | null>(null);
   const [videoError, setVideoError] = useState<AvAcquireError | null>(null);
@@ -430,6 +463,10 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   // Tracks whether the hook is unmounted to suppress late state
   // setters from in-flight acquisition promises.
   const unmountedRef = useRef<boolean>(false);
+  // Tracks whether the current localAudioStream comes from
+  // externalAudioStream (so we don't stop its tracks — those belong to
+  // the recorder hook).
+  const audioFromExternalRef = useRef<boolean>(false);
 
   // ---------------------------------------------------------------
   // Acquisition controls (idempotent)
@@ -465,7 +502,8 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
   const requestMic = useCallback(
     async (): Promise<void> => {
-      if (localAudioStreamRef.current) return; // already acquired
+      if (localAudioStreamRef.current) return; // already acquired (own or external)
+      if (externalAudioStream) return; // external stream will wire via effect
       if (micInFlightRef.current) return micInFlightRef.current;
 
       const getUM = resolveGetUserMedia();
@@ -511,6 +549,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           }
           localAudioStreamRef.current = stream;
           setLocalAudioStream(stream);
+          setHasEverHadLocalMedia(true);
           setHasMicPermission("granted");
           log.log(
             `mic acquired tracks=${stream.getAudioTracks().length} muted=${isMicMutedRef.current}`
@@ -536,7 +575,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       return inFlight;
       // eslint-disable-next-line react-hooks/exhaustive-deps
     },
-    [audioConstraints]
+    [audioConstraints, externalAudioStream]
   );
 
   const requestCam = useCallback(
@@ -584,6 +623,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           }
           localVideoStreamRef.current = stream;
           setLocalVideoStream(stream);
+          setHasEverHadLocalMedia(true);
           setHasCamPermission("granted");
           // requestCam implies user intent "cam on" — unmute on
           // success regardless of the placeholder isCamMuted=true
@@ -703,9 +743,10 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     return () => {
       unmountedRef.current = true;
       // Stop and release any acquired local streams on unmount so
-      // the OS frees the device.
+      // the OS frees the device. For externalAudioStream we DON'T
+      // stop the tracks — they belong to the recorder.
       const aud = localAudioStreamRef.current;
-      if (aud) {
+      if (aud && !audioFromExternalRef.current) {
         for (const t of aud.getTracks()) {
           try {
             t.stop();
@@ -724,17 +765,91 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           }
         }
       }
+      audioFromExternalRef.current = false;
       localAudioStreamRef.current = null;
       localVideoStreamRef.current = null;
     };
   }, []);
 
   // ---------------------------------------------------------------
+  // Effect: wire externalAudioStream into localAudioStream
+  //
+  // When the workspace recording mic is acquired by useAudioRecorder,
+  // it passes a DEDICATED publishStream here (one of two Web Audio
+  // destinations downstream of the source+gain pipeline). We use it
+  // directly — no cloning, no second getUserMedia. The recording's
+  // recordingStream is a SEPARATE Web Audio destination, so muting
+  // this stream's track via toggleMic does NOT affect recording.
+  //
+  // Cloning was tried and caused Chrome to send no audio data on the
+  // WebRTC track even though the Web Audio source captured fine — a
+  // known issue with two MediaStreamTrack consumers of the same
+  // hardware mic. Web Audio fan-out avoids that entirely.
+  // ---------------------------------------------------------------
+
+  useEffect(() => {
+    if (!externalAudioStream) {
+      // External stream withdrawn. Only clear if we're currently using
+      // an external stream. Self-acquired streams (requestMic path) are
+      // left untouched.
+      if (audioFromExternalRef.current) {
+        audioFromExternalRef.current = false;
+        localAudioStreamRef.current = null;
+        if (!unmountedRef.current) setLocalAudioStream(null);
+      }
+      return;
+    }
+
+    // Release any previous self-acquired stream before adopting the
+    // external one. (External streams are NOT stopped — they belong
+    // to the recorder hook.)
+    const prev = localAudioStreamRef.current;
+    if (prev && !audioFromExternalRef.current) {
+      for (const t of prev.getTracks()) {
+        try {
+          t.stop();
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
+    // Apply current mute state to the stream's tracks. Note this is
+    // fine — the recordingStream is a separate Web Audio destination,
+    // so disabling these tracks does NOT silence the MediaRecorder.
+    if (isMicMutedRef.current) {
+      for (const t of externalAudioStream.getAudioTracks()) t.enabled = false;
+    } else {
+      for (const t of externalAudioStream.getAudioTracks()) t.enabled = true;
+    }
+    audioFromExternalRef.current = true;
+    localAudioStreamRef.current = externalAudioStream;
+    if (!unmountedRef.current) {
+      setLocalAudioStream(externalAudioStream);
+      setHasEverHadLocalMedia(true);
+      setHasMicPermission("granted");
+      log.log(
+        `externalAudioStream wired tracks=${externalAudioStream.getAudioTracks().length}`
+      );
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalAudioStream]);
+
+  // ---------------------------------------------------------------
   // Effect: build mesh + signaling, reconcile peers, collect tracks
   // ---------------------------------------------------------------
 
   useEffect(() => {
-    if (!syncClient || !localAudioStream) {
+    // Build the mesh once the local peer has acquired its FIRST
+    // stream (mic OR cam — either is enough). After that point, the
+    // mesh stays up; later stream additions are reconciled by the
+    // `addLocalTrackToAllPeers` effect below WITHOUT a teardown.
+    //
+    // Deliberately NOT depending on `localAudioStream` /
+    // `localVideoStream` identity here — that was the pre-May-15
+    // bug that dropped son's audio + video when the tutor clicked
+    // "Allow camera" mid-session.
+    if (!syncClient || !hasEverHadLocalMedia) {
       setParticipants([]);
       return;
     }
@@ -757,6 +872,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       signaling,
       localPeerId,
       sessionId,
+      iceServers: getIceServersForBrowser(),
       getLocalTracks: () => {
         const tracks: MediaStreamTrack[] = [];
         const aud = localAudioStreamRef.current;
@@ -991,7 +1107,50 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       setParticipants([]);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [syncClient, localAudioStream, localPeerId, sessionId]);
+  }, [syncClient, hasEverHadLocalMedia, localPeerId, sessionId]);
+
+  // ---------------------------------------------------------------
+  // Effect: sync late-arriving local tracks into the existing mesh
+  //
+  // When `localAudioStream` or `localVideoStream` changes AFTER the
+  // mesh is built (e.g. tutor granted mic first, then cam later),
+  // every track on the new stream is fanned out to all existing
+  // peer connections via `mesh.addLocalTrackToAllPeers`. The mesh
+  // method is idempotent on track id (checks `pc.getSenders()`), so
+  // tracks attached at `addPeer` time via `getLocalTracks` are NOT
+  // re-added. The remote peer sees one renegotiation per new track
+  // — perfect negotiation handles glare — and ALL previously-flowing
+  // tracks stay live throughout.
+  //
+  // Skipped silently when the mesh is not yet built or has been
+  // disposed; the host's stream-acquisition path will eventually
+  // satisfy the build gate and the next render of this effect will
+  // catch up.
+  // ---------------------------------------------------------------
+  useEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh || mesh.isDisposed()) return;
+    const audTracks = localAudioStream?.getAudioTracks() ?? [];
+    const vidTracks = localVideoStream?.getVideoTracks() ?? [];
+    for (const t of audTracks) {
+      try {
+        mesh.addLocalTrackToAllPeers(t);
+      } catch (err) {
+        log.warn(
+          `track-sync audio addLocalTrackToAllPeers threw: ${(err as Error)?.message ?? String(err)}`
+        );
+      }
+    }
+    for (const t of vidTracks) {
+      try {
+        mesh.addLocalTrackToAllPeers(t);
+      } catch (err) {
+        log.warn(
+          `track-sync video addLocalTrackToAllPeers threw: ${(err as Error)?.message ?? String(err)}`
+        );
+      }
+    }
+  }, [localAudioStream, localVideoStream]);
 
   // ---------------------------------------------------------------
   // Public callbacks
@@ -1071,7 +1230,9 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   }, []);
 
   const isActive =
-    !!syncClient && !!localAudioStream && error === null;
+    !!syncClient &&
+    ((localAudioStream !== null && error === null) ||
+      (localVideoStream !== null && videoError === null));
 
   return {
     participants,

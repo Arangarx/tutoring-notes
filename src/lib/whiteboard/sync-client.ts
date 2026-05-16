@@ -825,6 +825,84 @@ export function createWhiteboardSyncClient(
   };
   let lastRemoteScene: LastRemoteSceneSnapshot | null = null;
 
+  /**
+   * **May 15 hotfix #3 — buffer inbound webrtc-signals for late
+   * subscribers.**
+   *
+   * `onRoomPeersChange` already replays its last snapshot via a
+   * microtask when a new subscriber attaches (see further down). The
+   * webrtc-signal stream had no such buffer — signals were fanned to
+   * `remoteSignalSubs` and any signal arriving before the (typically
+   * `useLiveAV`-driven) `signaling.ts` layer subscribed was silently
+   * dropped. That stranded the late-mounting peer on "Connecting…":
+   * the early peer sent an offer that hit zero subscribers on the
+   * late peer's sync-client; the late peer eventually subscribed
+   * but only saw FUTURE signals.
+   *
+   * Fix: buffer every webrtc-signal addressed to OR from any peer
+   * (we don't filter by `targetPeerId` here because signaling.ts is
+   * the layer that does that — keeping this layer payload-agnostic
+   * preserves the original layering rule documented at the top of
+   * `signaling.ts`). On first subscribe to `onRemoteSignal`, replay
+   * the buffered signals via `queueMicrotask` so the subscriber
+   * catches up. Bounded by TTL + count so a never-subscribed buffer
+   * cannot leak memory (e.g. the tutor opens the workspace, never
+   * starts a live-A/V session, signals from a curious browser
+   * extension would otherwise pile up forever).
+   *
+   * TTL chosen at 8s: long enough to cover slow cold-mount of
+   * `useLiveAV` on cellular (mic permission prompt + `getUserMedia`
+   * can easily eat 3-5s), short enough that stale signals from a
+   * peer who already left don't get replayed minutes later.
+   * Count cap of 64: a typical SDP exchange + ICE trickle is
+   * ~10-30 messages per peer, 64 covers a 2-peer mesh's worst-case
+   * burst with room for retries before eviction kicks in.
+   */
+  const SIGNAL_BUFFER_TTL_MS = 8_000;
+  const SIGNAL_BUFFER_MAX = 64;
+  type BufferedRemoteSignal = {
+    fromPeerId: string;
+    targetPeerId: string;
+    payload: WhiteboardWireSignalPayload;
+    capturedAtMs: number;
+  };
+  const bufferedRemoteSignals: BufferedRemoteSignal[] = [];
+
+  function bufferRemoteSignal(
+    fromPeerId: string,
+    targetPeerId: string,
+    payload: WhiteboardWireSignalPayload
+  ): void {
+    const now = Date.now();
+    bufferedRemoteSignals.push({
+      fromPeerId,
+      targetPeerId,
+      payload,
+      capturedAtMs: now,
+    });
+    // Evict by TTL from the head. The array is naturally ordered by
+    // capturedAtMs because we only ever push (never insert).
+    while (
+      bufferedRemoteSignals.length > 0 &&
+      now - bufferedRemoteSignals[0]!.capturedAtMs > SIGNAL_BUFFER_TTL_MS
+    ) {
+      bufferedRemoteSignals.shift();
+    }
+    // Evict by count cap from the head (oldest-first).
+    while (bufferedRemoteSignals.length > SIGNAL_BUFFER_MAX) {
+      bufferedRemoteSignals.shift();
+    }
+  }
+
+  function getReplayableSignals(): ReadonlyArray<BufferedRemoteSignal> {
+    const now = Date.now();
+    // Same TTL gate as eviction — a subscriber attaching at the
+    // tail end of the window still sees only fresh entries.
+    return bufferedRemoteSignals.filter(
+      (s) => now - s.capturedAtMs <= SIGNAL_BUFFER_TTL_MS
+    );
+  }
+
   function fan<T extends (...args: never[]) => void>(
     set: Set<T>,
     ...args: Parameters<T>
@@ -1058,6 +1136,12 @@ export function createWhiteboardSyncClient(
       log.log(
         `kind=webrtc-signal from=${msg.peerId} target=${msg.targetPeerId} type=${msg.payload.type}`
       );
+      // May 15 hotfix #3 — buffer for late subscribers. See the
+      // BufferedRemoteSignal docblock for the full rationale; the
+      // tl;dr is that signaling.ts may not be subscribed yet when
+      // a peer joins, and dropping the signal here means the peer
+      // stays stuck on "Connecting…" until refresh.
+      bufferRemoteSignal(msg.peerId, msg.targetPeerId, msg.payload);
       fan(remoteSignalSubs, msg.peerId, msg.targetPeerId, msg.payload);
       return;
     }
@@ -1491,6 +1575,31 @@ export function createWhiteboardSyncClient(
     broadcastSignal,
     onRemoteSignal: (cb) => {
       remoteSignalSubs.add(cb);
+      // **May 15 hotfix #3 — replay buffered signals to late subscribers.**
+      // Pilot symptom: peer A subscribes, sends an offer, peer B's
+      // sync-client receives it before B's `useLiveAV` has subscribed
+      // to onRemoteSignal — the signal is fanned to zero subscribers
+      // and lost. When B finally subscribes, A's offer is gone and B
+      // sits on "Connecting…" until a refresh. Replay any in-TTL
+      // buffered signals via microtask (subscriber unsubscribed
+      // between attach and microtask = no-op), mirroring the
+      // onRemoteScene / onRoomPeersChange replay pattern.
+      const replay = getReplayableSignals();
+      if (replay.length > 0) {
+        queueMicrotask(() => {
+          if (!remoteSignalSubs.has(cb)) return;
+          for (const s of replay) {
+            try {
+              cb(s.fromPeerId, s.targetPeerId, s.payload);
+            } catch (err) {
+              log.warn(
+                "onRemoteSignal replay subscriber threw:",
+                (err as Error)?.message ?? String(err)
+              );
+            }
+          }
+        });
+      }
       return () => {
         remoteSignalSubs.delete(cb);
       };

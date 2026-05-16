@@ -33,6 +33,8 @@
 
 import {
   buildContentSecurityPolicy,
+  buildPermissionsPolicy,
+  LIVE_AV_ROUTE_PATTERNS,
   whiteboardSyncOrigins,
 } from "@/lib/security/csp";
 
@@ -63,10 +65,35 @@ describe("buildContentSecurityPolicy — directive guards", () => {
     );
   });
 
-  test("img-src still includes blob: and data:", () => {
+  test("img-src includes blob: and data:", () => {
     const directive = getDirective(csp, "img-src") ?? "";
     expect(directive).toMatch(/\bblob:/);
     expect(directive).toMatch(/\bdata:/);
+  });
+
+  test("img-src allows Vercel Blob public CDN (whiteboard images)", () => {
+    expect(getDirective(csp, "img-src")).toMatch(
+      /https:\/\/\*\.public\.blob\.vercel-storage\.com/
+    );
+  });
+
+  test("img-src allows Vercel Blob private CDN (signed whiteboard image URLs)", () => {
+    // Whiteboard images inserted via the tutor toolbar are stored as
+    // private Blob assets and served from *.private.blob.vercel-storage.com.
+    // Without this, Chrome blocks <img> on the workspace and student page
+    // with "violates img-src … blob:".
+    expect(getDirective(csp, "img-src")).toMatch(
+      /https:\/\/\*\.private\.blob\.vercel-storage\.com/
+    );
+  });
+
+  test("connect-src allows Vercel Blob private CDN (fetch() by replay + student page)", () => {
+    // The whiteboard replay and student page fetch() private Blob URLs to load
+    // image assets. Without this the fetch is blocked by connect-src and
+    // [WhiteboardReplay] logs "Could not load asset … Failed to fetch".
+    expect(getDirective(csp, "connect-src")).toMatch(
+      /https:\/\/\*\.private\.blob\.vercel-storage\.com/
+    );
   });
 
   test("font-src includes data: (Excalidraw 0.18 bundled-font regression guard)", () => {
@@ -174,5 +201,151 @@ describe("whiteboardSyncOrigins — input shapes", () => {
     // misconfiguration, not something CSP should silently paper over.
     expect(whiteboardSyncOrigins("https://wb.mortensenapps.com")).toEqual([]);
     expect(whiteboardSyncOrigins("http://localhost:3002")).toEqual([]);
+  });
+});
+
+/**
+ * Permissions-Policy regression tests.
+ *
+ * Background:
+ *
+ *   Phase 4c (Pillar 6) originally shipped a per-pathname
+ *   Permissions-Policy: workspace + student-join routes got the
+ *   widened `camera=(self), microphone=(self)`; everything else
+ *   stayed `camera=(), microphone=(self)`. The intent was
+ *   defense-in-depth.
+ *
+ *   **May 15 2026: widened to site-wide.** Pilot smoke proved the
+ *   per-path design was fundamentally incompatible with the Next.js
+ *   App Router server-action `redirect()` flow: `createWhiteboardSession`
+ *   redirects to the workspace URL, but the redirect is a CLIENT-SIDE
+ *   navigation that reuses the existing document. `Permissions-Policy`
+ *   is a per-document header, so the workspace inherits whatever
+ *   policy the source page (the student-detail page,
+ *   `camera=()`) set. The browser then blocks `getUserMedia({video:true})`
+ *   with "camera is not allowed in this document" until the user
+ *   does a full hard refresh — which Sarah hit every single session.
+ *
+ *   See the `buildPermissionsPolicy` JSDoc in `csp.ts` for the full
+ *   reasoning and the three options that were considered. The
+ *   threat model now relies on (i) the browser's per-origin
+ *   permission prompts and (ii) `frame-ancestors 'none'` +
+ *   `frame-src` allowlist for third-party-embed protection — both
+ *   stronger boundaries than per-route Permissions-Policy ever was.
+ *
+ *   Do NOT add a second `Permissions-Policy` header in `next.config.ts`
+ *   (or Vercel project settings): the browser merges multiple policy
+ *   headers and the strictest value of each feature wins, which would
+ *   silently re-introduce the camera-blocked bug. The middleware
+ *   emitter (`buildPermissionsPolicy`) is the single source of truth.
+ */
+describe("buildPermissionsPolicy — site-wide camera + microphone widening", () => {
+  function parsePolicy(value: string): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const part of value.split(",")) {
+      const trimmed = part.trim();
+      if (trimmed === "") continue;
+      const eq = trimmed.indexOf("=");
+      if (eq < 0) continue;
+      out[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1).trim();
+    }
+    return out;
+  }
+
+  // The widened policy must apply to EVERY pathname, regardless of
+  // route shape, because Next.js server-action redirects perform a
+  // client-side navigation and the workspace can be entered from any
+  // page that links to it. Pinning the symmetry here so a future
+  // "let's tighten back up" refactor immediately fails CI with a clear
+  // message rather than re-introducing the camera-blocked bug.
+  describe("EVERY route gets camera=(self) microphone=(self)", () => {
+    test.each([
+      // live-A/V routes (always needed)
+      "/admin/students/abc123/whiteboard/sess-456/workspace",
+      "/admin/students/abc123/whiteboard/sess-456/workspace/",
+      "/admin/students/abc123/whiteboard/sess-456/workspace/some-nested",
+      "/w/abcd-1234",
+      "/w/abcd-1234/",
+      "/w/abcd-1234/nested-path",
+      // pages that redirect to the workspace via Next.js server-action
+      // soft nav — these MUST share the wide policy or the workspace
+      // inherits the wrong one on the destination document. (May 15
+      // regression class.)
+      "/admin/students/abc123",
+      "/admin/students/abc123/whiteboard/sess-456",
+      // landing + auth + admin siblings — kept wide too so any future
+      // entry point that uses `<Link>` or `router.push` to /workspace
+      // doesn't silently re-introduce the bug.
+      "/",
+      "/login",
+      "/setup",
+      "/forgot-password",
+      "/admin/students/abc123/whiteboard",
+      "/admin/students/abc123/whiteboard/sess-456/review",
+      "/api/whiteboard/sess-456/join-timer",
+      "/api/audio/upload",
+      // lookalike paths — these get the wide policy too. Harmless: the
+      // browser permission prompt still gates the actual getUserMedia
+      // call, so a route that has no AV UI cannot silently use the
+      // camera even with the wide policy.
+      "/admin/students/abc123/workspace",
+      "/admin/workspace/w/something",
+      "/w",
+    ])("widens camera=(self) microphone=(self) on %s", (pathname) => {
+      const parsed = parsePolicy(buildPermissionsPolicy(pathname));
+      expect(parsed.camera).toBe("(self)");
+      expect(parsed.microphone).toBe("(self)");
+      expect(parsed.geolocation).toBe("()");
+    });
+  });
+
+  test("zero-arg call returns the same wide policy", () => {
+    // pathname is now optional / ignored — callers that don't have a
+    // pathname handy (e.g. error response paths in middleware) must
+    // still get the correct widened policy.
+    const parsed = parsePolicy(buildPermissionsPolicy());
+    expect(parsed.camera).toBe("(self)");
+    expect(parsed.microphone).toBe("(self)");
+    expect(parsed.geolocation).toBe("()");
+  });
+
+  test("returned header is a comma-separated list with no trailing comma", () => {
+    // Defensive: Permissions-Policy syntax is comma-separated and a
+    // trailing comma is invalid per the structured-headers RFC. Browsers
+    // mostly tolerate it, but our regression test pins the exact shape so
+    // a future serializer change doesn't drift.
+    const sample = buildPermissionsPolicy("/");
+    expect(sample).not.toMatch(/,\s*$/);
+    expect(sample.split(",").length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("LIVE_AV_ROUTE_PATTERNS — anchor invariants", () => {
+  test("every pattern is anchored at both ends", () => {
+    for (const re of LIVE_AV_ROUTE_PATTERNS) {
+      const src = re.source;
+      expect(src.startsWith("^")).toBe(true);
+      expect(src.endsWith("$")).toBe(true);
+    }
+  });
+
+  test("workspace pattern does NOT match a /workspace path without /admin/students prefix", () => {
+    const ok = LIVE_AV_ROUTE_PATTERNS.some((re) =>
+      re.test("/foo/bar/workspace")
+    );
+    expect(ok).toBe(false);
+  });
+
+  test("student-join pattern requires a non-empty token segment", () => {
+    const ok = LIVE_AV_ROUTE_PATTERNS.some((re) => re.test("/w/"));
+    // "/w/" matches `^/w/[^/]+...` only if the token is non-empty.
+    expect(ok).toBe(false);
+  });
+
+  test("workspace pattern matches the canonical shape exactly", () => {
+    const ok = LIVE_AV_ROUTE_PATTERNS.some((re) =>
+      re.test("/admin/students/s_123/whiteboard/wb_456/workspace")
+    );
+    expect(ok).toBe(true);
   });
 });

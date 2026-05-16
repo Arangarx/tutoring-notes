@@ -38,7 +38,7 @@
  *    Sarah's "4-second cutoff between recordings" report).
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { uploadAudioDirect } from "@/lib/recording/upload";
 import { formatUserFacingActionError } from "@/lib/action-correlation";
 import { createMicAudioGraph, type MicAudioGraph } from "@/lib/mic-recorder-audio";
@@ -114,6 +114,17 @@ export type UseAudioRecorderOptions = {
   ) => void | Promise<void>;
   /** Called whenever the recording active state changes (acquiring/ready/recording/paused/uploading = true). */
   onRecordingActive?: (active: boolean) => void;
+  /**
+   * Seed the displayed timer with an already-elapsed second count so the
+   * recording timer stays in sync with a server-persisted session timer
+   * after a page refresh. The hook still counts forward from this seed;
+   * the value is only applied once at mount.
+   *
+   * In the workspace, pass `Math.floor(initialActiveMs / 1000)` so that
+   * after a refresh the recording timer resumes at the session's
+   * already-elapsed time rather than restarting from 0.
+   */
+  initialElapsedSeconds?: number;
 };
 
 export type UseAudioRecorderReturn = {
@@ -125,6 +136,33 @@ export type UseAudioRecorderReturn = {
   elapsed: number;
   segmentNumber: number;
   doneSegmentSeconds: number;
+  /**
+   * The raw mic MediaStream while recording is active (non-null from
+   * the moment getUserMedia succeeds until teardown). Expose this so
+   * callers that need to share the same hardware mic — e.g. the live
+   * A/V hook — can clone the stream instead of calling getUserMedia a
+   * second time. Two simultaneous getUserMedia streams from the same
+   * device trigger Chrome's shared audio-processing pipeline in a way
+   * that suppresses the source signal in both streams via echo
+   * cancellation cross-talk.
+   */
+  localMicStream: MediaStream | null;
+
+  /**
+   * Add a remote audio MediaStream (typically a `useLiveAV` participant's
+   * audioStream) to the recording mixdown. Returns an unsubscribe that
+   * detaches the remote stream from the mix.
+   *
+   * Always safe to call. If the audio graph hasn't been built yet (mic
+   * not acquired) the call is a no-op and the unsubscribe is harmless.
+   * The caller (workspace) is responsible for re-invoking once the graph
+   * is ready — gating on `localMicStream != null` is the canonical
+   * pattern.
+   *
+   * The remote stream's lifecycle is NOT owned by this hook. We do not
+   * stop its tracks on detach or dispose; the WebRTC layer owns that.
+   */
+  addRemoteAudio: (stream: MediaStream) => () => void;
 
   // Mic + prefs
   devices: MediaDeviceInfo[];
@@ -196,10 +234,12 @@ export function useAudioRecorder({
   studentId,
   onRecorded,
   onRecordingActive,
+  initialElapsedSeconds = 0,
 }: UseAudioRecorderOptions): UseAudioRecorderReturn {
   const [recordState, setRecordState] = useState<RecordState>("idle");
-  const [elapsed, setElapsed] = useState(0);
+  const [elapsed, setElapsed] = useState(initialElapsedSeconds);
   const [error, setError] = useState<string | null>(null);
+  const [localMicStream, setLocalMicStream] = useState<MediaStream | null>(null);
 
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
@@ -225,7 +265,7 @@ export function useAudioRecorder({
   const streamRef = useRef<MediaStream | null>(null);
   const graphRef = useRef<MicAudioGraph | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const elapsedRef = useRef(0);
+  const elapsedRef = useRef(initialElapsedSeconds);
   const rafRef = useRef<number | null>(null);
   const meterBarRef = useRef<HTMLDivElement | null>(null);
   /** Tracks the latest meter colour so we don't thrash style.background every frame. */
@@ -418,6 +458,7 @@ export function useAudioRecorder({
       /* ignore */
     }
     streamRef.current = null;
+    setLocalMicStream(null);
   }
 
   function startTimer() {
@@ -737,6 +778,12 @@ export function useAudioRecorder({
     }
 
     streamRef.current = stream;
+    // Note: we expose localMicStream AFTER the audio graph is built
+    // (below) so callers like useLiveAV receive the graph's publishStream
+    // (a separate Web Audio destination) rather than the raw mic stream.
+    // Using the raw stream would force WebRTC to clone the mic track,
+    // which causes Chrome to send silence on the WebRTC track in some
+    // configurations.
     const audioTrack = stream.getAudioTracks?.()[0];
 
     // Persist the actual deviceId in use (browsers sometimes resolve "default" to a real id).
@@ -759,6 +806,12 @@ export function useAudioRecorder({
     // or the stream isn't a real MediaStream (test stub) — fall back to raw stream below.
     const graph = await createMicAudioGraph(stream, gainLinear);
     graphRef.current = graph;
+
+    // Expose the stream that downstream consumers (useLiveAV) should use.
+    // Prefer the graph's publishStream (independent destination, fans out
+    // from the same source as recordingStream — no track sharing). Fall
+    // back to the raw mic stream when Web Audio is unavailable (tests).
+    setLocalMicStream(graph?.publishStream ?? stream);
 
     if (graph) {
       startMeter(graph);
@@ -1037,12 +1090,30 @@ export function useAudioRecorder({
     recordState === "paused" ||
     (recordState === "uploading" && uploadMode === "segment");
 
+  // Ref-stable addRemoteAudio so consumers (the workspace's
+  // participants-reconcile effect) don't re-run on every render just
+  // because the function identity changes.
+  const addRemoteAudio = useCallback((stream: MediaStream) => {
+    const g = graphRef.current;
+    if (!g || typeof g.addRemoteAudio !== "function") {
+      // Graph not ready (mic not yet acquired) or this hook is being
+      // exercised by a test stub that hasn't implemented mixdown. The
+      // caller is expected to gate on `localMicStream != null` and
+      // re-invoke once the graph builds; no-op here keeps the
+      // contract "always safe to call".
+      return () => {};
+    }
+    return g.addRemoteAudio(stream);
+  }, []);
+
   return {
     state: recordState,
     uploadMode,
     elapsed,
     segmentNumber,
     doneSegmentSeconds,
+    localMicStream,
+    addRemoteAudio,
     devices,
     selectedDeviceId,
     gainLinear,
