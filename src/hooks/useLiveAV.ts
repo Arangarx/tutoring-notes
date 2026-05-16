@@ -423,6 +423,17 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     useState<MediaStream | null>(null);
   const [localVideoStream, setLocalVideoStream] =
     useState<MediaStream | null>(null);
+  // Latches true the first time EITHER `localAudioStream` or
+  // `localVideoStream` becomes non-null and stays true for the
+  // lifetime of the hook. The mesh-build effect gates on this rather
+  // than on stream identity so adding a SECOND stream (e.g. tutor
+  // grants mic first, cam second) does NOT trigger a mesh teardown +
+  // rebuild — which would otherwise drop every remote peer's media
+  // for ~5s while the new mesh re-negotiates. Late-arriving tracks
+  // are routed through `mesh.addLocalTrackToAllPeers` in a separate
+  // effect; perfect-negotiation handles the SDP refresh in-place.
+  const [hasEverHadLocalMedia, setHasEverHadLocalMedia] =
+    useState<boolean>(false);
   const [isAcquiring, setIsAcquiring] = useState<boolean>(false);
   const [error, setError] = useState<AvAcquireError | null>(null);
   const [videoError, setVideoError] = useState<AvAcquireError | null>(null);
@@ -538,6 +549,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           }
           localAudioStreamRef.current = stream;
           setLocalAudioStream(stream);
+          setHasEverHadLocalMedia(true);
           setHasMicPermission("granted");
           log.log(
             `mic acquired tracks=${stream.getAudioTracks().length} muted=${isMicMutedRef.current}`
@@ -611,6 +623,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           }
           localVideoStreamRef.current = stream;
           setLocalVideoStream(stream);
+          setHasEverHadLocalMedia(true);
           setHasCamPermission("granted");
           // requestCam implies user intent "cam on" — unmute on
           // success regardless of the placeholder isCamMuted=true
@@ -813,6 +826,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     localAudioStreamRef.current = externalAudioStream;
     if (!unmountedRef.current) {
       setLocalAudioStream(externalAudioStream);
+      setHasEverHadLocalMedia(true);
       setHasMicPermission("granted");
       log.log(
         `externalAudioStream wired tracks=${externalAudioStream.getAudioTracks().length}`
@@ -826,9 +840,16 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   // ---------------------------------------------------------------
 
   useEffect(() => {
-    const hasLocalMedia =
-      localAudioStream !== null || localVideoStream !== null;
-    if (!syncClient || !hasLocalMedia) {
+    // Build the mesh once the local peer has acquired its FIRST
+    // stream (mic OR cam — either is enough). After that point, the
+    // mesh stays up; later stream additions are reconciled by the
+    // `addLocalTrackToAllPeers` effect below WITHOUT a teardown.
+    //
+    // Deliberately NOT depending on `localAudioStream` /
+    // `localVideoStream` identity here — that was the pre-May-15
+    // bug that dropped son's audio + video when the tutor clicked
+    // "Allow camera" mid-session.
+    if (!syncClient || !hasEverHadLocalMedia) {
       setParticipants([]);
       return;
     }
@@ -1086,7 +1107,50 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       setParticipants([]);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [syncClient, localAudioStream, localVideoStream, localPeerId, sessionId]);
+  }, [syncClient, hasEverHadLocalMedia, localPeerId, sessionId]);
+
+  // ---------------------------------------------------------------
+  // Effect: sync late-arriving local tracks into the existing mesh
+  //
+  // When `localAudioStream` or `localVideoStream` changes AFTER the
+  // mesh is built (e.g. tutor granted mic first, then cam later),
+  // every track on the new stream is fanned out to all existing
+  // peer connections via `mesh.addLocalTrackToAllPeers`. The mesh
+  // method is idempotent on track id (checks `pc.getSenders()`), so
+  // tracks attached at `addPeer` time via `getLocalTracks` are NOT
+  // re-added. The remote peer sees one renegotiation per new track
+  // — perfect negotiation handles glare — and ALL previously-flowing
+  // tracks stay live throughout.
+  //
+  // Skipped silently when the mesh is not yet built or has been
+  // disposed; the host's stream-acquisition path will eventually
+  // satisfy the build gate and the next render of this effect will
+  // catch up.
+  // ---------------------------------------------------------------
+  useEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh || mesh.isDisposed()) return;
+    const audTracks = localAudioStream?.getAudioTracks() ?? [];
+    const vidTracks = localVideoStream?.getVideoTracks() ?? [];
+    for (const t of audTracks) {
+      try {
+        mesh.addLocalTrackToAllPeers(t);
+      } catch (err) {
+        log.warn(
+          `track-sync audio addLocalTrackToAllPeers threw: ${(err as Error)?.message ?? String(err)}`
+        );
+      }
+    }
+    for (const t of vidTracks) {
+      try {
+        mesh.addLocalTrackToAllPeers(t);
+      } catch (err) {
+        log.warn(
+          `track-sync video addLocalTrackToAllPeers threw: ${(err as Error)?.message ?? String(err)}`
+        );
+      }
+    }
+  }, [localAudioStream, localVideoStream]);
 
   // ---------------------------------------------------------------
   // Public callbacks

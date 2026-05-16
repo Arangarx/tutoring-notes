@@ -132,7 +132,16 @@ class FakePc {
   addTrack(track: MediaStreamTrack, ..._streams: MediaStream[]): RTCRtpSender {
     this.history.push({ type: "addTrack" });
     this.addedTracks.push(track);
-    return {} as RTCRtpSender;
+    const sender = { track } as unknown as RTCRtpSender;
+    this._senders.push(sender);
+    return sender;
+  }
+
+  /** Senders backing `getSenders()` — populated by `addTrack`. */
+  _senders: RTCRtpSender[] = [];
+
+  getSenders(): RTCRtpSender[] {
+    return [...this._senders];
   }
 
   close(): void {
@@ -1154,5 +1163,137 @@ describe("createPeerMesh — log shape", () => {
     } finally {
       logSpy.mockRestore();
     }
+  });
+});
+
+// =================================================================
+// addLocalTrackToAllPeers — late-arriving track fan-out
+//
+// Regression: prior to May 15 evening, `useLiveAV`'s mesh-build
+// effect included `localAudioStream` + `localVideoStream` in its
+// dependency array. Acquiring the cam AFTER the mic (the natural
+// flow when the tutor clicks "Allow microphone" → mesh builds →
+// "Allow camera" later) forced a full mesh teardown + rebuild,
+// dropping every remote peer's media for the duration. This
+// method is the in-place alternative: each existing PC gets the
+// new track via `pc.addTrack`, perfect-negotiation handles the
+// rest, and remote peers see only a brief renegotiation pause
+// (no media gap on already-flowing tracks).
+// =================================================================
+
+describe("createPeerMesh — addLocalTrackToAllPeers", () => {
+  test("adds the track to every existing peer connection in one call", () => {
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      // No initial tracks — simulates "cam not granted at mesh build".
+      getLocalTracks: () => [],
+    });
+    m.addPeer("B");
+    m.addPeer("C");
+    expect(instances).toHaveLength(2);
+    const [pcB, pcC] = instances as [FakePc, FakePc];
+    expect(pcB.addedTracks).toEqual([]);
+    expect(pcC.addedTracks).toEqual([]);
+
+    const lateCamTrack = makeFakeTrack("video");
+    m.addLocalTrackToAllPeers(lateCamTrack);
+
+    expect(pcB.addedTracks).toEqual([lateCamTrack]);
+    expect(pcC.addedTracks).toEqual([lateCamTrack]);
+    m.dispose();
+  });
+
+  test("idempotent on the same track id — a second call is a no-op", () => {
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      getLocalTracks: () => [],
+    });
+    m.addPeer("B");
+    const pc = instances[0]! as FakePc;
+
+    const t = makeFakeTrack("video");
+    m.addLocalTrackToAllPeers(t);
+    m.addLocalTrackToAllPeers(t);
+    m.addLocalTrackToAllPeers(t);
+    // Only one addTrack call survived idempotency.
+    expect(pc.addedTracks).toEqual([t]);
+    m.dispose();
+  });
+
+  test("no-op when disposed", () => {
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      getLocalTracks: () => [],
+    });
+    m.addPeer("B");
+    const pc = instances[0]! as FakePc;
+    m.dispose();
+    const t = makeFakeTrack("video");
+    expect(() => m.addLocalTrackToAllPeers(t)).not.toThrow();
+    expect(pc.addedTracks).toEqual([]);
+  });
+
+  test("no-op when track.readyState is 'ended' — never attach a dead track", () => {
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      getLocalTracks: () => [],
+    });
+    m.addPeer("B");
+    const pc = instances[0]! as FakePc;
+    const deadTrack = {
+      kind: "video",
+      id: "dead-1",
+      readyState: "ended" as MediaStreamTrackState,
+    } as unknown as MediaStreamTrack;
+    m.addLocalTrackToAllPeers(deadTrack);
+    expect(pc.addedTracks).toEqual([]);
+    m.dispose();
+  });
+
+  test("triggers onnegotiationneeded on the PC so perfect-negotiation re-runs", async () => {
+    // The real RTCPeerConnection fires negotiationneeded asynchronously
+    // after addTrack. The FakePc does NOT auto-fire, but we can verify
+    // that the event handler the mesh wired up still exists (i.e. the
+    // mesh did NOT detach the PC), so a real browser would correctly
+    // re-negotiate.
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      getLocalTracks: () => [],
+    });
+    m.addPeer("B");
+    const pc = instances[0]! as FakePc;
+    const negNeededBefore = pc.onnegotiationneeded;
+    expect(negNeededBefore).not.toBeNull();
+
+    m.addLocalTrackToAllPeers(makeFakeTrack("video"));
+    expect(pc.onnegotiationneeded).toBe(negNeededBefore);
+
+    // Now simulate the browser firing the event after addTrack; the
+    // existing handler should produce a fresh offer via signaling.
+    pc.triggerNegotiationNeeded();
+    await flush();
+    const offerSends = sig.sends.filter((s) => s.kind === "offer");
+    expect(offerSends).toHaveLength(1);
+    m.dispose();
   });
 });

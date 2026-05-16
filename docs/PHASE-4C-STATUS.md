@@ -63,6 +63,47 @@ smoke before merging to `master`.**
 > the tutor as a relay, an obvious feedback loop. The mixing happens
 > at recordingStream only.
 
+> **🔴 May 15 evening hotfix — late-cam acquisition no longer
+> tears down the mesh.** Pilot smoke surfaced a P0 regression:
+> tutor grants mic first → mesh builds with audio-only → tutor
+> later clicks "Allow camera" → entire mesh disposes + rebuilds
+> from scratch → remote peer's audio + video drop for 5-10s while
+> the new mesh re-negotiates → tutor ends the session before the
+> rebuild stabilizes → recording mixdown contains only tutor audio
+> (son's audioStream was disconnected from `addRemoteAudio` when
+> the mesh tore down, and the rebuild's new son-audioStream
+> arrived too late to be recorded).
+>
+> Root cause: `useLiveAV`'s mesh-build effect had
+> `[syncClient, localAudioStream, localVideoStream, localPeerId,
+> sessionId]` as its dependency array. Stream IDENTITY change (from
+> `null` to a `MediaStream`) flagged a re-run, which the React
+> contract executes as cleanup + run-fresh → full mesh teardown.
+>
+> Fix:
+> 1. Introduce `hasEverHadLocalMedia: boolean` state that latches
+>    true the first time either stream becomes non-null. The
+>    mesh-build effect depends on this boolean instead of stream
+>    identity. After the first true, it stays true; later stream
+>    changes no longer trigger effect re-runs.
+> 2. Add `peer-mesh.ts` `addLocalTrackToAllPeers(track)`. Iterates
+>    every existing peer connection and calls `pc.addTrack(track)`
+>    (idempotent — checks `pc.getSenders()` for the same track id
+>    first). Each `addTrack` fires `onnegotiationneeded`, which the
+>    existing perfect-negotiation handler turns into a fresh
+>    offer → answer cycle. Remote peers' already-flowing tracks
+>    stay live throughout; they see only a brief SDP refresh.
+> 3. New `useLiveAV` effect with deps `[localAudioStream,
+>    localVideoStream]` calls `mesh.addLocalTrackToAllPeers` for
+>    every track in the current streams. Idempotency in the mesh
+>    method means tracks attached at `addPeer` time via
+>    `getLocalTracks` are NOT re-added.
+>
+> Tests: `addLocalTrackToAllPeers` × 4 (peer-mesh.test.ts) +
+> mic-then-cam and cam-then-mic regressions (useLiveAV.dom.test.tsx)
+> assert mesh.dispose is called EXACTLY ONCE per hook lifetime
+> (at unmount) regardless of acquisition order.
+
 This sub-chat covers Phase 4 Tasks 4 (UI components), 6 (workspace +
 student mounting), and 7 (CSP / Permissions-Policy unblock — moved up
 from 4d per the orchestrator's revised partitioning since the

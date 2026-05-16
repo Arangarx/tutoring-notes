@@ -1,0 +1,38 @@
+fix(av): late-cam acquisition no longer disposes + rebuilds the mesh
+
+P0 pilot smoke regression: tutor grants mic first -> mesh builds with
+audio-only -> tutor later clicks "Allow camera" -> entire mesh disposes
++ rebuilds from scratch -> remote peer's audio + video drop for 5-10s
+while the new mesh re-negotiates. If the tutor ends the session before
+the rebuild stabilizes, the recording mixdown contains only tutor audio
+(son's audioStream was disconnected from addRemoteAudio when the mesh
+tore down, and the rebuild's new son-audioStream arrived too late to be
+recorded).
+
+Root cause: useLiveAV's mesh-build effect had
+[syncClient, localAudioStream, localVideoStream, localPeerId, sessionId]
+as its dep array. Stream identity change (null -> MediaStream) flagged
+a re-run, executed as cleanup + run-fresh -> full teardown.
+
+Fix:
+1. Introduce hasEverHadLocalMedia state - latches true the first time
+   either stream becomes non-null, never goes back to false.
+   Mesh-build effect depends on this boolean instead of stream identity.
+2. peer-mesh adds addLocalTrackToAllPeers(track). Iterates every
+   existing peer connection and pc.addTrack(track), idempotent on
+   track id via pc.getSenders(). Each addTrack fires
+   onnegotiationneeded, which the existing perfect-negotiation handler
+   turns into a fresh offer -> answer cycle. Remote peers' already-
+   flowing tracks stay live throughout; they see only a brief SDP
+   refresh.
+3. New useLiveAV effect with deps [localAudioStream, localVideoStream]
+   calls mesh.addLocalTrackToAllPeers for every track in the current
+   streams.
+
+Tests: addLocalTrackToAllPeers x 4 in peer-mesh.test.ts (fan-out,
+idempotency, disposed no-op, ended-track no-op) + mic-then-cam and
+cam-then-mic regressions in useLiveAV.dom.test.tsx that assert
+mesh.dispose is called exactly once per hook lifetime regardless of
+acquisition order. All 43 useLiveAV tests pass, all 36 peer-mesh tests
+pass, 994 of 1002 tests pass project-wide (8 failures are pre-existing
+PG-unreachable suites unrelated to this change).

@@ -136,6 +136,31 @@ export type PeerMesh = {
    */
   restart: (peerId: string) => void;
   /**
+   * Attach a NEW local track to every existing peer connection.
+   * Idempotent on the track id — adding the same track twice is a
+   * no-op on the second call (we check `pc.getSenders()` for an
+   * existing sender bound to the same track).
+   *
+   * Each `pc.addTrack(track)` fires `onnegotiationneeded` on that
+   * PC, which the existing perfect-negotiation handler in
+   * `createPeerEntry` picks up and turns into a fresh offer →
+   * answer → ICE refresh. The peer connection itself is NOT torn
+   * down; remote tracks stay flowing, only the SDP is updated to
+   * include the new media line.
+   *
+   * Used by `useLiveAV` to support the "tutor grants mic first, cam
+   * second" flow without rebuilding the mesh and dropping every
+   * remote peer's media. Before this method existed, the
+   * mesh-build effect's `[localAudioStream, localVideoStream]`
+   * dependency forced a full teardown on every stream identity
+   * change — which manifested in pilot as "clicking Allow camera
+   * mid-session drops son's audio + video for 5+ seconds while the
+   * mesh rebuilds".
+   *
+   * No-op when the mesh is disposed.
+   */
+  addLocalTrackToAllPeers: (track: MediaStreamTrack) => void;
+  /**
    * Subscribe to remote `track` events. Multiple subscribers
    * allowed. Returns unsubscriber.
    */
@@ -691,6 +716,55 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
       }
       log.log(`peer=${peerId} event=restart-manual`);
       restartInternal(entry);
+    },
+    addLocalTrackToAllPeers: (track: MediaStreamTrack) => {
+      if (disposed) {
+        log.warn(`addLocalTrackToAllPeers: ignored (disposed) track=${track.id}`);
+        return;
+      }
+      if (!track || track.readyState === "ended") {
+        log.warn(
+          `addLocalTrackToAllPeers: ignored (track ended or null) track=${track?.id ?? "<null>"}`
+        );
+        return;
+      }
+      let attachedCount = 0;
+      let skippedAlreadyPresent = 0;
+      for (const entry of peers.values()) {
+        if (entry.closed) continue;
+        // Idempotency guard: if a sender for this exact track
+        // already exists on the PC, do not re-add. The same track
+        // arriving twice (e.g. a re-fired sync-tracks effect) would
+        // otherwise produce duplicate m-line entries in the SDP and
+        // confuse the remote peer.
+        let already = false;
+        try {
+          const senders = entry.pc.getSenders?.() ?? [];
+          for (const s of senders) {
+            if (s.track && s.track.id === track.id) {
+              already = true;
+              break;
+            }
+          }
+        } catch {
+          /* defensive: some PC stubs in tests don't implement getSenders */
+        }
+        if (already) {
+          skippedAlreadyPresent++;
+          continue;
+        }
+        try {
+          entry.pc.addTrack(track);
+          attachedCount++;
+        } catch (err) {
+          log.warn(
+            `peer=${entry.remotePeerId} event=addtrack-late-fail kind=${track.kind} reason=${(err as Error)?.message ?? String(err)}`
+          );
+        }
+      }
+      log.log(
+        `event=addLocalTrack-fan kind=${track.kind} trackId=${track.id} attached=${attachedCount} skipped=${skippedAlreadyPresent}`
+      );
     },
     onRemoteTrack: (cb) => {
       trackSubs.add(cb);
