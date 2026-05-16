@@ -1026,9 +1026,24 @@ describe("createPeerMesh — 3-peer mesh fan-out", () => {
 // =================================================================
 
 describe("createPeerMesh — signal from unknown peer", () => {
-  test("signal arriving from a peer with no entry warns and drops (no auto-add in 4a)", async () => {
+  test("inbound OFFER from unknown peer triggers implicit-add + answer (May 15 hotfix #3)", async () => {
+    // Pilot race this guards against:
+    //   1. Wife joins a session; her useLiveAV builds the mesh and
+    //      subscribes to onRoomPeersChange.
+    //   2. The presence replay fires `addPeer(Andrew)` on wife's side
+    //      → her negotiationneeded fires → she sends an offer.
+    //   3. Andrew's mesh was already up, but the buffered-replay in
+    //      sync-client delivers wife's offer to Andrew's signaling
+    //      BEFORE Andrew's host has called `addPeer(wife)` (presence
+    //      replay timing differs across tabs).
+    //   4. Pre-hotfix #3: Andrew dropped the offer with
+    //      `event=signal-no-entry`. The PCs never connected.
+    //
+    // With implicit-add, the offer creates the PC, fires
+    // setRemoteDescription, and sends an answer — the connection
+    // proceeds even though the host's addPeer hasn't landed yet.
     const sig = makeFakeSignaling();
-    const { factory } = makePcFactory();
+    const { factory, instances } = makePcFactory();
     const { log, lines } = quietLog();
     const m = createPeerMesh({
       signaling: sig,
@@ -1037,14 +1052,114 @@ describe("createPeerMesh — signal from unknown peer", () => {
       log,
     });
 
-    sig.inject("Z", { type: "offer", sdp: "unsolicited" });
+    sig.inject("Z", { type: "offer", sdp: "remote-offer-from-Z" });
+    await flush();
+
+    expect(m.peers().size).toBe(1);
+    expect(m.peers().has("Z")).toBe(true);
+    expect(instances.length).toBe(1);
+    expect(instances[0]!.history.some((h) => h.type === "setRemoteDescription:offer")).toBe(true);
+    expect(instances[0]!.history.some((h) => h.type === "createAnswer")).toBe(true);
+    expect(
+      sig.sends.some(
+        (s) => s.kind === "answer" && s.targetPeerId === "Z" && s.sdp === "fake-answer-sdp"
+      )
+    ).toBe(true);
+    expect(lines.some((l) => /implicit-add.*inbound-offer/.test(l))).toBe(true);
+
+    // Host's later addPeer(Z) must be a no-op (idempotent).
+    m.addPeer("Z");
+    expect(instances.length).toBe(1);
+    expect(lines.some((l) => /add-skip.*already-present/.test(l))).toBe(true);
+
+    m.dispose();
+  });
+
+  test("inbound ANSWER from unknown peer warns and drops (NOT implicit-added — no PC ever sent an offer)", async () => {
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const { log, lines } = quietLog();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      log,
+    });
+
+    sig.inject("Z", { type: "answer", sdp: "spurious-answer" });
     await flush();
 
     expect(m.peers().size).toBe(0);
+    expect(instances.length).toBe(0);
     expect(sig.sends).toEqual([]);
-    expect(
-      lines.some((l) => /signal-no-entry|Z/.test(l))
-    ).toBe(true);
+    expect(lines.some((l) => /signal-no-entry.*type=answer/.test(l))).toBe(true);
+    m.dispose();
+  });
+
+  test("inbound ICE from unknown peer warns and drops (NOT implicit-added — no remote description yet)", async () => {
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const { log, lines } = quietLog();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      log,
+    });
+
+    sig.inject("Z", {
+      type: "ice",
+      candidate: { candidate: "candidate:1 1 udp 1 1.2.3.4 5 typ host", sdpMid: "0", sdpMLineIndex: 0 },
+    });
+    await flush();
+
+    expect(m.peers().size).toBe(0);
+    expect(instances.length).toBe(0);
+    expect(lines.some((l) => /signal-no-entry.*type=ice/.test(l))).toBe(true);
+    m.dispose();
+  });
+
+  test("inbound LEAVE from unknown peer warns and drops (no-op — nothing to clean up)", async () => {
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const { log, lines } = quietLog();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      log,
+    });
+
+    sig.inject("Z", { type: "leave" });
+    await flush();
+
+    expect(m.peers().size).toBe(0);
+    expect(instances.length).toBe(0);
+    expect(lines.some((l) => /signal-no-entry.*type=leave/.test(l))).toBe(true);
+    m.dispose();
+  });
+
+  test("implicit-add ignores a self-targeted offer (defense-in-depth)", async () => {
+    // signaling.ts already filters self-echoes, but if a future
+    // relay/test bypass delivered a self-offer we must NOT create a
+    // self-peer entry (every other peer-mesh invariant assumes
+    // peerId !== localPeerId).
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const { log, lines } = quietLog();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+      log,
+    });
+
+    sig.inject("A", { type: "offer", sdp: "self-echo-offer" });
+    await flush();
+
+    expect(m.peers().size).toBe(0);
+    expect(instances.length).toBe(0);
+    expect(lines.some((l) => /signal-no-entry-self-offer/.test(l))).toBe(true);
     m.dispose();
   });
 

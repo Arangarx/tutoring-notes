@@ -79,11 +79,11 @@ export type PeerMeshOptions = {
    */
   iceServers?: ReadonlyArray<RTCIceServer>;
   /**
-   * Called whenever a peer's `RTCPeerConnection` is created (on
-   * `addPeer` or on first inbound offer if implicit-add is enabled
-   * in a later phase). Return the local tracks that should be
-   * `addTrack`-ed to the PC. Default returns `[]` — peer-mesh
-   * unit tests never attach real tracks.
+   * Called whenever a peer's `RTCPeerConnection` is created — on
+   * explicit `addPeer(peerId)` OR on first inbound offer for an
+   * unknown peer (implicit-add, May 15 hotfix #3). Return the local
+   * tracks that should be `addTrack`-ed to the PC. Default returns
+   * `[]` — peer-mesh unit tests never attach real tracks.
    */
   getLocalTracks?: (remotePeerId: string) => MediaStreamTrack[];
   /**
@@ -419,17 +419,62 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
 
   const handleSignal: SignalHandler = (fromPeerId, payload) => {
     if (disposed) return;
-    const entry = lifeOf(fromPeerId);
+    let entry = lifeOf(fromPeerId);
     if (!entry) {
-      // No PC for this peer yet. In Phase 4a, the host (`useLiveAV`
-      // in 4b) is responsible for calling `addPeer(fromPeerId)`
-      // before the first inbound signal lands. If we see a signal
-      // without an entry, drop it with a warning — auto-add is
-      // out of scope for 4a.
-      log.warn(
-        `peer=${fromPeerId} event=signal-no-entry type=${payload.type}`
-      );
-      return;
+      // **May 15 hotfix #3 — implicit-add on inbound offer.**
+      //
+      // The original Phase 4a design required the host (`useLiveAV`)
+      // to call `addPeer(fromPeerId)` BEFORE the first signal landed,
+      // and dropped any signal arriving before that. That worked while
+      // both peers reliably mounted their meshes in the same order,
+      // but the realistic pilot race (peer A acquires media + builds
+      // mesh before peer B; A's offer is sent over the relay; B's
+      // mesh hasn't subscribed yet so the signal is fanned to zero
+      // subscribers and dropped; B subscribes later; B's own offer
+      // never round-trips with A's because A's PC is already in
+      // have-local-offer and the missing ICE candidates never
+      // converge) reliably stranded the peer on "Connecting…" until
+      // someone hit refresh.
+      //
+      // Implicit-add closes the race from the receiver side: if an
+      // offer arrives for a peer we don't yet have an entry for, we
+      // create the entry on the spot. Perfect-negotiation handles
+      // the glare that may follow (the host's own `addPeer` call is
+      // idempotent — line 686 `event=add-skip reason=already-present`).
+      // The buffered-replay fix in `sync-client.ts` closes the OTHER
+      // half of the race: signals that arrived before ANY subscriber
+      // (mesh OR signaling) are replayed when the first subscriber
+      // attaches.
+      //
+      // ONLY `offer` triggers implicit-add. `answer` / `ice` /
+      // `leave` arriving without a prior entry are still anomalies
+      // (an answer means we sent an offer for a peer we then lost
+      // state for; an ICE candidate without a description is
+      // meaningless; a leave for a peer we never knew is a no-op).
+      // Drop those with a warning as before.
+      if (payload.type !== "offer") {
+        log.warn(
+          `peer=${fromPeerId} event=signal-no-entry type=${payload.type}`
+        );
+        return;
+      }
+      // Reject self-targeted offers as a defense-in-depth — signaling
+      // already filters but a future relay/test bypass could deliver
+      // a self-echoed offer that would create a self-peer entry.
+      if (fromPeerId === localPeerId) {
+        log.warn(`peer=${fromPeerId} event=signal-no-entry-self-offer`);
+        return;
+      }
+      log.log(`peer=${fromPeerId} event=implicit-add reason=inbound-offer`);
+      try {
+        entry = createPeerEntry(fromPeerId);
+        peers.set(fromPeerId, entry);
+      } catch (err) {
+        log.error(
+          `peer=${fromPeerId} event=implicit-add-fail reason=${(err as Error)?.message ?? String(err)}`
+        );
+        return;
+      }
     }
     void applyInboundSignal(entry, payload);
   };

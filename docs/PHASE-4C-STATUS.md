@@ -158,6 +158,43 @@ smoke before merging to `master`.**
 > (e.g. analytics, smoke harnesses), and its anchor invariants
 > are still tested.
 
+> **🔴 May 15 evening hotfix #3 — peer joining after the tutor's
+> mesh is built no longer gets stuck on "Connecting…" until a
+> refresh.** Pilot smoke (Andrew + wife on a second device) surfaced
+> the LAST refresh-required failure mode: tile shows "Connecting…"
+> indefinitely until the receiving side hits refresh. Root-caused
+> as a two-sided race: (a) `sync-client.onRemoteSignal` had no
+> replay buffer for inbound webrtc-signals, so an offer arriving
+> before the late-mounting peer's signaling layer subscribed was
+> fanned to an empty subscriber set and silently dropped; (b)
+> `peer-mesh.handleSignal` dropped any signal for an unknown peer
+> with `event=signal-no-entry`, so even after the late peer's host
+> subscribed, an offer arriving BEFORE the host's `addPeer()` call
+> was still rejected. Refresh worked because timing reset.
+>
+> Both fixes landed additively:
+> - **sync-client buffer:** new `BufferedRemoteSignal` queue (64
+>   entries / 8s TTL). Inbound signals are pushed before `fan()`
+>   so they replay to first subscriber via `queueMicrotask` —
+>   identical pattern to the existing `onRoomPeersChange` snapshot
+>   replay.
+> - **peer-mesh implicit-add:** `handleSignal` now creates the
+>   `PeerEntry` on the spot if an OFFER arrives for an unknown
+>   peer (answer/ice/leave-without-entry still drop, because they
+>   are anomalies, not race victims). The host's later `addPeer`
+>   is a no-op via the existing `event=add-skip
+>   reason=already-present` idempotency.
+>
+> Files: `src/lib/whiteboard/sync-client.ts` (buffer + replay);
+> `src/lib/av/peer-mesh.ts` (implicit-add); `src/__tests__/whiteboard/
+> sync-client.test.ts` (+6 tests covering replay ordering,
+> no-double-delivery, multi-subscriber replay, TTL eviction, 64-cap,
+> unsubscribe-before-microtask); `src/__tests__/av/peer-mesh.test.ts`
+> (4 tests rewritten — offer→implicit-add→answer, answer/ice/leave
+> drop-with-warning, self-offer defense). All 415 existing
+> AV+whiteboard+useLiveAV tests still pass; the entire sub-mesh
+> works without rebuilding when peers join in any order.
+
 This sub-chat covers Phase 4 Tasks 4 (UI components), 6 (workspace +
 student mounting), and 7 (CSP / Permissions-Policy unblock — moved up
 from 4d per the orchestrator's revised partitioning since the
