@@ -42,7 +42,7 @@ pending.** See the commit-by-commit table below.
 | 4 | Duplicate-tile-on-reload fix via stable `localPeerId` in sessionStorage | ✅ Landed |
 | 5 | Regression test for student mute-propagation (bug shipped pre-4d; BACKLOG entry now ✅) | ✅ Landed |
 | 6 | Recording-doesn't-start-before-peer-audio: FSM `participantsWithFlowingAudio` gate + `useAudioFlowConfirmation` hook | ✅ Landed |
-| 7 | Per-peer `GainNode` moderation restore: `addRemoteAudio` gain insertion + `setRemoteGain` + workspace rewire | ⏳ Pending |
+| 7 | Per-peer `GainNode` moderation restore: `addRemoteAudio` gain insertion + `setRemoteGain` + workspace rewire | ✅ Landed |
 | 8 | Playwright integration tests: webrtc-fake helper + happy-path 2-/3-peer + 4c hotfix regressions + 4d fix regressions | ⏳ Pending |
 | 9 | `docs/LIVE-AV.md` cross-cutting architecture doc + cross-link from RECORDER-LIFECYCLE.md | ⏳ Pending |
 | 10 | Finalize `docs/PHASE-4D-STATUS.md` with handoff + cross-browser smoke matrix scaffold | ⏳ Pending |
@@ -268,6 +268,68 @@ recording, which matches the FSM's intended semantics.
 Sticky latch lives in `everHadAudioFlowRef` and flips on the
 first non-empty `audioFlowingPeerIds`.
 
+### Commit 7 — Per-peer GainNode moderation restore
+
+**Files modified:** `src/lib/mic-recorder-audio.ts`,
+`src/hooks/useAudioRecorder.ts`,
+`WhiteboardWorkspaceClient.tsx`,
+`src/components/av/AVControls.tsx` (no code change — its
+`moderation` prop existed since 4c; only the workspace
+re-passes it now), `src/__tests__/mic-recorder-audio.test.ts`,
+two test-stub fixtures.
+
+Phase 4c intentionally dropped per-peer "Don't record this
+student" because the May 15 mixdown redesign (`addRemoteAudio` —
+every participant summed into the tutor's single recording
+stream) made the previous per-peer-MediaRecorder gating
+inoperative. The `mutedPeerIdsInRecording` state + handler
+stayed in scope, but the `moderation` prop was hidden from
+`AVControls`. Commit 7 wires it back in via per-stream
+`GainNode`.
+
+Graph topology now: `remoteSource → remoteGain → recordingDest`
+(was: `remoteSource → recordingDest`). Each `addRemoteAudio`
+invocation creates a fresh `GainNode` with `gain.value = 1`,
+stored on the `RemoteEntry` and indexed by stream identity in a
+new `remoteByStream` map. New method
+`setRemoteGain(stream, gainLinear)` clamps to >=0 and flips the
+gain value live — no graph rebuild, no disconnect. Replay then
+sees a clean silence during the muted window (not a gap)
+because the source stays connected; this matters because the
+existing replay UI plays a single audio file per session with
+no multi-track-sync metadata, so any "gap" would manifest as a
+hard-to-explain time-shift.
+
+`addRemoteAudio` is now idempotent — re-attaching the same
+stream returns a fresh-closure unsubscribe but does NOT create
+a second source/gain pair. The workspace's reconcile effect
+already guards against double-attach with a per-stream sub
+map, but defending at the graph level prevents future callers
+from accidentally inflating the mixdown.
+
+`useAudioRecorder` exposes
+`setRemoteRecordingGain(stream, gainLinear)` (ref-stable
+`useCallback`) which forwards to the graph's `setRemoteGain`
+when the graph is built, no-ops otherwise.
+`WhiteboardWorkspaceClient` re-passes the `moderation` prop to
+`AVControls` and runs a reconcile effect that maps
+`mutedPeerIdsInRecording` × `liveAv.participants` → gain 0/1
+per participant. The effect re-runs whenever either set
+changes OR when the audio graph rebuilds
+(`workspaceAudio.localMicStream` flips non-null again).
+
+Wire-level mute (asking the remote peer to stop transmitting)
+stays out of scope — the student's voice is still audible in
+the tutor's live A/V playback (the `<audio>` element on the
+`AVTile` is independent of the recording graph). Only the
+recording mixdown is affected. This matches the original 4c
+plan and the BACKLOG description.
+
+3 new graph tests; all 195 pre-4d recorder/graph/outbox tests
+still pass. Existing `node.connect(recordingDest)` assertions
+on the old direct-connect topology were rewritten to assert
+the new per-remote-gain hop.
+
 ---
 
 ## Public-API additions (Phase 4d)
@@ -298,6 +360,11 @@ in this branch is internal-implementation:
 - `AVTilesPanelProps.onReconnect?: (peerId) => void` and
   `AVTilesPanelProps.resolveLabel?: (participant) =>
   string|undefined` — `src/components/av/AVTilesPanel.tsx`.
+- `MicAudioGraph.setRemoteGain(stream, gainLinear)` —
+  `src/lib/mic-recorder-audio.ts`. Clamps to >=0; no-op when
+  stream is not attached.
+- `UseAudioRecorderReturn.setRemoteRecordingGain(stream,
+  gainLinear)` — `src/hooks/useAudioRecorder.ts`.
 
 ---
 

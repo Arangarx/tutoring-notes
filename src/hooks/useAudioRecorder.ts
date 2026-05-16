@@ -164,6 +164,20 @@ export type UseAudioRecorderReturn = {
    */
   addRemoteAudio: (stream: MediaStream) => () => void;
 
+  /**
+   * Live-update the per-remote-stream gain used in the recording
+   * mixdown (Phase 4d Commit 7 — per-peer moderation restore).
+   * Pass `0` to silence a participant from the recording while
+   * keeping their audio audible in live A/V playback; pass `1` to
+   * restore full volume.
+   *
+   * No-op when the stream is not currently attached via
+   * `addRemoteAudio`, OR when the audio graph is not yet built
+   * (mic not acquired). Idempotent: calling with the same gain
+   * multiple times is safe.
+   */
+  setRemoteRecordingGain: (stream: MediaStream, gainLinear: number) => void;
+
   // Mic + prefs
   devices: MediaDeviceInfo[];
   selectedDeviceId: string;
@@ -1106,6 +1120,17 @@ export function useAudioRecorder({
     return g.addRemoteAudio(stream);
   }, []);
 
+  // Phase 4d Commit 7: per-peer recording-mute via the graph's
+  // GainNode. Ref-stable for the same reason as `addRemoteAudio`.
+  const setRemoteRecordingGain = useCallback(
+    (stream: MediaStream, gainLinear: number) => {
+      const g = graphRef.current;
+      if (!g || typeof g.setRemoteGain !== "function") return;
+      g.setRemoteGain(stream, gainLinear);
+    },
+    []
+  );
+
   return {
     state: recordState,
     uploadMode,
@@ -1114,6 +1139,7 @@ export function useAudioRecorder({
     doneSegmentSeconds,
     localMicStream,
     addRemoteAudio,
+    setRemoteRecordingGain,
     devices,
     selectedDeviceId,
     gainLinear,

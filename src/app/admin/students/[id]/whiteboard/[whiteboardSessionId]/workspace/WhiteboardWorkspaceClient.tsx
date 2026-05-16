@@ -1007,6 +1007,42 @@ export function WhiteboardWorkspaceClient({
     whiteboardSessionId,
   ]);
 
+  // Phase 4d Commit 7: per-peer recording-mute reconcile. After the
+  // attach effect above ensures every participant's audioStream is
+  // wired into the graph, this effect flips each stream's GainNode
+  // to 0 (muted) or 1 (live) based on `mutedPeerIdsInRecording`.
+  // Replay sees a clean silence during the muted window (not a gap)
+  // because the source stays connected — important for the single-
+  // blob / single-row replay pipeline.
+  //
+  // Wire-level mute (asking the remote peer to stop transmitting)
+  // stays out of scope — the student's voice is still audible in
+  // the tutor's live A/V playback (the `<audio>` element on the
+  // AVTile is independent of the recording graph). Only the
+  // recording mixdown is affected.
+  const workspaceAudioSetRemoteGain = workspaceAudio.setRemoteRecordingGain;
+  useEffect(() => {
+    if (!workspaceAudioLocalMicStream) return;
+    for (const p of liveAv.participants) {
+      if (!p.audioStream) continue;
+      const muted = mutedPeerIdsInRecording.has(p.peerId);
+      try {
+        workspaceAudioSetRemoteGain(p.audioStream, muted ? 0 : 1);
+      } catch (err) {
+        console.warn(
+          `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} setRemoteRecordingGain failed peer=${p.peerId}`,
+          (err as Error)?.message ?? String(err)
+        );
+      }
+    }
+  }, [
+    liveAv.participants,
+    mutedPeerIdsInRecording,
+    workspaceAudioSetRemoteGain,
+    workspaceAudioLocalMicStream,
+    whiteboardSessionId,
+  ]);
+
   // Drop every sub on unmount as a belt-and-suspenders teardown —
   // disposing the audio graph already detaches them implicitly, but
   // calling our own unsubs first keeps the bookkeeping clean if
@@ -2107,19 +2143,19 @@ export function WhiteboardWorkspaceClient({
           toggleMic={liveAv.toggleMic}
           toggleCam={liveAv.toggleCam}
           disabled={endingBusy}
-          // moderation prop intentionally NOT passed in v1: the
-          // per-peer "Don't record this student" toggle relied on
-          // useRemoteMicRecorders gating each peer's MediaRecorder
-          // by mutedPeerIdsInRecording. That hook is no longer
-          // mounted (May 15 mixdown redesign — every participant is
-          // summed into the tutor's single recording stream), and
-          // wiring per-peer attenuation into addRemoteAudio is its
-          // own ~1hr build. Until then we hide the toggle so the UI
-          // doesn't claim to do something it doesn't. Tutor falls
-          // back to verbally asking the student to mute. See
-          // BACKLOG.md "Tutor-side per-peer audio moderation" entry.
-          // The `mutedPeerIdsInRecording` state + handler stay in
-          // scope above so re-wiring is a one-line prop add.
+          // Phase 4d Commit 7: per-peer "Don't record this student"
+          // moderation restored on top of the mixdown via per-stream
+          // GainNode in `mic-recorder-audio.ts`. The reconcile effect
+          // below flips each muted peer's gain to 0; replay sees a
+          // clean silence (not a gap) because the source stays
+          // connected. Wire-level mute (asking the remote peer to
+          // stop transmitting) remains post-v1 — only recording-
+          // mute is in play here.
+          moderation={{
+            participants: liveAv.participants,
+            mutedPeerIds: mutedPeerIdsInRecording,
+            onTogglePeer: handleToggleParticipantMod,
+          }}
         />
       </div>
       {/* Board pages — own row so it isn’t buried in the recording/toolbar cluster */}
