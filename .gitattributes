@@ -1,0 +1,2 @@
+# Large binary smoke fixtures — treat as binary for merges/diffs
+tests/fixtures/long-form-transcribe-smoke/*.webm binary
