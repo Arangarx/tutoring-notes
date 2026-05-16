@@ -24,6 +24,7 @@ import {
 } from "@/lib/whiteboard/active-time";
 import { ExcalidrawDynamic } from "@/components/whiteboard/ExcalidrawDynamic";
 import { validateExcalidrawEmbeddable } from "@/lib/whiteboard/validate-embeddable";
+import { getOrCreateLocalPeerId } from "@/lib/whiteboard/local-peer-id";
 import { useStudentWhiteboardCanvas } from "@/hooks/useStudentWhiteboardCanvas";
 import { UndoRedoButtons } from "@/components/whiteboard/UndoRedoButtons";
 import type { ExcalidrawApiLike } from "@/lib/whiteboard/insert-asset";
@@ -124,23 +125,19 @@ export function StudentWhiteboardClient({
   );
   const [connected, setConnected] = useState(false);
 
-  // Phase 4c: one stable peer id per student mount. Threaded into
+  // Phase 4c: one stable peer id per student mount. Phase 4d Commit
+  // 4: persisted in `sessionStorage[wb-peer-id:<sessionId>]` so a
+  // tab reload reuses the SAME id and the peer-mesh idempotency
+  // path absorbs the rejoin (no duplicate-tile bug). Threaded into
   // BOTH `createWhiteboardSyncClient({peerId})` and
   // `useLiveAV({localPeerId})` so the wire-envelope peerId and the
   // peer-mesh + signaling identity match. Same pattern as the tutor
   // workspace; see `WhiteboardWorkspaceClient.tsx` for the
   // architectural rationale.
-  const localPeerId = useMemo(() => {
-    if (
-      typeof globalThis.crypto !== "undefined" &&
-      typeof globalThis.crypto.randomUUID === "function"
-    ) {
-      return globalThis.crypto.randomUUID();
-    }
-    return `student-${Date.now().toString(36)}-${Math.random()
-      .toString(36)
-      .slice(2, 8)}`;
-  }, []);
+  const localPeerId = useMemo(
+    () => getOrCreateLocalPeerId(whiteboardSessionId, "student"),
+    [whiteboardSessionId]
+  );
   /**
    * Shown only on this student's own tile. Must NOT be sent on the
    * sync `presence` wire — that label is visible to the tutor and

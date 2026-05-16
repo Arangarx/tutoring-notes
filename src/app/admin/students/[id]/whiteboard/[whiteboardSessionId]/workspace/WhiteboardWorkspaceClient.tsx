@@ -80,6 +80,7 @@ import {
 import { generateSessionSnapshotPng } from "@/lib/whiteboard/snapshot-png";
 import { deriveSyncPillState } from "@/lib/whiteboard/sync-pill-presentation";
 import { resolveParticipantLabel } from "@/lib/whiteboard/participant-label";
+import { getOrCreateLocalPeerId } from "@/lib/whiteboard/local-peer-id";
 import {
   endWhiteboardSession,
   issueJoinToken,
@@ -299,10 +300,15 @@ export function WhiteboardWorkspaceClient({
   // Live-A/V peer-id minting (Phase 4c)
   // ---------------------------------------------------------------
   //
-  // ONE stable peer id per workspace mount. We thread it to BOTH
-  // `createWhiteboardSyncClient({peerId})` AND `useLiveAV({localPeerId})`
-  // so the sync-client wire envelopes carry the SAME peerId that
-  // peer-mesh + signaling use for polite/impolite role + targetPeerId
+  // ONE stable peer id per workspace mount, persisted in
+  // `sessionStorage[wb-peer-id:<sessionId>]` (Phase 4d Commit 4)
+  // so a tab reload reuses the SAME id and the peer-mesh idempotency
+  // path (`event=add-skip reason=already-present`) handles the
+  // rejoin as a normal re-establish rather than a fresh peer. We
+  // thread it to BOTH `createWhiteboardSyncClient({peerId})` AND
+  // `useLiveAV({localPeerId})` so the sync-client wire envelopes
+  // carry the SAME peerId that peer-mesh + signaling use for
+  // polite/impolite role + targetPeerId
   // demux. Resolves the open scoping question from PHASE-4B-STATUS:
   // we mint here (workspace = single source of truth) rather than
   // having sync-client expose its own minted id.
@@ -310,17 +316,10 @@ export function WhiteboardWorkspaceClient({
   // `useMemo([])` is stable across renders within the same React
   // component instance. HMR remounts produce a new id along with a
   // new sync-client; both layers agree.
-  const localPeerId = useMemo(() => {
-    if (
-      typeof globalThis.crypto !== "undefined" &&
-      typeof globalThis.crypto.randomUUID === "function"
-    ) {
-      return globalThis.crypto.randomUUID();
-    }
-    return `tutor-${Date.now().toString(36)}-${Math.random()
-      .toString(36)
-      .slice(2, 8)}`;
-  }, []);
+  const localPeerId = useMemo(
+    () => getOrCreateLocalPeerId(whiteboardSessionId, "tutor"),
+    [whiteboardSessionId]
+  );
   // Display label for the tutor's own presence frame. Server-side
   // doesn't pass the tutor's display name through props today; fall
   // back to "Tutor" so we don't block hook usage on the label being
