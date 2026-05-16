@@ -7,10 +7,12 @@
 
 export type WhiteboardBoardDocumentV1 = {
   v: 1;
-  pageList: { id: string; title: string }[];
+  pageList: { id: string; title: string; section?: string }[];
   activePageId: string;
   /** Excalidraw-serializable element arrays (JSON) per page id. */
   pages: Record<string, ReadonlyArray<unknown>>;
+  /** Optional registry for collapsible strip sections (e.g. PDF imports). */
+  sections?: Record<string, { label: string }>;
 };
 
 export function isWhiteboardBoardDocumentV1(
@@ -22,10 +24,25 @@ export function isWhiteboardBoardDocumentV1(
   if (typeof o.activePageId !== "string") return false;
   if (!Array.isArray(o.pageList)) return false;
   if (!o.pages || typeof o.pages !== "object") return false;
+  const sectionsRaw = (o as { sections?: unknown }).sections;
+  if (typeof sectionsRaw !== "undefined") {
+    if (!sectionsRaw || typeof sectionsRaw !== "object") return false;
+    for (const [, meta] of Object.entries(sectionsRaw as Record<string, unknown>)) {
+      if (!meta || typeof meta !== "object") return false;
+      const label = (meta as { label?: unknown }).label;
+      if (typeof label !== "string") return false;
+    }
+  }
   for (const p of o.pageList) {
     if (!p || typeof p !== "object") return false;
-    const row = p as { id?: unknown; title?: unknown };
+    const row = p as { id?: unknown; title?: unknown; section?: unknown };
     if (typeof row.id !== "string" || typeof row.title !== "string") return false;
+    if (
+      typeof row.section !== "undefined" &&
+      typeof row.section !== "string"
+    ) {
+      return false;
+    }
   }
   return true;
 }
