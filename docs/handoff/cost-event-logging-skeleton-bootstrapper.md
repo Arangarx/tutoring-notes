@@ -1,5 +1,7 @@
 # Cost-event logging skeleton — executor briefing (Phase 9 early action)
 
+> **This file is your complete task briefing.** If you're seeing it because Andrew pasted its contents or `@`-referenced it at the start of a fresh Composer chat, your instructions are below — start by reading the AGENTS.md + the other files in the "Read first" section, then proceed through the deliverables in order. No further confirmation needed; begin work.
+
 You are running a Phase 9 early-action build for the tutoring-notes app. Composer-class. ~2-4 hour scope. **Branch + smoke + direct merge to master per AGENTS.md merging convention** — NO PR step.
 
 ## Workspace + path discipline (read carefully)
