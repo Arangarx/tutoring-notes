@@ -20,7 +20,15 @@ Logs (prefix `wbsid=`): `pdf-inspect`, `pdf-pick`, `pdf-upload`, `pdf-page-inser
 
 ## Insert API
 
-- `insertPdfPagesAsBoardPages`: uploads sequentially, workspace **`InsertPdfBoardPagesIntegrate`** owns page-list + scene mutations + BinaryFiles registration.
+- `insertPdfPagesAsBoardPages`: uploads sequentially, accumulates rows, then calls the workspace **`InsertPdfBoardPagesIntegrate.commitPdfBatch`** **once** with section seed + all rows + first page id. The workspace `commitPdfBatch`:
+  1. Freezes the anchor page's scene into `pageDataRef` BEFORE any state mutation.
+  2. Seeds the section registry.
+  3. Writes per-page `pageDataRef` entries.
+  4. Appends all new rows to `pageListRef` + `setPageList` in one shot.
+  5. Registers all BinaryFiles via a single `api.addFiles`.
+  6. Navigates to the first PDF page (only if anchor is still active).
+  Atomic commit closes the page-switch / `setPageList` race window that smoke-1 #3/#6/#7 exploited.
+- Partial failures still call `commitPdfBatch` with the successful prefix and return a `Inserted N of M…` error message.
 - `insertPdfPagesOnCanvas` retained for unit coverage / legacy comparison.
 
 ## Page strip (`PageStrip.tsx`)
@@ -45,10 +53,47 @@ Logs (prefix `wbsid=`): `pdf-inspect`, `pdf-pick`, `pdf-upload`, `pdf-page-inser
 - `board-document-snapshot.test.ts`, `pdf-render.test.ts` (`resolvePdfPagesToRender`), `insert-asset.test.ts`, `pdf-page-selection.test.ts`.
 - Student AV mount mock updated with `sectionsRegistry`.
 
+## Smoke-1 hardening (2026-05-16)
+
+See [PHASE-PDF-SMOKE-1.md](PHASE-PDF-SMOKE-1.md) for the full smoke
+findings + triage. Blockers fixed in this pass:
+
+- **#3 / #6 / #7 page-data leakage** — atomic `commitPdfBatch` (above);
+  `selectTutorPage` + `addTutorPage` now save the leaving scene
+  unconditionally, hold the programmatic-switch guard across **two
+  animation frames** instead of `setTimeout(0)`, and the
+  `ensureNativeImageAssetUrlsForSync` async tail no longer writes back
+  to `pageDataRef[curPage]` when the active page changed since the
+  upload started.
+- **#1 picker dialog dismiss-on-text-selection** — backdrop now uses
+  `onPointerDown` + `onPointerUp`; only closes when BOTH events land
+  on the backdrop (drag-release outside an input no longer dismisses).
+- **#5 Add Page placement** — inserts right after the active page and
+  picks the smallest unused `Page N` label so adding from inside a PDF
+  section produces a sensible "Page 2", not "Page 9".
+- **#12 replay PDFs show as placeholders** — `registerImageAssets`
+  now registers BinaryFiles under `wba-${elementId}` to match the
+  `toExcalidraw` synthesis. Previously the replay used
+  `stableHashFileId(url)` which never matched the rendered Excalidraw
+  element's `fileId`, so Excalidraw couldn't find the bitmap.
+- **S1 First-N select-on-focus** — typing replaces the prefilled value
+  instead of requiring backspace.
+
+Deferred to a follow-up branch (per smoke-1 triage):
+
+- **#2** PDF page lock / pan-clamp — separate spike.
+- **#8** Vercel Blob token rate limit during 30-page imports — existing
+  retry path needs a backoff; not introduced here.
+- **#9** Replay page strip display — read-only `PageStrip` in replay
+  viewer.
+- **#11** Replay scrub liveness + 429 — pre-existing recorder issue.
+- **S3** Tutor-vs-student viewport-center insert origin — pre-existing.
+- **S4** Math button promotion + Excalidraw library button behaviour.
+
 ## Known gaps / follow-ups
 
 - Large PDFs + **mobile Safari** at picker step (memory) — manual only.
-- **Replay UI** may need explicit `PageStrip` parity if it renders page metadata separately from checkpoint docs (verify on Preview smoke).
+- **Replay page strip** still not rendered (#9, deferred above).
 
 ## Explicitly deferred (bootstrapper)
 
