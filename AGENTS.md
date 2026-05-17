@@ -65,6 +65,7 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   font CDN) requires updating `src/middleware.ts` and documenting it in
   the feature's STATUS doc.
 - **This repo (`tutoring-notes`) — feature branches: commit + push by default.** After substantive work on a named branch here, create a descriptive commit and push (`origin`; retry transient network failures) unless Andrew says to hold off. (Scope is this app only, not every workspace.)
+- **Executor bootstrappers live in `docs/handoff/`** — when the orchestrator drafts a briefing for a fresh executor chat, write it as `docs/handoff/<scope>-bootstrapper.md` rather than `~/.cursor/plans/`. Two reasons: (a) Cursor's chat UI only resolves workspace-relative file paths so in-workspace bootstrappers are clickable, (b) committed bootstrappers create an audit trail pairing "what we asked for" with "what shipped." See `docs/handoff/README.md` for the lifecycle.
 
 ## When picking up work mid-feature
 
