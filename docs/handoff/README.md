@@ -20,6 +20,21 @@ smoke checklist, wrap-up + merge instructions, and stop conditions.
 - **Pattern reuse** — a new bootstrapper for similar work can be
   drafted by adapting a prior one rather than starting from scratch.
 
+## File contents convention — pure executor briefing, no orchestrator header
+
+Bootstrappers in this folder are **pure executor briefings from line 1**.
+No orchestrator-facing wrapper (no "copy below the rule line" notes, no
+"don't include this header" instructions). Andrew copies the whole file
+(`Ctrl+A`, `Ctrl+C`) and pastes into a fresh Composer chat — sub-selecting
+ranges every time is wasted overhead.
+
+The file's `# Title` H1 is allowed and useful — the executor reads it
+as "the title of the work I'm doing." Keep it descriptive and
+self-explanatory (e.g. `# Cost-event logging skeleton — executor
+briefing`). Anything else orchestrator-only (handoff notes, internal
+reasoning) belongs in the chat that drafts the bootstrapper or in the
+master plan, not in the bootstrapper file itself.
+
 ## Naming convention
 
 `<scope>-bootstrapper.md` in kebab-case. Examples:

@@ -1,8 +1,4 @@
-# Cost-event logging skeleton — Executor bootstrapper (Phase 9 early action)
-
-Copy everything below the rule line into a fresh Composer chat. Do NOT include this header.
-
----
+# Cost-event logging skeleton — executor briefing (Phase 9 early action)
 
 You are running a Phase 9 early-action build for the tutoring-notes app. Composer-class. ~2-4 hour scope. **Branch + smoke + direct merge to master per AGENTS.md merging convention** — NO PR step.
 
