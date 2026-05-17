@@ -86,6 +86,11 @@ export function PdfImageUploadButton({
   const [customRaw, setCustomRaw] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cancellationRef = useRef<{ aborted: boolean }>({ aborted: false });
+  // smoke-1 #1: highlighting text in the custom-range field and releasing
+  // the mouse outside the input fires `onClick` on the backdrop, dismissing
+  // the dialog. Track pointer-down vs up; only close when BOTH occur on
+  // the backdrop (real outside-click), not a drag that ended outside.
+  const backdropPointerDownTargetRef = useRef<EventTarget | null>(null);
 
   const showIOSWarning = isLikelyIOSSafari();
 
@@ -293,8 +298,19 @@ export function PdfImageUploadButton({
               justifyContent: "center",
               zIndex: 1000,
             }}
-            onClick={(e) => {
-              if (e.target === e.currentTarget) close();
+            onPointerDown={(e) => {
+              backdropPointerDownTargetRef.current = e.target;
+            }}
+            onPointerUp={(e) => {
+              const downOnBackdrop =
+                backdropPointerDownTargetRef.current === e.currentTarget;
+              backdropPointerDownTargetRef.current = null;
+              // Both press AND release must land on the backdrop —
+              // selection drags starting inside the card no longer
+              // dismiss the dialog. (smoke-1 #1)
+              if (downOnBackdrop && e.target === e.currentTarget) {
+                close();
+              }
             }}
           >
             <div
@@ -557,6 +573,9 @@ function PdfPickerPanel(props: {
               )
             )
           }
+          // smoke-1 S1: select-on-focus so tutors can just type the new
+          // value rather than backspacing through the prefilled default.
+          onFocus={(e) => e.currentTarget.select()}
           style={{ width: 72 }}
         />
         <span className="muted">pages</span>
