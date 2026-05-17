@@ -64,6 +64,7 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
 - **CSP is tight.** Adding a new external origin (sync server, embed,
   font CDN) requires updating `src/middleware.ts` and documenting it in
   the feature's STATUS doc.
+- **This repo (`tutoring-notes`) — feature branches: commit + push by default.** After substantive work on a named branch here, create a descriptive commit and push (`origin`; retry transient network failures) unless Andrew says to hold off. (Scope is this app only, not every workspace.)
 
 ## When picking up work mid-feature
 

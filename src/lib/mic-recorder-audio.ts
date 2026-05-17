@@ -4,6 +4,11 @@
  * (e.g. tests with a stub MediaStream).
  */
 
+export type CreateMicAudioGraphOptions = {
+  /** Same id as live-A/V `avx=` for correlating logs (`whiteboardSessionId`). */
+  sessionId?: string;
+};
+
 export type MicAudioGraph = {
   /**
    * Stream to pass to MediaRecorder (processed: source → gain → recordingDest).
@@ -91,6 +96,12 @@ export type MicAudioGraph = {
    * replay pipeline which has no multi-track-sync metadata.
    */
   setRemoteGain: (stream: MediaStream, gainLinear: number) => void;
+  /**
+   * Swap the tutor mic's {@link MediaStreamAudioSourceNode} to feed from a
+   * new `getUserMedia` stream without recreating recording/publish
+   * destinations (MediaRecorder continues on the same mixed graph).
+   */
+  swapLocalMicSource: (newMicStream: MediaStream) => void;
 };
 
 /**
@@ -99,13 +110,16 @@ export type MicAudioGraph = {
  */
 export async function createMicAudioGraph(
   micStream: MediaStream,
-  gainLinear: number
+  gainLinear: number,
+  options?: CreateMicAudioGraphOptions
 ): Promise<MicAudioGraph | null> {
+  const sid = options?.sessionId ?? "?";
   try {
     const audioContext = new AudioContext();
     await audioContext.resume();
 
-    const source = audioContext.createMediaStreamSource(micStream);
+    let inboundMicStream = micStream;
+    let mediaStreamSource = audioContext.createMediaStreamSource(micStream);
     const gainNode = audioContext.createGain();
     gainNode.gain.value = gainLinear;
 
@@ -117,7 +131,7 @@ export async function createMicAudioGraph(
 
     const data = new Float32Array(analyser.fftSize);
 
-    source.connect(gainNode);
+    mediaStreamSource.connect(gainNode);
     gainNode.connect(recordingDest);
     gainNode.connect(publishDest);
     gainNode.connect(analyser);
@@ -161,7 +175,7 @@ export async function createMicAudioGraph(
         remoteEntries.clear();
         remoteByStream.clear();
         try {
-          micStream.getTracks().forEach((t) => t.stop());
+          inboundMicStream.getTracks().forEach((t) => t.stop());
         } catch {
           /* ignore */
         }
@@ -254,6 +268,42 @@ export async function createMicAudioGraph(
         } catch {
           // AudioContext closed under us mid-flight. The detach
           // path will clean the entry; nothing to do here.
+        }
+      },
+      swapLocalMicSource: (newMicStream: MediaStream) => {
+        if (disposed) return;
+        try {
+          mediaStreamSource.disconnect();
+        } catch {
+          /* ignore */
+        }
+        let newSource: MediaStreamAudioSourceNode;
+        try {
+          newSource = audioContext.createMediaStreamSource(newMicStream);
+        } catch (err) {
+          console.warn(
+            `[mic-recorder-audio] avx=${sid} event=swap-local-source reason=create-source-failed`,
+            (err as Error)?.message ?? String(err)
+          );
+          return;
+        }
+        try {
+          newSource.connect(gainNode);
+          mediaStreamSource = newSource;
+          inboundMicStream = newMicStream;
+          console.log(
+            `[mic-recorder-audio] avx=${sid} event=swap-local-source`
+          );
+        } catch (err) {
+          console.warn(
+            `[mic-recorder-audio] avx=${sid} event=swap-local-source reason=connect-failed`,
+            (err as Error)?.message ?? String(err)
+          );
+          try {
+            newSource.disconnect();
+          } catch {
+            /* ignore */
+          }
         }
       },
     };

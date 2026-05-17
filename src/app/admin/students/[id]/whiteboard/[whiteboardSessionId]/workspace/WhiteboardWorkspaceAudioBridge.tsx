@@ -76,6 +76,11 @@ type Props = {
   recordingActive: boolean;
   /** Disables standalone Start (etc.) — e.g. until the workspace toolbar arms recording. */
   panelDisabled?: boolean;
+  /**
+   * Tutor workspace: forwards mic picker to `useLiveAV.setMicDevice` for
+   * WebRTC `replaceTrack` + recorder graph swap.
+   */
+  onMicDeviceChange?: (deviceId: string) => void | Promise<void>;
 };
 
 export type WhiteboardWorkspaceAudioBridgeHandle = {
@@ -108,6 +113,7 @@ export const WhiteboardWorkspaceAudioBridge = forwardRef<
     userWantsRecording,
     recordingActive,
     panelDisabled,
+    onMicDeviceChange,
   },
   ref
 ) {
@@ -201,7 +207,11 @@ export const WhiteboardWorkspaceAudioBridge = forwardRef<
   );
 
   return (
-    <RecordingControlPanel recorder={audio} disabled={panelDisabled} />
+    <RecordingControlPanel
+      recorder={audio}
+      disabled={panelDisabled}
+      onMicDeviceChange={onMicDeviceChange}
+    />
   );
 });
 

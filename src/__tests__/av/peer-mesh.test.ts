@@ -49,7 +49,7 @@ import type { WhiteboardWireSignalPayload } from "@/lib/whiteboard/sync-client";
 // Fake RTCPeerConnection — just enough surface for peer-mesh.ts
 // -----------------------------------------------------------------
 
-type FakePcSend = { targetPeerId?: string; type: string };
+type FakePcSend = { targetPeerId?: string; type: string; [k: string]: unknown };
 
 /**
  * Minimal RTCPeerConnection double. Tests drive it via the `_trigger*`
@@ -132,7 +132,16 @@ class FakePc {
   addTrack(track: MediaStreamTrack, ..._streams: MediaStream[]): RTCRtpSender {
     this.history.push({ type: "addTrack" });
     this.addedTracks.push(track);
-    const sender = { track } as unknown as RTCRtpSender;
+    const trackHolder: { current: MediaStreamTrack | null } = { current: track };
+    const sender = {
+      get track(): MediaStreamTrack | null {
+        return trackHolder.current;
+      },
+      replaceTrack: async (next: MediaStreamTrack | null) => {
+        this.history.push({ type: "replaceTrack" });
+        trackHolder.current = next;
+      },
+    } as unknown as RTCRtpSender;
     this._senders.push(sender);
     return sender;
   }
@@ -277,6 +286,7 @@ function makeFakeTrack(kind: "audio" | "video" = "audio"): MediaStreamTrack {
   return {
     kind,
     id: `${kind}-${Math.random().toString(36).slice(2, 8)}`,
+    readyState: "live",
   } as unknown as MediaStreamTrack;
 }
 
@@ -1409,6 +1419,70 @@ describe("createPeerMesh — addLocalTrackToAllPeers", () => {
     await flush();
     const offerSends = sig.sends.filter((s) => s.kind === "offer");
     expect(offerSends).toHaveLength(1);
+    m.dispose();
+  });
+});
+
+// =================================================================
+// replaceLocalTrackOnAllPeers
+// =================================================================
+
+describe("createPeerMesh — replaceLocalTrackOnAllPeers", () => {
+  test("calls replaceTrack on each peer's sender for the matching kind", async () => {
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "host",
+      _pcFactory: factory,
+      getLocalTracks: () => [],
+    });
+    const a1 = makeFakeTrack("audio");
+    const a2 = makeFakeTrack("audio");
+    m.addPeer("B");
+    m.addPeer("C");
+    m.addLocalTrackToAllPeers(a1);
+    m.replaceLocalTrackOnAllPeers("audio", a2);
+    expect(instances).toHaveLength(2);
+    for (const pc of instances) {
+      const fake = pc as FakePc;
+      const audioSender = fake.getSenders().find((s) => s.track?.kind === "audio");
+      expect(audioSender?.track?.id).toBe(a2.id);
+      expect(
+        fake.history.filter((h) => h.type === "replaceTrack")
+      ).toHaveLength(1);
+    }
+    m.dispose();
+  });
+
+  test("no-op when there are no peers", () => {
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "host",
+      _pcFactory: factory,
+      getLocalTracks: () => [],
+    });
+    m.replaceLocalTrackOnAllPeers("audio", makeFakeTrack("audio"));
+    expect(instances).toHaveLength(0);
+    m.dispose();
+  });
+
+  test("no replaceTrack when no sender matches the kind (defensive)", async () => {
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "host",
+      _pcFactory: factory,
+      getLocalTracks: () => [],
+    });
+    m.addPeer("B");
+    m.addLocalTrackToAllPeers(makeFakeTrack("video"));
+    m.replaceLocalTrackOnAllPeers("audio", makeFakeTrack("audio"));
+    const pc = instances[0]! as FakePc;
+    expect(pc.history.some((h) => h.type === "replaceTrack")).toBe(false);
     m.dispose();
   });
 });

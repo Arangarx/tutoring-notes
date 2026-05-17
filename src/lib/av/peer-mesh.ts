@@ -161,6 +161,19 @@ export type PeerMesh = {
    */
   addLocalTrackToAllPeers: (track: MediaStreamTrack) => void;
   /**
+   * Swap the locally captured track of a given kind on every existing
+   * peer connection via {@link RTCRtpSender.replaceTrack}. No SDP
+   * renegotiation — the RTP sender keeps the same m-line.
+   *
+   * Idempotent / defensive: no-op when disposed, when there are no
+   * peers, when `newTrack` is ended, or when no sender for `kind`
+   * exists on a given PC (e.g. audio not yet published).
+   */
+  replaceLocalTrackOnAllPeers: (
+    kind: "audio" | "video",
+    newTrack: MediaStreamTrack
+  ) => void;
+  /**
    * Subscribe to remote `track` events. Multiple subscribers
    * allowed. Returns unsubscriber.
    */
@@ -810,6 +823,58 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
       log.log(
         `event=addLocalTrack-fan kind=${track.kind} trackId=${track.id} attached=${attachedCount} skipped=${skippedAlreadyPresent}`
       );
+    },
+    replaceLocalTrackOnAllPeers: (
+      kind: "audio" | "video",
+      newTrack: MediaStreamTrack
+    ) => {
+      if (disposed) {
+        log.warn(
+          `replaceLocalTrackOnAllPeers: ignored (disposed) kind=${kind}`
+        );
+        return;
+      }
+      if (!newTrack || newTrack.readyState === "ended") {
+        log.warn(
+          `replaceLocalTrackOnAllPeers: ignored (bad track) kind=${kind} id=${newTrack?.id ?? "<null>"}`
+        );
+        return;
+      }
+      if (newTrack.kind !== kind) {
+        log.warn(
+          `replaceLocalTrackOnAllPeers: kind mismatch expected=${kind} actual=${newTrack.kind}`
+        );
+        return;
+      }
+      let replaceCount = 0;
+      let skippedNoSender = 0;
+      for (const entry of peers.values()) {
+        if (entry.closed) continue;
+        let replacedOnThisPeer = false;
+        try {
+          const senders = entry.pc.getSenders?.() ?? [];
+          for (const sender of senders) {
+            if (sender.track?.kind !== kind) continue;
+            log.log(
+              `peer=${entry.remotePeerId} event=replace-track kind=${kind} trackId=${newTrack.id}`
+            );
+            void sender.replaceTrack(newTrack);
+            replaceCount += 1;
+            replacedOnThisPeer = true;
+            break;
+          }
+          if (!replacedOnThisPeer) skippedNoSender += 1;
+        } catch (err) {
+          log.warn(
+            `peer=${entry.remotePeerId} event=replace-track-fail kind=${kind} reason=${(err as Error)?.message ?? String(err)}`
+          );
+        }
+      }
+      if (replaceCount > 0) {
+        log.log(
+          `event=replaceLocalTrack-fan kind=${kind} replaced=${replaceCount} peersWithNoSender=${skippedNoSender}`
+        );
+      }
     },
     onRemoteTrack: (cb) => {
       trackSubs.add(cb);

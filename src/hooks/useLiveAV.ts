@@ -53,6 +53,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
+  loadStoredVideoDeviceId,
+  loadStoredVideoGroupId,
+  saveStoredVideoDeviceId,
+  saveStoredVideoGroupId,
+} from "@/lib/recording/storage";
+
+import {
   createPeerMesh,
   type PeerMesh,
   type PeerMeshOptions,
@@ -202,6 +209,12 @@ export type UseLiveAVOptions = {
    * to `true`.
    */
   videoConstraints?: MediaTrackConstraints | boolean;
+  /**
+   * Tutor workspace: `workspaceAudio.swapMicDevice` so hardware mic swaps
+   * flow through the recording Web Audio graph; {@link setMicDevice} then
+   * refreshes WebRTC via {@link PeerMesh.replaceLocalTrackOnAllPeers}.
+   */
+  swapMicDevice?: (deviceId: string) => Promise<void>;
   /** Test-only override of `navigator.mediaDevices.getUserMedia`. */
   _getUserMedia?: (
     constraints: MediaStreamConstraints
@@ -325,6 +338,36 @@ export type UseLiveAVReturn = {
    * both retries (or the relevant subset) settle.
    */
   retryAcquire: () => Promise<void>;
+  /**
+   * Video inputs (labels populate after camera permission). Updates on
+   * successful `requestCam()` and on `devicechange`.
+   */
+  videoDevices: ReadonlyArray<MediaDeviceInfo>;
+  /** Device id from the active local video track; null before camera grant. */
+  selectedVideoDeviceId: string | null;
+  /**
+   * Index into {@link videoDevices} for the camera picker UI. Enumeration order
+   * can change on hotplug; pairing with slots fixes OEMs that duplicate `deviceId`.
+   */
+  pickedVideoCameraSlot: number;
+  /**
+   * Switch camera using an enumerate slot (preferred). Matches the Motorola /
+   * multi-lens duplicate-`deviceId` case reliably when combined with {@link videoDevices}.
+   */
+  setVideoCameraBySlot: (
+    slotIndex: number,
+    opts?: { force?: boolean }
+  ) => Promise<void>;
+  /**
+   * Switch the local camera to a specific device. Stops the prior video
+   * track, updates peers via `replaceTrack`, and persists the choice.
+   */
+  setVideoDevice: (deviceId: string) => Promise<void>;
+  /**
+   * Switch microphone hardware. With `swapMicDevice` from the workspace,
+   * delegates to the recorder; otherwise uses a self-acquired stream swap.
+   */
+  setMicDevice: (deviceId: string) => Promise<void>;
 };
 
 // -----------------------------------------------------------------
@@ -390,6 +433,217 @@ function classifyMediaError(
   };
 }
 
+function reconcilePickerSlotAfterEnumerate(
+  preferredDeviceId: string | null,
+  list: MediaDeviceInfo[],
+  prevSlot: number,
+  pinnedGroupId: string
+): number {
+  if (list.length === 0) return 0;
+  const max = list.length - 1;
+  const clamped = Math.max(0, Math.min(prevSlot, max));
+  if (!preferredDeviceId) return clamped;
+
+  const atPrev = list[clamped];
+  if (
+    atPrev?.deviceId === preferredDeviceId &&
+    (!pinnedGroupId ||
+      !atPrev.groupId ||
+      atPrev.groupId === pinnedGroupId)
+  ) {
+    return clamped;
+  }
+
+  if (pinnedGroupId) {
+    const byPinned = list.findIndex(
+      (d) =>
+        d.deviceId === preferredDeviceId && d.groupId === pinnedGroupId
+    );
+    if (byPinned >= 0) return byPinned;
+  }
+
+  const idx = list.findIndex((d) => d.deviceId === preferredDeviceId);
+  if (idx >= 0) return idx;
+
+  return clamped;
+}
+
+function fingerprintVideoTrackSettings(s: MediaTrackSettings): string {
+  return `${s.deviceId ?? ""}|${s.groupId ?? ""}`;
+}
+
+function videoinputsHaveDuplicateIds(list: MediaDeviceInfo[]): boolean {
+  const ids = list.map((d) => d.deviceId);
+  if (ids.length >= 2 && ids.filter((id) => !id || id === "").length >= 2) {
+    return true;
+  }
+  const nonEmpty = ids.filter(Boolean);
+  return nonEmpty.length !== new Set(nonEmpty).size;
+}
+
+/**
+ * Rough facing hint — OEM labels vary; Motorola often omits trustworthy `groupId`.
+ */
+function facingModeGuessFromCameraLabel(
+  label: string
+): "user" | "environment" | null {
+  const l = label.toLowerCase();
+  if (
+    /\b(back|rear|environment|rück|trasera|world|telephoto|wide)\b/.test(l) ||
+    /\b\d+x\b/i.test(l)
+  ) {
+    return "environment";
+  }
+  if (/\b(front|user|face|selfie|facetime)\b/.test(l)) return "user";
+  return null;
+}
+
+function disposeStreamTracks(stream: MediaStream | null | undefined): void {
+  if (!stream) return;
+  for (const t of stream.getTracks()) {
+    try {
+      t.stop();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/**
+ * Brief pause after `track.stop()` so Qualcomm/Moto camera HAL can reopen a
+ * *different* lens; opening immediately often returns the same sensor.
+ */
+function releaseMotorolaCamDelayMs(): Promise<void> {
+  return new Promise((r) => setTimeout(r, 55));
+}
+
+/**
+ * Some Android OEMs duplicate `deviceId` or ignore bundled constraints.
+ * Retry with progressively looser/stricter pairing, and optionally require a
+ * different `MediaTrackSettings` fingerprint when switching among siblings.
+ */
+async function getUserMediaVideoForEnumerateEntry(
+  getUM: (c: MediaStreamConstraints) => Promise<MediaStream>,
+  entry: MediaDeviceInfo,
+  allVideoinputs: MediaDeviceInfo[],
+  priorFingerprint: string | null,
+  slotIndex: number
+): Promise<{ stream: MediaStream; fingerprint: string }> {
+  const dupIds = videoinputsHaveDuplicateIds(allVideoinputs);
+  const facing = facingModeGuessFromCameraLabel(entry.label ?? "");
+
+  const requireDifferent =
+    priorFingerprint !== null && allVideoinputs.length > 1;
+
+  type TryVideo = MediaTrackConstraints | boolean;
+  const attempts: TryVideo[] = [];
+
+  if (dupIds && facing) {
+    attempts.push(
+      { facingMode: { ideal: facing } },
+      { facingMode: { exact: facing } }
+    );
+  }
+
+  if (!facing && dupIds && allVideoinputs.length === 2) {
+    const primary =
+      slotIndex >= 1 ? ("environment" as const) : ("user" as const);
+    const secondary = primary === "user" ? ("environment" as const) : ("user" as const);
+    attempts.unshift(
+      { facingMode: { ideal: secondary } },
+      { facingMode: { exact: secondary } },
+      { facingMode: { ideal: primary } },
+      { facingMode: { exact: primary } }
+    );
+  }
+
+  const baseIdeal: MediaTrackConstraints = {};
+  if (entry.deviceId) baseIdeal.deviceId = { ideal: entry.deviceId };
+  if (entry.groupId) baseIdeal.groupId = { ideal: entry.groupId };
+  if (Object.keys(baseIdeal).length > 0) attempts.push(baseIdeal);
+
+  if (entry.deviceId) {
+    attempts.push({
+      deviceId: { exact: entry.deviceId },
+      ...(entry.groupId ? { groupId: { ideal: entry.groupId } } : {}),
+    });
+    attempts.push({ deviceId: { exact: entry.deviceId } });
+  }
+
+  if (entry.groupId) {
+    attempts.push({ groupId: { ideal: entry.groupId } });
+    attempts.push({ groupId: { exact: entry.groupId } });
+  }
+
+  if (!dupIds && facing) {
+    attempts.push(
+      { facingMode: { ideal: facing } },
+      { facingMode: { exact: facing } }
+    );
+  }
+
+  attempts.push(true);
+
+  let lastErr: unknown = null;
+  for (const vid of attempts) {
+    let stream: MediaStream;
+    try {
+      stream = await getUM({
+        audio: false,
+        video: vid,
+      });
+    } catch (e) {
+      lastErr = e;
+      continue;
+    }
+
+    const t = stream.getVideoTracks()[0];
+    const fp =
+      fingerprintVideoTrackSettings(t?.getSettings?.() ?? {}) || "|";
+
+    const looksUnchanged =
+      requireDifferent && priorFingerprint !== null && fp === priorFingerprint;
+
+    if (!looksUnchanged) {
+      return { stream, fingerprint: fp };
+    }
+
+    logDevSwitch(
+      `cam-pick discarded same-fingerprint fps=${priorFingerprint ?? "<none>"} attempt=${typeof vid === "boolean" ? "true" : "obj"}`
+    );
+    disposeStreamTracks(stream);
+  }
+
+  try {
+    const fallback = await getUM({ audio: false, video: true });
+    const t = fallback.getVideoTracks()[0];
+    if (!t) {
+      disposeStreamTracks(fallback);
+    } else {
+      console.warn(
+        `[useLiveAV] cam picker exhausted constraints; fingerprints may collide on this device`
+      );
+      return {
+        stream: fallback,
+        fingerprint: fingerprintVideoTrackSettings(t.getSettings?.() ?? {}),
+      };
+    }
+  } catch {
+    /* fall through */
+  }
+
+  throw lastErr instanceof Error
+    ? lastErr
+    : new DOMException(String(lastErr ?? "constraints failed"));
+}
+
+/** Dev-only breadcrumbs for Motorola-class camera swaps (no noisy prod logs). */
+function logDevSwitch(msg: string): void {
+  if (process.env.NODE_ENV !== "production") {
+    console.debug(`[useLiveAV] ${msg}`);
+  }
+}
+
 // -----------------------------------------------------------------
 // Hook
 // -----------------------------------------------------------------
@@ -402,6 +656,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     audioConstraints = true,
     videoConstraints = true,
     externalAudioStream,
+    swapMicDevice: swapMicFromRecorder,
     _getUserMedia,
     _createPeerMesh,
     _createSignaling,
@@ -448,6 +703,11 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   const [participants, setParticipants] = useState<
     ReadonlyArray<AvParticipant>
   >([]);
+  const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedVideoDeviceId, setSelectedVideoDeviceId] = useState<
+    string | null
+  >(null);
+  const [pickedVideoCameraSlot, setPickedVideoCameraSlot] = useState(0);
 
   // Refs for things consumed by ref-stable callbacks.
   const localAudioStreamRef = useRef<MediaStream | null>(null);
@@ -467,6 +727,16 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   // externalAudioStream (so we don't stop its tracks — those belong to
   // the recorder hook).
   const audioFromExternalRef = useRef<boolean>(false);
+  /** Latest enumerated cameras + picker slot — read inside async enumeration. */
+  const videoDevicesRef = useRef<MediaDeviceInfo[]>([]);
+  const selectedVideoDeviceIdRef = useRef<string | null>(null);
+  const pickedVideoCameraSlotRef = useRef(0);
+  /** Disambiguates duplicate OEM `deviceId` rows via last-known `MediaDeviceInfo.groupId`. */
+  const pinnedVideoEnumerateGroupRef = useRef("");
+
+  videoDevicesRef.current = videoDevices;
+  selectedVideoDeviceIdRef.current = selectedVideoDeviceId;
+  pickedVideoCameraSlotRef.current = pickedVideoCameraSlot;
 
   // ---------------------------------------------------------------
   // Acquisition controls (idempotent)
@@ -499,6 +769,28 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     }
     return null;
   }
+
+  const refreshVideoDevices = useCallback(async () => {
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices?.enumerateDevices
+    ) {
+      return;
+    }
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      const videoinputs = all.filter((d) => d.kind === "videoinput");
+      if (!unmountedRef.current) {
+        videoDevicesRef.current = videoinputs;
+        setVideoDevices(videoinputs);
+      }
+    } catch (err) {
+      log.warn(
+        `video enumerateDevices failed: ${(err as Error)?.message ?? String(err)}`
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- log from opts is stable for session
+  }, [log]);
 
   const requestMic = useCallback(
     async (): Promise<void> => {
@@ -573,8 +865,8 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       })();
       micInFlightRef.current = inFlight;
       return inFlight;
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- log + resolveGetUserMedia stable per session
     [audioConstraints, externalAudioStream]
   );
 
@@ -607,9 +899,31 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
       const inFlight = (async () => {
         try {
+          const storedVid = loadStoredVideoDeviceId();
+          const storedGrp = loadStoredVideoGroupId();
+          let effectiveVideo: MediaTrackConstraints | boolean = videoConstraints;
+          if (videoConstraints === true) {
+            effectiveVideo = storedVid
+              ? {
+                  deviceId: { exact: storedVid },
+                  ...(storedGrp ? { groupId: { ideal: storedGrp } } : {}),
+                }
+              : true;
+          } else if (
+            typeof videoConstraints === "object" &&
+            videoConstraints !== null &&
+            storedVid &&
+            !(videoConstraints as MediaTrackConstraints).deviceId
+          ) {
+            effectiveVideo = {
+              ...(videoConstraints as MediaTrackConstraints),
+              deviceId: { exact: storedVid },
+              ...(storedGrp ? { groupId: { ideal: storedGrp } } : {}),
+            };
+          }
           const stream = await getUM({
             audio: false,
-            video: videoConstraints,
+            video: effectiveVideo,
           });
           if (unmountedRef.current) {
             for (const t of stream.getTracks()) {
@@ -632,6 +946,21 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           log.log(
             `cam acquired tracks=${stream.getVideoTracks().length}`
           );
+          const vt = stream.getVideoTracks()[0];
+          const gst = vt?.getSettings?.();
+          const devId = gst?.deviceId;
+          if (devId) {
+            selectedVideoDeviceIdRef.current = devId;
+            setSelectedVideoDeviceId(devId);
+            saveStoredVideoDeviceId(devId);
+          }
+          if (gst?.groupId) {
+            saveStoredVideoGroupId(gst.groupId);
+            pinnedVideoEnumerateGroupRef.current = gst.groupId;
+          } else {
+            pinnedVideoEnumerateGroupRef.current = "";
+          }
+          await refreshVideoDevices();
         } catch (err) {
           if (unmountedRef.current) return;
           const classified = classifyMediaError(err, "cam");
@@ -651,9 +980,9 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       })();
       camInFlightRef.current = inFlight;
       return inFlight;
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     },
-    [videoConstraints]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- log + resolveGetUserMedia stable per session
+    [videoConstraints, refreshVideoDevices]
   );
 
   // ---------------------------------------------------------------
@@ -733,6 +1062,60 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ---------------------------------------------------------------
+  // Effect: refresh video device list when hardware changes
+  // ---------------------------------------------------------------
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    void refreshVideoDevices();
+
+    const md = navigator.mediaDevices;
+    const onDeviceChange = () => {
+      void refreshVideoDevices();
+    };
+    md?.addEventListener?.("devicechange", onDeviceChange);
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void refreshVideoDevices();
+      }
+    };
+
+    const onFocus = () => {
+      void refreshVideoDevices();
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onFocus);
+      md?.removeEventListener?.("devicechange", onDeviceChange);
+    };
+  }, [refreshVideoDevices]);
+
+  // ---------------------------------------------------------------
+  // Effect: keep camera picker slot aligned with enumerated order +
+  // `pinnedVideoEnumerateGroupRef` when OEM rows share a `deviceId`.
+  // ---------------------------------------------------------------
+  useEffect(() => {
+    if (videoDevices.length === 0) {
+      setPickedVideoCameraSlot(0);
+      return;
+    }
+    setPickedVideoCameraSlot((prev) =>
+      reconcilePickerSlotAfterEnumerate(
+        selectedVideoDeviceId,
+        videoDevices,
+        prev,
+        pinnedVideoEnumerateGroupRef.current
+      )
+    );
+  }, [videoDevices, selectedVideoDeviceId]);
 
   // ---------------------------------------------------------------
   // Effect: track unmount (suppresses late state setters)
@@ -1118,9 +1501,12 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   // peer connections via `mesh.addLocalTrackToAllPeers`. The mesh
   // method is idempotent on track id (checks `pc.getSenders()`), so
   // tracks attached at `addPeer` time via `getLocalTracks` are NOT
-  // re-added. The remote peer sees one renegotiation per new track
-  // — perfect negotiation handles glare — and ALL previously-flowing
-  // tracks stay live throughout.
+  // re-added. We then call `mesh.replaceLocalTrackOnAllPeers` for
+  // each attached track so RTP senders that already held that track
+  // (same id as prior add/getLocalTracks path) still get an explicit
+  // `replaceTrack` — mirrors the mic-switch path and avoids the
+  // Chrome/WebRTC quirk where remote audio stays silent until a
+  // replace happens.
   //
   // Skipped silently when the mesh is not yet built or has been
   // disposed; the host's stream-acquisition path will eventually
@@ -1135,26 +1521,396 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     for (const t of audTracks) {
       try {
         mesh.addLocalTrackToAllPeers(t);
+        mesh.replaceLocalTrackOnAllPeers("audio", t);
       } catch (err) {
         log.warn(
-          `track-sync audio addLocalTrackToAllPeers threw: ${(err as Error)?.message ?? String(err)}`
+          `track-sync audio mesh sync threw: ${(err as Error)?.message ?? String(err)}`
         );
       }
     }
     for (const t of vidTracks) {
       try {
         mesh.addLocalTrackToAllPeers(t);
+        mesh.replaceLocalTrackOnAllPeers("video", t);
       } catch (err) {
         log.warn(
-          `track-sync video addLocalTrackToAllPeers threw: ${(err as Error)?.message ?? String(err)}`
+          `track-sync video mesh sync threw: ${(err as Error)?.message ?? String(err)}`
         );
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- log stable per session
   }, [localAudioStream, localVideoStream]);
 
   // ---------------------------------------------------------------
   // Public callbacks
   // ---------------------------------------------------------------
+
+  const setVideoCameraBySlot = useCallback(
+    async (
+      slotIndex: number,
+      opts?: { force?: boolean }
+    ): Promise<void> => {
+      const entry = videoDevicesRef.current[slotIndex];
+      if (!entry) {
+        log.warn(`event=set-video-slot ignored invalid_slot=${slotIndex}`);
+        return;
+      }
+
+      const getUM = resolveGetUserMedia();
+      if (!getUM) {
+        const noUM: AvAcquireError = {
+          type: "browser-unsupported",
+          message:
+            "Your browser does not expose `navigator.mediaDevices.getUserMedia`.",
+          raw: null,
+        };
+        if (!unmountedRef.current) setVideoError(noUM);
+        return;
+      }
+
+      const curTrack = localVideoStreamRef.current?.getVideoTracks()[0];
+      const gs = curTrack?.getSettings?.() ?? {};
+
+      const sameLens =
+        !!curTrack &&
+        gs.deviceId === entry.deviceId &&
+        (!entry.groupId ||
+          !gs.groupId ||
+          gs.groupId === entry.groupId);
+      if (
+        !opts?.force &&
+        pickedVideoCameraSlotRef.current === slotIndex &&
+        sameLens
+      ) {
+        log.log(`event=set-video-slot no-op slot=${slotIndex}`);
+        return;
+      }
+
+      startAcquiring();
+      try {
+        const siblings = videoDevicesRef.current;
+        const priorFp = curTrack
+          ? fingerprintVideoTrackSettings(gs ?? {})
+          : null;
+        const hadVideo =
+          !!localVideoStreamRef.current?.getVideoTracks().length;
+
+        if (hadVideo) {
+          disposeStreamTracks(localVideoStreamRef.current);
+          await releaseMotorolaCamDelayMs();
+        }
+
+        const { stream } = await getUserMediaVideoForEnumerateEntry(
+          getUM,
+          entry,
+          siblings,
+          priorFp,
+          slotIndex
+        );
+        const newTrack = stream.getVideoTracks()[0];
+        if (!newTrack) {
+          disposeStreamTracks(stream);
+          if (!unmountedRef.current) {
+            const empty: AvAcquireError = {
+              type: "no-device",
+              message: "No video track from the selected camera.",
+              raw: null,
+            };
+            setVideoError(empty);
+            localVideoStreamRef.current = null;
+            setLocalVideoStream(null);
+          }
+          return;
+        }
+        if (unmountedRef.current) {
+          disposeStreamTracks(stream);
+          return;
+        }
+        const ms = new MediaStream([newTrack]);
+        if (isCamMutedRef.current) newTrack.enabled = false;
+        localVideoStreamRef.current = ms;
+        setLocalVideoStream(ms);
+        setVideoError(null);
+
+        const gst = newTrack.getSettings?.();
+        const devIdPersist = gst?.deviceId ?? entry.deviceId;
+        pinnedVideoEnumerateGroupRef.current =
+          gst?.groupId ?? entry.groupId ?? "";
+        selectedVideoDeviceIdRef.current =
+          devIdPersist.length > 0 ? devIdPersist : null;
+        if (devIdPersist) {
+          setSelectedVideoDeviceId(devIdPersist);
+          saveStoredVideoDeviceId(devIdPersist);
+        }
+        if (gst?.groupId) {
+          saveStoredVideoGroupId(gst.groupId);
+        }
+
+        setPickedVideoCameraSlot(slotIndex);
+
+        const mesh = meshRef.current;
+        if (mesh && !mesh.isDisposed()) {
+          mesh.replaceLocalTrackOnAllPeers("video", newTrack);
+        }
+        await refreshVideoDevices();
+        log.log(
+          `event=set-video-slot slot=${slotIndex} deviceId=${devIdPersist.length > 0 ? devIdPersist : "<empty>"}`
+        );
+      } catch (err) {
+        if (!unmountedRef.current) {
+          localVideoStreamRef.current = null;
+          setLocalVideoStream(null);
+        }
+        if (unmountedRef.current) return;
+        const classified = classifyMediaError(err, "cam");
+        log.warn(
+          `setVideoCameraBySlot failed type=${classified.type} err=${
+            (err as Error)?.message ?? String(err)
+          }`
+        );
+        setVideoError(classified);
+      } finally {
+        endAcquiring();
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- log stable per session
+    [log, refreshVideoDevices]
+  );
+
+  const setVideoDevice = useCallback(
+    async (deviceId: string): Promise<void> => {
+      const slots = videoDevicesRef.current;
+      const slotIdx = slots.findIndex((d) => d.deviceId === deviceId);
+      if (slotIdx >= 0) {
+        return setVideoCameraBySlot(slotIdx, { force: true });
+      }
+
+      pinnedVideoEnumerateGroupRef.current = "";
+      const cur =
+        localVideoStreamRef.current?.getVideoTracks()[0]?.getSettings()
+          ?.deviceId;
+      if (cur === deviceId) {
+        log.log(`event=set-video-device no-op deviceId=${deviceId}`);
+        return;
+      }
+
+      const getUM = resolveGetUserMedia();
+      if (!getUM) {
+        const noUM: AvAcquireError = {
+          type: "browser-unsupported",
+          message:
+            "Your browser does not expose `navigator.mediaDevices.getUserMedia`.",
+          raw: null,
+        };
+        if (!unmountedRef.current) setVideoError(noUM);
+        return;
+      }
+
+      startAcquiring();
+      try {
+        const pseudoEntry = {
+          deviceId,
+          label: "",
+          groupId: "",
+          kind: "videoinput" as const,
+          toJSON() {
+            return this;
+          },
+        } as MediaDeviceInfo;
+
+        const siblings = videoDevicesRef.current;
+        const curVTrack =
+          localVideoStreamRef.current?.getVideoTracks()[0];
+        const priorGs = curVTrack?.getSettings?.() ?? {};
+        const priorFp = curVTrack
+          ? fingerprintVideoTrackSettings(priorGs)
+          : null;
+        const hintSlotRaw = siblings.findIndex(
+          (d) => d.deviceId === deviceId
+        );
+        const hintSlot =
+          hintSlotRaw >= 0 ? hintSlotRaw : 0;
+
+        const hadVideo =
+          !!localVideoStreamRef.current?.getVideoTracks().length;
+
+        if (hadVideo) {
+          disposeStreamTracks(localVideoStreamRef.current);
+          await releaseMotorolaCamDelayMs();
+        }
+
+        const { stream } = await getUserMediaVideoForEnumerateEntry(
+          getUM,
+          pseudoEntry,
+          siblings,
+          priorFp,
+          hintSlot
+        );
+        const newTrack = stream.getVideoTracks()[0];
+        if (!newTrack) {
+          disposeStreamTracks(stream);
+          if (!unmountedRef.current) {
+            const empty: AvAcquireError = {
+              type: "no-device",
+              message: "No video track from the selected camera.",
+              raw: null,
+            };
+            setVideoError(empty);
+            localVideoStreamRef.current = null;
+            setLocalVideoStream(null);
+          }
+          return;
+        }
+        if (unmountedRef.current) {
+          disposeStreamTracks(stream);
+          return;
+        }
+        const ms = new MediaStream([newTrack]);
+        if (isCamMutedRef.current) newTrack.enabled = false;
+        localVideoStreamRef.current = ms;
+        setLocalVideoStream(ms);
+        setVideoError(null);
+
+        const gst = newTrack.getSettings?.();
+        const devPersist = gst?.deviceId ?? deviceId;
+        pinnedVideoEnumerateGroupRef.current = gst?.groupId ?? "";
+        selectedVideoDeviceIdRef.current = devPersist.length > 0 ? devPersist : null;
+        if (devPersist) {
+          setSelectedVideoDeviceId(devPersist);
+          saveStoredVideoDeviceId(devPersist);
+        }
+        if (gst?.groupId) saveStoredVideoGroupId(gst.groupId);
+
+        const mesh = meshRef.current;
+        if (mesh && !mesh.isDisposed()) {
+          mesh.replaceLocalTrackOnAllPeers("video", newTrack);
+        }
+        await refreshVideoDevices();
+        log.log(`event=set-video-device orphan deviceId=${deviceId}`);
+      } catch (err) {
+        if (!unmountedRef.current) {
+          localVideoStreamRef.current = null;
+          setLocalVideoStream(null);
+        }
+        if (unmountedRef.current) return;
+        const classified = classifyMediaError(err, "cam");
+        log.warn(
+          `setVideoDevice failed type=${classified.type} err=${
+            (err as Error)?.message ?? String(err)
+          }`
+        );
+        setVideoError(classified);
+      } finally {
+        endAcquiring();
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [log, refreshVideoDevices, setVideoCameraBySlot]
+  );
+
+  // ---------------------------------------------------------------
+  // Effect: camera unplugged — enumerator no longer lists live deviceId
+  // ---------------------------------------------------------------
+  useEffect(() => {
+    const id = selectedVideoDeviceId;
+    if (!localVideoStream || !id || videoDevices.length === 0) return;
+    if (videoDevices.some((d) => d.deviceId === id)) return;
+    log.warn(
+      `camera device id missing after enumerate (likely unplugged) id=${id}`
+    );
+    void setVideoCameraBySlot(0, { force: true });
+  }, [
+    videoDevices,
+    selectedVideoDeviceId,
+    localVideoStream,
+    setVideoCameraBySlot,
+  ]);
+
+  const setMicDevice = useCallback(
+    async (deviceId: string): Promise<void> => {
+      if (swapMicFromRecorder) {
+        if (!externalAudioStream) {
+          log.warn(
+            "setMicDevice: swapMicDevice set without externalAudioStream — ignoring"
+          );
+          return;
+        }
+        try {
+          await swapMicFromRecorder(deviceId);
+        } catch {
+          return;
+        }
+        const mesh = meshRef.current;
+        const t = localAudioStreamRef.current?.getAudioTracks()[0];
+        if (mesh && t && !mesh.isDisposed()) {
+          try {
+            mesh.replaceLocalTrackOnAllPeers("audio", t);
+          } catch (err) {
+            log.warn(
+              `setMicDevice replaceTrack threw: ${
+                (err as Error)?.message ?? String(err)
+              }`
+            );
+          }
+        }
+        log.log(`event=set-mic-device deviceId=${deviceId} path=recorder`);
+        return;
+      }
+      if (externalAudioStream) {
+        log.warn(
+          "setMicDevice: external audio present — pass swapMicDevice from workspace"
+        );
+        return;
+      }
+      const cur =
+        localAudioStreamRef.current?.getAudioTracks()[0]?.getSettings()
+          ?.deviceId;
+      if (cur === deviceId) {
+        log.log(`event=set-mic-device no-op deviceId=${deviceId}`);
+        return;
+      }
+      const getUM = resolveGetUserMedia();
+      if (!getUM) return;
+      startAcquiring();
+      if (!unmountedRef.current) setError(null);
+      try {
+        const stream = await getUM({
+          audio: { deviceId: { exact: deviceId } },
+          video: false,
+        });
+        if (unmountedRef.current) {
+          for (const tt of stream.getTracks()) tt.stop();
+          return;
+        }
+        const newTrack = stream.getAudioTracks()[0];
+        if (!newTrack) {
+          for (const tt of stream.getTracks()) tt.stop();
+          return;
+        }
+        const prev = localAudioStreamRef.current;
+        if (prev) {
+          for (const tt of prev.getTracks()) tt.stop();
+        }
+        if (isMicMutedRef.current) {
+          for (const tt of stream.getAudioTracks()) tt.enabled = false;
+        }
+        localAudioStreamRef.current = stream;
+        setLocalAudioStream(stream);
+        const mesh = meshRef.current;
+        if (mesh && !mesh.isDisposed()) {
+          mesh.replaceLocalTrackOnAllPeers("audio", newTrack);
+        }
+        log.log(`event=set-mic-device deviceId=${deviceId}`);
+      } catch (err) {
+        if (unmountedRef.current) return;
+        setError(classifyMediaError(err, "mic"));
+      } finally {
+        endAcquiring();
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- log + integration refs stable per session
+    [externalAudioStream, swapMicFromRecorder, log]
+  );
 
   const toggleMic = useCallback(() => {
     const stream = localAudioStreamRef.current;
@@ -1252,5 +2008,11 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     videoError,
     reconnectPeer,
     retryAcquire,
+    videoDevices,
+    selectedVideoDeviceId,
+    pickedVideoCameraSlot,
+    setVideoCameraBySlot,
+    setVideoDevice,
+    setMicDevice,
   };
 }

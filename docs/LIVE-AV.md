@@ -53,7 +53,7 @@ See companion docs:
 
 | Concern | File | Notes |
 |---|---|---|
-| **Peer mesh** (Pillar 6) | `src/lib/av/peer-mesh.ts` | Wraps N `RTCPeerConnection`s; perfect-negotiation glare resolution; ICE restart on `failed`; `addLocalTrackToAllPeers` for mid-session cam/mic add. |
+| **Peer mesh** (Pillar 6) | `src/lib/av/peer-mesh.ts` | Wraps N `RTCPeerConnection`s; perfect-negotiation glare resolution; ICE restart on `failed`; `addLocalTrackToAllPeers` for mid-session cam/mic add; `replaceLocalTrackOnAllPeers` for device hotswap (`replaceTrack`). |
 | **Signaling envelope** | `src/lib/av/signaling.ts` | `createSignaling(syncClient)` — typed `offer`/`answer`/`ice`/`leave` envelopes. Subscribes to `syncClient.onRemoteSignal`. |
 | **Sync client** | `src/lib/whiteboard/sync-client.ts` | E2E-encrypted transport over the sync server. Owns presence (`onRoomPeersChange`) AND signaling fan-out. Buffered replay of in-TTL signals — see 4c hotfix #3. |
 | **AV hook (host integration)** | `src/hooks/useLiveAV.ts` | Owns the mesh + signaling lifecycle; exposes `participants`, `localAudio/VideoStream`, `requestMic/Cam`, `toggleMic/Cam`, `reconnectPeer`. |
@@ -254,7 +254,16 @@ fix for a real pilot-blocking bug.
     live without disconnecting the source. Replay sees a clean
     silence during the muted window rather than a gap — the
     single-blob/single-row replay pipeline has no multi-track-
-    sync metadata to interpret a gap correctly.
+12. **Client-side device pick + `replaceLocalTrackOnAllPeers`** (live
+    device management). Tutor camera/mic selection and mid-session
+    hotswap are implemented entirely in the browser: `getUserMedia`
+    for the new hardware, `RTCRtpSender.replaceTrack` on the existing
+    peer mesh (no mesh teardown — invariant 2), `navigator.mediaDevices`
+    enumeration + `devicechange` for plug/unplug, and for the recording
+    path a `swapLocalMicSource` swap of the local
+    `MediaStreamAudioSourceNode` in `mic-recorder-audio` so MediaRecorder
+    stays on one mixdown graph. A sub-50ms audible glitch on mic swap is
+    acceptable; dropping remote peers or freezing the UI is not.
 
 ---
 

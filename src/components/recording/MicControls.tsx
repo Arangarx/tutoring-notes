@@ -39,7 +39,7 @@ export type MicControlsProps = {
   onGainChange: (gain: number) => void;
   /** True when mic is hot (graph running) — controls are enabled, meter is live. */
   isLive: boolean;
-  /** True during recording/paused — picker is locked but slider stays live. */
+  /** True during in-flight segment upload — picker disabled to protect payload integrity. */
   lockDevice: boolean;
   /** Optional message shown when mic isn't yet acquired. */
   hint?: string;
