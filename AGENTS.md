@@ -51,7 +51,8 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   Currently in use: `rid` (audio recorder), `wbsid` (whiteboard session),
   `obx` (upload-outbox row), `snp` (snapshot generation), `pvw`
   (workspace preview-before-Start), `avx` (live-A/V session — Phase 4a;
-  per-peer events also carry `peer=<peerId>`). See
+  per-peer events also carry `peer=<peerId>`), `cev` (cost-event row —
+  OpenAI usage observability). See
   [docs/RECORDER-LIFECYCLE.md](docs/RECORDER-LIFECYCLE.md) for the
   registry.
 - **Migrations are additive.** Production runs on Neon; never drop or
