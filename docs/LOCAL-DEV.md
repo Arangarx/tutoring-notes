@@ -45,6 +45,31 @@ Create a free Neon project or a **branch** used only for development. Put the **
 
 Jest still defaults to `postgresql://...@127.0.0.1:5432/tutoring_notes_test` unless you set `TEST_DATABASE_URL` in `.env` to a separate Neon database/branch for tests.
 
+## Prod → dev DB mirror harness (destructive-op scripts)
+
+Some maintenance CLIs assume **matching schema** plus realistic prod-like rows while pointing at Neon **development** blobs or tokens (for example [`scripts/blob-cleanup.mjs`](../scripts/blob-cleanup.mjs) runbook). Typical patterns:
+
+### Neon-native copy
+
+1. In the Neon console, duplicate the prod branch via **Branch from parent** into a disposable dev branch (`prod-mirror-<date>`), or refresh an existing mirror branch periodically.
+2. Put that branch URL in **`DEV_DATABASE_URL`** (or **`PROD_DATABASE_URL` when practising against a cloned snapshot only—never confuse with live prod**) while practising `--dry-run` flows.
+
+### Logical dump restore (PostgreSQL)
+
+From a workstation with networking to both Neon endpoints:
+
+```bash
+pg_dump "$PRODUCTION_URL" \
+  --no-owner --format=custom --file tutoring-notes-prod.dump
+
+pg_restore "$DEV_MIRROR_URL" \
+  --no-owner --clean --if-exists tutoring-notes-prod.dump
+```
+
+On Windows shells, substitute `set` / `$env:` as needed. Prefer **temporary** Neon branches dedicated to rehearsals so Preview traffic never shares credentials with practise dumps.
+
+**Rule of thumb:** any script that deletes shared infrastructure (blobs + DB-backed references) rehearses against a **cloned** database first and only swaps in live Neon URLs plus `--delete` after manual review.
+
 ## Vercel / production
 
 Set `DATABASE_URL` and `DIRECT_URL` in the Vercel project to your **production** Neon strings. No code change — only host env vars.
