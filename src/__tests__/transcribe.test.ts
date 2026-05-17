@@ -26,10 +26,21 @@ jest.mock("@/lib/env", () => ({
   env: { OPENAI_API_KEY: "sk-test-key" },
 }));
 
+jest.mock("@/lib/observability/cost-events", () => {
+  const actual = jest.requireActual(
+    "@/lib/observability/cost-events"
+  ) as typeof import("@/lib/observability/cost-events");
+  return {
+    ...actual,
+    logCostEvent: jest.fn().mockResolvedValue(undefined),
+  };
+});
+
 jest.mock("@/lib/transcribe-ffmpeg", () => ({
   splitAudioIntoWhisperParts: jest.fn(),
 }));
 
+import { logCostEvent } from "@/lib/observability/cost-events";
 import { splitAudioIntoWhisperParts } from "@/lib/transcribe-ffmpeg";
 import { transcribeAudio, WHISPER_MAX_BYTES } from "@/lib/transcribe";
 
@@ -61,6 +72,7 @@ describe("transcribeAudio", () => {
       })
     );
     expect(mockSplit).not.toHaveBeenCalled();
+    expect(jest.mocked(logCostEvent)).toHaveBeenCalledTimes(1);
   });
 
   test("trims transcript whitespace", async () => {
@@ -100,6 +112,7 @@ describe("transcribeAudio", () => {
 
     expect(mockSplit).toHaveBeenCalledWith(bigBuffer, "big.webm", "audio/webm");
     expect(mockTranscriptionsCreate).toHaveBeenCalledTimes(2);
+    expect(jest.mocked(logCostEvent)).toHaveBeenCalledTimes(2);
     expect(result).toEqual({
       transcript: "Part one.\n\nPart two.",
       durationSeconds: 30,
@@ -132,6 +145,7 @@ describe("transcribeAudio", () => {
 
     const result = await transcribeAudio(SMALL_BUFFER, "session.webm", "audio/webm");
     expect(result).toMatchObject({ error: expect.stringContaining("failed") });
+    expect(jest.mocked(logCostEvent)).not.toHaveBeenCalled();
   });
 
   test("returns error when OPENAI_API_KEY is absent", async () => {
@@ -146,6 +160,10 @@ describe("transcribeAudio", () => {
     }));
     jest.doMock("@/lib/transcribe-ffmpeg", () => ({
       splitAudioIntoWhisperParts: jest.fn(),
+    }));
+    jest.doMock("@/lib/observability/cost-events", () => ({
+      estimateCostUsd: () => undefined,
+      logCostEvent: jest.fn().mockResolvedValue(undefined),
     }));
 
     const { transcribeAudio: transcribeNoKey } = await import("@/lib/transcribe");

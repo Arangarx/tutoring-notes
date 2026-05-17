@@ -1,5 +1,10 @@
 import OpenAI from "openai";
 import { env } from "@/lib/env";
+import {
+  estimateCostUsd,
+  logCostEvent,
+  type CostEventProvenance,
+} from "@/lib/observability/cost-events";
 
 /**
  * Bumped from v5 → v6 in B4 for Sarah's pilot feedback:
@@ -28,6 +33,8 @@ export type GenerateSessionNoteInput = {
   sessionText: string;
   recentNotes?: RecentNoteContext[];
   template?: string | null;
+  /** Optional tutor/student/session FKs for `CostEvent` provenance. */
+  costProvenance?: CostEventProvenance | null;
 };
 
 export type GenerateSessionNoteSuccess = {
@@ -94,6 +101,8 @@ const MAX_INPUT_TOKENS = 30000;
 /** Max tokens for the JSON response. */
 const MAX_OUTPUT_TOKENS = 800;
 
+const CHAT_MODEL = "gpt-4o-mini";
+
 export async function generateSessionNote(
   input: GenerateSessionNoteInput
 ): Promise<GenerateSessionNoteResult> {
@@ -106,7 +115,7 @@ export async function generateSessionNote(
   let raw: string;
   try {
     const response = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: CHAT_MODEL,
       response_format: { type: "json_object" },
       max_tokens: MAX_OUTPUT_TOKENS,
       messages: [
@@ -116,8 +125,32 @@ export async function generateSessionNote(
           content: buildUserPrompt(input),
         },
       ],
-      // Soft input cap via truncation awareness — the caller should guard input length.
-      // max_completion_tokens covers our output; input is bounded by model context.
+    });
+
+    const rawModel = response.model;
+    const modelId =
+      typeof rawModel === "string" && rawModel.trim().length > 0
+        ? rawModel.trim()
+        : CHAT_MODEL;
+    const usage = response.usage;
+    const inTok = usage?.prompt_tokens;
+    const outTok = usage?.completion_tokens;
+
+    await logCostEvent({
+      kind: "GPT_NOTES_GENERATION",
+      model: modelId,
+      inputTokens: inTok,
+      outputTokens: outTok,
+      estimatedCostUsd: estimateCostUsd({
+        kind: "GPT_NOTES_GENERATION",
+        model: modelId,
+        inputTokens: inTok,
+        outputTokens: outTok,
+      }),
+      adminUserId: input.costProvenance?.adminUserId,
+      studentId: input.costProvenance?.studentId,
+      sessionRecordingId: input.costProvenance?.sessionRecordingId,
+      whiteboardSessionId: input.costProvenance?.whiteboardSessionId,
     });
 
     raw = response.choices[0]?.message?.content ?? "";

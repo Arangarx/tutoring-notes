@@ -113,7 +113,8 @@ describe("transcribeAndGenerateAction — late hallucination guard", () => {
     mockGenerateSessionNote.mockResolvedValue({
       topics: "",
       homework: "",
-      nextSteps: "",
+      assessment: "",
+      plan: "",
       links: "",
       promptVersion: "v-test",
     });

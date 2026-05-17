@@ -7,7 +7,7 @@ import { db, withDbRetry, isTransientDbConnectionError } from "@/lib/db";
 import { getAdminByEmail } from "@/lib/auth-db";
 import { sendMail } from "@/lib/email";
 import { generateShareToken, parseLinksFromTextarea } from "@/lib/security";
-import { assertOwnsStudent, requireStudentScope } from "@/lib/student-scope";
+import { assertOwnsStudent, getStudentScope, requireStudentScope } from "@/lib/student-scope";
 import { generateSessionNote, estimateTokens, MAX_INPUT_TOKENS } from "@/lib/ai";
 import { parseDateOnlyInput } from "@/lib/date-only";
 import { transcribeAudio } from "@/lib/transcribe";
@@ -246,6 +246,8 @@ export async function generateNoteFromTextAction(
   sessionText: string
 ): Promise<GenerateNoteResult> {
   await assertOwnsStudent(studentId);
+  const scope = await getStudentScope();
+  const adminUserId = scope.kind === "admin" ? scope.adminId : null;
 
   const trimmed = sessionText.trim();
   if (!trimmed) return { ok: false, error: "Please enter some session text first." };
@@ -278,6 +280,7 @@ export async function generateNoteFromTextAction(
       plan: n.nextSteps,
     })),
     template,
+    costProvenance: { adminUserId, studentId },
   });
 
   if ("error" in result) {
@@ -495,7 +498,11 @@ async function _transcribeAndGenerateImpl(
     const baseMime = resolvedMimeType.split(";")[0].trim().toLowerCase();
     const ext = MIME_TO_EXT[baseMime] ?? baseMime.split("/")[1]?.split(";")[0] ?? "webm";
     const filename = `session-${studentId}-part${i + 1}.${ext}`;
-    const transcribeResult = await transcribeAudio(audioBuffer, filename, resolvedMimeType);
+    const transcribeResult = await transcribeAudio(audioBuffer, filename, resolvedMimeType, {
+      adminUserId: scope.adminId,
+      studentId,
+      sessionRecordingId: recording.id,
+    });
 
     if ("error" in transcribeResult) {
       if (transcribeResult.error === "not configured") {
@@ -645,6 +652,7 @@ async function _transcribeAndGenerateImpl(
     studentName: student.name,
     sessionText: trimmed,
     template,
+    costProvenance: { adminUserId: scope.adminId, studentId },
   });
 
   if ("error" in genResult) {
