@@ -85,6 +85,11 @@ export type RenderPdfOptions = {
   cancellation?: { aborted: boolean };
   /** Override the default render scale; clamped to [0.5, 3.0]. */
   scale?: number;
+  /**
+   * 1-based PDF page numbers to render (subset). When omitted, renders
+   * pages `1 .. min(totalPages, PDF_MAX_PAGES)` (legacy behaviour).
+   */
+  pageIndices?: number[];
 };
 
 export type RenderPdfResult =
@@ -131,9 +136,127 @@ async function loadPdfJs(): Promise<typeof import("pdfjs-dist")> {
   return pdfjsModulePromise;
 }
 
+/**
+ * Read total page count without rasterizing (for the PDF picker UI).
+ */
+export async function readPdfFilePageCount(
+  file: File
+): Promise<
+  | { ok: true; totalPages: number }
+  | {
+      ok: false;
+      reason: "browser-only" | "too-large" | "no-pdfjs" | "load-failed";
+      message: string;
+    }
+> {
+  if (typeof window === "undefined") {
+    return {
+      ok: false,
+      reason: "browser-only",
+      message: "PDF inspection must run in the browser.",
+    };
+  }
+  if (file.size > PDF_MAX_BYTES) {
+    const mb = (file.size / (1024 * 1024)).toFixed(1);
+    return {
+      ok: false,
+      reason: "too-large",
+      message: `PDF is ${mb} MB; the upload limit is ${PDF_MAX_BYTES / (1024 * 1024)} MB.`,
+    };
+  }
+  let pdfjs: typeof import("pdfjs-dist");
+  try {
+    pdfjs = await loadPdfJs();
+  } catch (err) {
+    return {
+      ok: false,
+      reason: "no-pdfjs",
+      message: `Could not load the PDF renderer: ${(err as Error).message}`,
+    };
+  }
+  const arrayBuffer = await file.arrayBuffer();
+  let doc: PDFDocumentProxy;
+  try {
+    const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
+    doc = await loadingTask.promise;
+  } catch (err) {
+    return {
+      ok: false,
+      reason: "load-failed",
+      message: `That doesn't look like a valid PDF (${(err as Error).message}).`,
+    };
+  }
+  const totalPages = doc.numPages;
+  try {
+    await doc.cleanup();
+    doc.destroy();
+  } catch {
+    // best-effort
+  }
+  return { ok: true, totalPages };
+}
+
 function clampScale(s: number | undefined): number {
   const v = typeof s === "number" && Number.isFinite(s) ? s : PDF_RENDER_SCALE;
   return Math.min(3.0, Math.max(0.5, v));
+}
+
+/**
+ * Normalize which 1-based PDF pages to rasterize: default cap, explicit
+ * selection validation, dedupe, sort, and truncation to {@link PDF_MAX_PAGES}.
+ */
+export function resolvePdfPagesToRender(args: {
+  totalPagesInPdf: number;
+  pageIndices?: number[];
+}):
+  | { ok: true; indices: ReadonlyArray<number>; truncated: boolean }
+  | { ok: false; message: string } {
+  const { totalPagesInPdf, pageIndices } = args;
+  if (
+    typeof totalPagesInPdf !== "number" ||
+    !Number.isInteger(totalPagesInPdf) ||
+    totalPagesInPdf < 1
+  ) {
+    return { ok: false, message: "Invalid PDF page count." };
+  }
+
+  if (pageIndices === undefined) {
+    const cap = Math.min(totalPagesInPdf, PDF_MAX_PAGES);
+    const indices = Array.from({ length: cap }, (_, i) => i + 1);
+    return {
+      ok: true,
+      indices,
+      truncated: totalPagesInPdf > PDF_MAX_PAGES,
+    };
+  }
+
+  if (pageIndices.length === 0) {
+    return { ok: false, message: "No pages selected." };
+  }
+
+  const uniq = [...new Set(pageIndices)];
+  for (const p of uniq) {
+    if (!Number.isInteger(p) || p < 1 || p > totalPagesInPdf) {
+      return {
+        ok: false,
+        message: "Selected pages out of range",
+      };
+    }
+  }
+  uniq.sort((a, b) => a - b);
+  let truncated = false;
+  if (uniq.length > PDF_MAX_PAGES) {
+    truncated = true;
+    console.warn(
+      "[whiteboard] PDF page selection truncated to PDF_MAX_PAGES",
+      {
+        requested: uniq.length,
+        cap: PDF_MAX_PAGES,
+      }
+    );
+    uniq.length = PDF_MAX_PAGES;
+  }
+  return { ok: true, indices: uniq, truncated };
 }
 
 /**
@@ -176,7 +299,8 @@ async function blobFromCanvas(
 
 /**
  * Render a PDF File into one PNG Blob per page. The caller wires the
- * resulting blobs into Excalidraw via `insertPdfPagesOnCanvas`.
+ * resulting blobs into Excalidraw via `insertPdfPagesOnCanvas` or
+ * `insertPdfPagesAsBoardPages`.
  */
 export async function renderPdfFileToPngs(
   file: File,
@@ -221,21 +345,34 @@ export async function renderPdfFileToPngs(
   }
 
   const totalPages = doc.numPages;
-  const pagesToRender = Math.min(totalPages, PDF_MAX_PAGES);
-  const truncated = totalPages > PDF_MAX_PAGES;
+  const planned = resolvePdfPagesToRender({
+    totalPagesInPdf: totalPages,
+    pageIndices: opts.pageIndices,
+  });
+  if (!planned.ok) {
+    return {
+      ok: false,
+      reason: "render-failed",
+      message: planned.message,
+    };
+  }
+  const indicesToRender = planned.indices;
+  const truncated = planned.truncated;
   const baseScale = clampScale(opts.scale);
 
   const pages: PdfPageRender[] = [];
 
   try {
-    for (let i = 1; i <= pagesToRender; i++) {
+    const nRender = indicesToRender.length;
+    for (let ord = 0; ord < nRender; ord++) {
+      const i = indicesToRender[ord]!;
       if (opts.cancellation?.aborted) {
         return { ok: false, reason: "aborted", message: "Render cancelled." };
       }
       opts.onProgress?.({
         phase: "rendering",
-        pageIndex: i,
-        totalPages: pagesToRender,
+        pageIndex: ord + 1,
+        totalPages: nRender,
       });
       const page: PDFPageProxy = await doc.getPage(i);
       const naturalViewport = page.getViewport({ scale: 1 });
@@ -292,7 +429,11 @@ export async function renderPdfFileToPngs(
     }
   }
 
-  opts.onProgress?.({ phase: "done", pageIndex: pagesToRender, totalPages: pagesToRender });
+  opts.onProgress?.({
+    phase: "done",
+    pageIndex: indicesToRender.length,
+    totalPages: indicesToRender.length,
+  });
 
   return { ok: true, pages, totalPagesInPdf: totalPages, truncated };
 }

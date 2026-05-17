@@ -97,11 +97,15 @@ import {
 } from "@/lib/recording/upload-outbox-instance";
 import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter";
 import { PdfImageUploadButton } from "@/components/whiteboard/PdfImageUploadButton";
+import { PageStrip } from "@/components/whiteboard/PageStrip";
 import { MathInsertButton } from "@/components/whiteboard/MathInsertButton";
 import { DesmosInsertButton } from "@/components/whiteboard/DesmosInsertButton";
 import { UndoRedoButtons } from "@/components/whiteboard/UndoRedoButtons";
 import { ExcalidrawDynamic } from "@/components/whiteboard/ExcalidrawDynamic";
-import { type ExcalidrawApiLike } from "@/lib/whiteboard/insert-asset";
+import {
+  type ExcalidrawApiLike,
+  type InsertPdfBoardPagesIntegrate,
+} from "@/lib/whiteboard/insert-asset";
 import {
   ensureNativeImageAssetUrlsForSync,
   type BinaryFileFromExcalidraw,
@@ -113,10 +117,7 @@ import type {
   WhiteboardWireRemoteDetails,
 } from "@/lib/whiteboard/sync-client";
 import { validateExcalidrawEmbeddable } from "@/lib/whiteboard/validate-embeddable";
-import {
-  mergeScenesReconciled,
-  updateSceneMergingWithRemote,
-} from "@/lib/whiteboard/apply-reconciled-remote-scene";
+import { mergeScenesReconciled } from "@/lib/whiteboard/apply-reconciled-remote-scene";
 import type { RemoteSceneIngestLogHint } from "@/hooks/useWhiteboardRecorder";
 import {
   adaptWBElementsToExcalidraw,
@@ -159,6 +160,17 @@ type Props = {
 // `participantsWithFlowingAudio` input stays referentially equal
 // when there are no participants — avoids unnecessary re-evaluations.
 const EMPTY_FLOW_SET: ReadonlySet<string> = new Set<string>();
+
+// Smoke-4 (May 17, 2026): hard timeout on the audio-flow gate. If both
+// parties are present but neither has produced detectable audio-flow
+// within this window, release the gate anyway so the session does
+// record. Bound = max billing/audit-loss window. Sized to cover the
+// long tail of WebRTC negotiation while staying short enough that
+// the tutor will likely still be in their greeting / setup chatter
+// when the recording finally flips on. Decreasing this is a UX
+// trade-off (more dead air at the top of replays) — see
+// `docs/PHASE-PDF-SMOKE-1.md` smoke-4 section.
+const AUDIO_FLOW_GATE_TIMEOUT_MS = 10_000;
 
 function CanvasPlaceholder({ label }: { label: string }) {
   return (
@@ -351,6 +363,31 @@ export function WhiteboardWorkspaceClient({
    * timeout runs.
    */
   const pageSwitchProgrammaticRef = useRef(0);
+  /**
+   * Monotonic switch token — smoke-2 root cause.
+   *
+   * `selectTutorPage` awaits `hydrateRemoteImageFilesForScene` BEFORE
+   * actually swapping the scene. Pre-fix that await window was a race:
+   *   1. Switch P1 → P2 starts; `activePageIdRef` was bumped to P2;
+   *      hydrate fetches assets; scene STILL shows P1.
+   *   2. User clicks P3 before hydrate finishes.
+   *   3. Second `selectTutorPage` reads `activePageIdRef = P2` as `from`,
+   *      calls `getSceneElements()` which still returns P1 elements,
+   *      writes `pageDataRef[P2] = P1's elements`. Page swap! That was
+   *      the smoke-1 #3/#6/#7 and smoke-2 #1/#2 leak.
+   *
+   * Fix shape:
+   *   - Every `selectTutorPage` / `addTutorPage` increments this token.
+   *   - `selectTutorPage` checks `myToken === current` AFTER hydrate;
+   *     if newer call won, it abandons without bumping
+   *     `activePageIdRef` or touching the scene.
+   *   - `activePageIdRef.current = nextId` now happens AFTER hydrate,
+   *     immediately before `updateScene` — atomic swap, no window.
+   *   - `addTutorPage` also bumps the token so an in-flight select
+   *     abandons (otherwise the late select would clobber Add Page's
+   *     new-page navigation).
+   */
+  const tutorSwitchTokenRef = useRef(0);
   /** Per-tab sessionStorage draft — see `session-scene-draft.ts`. */
   const sceneDraftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasHydratedSessionDraftRef = useRef(false);
@@ -378,9 +415,13 @@ export function WhiteboardWorkspaceClient({
     () => undefined
   );
 
-  const [pageList, setPageList] = useState(() => [
-    { id: "p1", title: "Page 1" },
-  ]);
+  const [pageList, setPageList] = useState<
+    { id: string; title: string; section?: string }[]
+  >(() => [{ id: "p1", title: "Page 1" }]);
+  const sectionsRegistryRef = useRef<Record<string, { label: string }>>({});
+  const [sectionsRegistry, setSectionsRegistry] = useState<
+    Record<string, { label: string }>
+  >({});
   /**
    * Same rows as `pageList`, updated synchronously before any wire
    * `getWireBroadcastExtras` call. React state lags by one frame — using it in
@@ -406,6 +447,23 @@ export function WhiteboardWorkspaceClient({
     "none" | "load" | "missing"
   >("none");
 
+  // Smoke-4 (May 17, 2026): WB-activity latch for the audio-flow gate.
+  // Declared up here (before `applyRemoteToCanvas`) so the temporal
+  // dead-zone doesn't throw when `applyRemoteToCanvas`'s closure
+  // captures `markWbActivity` in its dep array. We carry the latch
+  // through a ref (cheap to read), and bump a small state to force
+  // a re-render so the FSM evaluation re-reads the gate boolean.
+  // The full release predicate is computed further down where
+  // `everHadAudioFlowRef` and friends are in scope; here we only
+  // own the WB-activity sub-latch + the marker callback.
+  const everHadWbActivityRef = useRef(false);
+  const [, bumpWbActivityRerender] = useState(0);
+  const markWbActivity = useCallback(() => {
+    if (everHadWbActivityRef.current) return;
+    everHadWbActivityRef.current = true;
+    bumpWbActivityRerender((n) => n + 1);
+  }, []);
+
   const applyRemoteToCanvas = useCallback(
     async (
       elements: ReadonlyArray<ExcalidrawLikeElement>,
@@ -414,10 +472,29 @@ export function WhiteboardWorkspaceClient({
       const api = excalidrawAPIRef.current;
       if (!api) return;
       // `scenePageId` is which page this `elements` snapshot belongs to (may
-      // lag the tutor’s visible tab when the wire diff is throttled).
+      // lag the tutor's visible tab when the wire diff is throttled).
       const targetId = details?.scenePageId ?? details?.page?.activePageId ?? "p1";
-      const curActive = activePageIdRef.current;
 
+      // Smoke-3 root cause: this used to capture `curActive` BEFORE the
+      // hydrate await and use it as the bucket key. During the await the
+      // tutor could click another page; `activePageIdRef.current` would
+      // move but the stale capture still pointed at the old page,
+      // sending the merged peer scene into the WRONG `pageDataRef` slot
+      // AND into the live scene of a now-different page (see
+      // `docs/PHASE-PDF-STATUS.md` for the full trace). The bilateral
+      // leakage the pilot saw — "p.1 and pdf p.1 already bled" — was
+      // exactly this race firing on every page switch where a student
+      // broadcast was in flight.
+      //
+      // The new contract:
+      //   1. Read all "live" state AFTER the hydrate await (no captures).
+      //   2. Use `pageDataRef[targetId]` as the merge local — never the
+      //      live scene, because the live scene may belong to a different
+      //      page right now.
+      //   3. Only touch the live scene when we're STILL on `targetId` AND
+      //      no programmatic page switch is mid-flight. Otherwise just
+      //      update the bucket and let the next page-switch hydrate
+      //      surface the change visually.
       const result = await hydrateRemoteImageFilesForScene(
         api,
         elements,
@@ -440,36 +517,57 @@ export function WhiteboardWorkspaceClient({
           prev === "load" ? "load" : "missing"
         );
       }
+
+      // Read local at this exact tick:
+      //   - If we're STILL on `targetId` and no page-switch swap is
+      //     mid-flight, the live scene IS this page's scene and is the
+      //     freshest source (captures the tutor's in-flight stroke that
+      //     hasn't surfaced through `onChange` yet).
+      //   - Otherwise, the live scene belongs to a different page; reading
+      //     it would mix peer page X's elements with tutor page Y's
+      //     elements (the bilateral leak). Fall back to the bucket, which
+      //     is kept in sync by handleExcalidrawChange + page-switch saves.
+      const onTargetReadTime =
+        activePageIdRef.current === targetId &&
+        pageSwitchProgrammaticRef.current === 0;
+      const localForMerge: ReadonlyArray<ExcalidrawLikeElement> =
+        onTargetReadTime
+          ? (api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>)
+          : ((pageDataRef.current[targetId] as
+              | ReadonlyArray<ExcalidrawLikeElement>
+              | undefined) ?? []);
       const appState = api.getAppState() as unknown;
-
-      if (targetId === curActive) {
-        applyingRemoteToCanvasRef.current = true;
-        try {
-          await updateSceneMergingWithRemote(api, elements, {
-            shouldDropRemoteElement,
-          });
-          const merged = api.getSceneElements() as ExcalidrawLikeElement[];
-          pageDataRef.current[curActive] = merged;
-          return { recordScene: merged };
-        } finally {
-          applyingRemoteToCanvasRef.current = false;
-        }
-      }
-
-      const prev =
-        (pageDataRef.current[targetId] as
-          | ReadonlyArray<ExcalidrawLikeElement>
-          | undefined) ?? [];
       const merged = await mergeScenesReconciled(
-        prev,
+        localForMerge,
         elements,
         appState,
         { shouldDropRemoteElement }
       );
       pageDataRef.current[targetId] = merged;
+
+      // Re-check at write time. `mergeScenesReconciled` has a tiny
+      // microtask await (dynamic import of `reconcileElements`); in
+      // theory another microtask could have moved the active page, so
+      // we don't reuse `onTargetReadTime`.
+      const stillOnTargetWriteTime =
+        activePageIdRef.current === targetId &&
+        pageSwitchProgrammaticRef.current === 0;
+      if (stillOnTargetWriteTime) {
+        applyingRemoteToCanvasRef.current = true;
+        try {
+          api.updateScene({ elements: merged as ReadonlyArray<unknown> });
+        } finally {
+          applyingRemoteToCanvasRef.current = false;
+        }
+        // Smoke-4 (May 17, 2026): on-target remote activity is
+        // also proof-of-session — releases the audio-flow gate
+        // even if both mics are silent / muted.
+        markWbActivity();
+        return { recordScene: merged };
+      }
       return { record: "skip" };
     },
-    [shouldDropRemoteElement, whiteboardSessionId]
+    [markWbActivity, shouldDropRemoteElement, whiteboardSessionId]
   );
 
   useEffect(() => {
@@ -906,6 +1004,118 @@ export function WhiteboardWorkspaceClient({
     everHadAudioFlowRef.current = true;
   }
 
+  // Smoke-4 (May 17, 2026): the audio-flow gate as-shipped relied
+  // exclusively on REMOTE peer flow. If both parties mute mics at
+  // session start (Andrew's exact scenario: phone joined → "we
+  // muted to stop the feedback" → audio-flow latch never flipped →
+  // FSM held in armed/awaiting_audio_flow → no recording, no audio,
+  // no event log, empty replay). That's a billing/audit hole and
+  // a real abuse vector — a tutor could mute both ends, deliver
+  // the session, and have no recording to bill against. We layer
+  // THREE additional release conditions on top of the existing
+  // peer-flow latch; ANY of them releases the gate, all sticky:
+  //
+  //   1. Tutor's OWN local mic flow detected (their device is
+  //      producing audio frames). Matches Sarah's mental model
+  //      ("session starts as soon as someone is talking") and
+  //      is robust to the remote peer being muted at start.
+  //   2. Any whiteboard activity (tutor stroke / image insert /
+  //      PDF insert; or on-target peer stroke via
+  //      `applyRemoteToCanvas`'s recordScene return). A real
+  //      session has WB activity within seconds.
+  //   3. A 10 s hard timeout after both parties are in the room —
+  //      bounded worst case of dead-air-no-recording.
+  //
+  // Together these make "silent-loss of the entire recording"
+  // extremely difficult to trigger by accident or design. The
+  // 10 s timeout is the floor; if all other signals fail we still
+  // capture the session after at most a 10 s gap.
+
+  // Sub-latch 1 — tutor's own mic flow. Reuses the same
+  // `track.muted === false && readyState === "live"` heuristic
+  // as `useAudioFlowConfirmation`, applied to the local stream.
+  const [everHadTutorAudioFlow, setEverHadTutorAudioFlow] = useState(false);
+  useEffect(() => {
+    if (everHadTutorAudioFlow) return;
+    const stream = liveAv.localAudioStream;
+    if (!stream) return;
+    const tracks = stream.getAudioTracks();
+    if (tracks.length === 0) return;
+    let cancelled = false;
+    const check = (): void => {
+      if (cancelled || everHadTutorAudioFlow) return;
+      if (tracks.some((t) => !t.muted && t.readyState === "live")) {
+        setEverHadTutorAudioFlow(true);
+      }
+    };
+    check();
+    const cleanups: Array<() => void> = [];
+    for (const t of tracks) {
+      const onAny = () => check();
+      try {
+        t.addEventListener("unmute", onAny);
+        t.addEventListener("mute", onAny);
+        t.addEventListener("ended", onAny);
+        cleanups.push(() => {
+          try {
+            t.removeEventListener("unmute", onAny);
+            t.removeEventListener("mute", onAny);
+            t.removeEventListener("ended", onAny);
+          } catch {
+            // ignore
+          }
+        });
+      } catch {
+        (t as MediaStreamTrack).onunmute = onAny;
+        (t as MediaStreamTrack).onmute = onAny;
+        (t as MediaStreamTrack).onended = onAny;
+        cleanups.push(() => {
+          (t as MediaStreamTrack).onunmute = null;
+          (t as MediaStreamTrack).onmute = null;
+          (t as MediaStreamTrack).onended = null;
+        });
+      }
+    }
+    return () => {
+      cancelled = true;
+      for (const c of cleanups) c();
+    };
+  }, [liveAv.localAudioStream, everHadTutorAudioFlow]);
+
+  // Sub-latch 2 — any whiteboard activity. The `everHadWbActivityRef`
+  // ref + `markWbActivity` callback are declared higher up in the
+  // component (above `applyRemoteToCanvas`) because both that
+  // function and `handleExcalidrawChange` capture `markWbActivity`
+  // in their dep arrays; the ref pattern dodges the temporal
+  // dead-zone we'd hit if the latch lived only here. Re-render is
+  // forced by `bumpWbActivityRerender` so the FSM evaluation below
+  // re-reads `everHadWbActivityRef.current`.
+
+  // Sub-latch 3 — 10 s hard timeout once both parties are present.
+  // Restarts on disconnect, fires once, sticky thereafter.
+  const [gateTimeoutFired, setGateTimeoutFired] = useState(false);
+  useEffect(() => {
+    if (gateTimeoutFired) return;
+    if (!bothPartiesInRoom) return;
+    const t = setTimeout(
+      () => setGateTimeoutFired(true),
+      AUDIO_FLOW_GATE_TIMEOUT_MS
+    );
+    return () => clearTimeout(t);
+  }, [bothPartiesInRoom, gateTimeoutFired]);
+
+  // Combined gate-release boolean. We pass this in place of the raw
+  // peer-flow latch so the existing FSM signature is preserved.
+  // Renaming `everHadAudioFlow` → `everHadSessionActivity` is a
+  // follow-up; the FSM tests + Phase-4d Commit-6 documentation
+  // still refer to the old name. The OR is sticky — any sub-latch
+  // flipping permanently releases the gate.
+  const sessionGateReleased =
+    everHadAudioFlowRef.current ||
+    everHadTutorAudioFlow ||
+    everHadWbActivityRef.current ||
+    gateTimeoutFired;
+
   const lifecycle = evaluateLifecycle({
     tutorWantsRecording: userWantsRecording,
     participants: lifecycleParticipants,
@@ -916,7 +1126,7 @@ export function WhiteboardWorkspaceClient({
     networkOk: true,
     audioClockMs: 0,
     participantsWithFlowingAudio,
-    everHadAudioFlow: everHadAudioFlowRef.current,
+    everHadAudioFlow: sessionGateReleased,
   });
 
   const presence = derivePresentation(lifecycle, {
@@ -1095,7 +1305,14 @@ export function WhiteboardWorkspaceClient({
         // Ref — not React state — so rapid tab switches don’t lag one frame
         // behind the canvas (state updates async; ref updates in selectTutorPage).
         activePageId: activePageIdRef.current,
-        pageList: pageListRef.current.map((p) => ({ id: p.id, title: p.title })),
+        pageList: pageListRef.current.map((p) => ({
+          id: p.id,
+          title: p.title,
+          ...(p.section ? { section: p.section } : {}),
+        })),
+        ...(Object.keys(sectionsRegistryRef.current).length > 0
+          ? { sections: { ...sectionsRegistryRef.current } }
+          : {}),
       },
       // Same ref as throttled flush — immediate broadcast (e.g. native image) stays consistent.
       scenePageId: activePageIdRef.current,
@@ -1139,9 +1356,16 @@ export function WhiteboardWorkspaceClient({
       }
       return {
         v: 1,
-        pageList: pageListRef.current.map((p) => ({ id: p.id, title: p.title })),
+        pageList: pageListRef.current.map((p) => ({
+          id: p.id,
+          title: p.title,
+          ...(p.section ? { section: p.section } : {}),
+        })),
         activePageId: activePageIdRef.current,
         pages,
+        ...(Object.keys(sectionsRegistryRef.current).length > 0
+          ? { sections: { ...sectionsRegistryRef.current } }
+          : {}),
       };
     }, [getTutorDocumentPagesSnapshot]);
 
@@ -1195,6 +1419,10 @@ export function WhiteboardWorkspaceClient({
     () => ({
       pageList: pageListRef.current,
       activePageId: activePageIdRef.current,
+      sections:
+        Object.keys(sectionsRegistryRef.current).length > 0
+          ? { ...sectionsRegistryRef.current }
+          : undefined,
     }),
     []
   );
@@ -1232,6 +1460,9 @@ export function WhiteboardWorkspaceClient({
 
   const selectTutorPage = useCallback(
     async (nextId: string) => {
+      // Bump the token FIRST so any in-flight switch abandons even when
+      // the user re-clicks the page they're already on (cancel pattern).
+      const myToken = ++tutorSwitchTokenRef.current;
       if (nextId === activePageIdRef.current) return;
       const api = excalidrawAPIRef.current;
       if (!api) {
@@ -1240,27 +1471,24 @@ export function WhiteboardWorkspaceClient({
         return;
       }
       // Drain the throttled onChange+event log for the old tab *before* we
-      // bump `activePageIdRef`.
+      // capture its scene.
       flushThrottledFrameNow();
       const from = activePageIdRef.current;
-      // `getSceneElements()` can still reflect the *previous* tab for a frame when
-      // the user flips pages faster than Excalidraw flushes. onChange is keyed by
-      // `activePageIdRef` and already mirrors the true per-tab state.
-      if (pageDataRef.current[from] === undefined) {
-        pageDataRef.current[from] = api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>;
-      }
+      // Freeze the leaving scene. Safe because activePageIdRef has NOT
+      // moved yet — any prior in-flight switch is still hydrating and
+      // hasn't bumped activePageIdRef either (see atomic swap below).
+      pageDataRef.current[from] = api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>;
       const next =
         (pageDataRef.current[nextId] as
           | ReadonlyArray<ExcalidrawLikeElement>
           | undefined) ?? [];
-      // PDF / uploaded images: Excalidraw drops unreferenced `fileId` binaries
-      // when the scene is replaced by another tab — re-fetch from `assetUrl`
-      // before `updateScene` so we don’t show empty image frames.
+
+      // Hold the programmatic-switch guard across the entire hydrate.
+      // onChange events during this window are dropped (any user input
+      // mid-switch is intentionally lost — they just clicked away).
       pageSwitchProgrammaticRef.current += 1;
+      let committed = false;
       try {
-        // Bump active only after the programmatic guard: otherwise a trailing
-        // onChange can stamp the old tab’s pixels into `pageDataRef[nextId]`.
-        activePageIdRef.current = nextId;
         const hydrateRes = await hydrateRemoteImageFilesForScene(
           api,
           next,
@@ -1276,20 +1504,44 @@ export function WhiteboardWorkspaceClient({
               }),
           }
         );
+        // ABANDON: a newer selectTutorPage / addTutorPage call won the
+        // race during our hydrate. Do NOT bump activePageIdRef, do NOT
+        // touch the scene. The newer call's atomic swap owns the
+        // final state. (Guard is still released in finally.)
+        if (myToken !== tutorSwitchTokenRef.current) return;
         if (hydrateRes.fetchFailed.length > 0) {
           setPeerImageMaterialNotice("load");
         } else if (hydrateRes.missingAssetUrlFileIds.length > 0) {
           setPeerImageMaterialNotice((prev) => (prev === "load" ? "load" : "missing"));
         }
+        // Atomic swap: activePageIdRef and the rendered scene move
+        // together in the same synchronous block. NO async gap exists
+        // between them, so a parallel selectTutorPage cannot read a
+        // stale (activePageIdRef = new, scene = old) state.
+        activePageIdRef.current = nextId;
         api.updateScene({ elements: next as ReadonlyArray<unknown> });
+        committed = true;
       } finally {
-        setTimeout(() => {
+        // Hold the guard across two animation frames + a microtask tail
+        // so Excalidraw's debounced onChange (which fires on the next
+        // frame) is still dropped if it carries stale elements.
+        const releaseGuard = () => {
           pageSwitchProgrammaticRef.current = Math.max(
             0,
             pageSwitchProgrammaticRef.current - 1
           );
-        }, 0);
+        };
+        if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+          window.requestAnimationFrame(() =>
+            window.requestAnimationFrame(() => {
+              window.setTimeout(releaseGuard, 0);
+            })
+          );
+        } else {
+          setTimeout(releaseGuard, 32);
+        }
       }
+      if (!committed) return;
       setActivePageId(nextId);
       flushDocumentBroadcastNow();
     },
@@ -1297,16 +1549,39 @@ export function WhiteboardWorkspaceClient({
   );
 
   const addTutorPage = useCallback(() => {
+    // Bump the switch token: any in-flight selectTutorPage will abandon
+    // when its hydrate finishes (otherwise that late select would
+    // clobber Add Page's navigation + scene, reintroducing the leak).
+    tutorSwitchTokenRef.current += 1;
     const api = excalidrawAPIRef.current;
     const from = activePageIdRef.current;
     if (api) {
-      if (pageDataRef.current[from] === undefined) {
-        pageDataRef.current[from] = api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>;
-      }
+      // Freeze the leaving scene unconditionally — see selectTutorPage
+      // comment for the same guard rationale.
+      pageDataRef.current[from] = api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>;
     }
-    const n = pageList.length + 1;
-    const newId = `p${Date.now()}`;
-    const nextList = [...pageList, { id: newId, title: `Page ${n}` }];
+    // Smoke-1 #5: pick the smallest unused "Page N" label so adding a
+    // page after a PDF section produces a sensible "Page 2", not "Page 9".
+    const usedNumbers = new Set<number>();
+    for (const p of pageListRef.current) {
+      const m = /^Page (\d+)$/.exec(p.title);
+      if (m) usedNumbers.add(Number(m[1]));
+    }
+    let nextN = 2;
+    while (usedNumbers.has(nextN)) nextN += 1;
+    // Smoke-1 #5: insert AFTER the active page rather than at the end,
+    // so adding a page from inside the PDF section drops it adjacent.
+    // Also: avoid id collisions with `Date.now()` fast-clicks by salting
+    // with a randomised suffix.
+    const newId = `p${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const fromIdx = pageListRef.current.findIndex((p) => p.id === from);
+    const insertAt =
+      fromIdx >= 0 ? fromIdx + 1 : pageListRef.current.length;
+    const nextList = [
+      ...pageListRef.current.slice(0, insertAt),
+      { id: newId, title: `Page ${nextN}` },
+      ...pageListRef.current.slice(insertAt),
+    ];
     pageListRef.current = nextList;
     setPageList(nextList);
     pageDataRef.current[newId] = [];
@@ -1318,12 +1593,21 @@ export function WhiteboardWorkspaceClient({
         activePageIdRef.current = newId;
         api.updateScene({ elements: [] });
       } finally {
-        setTimeout(() => {
+        const releaseGuard = () => {
           pageSwitchProgrammaticRef.current = Math.max(
             0,
             pageSwitchProgrammaticRef.current - 1
           );
-        }, 0);
+        };
+        if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+          window.requestAnimationFrame(() =>
+            window.requestAnimationFrame(() => {
+              window.setTimeout(releaseGuard, 0);
+            })
+          );
+        } else {
+          setTimeout(releaseGuard, 32);
+        }
       }
     } else {
       activePageIdRef.current = newId;
@@ -1332,7 +1616,126 @@ export function WhiteboardWorkspaceClient({
     if (api) {
       flushDocumentBroadcastNow();
     }
-  }, [flushDocumentBroadcastNow, flushThrottledFrameNow, pageList]);
+  }, [flushDocumentBroadcastNow, flushThrottledFrameNow]);
+
+  const removeTutorPage = useCallback(
+    (pageId: string) => {
+      if (pageListRef.current.length <= 1) return;
+      const idx = pageListRef.current.findIndex((p) => p.id === pageId);
+      if (idx < 0) return;
+      const api = excalidrawAPIRef.current;
+      const curActive = activePageIdRef.current;
+      if (api && curActive === pageId) {
+        flushThrottledFrameNow();
+      }
+      const nextList = pageListRef.current.filter((p) => p.id !== pageId);
+      pageListRef.current = nextList;
+      setPageList(nextList);
+      const nextData = { ...pageDataRef.current };
+      delete nextData[pageId];
+      pageDataRef.current = nextData;
+
+      const referenced = new Set<string>();
+      for (const p of nextList) {
+        if (p.section) referenced.add(p.section);
+      }
+      const nextSecs: Record<string, { label: string }> = {};
+      for (const [sid, meta] of Object.entries(sectionsRegistryRef.current)) {
+        if (referenced.has(sid)) nextSecs[sid] = meta;
+      }
+      sectionsRegistryRef.current = nextSecs;
+      setSectionsRegistry(nextSecs);
+
+      if (curActive === pageId) {
+        const fallback =
+          nextList[Math.max(0, idx - 1)]?.id ??
+          nextList[0]?.id ??
+          curActive;
+        void selectTutorPage(fallback);
+      } else {
+        flushThrottledFrameNow();
+        flushDocumentBroadcastNow();
+      }
+    },
+    [flushDocumentBroadcastNow, flushThrottledFrameNow, selectTutorPage]
+  );
+
+  const pdfBoardIntegrate = useMemo<InsertPdfBoardPagesIntegrate>(
+    () => ({
+      getActivePageId: () => activePageIdRef.current,
+      // Atomic batch commit — see InsertPdfBoardPagesIntegrate JSDoc.
+      // Before this redesign (smoke-1), each PDF page mutated pageListRef
+      // and pageDataRef incrementally, and intermediate `setPageList`
+      // re-renders + Excalidraw onChange races could leak the leaving
+      // page's elements into the new PDF pages. The single commit closes
+      // the window: freeze anchor scene → append rows → register files →
+      // navigate, all before the next React tick or v3 broadcast fires.
+      commitPdfBatch: ({
+        sectionId,
+        sectionLabel,
+        anchorActivePageId,
+        rows,
+        firstPageId,
+      }) => {
+        if (rows.length === 0) return;
+        // 1. Freeze the anchor page's scene so its drawings can't be
+        // overwritten by any onChange that arrives during the commit.
+        const api = excalidrawAPIRef.current;
+        if (api) {
+          pageDataRef.current[anchorActivePageId] = api.getSceneElements() as
+            ReadonlyArray<ExcalidrawLikeElement>;
+        }
+        // 2. Seed the section registry.
+        sectionsRegistryRef.current = {
+          ...sectionsRegistryRef.current,
+          [sectionId]: { label: sectionLabel },
+        };
+        setSectionsRegistry({ ...sectionsRegistryRef.current });
+        // 3. Write per-page elements BEFORE appending to pageList — so
+        // any intermediate `getTutorDocumentPagesSnapshot` read sees
+        // populated data rather than `[]`.
+        for (const row of rows) {
+          pageDataRef.current[row.pageId] =
+            row.elements as ReadonlyArray<ExcalidrawLikeElement>;
+        }
+        // 4. Append all new page rows to the list in one shot.
+        const nextList = [
+          ...pageListRef.current,
+          ...rows.map((r) => ({
+            id: r.pageId,
+            title: r.title,
+            section: sectionId,
+          })),
+        ];
+        pageListRef.current = nextList;
+        setPageList(nextList);
+        // 5. Register BinaryFiles in one addFiles call (still on anchor
+        // tab; we navigate next).
+        if (api) {
+          api.addFiles(rows.map((r) => r.file));
+        }
+        // 6. Log per-page inserts AFTER state is settled.
+        for (const row of rows) {
+          console.info(
+            `[whiteboard] wbsid=${whiteboardSessionId} pdf-page-insert pageId=${row.pageId} sectionId=${sectionId}`
+          );
+        }
+        // 7. Navigate to first imported page IF tutor still on anchor.
+        flushThrottledFrameNow();
+        if (activePageIdRef.current === anchorActivePageId) {
+          void selectTutorPage(firstPageId);
+        } else {
+          flushDocumentBroadcastNow();
+        }
+      },
+    }),
+    [
+      flushDocumentBroadcastNow,
+      flushThrottledFrameNow,
+      selectTutorPage,
+      whiteboardSessionId,
+    ]
+  );
 
   // ---------------------------------------------------------------
   // Live timer — Wyzant-style "both connected" billable clock
@@ -1837,9 +2240,19 @@ export function WhiteboardWorkspaceClient({
       const api = excalidrawAPIRef.current;
       if (!api) return;
       const { restoreElements } = await import("@excalidraw/excalidraw");
-      const list = doc.pageList.map((p) => ({ id: p.id, title: p.title }));
+      const list = doc.pageList.map((p) => ({
+        id: p.id,
+        title: p.title,
+        ...(p.section ? { section: p.section } : {}),
+      }));
       pageListRef.current = list;
       setPageList(list);
+      const secs =
+        doc.sections && typeof doc.sections === "object"
+          ? { ...doc.sections }
+          : {};
+      sectionsRegistryRef.current = secs;
+      setSectionsRegistry(secs);
       activePageIdRef.current = doc.activePageId;
       setActivePageId(doc.activePageId);
       for (const [pid, raw] of Object.entries(doc.pages)) {
@@ -1997,6 +2410,13 @@ export function WhiteboardWorkspaceClient({
       const els = elements as ReadonlyArray<ExcalidrawLikeElement>;
       pageDataRef.current[activePageIdRef.current] = [...els];
       onLocalElementSnapshot(elements);
+      // Smoke-4 (May 17, 2026): real local activity counts as
+      // proof-of-session for the audio-flow gate (see
+      // `sessionGateReleased`). We hit this branch only AFTER the
+      // `applyingRemoteToCanvasRef` and `pageSwitchProgrammaticRef`
+      // early-returns, so programmatic scene swaps don't fire it
+      // (which is correct — a page switch isn't user activity).
+      markWbActivity();
       if (sceneDraftTimerRef.current !== null) {
         clearTimeout(sceneDraftTimerRef.current);
         sceneDraftTimerRef.current = null;
@@ -2023,6 +2443,11 @@ export function WhiteboardWorkspaceClient({
       // sets assetUrl at insert time).
       const api = excalidrawAPIRef.current;
       if (api) {
+        // smoke-1 #6: capture the page the onChange fired on. If the
+        // tutor switches pages while this async upload is in flight,
+        // we must NOT write the (page A) patched elements into
+        // (page B)'s pageDataRef — that's how Page 1 ↔ Page 9 leaked.
+        const onChangePageId = activePageIdRef.current;
         void (async () => {
           try {
             const getFiles = (): Record<string, BinaryFileFromExcalidraw> => {
@@ -2041,19 +2466,21 @@ export function WhiteboardWorkspaceClient({
               inFlight: tutorNativeImageUploadInFlightRef.current,
             });
             if (patched && excalidrawAPIRef.current) {
-              // `getTutorDocumentPagesSnapshot` trusts `pageDataRef` over
-              // `getSceneElements()`. `onChange` may not run before the next
-              // flush, so sync the cache + recorder with the patched scene
-              // (customData.assetUrl) before broadcasting — fixes native
-              // drag/drop images missing URLs for the student + event log.
-              const curPage = activePageIdRef.current;
-              pageDataRef.current[curPage] =
+              // smoke-1 #6 guard: tutor may have switched pages while
+              // ensureNativeImageAssetUrlsForSync was awaiting the upload.
+              // If so, the patched elements belong to the page the
+              // onChange originated on, not the current one. Stamp into
+              // pageDataRef[onChangePageId] unconditionally, but only
+              // hot-swap the live scene if we're still ON that page.
+              pageDataRef.current[onChangePageId] =
                 patched as ReadonlyArray<ExcalidrawLikeElement>;
-              excalidrawAPIRef.current.updateScene({ elements: patched });
-              recorderOnCanvasChange(
-                patched as ReadonlyArray<ExcalidrawLikeElement>
-              );
-              flushThrottledFrameNow();
+              if (activePageIdRef.current === onChangePageId) {
+                excalidrawAPIRef.current.updateScene({ elements: patched });
+                recorderOnCanvasChange(
+                  patched as ReadonlyArray<ExcalidrawLikeElement>
+                );
+                flushThrottledFrameNow();
+              }
               if (sync && syncUrl) {
                 flushDocumentBroadcastNow();
               }
@@ -2071,6 +2498,7 @@ export function WhiteboardWorkspaceClient({
       buildBoardDocumentForCheckpoint,
       flushDocumentBroadcastNow,
       flushThrottledFrameNow,
+      markWbActivity,
       onLocalElementSnapshot,
       recorderOnCanvasChange,
       scheduleDocumentBroadcast,
@@ -2182,43 +2610,22 @@ export function WhiteboardWorkspaceClient({
           className="muted"
           style={{ margin: "6px 0 10px", fontSize: 12, lineHeight: 1.45, maxWidth: 720 }}
         >
-          Switch pages like separate worksheets. Inserts (PDF, image) land on
-          the page you have open. When live sync is on, the student sees which
-          page you are on.
+          Switch pages like separate worksheets. PDF worksheets add new pages
+          grouped under the file name; images insert on the page you have open.
+          When live sync is on, the student sees which page you are on.
         </p>
-        <div
-          className="row"
-          style={{
-            gap: 6,
-            flexWrap: "wrap",
-            alignItems: "center",
-          }}
-        >
-          {pageList.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              className="btn"
-              onClick={() => void selectTutorPage(p.id)}
-              disabled={endingBusy || p.id === activePageId}
-              style={
-                p.id === activePageId
-                  ? { fontWeight: 700, borderWidth: 2, borderColor: "var(--border-strong, #999)" }
-                  : undefined
-              }
-            >
-              {p.title}
-            </button>
-          ))}
-          <button
-            type="button"
-            className="btn primary"
-            onClick={addTutorPage}
-            disabled={endingBusy || pageList.length >= 20}
-          >
-            + Add page
-          </button>
-        </div>
+        <PageStrip
+          variant="tutor"
+          sessionId={whiteboardSessionId}
+          pageList={pageList}
+          sections={sectionsRegistry}
+          activePageId={activePageId}
+          disabled={endingBusy}
+          maxPages={20}
+          onSelectPage={(id) => void selectTutorPage(id)}
+          onAddPage={addTutorPage}
+          onRemovePage={removeTutorPage}
+        />
       </div>
 
       {/* Toolbar */}
@@ -2309,6 +2716,7 @@ export function WhiteboardWorkspaceClient({
           whiteboardSessionId={whiteboardSessionId}
           studentId={studentId}
           disabled={endingBusy}
+          integrate={pdfBoardIntegrate}
         />
         <MathInsertButton
           excalidrawAPI={excalidrawAPI}

@@ -80,6 +80,41 @@ export type InsertPdfResult =
     }
   | { ok: false; reason: string };
 
+export type PdfBoardBatchRow = {
+  pageId: string;
+  title: string;
+  elements: ReadonlyArray<unknown>;
+  file: {
+    id: string;
+    mimeType: "image/png";
+    dataURL: string;
+    created: number;
+  };
+};
+
+export type InsertPdfBoardPagesIntegrate = {
+  /** Snapshot tutor active tab before inserts — auto-nav only if unchanged at end. */
+  getActivePageId: () => string;
+  /**
+   * Atomic commit: workspace freezes its current scene into `pageDataRef`,
+   * appends rows to the page list, seeds the section registry, registers
+   * BinaryFiles, and (if the anchor is still active) navigates to
+   * `firstPageId`. Called ONCE per PDF — including partial-success — so
+   * intermediate React state never leaks into broadcasts or onChange.
+   */
+  commitPdfBatch: (args: {
+    sectionId: string;
+    sectionLabel: string;
+    anchorActivePageId: string;
+    rows: PdfBoardBatchRow[];
+    firstPageId: string;
+  }) => void;
+};
+
+export type InsertPdfBoardPagesResult =
+  | { ok: true; pagesInserted: number; sectionId: string; firstPageId: string }
+  | { ok: false; reason: "upload-failed"; message: string };
+
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 const PDF_PAGE_GAP_PX = 32;
 /**
@@ -566,6 +601,165 @@ export async function insertPdfPagesOnCanvas(args: InsertAssetCommonArgs & {
     elementIds,
     assetUrls,
     pagesInserted: pages.length,
+  };
+}
+
+/** Strip title segment for one imported PDF page row (design spec). */
+export function pdfBoardPageTitle(filename: string, pdfPageNumber: number): string {
+  const stripped = filename.replace(/\.pdf$/i, "").trim();
+  const base = stripped.length > 0 ? stripped : "PDF";
+  const short = base.length > 20 ? `${base.slice(0, 20)}\u2026` : base;
+  return `${short} p.${pdfPageNumber}`;
+}
+
+/**
+ * Insert one board tab per rendered PDF page, grouped under a new section.
+ * The workspace supplies {@link InsertPdfBoardPagesIntegrate} so page-list
+ * state stays authoritative in React while uploads + BinaryFiles happen here.
+ */
+export async function insertPdfPagesAsBoardPages(
+  args: InsertAssetCommonArgs & {
+    pages: PdfPageRender[];
+    filename: string;
+    onProgress?: (uploaded: number, total: number) => void;
+    integrate: InsertPdfBoardPagesIntegrate;
+  }
+): Promise<InsertPdfBoardPagesResult> {
+  const {
+    excalidrawAPI,
+    whiteboardSessionId,
+    studentId,
+    pages,
+    filename,
+    onProgress,
+    integrate,
+  } = args;
+
+  if (pages.length === 0) {
+    return {
+      ok: false,
+      reason: "upload-failed",
+      message: "No pages to insert.",
+    };
+  }
+
+  const sectionId =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? `pdf-${crypto.randomUUID()}`
+      : `pdf_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`;
+
+  const sectionLabel =
+    filename.replace(/\.pdf$/i, "").trim() || filename || "PDF";
+
+  const anchorActivePageId = integrate.getActivePageId();
+
+  const rows: PdfBoardBatchRow[] = [];
+  let firstPageId = "";
+  let failureMessage: string | null = null;
+
+  for (let i = 0; i < pages.length; i++) {
+    if (i > 0) {
+      await new Promise<void>((r) => setTimeout(r, 75));
+    }
+    const page = pages[i]!;
+    const pagePath = `${filename || "document"}-p${page.pageIndex}.png`;
+    const upload = await uploadWhiteboardAsset({
+      whiteboardSessionId,
+      studentId,
+      blob: page.pngBlob,
+      filename: pagePath,
+      contentType: "image/png",
+      assetTag: `pdf-page-${page.pageIndex}`,
+    });
+    if (!upload.ok) {
+      failureMessage = upload.error;
+      break;
+    }
+
+    console.info(
+      `[whiteboard] wbsid=${whiteboardSessionId} pdf-upload page=${page.pageIndex} bytes=${page.pngBlob.size}`
+    );
+
+    let dataURL: string;
+    try {
+      dataURL = await blobToDataUrl(page.pngBlob);
+    } catch (err) {
+      failureMessage = (err as Error).message;
+      break;
+    }
+
+    const fileId = makeRandomFileId();
+    const aspect = page.heightPx / page.widthPx;
+    const width = PDF_PAGE_RENDER_WIDTH;
+    const height = width * aspect;
+    const center = viewportCenter(excalidrawAPI);
+    const x = center.x - width / 2;
+    const y = center.y - height / 2;
+
+    const pageId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : makeRandomElementId();
+
+    const el = buildImageElement({
+      fileId,
+      x,
+      y,
+      width,
+      height,
+      assetUrl: upload.blobUrl,
+      altText: `${filename} page ${page.pageIndex}`,
+    });
+
+    if (i === 0) {
+      firstPageId = pageId;
+    }
+
+    rows.push({
+      pageId,
+      title: pdfBoardPageTitle(filename, page.pageIndex),
+      elements: [el],
+      file: {
+        id: fileId,
+        mimeType: "image/png",
+        dataURL,
+        created: Date.now(),
+      },
+    });
+    onProgress?.(i + 1, pages.length);
+  }
+
+  if (rows.length === 0) {
+    return {
+      ok: false,
+      reason: "upload-failed",
+      message: failureMessage
+        ? `Upload failed before any pages were inserted: ${failureMessage}`
+        : "No pages were inserted.",
+    };
+  }
+
+  integrate.commitPdfBatch({
+    sectionId,
+    sectionLabel,
+    anchorActivePageId,
+    rows,
+    firstPageId,
+  });
+
+  if (failureMessage !== null) {
+    return {
+      ok: false,
+      reason: "upload-failed",
+      message: `Inserted ${rows.length} of ${pages.length} pages; remainder failed: ${failureMessage}`,
+    };
+  }
+
+  return {
+    ok: true,
+    pagesInserted: rows.length,
+    sectionId,
+    firstPageId,
   };
 }
 

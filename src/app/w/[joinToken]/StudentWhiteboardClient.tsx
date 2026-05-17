@@ -27,6 +27,7 @@ import { validateExcalidrawEmbeddable } from "@/lib/whiteboard/validate-embeddab
 import { getOrCreateLocalPeerId } from "@/lib/whiteboard/local-peer-id";
 import { useStudentWhiteboardCanvas } from "@/hooks/useStudentWhiteboardCanvas";
 import { UndoRedoButtons } from "@/components/whiteboard/UndoRedoButtons";
+import { PageStrip } from "@/components/whiteboard/PageStrip";
 import type { ExcalidrawApiLike } from "@/lib/whiteboard/insert-asset";
 import type { HydrateRemoteImageFilesResult } from "@/lib/whiteboard/hydrate-remote-files";
 import { ensureNativeImageAssetUrlsForSync } from "@/lib/whiteboard/ensure-native-image-asset-urls-for-sync";
@@ -383,6 +384,7 @@ export function StudentWhiteboardClient({
     snapToTutorView,
     getPageBroadcastExtras,
     pageList,
+    sectionsRegistry,
     activePageId: studentActivePageId,
     tutorStreamReady,
   } = useStudentWhiteboardCanvas(
@@ -679,28 +681,14 @@ export function StudentWhiteboardClient({
           you’re working on; your lines stay on that page and won’t overwrite the
           tutor’s other tabs.
         </p>
-        <div
-          className="row"
-          style={{ flexWrap: "wrap", gap: 6, alignItems: "center" }}
-        >
-          {pageList.map((p) => (
-            <span
-              key={p.id}
-              className="btn"
-              style={{
-                display: "inline-block",
-                pointerEvents: "none",
-                opacity: p.id === studentActivePageId ? 1 : 0.75,
-                fontWeight: p.id === studentActivePageId ? 700 : 400,
-                borderWidth: p.id === studentActivePageId ? 2 : 1,
-                borderColor: "var(--border-strong, #999)",
-                cursor: "default",
-              }}
-              aria-current={p.id === studentActivePageId ? "true" : undefined}
-            >
-              {p.title}
-            </span>
-          ))}
+        <div data-testid="student-board-pages-strip">
+          <PageStrip
+            variant="student"
+            sessionId={whiteboardSessionId}
+            pageList={pageList}
+            sections={sectionsRegistry}
+            activePageId={studentActivePageId}
+          />
         </div>
       </div>
 

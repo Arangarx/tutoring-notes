@@ -815,13 +815,19 @@ function collectAssetUrls(log: WBEventLog): string[] {
  * tree (an image that won't load just doesn't render the bitmap;
  * the bounding box stays).
  *
- * NOTE: we re-derive a `fileId` here using a hash of the URL so that
- * the same URL always maps to the same fileId across re-renders, and
- * we patch each affected scene element's `fileId` to match. The
- * recorder DOES write a `fileId` into the canonical log via the
- * adapter — but we redo it here defensively because we want this
- * component to also work for replays of logs that omitted fileId
- * (older recordings, or future schema variants).
+ * Fileid convention: Excalidraw renders an image element by looking up
+ * its `fileId` in the BinaryFiles map. The replay path uses the SAME
+ * synthesis as `toExcalidraw` (`wba-${elementId}`) so the rendered
+ * image element id matches the registered BinaryFile id. Previously
+ * replay registered under `stableHashFileId(url)`, which never matched
+ * the `wba-${id}` already stamped on the rendered Excalidraw element —
+ * resulting in placeholder image-frame boxes for every PDF page in
+ * replay (smoke-1 #12 root cause).
+ *
+ * We register one BinaryFile per (element id, asset url) pair. Two
+ * elements pointing at the same assetUrl each get their own fileId in
+ * the map — Excalidraw stores duplicates without churn, and per-
+ * element fileids let us evict / re-hydrate independently.
  */
 async function registerImageAssets(
   api: ReplayApi,
@@ -844,26 +850,44 @@ async function registerImageAssets(
       const res = await fetch(fetchUrl, {
         credentials: fetchUrl.startsWith("/") ? "include" : "omit",
       });
-      if (!res.ok) continue;
+      if (!res.ok) {
+        console.warn(
+          "[WhiteboardReplay] asset fetch returned non-OK",
+          fetchUrl,
+          res.status
+        );
+        continue;
+      }
       const blob = await res.blob();
       const dataURL = await blobToDataUrl(blob);
       const mime = normalizeAssetMime(blob.type) ?? "image/png";
-      // Key by original URL so scene elements (which store the raw assetUrl)
-      // can be matched even when the fetch went through a proxy route.
-      const fileId = stableHashFileId(originalUrl);
-      filesToRegister.push({
-        id: fileId,
-        mimeType: mime,
-        dataURL,
-        created: Date.now(),
-      });
-      // Best-effort: stamp matching scene elements with this fileId.
-      // Excalidraw renders an image element via the (fileId, files
-      // map) pair, so without this it wouldn't pick up the bitmap.
+      // One BinaryFile per scene element that points at this URL.
+      // fileId synthesis MUST match `toExcalidraw` (`wba-${id}`) — the
+      // rendered Excalidraw image element already carries that id by
+      // the time we get here, so the BinaryFile must register under
+      // the same key for the bitmap to actually paint.
+      let matchedAny = false;
       for (const el of scene.values()) {
-        if (el.assetUrl === originalUrl && el.type === "image") {
-          (el as unknown as { fileId?: string }).fileId = fileId;
-        }
+        if (el.assetUrl !== originalUrl || el.type !== "image") continue;
+        matchedAny = true;
+        filesToRegister.push({
+          id: `wba-${el.id}`,
+          mimeType: mime,
+          dataURL,
+          created: Date.now(),
+        });
+      }
+      if (!matchedAny) {
+        // Asset URL collected from the event log but no matching scene
+        // element at the current replay time. Cache under a stable URL
+        // key so a later applyAt() that surfaces the element can still
+        // find the binary (Excalidraw rebuilds image bitmaps lazily).
+        filesToRegister.push({
+          id: stableHashFileId(originalUrl),
+          mimeType: mime,
+          dataURL,
+          created: Date.now(),
+        });
       }
     } catch (err) {
       console.warn("[WhiteboardReplay] Could not load asset", fetchUrl, err);

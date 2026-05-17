@@ -44,11 +44,21 @@ export function useStudentWhiteboardCanvas(
   const giveUpFileIdsRef = useRef(new Set<string>());
   const warnDedupeRef = useRef(new Set<string>());
 
-  const [pageList, setPageList] = useState([{ id: "p1", title: "Page 1" }]);
+  const [pageList, setPageList] = useState<
+    { id: string; title: string; section?: string }[]
+  >([{ id: "p1", title: "Page 1" }]);
   const pageListRef = useRef(pageList);
   useEffect(() => {
     pageListRef.current = pageList;
   }, [pageList]);
+
+  const [sectionsRegistry, setSectionsRegistry] = useState<
+    Record<string, { label: string }>
+  >({});
+  const sectionsRegistryRef = useRef(sectionsRegistry);
+  useEffect(() => {
+    sectionsRegistryRef.current = sectionsRegistry;
+  }, [sectionsRegistry]);
 
   const [activePageId, setActivePageId] = useState("p1");
   const activePageIdRef = useRef("p1");
@@ -120,7 +130,14 @@ export function useStudentWhiteboardCanvas(
     return {
       page: {
         activePageId: id,
-        pageList: pageListRef.current.map((p) => ({ id: p.id, title: p.title })),
+        pageList: pageListRef.current.map((p) => ({
+          id: p.id,
+          title: p.title,
+          ...(p.section ? { section: p.section } : {}),
+        })),
+        ...(Object.keys(sectionsRegistryRef.current).length > 0
+          ? { sections: { ...sectionsRegistryRef.current } }
+          : {}),
       },
       scenePageId: id,
     };
@@ -136,7 +153,22 @@ export function useStudentWhiteboardCanvas(
         lastTutorFollowRef.current = details.follow;
       }
       if (page.pageList && page.pageList.length > 0) {
-        setPageList(page.pageList.map((p) => ({ id: p.id, title: p.title })));
+        setPageList(
+          page.pageList.map((p) => ({
+            id: p.id,
+            title: p.title,
+            ...(typeof (p as { section?: unknown }).section === "string"
+              ? { section: (p as { section: string }).section }
+              : {}),
+          }))
+        );
+      }
+      if (typeof page.sections !== "undefined") {
+        setSectionsRegistry(
+          page.sections && typeof page.sections === "object"
+            ? { ...page.sections }
+            : {}
+        );
       }
       const followTarget = page.activePageId;
       const previous = activePageIdRef.current;
@@ -236,7 +268,22 @@ export function useStudentWhiteboardCanvas(
       const followTarget = page?.activePageId ?? "p1";
       const mergeTarget = details?.scenePageId ?? followTarget;
       if (page?.pageList && page.pageList.length > 0) {
-        setPageList(page.pageList.map((p) => ({ id: p.id, title: p.title })));
+        setPageList(
+          page.pageList.map((p) => ({
+            id: p.id,
+            title: p.title,
+            ...(typeof (p as { section?: unknown }).section === "string"
+              ? { section: (p as { section: string }).section }
+              : {}),
+          }))
+        );
+      }
+      if (page && typeof page.sections !== "undefined") {
+        setSectionsRegistry(
+          page.sections && typeof page.sections === "object"
+            ? { ...page.sections }
+            : {}
+        );
       }
       const previous = activePageIdRef.current;
       if (previous !== followTarget) {
@@ -439,6 +486,7 @@ export function useStudentWhiteboardCanvas(
     snapToTutorView,
     getPageBroadcastExtras,
     pageList,
+    sectionsRegistry,
     activePageId,
     /** At least one tutor v2 or v3 scene was applied; false until first packet. */
     tutorStreamReady,

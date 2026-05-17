@@ -145,8 +145,37 @@ export function MathInsertButton({
     let cancelled = false;
     void (async () => {
       try {
-        await import("mathlive");
+        const mod = await import("mathlive");
         if (typeof window === "undefined") return;
+        // Point mathlive at our self-hosted KaTeX woff2 files served
+        // under `public/mathlive-fonts/` (Next serves `public/` at the
+        // site root). History:
+        //   - mathlive 0.109 ships with the static initializer
+        //     `_MathfieldElement._fontsDirectory = "./fonts/"`, so the
+        //     fonts would be requested at the page-relative path the
+        //     workspace happens to render from — which on Vercel ends
+        //     up at `/_next/static/chunks/fonts/KaTeX_*.woff2` (404s,
+        //     Next never copies the woff2 files there).
+        //   - Smoke-3 attempted a guard `if (!Mf.fontsDirectory)` to
+        //     fall back to a jsDelivr CDN; the guard was always false
+        //     because the default `"./fonts/"` is truthy, so the CDN
+        //     URL was never applied.
+        //   - Smoke-4 found that the jsDelivr CDN was unreachable from
+        //     Andrew's network (DNS instability that also hit
+        //     `github.com` and `wb-mortensen.fly.dev`). Self-hosting
+        //     removes the third-party dep entirely — the fonts ship
+        //     in `public/mathlive-fonts/` and are served by the same
+        //     origin as the app, so they cannot fail independently.
+        // CSP `font-src 'self' data: blob: https:` already permits
+        // same-origin fonts; no middleware change required.
+        const Mf = (
+          mod as unknown as {
+            MathfieldElement?: { fontsDirectory?: string };
+          }
+        ).MathfieldElement;
+        if (Mf) {
+          Mf.fontsDirectory = "/mathlive-fonts/";
+        }
         // mathlive 0.109 registers the element synchronously on
         // import, but on slower devices the registration callback
         // can land in a microtask — wait for `customElements.get`
