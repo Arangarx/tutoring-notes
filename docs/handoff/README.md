@@ -33,15 +33,18 @@ Andrew's workflow can use whichever is faster.
 ```markdown
 # <Scope> — executor briefing (<phase-or-context>)
 
+> **Recommended model: <Composer | Opus | Sonnet>** (<one-line rationale: why this model, what scope, what's well-patterned vs novel>). If you spawn this chat on a different model, that's fine, but <call out the obvious mismatch — e.g. "Opus is overkill" or "Composer may struggle with novel architecture">.
+>
 > **This file is your complete task briefing.** If you're seeing it because Andrew pasted its contents or `@`-referenced it at the start of a fresh Composer chat, your instructions are below — start by reading the AGENTS.md + the other files in the "Read first" section, then proceed through the deliverables in order. No further confirmation needed; begin work.
 
 <the actual briefing body starts here — workspace discipline, branch discipline, project context, read-first, scope, smoke, wrap-up, stop conditions>
 ```
 
-**Why both the H1 title AND the blockquote**:
+**Why all three elements**:
 
-- **H1** — orients the executor (and Andrew's chat history) on what the work is.
-- **Blockquote** — disambiguates intent when the file arrives as an
+- **H1 title** — orients the executor (and Andrew's chat history) on what the work is.
+- **Model recommendation blockquote** — Andrew sees it when opening the file before spawning the chat, so he picks the right model class. Composer for well-patterned work (~2-4 hr); Opus for novel architecture / cross-cutting design / >1 day scope; Sonnet for in-between. See master plan's "Model usage protocol" section for full guidance.
+- **Briefing-intent blockquote** — disambiguates intent when the file arrives as an
   `@`-reference. Without it, the receiving agent may treat the file as
   "reference material the user wants me to know about" rather than "my
   complete task spec." With it, the agent immediately knows to execute,
