@@ -119,6 +119,58 @@ describe("createMicAudioGraph", () => {
     expect(close).toHaveBeenCalled();
   });
 
+  test("swapLocalMicSource rewires the local mic without recreating destinations (MediaRecorder path stable)", async () => {
+    const gainParam: GainParam = { value: 1 };
+    const firstSource = { connect: jest.fn(), disconnect: jest.fn() };
+    const secondSource = { connect: jest.fn(), disconnect: jest.fn() };
+    const gainNode = { gain: gainParam, connect: jest.fn() };
+    const analyserNode = {
+      fftSize: 0,
+      smoothingTimeConstant: 0,
+      getFloatTimeDomainData: jest.fn((arr: Float32Array) => {
+        for (let i = 0; i < arr.length; i++) arr[i] = 0.05;
+      }),
+    };
+    const recordingStream = { id: "rec" };
+    const publishStream = { id: "pub" };
+    const destinations = [{ stream: recordingStream }, { stream: publishStream }];
+    let destIdx = 0;
+    let micCall = 0;
+    const micStreams = [
+      { getTracks: () => [{ stop: jest.fn() }] },
+      { getTracks: () => [{ stop: jest.fn() }] },
+    ];
+    const ctx = {
+      createMediaStreamSource: jest.fn((s: MediaStream) => {
+        micCall += 1;
+        return micCall === 1 ? firstSource : secondSource;
+      }),
+      createGain: jest.fn(() => gainNode),
+      createAnalyser: jest.fn(() => analyserNode),
+      createMediaStreamDestination: jest.fn(() => destinations[destIdx++]),
+      resume: jest.fn().mockResolvedValue(undefined),
+      close: jest.fn().mockResolvedValue(undefined),
+    };
+    (globalThis as { AudioContext?: unknown }).AudioContext = jest.fn(() => ctx);
+
+    const graph = await createMicAudioGraph(
+      micStreams[0] as unknown as MediaStream,
+      1,
+      { sessionId: "sess-1" }
+    );
+    expect(graph).not.toBeNull();
+    const recBefore = graph!.recordingStream;
+    const pubBefore = graph!.publishStream;
+
+    graph!.swapLocalMicSource(micStreams[1] as unknown as MediaStream);
+    expect(firstSource.disconnect).toHaveBeenCalled();
+    expect(secondSource.connect).toHaveBeenCalledWith(gainNode);
+    expect(graph!.recordingStream).toBe(recBefore);
+    expect(graph!.publishStream).toBe(pubBefore);
+
+    graph!.dispose();
+  });
+
   test("addRemoteAudio mixes remote streams into recordingStream only (NOT publishStream), via per-remote GainNode", async () => {
     // Mixdown contract — the whole point of this feature. Tutor audio
     // goes both places (recording + WebRTC out); remote participant

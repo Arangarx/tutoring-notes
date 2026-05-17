@@ -69,6 +69,7 @@ import { studentMicStreamId } from "@/lib/recording/remote-stream-recorder";
 import { AVPermissionsPrompt } from "@/components/av/AVPermissionsPrompt";
 import { AVTilesPanel } from "@/components/av/AVTilesPanel";
 import { AVControls } from "@/components/av/AVControls";
+import VideoControls from "@/components/av/VideoControls";
 import {
   useWhiteboardRecorder,
   type ResumeResult,
@@ -785,6 +786,7 @@ export function WhiteboardWorkspaceClient({
   const workspaceAudio = useAudioRecorder({
     studentId,
     onRecorded: onWorkspaceAudioRecorded,
+    avLogSessionId: whiteboardSessionId,
     // Seed the displayed recording timer at the session's already-elapsed
     // time so a page refresh doesn't reset it to 0 while the session
     // timer stays at e.g. "12:34". Uses the server-truth value from SSR.
@@ -817,6 +819,7 @@ export function WhiteboardWorkspaceClient({
     localPeerId,
     sessionId: whiteboardSessionId,
     externalAudioStream: workspaceAudio.localMicStream,
+    swapMicDevice: workspaceAudio.swapMicDevice,
   });
 
   // -----------------------------------------------------------------
@@ -2524,6 +2527,7 @@ export function WhiteboardWorkspaceClient({
         userWantsRecording={userWantsRecording}
         recordingActive={recordingActive}
         panelDisabled={endingBusy || !userWantsRecording}
+        onMicDeviceChange={(deviceId) => void liveAv.setMicDevice(deviceId)}
       />
       {/* Phase 4c — live A/V surface */}
       <AVPermissionsPrompt
@@ -2585,6 +2589,15 @@ export function WhiteboardWorkspaceClient({
             onTogglePeer: handleToggleParticipantMod,
           }}
         />
+        {liveAv.isActive && (
+          <VideoControls
+            devices={liveAv.videoDevices}
+            selectedDeviceId={liveAv.selectedVideoDeviceId ?? ""}
+            onDeviceChange={(id) => void liveAv.setVideoDevice(id)}
+            isLive={liveAv.localVideoStream !== null}
+            disabled={endingBusy}
+          />
+        )}
       </div>
       {/* Board pages — own row so it isn’t buried in the recording/toolbar cluster */}
       <div

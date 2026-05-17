@@ -171,6 +171,7 @@ type MeshHandles = {
   removePeer: jest.Mock;
   restart: jest.Mock;
   addLocalTrackToAllPeers: jest.Mock;
+  replaceLocalTrackOnAllPeers: jest.Mock;
   dispose: jest.Mock;
   emitTrack: (
     peerId: string,
@@ -198,6 +199,7 @@ function makeFakeMesh(): MeshHandles {
   });
   const restart = jest.fn();
   const addLocalTrackToAllPeers = jest.fn();
+  const replaceLocalTrackOnAllPeers = jest.fn();
   const dispose = jest.fn(() => {
     disposed = true;
     trackSubs.clear();
@@ -211,6 +213,7 @@ function makeFakeMesh(): MeshHandles {
     peers: () => peerSet,
     restart,
     addLocalTrackToAllPeers,
+    replaceLocalTrackOnAllPeers,
     onRemoteTrack: (cb) => {
       trackSubs.add(cb);
       return () => {
@@ -244,6 +247,7 @@ function makeFakeMesh(): MeshHandles {
     removePeer,
     restart,
     addLocalTrackToAllPeers,
+    replaceLocalTrackOnAllPeers,
     dispose,
     emitTrack: (peerId, track, streams = []) => {
       for (const cb of trackSubs) cb(peerId, track, streams);

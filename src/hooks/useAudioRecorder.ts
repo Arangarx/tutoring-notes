@@ -125,6 +125,11 @@ export type UseAudioRecorderOptions = {
    * already-elapsed time rather than restarting from 0.
    */
   initialElapsedSeconds?: number;
+  /**
+   * Same value as live-A/V `avx=` / whiteboard session id — threads into
+   * `mic-recorder-audio` swap logs.
+   */
+  avLogSessionId?: string;
 };
 
 export type UseAudioRecorderReturn = {
@@ -195,7 +200,7 @@ export type UseAudioRecorderReturn = {
   // Derived UI flags
   /** Mic is hot — controls enabled, meter live. */
   isLive: boolean;
-  /** Mic device picker should be locked (recording / paused / saving segment). */
+  /** Mic device picker locked only during mid-rollover segment upload. */
   lockDevice: boolean;
   /** Show the "approaching segment cap" warning copy + colour. */
   isWarning: boolean;
@@ -234,6 +239,8 @@ export type UseAudioRecorderReturn = {
    * set drains and stays drained.
    */
   flushPendingUploads: () => Promise<void>;
+  /** Hot-swap the mic while the Web Audio graph is live (workspace + live A/V). */
+  swapMicDevice: (deviceId: string) => Promise<void>;
 };
 
 /** Decide bar colour by level — green/yellow/red zones for visible feedback. */
@@ -249,6 +256,7 @@ export function useAudioRecorder({
   onRecorded,
   onRecordingActive,
   initialElapsedSeconds = 0,
+  avLogSessionId,
 }: UseAudioRecorderOptions): UseAudioRecorderReturn {
   const [recordState, setRecordState] = useState<RecordState>("idle");
   const [elapsed, setElapsed] = useState(initialElapsedSeconds);
@@ -818,7 +826,11 @@ export function useAudioRecorder({
 
     // Build the audio graph (gain + meter). Returns null if Web Audio is unavailable
     // or the stream isn't a real MediaStream (test stub) — fall back to raw stream below.
-    const graph = await createMicAudioGraph(stream, gainLinear);
+    const graph = await createMicAudioGraph(
+      stream,
+      gainLinear,
+      avLogSessionId ? { sessionId: avLogSessionId } : undefined
+    );
     graphRef.current = graph;
 
     // Expose the stream that downstream consumers (useLiveAV) should use.
@@ -835,6 +847,96 @@ export function useAudioRecorder({
       startMediaRecorder();
     } else {
       setRecordState("ready");
+    }
+  }
+
+  /**
+   * Swap the underlying `getUserMedia` mic without stopping MediaRecorder /
+   * tearing down the Web Audio graph. Used when the tutor changes device
+   * mid-recording; pairs with `peer-mesh.replaceLocalTrackOnAllPeers` on the
+   * live-A/V side.
+   */
+  async function swapMicDevice(deviceId: string): Promise<void> {
+    const graph = graphRef.current;
+    if (!graph?.swapLocalMicSource) {
+      if (!streamRef.current) {
+        await acquireMic({
+          deviceId: deviceId || undefined,
+          forRecording: false,
+        });
+        return;
+      }
+      setError(
+        "Cannot switch microphone — audio processing is unavailable in this browser."
+      );
+      throw new Error("mic graph swap unavailable");
+    }
+
+    const constraints: MediaStreamConstraints = {
+      audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+      video: false,
+    };
+    let newStream: MediaStream;
+    try {
+      newStream = await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (err) {
+      const name = err instanceof Error ? (err as DOMException).name : "";
+      console.error("[useAudioRecorder] swapMicDevice getUserMedia failed:", err);
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        setError(
+          "Microphone access denied. Check browser permissions and try again."
+        );
+      } else if (name === "NotReadableError" || name === "TrackStartError") {
+        setError(
+          "Microphone is in use by another app. Close that app or pick a different device."
+        );
+      } else if (
+        name === "OverconstrainedError" ||
+        name === "ConstraintNotSatisfiedError"
+      ) {
+        setError(
+          "That microphone is not available. Pick a different device or reconnect the USB mic."
+        );
+      } else {
+        setError(
+          `Could not switch microphone (${name || "unknown"}). Try again.`
+        );
+      }
+      throw err;
+    }
+
+    try {
+      graph.swapLocalMicSource(newStream);
+      const prev = streamRef.current;
+      if (prev) {
+        for (const t of prev.getTracks()) {
+          try {
+            t.stop();
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+      streamRef.current = newStream;
+
+      const audioTrack = newStream.getAudioTracks?.()[0];
+      const settings = audioTrack?.getSettings?.();
+      if (settings?.deviceId) {
+        saveStoredDeviceId(settings.deviceId);
+        setSelectedDeviceId(settings.deviceId);
+      }
+
+      setLocalMicStream(graph.publishStream);
+      setError(null);
+    } catch (err) {
+      for (const t of newStream.getTracks()) {
+        try {
+          t.stop();
+        } catch {
+          /* ignore */
+        }
+      }
+      throw err;
     }
   }
 
@@ -901,9 +1003,16 @@ export function useAudioRecorder({
   }
 
   async function handleDeviceChange(newDeviceId: string) {
+    if (recordState === "recording" || recordState === "paused") {
+      try {
+        await swapMicDevice(newDeviceId);
+      } catch {
+        /* swapMicDevice surfaces setError */
+      }
+      return;
+    }
     setSelectedDeviceId(newDeviceId);
     saveStoredDeviceId(newDeviceId);
-    // Re-acquire only when ready (we lock the picker mid-recording).
     if (recordState === "ready") {
       await acquireMic({ deviceId: newDeviceId || undefined, forRecording: false });
     }
@@ -1100,9 +1209,7 @@ export function useAudioRecorder({
     recordState === "paused" ||
     (recordState === "uploading" && uploadMode === "segment");
   const lockDevice =
-    recordState === "recording" ||
-    recordState === "paused" ||
-    (recordState === "uploading" && uploadMode === "segment");
+    recordState === "uploading" && uploadMode === "segment";
 
   // Ref-stable addRemoteAudio so consumers (the workspace's
   // participants-reconcile effect) don't re-run on every render just
@@ -1161,6 +1268,7 @@ export function useAudioRecorder({
     stopAndUpload,
     handleReset,
     flushPendingUploads,
+    swapMicDevice,
   };
 }
 

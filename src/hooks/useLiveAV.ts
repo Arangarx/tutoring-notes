@@ -53,6 +53,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
+  loadStoredVideoDeviceId,
+  saveStoredVideoDeviceId,
+} from "@/lib/recording/storage";
+
+import {
   createPeerMesh,
   type PeerMesh,
   type PeerMeshOptions,
@@ -202,6 +207,12 @@ export type UseLiveAVOptions = {
    * to `true`.
    */
   videoConstraints?: MediaTrackConstraints | boolean;
+  /**
+   * Tutor workspace: `workspaceAudio.swapMicDevice` so hardware mic swaps
+   * flow through the recording Web Audio graph; {@link setMicDevice} then
+   * refreshes WebRTC via {@link PeerMesh.replaceLocalTrackOnAllPeers}.
+   */
+  swapMicDevice?: (deviceId: string) => Promise<void>;
   /** Test-only override of `navigator.mediaDevices.getUserMedia`. */
   _getUserMedia?: (
     constraints: MediaStreamConstraints
@@ -325,6 +336,23 @@ export type UseLiveAVReturn = {
    * both retries (or the relevant subset) settle.
    */
   retryAcquire: () => Promise<void>;
+  /**
+   * Video inputs (labels populate after camera permission). Updates on
+   * successful `requestCam()` and on `devicechange`.
+   */
+  videoDevices: ReadonlyArray<MediaDeviceInfo>;
+  /** Device id from the active local video track; null before camera grant. */
+  selectedVideoDeviceId: string | null;
+  /**
+   * Switch the local camera to a specific device. Stops the prior video
+   * track, updates peers via `replaceTrack`, and persists the choice.
+   */
+  setVideoDevice: (deviceId: string) => Promise<void>;
+  /**
+   * Switch microphone hardware. With `swapMicDevice` from the workspace,
+   * delegates to the recorder; otherwise uses a self-acquired stream swap.
+   */
+  setMicDevice: (deviceId: string) => Promise<void>;
 };
 
 // -----------------------------------------------------------------
@@ -402,6 +430,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     audioConstraints = true,
     videoConstraints = true,
     externalAudioStream,
+    swapMicDevice: swapMicFromRecorder,
     _getUserMedia,
     _createPeerMesh,
     _createSignaling,
@@ -448,6 +477,10 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   const [participants, setParticipants] = useState<
     ReadonlyArray<AvParticipant>
   >([]);
+  const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedVideoDeviceId, setSelectedVideoDeviceId] = useState<
+    string | null
+  >(null);
 
   // Refs for things consumed by ref-stable callbacks.
   const localAudioStreamRef = useRef<MediaStream | null>(null);
@@ -499,6 +532,26 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     }
     return null;
   }
+
+  const refreshVideoDevices = useCallback(async () => {
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices?.enumerateDevices
+    ) {
+      return;
+    }
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      if (!unmountedRef.current) {
+        setVideoDevices(all.filter((d) => d.kind === "videoinput"));
+      }
+    } catch (err) {
+      log.warn(
+        `video enumerateDevices failed: ${(err as Error)?.message ?? String(err)}`
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- log from opts is stable for session
+  }, []);
 
   const requestMic = useCallback(
     async (): Promise<void> => {
@@ -573,8 +626,8 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       })();
       micInFlightRef.current = inFlight;
       return inFlight;
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- log + resolveGetUserMedia stable per session
     [audioConstraints, externalAudioStream]
   );
 
@@ -607,9 +660,26 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
       const inFlight = (async () => {
         try {
+          const storedVid = loadStoredVideoDeviceId();
+          let effectiveVideo: MediaTrackConstraints | boolean = videoConstraints;
+          if (videoConstraints === true) {
+            effectiveVideo = storedVid
+              ? { deviceId: { exact: storedVid } }
+              : true;
+          } else if (
+            typeof videoConstraints === "object" &&
+            videoConstraints !== null &&
+            storedVid &&
+            !(videoConstraints as MediaTrackConstraints).deviceId
+          ) {
+            effectiveVideo = {
+              ...(videoConstraints as MediaTrackConstraints),
+              deviceId: { exact: storedVid },
+            };
+          }
           const stream = await getUM({
             audio: false,
-            video: videoConstraints,
+            video: effectiveVideo,
           });
           if (unmountedRef.current) {
             for (const t of stream.getTracks()) {
@@ -632,6 +702,13 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           log.log(
             `cam acquired tracks=${stream.getVideoTracks().length}`
           );
+          void refreshVideoDevices();
+          const vt = stream.getVideoTracks()[0];
+          const devId = vt?.getSettings?.()?.deviceId;
+          if (devId) {
+            setSelectedVideoDeviceId(devId);
+            saveStoredVideoDeviceId(devId);
+          }
         } catch (err) {
           if (unmountedRef.current) return;
           const classified = classifyMediaError(err, "cam");
@@ -651,9 +728,9 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       })();
       camInFlightRef.current = inFlight;
       return inFlight;
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     },
-    [videoConstraints]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- log + resolveGetUserMedia stable per session
+    [videoConstraints, refreshVideoDevices]
   );
 
   // ---------------------------------------------------------------
@@ -733,6 +810,24 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ---------------------------------------------------------------
+  // Effect: refresh video device list when hardware changes
+  // ---------------------------------------------------------------
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const md = navigator.mediaDevices;
+    if (!md?.addEventListener) return;
+
+    const onDeviceChange = () => {
+      void refreshVideoDevices();
+    };
+    md.addEventListener("devicechange", onDeviceChange);
+    return () => {
+      md.removeEventListener("devicechange", onDeviceChange);
+    };
+  }, [refreshVideoDevices]);
 
   // ---------------------------------------------------------------
   // Effect: track unmount (suppresses late state setters)
@@ -1150,11 +1245,181 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         );
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- log stable per session
   }, [localAudioStream, localVideoStream]);
 
   // ---------------------------------------------------------------
   // Public callbacks
   // ---------------------------------------------------------------
+
+  const setVideoDevice = useCallback(
+    async (deviceId: string): Promise<void> => {
+      const cur =
+        localVideoStreamRef.current?.getVideoTracks()[0]?.getSettings()
+          ?.deviceId;
+      if (cur === deviceId) {
+        log.log(`event=set-video-device no-op deviceId=${deviceId}`);
+        return;
+      }
+      const getUM = resolveGetUserMedia();
+      if (!getUM) {
+        const noUM: AvAcquireError = {
+          type: "browser-unsupported",
+          message:
+            "Your browser does not expose `navigator.mediaDevices.getUserMedia`.",
+          raw: null,
+        };
+        if (!unmountedRef.current) setVideoError(noUM);
+        return;
+      }
+      startAcquiring();
+      try {
+        const stream = await getUM({
+          audio: false,
+          video: { deviceId: { exact: deviceId } },
+        });
+        const newTrack = stream.getVideoTracks()[0];
+        if (!newTrack) {
+          for (const t of stream.getTracks()) t.stop();
+          if (!unmountedRef.current) {
+            const empty: AvAcquireError = {
+              type: "no-device",
+              message: "No video track from the selected camera.",
+              raw: null,
+            };
+            setVideoError(empty);
+          }
+          return;
+        }
+        if (unmountedRef.current) {
+          for (const t of stream.getTracks()) t.stop();
+          return;
+        }
+        const prev = localVideoStreamRef.current;
+        if (prev) {
+          for (const t of prev.getVideoTracks()) {
+            try {
+              t.stop();
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+        const ms = new MediaStream([newTrack]);
+        if (isCamMutedRef.current) newTrack.enabled = false;
+        localVideoStreamRef.current = ms;
+        setLocalVideoStream(ms);
+        setVideoError(null);
+        setSelectedVideoDeviceId(deviceId);
+        saveStoredVideoDeviceId(deviceId);
+        const mesh = meshRef.current;
+        if (mesh && !mesh.isDisposed()) {
+          mesh.replaceLocalTrackOnAllPeers("video", newTrack);
+        }
+        void refreshVideoDevices();
+        log.log(`event=set-video-device deviceId=${deviceId}`);
+      } catch (err) {
+        if (unmountedRef.current) return;
+        const classified = classifyMediaError(err, "cam");
+        log.warn(
+          `setVideoDevice failed type=${classified.type} err=${
+            (err as Error)?.message ?? String(err)
+          }`
+        );
+        setVideoError(classified);
+      } finally {
+        endAcquiring();
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- log + resolveGetUserMedia stable per session
+    [log, refreshVideoDevices]
+  );
+
+  const setMicDevice = useCallback(
+    async (deviceId: string): Promise<void> => {
+      if (swapMicFromRecorder) {
+        if (!externalAudioStream) {
+          log.warn(
+            "setMicDevice: swapMicDevice set without externalAudioStream — ignoring"
+          );
+          return;
+        }
+        try {
+          await swapMicFromRecorder(deviceId);
+        } catch {
+          return;
+        }
+        const mesh = meshRef.current;
+        const t = localAudioStreamRef.current?.getAudioTracks()[0];
+        if (mesh && t && !mesh.isDisposed()) {
+          try {
+            mesh.replaceLocalTrackOnAllPeers("audio", t);
+          } catch (err) {
+            log.warn(
+              `setMicDevice replaceTrack threw: ${
+                (err as Error)?.message ?? String(err)
+              }`
+            );
+          }
+        }
+        log.log(`event=set-mic-device deviceId=${deviceId} path=recorder`);
+        return;
+      }
+      if (externalAudioStream) {
+        log.warn(
+          "setMicDevice: external audio present — pass swapMicDevice from workspace"
+        );
+        return;
+      }
+      const cur =
+        localAudioStreamRef.current?.getAudioTracks()[0]?.getSettings()
+          ?.deviceId;
+      if (cur === deviceId) {
+        log.log(`event=set-mic-device no-op deviceId=${deviceId}`);
+        return;
+      }
+      const getUM = resolveGetUserMedia();
+      if (!getUM) return;
+      startAcquiring();
+      if (!unmountedRef.current) setError(null);
+      try {
+        const stream = await getUM({
+          audio: { deviceId: { exact: deviceId } },
+          video: false,
+        });
+        if (unmountedRef.current) {
+          for (const tt of stream.getTracks()) tt.stop();
+          return;
+        }
+        const newTrack = stream.getAudioTracks()[0];
+        if (!newTrack) {
+          for (const tt of stream.getTracks()) tt.stop();
+          return;
+        }
+        const prev = localAudioStreamRef.current;
+        if (prev) {
+          for (const tt of prev.getTracks()) tt.stop();
+        }
+        if (isMicMutedRef.current) {
+          for (const tt of stream.getAudioTracks()) tt.enabled = false;
+        }
+        localAudioStreamRef.current = stream;
+        setLocalAudioStream(stream);
+        const mesh = meshRef.current;
+        if (mesh && !mesh.isDisposed()) {
+          mesh.replaceLocalTrackOnAllPeers("audio", newTrack);
+        }
+        log.log(`event=set-mic-device deviceId=${deviceId}`);
+      } catch (err) {
+        if (unmountedRef.current) return;
+        setError(classifyMediaError(err, "mic"));
+      } finally {
+        endAcquiring();
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- log + integration refs stable per session
+    [externalAudioStream, swapMicFromRecorder, log]
+  );
 
   const toggleMic = useCallback(() => {
     const stream = localAudioStreamRef.current;
@@ -1252,5 +1517,9 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     videoError,
     reconnectPeer,
     retryAcquire,
+    videoDevices,
+    selectedVideoDeviceId,
+    setVideoDevice,
+    setMicDevice,
   };
 }

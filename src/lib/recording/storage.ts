@@ -16,6 +16,8 @@ export const CHIME_VOL_MAX = 1;
 export const CHIME_VOL_DEFAULT = 0.75;
 
 export const STORAGE_DEVICE_KEY = "tn-mic-device-id";
+/** Stored preferred camera (same semantics as mic device id). */
+export const STORAGE_VIDEO_DEVICE_KEY = "tn-cam-device-id";
 export const STORAGE_GAIN_KEY = "tn-mic-gain";
 /** Whether to play the approaching-cap + rollover chimes (also gates vibration). */
 export const STORAGE_CHIME_ENABLED_KEY = "tn-recording-chime-enabled";
@@ -62,6 +64,22 @@ export function saveStoredDeviceId(id: string): void {
   if (!s) return;
   try {
     s.setItem(STORAGE_DEVICE_KEY, id);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function loadStoredVideoDeviceId(): string {
+  const s = getStorage();
+  if (!s) return "";
+  return s.getItem(STORAGE_VIDEO_DEVICE_KEY) ?? "";
+}
+
+export function saveStoredVideoDeviceId(id: string): void {
+  const s = getStorage();
+  if (!s) return;
+  try {
+    s.setItem(STORAGE_VIDEO_DEVICE_KEY, id);
   } catch {
     /* ignore */
   }

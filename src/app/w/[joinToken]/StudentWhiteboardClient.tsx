@@ -18,6 +18,7 @@ import { useLiveAV } from "@/hooks/useLiveAV";
 import { AVPermissionsPrompt } from "@/components/av/AVPermissionsPrompt";
 import { AVTilesPanel } from "@/components/av/AVTilesPanel";
 import { AVControls } from "@/components/av/AVControls";
+import VideoControls from "@/components/av/VideoControls";
 import {
   ACTIVE_PING_STALE_MS,
   computeDisplayActiveMs,
@@ -652,6 +653,15 @@ export function StudentWhiteboardClient({
           toggleCam={liveAv.toggleCam}
           disabled={!liveAv.isActive}
         />
+        {liveAv.isActive && (
+          <VideoControls
+            devices={liveAv.videoDevices}
+            selectedDeviceId={liveAv.selectedVideoDeviceId ?? ""}
+            onDeviceChange={(id) => void liveAv.setVideoDevice(id)}
+            isLive={liveAv.localVideoStream !== null}
+            disabled={!liveAv.isActive}
+          />
+        )}
       </div>
 
       <div

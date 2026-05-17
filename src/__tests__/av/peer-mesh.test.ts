@@ -49,7 +49,7 @@ import type { WhiteboardWireSignalPayload } from "@/lib/whiteboard/sync-client";
 // Fake RTCPeerConnection — just enough surface for peer-mesh.ts
 // -----------------------------------------------------------------
 
-type FakePcSend = { targetPeerId?: string; type: string };
+type FakePcSend = { targetPeerId?: string; type: string; [k: string]: unknown };
 
 /**
  * Minimal RTCPeerConnection double. Tests drive it via the `_trigger*`
@@ -132,15 +132,14 @@ class FakePc {
   addTrack(track: MediaStreamTrack, ..._streams: MediaStream[]): RTCRtpSender {
     this.history.push({ type: "addTrack" });
     this.addedTracks.push(track);
+    const trackHolder: { current: MediaStreamTrack | null } = { current: track };
     const sender = {
-      track,
+      get track(): MediaStreamTrack | null {
+        return trackHolder.current;
+      },
       replaceTrack: async (next: MediaStreamTrack | null) => {
-        this.history.push({
-          type: "replaceTrack",
-          kind: next?.kind,
-          id: next?.id,
-        });
-        sender.track = next ?? null;
+        this.history.push({ type: "replaceTrack" });
+        trackHolder.current = next;
       },
     } as unknown as RTCRtpSender;
     this._senders.push(sender);

@@ -12,6 +12,11 @@ export type RecordingControlPanelProps = {
   /** Passed to MainPanel — e.g. transcribe-in-progress or workspace guardrails. */
   disabled?: boolean;
   /**
+   * When set (e.g. tutor workspace + live A/V), wires mic picker changes to
+   * `useLiveAV.setMicDevice` so WebRTC and the recorder graph stay in sync.
+   */
+  onMicDeviceChange?: (deviceId: string) => void | Promise<void>;
+  /**
    * Live label offset — set when the host already shows prior segments (e.g.
    * pending list) while the hook reset `segmentNumber` to 1 for a new take.
    */
@@ -26,13 +31,14 @@ export type RecordingControlPanelProps = {
 export default function RecordingControlPanel({
   recorder: r,
   disabled,
+  onMicDeviceChange,
   segmentDisplayBase = 0,
 }: RecordingControlPanelProps) {
   const micControls: MicControlsProps = {
     meterBarRef: r.meterBarRef,
     devices: r.devices,
     selectedDeviceId: r.selectedDeviceId,
-    onDeviceChange: r.handleDeviceChange,
+    onDeviceChange: onMicDeviceChange ?? r.handleDeviceChange,
     gainLinear: r.gainLinear,
     onGainChange: r.setGainLinear,
     isLive: r.isLive,
