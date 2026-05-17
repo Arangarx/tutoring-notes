@@ -117,10 +117,7 @@ import type {
   WhiteboardWireRemoteDetails,
 } from "@/lib/whiteboard/sync-client";
 import { validateExcalidrawEmbeddable } from "@/lib/whiteboard/validate-embeddable";
-import {
-  mergeScenesReconciled,
-  updateSceneMergingWithRemote,
-} from "@/lib/whiteboard/apply-reconciled-remote-scene";
+import { mergeScenesReconciled } from "@/lib/whiteboard/apply-reconciled-remote-scene";
 import type { RemoteSceneIngestLogHint } from "@/hooks/useWhiteboardRecorder";
 import {
   adaptWBElementsToExcalidraw,
@@ -447,10 +444,29 @@ export function WhiteboardWorkspaceClient({
       const api = excalidrawAPIRef.current;
       if (!api) return;
       // `scenePageId` is which page this `elements` snapshot belongs to (may
-      // lag the tutor’s visible tab when the wire diff is throttled).
+      // lag the tutor's visible tab when the wire diff is throttled).
       const targetId = details?.scenePageId ?? details?.page?.activePageId ?? "p1";
-      const curActive = activePageIdRef.current;
 
+      // Smoke-3 root cause: this used to capture `curActive` BEFORE the
+      // hydrate await and use it as the bucket key. During the await the
+      // tutor could click another page; `activePageIdRef.current` would
+      // move but the stale capture still pointed at the old page,
+      // sending the merged peer scene into the WRONG `pageDataRef` slot
+      // AND into the live scene of a now-different page (see
+      // `docs/PHASE-PDF-STATUS.md` for the full trace). The bilateral
+      // leakage the pilot saw — "p.1 and pdf p.1 already bled" — was
+      // exactly this race firing on every page switch where a student
+      // broadcast was in flight.
+      //
+      // The new contract:
+      //   1. Read all "live" state AFTER the hydrate await (no captures).
+      //   2. Use `pageDataRef[targetId]` as the merge local — never the
+      //      live scene, because the live scene may belong to a different
+      //      page right now.
+      //   3. Only touch the live scene when we're STILL on `targetId` AND
+      //      no programmatic page switch is mid-flight. Otherwise just
+      //      update the bucket and let the next page-switch hydrate
+      //      surface the change visually.
       const result = await hydrateRemoteImageFilesForScene(
         api,
         elements,
@@ -473,33 +489,50 @@ export function WhiteboardWorkspaceClient({
           prev === "load" ? "load" : "missing"
         );
       }
+
+      // Read local at this exact tick:
+      //   - If we're STILL on `targetId` and no page-switch swap is
+      //     mid-flight, the live scene IS this page's scene and is the
+      //     freshest source (captures the tutor's in-flight stroke that
+      //     hasn't surfaced through `onChange` yet).
+      //   - Otherwise, the live scene belongs to a different page; reading
+      //     it would mix peer page X's elements with tutor page Y's
+      //     elements (the bilateral leak). Fall back to the bucket, which
+      //     is kept in sync by handleExcalidrawChange + page-switch saves.
+      const onTargetReadTime =
+        activePageIdRef.current === targetId &&
+        pageSwitchProgrammaticRef.current === 0;
+      const localForMerge: ReadonlyArray<ExcalidrawLikeElement> =
+        onTargetReadTime
+          ? (api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>)
+          : ((pageDataRef.current[targetId] as
+              | ReadonlyArray<ExcalidrawLikeElement>
+              | undefined) ?? []);
       const appState = api.getAppState() as unknown;
-
-      if (targetId === curActive) {
-        applyingRemoteToCanvasRef.current = true;
-        try {
-          await updateSceneMergingWithRemote(api, elements, {
-            shouldDropRemoteElement,
-          });
-          const merged = api.getSceneElements() as ExcalidrawLikeElement[];
-          pageDataRef.current[curActive] = merged;
-          return { recordScene: merged };
-        } finally {
-          applyingRemoteToCanvasRef.current = false;
-        }
-      }
-
-      const prev =
-        (pageDataRef.current[targetId] as
-          | ReadonlyArray<ExcalidrawLikeElement>
-          | undefined) ?? [];
       const merged = await mergeScenesReconciled(
-        prev,
+        localForMerge,
         elements,
         appState,
         { shouldDropRemoteElement }
       );
       pageDataRef.current[targetId] = merged;
+
+      // Re-check at write time. `mergeScenesReconciled` has a tiny
+      // microtask await (dynamic import of `reconcileElements`); in
+      // theory another microtask could have moved the active page, so
+      // we don't reuse `onTargetReadTime`.
+      const stillOnTargetWriteTime =
+        activePageIdRef.current === targetId &&
+        pageSwitchProgrammaticRef.current === 0;
+      if (stillOnTargetWriteTime) {
+        applyingRemoteToCanvasRef.current = true;
+        try {
+          api.updateScene({ elements: merged as ReadonlyArray<unknown> });
+        } finally {
+          applyingRemoteToCanvasRef.current = false;
+        }
+        return { recordScene: merged };
+      }
       return { record: "skip" };
     },
     [shouldDropRemoteElement, whiteboardSessionId]

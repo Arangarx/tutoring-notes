@@ -53,10 +53,33 @@ Logs (prefix `wbsid=`): `pdf-inspect`, `pdf-pick`, `pdf-upload`, `pdf-page-inser
 - `board-document-snapshot.test.ts`, `pdf-render.test.ts` (`resolvePdfPagesToRender`), `insert-asset.test.ts`, `pdf-page-selection.test.ts`.
 - Student AV mount mock updated with `sectionsRegistry`.
 
-## Smoke-1 / Smoke-2 hardening (2026-05-16)
+## Smoke-1 / Smoke-2 / Smoke-3 hardening (2026-05-16)
 
 See [PHASE-PDF-SMOKE-1.md](PHASE-PDF-SMOKE-1.md) for the full smoke
-findings + triage (round 1 + round 2 are both in that doc).
+findings + triage (rounds 1, 2, and 3 all in that doc).
+
+**Smoke-3 follow-on** (the leak's twin — peer-broadcast side):
+- The smoke-2 fix closed the `selectTutorPage` async window, but the
+  *peer-broadcast* path (`applyRemoteToCanvas`) had a structurally
+  identical race: it captured `activePageIdRef.current` BEFORE the
+  hydrate await, then after the await called
+  `updateSceneMergingWithRemote` which read `api.getSceneElements()`
+  (the live scene, now showing the page the tutor had switched to)
+  and pushed `reconcileElements`'s **union** of (new-page elements +
+  peer's target-page elements) back into the live scene AND into
+  `pageDataRef[capturedActive]`. Bilateral leakage.
+- Round-3 fix: rewrote `applyRemoteToCanvas` — no pre-await capture;
+  read all volatile state AFTER hydrate; use `pageDataRef[targetId]`
+  as the merge local (or the live scene only when *still* on target
+  at read time); only update the live scene when still on target +
+  no page-switch swap is in flight at write time. When we've moved,
+  only the bucket is updated; the next page-switch hydrate surfaces
+  the change.
+- Also (round 3): drop the `!Mf.fontsDirectory` guard in
+  `MathInsertButton.tsx`. `MathfieldElement.fontsDirectory` defaults
+  to the truthy `"./fonts/"`, so the round-2 conditional never fired
+  and the CDN URL was never assigned — KaTeX 404s persisted.
+  Unconditional assignment now lands.
 
 **Smoke-2 follow-on** (the real leak — round 1 fix was insufficient):
 - `selectTutorPage`'s `await hydrateRemoteImageFilesForScene` had been
@@ -72,7 +95,8 @@ findings + triage (round 1 + round 2 are both in that doc).
   in the same synchronous block.
 - Also: `MathfieldElement.fontsDirectory` pinned to jsDelivr CDN so
   the Insert math button stops 404'ing on Vercel Preview (smoke-2
-  Note 1 — pre-existing, not introduced by this branch).
+  Note 1 — pre-existing, not introduced by this branch). Round 3
+  re-fixed because the guard was wrong (see above).
 
 Round-1 blockers fixed (still hold after round-2 verification):
 

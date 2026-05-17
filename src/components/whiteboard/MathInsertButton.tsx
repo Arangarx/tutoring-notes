@@ -147,22 +147,24 @@ export function MathInsertButton({
       try {
         const mod = await import("mathlive");
         if (typeof window === "undefined") return;
-        // smoke-2 note 1: mathlive 0.109 tries to derive its font path
-        // from `import.meta.url`, but Next's webpack output puts the
-        // chunks where the relative font path resolves to
-        // `/_next/static/chunks/fonts/...` — a location the build
-        // never actually copies the .woff2 files to. Result: a wall
-        // of `404 Not Found` font errors + KaTeX glyphs fall back to
-        // system fonts. Pin the path to the jsDelivr-hosted MathLive
-        // fonts dir (CSP `font-src 'self' data: blob: https:` already
-        // permits HTTPS font subresources).
+        // smoke-3 #3 root cause: mathlive 0.109 ships with the static
+        // initializer `_MathfieldElement._fontsDirectory = "./fonts/"`,
+        // so the previous `if (!Mf.fontsDirectory)` guard was always
+        // false and the CDN URL was never assigned — KaTeX glyphs kept
+        // 404ing on Vercel because Next's webpack output never copies
+        // the .woff2 files to `/_next/static/chunks/fonts/`. Set the
+        // CDN URL UNCONDITIONALLY before the first `<math-field>` is
+        // created (the docblock on the setter warns that changes after
+        // mount have no effect). CSP `font-src 'self' data: blob: https:`
+        // already permits HTTPS font subresources.
         const Mf = (
           mod as unknown as {
             MathfieldElement?: { fontsDirectory?: string };
           }
         ).MathfieldElement;
-        if (Mf && !Mf.fontsDirectory) {
-          Mf.fontsDirectory = "https://cdn.jsdelivr.net/npm/mathlive@0.109.1/fonts/";
+        if (Mf) {
+          Mf.fontsDirectory =
+            "https://cdn.jsdelivr.net/npm/mathlive@0.109.1/fonts/";
         }
         // mathlive 0.109 registers the element synchronously on
         // import, but on slower devices the registration callback

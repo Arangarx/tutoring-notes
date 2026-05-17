@@ -240,3 +240,117 @@ Still deferred (per triage above): #2, #8, #9, #11, S3, S4, S2-2
 | #1 rapid-click leak | Token-based switch cancellation + atomic activePageIdRef-and-updateScene swap (no await window) | `WhiteboardWorkspaceClient.tsx` (`tutorSwitchTokenRef`, rewritten `selectTutorPage`, `addTutorPage`) |
 | #2 Add Page cascade | Same token bump in `addTutorPage` so an in-flight `selectTutorPage` abandons rather than overwriting | `WhiteboardWorkspaceClient.tsx` (`addTutorPage`) |
 | Note 1 KaTeX 404s | `MathfieldElement.fontsDirectory` pinned to jsDelivr CDN | `src/components/whiteboard/MathInsertButton.tsx` |
+
+## Smoke-3 (2026-05-16 round 3) — findings
+
+Against `5a6a798` on the Vercel Preview. Headline: the page-switch
+race fix held (no rapid-click leak from switching alone), but **a
+SECOND, independent race in `applyRemoteToCanvas` was still bleeding
+pages bilaterally** — and the math-fonts CDN pin was a no-op because
+the guard never let it run.
+
+### Live session
+
+1. **Bilateral leak persists with slow, deliberate navigation.**
+   Brought in 3 PDF pages. Drew a green "1" on p.1, pink "1/2/3" on
+   PDF p.1/p.2/p.3. Walking SLOWLY back through the page strip,
+   p.1 and PDF p.1 had already bled into each other. With rapid
+   clicks + collapse/expand spam, every PDF page contaminated every
+   other PDF page (strokes AND sheet bitmaps).
+2. **Add Page after PDF p.2 reproduces a cascade immediately.**
+   Strokes from all three PDF pages + all three PDF sheets land on
+   the new page. (Reliable, no rapid-clicking needed.) On a clean
+   retest PDF p.2/p.3 only bled with spam clicks + collapse toggles.
+3. **Insert math — same 404 wall as smoke-2.** No change from
+   round 2; the CDN pin did not land.
+4. Replay — strokes on PDF p.1/p.2 may be obscured by the sheet
+   bitmap z-ordering rather than truly missing; deferred to a
+   layered inspection.
+
+### Smoke-3 root cause — `applyRemoteToCanvas` page-switch race
+
+The smoke-2 fix closed the `selectTutorPage` async window between
+`activePageIdRef = nextId` and `api.updateScene(next)`. Good. But
+the *peer-side* path that processes a student's broadcast had its
+own, **structurally identical** race:
+
+```
+applyRemoteToCanvas(elements, { scenePageId: targetId }) {
+  const curActive = activePageIdRef.current;           // ← captured BEFORE await
+  await hydrateRemoteImageFilesForScene(...);          // ← long await
+  await updateSceneMergingWithRemote(api, elements, …) // ← reads live scene,
+                                                       //   merges into live scene
+  if (targetId === curActive) {
+    pageDataRef.current[curActive] = api.getSceneElements();  // ← writes BUCKET
+  }
+}
+```
+
+During the awaits the tutor switches pages (intentional or
+accidental). When the function resumes:
+
+- `activePageIdRef.current` = `pageB` (the new page the tutor
+  navigated to).
+- `curActive` (captured) still = `pageA` (the page the broadcast
+  was about, equal to `targetId`).
+- The live scene now shows `pageB`'s elements.
+- `updateSceneMergingWithRemote` reads `api.getSceneElements()` =
+  `pageB`'s elements, runs Excalidraw's `reconcileElements` to
+  UNION them with the student's `pageA` elements, and pushes
+  `union(pageB, pageA)` back into the live scene. **PageB now
+  visibly contains pageA's strokes.**
+- Then `pageDataRef[curActive] = api.getSceneElements()` writes
+  `pageDataRef[pageA] = union(pageB, pageA)`. **PageA's bucket now
+  contains pageB's strokes too.**
+
+That's the bilateral leak the pilot kept seeing. `reconcileElements`
+is correct for collaborative co-editing (it's a union by id with
+version/nonce ties broken sensibly) — the bug is feeding it the
+WRONG local side.
+
+The `Add Page after PDF p.2` cascade is the same race compounded:
+clicking Add Page bumps `tutorSwitchTokenRef` and `activePageIdRef`,
+but a still-resolving `applyRemoteToCanvas` from before the click
+fires its post-await body with the now-stale `curActive = pdfP2`
+and overwrites `pageDataRef[pdfP2]` with the new blank page's
+scene (plus whatever the student broadcast). Subsequent
+`selectTutorPage(pdfP2)` reads that polluted bucket → the leak is
+now persistent across the session.
+
+### Smoke-3 root cause — MathLive font CDN guard
+
+`MathInsertButton.tsx` set the CDN URL only when `!Mf.fontsDirectory`:
+
+```
+if (Mf && !Mf.fontsDirectory) {
+  Mf.fontsDirectory = "https://cdn.jsdelivr.net/.../fonts/";
+}
+```
+
+But mathlive 0.109 ships with the static initializer
+`_MathfieldElement._fontsDirectory = "./fonts/"` (verified in
+`node_modules/mathlive/mathlive.mjs`), so `Mf.fontsDirectory` is
+the truthy string `"./fonts/"` at import time. The guard is always
+false; the CDN URL is never written. KaTeX glyphs keep 404ing.
+
+### Smoke-3 fixes landed
+
+| Smoke ref | Fix | Where |
+| --- | --- | --- |
+| #1 / #2 bilateral page leak | Rewrote `applyRemoteToCanvas`: no pre-await capture of `activePageIdRef`; use `pageDataRef[targetId]` (or the live scene only when *still* on target at read time) as the merge local instead of `getSceneElements()` on the live scene; only call `api.updateScene` when active page is STILL `targetId` AND `pageSwitchProgrammaticRef.current === 0` at write time. When we've navigated away, write `pageDataRef[targetId] = merged` and skip the live-scene update; the next page-switch hydrate will surface it visually. | `WhiteboardWorkspaceClient.tsx` (`applyRemoteToCanvas`); also removed the now-unused `updateSceneMergingWithRemote` import |
+| #3 KaTeX 404s (round 2 redux) | Drop the `!Mf.fontsDirectory` guard — `MathfieldElement.fontsDirectory` defaults to the truthy `"./fonts/"`, so the previous conditional never fired. Unconditionally pin the CDN URL after dynamic import. | `src/components/whiteboard/MathInsertButton.tsx` |
+
+Net: the post-`await` write-back path can no longer cross page
+buckets, and the math fonts CDN URL is actually applied.
+
+Test status post-fix: `npx jest src/__tests__/whiteboard
+src/__tests__/dom` → **533/533 pass**; `npx tsc --noEmit` → clean.
+Pre-existing DB-dependent suites (auth, password-reset, email,
+transcribe-late-hallucination, note-and-share) still fail with
+`P1001 Can't reach database server at 127.0.0.1:5432`; unrelated
+to this branch.
+
+Still deferred (unchanged from above): #2 PDF position lock, #8
+Blob token rate limit, #9 replay page strip, #11/S2-4 scrub drag
+429, S3 viewport-center mismatch, S4 math button promotion /
+library button behaviour, S2-2 replay active-ping 409.
