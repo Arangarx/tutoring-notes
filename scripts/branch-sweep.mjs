@@ -98,9 +98,15 @@ function globToRegex(glob) {
 }
 
 function repoRootPath() {
-  const r = git(["rev-parse", "--show-toplevel"], "");
+  // Use process.cwd() explicitly — passing "" to spawnSync cwd is undefined
+  // behavior on Windows (doesn't fall back to the parent process cwd, so the
+  // git invocation appears to run outside any checkout). Tripped during real
+  // smoke 2026-05-17.
+  const r = git(["rev-parse", "--show-toplevel"], process.cwd());
   if (r.status !== 0 || !r.stdout) {
-    console.error(`${PREFIX} git rev-parse --show-top-level failed: ${r.stderr}`);
+    console.error(
+      `${PREFIX} git rev-parse --show-toplevel failed: cwd=${process.cwd()} stderr=${r.stderr}`
+    );
     throw new Error("not a git checkout");
   }
   return r.stdout;
