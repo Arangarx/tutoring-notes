@@ -656,8 +656,8 @@ export function StudentWhiteboardClient({
         {liveAv.isActive && (
           <VideoControls
             devices={liveAv.videoDevices}
-            selectedDeviceId={liveAv.selectedVideoDeviceId ?? ""}
-            onDeviceChange={(id) => void liveAv.setVideoDevice(id)}
+            selectedPickerSlot={liveAv.pickedVideoCameraSlot}
+            onPickCameraSlot={(i) => void liveAv.setVideoCameraBySlot(i)}
             isLive={liveAv.localVideoStream !== null}
             disabled={!liveAv.isActive}
           />

@@ -3,12 +3,17 @@
 /**
  * Camera device picker for live A/V — mirrors the MicControls device row
  * (chrome + layout) without gain/meter/chimes.
+ *
+ * Option `value`s are enumerate **indices**, not bare `deviceId`s, because some
+ * Android OEM rows share a bogus duplicate `deviceId`; the hook resolves the
+ * row → `MediaDeviceInfo` (+ `groupId`) at pick time.
  */
 
 export type VideoControlsProps = {
   devices: ReadonlyArray<MediaDeviceInfo>;
-  selectedDeviceId: string;
-  onDeviceChange: (deviceId: string) => void;
+  /** Index into {@link devices} — unique per enumerated row / label. */
+  selectedPickerSlot: number;
+  onPickCameraSlot: (slotIndex: number) => void;
   /** True when camera stream is active — picker options populate after permission. */
   isLive: boolean;
   disabled?: boolean;
@@ -16,15 +21,18 @@ export type VideoControlsProps = {
 
 export default function VideoControls({
   devices,
-  selectedDeviceId,
-  onDeviceChange,
+  selectedPickerSlot,
+  onPickCameraSlot,
   isLive,
   disabled = false,
 }: VideoControlsProps) {
   const pickerDisabled =
     disabled || (isLive ? false : devices.length === 0);
-  const selectedLabel =
-    devices.find((d) => d.deviceId === selectedDeviceId)?.label ?? "";
+  const safeSlot =
+    devices.length === 0
+      ? 0
+      : Math.min(Math.max(0, selectedPickerSlot), devices.length - 1);
+  const selectedLabel = devices[safeSlot]?.label ?? "";
 
   return (
     <div
@@ -54,9 +62,12 @@ export default function VideoControls({
         <select
           data-testid="video-device-select"
           aria-label="Camera device"
-          value={selectedDeviceId}
+          value={devices.length === 0 ? "" : String(safeSlot)}
           disabled={pickerDisabled}
-          onChange={(e) => onDeviceChange(e.target.value)}
+          onChange={(e) => {
+            const idx = Number(e.target.value);
+            if (Number.isFinite(idx)) onPickCameraSlot(idx);
+          }}
           title={selectedLabel || undefined}
           style={{
             flex: 1,
@@ -80,7 +91,10 @@ export default function VideoControls({
             </option>
           ) : (
             devices.map((d, i) => (
-              <option key={d.deviceId || `video-${i}`} value={d.deviceId}>
+              <option
+                key={`${d.groupId}|${d.deviceId}|${i}`}
+                value={String(i)}
+              >
                 {d.label || `Camera ${i + 1}`}
               </option>
             ))
