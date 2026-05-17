@@ -149,15 +149,66 @@ function requireDualDb(prodUrl, devUrl, log) {
   }
 }
 
-/** @param {import('@prisma/client').PrismaClient} prisma */
-async function loadReferenceSet(prisma) {
+/**
+ * Neon's serverless Postgres (PgBouncer pooler) aggressively closes idle
+ * connections. If anything slow (e.g. the Vercel Blob LIST) runs between
+ * $connect() and the first query, the next Prisma call dies with
+ * "Server has closed the connection". This wrapper catches the typical
+ * symptoms and reconnects + retries ONCE before giving up.
+ * @template T
+ * @param {import('@prisma/client').PrismaClient} prisma
+ * @param {string} label
+ * @param {() => Promise<T>} fn
+ * @param {(s: string) => void} log
+ * @param {number} [maxAttempts=2]
+ * @returns {Promise<T>}
+ */
+async function withConnectionRetry(prisma, label, fn, log, maxAttempts = 2) {
+  let lastErr;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      const msg = e instanceof Error ? e.message : String(e);
+      const code = /** @type {{ code?: string }} */ (e)?.code;
+      const isConnLost =
+        msg.includes("Server has closed the connection") ||
+        msg.includes("Connection terminated") ||
+        msg.includes("ECONNRESET") ||
+        code === "P1001" ||
+        code === "P1017";
+      if (!isConnLost || attempt >= maxAttempts) throw e;
+      log(`retry label=${label} attempt=${attempt} reason=connection-lost reconnecting`);
+      try { await prisma.$disconnect(); } catch {}
+      await prisma.$connect();
+    }
+  }
+  throw lastErr;
+}
+
+/**
+ * @param {import('@prisma/client').PrismaClient} prisma
+ * @param {string} label
+ * @param {(s: string) => void} log
+ */
+async function loadReferenceSet(prisma, label, log) {
   const set = new Set();
-  const recs = await prisma.sessionRecording.findMany({
-    select: { blobUrl: true },
-  });
-  const boards = await prisma.whiteboardSession.findMany({
-    select: { eventsBlobUrl: true, snapshotBlobUrl: true },
-  });
+  const recs = await withConnectionRetry(
+    prisma,
+    `${label}.sessionRecording`,
+    () => prisma.sessionRecording.findMany({ select: { blobUrl: true } }),
+    log
+  );
+  const boards = await withConnectionRetry(
+    prisma,
+    `${label}.whiteboardSession`,
+    () =>
+      prisma.whiteboardSession.findMany({
+        select: { eventsBlobUrl: true, snapshotBlobUrl: true },
+      }),
+    log
+  );
   for (const r of recs) {
     if (r.blobUrl) set.add(r.blobUrl);
   }
@@ -262,14 +313,18 @@ async function main() {
     await devPrisma.$connect();
     log("dev DB connected");
 
-    const listed = await listAllBlobs(token, opts.prefix, log);
-
+    // Load DB reference sets FIRST (right after $connect, while the Neon
+    // pooled connection is warm). If we listed Blobs first, the ~510-blob
+    // HTTP round-trip would idle out the Postgres connection and the next
+    // Prisma call dies with "Server has closed the connection".
     /** @type {Set<string>} */
-    const prodRefs = await loadReferenceSet(prodPrisma);
+    const prodRefs = await loadReferenceSet(prodPrisma, "prod", log);
     /** @type {Set<string>} */
-    const devRefs = await loadReferenceSet(devPrisma);
+    const devRefs = await loadReferenceSet(devPrisma, "dev", log);
 
     log(`ref-count prod=${prodRefs.size} dev=${devRefs.size}`);
+
+    const listed = await listAllBlobs(token, opts.prefix, log);
 
     /** @type {{ url: string; size: number; uploadedAt: Date }[]} */
     const orphans = [];
