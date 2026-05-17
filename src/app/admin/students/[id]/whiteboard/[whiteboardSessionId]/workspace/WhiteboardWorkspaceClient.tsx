@@ -355,6 +355,31 @@ export function WhiteboardWorkspaceClient({
    * timeout runs.
    */
   const pageSwitchProgrammaticRef = useRef(0);
+  /**
+   * Monotonic switch token — smoke-2 root cause.
+   *
+   * `selectTutorPage` awaits `hydrateRemoteImageFilesForScene` BEFORE
+   * actually swapping the scene. Pre-fix that await window was a race:
+   *   1. Switch P1 → P2 starts; `activePageIdRef` was bumped to P2;
+   *      hydrate fetches assets; scene STILL shows P1.
+   *   2. User clicks P3 before hydrate finishes.
+   *   3. Second `selectTutorPage` reads `activePageIdRef = P2` as `from`,
+   *      calls `getSceneElements()` which still returns P1 elements,
+   *      writes `pageDataRef[P2] = P1's elements`. Page swap! That was
+   *      the smoke-1 #3/#6/#7 and smoke-2 #1/#2 leak.
+   *
+   * Fix shape:
+   *   - Every `selectTutorPage` / `addTutorPage` increments this token.
+   *   - `selectTutorPage` checks `myToken === current` AFTER hydrate;
+   *     if newer call won, it abandons without bumping
+   *     `activePageIdRef` or touching the scene.
+   *   - `activePageIdRef.current = nextId` now happens AFTER hydrate,
+   *     immediately before `updateScene` — atomic swap, no window.
+   *   - `addTutorPage` also bumps the token so an in-flight select
+   *     abandons (otherwise the late select would clobber Add Page's
+   *     new-page navigation).
+   */
+  const tutorSwitchTokenRef = useRef(0);
   /** Per-tab sessionStorage draft — see `session-scene-draft.ts`. */
   const sceneDraftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasHydratedSessionDraftRef = useRef(false);
@@ -1258,6 +1283,9 @@ export function WhiteboardWorkspaceClient({
 
   const selectTutorPage = useCallback(
     async (nextId: string) => {
+      // Bump the token FIRST so any in-flight switch abandons even when
+      // the user re-clicks the page they're already on (cancel pattern).
+      const myToken = ++tutorSwitchTokenRef.current;
       if (nextId === activePageIdRef.current) return;
       const api = excalidrawAPIRef.current;
       if (!api) {
@@ -1266,26 +1294,24 @@ export function WhiteboardWorkspaceClient({
         return;
       }
       // Drain the throttled onChange+event log for the old tab *before* we
-      // bump `activePageIdRef`.
+      // capture its scene.
       flushThrottledFrameNow();
       const from = activePageIdRef.current;
-      // Always freeze the active scene before switching. Without this, a
-      // trailing debounced `onChange` arriving AFTER the guard window
-      // would stamp the previous tab's elements into the NEW tab's
-      // pageDataRef slot (the "Page 1 ↔ Page 9 swap" smoke-1 #3/#6/#7).
+      // Freeze the leaving scene. Safe because activePageIdRef has NOT
+      // moved yet — any prior in-flight switch is still hydrating and
+      // hasn't bumped activePageIdRef either (see atomic swap below).
       pageDataRef.current[from] = api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>;
       const next =
         (pageDataRef.current[nextId] as
           | ReadonlyArray<ExcalidrawLikeElement>
           | undefined) ?? [];
-      // PDF / uploaded images: Excalidraw drops unreferenced `fileId` binaries
-      // when the scene is replaced by another tab — re-fetch from `assetUrl`
-      // before `updateScene` so we don't show empty image frames.
+
+      // Hold the programmatic-switch guard across the entire hydrate.
+      // onChange events during this window are dropped (any user input
+      // mid-switch is intentionally lost — they just clicked away).
       pageSwitchProgrammaticRef.current += 1;
+      let committed = false;
       try {
-        // Bump active only after the programmatic guard: otherwise a trailing
-        // onChange can stamp the old tab's pixels into `pageDataRef[nextId]`.
-        activePageIdRef.current = nextId;
         const hydrateRes = await hydrateRemoteImageFilesForScene(
           api,
           next,
@@ -1301,17 +1327,27 @@ export function WhiteboardWorkspaceClient({
               }),
           }
         );
+        // ABANDON: a newer selectTutorPage / addTutorPage call won the
+        // race during our hydrate. Do NOT bump activePageIdRef, do NOT
+        // touch the scene. The newer call's atomic swap owns the
+        // final state. (Guard is still released in finally.)
+        if (myToken !== tutorSwitchTokenRef.current) return;
         if (hydrateRes.fetchFailed.length > 0) {
           setPeerImageMaterialNotice("load");
         } else if (hydrateRes.missingAssetUrlFileIds.length > 0) {
           setPeerImageMaterialNotice((prev) => (prev === "load" ? "load" : "missing"));
         }
+        // Atomic swap: activePageIdRef and the rendered scene move
+        // together in the same synchronous block. NO async gap exists
+        // between them, so a parallel selectTutorPage cannot read a
+        // stale (activePageIdRef = new, scene = old) state.
+        activePageIdRef.current = nextId;
         api.updateScene({ elements: next as ReadonlyArray<unknown> });
+        committed = true;
       } finally {
-        // Hold the guard across two animation frames + a microtask tail —
-        // `setTimeout(0)` was too tight and let Excalidraw's debounced
-        // onChange leak the old scene into the new pageDataRef slot.
-        // smoke-1 #3/#6/#7 root cause.
+        // Hold the guard across two animation frames + a microtask tail
+        // so Excalidraw's debounced onChange (which fires on the next
+        // frame) is still dropped if it carries stale elements.
         const releaseGuard = () => {
           pageSwitchProgrammaticRef.current = Math.max(
             0,
@@ -1328,6 +1364,7 @@ export function WhiteboardWorkspaceClient({
           setTimeout(releaseGuard, 32);
         }
       }
+      if (!committed) return;
       setActivePageId(nextId);
       flushDocumentBroadcastNow();
     },
@@ -1335,11 +1372,15 @@ export function WhiteboardWorkspaceClient({
   );
 
   const addTutorPage = useCallback(() => {
+    // Bump the switch token: any in-flight selectTutorPage will abandon
+    // when its hydrate finishes (otherwise that late select would
+    // clobber Add Page's navigation + scene, reintroducing the leak).
+    tutorSwitchTokenRef.current += 1;
     const api = excalidrawAPIRef.current;
     const from = activePageIdRef.current;
     if (api) {
       // Freeze the leaving scene unconditionally — see selectTutorPage
-      // comment for the same guard rationale (smoke-1 #3/#6/#7).
+      // comment for the same guard rationale.
       pageDataRef.current[from] = api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>;
     }
     // Smoke-1 #5: pick the smallest unused "Page N" label so adding a
