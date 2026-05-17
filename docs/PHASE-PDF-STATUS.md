@@ -53,10 +53,28 @@ Logs (prefix `wbsid=`): `pdf-inspect`, `pdf-pick`, `pdf-upload`, `pdf-page-inser
 - `board-document-snapshot.test.ts`, `pdf-render.test.ts` (`resolvePdfPagesToRender`), `insert-asset.test.ts`, `pdf-page-selection.test.ts`.
 - Student AV mount mock updated with `sectionsRegistry`.
 
-## Smoke-1 hardening (2026-05-16)
+## Smoke-1 / Smoke-2 hardening (2026-05-16)
 
 See [PHASE-PDF-SMOKE-1.md](PHASE-PDF-SMOKE-1.md) for the full smoke
-findings + triage. Blockers fixed in this pass:
+findings + triage (round 1 + round 2 are both in that doc).
+
+**Smoke-2 follow-on** (the real leak — round 1 fix was insufficient):
+- `selectTutorPage`'s `await hydrateRemoteImageFilesForScene` had been
+  positioned BETWEEN bumping `activePageIdRef` and calling
+  `api.updateScene`. That async window allowed a parallel select /
+  add-page to read `activePageIdRef = new` while `getSceneElements()`
+  still returned the old scene, writing `pageDataRef[new] = old` and
+  committing a page swap.
+- Round-2 fix: `tutorSwitchTokenRef` monotonic counter — every
+  `selectTutorPage` / `addTutorPage` bumps it at entry; `selectTutorPage`
+  abandons after hydrate if a newer call won the race; the
+  `activePageIdRef = nextId` and `updateScene(next)` calls are now
+  in the same synchronous block.
+- Also: `MathfieldElement.fontsDirectory` pinned to jsDelivr CDN so
+  the Insert math button stops 404'ing on Vercel Preview (smoke-2
+  Note 1 — pre-existing, not introduced by this branch).
+
+Round-1 blockers fixed (still hold after round-2 verification):
 
 - **#3 / #6 / #7 page-data leakage** — atomic `commitPdfBatch` (above);
   `selectTutorPage` + `addTutorPage` now save the leaving scene

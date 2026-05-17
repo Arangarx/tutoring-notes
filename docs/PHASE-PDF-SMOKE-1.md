@@ -111,6 +111,111 @@ S4. **Math whiteboard library default + Excalidraw library button.**
   grouped page strip).
 - **NOT mergeable as-is** until blockers above are addressed.
 
+## Smoke-2 (2026-05-16 round 2) — findings
+
+Against `0c49c33` on the Vercel Preview. Headline: most smoke-1
+blockers verified fixed, but the **leakage fix was insufficient** —
+rapid switching still bleeds, and adding a page after a PDF section
+reproduces a fresh per-page swap.
+
+### Live session
+
+1. **Rapid-click still bleeds.** General clicking is clean; rapid
+   clicking on the page strip still leaks drawings across pages.
+   (Smoke-1 #3/#6/#7 NOT fully resolved.)
+2. **Add Page after PDF section produces a cascade.** From PDF p.2,
+   click Add Page → new "Page 3" inserted in the right spot (smoke-1
+   #5 verified). But: the normal "Page 2"'s strokes now appear on
+   PDF p.2. Both PDF p.2 and p.3 show original p.2 + p.3 strokes
+   AND "Page 2"'s strokes. "Page 2" also displays the PDF p.2 image.
+3. **Picker dismiss-on-selection: PASS** (smoke-1 #1 verified).
+4. **Replay PDF bitmaps: PASS** (smoke-1 #12 verified).
+5. **First-N select-on-focus: PASS** (smoke-1 S1 verified).
+
+### Side notes
+
+S1-2. **Insert math button** triggers a wall of KaTeX font 404s on
+the Vercel Preview build:
+`https://…/_next/static/chunks/fonts/KaTeX_*.woff2 → 404`. Webpack
+bundles the JS but Next never copies the woff2 files to that path;
+MathLive's font-path derivation from `import.meta.url` lands on a
+location that doesn't exist. NOT introduced by this branch — math
+files (`MathInsertButton.tsx`, `math-render.ts`) were last touched
+in `6124459` / `4fbd808` / `a024d45` / `6af4336`.
+
+S2-2. **Replay console errors.** Two `POST /api/whiteboard/<id>/active-ping
+→ 409 (Conflict)` on the replay page on load. Pre-existing; replay
+shouldn't even be active-pinging. Worth a follow-up but doesn't break
+playback.
+
+S2-3. **Replay scrub click navigation: PASS** (clicking to seek now
+works smoothly — different from smoke-1 #11).
+
+S2-4. **Replay scrub *drag* still 429s.** Dragging the scrubber
+eventually returns `429 Too Many Requests`; after the 429, dropping
+the scrubber shows state but live drag stops updating. Pre-existing
+(smoke-1 #11 deferred); didn't regress.
+
+## Smoke-1 → 2 root cause re-analysis (the real leak)
+
+The smoke-1 fix held `pageSwitchProgrammaticRef` longer and saved the
+leaving scene unconditionally, but **missed an async window inside
+`selectTutorPage` itself**:
+
+```
+pageSwitchProgrammaticRef += 1;
+activePageIdRef.current = nextId;       // ← bumped FIRST
+await hydrateRemoteImageFilesForScene(...);  // ← long await window
+api.updateScene({ elements: next });    // ← scene swap LAST
+```
+
+During the await:
+- `activePageIdRef` has already moved to the new page.
+- The canvas is still showing the *old* page's elements.
+
+If a second `selectTutorPage` fires here (or `addTutorPage`, or any
+read of `activePageIdRef` that pairs with `api.getSceneElements()`),
+it reads `activePageIdRef = new` as its `from`, calls
+`getSceneElements()` which still returns the *old* page's scene, and
+writes `pageDataRef[new] = old's elements`. Page swap committed; v3
+broadcast publishes the corruption; student mirrors it back.
+
+`Add Page` from inside the PDF section reliably hits this because:
+1. User selected PDF p.2 a moment before → `selectTutorPage(pdfP2)`
+   is mid-hydrate.
+2. User clicks Add Page → `addTutorPage` reads `activePageIdRef =
+   pdfP2`, calls `getSceneElements() = stale (still Page 1)`, writes
+   `pageDataRef[pdfP2] = Page 1 elements`. The PDF page's pageDataRef
+   slot is now corrupted with Page 1's strokes. Subsequent broadcasts
+   cement the swap.
+
+## Smoke-2 fix landed
+
+- **Token-based switch cancellation.** New `tutorSwitchTokenRef`
+  monotonic counter; every `selectTutorPage` / `addTutorPage` bumps
+  it at entry. `selectTutorPage` checks `myToken === current` AFTER
+  hydrate; if a newer call won the race it abandons without bumping
+  `activePageIdRef` or touching the scene. The newer call's atomic
+  swap owns the final state.
+- **Atomic swap.** `activePageIdRef.current = nextId` now happens
+  immediately before `api.updateScene` in the same synchronous block.
+  No async gap exists between them, so a parallel `selectTutorPage`
+  cannot read a stale (activePageIdRef = new, scene = old) state.
+- **Add Page invalidates in-flight switches.** `addTutorPage` also
+  bumps the token, so a late select that resolves after add page
+  abandons rather than clobbering the new-page navigation.
+
+Net: the smoke-2 #1/#2 page-data leakage path is closed.
+
+## Smoke-2 side fixes also landed (cheap)
+
+- **Note 1 — MathLive KaTeX font 404s.** Set
+  `MathfieldElement.fontsDirectory = "https://cdn.jsdelivr.net/npm/
+  mathlive@0.109.1/fonts/"` on dynamic import. CSP `font-src 'self'
+  data: blob: https:` already permits HTTPS font subresources, so no
+  CSP change required. Math button is now functional; pre-existing
+  bug surfaces no longer.
+
 ## Smoke-1 fixes landed (pending smoke 2)
 
 | Smoke ref | Fix | Where |
@@ -125,4 +230,13 @@ S4. **Math whiteboard library default + Excalidraw library button.**
 Test status post-fix: `npx jest --testPathPatterns="whiteboard"` →
 **428/428 pass**; `npx tsc --noEmit` → clean.
 
-Still deferred (per triage above): #2, #8, #9, #11, S3, S4.
+Still deferred (per triage above): #2, #8, #9, #11, S3, S4, S2-2
+(replay active-ping 409), S2-4 (scrub drag 429 — same surface as #11).
+
+## Smoke-2 fix table (top-up)
+
+| Smoke ref | Fix | Where |
+| --- | --- | --- |
+| #1 rapid-click leak | Token-based switch cancellation + atomic activePageIdRef-and-updateScene swap (no await window) | `WhiteboardWorkspaceClient.tsx` (`tutorSwitchTokenRef`, rewritten `selectTutorPage`, `addTutorPage`) |
+| #2 Add Page cascade | Same token bump in `addTutorPage` so an in-flight `selectTutorPage` abandons rather than overwriting | `WhiteboardWorkspaceClient.tsx` (`addTutorPage`) |
+| Note 1 KaTeX 404s | `MathfieldElement.fontsDirectory` pinned to jsDelivr CDN | `src/components/whiteboard/MathInsertButton.tsx` |
