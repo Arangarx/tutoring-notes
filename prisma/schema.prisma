@@ -21,6 +21,12 @@ enum FeedbackKind {
   FEEDBACK
 }
 
+enum CostEventKind {
+  WHISPER_TRANSCRIPTION
+  GPT_NOTES_GENERATION
+  GPT_ASSESSMENT_EXTRACTION
+}
+
 model Student {
   id          String       @id @default(uuid())
   name        String
@@ -43,6 +49,7 @@ model Student {
   shareLinks  ShareLink[]
   recordings  SessionRecording[]
   whiteboardSessions WhiteboardSession[]
+  costEvents  CostEvent[]
 
   @@index([adminUserId])
 }
@@ -166,6 +173,7 @@ model SessionRecording {
    * compatibility (queries that don't filter by streamId).
    */
   @@index([whiteboardSessionId, streamId])
+  costEvents CostEvent[]
 }
 
 /**
@@ -277,6 +285,7 @@ model WhiteboardSession {
   @@index([adminUserId])
   @@index([studentId])
   @@index([noteId])
+  costEvents CostEvent[]
 }
 
 /**
@@ -357,6 +366,7 @@ model AdminUser {
   oauthConnections OAuthEmailConnection[] @relation("AdminOAuthConnections")
   recordings    SessionRecording[] @relation("AdminRecordings")
   whiteboardSessions WhiteboardSession[] @relation("AdminWhiteboards")
+  costEvents    CostEvent[]
 }
 
 // One-time password reset links (hashed token, email delivery).
@@ -405,5 +415,36 @@ model WaitlistEntry {
   name      String?
   note      String?
   createdAt DateTime @default(now())
+}
+
+model CostEvent {
+  id     String @id @default(uuid())
+  kind   CostEventKind
+  /// e.g. `whisper-1`, `gpt-4o-mini` — exact model id string from the API call
+  model  String
+
+  inputTokens  Int?
+  outputTokens Int?
+  audioSeconds Float?
+
+  estimatedCostUsd Decimal? @db.Decimal(10, 6)
+
+  adminUserId    String?
+  adminUser      AdminUser?       @relation(fields: [adminUserId],    references: [id], onDelete: SetNull)
+  studentId      String?
+  student        Student?         @relation(fields: [studentId],      references: [id], onDelete: SetNull)
+  sessionRecordingId String?
+  sessionRecording   SessionRecording? @relation(fields: [sessionRecordingId], references: [id], onDelete: SetNull)
+  whiteboardSessionId String?
+  whiteboardSession   WhiteboardSession? @relation(fields: [whiteboardSessionId], references: [id], onDelete: SetNull)
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([kind, createdAt])
+  @@index([adminUserId, createdAt])
+  @@index([studentId, createdAt])
+  @@index([createdAt])
 }
 
