@@ -211,27 +211,17 @@ describe("pdfBoardPageTitle", () => {
 });
 
 describe("insertPdfPagesAsBoardPages", () => {
-  it("seeds section, appends rows, registers files, completes import", async () => {
+  it("commits a single atomic batch with section + rows + first page", async () => {
     uploadMock.mockResolvedValue({
       ok: true,
       blobUrl: "https://blob.example/p.png",
       sizeBytes: 4,
     });
     const { api } = makeFakeApi();
-    const appended: Array<{ title: string; sectionId: string }> = [];
+    const commit = jest.fn();
     const integrate = {
       getActivePageId: () => "p1",
-      seedPdfSection: jest.fn(),
-      appendBoardPage: (a: {
-        pageId: string;
-        title: string;
-        sectionId: string;
-        elements: ReadonlyArray<unknown>;
-      }) => {
-        appended.push({ title: a.title, sectionId: a.sectionId });
-      },
-      registerImageFile: jest.fn(),
-      completePdfImport: jest.fn(),
+      commitPdfBatch: commit,
     };
     const result = await insertPdfPagesAsBoardPages({
       excalidrawAPI: api,
@@ -252,21 +242,29 @@ describe("insertPdfPagesAsBoardPages", () => {
     if (!result.ok) return;
     expect(result.pagesInserted).toBe(1);
     expect(result.sectionId.startsWith("pdf-")).toBe(true);
-    expect(integrate.seedPdfSection).toHaveBeenCalledWith(
-      result.sectionId,
-      "mixed"
-    );
-    expect(appended).toHaveLength(1);
-    expect(appended[0]?.title).toBe("mixed p.3");
-    expect(appended[0]?.sectionId).toBe(result.sectionId);
-    expect(integrate.registerImageFile).toHaveBeenCalledTimes(1);
-    expect(integrate.completePdfImport).toHaveBeenCalledWith({
-      firstPageId: result.firstPageId,
-      anchorActivePageId: "p1",
-    });
+    expect(commit).toHaveBeenCalledTimes(1);
+    const arg = commit.mock.calls[0]?.[0] as {
+      sectionId: string;
+      sectionLabel: string;
+      anchorActivePageId: string;
+      rows: Array<{
+        pageId: string;
+        title: string;
+        elements: ReadonlyArray<unknown>;
+        file: { id: string; mimeType: string };
+      }>;
+      firstPageId: string;
+    };
+    expect(arg.sectionId).toBe(result.sectionId);
+    expect(arg.sectionLabel).toBe("mixed");
+    expect(arg.anchorActivePageId).toBe("p1");
+    expect(arg.rows).toHaveLength(1);
+    expect(arg.rows[0]?.title).toBe("mixed p.3");
+    expect(arg.rows[0]?.file.mimeType).toBe("image/png");
+    expect(arg.firstPageId).toBe(result.firstPageId);
   });
 
-  it("returns partial failure message after first uploads succeed", async () => {
+  it("still commits the successful prefix, then reports partial failure", async () => {
     uploadMock
       .mockResolvedValueOnce({
         ok: true,
@@ -275,12 +273,10 @@ describe("insertPdfPagesAsBoardPages", () => {
       })
       .mockResolvedValueOnce({ ok: false, error: "quota" });
     const { api } = makeFakeApi();
+    const commit = jest.fn();
     const integrate = {
       getActivePageId: () => "tab-a",
-      seedPdfSection: jest.fn(),
-      appendBoardPage: jest.fn(),
-      registerImageFile: jest.fn(),
-      completePdfImport: jest.fn(),
+      commitPdfBatch: commit,
     };
     const result = await insertPdfPagesAsBoardPages({
       excalidrawAPI: api,
@@ -306,7 +302,38 @@ describe("insertPdfPagesAsBoardPages", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.message).toMatch(/Inserted 1 of 2/);
-    expect(integrate.completePdfImport).toHaveBeenCalled();
+    expect(commit).toHaveBeenCalledTimes(1);
+    const arg = commit.mock.calls[0]?.[0] as {
+      rows: ReadonlyArray<unknown>;
+    };
+    expect(arg.rows).toHaveLength(1);
+  });
+
+  it("does NOT commit when every page upload fails", async () => {
+    uploadMock.mockResolvedValue({ ok: false, error: "net" });
+    const { api } = makeFakeApi();
+    const commit = jest.fn();
+    const integrate = {
+      getActivePageId: () => "p1",
+      commitPdfBatch: commit,
+    };
+    const result = await insertPdfPagesAsBoardPages({
+      excalidrawAPI: api,
+      whiteboardSessionId: "wb",
+      studentId: "s",
+      pages: [
+        {
+          pageIndex: 1,
+          pngBlob: new Blob([new Uint8Array(1)], { type: "image/png" }),
+          widthPx: 10,
+          heightPx: 10,
+        },
+      ],
+      filename: "f.pdf",
+      integrate,
+    });
+    expect(result.ok).toBe(false);
+    expect(commit).not.toHaveBeenCalled();
   });
 });
 

@@ -80,26 +80,34 @@ export type InsertPdfResult =
     }
   | { ok: false; reason: string };
 
-export type InsertPdfBoardPagesIntegrate = {
-  /** Snapshot tutor active tab before inserts — auto-nav only if unchanged at end */
-  getActivePageId: () => string;
-  /** Makes section header label available before rows reference section ids */
-  seedPdfSection: (sectionId: string, sectionLabel: string) => void;
-  appendBoardPage: (args: {
-    pageId: string;
-    title: string;
-    sectionId: string;
-    elements: ReadonlyArray<unknown>;
-  }) => void;
-  registerImageFile: (file: {
+export type PdfBoardBatchRow = {
+  pageId: string;
+  title: string;
+  elements: ReadonlyArray<unknown>;
+  file: {
     id: string;
     mimeType: "image/png";
     dataURL: string;
     created: number;
-  }) => void;
-  completePdfImport: (opts: {
-    firstPageId: string;
+  };
+};
+
+export type InsertPdfBoardPagesIntegrate = {
+  /** Snapshot tutor active tab before inserts — auto-nav only if unchanged at end. */
+  getActivePageId: () => string;
+  /**
+   * Atomic commit: workspace freezes its current scene into `pageDataRef`,
+   * appends rows to the page list, seeds the section registry, registers
+   * BinaryFiles, and (if the anchor is still active) navigates to
+   * `firstPageId`. Called ONCE per PDF — including partial-success — so
+   * intermediate React state never leaks into broadcasts or onChange.
+   */
+  commitPdfBatch: (args: {
+    sectionId: string;
+    sectionLabel: string;
     anchorActivePageId: string;
+    rows: PdfBoardBatchRow[];
+    firstPageId: string;
   }) => void;
 };
 
@@ -644,10 +652,10 @@ export async function insertPdfPagesAsBoardPages(
     filename.replace(/\.pdf$/i, "").trim() || filename || "PDF";
 
   const anchorActivePageId = integrate.getActivePageId();
-  integrate.seedPdfSection(sectionId, sectionLabel);
 
+  const rows: PdfBoardBatchRow[] = [];
   let firstPageId = "";
-  let pagesDone = 0;
+  let failureMessage: string | null = null;
 
   for (let i = 0; i < pages.length; i++) {
     if (i > 0) {
@@ -664,21 +672,8 @@ export async function insertPdfPagesAsBoardPages(
       assetTag: `pdf-page-${page.pageIndex}`,
     });
     if (!upload.ok) {
-      const done = pagesDone;
-      if (firstPageId) {
-        integrate.completePdfImport({
-          firstPageId,
-          anchorActivePageId,
-        });
-      }
-      return {
-        ok: false,
-        reason: "upload-failed",
-        message:
-          done === 0
-            ? `Upload failed before any pages were inserted: ${upload.error}`
-            : `Inserted ${done} of ${pages.length} pages; remainder failed: ${upload.error}`,
-      };
+      failureMessage = upload.error;
+      break;
     }
 
     console.info(
@@ -689,31 +684,11 @@ export async function insertPdfPagesAsBoardPages(
     try {
       dataURL = await blobToDataUrl(page.pngBlob);
     } catch (err) {
-      const done = pagesDone;
-      if (firstPageId) {
-        integrate.completePdfImport({
-          firstPageId,
-          anchorActivePageId,
-        });
-      }
-      return {
-        ok: false,
-        reason: "upload-failed",
-        message:
-          done === 0
-            ? `Inserted 0 of ${pages.length}; ${(err as Error).message}`
-            : `Inserted ${done} of ${pages.length}; remainder failed: ${(err as Error).message}`,
-      };
+      failureMessage = (err as Error).message;
+      break;
     }
 
     const fileId = makeRandomFileId();
-    integrate.registerImageFile({
-      id: fileId,
-      mimeType: "image/png",
-      dataURL,
-      created: Date.now(),
-    });
-
     const aspect = page.heightPx / page.widthPx;
     const width = PDF_PAGE_RENDER_WIDTH;
     const height = width * aspect;
@@ -740,24 +715,49 @@ export async function insertPdfPagesAsBoardPages(
       firstPageId = pageId;
     }
 
-    integrate.appendBoardPage({
+    rows.push({
       pageId,
       title: pdfBoardPageTitle(filename, page.pageIndex),
-      sectionId,
       elements: [el],
+      file: {
+        id: fileId,
+        mimeType: "image/png",
+        dataURL,
+        created: Date.now(),
+      },
     });
-    pagesDone += 1;
     onProgress?.(i + 1, pages.length);
   }
 
-  integrate.completePdfImport({
-    firstPageId,
+  if (rows.length === 0) {
+    return {
+      ok: false,
+      reason: "upload-failed",
+      message: failureMessage
+        ? `Upload failed before any pages were inserted: ${failureMessage}`
+        : "No pages were inserted.",
+    };
+  }
+
+  integrate.commitPdfBatch({
+    sectionId,
+    sectionLabel,
     anchorActivePageId,
+    rows,
+    firstPageId,
   });
+
+  if (failureMessage !== null) {
+    return {
+      ok: false,
+      reason: "upload-failed",
+      message: `Inserted ${rows.length} of ${pages.length} pages; remainder failed: ${failureMessage}`,
+    };
+  }
 
   return {
     ok: true,
-    pagesInserted: pages.length,
+    pagesInserted: rows.length,
     sectionId,
     firstPageId,
   };

@@ -1269,23 +1269,22 @@ export function WhiteboardWorkspaceClient({
       // bump `activePageIdRef`.
       flushThrottledFrameNow();
       const from = activePageIdRef.current;
-      // `getSceneElements()` can still reflect the *previous* tab for a frame when
-      // the user flips pages faster than Excalidraw flushes. onChange is keyed by
-      // `activePageIdRef` and already mirrors the true per-tab state.
-      if (pageDataRef.current[from] === undefined) {
-        pageDataRef.current[from] = api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>;
-      }
+      // Always freeze the active scene before switching. Without this, a
+      // trailing debounced `onChange` arriving AFTER the guard window
+      // would stamp the previous tab's elements into the NEW tab's
+      // pageDataRef slot (the "Page 1 ↔ Page 9 swap" smoke-1 #3/#6/#7).
+      pageDataRef.current[from] = api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>;
       const next =
         (pageDataRef.current[nextId] as
           | ReadonlyArray<ExcalidrawLikeElement>
           | undefined) ?? [];
       // PDF / uploaded images: Excalidraw drops unreferenced `fileId` binaries
       // when the scene is replaced by another tab — re-fetch from `assetUrl`
-      // before `updateScene` so we don’t show empty image frames.
+      // before `updateScene` so we don't show empty image frames.
       pageSwitchProgrammaticRef.current += 1;
       try {
         // Bump active only after the programmatic guard: otherwise a trailing
-        // onChange can stamp the old tab’s pixels into `pageDataRef[nextId]`.
+        // onChange can stamp the old tab's pixels into `pageDataRef[nextId]`.
         activePageIdRef.current = nextId;
         const hydrateRes = await hydrateRemoteImageFilesForScene(
           api,
@@ -1309,12 +1308,25 @@ export function WhiteboardWorkspaceClient({
         }
         api.updateScene({ elements: next as ReadonlyArray<unknown> });
       } finally {
-        setTimeout(() => {
+        // Hold the guard across two animation frames + a microtask tail —
+        // `setTimeout(0)` was too tight and let Excalidraw's debounced
+        // onChange leak the old scene into the new pageDataRef slot.
+        // smoke-1 #3/#6/#7 root cause.
+        const releaseGuard = () => {
           pageSwitchProgrammaticRef.current = Math.max(
             0,
             pageSwitchProgrammaticRef.current - 1
           );
-        }, 0);
+        };
+        if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+          window.requestAnimationFrame(() =>
+            window.requestAnimationFrame(() => {
+              window.setTimeout(releaseGuard, 0);
+            })
+          );
+        } else {
+          setTimeout(releaseGuard, 32);
+        }
       }
       setActivePageId(nextId);
       flushDocumentBroadcastNow();
@@ -1326,13 +1338,32 @@ export function WhiteboardWorkspaceClient({
     const api = excalidrawAPIRef.current;
     const from = activePageIdRef.current;
     if (api) {
-      if (pageDataRef.current[from] === undefined) {
-        pageDataRef.current[from] = api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>;
-      }
+      // Freeze the leaving scene unconditionally — see selectTutorPage
+      // comment for the same guard rationale (smoke-1 #3/#6/#7).
+      pageDataRef.current[from] = api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>;
     }
-    const n = pageList.length + 1;
-    const newId = `p${Date.now()}`;
-    const nextList = [...pageList, { id: newId, title: `Page ${n}` }];
+    // Smoke-1 #5: pick the smallest unused "Page N" label so adding a
+    // page after a PDF section produces a sensible "Page 2", not "Page 9".
+    const usedNumbers = new Set<number>();
+    for (const p of pageListRef.current) {
+      const m = /^Page (\d+)$/.exec(p.title);
+      if (m) usedNumbers.add(Number(m[1]));
+    }
+    let nextN = 2;
+    while (usedNumbers.has(nextN)) nextN += 1;
+    // Smoke-1 #5: insert AFTER the active page rather than at the end,
+    // so adding a page from inside the PDF section drops it adjacent.
+    // Also: avoid id collisions with `Date.now()` fast-clicks by salting
+    // with a randomised suffix.
+    const newId = `p${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const fromIdx = pageListRef.current.findIndex((p) => p.id === from);
+    const insertAt =
+      fromIdx >= 0 ? fromIdx + 1 : pageListRef.current.length;
+    const nextList = [
+      ...pageListRef.current.slice(0, insertAt),
+      { id: newId, title: `Page ${nextN}` },
+      ...pageListRef.current.slice(insertAt),
+    ];
     pageListRef.current = nextList;
     setPageList(nextList);
     pageDataRef.current[newId] = [];
@@ -1344,12 +1375,21 @@ export function WhiteboardWorkspaceClient({
         activePageIdRef.current = newId;
         api.updateScene({ elements: [] });
       } finally {
-        setTimeout(() => {
+        const releaseGuard = () => {
           pageSwitchProgrammaticRef.current = Math.max(
             0,
             pageSwitchProgrammaticRef.current - 1
           );
-        }, 0);
+        };
+        if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+          window.requestAnimationFrame(() =>
+            window.requestAnimationFrame(() => {
+              window.setTimeout(releaseGuard, 0);
+            })
+          );
+        } else {
+          setTimeout(releaseGuard, 32);
+        }
       }
     } else {
       activePageIdRef.current = newId;
@@ -1358,7 +1398,7 @@ export function WhiteboardWorkspaceClient({
     if (api) {
       flushDocumentBroadcastNow();
     }
-  }, [flushDocumentBroadcastNow, flushThrottledFrameNow, pageList]);
+  }, [flushDocumentBroadcastNow, flushThrottledFrameNow]);
 
   const removeTutorPage = useCallback(
     (pageId: string) => {
@@ -1405,30 +1445,64 @@ export function WhiteboardWorkspaceClient({
   const pdfBoardIntegrate = useMemo<InsertPdfBoardPagesIntegrate>(
     () => ({
       getActivePageId: () => activePageIdRef.current,
-      seedPdfSection: (sectionId, sectionLabel) => {
+      // Atomic batch commit — see InsertPdfBoardPagesIntegrate JSDoc.
+      // Before this redesign (smoke-1), each PDF page mutated pageListRef
+      // and pageDataRef incrementally, and intermediate `setPageList`
+      // re-renders + Excalidraw onChange races could leak the leaving
+      // page's elements into the new PDF pages. The single commit closes
+      // the window: freeze anchor scene → append rows → register files →
+      // navigate, all before the next React tick or v3 broadcast fires.
+      commitPdfBatch: ({
+        sectionId,
+        sectionLabel,
+        anchorActivePageId,
+        rows,
+        firstPageId,
+      }) => {
+        if (rows.length === 0) return;
+        // 1. Freeze the anchor page's scene so its drawings can't be
+        // overwritten by any onChange that arrives during the commit.
+        const api = excalidrawAPIRef.current;
+        if (api) {
+          pageDataRef.current[anchorActivePageId] = api.getSceneElements() as
+            ReadonlyArray<ExcalidrawLikeElement>;
+        }
+        // 2. Seed the section registry.
         sectionsRegistryRef.current = {
           ...sectionsRegistryRef.current,
           [sectionId]: { label: sectionLabel },
         };
         setSectionsRegistry({ ...sectionsRegistryRef.current });
-      },
-      appendBoardPage: ({ pageId, title, sectionId, elements }) => {
-        const next = [
+        // 3. Write per-page elements BEFORE appending to pageList — so
+        // any intermediate `getTutorDocumentPagesSnapshot` read sees
+        // populated data rather than `[]`.
+        for (const row of rows) {
+          pageDataRef.current[row.pageId] =
+            row.elements as ReadonlyArray<ExcalidrawLikeElement>;
+        }
+        // 4. Append all new page rows to the list in one shot.
+        const nextList = [
           ...pageListRef.current,
-          { id: pageId, title, section: sectionId },
+          ...rows.map((r) => ({
+            id: r.pageId,
+            title: r.title,
+            section: sectionId,
+          })),
         ];
-        pageListRef.current = next;
-        setPageList(next);
-        pageDataRef.current[pageId] =
-          elements as ReadonlyArray<ExcalidrawLikeElement>;
-        console.info(
-          `[whiteboard] wbsid=${whiteboardSessionId} pdf-page-insert pageId=${pageId} sectionId=${sectionId}`
-        );
-      },
-      registerImageFile: (file) => {
-        excalidrawAPIRef.current?.addFiles([file]);
-      },
-      completePdfImport: ({ firstPageId, anchorActivePageId }) => {
+        pageListRef.current = nextList;
+        setPageList(nextList);
+        // 5. Register BinaryFiles in one addFiles call (still on anchor
+        // tab; we navigate next).
+        if (api) {
+          api.addFiles(rows.map((r) => r.file));
+        }
+        // 6. Log per-page inserts AFTER state is settled.
+        for (const row of rows) {
+          console.info(
+            `[whiteboard] wbsid=${whiteboardSessionId} pdf-page-insert pageId=${row.pageId} sectionId=${sectionId}`
+          );
+        }
+        // 7. Navigate to first imported page IF tutor still on anchor.
         flushThrottledFrameNow();
         if (activePageIdRef.current === anchorActivePageId) {
           void selectTutorPage(firstPageId);
@@ -2144,6 +2218,11 @@ export function WhiteboardWorkspaceClient({
       // sets assetUrl at insert time).
       const api = excalidrawAPIRef.current;
       if (api) {
+        // smoke-1 #6: capture the page the onChange fired on. If the
+        // tutor switches pages while this async upload is in flight,
+        // we must NOT write the (page A) patched elements into
+        // (page B)'s pageDataRef — that's how Page 1 ↔ Page 9 leaked.
+        const onChangePageId = activePageIdRef.current;
         void (async () => {
           try {
             const getFiles = (): Record<string, BinaryFileFromExcalidraw> => {
@@ -2162,19 +2241,21 @@ export function WhiteboardWorkspaceClient({
               inFlight: tutorNativeImageUploadInFlightRef.current,
             });
             if (patched && excalidrawAPIRef.current) {
-              // `getTutorDocumentPagesSnapshot` trusts `pageDataRef` over
-              // `getSceneElements()`. `onChange` may not run before the next
-              // flush, so sync the cache + recorder with the patched scene
-              // (customData.assetUrl) before broadcasting — fixes native
-              // drag/drop images missing URLs for the student + event log.
-              const curPage = activePageIdRef.current;
-              pageDataRef.current[curPage] =
+              // smoke-1 #6 guard: tutor may have switched pages while
+              // ensureNativeImageAssetUrlsForSync was awaiting the upload.
+              // If so, the patched elements belong to the page the
+              // onChange originated on, not the current one. Stamp into
+              // pageDataRef[onChangePageId] unconditionally, but only
+              // hot-swap the live scene if we're still ON that page.
+              pageDataRef.current[onChangePageId] =
                 patched as ReadonlyArray<ExcalidrawLikeElement>;
-              excalidrawAPIRef.current.updateScene({ elements: patched });
-              recorderOnCanvasChange(
-                patched as ReadonlyArray<ExcalidrawLikeElement>
-              );
-              flushThrottledFrameNow();
+              if (activePageIdRef.current === onChangePageId) {
+                excalidrawAPIRef.current.updateScene({ elements: patched });
+                recorderOnCanvasChange(
+                  patched as ReadonlyArray<ExcalidrawLikeElement>
+                );
+                flushThrottledFrameNow();
+              }
               if (sync && syncUrl) {
                 flushDocumentBroadcastNow();
               }
