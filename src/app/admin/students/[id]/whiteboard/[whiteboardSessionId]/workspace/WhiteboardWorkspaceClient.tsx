@@ -161,6 +161,17 @@ type Props = {
 // when there are no participants — avoids unnecessary re-evaluations.
 const EMPTY_FLOW_SET: ReadonlySet<string> = new Set<string>();
 
+// Smoke-4 (May 17, 2026): hard timeout on the audio-flow gate. If both
+// parties are present but neither has produced detectable audio-flow
+// within this window, release the gate anyway so the session does
+// record. Bound = max billing/audit-loss window. Sized to cover the
+// long tail of WebRTC negotiation while staying short enough that
+// the tutor will likely still be in their greeting / setup chatter
+// when the recording finally flips on. Decreasing this is a UX
+// trade-off (more dead air at the top of replays) — see
+// `docs/PHASE-PDF-SMOKE-1.md` smoke-4 section.
+const AUDIO_FLOW_GATE_TIMEOUT_MS = 10_000;
+
 function CanvasPlaceholder({ label }: { label: string }) {
   return (
     <div
@@ -436,6 +447,23 @@ export function WhiteboardWorkspaceClient({
     "none" | "load" | "missing"
   >("none");
 
+  // Smoke-4 (May 17, 2026): WB-activity latch for the audio-flow gate.
+  // Declared up here (before `applyRemoteToCanvas`) so the temporal
+  // dead-zone doesn't throw when `applyRemoteToCanvas`'s closure
+  // captures `markWbActivity` in its dep array. We carry the latch
+  // through a ref (cheap to read), and bump a small state to force
+  // a re-render so the FSM evaluation re-reads the gate boolean.
+  // The full release predicate is computed further down where
+  // `everHadAudioFlowRef` and friends are in scope; here we only
+  // own the WB-activity sub-latch + the marker callback.
+  const everHadWbActivityRef = useRef(false);
+  const [, bumpWbActivityRerender] = useState(0);
+  const markWbActivity = useCallback(() => {
+    if (everHadWbActivityRef.current) return;
+    everHadWbActivityRef.current = true;
+    bumpWbActivityRerender((n) => n + 1);
+  }, []);
+
   const applyRemoteToCanvas = useCallback(
     async (
       elements: ReadonlyArray<ExcalidrawLikeElement>,
@@ -531,11 +559,15 @@ export function WhiteboardWorkspaceClient({
         } finally {
           applyingRemoteToCanvasRef.current = false;
         }
+        // Smoke-4 (May 17, 2026): on-target remote activity is
+        // also proof-of-session — releases the audio-flow gate
+        // even if both mics are silent / muted.
+        markWbActivity();
         return { recordScene: merged };
       }
       return { record: "skip" };
     },
-    [shouldDropRemoteElement, whiteboardSessionId]
+    [markWbActivity, shouldDropRemoteElement, whiteboardSessionId]
   );
 
   useEffect(() => {
@@ -972,6 +1004,118 @@ export function WhiteboardWorkspaceClient({
     everHadAudioFlowRef.current = true;
   }
 
+  // Smoke-4 (May 17, 2026): the audio-flow gate as-shipped relied
+  // exclusively on REMOTE peer flow. If both parties mute mics at
+  // session start (Andrew's exact scenario: phone joined → "we
+  // muted to stop the feedback" → audio-flow latch never flipped →
+  // FSM held in armed/awaiting_audio_flow → no recording, no audio,
+  // no event log, empty replay). That's a billing/audit hole and
+  // a real abuse vector — a tutor could mute both ends, deliver
+  // the session, and have no recording to bill against. We layer
+  // THREE additional release conditions on top of the existing
+  // peer-flow latch; ANY of them releases the gate, all sticky:
+  //
+  //   1. Tutor's OWN local mic flow detected (their device is
+  //      producing audio frames). Matches Sarah's mental model
+  //      ("session starts as soon as someone is talking") and
+  //      is robust to the remote peer being muted at start.
+  //   2. Any whiteboard activity (tutor stroke / image insert /
+  //      PDF insert; or on-target peer stroke via
+  //      `applyRemoteToCanvas`'s recordScene return). A real
+  //      session has WB activity within seconds.
+  //   3. A 10 s hard timeout after both parties are in the room —
+  //      bounded worst case of dead-air-no-recording.
+  //
+  // Together these make "silent-loss of the entire recording"
+  // extremely difficult to trigger by accident or design. The
+  // 10 s timeout is the floor; if all other signals fail we still
+  // capture the session after at most a 10 s gap.
+
+  // Sub-latch 1 — tutor's own mic flow. Reuses the same
+  // `track.muted === false && readyState === "live"` heuristic
+  // as `useAudioFlowConfirmation`, applied to the local stream.
+  const [everHadTutorAudioFlow, setEverHadTutorAudioFlow] = useState(false);
+  useEffect(() => {
+    if (everHadTutorAudioFlow) return;
+    const stream = liveAv.localAudioStream;
+    if (!stream) return;
+    const tracks = stream.getAudioTracks();
+    if (tracks.length === 0) return;
+    let cancelled = false;
+    const check = (): void => {
+      if (cancelled || everHadTutorAudioFlow) return;
+      if (tracks.some((t) => !t.muted && t.readyState === "live")) {
+        setEverHadTutorAudioFlow(true);
+      }
+    };
+    check();
+    const cleanups: Array<() => void> = [];
+    for (const t of tracks) {
+      const onAny = () => check();
+      try {
+        t.addEventListener("unmute", onAny);
+        t.addEventListener("mute", onAny);
+        t.addEventListener("ended", onAny);
+        cleanups.push(() => {
+          try {
+            t.removeEventListener("unmute", onAny);
+            t.removeEventListener("mute", onAny);
+            t.removeEventListener("ended", onAny);
+          } catch {
+            // ignore
+          }
+        });
+      } catch {
+        (t as MediaStreamTrack).onunmute = onAny;
+        (t as MediaStreamTrack).onmute = onAny;
+        (t as MediaStreamTrack).onended = onAny;
+        cleanups.push(() => {
+          (t as MediaStreamTrack).onunmute = null;
+          (t as MediaStreamTrack).onmute = null;
+          (t as MediaStreamTrack).onended = null;
+        });
+      }
+    }
+    return () => {
+      cancelled = true;
+      for (const c of cleanups) c();
+    };
+  }, [liveAv.localAudioStream, everHadTutorAudioFlow]);
+
+  // Sub-latch 2 — any whiteboard activity. The `everHadWbActivityRef`
+  // ref + `markWbActivity` callback are declared higher up in the
+  // component (above `applyRemoteToCanvas`) because both that
+  // function and `handleExcalidrawChange` capture `markWbActivity`
+  // in their dep arrays; the ref pattern dodges the temporal
+  // dead-zone we'd hit if the latch lived only here. Re-render is
+  // forced by `bumpWbActivityRerender` so the FSM evaluation below
+  // re-reads `everHadWbActivityRef.current`.
+
+  // Sub-latch 3 — 10 s hard timeout once both parties are present.
+  // Restarts on disconnect, fires once, sticky thereafter.
+  const [gateTimeoutFired, setGateTimeoutFired] = useState(false);
+  useEffect(() => {
+    if (gateTimeoutFired) return;
+    if (!bothPartiesInRoom) return;
+    const t = setTimeout(
+      () => setGateTimeoutFired(true),
+      AUDIO_FLOW_GATE_TIMEOUT_MS
+    );
+    return () => clearTimeout(t);
+  }, [bothPartiesInRoom, gateTimeoutFired]);
+
+  // Combined gate-release boolean. We pass this in place of the raw
+  // peer-flow latch so the existing FSM signature is preserved.
+  // Renaming `everHadAudioFlow` → `everHadSessionActivity` is a
+  // follow-up; the FSM tests + Phase-4d Commit-6 documentation
+  // still refer to the old name. The OR is sticky — any sub-latch
+  // flipping permanently releases the gate.
+  const sessionGateReleased =
+    everHadAudioFlowRef.current ||
+    everHadTutorAudioFlow ||
+    everHadWbActivityRef.current ||
+    gateTimeoutFired;
+
   const lifecycle = evaluateLifecycle({
     tutorWantsRecording: userWantsRecording,
     participants: lifecycleParticipants,
@@ -982,7 +1126,7 @@ export function WhiteboardWorkspaceClient({
     networkOk: true,
     audioClockMs: 0,
     participantsWithFlowingAudio,
-    everHadAudioFlow: everHadAudioFlowRef.current,
+    everHadAudioFlow: sessionGateReleased,
   });
 
   const presence = derivePresentation(lifecycle, {
@@ -2266,6 +2410,13 @@ export function WhiteboardWorkspaceClient({
       const els = elements as ReadonlyArray<ExcalidrawLikeElement>;
       pageDataRef.current[activePageIdRef.current] = [...els];
       onLocalElementSnapshot(elements);
+      // Smoke-4 (May 17, 2026): real local activity counts as
+      // proof-of-session for the audio-flow gate (see
+      // `sessionGateReleased`). We hit this branch only AFTER the
+      // `applyingRemoteToCanvasRef` and `pageSwitchProgrammaticRef`
+      // early-returns, so programmatic scene swaps don't fire it
+      // (which is correct — a page switch isn't user activity).
+      markWbActivity();
       if (sceneDraftTimerRef.current !== null) {
         clearTimeout(sceneDraftTimerRef.current);
         sceneDraftTimerRef.current = null;
@@ -2347,6 +2498,7 @@ export function WhiteboardWorkspaceClient({
       buildBoardDocumentForCheckpoint,
       flushDocumentBroadcastNow,
       flushThrottledFrameNow,
+      markWbActivity,
       onLocalElementSnapshot,
       recorderOnCanvasChange,
       scheduleDocumentBroadcast,

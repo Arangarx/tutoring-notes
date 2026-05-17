@@ -53,10 +53,37 @@ Logs (prefix `wbsid=`): `pdf-inspect`, `pdf-pick`, `pdf-upload`, `pdf-page-inser
 - `board-document-snapshot.test.ts`, `pdf-render.test.ts` (`resolvePdfPagesToRender`), `insert-asset.test.ts`, `pdf-page-selection.test.ts`.
 - Student AV mount mock updated with `sectionsRegistry`.
 
-## Smoke-1 / Smoke-2 / Smoke-3 hardening (2026-05-16)
+## Smoke-1 / Smoke-2 / Smoke-3 / Smoke-4 hardening (2026-05-16 → 17)
 
 See [PHASE-PDF-SMOKE-1.md](PHASE-PDF-SMOKE-1.md) for the full smoke
-findings + triage (rounds 1, 2, and 3 all in that doc).
+findings + triage (rounds 1, 2, 3, and 4 all in that doc).
+
+**Smoke-4 follow-on** (post-leak-fix verification + two adjacent
+bugs the round surfaced):
+- Bleed verified fixed for the first time across rapid-click + slow
+  walk-through + Add-Page-after-PDF scenarios. (Andrew: "this is
+  the first time bleed has ACTUALLY been fixed.")
+- Insert math 404s persisted — the smoke-3 CDN setter ran correctly,
+  but `cdn.jsdelivr.net` was unreachable from Andrew's network
+  (same DNS class as the `github.com` and `wb-mortensen.fly.dev`
+  flakes the round also surfaced). Fix: drop the third-party CDN
+  entirely — ship the 20 KaTeX `.woff2` files (254 KB total) under
+  `public/mathlive-fonts/` and serve them same-origin via Next's
+  `public/`. CSP `font-src 'self'` already permits same-origin
+  fonts, no middleware change.
+- Apparent "replay doesn't load" — actually the existing "no
+  whiteboard activity recorded" guard from `WhiteboardReplay.tsx`,
+  because the recording lifecycle FSM held in
+  `armed/awaiting_audio_flow` for the entire session. Both
+  parties muted their mics on join to kill feedback, the
+  audio-flow gate (Phase 4d Commit 6) only releases on REMOTE
+  peer audio flow, so nothing ever flipped the latch.
+  **Billing/audit hole** — a tutor could mute both ends, deliver
+  the session, and leave no recording. Fix: workspace-side OR of
+  four sticky release latches (peer flow, tutor's own mic flow,
+  any WB activity, 10 s hard timeout). Any one signal releases
+  the gate. FSM signature unchanged. See smoke-4 fix table in
+  [PHASE-PDF-SMOKE-1.md](PHASE-PDF-SMOKE-1.md#smoke-4-fixes-landed).
 
 **Smoke-3 follow-on** (the leak's twin — peer-broadcast side):
 - The smoke-2 fix closed the `selectTutorPage` async window, but the

@@ -354,3 +354,140 @@ Still deferred (unchanged from above): #2 PDF position lock, #8
 Blob token rate limit, #9 replay page strip, #11/S2-4 scrub drag
 429, S3 viewport-center mismatch, S4 math button promotion /
 library button behaviour, S2-2 replay active-ping 409.
+
+## Smoke-4 (2026-05-17 round 4) — findings
+
+Against `1600dba` on the Vercel Preview. Headline: **bleed is fixed
+for the first time across rapid-click + slow-walk + Add-Page-after-PDF
+scenarios** (Andrew's words: "this is the first time bleed has
+ACTUALLY been fixed; quick clicking has always had a problem"). Two
+remaining bugs surfaced — one in math fonts (CDN was unreachable from
+Andrew's network) and one in the audio-flow gate that swallows the
+entire recording when both mics are muted at session start.
+
+### Live session
+
+1. **PASS** — Bleed fixed. Rapid clicking + slow walk-through +
+   collapse/expand spam all clean. (Smoke-1 #3/#6/#7, Smoke-2 #1,
+   Smoke-3 #1 all verified closed.)
+2. **PASS** — Add Page after PDF p.2 no longer cascades.
+3. **FAIL** — Insert math still 404s. URLs are now
+   `https://cdn.jsdelivr.net/npm/mathlive@0.109.1/fonts/KaTeX_*.woff2
+   → net::ERR_NAME_NOT_RESOLVED`. The smoke-3 CDN setter DID land
+   (URLs are no longer `_next/static/chunks/fonts/`), but
+   `cdn.jsdelivr.net` was unreachable from Andrew's network at the
+   time of the smoke. The same DNS instability also produced the
+   `wss://wb-mortensen.fly.dev` retry storm visible in the
+   workspace console and matches the `Could not resolve host:
+   github.com` failures git push hit on this branch.
+4. **FAIL → not actually a leak/replay regression.** Replay page
+   loaded fine; it showed the "No whiteboard activity was recorded
+   for this session" card from `WhiteboardReplay.tsx:588`. Andrew
+   reported both the audio and the whiteboard event log empty,
+   despite drawing strokes and a phone joining the room. Phone
+   feedback was killed by muting both mics immediately on join.
+
+### Smoke-4 root cause — audio-flow gate over-restriction
+
+Initially looked like recording was off (no Start click). Wrong:
+`Student.recordingDefaultEnabled` defaults to `true` at the schema
+level, so `userWantsRecording` was `true` from mount. Andrew has
+never had to click Start in any prior session.
+
+The actual cause is the **Phase 4d Commit 6 audio-flow gate** in
+`src/lib/recording/lifecycle-machine.ts:448-456`:
+
+```
+if (
+  !everHadAudioFlow &&
+  participantsWithFlowingAudio !== undefined &&
+  !hasIntersection(participants, participantsWithFlowingAudio)
+) {
+  return finalize("armed", "awaiting_audio_flow", undefined, inputs);
+}
+return finalize("recording", undefined, undefined, inputs);
+```
+
+The gate's purpose is sound: WebRTC takes ~200-2000ms to converge
+after both peers are present, and without the gate the recorder
+captures up to 2 s of empty-remote-channel as silence at the top
+of every recording. The release signal, however, is one-dimensional
+— it only fires on **remote** peer flow detected via
+`useAudioFlowConfirmation`. If the remote peer's mic is muted at
+session start, the latch never flips and the FSM holds in
+`armed/awaiting_audio_flow` for the entire session.
+
+Andrew's session reproduces the failure path cleanly:
+
+1. Tutor mounts; `userWantsRecording=true`, `everHadAudioFlow=false`.
+2. Phone joins; `participants.size=1`, `everBothPresentRef.current=true`.
+3. Both parties mute their mics immediately ("we muted to stop the
+   feedback"). `audioFlowingPeerIds.size=0` → `participantsWithFlowingAudio={}`.
+4. Gate condition met → FSM state = `armed/awaiting_audio_flow`,
+   `recordingActive=false`.
+5. Session runs (visible strokes, PDFs inserted, page switches all
+   work via live sync, which is gate-independent).
+6. End Session uploads empty `events.json` + zero audio segments.
+7. Replay shows the "nothing recorded" card.
+
+This is a billing/audit hole: a tutor (in good faith or otherwise)
+muting both ends could deliver a session and leave no recording.
+Andrew flagged the abuse vector explicitly: "we definitely can NOT
+rely on them to hit start, we're not giving out a free tutor WB
+just because they're okay not recording".
+
+### Smoke-4 root cause — math fonts CDN unreachable
+
+The smoke-3 CDN pin lands (URLs in DevTools confirm
+`/npm/mathlive@0.109.1/fonts/`), but `cdn.jsdelivr.net` doesn't
+resolve from Andrew's network. Same DNS pattern as the github.com
+git-push retries and the wss://wb-mortensen.fly.dev retry storm —
+third-party hostnames flake. The fix is to drop the third-party
+dependency entirely: ship the 20 KaTeX `.woff2` files (254 KB
+total) under `public/mathlive-fonts/` so they're served same-origin
+by Next.js. No CSP change required (`font-src 'self'` already
+covers same-origin), no DNS dependency, no rate-limit risk.
+
+### Smoke-4 fixes landed
+
+| Smoke ref | Fix | Where |
+| --- | --- | --- |
+| #3 KaTeX 404s (round 3 redux) | Self-host KaTeX woff2 fonts under `public/mathlive-fonts/` (254 KB, 20 files copied from `node_modules/mathlive/fonts/`). `MathfieldElement.fontsDirectory` now points to `/mathlive-fonts/` — same-origin, no third-party dep. | `public/mathlive-fonts/*.woff2`, `src/components/whiteboard/MathInsertButton.tsx` |
+| #4 empty-replay (audio-flow gate over-restriction) | Workspace-side: the gate-release boolean fed to the FSM is now the OR of FOUR sticky latches: (1) remote peer flow (existing), (2) **tutor's own local mic flow**, (3) **any whiteboard activity** — local stroke/insert OR on-target remote draw, (4) **10 s hard timeout** once both parties are present. ANY of these releases the gate permanently. FSM signature unchanged — same `everHadAudioFlow` input, semantically expanded by the workspace. | `WhiteboardWorkspaceClient.tsx` (new `everHadWbActivityRef` + `markWbActivity` above `applyRemoteToCanvas`; new `[everHadTutorAudioFlow, …]` + `[gateTimeoutFired, …]` + `AUDIO_FLOW_GATE_TIMEOUT_MS`; `markWbActivity()` fired from `handleExcalidrawChange` post-guards and from `applyRemoteToCanvas` on-target branch) |
+
+Net: silent-loss-of-the-entire-recording is now extremely hard to
+trigger. The 10 s timeout is the absolute floor — if every other
+signal fails (no audio flow, no WB activity), we still capture
+the session after at most a 10 s gap. The tutor-mic-flow latch
+covers the common "Sarah greets the student" case (her audio
+flows within the first second of greeting). The WB-activity latch
+covers silent-board sessions ("let's do this problem on the
+whiteboard"). The peer-flow latch is the original Phase 4d signal,
+unchanged.
+
+Test status post-fix: `npx jest src/__tests__/whiteboard
+src/__tests__/dom` → **533/533 pass**; `npx tsc --noEmit` → clean;
+`npx eslint` → 0 errors / 2 pre-existing warnings.
+
+### Smoke-4 follow-ups (not blocking PDF merge)
+
+- **Rename `everHadAudioFlow` → `everHadSessionActivity`** in the
+  FSM signature and tests, since the workspace-side semantic is no
+  longer "audio flow" specifically. Pure refactor — no behaviour
+  change.
+- **Tutor-mic-flow heuristic** uses `track.muted === false &&
+  readyState === "live"`, same as `useAudioFlowConfirmation`. That
+  doesn't actually require the tutor to be SPEAKING — just that
+  their mic track is delivering frames (which it is whenever the
+  mic is acquired, even if the user clicks the in-app mute toggle
+  which flips `track.enabled` not `track.muted`). For Sarah's
+  pilot this is fine (her mic is always live), but a stricter
+  variant would gate on RMS amplitude. Defer until we see a
+  failure mode that demands it.
+- **Replay UX when nothing was recorded** — the existing "nothing
+  recorded" card is correct copy, but it's hard for a tutor to
+  tell at a glance whether it's "I forgot to start recording" vs
+  "the gate held the whole time". Optional: surface the FSM's
+  final `armedReason` / `pausedReason` so the card reads "Session
+  ended while waiting for audio flow" instead of generic "nothing
+  recorded". Defer.
