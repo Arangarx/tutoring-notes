@@ -1213,9 +1213,12 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   // peer connections via `mesh.addLocalTrackToAllPeers`. The mesh
   // method is idempotent on track id (checks `pc.getSenders()`), so
   // tracks attached at `addPeer` time via `getLocalTracks` are NOT
-  // re-added. The remote peer sees one renegotiation per new track
-  // — perfect negotiation handles glare — and ALL previously-flowing
-  // tracks stay live throughout.
+  // re-added. We then call `mesh.replaceLocalTrackOnAllPeers` for
+  // each attached track so RTP senders that already held that track
+  // (same id as prior add/getLocalTracks path) still get an explicit
+  // `replaceTrack` — mirrors the mic-switch path and avoids the
+  // Chrome/WebRTC quirk where remote audio stays silent until a
+  // replace happens.
   //
   // Skipped silently when the mesh is not yet built or has been
   // disposed; the host's stream-acquisition path will eventually
@@ -1230,18 +1233,20 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     for (const t of audTracks) {
       try {
         mesh.addLocalTrackToAllPeers(t);
+        mesh.replaceLocalTrackOnAllPeers("audio", t);
       } catch (err) {
         log.warn(
-          `track-sync audio addLocalTrackToAllPeers threw: ${(err as Error)?.message ?? String(err)}`
+          `track-sync audio mesh sync threw: ${(err as Error)?.message ?? String(err)}`
         );
       }
     }
     for (const t of vidTracks) {
       try {
         mesh.addLocalTrackToAllPeers(t);
+        mesh.replaceLocalTrackOnAllPeers("video", t);
       } catch (err) {
         log.warn(
-          `track-sync video addLocalTrackToAllPeers threw: ${(err as Error)?.message ?? String(err)}`
+          `track-sync video mesh sync threw: ${(err as Error)?.message ?? String(err)}`
         );
       }
     }

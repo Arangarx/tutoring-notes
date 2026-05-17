@@ -812,6 +812,15 @@ describe("useLiveAV — requestCam", () => {
       (c: unknown[]) => c[0]
     );
     expect(fannedTracks).toContain(video.videoTracks[0]);
+    // Same-path `replaceTrack` as mic switch — wakes RTP senders after add.
+    expect(meshHandles.replaceLocalTrackOnAllPeers).toHaveBeenCalledWith(
+      "audio",
+      audio.audioTracks[0]
+    );
+    expect(meshHandles.replaceLocalTrackOnAllPeers).toHaveBeenCalledWith(
+      "video",
+      video.videoTracks[0]
+    );
 
     // Cleanup: unmount triggers exactly one dispose.
     unmount();
@@ -856,6 +865,14 @@ describe("useLiveAV — requestCam", () => {
       (c: unknown[]) => c[0]
     );
     expect(fannedTracks).toContain(audio.audioTracks[0]);
+    expect(meshHandles.replaceLocalTrackOnAllPeers).toHaveBeenCalledWith(
+      "video",
+      video.videoTracks[0]
+    );
+    expect(meshHandles.replaceLocalTrackOnAllPeers).toHaveBeenCalledWith(
+      "audio",
+      audio.audioTracks[0]
+    );
 
     unmount();
   });
