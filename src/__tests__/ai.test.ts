@@ -23,6 +23,16 @@ jest.mock("@/lib/env", () => ({
   env: { OPENAI_API_KEY: "sk-test-key" },
 }));
 
+jest.mock("@/lib/observability/cost-events", () => {
+  const actual = jest.requireActual(
+    "@/lib/observability/cost-events"
+  ) as typeof import("@/lib/observability/cost-events");
+  return {
+    ...actual,
+    logCostEvent: jest.fn().mockResolvedValue(undefined),
+  };
+});
+
 import {
   generateSessionNote,
   PROMPT_VERSION,
@@ -40,6 +50,8 @@ beforeEach(() => {
 
 test("returns topics/homework/assessment/plan/links on a valid OpenAI response", async () => {
   mockCreate.mockResolvedValueOnce({
+    model: "gpt-4o-mini",
+    usage: { prompt_tokens: 100, completion_tokens: 50 },
     choices: [
       {
         message: {
@@ -74,6 +86,8 @@ test("accepts legacy `nextSteps` JSON field as `plan` for backwards compat", asy
   // If the model echoes the old key (rare with json_object mode but free
   // to handle), we should still surface it as `plan`.
   mockCreate.mockResolvedValueOnce({
+    model: "gpt-4o-mini",
+    usage: { prompt_tokens: 10, completion_tokens: 10 },
     choices: [
       {
         message: {
@@ -103,6 +117,8 @@ test("accepts legacy `nextSteps` JSON field as `plan` for backwards compat", asy
 
 test("sends the correct model, json_object response_format, and token limits", async () => {
   mockCreate.mockResolvedValueOnce({
+    model: "gpt-4o-mini",
+    usage: { prompt_tokens: 10, completion_tokens: 10 },
     choices: [
       {
         message: {
@@ -148,6 +164,8 @@ test("accepts recent note context (RecentNoteContext.plan) without throwing", as
   // callers don't have to special-case it. If we reintroduce recent-note
   // context later, expand this test to assert the strings appear.
   mockCreate.mockResolvedValueOnce({
+    model: "gpt-4o-mini",
+    usage: { prompt_tokens: 10, completion_tokens: 10 },
     choices: [
       {
         message: {
@@ -178,6 +196,8 @@ test("accepts recent note context (RecentNoteContext.plan) without throwing", as
 
 test("returns { error } when OpenAI returns malformed JSON (no throw)", async () => {
   mockCreate.mockResolvedValueOnce({
+    model: "gpt-4o-mini",
+    usage: { prompt_tokens: 1, completion_tokens: 1 },
     choices: [{ message: { content: "not valid json{{" } }],
   });
 
@@ -240,6 +260,8 @@ test("returns { error: 'not configured' } immediately when OPENAI_API_KEY is abs
 
 test("falls back to empty string for missing JSON fields", async () => {
   mockCreate.mockResolvedValueOnce({
+    model: "gpt-4o-mini",
+    usage: { prompt_tokens: 1, completion_tokens: 1 },
     choices: [{ message: { content: JSON.stringify({ topics: "Only topics returned" }) } }],
   });
 

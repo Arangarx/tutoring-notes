@@ -943,7 +943,12 @@ export async function generateNotesFromWhiteboardSessionAction(
     const ext =
       MIME_TO_EXT[baseMime] ?? baseMime.split("/")[1]?.split(";")[0] ?? "webm";
     const filename = `wb-${whiteboardSessionId}-part${i + 1}.${ext}`;
-    const result = await transcribeAudio(audioBuffer, filename, row.mimeType);
+    const result = await transcribeAudio(audioBuffer, filename, row.mimeType, {
+      adminUserId: scope.adminId,
+      studentId,
+      sessionRecordingId: row.id,
+      whiteboardSessionId,
+    });
 
     if ("error" in result) {
       if (result.error === "not configured") {
@@ -1026,6 +1031,11 @@ export async function generateNotesFromWhiteboardSessionAction(
     studentName: student.name,
     sessionText: trimmed,
     template,
+    costProvenance: {
+      adminUserId: scope.adminId,
+      studentId,
+      whiteboardSessionId,
+    },
   });
 
   if ("error" in genResult) {

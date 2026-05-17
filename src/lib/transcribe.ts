@@ -3,6 +3,11 @@ import { toFile } from "openai";
 import { env } from "@/lib/env";
 import { WHISPER_MAX_BYTES } from "@/lib/transcribe-constants";
 import { splitAudioIntoWhisperParts, type WhisperAudioPart } from "@/lib/transcribe-ffmpeg";
+import {
+  estimateCostUsd,
+  logCostEvent,
+  type CostEventProvenance,
+} from "@/lib/observability/cost-events";
 
 export { WHISPER_MAX_BYTES } from "@/lib/transcribe-constants";
 
@@ -13,18 +18,22 @@ export type TranscribeSuccess = {
 
 export type TranscribeResult = TranscribeSuccess | { error: string };
 
+export type { CostEventProvenance as TranscribeCostProvenance } from "@/lib/observability/cost-events";
+
 async function transcribeSinglePart(
   buffer: Buffer,
   filename: string,
-  mimeType: string
+  mimeType: string,
+  costProvenance?: CostEventProvenance | null
 ): Promise<TranscribeResult> {
   const client = new OpenAI({ apiKey: env.OPENAI_API_KEY! });
+  const modelRequested = "whisper-1";
 
   try {
     const file = await toFile(buffer, filename, { type: mimeType });
 
     const response = await client.audio.transcriptions.create({
-      model: "whisper-1",
+      model: modelRequested,
       file,
       response_format: "verbose_json",
     });
@@ -34,13 +43,43 @@ async function transcribeSinglePart(
         ? String((response as { text: string }).text).trim()
         : "";
 
-    const duration =
+    const durationRaw =
       typeof response === "object" &&
       response !== null &&
       "duration" in response &&
       typeof (response as { duration: unknown }).duration === "number"
-        ? Math.round((response as { duration: number }).duration)
+        ? (response as { duration: number }).duration
         : null;
+    const duration = durationRaw != null ? Math.round(durationRaw) : null;
+
+    const responseModel =
+      typeof response === "object" &&
+      response !== null &&
+      "model" in response &&
+      typeof (response as { model: unknown }).model === "string" &&
+      (response as { model: string }).model.trim()
+        ? (response as { model: string }).model.trim()
+        : modelRequested;
+
+    const est =
+      durationRaw != null
+        ? estimateCostUsd({
+            kind: "WHISPER_TRANSCRIPTION",
+            model: responseModel,
+            audioSeconds: durationRaw,
+          })
+        : undefined;
+
+    await logCostEvent({
+      kind: "WHISPER_TRANSCRIPTION",
+      model: responseModel,
+      audioSeconds: durationRaw ?? undefined,
+      estimatedCostUsd: est,
+      adminUserId: costProvenance?.adminUserId,
+      studentId: costProvenance?.studentId,
+      sessionRecordingId: costProvenance?.sessionRecordingId,
+      whiteboardSessionId: costProvenance?.whiteboardSessionId,
+    });
 
     return { transcript, durationSeconds: duration };
   } catch (err: unknown) {
@@ -66,7 +105,8 @@ function normalizeMime(mimeType: string): string {
 export async function transcribeAudio(
   buffer: Buffer,
   filename: string,
-  mimeType: string
+  mimeType: string,
+  costProvenance?: CostEventProvenance | null
 ): Promise<TranscribeResult> {
   if (!env.OPENAI_API_KEY) {
     return { error: "not configured" };
@@ -104,7 +144,12 @@ export async function transcribeAudio(
       };
     }
 
-    const result = await transcribeSinglePart(part.buffer, part.filename, part.mimeType);
+    const result = await transcribeSinglePart(
+      part.buffer,
+      part.filename,
+      part.mimeType,
+      costProvenance
+    );
     if ("error" in result) return result;
     if (result.transcript) transcripts.push(result.transcript);
     if (result.durationSeconds != null) {
