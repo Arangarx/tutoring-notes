@@ -57,6 +57,20 @@ node scripts/blob-cleanup.mjs --delete --no-limit
 | `--dry-run` + `--delete` | Hard-exit |
 | Orphans strictly **>** `--max-deletions` while `--delete` | Hard-exit unless `--no-limit` |
 | Prod or dev `$connect()` failure | Abort before deletes |
-| Unreferenced blobs younger than `--min-age-days` | Skipped |
+| Unreferenced blobs younger than `--min-age-days` | Skipped (`TOO_NEW_UNREF`) |
+| Pathname matches a protected pattern (see below) | Kept regardless of DB-ref state (`PROTECTED`) |
 
 Logging prefix: `[blob-cleanup] blb=<uuid> …`.
+
+## Protected pathnames (known DB-cross-reference gap)
+
+Some blob types are referenced ONLY inside other blobs (not in any Prisma column the orphan check inspects), so the DB-cross-reference check would falsely flag them and a `--delete` would 404 the next replay. Until the orphan detector learns to also parse `events.json` contents and extract embedded asset URLs (slotted as a follow-up), the script unconditionally **keeps** blobs matching these pathname patterns:
+
+| Pattern | What it is | Why protected |
+|---------|------------|---------------|
+| `whiteboard-sessions/{studentId}/{sessionId}/assets/...` | Tutor-inserted whiteboard images (uploaded via `src/lib/whiteboard/upload.ts` → `uploadWhiteboardAsset`) | URL stored inside `WhiteboardSession.eventsBlobUrl` JSON (Excalidraw `customData.assetUrl`), not in any column. Deleting would break replay (images would 404). Discovered 2026-05-17 when a 510-blob production dry-run flagged 35 such assets for deletion. |
+| `whiteboard-checkpoints/...` | Auto-save recovery checkpoints (uploaded via `src/app/api/whiteboard/[sessionId]/checkpoint/route.ts`) | Not referenced in any DB column; intended for prefix-based sweeping in a separate utility, not orphan detection. |
+
+Maintenance: when any new upload code path adds a pathname that's not directly referenced in `SessionRecording.blobUrl` / `WhiteboardSession.eventsBlobUrl` / `WhiteboardSession.snapshotBlobUrl`, add its pattern to `isPathProtected` in `scripts/blob-cleanup-logic.mjs` AND this table. Failure to do so risks falsely deleting real session data.
+
+Cost of the conservative approach: genuinely-orphaned asset/checkpoint blobs (uploaded but never embedded in a real session — e.g. upload succeeded, events write failed) accumulate forever as dead storage. At pilot scale this is pennies/month; trade safely accepted until the events.json content-aware orphan detection follow-up ships.

@@ -55,3 +55,31 @@ export function refuseDeletionOverCap(orphanCount, maxDeletions, noLimit) {
   if (noLimit) return false;
   return orphanCount > maxDeletions;
 }
+
+/**
+ * Some blob pathnames are referenced ONLY inside other blobs (e.g. tutor-
+ * inserted whiteboard image assets live inside the events.json blob's
+ * Excalidraw scene state), so the DB-cross-reference orphan check would
+ * falsely flag them and deleting them would 404 the next replay.
+ *
+ * Until the orphan detector learns to also parse events.json contents
+ * (slotted as a follow-up), these patterns are PROTECTED — kept regardless
+ * of DB-reference state. Cost: a small amount of genuinely-orphaned
+ * storage stays around. Benefit: zero risk of breaking real sessions.
+ *
+ * Maintained in lockstep with the upload pathname patterns in:
+ *   - src/lib/whiteboard/upload.ts (whiteboard-sessions/.../assets/...)
+ *   - src/app/api/whiteboard/[sessionId]/checkpoint/route.ts
+ *     (whiteboard-checkpoints/...)
+ *
+ * @param {string} pathname  The Vercel Blob `pathname` (path-only, no host).
+ * @returns {boolean}
+ */
+export function isPathProtected(pathname) {
+  if (typeof pathname !== "string") return false;
+  // Tutor-inserted whiteboard assets — referenced only inside events.json.
+  if (/^whiteboard-sessions\/[^/]+\/[^/]+\/assets\//.test(pathname)) return true;
+  // Whiteboard recovery checkpoints — not referenced in any DB column.
+  if (/^whiteboard-checkpoints\//.test(pathname)) return true;
+  return false;
+}

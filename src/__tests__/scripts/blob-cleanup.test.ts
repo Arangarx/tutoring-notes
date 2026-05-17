@@ -109,6 +109,7 @@ interface BlobCleanupLogicModule {
     selected: typeof orphans;
     refusedExcess: number;
   };
+  isPathProtected(pathname: string): boolean;
 }
 
 describe("blob-cleanup-logic helpers", () => {
@@ -181,6 +182,53 @@ describe("blob-cleanup-logic helpers", () => {
     expect(mod.refuseDeletionOverCap(60, 50, false)).toBe(true);
     expect(mod.refuseDeletionOverCap(10, 50, false)).toBe(false);
     expect(mod.refuseDeletionOverCap(9999, 50, true)).toBe(false);
+  });
+
+  describe("isPathProtected", () => {
+    it("protects tutor-inserted whiteboard assets (referenced only inside events.json)", () => {
+      expect(
+        mod.isPathProtected(
+          "whiteboard-sessions/stu_1/wsid_1/assets/1700000000000-image.png"
+        )
+      ).toBe(true);
+    });
+
+    it("protects whiteboard recovery checkpoints", () => {
+      expect(
+        mod.isPathProtected(
+          "whiteboard-checkpoints/wsid_1/1700000000000-recovery.json"
+        )
+      ).toBe(true);
+    });
+
+    it("does NOT protect events log blobs (those are tracked via WhiteboardSession.eventsBlobUrl)", () => {
+      expect(
+        mod.isPathProtected(
+          "whiteboard-sessions/stu_1/wsid_1/1700000000000-events.json"
+        )
+      ).toBe(false);
+    });
+
+    it("does NOT protect snapshot blobs (tracked via WhiteboardSession.snapshotBlobUrl)", () => {
+      expect(
+        mod.isPathProtected(
+          "whiteboard-sessions/stu_1/wsid_1/1700000000000-snapshot.png"
+        )
+      ).toBe(false);
+    });
+
+    it("does NOT protect audio session recordings (tracked via SessionRecording.blobUrl)", () => {
+      expect(
+        mod.isPathProtected("sessions/stu_1/1700000000000-recording.webm")
+      ).toBe(false);
+    });
+
+    it("returns false for non-string input (defensive)", () => {
+      // @ts-expect-error intentional bad input
+      expect(mod.isPathProtected(undefined)).toBe(false);
+      // @ts-expect-error intentional bad input
+      expect(mod.isPathProtected(null)).toBe(false);
+    });
   });
 
   it("applyDeletionCap keeps oldest orphans first when truncating", () => {

@@ -10,7 +10,11 @@ import { URL as NodeURL } from "node:url";
 import { list, del, BlobServiceRateLimited } from "@vercel/blob";
 import { PrismaClient } from "@prisma/client";
 
-import { isOrphanCandidate, referencedWhere } from "./blob-cleanup-logic.mjs";
+import {
+  isOrphanCandidate,
+  isPathProtected,
+  referencedWhere,
+} from "./blob-cleanup-logic.mjs";
 
 const PREFIX = "[blob-cleanup]";
 const LOG_KEY = "blb";
@@ -333,10 +337,22 @@ async function main() {
     let cntDevOnly = 0;
     let cntBoth = 0;
     let cntTooNew = 0;
+    let cntProtected = 0;
 
     const minAgeMs = opts.minAgeDays * 86400 * 1000;
 
     for (const blob of listed) {
+      // Protected pathnames (e.g. whiteboard-sessions/.../assets/, whiteboard-checkpoints/)
+      // are referenced ONLY inside other blobs, not in any DB column the orphan
+      // check inspects. Keep them regardless of DB-ref state to avoid breaking
+      // real sessions on replay. See isPathProtected in blob-cleanup-logic.mjs.
+      if (isPathProtected(blob.pathname)) {
+        cntProtected++;
+        log(
+          `KEEP url=${blob.url} reason=protected-path pathname=${blob.pathname}`
+        );
+        continue;
+      }
       const where = referencedWhere(blob.url, prodRefs, devRefs);
       if (where === "prod") {
         cntProdOnly++;
@@ -383,7 +399,7 @@ async function main() {
       }
       console.log("");
       console.log(
-        `${PREFIX} ${LOG_KEY}=${runId} SUMMARY LISTED=${listed.length} REF-PROD-ONLY=${cntProdOnly} REF-DEV-ONLY=${cntDevOnly} REF-BOTH=${cntBoth} TOO_NEW_UNREF=${cntTooNew} ORPHANS=${orphans.length} DELETED=0 WOULD_DELETE=${orphans.length}`
+        `${PREFIX} ${LOG_KEY}=${runId} SUMMARY LISTED=${listed.length} PROTECTED=${cntProtected} REF-PROD-ONLY=${cntProdOnly} REF-DEV-ONLY=${cntDevOnly} REF-BOTH=${cntBoth} TOO_NEW_UNREF=${cntTooNew} ORPHANS=${orphans.length} DELETED=0 WOULD_DELETE=${orphans.length}`
       );
       return;
     }
@@ -405,7 +421,7 @@ async function main() {
 
     console.log("");
     console.log(
-      `${PREFIX} ${LOG_KEY}=${runId} SUMMARY LISTED=${listed.length} REF-PROD-ONLY=${cntProdOnly} REF-DEV-ONLY=${cntDevOnly} REF-BOTH=${cntBoth} TOO_NEW_UNREF=${cntTooNew} ORPHANS=${orphans.length} DELETED=${deleted}`
+      `${PREFIX} ${LOG_KEY}=${runId} SUMMARY LISTED=${listed.length} PROTECTED=${cntProtected} REF-PROD-ONLY=${cntProdOnly} REF-DEV-ONLY=${cntDevOnly} REF-BOTH=${cntBoth} TOO_NEW_UNREF=${cntTooNew} ORPHANS=${orphans.length} DELETED=${deleted}`
     );
   } catch (e) {
     const msg = e instanceof Error ? e.stack ?? e.message : String(e);
