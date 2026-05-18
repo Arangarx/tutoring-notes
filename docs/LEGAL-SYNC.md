@@ -79,11 +79,26 @@ a Google compliance gate.
 ## Source of truth
 
 - **Umbrella canonical text + verification history:** the
-  `mortensenapps.com` site repository. Andrew has the path; this doc
-  should be updated to reference it explicitly once shared. The commit
-  history of that repo captures the iteration with the Google
-  verification team across rounds — that history is invaluable context
-  when the umbrella next changes.
+  `mortensenapps.com` site repository, currently at
+  **`C:\Users\arang\Documents\Andrew\dev\agenticPipeline\pipeline-projects\mortensen-apps-site`**
+  (path provided by Andrew 2026-05-18; the site repo has not yet been
+  moved to the `agentic-projects/` parent alongside this app — update
+  this reference when it moves). Static HTML site, not Next.js;
+  `privacy/index.html` and `terms/index.html` are the canonical files.
+  The commit history of that repo captures the iteration with the
+  Google verification team across rounds — invaluable context when the
+  umbrella next changes. Known Google-verification-driven commits as of
+  2026-05-18:
+    - `89f3cc9` (2026-04-22) — Initial site: home, privacy, terms for OAuth verification.
+    - `9422b0a` (2026-04-22) — Contact: primary `arangarx@gmail.com`; per-app support on home.
+    - `b0aa270` (2026-05-12) — Homepage: Tutoring Notes purpose for OAuth verification.
+    - `b3483b6` (2026-05-12) — **Privacy: sharing/recipients and security (Google verification).** +82 lines. Most load-bearing — added the full `Sharing, disclosure, and recipients` enumerated list and the full `Security` enumerated list (including the Limiting-data-use bullet). DO NOT lose any content from this commit when editing.
+- **Pending umbrella drafts (not yet shipped):** see
+  `docs/legal-drafts/umbrella-pending-2026-05-18.md` in this repo for
+  the PostHog analytics expansion + AI-improvement section that the
+  Phase 11a + 11b bootstrappers depend on. That draft also documents
+  the must-preserve-verbatim blocks from each prior Google round so
+  the next umbrella edit can't accidentally delete verified content.
 - **Live deployed umbrella copy:** `https://www.mortensenapps.com/privacy`
   and `https://www.mortensenapps.com/terms` (the www subdomain — exact
   match to the registered consent-screen URLs; the apex
