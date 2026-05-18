@@ -127,6 +127,120 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
    making changes.
 4. Update the STATUS doc as you finish each sub-phase.
 
+## Model usage protocol (provisional, captured 2026-05-18 post-Composer-2.5-launch)
+
+Cost discipline matters because Opus on-demand burn was a non-trivial
+line item even before this pilot started charging anyone. Composer 2.5
+(released 2026-05-18) is ~30× cheaper per token than Opus 4.7 at the
+Standard tier, ~5× cheaper at the Fast tier, and demonstrated
+production-grade quality on this codebase the day it launched (security
+audit Tier A, commits `5aa16f9` + `8cdbe58` — see
+"Real-world observations" below).
+
+**Tier assignment** (default — escalate only on the criteria in the
+next subsection):
+
+- **Composer 2.5** is the default. Use it for:
+  - **Bootstrapper authoring** — writing `docs/handoff/*-bootstrapper.md`
+    executor briefings. Composer 2.5 has the project context + bootstrap
+    template to do this itself; orchestrator no longer drafts unless
+    the work is genuinely novel.
+  - **Executor work** — running bootstrappers, schema migrations,
+    repetitive plumbing, well-patterned features (the canonical
+    docs/handoff/ pipeline).
+  - **Code review, security audits, cleanup passes** — repetitive,
+    grep-then-spot-check work where the cost differential dominates.
+  - **Spike chats** — "go figure out X" investigations where the
+    answer might be thrown away.
+  - **Most refactor + feature work** where the pattern is clear from
+    prior similar work in the repo.
+
+- **Sonnet** when more than Composer is needed but Opus is overkill:
+  - Novel architecture that fits in ~half-day novel design (not full
+    cross-cutting design).
+  - Cross-cutting changes that need broader context than a single
+    feature but don't span multiple phases.
+  - Code review of large diffs where Composer 2.5 might miss subtle
+    issues (e.g. concurrency or auth-boundary bugs).
+  - Adversarial reviews of feature plans (the 5-axis reliability
+    check from the North Star section).
+
+- **Opus reserved for orchestration only**:
+  - Phase planning + sequencing (this chat-style orchestration
+    session).
+  - Cross-cutting design decisions that span multiple phases
+    (e.g. introducing the FSM/outbox/atomic end-session three-pillar
+    pattern back in Phase 1).
+  - Multi-day novel architecture where wrong design = days of
+    unwinding.
+  - Strategic decisions (Vercel Pro upgrade, when to merge, when to
+    defer a phase, brand resumption gating).
+  - Debugging deep, novel issues where reasoning depth materially
+    helps and the cost differential is justified by the avoided
+    human-orchestrator hours.
+
+**Escalation criteria** — what triggers moving up a tier:
+
+- Composer 2.5 → Sonnet: the work surface has any of (a) auth-boundary
+  or ownership-assertion change, (b) concurrency or race-condition
+  reasoning, (c) cross-cutting refactor affecting >3 phases of code,
+  (d) a feature plan where the 5-axis reliability review has not yet
+  been done.
+- Sonnet → Opus: the work is (a) introducing a new architectural
+  pillar to the recorder lifecycle / outbox / sync layer (Pillar
+  language from RECORDER-LIFECYCLE.md), (b) revisiting a design
+  decision that has already cost us a recovery cycle in pilot, (c)
+  multi-day with high blast radius (Phase 4 series, Phase 1
+  outbox/FSM work, Phase 11d prompt iteration meta-loop), or (d)
+  determining the shape of a future Phase that doesn't yet have a
+  bootstrapper.
+
+**Proven patterns** — combine tiers when it pays off:
+
+- **"Opus designs, Composer ships"** (validated 2026-05-17 PDF feature
+  + per-page view state). Opus does the design pass + writes the
+  bootstrapper; Composer 2.5 executes. Optimal when the design is
+  high-stakes but the execution is well-patterned.
+- **"Composer designs and ships"** (validated 2026-05-18 security
+  Tier A, commit `8cdbe58`). Composer 2.5 writes both the spec
+  in-chat and the implementation, with orchestrator review at the
+  end. Optimal when the work is clearly scoped, has a definite
+  acceptance criterion, and the orchestrator has prior context.
+- **"Opus orchestrates, Sonnet reviews, Composer executes"** — when a
+  Composer-class bootstrapper produces a large diff that benefits
+  from a Sonnet-class adversarial review before merge. Reserved for
+  high-blast-radius features.
+
+**Real-world observations** — what we've actually seen, updated when
+evidence changes:
+
+- **Composer 2.5 quality (2026-05-18, day-of-launch)**: production-grade
+  on the security Tier A scope. Read 3 files to confirm 1 claim
+  (`/forgot-password` enumeration safety); caught the silent
+  `npm audit fix` no-op via `git diff --stat`; correctly diagnosed
+  peer-dep conflict from the ERESOLVE warnings; held scope discipline
+  on zod-validation generalization. Verified pre-push via tsc + eslint.
+  Slightly verbose code comments but otherwise indistinguishable from
+  Opus-class output for this scope.
+- **Composer 2 fell short of marketing claims in practice** (Andrew,
+  pilot history). Composer 2.5's marketing is similar in shape; treat
+  this protocol as PROVISIONAL pending independent benchmark data and
+  more multi-week observation of Composer 2.5 in real work.
+- **What to watch for that would trigger protocol revision**: (a)
+  complexity ceiling — work where Composer 2.5 silently produces
+  mediocre work without obvious failure (rename to "default-with-
+  caveats" if it appears); (b) reliability ceiling — instances where
+  Composer 2.5 cuts corners on tests/lints/docs that an Opus pass
+  would have caught; (c) debugging depth ceiling — issues where
+  Composer 2.5 gives up at a layer Opus would have pushed through.
+  Capture these as dated entries under "Real-world observations"
+  when they occur.
+
+**Cost discipline rule**: default to the cheapest tier that can do
+the job. Escalate only when the cost of a wrong call (hours of
+unwinding) > the marginal model cost (cents per chat at Composer
+2.5 rates, dollars at Opus rates).
+
 ## Merging convention (solo-tutor pilot stage)
 
 While the pilot is solo (just Andrew + Sarah) and there's no adversarial
