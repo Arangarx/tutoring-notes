@@ -33,9 +33,9 @@
 - **Where baked in**:
   - `src/app/admin/students/[id]/page.tsx:41` — `export const maxDuration = 300;`
   - `src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/page.tsx:18` — `export const maxDuration = 300;`
-  - `src/lib/transcribe.ts` — sequential Whisper-per-part loop (Tier 1 parallelize pending per `docs/handoff/long-form-transcribe-tier-1-parallelize-bootstrapper.md`) assumes ~300s ceiling.
-  - `src/app/admin/students/[id]/actions.ts` — `transcribeAndGenerateAction` outer per-segment loop.
-  - `src/app/admin/students/[id]/whiteboard/actions.ts` — whiteboard transcribe path, same pattern.
+  - `src/lib/transcribe.ts` — Whisper-per-part loop parallelized with concurrency cap 6 (`WHISPER_INNER_CONCURRENCY`) post-Tier-1 (shipped 2026-05-17). Assumes 300s wall-clock budget at the action boundary.
+  - `src/app/admin/students/[id]/actions.ts` — `transcribeAndGenerateAction` outer per-segment loop, parallelized with cap 3 (`TRANSCRIPT_OUTER_CONCURRENCY`) post-Tier-1.
+  - `src/app/admin/students/[id]/whiteboard/actions.ts` — whiteboard transcribe path, same outer-cap-3 pattern (`WB_TRANSCRIPT_OUTER_CONCURRENCY`).
 - **What breaks if violated**:
   - **Hobby tier (60s ceiling)**: long-form transcribe (>5 min audio) silently times out. Sarah's April 24 50-min recording hit this. `maxDuration = 300` declarations are silently plan-capped to 60s without any warning. **Re-introducing Hobby = re-breaking long-form transcribe for the pilot.**
   - **AWS Lambda default (~15 min hard max, but 30s default)**: depends on configured timeout per function. If migrating, every `maxDuration` declaration must be re-validated against the new platform's per-function timeout config. Lambda's 900s ceiling is generous, but the per-invocation cost model changes.
