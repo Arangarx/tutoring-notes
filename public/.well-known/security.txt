@@ -1,0 +1,26 @@
+# Security contact for Tutoring Notes (Mortensen Apps)
+# RFC 9116 — https://www.rfc-editor.org/rfc/rfc9116
+#
+# If you believe you have found a security vulnerability in Tutoring Notes
+# or any other Mortensen Apps product, please report it to the address
+# below. We appreciate responsible disclosure and will acknowledge receipt
+# within 5 business days. Please give us a reasonable window to investigate
+# and remediate before any public disclosure.
+
+Contact: mailto:arangarx+security@gmail.com
+Expires: 2027-05-18T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://tutoring-notes.vercel.app/.well-known/security.txt
+
+# About scope
+#
+# This file applies to the Tutoring Notes web application at
+# https://tutoring-notes.vercel.app and to the umbrella site at
+# https://www.mortensenapps.com. Reports against other Mortensen Apps
+# products may also be sent here; we will route internally.
+#
+# Out of scope: vulnerabilities in third-party services we use (Vercel,
+# Neon, Vercel Blob, OpenAI, PostHog) — please report those directly to
+# the vendor.
+
+# Last reviewed: 2026-05-18
