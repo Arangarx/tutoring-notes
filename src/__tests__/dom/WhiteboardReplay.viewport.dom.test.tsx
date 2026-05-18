@@ -201,3 +201,135 @@ describe("WhiteboardReplay initial viewport (Phase 0e)", () => {
     expect(measurementCalls).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe("WhiteboardReplay timeline-driven viewport events (Phase 5 task 8 tier-c-lite)", () => {
+  let gbcrSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    updateSceneMock.mockClear();
+    fetchMock.mockReset();
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const viewportRect = new DOMRectReadOnly(0, 0, 800, 600);
+    gbcrSpy = jest
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        if (this.hasAttribute("data-replay-viewport-metrics")) {
+          return viewportRect as DOMRect;
+        }
+        return new DOMRect(0, 0, 640, 480);
+      });
+  });
+
+  afterEach(() => {
+    gbcrSpy.mockRestore();
+  });
+
+  afterAll(() => {
+    global.fetch = originalFetch;
+  });
+
+  it("applies a t=0 viewport event on initial paint (no camera-fit)", async () => {
+    // No-audio replay starts at the final frame, so applySceneAt finds
+    // any viewport ≤ finalClockMs. With a viewport at t=0 and an event at
+    // t=500, the latest one ≤ initialT is the t=0 viewport.
+    const log = {
+      schemaVersion: 1,
+      startedAt: "2026-05-17T19:00:00Z",
+      durationMs: 1_000,
+      events: [
+        { type: "viewport", t: 0, panX: 999, panY: -777, zoom: 0.5 },
+        {
+          type: "snapshot",
+          t: 500,
+          elements: [
+            {
+              id: "rect-tl",
+              type: "rectangle",
+              x: -40,
+              y: -28,
+              width: 30,
+              height: 20,
+              strokeColor: "#000",
+            },
+          ],
+        },
+      ],
+    };
+    fetchMock.mockResolvedValue(fakeResponse(JSON.stringify(log)));
+
+    render(
+      <WhiteboardReplay
+        eventsBlobUrl="/api/whiteboard/wb-vp-t0/events"
+        title="t=0 viewport"
+      />
+    );
+
+    await screen.findByTestId("wb-replay");
+
+    type AppCrop = {
+      scrollX?: number;
+      scrollY?: number;
+      zoom?: { value: number };
+    };
+
+    await waitFor(() => {
+      const apps = updateSceneMock.mock.calls
+        .map((c) => (c[0] as { appState?: AppCrop }).appState)
+        .filter((a): a is AppCrop => !!a);
+      expect(
+        apps.some(
+          (a) =>
+            a.scrollX === 999 &&
+            a.scrollY === -777 &&
+            a.zoom?.value === 0.5
+        )
+      ).toBe(true);
+    });
+
+    // Camera-fit's bbox-centered scrollX (≈825) must NOT have been pushed.
+    const apps = updateSceneMock.mock.calls
+      .map((c) => (c[0] as { appState?: AppCrop }).appState)
+      .filter((a): a is AppCrop => !!a);
+    expect(apps.some((a) => a.scrollX === 825 && a.scrollY === 318)).toBe(false);
+  });
+
+  it("falls back to camera-fit when log has no viewport events", async () => {
+    fetchMock.mockResolvedValue(fakeResponse(EVENT_LOG_JSON));
+
+    render(
+      <WhiteboardReplay
+        eventsBlobUrl="/api/whiteboard/wb-vp-none/events"
+        title="No viewport events"
+      />
+    );
+
+    await screen.findByTestId("wb-replay");
+
+    type AppCrop = {
+      scrollX?: number;
+      scrollY?: number;
+      zoom?: { value: number };
+    };
+
+    await waitFor(() => {
+      const fits = updateSceneMock.mock.calls
+        .map((c) => (c[0] as { appState?: AppCrop }).appState)
+        .filter(
+          (a): a is AppCrop & { scrollX: number; scrollY: number } =>
+            !!a &&
+            typeof a.scrollX === "number" &&
+            typeof a.scrollY === "number"
+        );
+      const expectedSx = 800 / 2 - -25;
+      const expectedSy = 600 / 2 - -18;
+      expect(
+        fits.some(
+          (a) =>
+            Math.abs(a.scrollX - expectedSx) < 1e-6 &&
+            Math.abs(a.scrollY - expectedSy) < 1e-6
+        )
+      ).toBe(true);
+    });
+  });
+});

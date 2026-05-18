@@ -136,6 +136,28 @@ export type WBEvent =
   /** Live-sync server connection re-established. */
   | { t: number; type: "sync-reconnect" }
   /**
+   * Phase 5 task 8 (replay viewport tier-c-lite).
+   *
+   * Records the tutor's pan/zoom at time `t`. Replay applies the latest
+   * `viewport` event with `t <= currentTime` on each play-loop tick, so
+   * the camera tracks what the tutor was looking at as audio scrubs
+   * through history (NOT a full historical scrubber — viewport changes
+   * are only emitted on debounced flush + page switch, same cadence as
+   * the live `pageViewState` wire; not pixel-by-pixel).
+   *
+   * Backward compat: pre-feature logs have zero `viewport` events; the
+   * replay player falls back to `createCameraFitter` (bbox auto-fit).
+   * Scene reconstruction (`reconstructSceneAt`) ignores this variant —
+   * it's pure camera, not an element change.
+   *
+   * Per-page navigation is intentionally NOT carried in this event
+   * because replay has no page-strip surface today. Viewport changes
+   * captured on page-switch (live workspace) will appear in the log
+   * as a normal `viewport` event at the moment of the switch, which
+   * is exactly the camera-jump replay needs.
+   */
+  | { t: number; type: "viewport"; panX: number; panY: number; zoom: number }
+  /**
    * Phase 2 reservation — tutor and student edited a shared text/code
    * document. Carries an opaque `payload` (likely a Yjs update or
    * canonical OT op) so the format is stable from the start, even
@@ -286,11 +308,34 @@ export function reconstructSceneAt(
         break;
       }
       default:
-        // pause / resume / tab-* / sync-* / text-doc-update don't affect
-        // scene reconstruction. text-doc-update will get its own
-        // reconstruction path in Phase 2.
+        // pause / resume / tab-* / sync-* / viewport / text-doc-update don't
+        // affect scene reconstruction. viewport is pure camera (replay's
+        // applySceneAt handles it separately). text-doc-update will get its
+        // own reconstruction path in Phase 2.
         break;
     }
   }
   return scene;
+}
+
+/**
+ * Find the latest `viewport` event with `t <= untilT`. Returns null when
+ * no viewport events exist at or before that time — replay then falls
+ * back to its default camera (camera-fit or whatever the current scroll
+ * already is). Pure linear scan; logs are short enough that binary search
+ * isn't worth the complexity (200ms debounce + page-switch cadence means
+ * ~50–200 events even on a long session).
+ */
+export function findLatestViewportAt(
+  log: WBEventLog,
+  untilT: number
+): { panX: number; panY: number; zoom: number } | null {
+  let latest: { panX: number; panY: number; zoom: number } | null = null;
+  for (const ev of log.events) {
+    if (ev.t > untilT) break;
+    if (ev.type === "viewport") {
+      latest = { panX: ev.panX, panY: ev.panY, zoom: ev.zoom };
+    }
+  }
+  return latest;
 }

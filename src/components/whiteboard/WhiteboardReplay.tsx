@@ -47,6 +47,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
+  findLatestViewportAt,
   maxEventTimestampMs,
   type WBElement,
   type WBEventLog,
@@ -371,10 +372,27 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       if (loadState.kind !== "ready" || !api) return;
       const painter = scenePainterRef.current;
       if (!painter) return;
+      // Phase 5 task 8 (replay viewport tier-c-lite): find the most recent
+      // `viewport` event ≤ timeMs. When present, the painter pushes it
+      // atomically with the scene elements so the camera moves in lockstep
+      // with strokes. When absent (pre-feature logs, or the first frames
+      // of a recording before the anchor `viewport` event lands), we fall
+      // back to the engine's `preserveScroll` behaviour — which keeps
+      // whatever scroll the camera-fitter set on first paint.
+      const vp = findLatestViewportAt(loadState.log, timeMs);
       const result = painter.applyAt(timeMs, {
-        preserveScroll: replayCameraReadyRef.current,
+        preserveScroll: vp ? false : replayCameraReadyRef.current,
+        viewportOverride: vp ?? undefined,
       });
       lastSceneElementsRef.current = result.paintedElements;
+      // Once a viewport event has driven the camera, treat the camera as
+      // "ready" so any future tick with no viewport event still preserves
+      // scroll (otherwise reverting to camera-fit math would jump the camera
+      // on every empty-frame tick).
+      if (vp && !replayCameraReadyRef.current) {
+        replayCameraReadyRef.current = true;
+        setReplayViewportSeq((n) => n + 1);
+      }
       // Kick off image fetches in the background — Excalidraw will
       // call `getFiles()` or look in `BinaryFiles` on next render
       // tick, and addFiles is what populates that.
@@ -417,6 +435,15 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
 
     const container = excalCanvasContainerRef.current;
     if (!container) return;
+
+    // Phase 5 task 8 (replay viewport tier-c-lite): if the log carries a
+    // viewport event at or before initialT, applySceneAt above already
+    // pushed it via the painter's viewportOverride path and
+    // replayCameraReadyRef is true. Skip camera-fit in that case so we
+    // don't fight the tutor's recorded camera on first paint.
+    if (replayCameraReadyRef.current) {
+      return;
+    }
 
     // Phase 1a: camera fit + rAF retry now lives in the scene-paint
     // engine. Same behaviour as the old inline impl (Phase 0e):

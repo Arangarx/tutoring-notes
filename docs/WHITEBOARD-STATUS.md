@@ -380,6 +380,24 @@ to know when to revisit.
 
 ---
 
+## Per-page view state SHIPPED (Phase 5 task 8, tier b — May 2026)
+
+**Branch:** `feat/per-page-view-state` (merge after Andrew smoke).
+
+**Behavior:** Each board tab stores optional `viewState` (`panX`/`panY`/`zoom`) on `WhiteboardBoardDocumentV1.pageList[]`. Tutor capture runs on page switch; a **200ms debounced** flush updates the document, `sessionStorage` draft, and `pageViewState` wire envelopes for student follow-mode. Tab hide / `beforeunload` runs a best-effort viewport flush first. Student applies tutor patches only (no `pageViewState` emits).
+
+**Replay viewport (tier-c-lite — May 2026):** Pan/zoom changes are recorded as **`viewport` events in the `WBEventLog`** (`{ t, type: "viewport", panX, panY, zoom }`), emitted from the workspace on (a) recording-start anchor, (b) the existing 200ms debounced viewport flush, and (c) page-switch viewport restore. Replay's `applySceneAt` finds the latest viewport event with `t ≤ currentTime` on each tick and pushes it atomically with the scene elements via the scene-paint engine's new `viewportOverride` PaintOption. Pre-feature logs (no viewport events) fall back to the existing `createCameraFitter` bbox auto-fit. The earlier "stamp the END viewport into the log" approach (commit `2d9963e`) was yanked: at t=0 of replay the camera was wherever the tutor *ended*, so content drawn elsewhere appeared off-screen — see commit `2499f7b` for the revert + rationale.
+
+**Smoke:** Use the checklist in `docs/handoff/per-page-view-state-bootstrapper.md` (SMOKE CHECKLIST FOR ANDREW). Plus for replay: end a session that started zoomed in on page 1, panned across page 2, zoomed out on page 3 → open replay → camera should move with the tutor (camera-fit at t=0 if no early viewport event landed, then jump on each viewport event).
+
+**Deferred:** Per-viewer independent-mode persistence (Phase 5 task 3); per-page navigation IN replay (would need a PageStrip in the replay surface — out of scope here).
+
+**Smoke follow-ups (May 2026 pilot):**
+- **sessionStorage board draft** skips silently when JSON exceeds **4MB** (`session-scene-draft.ts`); we now **console.warn** when that happens. Heavy PDF boards should rely on **IndexedDB checkpoint "Load draft into board"** after refresh. A prior bug **merged** stale per-tab element buckets across two hydrates — fixed by replacing `pageDataRef` wholesale when applying `WhiteboardBoardDocumentV1`.
+- **Cursor-to-stroke offset:** initial hydrate uses a **minimal** `appState` patch (no `...prevState` spread) so a not-yet-laid-out canvas doesn't corrupt Excalidraw's pointer→scene transform. Page-switch + live follow paths DO spread `prevState` because the canvas is fully laid out there; without the spread, strokes land above/below the cursor.
+
+---
+
 ## Follow-ups (NOT in Phase 1, tracked here so they don't get lost)
 
 - **Backlog of record (whiteboard + cross-cutting):** `docs/BACKLOG.md` section **“Whiteboard — implementation / design queue”** (PDF workbook, session audio, replay scrub, multi-page log, student follow UX). Add there first; keep this file’s follow-ups to Phase-1-adjacent crumbs.

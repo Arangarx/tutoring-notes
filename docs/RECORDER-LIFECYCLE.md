@@ -362,15 +362,26 @@ explicit precedence, add tests in
 `src/__tests__/recording/lifecycle-machine.test.ts`. Then thread the
 input from the host. Do NOT introduce side effects in the FSM.
 
-**Q: Where do I see the rid / wbsid / obx / pvw / snp / avx prefixes
+**Q: Where do I see the rid / wbsid / obx / pvw / snp / avx / pvs prefixes
 documented?**
 A: AGENTS.md "Per-session ID logging is mandatory." section. The
 3-letter prefixes used in this stack are `wbsid` (whiteboard
 session id), `obx` (outbox row), `snp` (snapshot generation),
-`pvw` (preview-before-start), `rid` (audio recorder), `avx`
+`pvw` (preview-before-start), `pvs` (per-page whiteboard pan/zoom —
+Phase 5 task 8), `rid` (audio recorder), `avx`
 (live-A/V session — Phase 4a `peer-mesh.ts` + `signaling.ts`; per-peer
 events also carry a `peer=<remotePeerId>` subkey), and the
 component-specific ones in `useAudioRecorder` (`aud=`).
+
+### Whiteboard per-page viewport (`pvs`, Phase 5 task 8)
+
+Per-tab pan/zoom lives on `WhiteboardBoardDocumentV1.pageList[].viewState`
+(sessionStorage draft, IndexedDB checkpoint, server checkpoint — same JSON
+document). Tutor flush triggers: **page switch** (debounced preflush + explicit
+capture), **~200ms debounce** after interactive viewport/`onChange`, **tab hide /
+pagehide / beforeunload** (best-effort). Live sync uses an immediate encrypted
+`kind: "pageViewState"` envelope in parallel with v3 full-document broadcasts;
+students apply tutor patches only.
 
 ---
 

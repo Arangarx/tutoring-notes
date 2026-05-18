@@ -2378,3 +2378,76 @@ describe("sync-client presence envelope (Phase 4b)", () => {
     expect(peersCb).not.toHaveBeenCalled();
   });
 });
+
+describe("sync-client pageViewState envelope (Phase 5 task 8)", () => {
+  test("encrypt → decrypt round-trip", async () => {
+    const k = generateEncryptionKeyBase64Url();
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const msg = {
+      v: 1 as const,
+      kind: "pageViewState" as const,
+      peerId: "tutor-pvs",
+      role: "tutor" as const,
+      pageId: "p1",
+      panX: 12,
+      panY: -3,
+      zoom: 1.5,
+    };
+    const { data, iv } = await _testing.encryptMessage(aes, msg);
+    const out = await _testing.decryptMessage(aes, data, iv);
+    expect(out).toEqual(msg);
+  });
+
+  test("rejects NaN pan", async () => {
+    const k = generateEncryptionKeyBase64Url();
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const msg = {
+      v: 1 as const,
+      kind: "pageViewState" as const,
+      peerId: "t",
+      role: "tutor" as const,
+      pageId: "p1",
+      panX: NaN,
+      panY: 0,
+      zoom: 1,
+    };
+    const { data, iv } = await _testing.encryptMessage(aes, msg);
+    await expect(_testing.decryptMessage(aes, data, iv)).rejects.toThrow(
+      /bad pan\/zoom/
+    );
+  });
+
+  test("onRemotePageViewState receives decrypted tutor patch", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const recv = jest.fn();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-pvs",
+      encryptionKeyBase64Url: k,
+      role: "student",
+      peerId: "student-self",
+      _ioFactory: factory,
+    });
+    client.onRemotePageViewState(recv);
+    await realTick(10);
+    await flushMicrotasks(20);
+    const payload = {
+      v: 1 as const,
+      kind: "pageViewState" as const,
+      peerId: "tutor-remote",
+      role: "tutor" as const,
+      pageId: "p2",
+      panX: 1,
+      panY: 2,
+      zoom: 3,
+    };
+    const { data, iv } = await _testing.encryptMessage(aes, payload);
+    sockets[0]!.inject("client-broadcast", data, iv);
+    await realTick(20);
+    await flushMicrotasks(20);
+    expect(recv).toHaveBeenCalledWith("tutor-remote", payload);
+    client.disconnect();
+  });
+});

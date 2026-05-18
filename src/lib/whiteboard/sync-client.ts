@@ -44,6 +44,7 @@
  */
 
 import { io, type Socket } from "socket.io-client";
+import type { PageViewState } from "@/lib/whiteboard/board-document-snapshot";
 import type { ExcalidrawLikeElement } from "./excalidraw-adapter";
 
 // -----------------------------------------------------------------
@@ -78,7 +79,13 @@ export type WhiteboardWireFollow = {
 /** Page tabs: tutor’s active list + which tab is on screen. */
 export type WhiteboardWirePage = {
   activePageId: string;
-  pageList: { id: string; title: string; section?: string }[];
+  pageList: {
+    id: string;
+    title: string;
+    section?: string;
+    /** Phase 5 task 8 — tutor-authoritative per-page pan/zoom (optional). */
+    viewState?: PageViewState;
+  }[];
   /** Optional registry for grouped strip sections (PDF imports). */
   sections?: Record<string, { label: string }>;
 };
@@ -141,7 +148,8 @@ export type AnyWhiteboardWireMessage =
   | WhiteboardWireMessageV2
   | WhiteboardWireMessageV3
   | WhiteboardWireSignal
-  | WhiteboardWirePresence;
+  | WhiteboardWirePresence
+  | WhiteboardWirePageViewStateMsg;
 
 /** Extras attached to each `broadcastScene` (throttled on the tutor). */
 export type WhiteboardWireBroadcastExtras = {
@@ -255,6 +263,21 @@ export type WhiteboardWirePresence = {
    * separate "label changed" event.
    */
   label?: string;
+};
+
+/**
+ * Per-page viewport patch (debounced on tutor). Immediate envelope — not
+ * subject to the v3 document throttle. Phase 5 task 8.
+ */
+export type WhiteboardWirePageViewStateMsg = {
+  v: 1;
+  kind: "pageViewState";
+  peerId: string;
+  role: "tutor" | "student";
+  pageId: string;
+  panX: number;
+  panY: number;
+  zoom: number;
 };
 
 /**
@@ -410,6 +433,16 @@ export type WhiteboardSyncClient = {
     payload: WhiteboardWireSignalPayload
   ) => void;
   /**
+   * Tutor: immediate per-page viewport patch (debounced by caller ~200ms).
+   * Phase 5 task 8 — not throttled with v3 document payloads.
+   */
+  broadcastPageViewState: (patch: {
+    pageId: string;
+    panX: number;
+    panY: number;
+    zoom: number;
+  }) => void;
+  /**
    * Phase 4a — subscribe to inbound signals. Fires for EVERY non-self
    * signal observed in the room; the recipient-side filtering by
    * `targetPeerId` happens in `signaling.ts`, not here. Returns an
@@ -421,6 +454,10 @@ export type WhiteboardSyncClient = {
       targetPeerId: string,
       payload: WhiteboardWireSignalPayload
     ) => void
+  ) => () => void;
+  /** Subscribe to inbound per-page viewport patches (Phase 5 task 8). */
+  onRemotePageViewState: (
+    cb: (fromPeerId: string, msg: WhiteboardWirePageViewStateMsg) => void
   ) => () => void;
   /**
    * Phase 4b — subscribe to changes in the room's participant set.
@@ -643,6 +680,65 @@ function validateWirePresence(parsed: unknown): WhiteboardWirePresence {
   return out;
 }
 
+function validateWirePageRowViewState(vs: unknown): PageViewState {
+  if (!vs || typeof vs !== "object") {
+    throw new Error("[sync-client] decoded payload v3: bad page row viewState");
+  }
+  const o = vs as { panX?: unknown; panY?: unknown; zoom?: unknown };
+  if (
+    typeof o.panX !== "number" ||
+    !Number.isFinite(o.panX) ||
+    typeof o.panY !== "number" ||
+    !Number.isFinite(o.panY) ||
+    typeof o.zoom !== "number" ||
+    !Number.isFinite(o.zoom)
+  ) {
+    throw new Error(
+      "[sync-client] decoded payload v3: bad page row viewState fields"
+    );
+  }
+  return { panX: o.panX, panY: o.panY, zoom: o.zoom };
+}
+
+function validateWirePageViewState(parsed: unknown): WhiteboardWirePageViewStateMsg {
+  const p = parsed as Partial<WhiteboardWirePageViewStateMsg>;
+  if (p.v !== 1) {
+    throw new Error("[sync-client] pageViewState envelope: bad v");
+  }
+  if (p.kind !== "pageViewState") {
+    throw new Error("[sync-client] pageViewState envelope: bad kind");
+  }
+  if (typeof p.peerId !== "string" || p.peerId.length === 0) {
+    throw new Error("[sync-client] pageViewState envelope: bad peerId");
+  }
+  if (p.role !== "tutor" && p.role !== "student") {
+    throw new Error("[sync-client] pageViewState envelope: bad role");
+  }
+  if (typeof p.pageId !== "string" || p.pageId.length === 0) {
+    throw new Error("[sync-client] pageViewState envelope: bad pageId");
+  }
+  if (
+    typeof p.panX !== "number" ||
+    !Number.isFinite(p.panX) ||
+    typeof p.panY !== "number" ||
+    !Number.isFinite(p.panY) ||
+    typeof p.zoom !== "number" ||
+    !Number.isFinite(p.zoom)
+  ) {
+    throw new Error("[sync-client] pageViewState envelope: bad pan/zoom");
+  }
+  return {
+    v: 1,
+    kind: "pageViewState",
+    peerId: p.peerId,
+    role: p.role,
+    pageId: p.pageId,
+    panX: p.panX,
+    panY: p.panY,
+    zoom: p.zoom,
+  };
+}
+
 function validateWireMessage(parsed: unknown): AnyWhiteboardWireMessage {
   if (!parsed || typeof parsed !== "object") {
     throw new Error("[sync-client] decoded payload: not an object");
@@ -659,6 +755,9 @@ function validateWireMessage(parsed: unknown): AnyWhiteboardWireMessage {
   }
   if (kind === "presence") {
     return validateWirePresence(parsed);
+  }
+  if (kind === "pageViewState") {
+    return validateWirePageViewState(parsed);
   }
   if (typeof kind !== "undefined") {
     throw new Error(
@@ -687,6 +786,15 @@ function validateWireMessage(parsed: unknown): AnyWhiteboardWireMessage {
     for (const [pid, els] of Object.entries(p.pages)) {
       if (typeof pid !== "string" || !Array.isArray(els)) {
         throw new Error(`[sync-client] decoded payload v3: bad pages.${pid}`);
+      }
+    }
+    for (const row of p.page.pageList) {
+      if (!row || typeof row !== "object") {
+        throw new Error("[sync-client] decoded payload v3: bad page row");
+      }
+      const r = row as { viewState?: unknown };
+      if (typeof r.viewState !== "undefined") {
+        validateWirePageRowViewState(r.viewState);
       }
     }
     return p;
@@ -798,9 +906,14 @@ export function createWhiteboardSyncClient(
     targetPeerId: string,
     payload: WhiteboardWireSignalPayload
   ) => void;
+  type RemotePageViewStateCb = (
+    fromPeerId: string,
+    msg: WhiteboardWirePageViewStateMsg
+  ) => void;
   type RoomPeersCb = (peers: ReadonlyArray<RoomPeer>) => void;
   const remoteSceneSubs = new Set<RemoteSceneCb>();
   const remoteSignalSubs = new Set<RemoteSignalCb>();
+  const remotePageViewStateSubs = new Set<RemotePageViewStateCb>();
   const connectSubs = new Set<() => void>();
   const disconnectSubs = new Set<() => void>();
   const peerCountSubs = new Set<(count: number) => void>();
@@ -1147,6 +1260,23 @@ export function createWhiteboardSyncClient(
       fan(remoteSignalSubs, msg.peerId, msg.targetPeerId, msg.payload);
       return;
     }
+    if ((msg as Partial<WhiteboardWirePageViewStateMsg>).kind === "pageViewState") {
+      const m = msg as WhiteboardWirePageViewStateMsg;
+      log.log(
+        `kind=pageViewState recv from=${m.peerId} pageId=${m.pageId} panX=${m.panX} panY=${m.panY} zoom=${m.zoom}`
+      );
+      for (const cb of remotePageViewStateSubs) {
+        try {
+          cb(m.peerId, m);
+        } catch (err) {
+          log.warn(
+            "onRemotePageViewState subscriber threw:",
+            (err as Error)?.message ?? String(err)
+          );
+        }
+      }
+      return;
+    }
     if (msg.v === 3) {
       const m = msg as WhiteboardWireMessageV3;
       const details: WhiteboardWireRemoteDetails = {
@@ -1167,15 +1297,16 @@ export function createWhiteboardSyncClient(
       }
     }
     const has = Object.keys(details).length > 0;
+    const sceneMsg = msg as WhiteboardWireMessage | WhiteboardWireMessageV2;
     lastRemoteScene = {
-      peerId: msg.peerId,
-      elements: msg.elements,
+      peerId: sceneMsg.peerId,
+      elements: sceneMsg.elements,
       details: has ? details : undefined,
     };
     fan(
       remoteSceneSubs,
-      msg.peerId,
-      msg.elements,
+      sceneMsg.peerId,
+      sceneMsg.elements,
       has ? details : undefined
     );
   }
@@ -1486,7 +1617,10 @@ export function createWhiteboardSyncClient(
    * connect/new-user handlers explicitly when appropriate.
    */
   function encryptAndEmitImmediate(
-    msg: WhiteboardWireSignal | WhiteboardWirePresence
+    msg:
+      | WhiteboardWireSignal
+      | WhiteboardWirePresence
+      | WhiteboardWirePageViewStateMsg
   ): Promise<void> {
     const job = (async () => {
       if (!aesKey || !socket) return;
@@ -1495,7 +1629,7 @@ export function createWhiteboardSyncClient(
         socket.emit("server-broadcast", roomId, data, iv);
       } catch (err) {
         log.warn(
-          `encrypt/emit ${msg.kind} failed:`,
+          `encrypt/emit ${String((msg as { kind?: unknown }).kind ?? "scene")} failed:`,
           (err as Error)?.message ?? String(err)
         );
       }
@@ -1523,6 +1657,30 @@ export function createWhiteboardSyncClient(
     };
     log.log(
       `kind=webrtc-signal send target=${targetPeerId} type=${payload.type}`
+    );
+    void encryptAndEmitImmediate(msg);
+  }
+
+  function broadcastPageViewState(patch: {
+    pageId: string;
+    panX: number;
+    panY: number;
+    zoom: number;
+  }): void {
+    if (disposed) return;
+    if (aesKeyError) return;
+    const msg: WhiteboardWirePageViewStateMsg = {
+      v: 1,
+      kind: "pageViewState",
+      peerId,
+      role,
+      pageId: patch.pageId,
+      panX: patch.panX,
+      panY: patch.panY,
+      zoom: patch.zoom,
+    };
+    log.log(
+      `kind=pageViewState send pageId=${patch.pageId} panX=${patch.panX} panY=${patch.panY} zoom=${patch.zoom}`
     );
     void encryptAndEmitImmediate(msg);
   }
@@ -1575,6 +1733,7 @@ export function createWhiteboardSyncClient(
     broadcastDocument,
     flushPendingBroadcast: tryFlushPendingBroadcastNow,
     broadcastSignal,
+    broadcastPageViewState,
     onRemoteSignal: (cb) => {
       remoteSignalSubs.add(cb);
       // **May 15 hotfix #3 — replay buffered signals to late subscribers.**
@@ -1604,6 +1763,12 @@ export function createWhiteboardSyncClient(
       }
       return () => {
         remoteSignalSubs.delete(cb);
+      };
+    },
+    onRemotePageViewState: (cb) => {
+      remotePageViewStateSubs.add(cb);
+      return () => {
+        remotePageViewStateSubs.delete(cb);
       };
     },
     onRoomPeersChange: (cb) => {
@@ -1646,6 +1811,7 @@ export function createWhiteboardSyncClient(
       lastRemoteScene = null;
       remoteSceneSubs.clear();
       remoteSignalSubs.clear();
+      remotePageViewStateSubs.clear();
       connectSubs.clear();
       disconnectSubs.clear();
       peerCountSubs.clear();
