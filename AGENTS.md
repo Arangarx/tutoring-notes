@@ -51,12 +51,20 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   checklist.
 - [docs/LEGAL-SYNC.md](docs/LEGAL-SYNC.md) — **read before touching
   `src/app/privacy/page.tsx`, `src/app/terms/page.tsx`, the Gmail OAuth
-  consent flow, or any external policy reference.** The product's `/privacy`
-  and `/terms` are intentionally local copies (not redirects) of the
-  Mortensen Apps umbrella at `mortensenapps.com/privacy` + `/terms`. This
-  doc maps which sections are umbrella-derived vs. product-specific, the
-  sync protocol when the umbrella changes (incl. Google OAuth Limited-Use
-  re-verification check), and the quarterly drift review cadence.
+  consent flow, or any external policy reference.** The
+  **`mortensenapps.com/privacy` + `mortensenapps.com/terms`** umbrella is
+  the **canonical legal source** (Google's verification rounds have been
+  against those URLs; verification history lives in the mortensenapps.com
+  site repo). The product's `/privacy` and `/terms` are **local
+  subordinate facades** that supplement the umbrella with product-
+  specific sections (Vercel Blob audio, OpenAI Whisper, whiteboard data,
+  minor-data tutor-consent specifics). This doc maps which sections are
+  umbrella-derived vs. product-specific, the sync protocol when the
+  umbrella changes (incl. Google OAuth Limited-Use re-verification
+  check), and the quarterly drift review cadence. **Open question** —
+  which URLs the Tutoring Notes OAuth consent screen registers in Google
+  Cloud Console is not yet confirmed; resolving that is an action item
+  in the doc.
 
 ## Conventions
 
@@ -90,19 +98,24 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   in the same commit. Orchestrators check this during executor
   handoff review. Migration to a new compute platform reads that
   doc as the primary checklist.
-- **Legal copy stays synced with the umbrella.** `/privacy` and
-  `/terms` are local copies of `mortensenapps.com/privacy` +
-  `mortensenapps.com/terms`, not redirects, because Google OAuth
-  verification is anchored to the tutoring-notes domain and the
-  product needs sections the umbrella omits (Vercel Blob audio,
-  OpenAI Whisper, whiteboard data, minor-data consent specifics).
-  Any change to either TSX file MUST follow the sync protocol in
+- **Legal copy stays synced with the umbrella.** `mortensenapps.com/privacy`
+  + `mortensenapps.com/terms` are the **canonical legal source** (the
+  Google verification rounds have been against those URLs; the
+  mortensenapps.com site repo has the verification history). The
+  product's `/privacy` and `/terms` are **local subordinate facades**
+  that supplement the umbrella with product-specific sections (Vercel
+  Blob audio, OpenAI Whisper, whiteboard data, minor-data tutor-consent
+  specifics) — they are not a parallel canonical source. Any change to
+  either TSX file MUST follow the sync protocol in
   [docs/LEGAL-SYNC.md](docs/LEGAL-SYNC.md): identify whether the
   edited section is umbrella-derived (must match upstream verbatim)
   or product-specific (free to edit), update the top-of-file sync
   date and the in-UI "Last updated" string, and update the doc's
   classification tables if the section changed type. Quarterly drift
-  review applies.
+  review applies. **Open question** in the doc: which URLs the
+  Tutoring Notes OAuth consent screen registers in Google Cloud
+  Console — confirm before any sync that materially edits embedded
+  umbrella sections.
 - **This repo (`tutoring-notes`) — feature branches: commit + push by default.** After substantive work on a named branch here, create a descriptive commit and push (`origin`; retry transient network failures) unless Andrew says to hold off. (Scope is this app only, not every workspace.)
 - **Executor bootstrappers live in `docs/handoff/`** — when the orchestrator drafts a briefing for a fresh executor chat, write it as `docs/handoff/<scope>-bootstrapper.md` rather than `~/.cursor/plans/`. Two reasons: (a) Cursor's chat UI only resolves workspace-relative file paths so in-workspace bootstrappers are clickable, (b) committed bootstrappers create an audit trail pairing "what we asked for" with "what shipped." **Bootstrappers must be pure executor briefings from line 1** — no orchestrator wrapper, no "copy below the rule line" headers. They must also include a top-of-file blockquote that disambiguates intent when the file arrives via `@`-reference (so Andrew's workflow can use either paste-the-blob or single-`@`-reference, whichever is faster). See `docs/handoff/README.md` for the required top-of-file template + full lifecycle.
 

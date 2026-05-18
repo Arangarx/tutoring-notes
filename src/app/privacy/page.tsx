@@ -2,19 +2,28 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 /**
- * Privacy policy — Tutoring Notes (product copy).
+ * Privacy policy — Tutoring Notes (product subordinate facade).
  *
  * SYNCED FROM https://mortensenapps.com/privacy as of 2026-05-17.
- * The umbrella Mortensen Apps privacy policy is the load-bearing copy for
- * Google OAuth verification (Gmail limited-use disclosure, no-sale of
- * Google user data, sharing/disclosure categories, children, changes,
- * contact). This file embeds those sections AS-IS and layers product-
- * specific sections (Tutoring Notes data inventory, OpenAI/Whisper, Vercel
- * Blob audio, share-link consent for minors) on top.
+ *
+ * The Mortensen Apps umbrella policy at mortensenapps.com/privacy is the
+ * CANONICAL legal source. Google's OAuth verification rounds have been
+ * against the umbrella URLs (verification history lives in the
+ * mortensenapps.com site repo). This file is a local subordinate facade
+ * that embeds the umbrella's sections (no-sale of Google user data,
+ * sharing/disclosure categories, Children, Changes, Limited Use
+ * language) verbatim and layers product-specific sections on top —
+ * Tutoring Notes data inventory, OpenAI / Whisper, Vercel Blob audio,
+ * share-link consent for minors. The in-UI preamble paragraph on this
+ * page explicitly tells readers the umbrella governs.
  *
  * MAINTENANCE: when mortensenapps.com/privacy changes, update the
- * embedded sections here and bump the "Last updated" date. See
- * docs/LEGAL-SYNC.md for the sync protocol.
+ * embedded sections here verbatim from the upstream + bump the "Last
+ * updated" date + bump the SYNCED FROM date above. See
+ * docs/LEGAL-SYNC.md for the sync protocol, the per-section
+ * umbrella-vs-product classification table, and the pending action
+ * item about confirming which URLs the Tutoring Notes OAuth consent
+ * screen registers in Google Cloud Console.
  */
 
 export const metadata: Metadata = {

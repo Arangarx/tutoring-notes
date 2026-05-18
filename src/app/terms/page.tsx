@@ -2,18 +2,25 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 /**
- * Terms of Service — Tutoring Notes (product copy).
+ * Terms of Service — Tutoring Notes (product subordinate facade).
  *
  * SYNCED FROM https://mortensenapps.com/terms as of 2026-05-17.
- * The umbrella Mortensen Apps terms are the load-bearing copy for
- * eligibility / acceptable use / disclaimers / limitation of liability
- * (incl. dollar cap) / indemnity / governing law. This file embeds those
- * sections AS-IS and layers product-specific sections (Your content,
- * Gmail integration specifics, Availability) on top.
+ *
+ * The Mortensen Apps umbrella terms at mortensenapps.com/terms are the
+ * CANONICAL legal source for eligibility / acceptable use / disclaimers /
+ * limitation of liability (incl. the $50 dollar cap) / indemnity /
+ * governing law. This file is a local subordinate facade that embeds
+ * those sections verbatim and layers product-specific sections on top —
+ * Your content, Gmail integration specifics, Availability. The in-UI
+ * preamble paragraph on this page explicitly tells readers the umbrella
+ * governs.
  *
  * MAINTENANCE: when mortensenapps.com/terms changes, update the embedded
- * sections here and bump the "Last updated" date. See docs/LEGAL-SYNC.md
- * for the sync protocol.
+ * sections here verbatim from the upstream + bump the "Last updated"
+ * date + bump the SYNCED FROM date above. See docs/LEGAL-SYNC.md for
+ * the sync protocol, the per-section umbrella-vs-product classification
+ * table, and the pending action item about confirming which URLs the
+ * Tutoring Notes OAuth consent screen registers in Google Cloud Console.
  */
 
 export const metadata: Metadata = {
