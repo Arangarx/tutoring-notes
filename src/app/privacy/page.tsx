@@ -4,26 +4,26 @@ import Link from "next/link";
 /**
  * Privacy policy — Tutoring Notes (product subordinate facade).
  *
- * SYNCED FROM https://mortensenapps.com/privacy as of 2026-05-17.
+ * SYNCED FROM https://www.mortensenapps.com/privacy as of 2026-05-17.
  *
- * The Mortensen Apps umbrella policy at mortensenapps.com/privacy is the
- * CANONICAL legal source. Google's OAuth verification rounds have been
- * against the umbrella URLs (verification history lives in the
- * mortensenapps.com site repo). This file is a local subordinate facade
- * that embeds the umbrella's sections (no-sale of Google user data,
- * sharing/disclosure categories, Children, Changes, Limited Use
+ * The Mortensen Apps umbrella policy at www.mortensenapps.com/privacy is
+ * the CANONICAL legal source and the URL registered in the shared
+ * "Mortensen Apps" OAuth consent screen Tutoring Notes uses (confirmed
+ * from Google Cloud Console 2026-05-17). Verification history lives in
+ * the mortensenapps.com site repo. This file is a local subordinate
+ * facade that embeds the umbrella's sections (no-sale of Google user
+ * data, sharing/disclosure categories, Children, Changes, Limited Use
  * language) verbatim and layers product-specific sections on top —
  * Tutoring Notes data inventory, OpenAI / Whisper, Vercel Blob audio,
  * share-link consent for minors. The in-UI preamble paragraph on this
- * page explicitly tells readers the umbrella governs.
+ * page explicitly tells readers the umbrella governs. This URL is NOT
+ * registered with Google as a policy URL for the OAuth client.
  *
- * MAINTENANCE: when mortensenapps.com/privacy changes, update the
+ * MAINTENANCE: when www.mortensenapps.com/privacy changes, update the
  * embedded sections here verbatim from the upstream + bump the "Last
  * updated" date + bump the SYNCED FROM date above. See
- * docs/LEGAL-SYNC.md for the sync protocol, the per-section
- * umbrella-vs-product classification table, and the pending action
- * item about confirming which URLs the Tutoring Notes OAuth consent
- * screen registers in Google Cloud Console.
+ * docs/LEGAL-SYNC.md for the sync protocol and the per-section
+ * umbrella-vs-product classification table.
  */
 
 export const metadata: Metadata = {
@@ -42,8 +42,8 @@ export default function PrivacyPage() {
           This policy applies to <strong>Tutoring Notes</strong>, a web application operated
           by Andrew Mortensen under the Mortensen Apps umbrella. It supplements the
           umbrella privacy policy at{" "}
-          <a href="https://mortensenapps.com/privacy" target="_blank" rel="noreferrer">
-            mortensenapps.com/privacy
+          <a href="https://www.mortensenapps.com/privacy" target="_blank" rel="noreferrer">
+            www.mortensenapps.com/privacy
           </a>{" "}
           with product-specific details. Where this policy is silent, the umbrella
           policy governs.
@@ -278,8 +278,8 @@ export default function PrivacyPage() {
               Tutoring Notes, email{" "}
               <a href="mailto:arangarx+tutoringnotes@gmail.com">arangarx+tutoringnotes@gmail.com</a>.
               For general Mortensen Apps inquiries, see{" "}
-              <a href="https://mortensenapps.com/" target="_blank" rel="noreferrer">
-                mortensenapps.com
+              <a href="https://www.mortensenapps.com/" target="_blank" rel="noreferrer">
+                www.mortensenapps.com
               </a>.
             </p>
           </div>
@@ -289,7 +289,7 @@ export default function PrivacyPage() {
 
         <p className="muted" style={{ fontSize: 13 }}>
           <Link href="/">Home</Link> · <Link href="/terms">Terms</Link> ·{" "}
-          <a href="https://mortensenapps.com/privacy" target="_blank" rel="noreferrer">
+          <a href="https://www.mortensenapps.com/privacy" target="_blank" rel="noreferrer">
             Umbrella privacy policy
           </a>
         </p>

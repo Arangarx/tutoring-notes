@@ -1,16 +1,20 @@
-# Legal sync — `/privacy` and `/terms` ↔ mortensenapps.com
+# Legal sync — `/privacy` and `/terms` ↔ www.mortensenapps.com
 
-**`mortensenapps.com/privacy` and `mortensenapps.com/terms` are the
-authoritative legal source for any product under the Mortensen Apps
-umbrella.** Those URLs are the ones Google's OAuth verification team has
-been reviewing across multiple rounds (the verification history lives in
-the mortensenapps.com site repo — see "Source of truth" below). Anything
-they vet is the policy that legally governs the products, including
-Tutoring Notes.
+**`https://www.mortensenapps.com/privacy` and `https://www.mortensenapps.com/terms`
+are the authoritative legal source for any product under the Mortensen
+Apps umbrella.** Those exact URLs (with the `www.` subdomain) are the
+ones Google's OAuth verification team has been reviewing across multiple
+rounds and the URLs registered in the OAuth consent screen for the
+shared "Mortensen Apps" OAuth client that Tutoring Notes uses (confirmed
+from Google Cloud Console 2026-05-17, screenshot attached to the
+follow-up chat). The verification history lives in the mortensenapps.com
+site repo — see "Source of truth" below. Anything Google vets there is
+the policy that legally governs the products, including Tutoring Notes.
 
 Tutoring Notes ships **its own local copies** at `/privacy` and `/terms`,
 but those are **subordinate facades** of the umbrella, not a parallel
-canonical source. The local copies exist to:
+canonical source — they are NOT registered with Google as policy URLs
+for this OAuth client. The local copies exist to:
 
 1. **Add product-specific sections the umbrella deliberately omits** —
    session audio recordings (Vercel Blob + OpenAI Whisper), whiteboard
@@ -29,36 +33,48 @@ umbrella *governs* and the local copy *supplements*. That hierarchy is the
 load-bearing legal posture; this doc and the file headers must not
 contradict it.
 
-## What is NOT yet confirmed (open question, do not lose this)
+## Confirmed state of Google verification (2026-05-17)
 
-It is **not yet established** which URLs are registered in the Google
-Cloud Console OAuth consent screen for the Tutoring Notes OAuth client:
+Andrew shared the Google Cloud Console OAuth consent screen Branding tab
+for the shared "Mortensen Apps" OAuth client. Confirmed values:
 
-- **Most likely:** the consent screen points at
-  `mortensenapps.com/privacy` + `mortensenapps.com/terms` (matches the
-  verification history Andrew references). Under this scenario, this
-  product's local `/privacy` + `/terms` URLs are decorative for
-  verification purposes — the umbrella URLs are what Google checks. The
-  local copies still matter for in-product UX, search-engine surfacing,
-  and legal completeness, but changes to them do NOT trigger Google
-  re-verification on their own.
-- **Possible but less likely:** the consent screen points at the
-  tutoring-notes domain's `/privacy` + `/terms`. Under this scenario,
-  rewriting the local copies (as we did 2026-05-17) is a content change
-  to a Google-verified URL. Google generally tolerates moving toward
-  more compliant copy (and our rewrite was an upgrade — added the
-  Limited Use language, no-sale clause, Sharing/Disclosure enumeration,
-  Children section), but it is a thing to be aware of.
+| Setting | Registered value |
+|---------|------------------|
+| App name | **Mortensen Apps** |
+| User support email | `arangarx@gmail.com` |
+| Application home page | `https://www.mortensenapps.com/` |
+| Application privacy policy link | **`https://www.mortensenapps.com/privacy`** |
+| Application terms of service link | **`https://www.mortensenapps.com/terms`** |
+| Authorized domain 1 | `tutoring-notes.vercel.app` |
+| Authorized domain 2 | `mortensenapps.com` |
+| Developer contact | `arangarx@gmail.com` |
 
-**Action item for Andrew (do this before relying on the framing here):**
-1. Open [Google Cloud Console → APIs & Services → OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent)
-   for the Tutoring Notes project.
-2. Note the values in:
-   - "Application privacy policy link"
-   - "Application terms of service link"
-   - "Authorized domains"
-3. Update this doc's "Source of truth" section below with the confirmed
-   answer.
+**What this means operationally:**
+
+- **The privacy + terms URLs Google enforces against are the `www.`
+  mortensenapps.com URLs.** Tutoring Notes' local `/privacy` + `/terms`
+  pages are **NOT registered with Google for this OAuth client.** Changes
+  to the local TSX pages do not trigger Google re-verification on their
+  own.
+- **`tutoring-notes.vercel.app` is an Authorized Domain** so that the
+  OAuth callback (`tutoring-notes.vercel.app/api/auth/gmail/callback`)
+  resolves correctly when a tutor connects Gmail. Authorized Domains
+  control where redirects + OAuth flows can land; they do not promote
+  the domain's URLs to "verified policy URL" status.
+- **The OAuth consent screen users see says "Mortensen Apps"**, not
+  "Tutoring Notes." For users who signed up for Tutoring Notes, the
+  consent screen branding is the umbrella name. This is intentional
+  umbrella-branding and out of scope for the legal-sync doc, but worth
+  flagging as a UX consideration for any future Connect-Gmail flow
+  copy or onboarding.
+
+**Implication for the sync protocol** (codified in "Sync protocol"
+below): when the umbrella legally changes, the operational
+re-verification check is **the consent screen settings + the live
+`www.mortensenapps.com/*` content**, not the tutoring-notes pages.
+The tutoring-notes pages should still be synced (so users + search
+engines see consistent text), but that sync is in-product hygiene, not
+a Google compliance gate.
 
 ## Source of truth
 
@@ -68,14 +84,16 @@ Cloud Console OAuth consent screen for the Tutoring Notes OAuth client:
   history of that repo captures the iteration with the Google
   verification team across rounds — that history is invaluable context
   when the umbrella next changes.
-- **Live deployed umbrella copy:** `https://mortensenapps.com/privacy`
-  and `https://mortensenapps.com/terms` (what was fetched during the
-  initial sync on 2026-05-17).
+- **Live deployed umbrella copy:** `https://www.mortensenapps.com/privacy`
+  and `https://www.mortensenapps.com/terms` (the www subdomain — exact
+  match to the registered consent-screen URLs; the apex
+  `mortensenapps.com/*` resolves to the same content, but referencing
+  the registered form keeps everything string-aligned with Google's
+  records).
 - **Tutoring Notes local copies:** `src/app/privacy/page.tsx` and
   `src/app/terms/page.tsx` in this repo.
-- **Google Cloud Console OAuth consent screen:** the operational source
-  of truth for which URLs Google is enforcing against — pending
-  confirmation per the action item above.
+- **Google Cloud Console OAuth consent screen:** as confirmed above
+  (2026-05-17). Re-confirm during quarterly drift review.
 
 ## What's umbrella-derived vs. product-specific
 
@@ -119,8 +137,8 @@ Cloud Console OAuth consent screen for the Tutoring Notes OAuth client:
 
 ## Sync protocol (when umbrella changes)
 
-The umbrella is canonical. When `mortensenapps.com/privacy` or
-`mortensenapps.com/terms` is updated (or when the mortensenapps.com site
+The umbrella is canonical. When `www.mortensenapps.com/privacy` or
+`www.mortensenapps.com/terms` is updated (or when the mortensenapps.com site
 repo lands a verification-team-driven change before the deploy):
 
 1. **Source the new umbrella text from the mortensenapps.com site repo**
@@ -175,18 +193,29 @@ repo lands a verification-team-driven change before the deploy):
   with the umbrella's full Sharing/Disclosure list, Limited Use
   language, Children section, $50 liability cap, Indemnity, and
   Governing Law sections. Previous product copies (April 2026) were
-  missing several Google-OAuth-defense-relevant clauses. **Framing
-  correction same day:** original commit message and an earlier draft
-  of this doc overstated "Google OAuth verification is anchored to
-  the tutoring-notes domain's /privacy URL." That was an unvalidated
-  assumption. Andrew clarified the verification rounds have been
-  against the mortensenapps.com umbrella, and the mortensenapps.com
-  site repo holds the verification history. This doc was rewritten
-  to reflect that mortensenapps.com is the canonical legal source and
-  the tutoring-notes local copies are subordinate facades. The
-  shipped TSX content itself was already coherent under the corrected
-  framing (the in-UI preamble correctly positions the umbrella as
-  governing and the local copy as supplementing) — only the
-  developer-facing rationale needed correction. Pending action item
-  for Andrew: confirm which URLs the Tutoring Notes OAuth consent
-  screen registers (see "What is NOT yet confirmed" section above).
+  missing several Google-OAuth-defense-relevant clauses.
+- **2026-05-17 (same evening) — framing correction.** Original commit
+  message and an earlier draft of this doc overstated "Google OAuth
+  verification is anchored to the tutoring-notes domain's /privacy
+  URL." That was an unvalidated assumption. Andrew clarified the
+  verification rounds have been against the mortensenapps.com
+  umbrella, and the mortensenapps.com site repo holds the verification
+  history. Doc rewritten to reflect mortensenapps.com is the canonical
+  legal source and the tutoring-notes local copies are subordinate
+  facades. The shipped TSX content was already coherent under the
+  corrected framing (the in-UI preamble correctly positions the
+  umbrella as governing and the local copy as supplementing); only
+  the developer-facing rationale needed correction.
+- **2026-05-17 (same evening) — verification state confirmed.**
+  Andrew shared the Google Cloud Console OAuth consent screen
+  Branding tab. Confirmed: the consent screen registers
+  `https://www.mortensenapps.com/privacy` and
+  `https://www.mortensenapps.com/terms` as the Application policy URLs;
+  `tutoring-notes.vercel.app` and `mortensenapps.com` are both
+  Authorized Domains (so the OAuth callback resolves on the Vercel
+  domain), but the tutoring-notes app's `/privacy` and `/terms` URLs
+  are not registered as policy URLs. App name is "Mortensen Apps,"
+  not "Tutoring Notes." Local TSX links updated from apex
+  `mortensenapps.com/*` to `www.mortensenapps.com/*` to exact-match
+  the consent-screen registration. The earlier "pending action item"
+  in this doc is now resolved (see "Confirmed state" section above).

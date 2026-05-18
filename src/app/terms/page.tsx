@@ -4,23 +4,25 @@ import Link from "next/link";
 /**
  * Terms of Service — Tutoring Notes (product subordinate facade).
  *
- * SYNCED FROM https://mortensenapps.com/terms as of 2026-05-17.
+ * SYNCED FROM https://www.mortensenapps.com/terms as of 2026-05-17.
  *
- * The Mortensen Apps umbrella terms at mortensenapps.com/terms are the
- * CANONICAL legal source for eligibility / acceptable use / disclaimers /
- * limitation of liability (incl. the $50 dollar cap) / indemnity /
- * governing law. This file is a local subordinate facade that embeds
- * those sections verbatim and layers product-specific sections on top —
- * Your content, Gmail integration specifics, Availability. The in-UI
- * preamble paragraph on this page explicitly tells readers the umbrella
- * governs.
+ * The Mortensen Apps umbrella terms at www.mortensenapps.com/terms are
+ * the CANONICAL legal source for eligibility / acceptable use /
+ * disclaimers / limitation of liability (incl. the $50 dollar cap) /
+ * indemnity / governing law, and the URL registered in the shared
+ * "Mortensen Apps" OAuth consent screen Tutoring Notes uses (confirmed
+ * from Google Cloud Console 2026-05-17). This file is a local
+ * subordinate facade that embeds those sections verbatim and layers
+ * product-specific sections on top — Your content, Gmail integration
+ * specifics, Availability. The in-UI preamble paragraph on this page
+ * explicitly tells readers the umbrella governs. This URL is NOT
+ * registered with Google as a policy URL for the OAuth client.
  *
- * MAINTENANCE: when mortensenapps.com/terms changes, update the embedded
- * sections here verbatim from the upstream + bump the "Last updated"
- * date + bump the SYNCED FROM date above. See docs/LEGAL-SYNC.md for
- * the sync protocol, the per-section umbrella-vs-product classification
- * table, and the pending action item about confirming which URLs the
- * Tutoring Notes OAuth consent screen registers in Google Cloud Console.
+ * MAINTENANCE: when www.mortensenapps.com/terms changes, update the
+ * embedded sections here verbatim from the upstream + bump the "Last
+ * updated" date + bump the SYNCED FROM date above. See
+ * docs/LEGAL-SYNC.md for the sync protocol and the per-section
+ * umbrella-vs-product classification table.
  */
 
 export const metadata: Metadata = {
@@ -40,8 +42,8 @@ export default function TermsPage() {
           application operated by Andrew Mortensen (&ldquo;Operator,&rdquo; &ldquo;we,&rdquo;
           &ldquo;us&rdquo;) under the Mortensen Apps umbrella. They supplement the umbrella
           terms of service at{" "}
-          <a href="https://mortensenapps.com/terms" target="_blank" rel="noreferrer">
-            mortensenapps.com/terms
+          <a href="https://www.mortensenapps.com/terms" target="_blank" rel="noreferrer">
+            www.mortensenapps.com/terms
           </a>. By using the app, you agree to these terms.
         </p>
 
@@ -185,8 +187,8 @@ export default function TermsPage() {
               Questions about these terms specific to Tutoring Notes? Email{" "}
               <a href="mailto:arangarx+tutoringnotes@gmail.com">arangarx+tutoringnotes@gmail.com</a>.
               For general Mortensen Apps legal notices, see{" "}
-              <a href="https://mortensenapps.com/" target="_blank" rel="noreferrer">
-                mortensenapps.com
+              <a href="https://www.mortensenapps.com/" target="_blank" rel="noreferrer">
+                www.mortensenapps.com
               </a>.
             </p>
           </div>
@@ -196,7 +198,7 @@ export default function TermsPage() {
 
         <p className="muted" style={{ fontSize: 13 }}>
           <Link href="/">Home</Link> · <Link href="/privacy">Privacy</Link> ·{" "}
-          <a href="https://mortensenapps.com/terms" target="_blank" rel="noreferrer">
+          <a href="https://www.mortensenapps.com/terms" target="_blank" rel="noreferrer">
             Umbrella terms of service
           </a>
         </p>
