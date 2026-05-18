@@ -201,3 +201,140 @@ describe("WhiteboardReplay initial viewport (Phase 0e)", () => {
     expect(measurementCalls).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe("WhiteboardReplay stamped-viewport restore (Phase 5 task 8 — replay tier b)", () => {
+  let gbcrSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    updateSceneMock.mockClear();
+    fetchMock.mockReset();
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const viewportRect = new DOMRectReadOnly(0, 0, 800, 600);
+    gbcrSpy = jest
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        if (this.hasAttribute("data-replay-viewport-metrics")) {
+          return viewportRect as DOMRect;
+        }
+        return new DOMRect(0, 0, 640, 480);
+      });
+  });
+
+  afterEach(() => {
+    gbcrSpy.mockRestore();
+  });
+
+  afterAll(() => {
+    global.fetch = originalFetch;
+  });
+
+  it("applies log.finalActiveViewport instead of running camera-fit", async () => {
+    const stamped = {
+      schemaVersion: 1,
+      startedAt: "2026-05-17T19:00:00.000Z",
+      durationMs: 800,
+      events: [
+        {
+          type: "snapshot",
+          t: 0,
+          elements: [
+            {
+              id: "rect-vp-stamped",
+              type: "rectangle",
+              x: -40,
+              y: -28,
+              width: 30,
+              height: 20,
+              strokeColor: "#000",
+            },
+          ],
+        },
+      ],
+      finalActiveViewport: { panX: 123, panY: -456, zoom: 1.75 },
+      finalActivePageId: "p2",
+    };
+    fetchMock.mockResolvedValue(fakeResponse(JSON.stringify(stamped)));
+
+    render(
+      <WhiteboardReplay
+        eventsBlobUrl="/api/whiteboard/wb-vp-stamped/events"
+        title="Stamped viewport"
+      />
+    );
+
+    await screen.findByTestId("wb-replay");
+
+    type AppCrop = {
+      scrollX?: number;
+      scrollY?: number;
+      zoom?: { value: number };
+    };
+
+    await waitFor(() => {
+      const apps = updateSceneMock.mock.calls
+        .map((c) => (c[0] as { appState?: AppCrop }).appState)
+        .filter((a): a is AppCrop => !!a);
+      // Must see the EXACT stamped pan/zoom — not bbox-fit's centered value.
+      expect(
+        apps.some(
+          (a) =>
+            a.scrollX === 123 &&
+            a.scrollY === -456 &&
+            a.zoom?.value === 1.75
+        )
+      ).toBe(true);
+    });
+
+    // And the bbox-fit centered values from the prior test (expectedSx ~825,
+    // expectedSy ~318) must NOT have been pushed — the stamped viewport
+    // short-circuits camera-fit.
+    const apps = updateSceneMock.mock.calls
+      .map((c) => (c[0] as { appState?: AppCrop }).appState)
+      .filter((a): a is AppCrop => !!a);
+    expect(
+      apps.some(
+        (a) => a.scrollX === 825 && a.scrollY === 318
+      )
+    ).toBe(false);
+  });
+
+  it("falls back to camera-fit when finalActiveViewport is absent (pre-feature logs)", async () => {
+    fetchMock.mockResolvedValue(fakeResponse(EVENT_LOG_JSON));
+    render(
+      <WhiteboardReplay
+        eventsBlobUrl="/api/whiteboard/wb-vp-legacy/events"
+        title="Legacy log"
+      />
+    );
+
+    await screen.findByTestId("wb-replay");
+
+    type AppCrop = {
+      scrollX?: number;
+      scrollY?: number;
+      zoom?: { value: number };
+    };
+
+    await waitFor(() => {
+      const fits = updateSceneMock.mock.calls
+        .map((c) => (c[0] as { appState?: AppCrop }).appState)
+        .filter(
+          (a): a is AppCrop & { scrollX: number; scrollY: number } =>
+            !!a &&
+            typeof a.scrollX === "number" &&
+            typeof a.scrollY === "number"
+        );
+      // bbox-center math from the prior fixture.
+      const expectedSx = 800 / 2 - -25;
+      const expectedSy = 600 / 2 - -18;
+      expect(
+        fits.some(
+          (a) =>
+            Math.abs(a.scrollX - expectedSx) < 1e-6 &&
+            Math.abs(a.scrollY - expectedSy) < 1e-6
+        )
+      ).toBe(true);
+    });
+  });
+});

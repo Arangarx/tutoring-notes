@@ -51,6 +51,58 @@ describe("parseEventLogBySchema", () => {
     ).toThrow(/Unsupported whiteboard events schemaVersion/);
   });
 
+  describe("finalActiveViewport (Phase 5 task 8 — replay tier b)", () => {
+    const base = {
+      schemaVersion: 1,
+      startedAt: "2026-05-17T19:00:00Z",
+      durationMs: 0,
+      events: [],
+    };
+
+    it("passes through a valid viewport + active page id", () => {
+      const out = parseEventLogBySchema({
+        ...base,
+        finalActiveViewport: { panX: 10, panY: -20, zoom: 1.5 },
+        finalActivePageId: "p7",
+      });
+      expect(out.finalActiveViewport).toEqual({ panX: 10, panY: -20, zoom: 1.5 });
+      expect(out.finalActivePageId).toBe("p7");
+    });
+
+    it("tolerates absence (pre-feature log)", () => {
+      const out = parseEventLogBySchema(base);
+      expect(out.finalActiveViewport).toBeUndefined();
+      expect(out.finalActivePageId).toBeUndefined();
+    });
+
+    it.each([
+      ["NaN pan", { panX: NaN, panY: 0, zoom: 1 }],
+      ["non-finite zoom", { panX: 0, panY: 0, zoom: Infinity }],
+      ["zero zoom", { panX: 0, panY: 0, zoom: 0 }],
+      ["negative zoom", { panX: 0, panY: 0, zoom: -1 }],
+      ["wrong types", { panX: "10" as unknown as number, panY: 0, zoom: 1 }],
+      ["missing field", { panX: 0, panY: 0 } as unknown as { panX: number; panY: number; zoom: number }],
+    ])("drops malformed viewport: %s", (_label, vp) => {
+      const out = parseEventLogBySchema({
+        ...base,
+        finalActiveViewport: vp,
+        finalActivePageId: "p1",
+      });
+      expect(out.finalActiveViewport).toBeUndefined();
+      expect(out.finalActivePageId).toBeUndefined();
+    });
+
+    it("drops non-string finalActivePageId but keeps valid viewport", () => {
+      const out = parseEventLogBySchema({
+        ...base,
+        finalActiveViewport: { panX: 1, panY: 2, zoom: 1 },
+        finalActivePageId: 42 as unknown as string,
+      });
+      expect(out.finalActiveViewport).toEqual({ panX: 1, panY: 2, zoom: 1 });
+      expect(out.finalActivePageId).toBeUndefined();
+    });
+  });
+
   it("rejects v1 logs missing top-level fields", () => {
     expect(() =>
       parseEventLogBySchema({

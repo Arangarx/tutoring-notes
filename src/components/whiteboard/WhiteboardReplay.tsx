@@ -418,6 +418,68 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     const container = excalCanvasContainerRef.current;
     if (!container) return;
 
+    // Phase 5 task 8 (replay tier b): if the recorder stamped the active
+    // page's final viewport into the log at end-session, honor it instead
+    // of camera-fit. Same UX intent as the workspace: replay opens at the
+    // exact pan/zoom the tutor left things at.
+    //
+    // Fallback: when absent (pre-feature logs, or sessions that ended
+    // before the recorder could read the viewport), run the same camera-
+    // fitter we've always used so we don't regress old recordings.
+    const stamped = log.finalActiveViewport;
+    if (stamped) {
+      replayCameraReadyRef.current = true;
+      // Apply on the next microtask so the elements `updateScene` above
+      // has fully committed before we push the appState delta. We pass a
+      // minimal patch — replicating the workspace's "initial hydrate" rule
+      // (NO `...prevState` spread before the canvas is laid out, see
+      // `applyBoardDocumentV1ToExcalidraw`).
+      queueMicrotask(() => {
+        try {
+          api.updateScene({
+            appState: {
+              scrollX: stamped.panX,
+              scrollY: stamped.panY,
+              zoom: { value: stamped.zoom },
+            },
+          });
+          // Re-push the last scene because Excalidraw can clear the
+          // freshly-painted elements when only `appState` is sent. The
+          // workspace hits the same quirk in `WhiteboardReplay`'s sibling
+          // surfaces; mirror that defense here.
+          if (lastSceneElementsRef.current.length > 0) {
+            api.updateScene({
+              elements: lastSceneElementsRef.current,
+            });
+          }
+          setReplayViewportSeq((n) => n + 1);
+          const pageTag = log.finalActivePageId ?? "unknown";
+          console.info(
+            `[pvs] pvs=${pageTag} action=restore source=replay-mount panX=${stamped.panX} panY=${stamped.panY} zoom=${stamped.zoom}`
+          );
+        } catch (err) {
+          console.warn(
+            "[WhiteboardReplay] viewport restore failed, falling back to auto-fit:",
+            (err as Error)?.message ?? err
+          );
+          // Belt + suspenders: kick the auto-fitter so the user isn't
+          // looking at a blank corner if the stamped viewport apply blew up.
+          const recoveryFitter = createCameraFitter({
+            api: api as ScenePaintApi,
+            container,
+            getElements: () => lastSceneElementsRef.current,
+            zoom: 1,
+            onFit: () => {
+              replayCameraReadyRef.current = true;
+              setReplayViewportSeq((n) => n + 1);
+            },
+          });
+          recoveryFitter.fit();
+        }
+      });
+      return;
+    }
+
     // Phase 1a: camera fit + rAF retry now lives in the scene-paint
     // engine. Same behaviour as the old inline impl (Phase 0e):
     // synchronous attempt → if measure returns 0×0, schedule rAF

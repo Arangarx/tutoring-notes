@@ -2231,7 +2231,55 @@ export function WhiteboardWorkspaceClient({
       // and so a flaky events upload doesn't double-bill the tutor's
       // patience clock.
       setEndingState("ending");
-      const eventsJson = recorder.buildFinalEventsJson();
+      // Phase 5 task 8 (replay tier b): snapshot the active page's viewport
+      // into the events.json so replay opens at the same pan/zoom the tutor
+      // left things at. Best-effort — if `getAppState` isn't readable yet
+      // (canvas unmounted, race with end-session click), we skip the field
+      // entirely and replay falls back to its existing camera-fit behaviour.
+      let finalActiveViewport:
+        | { panX: number; panY: number; zoom: number }
+        | undefined;
+      try {
+        const apiAtEnd = excalidrawAPIRef.current;
+        if (apiAtEnd) {
+          // Drain pending viewport flush so the very last pan/zoom lands in
+          // `pageListRef` even if the user pan/zoom-then-clicked-End within
+          // the 200ms debounce window.
+          flushViewportPersistNow("debounced");
+          const st = apiAtEnd.getAppState() as {
+            scrollX?: number;
+            scrollY?: number;
+            zoom?: { value?: number };
+          };
+          if (
+            typeof st.scrollX === "number" &&
+            typeof st.scrollY === "number" &&
+            typeof st.zoom?.value === "number"
+          ) {
+            finalActiveViewport = {
+              panX: st.scrollX,
+              panY: st.scrollY,
+              zoom: st.zoom.value,
+            };
+            console.info(
+              `[pvs] pvs=${activePageIdRef.current} action=capture source=end-session panX=${finalActiveViewport.panX} panY=${finalActiveViewport.panY} zoom=${finalActiveViewport.zoom}`
+            );
+          }
+        }
+      } catch (vpErr) {
+        console.warn(
+          `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} viewport snapshot at end-session failed (replay will auto-fit):`,
+          (vpErr as Error)?.message ?? vpErr
+        );
+      }
+      const eventsJson = recorder.buildFinalEventsJson(
+        finalActiveViewport
+          ? {
+              finalActiveViewport,
+              finalActivePageId: activePageIdRef.current,
+            }
+          : undefined
+      );
       const upload = await uploadWhiteboardEvents({
         whiteboardSessionId,
         studentId,
@@ -2362,7 +2410,7 @@ export function WhiteboardWorkspaceClient({
       // Don't auto-retry — the tutor decides whether to retry End or
       // keep the session open and try again.
     }
-  }, [recorder, router, studentId, whiteboardSessionId]);
+  }, [flushViewportPersistNow, recorder, router, studentId, whiteboardSessionId]);
 
   // ---------------------------------------------------------------
   // After refresh: (1) auto-paint after stale-room "Resume session" when
