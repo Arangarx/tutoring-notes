@@ -52,7 +52,8 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   `obx` (upload-outbox row), `snp` (snapshot generation), `pvw`
   (workspace preview-before-Start), `avx` (live-A/V session — Phase 4a;
   per-peer events also carry `peer=<peerId>`), `cev` (cost-event row —
-  OpenAI usage observability). See
+  OpenAI usage observability), `blb` (blob cleanup CLI), `brs` (branch
+  sweep CLI). See
   [docs/RECORDER-LIFECYCLE.md](docs/RECORDER-LIFECYCLE.md) for the
   registry.
 - **Migrations are additive.** Production runs on Neon; never drop or
