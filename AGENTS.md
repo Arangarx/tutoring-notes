@@ -42,6 +42,13 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   + signaling foundation branch handoff (Pillar 6, first of 4 Phase 4 sub-chats).
 - [docs/DEPLOY.md](docs/DEPLOY.md) — Vercel + Neon deploy notes.
 - [docs/LOCAL-DEV.md](docs/LOCAL-DEV.md) — local setup.
+- [docs/PLATFORM-ASSUMPTIONS.md](docs/PLATFORM-ASSUMPTIONS.md) — **read
+  before migrating to a different compute platform / managed-service tier,
+  or onboarding a new external dependency.** Single inventory of every
+  load-bearing infra, runtime, browser, and OS assumption (Vercel Pro
+  300s ceiling, Neon branching, Vercel Blob shared store, CSP origins,
+  Node 20+, ffmpeg-static, Excalidraw API surface, etc.) + a migration
+  checklist.
 
 ## Conventions
 
@@ -67,6 +74,14 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
 - **CSP is tight.** Adding a new external origin (sync server, embed,
   font CDN) requires updating `src/middleware.ts` and documenting it in
   the feature's STATUS doc.
+- **Platform assumptions are tracked.** Any commit that introduces a
+  new load-bearing infrastructure dependency (a hardcoded timeout
+  cap, a per-tier limit, a new external origin, a new runtime
+  requirement, a new env var with platform-specific semantics) MUST
+  update [docs/PLATFORM-ASSUMPTIONS.md](docs/PLATFORM-ASSUMPTIONS.md)
+  in the same commit. Orchestrators check this during executor
+  handoff review. Migration to a new compute platform reads that
+  doc as the primary checklist.
 - **This repo (`tutoring-notes`) — feature branches: commit + push by default.** After substantive work on a named branch here, create a descriptive commit and push (`origin`; retry transient network failures) unless Andrew says to hold off. (Scope is this app only, not every workspace.)
 - **Executor bootstrappers live in `docs/handoff/`** — when the orchestrator drafts a briefing for a fresh executor chat, write it as `docs/handoff/<scope>-bootstrapper.md` rather than `~/.cursor/plans/`. Two reasons: (a) Cursor's chat UI only resolves workspace-relative file paths so in-workspace bootstrappers are clickable, (b) committed bootstrappers create an audit trail pairing "what we asked for" with "what shipped." **Bootstrappers must be pure executor briefings from line 1** — no orchestrator wrapper, no "copy below the rule line" headers. They must also include a top-of-file blockquote that disambiguates intent when the file arrives via `@`-reference (so Andrew's workflow can use either paste-the-blob or single-`@`-reference, whichever is faster). See `docs/handoff/README.md` for the required top-of-file template + full lifecycle.
 
