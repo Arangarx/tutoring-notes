@@ -109,6 +109,25 @@ Track all forks + resolutions here so future-Andrew + future-orchestrator can se
 | 2026-05-18 | How to measure Phase 2 click-reduction success | **PostHog product analytics (Phase 11a in master plan)** lands BEFORE Phase 2 of this UX refresh resumes | Phase 2's whole charter is "cut clicks-to-primary-action from 3→1." Without analytics, "we cut clicks" is aesthetic. With PostHog funnels (`/admin → session_started → recording_stopped`), Phase 2's success criteria become measurable. PostHog Tier 0+1 is its own bootstrapper (`docs/handoff/posthog-analytics-tier-0-1-bootstrapper.md`); ships independently of the UX refresh foundation. |
 | 2026-05-18 | Build order: Tailwind/shadcn vs. PostHog first | **PostHog first, then resume Phase 0 (Tailwind/shadcn)** | PostHog gives us a baseline measurement BEFORE the refresh changes anything. Otherwise we have no before/after comparison and can't prove the refresh reduced clicks (vs. simply "feels lighter"). Marginal cost: one extra branch sequenced ahead of Phase 0. |
 
+### Forward-compatibility: org-level scoping (Phase 12 hook)
+
+**Constraint** (locked in 2026-05-18, see `docs/MYNK-ORG-PILOT-BACKLOG.md`):
+
+The nav primitives and URL structure introduced by this UX refresh
+must NOT preclude introducing organization-level scoping later
+(Phase 12, gated on this refresh + pilot stability). Specifically:
+
+- Global nav should support a future "org switcher" affordance
+  (think Vercel/GitHub team switcher pattern) without requiring
+  a rewrite of the primitive.
+- New URL structures should accommodate additive `/org/[id]/...`
+  paths without colliding with the existing `/admin/students/[id]/...`
+  tutor-scoped routes.
+
+**This refresh does NOT need to BUILD any org-aware nav** — Phase 12
+is gated on this refresh completing. The constraint is purely "don't
+paint us into a corner."
+
 ---
 
 ## Phased plan
