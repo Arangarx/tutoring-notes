@@ -1926,13 +1926,18 @@ export function WhiteboardWorkspaceClient({
           pageDataRef.current[row.pageId] =
             row.elements as ReadonlyArray<ExcalidrawLikeElement>;
         }
-        // 4. Append all new page rows to the list in one shot.
+        // 4. Append all new page rows to the list in one shot. Carry
+        // through any per-row `viewState` (Phase 5 task 8 — PDF auto-
+        // fit) so `selectTutorPage(firstPageId)` below restores the
+        // camera centered on the PDF instead of inheriting the anchor
+        // page's pan/zoom.
         const nextList = [
           ...pageListRef.current,
           ...rows.map((r) => ({
             id: r.pageId,
             title: r.title,
             section: sectionId,
+            ...(r.viewState ? { viewState: r.viewState } : {}),
           })),
         ];
         pageListRef.current = nextList;

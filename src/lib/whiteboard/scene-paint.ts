@@ -346,7 +346,24 @@ export function createScenePainter(deps: ScenePainterDeps): ScenePainter {
       // Override beats preserveScroll — replay's timeline-driven viewport
       // events drive the camera; we don't want last-frame's inherited
       // scroll fighting the new camera position.
+      //
+      // Spread the current appState so we preserve Excalidraw-required
+      // fields (width/height/zoom shape/theme/etc) that the canvas has
+      // already negotiated against its container. The workspace hit the
+      // same shape constraint in `selectTutorPage` — without the spread,
+      // pushing `{ scrollX, scrollY, zoom }` standalone caused cursor-
+      // to-stroke offset because the pointer→scene transform read stale
+      // dimensions. Replay is "live update on a laid-out canvas" by the
+      // time `applyAt` runs, so the spread is safe (and matches the
+      // workspace's page-switch restore path).
+      let prev: Record<string, unknown> | undefined;
+      try {
+        prev = api.getAppState?.();
+      } catch {
+        prev = undefined;
+      }
       updatePayload.appState = {
+        ...(prev ?? {}),
         scrollX: viewportOverride.panX,
         scrollY: viewportOverride.panY,
         zoom: { value: viewportOverride.zoom },

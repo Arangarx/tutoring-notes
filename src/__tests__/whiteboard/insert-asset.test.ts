@@ -309,6 +309,98 @@ describe("insertPdfPagesAsBoardPages", () => {
     expect(arg.rows).toHaveLength(1);
   });
 
+  it("stamps a fit-to-PDF viewState on each row so selectTutorPage lands the camera on the page", async () => {
+    uploadMock.mockResolvedValue({
+      ok: true,
+      blobUrl: "https://blob.example/p.png",
+      sizeBytes: 4,
+    });
+    // 1000 x 800 viewport (from makeFakeApi getAppState), anchor camera at
+    // (0,0,1). PDF rendered at 720 x 720*aspect; for aspect=4/3 the PDF
+    // is 720x960 scene-units. Fit math:
+    //   zoom = min(1000*0.9 / 720, 800*0.9 / 960) = min(1.25, 0.75) = 0.75
+    //   centerX = 0 + 1000/2/1 = 500, centerY = 0 + 800/2/1 = 400
+    //   panX = 500 - 1000/2/0.75 ≈ -166.67
+    //   panY = 400 - 800/2/0.75 ≈ -133.33
+    const { api } = makeFakeApi();
+    const commit = jest.fn();
+    const integrate = {
+      getActivePageId: () => "p1",
+      commitPdfBatch: commit,
+    };
+    const result = await insertPdfPagesAsBoardPages({
+      excalidrawAPI: api,
+      whiteboardSessionId: "wb",
+      studentId: "s",
+      pages: [
+        {
+          pageIndex: 1,
+          pngBlob: new Blob([new Uint8Array(4)], { type: "image/png" }),
+          widthPx: 720,
+          heightPx: 960,
+        },
+      ],
+      filename: "x.pdf",
+      integrate,
+    });
+    expect(result.ok).toBe(true);
+    const arg = commit.mock.calls[0]?.[0] as {
+      rows: Array<{ viewState?: { panX: number; panY: number; zoom: number } }>;
+    };
+    const vs = arg.rows[0]?.viewState;
+    expect(vs).toBeDefined();
+    if (!vs) return;
+    expect(vs.zoom).toBeCloseTo(0.75, 5);
+    expect(vs.panX).toBeCloseTo(-1000 / 1.5 + 500, 5); // 500 - 666.667
+    expect(vs.panY).toBeCloseTo(-800 / 1.5 + 400, 5); // 400 - 533.333
+  });
+
+  it("omits viewState when the canvas hasn't measured yet (fallback to anchor camera)", async () => {
+    uploadMock.mockResolvedValue({
+      ok: true,
+      blobUrl: "https://blob.example/p.png",
+      sizeBytes: 4,
+    });
+    // API with zero-area appState (pre-mount Excalidraw stub).
+    const apiUnmeasured: ExcalidrawApiLike = {
+      getSceneElements: () => [],
+      getAppState: () => ({
+        scrollX: 0,
+        scrollY: 0,
+        width: 0,
+        height: 0,
+        zoom: { value: 1 },
+      }),
+      addFiles: () => undefined,
+      updateScene: () => undefined,
+    };
+    const commit = jest.fn();
+    const integrate = {
+      getActivePageId: () => "p1",
+      commitPdfBatch: commit,
+    };
+    const result = await insertPdfPagesAsBoardPages({
+      excalidrawAPI: apiUnmeasured,
+      whiteboardSessionId: "wb",
+      studentId: "s",
+      pages: [
+        {
+          pageIndex: 1,
+          pngBlob: new Blob([new Uint8Array(4)], { type: "image/png" }),
+          widthPx: 720,
+          heightPx: 960,
+        },
+      ],
+      filename: "x.pdf",
+      integrate,
+    });
+    expect(result.ok).toBe(true);
+    const arg = commit.mock.calls[0]?.[0] as {
+      rows: Array<{ viewState?: { panX: number; panY: number; zoom: number } }>;
+    };
+    expect(arg.rows[0]?.viewState).toBeUndefined();
+  });
+
   it("does NOT commit when every page upload fails", async () => {
     uploadMock.mockResolvedValue({ ok: false, error: "net" });
     const { api } = makeFakeApi();

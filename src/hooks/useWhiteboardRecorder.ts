@@ -650,7 +650,16 @@ export function useWhiteboardRecorder(
 
   const recordViewport = useCallback(
     (panX: number, panY: number, zoom: number) => {
-      if (!recordingActiveRef.current) return;
+      if (!recordingActiveRef.current) {
+        // Diagnostic only — fires on every pan/zoom that happens before
+        // the student joins / solo-rehearsal allows. Confirms whether
+        // the workspace's recordViewport call site reached the recorder
+        // (smoke debugging for replay-viewport-empty cases).
+        console.info(
+          `[pvs] action=record-viewport skip=recording-inactive panX=${panX} panY=${panY} zoom=${zoom}`
+        );
+        return;
+      }
       if (!Number.isFinite(panX) || !Number.isFinite(panY)) return;
       if (!Number.isFinite(zoom) || zoom <= 0) return;
       const last = lastEmittedViewportRef.current;
@@ -660,11 +669,17 @@ export function useWhiteboardRecorder(
         last.panY === panY &&
         last.zoom === zoom
       ) {
+        // Skip — already at this exact camera. Don't log, would spam.
         return;
       }
       lastEmittedViewportRef.current = { panX, panY, zoom };
       const t = Math.max(0, Math.floor(getAudioMsRef.current()));
       pushEvent({ t, type: "viewport", panX, panY, zoom });
+      // One log per actual log-append so the smoke session shows
+      // whether viewport events are flowing into the events.json.
+      console.info(
+        `[pvs] action=record-viewport append t=${t} panX=${panX} panY=${panY} zoom=${zoom} totalEvents=${logRef.current.events.length}`
+      );
     },
     [pushEvent]
   );

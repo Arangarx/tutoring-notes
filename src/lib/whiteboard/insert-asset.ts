@@ -90,6 +90,18 @@ export type PdfBoardBatchRow = {
     dataURL: string;
     created: number;
   };
+  /**
+   * Initial per-page viewport (Phase 5 task 8). Computed at insert time
+   * so the PDF lands centered + zoomed-to-fit when the tutor (and student
+   * via follow) first lands on the page. Without this, `selectTutorPage`
+   * falls through the `vsNext`-absent branch and keeps the anchor page's
+   * pan/zoom — which dwarfs or hides the fixed-width PDF image
+   * depending on the tutor's anchor camera.
+   *
+   * Optional + additive: when omitted (legacy callers, future inserters
+   * that don't yet plumb this), `selectTutorPage` falls through unchanged.
+   */
+  viewState?: { panX: number; panY: number; zoom: number };
 };
 
 export type InsertPdfBoardPagesIntegrate = {
@@ -169,6 +181,87 @@ function viewportCenter(api: ExcalidrawApiLike): { x: number; y: number } {
   const cx = s.scrollX + s.width / 2 / zoom;
   const cy = s.scrollY + s.height / 2 / zoom;
   return { x: cx, y: cy };
+}
+
+/**
+ * Read the Excalidraw viewport dimensions (in CSS pixels) plus an
+ * acceptable zoom for a placement-time camera-fit. Returns null when
+ * the canvas hasn't measured yet (jsdom test mocks, pre-mount API).
+ */
+function viewportSize(
+  api: ExcalidrawApiLike
+): { width: number; height: number } | null {
+  try {
+    const s = api.getAppState();
+    if (
+      typeof s.width === "number" &&
+      Number.isFinite(s.width) &&
+      s.width > 0 &&
+      typeof s.height === "number" &&
+      Number.isFinite(s.height) &&
+      s.height > 0
+    ) {
+      return { width: s.width, height: s.height };
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+/**
+ * Compute the camera (panX, panY, zoom) that fits a single image
+ * element centered at `(centerX, centerY)` of size `width × height`
+ * into a viewport of size `viewW × viewH`, with ~10% margin so the
+ * page doesn't kiss the chrome.
+ *
+ * Returns null when the math is undefined (zero viewport, zero
+ * element). Caller falls through to the anchor-page camera path.
+ *
+ * Phase 5 task 8 — drives PDF insert auto-fit. The new page's
+ * `viewState` is set to this triple so `selectTutorPage` restores it
+ * the moment the tutor lands on the page.
+ */
+function fitViewportToImage(args: {
+  centerX: number;
+  centerY: number;
+  imageWidth: number;
+  imageHeight: number;
+  viewportWidth: number;
+  viewportHeight: number;
+  /** Zoom is clamped to [min, max] so a wildly-sized PDF can't push the camera into a state Excalidraw fights. */
+  minZoom?: number;
+  maxZoom?: number;
+  /** Margin around the image as a fraction of the viewport (0.1 = 10%). */
+  marginFraction?: number;
+}): { panX: number; panY: number; zoom: number } | null {
+  const {
+    centerX,
+    centerY,
+    imageWidth,
+    imageHeight,
+    viewportWidth,
+    viewportHeight,
+    minZoom = 0.1,
+    maxZoom = 2,
+    marginFraction = 0.1,
+  } = args;
+  if (
+    !(viewportWidth > 0 && viewportHeight > 0) ||
+    !(imageWidth > 0 && imageHeight > 0)
+  ) {
+    return null;
+  }
+  const usableW = viewportWidth * (1 - marginFraction);
+  const usableH = viewportHeight * (1 - marginFraction);
+  const rawZoom = Math.min(usableW / imageWidth, usableH / imageHeight);
+  const zoom = Math.min(maxZoom, Math.max(minZoom, rawZoom));
+  // Excalidraw scrollX/scrollY convention: viewport-center-in-scene =
+  // scrollX + (viewportWidth / zoom) / 2. Solving for scrollX given a
+  // target scene-center:
+  const panX = centerX - viewportWidth / 2 / zoom;
+  const panY = centerY - viewportHeight / 2 / zoom;
+  return { panX, panY, zoom };
 }
 
 const IMAGE_MIME_WHITELIST: ReadonlyArray<string> = [
@@ -695,6 +788,26 @@ export async function insertPdfPagesAsBoardPages(
     const center = viewportCenter(excalidrawAPI);
     const x = center.x - width / 2;
     const y = center.y - height / 2;
+    // Phase 5 task 8 — fit-to-PDF camera. Without this the new page
+    // inherits the anchor page's pan/zoom (selectTutorPage's vsNext-
+    // absent branch) which leaves the fixed-720px PDF dwarfed or
+    // off-screen depending on where the tutor was looking when they
+    // hit Insert. By stamping a per-page viewState now, the existing
+    // restore path in selectTutorPage lands the camera centered on
+    // the PDF with margin — same place the tutor would have manually
+    // panned to anyway, and replay sees the camera-jump because
+    // selectTutorPage also emits the viewport-event for it.
+    const vp = viewportSize(excalidrawAPI);
+    const initialViewState = vp
+      ? fitViewportToImage({
+          centerX: center.x,
+          centerY: center.y,
+          imageWidth: width,
+          imageHeight: height,
+          viewportWidth: vp.width,
+          viewportHeight: vp.height,
+        })
+      : null;
 
     const pageId =
       typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -725,6 +838,7 @@ export async function insertPdfPagesAsBoardPages(
         dataURL,
         created: Date.now(),
       },
+      ...(initialViewState ? { viewState: initialViewState } : {}),
     });
     onProgress?.(i + 1, pages.length);
   }
