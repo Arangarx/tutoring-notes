@@ -12,6 +12,8 @@
 import { parseEventLogBySchema } from "@/lib/whiteboard/replay-parse";
 import {
   WB_EVENT_LOG_SCHEMA_VERSION,
+  findLatestViewportAt,
+  isSceneAffectingEvent,
   maxEventTimestampMs,
   reconstructSceneAt,
   type WBEventLog,
@@ -180,5 +182,57 @@ describe("reconstructSceneAt timeline behavior (replay player contract)", () => 
     const endT = Math.max(stale.durationMs, maxEventTimestampMs(stale));
     expect(reconstructSceneAt(stale, endT).size).toBe(1);
     expect(reconstructSceneAt(stale, endT).get("a")!.x).toBe(10);
+  });
+});
+
+describe("viewport events (Phase 5 task 8 — replay tier-c-lite)", () => {
+  const log: WBEventLog = {
+    schemaVersion: 1,
+    startedAt: "2026-05-17T19:00:00Z",
+    durationMs: 5_000,
+    events: [
+      { t: 0, type: "viewport", panX: 10, panY: 20, zoom: 1 },
+      {
+        t: 500,
+        type: "add",
+        element: {
+          id: "a",
+          type: "freehand",
+          x: 0,
+          y: 0,
+          width: 10,
+          height: 10,
+        },
+      },
+      { t: 1000, type: "viewport", panX: -100, panY: 200, zoom: 1.5 },
+      { t: 2000, type: "viewport", panX: -100, panY: 200, zoom: 0.75 },
+      { t: 3000, type: "pause" },
+      { t: 4000, type: "viewport", panX: 0, panY: 0, zoom: 2 },
+    ],
+  };
+
+  it("viewport events are not scene-affecting", () => {
+    expect(isSceneAffectingEvent({ t: 0, type: "viewport", panX: 0, panY: 0, zoom: 1 })).toBe(false);
+  });
+
+  it("reconstructSceneAt ignores viewport events (camera != scene)", () => {
+    // Only the `add` at t=500 contributes; viewports are camera-only.
+    expect(reconstructSceneAt(log, 500).size).toBe(1);
+    expect(reconstructSceneAt(log, 4500).size).toBe(1);
+  });
+
+  it("findLatestViewportAt returns null when no viewport ≤ t", () => {
+    const noVp: WBEventLog = { ...log, events: [{ t: 1000, type: "pause" }] };
+    expect(findLatestViewportAt(noVp, 500)).toBeNull();
+    expect(findLatestViewportAt(noVp, 1500)).toBeNull();
+  });
+
+  it("findLatestViewportAt returns latest viewport at or before t", () => {
+    expect(findLatestViewportAt(log, -1)).toBeNull();
+    expect(findLatestViewportAt(log, 0)).toEqual({ panX: 10, panY: 20, zoom: 1 });
+    expect(findLatestViewportAt(log, 750)).toEqual({ panX: 10, panY: 20, zoom: 1 });
+    expect(findLatestViewportAt(log, 1000)).toEqual({ panX: -100, panY: 200, zoom: 1.5 });
+    expect(findLatestViewportAt(log, 2500)).toEqual({ panX: -100, panY: 200, zoom: 0.75 });
+    expect(findLatestViewportAt(log, 5000)).toEqual({ panX: 0, panY: 0, zoom: 2 });
   });
 });

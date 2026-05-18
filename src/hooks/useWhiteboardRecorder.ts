@@ -342,6 +342,19 @@ export type UseWhiteboardRecorderReturn = {
     elements: ReadonlyArray<ExcalidrawLikeElement>;
     scenePageId: string;
   }) => void;
+  /**
+   * Phase 5 task 8 (replay viewport tier-c-lite).
+   *
+   * Append a `viewport` event to the live log. No-op when recording is
+   * not active (we don't want pre-Start pan/zoom polluting the replay
+   * log) or when called repeatedly with the same coords (de-dupes
+   * idle-debounce storms).
+   *
+   * The workspace calls this from `flushViewportPersistNow` (debounced
+   * pan/zoom) and from page-switch handlers so replay's camera tracks
+   * the same cadence as the live pageViewState wire.
+   */
+  recordViewport: (panX: number, panY: number, zoom: number) => void;
 };
 
 export type ResumeAvailability = {
@@ -615,6 +628,57 @@ export function useWhiteboardRecorder(
     },
     [whiteboardSessionId]
   );
+
+  // ---------------------------------------------------------------
+  // Section A.5 — Viewport recording (Phase 5 task 8, replay tier-c-lite).
+  //
+  // The workspace calls `recordViewport` whenever the active page's
+  // pan/zoom changes. The log accumulates a sparse series of `viewport`
+  // events; replay finds the latest one <= currentTime each tick.
+  //
+  // Gating: only emit while `recordingActive` so the pre-Start "waiting
+  // for student" pan/zoom doesn't pollute the recorded timeline.
+  //
+  // De-dupe: skip emits whose (panX, panY, zoom) match the last viewport
+  // event already in the log; otherwise a debounced flush with no actual
+  // viewport movement (e.g. tab visibility change while still in the same
+  // spot) would write redundant rows.
+  // ---------------------------------------------------------------
+  const lastEmittedViewportRef = useRef<
+    { panX: number; panY: number; zoom: number } | null
+  >(null);
+
+  const recordViewport = useCallback(
+    (panX: number, panY: number, zoom: number) => {
+      if (!recordingActiveRef.current) return;
+      if (!Number.isFinite(panX) || !Number.isFinite(panY)) return;
+      if (!Number.isFinite(zoom) || zoom <= 0) return;
+      const last = lastEmittedViewportRef.current;
+      if (
+        last &&
+        last.panX === panX &&
+        last.panY === panY &&
+        last.zoom === zoom
+      ) {
+        return;
+      }
+      lastEmittedViewportRef.current = { panX, panY, zoom };
+      const t = Math.max(0, Math.floor(getAudioMsRef.current()));
+      pushEvent({ t, type: "viewport", panX, panY, zoom });
+    },
+    [pushEvent]
+  );
+
+  // Recording-start hook: when the FSM flips to active, reset the
+  // de-dupe ref so the next recordViewport call always emits at least
+  // once (anchoring the timeline at t≈0 with whatever viewport the
+  // tutor is currently looking at — replay needs SOMETHING at t=0 to
+  // avoid camera-fit overriding the tutor's setup).
+  useEffect(() => {
+    if (recordingActive) {
+      lastEmittedViewportRef.current = null;
+    }
+  }, [recordingActive]);
 
   const ingestRemote = useCallback(
     async (
@@ -1038,5 +1102,6 @@ export function useWhiteboardRecorder(
     acknowledgePostGateAutoCanvas,
     flushThrottledFrameNow,
     broadcastScenePageSnapshot,
+    recordViewport,
   };
 }

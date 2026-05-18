@@ -386,9 +386,9 @@ to know when to revisit.
 
 **Behavior:** Each board tab stores optional `viewState` (`panX`/`panY`/`zoom`) on `WhiteboardBoardDocumentV1.pageList[]`. Tutor capture runs on page switch; a **200ms debounced** flush updates the document, `sessionStorage` draft, and `pageViewState` wire envelopes for student follow-mode. Tab hide / `beforeunload` runs a best-effort viewport flush first. Student applies tutor patches only (no `pageViewState` emits).
 
-**Replay** is covered separately by **viewport events in the event log** (treat pan/zoom changes like strokes) — see "Replay viewport" section below. The bootstrapper's tier-b "stamp the end viewport into the log" path was tried (commit `2d9963e`) and yanked: at t=0 of replay the camera was wherever the tutor *ended*, so strokes drawn elsewhere appeared off-screen.
+**Replay viewport (tier-c-lite — May 2026):** Pan/zoom changes are recorded as **`viewport` events in the `WBEventLog`** (`{ t, type: "viewport", panX, panY, zoom }`), emitted from the workspace on (a) recording-start anchor, (b) the existing 200ms debounced viewport flush, and (c) page-switch viewport restore. Replay's `applySceneAt` finds the latest viewport event with `t ≤ currentTime` on each tick and pushes it atomically with the scene elements via the scene-paint engine's new `viewportOverride` PaintOption. Pre-feature logs (no viewport events) fall back to the existing `createCameraFitter` bbox auto-fit. The earlier "stamp the END viewport into the log" approach (commit `2d9963e`) was yanked: at t=0 of replay the camera was wherever the tutor *ended*, so content drawn elsewhere appeared off-screen — see commit `2499f7b` for the revert + rationale.
 
-**Smoke:** Use the checklist in `docs/handoff/per-page-view-state-bootstrapper.md` (SMOKE CHECKLIST FOR ANDREW).
+**Smoke:** Use the checklist in `docs/handoff/per-page-view-state-bootstrapper.md` (SMOKE CHECKLIST FOR ANDREW). Plus for replay: end a session that started zoomed in on page 1, panned across page 2, zoomed out on page 3 → open replay → camera should move with the tutor (camera-fit at t=0 if no early viewport event landed, then jump on each viewport event).
 
 **Deferred:** Per-viewer independent-mode persistence (Phase 5 task 3); per-page navigation IN replay (would need a PageStrip in the replay surface — out of scope here).
 

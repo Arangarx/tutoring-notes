@@ -255,8 +255,26 @@ export type PaintOptions = {
    * The painter NEVER merges zoom — see Phase 0e + replay header
    * comment, ticking zoom alongside scene updates blew up percentages
    * in pilots.
+   *
+   * Ignored when {@link viewportOverride} is set (the override takes
+   * precedence over inherited scroll).
    */
   preserveScroll?: boolean;
+  /**
+   * Phase 5 task 8 (replay viewport tier-c-lite).
+   *
+   * When set, the painter pushes the override pan/zoom in the SAME
+   * `updateScene` call as the elements so the camera moves atomically
+   * with the scene (no one-frame flicker between elements landing and
+   * camera landing). Replay sources this from `findLatestViewportAt` on
+   * each play-loop tick.
+   *
+   * Pushing zoom here is the ONE exception to the engine's "never push
+   * zoom" rule — viewport events are a deliberate, debounced cadence
+   * driven by the recorder, not the per-frame ticking that historically
+   * blew up percentages. The risk surface is bounded.
+   */
+  viewportOverride?: { panX: number; panY: number; zoom: number };
 };
 
 export type PaintResult = {
@@ -309,7 +327,7 @@ export function createScenePainter(deps: ScenePainterDeps): ScenePainter {
   let lastSceneElements: readonly unknown[] = [];
 
   function applyAt(timeMs: number, opts: PaintOptions = {}): PaintResult {
-    const { preserveScroll = true } = opts;
+    const { preserveScroll = true, viewportOverride } = opts;
     const built = buildSceneAt(log, timeMs, restoreElements);
 
     const newAssetUrls: string[] = [];
@@ -324,7 +342,16 @@ export function createScenePainter(deps: ScenePainterDeps): ScenePainter {
       elements: readonly unknown[];
       appState?: Record<string, unknown>;
     } = { elements: built.elements };
-    if (preserveScroll) {
+    if (viewportOverride) {
+      // Override beats preserveScroll — replay's timeline-driven viewport
+      // events drive the camera; we don't want last-frame's inherited
+      // scroll fighting the new camera position.
+      updatePayload.appState = {
+        scrollX: viewportOverride.panX,
+        scrollY: viewportOverride.panY,
+        zoom: { value: viewportOverride.zoom },
+      };
+    } else if (preserveScroll) {
       const merged = readScrollOnly(api);
       if (merged) updatePayload.appState = merged;
     }

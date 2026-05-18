@@ -378,6 +378,16 @@ export function WhiteboardWorkspaceClient({
     null
   );
   /**
+   * Phase 5 task 8 (replay viewport tier-c-lite). Captured below the
+   * recorder hook call — let viewport-flush + page-switch handlers
+   * (defined earlier in this component) reach `recorder.recordViewport`
+   * without re-ordering the entire file. Refs are React's escape hatch
+   * for exactly this "callback owns a stale closure" shape.
+   */
+  const recorderRecordViewportRef = useRef<
+    ((panX: number, panY: number, zoom: number) => void) | null
+  >(null);
+  /**
    * Monotonic switch token — smoke-2 root cause.
    *
    * `selectTutorPage` awaits `hydrateRemoteImageFilesForScene` BEFORE
@@ -1447,6 +1457,10 @@ export function WhiteboardWorkspaceClient({
           `[pvs] pvs=${pid} action=wire-emit source=${srcTag} panX=${vs.panX} panY=${vs.panY} zoom=${vs.zoom}`
         );
       }
+      // Phase 5 task 8 (replay tier-c-lite): also append to the event log
+      // so replay's camera tracks the same cadence as live. No-op when
+      // recording isn't active (gated inside recorder.recordViewport).
+      recorderRecordViewportRef.current?.(vs.panX, vs.panY, vs.zoom);
       flushSessionBoardDocumentNow();
     },
     [
@@ -1545,10 +1559,47 @@ export function WhiteboardWorkspaceClient({
   });
   const { flushThrottledFrameNow, onCanvasChange: recorderOnCanvasChange } =
     recorder;
+  // Phase 5 task 8 — keep the recorderRecordViewportRef pointed at the
+  // current recorder instance so earlier-in-file callbacks
+  // (flushViewportPersistNow, selectTutorPage) can append viewport
+  // events without circular hook-ordering.
+  recorderRecordViewportRef.current = recorder.recordViewport;
   tutorResyncOnNewRemotePeerRef.current = async () => {
     flushThrottledFrameNow();
     flushDocumentBroadcastNow();
   };
+
+  // Phase 5 task 8 — anchor replay's camera at t≈0 by emitting one
+  // viewport event when recording becomes active. Without this, replay's
+  // first frames have no viewport event ≤ currentTime and fall back to
+  // camera-fit, which would jump on the first tutor pan/zoom afterwards.
+  useEffect(() => {
+    if (!recordingActive) return;
+    const api = excalidrawAPIRef.current;
+    if (!api) return;
+    try {
+      const st = api.getAppState() as {
+        scrollX?: number;
+        scrollY?: number;
+        zoom?: { value?: number };
+      };
+      if (
+        typeof st.scrollX === "number" &&
+        typeof st.scrollY === "number" &&
+        typeof st.zoom?.value === "number"
+      ) {
+        recorder.recordViewport(st.scrollX, st.scrollY, st.zoom.value);
+        console.info(
+          `[pvs] pvs=${activePageIdRef.current} action=anchor source=recording-start panX=${st.scrollX} panY=${st.scrollY} zoom=${st.zoom.value}`
+        );
+      }
+    } catch (err) {
+      console.warn(
+        `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} viewport-anchor at recording-start failed (replay first frames will auto-fit):`,
+        (err as Error)?.message ?? err
+      );
+    }
+  }, [recordingActive, recorder, whiteboardSessionId]);
 
   const selectTutorPage = useCallback(
     async (nextId: string) => {
@@ -1659,6 +1710,16 @@ export function WhiteboardWorkspaceClient({
             });
             console.info(
               `[pvs] pvs=${nextId} action=restore source=page-switch panX=${vsNext.panX} panY=${vsNext.panY} zoom=${vsNext.zoom}`
+            );
+            // Phase 5 task 8 (replay tier-c-lite): replay sees the
+            // camera-jump on page-switch as a viewport event. The
+            // page-switch-preflush above already captured the OUTGOING
+            // page's final viewport; this captures the INCOMING page's
+            // restored viewport so replay knows to move the camera.
+            recorderRecordViewportRef.current?.(
+              vsNext.panX,
+              vsNext.panY,
+              vsNext.zoom
             );
           } finally {
             queueMicrotask(() => {
