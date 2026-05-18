@@ -384,15 +384,15 @@ to know when to revisit.
 
 **Branch:** `feat/per-page-view-state` (merge after Andrew smoke).
 
-**Behavior:** Each board tab stores optional `viewState` (`panX`/`panY`/`zoom`) on `WhiteboardBoardDocumentV1.pageList[]`. Tutor capture runs on page switch; a **200ms debounced** flush updates the document, `sessionStorage` draft, and `pageViewState` wire envelopes for student follow-mode. Tab hide / `beforeunload` runs a best-effort viewport flush first. Student applies tutor patches only (no `pageViewState` emits). **Replay opens at the active page's end-session viewport** — the recorder stamps `finalActiveViewport` onto `events.json` and `WhiteboardReplay` honors it instead of auto-fit when present. **Tier (c)** — replay scrubber respecting historical viewports per timestep — **DEFERRED**.
+**Behavior:** Each board tab stores optional `viewState` (`panX`/`panY`/`zoom`) on `WhiteboardBoardDocumentV1.pageList[]`. Tutor capture runs on page switch; a **200ms debounced** flush updates the document, `sessionStorage` draft, and `pageViewState` wire envelopes for student follow-mode. Tab hide / `beforeunload` runs a best-effort viewport flush first. Student applies tutor patches only (no `pageViewState` emits).
 
-**Smoke:** Use the checklist in `docs/handoff/per-page-view-state-bootstrapper.md` (SMOKE CHECKLIST FOR ANDREW). Plus: end a session zoomed into a specific area on a single page, open replay → replay opens at that exact pan/zoom (not auto-fit-to-content).
+**Replay** is covered separately by **viewport events in the event log** (treat pan/zoom changes like strokes) — see "Replay viewport" section below. The bootstrapper's tier-b "stamp the end viewport into the log" path was tried (commit `2d9963e`) and yanked: at t=0 of replay the camera was wherever the tutor *ended*, so strokes drawn elsewhere appeared off-screen.
 
-**Deferred:** Per-viewer independent-mode persistence (Phase 5 task 3); replay timeline scrub viewport history (tier c); per-page navigation IN replay (would need a PageStrip in the replay surface — out of scope here, blocks full per-page replay viewport).
+**Smoke:** Use the checklist in `docs/handoff/per-page-view-state-bootstrapper.md` (SMOKE CHECKLIST FOR ANDREW).
+
+**Deferred:** Per-viewer independent-mode persistence (Phase 5 task 3); per-page navigation IN replay (would need a PageStrip in the replay surface — out of scope here).
 
 **Smoke follow-ups (May 2026 pilot):**
-
-- **Replay viewport (active page only).** Replay has no page-strip today, so it honors **one** viewport — the active page at end-session, stamped onto the event log as `finalActiveViewport`. Pre-feature sessions and any session that ended before the recorder could read the viewport (network race, etc.) fall back to the existing camera-fit behaviour automatically. When per-page navigation lands in replay, extend `WBEventLog` with the full per-page array.
 - **sessionStorage board draft** skips silently when JSON exceeds **4MB** (`session-scene-draft.ts`); we now **console.warn** when that happens. Heavy PDF boards should rely on **IndexedDB checkpoint "Load draft into board"** after refresh. A prior bug **merged** stale per-tab element buckets across two hydrates — fixed by replacing `pageDataRef` wholesale when applying `WhiteboardBoardDocumentV1`.
 - **Cursor-to-stroke offset:** initial hydrate uses a **minimal** `appState` patch (no `...prevState` spread) so a not-yet-laid-out canvas doesn't corrupt Excalidraw's pointer→scene transform. Page-switch + live follow paths DO spread `prevState` because the canvas is fully laid out there; without the spread, strokes land above/below the cursor.
 

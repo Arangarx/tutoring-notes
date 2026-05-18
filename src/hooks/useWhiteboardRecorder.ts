@@ -306,16 +306,8 @@ export type UseWhiteboardRecorderReturn = {
    * Build the final events.json string for upload. Caller is the
    * workspace page, which posts it to `/api/upload/blob`
    * (kind="whiteboard-events"). Does NOT clear local state.
-   *
-   * `opts.finalActiveViewport` + `opts.finalActivePageId` (optional) are
-   * stamped onto the top-level log so replay can land on the same
-   * pan/zoom the tutor left things at (Phase 5 task 8 tier b for
-   * replay). Replay falls back to camera-fit when absent.
    */
-  buildFinalEventsJson: (opts?: {
-    finalActiveViewport?: { panX: number; panY: number; zoom: number };
-    finalActivePageId?: string;
-  }) => string;
+  buildFinalEventsJson: () => string;
   /**
    * Call AFTER the workspace component successfully persists the
    * events.json to Vercel Blob and updates `WhiteboardSession.eventsBlobUrl`.
@@ -995,42 +987,15 @@ export function useWhiteboardRecorder(
   // Section G — Final flush + persist
   // ---------------------------------------------------------------
 
-  const buildFinalEventsJson = useCallback(
-    (opts?: {
-      finalActiveViewport?: { panX: number; panY: number; zoom: number };
-      finalActivePageId?: string;
-    }): string => {
-      // Drain any in-flight diff first so the last stroke isn't lost.
-      if (diffTimerRef.current !== null) {
-        clearTimeout(diffTimerRef.current);
-        diffTimerRef.current = null;
-        flushPendingDiff();
-      }
-      // Stamp viewport metadata onto the log just before serialization.
-      // Pure data mutation on the live ref is intentional (mirrors how
-      // `durationMs` advances in `appendEvent`); both produce a consistent
-      // shape for the immediate `JSON.stringify` below.
-      const vp = opts?.finalActiveViewport;
-      if (
-        vp &&
-        Number.isFinite(vp.panX) &&
-        Number.isFinite(vp.panY) &&
-        Number.isFinite(vp.zoom) &&
-        vp.zoom > 0
-      ) {
-        logRef.current.finalActiveViewport = {
-          panX: vp.panX,
-          panY: vp.panY,
-          zoom: vp.zoom,
-        };
-        if (typeof opts?.finalActivePageId === "string") {
-          logRef.current.finalActivePageId = opts.finalActivePageId;
-        }
-      }
-      return JSON.stringify(logRef.current);
-    },
-    [flushPendingDiff]
-  );
+  const buildFinalEventsJson = useCallback((): string => {
+    // Drain any in-flight diff first so the last stroke isn't lost.
+    if (diffTimerRef.current !== null) {
+      clearTimeout(diffTimerRef.current);
+      diffTimerRef.current = null;
+      flushPendingDiff();
+    }
+    return JSON.stringify(logRef.current);
+  }, [flushPendingDiff]);
 
   const markPersisted = useCallback(async () => {
     await clearCheckpoint("whiteboard", ownerKey);

@@ -164,30 +164,6 @@ export type WBEventLog = {
    */
   durationMs: number;
   events: WBEvent[];
-  /**
-   * Phase 5 task 8 (per-page view state, replay-mount tier b).
-   *
-   * Snapshot of the **active page's viewport at end-session**. Replay
-   * has no page-strip today (single-scene event-log player), so it can
-   * only honor one viewport — the place the tutor left things. When
-   * present, replay applies this on first paint instead of auto-fit.
-   *
-   * Optional + additive (no schemaVersion bump). Pre-feature logs and
-   * any session that ended before the recorder learned to capture the
-   * viewport (network failure mid-end, etc.) simply omit it and replay
-   * falls back to the default camera-fit behaviour.
-   *
-   * When per-page navigation lands in replay, extend this with the full
-   * `pageList[].viewState` array; the additive-field pattern stays the
-   * same.
-   */
-  finalActiveViewport?: {
-    panX: number;
-    panY: number;
-    zoom: number;
-  };
-  /** Active page id at end-session (informational; `[pvs]` log tagging). */
-  finalActivePageId?: string;
 };
 
 /**
