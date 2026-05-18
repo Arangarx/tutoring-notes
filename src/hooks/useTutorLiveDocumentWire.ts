@@ -7,6 +7,7 @@ import type {
   WhiteboardWirePage,
 } from "@/lib/whiteboard/sync-client";
 import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter";
+import type { PageViewState } from "@/lib/whiteboard/board-document-snapshot";
 
 const THROTTLE_MS = 50;
 
@@ -22,7 +23,12 @@ export function useTutorLiveDocumentWire(options: {
   sync: WhiteboardSyncClient | null;
   getPagesSnapshot: () => Readonly<Record<string, ReadonlyArray<ExcalidrawLikeElement>>>;
   getPageListAndActive: () => {
-    pageList: ReadonlyArray<{ id: string; title: string; section?: string }>;
+    pageList: ReadonlyArray<{
+      id: string;
+      title: string;
+      section?: string;
+      viewState?: PageViewState;
+    }>;
     activePageId: string;
     sections?: Record<string, { label: string }>;
   };
@@ -47,6 +53,15 @@ export function useTutorLiveDocumentWire(options: {
       id: p.id,
       title: p.title,
       ...(p.section ? { section: p.section } : {}),
+      ...(p.viewState
+        ? {
+            viewState: {
+              panX: p.viewState.panX,
+              panY: p.viewState.panY,
+              zoom: p.viewState.zoom,
+            },
+          }
+        : {}),
     }));
     const page: WhiteboardWirePage = {
       activePageId,

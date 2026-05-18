@@ -50,7 +50,8 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   log every state transition. Without this, prod debugging is impossible.
   Currently in use: `rid` (audio recorder), `wbsid` (whiteboard session),
   `obx` (upload-outbox row), `snp` (snapshot generation), `pvw`
-  (workspace preview-before-Start), `avx` (live-A/V session — Phase 4a;
+  (workspace preview-before-Start), `pvs` (per-page whiteboard pan/zoom —
+  Phase 5 task 8), `avx` (live-A/V session — Phase 4a;
   per-peer events also carry `peer=<peerId>`), `cev` (cost-event row —
   OpenAI usage observability), `blb` (blob cleanup CLI), `brs` (branch
   sweep CLI). See

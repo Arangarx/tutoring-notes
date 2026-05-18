@@ -2,7 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-export type PageStripRow = { id: string; title: string; section?: string };
+import type { PageViewState } from "@/lib/whiteboard/board-document-snapshot";
+
+export type PageStripRow = {
+  id: string;
+  title: string;
+  section?: string;
+  /** Tutor-authoritative; ignored by strip UI. */
+  viewState?: PageViewState;
+};
 
 export type PageStripProps = {
   variant: "tutor" | "student";

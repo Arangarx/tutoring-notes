@@ -15,8 +15,28 @@ import type {
   WhiteboardWireBroadcastExtras,
   WhiteboardWireRemoteDetails,
 } from "@/lib/whiteboard/sync-client";
+import type { PageViewState } from "@/lib/whiteboard/board-document-snapshot";
 import { useSyncTombstonedElementIds } from "@/hooks/useSyncTombstonedElementIds";
 import { resolveWhiteboardAssetReadUrl } from "@/lib/whiteboard/resolve-asset-read-url";
+
+function wireRowViewState(
+  p: WhiteboardWirePage["pageList"][number]
+): PageViewState | undefined {
+  const vs = (p as { viewState?: unknown }).viewState;
+  if (!vs || typeof vs !== "object") return undefined;
+  const o = vs as { panX?: unknown; panY?: unknown; zoom?: unknown };
+  if (
+    typeof o.panX === "number" &&
+    Number.isFinite(o.panX) &&
+    typeof o.panY === "number" &&
+    Number.isFinite(o.panY) &&
+    typeof o.zoom === "number" &&
+    Number.isFinite(o.zoom)
+  ) {
+    return { panX: o.panX, panY: o.panY, zoom: o.zoom };
+  }
+  return undefined;
+}
 
 /**
  * Wires the student Excalidraw to sync with the tutor, including
@@ -45,7 +65,7 @@ export function useStudentWhiteboardCanvas(
   const warnDedupeRef = useRef(new Set<string>());
 
   const [pageList, setPageList] = useState<
-    { id: string; title: string; section?: string }[]
+    { id: string; title: string; section?: string; viewState?: PageViewState }[]
   >([{ id: "p1", title: "Page 1" }]);
   const pageListRef = useRef(pageList);
   useEffect(() => {
@@ -134,6 +154,15 @@ export function useStudentWhiteboardCanvas(
           id: p.id,
           title: p.title,
           ...(p.section ? { section: p.section } : {}),
+          ...(p.viewState
+            ? {
+                viewState: {
+                  panX: p.viewState.panX,
+                  panY: p.viewState.panY,
+                  zoom: p.viewState.zoom,
+                },
+              }
+            : {}),
         })),
         ...(Object.keys(sectionsRegistryRef.current).length > 0
           ? { sections: { ...sectionsRegistryRef.current } }
@@ -154,13 +183,17 @@ export function useStudentWhiteboardCanvas(
       }
       if (page.pageList && page.pageList.length > 0) {
         setPageList(
-          page.pageList.map((p) => ({
-            id: p.id,
-            title: p.title,
-            ...(typeof (p as { section?: unknown }).section === "string"
-              ? { section: (p as { section: string }).section }
-              : {}),
-          }))
+          page.pageList.map((p) => {
+            const vs = wireRowViewState(p);
+            return {
+              id: p.id,
+              title: p.title,
+              ...(typeof (p as { section?: unknown }).section === "string"
+                ? { section: (p as { section: string }).section }
+                : {}),
+              ...(vs ? { viewState: { ...vs } } : {}),
+            };
+          })
         );
       }
       if (typeof page.sections !== "undefined") {
@@ -222,19 +255,36 @@ export function useStudentWhiteboardCanvas(
         if (toShow) {
           api.updateScene({ elements: toShow as ReadonlyArray<unknown> });
         }
-        if (details.follow && followTutorView) {
+        if (followTutorView) {
+          const act = activePageIdRef.current;
+          const wireRow = page.pageList.find((r) => r.id === act);
+          const vs = wireRow ? wireRowViewState(wireRow) : undefined;
           const prevState = api.getAppState() as Record<string, unknown>;
           const a = api as ExcalidrawApiLike & {
             updateScene: (s: { appState?: unknown; elements?: unknown }) => void;
           };
-          a.updateScene({
-            appState: {
-              ...prevState,
-              scrollX: details.follow!.scrollX,
-              scrollY: details.follow!.scrollY,
-              zoom: { value: details.follow!.zoom },
-            },
-          });
+          if (vs) {
+            a.updateScene({
+              appState: {
+                ...prevState,
+                scrollX: vs.panX,
+                scrollY: vs.panY,
+                zoom: { value: vs.zoom },
+              },
+            });
+            console.info(
+              `[pvs] pvs=${act} action=restore source=wire-v3 panX=${vs.panX} panY=${vs.panY} zoom=${vs.zoom}`
+            );
+          } else if (details.follow) {
+            a.updateScene({
+              appState: {
+                ...prevState,
+                scrollX: details.follow.scrollX,
+                scrollY: details.follow.scrollY,
+                zoom: { value: details.follow.zoom },
+              },
+            });
+          }
         }
         setTutorStreamReady(true);
       } catch (err) {
@@ -269,13 +319,17 @@ export function useStudentWhiteboardCanvas(
       const mergeTarget = details?.scenePageId ?? followTarget;
       if (page?.pageList && page.pageList.length > 0) {
         setPageList(
-          page.pageList.map((p) => ({
-            id: p.id,
-            title: p.title,
-            ...(typeof (p as { section?: unknown }).section === "string"
-              ? { section: (p as { section: string }).section }
-              : {}),
-          }))
+          page.pageList.map((p) => {
+            const vs = wireRowViewState(p);
+            return {
+              id: p.id,
+              title: p.title,
+              ...(typeof (p as { section?: unknown }).section === "string"
+                ? { section: (p as { section: string }).section }
+                : {}),
+              ...(vs ? { viewState: { ...vs } } : {}),
+            };
+          })
         );
       }
       if (page && typeof page.sections !== "undefined") {
@@ -334,7 +388,37 @@ export function useStudentWhiteboardCanvas(
         if (activePageIdRef.current === mergeTarget) {
           api.updateScene({ elements: merged as ReadonlyArray<unknown> });
         }
-        if (details?.follow && followTutorView) {
+        if (followTutorView && page?.pageList) {
+          const act = activePageIdRef.current;
+          const wireRow = page.pageList.find((r) => r.id === act);
+          const vs = wireRow ? wireRowViewState(wireRow) : undefined;
+          const prevState = api.getAppState() as Record<string, unknown>;
+          const a = api as ExcalidrawApiLike & {
+            updateScene: (s: { appState?: unknown; elements?: unknown }) => void;
+          };
+          if (vs) {
+            a.updateScene({
+              appState: {
+                ...prevState,
+                scrollX: vs.panX,
+                scrollY: vs.panY,
+                zoom: { value: vs.zoom },
+              },
+            });
+            console.info(
+              `[pvs] pvs=${act} action=restore source=wire-v2 panX=${vs.panX} panY=${vs.panY} zoom=${vs.zoom}`
+            );
+          } else if (details?.follow) {
+            a.updateScene({
+              appState: {
+                ...prevState,
+                scrollX: details.follow.scrollX,
+                scrollY: details.follow.scrollY,
+                zoom: { value: details.follow.zoom },
+              },
+            });
+          }
+        } else if (details?.follow && followTutorView) {
           const prevState = api.getAppState() as Record<string, unknown>;
           const a = api as ExcalidrawApiLike & {
             updateScene: (s: { appState?: unknown; elements?: unknown }) => void;
@@ -447,6 +531,53 @@ export function useStudentWhiteboardCanvas(
     });
     return off;
   }, [runV2Apply, runV3Apply, sync]);
+
+  useEffect(() => {
+    if (!sync || typeof sync.onRemotePageViewState !== "function") return;
+    const off = sync.onRemotePageViewState((_from, msg) => {
+      if (msg.role !== "tutor") return;
+      setPageList((prev) => {
+        const idx = prev.findIndex((p) => p.id === msg.pageId);
+        if (idx < 0) return prev;
+        const vs: PageViewState = {
+          panX: msg.panX,
+          panY: msg.panY,
+          zoom: msg.zoom,
+        };
+        const next = [...prev];
+        next[idx] = { ...next[idx]!, viewState: vs };
+        return next;
+      });
+      const api = excalidrawApiRef.current;
+      if (!followTutorView || !api || msg.pageId !== activePageIdRef.current) {
+        console.info(
+          `[pvs] pvs=${msg.pageId} action=wire-recv source=wire-recv panX=${msg.panX} panY=${msg.panY} zoom=${msg.zoom}`
+        );
+        return;
+      }
+      applyingRemoteRef.current = true;
+      try {
+        const prevState = api.getAppState() as Record<string, unknown>;
+        const a = api as ExcalidrawApiLike & {
+          updateScene: (s: { appState?: unknown; elements?: unknown }) => void;
+        };
+        a.updateScene({
+          appState: {
+            ...prevState,
+            scrollX: msg.panX,
+            scrollY: msg.panY,
+            zoom: { value: msg.zoom },
+          },
+        });
+        console.info(
+          `[pvs] pvs=${msg.pageId} action=wire-recv source=wire-recv panX=${msg.panX} panY=${msg.panY} zoom=${msg.zoom}`
+        );
+      } finally {
+        applyingRemoteRef.current = false;
+      }
+    });
+    return off;
+  }, [sync, followTutorView]);
 
   const syncActivePageElements = useCallback(
     (elements: ReadonlyArray<ExcalidrawLikeElement>) => {

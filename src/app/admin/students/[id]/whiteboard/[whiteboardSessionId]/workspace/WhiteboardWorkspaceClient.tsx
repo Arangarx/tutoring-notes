@@ -98,7 +98,7 @@ import {
 } from "@/lib/recording/upload-outbox-instance";
 import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter";
 import { PdfImageUploadButton } from "@/components/whiteboard/PdfImageUploadButton";
-import { PageStrip } from "@/components/whiteboard/PageStrip";
+import { PageStrip, type PageStripRow } from "@/components/whiteboard/PageStrip";
 import { MathInsertButton } from "@/components/whiteboard/MathInsertButton";
 import { DesmosInsertButton } from "@/components/whiteboard/DesmosInsertButton";
 import { UndoRedoButtons } from "@/components/whiteboard/UndoRedoButtons";
@@ -124,7 +124,7 @@ import {
   adaptWBElementsToExcalidraw,
   restoreAndSanitizeForPaint,
 } from "@/lib/whiteboard/scene-paint";
-import type { WhiteboardBoardDocumentV1 } from "@/lib/whiteboard/board-document-snapshot";
+import type { PageViewState, WhiteboardBoardDocumentV1 } from "@/lib/whiteboard/board-document-snapshot";
 import {
   clearSessionSceneDraft,
   loadTutorSessionRecoveryDraft,
@@ -161,6 +161,14 @@ type Props = {
 // `participantsWithFlowingAudio` input stays referentially equal
 // when there are no participants — avoids unnecessary re-evaluations.
 const EMPTY_FLOW_SET: ReadonlySet<string> = new Set<string>();
+
+function upsertPageStripViewState(
+  list: PageStripRow[],
+  pageId: string,
+  vs: PageViewState
+): PageStripRow[] {
+  return list.map((p) => (p.id === pageId ? { ...p, viewState: vs } : p));
+}
 
 // Smoke-4 (May 17, 2026): hard timeout on the audio-flow gate. If both
 // parties are present but neither has produced detectable audio-flow
@@ -364,6 +372,11 @@ export function WhiteboardWorkspaceClient({
    * timeout runs.
    */
   const pageSwitchProgrammaticRef = useRef(0);
+  /** Skips debounced viewport flush while applying stored/programmatic camera. */
+  const isApplyingViewportProgrammaticRef = useRef(false);
+  const viewportPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
   /**
    * Monotonic switch token — smoke-2 root cause.
    *
@@ -416,9 +429,9 @@ export function WhiteboardWorkspaceClient({
     () => undefined
   );
 
-  const [pageList, setPageList] = useState<
-    { id: string; title: string; section?: string }[]
-  >(() => [{ id: "p1", title: "Page 1" }]);
+  const [pageList, setPageList] = useState<PageStripRow[]>(() => [
+    { id: "p1", title: "Page 1" },
+  ]);
   const sectionsRegistryRef = useRef<Record<string, { label: string }>>({});
   const [sectionsRegistry, setSectionsRegistry] = useState<
     Record<string, { label: string }>
@@ -1312,6 +1325,7 @@ export function WhiteboardWorkspaceClient({
           id: p.id,
           title: p.title,
           ...(p.section ? { section: p.section } : {}),
+          ...(p.viewState ? { viewState: { ...p.viewState } } : {}),
         })),
         ...(Object.keys(sectionsRegistryRef.current).length > 0
           ? { sections: { ...sectionsRegistryRef.current } }
@@ -1363,6 +1377,7 @@ export function WhiteboardWorkspaceClient({
           id: p.id,
           title: p.title,
           ...(p.section ? { section: p.section } : {}),
+          ...(p.viewState ? { viewState: { ...p.viewState } } : {}),
         })),
         activePageId: activePageIdRef.current,
         pages,
@@ -1384,16 +1399,86 @@ export function WhiteboardWorkspaceClient({
     }
   }, [buildBoardDocumentForCheckpoint, whiteboardSessionId]);
 
+  const clearViewportPersistTimer = useCallback(() => {
+    if (viewportPersistTimerRef.current !== null) {
+      clearTimeout(viewportPersistTimerRef.current);
+      viewportPersistTimerRef.current = null;
+    }
+  }, []);
+
+  const flushViewportPersistNow = useCallback(
+    (source: "debounced" | "page-switch-preflush" | "visibility") => {
+      clearViewportPersistTimer();
+      const api = excalidrawAPIRef.current;
+      if (!api) return;
+      if (isApplyingViewportProgrammaticRef.current) return;
+      if (source === "debounced" && pageSwitchProgrammaticRef.current > 0) return;
+      const pid = activePageIdRef.current;
+      const st = api.getAppState() as {
+        scrollX: number;
+        scrollY: number;
+        zoom: { value: number };
+      };
+      const vs: PageViewState = {
+        panX: st.scrollX,
+        panY: st.scrollY,
+        zoom: st.zoom.value,
+      };
+      const nextList = upsertPageStripViewState(pageListRef.current, pid, vs);
+      pageListRef.current = nextList;
+      setPageList(nextList);
+      const srcTag =
+        source === "debounced"
+          ? "debounced-flush"
+          : source === "page-switch-preflush"
+            ? "page-switch"
+            : "visibility";
+      console.info(
+        `[pvs] pvs=${pid} action=flush source=${srcTag} panX=${vs.panX} panY=${vs.panY} zoom=${vs.zoom}`
+      );
+      if (sync && syncUrl) {
+        sync.broadcastPageViewState({
+          pageId: pid,
+          panX: vs.panX,
+          panY: vs.panY,
+          zoom: vs.zoom,
+        });
+        console.info(
+          `[pvs] pvs=${pid} action=wire-emit source=${srcTag} panX=${vs.panX} panY=${vs.panY} zoom=${vs.zoom}`
+        );
+      }
+      flushSessionBoardDocumentNow();
+    },
+    [
+      clearViewportPersistTimer,
+      flushSessionBoardDocumentNow,
+      sync,
+      syncUrl,
+    ]
+  );
+
+  const scheduleViewportPersist = useCallback(() => {
+    if (isApplyingViewportProgrammaticRef.current) return;
+    if (pageSwitchProgrammaticRef.current > 0) return;
+    if (viewportPersistTimerRef.current !== null) {
+      clearTimeout(viewportPersistTimerRef.current);
+    }
+    viewportPersistTimerRef.current = setTimeout(() => {
+      viewportPersistTimerRef.current = null;
+      flushViewportPersistNow("debounced");
+    }, 200);
+  }, [flushViewportPersistNow]);
+
   useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState !== "hidden") return;
-      flushSessionBoardDocumentNow();
+      flushViewportPersistNow("visibility");
     };
     const onPageHide = () => {
-      flushSessionBoardDocumentNow();
+      flushViewportPersistNow("visibility");
     };
     const onBeforeUnload = () => {
-      flushSessionBoardDocumentNow();
+      flushViewportPersistNow("visibility");
     };
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", onPageHide);
@@ -1403,7 +1488,11 @@ export function WhiteboardWorkspaceClient({
       window.removeEventListener("pagehide", onPageHide);
       window.removeEventListener("beforeunload", onBeforeUnload);
     };
-  }, [flushSessionBoardDocumentNow]);
+  }, [flushViewportPersistNow]);
+
+  useEffect(() => {
+    return () => clearViewportPersistTimer();
+  }, [clearViewportPersistTimer]);
 
   const getTutorLiveFollow = useCallback((): WhiteboardWireFollow => {
     const api = excalidrawAPIRef.current;
@@ -1476,7 +1565,26 @@ export function WhiteboardWorkspaceClient({
       // Drain the throttled onChange+event log for the old tab *before* we
       // capture its scene.
       flushThrottledFrameNow();
+      flushViewportPersistNow("page-switch-preflush");
       const from = activePageIdRef.current;
+      if (api) {
+        const st = api.getAppState() as {
+          scrollX: number;
+          scrollY: number;
+          zoom: { value: number };
+        };
+        const vs: PageViewState = {
+          panX: st.scrollX,
+          panY: st.scrollY,
+          zoom: st.zoom.value,
+        };
+        console.info(
+          `[pvs] pvs=${from} action=capture source=page-switch panX=${vs.panX} panY=${vs.panY} zoom=${vs.zoom}`
+        );
+        const capturedList = upsertPageStripViewState(pageListRef.current, from, vs);
+        pageListRef.current = capturedList;
+        setPageList(capturedList);
+      }
       // Freeze the leaving scene. Safe because activePageIdRef has NOT
       // moved yet — any prior in-flight switch is still hydrating and
       // hasn't bumped activePageIdRef either (see atomic swap below).
@@ -1523,6 +1631,38 @@ export function WhiteboardWorkspaceClient({
         // stale (activePageIdRef = new, scene = old) state.
         activePageIdRef.current = nextId;
         api.updateScene({ elements: next as ReadonlyArray<unknown> });
+        const vsNext = pageListRef.current.find((p) => p.id === nextId)?.viewState;
+        if (vsNext) {
+          isApplyingViewportProgrammaticRef.current = true;
+          try {
+            const prevState = api.getAppState() as Record<string, unknown>;
+            const a = api as ExcalidrawApiLike & {
+              updateScene: (s: {
+                appState?: unknown;
+                elements?: unknown;
+              }) => void;
+            };
+            a.updateScene({
+              appState: {
+                ...prevState,
+                scrollX: vsNext.panX,
+                scrollY: vsNext.panY,
+                zoom: { value: vsNext.zoom },
+              },
+            });
+            console.info(
+              `[pvs] pvs=${nextId} action=restore source=page-switch panX=${vsNext.panX} panY=${vsNext.panY} zoom=${vsNext.zoom}`
+            );
+          } finally {
+            queueMicrotask(() => {
+              isApplyingViewportProgrammaticRef.current = false;
+            });
+          }
+        } else {
+          console.info(
+            `[pvs] pvs=${nextId} action=restore source=page-switch viewState=absent`
+          );
+        }
         committed = true;
       } finally {
         // Hold the guard across two animation frames + a microtask tail
@@ -1548,7 +1688,7 @@ export function WhiteboardWorkspaceClient({
       setActivePageId(nextId);
       flushDocumentBroadcastNow();
     },
-    [flushDocumentBroadcastNow, flushThrottledFrameNow, whiteboardSessionId]
+    [flushDocumentBroadcastNow, flushThrottledFrameNow, flushViewportPersistNow, whiteboardSessionId]
   );
 
   const addTutorPage = useCallback(() => {
@@ -1558,7 +1698,25 @@ export function WhiteboardWorkspaceClient({
     tutorSwitchTokenRef.current += 1;
     const api = excalidrawAPIRef.current;
     const from = activePageIdRef.current;
+    flushThrottledFrameNow();
+    flushViewportPersistNow("page-switch-preflush");
     if (api) {
+      const st = api.getAppState() as {
+        scrollX: number;
+        scrollY: number;
+        zoom: { value: number };
+      };
+      const vs: PageViewState = {
+        panX: st.scrollX,
+        panY: st.scrollY,
+        zoom: st.zoom.value,
+      };
+      console.info(
+        `[pvs] pvs=${from} action=capture source=page-switch panX=${vs.panX} panY=${vs.panY} zoom=${vs.zoom}`
+      );
+      const capList = upsertPageStripViewState(pageListRef.current, from, vs);
+      pageListRef.current = capList;
+      setPageList(capList);
       // Freeze the leaving scene unconditionally — see selectTutorPage
       // comment for the same guard rationale.
       pageDataRef.current[from] = api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>;
@@ -1588,8 +1746,6 @@ export function WhiteboardWorkspaceClient({
     pageListRef.current = nextList;
     setPageList(nextList);
     pageDataRef.current[newId] = [];
-    // Still on `from`: drain the last throttled event-log frame for the leaving page.
-    flushThrottledFrameNow();
     if (api) {
       pageSwitchProgrammaticRef.current += 1;
       try {
@@ -1619,7 +1775,7 @@ export function WhiteboardWorkspaceClient({
     if (api) {
       flushDocumentBroadcastNow();
     }
-  }, [flushDocumentBroadcastNow, flushThrottledFrameNow]);
+  }, [flushDocumentBroadcastNow, flushThrottledFrameNow, flushViewportPersistNow]);
 
   const removeTutorPage = useCallback(
     (pageId: string) => {
@@ -2247,6 +2403,7 @@ export function WhiteboardWorkspaceClient({
         id: p.id,
         title: p.title,
         ...(p.section ? { section: p.section } : {}),
+        ...(p.viewState ? { viewState: { ...p.viewState } } : {}),
       }));
       pageListRef.current = list;
       setPageList(list);
@@ -2285,6 +2442,38 @@ export function WhiteboardWorkspaceClient({
         api.updateScene({ elements: toPaint });
       } finally {
         applyingRemoteToCanvasRef.current = false;
+      }
+      const vs0 = doc.pageList.find((p) => p.id === doc.activePageId)?.viewState;
+      if (vs0) {
+        isApplyingViewportProgrammaticRef.current = true;
+        try {
+          const prevState = api.getAppState() as Record<string, unknown>;
+          const a = api as ExcalidrawApiLike & {
+            updateScene: (s: {
+              appState?: unknown;
+              elements?: unknown;
+            }) => void;
+          };
+          a.updateScene({
+            appState: {
+              ...prevState,
+              scrollX: vs0.panX,
+              scrollY: vs0.panY,
+              zoom: { value: vs0.zoom },
+            },
+          });
+          console.info(
+            `[pvs] pvs=${doc.activePageId} action=restore source=reload-restore panX=${vs0.panX} panY=${vs0.panY} zoom=${vs0.zoom}`
+          );
+        } finally {
+          queueMicrotask(() => {
+            isApplyingViewportProgrammaticRef.current = false;
+          });
+        }
+      } else {
+        console.info(
+          `[pvs] pvs=${doc.activePageId} action=restore source=reload-restore viewState=absent`
+        );
       }
       if (sync && syncUrl) {
         flushDocumentBroadcastNow();
@@ -2439,6 +2628,9 @@ export function WhiteboardWorkspaceClient({
       if (sync && syncUrl) {
         scheduleDocumentBroadcast();
       }
+      if (!isApplyingViewportProgrammaticRef.current) {
+        scheduleViewportPersist();
+      }
 
       // Excalidraw's own image tool / library / drop: elements carry
       // fileId but no customData.assetUrl. Upload from local BinaryFiles
@@ -2505,6 +2697,7 @@ export function WhiteboardWorkspaceClient({
       onLocalElementSnapshot,
       recorderOnCanvasChange,
       scheduleDocumentBroadcast,
+      scheduleViewportPersist,
       studentId,
       sync,
       syncUrl,

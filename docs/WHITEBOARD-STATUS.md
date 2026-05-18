@@ -380,6 +380,18 @@ to know when to revisit.
 
 ---
 
+## Per-page view state SHIPPED (Phase 5 task 8, tier b — May 2026)
+
+**Branch:** `feat/per-page-view-state` (merge after Andrew smoke).
+
+**Behavior:** Each board tab stores optional `viewState` (`panX`/`panY`/`zoom`) on `WhiteboardBoardDocumentV1.pageList[]`. Tutor capture runs on page switch; a **200ms debounced** flush updates the document, `sessionStorage` draft, and `pageViewState` wire envelopes for student follow-mode. Tab hide / `beforeunload` runs a best-effort viewport flush first. Student applies tutor patches only (no `pageViewState` emits). **Tier (c)** — replay scrubber respecting historical viewports per timestep — **DEFERRED**.
+
+**Smoke:** Use the checklist in `docs/handoff/per-page-view-state-bootstrapper.md` (SMOKE CHECKLIST FOR ANDREW).
+
+**Deferred:** Per-viewer independent-mode persistence (Phase 5 task 3); replay timeline scrub viewport history (tier c).
+
+---
+
 ## Follow-ups (NOT in Phase 1, tracked here so they don't get lost)
 
 - **Backlog of record (whiteboard + cross-cutting):** `docs/BACKLOG.md` section **“Whiteboard — implementation / design queue”** (PDF workbook, session audio, replay scrub, multi-page log, student follow UX). Add there first; keep this file’s follow-ups to Phase-1-adjacent crumbs.
