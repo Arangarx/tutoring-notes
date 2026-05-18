@@ -10,10 +10,12 @@ import { generateShareToken, parseLinksFromTextarea } from "@/lib/security";
 import { assertOwnsStudent, getStudentScope, requireStudentScope } from "@/lib/student-scope";
 import { generateSessionNote, estimateTokens, MAX_INPUT_TOKENS } from "@/lib/ai";
 import { parseDateOnlyInput } from "@/lib/date-only";
-import { transcribeAudio } from "@/lib/transcribe";
+import { mapWithConcurrency, transcribeAudio } from "@/lib/transcribe";
 import { getAudioUrl, getBlobMetadata, deleteBlob } from "@/lib/blob";
 import {
   buildTranscribeAndGenerateResult,
+  FRIENDLY_TRANSCRIPTION_TIMEOUT_MESSAGE,
+  shouldTreatAsTranscriptionTimeout,
   type TranscribeAndGenerateResult,
 } from "./transcribe-result";
 import { createActionCorrelationId } from "@/lib/action-correlation";
@@ -22,6 +24,8 @@ import { looksLikeSilenceHallucination } from "@/lib/whisper-guardrails";
 
 const HALLUCINATION_MIC_MESSAGE =
   "We couldn't detect clear speech in this recording. Whisper sometimes invents text when the mic picks up silence or the wrong device. Check the browser's microphone permission, choose the correct input, speak for at least 15–20 seconds, then try again. You can also use Upload and pick a file from another recorder.";
+
+const TRANSCRIPT_OUTER_CONCURRENCY = 3;
 
 // Re-export for callers that still import the type from this module.
 export type { TranscribeAndGenerateResult };
@@ -326,6 +330,7 @@ export async function transcribeAndGenerateAction(
   recordings: Array<{ blobUrl: string; mimeType: string }>
 ): Promise<TranscribeAndGenerateResult> {
   const rid = createActionCorrelationId();
+  const actionStartedMs = performance.now();
   console.log(
     `[transcribeAndGenerateAction] rid=${rid} studentId=${studentId} segments=${recordings.length} begin`
   );
@@ -338,6 +343,17 @@ export async function transcribeAndGenerateAction(
     }
     return out;
   } catch (err) {
+    const elapsedMs = performance.now() - actionStartedMs;
+    if (shouldTreatAsTranscriptionTimeout(err, elapsedMs)) {
+      console.error(
+        `[transcribeAndGenerateAction] rid=${rid} invocation budget exceeded (elapsedMs=${Math.round(elapsedMs)})`
+      );
+      return {
+        ok: false,
+        error: FRIENDLY_TRANSCRIPTION_TIMEOUT_MESSAGE,
+        debugId: rid,
+      };
+    }
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[transcribeAndGenerateAction] rid=${rid} thrown:`, msg);
     if (isTransientDbConnectionError(err)) {
@@ -366,9 +382,10 @@ async function _transcribeAndGenerateImpl(
   rid: string
 ): Promise<TranscribeAndGenerateResult> {
   const scope = await requireStudentScope();
-  if (scope.kind === "env") {
+  if (scope.kind !== "admin") {
     return transcribeFail(rid, "Audio features require a DB-backed tutor account.");
   }
+  const tutorAdminId = scope.adminId;
   await assertOwnsStudent(studentId);
 
   if (recordings.length === 0) {
@@ -395,28 +412,23 @@ async function _transcribeAndGenerateImpl(
     "audio/flac": "flac",
   };
 
-  // Process each segment: create DB row, download, transcribe, persist transcript.
-  const createdRecordingIds: string[] = [];
-  const transcriptParts: string[] = [];
-  /** Last segment's Whisper-reported duration (used for late hallucination checks). */
-  let lastWhisperDurationSeconds: number | null = null;
-  /**
-   * Per-segment hallucinations don't fail the whole batch — we drop the bad segment
-   * (delete blob + DB row) and keep going. Only if every segment was empty/junk do
-   * we hard-fail with HALLUCINATION_MIC_MESSAGE. Surfacing this as a warning lets
-   * tutors recover from "I accidentally stopped one of two recordings early".
-   */
-  let skippedHallucinationSegments = 0;
-  /**
-   * Per kept segment: when the row was created (≈ when MediaRecorder stopped) plus
-   * Whisper-reported duration. Used to derive sessionStartedAt / sessionEndedAt so
-   * the form can pre-fill Session start / end before the tutor saves. Skipped
-   * (silent) segments are excluded so a 4-second silent stop doesn't pull the
-   * derived end time forward.
-   */
-  const keptSegmentTimings: Array<{ createdAt: Date; durationSeconds: number }> = [];
+  console.log(
+    `[transcribe-parallel] rid=${rid} outer-cap=${TRANSCRIPT_OUTER_CONCURRENCY} segments=${recordings.length} mode=parallel`
+  );
 
-  for (let i = 0; i < recordings.length; i++) {
+  type SegmentOutcome =
+    | { kind: "fatal"; index: number; result: TranscribeAndGenerateResult }
+    | { kind: "skipped"; index: number }
+    | {
+        kind: "kept";
+        index: number;
+        transcript: string;
+        recordingId: string;
+        createdAt: Date;
+        durationSeconds: number | null;
+      };
+
+  async function processSegment(i: number): Promise<SegmentOutcome> {
     const { blobUrl, mimeType } = recordings[i];
 
     // Get metadata from Vercel Blob. Retry once after a short pause to absorb
@@ -441,14 +453,15 @@ async function _transcribeAndGenerateImpl(
       resolvedMimeType = meta.contentType || mimeType;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(
-        `[transcribeAndGenerate] rid=${rid} getBlobMetadata failed twice:`,
-        msg
-      );
-      return transcribeFail(
-        rid,
-        `Could not reach audio file${recordings.length > 1 ? ` (segment ${i + 1})` : ""}. Please try uploading again.`
-      );
+      console.error(`[transcribeAndGenerate] rid=${rid} getBlobMetadata failed twice:`, msg);
+      return {
+        kind: "fatal",
+        index: i,
+        result: transcribeFail(
+          rid,
+          `Could not reach audio file${recordings.length > 1 ? ` (segment ${i + 1})` : ""}. Please try uploading again.`
+        ),
+      };
     }
 
     // Create the recording row early so we have its ID even if transcription fails.
@@ -459,7 +472,7 @@ async function _transcribeAndGenerateImpl(
       () =>
         db.sessionRecording.create({
           data: {
-            adminUserId: scope.adminId,
+            adminUserId: tutorAdminId,
             studentId,
             blobUrl,
             mimeType: resolvedMimeType,
@@ -488,34 +501,45 @@ async function _transcribeAndGenerateImpl(
       const msg = err instanceof Error ? err.message : String(err);
       const cause = err instanceof Error && (err as Error & { cause?: unknown }).cause;
       console.error(`[transcribeAndGenerate] rid=${rid} download failed:`, msg, cause ? `cause=${String(cause)}` : "");
-      return transcribeFail(
-        rid,
-        `Could not download audio for transcription${recordings.length > 1 ? ` (segment ${i + 1})` : ""}. Please try again.`
-      );
+      return {
+        kind: "fatal",
+        index: i,
+        result: transcribeFail(
+          rid,
+          `Could not download audio for transcription${recordings.length > 1 ? ` (segment ${i + 1})` : ""}. Please try again.`
+        ),
+      };
     }
 
     // Transcribe via Whisper.
     const baseMime = resolvedMimeType.split(";")[0].trim().toLowerCase();
     const ext = MIME_TO_EXT[baseMime] ?? baseMime.split("/")[1]?.split(";")[0] ?? "webm";
     const filename = `session-${studentId}-part${i + 1}.${ext}`;
-    const transcribeResult = await transcribeAudio(audioBuffer, filename, resolvedMimeType, {
-      adminUserId: scope.adminId,
-      studentId,
-      sessionRecordingId: recording.id,
-    });
+    const transcribeResult = await transcribeAudio(
+      audioBuffer,
+      filename,
+      resolvedMimeType,
+      {
+        adminUserId: tutorAdminId,
+        studentId,
+        sessionRecordingId: recording.id,
+      },
+      { rid }
+    );
 
     if ("error" in transcribeResult) {
       if (transcribeResult.error === "not configured") {
-        return transcribeFail(rid, "AI transcription is not configured on this server.");
+        return {
+          kind: "fatal",
+          index: i,
+          result: transcribeFail(rid, "AI transcription is not configured on this server."),
+        };
       }
-      return transcribeFail(rid, transcribeResult.error);
+      return { kind: "fatal", index: i, result: transcribeFail(rid, transcribeResult.error) };
     }
 
     if (
-      looksLikeSilenceHallucination(
-        transcribeResult.transcript,
-        transcribeResult.durationSeconds
-      )
+      looksLikeSilenceHallucination(transcribeResult.transcript, transcribeResult.durationSeconds)
     ) {
       console.warn(
         `[transcribeAndGenerate] rid=${rid} likely silence/mic hallucination — skipping segment`,
@@ -531,14 +555,8 @@ async function _transcribeAndGenerateImpl(
         () => db.sessionRecording.delete({ where: { id: recording.id } }),
         { label: "deleteSessionRecordingHallucination" }
       ).catch(() => undefined);
-      skippedHallucinationSegments += 1;
-      // Skip this segment instead of failing the whole batch — earlier good segments
-      // are kept and reported via `warning` in the result. If every segment is bad,
-      // we hard-fail after the loop with HALLUCINATION_MIC_MESSAGE.
-      continue;
+      return { kind: "skipped", index: i };
     }
-
-    lastWhisperDurationSeconds = transcribeResult.durationSeconds;
 
     // Persist transcript + duration on the recording row.
     await withDbRetry(
@@ -553,11 +571,54 @@ async function _transcribeAndGenerateImpl(
       { label: "updateSessionRecordingTranscript" }
     );
 
-    createdRecordingIds.push(recording.id);
-    transcriptParts.push(transcribeResult.transcript);
-    keptSegmentTimings.push({
+    return {
+      kind: "kept",
+      index: i,
+      transcript: transcribeResult.transcript,
+      recordingId: recording.id,
       createdAt: recording.createdAt,
-      durationSeconds: transcribeResult.durationSeconds ?? 0,
+      durationSeconds: transcribeResult.durationSeconds,
+    };
+  }
+
+  const outcomes = await mapWithConcurrency(
+    recordings.map((_, i) => i),
+    TRANSCRIPT_OUTER_CONCURRENCY,
+    async (i) => processSegment(i)
+  );
+
+  const createdRecordingIds: string[] = [];
+  const transcriptParts: string[] = [];
+  /** Last segment's Whisper-reported duration (used for late hallucination checks). */
+  let lastWhisperDurationSeconds: number | null = null;
+  /**
+   * Per-segment hallucinations don't fail the whole batch — we drop the bad segment
+   * (delete blob + DB row) and keep going. Only if every segment was empty/junk do
+   * we hard-fail with HALLUCINATION_MIC_MESSAGE. Surfacing this as a warning lets
+   * tutors recover from "I accidentally stopped one of two recordings early".
+   */
+  let skippedHallucinationSegments = 0;
+  /**
+   * Per kept segment: when the row was created (≈ when MediaRecorder stopped) plus
+   * Whisper-reported duration. Used to derive sessionStartedAt / sessionEndedAt so
+   * the form can pre-fill Session start / end before the tutor saves. Skipped
+   * (silent) segments are excluded so a 4-second silent stop doesn't pull the
+   * derived end time forward.
+   */
+  const keptSegmentTimings: Array<{ createdAt: Date; durationSeconds: number }> = [];
+
+  for (const o of outcomes) {
+    if (o.kind === "fatal") return o.result;
+    if (o.kind === "skipped") {
+      skippedHallucinationSegments += 1;
+      continue;
+    }
+    lastWhisperDurationSeconds = o.durationSeconds;
+    createdRecordingIds.push(o.recordingId);
+    transcriptParts.push(o.transcript);
+    keptSegmentTimings.push({
+      createdAt: o.createdAt,
+      durationSeconds: o.durationSeconds ?? 0,
     });
   }
 
@@ -652,7 +713,7 @@ async function _transcribeAndGenerateImpl(
     studentName: student.name,
     sessionText: trimmed,
     template,
-    costProvenance: { adminUserId: scope.adminId, studentId },
+    costProvenance: { adminUserId: tutorAdminId, studentId },
   });
 
   if ("error" in genResult) {

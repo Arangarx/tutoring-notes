@@ -8,10 +8,12 @@ import { db, withDbRetry } from "@/lib/db";
 import { assertOwnsStudent, requireStudentScope } from "@/lib/student-scope";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import { createActionCorrelationId } from "@/lib/action-correlation";
-import { transcribeAudio } from "@/lib/transcribe";
+import { mapWithConcurrency, transcribeAudio } from "@/lib/transcribe";
 import { generateSessionNote, estimateTokens, MAX_INPUT_TOKENS } from "@/lib/ai";
 import {
   buildTranscribeAndGenerateResult,
+  FRIENDLY_TRANSCRIPTION_TIMEOUT_MESSAGE,
+  shouldTreatAsTranscriptionTimeout,
   type TranscribeAndGenerateResult,
 } from "@/app/admin/students/[id]/transcribe-result";
 import { looksLikeSilenceHallucination } from "@/lib/whisper-guardrails";
@@ -831,6 +833,8 @@ const MIME_TO_EXT: Record<string, string> = {
   "audio/flac": "flac",
 };
 
+const WB_TRANSCRIPT_OUTER_CONCURRENCY = 3;
+
 /**
  * Transcribe the audio recording(s) captured during a whiteboard
  * session and run `generateSessionNote` on the combined transcript.
@@ -852,18 +856,20 @@ export async function generateNotesFromWhiteboardSessionAction(
   whiteboardSessionId: string
 ): Promise<TranscribeAndGenerateResult> {
   const rid = createActionCorrelationId();
-  console.log(
-    `[generateNotesFromWB] rid=${rid} wbsid=${whiteboardSessionId} begin`
-  );
+  console.log(`[generateNotesFromWB] rid=${rid} wbsid=${whiteboardSessionId} begin`);
 
-  const scope = await requireStudentScope();
-  if (scope.kind === "env") {
-    return {
-      ok: false,
-      error: "Audio transcription requires a DB-backed tutor account.",
-      debugId: rid,
-    };
-  }
+  const actionStartedMs = performance.now();
+
+  try {
+    const scope = await requireStudentScope();
+    if (scope.kind !== "admin") {
+      return {
+        ok: false,
+        error: "Audio transcription requires a DB-backed tutor account.",
+        debugId: rid,
+      };
+    }
+    const tutorAdminId = scope.adminId;
 
   const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
   const studentId = session.studentId;
@@ -911,12 +917,22 @@ export async function generateNotesFromWhiteboardSessionAction(
     { label: "generateNotesFromWB.template" }
   );
 
-  // Transcribe each segment.
-  const transcriptParts: string[] = [];
-  const keptTimings: Array<{ createdAt: Date; durationSeconds: number }> = [];
-  let skippedHallucinationSegments = 0;
+  console.log(
+    `[transcribe-parallel] rid=${rid} outer-cap=${WB_TRANSCRIPT_OUTER_CONCURRENCY} segments=${audioRows.length} mode=parallel`
+  );
 
-  for (let i = 0; i < audioRows.length; i++) {
+  type SegmentOutcome =
+    | { kind: "fatal"; index: number; result: TranscribeAndGenerateResult }
+    | { kind: "skipped"; index: number }
+    | {
+        kind: "kept";
+        index: number;
+        transcript: string;
+        durationSeconds: number | null;
+        createdAt: Date;
+      };
+
+  async function processSegment(i: number): Promise<SegmentOutcome> {
     const row = audioRows[i];
     let audioBuffer: Buffer;
     try {
@@ -933,9 +949,13 @@ export async function generateNotesFromWhiteboardSessionAction(
         err
       );
       return {
-        ok: false,
-        error: `Could not download audio segment ${i + 1}. Please try again.`,
-        debugId: rid,
+        kind: "fatal",
+        index: i,
+        result: {
+          ok: false,
+          error: `Could not download audio segment ${i + 1}. Please try again.`,
+          debugId: rid,
+        },
       };
     }
 
@@ -944,32 +964,38 @@ export async function generateNotesFromWhiteboardSessionAction(
       MIME_TO_EXT[baseMime] ?? baseMime.split("/")[1]?.split(";")[0] ?? "webm";
     const filename = `wb-${whiteboardSessionId}-part${i + 1}.${ext}`;
     const result = await transcribeAudio(audioBuffer, filename, row.mimeType, {
-      adminUserId: scope.adminId,
+      adminUserId: tutorAdminId,
       studentId,
       sessionRecordingId: row.id,
       whiteboardSessionId,
-    });
+    }, { rid });
 
     if ("error" in result) {
       if (result.error === "not configured") {
         return {
-          ok: false,
-          error: "AI transcription is not configured on this server.",
-          debugId: rid,
+          kind: "fatal",
+          index: i,
+          result: {
+            ok: false,
+            error: "AI transcription is not configured on this server.",
+            debugId: rid,
+          },
         };
       }
-      return { ok: false, error: result.error, debugId: rid };
+      return {
+        kind: "fatal",
+        index: i,
+        result: { ok: false, error: result.error, debugId: rid },
+      };
     }
 
     if (looksLikeSilenceHallucination(result.transcript, result.durationSeconds)) {
       console.warn(
         `[generateNotesFromWB] rid=${rid} wbsid=${whiteboardSessionId} segment ${i + 1} likely silence — skipping`
       );
-      skippedHallucinationSegments += 1;
-      continue;
+      return { kind: "skipped", index: i };
     }
 
-    // Persist transcript + duration on the recording row for future reference.
     await withDbRetry(
       () =>
         db.sessionRecording.update({
@@ -982,10 +1008,35 @@ export async function generateNotesFromWhiteboardSessionAction(
       { label: "generateNotesFromWB.updateTranscript" }
     );
 
-    transcriptParts.push(result.transcript);
-    keptTimings.push({
+    return {
+      kind: "kept",
+      index: i,
+      transcript: result.transcript,
+      durationSeconds: result.durationSeconds,
       createdAt: row.createdAt,
-      durationSeconds: result.durationSeconds ?? 0,
+    };
+  }
+
+  const outcomes = await mapWithConcurrency(
+    audioRows.map((_, i) => i),
+    WB_TRANSCRIPT_OUTER_CONCURRENCY,
+    async (i) => processSegment(i)
+  );
+
+  const transcriptParts: string[] = [];
+  const keptTimings: Array<{ createdAt: Date; durationSeconds: number }> = [];
+  let skippedHallucinationSegments = 0;
+
+  for (const o of outcomes) {
+    if (o.kind === "fatal") return o.result;
+    if (o.kind === "skipped") {
+      skippedHallucinationSegments += 1;
+      continue;
+    }
+    transcriptParts.push(o.transcript);
+    keptTimings.push({
+      createdAt: o.createdAt,
+      durationSeconds: o.durationSeconds ?? 0,
     });
   }
 
@@ -1032,7 +1083,7 @@ export async function generateNotesFromWhiteboardSessionAction(
     sessionText: trimmed,
     template,
     costProvenance: {
-      adminUserId: scope.adminId,
+      adminUserId: tutorAdminId,
       studentId,
       whiteboardSessionId,
     },
@@ -1055,6 +1106,26 @@ export async function generateNotesFromWhiteboardSessionAction(
     sessionEndedAt,
     debugId: rid,
   });
+  } catch (err: unknown) {
+    const elapsedMs = performance.now() - actionStartedMs;
+    if (shouldTreatAsTranscriptionTimeout(err, elapsedMs)) {
+      console.error(
+        `[generateNotesFromWB] rid=${rid} wbsid=${whiteboardSessionId} invocation budget exceeded (elapsedMs=${Math.round(elapsedMs)})`
+      );
+      return {
+        ok: false,
+        error: FRIENDLY_TRANSCRIPTION_TIMEOUT_MESSAGE,
+        debugId: rid,
+      };
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[generateNotesFromWB] rid=${rid} wbsid=${whiteboardSessionId} thrown:`, msg);
+    return {
+      ok: false,
+      error: `Server error during transcription: ${msg}. Please try again.`,
+      debugId: rid,
+    };
+  }
 }
 
 export type RegisterWhiteboardSessionAudioSegmentResult =

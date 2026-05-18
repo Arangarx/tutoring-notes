@@ -1,3 +1,16 @@
+/** User-facing copy when the server action hits the platform time budget (Vercel / long sessions). */
+export const FRIENDLY_TRANSCRIPTION_TIMEOUT_MESSAGE =
+  "This recording is taking longer than expected to process. For long sessions (60+ min), try uploading the recording in two shorter parts from Voice Memos / Audacity, or paste a text summary. We're improving long-session handling in the background.";
+
+/** Heuristic: Vercel / runtime timeout vs other errors (used only in action catch paths). */
+export function shouldTreatAsTranscriptionTimeout(err: unknown, elapsedMs: number): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (msg.includes("FUNCTION_INVOCATION_TIMEOUT")) return true;
+  if (err instanceof Error && err.name === "TimeoutError") return true;
+  if (elapsedMs >= 290_000) return true;
+  return false;
+}
+
 /**
  * Pure helper for shaping the result of `transcribeAndGenerateAction`.
  *
