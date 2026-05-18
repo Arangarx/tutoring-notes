@@ -23,7 +23,7 @@ git status                                                # if uncommitted chang
 git fetch origin                                          # retry on transient DNS failures (Andrew's git-push-retry rule applies)
 git checkout master                                       # switch to master
 git pull origin master                                    # fast-forward
-git log -1 --format='%H %s'                               # expect a tip at or after 94391c3 (housekeeping bootstrapper dual-DB update); if older, STOP
+git log -1 --format='%H %s'                               # expect a tip at or after 22d9afc (housekeeping merge); if older, STOP
 git checkout -b feat/per-page-view-state                  # branch off master
 git status                                                # confirm clean tree on new branch
 ```
@@ -32,8 +32,6 @@ git status                                                # confirm clean tree o
 - Push after Commit 1: `git push -u origin feat/per-page-view-state`. Triggers Vercel Preview deploy.
 - Smoke happens against the Vercel Preview URL Andrew will share back. You DO NOT smoke this; Andrew smokes it on real hardware. Your job is build + unit tests + push + report.
 - **NEVER push directly to master.** Branch → commit → push → smoke (Andrew) → merge (Andrew or you-on-Andrew's-go-ahead).
-
-**PARALLEL EXECUTION AWARENESS**: A second Composer chat is running `chore/housekeeping-utilities` against the SAME `master` base in parallel with you. Tiny overlap on `AGENTS.md` only — both chats register a 3-letter ID prefix in the per-session-ID-logging section (you'll register `pvs`; housekeeping registers `blb`/`brs`). If you encounter a merge conflict on `AGENTS.md` at merge time, the resolution is "keep both ID prefix lines, no other resolution needed." Otherwise zero file overlap with housekeeping (they're in `scripts/`, you're in `src/`).
 
 ## Project context
 
@@ -165,7 +163,7 @@ For replay specifically: when replay viewer lands on a page, apply that page's v
 
 ### Commit 6 — Docs + ID-prefix registration + STATUS update
 
-- **Update `AGENTS.md`**: add a line in the per-session-ID-logging section registering `pvs` (per-page view state — Phase 5 task 8). ONE-LINE addition; don't restructure. NOTE: housekeeping parallel chat may also be adding lines for `blb`/`brs` to the same section; trivial merge conflict if both land — resolution is "keep both ID-prefix lines."
+- **Update `AGENTS.md`**: add a line in the per-session-ID-logging section registering `pvs` (per-page view state — Phase 5 task 8). ONE-LINE addition; don't restructure.
 - **Update `docs/WHITEBOARD-STATUS.md`**: append a "Per-page view state SHIPPED" entry with commit hashes, behavior summary, smoke checklist, and the explicit "tier (c) replay scrubber respects historical view state is DEFERRED" note. Follow the existing STATUS-doc pattern (sibling completed entries are the template).
 - **Add a brief section to `docs/RECORDER-LIFECYCLE.md`** OR a sibling whiteboard-specific doc explaining the new flush triggers (page-switch, debounced 200ms, tab-close best-effort) so future debugging has a reference. ~10 lines.
 
@@ -217,11 +215,10 @@ Andrew runs these against the Vercel Preview URL on real hardware (his laptop + 
 6. **If Andrew confirms smoke pass and asks you to merge**:
    ```powershell
    git checkout master
-   git pull origin master                  # fast-forward; may include the housekeeping merge if that landed first
+   git pull origin master
    git merge --no-ff feat/per-page-view-state
    git push origin master
    ```
-   If `git pull` brings in the housekeeping merge and `AGENTS.md` has a conflict on the ID-prefix lines: keep both blocks (housekeeping's `blb`/`brs` lines AND your `pvs` line), nothing else needs resolution.
 
 ## STOP CONDITIONS
 
@@ -245,4 +242,3 @@ Andrew runs these against the Vercel Preview URL on real hardware (his laptop + 
 - Anti-loop guard on programmatic viewport applies is non-negotiable (Constraint #6 / Commit 2). Infinite loop on page switch = session-killing bug.
 - Replay backward compatibility is non-negotiable (Constraint #3). Old sessions must render normally.
 - Logging on every state transition (capture, restore, flush, wire-emit, wire-recv) is mandatory per workspace convention.
-- Parallel chat awareness: tiny `AGENTS.md` conflict at merge is expected; resolution is trivial (keep both).
