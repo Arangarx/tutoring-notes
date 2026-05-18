@@ -390,6 +390,11 @@ to know when to revisit.
 
 **Deferred:** Per-viewer independent-mode persistence (Phase 5 task 3); replay timeline scrub viewport history (tier c).
 
+**Smoke follow-ups (May 2026 pilot):**
+
+- **Replay / event-log player** (`WhiteboardReplay`) still reconstructs scenes from the **event log only** — it does **not** read `pageList[].viewState` from the board document, so **saved pan/zoom does not appear in replay** until we either emit viewport into the log or load a final board snapshot alongside replay (tier **(c)** territory).
+- **sessionStorage board draft** skips silently when JSON exceeds **4MB** (`session-scene-draft.ts`); we now **console.warn** when that happens. Heavy PDF boards should rely on **IndexedDB checkpoint “Load draft into board”** after refresh. A prior bug **merged** stale per-tab element buckets across two hydrates — fixed by replacing `pageDataRef` wholesale when applying `WhiteboardBoardDocumentV1`.
+
 ---
 
 ## Follow-ups (NOT in Phase 1, tracked here so they don't get lost)

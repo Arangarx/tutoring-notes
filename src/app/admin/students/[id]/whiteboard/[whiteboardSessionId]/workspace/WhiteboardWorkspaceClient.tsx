@@ -1630,21 +1630,24 @@ export function WhiteboardWorkspaceClient({
         // between them, so a parallel selectTutorPage cannot read a
         // stale (activePageIdRef = new, scene = old) state.
         activePageIdRef.current = nextId;
-        api.updateScene({ elements: next as ReadonlyArray<unknown> });
         const vsNext = pageListRef.current.find((p) => p.id === nextId)?.viewState;
+        const aDual = api as ExcalidrawApiLike & {
+          updateScene: (s: {
+            appState?: unknown;
+            elements?: unknown;
+          }) => void;
+        };
+        // Single updateScene so we never paint new tab elements under the old
+        // tab's camera (avoids a one-frame misalignment Sarah saw after reload).
         if (vsNext) {
           isApplyingViewportProgrammaticRef.current = true;
           try {
-            const prevState = api.getAppState() as Record<string, unknown>;
-            const a = api as ExcalidrawApiLike & {
-              updateScene: (s: {
-                appState?: unknown;
-                elements?: unknown;
-              }) => void;
-            };
-            a.updateScene({
+            // Do not spread full `getAppState()` here — stale width/height or
+            // other merged fields break screen→scene coords (strokes south of
+            // cursor). Same rule as `scene-paint.ts` readScrollOnly.
+            aDual.updateScene({
+              elements: next as ReadonlyArray<unknown>,
               appState: {
-                ...prevState,
                 scrollX: vsNext.panX,
                 scrollY: vsNext.panY,
                 zoom: { value: vsNext.zoom },
@@ -1659,6 +1662,7 @@ export function WhiteboardWorkspaceClient({
             });
           }
         } else {
+          api.updateScene({ elements: next as ReadonlyArray<unknown> });
           console.info(
             `[pvs] pvs=${nextId} action=restore source=page-switch viewState=absent`
           );
@@ -2415,12 +2419,25 @@ export function WhiteboardWorkspaceClient({
       setSectionsRegistry(secs);
       activePageIdRef.current = doc.activePageId;
       setActivePageId(doc.activePageId);
-      for (const [pid, raw] of Object.entries(doc.pages)) {
-        pageDataRef.current[pid] = (raw as ReadonlyArray<unknown>).map(
-          (e) => ({ ...(e as object) })
-        ) as ExcalidrawLikeElement[];
+
+      // Replace per-tab buckets wholesale. Merging into pageDataRef leaves
+      // orphan keys when a second hydrate (browser draft → IndexedDB "Load
+      // draft") narrows or changes ids — that matched strokes from one tab
+      // appearing under another tab's viewport.
+      const nextBucket: Record<string, ReadonlyArray<ExcalidrawLikeElement>> =
+        Object.create(null);
+      for (const row of doc.pageList) {
+        const raw = doc.pages[row.id];
+        nextBucket[row.id] =
+          raw !== undefined
+            ? ((raw as ReadonlyArray<unknown>).map(
+                (e) => ({ ...(e as object) })
+              ) as ExcalidrawLikeElement[])
+            : [];
       }
-      const activeEls = doc.pages[doc.activePageId] ?? [];
+      pageDataRef.current = nextBucket;
+
+      const activeEls = nextBucket[doc.activePageId] ?? [];
       // Board-document elements are already Excalidraw-shaped (the
       // sender adapted from WBElement before broadcasting). Pass them
       // through the engine's restore + sanitize pipeline so the
@@ -2437,43 +2454,43 @@ export function WhiteboardWorkspaceClient({
         api,
         toPaint as ReadonlyArray<ExcalidrawLikeElement>
       );
+      const vs0 = doc.pageList.find((p) => p.id === doc.activePageId)?.viewState;
+      const aDual = api as ExcalidrawApiLike & {
+        updateScene: (s: {
+          appState?: unknown;
+          elements?: unknown;
+        }) => void;
+      };
+
       applyingRemoteToCanvasRef.current = true;
       try {
-        api.updateScene({ elements: toPaint });
+        if (vs0) {
+          isApplyingViewportProgrammaticRef.current = true;
+          try {
+            aDual.updateScene({
+              elements: toPaint,
+              appState: {
+                scrollX: vs0.panX,
+                scrollY: vs0.panY,
+                zoom: { value: vs0.zoom },
+              },
+            });
+            console.info(
+              `[pvs] pvs=${doc.activePageId} action=restore source=reload-restore panX=${vs0.panX} panY=${vs0.panY} zoom=${vs0.zoom}`
+            );
+          } finally {
+            queueMicrotask(() => {
+              isApplyingViewportProgrammaticRef.current = false;
+            });
+          }
+        } else {
+          api.updateScene({ elements: toPaint });
+          console.info(
+            `[pvs] pvs=${doc.activePageId} action=restore source=reload-restore viewState=absent`
+          );
+        }
       } finally {
         applyingRemoteToCanvasRef.current = false;
-      }
-      const vs0 = doc.pageList.find((p) => p.id === doc.activePageId)?.viewState;
-      if (vs0) {
-        isApplyingViewportProgrammaticRef.current = true;
-        try {
-          const prevState = api.getAppState() as Record<string, unknown>;
-          const a = api as ExcalidrawApiLike & {
-            updateScene: (s: {
-              appState?: unknown;
-              elements?: unknown;
-            }) => void;
-          };
-          a.updateScene({
-            appState: {
-              ...prevState,
-              scrollX: vs0.panX,
-              scrollY: vs0.panY,
-              zoom: { value: vs0.zoom },
-            },
-          });
-          console.info(
-            `[pvs] pvs=${doc.activePageId} action=restore source=reload-restore panX=${vs0.panX} panY=${vs0.panY} zoom=${vs0.zoom}`
-          );
-        } finally {
-          queueMicrotask(() => {
-            isApplyingViewportProgrammaticRef.current = false;
-          });
-        }
-      } else {
-        console.info(
-          `[pvs] pvs=${doc.activePageId} action=restore source=reload-restore viewState=absent`
-        );
       }
       if (sync && syncUrl) {
         flushDocumentBroadcastNow();

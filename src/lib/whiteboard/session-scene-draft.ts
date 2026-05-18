@@ -82,7 +82,13 @@ export function saveSessionBoardDocument(
   if (typeof sessionStorage === "undefined") return;
   try {
     const json = JSON.stringify(doc);
-    if (json.length > MAX_DRAFT_BYTES) return;
+    if (json.length > MAX_DRAFT_BYTES) {
+      console.warn(
+        `[whiteboard] wbsid=${whiteboardSessionId} sessionStorage board draft NOT saved: ${json.length} bytes exceeds MAX_DRAFT_BYTES (${MAX_DRAFT_BYTES}). ` +
+          `Tab refresh may restore an older snapshot — prefer IndexedDB checkpoint resume or keep sessions under the quota.`
+      );
+      return;
+    }
     sessionStorage.setItem(boardDraftKey(whiteboardSessionId), json);
     // Avoid stale single-array key fighting multi-page
     try {

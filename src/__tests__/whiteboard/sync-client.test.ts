@@ -2384,7 +2384,7 @@ describe("sync-client pageViewState envelope (Phase 5 task 8)", () => {
     const k = generateEncryptionKeyBase64Url();
     const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
     const msg = {
-      v: 1,
+      v: 1 as const,
       kind: "pageViewState" as const,
       peerId: "tutor-pvs",
       role: "tutor" as const,
@@ -2402,7 +2402,7 @@ describe("sync-client pageViewState envelope (Phase 5 task 8)", () => {
     const k = generateEncryptionKeyBase64Url();
     const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
     const msg = {
-      v: 1,
+      v: 1 as const,
       kind: "pageViewState" as const,
       peerId: "t",
       role: "tutor" as const,
@@ -2434,7 +2434,7 @@ describe("sync-client pageViewState envelope (Phase 5 task 8)", () => {
     await realTick(10);
     await flushMicrotasks(20);
     const payload = {
-      v: 1,
+      v: 1 as const,
       kind: "pageViewState" as const,
       peerId: "tutor-remote",
       role: "tutor" as const,
