@@ -6,12 +6,22 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import ffmpegStatic from "ffmpeg-static";
-import { WHISPER_MAX_BYTES } from "@/lib/transcribe-constants";
+import { WHISPER_MAX_BYTES, WHISPER_TARGET_CHUNK_SECONDS } from "@/lib/transcribe-constants";
 
 const execFileAsync = promisify(execFile);
 
 /** Target max bytes per chunk before Whisper (~22 MB leaves margin under 25 MB). */
 const CHUNK_TARGET_BYTES = 22 * 1024 * 1024;
+
+/**
+ * Segment count before recursive bisection (used by tests and aligned with splitter logic).
+ * Combines byte-based and duration-based caps so small-but-long recordings split too.
+ */
+export function planWhisperInitialSegmentCount(bufferByteLength: number, durationSeconds: number): number {
+  const byteBasedCount = Math.ceil(bufferByteLength / CHUNK_TARGET_BYTES);
+  const durationBasedCount = Math.ceil(durationSeconds / WHISPER_TARGET_CHUNK_SECONDS);
+  return Math.max(1, Math.max(byteBasedCount, durationBasedCount));
+}
 
 export type WhisperAudioPart = {
   buffer: Buffer;
@@ -212,7 +222,18 @@ export async function splitAudioIntoWhisperParts(
       throw new Error("Invalid or zero duration.");
     }
 
-    let segmentCount = Math.max(1, Math.ceil(buffer.length / CHUNK_TARGET_BYTES));
+    if (buffer.byteLength <= WHISPER_MAX_BYTES && durationSec <= WHISPER_TARGET_CHUNK_SECONDS) {
+      const normalizedMime = baseMime(mimeType);
+      return [
+        {
+          buffer,
+          filename,
+          mimeType: normalizedMime,
+        },
+      ];
+    }
+
+    const segmentCount = planWhisperInitialSegmentCount(buffer.byteLength, durationSec);
     const segmentDuration = durationSec / segmentCount;
 
     const initial: Buffer[] = [];

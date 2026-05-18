@@ -50,6 +50,11 @@ jest.mock("@/lib/db", () => ({
 const mockTranscribeAudio = jest.fn();
 jest.mock("@/lib/transcribe", () => ({
   transcribeAudio: (...args: unknown[]) => mockTranscribeAudio(...args),
+  mapWithConcurrency: async <T, U>(
+    items: T[],
+    _cap: number,
+    fn: (item: T, idx: number) => Promise<U>
+  ): Promise<U[]> => Promise.all(items.map((item, idx) => fn(item, idx))),
   WHISPER_MAX_BYTES: 25 * 1024 * 1024,
 }));
 

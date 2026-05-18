@@ -111,6 +111,11 @@ const transcribeAudioMock = jest.fn();
 jest.mock("@/lib/transcribe", () => ({
   __esModule: true,
   transcribeAudio: (...args: unknown[]) => transcribeAudioMock(...args),
+  mapWithConcurrency: async <T, U>(
+    items: T[],
+    _cap: number,
+    fn: (item: T, idx: number) => Promise<U>
+  ): Promise<U[]> => Promise.all(items.map((item, idx) => fn(item, idx))),
 }));
 
 const generateSessionNoteMock = jest.fn();
