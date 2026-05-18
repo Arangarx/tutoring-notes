@@ -1642,12 +1642,16 @@ export function WhiteboardWorkspaceClient({
         if (vsNext) {
           isApplyingViewportProgrammaticRef.current = true;
           try {
-            // Do not spread full `getAppState()` here — stale width/height or
-            // other merged fields break screen→scene coords (strokes south of
-            // cursor). Same rule as `scene-paint.ts` readScrollOnly.
+            // Spread prevState here (page switch, canvas fully laid out) so
+            // Excalidraw keeps its live width/height for pointer→scene mapping.
+            // Without it strokes land above/below the cursor because coordinate
+            // transform uses stale dimensions. Contrast with applyBoardDocumentV1
+            // (initial mount, canvas may still be 0×0) where we must NOT spread.
+            const prevState = api.getAppState() as Record<string, unknown>;
             aDual.updateScene({
               elements: next as ReadonlyArray<unknown>,
               appState: {
+                ...prevState,
                 scrollX: vsNext.panX,
                 scrollY: vsNext.panY,
                 zoom: { value: vsNext.zoom },

@@ -259,12 +259,14 @@ export function useStudentWhiteboardCanvas(
           const act = activePageIdRef.current;
           const wireRow = page.pageList.find((r) => r.id === act);
           const vs = wireRow ? wireRowViewState(wireRow) : undefined;
+          const prevState = api.getAppState() as Record<string, unknown>;
           const a = api as ExcalidrawApiLike & {
             updateScene: (s: { appState?: unknown; elements?: unknown }) => void;
           };
           if (vs) {
             a.updateScene({
               appState: {
+                ...prevState,
                 scrollX: vs.panX,
                 scrollY: vs.panY,
                 zoom: { value: vs.zoom },
@@ -276,6 +278,7 @@ export function useStudentWhiteboardCanvas(
           } else if (details.follow) {
             a.updateScene({
               appState: {
+                ...prevState,
                 scrollX: details.follow.scrollX,
                 scrollY: details.follow.scrollY,
                 zoom: { value: details.follow.zoom },
@@ -389,12 +392,14 @@ export function useStudentWhiteboardCanvas(
           const act = activePageIdRef.current;
           const wireRow = page.pageList.find((r) => r.id === act);
           const vs = wireRow ? wireRowViewState(wireRow) : undefined;
+          const prevState = api.getAppState() as Record<string, unknown>;
           const a = api as ExcalidrawApiLike & {
             updateScene: (s: { appState?: unknown; elements?: unknown }) => void;
           };
           if (vs) {
             a.updateScene({
               appState: {
+                ...prevState,
                 scrollX: vs.panX,
                 scrollY: vs.panY,
                 zoom: { value: vs.zoom },
@@ -406,6 +411,7 @@ export function useStudentWhiteboardCanvas(
           } else if (details?.follow) {
             a.updateScene({
               appState: {
+                ...prevState,
                 scrollX: details.follow.scrollX,
                 scrollY: details.follow.scrollY,
                 zoom: { value: details.follow.zoom },
@@ -413,11 +419,13 @@ export function useStudentWhiteboardCanvas(
             });
           }
         } else if (details?.follow && followTutorView) {
+          const prevState = api.getAppState() as Record<string, unknown>;
           const a = api as ExcalidrawApiLike & {
             updateScene: (s: { appState?: unknown; elements?: unknown }) => void;
           };
           a.updateScene({
             appState: {
+              ...prevState,
               scrollX: details.follow.scrollX,
               scrollY: details.follow.scrollY,
               zoom: { value: details.follow.zoom },
@@ -549,11 +557,13 @@ export function useStudentWhiteboardCanvas(
       }
       applyingRemoteRef.current = true;
       try {
+        const prevState = api.getAppState() as Record<string, unknown>;
         const a = api as ExcalidrawApiLike & {
           updateScene: (s: { appState?: unknown; elements?: unknown }) => void;
         };
         a.updateScene({
           appState: {
+            ...prevState,
             scrollX: msg.panX,
             scrollY: msg.panY,
             zoom: { value: msg.zoom },
