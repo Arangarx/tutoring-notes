@@ -22,7 +22,11 @@ type Props = {
 type PanelState = "idle" | "filled";
 
 export default function AiAssistPanel({ studentId, formRef, enabled, blobEnabled }: Props) {
-  const [activeTab, setActiveTab] = useState<Tab>("text");
+  // UX refresh quick win (2026-05-17): default to Record when Blob is configured.
+  // Sarah hits Record every session; saving the click here removes one of the
+  // top-5 friction points called out in docs/UX-REFRESH-PLAN.md. Falls back to
+  // "text" when Blob isn't configured (Record/Upload tabs don't render at all).
+  const [activeTab, setActiveTab] = useState<Tab>(blobEnabled ? "record" : "text");
   const [sessionText, setSessionText] = useState("");
   const [pendingAudios, setPendingAudios] = useState<AudioResult[]>([]);
   const pendingAudiosRef = useRef(pendingAudios);

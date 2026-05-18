@@ -2,54 +2,26 @@
 
 import Link from "next/link";
 import { signOut, useSession } from "next-auth/react";
-import { useState } from "react";
 
 export default function HomePage() {
   const { status } = useSession();
   const signedIn = status === "authenticated";
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [success, setSuccess] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleWaitlist(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/waitlist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, name }),
-      });
-      const data = (await res.json()) as { ok?: boolean; message?: string; error?: string };
-      if (!res.ok || !data.ok) {
-        setError(data.error ?? "Something went wrong. Try again.");
-        return;
-      }
-      setSuccess(data.message ?? "You're on the list!");
-      setEmail("");
-      setName("");
-    } catch {
-      setError("Network error. Try again.");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <div className="container">
       <div className="card">
         <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-          <div>
-            <h1 style={{ margin: 0 }}>Tutoring Notes</h1>
-            <p className="muted" style={{ marginTop: 8 }}>
-              Write session notes fast. Send a clean update to parents/students
-              in one click.
+          <div style={{ flex: 1, minWidth: 260 }}>
+            <h1 style={{ margin: 0, lineHeight: 1.15 }}>
+              Record your tutoring session. Send a polished parent update in 90 seconds.
+            </h1>
+            <p className="muted" style={{ marginTop: 12, maxWidth: 640, lineHeight: 1.5 }}>
+              Tutoring Notes captures the session audio, drafts the homework, assessment, and
+              plan fields for you, and gives families a read-only link that works on any phone.
+              Built for working tutors.
             </p>
           </div>
-          <div className="row">
+          <div className="row" style={{ alignItems: "flex-start" }}>
             <Link className="btn" href="/feedback">
               Feedback
             </Link>
@@ -68,11 +40,11 @@ export default function HomePage() {
               </>
             ) : (
               <>
-                <Link className="btn" href="/signup">
-                  Create account
-                </Link>
-                <Link className="btn primary" href="/login">
+                <Link className="btn" href="/login">
                   Sign in
+                </Link>
+                <Link className="btn primary" href="/signup">
+                  Create account
                 </Link>
               </>
             )}
@@ -82,79 +54,36 @@ export default function HomePage() {
         <div className="divider" />
 
         <div className="row" style={{ alignItems: "stretch", flexWrap: "wrap" }}>
-          <div className="card" style={{ flex: 1, minWidth: 200 }}>
-            <h3 style={{ marginTop: 0 }}>For tutors</h3>
-            <ul className="muted" style={{ lineHeight: 1.6 }}>
-              <li>2-minute capture flow</li>
-              <li>Per-student history</li>
-              <li>Email delivery with outbox history</li>
-            </ul>
+          <div className="card" style={{ flex: 1, minWidth: 240 }}>
+            <h3 style={{ marginTop: 0 }}>Record once, write less</h3>
+            <p className="muted" style={{ margin: 0, lineHeight: 1.55 }}>
+              Hit record. We transcribe the session and draft the homework, assessment,
+              and plan fields. Edit what you want, save, send. Most sessions take under
+              two minutes from stop-recording to email-sent.
+            </p>
           </div>
-          <div className="card" style={{ flex: 1, minWidth: 200 }}>
-            <h3 style={{ marginTop: 0 }}>For families</h3>
-            <ul className="muted" style={{ lineHeight: 1.6 }}>
-              <li>Clean read-only link</li>
-              <li>Homework, assessment, and the plan always visible</li>
-              <li>Mobile-friendly layout</li>
-            </ul>
+          <div className="card" style={{ flex: 1, minWidth: 240 }}>
+            <h3 style={{ marginTop: 0 }}>Parents get a clean link</h3>
+            <p className="muted" style={{ margin: 0, lineHeight: 1.55 }}>
+              No app for families. A read-only share link works on phones, no login.
+              Updates deliver by email when you finalize a note. Whiteboard replays
+              with audio so parents can see the actual lesson.
+            </p>
           </div>
-          <div className="card" style={{ flex: 1, minWidth: 200 }}>
-            <h3 style={{ marginTop: 0 }}>Early access</h3>
-            <p className="muted" style={{ marginBottom: 0 }}>
-              Free while we&apos;re in pilot. Give us feedback and help shape the product.
+          <div className="card" style={{ flex: 1, minWidth: 240 }}>
+            <h3 style={{ marginTop: 0 }}>It&apos;s yours</h3>
+            <p className="muted" style={{ margin: 0, lineHeight: 1.55 }}>
+              You keep 100% of your tutoring rate &mdash; we don&apos;t take a cut. Free
+              during pilot, transparent pricing later. Your data stays under your account;
+              parent-facing pages are share-link only.
             </p>
           </div>
         </div>
       </div>
 
-      <div className="card" style={{ marginTop: 16 }}>
-        <h2 style={{ marginTop: 0 }}>Get early access</h2>
-        <p className="muted">
-          We&apos;re onboarding a small group of tutors. Drop your email and
-          we&apos;ll reach out with access.
-        </p>
-
-        {success ? (
-          <p style={{ fontWeight: 600 }}>{success}</p>
-        ) : (
-          <form onSubmit={handleWaitlist}>
-            <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-              <div style={{ flex: 1, minWidth: 200 }}>
-                <label htmlFor="waitlist-name">Name (optional)</label>
-                <input
-                  id="waitlist-name"
-                  type="text"
-                  placeholder="Your name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  autoComplete="name"
-                />
-              </div>
-              <div style={{ flex: 1, minWidth: 220 }}>
-                <label htmlFor="waitlist-email">Email</label>
-                <input
-                  id="waitlist-email"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  autoComplete="email"
-                />
-              </div>
-              <div style={{ alignSelf: "flex-end" }}>
-                <button className="btn primary" type="submit" disabled={busy}>
-                  {busy ? "Sending…" : "Request access"}
-                </button>
-              </div>
-            </div>
-            {error && <p style={{ color: "#ffb4b4", marginTop: 10 }}>{error}</p>}
-          </form>
-        )}
-      </div>
-
       <p className="muted" style={{ marginTop: 12 }}>
-        Your account is protected by login. Parent/student views use share links. No ads, no tracking.
+        Your account is protected by login. Parent and student views use revocable
+        share links. No ads, no tracking.
       </p>
     </div>
   );
