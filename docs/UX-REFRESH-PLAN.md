@@ -106,6 +106,8 @@ Track all forks + resolutions here so future-Andrew + future-orchestrator can se
 | 2026-05-17 | Design system: Tailwind+shadcn vs. stay-with-globals vs. minimal-tokens-hybrid | **Tailwind + shadcn/ui** | Compounding leverage on every future UX change; industry-standard tooling; AI-coding-friendly; dark mode native; one evening of setup cost vs. months of slower iteration. |
 | 2026-05-17 | Tonight scope: plan-only vs. plan+quick-wins vs. plan+Phase-0-start | **Plan + 2 quick wins** | Late night, Andrew tired, wants visible progress without committing to a multi-hour foundation build at 10 PM. Quick wins are low-risk + don't depend on the design system. |
 | 2026-05-17 | Waitlist form on landing | **Removed** | Andrew confirmed: signup is currently open (gated only by his manual email approval) and even that goes away once email verification ships. Waitlist form was misleading. |
+| 2026-05-18 | How to measure Phase 2 click-reduction success | **PostHog product analytics (Phase 11a in master plan)** lands BEFORE Phase 2 of this UX refresh resumes | Phase 2's whole charter is "cut clicks-to-primary-action from 3→1." Without analytics, "we cut clicks" is aesthetic. With PostHog funnels (`/admin → session_started → recording_stopped`), Phase 2's success criteria become measurable. PostHog Tier 0+1 is its own bootstrapper (`docs/handoff/posthog-analytics-tier-0-1-bootstrapper.md`); ships independently of the UX refresh foundation. |
+| 2026-05-18 | Build order: Tailwind/shadcn vs. PostHog first | **PostHog first, then resume Phase 0 (Tailwind/shadcn)** | PostHog gives us a baseline measurement BEFORE the refresh changes anything. Otherwise we have no before/after comparison and can't prove the refresh reduced clicks (vs. simply "feels lighter"). Marginal cost: one extra branch sequenced ahead of Phase 0. |
 
 ---
 
@@ -162,6 +164,8 @@ Track all forks + resolutions here so future-Andrew + future-orchestrator can se
 ### Phase 2 — Tutor Flow Click Reduction (~1-2 evenings)
 
 **Goal**: cut clicks-to-primary-action from 3 (audio) / 4-6 (whiteboard) toward the 1 / 2 target.
+
+**Prerequisite**: Phase 11a of the master plan (PostHog Tier 0+1) MUST have shipped before Phase 2 begins. Phase 2's success criteria are measurable only with PostHog funnels live. Concrete bar: **`/admin → session_started → recording_stopped` completes in ≤ 2 events (post-`session_started` page entry) for ≥ 80% of tutor sessions across a 10-session post-Phase-2 baseline**. Without PostHog, this bar collapses to "feels lighter" — unfalsifiable.
 
 **Tasks:**
 1. **Dashboard becomes a workspace, not a stats page** (`src/app/admin/page.tsx`):
