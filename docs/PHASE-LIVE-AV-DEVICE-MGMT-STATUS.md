@@ -1,5 +1,7 @@
 # Phase: Live A/V device management (camera + mic picker + hotswap)
 
+> **Archive (2026-05-19):** ✅ **SHIPPED to master** merge `ac92137` 2026-05-17.
+
 Handoff for the `live-av-device-management` branch — camera enumeration,
 `setVideoDevice` / `setMicDevice`, `peer-mesh.replaceLocalTrackOnAllPeers`,
 and `mic-recorder-audio.swapLocalMicSource`.

@@ -1,5 +1,7 @@
 # Phase 4d — Polish + bug fixes + per-peer moderation restore + Playwright + docs — branch handoff
 
+> **Archive (2026-05-19):** ✅ **SHIPPED to master** merge `41bf006` 2026-05-16.
+
 **Branch:** `phase-4d-polish-tests-docs` (off `master` at the 4c merge
 commit `d7fd583`).
 **Master plan:** `~/.cursor/plans/tutoring_notes_pilot_ready_master_plan_9aaca460.plan.md`

@@ -1,5 +1,7 @@
 # Phase 4b — useLiveAV + recording outbox integration — branch handoff
 
+> **Archive (2026-05-19):** ✅ **SHIPPED to master** (Phase 4b merge in 4c train; see master plan). Branch deleted.
+
 **Branch:** `phase-4b-uselife-av-and-outbox-integration` (off `master`
 at `59d13ad`).
 **Master plan:** `~/.cursor/plans/tutoring_notes_pilot_ready_master_plan_9aaca460.plan.md`
