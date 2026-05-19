@@ -58,6 +58,16 @@ Started from brainstorming many synonyms around learning, teaching, knowledge tr
 - **Morocco**: fintech-Mynk already owns this territory. Avoid.
 - **India**: MYNK Class 41 VOD trademark blocks.
 
+### Research methodology corrections (post-research observations)
+
+- **TwStalker mirror data is unreliable for X / Twitter handle availability.** 2026-05-18 research subagent reported `@usemynk` as an "empty squat (0/0)" via TwStalker mirror; direct signup attempt 2026-05-19 02:14 succeeded cleanly. TwStalker data was stale or wrong. **Future handle-availability research dispatches should verify via direct platform signup attempt rather than trusting third-party mirrors.** Same lesson likely applies to similar mirror sites for Instagram, TikTok, etc. — direct signup attempt is the only authoritative availability signal.
+
+- **LinkedIn slug reservation differs from page visibility.** 2026-05-18 research subagent reported `linkedin.com/company/mynk` as "available (404)" based on logged-out page-fetch returning 404. Actual signup attempt 2026-05-18 ~20:30 surfaced "This public URL is already in use" — the slug is held by the Moroccan fintech Mynk (QAZI Finance) as a SECOND LinkedIn company page alongside the previously-known `/company/mynkapp`. Lesson: LinkedIn reserves slugs even for low-visibility pages; future LinkedIn-slug research should attempt the actual signup flow rather than relying on logged-out page-fetch as a proxy.
+
+- **TikTok `Mynk`-pattern handle pool is fully exhausted.** 2026-05-19 02:06 direct signup attempts confirmed `@usemynk`, `@trymynk`, `@usemynkhq`, `@usemynkapp` are all taken. TikTok deferred indefinitely — reconsider channel strategy (tutoring SaaS is not necessarily a TikTok-native audience).
+
+- **GoDaddy `mynk.com` listing confirmed as fixed-price-no-offer.** 2026-05-19 02:06 direct check showed $150,000 Buy It Now with no "Make Offer" affordance — seller has not enabled offers. Take-it-or-leave-it pricing through self-service; only path to negotiate would be calling broker line (480-366-3343). Confirms skip decision is correct; no further inquiry needed.
+
 ---
 
 ## Decisions landed 2026-05-18
@@ -71,6 +81,7 @@ Started from brainstorming many synonyms around learning, teaching, knowledge tr
 | **LinkedIn company slug** | `/company/mynk` | Only major platform where exact-Mynk identifier still claimable — grab ASAP |
 | **Skip from grab list** | `mynkapp.com`, `@mynkapp` everywhere | Moroccan fintech owns matching social handles; SEO collision unavoidable |
 | **Pilot scope discipline** | US-only, tutoring-not-payments | Mitigates fintech-Mynk collision; defers India trademark conflict; keeps strategic complexity low |
+| **`@usemynk` claimed across X and Bluesky** | YES | Direct signup succeeded; TwStalker mirror data was stale/wrong |
 
 ## Decisions deferred to brand walkthrough Phase 2
 
@@ -104,3 +115,4 @@ Started from brainstorming many synonyms around learning, teaching, knowledge tr
 ## History
 
 - **2026-05-18 captured** — Orchestrator dispatched 4 parallel Composer 2.5 research subagents from Opus chat per AGENTS.md "Default execution path." Synthesized findings into yellow-flag walkthrough with Andrew. Andrew greenlit with 2 key decisions (skip mynk.com, standardize on usemynk). Capture dispatched as 5th Composer 2.5 subagent.
+- **2026-05-19 02:14 corrections** — Bluesky + X handles successfully claimed via direct signup; research methodology corrections folded into notes (TwStalker / LinkedIn slug reservation / TikTok pool exhaustion / GoDaddy listing nature).

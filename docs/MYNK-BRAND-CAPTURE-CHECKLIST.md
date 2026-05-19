@@ -22,7 +22,7 @@
 - [ ] **LinkedIn `/company/mynk`** — slug still 404, exact-Mynk match still claimable. Create the company page even before content; just lock the slug. https://www.linkedin.com/company/setup/new/
 
 **Priority 2 (key consumer platforms)**:
-- [ ] **X / Twitter `@usemynk`** — verify availability in-app before creating; `@mynk` is held by active personal account so we use `usemynk`
+- [x] **X / Twitter `@usemynk`** — ✅ **CLAIMED 2026-05-19 02:14** (new account via Gmail). Display name shows "Andrew Mortensen" from Gmail auto-fill — will update to "Mynk" in brand walkthrough Phase 2 along with bio + avatar.
 - [ ] **Instagram `@usemynk`** — verify in-app (was unclear from research, login-walled)
 - [ ] **TikTok `@usemynk`** — confirmed available in research
 
@@ -30,7 +30,7 @@
 - [ ] **YouTube `@usemynk`** — confirmed available
 - [ ] **GitHub org `usemynk`** — confirmed available
 - [ ] **Reddit `r/mynk`** (subreddit) + **`u/usemynk`** (avoid `u/mynk` — NSFW)
-- [ ] **Bluesky `usemynk.bsky.social`** — confirmed available
+- [x] **Bluesky `@usemynk.bsky.social`** — ✅ **CLAIMED 2026-05-19 02:14** (new account via Gmail)
 
 ### Reference inquiry (free, no commitment)
 
