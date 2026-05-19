@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mynk — warm-direction palettes (for the daughter)</title>
+<style>
+  *,*::before,*::after { box-sizing: border-box; }
+  :root {
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-serif: "Iowan Old Style", "Palatino Linotype", "Source Serif Pro", Georgia, serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --radius-sm: 6px; --radius-md: 10px; --radius-lg: 16px;
+    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+    --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-12: 48px;
+  }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: var(--font-sans);
+    background: #f4ece2; color: #2a1a10;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body[data-mode="dark"] { background: #120806; color: #f4ece2; }
+
+  .chrome-header {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(244,236,226,0.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    padding: var(--space-4) var(--space-6);
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-6);
+  }
+  body[data-mode="dark"] .chrome-header {
+    background: rgba(18,8,6,0.92);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .chrome-title {
+    font-family: var(--font-serif); font-size: 18px;
+    font-weight: 600; letter-spacing: -0.01em;
+  }
+  .chrome-sub {
+    font-size: 13px; opacity: 0.6;
+    font-family: var(--font-mono);
+  }
+  .chrome-controls { display: flex; gap: var(--space-3); align-items: center; }
+  .toggle-btn {
+    border: 1px solid currentColor; background: transparent;
+    color: inherit; padding: 6px 14px; border-radius: 999px;
+    font: inherit; font-size: 13px; cursor: pointer; opacity: 0.75;
+  }
+  .toggle-btn:hover { opacity: 1; }
+  .toggle-btn[aria-pressed="true"] {
+    background: currentColor; color: #f4ece2; opacity: 1;
+  }
+  body[data-mode="dark"] .toggle-btn[aria-pressed="true"] { color: #120806; }
+
+  .intro {
+    max-width: 1100px; margin: 0 auto;
+    padding: var(--space-8) var(--space-6) var(--space-6);
+    font-size: 14px; line-height: 1.6;
+  }
+  .intro h2 {
+    font-family: var(--font-serif); font-size: 26px;
+    letter-spacing: -0.02em; margin: 0 0 var(--space-3); font-weight: 600;
+  }
+  .intro p { margin: 0 0 var(--space-3); opacity: 0.85; }
+  .intro .for-daughter {
+    display: inline-block;
+    padding: 2px 8px; border-radius: 999px;
+    background: #e27d60; color: #fff;
+    font: 500 11px var(--font-mono);
+    letter-spacing: 0.04em; text-transform: uppercase;
+    margin-bottom: var(--space-3);
+  }
+
+  main {
+    padding: 0 var(--space-6) var(--space-12);
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: var(--space-4);
+    max-width: 2400px; margin: 0 auto;
+  }
+  @media (max-width: 2000px) { main { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 1280px) { main { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 820px) { main { grid-template-columns: 1fr; } }
+
+  .palette-frame {
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    border: 1px solid rgba(0,0,0,0.1);
+    display: flex; flex-direction: column;
+    background: var(--surface); color: var(--text);
+  }
+  body[data-mode="dark"] .palette-frame { border-color: rgba(255,255,255,0.08); }
+  .palette-frame.requested {
+    box-shadow: 0 0 0 3px #e27d60, 0 12px 32px rgba(226,125,96,0.18);
+  }
+
+  .palette-label {
+    padding: var(--space-4); border-bottom: 1px solid var(--border);
+    background: var(--surface-raised);
+    position: relative;
+  }
+  .palette-label-name {
+    font-family: var(--font-serif); font-size: 16px;
+    font-weight: 600; letter-spacing: -0.01em; margin: 0 0 4px;
+  }
+  .palette-label-tag {
+    font-family: var(--font-mono); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted);
+  }
+  .palette-label-pin {
+    position: absolute; top: var(--space-3); right: var(--space-3);
+    padding: 2px 8px; border-radius: 999px;
+    background: #e27d60; color: #fff;
+    font: 500 9px var(--font-mono);
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+
+  .swatches {
+    display: flex; height: 34px;
+    border-bottom: 1px solid var(--border);
+  }
+  .swatch {
+    flex: 1;
+    display: flex; align-items: center; justify-content: center;
+    font: 9px/1 var(--font-mono);
+    letter-spacing: 0.04em;
+    user-select: all;
+  }
+
+  .surfaces { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); }
+
+  .mock-hero {
+    padding: var(--space-5) var(--space-4);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+  }
+  .mock-hero-wordmark {
+    font-family: var(--font-serif); font-size: 19px;
+    font-weight: 600; letter-spacing: -0.02em;
+    margin: 0 0 var(--space-3); color: var(--brand);
+  }
+  .mock-hero-wordmark::after { content: "·"; color: var(--accent); margin-left: 4px; }
+  .mock-hero-tag {
+    font-family: var(--font-serif); font-size: 20px; line-height: 1.15;
+    font-weight: 500; letter-spacing: -0.015em;
+    margin: 0 0 var(--space-2); color: var(--text);
+  }
+  .mock-hero-sub {
+    font-size: 13px; line-height: 1.5; color: var(--text-muted);
+    margin: 0 0 var(--space-4);
+  }
+  .mock-hero-ctas { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+  .btn-primary, .btn-ghost {
+    font: 12px var(--font-sans); font-weight: 500;
+    padding: 7px 14px; border-radius: 999px; cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .btn-primary { background: var(--accent); color: var(--accent-on); }
+  .btn-ghost { background: transparent; color: var(--text); border-color: var(--border-strong); }
+
+  .mock-dashboard {
+    padding: var(--space-4); border-radius: var(--radius-md);
+    background: var(--surface-raised); border: 1px solid var(--border);
+  }
+  .mock-dashboard-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin: 0 0 var(--space-3);
+  }
+  .mock-dashboard-title { font: 600 13px/1.2 var(--font-sans); color: var(--text); margin: 0; }
+  .mock-dashboard-meta { font: 11px/1 var(--font-mono); color: var(--text-muted); }
+  .session-row {
+    display: grid; grid-template-columns: 1fr auto auto;
+    align-items: center; gap: var(--space-2);
+    padding: var(--space-2); border-bottom: 1px solid var(--border);
+  }
+  .session-row:last-child { border-bottom: none; }
+  .session-student { font: 500 12px/1.3 var(--font-sans); color: var(--text); }
+  .session-sub { font: 11px/1.3 var(--font-sans); color: var(--text-muted); margin-top: 2px; }
+  .session-when { font: 11px var(--font-mono); color: var(--text-muted); }
+  .ai-tag {
+    font: 500 9px var(--font-mono); letter-spacing: 0.04em;
+    text-transform: uppercase; padding: 3px 6px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent-text); white-space: nowrap;
+  }
+
+  .mock-recording {
+    display: grid; grid-template-columns: auto 1fr auto auto;
+    align-items: center; gap: var(--space-3);
+    padding: var(--space-3) var(--space-4); border-radius: var(--radius-md);
+    background: var(--surface-raised); border: 1px solid var(--border);
+  }
+  .rec-dot {
+    width: 9px; height: 9px; border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-soft);
+    animation: rec-pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes rec-pulse {
+    0%, 100% { box-shadow: 0 0 0 4px var(--accent-soft); }
+    50% { box-shadow: 0 0 0 7px transparent; }
+  }
+  .rec-label { font: 500 12px var(--font-sans); color: var(--text); }
+  .rec-time { font: 600 12px var(--font-mono); color: var(--text); }
+  .rec-end {
+    font: 500 11px var(--font-sans); padding: 6px 11px;
+    border-radius: var(--radius-sm); border: 1px solid var(--text);
+    background: var(--text); color: var(--surface); cursor: pointer;
+  }
+
+  .mock-ai-field {
+    padding: var(--space-4); border-radius: var(--radius-md);
+    background: var(--surface-raised); border: 1px solid var(--border);
+  }
+  .ai-field-name {
+    font: 600 11px var(--font-sans); letter-spacing: 0.02em;
+    text-transform: uppercase; color: var(--text-muted);
+    margin: 0 0 var(--space-3);
+  }
+  .ai-field-body {
+    font: 13px/1.55 var(--font-serif); color: var(--text);
+    padding: var(--space-3); border-radius: var(--radius-sm);
+    background: var(--accent-soft); border-left: 3px solid var(--accent);
+  }
+  .ai-field-foot {
+    margin-top: var(--space-2); font: 10px var(--font-mono);
+    color: var(--text-muted); letter-spacing: 0.03em;
+  }
+
+  .mock-mascot {
+    padding: var(--space-4); border-radius: var(--radius-md);
+    background: var(--surface-raised); border: 1px solid var(--border);
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: var(--space-3); align-items: center;
+  }
+  .mascot-svg { width: 100%; height: auto; color: var(--text); }
+  .mascot-svg.accent { color: var(--accent); }
+
+  .palette-notes {
+    padding: var(--space-4); border-top: 1px solid var(--border);
+    background: var(--surface-raised);
+    font: 12px/1.5 var(--font-sans); color: var(--text-muted);
+  }
+  .palette-notes strong { color: var(--text); font-weight: 600; }
+  .palette-source {
+    margin-top: var(--space-2);
+    font: 10px var(--font-mono);
+    color: var(--text-muted); opacity: 0.7;
+    word-break: break-all;
+  }
+  .palette-source a {
+    color: var(--accent-text);
+    text-decoration: none;
+  }
+  .palette-source a:hover { text-decoration: underline; }
+
+  /* =================================================================
+     PALETTE 1 — Fiery Ocean (780000 C1121F FDF0D5 003049 669BBC)  ⭐ REQUESTED
+     ================================================================= */
+  body[data-mode="light"] .palette-fo {
+    --brand: #780000; --text: #003049; --text-muted: #5a7186;
+    --surface: #fdf0d5; --surface-raised: #fff7e3;
+    --border: #e6d8b8; --border-strong: #c1ad84;
+    --accent: #c1121f; --accent-soft: #fbdcd9;
+    --accent-text: #780000; --accent-on: #fdf0d5;
+  }
+  body[data-mode="dark"] .palette-fo {
+    --brand: #669bbc; --text: #fdf0d5; --text-muted: #a8b8c6;
+    --surface: #001f31; --surface-raised: #00263c;
+    --border: #1a4561; --border-strong: #3a6a86;
+    --accent: #ff6b6b; --accent-soft: #3a0d12;
+    --accent-text: #fbdcd9; --accent-on: #001f31;
+  }
+
+  /* =================================================================
+     PALETTE 2 — Warm Autumn Glow (003049 D62828 F77F00 FCBF49 EAE2B7)
+     ================================================================= */
+  body[data-mode="light"] .palette-wag {
+    --brand: #003049; --text: #003049; --text-muted: #5c6f7e;
+    --surface: #f7efd6; --surface-raised: #fdf8e6;
+    --border: #ddd1a5; --border-strong: #b8ac80;
+    --accent: #d62828; --accent-soft: #fbdcd9;
+    --accent-text: #8a1818; --accent-on: #fdf8e6;
+  }
+  body[data-mode="dark"] .palette-wag {
+    --brand: #fcbf49; --text: #eae2b7; --text-muted: #b8b09a;
+    --surface: #001f31; --surface-raised: #002c44;
+    --border: #1a4561; --border-strong: #3a6a86;
+    --accent: #f77f00; --accent-soft: #3a1c00;
+    --accent-text: #fcbf49; --accent-on: #001f31;
+  }
+
+  /* =================================================================
+     PALETTE 3 — Bold Berry (F9DBBD FFA5AB DA627D A53860 450920)
+     ================================================================= */
+  body[data-mode="light"] .palette-bb {
+    --brand: #450920; --text: #450920; --text-muted: #8a3e58;
+    --surface: #fef2e0; --surface-raised: #fff8ea;
+    --border: #e8cbb0; --border-strong: #c19884;
+    --accent: #da627d; --accent-soft: #fbe2e8;
+    --accent-text: #a53860; --accent-on: #fff8ea;
+  }
+  body[data-mode="dark"] .palette-bb {
+    --brand: #ffa5ab; --text: #f9dbbd; --text-muted: #d4a8b6;
+    --surface: #2a0512; --surface-raised: #3a081a;
+    --border: #621635; --border-strong: #a53860;
+    --accent: #ffa5ab; --accent-soft: #4a1325;
+    --accent-text: #ffc4c8; --accent-on: #2a0512;
+  }
+
+  /* =================================================================
+     PALETTE 4 — Red Sunburst (4F000B 720026 CE4257 FF7F51 FF9B54)
+     ================================================================= */
+  body[data-mode="light"] .palette-rs {
+    --brand: #720026; --text: #4f000b; --text-muted: #8a3344;
+    --surface: #fff1e8; --surface-raised: #fff8f1;
+    --border: #f5d4bc; --border-strong: #d49890;
+    --accent: #ce4257; --accent-soft: #fbdde2;
+    --accent-text: #720026; --accent-on: #fff8f1;
+  }
+  body[data-mode="dark"] .palette-rs {
+    --brand: #ff9b54; --text: #ffe0cc; --text-muted: #d4a89a;
+    --surface: #2a0006; --surface-raised: #3a0009;
+    --border: #6a1828; --border-strong: #ce4257;
+    --accent: #ff7f51; --accent-soft: #4f000b;
+    --accent-text: #ff9b54; --accent-on: #2a0006;
+  }
+
+  /* =================================================================
+     PALETTE 5 — Sweet Summer Melody (F6BD60 F7EDE2 F5CAC3 84A59D F28482)
+     ================================================================= */
+  body[data-mode="light"] .palette-ssm {
+    --brand: #2d3b36; --text: #2d3b36; --text-muted: #6b8077;
+    --surface: #f7ede2; --surface-raised: #fdf6ed;
+    --border: #e8d4c2; --border-strong: #c19884;
+    --accent: #f28482; --accent-soft: #f5cac3;
+    --accent-text: #a34543; --accent-on: #fdf6ed;
+  }
+  body[data-mode="dark"] .palette-ssm {
+    --brand: #f6bd60; --text: #f7ede2; --text-muted: #b5c2bc;
+    --surface: #1c2622; --surface-raised: #28332e;
+    --border: #3d504a; --border-strong: #5c6f68;
+    --accent: #f28482; --accent-soft: #3a1f1e;
+    --accent-text: #f5cac3; --accent-on: #1c2622;
+  }
+
+  /* =================================================================
+     PALETTE 6 — Sunny Beach Day (264653 2A9D8F E9C46A F4A261 E76F51)
+     most-loved palette on Coolors trending (124K)
+     ================================================================= */
+  body[data-mode="light"] .palette-sbd {
+    --brand: #264653; --text: #264653; --text-muted: #5a7180;
+    --surface: #fdf6ea; --surface-raised: #fffbf2;
+    --border: #e8d5b8; --border-strong: #c2a878;
+    --accent: #e76f51; --accent-soft: #fbe2d9;
+    --accent-text: #a3432a; --accent-on: #fffbf2;
+  }
+  body[data-mode="dark"] .palette-sbd {
+    --brand: #e9c46a; --text: #f4f0e6; --text-muted: #b5c5cc;
+    --surface: #15303b; --surface-raised: #1f3d4a;
+    --border: #3d5c68; --border-strong: #5c7a87;
+    --accent: #e76f51; --accent-soft: #3a1c12;
+    --accent-text: #f4a261; --accent-on: #15303b;
+  }
+</style>
+</head>
+
+<body data-mode="light">
+<aside class="archived-banner" style="position: sticky; top: 0; z-index: 9999; background: #fff3cd; border-bottom: 3px solid #f59e0b; padding: 12px 20px; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.5; color: #78350f; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+  <strong>ARCHIVED EXPLORATION.</strong> This file is preserved for historical reference only. The Mynk brand was finalized as <strong>Mynka Blue</strong> on 2026-05-19. Canonical visual reference: <a href="../palette-mocks-FINAL-mynka-blue.html" style="color: #78350f; text-decoration: underline;">palette-mocks-FINAL-mynka-blue.html</a>. Decision doc: <code style="background:rgba(0,0,0,0.08);padding:1px 5px;border-radius:3px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;">docs/MYNK-BRAND-PHASE-2-DECISIONS.md</code>.
+</aside>
+
+<header class="chrome-header">
+  <div>
+    <div class="chrome-title">Mynk — warm-direction palettes</div>
+    <div class="chrome-sub">6 candidates for the daughter · 2026-05-19</div>
+  </div>
+  <div class="chrome-controls">
+    <button class="toggle-btn" data-mode-btn="light" aria-pressed="true">Light</button>
+    <button class="toggle-btn" data-mode-btn="dark" aria-pressed="false">Dark</button>
+  </div>
+</header>
+
+<section class="intro">
+  <span class="for-daughter">For the daughter</span>
+  <h2>Warm-direction palettes — six options, with "Fiery Ocean" up front.</h2>
+  <p>"Fiery Ocean" is the one you specifically asked about (first column, with the coral ring around it). It's actually a warm-meets-cool palette — deep red + cream + navy — so I also pulled five neighbors that play in the same warm territory, ranging from "all warm" to "warm anchored by something cool."</p>
+  <p>Toggle light/dark in the header. Each column shows the same five surfaces (homepage, dashboard, recording bar, AI-generated field, mink mascot). Hex codes are on every swatch.</p>
+  <p style="opacity:0.7"><strong>Heads up for dad:</strong> these are noticeably louder than the cool/considered palettes in round 2. Your wife already said "yellow, yuck" on Concept 1 — palettes 2 (Warm Autumn Glow) and 6 (Sunny Beach Day) lean yellow/gold, so flag those as exploration-only.</p>
+</section>
+
+<main>
+
+  <!-- ============================== Palette 1: Fiery Ocean (REQUESTED) -->
+  <article class="palette-frame palette-fo requested">
+    <div class="palette-label">
+      <span class="palette-label-pin">Requested</span>
+      <div class="palette-label-name">1 · Fiery Ocean</div>
+      <div class="palette-label-tag">deep red + cream + navy · 35K likes</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #780000; color: #fdf0d5;">#780000</div>
+      <div class="swatch" style="background: #c1121f; color: #fdf0d5;">#C1121F</div>
+      <div class="swatch" style="background: #fdf0d5; color: #003049;">#FDF0D5</div>
+      <div class="swatch" style="background: #003049; color: #fdf0d5;">#003049</div>
+      <div class="swatch" style="background: #669bbc; color: #001f31;">#669BBC</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div>
+        <div class="rec-label">Recording with Aiden K.</div>
+        <div class="rec-time">23:14</div>
+        <button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+      <div class="mock-mascot">
+        <svg class="mascot-svg" viewBox="0 0 240 90"><rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.45"/><rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.25"/><polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.55"/><ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/><path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/><ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/><ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/><circle cx="135" cy="19" r="3.5" fill="currentColor"/><circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/></svg>
+        <svg class="mascot-svg accent" viewBox="0 0 240 90"><rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.45"/><rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.28"/><polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.55"/><ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/><path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/><ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/><ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/><circle cx="135" cy="19" r="3.5" fill="currentColor"/><circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/></svg>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>The one you asked about.</strong> Not pure warm — it's deep red + cream + navy in a 2-warm-1-cool tension. That's why it's called "Fiery Ocean": the navy keeps it from feeling alarmist, the red keeps it from feeling cold. <em>Honest reading:</em> the red is in the territory of warning signals (close to Coca-Cola red, close to error states). For a tutoring app where you want students and parents to feel calm, that's a real risk. But the look is genuinely memorable — Stripe red + Linear navy energy.
+      <div class="palette-source"><a href="https://coolors.co/780000-c1121f-fdf0d5-003049-669bbc" target="_blank">coolors.co/780000-c1121f-fdf0d5-003049-669bbc</a></div>
+    </div>
+  </article>
+
+  <!-- ============================== Palette 2: Warm Autumn Glow -->
+  <article class="palette-frame palette-wag">
+    <div class="palette-label">
+      <div class="palette-label-name">2 · Warm Autumn Glow</div>
+      <div class="palette-label-tag">navy + red + orange + gold · 48K likes</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #003049; color: #eae2b7;">#003049</div>
+      <div class="swatch" style="background: #d62828; color: #eae2b7;">#D62828</div>
+      <div class="swatch" style="background: #f77f00; color: #003049;">#F77F00</div>
+      <div class="swatch" style="background: #fcbf49; color: #003049;">#FCBF49</div>
+      <div class="swatch" style="background: #eae2b7; color: #003049;">#EAE2B7</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div>
+        <div class="rec-label">Recording with Aiden K.</div>
+        <div class="rec-time">23:14</div>
+        <button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+      <div class="mock-mascot">
+        <svg class="mascot-svg" viewBox="0 0 240 90"><rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.45"/><rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.25"/><polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.55"/><ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/><path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/><ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/><ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/><circle cx="135" cy="19" r="3.5" fill="currentColor"/><circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/></svg>
+        <svg class="mascot-svg accent" viewBox="0 0 240 90"><rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.45"/><rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.28"/><polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.55"/><ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/><path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/><ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/><ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/><circle cx="135" cy="19" r="3.5" fill="currentColor"/><circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/></svg>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>The fuller Fiery Ocean.</strong> Same navy-anchor structure but with red + orange + gold filling out the warm side. Way more design system flexibility — you can pick orange for primary buttons, red for destructive, gold for highlights. <em>Caveat:</em> the gold cream surface is unmistakably yellow-leaning, which is exactly what mom said no to. The light mode skews very autumn-leaves; the dark mode (gold-on-navy) is actually pretty striking.
+      <div class="palette-source"><a href="https://coolors.co/003049-d62828-f77f00-fcbf49-eae2b7" target="_blank">coolors.co/003049-d62828-f77f00-fcbf49-eae2b7</a></div>
+    </div>
+  </article>
+
+  <!-- ============================== Palette 3: Bold Berry -->
+  <article class="palette-frame palette-bb">
+    <div class="palette-label">
+      <div class="palette-label-name">3 · Bold Berry</div>
+      <div class="palette-label-tag">peach → deep berry · 13K likes</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #f9dbbd; color: #450920;">#F9DBBD</div>
+      <div class="swatch" style="background: #ffa5ab; color: #450920;">#FFA5AB</div>
+      <div class="swatch" style="background: #da627d; color: #fef2e0;">#DA627D</div>
+      <div class="swatch" style="background: #a53860; color: #fef2e0;">#A53860</div>
+      <div class="swatch" style="background: #450920; color: #f9dbbd;">#450920</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div>
+        <div class="rec-label">Recording with Aiden K.</div>
+        <div class="rec-time">23:14</div>
+        <button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+      <div class="mock-mascot">
+        <svg class="mascot-svg" viewBox="0 0 240 90"><rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.45"/><rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.25"/><polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.55"/><ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/><path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/><ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/><ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/><circle cx="135" cy="19" r="3.5" fill="currentColor"/><circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/></svg>
+        <svg class="mascot-svg accent" viewBox="0 0 240 90"><rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.45"/><rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.28"/><polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.55"/><ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/><path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/><ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/><ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/><circle cx="135" cy="19" r="3.5" fill="currentColor"/><circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/></svg>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>All-warm, no cool anchor.</strong> Peach surface, berry brand, light pink as the bright pop. Zero yellow, zero brown. Reads sophisticated-feminine — more "wellness brand" than "tutoring infrastructure." The dark mode (deep berry-black + peach text) is genuinely beautiful but probably too distinctive for a B2B-leaning product. <em>For the daughter:</em> this is probably what she pictures when she thinks "warm and fun."
+      <div class="palette-source"><a href="https://coolors.co/f9dbbd-ffa5ab-da627d-a53860-450920" target="_blank">coolors.co/f9dbbd-ffa5ab-da627d-a53860-450920</a></div>
+    </div>
+  </article>
+
+  <!-- ============================== Palette 4: Red Sunburst -->
+  <article class="palette-frame palette-rs">
+    <div class="palette-label">
+      <div class="palette-label-name">4 · Red Sunburst</div>
+      <div class="palette-label-tag">deep red → bright orange · 14K likes</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #4f000b; color: #ff9b54;">#4F000B</div>
+      <div class="swatch" style="background: #720026; color: #ff9b54;">#720026</div>
+      <div class="swatch" style="background: #ce4257; color: #fff1e8;">#CE4257</div>
+      <div class="swatch" style="background: #ff7f51; color: #4f000b;">#FF7F51</div>
+      <div class="swatch" style="background: #ff9b54; color: #4f000b;">#FF9B54</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div>
+        <div class="rec-label">Recording with Aiden K.</div>
+        <div class="rec-time">23:14</div>
+        <button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+      <div class="mock-mascot">
+        <svg class="mascot-svg" viewBox="0 0 240 90"><rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.45"/><rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.25"/><polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.55"/><ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/><path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/><ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/><ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/><circle cx="135" cy="19" r="3.5" fill="currentColor"/><circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/></svg>
+        <svg class="mascot-svg accent" viewBox="0 0 240 90"><rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.45"/><rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.28"/><polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.55"/><ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/><path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/><ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/><ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/><circle cx="135" cy="19" r="3.5" fill="currentColor"/><circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/></svg>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>Dramatic, all-warm gradient.</strong> Deep red-black to bright sunset orange. No yellow. No cool anchor. The light mode had to derive its own cream surface (the palette itself has no light color) — that's a small honesty cost. Reads "intense, performance-coded, motorsport / fitness brand." Almost certainly too aggressive for tutoring, but visually the most striking warm option.
+      <div class="palette-source"><a href="https://coolors.co/4f000b-720026-ce4257-ff7f51-ff9b54" target="_blank">coolors.co/4f000b-720026-ce4257-ff7f51-ff9b54</a></div>
+    </div>
+  </article>
+
+  <!-- ============================== Palette 5: Sweet Summer Melody -->
+  <article class="palette-frame palette-ssm">
+    <div class="palette-label">
+      <div class="palette-label-name">5 · Sweet Summer Melody</div>
+      <div class="palette-label-tag">cream + sage + coral · 46K likes</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #f6bd60; color: #2d3b36;">#F6BD60</div>
+      <div class="swatch" style="background: #f7ede2; color: #2d3b36;">#F7EDE2</div>
+      <div class="swatch" style="background: #f5cac3; color: #2d3b36;">#F5CAC3</div>
+      <div class="swatch" style="background: #84a59d; color: #f7ede2;">#84A59D</div>
+      <div class="swatch" style="background: #f28482; color: #f7ede2;">#F28482</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div>
+        <div class="rec-label">Recording with Aiden K.</div>
+        <div class="rec-time">23:14</div>
+        <button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+      <div class="mock-mascot">
+        <svg class="mascot-svg" viewBox="0 0 240 90"><rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.45"/><rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.25"/><polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.55"/><ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/><path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/><ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/><ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/><circle cx="135" cy="19" r="3.5" fill="currentColor"/><circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/></svg>
+        <svg class="mascot-svg accent" viewBox="0 0 240 90"><rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.45"/><rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.28"/><polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.55"/><ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/><path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/><ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/><ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/><circle cx="135" cy="19" r="3.5" fill="currentColor"/><circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/></svg>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>Soft warm with a sage anchor.</strong> Cream surface, blush highlights, sage as the cool counterweight, coral as the pop. Closest of the six to Concept 3 in <em>structure</em> (warm + a single cool grounding hue) but considerably softer. The gold (F6BD60) sits in the swatch row mostly as decoration; you'd probably never use it as a primary surface. Reads "considered DTC brand, lifestyle-adjacent."
+      <div class="palette-source"><a href="https://coolors.co/f6bd60-f7ede2-f5cac3-84a59d-f28482" target="_blank">coolors.co/f6bd60-f7ede2-f5cac3-84a59d-f28482</a></div>
+    </div>
+  </article>
+
+  <!-- ============================== Palette 6: Sunny Beach Day -->
+  <article class="palette-frame palette-sbd">
+    <div class="palette-label">
+      <div class="palette-label-name">6 · Sunny Beach Day</div>
+      <div class="palette-label-tag">teal + gold + coral · 124K likes (most-loved)</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #264653; color: #f4f0e6;">#264653</div>
+      <div class="swatch" style="background: #2a9d8f; color: #f4f0e6;">#2A9D8F</div>
+      <div class="swatch" style="background: #e9c46a; color: #264653;">#E9C46A</div>
+      <div class="swatch" style="background: #f4a261; color: #264653;">#F4A261</div>
+      <div class="swatch" style="background: #e76f51; color: #f4f0e6;">#E76F51</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div>
+        <div class="rec-label">Recording with Aiden K.</div>
+        <div class="rec-time">23:14</div>
+        <button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+      <div class="mock-mascot">
+        <svg class="mascot-svg" viewBox="0 0 240 90"><rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.45"/><rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.25"/><polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.55"/><ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/><path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/><ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/><ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/><circle cx="135" cy="19" r="3.5" fill="currentColor"/><circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/></svg>
+        <svg class="mascot-svg accent" viewBox="0 0 240 90"><rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.45"/><rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.28"/><polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.55"/><ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/><path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/><ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/><ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/><circle cx="135" cy="19" r="3.5" fill="currentColor"/><circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/></svg>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>The all-time Coolors favorite (124K likes).</strong> Deep teal brand + warm gold/coral accents. Structurally <em>identical</em> to Concept 3 — teal foundation, cream surface, coral pop — just with a fuller warm palette in the middle (adds gold and orange-tan). If "warm and welcoming" is the destination but you want to keep the cool-anchored discipline of Concept 3, this is the bridge. <em>Caveat:</em> the gold (E9C46A) brings in the yellow that mom flagged on Concept 1.
+      <div class="palette-source"><a href="https://coolors.co/264653-2a9d8f-e9c46a-f4a261-e76f51" target="_blank">coolors.co/264653-2a9d8f-e9c46a-f4a261-e76f51</a></div>
+    </div>
+  </article>
+
+</main>
+
+<script>
+  const body = document.body;
+  const btns = document.querySelectorAll('[data-mode-btn]');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const m = btn.dataset.modeBtn;
+      body.setAttribute('data-mode', m);
+      btns.forEach(b => b.setAttribute('aria-pressed', b.dataset.modeBtn === m ? 'true' : 'false'));
+    });
+  });
+</script>
+
+</body>
+</html>

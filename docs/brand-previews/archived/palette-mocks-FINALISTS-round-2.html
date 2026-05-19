@@ -1,0 +1,878 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mynk — finalists round 2 (3 + MWW light v2 + 4 mashups)</title>
+<style>
+  *,*::before,*::after { box-sizing: border-box; }
+  :root {
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-serif: "Iowan Old Style", "Palatino Linotype", "Source Serif Pro", Georgia, serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --radius-sm: 6px; --radius-md: 10px; --radius-lg: 16px;
+    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+    --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-12: 48px;
+  }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: var(--font-sans);
+    background: #f0eee8; color: #1a1a1f;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body[data-mode="dark"] { background: #0a0a0c; color: #f0ece6; }
+
+  .chrome-header {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(240,238,232,0.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    padding: var(--space-4) var(--space-6);
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-6);
+  }
+  body[data-mode="dark"] .chrome-header {
+    background: rgba(10,10,12,0.92);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .chrome-title {
+    font-family: var(--font-serif); font-size: 18px;
+    font-weight: 600; letter-spacing: -0.01em;
+  }
+  .chrome-sub {
+    font-size: 13px; opacity: 0.6;
+    font-family: var(--font-mono);
+  }
+  .chrome-controls { display: flex; gap: var(--space-3); align-items: center; }
+  .toggle-btn {
+    border: 1px solid currentColor; background: transparent;
+    color: inherit; padding: 6px 14px; border-radius: 999px;
+    font: inherit; font-size: 13px; cursor: pointer; opacity: 0.75;
+  }
+  .toggle-btn:hover { opacity: 1; }
+  .toggle-btn[aria-pressed="true"] {
+    background: currentColor; color: #f0eee8; opacity: 1;
+  }
+  body[data-mode="dark"] .toggle-btn[aria-pressed="true"] { color: #0a0a0c; }
+
+  .intro {
+    max-width: 1100px; margin: 0 auto;
+    padding: var(--space-8) var(--space-6) var(--space-6);
+    font-size: 14px; line-height: 1.6;
+  }
+  .intro h2 {
+    font-family: var(--font-serif); font-size: 28px;
+    letter-spacing: -0.02em; margin: 0 0 var(--space-3); font-weight: 600;
+  }
+  .intro p { margin: 0 0 var(--space-3); opacity: 0.85; }
+  .intro .callout {
+    margin: var(--space-4) 0 0;
+    padding: var(--space-3) var(--space-4);
+    border-left: 3px solid currentColor;
+    background: rgba(0,0,0,0.04);
+    font-size: 13px; opacity: 0.85;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+  body[data-mode="dark"] .intro .callout { background: rgba(255,255,255,0.04); }
+
+  .section-header {
+    max-width: 2400px; margin: 0 auto;
+    padding: var(--space-8) var(--space-6) var(--space-4);
+    font-family: var(--font-serif); font-size: 22px;
+    font-weight: 600; letter-spacing: -0.01em;
+    border-top: 1px solid rgba(0,0,0,0.08);
+  }
+  body[data-mode="dark"] .section-header { border-top: 1px solid rgba(255,255,255,0.08); }
+  .section-header .count {
+    font-family: var(--font-mono); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    opacity: 0.55; margin-left: var(--space-2);
+    font-weight: 400;
+  }
+  .section-blurb {
+    max-width: 2400px; margin: 0 auto;
+    padding: 0 var(--space-6) var(--space-4);
+    font-size: 13px; line-height: 1.55; opacity: 0.72;
+    max-width: 880px;
+  }
+
+  main {
+    padding: 0 var(--space-6) var(--space-6);
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-5);
+    max-width: 2200px; margin: 0 auto;
+  }
+  @media (max-width: 1400px) { main { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 820px) { main { grid-template-columns: 1fr; } }
+
+  .palette-frame {
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    border: 1px solid rgba(0,0,0,0.1);
+    display: flex; flex-direction: column;
+    background: var(--surface); color: var(--text);
+  }
+  body[data-mode="dark"] .palette-frame { border-color: rgba(255,255,255,0.08); }
+
+  .palette-label {
+    padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--border);
+    background: var(--surface-raised);
+    display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3);
+  }
+  .palette-label-name {
+    font-family: var(--font-serif); font-size: 18px;
+    font-weight: 600; letter-spacing: -0.01em; margin: 0 0 4px;
+  }
+  .palette-label-tag {
+    font-family: var(--font-mono); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted);
+  }
+  .palette-label-source {
+    font-family: var(--font-mono); font-size: 9px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted);
+    opacity: 0.6; text-align: right; flex-shrink: 0;
+  }
+
+  .swatches {
+    display: flex; height: 38px;
+    border-bottom: 1px solid var(--border);
+  }
+  .swatch {
+    flex: 1;
+    display: flex; align-items: center; justify-content: center;
+    font: 10px/1 var(--font-mono);
+    letter-spacing: 0.04em;
+    user-select: all;
+  }
+
+  .pedigree {
+    padding: var(--space-2) var(--space-5);
+    background: var(--surface-raised);
+    border-bottom: 1px solid var(--border);
+    font: 10px var(--font-mono); letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--text-muted); opacity: 0.85;
+    display: flex; gap: var(--space-2); flex-wrap: wrap;
+  }
+  .pedigree .from-c3 { color: #c66d50; }
+  .pedigree .from-mww { color: #4a8d6d; }
+  body[data-mode="dark"] .pedigree .from-c3 { color: #e8a08a; }
+  body[data-mode="dark"] .pedigree .from-mww { color: #85ae8e; }
+
+  .surfaces { padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-4); }
+
+  .mock-hero {
+    padding: var(--space-5) var(--space-5);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+  }
+  .mock-hero-wordmark {
+    font-family: var(--font-serif); font-size: 20px;
+    font-weight: 600; letter-spacing: -0.02em;
+    margin: 0 0 var(--space-3); color: var(--brand);
+  }
+  .mock-hero-wordmark::after { content: "·"; color: var(--accent); margin-left: 4px; }
+  .mock-hero-tag {
+    font-family: var(--font-serif); font-size: 21px; line-height: 1.15;
+    font-weight: 500; letter-spacing: -0.015em;
+    margin: 0 0 var(--space-2); color: var(--text);
+  }
+  .mock-hero-sub {
+    font-size: 13px; line-height: 1.5; color: var(--text-muted);
+    margin: 0 0 var(--space-4);
+  }
+  .mock-hero-ctas { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+  .btn-primary, .btn-ghost {
+    font: 12px var(--font-sans); font-weight: 500;
+    padding: 7px 14px; border-radius: 999px; cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .btn-primary { background: var(--accent); color: var(--accent-on); }
+  .btn-ghost { background: transparent; color: var(--text); border-color: var(--border-strong); }
+
+  .mock-dashboard {
+    padding: var(--space-4); border-radius: var(--radius-md);
+    background: var(--surface-raised); border: 1px solid var(--border);
+  }
+  .mock-dashboard-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin: 0 0 var(--space-3);
+  }
+  .mock-dashboard-title { font: 600 13px/1.2 var(--font-sans); color: var(--text); margin: 0; }
+  .mock-dashboard-meta { font: 11px/1 var(--font-mono); color: var(--text-muted); }
+  .session-row {
+    display: grid; grid-template-columns: 1fr auto auto;
+    align-items: center; gap: var(--space-2);
+    padding: var(--space-2); border-bottom: 1px solid var(--border);
+  }
+  .session-row:last-child { border-bottom: none; }
+  .session-student { font: 500 12px/1.3 var(--font-sans); color: var(--text); }
+  .session-sub { font: 11px/1.3 var(--font-sans); color: var(--text-muted); margin-top: 2px; }
+  .session-when { font: 11px var(--font-mono); color: var(--text-muted); }
+  .ai-tag {
+    font: 500 9px var(--font-mono); letter-spacing: 0.04em;
+    text-transform: uppercase; padding: 3px 6px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent-text); white-space: nowrap;
+  }
+
+  .mock-recording {
+    display: grid; grid-template-columns: auto 1fr auto auto;
+    align-items: center; gap: var(--space-3);
+    padding: var(--space-3) var(--space-4); border-radius: var(--radius-md);
+    background: var(--surface-raised); border: 1px solid var(--border);
+  }
+  .rec-dot {
+    width: 9px; height: 9px; border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-soft);
+    animation: rec-pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes rec-pulse {
+    0%, 100% { box-shadow: 0 0 0 4px var(--accent-soft); }
+    50% { box-shadow: 0 0 0 7px transparent; }
+  }
+  .rec-label { font: 500 12px var(--font-sans); color: var(--text); }
+  .rec-time { font: 600 12px var(--font-mono); color: var(--text); }
+  .rec-end {
+    font: 500 11px var(--font-sans); padding: 6px 11px;
+    border-radius: var(--radius-sm); border: 1px solid var(--text);
+    background: var(--text); color: var(--surface); cursor: pointer;
+  }
+
+  .mock-ai-field {
+    padding: var(--space-4); border-radius: var(--radius-md);
+    background: var(--surface-raised); border: 1px solid var(--border);
+  }
+  .ai-field-name {
+    font: 600 11px var(--font-sans); letter-spacing: 0.02em;
+    text-transform: uppercase; color: var(--text-muted);
+    margin: 0 0 var(--space-3);
+  }
+  .ai-field-body {
+    font: 13px/1.55 var(--font-serif); color: var(--text);
+    padding: var(--space-3); border-radius: var(--radius-sm);
+    background: var(--accent-soft); border-left: 3px solid var(--accent);
+  }
+  .ai-field-foot {
+    margin-top: var(--space-2); font: 10px var(--font-mono);
+    color: var(--text-muted); letter-spacing: 0.03em;
+  }
+
+  .palette-notes {
+    padding: var(--space-4) var(--space-5); border-top: 1px solid var(--border);
+    background: var(--surface-raised);
+    font: 13px/1.55 var(--font-sans); color: var(--text-muted);
+  }
+  .palette-notes strong { color: var(--text); font-weight: 600; }
+  .palette-notes .vs {
+    margin-top: var(--space-3); padding-top: var(--space-3);
+    border-top: 1px dashed var(--border);
+    font-style: italic; font-size: 12px;
+  }
+
+  /* =================================================================
+     SECTION 1 — Round 2 finalists (unchanged from finalists doc)
+     ================================================================= */
+
+  /* 1. Concept 3 — 3a Warm graphite (cream/teal/coral light; warm graphite dark) */
+  body[data-mode="light"] .palette-3a {
+    --brand: #1e4d4a; --text: #1e4d4a; --text-muted: #6b7c7a;
+    --surface: #f7f5f0; --surface-raised: #fdfcf8;
+    --border: #d6dad5; --border-strong: #aab2ad;
+    --accent: #e27d60; --accent-soft: #f8e0d6;
+    --accent-text: #8a3c25; --accent-on: #fdfcf8;
+  }
+  body[data-mode="dark"] .palette-3a {
+    --brand: #4a8b87; --text: #e8e6e0; --text-muted: #8d9590;
+    --surface: #1a1d1c; --surface-raised: #25292a;
+    --border: #2f3433; --border-strong: #4a8b87;
+    --accent: #e27d60; --accent-soft: #2e1d18;
+    --accent-text: #e8a08a; --accent-on: #1a1d1c;
+  }
+
+  /* 2. Midnight Woodland Whimsy — original */
+  body[data-mode="light"] .palette-mww {
+    --brand: #152134; --text: #0b0a18; --text-muted: #5a6c5e;
+    --surface: #f2f5ee; --surface-raised: #fafbf6;
+    --border: #c8d3c4; --border-strong: #85ae8e;
+    --accent: #487d68; --accent-soft: #d4e3d8;
+    --accent-text: #224638; --accent-on: #f2f5ee;
+  }
+  body[data-mode="dark"] .palette-mww {
+    --brand: #85ae8e; --text: #c4d4c7; --text-muted: #6a8070;
+    --surface: #0b0a18; --surface-raised: #152134;
+    --border: #28384a; --border-strong: #315657;
+    --accent: #487d68; --accent-soft: #1a2820;
+    --accent-text: #85ae8e; --accent-on: #0b0a18;
+  }
+
+  /* 3. Mystic Waters */
+  body[data-mode="light"] .palette-mw {
+    --brand: #031926; --text: #031926; --text-muted: #6a8281;
+    --surface: #f8f1dd; --surface-raised: #fdf8ea;
+    --border: #d8d4c0; --border-strong: #9dbebb;
+    --accent: #468189; --accent-soft: #d2e2e3;
+    --accent-text: #1f4f56; --accent-on: #fdf8ea;
+  }
+  body[data-mode="dark"] .palette-mw {
+    --brand: #9dbebb; --text: #f4e9cd; --text-muted: #8ea8a7;
+    --surface: #031926; --surface-raised: #0e2c39;
+    --border: #1d4451; --border-strong: #468189;
+    --accent: #77aca2; --accent-soft: #143839;
+    --accent-text: #9dbebb; --accent-on: #031926;
+  }
+
+  /* =================================================================
+     SECTION 2 — MWW light v2 (contrast fix; dark unchanged)
+     ================================================================= */
+  body[data-mode="light"] .palette-mww-v2 {
+    --brand: #152134; --text: #0b0a18; --text-muted: #4a5c4e;
+    --surface: #f8faf3; --surface-raised: #ffffff;
+    --border: #d4dccc; --border-strong: #487d68;
+    --accent: #1f3f3a; --accent-soft: #d4e3d8;
+    --accent-text: #0f2a25; --accent-on: #ffffff;
+  }
+  body[data-mode="dark"] .palette-mww-v2 {
+    --brand: #85ae8e; --text: #c4d4c7; --text-muted: #6a8070;
+    --surface: #0b0a18; --surface-raised: #152134;
+    --border: #28384a; --border-strong: #315657;
+    --accent: #487d68; --accent-soft: #1a2820;
+    --accent-text: #85ae8e; --accent-on: #0b0a18;
+  }
+
+  /* =================================================================
+     SECTION 3 — Mashups (Concept 3 × Midnight Woodland Whimsy)
+     ================================================================= */
+
+  /* M1 — Forest Concept 3: C3 chassis, MWW deep forest as brand, coral kept */
+  body[data-mode="light"] .palette-m1 {
+    --brand: #2e5746; --text: #1a2820; --text-muted: #5a6c5e;
+    --surface: #f7f5f0; --surface-raised: #fdfcf8;
+    --border: #d6dad5; --border-strong: #9aa89a;
+    --accent: #e27d60; --accent-soft: #f8e0d6;
+    --accent-text: #8a3c25; --accent-on: #fdfcf8;
+  }
+  body[data-mode="dark"] .palette-m1 {
+    --brand: #85ae8e; --text: #e8e6e0; --text-muted: #8a958a;
+    --surface: #1a221d; --surface-raised: #252e27;
+    --border: #2f3a32; --border-strong: #487d68;
+    --accent: #e27d60; --accent-soft: #2e1d18;
+    --accent-text: #e8a08a; --accent-on: #1a221d;
+  }
+
+  /* M2 — Warm Midnight: MWW chassis + Concept 3 coral, slightly warmer cream */
+  body[data-mode="light"] .palette-m2 {
+    --brand: #152134; --text: #0b0a18; --text-muted: #5a6c5e;
+    --surface: #faf6ec; --surface-raised: #fffbf2;
+    --border: #e8dfca; --border-strong: #85ae8e;
+    --accent: #e27d60; --accent-soft: #f8e0d6;
+    --accent-text: #8a3c25; --accent-on: #faf6ec;
+  }
+  body[data-mode="dark"] .palette-m2 {
+    --brand: #85ae8e; --text: #f0e8d8; --text-muted: #8a948a;
+    --surface: #0b0a18; --surface-raised: #152134;
+    --border: #28384a; --border-strong: #487d68;
+    --accent: #e27d60; --accent-soft: #2e1d18;
+    --accent-text: #e8a08a; --accent-on: #0b0a18;
+  }
+
+  /* M3 — Dual Identity: pure C3 light + MWW dark, coral as the crossing thread */
+  body[data-mode="light"] .palette-m3 {
+    --brand: #1e4d4a; --text: #1e4d4a; --text-muted: #6b7c7a;
+    --surface: #f7f5f0; --surface-raised: #fdfcf8;
+    --border: #d6dad5; --border-strong: #aab2ad;
+    --accent: #e27d60; --accent-soft: #f8e0d6;
+    --accent-text: #8a3c25; --accent-on: #fdfcf8;
+  }
+  body[data-mode="dark"] .palette-m3 {
+    --brand: #85ae8e; --text: #e8e6e0; --text-muted: #8a948a;
+    --surface: #0b0a18; --surface-raised: #152134;
+    --border: #28384a; --border-strong: #487d68;
+    --accent: #e27d60; --accent-soft: #2e1d18;
+    --accent-text: #e8a08a; --accent-on: #0b0a18;
+  }
+
+  /* M4 — Forest-Teal Bridge: teal brand + forest mid + coral, both families present */
+  body[data-mode="light"] .palette-m4 {
+    --brand: #1e4d4a; --text: #1a2820; --text-muted: #5a6c5e;
+    --surface: #f5f4ec; --surface-raised: #fcfbf4;
+    --border: #c8d3c4; --border-strong: #487d68;
+    --accent: #e27d60; --accent-soft: #f8e0d6;
+    --accent-text: #8a3c25; --accent-on: #fcfbf4;
+  }
+  body[data-mode="dark"] .palette-m4 {
+    --brand: #7eb1ae; --text: #e8e6e0; --text-muted: #8a958a;
+    --surface: #0e2926; --surface-raised: #1a4441;
+    --border: #2a5754; --border-strong: #85ae8e;
+    --accent: #e27d60; --accent-soft: #2e1d18;
+    --accent-text: #e8a08a; --accent-on: #0e2926;
+  }
+</style>
+</head>
+
+<body data-mode="light">
+<aside class="archived-banner" style="position: sticky; top: 0; z-index: 9999; background: #fff3cd; border-bottom: 3px solid #f59e0b; padding: 12px 20px; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.5; color: #78350f; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+  <strong>ARCHIVED EXPLORATION.</strong> This file is preserved for historical reference only. The Mynk brand was finalized as <strong>Mynka Blue</strong> on 2026-05-19. Canonical visual reference: <a href="../palette-mocks-FINAL-mynka-blue.html" style="color: #78350f; text-decoration: underline;">palette-mocks-FINAL-mynka-blue.html</a>. Decision doc: <code style="background:rgba(0,0,0,0.08);padding:1px 5px;border-radius:3px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;">docs/MYNK-BRAND-PHASE-2-DECISIONS.md</code>.
+</aside>
+
+<header class="chrome-header">
+  <div>
+    <div class="chrome-title">Mynk — round 2 finalists</div>
+    <div class="chrome-sub">3 finalists + MWW light v2 + 4 mashups · 2026-05-19</div>
+  </div>
+  <div class="chrome-controls">
+    <button class="toggle-btn" data-mode-btn="light" aria-pressed="true">Light</button>
+    <button class="toggle-btn" data-mode-btn="dark" aria-pressed="false">Dark</button>
+  </div>
+</header>
+
+<section class="intro">
+  <h2>Round 2: the three finalists, plus four bridges between Concept 3 and Midnight Woodland Whimsy.</h2>
+  <p>You and the daughter narrowed it to <strong>Concept 3 (Warm graphite)</strong>, <strong>Midnight Woodland Whimsy</strong>, and <strong>Mystic Waters</strong>, with C3 and MWW out front. Two open questions: (1) MWW isn't warm — can we keep its pleasant outdoor calm but make it feel less indifferent? (2) MWW light mode reads a little washed out — can it be made more confident?</p>
+  <p>This page answers both. Section 1 reprints the three finalists for reference. Section 2 is MWW with a higher-contrast light mode (dark mode unchanged). Section 3 is four mashups exploring what happens when you blend C3's warm cream + coral pop with MWW's forest-green DNA.</p>
+  <div class="callout">
+    <strong>How to read the mashup pedigree strip.</strong> Each mashup card has a colored ribbon showing where each token came from — <span style="color:#c66d50; font-family: var(--font-mono); font-weight: 600;">orange = Concept 3</span>, <span style="color:#4a8d6d; font-family: var(--font-mono); font-weight: 600;">green = MWW</span>. The hex codes on the swatches are the actual values used in that card's light mode (top three) and dark mode (bottom two), so you can copy them into a Figma comp or paste them into someone's chat.
+  </div>
+</section>
+
+<h3 class="section-header">Section 1 · Round 2 finalists <span class="count">3 cards · unchanged from finalists doc</span></h3>
+<p class="section-blurb">Reprinted here so you don't have to bounce between docs. C3 (3a) is the "safe default" warm choice; MWW is the "pleasant cool wildcard"; Mystic Waters is the "design-system depth" alternative.</p>
+
+<main>
+
+  <!-- 1. 3a Warm graphite -->
+  <article class="palette-frame palette-3a">
+    <div class="palette-label">
+      <div>
+        <div class="palette-label-name">3a · Concept 3 (Warm graphite)</div>
+        <div class="palette-label-tag">teal as flavor · cream-coral light · graphite dark</div>
+      </div>
+      <div class="palette-label-source">palette-mocks<br>concept-3-dark · 3a</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #1e4d4a; color: #f7f5f0;">#1E4D4A</div>
+      <div class="swatch" style="background: #f7f5f0; color: #1e4d4a;">#F7F5F0</div>
+      <div class="swatch" style="background: #1a1d1c; color: #e8e6e0;">#1A1D1C</div>
+      <div class="swatch" style="background: #4a8b87; color: #1a1d1c;">#4A8B87</div>
+      <div class="swatch" style="background: #e27d60; color: #1a1d1c;">#E27D60</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What 3a is:</strong> The warm-default option. Cream + teal + coral in light mode; warm graphite + lifted teal + coral in dark mode. Teal is flavor, not foundation. Coral is the one warm pop.
+      <div class="vs"><strong>vs MWW:</strong> 3a has warmth and a clear color story (cream/teal/coral). MWW has atmosphere and pleasantness, less identity. 3a's risk: coral can read "startup-y" depending on typography. MWW's risk: feels indifferent in light mode.</div>
+    </div>
+  </article>
+
+  <!-- 2. Midnight Woodland Whimsy (original) -->
+  <article class="palette-frame palette-mww">
+    <div class="palette-label">
+      <div>
+        <div class="palette-label-name">Midnight Woodland Whimsy</div>
+        <div class="palette-label-tag">deep navy · sage forest · no warm pop</div>
+      </div>
+      <div class="palette-label-source">daughter-picks<br>original</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #85ae8e; color: #0b0a18;">#85AE8E</div>
+      <div class="swatch" style="background: #487d68; color: #f2f5ee;">#487D68</div>
+      <div class="swatch" style="background: #315657; color: #f2f5ee;">#315657</div>
+      <div class="swatch" style="background: #152134; color: #f2f5ee;">#152134</div>
+      <div class="swatch" style="background: #0b0a18; color: #85ae8e;">#0B0A18</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What MWW is:</strong> Forest-floor mood. Deep navy + sage + mid-forest greens. Dark mode is the star; light mode loses the "midnight" feel because there's no contrast-anchor. Patagonia/REI energy.
+      <div class="vs"><strong>The two open concerns:</strong> (1) no warmth — the whole system reads cool/atmospheric, no pop. (2) light mode washed out — sage accent on cream-sage surface doesn't have enough fight in it. Section 2 fixes (2); the mashups address (1).</div>
+    </div>
+  </article>
+
+  <!-- 3. Mystic Waters -->
+  <article class="palette-frame palette-mw">
+    <div class="palette-label">
+      <div>
+        <div class="palette-label-name">Mystic Waters</div>
+        <div class="palette-label-tag">deep teal · cream surface · 5-step gradient</div>
+      </div>
+      <div class="palette-label-source">round-2-coolors<br>palette B</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #031926; color: #f4e9cd;">#031926</div>
+      <div class="swatch" style="background: #468189; color: #f4e9cd;">#468189</div>
+      <div class="swatch" style="background: #77aca2; color: #031926;">#77ACA2</div>
+      <div class="swatch" style="background: #9dbebb; color: #031926;">#9DBEBB</div>
+      <div class="swatch" style="background: #f4e9cd; color: #031926;">#F4E9CD</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What Mystic Waters is:</strong> 5-step teal gradient from near-black to warm cream. No coral. Most "design system depth" of the three. Best when you want a single tasteful color family instead of brand-color + accent.
+      <div class="vs"><strong>The weaker of the three:</strong> You both flagged this as third behind C3 and MWW. Still here for reference; if the mashups change your mind about coral, you might prefer Mystic Waters' pure-teal approach.</div>
+    </div>
+  </article>
+
+</main>
+
+<h3 class="section-header">Section 2 · Midnight Woodland Whimsy — light v2 <span class="count">contrast fix · dark unchanged</span></h3>
+<p class="section-blurb">The diagnosis: original MWW light uses a mid-sage accent (#487D68) on a cream-sage surface (#F2F5EE). They live next to each other in lightness and saturation, so the CTA button and the AI-content tint both feel underpowered. <strong>v2 fixes that</strong>: keep the same MWW DNA, but use deep forest (#1F3F3A) as the accent for buttons/CTAs, brighten the surface to near-white (#F8FAF3) so green has room to register, and demote sage (#487D68) to a strong-border role instead of a primary one.</p>
+
+<main>
+
+  <!-- 4. MWW light v2 -->
+  <article class="palette-frame palette-mww-v2">
+    <div class="palette-label">
+      <div>
+        <div class="palette-label-name">MWW · light v2</div>
+        <div class="palette-label-tag">deep-forest accent · brighter cream · same dark mode</div>
+      </div>
+      <div class="palette-label-source">section 2<br>contrast fix</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #152134; color: #f8faf3;">#152134</div>
+      <div class="swatch" style="background: #1f3f3a; color: #f8faf3;">#1F3F3A</div>
+      <div class="swatch" style="background: #f8faf3; color: #152134;">#F8FAF3</div>
+      <div class="swatch" style="background: #487d68; color: #f8faf3;">#487D68</div>
+      <div class="swatch" style="background: #0b0a18; color: #85ae8e;">#0B0A18</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What changed from original MWW:</strong> Surface lifted from #F2F5EE → #F8FAF3 (cleaner, more white). Accent demoted from sage #487D68 to deep forest #1F3F3A (more contrast against the bright surface; CTA pops). Border-strong promoted to sage #487D68 (the original accent becomes a secondary support role). Text-muted darkened from #5A6C5E → #4A5C4E. <strong>Dark mode is byte-for-byte unchanged</strong> — only light mode is touched.
+      <div class="vs"><strong>vs original MWW:</strong> The CTA button reads as a confident dark-green pill instead of a muted sage smudge. The AI summary panel still uses the soft sage tint, so the "outdoor pleasantness" survives. Still no warmth — that's the mashups' job. If you like this contrast but want a warm pop, look at M2 below.</div>
+    </div>
+  </article>
+
+</main>
+
+<h3 class="section-header">Section 3 · Mashups <span class="count">4 cards · C3 × MWW design space</span></h3>
+<p class="section-blurb">Four ways to combine. Each one keeps one parent's chassis and borrows from the other; the pedigree strip on each card shows which tokens came from where. Quick map: <strong>M1</strong> swaps C3's teal for MWW's forest (keep coral pop). <strong>M2</strong> keeps MWW's whole palette but adds coral. <strong>M3</strong> is C3 in the day, MWW at night, with coral as the connective thread. <strong>M4</strong> has both teal and forest in the same palette, with coral.</p>
+
+<main>
+
+  <!-- 5. M1 — Forest Concept 3 -->
+  <article class="palette-frame palette-m1">
+    <div class="palette-label">
+      <div>
+        <div class="palette-label-name">M1 · Forest Concept 3</div>
+        <div class="palette-label-tag">C3 chassis · forest replaces teal · coral kept</div>
+      </div>
+      <div class="palette-label-source">mashup<br>C3 form, MWW brand</div>
+    </div>
+    <div class="pedigree">
+      <span class="from-c3">[C3] cream surface</span>
+      <span class="from-mww">[MWW] deep forest brand</span>
+      <span class="from-c3">[C3] coral accent</span>
+      <span class="from-c3">[C3] warm graphite dark</span>
+      <span class="from-mww">[MWW] sage in dark</span>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #2e5746; color: #f7f5f0;">#2E5746</div>
+      <div class="swatch" style="background: #f7f5f0; color: #2e5746;">#F7F5F0</div>
+      <div class="swatch" style="background: #e27d60; color: #1a2820;">#E27D60</div>
+      <div class="swatch" style="background: #1a221d; color: #e8e6e0;">#1A221D</div>
+      <div class="swatch" style="background: #85ae8e; color: #1a221d;">#85AE8E</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What M1 is:</strong> Concept 3's whole structure — cream surface, coral pop, warm-graphite dark — with the brand color shifted from teal (#1E4D4A) to deep forest (#2E5746). Same layout, same warmth, slightly more "outdoor."
+      <div class="vs"><strong>vs C3 (3a):</strong> The teal becomes forest. That's the entire delta. Pick M1 if "forest as identity" pulls you more than "teal as identity," but you still want C3's warm cream + coral pop. <strong>vs MWW:</strong> Way warmer than MWW (cream surface, coral CTA), but inherits MWW's brand-color direction.</div>
+    </div>
+  </article>
+
+  <!-- 6. M2 — Warm Midnight -->
+  <article class="palette-frame palette-m2">
+    <div class="palette-label">
+      <div>
+        <div class="palette-label-name">M2 · Warm Midnight</div>
+        <div class="palette-label-tag">MWW chassis · slightly warmer cream · coral pop</div>
+      </div>
+      <div class="palette-label-source">mashup<br>MWW form, C3 warmth</div>
+    </div>
+    <div class="pedigree">
+      <span class="from-mww">[MWW] navy brand</span>
+      <span class="from-c3">[C3] warmer cream surface</span>
+      <span class="from-c3">[C3] coral accent</span>
+      <span class="from-mww">[MWW] deep navy dark</span>
+      <span class="from-mww">[MWW] sage brand in dark</span>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #152134; color: #faf6ec;">#152134</div>
+      <div class="swatch" style="background: #faf6ec; color: #152134;">#FAF6EC</div>
+      <div class="swatch" style="background: #e27d60; color: #faf6ec;">#E27D60</div>
+      <div class="swatch" style="background: #0b0a18; color: #f0e8d8;">#0B0A18</div>
+      <div class="swatch" style="background: #85ae8e; color: #0b0a18;">#85AE8E</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What M2 is:</strong> MWW's whole palette intact — navy brand, deep navy dark surface, sage support — but with two surgical edits. The cream surface gets warmer (#F2F5EE → #FAF6EC, more buttery less green-tinted). And coral (#E27D60) takes the accent role from sage in both modes. Now the CTA pops, the AI summary tint feels warm, and the system has a personality.
+      <div class="vs"><strong>vs original MWW:</strong> Same outdoor-calm DNA, but with one warm signal. This is the "addresses both open concerns" answer — coral fixes the warmth, the warmer cream + coral CTA fixes the contrast. <strong>vs C3:</strong> Cooler overall. The brand text is navy (not teal); the dark mode is much deeper.</div>
+    </div>
+  </article>
+
+  <!-- 7. M3 — Dual Identity -->
+  <article class="palette-frame palette-m3">
+    <div class="palette-label">
+      <div>
+        <div class="palette-label-name">M3 · Dual Identity</div>
+        <div class="palette-label-tag">C3 by day · MWW by night · coral connects</div>
+      </div>
+      <div class="palette-label-source">mashup<br>different modes, different parents</div>
+    </div>
+    <div class="pedigree">
+      <span class="from-c3">[C3] full light mode</span>
+      <span class="from-mww">[MWW] deep navy dark surface</span>
+      <span class="from-mww">[MWW] sage brand in dark</span>
+      <span class="from-c3">[C3] coral in both modes</span>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #1e4d4a; color: #f7f5f0;">#1E4D4A</div>
+      <div class="swatch" style="background: #f7f5f0; color: #1e4d4a;">#F7F5F0</div>
+      <div class="swatch" style="background: #e27d60; color: #1e4d4a;">#E27D60</div>
+      <div class="swatch" style="background: #0b0a18; color: #85ae8e;">#0B0A18</div>
+      <div class="swatch" style="background: #85ae8e; color: #0b0a18;">#85AE8E</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What M3 is:</strong> Light mode is byte-identical to Concept 3 (cream + teal + coral). Dark mode is byte-identical to MWW (deep navy + sage). The thread connecting them: <strong>coral is the accent in both modes</strong>, so buttons, recording dots, and AI-field borders look like the "same product" in either theme. The brand text changes color across modes (teal → sage) because each mode picks the color that lives best in it.
+      <div class="vs"><strong>The risk:</strong> Mode-switching looks like switching between two products. The coral thread is what makes it cohere. <strong>The upside:</strong> Each mode is the absolute best version of its half. Daytime tutoring sessions get a warm cream room; late-night planning sessions get a forest-floor cave. Toggle to compare.</div>
+    </div>
+  </article>
+
+  <!-- 8. M4 — Forest-Teal Bridge -->
+  <article class="palette-frame palette-m4">
+    <div class="palette-label">
+      <div>
+        <div class="palette-label-name">M4 · Forest-Teal Bridge</div>
+        <div class="palette-label-tag">teal AND forest · cream surface · coral pop</div>
+      </div>
+      <div class="palette-label-source">mashup<br>both color families present</div>
+    </div>
+    <div class="pedigree">
+      <span class="from-c3">[C3] teal brand</span>
+      <span class="from-mww">[MWW] forest border</span>
+      <span class="from-c3">[C3] cream surface</span>
+      <span class="from-c3">[C3] coral accent</span>
+      <span class="from-mww">[MWW] sage in dark</span>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #1e4d4a; color: #f5f4ec;">#1E4D4A</div>
+      <div class="swatch" style="background: #487d68; color: #f5f4ec;">#487D68</div>
+      <div class="swatch" style="background: #f5f4ec; color: #1e4d4a;">#F5F4EC</div>
+      <div class="swatch" style="background: #e27d60; color: #1e4d4a;">#E27D60</div>
+      <div class="swatch" style="background: #0e2926; color: #e8e6e0;">#0E2926</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What M4 is:</strong> Both color families live in the system at once. Teal (#1E4D4A) is the brand (logo, hero, links). Forest (#487D68) is the strong border / divider color (you can see it on the ghost CTA outline and in the session-row dividers if you look). Coral (#E27D60) is the accent. Dark mode goes to a deep teal-forest blend (#0E2926) that splits the difference between C3 dark (#1A1D1C) and MWW dark (#0B0A18). Body text is dark forest (#1A2820), not pure navy, so the forest family has a quiet presence even in prose.
+      <div class="vs"><strong>vs the others:</strong> The most "design system" of the four. You get a teal brand AND a forest support color AND a coral pop, which means more flexibility for sub-features later (e.g., "AI" content could lean forest, "Live recording" could lean coral, brand pages stay teal). <strong>The risk:</strong> three accent families is one more than a small product needs — could read as undecided rather than rich.</div>
+    </div>
+  </article>
+
+</main>
+
+<script>
+  const body = document.body;
+  const btns = document.querySelectorAll('[data-mode-btn]');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const m = btn.dataset.modeBtn;
+      body.setAttribute('data-mode', m);
+      btns.forEach(b => b.setAttribute('aria-pressed', b.dataset.modeBtn === m ? 'true' : 'false'));
+    });
+  });
+</script>
+
+</body>
+</html>

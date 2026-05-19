@@ -1,0 +1,956 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mynk — finalists round 6 (full 4×4 matrix, richer surfaces)</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,SOFT,wght@9..144,0..100,400..900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  *,*::before,*::after { box-sizing: border-box; }
+  :root {
+    --font-body: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --radius-sm: 6px; --radius-md: 10px; --radius-lg: 14px;
+    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+    --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-12: 48px;
+  }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: var(--font-body);
+    background: #f0eee8; color: #1a1a1f;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body[data-mode="dark"] { background: #0a0a0c; color: #f0ece6; }
+
+  .chrome-header {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(240,238,232,0.94);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    padding: var(--space-4) var(--space-6);
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-6);
+  }
+  body[data-mode="dark"] .chrome-header {
+    background: rgba(10,10,12,0.94);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .chrome-title {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 700;
+    font-size: 18px; letter-spacing: -0.02em;
+  }
+  .chrome-sub {
+    font-size: 13px; opacity: 0.6;
+    font-family: var(--font-mono);
+  }
+  .chrome-controls { display: flex; gap: var(--space-3); align-items: center; }
+  .toggle-btn {
+    border: 1px solid currentColor; background: transparent;
+    color: inherit; padding: 6px 14px; border-radius: 999px;
+    font: inherit; font-size: 13px; cursor: pointer; opacity: 0.75;
+  }
+  .toggle-btn:hover { opacity: 1; }
+  .toggle-btn[aria-pressed="true"] {
+    background: currentColor; color: #f0eee8; opacity: 1;
+  }
+  body[data-mode="dark"] .toggle-btn[aria-pressed="true"] { color: #0a0a0c; }
+
+  .intro {
+    max-width: 1100px; margin: 0 auto;
+    padding: var(--space-8) var(--space-6) var(--space-6);
+    font-size: 14px; line-height: 1.6;
+  }
+  .intro h2 {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 600;
+    font-size: 30px; letter-spacing: -0.025em;
+    margin: 0 0 var(--space-3);
+  }
+  .intro p { margin: 0 0 var(--space-3); opacity: 0.85; }
+  .intro .callout {
+    margin: var(--space-4) 0 0;
+    padding: var(--space-3) var(--space-4);
+    border-left: 3px solid currentColor;
+    background: rgba(0,0,0,0.04);
+    font-size: 13px; opacity: 0.85;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+  body[data-mode="dark"] .intro .callout { background: rgba(255,255,255,0.04); }
+  .intro .legend {
+    margin-top: var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    background: rgba(0,0,0,0.03);
+    border-radius: var(--radius-sm);
+    font-size: 12px; line-height: 1.5;
+    display: grid; grid-template-columns: auto 1fr; gap: var(--space-2) var(--space-4);
+  }
+  body[data-mode="dark"] .intro .legend { background: rgba(255,255,255,0.03); }
+  .intro .legend dt {
+    font-family: var(--font-mono); font-weight: 600;
+    color: currentColor; opacity: 0.9;
+    white-space: nowrap;
+  }
+  .intro .legend dd { margin: 0; opacity: 0.75; }
+
+  /* ============================== Full 4×4 matrix grid */
+  .full-matrix {
+    max-width: 2200px; margin: 0 auto;
+    padding: 0 var(--space-6) var(--space-12);
+    display: grid;
+    grid-template-columns: 140px repeat(4, minmax(310px, 1fr));
+    gap: var(--space-3);
+  }
+  @media (max-width: 1600px) {
+    .full-matrix { grid-template-columns: 120px repeat(4, minmax(260px, 1fr)); }
+  }
+  @media (max-width: 1200px) {
+    .full-matrix {
+      grid-template-columns: 100px 1fr 1fr;
+    }
+    .full-matrix .col-header { display: none; }
+  }
+  @media (max-width: 720px) {
+    .full-matrix { grid-template-columns: 1fr; }
+    .full-matrix .col-header,
+    .full-matrix .row-header,
+    .full-matrix .matrix-corner { display: none; }
+    .cell::before {
+      content: attr(data-label);
+      display: block;
+      font: 500 10px var(--font-mono);
+      text-transform: uppercase; letter-spacing: 0.05em;
+      opacity: 0.65; margin-bottom: var(--space-2);
+    }
+  }
+
+  .matrix-corner {
+    background: transparent;
+    display: flex; align-items: end; justify-content: end;
+    padding: var(--space-2);
+    font: 10px var(--font-mono);
+    color: inherit; opacity: 0.4;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    text-align: right;
+  }
+  .col-header {
+    background: transparent;
+    padding: var(--space-3) var(--space-3);
+    text-align: center;
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    font: 600 12px var(--font-body);
+    color: inherit;
+  }
+  body[data-mode="dark"] .col-header { border-bottom-color: rgba(255,255,255,0.08); }
+  .col-header .axis {
+    display: block;
+    font: 10px var(--font-mono);
+    opacity: 0.6;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    margin-top: 3px;
+    font-weight: 400;
+  }
+
+  .row-header {
+    padding: var(--space-4) var(--space-3);
+    display: flex; flex-direction: column; justify-content: center;
+    border-right: 1px solid rgba(0,0,0,0.08);
+    color: inherit;
+  }
+  body[data-mode="dark"] .row-header { border-right-color: rgba(255,255,255,0.08); }
+  .row-header .row-name {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 600;
+    font-size: 15px; letter-spacing: -0.015em;
+    margin-bottom: var(--space-1);
+    line-height: 1.15;
+  }
+  .row-header .row-tag {
+    font: 10px var(--font-mono);
+    opacity: 0.6;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    line-height: 1.3;
+    margin-bottom: var(--space-3);
+  }
+  .row-header .row-swatches {
+    display: flex; height: 14px;
+    border-radius: 3px; overflow: hidden;
+    border: 1px solid rgba(0,0,0,0.08);
+  }
+  body[data-mode="dark"] .row-header .row-swatches { border-color: rgba(255,255,255,0.08); }
+  .row-header .row-swatch { flex: 1; }
+
+  /* ============================== The cells — now with more surfaces
+     Each cell has, top to bottom:
+       1. Brand-color left stripe (always visible, 4px)         → exposes BRAND
+       2. Wordmark + heading + sub
+       3. CTA: primary + ghost button                            → exposes ACCENT + BORDER-STRONG
+       4. Mini dashboard (2 session rows with bordered dividers) → exposes BORDER + TEXT-MUTED + ACCENT-SOFT (via tag)
+       5. Recording bar with dot+halo                            → exposes ACCENT + ACCENT-SOFT
+       6. Prominent AI summary panel                             → exposes ACCENT-SOFT (bg) + ACCENT (border) + ACCENT-TEXT (label)
+  */
+  .cell {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--brand);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+    display: flex; flex-direction: column;
+    gap: var(--space-4);
+  }
+  .cell-wordmark {
+    font-family: var(--font-display);
+    color: var(--brand);
+    font-size: 58px;
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+    margin: 0;
+  }
+  .cell-wordmark .dot { color: var(--accent); margin-left: 1px; }
+  .cell-heading {
+    font-family: var(--font-display);
+    color: var(--text);
+    font-size: 21px;
+    line-height: 1.16;
+    letter-spacing: -0.02em;
+    margin: 0 0 4px;
+  }
+  .cell-sub {
+    font: 12px/1.5 var(--font-body);
+    color: var(--text-muted);
+    margin: 0;
+  }
+
+  /* CTA strip — primary AND ghost so border-strong is visible at scale */
+  .cell-cta {
+    display: flex; gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+  .cell-btn-primary {
+    font: 500 11px var(--font-body);
+    padding: 7px 13px;
+    background: var(--accent); color: var(--accent-on);
+    border: 1px solid transparent;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  .cell-btn-ghost {
+    font: 500 11px var(--font-body);
+    padding: 7px 13px;
+    background: transparent; color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    cursor: pointer;
+  }
+
+  /* Mini dashboard with bordered rows */
+  .cell-dash {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-3);
+  }
+  .cell-dash-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: var(--space-2);
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .cell-dash-row:last-child { border-bottom: none; }
+  .cell-dash-student {
+    font: 500 12px/1.2 var(--font-body);
+    color: var(--text);
+  }
+  .cell-dash-sub {
+    font: 10px/1.3 var(--font-body);
+    color: var(--text-muted);
+    margin-top: 1px;
+  }
+  .cell-dash-tag {
+    font: 500 8px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 3px 6px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent-text);
+    white-space: nowrap;
+  }
+  .cell-dash-when {
+    font: 10px var(--font-mono);
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  /* Recording bar */
+  .cell-rec {
+    display: flex; align-items: center; gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+  }
+  .cell-rec-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+    animation: rec-pulse 1.8s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+  @keyframes rec-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px var(--accent-soft); }
+    50% { box-shadow: 0 0 0 6px transparent; }
+  }
+  .cell-rec-label {
+    font: 500 11px var(--font-body);
+    color: var(--text);
+    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .cell-rec-time {
+    font: 600 11px var(--font-mono);
+    color: var(--text);
+  }
+
+  /* AI summary panel — prominent, the biggest accent-soft surface */
+  .cell-ai {
+    padding: var(--space-3) var(--space-4);
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  }
+  .cell-ai-label {
+    display: block;
+    font: 500 9px var(--font-mono);
+    color: var(--accent-text);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: var(--space-1);
+  }
+  .cell-ai-body {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 14, "SOFT" 30, "wght" 400;
+    font-size: 12.5px; line-height: 1.5;
+    color: var(--text);
+    margin: 0;
+  }
+
+  /* ============================== Typography variant tunings
+     Grouped by axis so V2/V3 body weight variation applies cleanly. */
+
+  /* WORDMARK axis — V3w (heaviest) vs V4w (soft + bold) */
+  .v3w-v2h .cell-wordmark,
+  .v3w-v3h .cell-wordmark { font-variation-settings: "opsz" 144, "SOFT" 0,  "wght" 900; }
+
+  .v4w-v2h .cell-wordmark,
+  .v4w-v3h .cell-wordmark { font-variation-settings: "opsz" 144, "SOFT" 60, "wght" 700; }
+
+  /* HEADING axis — V2h (crisp, wght 700) vs V3h (heavier, wght 800) */
+  .v3w-v2h .cell-heading,
+  .v4w-v2h .cell-heading { font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700; }
+
+  .v3w-v3h .cell-heading,
+  .v4w-v3h .cell-heading { font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 800; }
+
+  /* BODY axis — V2 column = lighter body (Inter 400 + Fraunces 400)
+                  V3 column = slightly heavier body (Inter 500 + Fraunces 500)
+     Applies to cell-sub, cell-dash-sub, cell-body-prose (Inter) and cell-ai-body (Fraunces). */
+  .v3w-v2h .cell-sub,
+  .v3w-v2h .cell-dash-sub,
+  .v4w-v2h .cell-sub,
+  .v4w-v2h .cell-dash-sub { font-weight: 400; }
+
+  .v3w-v2h .cell-ai-body,
+  .v4w-v2h .cell-ai-body { font-variation-settings: "opsz" 14, "SOFT" 30, "wght" 400; }
+
+  .v3w-v3h .cell-sub,
+  .v3w-v3h .cell-dash-sub,
+  .v4w-v3h .cell-sub,
+  .v4w-v3h .cell-dash-sub { font-weight: 500; }
+
+  .v3w-v3h .cell-ai-body,
+  .v4w-v3h .cell-ai-body { font-variation-settings: "opsz" 14, "SOFT" 30, "wght" 500; }
+
+  /* ============================== Palette assignments (per-cell scoped vars) */
+
+  /* F1 — Forest-Teal Bridge v2 */
+  .cell.f1 {
+    --brand: #1e4d4a; --text: #1a2820; --text-muted: #5a6c5e;
+    --surface: #fcfbf4; --border: #c8d3c4; --border-strong: #487d68;
+    --accent: #e27d60; --accent-soft: #f8e0d6;
+    --accent-text: #8a3c25; --accent-on: #fcfbf4;
+  }
+  body[data-mode="dark"] .cell.f1 {
+    --brand: #7eb1ae; --text: #f0ede4; --text-muted: #a5b0a5;
+    --surface: #102f2b; --border: #1c3f3c; --border-strong: #85ae8e;
+    --accent: #e27d60; --accent-soft: #2e1d18;
+    --accent-text: #e8a08a; --accent-on: #07201c;
+  }
+
+  /* F2 — Bluer Bridge */
+  .cell.f2 {
+    --brand: #1e3d54; --text: #15203a; --text-muted: #5a6877;
+    --surface: #fcfbf4; --border: #c5cfd0; --border-strong: #4a6680;
+    --accent: #e27d60; --accent-soft: #f8e0d6;
+    --accent-text: #8a3c25; --accent-on: #fcfbf4;
+  }
+  body[data-mode="dark"] .cell.f2 {
+    --brand: #7ea4b1; --text: #f0ede4; --text-muted: #a5b5c0;
+    --surface: #0e2a38; --border: #1c3548; --border-strong: #6a8fa0;
+    --accent: #e27d60; --accent-soft: #2e1d18;
+    --accent-text: #e8a08a; --accent-on: #051a24;
+  }
+
+  /* F3 — Quieter Coral Bridge */
+  .cell.f3 {
+    --brand: #1e4d4a; --text: #1a2820; --text-muted: #5a6c5e;
+    --surface: #fcfbf4; --border: #c8d3c4; --border-strong: #487d68;
+    --accent: #d08d7a; --accent-soft: #f1ddd2;
+    --accent-text: #7a3a26; --accent-on: #fcfbf4;
+  }
+  body[data-mode="dark"] .cell.f3 {
+    --brand: #7eb1ae; --text: #f0ede4; --text-muted: #a5b0a5;
+    --surface: #102f2b; --border: #1c3f3c; --border-strong: #85ae8e;
+    --accent: #d08d7a; --accent-soft: #2a1d18;
+    --accent-text: #dba391; --accent-on: #07201c;
+  }
+
+  /* F4 — Softest Bridge (all three dials) */
+  .cell.f4 {
+    --brand: #1e3d54; --text: #1a2334; --text-muted: #5a6877;
+    --surface: #fcfbf4; --border: #c5cfd0; --border-strong: #4a6680;
+    --accent: #d08d7a; --accent-soft: #f1ddd2;
+    --accent-text: #7a3a26; --accent-on: #fcfbf4;
+  }
+  body[data-mode="dark"] .cell.f4 {
+    --brand: #7ea4b1; --text: #f0ede4; --text-muted: #a5b5c0;
+    --surface: #143245; --border: #1f3d4f; --border-strong: #6a8fa0;
+    --accent: #d08d7a; --accent-soft: #2a1d18;
+    --accent-text: #dba391; --accent-on: #0a2230;
+  }
+
+  /* ============================== Closing read-out */
+  .readout {
+    max-width: 1100px; margin: 0 auto;
+    padding: var(--space-8) var(--space-6) var(--space-12);
+    border-top: 1px solid rgba(0,0,0,0.08);
+    font-size: 14px; line-height: 1.6;
+  }
+  body[data-mode="dark"] .readout { border-top-color: rgba(255,255,255,0.08); }
+  .readout h3 {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 600;
+    font-size: 22px; letter-spacing: -0.02em;
+    margin: 0 0 var(--space-3);
+  }
+  .readout p { margin: 0 0 var(--space-3); opacity: 0.85; }
+</style>
+</head>
+
+<body data-mode="light">
+<aside class="archived-banner" style="position: sticky; top: 0; z-index: 9999; background: #fff3cd; border-bottom: 3px solid #f59e0b; padding: 12px 20px; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.5; color: #78350f; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+  <strong>ARCHIVED EXPLORATION.</strong> This file is preserved for historical reference only. The Mynk brand was finalized as <strong>Mynka Blue</strong> on 2026-05-19. Canonical visual reference: <a href="../palette-mocks-FINAL-mynka-blue.html" style="color: #78350f; text-decoration: underline;">palette-mocks-FINAL-mynka-blue.html</a>. Decision doc: <code style="background:rgba(0,0,0,0.08);padding:1px 5px;border-radius:3px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;">docs/MYNK-BRAND-PHASE-2-DECISIONS.md</code>.
+</aside>
+
+<header class="chrome-header">
+  <div>
+    <div class="chrome-title">Mynk — round 6: matrix with richer surfaces</div>
+    <div class="chrome-sub">4 palettes × 4 typography combos · 16 cells · ghost button + dashboard + AI panel · 2026-05-19</div>
+  </div>
+  <div class="chrome-controls">
+    <button class="toggle-btn" data-mode-btn="light" aria-pressed="true">Light</button>
+    <button class="toggle-btn" data-mode-btn="dark" aria-pressed="false">Dark</button>
+  </div>
+</header>
+
+<section class="intro">
+  <h2>Same matrix, but with more surface area so the palettes actually differentiate.</h2>
+  <p>You called it: round 5's compact cells made all four light modes look almost identical. That's because ~70% of each cell was cream surface and the only colored surfaces (small wordmark, tiny button, tiny tag) were too small to register the differences. The fix isn't <em>more cards</em>, it's <em>more surfaces per card</em> — specifically the ones where the palette differences actually live.</p>
+  <p>Five surfaces added or enlarged per cell, each one designed to expose a different token:</p>
+  <dl class="legend">
+    <dt>Brand stripe (left edge)</dt>
+    <dd>4px solid brand color on the left border of every cell. Always visible, always at scale. F1/F3 will show teal here; F2/F4 will show blue.</dd>
+    <dt>Ghost button</dt>
+    <dd>Second CTA next to "Start trial." Border uses <code>border-strong</code> — that's forest (#487D68) on F1/F3 vs blue-grey (#4A6680) on F2/F4. Hold your cursor over both buttons to read the contrast.</dd>
+    <dt>Mini dashboard</dt>
+    <dd>Two session rows with bordered dividers. Exposes <code>border</code>, <code>text-muted</code>, and the small AI tag (which uses <code>accent-soft</code> + <code>accent-text</code>).</dd>
+    <dt>Recording bar</dt>
+    <dd>The pulsing dot has a halo at 3× radius using <code>accent-soft</code>. F1/F2's bright coral halo is much more visible than F3/F4's muted coral halo.</dd>
+    <dt>AI summary panel</dt>
+    <dd>The largest accent-soft surface in each cell. This is where F1/F2's bright coral really separates from F3/F4's muted coral — it's a panel-sized splash of the accent family.</dd>
+    <dt>Body text weight (per V2/V3 column)</dt>
+    <dd>V2 columns render body text at Inter 400 + Fraunces 400 (lighter); V3 columns render at Inter 500 + Fraunces 500 (slightly heavier). Compare the sub-line under the heading, the small "Algebra II · 47 min" subtext in the dashboard rows, and the AI summary prose to see the body-weight delta cleanly between V2h and V3h columns.</dd>
+  </dl>
+  <div class="callout">
+    <strong>If F1 and F2 still look "the same" after this, the answer is they essentially <em>are</em>.</strong> The only structural difference between them is brand color rotating from HSL 178° (teal) to 210° (blue) — same lightness, same saturation, same accent, same surface. That's an honest finding: the daughter's "blues feel softer" preference and your "Forest-Teal Bridge v2" preference may be picking the same palette wearing two hats.
+  </div>
+</section>
+
+<div class="full-matrix">
+
+  <!-- ============= Header row ============= -->
+  <div class="matrix-corner">palette &nbsp;\&nbsp; type →</div>
+  <div class="col-header">V3w + V2h<span class="axis">heaviest mark · crisp heading · lighter body</span></div>
+  <div class="col-header">V3w + V3h<span class="axis">heaviest mark · heavy heading · medium body</span></div>
+  <div class="col-header">V4w + V2h<span class="axis">soft mark · crisp heading · lighter body</span></div>
+  <div class="col-header">V4w + V3h<span class="axis">soft mark · heavy heading · medium body</span></div>
+
+  <!-- ============= F1 row ============= -->
+  <div class="row-header">
+    <div class="row-name">F1</div>
+    <div class="row-tag">Forest-Teal<br>Bridge v2</div>
+    <div class="row-swatches">
+      <div class="row-swatch" style="background:#1e4d4a"></div>
+      <div class="row-swatch" style="background:#487d68"></div>
+      <div class="row-swatch" style="background:#f5f4ec"></div>
+      <div class="row-swatch" style="background:#e27d60"></div>
+    </div>
+  </div>
+  <article class="cell f1 v3w-v2h" data-label="F1 · V3w+V2h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <div>
+      <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+      <p class="cell-sub">Stay present. We handle the memory.</p>
+    </div>
+    <div class="cell-cta">
+      <button class="cell-btn-primary">Start trial</button>
+      <button class="cell-btn-ghost">How it works</button>
+    </div>
+    <div class="cell-dash">
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Aiden K.</div><div class="cell-dash-sub">Algebra II · 47 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">Yesterday</span></div>
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Maya R.</div><div class="cell-dash-sub">SAT prep · 52 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">2d ago</span></div>
+    </div>
+    <div class="cell-rec">
+      <span class="cell-rec-dot"></span>
+      <span class="cell-rec-label">Recording · Aiden K.</span>
+      <span class="cell-rec-time">23:14</span>
+    </div>
+    <div class="cell-ai">
+      <span class="cell-ai-label">AI summary</span>
+      <p class="cell-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; still needs reps on completing the square.</p>
+    </div>
+  </article>
+  <article class="cell f1 v3w-v3h" data-label="F1 · V3w+V3h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <div>
+      <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+      <p class="cell-sub">Stay present. We handle the memory.</p>
+    </div>
+    <div class="cell-cta">
+      <button class="cell-btn-primary">Start trial</button>
+      <button class="cell-btn-ghost">How it works</button>
+    </div>
+    <div class="cell-dash">
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Aiden K.</div><div class="cell-dash-sub">Algebra II · 47 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">Yesterday</span></div>
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Maya R.</div><div class="cell-dash-sub">SAT prep · 52 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">2d ago</span></div>
+    </div>
+    <div class="cell-rec">
+      <span class="cell-rec-dot"></span>
+      <span class="cell-rec-label">Recording · Aiden K.</span>
+      <span class="cell-rec-time">23:14</span>
+    </div>
+    <div class="cell-ai">
+      <span class="cell-ai-label">AI summary</span>
+      <p class="cell-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; still needs reps on completing the square.</p>
+    </div>
+  </article>
+  <article class="cell f1 v4w-v2h" data-label="F1 · V4w+V2h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <div>
+      <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+      <p class="cell-sub">Stay present. We handle the memory.</p>
+    </div>
+    <div class="cell-cta">
+      <button class="cell-btn-primary">Start trial</button>
+      <button class="cell-btn-ghost">How it works</button>
+    </div>
+    <div class="cell-dash">
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Aiden K.</div><div class="cell-dash-sub">Algebra II · 47 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">Yesterday</span></div>
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Maya R.</div><div class="cell-dash-sub">SAT prep · 52 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">2d ago</span></div>
+    </div>
+    <div class="cell-rec">
+      <span class="cell-rec-dot"></span>
+      <span class="cell-rec-label">Recording · Aiden K.</span>
+      <span class="cell-rec-time">23:14</span>
+    </div>
+    <div class="cell-ai">
+      <span class="cell-ai-label">AI summary</span>
+      <p class="cell-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; still needs reps on completing the square.</p>
+    </div>
+  </article>
+  <article class="cell f1 v4w-v3h" data-label="F1 · V4w+V3h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <div>
+      <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+      <p class="cell-sub">Stay present. We handle the memory.</p>
+    </div>
+    <div class="cell-cta">
+      <button class="cell-btn-primary">Start trial</button>
+      <button class="cell-btn-ghost">How it works</button>
+    </div>
+    <div class="cell-dash">
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Aiden K.</div><div class="cell-dash-sub">Algebra II · 47 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">Yesterday</span></div>
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Maya R.</div><div class="cell-dash-sub">SAT prep · 52 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">2d ago</span></div>
+    </div>
+    <div class="cell-rec">
+      <span class="cell-rec-dot"></span>
+      <span class="cell-rec-label">Recording · Aiden K.</span>
+      <span class="cell-rec-time">23:14</span>
+    </div>
+    <div class="cell-ai">
+      <span class="cell-ai-label">AI summary</span>
+      <p class="cell-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; still needs reps on completing the square.</p>
+    </div>
+  </article>
+
+  <!-- ============= F2 row ============= -->
+  <div class="row-header">
+    <div class="row-name">F2</div>
+    <div class="row-tag">Bluer<br>Bridge</div>
+    <div class="row-swatches">
+      <div class="row-swatch" style="background:#1e3d54"></div>
+      <div class="row-swatch" style="background:#4a6680"></div>
+      <div class="row-swatch" style="background:#f5f4ec"></div>
+      <div class="row-swatch" style="background:#e27d60"></div>
+    </div>
+  </div>
+  <article class="cell f2 v3w-v2h" data-label="F2 · V3w+V2h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <div>
+      <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+      <p class="cell-sub">Stay present. We handle the memory.</p>
+    </div>
+    <div class="cell-cta">
+      <button class="cell-btn-primary">Start trial</button>
+      <button class="cell-btn-ghost">How it works</button>
+    </div>
+    <div class="cell-dash">
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Aiden K.</div><div class="cell-dash-sub">Algebra II · 47 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">Yesterday</span></div>
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Maya R.</div><div class="cell-dash-sub">SAT prep · 52 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">2d ago</span></div>
+    </div>
+    <div class="cell-rec">
+      <span class="cell-rec-dot"></span>
+      <span class="cell-rec-label">Recording · Aiden K.</span>
+      <span class="cell-rec-time">23:14</span>
+    </div>
+    <div class="cell-ai">
+      <span class="cell-ai-label">AI summary</span>
+      <p class="cell-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; still needs reps on completing the square.</p>
+    </div>
+  </article>
+  <article class="cell f2 v3w-v3h" data-label="F2 · V3w+V3h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <div>
+      <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+      <p class="cell-sub">Stay present. We handle the memory.</p>
+    </div>
+    <div class="cell-cta">
+      <button class="cell-btn-primary">Start trial</button>
+      <button class="cell-btn-ghost">How it works</button>
+    </div>
+    <div class="cell-dash">
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Aiden K.</div><div class="cell-dash-sub">Algebra II · 47 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">Yesterday</span></div>
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Maya R.</div><div class="cell-dash-sub">SAT prep · 52 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">2d ago</span></div>
+    </div>
+    <div class="cell-rec">
+      <span class="cell-rec-dot"></span>
+      <span class="cell-rec-label">Recording · Aiden K.</span>
+      <span class="cell-rec-time">23:14</span>
+    </div>
+    <div class="cell-ai">
+      <span class="cell-ai-label">AI summary</span>
+      <p class="cell-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; still needs reps on completing the square.</p>
+    </div>
+  </article>
+  <article class="cell f2 v4w-v2h" data-label="F2 · V4w+V2h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <div>
+      <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+      <p class="cell-sub">Stay present. We handle the memory.</p>
+    </div>
+    <div class="cell-cta">
+      <button class="cell-btn-primary">Start trial</button>
+      <button class="cell-btn-ghost">How it works</button>
+    </div>
+    <div class="cell-dash">
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Aiden K.</div><div class="cell-dash-sub">Algebra II · 47 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">Yesterday</span></div>
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Maya R.</div><div class="cell-dash-sub">SAT prep · 52 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">2d ago</span></div>
+    </div>
+    <div class="cell-rec">
+      <span class="cell-rec-dot"></span>
+      <span class="cell-rec-label">Recording · Aiden K.</span>
+      <span class="cell-rec-time">23:14</span>
+    </div>
+    <div class="cell-ai">
+      <span class="cell-ai-label">AI summary</span>
+      <p class="cell-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; still needs reps on completing the square.</p>
+    </div>
+  </article>
+  <article class="cell f2 v4w-v3h" data-label="F2 · V4w+V3h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <div>
+      <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+      <p class="cell-sub">Stay present. We handle the memory.</p>
+    </div>
+    <div class="cell-cta">
+      <button class="cell-btn-primary">Start trial</button>
+      <button class="cell-btn-ghost">How it works</button>
+    </div>
+    <div class="cell-dash">
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Aiden K.</div><div class="cell-dash-sub">Algebra II · 47 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">Yesterday</span></div>
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Maya R.</div><div class="cell-dash-sub">SAT prep · 52 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">2d ago</span></div>
+    </div>
+    <div class="cell-rec">
+      <span class="cell-rec-dot"></span>
+      <span class="cell-rec-label">Recording · Aiden K.</span>
+      <span class="cell-rec-time">23:14</span>
+    </div>
+    <div class="cell-ai">
+      <span class="cell-ai-label">AI summary</span>
+      <p class="cell-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; still needs reps on completing the square.</p>
+    </div>
+  </article>
+
+  <!-- ============= F3 row ============= -->
+  <div class="row-header">
+    <div class="row-name">F3</div>
+    <div class="row-tag">Quieter<br>Coral Bridge</div>
+    <div class="row-swatches">
+      <div class="row-swatch" style="background:#1e4d4a"></div>
+      <div class="row-swatch" style="background:#487d68"></div>
+      <div class="row-swatch" style="background:#f5f4ec"></div>
+      <div class="row-swatch" style="background:#d08d7a"></div>
+    </div>
+  </div>
+  <article class="cell f3 v3w-v2h" data-label="F3 · V3w+V2h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <div>
+      <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+      <p class="cell-sub">Stay present. We handle the memory.</p>
+    </div>
+    <div class="cell-cta">
+      <button class="cell-btn-primary">Start trial</button>
+      <button class="cell-btn-ghost">How it works</button>
+    </div>
+    <div class="cell-dash">
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Aiden K.</div><div class="cell-dash-sub">Algebra II · 47 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">Yesterday</span></div>
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Maya R.</div><div class="cell-dash-sub">SAT prep · 52 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">2d ago</span></div>
+    </div>
+    <div class="cell-rec">
+      <span class="cell-rec-dot"></span>
+      <span class="cell-rec-label">Recording · Aiden K.</span>
+      <span class="cell-rec-time">23:14</span>
+    </div>
+    <div class="cell-ai">
+      <span class="cell-ai-label">AI summary</span>
+      <p class="cell-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; still needs reps on completing the square.</p>
+    </div>
+  </article>
+  <article class="cell f3 v3w-v3h" data-label="F3 · V3w+V3h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <div>
+      <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+      <p class="cell-sub">Stay present. We handle the memory.</p>
+    </div>
+    <div class="cell-cta">
+      <button class="cell-btn-primary">Start trial</button>
+      <button class="cell-btn-ghost">How it works</button>
+    </div>
+    <div class="cell-dash">
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Aiden K.</div><div class="cell-dash-sub">Algebra II · 47 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">Yesterday</span></div>
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Maya R.</div><div class="cell-dash-sub">SAT prep · 52 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">2d ago</span></div>
+    </div>
+    <div class="cell-rec">
+      <span class="cell-rec-dot"></span>
+      <span class="cell-rec-label">Recording · Aiden K.</span>
+      <span class="cell-rec-time">23:14</span>
+    </div>
+    <div class="cell-ai">
+      <span class="cell-ai-label">AI summary</span>
+      <p class="cell-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; still needs reps on completing the square.</p>
+    </div>
+  </article>
+  <article class="cell f3 v4w-v2h" data-label="F3 · V4w+V2h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <div>
+      <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+      <p class="cell-sub">Stay present. We handle the memory.</p>
+    </div>
+    <div class="cell-cta">
+      <button class="cell-btn-primary">Start trial</button>
+      <button class="cell-btn-ghost">How it works</button>
+    </div>
+    <div class="cell-dash">
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Aiden K.</div><div class="cell-dash-sub">Algebra II · 47 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">Yesterday</span></div>
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Maya R.</div><div class="cell-dash-sub">SAT prep · 52 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">2d ago</span></div>
+    </div>
+    <div class="cell-rec">
+      <span class="cell-rec-dot"></span>
+      <span class="cell-rec-label">Recording · Aiden K.</span>
+      <span class="cell-rec-time">23:14</span>
+    </div>
+    <div class="cell-ai">
+      <span class="cell-ai-label">AI summary</span>
+      <p class="cell-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; still needs reps on completing the square.</p>
+    </div>
+  </article>
+  <article class="cell f3 v4w-v3h" data-label="F3 · V4w+V3h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <div>
+      <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+      <p class="cell-sub">Stay present. We handle the memory.</p>
+    </div>
+    <div class="cell-cta">
+      <button class="cell-btn-primary">Start trial</button>
+      <button class="cell-btn-ghost">How it works</button>
+    </div>
+    <div class="cell-dash">
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Aiden K.</div><div class="cell-dash-sub">Algebra II · 47 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">Yesterday</span></div>
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Maya R.</div><div class="cell-dash-sub">SAT prep · 52 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">2d ago</span></div>
+    </div>
+    <div class="cell-rec">
+      <span class="cell-rec-dot"></span>
+      <span class="cell-rec-label">Recording · Aiden K.</span>
+      <span class="cell-rec-time">23:14</span>
+    </div>
+    <div class="cell-ai">
+      <span class="cell-ai-label">AI summary</span>
+      <p class="cell-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; still needs reps on completing the square.</p>
+    </div>
+  </article>
+
+  <!-- ============= F4 row ============= -->
+  <div class="row-header">
+    <div class="row-name">F4</div>
+    <div class="row-tag">Softest Bridge<br>(all dials)</div>
+    <div class="row-swatches">
+      <div class="row-swatch" style="background:#1e3d54"></div>
+      <div class="row-swatch" style="background:#4a6680"></div>
+      <div class="row-swatch" style="background:#f5f4ec"></div>
+      <div class="row-swatch" style="background:#d08d7a"></div>
+    </div>
+  </div>
+  <article class="cell f4 v3w-v2h" data-label="F4 · V3w+V2h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <div>
+      <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+      <p class="cell-sub">Stay present. We handle the memory.</p>
+    </div>
+    <div class="cell-cta">
+      <button class="cell-btn-primary">Start trial</button>
+      <button class="cell-btn-ghost">How it works</button>
+    </div>
+    <div class="cell-dash">
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Aiden K.</div><div class="cell-dash-sub">Algebra II · 47 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">Yesterday</span></div>
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Maya R.</div><div class="cell-dash-sub">SAT prep · 52 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">2d ago</span></div>
+    </div>
+    <div class="cell-rec">
+      <span class="cell-rec-dot"></span>
+      <span class="cell-rec-label">Recording · Aiden K.</span>
+      <span class="cell-rec-time">23:14</span>
+    </div>
+    <div class="cell-ai">
+      <span class="cell-ai-label">AI summary</span>
+      <p class="cell-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; still needs reps on completing the square.</p>
+    </div>
+  </article>
+  <article class="cell f4 v3w-v3h" data-label="F4 · V3w+V3h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <div>
+      <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+      <p class="cell-sub">Stay present. We handle the memory.</p>
+    </div>
+    <div class="cell-cta">
+      <button class="cell-btn-primary">Start trial</button>
+      <button class="cell-btn-ghost">How it works</button>
+    </div>
+    <div class="cell-dash">
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Aiden K.</div><div class="cell-dash-sub">Algebra II · 47 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">Yesterday</span></div>
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Maya R.</div><div class="cell-dash-sub">SAT prep · 52 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">2d ago</span></div>
+    </div>
+    <div class="cell-rec">
+      <span class="cell-rec-dot"></span>
+      <span class="cell-rec-label">Recording · Aiden K.</span>
+      <span class="cell-rec-time">23:14</span>
+    </div>
+    <div class="cell-ai">
+      <span class="cell-ai-label">AI summary</span>
+      <p class="cell-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; still needs reps on completing the square.</p>
+    </div>
+  </article>
+  <article class="cell f4 v4w-v2h" data-label="F4 · V4w+V2h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <div>
+      <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+      <p class="cell-sub">Stay present. We handle the memory.</p>
+    </div>
+    <div class="cell-cta">
+      <button class="cell-btn-primary">Start trial</button>
+      <button class="cell-btn-ghost">How it works</button>
+    </div>
+    <div class="cell-dash">
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Aiden K.</div><div class="cell-dash-sub">Algebra II · 47 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">Yesterday</span></div>
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Maya R.</div><div class="cell-dash-sub">SAT prep · 52 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">2d ago</span></div>
+    </div>
+    <div class="cell-rec">
+      <span class="cell-rec-dot"></span>
+      <span class="cell-rec-label">Recording · Aiden K.</span>
+      <span class="cell-rec-time">23:14</span>
+    </div>
+    <div class="cell-ai">
+      <span class="cell-ai-label">AI summary</span>
+      <p class="cell-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; still needs reps on completing the square.</p>
+    </div>
+  </article>
+  <article class="cell f4 v4w-v3h" data-label="F4 · V4w+V3h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <div>
+      <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+      <p class="cell-sub">Stay present. We handle the memory.</p>
+    </div>
+    <div class="cell-cta">
+      <button class="cell-btn-primary">Start trial</button>
+      <button class="cell-btn-ghost">How it works</button>
+    </div>
+    <div class="cell-dash">
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Aiden K.</div><div class="cell-dash-sub">Algebra II · 47 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">Yesterday</span></div>
+      <div class="cell-dash-row"><div><div class="cell-dash-student">Maya R.</div><div class="cell-dash-sub">SAT prep · 52 min</div></div><span class="cell-dash-tag">AI notes</span><span class="cell-dash-when">2d ago</span></div>
+    </div>
+    <div class="cell-rec">
+      <span class="cell-rec-dot"></span>
+      <span class="cell-rec-label">Recording · Aiden K.</span>
+      <span class="cell-rec-time">23:14</span>
+    </div>
+    <div class="cell-ai">
+      <span class="cell-ai-label">AI summary</span>
+      <p class="cell-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; still needs reps on completing the square.</p>
+    </div>
+  </article>
+
+</div>
+
+<section class="readout">
+  <h3>What to look at, surface by surface</h3>
+  <p>If you want to confirm a specific palette difference, here's where to focus your eyes:</p>
+  <p><strong>F1 vs F2 (teal vs blue brand).</strong> Compare the left edge stripes — F1's teal vs F2's deeper blue. Then compare the ghost button borders — F1 forest #487D68 vs F2 blue-grey #4A6680. Both differences live in cool-family tokens; coral is identical between these two so the warmth signal is unchanged.</p>
+  <p><strong>F1 vs F3 (bright coral vs muted coral).</strong> Look at the AI panel — F1's bright #F8E0D6 background is markedly warmer/peachier than F3's #F1DDD2 muted tint. Same for the primary button (#E27D60 vs #D08D7A) and the recording dot halo. Brand stripe is identical between F1 and F3 — it's purely a warmth-signal change.</p>
+  <p><strong>F1 vs F4 (everything different at once).</strong> Compare F1 top-left to F4 bottom-right — every cool token is bluer and every warm token is quieter. This is the full softness pass. F4 should feel like the calmest cell on the page; the question is whether it still feels like <em>Mynk</em>.</p>
+  <p style="font-size: 13px; opacity: 0.7; margin-top: var(--space-4);">If the F1↔F2 difference still feels too subtle even with all this surface area, that's the honest signal: blue and teal at the same lightness really are close. The daughter's "blues feel softer" preference may be a perceptual nudge of 10–15%, not a fundamental palette change. If so, either is a fine answer — pick whichever name reads better to the family ("Forest-Teal Bridge" vs "Twilight Bridge").</p>
+</section>
+
+<script>
+  const body = document.body;
+  const btns = document.querySelectorAll('[data-mode-btn]');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const m = btn.dataset.modeBtn;
+      body.setAttribute('data-mode', m);
+      btns.forEach(b => b.setAttribute('aria-pressed', b.dataset.modeBtn === m ? 'true' : 'false'));
+    });
+  });
+</script>
+
+</body>
+</html>

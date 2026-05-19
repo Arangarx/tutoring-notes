@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mynk — typography systems</title>
+
+<!-- Google Fonts: all five custom families used below.
+     Sized intentionally — we only load the weights each system actually uses,
+     so the page renders fast even though we're loading four families.        -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Lora:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet">
+
+<style>
+  *,*::before,*::after { box-sizing: border-box; }
+  :root {
+    /* Concept 3 palette as visual base — fonts are the variable here */
+    --brand: #1e4d4a;
+    --text: #1e4d4a;
+    --text-muted: #6b7c7a;
+    --surface: #f7f5f0;
+    --surface-raised: #fdfcf8;
+    --border: #d6dad5;
+    --border-strong: #aab2ad;
+    --accent: #e27d60;
+    --accent-soft: #f8e0d6;
+    --accent-text: #8a3c25;
+    --accent-on: #fdfcf8;
+
+    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+    --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-12: 48px;
+    --radius-sm: 6px; --radius-md: 10px; --radius-lg: 16px;
+  }
+
+  /* Each system defines its own font-family triplet — heading, body, mono.
+     Cards apply via .type-A, .type-B, etc.                                  */
+  .type-A {
+    --font-heading: "Source Serif 4", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --heading-letter-spacing: -0.015em;
+    --heading-weight: 600;
+    --body-weight: 400;
+    --tracking-allcaps: 0.06em;
+  }
+  .type-B {
+    --font-heading: "Fraunces", "Iowan Old Style", Georgia, serif;
+    --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    --heading-letter-spacing: -0.025em;
+    --heading-weight: 500;
+    --body-weight: 400;
+    --tracking-allcaps: 0.08em;
+  }
+  .type-C {
+    --font-heading: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    --font-body: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    --heading-letter-spacing: -0.015em;
+    --heading-weight: 600;
+    --body-weight: 400;
+    --tracking-allcaps: 0.08em;
+  }
+  .type-D {
+    --font-heading: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --heading-letter-spacing: -0.02em;
+    --heading-weight: 700;
+    --body-weight: 400;
+    --tracking-allcaps: 0.06em;
+  }
+  .type-E {
+    --font-heading: "Lora", "Iowan Old Style", Georgia, serif;
+    --font-body: "Lora", Georgia, serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --heading-letter-spacing: -0.01em;
+    --heading-weight: 600;
+    --body-weight: 400;
+    --tracking-allcaps: 0.05em;
+  }
+
+  html, body {
+    margin: 0; padding: 0;
+    background: #efece6; color: #1a1a1f;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .chrome-header {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(239,236,230,0.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    padding: var(--space-4) var(--space-6);
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-6);
+  }
+  .chrome-title {
+    font: 600 18px/1 "Source Serif 4", serif;
+    letter-spacing: -0.01em;
+  }
+  .chrome-sub {
+    font: 13px/1 ui-monospace, Menlo, monospace; opacity: 0.6;
+  }
+
+  .intro {
+    max-width: 1100px; margin: 0 auto;
+    padding: var(--space-8) var(--space-6) var(--space-6);
+    font-size: 14px; line-height: 1.65;
+  }
+  .intro h2 {
+    font: 600 28px/1.15 "Source Serif 4", serif;
+    letter-spacing: -0.02em; margin: 0 0 var(--space-3);
+  }
+  .intro p { margin: 0 0 var(--space-3); opacity: 0.85; }
+  .intro .brief {
+    margin-top: var(--space-4); padding: var(--space-3) var(--space-4);
+    background: rgba(0,0,0,0.04); border-left: 3px solid var(--accent);
+    border-radius: var(--radius-sm); font-size: 13px;
+  }
+  .intro .brief strong { color: #1e4d4a; }
+
+  main {
+    padding: 0 var(--space-6) var(--space-12);
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-6);
+    max-width: 1600px; margin: 0 auto;
+  }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+  .type-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+
+  .type-card-header {
+    padding: var(--space-4) var(--space-5);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-raised);
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: var(--space-3);
+  }
+  .type-card-name {
+    font: 600 15px/1.2 var(--font-body);
+    color: var(--text);
+  }
+  .type-card-fonts {
+    font: 10px/1.4 ui-monospace, Menlo, monospace;
+    color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.05em;
+    text-align: right; max-width: 50%;
+  }
+
+  /* The body of each card — six stacked specimens.                          */
+  .specimens {
+    padding: var(--space-6);
+    display: flex; flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  /* Specimen 1 — the wordmark, very big.                                    */
+  .specimen-wordmark {
+    font-family: var(--font-heading);
+    font-weight: var(--heading-weight);
+    font-size: 96px;
+    line-height: 1;
+    letter-spacing: var(--heading-letter-spacing);
+    color: var(--brand);
+    margin: 0;
+  }
+  .specimen-wordmark .dot {
+    color: var(--accent); margin-left: 4px;
+  }
+
+  /* Specimen 2 — heading + sub.                                             */
+  .specimen-heading {
+    font-family: var(--font-heading);
+    font-weight: var(--heading-weight);
+    font-size: 32px;
+    line-height: 1.15;
+    letter-spacing: var(--heading-letter-spacing);
+    color: var(--text);
+    margin: 0 0 var(--space-3);
+  }
+  .specimen-sub {
+    font-family: var(--font-body);
+    font-weight: var(--body-weight);
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--text-muted);
+    margin: 0;
+  }
+
+  /* Specimen 3 — body paragraph (this is where most reading happens).       */
+  .specimen-body {
+    font-family: var(--font-body);
+    font-weight: var(--body-weight);
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text);
+    margin: 0;
+    max-width: 56ch;
+  }
+  .specimen-body em {
+    font-style: italic;
+    color: var(--accent-text);
+  }
+
+  /* Specimen 4 — UI strip (button + tag + timestamp + label).               */
+  .specimen-ui {
+    display: flex; align-items: center; gap: var(--space-3);
+    flex-wrap: wrap;
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+  }
+  .ui-btn {
+    font-family: var(--font-body);
+    font-weight: 500; font-size: 13px;
+    padding: 8px 14px;
+    background: var(--accent); color: var(--accent-on);
+    border: none; border-radius: 999px; cursor: pointer;
+  }
+  .ui-label {
+    font-family: var(--font-body);
+    font-weight: 500; font-size: 12px;
+    color: var(--text);
+  }
+  .ui-tag {
+    font-family: var(--font-mono);
+    font-weight: 500; font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-allcaps);
+    padding: 4px 8px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent-text);
+  }
+  .ui-time {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-left: auto;
+  }
+
+  /* Specimen 5 — student-name edge cases (proper noun handling).            */
+  .specimen-names {
+    display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+  }
+  .name-row {}
+  .name-row .name {
+    font-family: var(--font-body);
+    font-weight: 500; font-size: 14px;
+    color: var(--text);
+    display: block;
+  }
+  .name-row .meta {
+    font-family: var(--font-body);
+    font-size: 12px;
+    color: var(--text-muted);
+    display: block; margin-top: 2px;
+  }
+
+  /* Specimen 6 — long-form AI-generated content (the bread-and-butter).     */
+  .specimen-ai {
+    padding: var(--space-4) var(--space-5);
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius-sm);
+  }
+  .specimen-ai-label {
+    font-family: var(--font-mono);
+    font-weight: 500; font-size: 10px;
+    color: var(--accent-text);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-allcaps);
+    margin-bottom: var(--space-2);
+  }
+  .specimen-ai-body {
+    font-family: var(--font-heading); /* serif body for AI content */
+    font-weight: 400; font-size: 15px;
+    line-height: 1.6;
+    color: var(--text);
+    margin: 0;
+  }
+
+  /* Notes footer.                                                           */
+  .type-card-notes {
+    padding: var(--space-4) var(--space-5);
+    border-top: 1px solid var(--border);
+    background: var(--surface-raised);
+    font: 13px/1.55 ui-sans-serif, system-ui, sans-serif;
+    color: var(--text-muted);
+  }
+  .type-card-notes strong { color: var(--text); font-weight: 600; }
+  .type-card-notes .axis {
+    margin-top: var(--space-2);
+    display: grid; grid-template-columns: auto 1fr; gap: var(--space-2) var(--space-3);
+    font-size: 12px;
+  }
+  .type-card-notes .axis dt {
+    font: 600 11px ui-monospace, Menlo, monospace;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--text); white-space: nowrap;
+  }
+  .type-card-notes .axis dd {
+    margin: 0;
+    color: var(--text-muted);
+  }
+</style>
+</head>
+
+<body>
+<aside class="archived-banner" style="position: sticky; top: 0; z-index: 9999; background: #fff3cd; border-bottom: 3px solid #f59e0b; padding: 12px 20px; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.5; color: #78350f; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+  <strong>ARCHIVED EXPLORATION.</strong> This file is preserved for historical reference only. The Mynk brand was finalized as <strong>Mynka Blue</strong> on 2026-05-19. Canonical visual reference: <a href="../palette-mocks-FINAL-mynka-blue.html" style="color: #78350f; text-decoration: underline;">palette-mocks-FINAL-mynka-blue.html</a>. Decision doc: <code style="background:rgba(0,0,0,0.08);padding:1px 5px;border-radius:3px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;">docs/MYNK-BRAND-PHASE-2-DECISIONS.md</code>.
+</aside>
+
+<header class="chrome-header">
+  <div>
+    <div class="chrome-title">Mynk — typography systems</div>
+    <div class="chrome-sub">5 candidates against the brand brief · 2026-05-19</div>
+  </div>
+</header>
+
+<section class="intro">
+  <h2>Five typography systems, same content, same color base.</h2>
+  <p>Color is held constant at Concept 3 (the family-favorite palette) so this page is purely about <em>type</em>. Each card shows: the wordmark at scale, a heading + sub, body copy, a UI strip with a button + AI-tag + timestamp, a student-name list (proper-noun handling matters), and an AI-generated session-summary block.</p>
+  <div class="brief">
+    <strong>Brand brief filter (already locked):</strong> warm, competent, calm, durable. <em>Not</em> cute, juvenile, gamified, AI-bro, or enterprise-cold. Every system below survives that filter; each one fails differently if pushed too far.
+  </div>
+  <p style="margin-top: var(--space-4);"><strong>What to look for:</strong> Does "Mynk" feel like a real product name in this font? Does the AI-content block read as <em>quotable</em> (literary, considered) or as <em>output</em> (functional, plain)? Does the student-name list feel like a friend list or a database row?</p>
+</section>
+
+<main>
+
+  <!-- ============================== A · Mynk Editorial -->
+  <article class="type-card type-A">
+    <div class="type-card-header">
+      <div class="type-card-name">A · Mynk Editorial</div>
+      <div class="type-card-fonts">Source Serif 4 · system sans · system mono</div>
+    </div>
+    <div class="specimens">
+      <h1 class="specimen-wordmark">Mynk<span class="dot">·</span></h1>
+      <div>
+        <h2 class="specimen-heading">You teach. Mynk takes the notes.</h2>
+        <p class="specimen-sub">Stay present in the session. We handle the memory.</p>
+      </div>
+      <p class="specimen-body">Every session is captured, transcribed, and turned into a clean note your student's parent can actually read. You stay in the conversation; the paperwork takes care of itself. <em>Built for tutors who'd rather teach than type.</em></p>
+      <div class="specimen-ui">
+        <button class="ui-btn">Start free trial</button>
+        <span class="ui-label">Aiden K.</span>
+        <span class="ui-tag">AI notes</span>
+        <span class="ui-time">23:14</span>
+      </div>
+      <div class="specimen-names">
+        <div class="name-row"><span class="name">Aiden Kowalczyk-Reyes</span><span class="meta">Algebra II · 47 min</span></div>
+        <div class="name-row"><span class="name">Maya Reyes</span><span class="meta">SAT prep · 52 min</span></div>
+        <div class="name-row"><span class="name">Jordán Pérez</span><span class="meta">Geometry · 38 min</span></div>
+        <div class="name-row"><span class="name">O'Sullivan, Liam</span><span class="meta">Pre-calc · 41 min</span></div>
+      </div>
+      <div class="specimen-ai">
+        <div class="specimen-ai-label">Session summary</div>
+        <p class="specimen-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; he still needs reps on completing the square. Recommended: 20 minutes of practice problems before next session.</p>
+      </div>
+    </div>
+    <div class="type-card-notes">
+      <strong>Read.</strong> The current mock baseline. Source Serif 4 (free Adobe family, very close to Iowan Old Style) for headings + system sans for body. Reads "Stripe Press, Pitch deck, considered editorial product."
+      <dl class="axis">
+        <dt>Best for</dt><dd>Dept-head professionalism without enterprise-cold defaults.</dd>
+        <dt>Risk</dt><dd>Serifs read older to some Gen-Z eyes; if Sarah's students are the audience signal, this might skew traditional.</dd>
+        <dt>Cost</dt><dd>1 free Google Font + zero proprietary. Loads ~40KB.</dd>
+      </dl>
+    </div>
+  </article>
+
+  <!-- ============================== B · Mynk Modern -->
+  <article class="type-card type-B">
+    <div class="type-card-header">
+      <div class="type-card-name">B · Mynk Modern</div>
+      <div class="type-card-fonts">Fraunces · Inter · JetBrains Mono</div>
+    </div>
+    <div class="specimens">
+      <h1 class="specimen-wordmark">Mynk<span class="dot">·</span></h1>
+      <div>
+        <h2 class="specimen-heading">You teach. Mynk takes the notes.</h2>
+        <p class="specimen-sub">Stay present in the session. We handle the memory.</p>
+      </div>
+      <p class="specimen-body">Every session is captured, transcribed, and turned into a clean note your student's parent can actually read. You stay in the conversation; the paperwork takes care of itself. <em>Built for tutors who'd rather teach than type.</em></p>
+      <div class="specimen-ui">
+        <button class="ui-btn">Start free trial</button>
+        <span class="ui-label">Aiden K.</span>
+        <span class="ui-tag">AI notes</span>
+        <span class="ui-time">23:14</span>
+      </div>
+      <div class="specimen-names">
+        <div class="name-row"><span class="name">Aiden Kowalczyk-Reyes</span><span class="meta">Algebra II · 47 min</span></div>
+        <div class="name-row"><span class="name">Maya Reyes</span><span class="meta">SAT prep · 52 min</span></div>
+        <div class="name-row"><span class="name">Jordán Pérez</span><span class="meta">Geometry · 38 min</span></div>
+        <div class="name-row"><span class="name">O'Sullivan, Liam</span><span class="meta">Pre-calc · 41 min</span></div>
+      </div>
+      <div class="specimen-ai">
+        <div class="specimen-ai-label">Session summary</div>
+        <p class="specimen-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; he still needs reps on completing the square. Recommended: 20 minutes of practice problems before next session.</p>
+      </div>
+    </div>
+    <div class="type-card-notes">
+      <strong>Read.</strong> Contemporary display serif (Fraunces is the Pitch-agency / Stripe Press 2.0 vibe) + Inter for body + JetBrains Mono for the technical bits. Most-on-trend pairing in the field today. The "y" in Mynk has personality here — Fraunces gives the descender a slight optical adjustment that reads "drawn, not picked."
+      <dl class="axis">
+        <dt>Best for</dt><dd>Reads "we hired a designer." Distinctive without being weird.</dd>
+        <dt>Risk</dt><dd>Fraunces is having a moment — risk of dating quickly. Inter has been the "default tech sans" for 6 years; ubiquitous.</dd>
+        <dt>Cost</dt><dd>3 Google Fonts. ~120KB total. Light by modern web standards.</dd>
+      </dl>
+    </div>
+  </article>
+
+  <!-- ============================== C · Mynk Technical -->
+  <article class="type-card type-C">
+    <div class="type-card-header">
+      <div class="type-card-name">C · Mynk Technical</div>
+      <div class="type-card-fonts">IBM Plex Sans · IBM Plex Sans · IBM Plex Mono</div>
+    </div>
+    <div class="specimens">
+      <h1 class="specimen-wordmark">Mynk<span class="dot">·</span></h1>
+      <div>
+        <h2 class="specimen-heading">You teach. Mynk takes the notes.</h2>
+        <p class="specimen-sub">Stay present in the session. We handle the memory.</p>
+      </div>
+      <p class="specimen-body">Every session is captured, transcribed, and turned into a clean note your student's parent can actually read. You stay in the conversation; the paperwork takes care of itself. <em>Built for tutors who'd rather teach than type.</em></p>
+      <div class="specimen-ui">
+        <button class="ui-btn">Start free trial</button>
+        <span class="ui-label">Aiden K.</span>
+        <span class="ui-tag">AI notes</span>
+        <span class="ui-time">23:14</span>
+      </div>
+      <div class="specimen-names">
+        <div class="name-row"><span class="name">Aiden Kowalczyk-Reyes</span><span class="meta">Algebra II · 47 min</span></div>
+        <div class="name-row"><span class="name">Maya Reyes</span><span class="meta">SAT prep · 52 min</span></div>
+        <div class="name-row"><span class="name">Jordán Pérez</span><span class="meta">Geometry · 38 min</span></div>
+        <div class="name-row"><span class="name">O'Sullivan, Liam</span><span class="meta">Pre-calc · 41 min</span></div>
+      </div>
+      <div class="specimen-ai">
+        <div class="specimen-ai-label">Session summary</div>
+        <p class="specimen-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; he still needs reps on completing the square. Recommended: 20 minutes of practice problems before next session.</p>
+      </div>
+    </div>
+    <div class="type-card-notes">
+      <strong>Read.</strong> The whole Plex family — IBM's open-source workhorse. Humanist sans throughout, with Plex Mono for technical bits. Reads "considered tech product, infrastructure-credible, IBM/Linear-adjacent." Most "tech company" of the five.
+      <dl class="axis">
+        <dt>Best for</dt><dd>Convincing IT directors and dept heads we're real software, not a side project.</dd>
+        <dt>Risk</dt><dd>Loses the warm/literary register from the brand brief. AI content blocks lose their "quotable" feel — they read as plain output.</dd>
+        <dt>Cost</dt><dd>2 Google Fonts (Plex Sans + Mono). ~90KB total.</dd>
+      </dl>
+    </div>
+  </article>
+
+  <!-- ============================== D · Mynk Pure System -->
+  <article class="type-card type-D">
+    <div class="type-card-header">
+      <div class="type-card-name">D · Mynk Pure System</div>
+      <div class="type-card-fonts">system sans · system sans · system mono · zero download</div>
+    </div>
+    <div class="specimens">
+      <h1 class="specimen-wordmark">Mynk<span class="dot">·</span></h1>
+      <div>
+        <h2 class="specimen-heading">You teach. Mynk takes the notes.</h2>
+        <p class="specimen-sub">Stay present in the session. We handle the memory.</p>
+      </div>
+      <p class="specimen-body">Every session is captured, transcribed, and turned into a clean note your student's parent can actually read. You stay in the conversation; the paperwork takes care of itself. <em>Built for tutors who'd rather teach than type.</em></p>
+      <div class="specimen-ui">
+        <button class="ui-btn">Start free trial</button>
+        <span class="ui-label">Aiden K.</span>
+        <span class="ui-tag">AI notes</span>
+        <span class="ui-time">23:14</span>
+      </div>
+      <div class="specimen-names">
+        <div class="name-row"><span class="name">Aiden Kowalczyk-Reyes</span><span class="meta">Algebra II · 47 min</span></div>
+        <div class="name-row"><span class="name">Maya Reyes</span><span class="meta">SAT prep · 52 min</span></div>
+        <div class="name-row"><span class="name">Jordán Pérez</span><span class="meta">Geometry · 38 min</span></div>
+        <div class="name-row"><span class="name">O'Sullivan, Liam</span><span class="meta">Pre-calc · 41 min</span></div>
+      </div>
+      <div class="specimen-ai">
+        <div class="specimen-ai-label">Session summary</div>
+        <p class="specimen-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; he still needs reps on completing the square. Recommended: 20 minutes of practice problems before next session.</p>
+      </div>
+    </div>
+    <div class="type-card-notes">
+      <strong>Read.</strong> What the app uses today, but with intentional weight + tracking. SF on Mac, Segoe UI on Windows, Roboto on Android. Same wordmark in three different cities looks <em>different</em> — that's the tradeoff. Reads "we are not playing the font game; performance and trust over style."
+      <dl class="axis">
+        <dt>Best for</dt><dd>Page-weight purists, slow connections, the "type isn't where we differentiate" position.</dd>
+        <dt>Risk</dt><dd>The wordmark looks slightly different on every OS. The "Mynk" personality is muted. Reads "made by an engineer" — could be a feature for Sarah, a bug for marketing.</dd>
+        <dt>Cost</dt><dd>Zero. No fonts loaded. Fastest possible first paint.</dd>
+      </dl>
+    </div>
+  </article>
+
+  <!-- ============================== E · Mynk Literary -->
+  <article class="type-card type-E">
+    <div class="type-card-header">
+      <div class="type-card-name">E · Mynk Literary</div>
+      <div class="type-card-fonts">Lora · Lora · system mono</div>
+    </div>
+    <div class="specimens">
+      <h1 class="specimen-wordmark">Mynk<span class="dot">·</span></h1>
+      <div>
+        <h2 class="specimen-heading">You teach. Mynk takes the notes.</h2>
+        <p class="specimen-sub">Stay present in the session. We handle the memory.</p>
+      </div>
+      <p class="specimen-body">Every session is captured, transcribed, and turned into a clean note your student's parent can actually read. You stay in the conversation; the paperwork takes care of itself. <em>Built for tutors who'd rather teach than type.</em></p>
+      <div class="specimen-ui">
+        <button class="ui-btn">Start free trial</button>
+        <span class="ui-label">Aiden K.</span>
+        <span class="ui-tag">AI notes</span>
+        <span class="ui-time">23:14</span>
+      </div>
+      <div class="specimen-names">
+        <div class="name-row"><span class="name">Aiden Kowalczyk-Reyes</span><span class="meta">Algebra II · 47 min</span></div>
+        <div class="name-row"><span class="name">Maya Reyes</span><span class="meta">SAT prep · 52 min</span></div>
+        <div class="name-row"><span class="name">Jordán Pérez</span><span class="meta">Geometry · 38 min</span></div>
+        <div class="name-row"><span class="name">O'Sullivan, Liam</span><span class="meta">Pre-calc · 41 min</span></div>
+      </div>
+      <div class="specimen-ai">
+        <div class="specimen-ai-label">Session summary</div>
+        <p class="specimen-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; he still needs reps on completing the square. Recommended: 20 minutes of practice problems before next session.</p>
+      </div>
+    </div>
+    <div class="type-card-notes">
+      <strong>Read.</strong> Lora serif in <em>both</em> heading and body. The whole app reads like a literary magazine. AI-generated notes blend seamlessly into the surrounding UI because the UI is already serif — which makes the AI content feel <em>quoted from a tutor's notebook</em>, not <em>generated by a model</em>. Most unusual of the five.
+      <dl class="axis">
+        <dt>Best for</dt><dd>Leaning into "your AI notes look like you wrote them yourself." Strongest narrative pairing with the product promise.</dd>
+        <dt>Risk</dt><dd>Reading serif body text in a SaaS dashboard is unusual. Some users will read it as "slow / longform." Density may suffer.</dd>
+        <dt>Cost</dt><dd>1 Google Font. ~50KB.</dd>
+      </dl>
+    </div>
+  </article>
+
+</main>
+
+</body>
+</html>

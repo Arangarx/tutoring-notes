@@ -1,0 +1,1174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mynk — daughter's picks (batch 2)</title>
+<style>
+  *,*::before,*::after { box-sizing: border-box; }
+  :root {
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-serif: "Iowan Old Style", "Palatino Linotype", "Source Serif Pro", Georgia, serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --radius-sm: 6px; --radius-md: 10px; --radius-lg: 16px;
+    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+    --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-12: 48px;
+  }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: var(--font-sans);
+    background: #f0eee8; color: #1a1a1f;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body[data-mode="dark"] { background: #0a0a0c; color: #f0ece6; }
+
+  .chrome-header {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(240,238,232,0.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    padding: var(--space-4) var(--space-6);
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-6);
+  }
+  body[data-mode="dark"] .chrome-header {
+    background: rgba(10,10,12,0.92);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .chrome-title {
+    font-family: var(--font-serif); font-size: 18px;
+    font-weight: 600; letter-spacing: -0.01em;
+  }
+  .chrome-sub {
+    font-size: 13px; opacity: 0.6;
+    font-family: var(--font-mono);
+  }
+  .chrome-controls { display: flex; gap: var(--space-3); align-items: center; }
+  .toggle-btn {
+    border: 1px solid currentColor; background: transparent;
+    color: inherit; padding: 6px 14px; border-radius: 999px;
+    font: inherit; font-size: 13px; cursor: pointer; opacity: 0.75;
+  }
+  .toggle-btn:hover { opacity: 1; }
+  .toggle-btn[aria-pressed="true"] {
+    background: currentColor; color: #f0eee8; opacity: 1;
+  }
+  body[data-mode="dark"] .toggle-btn[aria-pressed="true"] { color: #0a0a0c; }
+
+  .intro {
+    max-width: 1100px; margin: 0 auto;
+    padding: var(--space-8) var(--space-6) var(--space-6);
+    font-size: 14px; line-height: 1.6;
+  }
+  .intro h2 {
+    font-family: var(--font-serif); font-size: 26px;
+    letter-spacing: -0.02em; margin: 0 0 var(--space-3); font-weight: 600;
+  }
+  .intro p { margin: 0 0 var(--space-3); opacity: 0.85; }
+  .intro .pin {
+    display: inline-block;
+    padding: 2px 8px; border-radius: 999px;
+    background: #e27d60; color: #fff;
+    font: 500 11px var(--font-mono);
+    letter-spacing: 0.04em; text-transform: uppercase;
+    margin-bottom: var(--space-3);
+  }
+  .caveat {
+    margin-top: var(--space-4); padding: var(--space-3) var(--space-4);
+    background: rgba(0,0,0,0.04); border-left: 3px solid #d4a574;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+  }
+  body[data-mode="dark"] .caveat {
+    background: rgba(255,255,255,0.05);
+  }
+
+  .section-header {
+    max-width: 2400px; margin: 0 auto;
+    padding: var(--space-6) var(--space-6) var(--space-4);
+    font-family: var(--font-serif); font-size: 20px;
+    font-weight: 600; letter-spacing: -0.01em;
+    border-top: 1px solid rgba(0,0,0,0.08);
+  }
+  body[data-mode="dark"] .section-header { border-top: 1px solid rgba(255,255,255,0.08); }
+  .section-header:first-of-type { border-top: none; padding-top: var(--space-4); }
+  .section-header .count {
+    font-family: var(--font-mono); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    opacity: 0.55; margin-left: var(--space-2);
+    font-weight: 400;
+  }
+
+  main {
+    padding: 0 var(--space-6) var(--space-12);
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: var(--space-4);
+    max-width: 2400px; margin: 0 auto;
+  }
+  @media (max-width: 2000px) { main { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 1280px) { main { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 820px) { main { grid-template-columns: 1fr; } }
+
+  .palette-frame {
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    border: 1px solid rgba(0,0,0,0.1);
+    display: flex; flex-direction: column;
+    background: var(--surface); color: var(--text);
+  }
+  body[data-mode="dark"] .palette-frame { border-color: rgba(255,255,255,0.08); }
+
+  .palette-label {
+    padding: var(--space-4); border-bottom: 1px solid var(--border);
+    background: var(--surface-raised);
+    position: relative;
+  }
+  .palette-label-name {
+    font-family: var(--font-serif); font-size: 16px;
+    font-weight: 600; letter-spacing: -0.01em; margin: 0 0 4px;
+  }
+  .palette-label-tag {
+    font-family: var(--font-mono); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted);
+  }
+  .palette-label-warn {
+    position: absolute; top: var(--space-3); right: var(--space-3);
+    padding: 2px 8px; border-radius: 999px;
+    background: #d4a574; color: #2a1a08;
+    font: 500 9px var(--font-mono);
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+
+  .swatches {
+    display: flex; height: 34px;
+    border-bottom: 1px solid var(--border);
+  }
+  .swatch {
+    flex: 1;
+    display: flex; align-items: center; justify-content: center;
+    font: 9px/1 var(--font-mono);
+    letter-spacing: 0.04em;
+    user-select: all;
+  }
+
+  .surfaces { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); }
+
+  .mock-hero {
+    padding: var(--space-5) var(--space-4);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+  }
+  .mock-hero-wordmark {
+    font-family: var(--font-serif); font-size: 19px;
+    font-weight: 600; letter-spacing: -0.02em;
+    margin: 0 0 var(--space-3); color: var(--brand);
+  }
+  .mock-hero-wordmark::after { content: "·"; color: var(--accent); margin-left: 4px; }
+  .mock-hero-tag {
+    font-family: var(--font-serif); font-size: 20px; line-height: 1.15;
+    font-weight: 500; letter-spacing: -0.015em;
+    margin: 0 0 var(--space-2); color: var(--text);
+  }
+  .mock-hero-sub {
+    font-size: 13px; line-height: 1.5; color: var(--text-muted);
+    margin: 0 0 var(--space-4);
+  }
+  .mock-hero-ctas { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+  .btn-primary, .btn-ghost {
+    font: 12px var(--font-sans); font-weight: 500;
+    padding: 7px 14px; border-radius: 999px; cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .btn-primary { background: var(--accent); color: var(--accent-on); }
+  .btn-ghost { background: transparent; color: var(--text); border-color: var(--border-strong); }
+
+  .mock-dashboard {
+    padding: var(--space-4); border-radius: var(--radius-md);
+    background: var(--surface-raised); border: 1px solid var(--border);
+  }
+  .mock-dashboard-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin: 0 0 var(--space-3);
+  }
+  .mock-dashboard-title { font: 600 13px/1.2 var(--font-sans); color: var(--text); margin: 0; }
+  .mock-dashboard-meta { font: 11px/1 var(--font-mono); color: var(--text-muted); }
+  .session-row {
+    display: grid; grid-template-columns: 1fr auto auto;
+    align-items: center; gap: var(--space-2);
+    padding: var(--space-2); border-bottom: 1px solid var(--border);
+  }
+  .session-row:last-child { border-bottom: none; }
+  .session-student { font: 500 12px/1.3 var(--font-sans); color: var(--text); }
+  .session-sub { font: 11px/1.3 var(--font-sans); color: var(--text-muted); margin-top: 2px; }
+  .session-when { font: 11px var(--font-mono); color: var(--text-muted); }
+  .ai-tag {
+    font: 500 9px var(--font-mono); letter-spacing: 0.04em;
+    text-transform: uppercase; padding: 3px 6px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent-text); white-space: nowrap;
+  }
+
+  .mock-recording {
+    display: grid; grid-template-columns: auto 1fr auto auto;
+    align-items: center; gap: var(--space-3);
+    padding: var(--space-3) var(--space-4); border-radius: var(--radius-md);
+    background: var(--surface-raised); border: 1px solid var(--border);
+  }
+  .rec-dot {
+    width: 9px; height: 9px; border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-soft);
+    animation: rec-pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes rec-pulse {
+    0%, 100% { box-shadow: 0 0 0 4px var(--accent-soft); }
+    50% { box-shadow: 0 0 0 7px transparent; }
+  }
+  .rec-label { font: 500 12px var(--font-sans); color: var(--text); }
+  .rec-time { font: 600 12px var(--font-mono); color: var(--text); }
+  .rec-end {
+    font: 500 11px var(--font-sans); padding: 6px 11px;
+    border-radius: var(--radius-sm); border: 1px solid var(--text);
+    background: var(--text); color: var(--surface); cursor: pointer;
+  }
+
+  .mock-ai-field {
+    padding: var(--space-4); border-radius: var(--radius-md);
+    background: var(--surface-raised); border: 1px solid var(--border);
+  }
+  .ai-field-name {
+    font: 600 11px var(--font-sans); letter-spacing: 0.02em;
+    text-transform: uppercase; color: var(--text-muted);
+    margin: 0 0 var(--space-3);
+  }
+  .ai-field-body {
+    font: 13px/1.55 var(--font-serif); color: var(--text);
+    padding: var(--space-3); border-radius: var(--radius-sm);
+    background: var(--accent-soft); border-left: 3px solid var(--accent);
+  }
+  .ai-field-foot {
+    margin-top: var(--space-2); font: 10px var(--font-mono);
+    color: var(--text-muted); letter-spacing: 0.03em;
+  }
+
+  .palette-notes {
+    padding: var(--space-4); border-top: 1px solid var(--border);
+    background: var(--surface-raised);
+    font: 12px/1.5 var(--font-sans); color: var(--text-muted);
+  }
+  .palette-notes strong { color: var(--text); font-weight: 600; }
+  .palette-source {
+    margin-top: var(--space-2);
+    font: 10px var(--font-mono);
+    color: var(--text-muted); opacity: 0.7;
+    word-break: break-all;
+  }
+  .palette-source a {
+    color: var(--accent-text);
+    text-decoration: none;
+  }
+  .palette-source a:hover { text-decoration: underline; }
+  .match-note {
+    font-style: italic; opacity: 0.75;
+    display: block; margin-top: 4px;
+    font-size: 11px;
+  }
+
+  /* =================================================================
+     BATCH 1 — warm-leaning ocean / sunset / glow names
+     ================================================================= */
+
+  /* 1. Summer Ocean Breeze — all-cool blue gradient */
+  body[data-mode="light"] .palette-sob {
+    --brand: #007b92; --text: #003a4a; --text-muted: #5a7d8a;
+    --surface: #f0f8fc; --surface-raised: #fbfdfe;
+    --border: #c8dde6; --border-strong: #7fb3c3;
+    --accent: #0096c7; --accent-soft: #d4ecf5;
+    --accent-text: #00536e; --accent-on: #f0f8fc;
+  }
+  body[data-mode="dark"] .palette-sob {
+    --brand: #7ec6e8; --text: #b3e0f2; --text-muted: #7a9ba8;
+    --surface: #002d3d; --surface-raised: #003a4d;
+    --border: #1a4a5e; --border-strong: #4da4d3;
+    --accent: #4da4d3; --accent-soft: #0d2c38;
+    --accent-text: #7ec6e8; --accent-on: #002d3d;
+  }
+
+  /* 2. Dark Sunset — deep purple+grey base, warm sunset oranges */
+  body[data-mode="light"] .palette-ds {
+    --brand: #4d004b; --text: #404040; --text-muted: #6b6363;
+    --surface: #faf3eb; --surface-raised: #fefaf3;
+    --border: #d6c9b9; --border-strong: #a08572;
+    --accent: #f08e51; --accent-soft: #fbe1cf;
+    --accent-text: #7a3812; --accent-on: #faf3eb;
+  }
+  body[data-mode="dark"] .palette-ds {
+    --brand: #f0a94c; --text: #f0a94c; --text-muted: #9a8a72;
+    --surface: #1a001a; --surface-raised: #28042a;
+    --border: #4d004b; --border-strong: #5a3f3f;
+    --accent: #f08e51; --accent-soft: #2d1815;
+    --accent-text: #f0a94c; --accent-on: #1a001a;
+  }
+
+  /* 3. Golden Summer Glow — cream → deep brown gradient */
+  body[data-mode="light"] .palette-gsg {
+    --brand: #b15200; --text: #4d2e00; --text-muted: #8a6b3d;
+    --surface: #fef6d2; --surface-raised: #fffaea;
+    --border: #ecd9a8; --border-strong: #c4a168;
+    --accent: #e58016; --accent-soft: #f8d17c;
+    --accent-text: #7e4a00; --accent-on: #fef6d2;
+  }
+  body[data-mode="dark"] .palette-gsg {
+    --brand: #fbe1a6; --text: #fef6d2; --text-muted: #c4b287;
+    --surface: #1a0e00; --surface-raised: #261600;
+    --border: #4d2e00; --border-strong: #7e4a00;
+    --accent: #f49e3e; --accent-soft: #2d1c00;
+    --accent-text: #fbe1a6; --accent-on: #1a0e00;
+  }
+
+  /* 5. Golden Peachy Glow — peach + gold, dark brown anchor */
+  body[data-mode="light"] .palette-gpg {
+    --brand: #804837; --text: #543e3a; --text-muted: #8a6e5c;
+    --surface: #fdf6e8; --surface-raised: #fefaef;
+    --border: #ecd9b8; --border-strong: #c4a578;
+    --accent: #f2a27c; --accent-soft: #f9da62;
+    --accent-text: #804837; --accent-on: #fdf6e8;
+  }
+  body[data-mode="dark"] .palette-gpg {
+    --brand: #f9da62; --text: #fdf6e8; --text-muted: #b8a890;
+    --surface: #2a1f1c; --surface-raised: #382a26;
+    --border: #543e3a; --border-strong: #804837;
+    --accent: #f2a27c; --accent-soft: #3a2622;
+    --accent-text: #f9da62; --accent-on: #2a1f1c;
+  }
+
+  /* 6. Neutral Harmony Bliss — soft cream+nude neutrals (4-color, derived dark) */
+  body[data-mode="light"] .palette-nhb {
+    --brand: #6a5550; --text: #6a5550; --text-muted: #9a8580;
+    --surface: #f6f2e4; --surface-raised: #fcf9ef;
+    --border: #e0d3ca; --border-strong: #cfb9b9;
+    --accent: #cfb9b9; --accent-soft: #ecd7d1;
+    --accent-text: #6a5550; --accent-on: #f6f2e4;
+  }
+  body[data-mode="dark"] .palette-nhb {
+    --brand: #ecd7d1; --text: #f6f2e4; --text-muted: #a0938e;
+    --surface: #221c1a; --surface-raised: #2d2522;
+    --border: #4a3d39; --border-strong: #6a5550;
+    --accent: #cfb9b9; --accent-soft: #38302d;
+    --accent-text: #ecd7d1; --accent-on: #221c1a;
+  }
+
+  /* 7. Blood Moon Serenity — deep reds + warm orange gradient */
+  body[data-mode="light"] .palette-bms {
+    --brand: #5d090b; --text: #5d090b; --text-muted: #8a4234;
+    --surface: #fff5eb; --surface-raised: #fffaf3;
+    --border: #f5d8c0; --border-strong: #c85028;
+    --accent: #bf1d1f; --accent-soft: #fbdcd5;
+    --accent-text: #5d090b; --accent-on: #fff5eb;
+  }
+  body[data-mode="dark"] .palette-bms {
+    --brand: #cf763f; --text: #fff5eb; --text-muted: #c49a82;
+    --surface: #1a0202; --surface-raised: #260808;
+    --border: #5d090b; --border-strong: #a1110c;
+    --accent: #c85028; --accent-soft: #2d0a06;
+    --accent-text: #cf763f; --accent-on: #1a0202;
+  }
+
+  /* 8. Gentle Sea Breeze — soft blue gradient (3-color, derived dark) */
+  body[data-mode="light"] .palette-gsb {
+    --brand: #2a5a70; --text: #2a5a70; --text-muted: #5a7d8a;
+    --surface: #f0f8fc; --surface-raised: #fbfdfe;
+    --border: #cbe1ea; --border-strong: #7fb3c3;
+    --accent: #4d8da6; --accent-soft: #d4e7ef;
+    --accent-text: #2a5a70; --accent-on: #f0f8fc;
+  }
+  body[data-mode="dark"] .palette-gsb {
+    --brand: #b3d9e8; --text: #b3d9e8; --text-muted: #7a98a3;
+    --surface: #0d2530; --surface-raised: #143341;
+    --border: #2a4a5a; --border-strong: #4d8da6;
+    --accent: #7fb3c3; --accent-soft: #1a2e38;
+    --accent-text: #b3d9e8; --accent-on: #0d2530;
+  }
+
+  /* 9. Ocean Sunset — teal anchor + peach + bright orange */
+  body[data-mode="light"] .palette-os {
+    --brand: #235a5a; --text: #235a5a; --text-muted: #5a7a7a;
+    --surface: #fef0e8; --surface-raised: #fff8f3;
+    --border: #f0d4c0; --border-strong: #bdbdca;
+    --accent: #ff773e; --accent-soft: #f5bdaa;
+    --accent-text: #a3401a; --accent-on: #fef0e8;
+  }
+  body[data-mode="dark"] .palette-os {
+    --brand: #4a7c99; --text: #f5bdaa; --text-muted: #a08882;
+    --surface: #102a2a; --surface-raised: #1a3838;
+    --border: #235a5a; --border-strong: #4a7c99;
+    --accent: #ff773e; --accent-soft: #2d1410;
+    --accent-text: #f5bdaa; --accent-on: #102a2a;
+  }
+
+  /* 10. Ocean Sunset Vibes — saturated blue + saturated orange/red */
+  body[data-mode="light"] .palette-osv {
+    --brand: #1e90ff; --text: #003a6a; --text-muted: #5a7a98;
+    --surface: #fffaf5; --surface-raised: #ffffff;
+    --border: #d4e8f5; --border-strong: #b0e0e6;
+    --accent: #ff4500; --accent-soft: #ffd9c8;
+    --accent-text: #b32f00; --accent-on: #fffaf5;
+  }
+  body[data-mode="dark"] .palette-osv {
+    --brand: #b0e0e6; --text: #b0e0e6; --text-muted: #7a98a0;
+    --surface: #001a33; --surface-raised: #002544;
+    --border: #1e3050; --border-strong: #1e90ff;
+    --accent: #ff8c00; --accent-soft: #2a1505;
+    --accent-text: #ff8c00; --accent-on: #001a33;
+  }
+
+  /* =================================================================
+     BATCH 2 — cool / muted / cozy names
+     ================================================================= */
+
+  /* 11. Soft Whisper — muted blue (3-color, derived dark) */
+  body[data-mode="light"] .palette-sw {
+    --brand: #2a3850; --text: #2a3850; --text-muted: #6a7890;
+    --surface: #f4f6fb; --surface-raised: #fbfcfe;
+    --border: #d4dceb; --border-strong: #94a3c0;
+    --accent: #94aee3; --accent-soft: #dde5f5;
+    --accent-text: #2a3850; --accent-on: #f4f6fb;
+  }
+  body[data-mode="dark"] .palette-sw {
+    --brand: #b5c7eb; --text: #b5c7eb; --text-muted: #7a8aa3;
+    --surface: #1a202d; --surface-raised: #232a38;
+    --border: #2e3850; --border-strong: #94aee3;
+    --accent: #94aee3; --accent-soft: #1f2838;
+    --accent-text: #b5c7eb; --accent-on: #1a202d;
+  }
+
+  /* 12. Cozy Cabin — deep brown + warm rust accents */
+  body[data-mode="light"] .palette-cc {
+    --brand: #362613; --text: #362613; --text-muted: #765d55;
+    --surface: #e9e0d7; --surface-raised: #f3ede4;
+    --border: #c9bdae; --border-strong: #8c8887;
+    --accent: #a2623f; --accent-soft: #e3cdb8;
+    --accent-text: #5a2f18; --accent-on: #e9e0d7;
+  }
+  body[data-mode="dark"] .palette-cc {
+    --brand: #a2623f; --text: #e9e0d7; --text-muted: #a09588;
+    --surface: #1a1308; --surface-raised: #261c0f;
+    --border: #362613; --border-strong: #635c5c;
+    --accent: #a2623f; --accent-soft: #2d1f10;
+    --accent-text: #e3cdb8; --accent-on: #1a1308;
+  }
+
+  /* 13. Muted Earthy Tones — dusty rose + brick */
+  body[data-mode="light"] .palette-met {
+    --brand: #793b39; --text: #793b39; --text-muted: #8a655e;
+    --surface: #f5ece8; --surface-raised: #faf3f0;
+    --border: #ddc8c2; --border-strong: #c3b1a2;
+    --accent: #a3584d; --accent-soft: #e6d7d6;
+    --accent-text: #793b39; --accent-on: #f5ece8;
+  }
+  body[data-mode="dark"] .palette-met {
+    --brand: #c59b9b; --text: #e6d7d6; --text-muted: #a08885;
+    --surface: #1f1110; --surface-raised: #2c1a18;
+    --border: #4a2826; --border-strong: #793b39;
+    --accent: #c59b9b; --accent-soft: #38201d;
+    --accent-text: #e6d7d6; --accent-on: #1f1110;
+  }
+
+  /* 14. Midnight Woodland Whimsy — deep blue-black + forest greens */
+  body[data-mode="light"] .palette-mww {
+    --brand: #152134; --text: #0b0a18; --text-muted: #5a6c5e;
+    --surface: #f2f5ee; --surface-raised: #fafbf6;
+    --border: #c8d3c4; --border-strong: #85ae8e;
+    --accent: #487d68; --accent-soft: #d4e3d8;
+    --accent-text: #224638; --accent-on: #f2f5ee;
+  }
+  body[data-mode="dark"] .palette-mww {
+    --brand: #85ae8e; --text: #c4d4c7; --text-muted: #6a8070;
+    --surface: #0b0a18; --surface-raised: #152134;
+    --border: #28384a; --border-strong: #315657;
+    --accent: #487d68; --accent-soft: #1a2820;
+    --accent-text: #85ae8e; --accent-on: #0b0a18;
+  }
+
+  /* 15. Pastel Meadows — sage + cream + soft accent blue+lavender */
+  body[data-mode="light"] .palette-pm {
+    --brand: #3a4538; --text: #3a4538; --text-muted: #7a857a;
+    --surface: #faf6ed; --surface-raised: #fdfaf3;
+    --border: #d8cfbb; --border-strong: #b7a99a;
+    --accent: #a9c9a1; --accent-soft: #e2ead6;
+    --accent-text: #3a5a3a; --accent-on: #faf6ed;
+  }
+  body[data-mode="dark"] .palette-pm {
+    --brand: #d7c49d; --text: #e8e0c5; --text-muted: #a09885;
+    --surface: #1f2a1d; --surface-raised: #2a3628;
+    --border: #3a4538; --border-strong: #6a7d68;
+    --accent: #a9c9a1; --accent-soft: #2a3528;
+    --accent-text: #d7c49d; --accent-on: #1f2a1d;
+  }
+</style>
+</head>
+
+<body data-mode="light">
+<aside class="archived-banner" style="position: sticky; top: 0; z-index: 9999; background: #fff3cd; border-bottom: 3px solid #f59e0b; padding: 12px 20px; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.5; color: #78350f; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+  <strong>ARCHIVED EXPLORATION.</strong> This file is preserved for historical reference only. The Mynk brand was finalized as <strong>Mynka Blue</strong> on 2026-05-19. Canonical visual reference: <a href="../palette-mocks-FINAL-mynka-blue.html" style="color: #78350f; text-decoration: underline;">palette-mocks-FINAL-mynka-blue.html</a>. Decision doc: <code style="background:rgba(0,0,0,0.08);padding:1px 5px;border-radius:3px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;">docs/MYNK-BRAND-PHASE-2-DECISIONS.md</code>.
+</aside>
+
+<header class="chrome-header">
+  <div>
+    <div class="chrome-title">Mynk — daughter's picks (batch 2)</div>
+    <div class="chrome-sub">14 palettes she pulled · 2026-05-19</div>
+  </div>
+  <div class="chrome-controls">
+    <button class="toggle-btn" data-mode-btn="light" aria-pressed="true">Light</button>
+    <button class="toggle-btn" data-mode-btn="dark" aria-pressed="false">Dark</button>
+  </div>
+</header>
+
+<section class="intro">
+  <span class="pin">For the daughter — round 2</span>
+  <h2>Fourteen palettes she picked out, with hex codes on every swatch.</h2>
+  <p>Two groups: the first 9 are warm/ocean/sunset names from the first screenshot, the last 5 are cool/cozy/muted names from the second. <strong>Sunny Beach Day</strong> is omitted because it's already in <code>palette-mocks-warm-colors.html</code>.</p>
+  <div class="caveat">
+    <strong>One honest caveat:</strong> these palette names aren't unique to Coolors — names like "Ocean Sunset" and "Cozy Cabin" exist on Coolors, ColorMagic, ColorDrop, iPalettes, and a dozen other sites, each with slightly different hex sets. I picked the best-matching hex set per name based on which version felt most true to the name. The ones marked <span style="background:#d4a574;color:#2a1a08;padding:1px 6px;border-radius:999px;font:600 9px var(--font-mono);letter-spacing:0.04em;text-transform:uppercase;">loose match</span> are where I had to derive a darker text color or where the source palette had fewer than 5 colors. <strong>If she points at one and says "that's not the one I saw"</strong>, hover over that card on Coolors, copy the URL (it'll contain the hex codes), paste it here, and I'll swap it to the exact set instantly.
+  </div>
+  <p>Toggle light/dark in the header. Each card shows the same 5 surfaces (homepage, dashboard, recording bar, AI field) so she can compare apples to apples.</p>
+</section>
+
+<h3 class="section-header">Batch 1 — warm / ocean / sunset / glow <span class="count">9 palettes</span></h3>
+
+<main>
+
+  <!-- 1. Summer Ocean Breeze -->
+  <article class="palette-frame palette-sob">
+    <div class="palette-label">
+      <div class="palette-label-name">1 · Summer Ocean Breeze</div>
+      <div class="palette-label-tag">all-cool blue gradient</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #b3e0f2; color: #003a4a;">#B3E0F2</div>
+      <div class="swatch" style="background: #7ec6e8; color: #003a4a;">#7EC6E8</div>
+      <div class="swatch" style="background: #4da4d3; color: #f0f8fc;">#4DA4D3</div>
+      <div class="swatch" style="background: #0096c7; color: #f0f8fc;">#0096C7</div>
+      <div class="swatch" style="background: #007b92; color: #f0f8fc;">#007B92</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>Read.</strong> Pure cool. No warmth, no pop. Reads "swimming-pool app" or "beachfront real estate." Calming but might feel one-note for a daily-use product.
+      <span class="match-note">Source: ColorDrop #36282 (Ocean Breeze Summer).</span>
+    </div>
+  </article>
+
+  <!-- 2. Dark Sunset -->
+  <article class="palette-frame palette-ds">
+    <div class="palette-label">
+      <div class="palette-label-name">2 · Dark Sunset</div>
+      <div class="palette-label-tag">deep purple + warm sunset orange</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #4d004b; color: #fdf4ea;">#4D004B</div>
+      <div class="swatch" style="background: #404040; color: #fdf4ea;">#404040</div>
+      <div class="swatch" style="background: #5a3f3f; color: #fdf4ea;">#5A3F3F</div>
+      <div class="swatch" style="background: #f08e51; color: #4d004b;">#F08E51</div>
+      <div class="swatch" style="background: #f0a94c; color: #4d004b;">#F0A94C</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>Read.</strong> Plum-aubergine deep + warm orange pops. Like a sunset over a vineyard. Dark mode is striking; light mode is harder because the brand color is so deep. Edgier than Concept 3.
+      <span class="match-note">Source: ColorMagic Dark Sunset palette.</span>
+    </div>
+  </article>
+
+  <!-- 3. Golden Summer Glow -->
+  <article class="palette-frame palette-gsg">
+    <div class="palette-label">
+      <span class="palette-label-warn">Yellow risk</span>
+      <div class="palette-label-name">3 · Golden Summer Glow</div>
+      <div class="palette-label-tag">cream → deep brown gradient</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #fef6d2; color: #4d2e00;">#FEF6D2</div>
+      <div class="swatch" style="background: #f7b75d; color: #4d2e00;">#F7B75D</div>
+      <div class="swatch" style="background: #e58016; color: #fef6d2;">#E58016</div>
+      <div class="swatch" style="background: #b15200; color: #fef6d2;">#B15200</div>
+      <div class="swatch" style="background: #4d2e00; color: #fef6d2;">#4D2E00</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>Read.</strong> Pure honey/amber gradient. <em>Heads up:</em> the cream surface is the kind of yellow your mom said no to on Concept 1. Even more saturated than that one. Probably exploration-only.
+      <span class="match-note">Source: ColorDrop #36281 (10-color gradient, condensed to 5 representative stops).</span>
+    </div>
+  </article>
+
+  <!-- 5. Golden Peachy Glow -->
+  <article class="palette-frame palette-gpg">
+    <div class="palette-label">
+      <span class="palette-label-warn">Yellow risk</span>
+      <div class="palette-label-name">4 · Golden Peachy Glow</div>
+      <div class="palette-label-tag">peach + gold, brown anchor</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #543e3a; color: #fdf6e8;">#543E3A</div>
+      <div class="swatch" style="background: #804837; color: #fdf6e8;">#804837</div>
+      <div class="swatch" style="background: #956e5e; color: #fdf6e8;">#956E5E</div>
+      <div class="swatch" style="background: #f2a27c; color: #543e3a;">#F2A27C</div>
+      <div class="swatch" style="background: #f9da62; color: #543e3a;">#F9DA62</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>Read.</strong> Brown coffeehouse base, peach + bright canary yellow accents. Has the brown-risk mom flagged on Concept 2 <em>and</em> the yellow-risk from Concept 1. Visually it's lush, but it stacks both of the family vetoes.
+      <span class="match-note">Source: tintboxes Golden Peach (Coolors-named match not confirmed).</span>
+    </div>
+  </article>
+
+  <!-- 6. Neutral Harmony Bliss -->
+  <article class="palette-frame palette-nhb">
+    <div class="palette-label">
+      <span class="palette-label-warn">Loose match</span>
+      <div class="palette-label-name">5 · Neutral Harmony Bliss</div>
+      <div class="palette-label-tag">cream + nude + dusty rose</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #f6f2e4; color: #6a5550;">#F6F2E4</div>
+      <div class="swatch" style="background: #f4e8da; color: #6a5550;">#F4E8DA</div>
+      <div class="swatch" style="background: #ecd7d1; color: #6a5550;">#ECD7D1</div>
+      <div class="swatch" style="background: #cfb9b9; color: #6a5550;">#CFB9B9</div>
+      <div class="swatch" style="background: #6a5550; color: #f6f2e4;">#6A5550</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>Read.</strong> Ultra-soft cream + nude + dusty rose. The dusty-rose accent (#CFB9B9) is the only real "color" — everything else is neutral. Reads "quiet luxury, boutique skincare." <em>Risk:</em> may feel too quiet — no element really pops, so AI-content highlights might disappear.
+      <span class="match-note">Source: Pastel Color Palettes "Neutral Bliss" (4 colors + derived deep neutral).</span>
+    </div>
+  </article>
+
+  <!-- 7. Blood Moon Serenity -->
+  <article class="palette-frame palette-bms">
+    <div class="palette-label">
+      <span class="palette-label-warn">Loose match</span>
+      <div class="palette-label-name">6 · Blood Moon Serenity</div>
+      <div class="palette-label-tag">deep crimson → warm orange</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #5d090b; color: #fff5eb;">#5D090B</div>
+      <div class="swatch" style="background: #a1110c; color: #fff5eb;">#A1110C</div>
+      <div class="swatch" style="background: #bf1d1f; color: #fff5eb;">#BF1D1F</div>
+      <div class="swatch" style="background: #c85028; color: #fff5eb;">#C85028</div>
+      <div class="swatch" style="background: #cf763f; color: #5d090b;">#CF763F</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>Read.</strong> All-red, no cool anchor. Like Red Sunburst from the warm-colors page but darker. The name is a bit at odds with itself — "blood moon" is dramatic, "serenity" is calm — and this palette leans hard into dramatic. Probably too intense for tutoring.
+      <span class="match-note">Source: ColorsWall Blood Moon (warmer of the two interpretations found).</span>
+    </div>
+  </article>
+
+  <!-- 8. Gentle Sea Breeze -->
+  <article class="palette-frame palette-gsb">
+    <div class="palette-label">
+      <span class="palette-label-warn">Loose match</span>
+      <div class="palette-label-name">7 · Gentle Sea Breeze</div>
+      <div class="palette-label-tag">soft blue (3-color base)</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #b3d9e8; color: #2a5a70;">#B3D9E8</div>
+      <div class="swatch" style="background: #7fb3c3; color: #2a5a70;">#7FB3C3</div>
+      <div class="swatch" style="background: #4d8da6; color: #f0f8fc;">#4D8DA6</div>
+      <div class="swatch" style="background: #2a5a70; color: #f0f8fc;">#2A5A70</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>Read.</strong> Practically a tonal study of one blue. Even cooler than Summer Ocean Breeze. Restful, monastic. The lack of any warm tone makes it hard to signal "something exciting just happened" — every UI moment feels equally calm.
+      <span class="match-note">Source: ColorDrop #82682 (3 colors + derived deep blue for text).</span>
+    </div>
+  </article>
+
+  <!-- 9. Ocean Sunset -->
+  <article class="palette-frame palette-os">
+    <div class="palette-label">
+      <div class="palette-label-name">8 · Ocean Sunset</div>
+      <div class="palette-label-tag">deep teal + peach + bright orange</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #4a7c99; color: #fef0e8;">#4A7C99</div>
+      <div class="swatch" style="background: #bdbdca; color: #235a5a;">#BDBDCA</div>
+      <div class="swatch" style="background: #f5bdaa; color: #235a5a;">#F5BDAA</div>
+      <div class="swatch" style="background: #ff773e; color: #fef0e8;">#FF773E</div>
+      <div class="swatch" style="background: #235a5a; color: #fef0e8;">#235A5A</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>Read.</strong> Structurally very similar to Concept 3 — deep teal as brand, peach surface, orange as pop. Slightly warmer than Concept 3 (peach surface vs cream). The lavender-grey swatch is an unexpected middle tone that adds some sophistication.
+      <span class="match-note">Source: Color-Hex #39749 Ocean Sunset.</span>
+    </div>
+  </article>
+
+  <!-- 10. Ocean Sunset Vibes -->
+  <article class="palette-frame palette-osv">
+    <div class="palette-label">
+      <div class="palette-label-name">9 · Ocean Sunset Vibes</div>
+      <div class="palette-label-tag">saturated blue + saturated orange/red</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #ff4500; color: #fffaf5;">#FF4500</div>
+      <div class="swatch" style="background: #ff8c00; color: #003a6a;">#FF8C00</div>
+      <div class="swatch" style="background: #1e90ff; color: #fffaf5;">#1E90FF</div>
+      <div class="swatch" style="background: #b0e0e6; color: #003a6a;">#B0E0E6</div>
+      <div class="swatch" style="background: #ffffff; color: #003a6a;">#FFFFFF</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>Read.</strong> Pure CSS-named-colors energy — DodgerBlue + OrangeRed + DarkOrange + White. Reads "primary colors poster from a kids' classroom." Loud, friendly, low-restraint. Probably too saturated for a B2B-leaning product but it's <em>fun</em>.
+      <span class="match-note">Source: ColorAny Ocean Sunset Vibes.</span>
+    </div>
+  </article>
+
+</main>
+
+<h3 class="section-header">Batch 2 — cool / muted / cozy <span class="count">5 palettes</span></h3>
+
+<main>
+
+  <!-- 11. Soft Whisper -->
+  <article class="palette-frame palette-sw">
+    <div class="palette-label">
+      <span class="palette-label-warn">Loose match</span>
+      <div class="palette-label-name">10 · Soft Whisper</div>
+      <div class="palette-label-tag">muted blue (3-color base)</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #b5c7eb; color: #2a3850;">#B5C7EB</div>
+      <div class="swatch" style="background: #94aee3; color: #2a3850;">#94AEE3</div>
+      <div class="swatch" style="background: #94a3c0; color: #f4f6fb;">#94A3C0</div>
+      <div class="swatch" style="background: #2a3850; color: #f4f6fb;">#2A3850</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>Read.</strong> Periwinkle/lavender-blue, dreamy and quiet. Reads "meditation app." Like Gentle Sea Breeze but with more purple. Pretty but might feel sleepy for a daily-use product.
+      <span class="match-note">Source: Figma Soft Whisper (3 colors + derived deep slate).</span>
+    </div>
+  </article>
+
+  <!-- 12. Cozy Cabin -->
+  <article class="palette-frame palette-cc">
+    <div class="palette-label">
+      <span class="palette-label-warn">Brown risk</span>
+      <div class="palette-label-name">11 · Cozy Cabin</div>
+      <div class="palette-label-tag">deep brown + warm rust</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #362613; color: #e9e0d7;">#362613</div>
+      <div class="swatch" style="background: #635c5c; color: #e9e0d7;">#635C5C</div>
+      <div class="swatch" style="background: #765d55; color: #e9e0d7;">#765D55</div>
+      <div class="swatch" style="background: #8c8887; color: #362613;">#8C8887</div>
+      <div class="swatch" style="background: #a2623f; color: #e9e0d7;">#A2623F</div>
+      <div class="swatch" style="background: #e9e0d7; color: #362613;">#E9E0D7</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>Read.</strong> Espresso brown + warm rust. The Concept 2 (Mink Fur Tones) family — brown-leaning. Risk: mom said no to Concept 2 partly because of the brown. This is more rust-forward and a touch more interesting, but same family. Lovely for a coffee shop or whiskey brand.
+      <span class="match-note">Source: tintboxes Cozy Cabin palette.</span>
+    </div>
+  </article>
+
+  <!-- 13. Muted Earthy Tones -->
+  <article class="palette-frame palette-met">
+    <div class="palette-label">
+      <div class="palette-label-name">12 · Muted Earthy Tones</div>
+      <div class="palette-label-tag">dusty rose + brick</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #c59b9b; color: #793b39;">#C59B9B</div>
+      <div class="swatch" style="background: #a3584d; color: #f5ece8;">#A3584D</div>
+      <div class="swatch" style="background: #793b39; color: #f5ece8;">#793B39</div>
+      <div class="swatch" style="background: #e6d7d6; color: #793b39;">#E6D7D6</div>
+      <div class="swatch" style="background: #c3b1a2; color: #793b39;">#C3B1A2</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>Read.</strong> Dusty rose + brick + warm beige. More "ceramic studio" than "tutoring app." Closest to Bold Berry in tone but more grounded — the brick (#A3584D) gives it some bite. <em>Less yellow-risk than Concept 1, less brown-risk than Concept 2.</em>
+      <span class="match-note">Source: ColorMagic Muted Earthy Tones.</span>
+    </div>
+  </article>
+
+  <!-- 14. Midnight Woodland Whimsy -->
+  <article class="palette-frame palette-mww">
+    <div class="palette-label">
+      <span class="palette-label-warn">Loose match</span>
+      <div class="palette-label-name">13 · Midnight Woodland Whimsy</div>
+      <div class="palette-label-tag">deep blue-black + forest greens</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #85ae8e; color: #0b0a18;">#85AE8E</div>
+      <div class="swatch" style="background: #487d68; color: #f2f5ee;">#487D68</div>
+      <div class="swatch" style="background: #315657; color: #f2f5ee;">#315657</div>
+      <div class="swatch" style="background: #152134; color: #f2f5ee;">#152134</div>
+      <div class="swatch" style="background: #0b0a18; color: #f2f5ee;">#0B0A18</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>Read.</strong> Deep navy-black foundation + sage/forest greens. The dark mode is the star — light mode is harder because the green is gentle and you lose the moody "midnight" feel. Reads "premium outdoor brand, Patagonia-adjacent." Distinctive.
+      <span class="match-note">Source: Color-Hex Whimsical Woods #98765 (closest "midnight + woodland" match — exact name not confirmed).</span>
+    </div>
+  </article>
+
+  <!-- 15. Pastel Meadows -->
+  <article class="palette-frame palette-pm">
+    <div class="palette-label">
+      <span class="palette-label-warn">Loose match</span>
+      <div class="palette-label-name">14 · Pastel Meadows</div>
+      <div class="palette-label-tag">sage + cream + soft blue/lavender</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #d7c49d; color: #3a4538;">#D7C49D</div>
+      <div class="swatch" style="background: #a9c9a1; color: #3a4538;">#A9C9A1</div>
+      <div class="swatch" style="background: #6ec5e2; color: #3a4538;">#6EC5E2</div>
+      <div class="swatch" style="background: #d4c1e2; color: #3a4538;">#D4C1E2</div>
+      <div class="swatch" style="background: #b7a99a; color: #3a4538;">#B7A99A</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>Read.</strong> Spring meadow energy — sage + cream + a surprise lavender + soft sky blue. Most multi-hued of the cool/muted batch. Could feel a touch Easter-egg-ish; could also feel genuinely fresh. The lavender swatch (#D4C1E2) is the most distinctive note.
+      <span class="match-note">Source: ColorMagic Serene Meadow (closest "pastel meadow" match found).</span>
+    </div>
+  </article>
+
+</main>
+
+<script>
+  const body = document.body;
+  const btns = document.querySelectorAll('[data-mode-btn]');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const m = btn.dataset.modeBtn;
+      body.setAttribute('data-mode', m);
+      btns.forEach(b => b.setAttribute('aria-pressed', b.dataset.modeBtn === m ? 'true' : 'false'));
+    });
+  });
+</script>
+
+</body>
+</html>

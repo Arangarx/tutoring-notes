@@ -1,0 +1,952 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mynk — finalists round 4 (Forest-Teal Bridge softer × typography matrix)</title>
+
+<!-- Fraunces variable (opsz × SOFT × wght), Inter, JetBrains Mono -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,SOFT,wght@9..144,0..100,400..900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  *,*::before,*::after { box-sizing: border-box; }
+  :root {
+    --font-body: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --radius-sm: 6px; --radius-md: 10px; --radius-lg: 16px;
+    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+    --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-12: 48px;
+  }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: var(--font-body);
+    background: #f0eee8; color: #1a1a1f;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body[data-mode="dark"] { background: #0a0a0c; color: #f0ece6; }
+
+  .chrome-header {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(240,238,232,0.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    padding: var(--space-4) var(--space-6);
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-6);
+  }
+  body[data-mode="dark"] .chrome-header {
+    background: rgba(10,10,12,0.92);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .chrome-title {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 700;
+    font-size: 18px; letter-spacing: -0.02em;
+  }
+  .chrome-sub {
+    font-size: 13px; opacity: 0.6;
+    font-family: var(--font-mono);
+  }
+  .chrome-controls { display: flex; gap: var(--space-3); align-items: center; }
+  .toggle-btn {
+    border: 1px solid currentColor; background: transparent;
+    color: inherit; padding: 6px 14px; border-radius: 999px;
+    font: inherit; font-size: 13px; cursor: pointer; opacity: 0.75;
+  }
+  .toggle-btn:hover { opacity: 1; }
+  .toggle-btn[aria-pressed="true"] {
+    background: currentColor; color: #f0eee8; opacity: 1;
+  }
+  body[data-mode="dark"] .toggle-btn[aria-pressed="true"] { color: #0a0a0c; }
+
+  .intro {
+    max-width: 1100px; margin: 0 auto;
+    padding: var(--space-8) var(--space-6) var(--space-6);
+    font-size: 14px; line-height: 1.6;
+  }
+  .intro h2 {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 600;
+    font-size: 30px; letter-spacing: -0.025em;
+    margin: 0 0 var(--space-3);
+  }
+  .intro p { margin: 0 0 var(--space-3); opacity: 0.85; }
+  .intro ul { margin: 0 0 var(--space-3); padding-left: var(--space-5); opacity: 0.85; }
+  .intro li { margin-bottom: var(--space-1); }
+  .intro .callout {
+    margin: var(--space-4) 0 0;
+    padding: var(--space-3) var(--space-4);
+    border-left: 3px solid currentColor;
+    background: rgba(0,0,0,0.04);
+    font-size: 13px; opacity: 0.85;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+  body[data-mode="dark"] .intro .callout { background: rgba(255,255,255,0.04); }
+
+  .section-header {
+    max-width: 2400px; margin: 0 auto;
+    padding: var(--space-8) var(--space-6) var(--space-4);
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 600;
+    font-size: 24px; letter-spacing: -0.02em;
+    border-top: 1px solid rgba(0,0,0,0.08);
+  }
+  body[data-mode="dark"] .section-header { border-top: 1px solid rgba(255,255,255,0.08); }
+  .section-header .count {
+    font-family: var(--font-mono); font-size: 11px; font-weight: 400;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    opacity: 0.55; margin-left: var(--space-2);
+    font-variation-settings: normal;
+  }
+  .section-blurb {
+    margin: 0 auto;
+    padding: 0 var(--space-6) var(--space-4);
+    font-size: 13px; line-height: 1.55; opacity: 0.72;
+    max-width: 880px;
+  }
+
+  /* ============================== Palette grid (section 1) */
+  main.palette-grid {
+    padding: 0 var(--space-6) var(--space-6);
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-5);
+    max-width: 2200px; margin: 0 auto;
+  }
+  @media (max-width: 1100px) { main.palette-grid { grid-template-columns: 1fr; } }
+
+  .palette-frame {
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    border: 1px solid rgba(0,0,0,0.1);
+    display: flex; flex-direction: column;
+    background: var(--surface); color: var(--text);
+  }
+  body[data-mode="dark"] .palette-frame { border-color: rgba(255,255,255,0.08); }
+
+  .palette-label {
+    padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--border);
+    background: var(--surface-raised);
+    display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3);
+  }
+  .palette-label-name {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 600;
+    font-size: 19px; letter-spacing: -0.015em; margin: 0 0 4px;
+  }
+  .palette-label-tag {
+    font-family: var(--font-mono); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted);
+  }
+  .palette-label-source {
+    font-family: var(--font-mono); font-size: 9px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted);
+    opacity: 0.6; text-align: right; flex-shrink: 0;
+  }
+
+  .delta-strip {
+    padding: var(--space-2) var(--space-5);
+    background: var(--surface-raised);
+    border-bottom: 1px solid var(--border);
+    font: 10px var(--font-mono); letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--text-muted); opacity: 0.85;
+    display: flex; gap: var(--space-2); flex-wrap: wrap;
+  }
+  .delta-strip .from-mww { color: #4a8d6d; }
+  .delta-strip .from-blue { color: #4a8aa8; }
+  .delta-strip .from-muted { color: #b08070; }
+  body[data-mode="dark"] .delta-strip .from-mww { color: #85ae8e; }
+  body[data-mode="dark"] .delta-strip .from-blue { color: #95b0c0; }
+  body[data-mode="dark"] .delta-strip .from-muted { color: #d0a090; }
+
+  .swatches {
+    display: flex; height: 38px;
+    border-bottom: 1px solid var(--border);
+  }
+  .swatch {
+    flex: 1;
+    display: flex; align-items: center; justify-content: center;
+    font: 10px/1 var(--font-mono);
+    letter-spacing: 0.04em;
+    user-select: all;
+  }
+
+  .surfaces { padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-4); }
+
+  .mock-hero {
+    padding: var(--space-5) var(--space-5);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+  }
+  /* Palette section uses V4 wordmark (Soft + Bold) consistently so eyes
+     focus on color, not type. Section 2 will explore V3/V4 head-to-head. */
+  .mock-hero-wordmark {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 60, "wght" 700;
+    font-size: 32px; letter-spacing: -0.025em;
+    margin: 0 0 var(--space-3); color: var(--brand);
+  }
+  .mock-hero-wordmark::after { content: "·"; color: var(--accent); margin-left: 2px; }
+  .mock-hero-tag {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700;
+    font-size: 23px; line-height: 1.15; letter-spacing: -0.02em;
+    margin: 0 0 var(--space-2); color: var(--text);
+  }
+  .mock-hero-sub {
+    font-size: 13px; line-height: 1.5; color: var(--text-muted);
+    margin: 0 0 var(--space-4);
+  }
+  .mock-hero-ctas { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+  .btn-primary, .btn-ghost {
+    font: 12px var(--font-body); font-weight: 500;
+    padding: 7px 14px; border-radius: 999px; cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .btn-primary { background: var(--accent); color: var(--accent-on); }
+  .btn-ghost { background: transparent; color: var(--text); border-color: var(--border-strong); }
+
+  .mock-dashboard {
+    padding: var(--space-4); border-radius: var(--radius-md);
+    background: var(--surface-raised); border: 1px solid var(--border);
+  }
+  .mock-dashboard-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin: 0 0 var(--space-3);
+  }
+  .mock-dashboard-title { font: 600 13px/1.2 var(--font-body); color: var(--text); margin: 0; }
+  .mock-dashboard-meta { font: 11px/1 var(--font-mono); color: var(--text-muted); }
+  .session-row {
+    display: grid; grid-template-columns: 1fr auto auto;
+    align-items: center; gap: var(--space-2);
+    padding: var(--space-2); border-bottom: 1px solid var(--border);
+  }
+  .session-row:last-child { border-bottom: none; }
+  .session-student { font: 500 12px/1.3 var(--font-body); color: var(--text); }
+  .session-sub { font: 11px/1.3 var(--font-body); color: var(--text-muted); margin-top: 2px; }
+  .session-when { font: 11px var(--font-mono); color: var(--text-muted); }
+  .ai-tag {
+    font: 500 9px var(--font-mono); letter-spacing: 0.04em;
+    text-transform: uppercase; padding: 3px 6px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent-text); white-space: nowrap;
+  }
+
+  .mock-recording {
+    display: grid; grid-template-columns: auto 1fr auto auto;
+    align-items: center; gap: var(--space-3);
+    padding: var(--space-3) var(--space-4); border-radius: var(--radius-md);
+    background: var(--surface-raised); border: 1px solid var(--border);
+  }
+  .rec-dot {
+    width: 9px; height: 9px; border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-soft);
+    animation: rec-pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes rec-pulse {
+    0%, 100% { box-shadow: 0 0 0 4px var(--accent-soft); }
+    50% { box-shadow: 0 0 0 7px transparent; }
+  }
+  .rec-label { font: 500 12px var(--font-body); color: var(--text); }
+  .rec-time { font: 600 12px var(--font-mono); color: var(--text); }
+  .rec-end {
+    font: 500 11px var(--font-body); padding: 6px 11px;
+    border-radius: var(--radius-sm); border: 1px solid var(--text);
+    background: var(--text); color: var(--surface); cursor: pointer;
+  }
+
+  .mock-ai-field {
+    padding: var(--space-4); border-radius: var(--radius-md);
+    background: var(--surface-raised); border: 1px solid var(--border);
+  }
+  .ai-field-name {
+    font: 600 11px var(--font-body); letter-spacing: 0.02em;
+    text-transform: uppercase; color: var(--text-muted);
+    margin: 0 0 var(--space-3);
+  }
+  .ai-field-body {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 14, "SOFT" 30, "wght" 400;
+    font-size: 14px; line-height: 1.55; color: var(--text);
+    padding: var(--space-3); border-radius: var(--radius-sm);
+    background: var(--accent-soft); border-left: 3px solid var(--accent);
+  }
+  .ai-field-foot {
+    margin-top: var(--space-2); font: 10px var(--font-mono);
+    color: var(--text-muted); letter-spacing: 0.03em;
+  }
+
+  .palette-notes {
+    padding: var(--space-4) var(--space-5); border-top: 1px solid var(--border);
+    background: var(--surface-raised);
+    font: 13px/1.55 var(--font-body); color: var(--text-muted);
+  }
+  .palette-notes strong { color: var(--text); font-weight: 600; }
+  .palette-notes .vs {
+    margin-top: var(--space-3); padding-top: var(--space-3);
+    border-top: 1px dashed var(--border);
+    font-style: italic; font-size: 12px;
+  }
+
+  /* ============================== Typography hero strip (section 2) */
+  .type-strip-wrap {
+    max-width: 1600px; margin: 0 auto;
+    padding: 0 var(--space-6) var(--space-6);
+  }
+  .type-strip {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-3);
+  }
+  @media (max-width: 1100px) { .type-strip { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 600px) { .type-strip { grid-template-columns: 1fr; } }
+  .type-strip-cell {
+    /* uses Forest-Teal Bridge v2 light surface so the strip reads honestly */
+    background: #fcfbf4;
+    border: 1px solid #c8d3c4;
+    border-radius: var(--radius-md);
+    padding: var(--space-5) var(--space-4);
+    min-height: 160px;
+    display: flex; flex-direction: column; justify-content: center;
+    text-align: center;
+  }
+  body[data-mode="dark"] .type-strip-cell {
+    background: #102f2b; border-color: #1c3f3c;
+  }
+  .type-strip-sample {
+    color: #1e4d4a;
+    font-family: var(--font-display);
+    margin: 0 0 var(--space-3);
+    letter-spacing: -0.025em;
+  }
+  body[data-mode="dark"] .type-strip-sample { color: #7eb1ae; }
+  .type-strip-sample.is-wordmark { font-size: 64px; line-height: 1; }
+  .type-strip-sample.is-heading  { font-size: 22px; line-height: 1.18; color: #1a2820; }
+  body[data-mode="dark"] .type-strip-sample.is-heading { color: #f0ede4; }
+  .type-strip-sample .dot { color: #e27d60; margin-left: 2px; }
+  .type-strip-label {
+    font: 500 11px var(--font-mono);
+    color: #5a6c5e;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  body[data-mode="dark"] .type-strip-label { color: #a5b0a5; }
+  .type-strip-label strong {
+    display: block; font: 600 12px var(--font-body); color: #1e4d4a;
+    margin-bottom: 3px; letter-spacing: 0;
+  }
+  body[data-mode="dark"] .type-strip-label strong { color: #7eb1ae; }
+
+  /* Per-cell variant tunings for hero strip */
+  .v3-word { font-variation-settings: "opsz" 144, "SOFT" 0,  "wght" 900; }
+  .v4-word { font-variation-settings: "opsz" 144, "SOFT" 60, "wght" 700; }
+  .v2-head { font-variation-settings: "opsz" 144, "SOFT" 0,  "wght" 700; }
+  .v3-head { font-variation-settings: "opsz" 144, "SOFT" 0,  "wght" 800; }
+
+  /* ============================== Typography matrix grid (section 2) */
+  main.type-matrix {
+    padding: 0 var(--space-6) var(--space-12);
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-5);
+    max-width: 1900px; margin: 0 auto;
+  }
+  @media (max-width: 1100px) { main.type-matrix { grid-template-columns: 1fr; } }
+
+  .matrix-cell {
+    /* Forest-Teal Bridge v2 hard-coded — this section is about typography only */
+    --brand: #1e4d4a; --text: #1a2820; --text-muted: #5a6c5e;
+    --surface: #f5f4ec; --surface-raised: #fcfbf4;
+    --border: #c8d3c4; --border-strong: #487d68;
+    --accent: #e27d60; --accent-soft: #f8e0d6;
+    --accent-text: #8a3c25; --accent-on: #fcfbf4;
+    background: var(--surface); color: var(--text);
+    border: 1px solid #c8d3c4;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  body[data-mode="dark"] .matrix-cell {
+    --brand: #7eb1ae; --text: #f0ede4; --text-muted: #a5b0a5;
+    --surface: #07201c; --surface-raised: #102f2b;
+    --border: #1c3f3c; --border-strong: #85ae8e;
+    --accent: #e27d60; --accent-soft: #2e1d18;
+    --accent-text: #e8a08a; --accent-on: #07201c;
+    border-color: #1c3f3c;
+  }
+  .matrix-head {
+    padding: var(--space-3) var(--space-5);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-raised);
+    display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3);
+  }
+  .matrix-coord {
+    font: 600 11px var(--font-mono);
+    color: var(--brand);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .matrix-axis {
+    font: 10px var(--font-mono);
+    color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.05em;
+    text-align: right;
+  }
+  .matrix-body {
+    padding: var(--space-6) var(--space-5);
+    display: flex; flex-direction: column; gap: var(--space-5);
+  }
+  .matrix-wordmark {
+    font-family: var(--font-display);
+    color: var(--brand);
+    font-size: 96px; line-height: 1;
+    margin: 0; letter-spacing: -0.03em;
+  }
+  .matrix-wordmark .dot { color: var(--accent); margin-left: 2px; }
+  .matrix-heading {
+    font-family: var(--font-display);
+    color: var(--text);
+    font-size: 32px; line-height: 1.15; letter-spacing: -0.025em;
+    margin: 0 0 var(--space-2);
+  }
+  .matrix-sub {
+    font: 14px/1.5 var(--font-body);
+    color: var(--text-muted);
+    margin: 0;
+  }
+  .matrix-body-prose {
+    font: 14px/1.6 var(--font-body); color: var(--text);
+    margin: 0; max-width: 60ch;
+  }
+  .matrix-ui {
+    display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+  }
+  .matrix-ui .btn {
+    font: 500 13px var(--font-body);
+    padding: 7px 14px; background: var(--accent); color: var(--accent-on);
+    border: none; border-radius: 999px; cursor: pointer;
+  }
+  .matrix-ui .ai-tag {
+    font: 500 10px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    padding: 4px 8px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent-text);
+  }
+  .matrix-ui .student {
+    font: 500 13px var(--font-body); color: var(--text);
+  }
+  .matrix-ui .time {
+    font: 12px var(--font-mono); color: var(--text-muted); margin-left: auto;
+  }
+  .matrix-ai {
+    padding: var(--space-4); border-radius: var(--radius-md);
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+  }
+  .matrix-ai-label {
+    font: 500 10px var(--font-mono); color: var(--accent-text);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin: 0 0 var(--space-2);
+  }
+  .matrix-ai-body {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 14, "SOFT" 30, "wght" 400;
+    font-size: 14px; line-height: 1.55; color: var(--text);
+    margin: 0;
+  }
+  .matrix-notes {
+    padding: var(--space-4) var(--space-5);
+    border-top: 1px solid var(--border);
+    background: var(--surface-raised);
+    font: 13px/1.55 var(--font-body); color: var(--text-muted);
+  }
+  .matrix-notes strong { color: var(--text); font-weight: 600; }
+
+  /* Per-matrix-cell variant tunings */
+  .cell-v3w-v2h .matrix-wordmark { font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 900; }
+  .cell-v3w-v2h .matrix-heading  { font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700; }
+
+  .cell-v3w-v3h .matrix-wordmark { font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 900; }
+  .cell-v3w-v3h .matrix-heading  { font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 800; }
+
+  .cell-v4w-v2h .matrix-wordmark { font-variation-settings: "opsz" 144, "SOFT" 60, "wght" 700; }
+  .cell-v4w-v2h .matrix-heading  { font-variation-settings: "opsz" 144, "SOFT" 0,  "wght" 700; }
+
+  .cell-v4w-v3h .matrix-wordmark { font-variation-settings: "opsz" 144, "SOFT" 60, "wght" 700; }
+  .cell-v4w-v3h .matrix-heading  { font-variation-settings: "opsz" 144, "SOFT" 0,  "wght" 800; }
+
+  /* ============================== Palette definitions */
+
+  /* F1 — Forest-Teal Bridge v2 (round-3 reference, unchanged) */
+  body[data-mode="light"] .palette-f1 {
+    --brand: #1e4d4a; --text: #1a2820; --text-muted: #5a6c5e;
+    --surface: #f5f4ec; --surface-raised: #fcfbf4;
+    --border: #c8d3c4; --border-strong: #487d68;
+    --accent: #e27d60; --accent-soft: #f8e0d6;
+    --accent-text: #8a3c25; --accent-on: #fcfbf4;
+  }
+  body[data-mode="dark"] .palette-f1 {
+    --brand: #7eb1ae; --text: #f0ede4; --text-muted: #a5b0a5;
+    --surface: #07201c; --surface-raised: #102f2b;
+    --border: #1c3f3c; --border-strong: #85ae8e;
+    --accent: #e27d60; --accent-soft: #2e1d18;
+    --accent-text: #e8a08a; --accent-on: #07201c;
+  }
+
+  /* F2 — Bluer Bridge (brand shifts toward MWW navy/blue family) */
+  body[data-mode="light"] .palette-f2 {
+    --brand: #1e3d54; --text: #15203a; --text-muted: #5a6877;
+    --surface: #f5f4ec; --surface-raised: #fcfbf4;
+    --border: #c5cfd0; --border-strong: #4a6680;
+    --accent: #e27d60; --accent-soft: #f8e0d6;
+    --accent-text: #8a3c25; --accent-on: #fcfbf4;
+  }
+  body[data-mode="dark"] .palette-f2 {
+    --brand: #7ea4b1; --text: #f0ede4; --text-muted: #a5b5c0;
+    --surface: #051a24; --surface-raised: #0e2a38;
+    --border: #1c3548; --border-strong: #6a8fa0;
+    --accent: #e27d60; --accent-soft: #2e1d18;
+    --accent-text: #e8a08a; --accent-on: #051a24;
+  }
+
+  /* F3 — Quieter Coral Bridge (gentler accent) */
+  body[data-mode="light"] .palette-f3 {
+    --brand: #1e4d4a; --text: #1a2820; --text-muted: #5a6c5e;
+    --surface: #f5f4ec; --surface-raised: #fcfbf4;
+    --border: #c8d3c4; --border-strong: #487d68;
+    --accent: #d08d7a; --accent-soft: #f1ddd2;
+    --accent-text: #7a3a26; --accent-on: #fcfbf4;
+  }
+  body[data-mode="dark"] .palette-f3 {
+    --brand: #7eb1ae; --text: #f0ede4; --text-muted: #a5b0a5;
+    --surface: #07201c; --surface-raised: #102f2b;
+    --border: #1c3f3c; --border-strong: #85ae8e;
+    --accent: #d08d7a; --accent-soft: #2a1d18;
+    --accent-text: #dba391; --accent-on: #07201c;
+  }
+
+  /* F4 — Softest Bridge (bluer + quieter coral + slightly lifted darks) */
+  body[data-mode="light"] .palette-f4 {
+    --brand: #1e3d54; --text: #1a2334; --text-muted: #5a6877;
+    --surface: #f5f4ec; --surface-raised: #fcfbf4;
+    --border: #c5cfd0; --border-strong: #4a6680;
+    --accent: #d08d7a; --accent-soft: #f1ddd2;
+    --accent-text: #7a3a26; --accent-on: #fcfbf4;
+  }
+  body[data-mode="dark"] .palette-f4 {
+    --brand: #7ea4b1; --text: #f0ede4; --text-muted: #a5b5c0;
+    --surface: #0a2230; --surface-raised: #143245;
+    --border: #1f3d4f; --border-strong: #6a8fa0;
+    --accent: #d08d7a; --accent-soft: #2a1d18;
+    --accent-text: #dba391; --accent-on: #0a2230;
+  }
+</style>
+</head>
+
+<body data-mode="light">
+<aside class="archived-banner" style="position: sticky; top: 0; z-index: 9999; background: #fff3cd; border-bottom: 3px solid #f59e0b; padding: 12px 20px; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.5; color: #78350f; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+  <strong>ARCHIVED EXPLORATION.</strong> This file is preserved for historical reference only. The Mynk brand was finalized as <strong>Mynka Blue</strong> on 2026-05-19. Canonical visual reference: <a href="../palette-mocks-FINAL-mynka-blue.html" style="color: #78350f; text-decoration: underline;">palette-mocks-FINAL-mynka-blue.html</a>. Decision doc: <code style="background:rgba(0,0,0,0.08);padding:1px 5px;border-radius:3px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;">docs/MYNK-BRAND-PHASE-2-DECISIONS.md</code>.
+</aside>
+
+<header class="chrome-header">
+  <div>
+    <div class="chrome-title">Mynk — round 4 finalists</div>
+    <div class="chrome-sub">Forest-Teal Bridge softer variants × typography matrix · 2026-05-19</div>
+  </div>
+  <div class="chrome-controls">
+    <button class="toggle-btn" data-mode-btn="light" aria-pressed="true">Light</button>
+    <button class="toggle-btn" data-mode-btn="dark" aria-pressed="false">Dark</button>
+  </div>
+</header>
+
+<section class="intro">
+  <h2>Forest-Teal Bridge v2, four softness dials. Plus a 2×2 typography matrix.</h2>
+  <p>Two things to evaluate. <strong>Color:</strong> you and your wife landed on Forest-Teal Bridge v2; the daughter prefers the blues for being "softer on her eyes." She's right — blues at the same lightness read calmer than teals. So this page shows F1 (Forest-Teal Bridge v2 unchanged) plus three softer variants that pull individual dials toward the blue/soft side, ending with F4 which pulls all three dials at once.</p>
+  <p><strong>Typography:</strong> you're torn between V3 and V4 for the wordmark and V2 reads as nicely crisp for the heading. So the typography section is a 2×2 — V3 wordmark vs V4 wordmark crossed with V2 heading vs V3 heading. All four cells render on Forest-Teal Bridge v2 so the comparison stays clean.</p>
+  <div class="callout">
+    <strong>What "softer" actually means in F2–F4.</strong> Three independent dials: <span style="font-family: var(--font-mono); font-size: 12px;">(a) brand color teal→blue undertone</span>, <span style="font-family: var(--font-mono); font-size: 12px;">(b) coral accent saturated→muted</span>, and <span style="font-family: var(--font-mono); font-size: 12px;">(c) dark-mode surfaces sharper→slightly lifted</span>. F2 turns just dial (a). F3 turns just dial (b). F4 turns all three. Compare F2 to F1 to see "what does bluer alone feel like." Compare F3 to F1 to see "what does muted coral alone feel like."
+  </div>
+</section>
+
+<h3 class="section-header">Section 1 · Forest-Teal Bridge v2 — softness variants <span class="count">4 cards · color exploration</span></h3>
+<p class="section-blurb">All four cards use the same V4 wordmark + V2 heading typography (Fraunces Soft+Bold + Fraunces Bolder) so eyes stay on the palette. Section 2 explores the typography choice; this one's color-only.</p>
+
+<main class="palette-grid">
+
+  <!-- F1 -->
+  <article class="palette-frame palette-f1">
+    <div class="palette-label">
+      <div>
+        <div class="palette-label-name">F1 · Forest-Teal Bridge v2 (reference)</div>
+        <div class="palette-label-tag">teal brand · forest support · coral pop</div>
+      </div>
+      <div class="palette-label-source">round-3<br>baseline</div>
+    </div>
+    <div class="delta-strip">
+      <span>Δ from round-3 M4 v2:</span>
+      <span>none — unchanged reference</span>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #1e4d4a; color: #f5f4ec;">#1E4D4A</div>
+      <div class="swatch" style="background: #487d68; color: #f5f4ec;">#487D68</div>
+      <div class="swatch" style="background: #f5f4ec; color: #1e4d4a;">#F5F4EC</div>
+      <div class="swatch" style="background: #e27d60; color: #1e4d4a;">#E27D60</div>
+      <div class="swatch" style="background: #07201c; color: #f0ede4;">#07201C</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory. This unbolded sub-line is the litmus test for the dark mode "dim text" fix from round 3.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What F1 is:</strong> The reference. Teal brand at HSL(178°, 43%, 21%) — strongly teal, slightly cool but with a clear green pull. Coral at full saturation. Dark mode surfaces #07201C / #102F2B (the round-3 fix).
+      <div class="vs"><strong>Why it's here:</strong> Anchor. Read every other F-card on this page back to F1 to see what each softness dial actually changes.</div>
+    </div>
+  </article>
+
+  <!-- F2 -->
+  <article class="palette-frame palette-f2">
+    <div class="palette-label">
+      <div>
+        <div class="palette-label-name">F2 · Bluer Bridge</div>
+        <div class="palette-label-tag">brand shifts teal→blue · everything else from F1</div>
+      </div>
+      <div class="palette-label-source">soft-dial (a)<br>daughter's blue feedback</div>
+    </div>
+    <div class="delta-strip">
+      <span>Δ from F1:</span>
+      <span class="from-blue">[shift] brand #1E4D4A → #1E3D54</span>
+      <span class="from-blue">[shift] text #1A2820 → #15203A</span>
+      <span class="from-blue">[shift] strong #487D68 → #4A6680</span>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #1e3d54; color: #f5f4ec;">#1E3D54</div>
+      <div class="swatch" style="background: #4a6680; color: #f5f4ec;">#4A6680</div>
+      <div class="swatch" style="background: #f5f4ec; color: #1e3d54;">#F5F4EC</div>
+      <div class="swatch" style="background: #e27d60; color: #15203a;">#E27D60</div>
+      <div class="swatch" style="background: #051a24; color: #f0ede4;">#051A24</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory. This unbolded sub-line is the litmus test for the dark mode "dim text" fix from round 3.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What F2 is:</strong> Same coral, same cream, same structure as F1 — but the brand color rotates from HSL 178° (teal) to HSL 210° (blue-teal). The "Mynk" wordmark, the body text in light mode, and the strong-border (which was forest-green in F1) all shift to blue. Dark mode surface also leans deeper blue (#051A24).
+      <div class="vs"><strong>vs F1:</strong> Calmer. Less green energy. The daughter's "softer on eyes" intuition tracks — blues at this lightness do read as less assertive than equivalent teals because there's less yellow in the mix. <strong>Cost:</strong> loses the "forest-teal" character that named the palette. You'd want to rename this one — "Twilight Bridge"?</div>
+    </div>
+  </article>
+
+  <!-- F3 -->
+  <article class="palette-frame palette-f3">
+    <div class="palette-label">
+      <div>
+        <div class="palette-label-name">F3 · Quieter Coral Bridge</div>
+        <div class="palette-label-tag">coral muted · everything else from F1</div>
+      </div>
+      <div class="palette-label-source">soft-dial (b)<br>gentler accent</div>
+    </div>
+    <div class="delta-strip">
+      <span>Δ from F1:</span>
+      <span class="from-muted">[mute] accent #E27D60 → #D08D7A</span>
+      <span class="from-muted">[mute] accent-soft #F8E0D6 → #F1DDD2</span>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #1e4d4a; color: #f5f4ec;">#1E4D4A</div>
+      <div class="swatch" style="background: #487d68; color: #f5f4ec;">#487D68</div>
+      <div class="swatch" style="background: #f5f4ec; color: #1e4d4a;">#F5F4EC</div>
+      <div class="swatch" style="background: #d08d7a; color: #1a2820;">#D08D7A</div>
+      <div class="swatch" style="background: #07201c; color: #f0ede4;">#07201C</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory. This unbolded sub-line is the litmus test for the dark mode "dim text" fix from round 3.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What F3 is:</strong> Identical to F1 except coral. Original coral #E27D60 was HSL(13°, 67%, 63%) — bright and orange-leaning. Muted coral #D08D7A is HSL(13°, 47%, 64%) — same hue, same lightness, just less saturated. The CTA, recording dot, AI border, and AI tag all soften.
+      <div class="vs"><strong>vs F1:</strong> Less startup-y, more lived-in. The coral now feels like a warm putty rather than a brand color shouting. <strong>Risk:</strong> the AI tag and recording dot lose some "I'm a status indicator, look at me" quality. Probably fine for a calm product — Sarah's not going to miss the recording dot either way.</div>
+    </div>
+  </article>
+
+  <!-- F4 -->
+  <article class="palette-frame palette-f4">
+    <div class="palette-label">
+      <div>
+        <div class="palette-label-name">F4 · Softest Bridge (all three dials)</div>
+        <div class="palette-label-tag">bluer brand · muted coral · lifted dark surfaces</div>
+      </div>
+      <div class="palette-label-source">F2 + F3 + (c)<br>maximum softness</div>
+    </div>
+    <div class="delta-strip">
+      <span>Δ from F1:</span>
+      <span class="from-blue">[shift] brand → blue</span>
+      <span class="from-muted">[mute] coral → quieter</span>
+      <span class="from-mww">[lift] dark surfaces</span>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #1e3d54; color: #f5f4ec;">#1E3D54</div>
+      <div class="swatch" style="background: #4a6680; color: #f5f4ec;">#4A6680</div>
+      <div class="swatch" style="background: #f5f4ec; color: #1e3d54;">#F5F4EC</div>
+      <div class="swatch" style="background: #d08d7a; color: #1a2334;">#D08D7A</div>
+      <div class="swatch" style="background: #0a2230; color: #f0ede4;">#0A2230</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory. This unbolded sub-line is the litmus test for the dark mode "dim text" fix from round 3.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What F4 is:</strong> All three softness dials at once. Bluer brand (F2's contribution), muted coral (F3's contribution), plus dark surfaces lifted from #07201C to #0A2230 (a touch less aggressive black, slightly more breathing room). The most "all sides of the family agree" compromise — daughter gets the blues, you and your wife get the Forest-Teal Bridge structure, the muted coral makes it feel less branded-loud.
+      <div class="vs"><strong>vs F1:</strong> Whole system feels calmer, less "active." <strong>Risk:</strong> with all three dials turned, the palette may lose <em>distinctiveness</em> — it starts to feel like a generic "calm SaaS" palette rather than something with the specific Forest-Teal character you bought into. <strong>Suggested test:</strong> open F1 and F4 side by side and ask "if I had to describe each in 3 words, are they meaningfully different?" If yes, F4's earned the dials. If no, F2 or F3 alone is probably the right amount.</div>
+    </div>
+  </article>
+
+</main>
+
+<h3 class="section-header">Section 2 · Typography matrix <span class="count">4 cells · V3/V4 wordmark × V2/V3 heading</span></h3>
+<p class="section-blurb">You're torn between V3 (Heaviest, wght 900) and V4 (Soft+Bold, wght 700 + SOFT 60) for the Mynk wordmark. V2 (Bolder, wght 700) for the heading "seems nicely crisp." So this matrix is wordmark × heading: V3 vs V4 wordmark crossed with V2 vs V3 heading. All four cells render on Forest-Teal Bridge v2 (F1) so palette doesn't confound the comparison.</p>
+<p class="section-blurb">Hero strip first — each axis in isolation — then the four full combinations below.</p>
+
+<section class="type-strip-wrap">
+  <div class="type-strip">
+    <div class="type-strip-cell">
+      <h1 class="type-strip-sample is-wordmark v3-word">Mynk<span class="dot">·</span></h1>
+      <div class="type-strip-label"><strong>V3 · Heaviest wordmark</strong>wght 900</div>
+    </div>
+    <div class="type-strip-cell">
+      <h1 class="type-strip-sample is-wordmark v4-word">Mynk<span class="dot">·</span></h1>
+      <div class="type-strip-label"><strong>V4 · Soft+Bold wordmark</strong>wght 700 · SOFT 60</div>
+    </div>
+    <div class="type-strip-cell">
+      <h2 class="type-strip-sample is-heading v2-head">You teach. Mynk takes&nbsp;the&nbsp;notes.</h2>
+      <div class="type-strip-label"><strong>V2 · Bolder heading</strong>wght 700</div>
+    </div>
+    <div class="type-strip-cell">
+      <h2 class="type-strip-sample is-heading v3-head">You teach. Mynk takes&nbsp;the&nbsp;notes.</h2>
+      <div class="type-strip-label"><strong>V3 · Heaviest heading</strong>wght 800</div>
+    </div>
+  </div>
+</section>
+
+<main class="type-matrix">
+
+  <!-- Cell 1: V3 wordmark × V2 heading -->
+  <article class="matrix-cell cell-v3w-v2h">
+    <div class="matrix-head">
+      <div class="matrix-coord">V3 wordmark · V2 heading</div>
+      <div class="matrix-axis">wght 900 · wght 700</div>
+    </div>
+    <div class="matrix-body">
+      <h1 class="matrix-wordmark">Mynk<span class="dot">·</span></h1>
+      <div>
+        <h2 class="matrix-heading">You teach. Mynk takes the notes.</h2>
+        <p class="matrix-sub">Stay present in the session. We handle the memory.</p>
+      </div>
+      <p class="matrix-body-prose">Every session is captured, transcribed, and turned into a clean note your student's parent can actually read. You stay in the conversation; the paperwork takes care of itself.</p>
+      <div class="matrix-ui">
+        <button class="btn">Start free trial</button>
+        <span class="student">Aiden K.</span>
+        <span class="ai-tag">AI notes</span>
+        <span class="time">23:14</span>
+      </div>
+      <div class="matrix-ai">
+        <p class="matrix-ai-label">Session summary</p>
+        <p class="matrix-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; he still needs reps on completing the square. Recommended: 20 minutes of practice before next session.</p>
+      </div>
+    </div>
+    <div class="matrix-notes">
+      <strong>The read:</strong> Heaviest wordmark with a crisp-but-not-yet-heaviest heading. Wordmark dominates ("Mynk is the brand"); heading recedes one step so the message stays second voice. Most clear hierarchy of the four cells. <strong>Cost:</strong> wordmark at wght 900 is the loudest possible Mynk; if the brand feels less restrained than you want, V4 wordmark is the answer.
+    </div>
+  </article>
+
+  <!-- Cell 2: V3 wordmark × V3 heading -->
+  <article class="matrix-cell cell-v3w-v3h">
+    <div class="matrix-head">
+      <div class="matrix-coord">V3 wordmark · V3 heading</div>
+      <div class="matrix-axis">wght 900 · wght 800</div>
+    </div>
+    <div class="matrix-body">
+      <h1 class="matrix-wordmark">Mynk<span class="dot">·</span></h1>
+      <div>
+        <h2 class="matrix-heading">You teach. Mynk takes the notes.</h2>
+        <p class="matrix-sub">Stay present in the session. We handle the memory.</p>
+      </div>
+      <p class="matrix-body-prose">Every session is captured, transcribed, and turned into a clean note your student's parent can actually read. You stay in the conversation; the paperwork takes care of itself.</p>
+      <div class="matrix-ui">
+        <button class="btn">Start free trial</button>
+        <span class="student">Aiden K.</span>
+        <span class="ai-tag">AI notes</span>
+        <span class="time">23:14</span>
+      </div>
+      <div class="matrix-ai">
+        <p class="matrix-ai-label">Session summary</p>
+        <p class="matrix-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; he still needs reps on completing the square. Recommended: 20 minutes of practice before next session.</p>
+      </div>
+    </div>
+    <div class="matrix-notes">
+      <strong>The read:</strong> Heaviest everything. Wordmark and heading at nearly the same weight — they compete for the same visual layer. Most "magazine masthead" of the four. <strong>Cost:</strong> hierarchy flattens (everything shouts a little), and the daughter's "V2 text seems crisp" feedback gets lost — V3 heading is heavier and less crisp than V2.
+    </div>
+  </article>
+
+  <!-- Cell 3: V4 wordmark × V2 heading -->
+  <article class="matrix-cell cell-v4w-v2h">
+    <div class="matrix-head">
+      <div class="matrix-coord">V4 wordmark · V2 heading</div>
+      <div class="matrix-axis">wght 700 + SOFT 60 · wght 700</div>
+    </div>
+    <div class="matrix-body">
+      <h1 class="matrix-wordmark">Mynk<span class="dot">·</span></h1>
+      <div>
+        <h2 class="matrix-heading">You teach. Mynk takes the notes.</h2>
+        <p class="matrix-sub">Stay present in the session. We handle the memory.</p>
+      </div>
+      <p class="matrix-body-prose">Every session is captured, transcribed, and turned into a clean note your student's parent can actually read. You stay in the conversation; the paperwork takes care of itself.</p>
+      <div class="matrix-ui">
+        <button class="btn">Start free trial</button>
+        <span class="student">Aiden K.</span>
+        <span class="ai-tag">AI notes</span>
+        <span class="time">23:14</span>
+      </div>
+      <div class="matrix-ai">
+        <p class="matrix-ai-label">Session summary</p>
+        <p class="matrix-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; he still needs reps on completing the square. Recommended: 20 minutes of practice before next session.</p>
+      </div>
+    </div>
+    <div class="matrix-notes">
+      <strong>The read:</strong> Soft+Bold wordmark — same weight as heading (both 700), but the wordmark uses the SOFT axis to round its terminals. Heading stays sharp/crisp. The two ranks read as siblings, not parent/child — but the wordmark is friendlier (softer) and the heading is more business (sharper). Most aligned with "we like soft for the brand, crisp for the message."
+    </div>
+  </article>
+
+  <!-- Cell 4: V4 wordmark × V3 heading -->
+  <article class="matrix-cell cell-v4w-v3h">
+    <div class="matrix-head">
+      <div class="matrix-coord">V4 wordmark · V3 heading</div>
+      <div class="matrix-axis">wght 700 + SOFT 60 · wght 800</div>
+    </div>
+    <div class="matrix-body">
+      <h1 class="matrix-wordmark">Mynk<span class="dot">·</span></h1>
+      <div>
+        <h2 class="matrix-heading">You teach. Mynk takes the notes.</h2>
+        <p class="matrix-sub">Stay present in the session. We handle the memory.</p>
+      </div>
+      <p class="matrix-body-prose">Every session is captured, transcribed, and turned into a clean note your student's parent can actually read. You stay in the conversation; the paperwork takes care of itself.</p>
+      <div class="matrix-ui">
+        <button class="btn">Start free trial</button>
+        <span class="student">Aiden K.</span>
+        <span class="ai-tag">AI notes</span>
+        <span class="time">23:14</span>
+      </div>
+      <div class="matrix-ai">
+        <p class="matrix-ai-label">Session summary</p>
+        <p class="matrix-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; he still needs reps on completing the square. Recommended: 20 minutes of practice before next session.</p>
+      </div>
+    </div>
+    <div class="matrix-notes">
+      <strong>The read:</strong> Inverse of Cell 1. Heading is now heavier than the soft wordmark — the message shouts louder than the brand mark. Tension is interesting: brand whispers, copy asserts. <strong>Cost:</strong> the wordmark can feel underweighted next to a heavier headline. If you commit to V4 wordmark, V2 heading (Cell 3) probably reads more balanced than V3 heading (this cell).
+    </div>
+  </article>
+
+</main>
+
+<script>
+  const body = document.body;
+  const btns = document.querySelectorAll('[data-mode-btn]');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const m = btn.dataset.modeBtn;
+      body.setAttribute('data-mode', m);
+      btns.forEach(b => b.setAttribute('aria-pressed', b.dataset.modeBtn === m ? 'true' : 'false'));
+    });
+  });
+</script>
+
+</body>
+</html>

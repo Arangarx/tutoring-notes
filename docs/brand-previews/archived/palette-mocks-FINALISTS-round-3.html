@@ -1,0 +1,826 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mynk — finalists round 3 (MWW + coral placements + M4 darker)</title>
+<style>
+  *,*::before,*::after { box-sizing: border-box; }
+  :root {
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-serif: "Iowan Old Style", "Palatino Linotype", "Source Serif Pro", Georgia, serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --radius-sm: 6px; --radius-md: 10px; --radius-lg: 16px;
+    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+    --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-12: 48px;
+  }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: var(--font-sans);
+    background: #f0eee8; color: #1a1a1f;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body[data-mode="dark"] { background: #0a0a0c; color: #f0ece6; }
+
+  .chrome-header {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(240,238,232,0.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    padding: var(--space-4) var(--space-6);
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-6);
+  }
+  body[data-mode="dark"] .chrome-header {
+    background: rgba(10,10,12,0.92);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .chrome-title {
+    font-family: var(--font-serif); font-size: 18px;
+    font-weight: 600; letter-spacing: -0.01em;
+  }
+  .chrome-sub {
+    font-size: 13px; opacity: 0.6;
+    font-family: var(--font-mono);
+  }
+  .chrome-controls { display: flex; gap: var(--space-3); align-items: center; }
+  .toggle-btn {
+    border: 1px solid currentColor; background: transparent;
+    color: inherit; padding: 6px 14px; border-radius: 999px;
+    font: inherit; font-size: 13px; cursor: pointer; opacity: 0.75;
+  }
+  .toggle-btn:hover { opacity: 1; }
+  .toggle-btn[aria-pressed="true"] {
+    background: currentColor; color: #f0eee8; opacity: 1;
+  }
+  body[data-mode="dark"] .toggle-btn[aria-pressed="true"] { color: #0a0a0c; }
+
+  .intro {
+    max-width: 1100px; margin: 0 auto;
+    padding: var(--space-8) var(--space-6) var(--space-6);
+    font-size: 14px; line-height: 1.6;
+  }
+  .intro h2 {
+    font-family: var(--font-serif); font-size: 28px;
+    letter-spacing: -0.02em; margin: 0 0 var(--space-3); font-weight: 600;
+  }
+  .intro p { margin: 0 0 var(--space-3); opacity: 0.85; }
+  .intro .callout {
+    margin: var(--space-4) 0 0;
+    padding: var(--space-3) var(--space-4);
+    border-left: 3px solid currentColor;
+    background: rgba(0,0,0,0.04);
+    font-size: 13px; opacity: 0.85;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+  body[data-mode="dark"] .intro .callout { background: rgba(255,255,255,0.04); }
+
+  .parked-row {
+    max-width: 1100px; margin: 0 auto;
+    padding: 0 var(--space-6) var(--space-4);
+    display: flex; gap: var(--space-3); flex-wrap: wrap;
+    font-size: 12px; opacity: 0.65;
+  }
+  .parked-chip {
+    padding: 4px 10px; border-radius: 999px;
+    border: 1px dashed rgba(0,0,0,0.3); font-family: var(--font-mono);
+    font-size: 11px; letter-spacing: 0.02em;
+  }
+  body[data-mode="dark"] .parked-chip { border-color: rgba(255,255,255,0.3); }
+
+  .section-header {
+    max-width: 2400px; margin: 0 auto;
+    padding: var(--space-8) var(--space-6) var(--space-4);
+    font-family: var(--font-serif); font-size: 22px;
+    font-weight: 600; letter-spacing: -0.01em;
+    border-top: 1px solid rgba(0,0,0,0.08);
+  }
+  body[data-mode="dark"] .section-header { border-top: 1px solid rgba(255,255,255,0.08); }
+  .section-header .count {
+    font-family: var(--font-mono); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    opacity: 0.55; margin-left: var(--space-2);
+    font-weight: 400;
+  }
+  .section-blurb {
+    margin: 0 auto;
+    padding: 0 var(--space-6) var(--space-4);
+    font-size: 13px; line-height: 1.55; opacity: 0.72;
+    max-width: 880px;
+  }
+
+  main {
+    padding: 0 var(--space-6) var(--space-6);
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-5);
+    max-width: 2200px; margin: 0 auto;
+  }
+  @media (max-width: 1400px) { main { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 820px) { main { grid-template-columns: 1fr; } }
+
+  .palette-frame {
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    border: 1px solid rgba(0,0,0,0.1);
+    display: flex; flex-direction: column;
+    background: var(--surface); color: var(--text);
+  }
+  body[data-mode="dark"] .palette-frame { border-color: rgba(255,255,255,0.08); }
+
+  .palette-label {
+    padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--border);
+    background: var(--surface-raised);
+    display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3);
+  }
+  .palette-label-name {
+    font-family: var(--font-serif); font-size: 18px;
+    font-weight: 600; letter-spacing: -0.01em; margin: 0 0 4px;
+  }
+  .palette-label-tag {
+    font-family: var(--font-mono); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted);
+  }
+  .palette-label-source {
+    font-family: var(--font-mono); font-size: 9px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted);
+    opacity: 0.6; text-align: right; flex-shrink: 0;
+  }
+
+  .swatches {
+    display: flex; height: 38px;
+    border-bottom: 1px solid var(--border);
+  }
+  .swatch {
+    flex: 1;
+    display: flex; align-items: center; justify-content: center;
+    font: 10px/1 var(--font-mono);
+    letter-spacing: 0.04em;
+    user-select: all;
+  }
+
+  .delta-strip {
+    padding: var(--space-2) var(--space-5);
+    background: var(--surface-raised);
+    border-bottom: 1px solid var(--border);
+    font: 10px var(--font-mono); letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--text-muted); opacity: 0.85;
+    display: flex; gap: var(--space-2); flex-wrap: wrap;
+  }
+  .delta-strip .from-mww { color: #4a8d6d; }
+  .delta-strip .from-c3 { color: #c66d50; }
+  body[data-mode="dark"] .delta-strip .from-mww { color: #85ae8e; }
+  body[data-mode="dark"] .delta-strip .from-c3 { color: #e8a08a; }
+
+  .surfaces { padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-4); }
+
+  .mock-hero {
+    padding: var(--space-5) var(--space-5);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+  }
+  .mock-hero-wordmark {
+    font-family: var(--font-serif); font-size: 20px;
+    font-weight: 600; letter-spacing: -0.02em;
+    margin: 0 0 var(--space-3); color: var(--brand);
+  }
+  .mock-hero-wordmark::after { content: "·"; color: var(--accent); margin-left: 4px; }
+  .mock-hero-tag {
+    font-family: var(--font-serif); font-size: 21px; line-height: 1.15;
+    font-weight: 500; letter-spacing: -0.015em;
+    margin: 0 0 var(--space-2); color: var(--text);
+  }
+  .mock-hero-sub {
+    font-size: 13px; line-height: 1.5; color: var(--text-muted);
+    margin: 0 0 var(--space-4);
+  }
+  .mock-hero-ctas { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+  .btn-primary, .btn-ghost {
+    font: 12px var(--font-sans); font-weight: 500;
+    padding: 7px 14px; border-radius: 999px; cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .btn-primary { background: var(--accent); color: var(--accent-on); }
+  .btn-ghost { background: transparent; color: var(--text); border-color: var(--border-strong); }
+
+  .mock-dashboard {
+    padding: var(--space-4); border-radius: var(--radius-md);
+    background: var(--surface-raised); border: 1px solid var(--border);
+  }
+  .mock-dashboard-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin: 0 0 var(--space-3);
+  }
+  .mock-dashboard-title { font: 600 13px/1.2 var(--font-sans); color: var(--text); margin: 0; }
+  .mock-dashboard-meta { font: 11px/1 var(--font-mono); color: var(--text-muted); }
+  .session-row {
+    display: grid; grid-template-columns: 1fr auto auto;
+    align-items: center; gap: var(--space-2);
+    padding: var(--space-2); border-bottom: 1px solid var(--border);
+  }
+  .session-row:last-child { border-bottom: none; }
+  .session-student { font: 500 12px/1.3 var(--font-sans); color: var(--text); }
+  .session-sub { font: 11px/1.3 var(--font-sans); color: var(--text-muted); margin-top: 2px; }
+  .session-when { font: 11px var(--font-mono); color: var(--text-muted); }
+  .ai-tag {
+    font: 500 9px var(--font-mono); letter-spacing: 0.04em;
+    text-transform: uppercase; padding: 3px 6px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent-text); white-space: nowrap;
+  }
+
+  .mock-recording {
+    display: grid; grid-template-columns: auto 1fr auto auto;
+    align-items: center; gap: var(--space-3);
+    padding: var(--space-3) var(--space-4); border-radius: var(--radius-md);
+    background: var(--surface-raised); border: 1px solid var(--border);
+  }
+  .rec-dot {
+    width: 9px; height: 9px; border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-soft);
+    animation: rec-pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes rec-pulse {
+    0%, 100% { box-shadow: 0 0 0 4px var(--accent-soft); }
+    50% { box-shadow: 0 0 0 7px transparent; }
+  }
+  .rec-label { font: 500 12px var(--font-sans); color: var(--text); }
+  .rec-time { font: 600 12px var(--font-mono); color: var(--text); }
+  .rec-end {
+    font: 500 11px var(--font-sans); padding: 6px 11px;
+    border-radius: var(--radius-sm); border: 1px solid var(--text);
+    background: var(--text); color: var(--surface); cursor: pointer;
+  }
+
+  .mock-ai-field {
+    padding: var(--space-4); border-radius: var(--radius-md);
+    background: var(--surface-raised); border: 1px solid var(--border);
+  }
+  .ai-field-name {
+    font: 600 11px var(--font-sans); letter-spacing: 0.02em;
+    text-transform: uppercase; color: var(--text-muted);
+    margin: 0 0 var(--space-3);
+  }
+  .ai-field-body {
+    font: 13px/1.55 var(--font-serif); color: var(--text);
+    padding: var(--space-3); border-radius: var(--radius-sm);
+    background: var(--accent-soft); border-left: 3px solid var(--accent);
+  }
+  .ai-field-foot {
+    margin-top: var(--space-2); font: 10px var(--font-mono);
+    color: var(--text-muted); letter-spacing: 0.03em;
+  }
+
+  .palette-notes {
+    padding: var(--space-4) var(--space-5); border-top: 1px solid var(--border);
+    background: var(--surface-raised);
+    font: 13px/1.55 var(--font-sans); color: var(--text-muted);
+  }
+  .palette-notes strong { color: var(--text); font-weight: 600; }
+  .palette-notes .vs {
+    margin-top: var(--space-3); padding-top: var(--space-3);
+    border-top: 1px dashed var(--border);
+    font-style: italic; font-size: 12px;
+  }
+
+  /* =================================================================
+     Targeted coral overrides — let MWW v2 keep its deep-forest accent
+     globally while injecting coral only in the place specified.
+     Used by .coral-live and .coral-ai modifier classes.
+     ================================================================= */
+  .coral-live .rec-dot {
+    background: #e27d60;
+    box-shadow: 0 0 0 4px rgba(226, 125, 96, 0.22);
+  }
+  .coral-live .rec-dot {
+    animation-name: rec-pulse-coral;
+  }
+  @keyframes rec-pulse-coral {
+    0%, 100% { box-shadow: 0 0 0 4px rgba(226, 125, 96, 0.22); }
+    50% { box-shadow: 0 0 0 7px rgba(226, 125, 96, 0); }
+  }
+
+  .coral-ai .ai-field-body {
+    background: rgba(226, 125, 96, 0.15);
+    border-left-color: #e27d60;
+  }
+  .coral-ai .ai-tag {
+    background: rgba(226, 125, 96, 0.18);
+    color: #8a3c25;
+  }
+  body[data-mode="dark"] .coral-ai .ai-field-body {
+    background: rgba(226, 125, 96, 0.12);
+  }
+  body[data-mode="dark"] .coral-ai .ai-tag {
+    background: rgba(226, 125, 96, 0.22);
+    color: #e8a08a;
+  }
+  /* Brand-color "·" dot after the wordmark also pulls from --accent —
+     leave it alone for the targeted variants so the wordmark stays MWW. */
+  .coral-live .mock-hero-wordmark::after,
+  .coral-ai .mock-hero-wordmark::after { color: var(--accent); }
+
+  /* =================================================================
+     PALETTE A — Original Midnight Woodland Whimsy
+     ================================================================= */
+  body[data-mode="light"] .palette-mww {
+    --brand: #152134; --text: #0b0a18; --text-muted: #5a6c5e;
+    --surface: #f2f5ee; --surface-raised: #fafbf6;
+    --border: #c8d3c4; --border-strong: #85ae8e;
+    --accent: #487d68; --accent-soft: #d4e3d8;
+    --accent-text: #224638; --accent-on: #f2f5ee;
+  }
+  body[data-mode="dark"] .palette-mww {
+    --brand: #85ae8e; --text: #c4d4c7; --text-muted: #6a8070;
+    --surface: #0b0a18; --surface-raised: #152134;
+    --border: #28384a; --border-strong: #315657;
+    --accent: #487d68; --accent-soft: #1a2820;
+    --accent-text: #85ae8e; --accent-on: #0b0a18;
+  }
+
+  /* =================================================================
+     PALETTE B — MWW Light v2 (deep-forest accent, brighter cream)
+     The clean baseline. Used as the comparison point for the coral
+     variants below.
+     ================================================================= */
+  body[data-mode="light"] .palette-mww-v2 {
+    --brand: #152134; --text: #0b0a18; --text-muted: #4a5c4e;
+    --surface: #f8faf3; --surface-raised: #ffffff;
+    --border: #d4dccc; --border-strong: #487d68;
+    --accent: #1f3f3a; --accent-soft: #d4e3d8;
+    --accent-text: #0f2a25; --accent-on: #ffffff;
+  }
+  body[data-mode="dark"] .palette-mww-v2 {
+    --brand: #85ae8e; --text: #c4d4c7; --text-muted: #6a8070;
+    --surface: #0b0a18; --surface-raised: #152134;
+    --border: #28384a; --border-strong: #315657;
+    --accent: #487d68; --accent-soft: #1a2820;
+    --accent-text: #85ae8e; --accent-on: #0b0a18;
+  }
+
+  /* =================================================================
+     PALETTE C — MWW v2 + Coral as primary CTA
+     Globally swaps the accent token to coral. Deep forest demotes to
+     border-strong (loses its accent role entirely).
+     ================================================================= */
+  body[data-mode="light"] .palette-mww-v2-coral {
+    --brand: #152134; --text: #0b0a18; --text-muted: #4a5c4e;
+    --surface: #f8faf3; --surface-raised: #ffffff;
+    --border: #d4dccc; --border-strong: #1f3f3a;
+    --accent: #e27d60; --accent-soft: #f8e0d6;
+    --accent-text: #8a3c25; --accent-on: #ffffff;
+  }
+  body[data-mode="dark"] .palette-mww-v2-coral {
+    --brand: #85ae8e; --text: #c4d4c7; --text-muted: #8a948a;
+    --surface: #0b0a18; --surface-raised: #152134;
+    --border: #28384a; --border-strong: #487d68;
+    --accent: #e27d60; --accent-soft: #2e1d18;
+    --accent-text: #e8a08a; --accent-on: #0b0a18;
+  }
+
+  /* =================================================================
+     PALETTE D — MWW v2 + Coral live signal only
+     Same tokens as MWW v2. The .coral-live modifier (above) overrides
+     ONLY the recording dot so coral lives as a tiny "live/active" signal,
+     not as a primary accent.
+     ================================================================= */
+  body[data-mode="light"] .palette-mww-v2-live {
+    --brand: #152134; --text: #0b0a18; --text-muted: #4a5c4e;
+    --surface: #f8faf3; --surface-raised: #ffffff;
+    --border: #d4dccc; --border-strong: #487d68;
+    --accent: #1f3f3a; --accent-soft: #d4e3d8;
+    --accent-text: #0f2a25; --accent-on: #ffffff;
+  }
+  body[data-mode="dark"] .palette-mww-v2-live {
+    --brand: #85ae8e; --text: #c4d4c7; --text-muted: #6a8070;
+    --surface: #0b0a18; --surface-raised: #152134;
+    --border: #28384a; --border-strong: #315657;
+    --accent: #487d68; --accent-soft: #1a2820;
+    --accent-text: #85ae8e; --accent-on: #0b0a18;
+  }
+
+  /* =================================================================
+     PALETTE E — MWW v2 + Coral AI tint
+     Same tokens as MWW v2. The .coral-ai modifier (above) overrides ONLY
+     the AI surfaces (AI summary panel + AI tag) so "AI-generated" content
+     reads warm/human while CTAs stay forest.
+     ================================================================= */
+  body[data-mode="light"] .palette-mww-v2-aitint {
+    --brand: #152134; --text: #0b0a18; --text-muted: #4a5c4e;
+    --surface: #f8faf3; --surface-raised: #ffffff;
+    --border: #d4dccc; --border-strong: #487d68;
+    --accent: #1f3f3a; --accent-soft: #d4e3d8;
+    --accent-text: #0f2a25; --accent-on: #ffffff;
+  }
+  body[data-mode="dark"] .palette-mww-v2-aitint {
+    --brand: #85ae8e; --text: #c4d4c7; --text-muted: #6a8070;
+    --surface: #0b0a18; --surface-raised: #152134;
+    --border: #28384a; --border-strong: #315657;
+    --accent: #487d68; --accent-soft: #1a2820;
+    --accent-text: #85ae8e; --accent-on: #0b0a18;
+  }
+
+  /* =================================================================
+     PALETTE F — M4 Forest-Teal Bridge v2 (darker dark mode, brighter text)
+     Light mode unchanged from original M4. Dark mode: surface and
+     surface-raised dropped to deep teal-forest near-black; body text
+     brightened; muted text brightened so non-bold copy reads cleanly.
+     ================================================================= */
+  body[data-mode="light"] .palette-m4-v2 {
+    --brand: #1e4d4a; --text: #1a2820; --text-muted: #5a6c5e;
+    --surface: #f5f4ec; --surface-raised: #fcfbf4;
+    --border: #c8d3c4; --border-strong: #487d68;
+    --accent: #e27d60; --accent-soft: #f8e0d6;
+    --accent-text: #8a3c25; --accent-on: #fcfbf4;
+  }
+  body[data-mode="dark"] .palette-m4-v2 {
+    --brand: #7eb1ae; --text: #f0ede4; --text-muted: #a5b0a5;
+    --surface: #07201c; --surface-raised: #102f2b;
+    --border: #1c3f3c; --border-strong: #85ae8e;
+    --accent: #e27d60; --accent-soft: #2e1d18;
+    --accent-text: #e8a08a; --accent-on: #07201c;
+  }
+</style>
+</head>
+
+<body data-mode="light">
+<aside class="archived-banner" style="position: sticky; top: 0; z-index: 9999; background: #fff3cd; border-bottom: 3px solid #f59e0b; padding: 12px 20px; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.5; color: #78350f; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+  <strong>ARCHIVED EXPLORATION.</strong> This file is preserved for historical reference only. The Mynk brand was finalized as <strong>Mynka Blue</strong> on 2026-05-19. Canonical visual reference: <a href="../palette-mocks-FINAL-mynka-blue.html" style="color: #78350f; text-decoration: underline;">palette-mocks-FINAL-mynka-blue.html</a>. Decision doc: <code style="background:rgba(0,0,0,0.08);padding:1px 5px;border-radius:3px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;">docs/MYNK-BRAND-PHASE-2-DECISIONS.md</code>.
+</aside>
+
+<header class="chrome-header">
+  <div>
+    <div class="chrome-title">Mynk — round 3 finalists</div>
+    <div class="chrome-sub">MWW + MWW v2 + 3 coral placements + M4 v2 (darker) · 2026-05-19</div>
+  </div>
+  <div class="chrome-controls">
+    <button class="toggle-btn" data-mode-btn="light" aria-pressed="true">Light</button>
+    <button class="toggle-btn" data-mode-btn="dark" aria-pressed="false">Dark</button>
+  </div>
+</header>
+
+<section class="intro">
+  <h2>Round 3: MWW with three different coral placements, plus M4 with darker dark mode.</h2>
+  <p>Two threads to evaluate. <strong>(1) The daughter wants MWW Light v2 with one more coral accent</strong> — but "one more coral accent" is actually three different design questions, so this page shows all three placements side-by-side and you can vote on which one reads best. <strong>(2) M4 Forest-Teal Bridge's dark mode needed darker surfaces</strong> so the non-bold body text reads cleanly. v2 darkens both surface tones and brightens the muted text.</p>
+  <p>Cards C, D, E all start from the identical MWW Light v2 token set — the only thing that changes between them is <em>where</em> the coral lives. Read them as "same palette, three jobs for coral":</p>
+  <ul style="margin: 0 0 var(--space-3); padding-left: var(--space-5); font-size: 14px; line-height: 1.6; opacity: 0.85;">
+    <li><strong>C · Coral as primary CTA</strong> — coral takes the accent role globally. Deep forest demotes to a strong-border. Loudest, most "branded warmth."</li>
+    <li><strong>D · Coral as live signal only</strong> — only the recording dot is coral. Everything else stays MWW v2 deep-forest. Minimal warmth; coral becomes a status semantic ("we're live with you right now").</li>
+    <li><strong>E · Coral as AI tint</strong> — the AI summary panel and the "AI notes" tag use coral; CTAs stay deep forest. Says "AI content = warm/human" while keeping the rest of the system forest.</li>
+  </ul>
+  <div class="callout">
+    <strong>Methodology note.</strong> C, D, E share the exact same MWW Light v2 token set, so any visual difference is purely about coral placement — not about palette differences. Compare the recording bar between D and the others to see the "live signal" effect cleanly; compare the AI summary panel between E and the others to see the "AI tint" effect cleanly.
+  </div>
+</section>
+
+<div class="parked-row">
+  <span style="font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.5; align-self: center; margin-right: var(--space-1);">parked from round 2:</span>
+  <span class="parked-chip">3a · Warm graphite — "nice but not distinctive"</span>
+  <span class="parked-chip">Mystic Waters — third behind C3 and MWW</span>
+  <span class="parked-chip">M1 · Forest Concept 3 — superseded by MWW direction</span>
+  <span class="parked-chip">M2 · Warm Midnight — replaced by MWW v2 + coral CTA</span>
+  <span class="parked-chip">M3 · Dual Identity — replaced by MWW v2 + coral CTA</span>
+</div>
+
+<h3 class="section-header">Section 1 · Reference: the two starting points <span class="count">2 cards · for comparison</span></h3>
+<p class="section-blurb">Original MWW (cool/atmospheric, no warmth) and MWW Light v2 (same DNA but with deep-forest accent and brighter cream surface for contrast). These two anchor everything in Section 2 — every variant in this round starts from one of these as its base.</p>
+
+<main>
+
+  <!-- A. Original MWW -->
+  <article class="palette-frame palette-mww">
+    <div class="palette-label">
+      <div>
+        <div class="palette-label-name">A · Original Midnight Woodland Whimsy</div>
+        <div class="palette-label-tag">deep navy · sage forest · no warm pop</div>
+      </div>
+      <div class="palette-label-source">daughter-picks<br>baseline</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #85ae8e; color: #0b0a18;">#85AE8E</div>
+      <div class="swatch" style="background: #487d68; color: #f2f5ee;">#487D68</div>
+      <div class="swatch" style="background: #315657; color: #f2f5ee;">#315657</div>
+      <div class="swatch" style="background: #152134; color: #f2f5ee;">#152134</div>
+      <div class="swatch" style="background: #0b0a18; color: #85ae8e;">#0B0A18</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What A is:</strong> The unmodified original. Sage everywhere — accent, CTA, AI tint, rec dot. Pleasant outdoor calm, no warmth.
+      <div class="vs"><strong>Why it's here:</strong> Direct anchor. Compare every other card on this page back to this one to see what each change actually does.</div>
+    </div>
+  </article>
+
+  <!-- B. MWW Light v2 baseline -->
+  <article class="palette-frame palette-mww-v2">
+    <div class="palette-label">
+      <div>
+        <div class="palette-label-name">B · MWW Light v2 (baseline)</div>
+        <div class="palette-label-tag">deep-forest accent · brighter cream · no coral</div>
+      </div>
+      <div class="palette-label-source">round-2<br>contrast fix</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #152134; color: #f8faf3;">#152134</div>
+      <div class="swatch" style="background: #1f3f3a; color: #f8faf3;">#1F3F3A</div>
+      <div class="swatch" style="background: #f8faf3; color: #152134;">#F8FAF3</div>
+      <div class="swatch" style="background: #487d68; color: #f8faf3;">#487D68</div>
+      <div class="swatch" style="background: #0b0a18; color: #85ae8e;">#0B0A18</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What B is:</strong> Same MWW DNA as A, but with two contrast fixes — deep-forest accent (#1F3F3A) for confident CTAs, brighter cream surface (#F8FAF3) to give the green room to register. Sage demotes to strong-border.
+      <div class="vs"><strong>Why it's here:</strong> This is the starting point for the daughter's "add coral" request. C, D, and E are all this exact palette with coral added in different places.</div>
+    </div>
+  </article>
+
+</main>
+
+<h3 class="section-header">Section 2 · MWW Light v2 + coral, three placements <span class="count">3 cards · same palette, different jobs for coral</span></h3>
+<p class="section-blurb">Each of these three starts from B (MWW Light v2) and adds coral in exactly one place. They look more different than the underlying palette change would suggest, because the eye is drawn to wherever the warm signal lives. Toggle light/dark — the dark mode shows the effect just as clearly.</p>
+
+<main>
+
+  <!-- C. MWW v2 + Coral primary CTA -->
+  <article class="palette-frame palette-mww-v2-coral">
+    <div class="palette-label">
+      <div>
+        <div class="palette-label-name">C · MWW v2 + Coral CTA</div>
+        <div class="palette-label-tag">loudest warmth · coral globally replaces forest</div>
+      </div>
+      <div class="palette-label-source">variant 1<br>coral as accent token</div>
+    </div>
+    <div class="delta-strip">
+      <span>Δ from B:</span>
+      <span class="from-c3">[+coral] --accent</span>
+      <span>[demoted] forest → border-strong</span>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #152134; color: #f8faf3;">#152134</div>
+      <div class="swatch" style="background: #e27d60; color: #f8faf3;">#E27D60</div>
+      <div class="swatch" style="background: #f8faf3; color: #152134;">#F8FAF3</div>
+      <div class="swatch" style="background: #1f3f3a; color: #f8faf3;">#1F3F3A</div>
+      <div class="swatch" style="background: #0b0a18; color: #e8a08a;">#0B0A18</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What C is:</strong> Coral takes the accent role everywhere a system can use one — primary CTA fill, wordmark dot, recording indicator, AI summary border, AI tag. Deep forest steps back to be a strong-border only. The brand stays MWW navy.
+      <div class="vs"><strong>vs D and E:</strong> Loudest of the three. If your read of the daughter's request was "the warmth should actually be visible," this is the answer. <strong>Cost:</strong> coral does most of the visual work in the light mode hero — the dark forest the family liked in B is now mostly invisible.</div>
+    </div>
+  </article>
+
+  <!-- D. MWW v2 + Coral live signal -->
+  <article class="palette-frame palette-mww-v2-live coral-live">
+    <div class="palette-label">
+      <div>
+        <div class="palette-label-name">D · MWW v2 + Coral live signal</div>
+        <div class="palette-label-tag">minimal warmth · coral only on the rec dot</div>
+      </div>
+      <div class="palette-label-source">variant 2<br>coral as status semantic</div>
+    </div>
+    <div class="delta-strip">
+      <span>Δ from B:</span>
+      <span class="from-c3">[+coral] rec-dot only</span>
+      <span>everything else unchanged</span>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #152134; color: #f8faf3;">#152134</div>
+      <div class="swatch" style="background: #1f3f3a; color: #f8faf3;">#1F3F3A</div>
+      <div class="swatch" style="background: #f8faf3; color: #152134;">#F8FAF3</div>
+      <div class="swatch" style="background: #487d68; color: #f8faf3;">#487D68</div>
+      <div class="swatch" style="background: #e27d60; color: #f8faf3;">#E27D60</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What D is:</strong> Identical to B in every way except the recording dot — that single dot is coral. Read it as: "we're live with you right now, and that's the one moment we let the system feel warm." Everything else stays cool/forest.
+      <div class="vs"><strong>vs C:</strong> The discipline version. Coral becomes a semantic — it means "live capture in progress." Outside that one moment, the system is fully MWW. <strong>Risk:</strong> may be too subtle — the rest of the page reads as "the MWW that's still not warm," and one tiny coral dot doesn't carry warmth for the whole brand.</div>
+    </div>
+  </article>
+
+  <!-- E. MWW v2 + Coral AI tint -->
+  <article class="palette-frame palette-mww-v2-aitint coral-ai">
+    <div class="palette-label">
+      <div>
+        <div class="palette-label-name">E · MWW v2 + Coral AI tint</div>
+        <div class="palette-label-tag">coral where AI lives · forest where humans act</div>
+      </div>
+      <div class="palette-label-source">variant 3<br>coral as content semantic</div>
+    </div>
+    <div class="delta-strip">
+      <span>Δ from B:</span>
+      <span class="from-c3">[+coral] AI summary + AI tag</span>
+      <span>CTAs stay forest</span>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #152134; color: #f8faf3;">#152134</div>
+      <div class="swatch" style="background: #1f3f3a; color: #f8faf3;">#1F3F3A</div>
+      <div class="swatch" style="background: #f8faf3; color: #152134;">#F8FAF3</div>
+      <div class="swatch" style="background: #487d68; color: #f8faf3;">#487D68</div>
+      <div class="swatch" style="background: #e27d60; color: #f8faf3;">#E27D60</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What E is:</strong> CTAs and recording dot stay deep-forest (same as B). But the AI summary panel and the "AI notes" tag both shift to a soft coral tint. Reads as: "the things humans do are forest; the things the AI does are warm." Builds a semantic into the color system itself.
+      <div class="vs"><strong>vs C and D:</strong> Most considered of the three. Coral does meaningful work (signals AI provenance) without taking over the whole UI. <strong>Risk:</strong> only really pays off if "this is an AI-generated thing" is something users genuinely care about. For Sarah, probably yes — she's going to edit AI summaries; visually flagging them is useful. For a marketing site that doesn't have AI surfaces visible, this variant collapses back to plain MWW v2.</div>
+    </div>
+  </article>
+
+</main>
+
+<h3 class="section-header">Section 3 · M4 Forest-Teal Bridge — v2 (darker dark mode) <span class="count">1 card · contrast fix only</span></h3>
+<p class="section-blurb">You flagged the original M4's dark mode as having a "dim white" — the body text wasn't popping against the surface, especially non-bold copy. The diagnosis: surface (#0E2926) and surface-raised (#1A4441) were too close in luminance to the cream text (#E8E6E0). v2 fixes it: surfaces drop to deep teal-forest near-black (#07201C and #102F2B), body text brightens to #F0EDE4, and muted text lifts from #8A958A → #A5B0A5 so non-bold paragraphs read cleanly. Light mode is byte-for-byte unchanged.</p>
+
+<main>
+
+  <!-- F. M4 v2 -->
+  <article class="palette-frame palette-m4-v2">
+    <div class="palette-label">
+      <div>
+        <div class="palette-label-name">F · M4 Forest-Teal Bridge v2</div>
+        <div class="palette-label-tag">teal + forest + coral · darker dark mode</div>
+      </div>
+      <div class="palette-label-source">round-2 M4<br>contrast fix</div>
+    </div>
+    <div class="delta-strip">
+      <span>Δ from M4:</span>
+      <span class="from-mww">[dark] surface #0E2926 → #07201C</span>
+      <span class="from-mww">[dark] raised #1A4441 → #102F2B</span>
+      <span class="from-mww">[dark] text #E8E6E0 → #F0EDE4</span>
+      <span class="from-mww">[dark] muted #8A958A → #A5B0A5</span>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #1e4d4a; color: #f5f4ec;">#1E4D4A</div>
+      <div class="swatch" style="background: #487d68; color: #f5f4ec;">#487D68</div>
+      <div class="swatch" style="background: #f5f4ec; color: #1e4d4a;">#F5F4EC</div>
+      <div class="swatch" style="background: #e27d60; color: #1e4d4a;">#E27D60</div>
+      <div class="swatch" style="background: #07201c; color: #f0ede4;">#07201C</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory. This sub-line is unbolded and used to feel dim — check that it reads clearly in dark mode now.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min · non-bold subtext like this should now be clearly readable</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What changed from M4:</strong> Four edits, all in dark mode, all about contrast. Surfaces darkened, text brightened, muted text brightened more aggressively (the biggest perceptual win for "non-bold paragraphs read cleanly"). Light mode untouched.
+      <div class="vs"><strong>Does it land?</strong> Toggle dark mode and read the long sub-line in the hero, and the "non-bold subtext like this should now be clearly readable" line in the first session row. Both used to recede; should now feel present. If the surface still feels too light in dark mode, the next step would be to drop surface further (#04140F territory) but at that point you're losing the teal-forest tint that gives M4 its character.</div>
+    </div>
+  </article>
+
+</main>
+
+<script>
+  const body = document.body;
+  const btns = document.querySelectorAll('[data-mode-btn]');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const m = btn.dataset.modeBtn;
+      body.setAttribute('data-mode', m);
+      btns.forEach(b => b.setAttribute('aria-pressed', b.dataset.modeBtn === m ? 'true' : 'false'));
+    });
+  });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1988 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mynk — FINAL · Mynka Blue (V4w + V2h)</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,SOFT,wght@9..144,0..100,400..900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  *,*::before,*::after { box-sizing: border-box; }
+
+  /* ============================== MYNKA BLUE — FINAL palette (formerly F2 / Bluer Bridge) */
+  :root {
+    --brand: #1e3d54;
+    --text: #15203a;
+    --text-muted: #5a6877;
+    --surface: #f5f4ec;
+    --surface-raised: #fcfbf4;
+    --surface-sunken: #ecebe1;
+    --border: #c5cfd0;
+    --border-strong: #4a6680;
+    --accent: #e27d60;
+    --accent-soft: #f8e0d6;
+    --accent-text: #8a3c25;
+    --accent-on: #15203a;  /* DARK TEXT on coral CTA — 5.64 AA. Resolved 2026-05-19 PM (Option A). Was #fcfbf4. */
+
+    --font-body: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+    --radius-sm: 6px; --radius-md: 10px; --radius-lg: 16px; --radius-xl: 24px;
+    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+    --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px;
+    --space-12: 48px; --space-16: 64px; --space-20: 80px;
+  }
+  body[data-mode="dark"] {
+    --brand: #7ea4b1;
+    --text: #f0ede4;
+    --text-muted: #a5b5c0;
+    --surface: #051a24;
+    --surface-raised: #0e2a38;
+    --surface-sunken: #021018;
+    --border: #1c3548;
+    --border-strong: #6a8fa0;
+    --accent: #e27d60;
+    --accent-soft: #2e1d18;
+    --accent-text: #e8a08a;
+    --accent-on: #051a24;
+  }
+
+  html, body {
+    margin: 0; padding: 0;
+    font-family: var(--font-body);
+    font-weight: 400; /* V2 body weight */
+    background: #ebe9e0; color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body[data-mode="dark"] { background: #02080d; }
+
+  /* Reusable typography classes for this combo (V4w + V2h) */
+  .wordmark {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 60, "wght" 700;
+    color: var(--brand);
+    letter-spacing: -0.025em;
+    margin: 0;
+    line-height: 0.95;
+  }
+  .wordmark .dot { color: var(--accent); margin-left: 1px; }
+
+  .heading {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    line-height: 1.12;
+    margin: 0;
+  }
+
+  .prose {
+    font-weight: 400; /* V2 body — lighter */
+    color: var(--text);
+    line-height: 1.55;
+  }
+  .prose-mute {
+    font-weight: 400;
+    color: var(--text-muted);
+    line-height: 1.55;
+  }
+
+  .ai-prose {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 14, "SOFT" 30, "wght" 400;
+    color: var(--text);
+    line-height: 1.55;
+  }
+
+  /* ============================== Page chrome (the meta-page header) */
+  .meta-header {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(235,233,224,0.94);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    padding: var(--space-4) var(--space-6);
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-6);
+  }
+  body[data-mode="dark"] .meta-header {
+    background: rgba(2,8,13,0.94);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .meta-title {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 700;
+    font-size: 16px; letter-spacing: -0.02em;
+    color: var(--text);
+  }
+  .meta-sub {
+    font: 12px var(--font-mono);
+    color: var(--text-muted);
+  }
+  .meta-controls { display: flex; gap: var(--space-2); align-items: center; }
+  .toggle-btn {
+    border: 1px solid currentColor; background: transparent;
+    color: var(--text); padding: 6px 14px; border-radius: 999px;
+    font: 13px var(--font-body); font-weight: 500; cursor: pointer; opacity: 0.7;
+  }
+  .toggle-btn:hover { opacity: 1; }
+  .toggle-btn[aria-pressed="true"] {
+    background: var(--text); color: var(--surface); opacity: 1; border-color: var(--text);
+  }
+
+  /* Sticky inline nav of surfaces */
+  .surface-nav {
+    position: sticky; top: 56px; z-index: 90;
+    background: rgba(235,233,224,0.92);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+    padding: var(--space-3) var(--space-6);
+    display: flex; gap: var(--space-3); flex-wrap: wrap;
+    font-size: 12px;
+  }
+  body[data-mode="dark"] .surface-nav {
+    background: rgba(2,8,13,0.92);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .surface-nav a {
+    color: var(--text-muted);
+    text-decoration: none;
+    padding: 4px 10px; border-radius: 999px;
+    font: 500 12px var(--font-body);
+    border: 1px solid transparent;
+  }
+  .surface-nav a:hover {
+    color: var(--text); border-color: var(--border);
+  }
+  .surface-nav .nav-prefix {
+    font: 10px var(--font-mono);
+    color: var(--text-muted);
+    align-self: center; opacity: 0.55;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-right: var(--space-2);
+  }
+
+  /* DECISION banner */
+  .decision-banner {
+    max-width: 1280px; margin: var(--space-8) auto 0;
+    padding: var(--space-5) var(--space-6);
+    background: var(--accent-soft);
+    border: 1px solid var(--accent);
+    border-left-width: 4px;
+    border-radius: var(--radius-md);
+  }
+  body[data-mode="dark"] .decision-banner {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+  }
+  .decision-banner-label {
+    font: 600 11px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--accent-text);
+    margin-bottom: var(--space-2);
+  }
+  .decision-banner-title {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 700;
+    font-size: 22px; letter-spacing: -0.02em;
+    color: var(--text);
+    margin: 0 0 var(--space-2);
+  }
+  .decision-banner-body {
+    font-size: 14px; line-height: 1.55;
+    color: var(--text);
+    margin: 0;
+  }
+  .decision-banner-body code {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    background: rgba(255,255,255,0.5);
+    padding: 1px 5px; border-radius: 3px;
+  }
+  body[data-mode="dark"] .decision-banner-body code {
+    background: rgba(0,0,0,0.3);
+  }
+
+  /* Intro */
+  .intro {
+    max-width: 900px; margin: 0 auto;
+    padding: var(--space-12) var(--space-6) var(--space-8);
+  }
+  .intro h1 {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 600;
+    font-size: 36px; letter-spacing: -0.025em;
+    margin: 0 0 var(--space-3);
+    color: var(--text);
+  }
+  .intro p {
+    font-weight: 400;
+    font-size: 15px; line-height: 1.6;
+    color: var(--text-muted);
+    margin: 0 0 var(--space-3);
+  }
+  .intro .recipe {
+    margin-top: var(--space-5);
+    padding: var(--space-4) var(--space-5);
+    background: rgba(0,0,0,0.04);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    font-size: 13px; line-height: 1.55;
+  }
+  body[data-mode="dark"] .intro .recipe { background: rgba(255,255,255,0.04); }
+  .intro .recipe strong { color: var(--text); font-weight: 600; }
+
+  /* Surface block — wraps each app-screen mock */
+  .surface-block {
+    max-width: 1280px; margin: 0 auto var(--space-12);
+    padding: 0 var(--space-6);
+  }
+  .surface-label {
+    display: flex; align-items: baseline; gap: var(--space-3);
+    margin-bottom: var(--space-3);
+    font-family: var(--font-mono);
+    font-size: 11px; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--text-muted);
+  }
+  .surface-label .surface-num {
+    color: var(--accent-text);
+    font-weight: 600;
+  }
+  body[data-mode="dark"] .surface-label .surface-num { color: var(--accent); }
+  .surface-label .surface-name {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 600;
+    font-size: 18px; letter-spacing: -0.015em;
+    color: var(--text);
+    text-transform: none;
+  }
+
+  /* The "device frame" — each app screen lives inside one of these */
+  .device {
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    background: var(--surface);
+    box-shadow: 0 12px 40px rgba(21, 32, 58, 0.12), 0 2px 6px rgba(21, 32, 58, 0.06);
+    border: 1px solid var(--border);
+  }
+  body[data-mode="dark"] .device {
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
+  }
+  .device-chrome {
+    background: var(--surface-sunken);
+    padding: 10px var(--space-4);
+    display: flex; align-items: center; gap: var(--space-3);
+    border-bottom: 1px solid var(--border);
+  }
+  .chrome-dots { display: flex; gap: 5px; }
+  .chrome-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: rgba(0,0,0,0.15);
+  }
+  body[data-mode="dark"] .chrome-dot { background: rgba(255,255,255,0.18); }
+  .chrome-url {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 5px 14px;
+    font: 11px var(--font-mono);
+    color: var(--text-muted);
+    text-align: center;
+    max-width: 480px; margin: 0 auto;
+  }
+  .chrome-url strong { color: var(--text); font-weight: 500; }
+
+  /* =================================================================
+     SURFACE 1 — Marketing landing page
+     ================================================================= */
+  .marketing {
+    background: var(--surface);
+  }
+  .mkt-nav {
+    padding: var(--space-5) var(--space-8);
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+  .mkt-nav .nav-left { display: flex; align-items: center; gap: var(--space-8); }
+  .mkt-nav .wordmark { font-size: 24px; }
+  .mkt-nav-links { display: flex; gap: var(--space-6); }
+  .mkt-nav-links a {
+    color: var(--text-muted);
+    text-decoration: none;
+    font: 500 14px var(--font-body);
+  }
+  .mkt-nav-links a:hover { color: var(--text); }
+  .mkt-nav-right { display: flex; gap: var(--space-3); align-items: center; }
+  .mkt-signin {
+    color: var(--text); font: 500 14px var(--font-body);
+    text-decoration: none;
+  }
+  .btn-primary {
+    background: var(--accent); color: var(--accent-on);
+    font: 500 14px var(--font-body);
+    padding: 9px 18px; border-radius: 999px;
+    border: 1px solid transparent; cursor: pointer;
+    text-decoration: none; display: inline-block;
+  }
+  .btn-ghost {
+    background: transparent; color: var(--text);
+    font: 500 14px var(--font-body);
+    padding: 9px 18px; border-radius: 999px;
+    border: 1px solid var(--border-strong); cursor: pointer;
+    text-decoration: none; display: inline-block;
+  }
+  .btn-sm { font-size: 12px; padding: 6px 13px; }
+  .btn-lg { font-size: 15px; padding: 11px 22px; }
+
+  .mkt-hero {
+    padding: var(--space-20) var(--space-8) var(--space-16);
+    display: grid; grid-template-columns: 1.1fr 1fr;
+    gap: var(--space-12);
+    align-items: center;
+    background: linear-gradient(135deg, var(--surface) 0%, var(--surface-raised) 100%);
+  }
+  @media (max-width: 900px) { .mkt-hero { grid-template-columns: 1fr; gap: var(--space-8); padding: var(--space-12) var(--space-6); } }
+  .mkt-hero-eyebrow {
+    font: 500 11px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--accent-text);
+    margin-bottom: var(--space-4);
+  }
+  body[data-mode="dark"] .mkt-hero-eyebrow { color: var(--accent); }
+  .mkt-hero-head {
+    font-size: 54px; line-height: 1.05;
+    margin-bottom: var(--space-4);
+  }
+  .mkt-hero-sub {
+    font-size: 18px;
+    color: var(--text-muted);
+    margin: 0 0 var(--space-6); max-width: 36ch;
+  }
+  .mkt-hero-ctas {
+    display: flex; gap: var(--space-3); align-items: center;
+    margin-bottom: var(--space-5);
+  }
+  .mkt-hero-foot {
+    font: 12px var(--font-mono);
+    color: var(--text-muted);
+    display: flex; gap: var(--space-3); align-items: center;
+  }
+  .mkt-hero-foot .dot-sep { opacity: 0.4; }
+  .mkt-hero-foot .checkmark { color: var(--accent); font-weight: 700; }
+
+  /* Hero visual: a mini "live recording" preview card */
+  .mkt-hero-visual {
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+    box-shadow: 0 20px 50px rgba(30, 61, 84, 0.10);
+  }
+  body[data-mode="dark"] .mkt-hero-visual {
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+  }
+  .mkt-visual-meta {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: var(--space-4);
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--border);
+  }
+  .mkt-visual-tag {
+    display: inline-flex; align-items: center; gap: var(--space-2);
+    padding: 4px 10px;
+    background: var(--accent-soft); color: var(--accent-text);
+    border-radius: 999px;
+    font: 500 11px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .live-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+    animation: pulse 1.8s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 3px var(--accent-soft); }
+    50% { box-shadow: 0 0 0 6px transparent; }
+  }
+  .mkt-visual-time {
+    font: 600 14px var(--font-mono);
+    color: var(--text);
+  }
+  .mkt-visual-transcript {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+    font-size: 13px; line-height: 1.55;
+  }
+  .mkt-visual-transcript .speaker {
+    font: 500 10px var(--font-mono);
+    color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.05em;
+    margin-right: 6px;
+  }
+  .mkt-visual-transcript p { margin: 0 0 var(--space-2); }
+  .mkt-visual-transcript p:last-child { margin: 0; opacity: 0.55; }
+  .mkt-visual-summary {
+    margin-top: var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  }
+  .mkt-visual-summary .label {
+    font: 600 10px var(--font-mono);
+    color: var(--accent-text);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    display: block; margin-bottom: 3px;
+  }
+  .mkt-visual-summary .body {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 14, "SOFT" 30, "wght" 400;
+    font-size: 13px; line-height: 1.5;
+    margin: 0;
+  }
+
+  /* Marketing — feature row */
+  .mkt-features {
+    padding: var(--space-16) var(--space-8);
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+  .mkt-features-head {
+    text-align: center;
+    margin-bottom: var(--space-12);
+  }
+  .mkt-features-head h2 {
+    font-size: 38px; margin: 0 0 var(--space-3);
+  }
+  .mkt-features-head p {
+    font-size: 16px; color: var(--text-muted);
+    max-width: 56ch; margin: 0 auto;
+  }
+  .mkt-features-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-6);
+  }
+  @media (max-width: 900px) { .mkt-features-grid { grid-template-columns: 1fr; } }
+  .mkt-feature {
+    padding: var(--space-6);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
+  }
+  .mkt-feature-icon {
+    width: 40px; height: 40px;
+    border-radius: var(--radius-md);
+    background: var(--accent-soft);
+    color: var(--accent-text);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: var(--space-4);
+    font: 600 18px var(--font-display);
+  }
+  .mkt-feature h3 {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700;
+    font-size: 20px; margin: 0 0 var(--space-2);
+    color: var(--text);
+    letter-spacing: -0.015em;
+  }
+  .mkt-feature p {
+    font-size: 14px; color: var(--text-muted);
+    margin: 0;
+  }
+
+  /* Marketing — social proof */
+  .mkt-quote {
+    padding: var(--space-12) var(--space-8);
+    background: var(--surface-raised);
+    border-top: 1px solid var(--border);
+    text-align: center;
+  }
+  .mkt-quote-body {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 500;
+    font-style: italic;
+    font-size: 28px; line-height: 1.35;
+    color: var(--text);
+    margin: 0 auto var(--space-5); max-width: 28ch;
+    letter-spacing: -0.015em;
+  }
+  .mkt-quote-attr {
+    font: 500 13px var(--font-body);
+    color: var(--text-muted);
+  }
+  .mkt-quote-attr strong { color: var(--text); font-weight: 600; }
+
+  /* Marketing — footer */
+  .mkt-footer {
+    padding: var(--space-8);
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 12px; color: var(--text-muted);
+    flex-wrap: wrap; gap: var(--space-3);
+  }
+  .mkt-footer-links { display: flex; gap: var(--space-5); }
+  .mkt-footer-links a {
+    color: var(--text-muted); text-decoration: none;
+    font: 13px var(--font-body);
+  }
+  .mkt-footer-links a:hover { color: var(--text); }
+
+  /* =================================================================
+     SURFACE 2 — Tutor dashboard
+     ================================================================= */
+  .dash {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    min-height: 660px;
+  }
+  @media (max-width: 800px) { .dash { grid-template-columns: 1fr; } .dash-sidebar { display: none; } }
+  .dash-sidebar {
+    background: var(--surface-raised);
+    border-right: 1px solid var(--border);
+    padding: var(--space-5);
+    display: flex; flex-direction: column;
+    gap: var(--space-5);
+  }
+  .dash-side-wordmark {
+    font-size: 22px;
+    margin-bottom: var(--space-3);
+  }
+  .dash-side-section {
+    font: 600 10px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin: 0 0 var(--space-2) var(--space-2);
+  }
+  .dash-side-nav { display: flex; flex-direction: column; gap: 2px; margin-bottom: var(--space-3); }
+  .dash-side-link {
+    padding: 7px 10px;
+    color: var(--text); text-decoration: none;
+    font: 500 13px var(--font-body);
+    border-radius: var(--radius-sm);
+    display: flex; align-items: center; gap: var(--space-2);
+  }
+  .dash-side-link.is-active {
+    background: var(--accent-soft); color: var(--accent-text);
+  }
+  .dash-side-link .ico { opacity: 0.6; font: 12px var(--font-mono); width: 16px; text-align: center; }
+  .dash-side-link.is-active .ico { opacity: 1; }
+  .dash-side-link:hover:not(.is-active) { background: rgba(0,0,0,0.04); }
+  body[data-mode="dark"] .dash-side-link:hover:not(.is-active) { background: rgba(255,255,255,0.05); }
+
+  .dash-side-user {
+    margin-top: auto;
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    display: flex; align-items: center; gap: var(--space-3);
+    background: var(--surface);
+  }
+  .dash-avatar {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--brand);
+    color: var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    font: 600 13px var(--font-body);
+  }
+  .dash-side-user .name { font: 500 13px var(--font-body); color: var(--text); }
+  .dash-side-user .role { font: 11px var(--font-mono); color: var(--text-muted); margin-top: 1px; }
+
+  .dash-main { padding: var(--space-8); overflow: hidden; }
+  .dash-main-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: var(--space-6);
+  }
+  .dash-greeting {
+    font-size: 30px; margin: 0 0 4px;
+  }
+  .dash-greeting-sub {
+    font-size: 14px; color: var(--text-muted); margin: 0;
+  }
+
+  /* Stats row */
+  .dash-stats {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-3);
+    margin-bottom: var(--space-6);
+  }
+  @media (max-width: 700px) { .dash-stats { grid-template-columns: repeat(2, 1fr); } }
+  .dash-stat {
+    padding: var(--space-4) var(--space-5);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+  }
+  .dash-stat-label {
+    font: 500 11px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin: 0 0 var(--space-2);
+  }
+  .dash-stat-value {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700;
+    font-size: 28px; color: var(--text);
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .dash-stat-delta {
+    margin-top: var(--space-2);
+    font: 11px var(--font-mono);
+    color: var(--text-muted);
+  }
+  .dash-stat-delta.is-up { color: var(--accent-text); }
+  body[data-mode="dark"] .dash-stat-delta.is-up { color: var(--accent); }
+
+  /* Two-column main */
+  .dash-cols {
+    display: grid; grid-template-columns: 2fr 1fr;
+    gap: var(--space-6);
+  }
+  @media (max-width: 900px) { .dash-cols { grid-template-columns: 1fr; } }
+
+  .dash-panel {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    overflow: hidden;
+  }
+  .dash-panel-head {
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .dash-panel-title {
+    font: 600 13px var(--font-body);
+    color: var(--text); margin: 0;
+  }
+  .dash-panel-meta {
+    font: 11px var(--font-mono); color: var(--text-muted);
+  }
+
+  .dash-session {
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--border);
+    display: grid; grid-template-columns: 32px 1fr auto auto;
+    gap: var(--space-3); align-items: center;
+  }
+  .dash-session:last-child { border-bottom: none; }
+  .dash-session:hover { background: rgba(0,0,0,0.02); cursor: pointer; }
+  body[data-mode="dark"] .dash-session:hover { background: rgba(255,255,255,0.03); }
+  .dash-session-avatar {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--surface-sunken); color: var(--text-muted);
+    display: flex; align-items: center; justify-content: center;
+    font: 600 12px var(--font-body);
+    border: 1px solid var(--border);
+  }
+  .dash-session-name {
+    font: 500 14px var(--font-body); color: var(--text); margin: 0;
+  }
+  .dash-session-sub {
+    font: 12px var(--font-body); font-weight: 400;
+    color: var(--text-muted); margin-top: 1px;
+  }
+  .dash-session-status {
+    font: 500 10px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 3px 7px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent-text);
+    white-space: nowrap;
+  }
+  .dash-session-status.is-done {
+    background: transparent; color: var(--text-muted);
+    border: 1px solid var(--border);
+  }
+  .dash-session-when {
+    font: 11px var(--font-mono); color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  /* Right column: Up next */
+  .dash-upnext {
+    padding: var(--space-4) var(--space-5);
+    background: var(--brand); color: var(--surface);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-4);
+  }
+  .dash-upnext-label {
+    font: 500 10px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    opacity: 0.7; margin-bottom: var(--space-2);
+  }
+  .dash-upnext-name {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700;
+    font-size: 22px; letter-spacing: -0.02em;
+    line-height: 1.1; margin: 0 0 var(--space-2);
+  }
+  .dash-upnext-time {
+    font: 13px var(--font-mono); opacity: 0.8;
+    margin-bottom: var(--space-4);
+  }
+  .dash-upnext-cta {
+    background: var(--accent); color: var(--accent-on);
+    font: 500 13px var(--font-body);
+    padding: 8px 16px; border-radius: 999px;
+    border: none; cursor: pointer;
+    display: inline-flex; align-items: center; gap: var(--space-2);
+  }
+
+  .dash-pending-summaries {
+    padding: var(--space-3) var(--space-4);
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    margin-bottom: var(--space-4);
+  }
+  .dash-pending-head {
+    font: 600 11px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--accent-text);
+    margin-bottom: var(--space-1);
+  }
+  .dash-pending-msg {
+    font: 13px var(--font-body); font-weight: 400;
+    color: var(--text); margin: 0 0 var(--space-2);
+  }
+  .dash-pending-link {
+    color: var(--accent-text); text-decoration: none;
+    font: 500 12px var(--font-body);
+  }
+
+  /* =================================================================
+     SURFACE 3 — Pre-session preview ("Ready to record")
+     ================================================================= */
+  .pre {
+    padding: var(--space-12) var(--space-8);
+    background: var(--surface);
+    text-align: center;
+    min-height: 560px;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .pre-eyebrow {
+    font: 500 11px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--accent-text);
+    margin-bottom: var(--space-4);
+  }
+  body[data-mode="dark"] .pre-eyebrow { color: var(--accent); }
+  .pre-question {
+    font-size: 42px; line-height: 1.1;
+    margin: 0 auto var(--space-5); max-width: 18ch;
+  }
+  .pre-sub {
+    font-size: 16px; color: var(--text-muted);
+    max-width: 48ch; margin: 0 auto var(--space-8);
+  }
+
+  /* Mic-check + whiteboard preview cards */
+  .pre-cards {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: var(--space-4); max-width: 720px; margin: 0 auto var(--space-8);
+  }
+  @media (max-width: 700px) { .pre-cards { grid-template-columns: 1fr; } }
+  .pre-card {
+    padding: var(--space-5);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    text-align: left;
+  }
+  .pre-card-label {
+    font: 500 11px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin-bottom: var(--space-3);
+    display: flex; align-items: center; gap: var(--space-2);
+  }
+  .pre-card-label .status-ok {
+    color: var(--accent-text);
+  }
+  body[data-mode="dark"] .pre-card-label .status-ok { color: var(--accent); }
+
+  .mic-meter {
+    display: flex; gap: 3px; height: 36px; align-items: flex-end;
+  }
+  .mic-bar {
+    flex: 1; background: var(--border);
+    border-radius: 1px;
+    transition: height 0.3s;
+  }
+  .mic-bar.lvl-1 { height: 30%; background: var(--accent); }
+  .mic-bar.lvl-2 { height: 45%; background: var(--accent); }
+  .mic-bar.lvl-3 { height: 65%; background: var(--accent); }
+  .mic-bar.lvl-4 { height: 80%; background: var(--accent); }
+  .mic-bar.lvl-5 { height: 55%; background: var(--accent); }
+  .mic-bar.lvl-6 { height: 35%; background: var(--accent); }
+  .mic-source {
+    margin-top: var(--space-3); font: 11px var(--font-mono);
+    color: var(--text-muted);
+  }
+
+  .pre-whiteboard {
+    height: 80px; border: 1.5px dashed var(--border);
+    border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    font: 12px var(--font-mono); color: var(--text-muted);
+  }
+
+  .pre-context {
+    max-width: 720px; margin: 0 auto var(--space-8);
+    padding: var(--space-4) var(--space-5);
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    text-align: left;
+  }
+  .pre-context-label {
+    font: 600 10px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--accent-text);
+    margin-bottom: var(--space-1);
+  }
+  .pre-context-body {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 14, "SOFT" 30, "wght" 400;
+    font-size: 14px; line-height: 1.5;
+    color: var(--text);
+    margin: 0;
+  }
+
+  .pre-actions {
+    display: flex; gap: var(--space-3);
+    justify-content: center;
+  }
+
+  /* =================================================================
+     SURFACE 4 — Active recording
+     ================================================================= */
+  .rec-screen {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    min-height: 640px;
+  }
+  @media (max-width: 800px) { .rec-screen { grid-template-columns: 1fr; } .rec-side { display: none; } }
+
+  .rec-main {
+    padding: var(--space-5) var(--space-6);
+    display: flex; flex-direction: column; gap: var(--space-4);
+    background: var(--surface);
+  }
+  .rec-topbar {
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    display: flex; align-items: center; gap: var(--space-4);
+  }
+  .rec-live {
+    display: flex; align-items: center; gap: var(--space-2);
+    padding: 4px 10px;
+    background: var(--accent-soft); color: var(--accent-text);
+    border-radius: 999px;
+    font: 600 11px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .rec-live .live-dot { background: var(--accent); width: 7px; height: 7px; box-shadow: 0 0 0 3px var(--accent-soft); }
+  .rec-with { font: 500 13px var(--font-body); color: var(--text); }
+  .rec-with .name { font-weight: 600; }
+  .rec-timer {
+    font: 600 18px var(--font-mono);
+    color: var(--text);
+    margin-left: auto;
+    letter-spacing: 0.02em;
+  }
+  .rec-end-btn {
+    background: var(--text); color: var(--surface);
+    font: 500 13px var(--font-body);
+    padding: 8px 16px; border-radius: var(--radius-sm);
+    border: none; cursor: pointer;
+  }
+
+  .rec-whiteboard {
+    flex: 1; min-height: 360px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    padding: var(--space-5);
+    position: relative;
+    overflow: hidden;
+  }
+  .rec-whiteboard-toolbar {
+    position: absolute; top: var(--space-3); right: var(--space-3);
+    display: flex; gap: var(--space-1);
+    padding: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+  }
+  .rec-tool {
+    width: 26px; height: 26px;
+    display: flex; align-items: center; justify-content: center;
+    font: 11px var(--font-mono); color: var(--text-muted);
+    border-radius: 4px; cursor: pointer;
+  }
+  .rec-tool.is-active { background: var(--text); color: var(--surface); }
+  .rec-tool:hover:not(.is-active) { background: var(--surface-sunken); color: var(--text); }
+  /* The fake whiteboard content */
+  .rec-wb-content {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 500;
+    color: var(--brand);
+    font-size: 28px;
+  }
+  .rec-wb-line { margin: 0 0 var(--space-3); }
+  .rec-wb-line .step { color: var(--text-muted); font-size: 14px; font-family: var(--font-mono); margin-right: var(--space-3); }
+  .rec-wb-emphasis {
+    color: var(--accent);
+    text-decoration: underline;
+    text-decoration-color: var(--accent-soft);
+    text-decoration-thickness: 4px;
+    text-underline-offset: 4px;
+  }
+
+  .rec-statusbar {
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    display: flex; gap: var(--space-5); align-items: center;
+    font: 12px var(--font-mono);
+    color: var(--text-muted);
+    flex-wrap: wrap;
+  }
+  .rec-statusbar .stat-item {
+    display: flex; align-items: center; gap: var(--space-2);
+  }
+  .rec-statusbar .stat-item .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent);
+  }
+  .rec-statusbar .stat-item.is-ok .dot { background: #5b9b73; }
+
+  .rec-side {
+    background: var(--surface-raised);
+    border-left: 1px solid var(--border);
+    padding: var(--space-5);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .rec-side-title {
+    font: 600 11px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin: 0 0 var(--space-4);
+  }
+  .rec-transcript {
+    flex: 1; overflow: hidden;
+    display: flex; flex-direction: column; gap: var(--space-3);
+  }
+  .rec-trans-line {
+    font: 13px/1.55 var(--font-body); font-weight: 400;
+  }
+  .rec-trans-speaker {
+    font: 500 10px var(--font-mono);
+    color: var(--accent-text);
+    text-transform: uppercase; letter-spacing: 0.05em;
+    margin-right: 5px;
+  }
+  body[data-mode="dark"] .rec-trans-speaker { color: var(--accent); }
+  .rec-trans-line.is-other .rec-trans-speaker { color: var(--text-muted); }
+  .rec-trans-line.is-fresh {
+    opacity: 0.7;
+  }
+  .rec-trans-time {
+    font: 10px var(--font-mono); color: var(--text-muted); opacity: 0.5;
+    margin-right: 5px;
+  }
+
+  /* =================================================================
+     SURFACE 5 — Session detail (post-recording)
+     ================================================================= */
+  .session-detail {
+    background: var(--surface);
+    padding: var(--space-6) var(--space-8) var(--space-8);
+  }
+  .session-detail-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    margin-bottom: var(--space-6); flex-wrap: wrap; gap: var(--space-3);
+  }
+  .session-meta {
+    display: flex; gap: var(--space-3); align-items: center;
+    margin-bottom: var(--space-2);
+  }
+  .session-meta-back {
+    color: var(--text-muted); text-decoration: none;
+    font: 13px var(--font-body);
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .session-meta-back:hover { color: var(--text); }
+  .session-meta-when {
+    font: 12px var(--font-mono); color: var(--text-muted);
+  }
+  .session-title {
+    font-size: 32px; margin: 0 0 var(--space-2);
+  }
+  .session-subtitle {
+    font: 14px var(--font-body); color: var(--text-muted);
+    margin: 0;
+  }
+  .session-detail-actions { display: flex; gap: var(--space-2); }
+
+  /* Tab strip */
+  .session-tabs {
+    display: flex; gap: var(--space-1);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: var(--space-5);
+  }
+  .session-tab {
+    padding: 9px 14px;
+    font: 500 13px var(--font-body);
+    color: var(--text-muted);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    cursor: pointer;
+  }
+  .session-tab.is-active {
+    color: var(--text);
+    border-bottom-color: var(--accent);
+  }
+  .session-tab:hover:not(.is-active) { color: var(--text); }
+
+  /* Detail body: summary panel + transcript preview side by side */
+  .session-body {
+    display: grid; grid-template-columns: 1.2fr 1fr;
+    gap: var(--space-5);
+  }
+  @media (max-width: 900px) { .session-body { grid-template-columns: 1fr; } }
+
+  .session-summary-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    overflow: hidden;
+  }
+  .session-summary-head {
+    padding: var(--space-4) var(--space-5);
+    border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .session-summary-title {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700;
+    font-size: 18px; letter-spacing: -0.015em;
+    margin: 0; color: var(--text);
+  }
+  .session-summary-meta {
+    font: 11px var(--font-mono); color: var(--text-muted);
+  }
+  .session-summary-body {
+    padding: var(--space-5);
+  }
+  .session-summary-section {
+    margin-bottom: var(--space-5);
+  }
+  .session-summary-section:last-child { margin-bottom: 0; }
+  .session-summary-section h4 {
+    font: 600 10px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin: 0 0 var(--space-2);
+  }
+  .session-summary-section p,
+  .session-summary-section ul {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 14, "SOFT" 30, "wght" 400;
+    font-size: 14px; line-height: 1.55;
+    color: var(--text); margin: 0;
+    padding-left: var(--space-4);
+  }
+  .session-summary-section p { padding: 0; }
+  .session-summary-section ul li { margin-bottom: 4px; }
+  .session-summary-section .editable {
+    position: relative;
+    padding: var(--space-2) var(--space-3);
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    cursor: text;
+  }
+  .session-summary-section .editable:hover {
+    box-shadow: 0 0 0 2px var(--accent) inset;
+  }
+  .session-summary-section .edit-flag {
+    position: absolute; top: 4px; right: 6px;
+    font: 9px var(--font-mono);
+    color: var(--accent-text); opacity: 0.7;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .session-summary-foot {
+    padding: var(--space-3) var(--space-5);
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    display: flex; justify-content: space-between; align-items: center;
+    font: 11px var(--font-mono); color: var(--text-muted);
+  }
+
+  .session-side {
+    display: flex; flex-direction: column; gap: var(--space-4);
+  }
+  .session-side-panel {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    padding: var(--space-4);
+  }
+  .session-side-title {
+    font: 600 11px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin: 0 0 var(--space-3);
+  }
+
+  .transcript-line {
+    font: 13px/1.55 var(--font-body); font-weight: 400;
+    margin: 0 0 var(--space-2);
+  }
+  .transcript-line .speaker {
+    font: 500 10px var(--font-mono);
+    color: var(--accent-text);
+    text-transform: uppercase; letter-spacing: 0.05em;
+    margin-right: 5px;
+  }
+  body[data-mode="dark"] .transcript-line .speaker { color: var(--accent); }
+  .transcript-line.is-other .speaker { color: var(--text-muted); }
+  .transcript-line .ts {
+    font: 10px var(--font-mono); color: var(--text-muted); opacity: 0.5;
+    margin-right: 5px;
+  }
+  .transcript-more {
+    text-align: center; padding: var(--space-2) 0;
+    color: var(--text-muted); font: 12px var(--font-body);
+    margin-top: var(--space-3); border-top: 1px solid var(--border);
+  }
+
+  .session-snapshots {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: var(--space-2);
+  }
+  .session-snapshot {
+    aspect-ratio: 4/3;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2);
+    font: 600 14px var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 500;
+    color: var(--brand);
+    display: flex; align-items: center; justify-content: center;
+    text-align: center;
+    line-height: 1.15;
+  }
+  .session-snapshot .ts {
+    position: absolute; bottom: 4px; right: 4px;
+    font: 9px var(--font-mono); color: var(--text-muted);
+    opacity: 0.6;
+  }
+  .session-snapshot-wrap { position: relative; }
+
+  /* =================================================================
+     SURFACE 6 — Parent share view (read-only)
+     ================================================================= */
+  .parent {
+    background: var(--surface);
+    padding: var(--space-12) var(--space-8) var(--space-16);
+  }
+  .parent-head {
+    text-align: center;
+    margin-bottom: var(--space-8);
+    padding-bottom: var(--space-6);
+    border-bottom: 1px solid var(--border);
+  }
+  .parent-head .wordmark { font-size: 22px; }
+  .parent-head .subtitle {
+    margin-top: var(--space-2);
+    font: 12px var(--font-mono); color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+
+  .parent-body { max-width: 680px; margin: 0 auto; }
+  .parent-title {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700;
+    font-size: 30px; letter-spacing: -0.02em;
+    color: var(--text); margin: 0 0 var(--space-2);
+    line-height: 1.15;
+  }
+  .parent-meta {
+    font: 13px var(--font-mono); color: var(--text-muted);
+    margin: 0 0 var(--space-8);
+  }
+  .parent-section {
+    margin-bottom: var(--space-8);
+  }
+  .parent-section h2 {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700;
+    font-size: 20px; letter-spacing: -0.015em;
+    color: var(--text);
+    margin: 0 0 var(--space-3);
+    padding-bottom: var(--space-2);
+    border-bottom: 2px solid var(--accent);
+    display: inline-block;
+  }
+  .parent-prose {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 14, "SOFT" 30, "wght" 400;
+    font-size: 16px; line-height: 1.65;
+    color: var(--text); margin: 0 0 var(--space-3);
+  }
+  .parent-prose:last-child { margin-bottom: 0; }
+  .parent-prose strong {
+    font-variation-settings: "opsz" 14, "SOFT" 30, "wght" 500;
+  }
+
+  .parent-moment {
+    padding: var(--space-4) var(--space-5);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    margin-bottom: var(--space-3);
+    display: grid; grid-template-columns: auto 1fr auto;
+    gap: var(--space-4); align-items: center;
+  }
+  .parent-moment-ts {
+    font: 600 14px var(--font-mono); color: var(--accent-text);
+  }
+  body[data-mode="dark"] .parent-moment-ts { color: var(--accent); }
+  .parent-moment-text {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 14, "SOFT" 30, "wght" 400;
+    font-size: 14px; line-height: 1.55;
+    color: var(--text); margin: 0;
+  }
+  .parent-moment-play {
+    color: var(--text-muted); text-decoration: none;
+    font: 500 11px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+  }
+  .parent-moment-play:hover { color: var(--text); border-color: var(--border-strong); }
+
+  .parent-signoff {
+    margin-top: var(--space-8);
+    padding-top: var(--space-5);
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center; gap: var(--space-4);
+  }
+  .parent-signoff-avatar {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: var(--brand); color: var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    font: 600 18px var(--font-body);
+  }
+  .parent-signoff-text {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 14, "SOFT" 30, "wght" 400;
+    font-size: 14px; color: var(--text);
+  }
+  .parent-signoff-text strong {
+    font-variation-settings: "opsz" 14, "SOFT" 30, "wght" 500;
+  }
+  .parent-signoff-text .role {
+    display: block; font: 12px var(--font-mono);
+    color: var(--text-muted); margin-top: 2px;
+  }
+
+  .parent-footer {
+    text-align: center; margin-top: var(--space-12);
+    padding-top: var(--space-5);
+    border-top: 1px solid var(--border);
+    font: 11px var(--font-mono); color: var(--text-muted);
+  }
+  .parent-footer .wordmark { font-size: 14px; }
+  .parent-footer .wordmark::after { content: ""; }
+
+  /* Closing block */
+  .closing {
+    max-width: 900px; margin: 0 auto;
+    padding: var(--space-8) var(--space-6) var(--space-20);
+    border-top: 1px solid var(--border);
+  }
+  .closing h2 {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 600;
+    font-size: 24px; letter-spacing: -0.02em;
+    margin: 0 0 var(--space-3); color: var(--text);
+  }
+  .closing p {
+    font-weight: 400;
+    font-size: 14px; line-height: 1.6;
+    color: var(--text-muted); margin: 0 0 var(--space-3);
+  }
+  .closing ul {
+    font-weight: 400;
+    font-size: 14px; line-height: 1.6;
+    color: var(--text-muted); padding-left: var(--space-5);
+  }
+  .closing strong { color: var(--text); font-weight: 600; }
+</style>
+</head>
+
+<body data-mode="light">
+
+<header class="meta-header">
+  <div>
+    <div class="meta-title">Mynk — FINAL brand reference · Mynka Blue</div>
+    <div class="meta-sub">Decided 2026-05-19 · brand #1E3D54 · coral #E27D60 · Fraunces V4 wordmark + V2 heading + Inter 400 body</div>
+  </div>
+  <div class="meta-controls">
+    <button class="toggle-btn" data-mode-btn="light" aria-pressed="true">Light</button>
+    <button class="toggle-btn" data-mode-btn="dark" aria-pressed="false">Dark</button>
+  </div>
+</header>
+
+<nav class="surface-nav">
+  <span class="nav-prefix">Jump to:</span>
+  <a href="#s1">1 · Marketing landing</a>
+  <a href="#s2">2 · Tutor dashboard</a>
+  <a href="#s3">3 · Pre-session preview</a>
+  <a href="#s4">4 · Active recording</a>
+  <a href="#s5">5 · Session detail</a>
+  <a href="#s6">6 · Parent share view</a>
+</nav>
+
+<aside class="decision-banner">
+  <div class="decision-banner-label">✓ DECIDED · 2026-05-19</div>
+  <h2 class="decision-banner-title">This is the canonical Mynk brand reference.</h2>
+  <p class="decision-banner-body">
+    Palette is <strong>Mynka Blue</strong> (brand <code>#1E3D54</code>, accent coral <code>#E27D60</code>).
+    Typography is Fraunces V4 wordmark + V2 heading + Inter 400 body + JetBrains Mono labels.
+    Canonical decision doc: <code>docs/MYNK-BRAND-PHASE-2-DECISIONS.md</code>.
+    Engineering quick-reference: <code>docs/BRAND.md</code>.
+    Token migration plan: <code>docs/DESIGN-TOKENS-PLAN.md</code>.
+    Round-by-round exploration history lives in <code>docs/brand-previews/archived/</code>.
+  </p>
+</aside>
+
+<section class="intro">
+  <h1>One palette, one typography pair, six real surfaces.</h1>
+  <p>This is what <strong>Mynka Blue × V4w+V2h</strong> looks like operating as a product. Six surfaces — marketing landing, tutor dashboard, pre-session preview, active recording, session detail, parent share view — all rendered from the same token set. Toggle dark mode in the header; the surfaces respond.</p>
+  <div class="recipe">
+    <strong>Recipe.</strong> Palette is <strong>Mynka Blue</strong>: brand <code>#1E3D54</code>, accent coral <code>#E27D60</code>, cream surface <code>#F5F4EC</code>, blue-grey strong-border <code>#4A6680</code>, near-navy dark mode <code>#051A24</code>. Wordmark is V4 — Fraunces 700 with SOFT 60 (soft + bold). Heading is V2 — Fraunces 700 (crisp). Body is the lighter V2 weight — Inter 400 for sans, Fraunces 400 for prose. AI surfaces use Fraunces in the accent-soft tint so AI-generated content reads warm/serif while UI controls stay sans.
+  </div>
+</section>
+
+<!-- ============================== SURFACE 1: Marketing landing ============================== -->
+<section class="surface-block" id="s1">
+  <div class="surface-label">
+    <span class="surface-num">Surface 1</span>
+    <span class="surface-name">Marketing landing</span>
+    <span>· The first thing a tutor sees on mynk.app</span>
+  </div>
+
+  <div class="device">
+    <div class="device-chrome">
+      <div class="chrome-dots"><span class="chrome-dot"></span><span class="chrome-dot"></span><span class="chrome-dot"></span></div>
+      <div class="chrome-url">mynk.app<strong>/</strong></div>
+    </div>
+    <div class="marketing">
+      <header class="mkt-nav">
+        <div class="nav-left">
+          <h1 class="wordmark">Mynk<span class="dot">·</span></h1>
+          <nav class="mkt-nav-links">
+            <a href="#">How it works</a>
+            <a href="#">For schools</a>
+            <a href="#">Pricing</a>
+            <a href="#">Help</a>
+          </nav>
+        </div>
+        <div class="mkt-nav-right">
+          <a href="#" class="mkt-signin">Sign in</a>
+          <a href="#" class="btn-primary btn-sm">Start free trial</a>
+        </div>
+      </header>
+
+      <section class="mkt-hero">
+        <div class="mkt-hero-copy">
+          <div class="mkt-hero-eyebrow">For private tutors</div>
+          <h2 class="heading mkt-hero-head">You teach.<br>Mynk takes the notes.</h2>
+          <p class="mkt-hero-sub">Stay present in the session. Mynk records, transcribes, and writes a clean recap your student's parent can actually read.</p>
+          <div class="mkt-hero-ctas">
+            <a href="#" class="btn-primary btn-lg">Try it for one session</a>
+            <a href="#" class="btn-ghost btn-lg">See a sample recap</a>
+          </div>
+          <div class="mkt-hero-foot">
+            <span><span class="checkmark">✓</span> No credit card</span>
+            <span class="dot-sep">·</span>
+            <span><span class="checkmark">✓</span> Works on your phone</span>
+            <span class="dot-sep">·</span>
+            <span><span class="checkmark">✓</span> Cancel anytime</span>
+          </div>
+        </div>
+
+        <div class="mkt-hero-visual">
+          <div class="mkt-visual-meta">
+            <span class="mkt-visual-tag"><span class="live-dot"></span> Live · Aiden K.</span>
+            <span class="mkt-visual-time">23:14</span>
+          </div>
+          <div class="mkt-visual-transcript">
+            <p><span class="speaker">Sarah</span>So if we factor out the three, what do we get inside the parentheses?</p>
+            <p><span class="speaker">Aiden</span>Uh… x squared minus four x minus two?</p>
+            <p><span class="speaker">Sarah</span>Close — check the sign on the last term.</p>
+          </div>
+          <div class="mkt-visual-summary">
+            <span class="label">AI summary so far</span>
+            <p class="body">Working through factoring trinomials. Aiden gets the GCF step but is dropping signs on the constant term — worth a few drilled examples.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="mkt-features">
+        <div class="mkt-features-head">
+          <h2 class="heading">Built around how tutors actually work.</h2>
+          <p class="prose-mute">Not a meeting tool. Not a transcription service. A working notebook that does the parts you don't have time for.</p>
+        </div>
+        <div class="mkt-features-grid">
+          <div class="mkt-feature">
+            <div class="mkt-feature-icon">M</div>
+            <h3>Capture every word</h3>
+            <p>Records on your phone or laptop. Continues uploading after the session ends — even if your wifi drops.</p>
+          </div>
+          <div class="mkt-feature">
+            <div class="mkt-feature-icon">∑</div>
+            <h3>Recaps you'd actually send</h3>
+            <p>Concrete summaries, specific homework, and the moment things clicked. Editable before you send.</p>
+          </div>
+          <div class="mkt-feature">
+            <div class="mkt-feature-icon">↗</div>
+            <h3>Share with one tap</h3>
+            <p>Parents get a clean read-only page. No accounts, no app downloads, no surprise emails to you.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="mkt-quote">
+        <p class="mkt-quote-body">"It's the first tool I've used that gave me back time without taking anything away from the kid."</p>
+        <p class="mkt-quote-attr"><strong>Sarah M.</strong>  ·  SAT prep & math, 12 years tutoring  ·  Mynk pilot tutor</p>
+      </section>
+
+      <footer class="mkt-footer">
+        <div>© 2026 Mortensen Apps</div>
+        <nav class="mkt-footer-links">
+          <a href="#">Privacy</a>
+          <a href="#">Terms</a>
+          <a href="#">Status</a>
+          <a href="#">hello@mynk.app</a>
+        </nav>
+      </footer>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== SURFACE 2: Tutor dashboard ============================== -->
+<section class="surface-block" id="s2">
+  <div class="surface-label">
+    <span class="surface-num">Surface 2</span>
+    <span class="surface-name">Tutor dashboard</span>
+    <span>· Where Sarah lives most days</span>
+  </div>
+
+  <div class="device">
+    <div class="device-chrome">
+      <div class="chrome-dots"><span class="chrome-dot"></span><span class="chrome-dot"></span><span class="chrome-dot"></span></div>
+      <div class="chrome-url">mynk.app/org/sarah-tutoring<strong>/dashboard</strong></div>
+    </div>
+    <div class="dash">
+      <aside class="dash-sidebar">
+        <h1 class="wordmark dash-side-wordmark">Mynk<span class="dot">·</span></h1>
+        <div>
+          <div class="dash-side-section">Today</div>
+          <nav class="dash-side-nav">
+            <a href="#" class="dash-side-link is-active"><span class="ico">▤</span> Dashboard</a>
+            <a href="#" class="dash-side-link"><span class="ico">◐</span> Sessions</a>
+            <a href="#" class="dash-side-link"><span class="ico">♦</span> Students</a>
+          </nav>
+        </div>
+        <div>
+          <div class="dash-side-section">Library</div>
+          <nav class="dash-side-nav">
+            <a href="#" class="dash-side-link"><span class="ico">≡</span> Notes</a>
+            <a href="#" class="dash-side-link"><span class="ico">⌘</span> Whiteboards</a>
+            <a href="#" class="dash-side-link"><span class="ico">↗</span> Shared</a>
+          </nav>
+        </div>
+        <div>
+          <div class="dash-side-section">Account</div>
+          <nav class="dash-side-nav">
+            <a href="#" class="dash-side-link"><span class="ico">⚙</span> Settings</a>
+            <a href="#" class="dash-side-link"><span class="ico">?</span> Help</a>
+          </nav>
+        </div>
+        <div class="dash-side-user">
+          <div class="dash-avatar">SM</div>
+          <div>
+            <div class="name">Sarah M.</div>
+            <div class="role">Tutor · solo plan</div>
+          </div>
+        </div>
+      </aside>
+
+      <main class="dash-main">
+        <header class="dash-main-head">
+          <div>
+            <h1 class="heading dash-greeting">Good afternoon, Sarah.</h1>
+            <p class="dash-greeting-sub">Three sessions today. Aiden is up next at 4 PM.</p>
+          </div>
+          <a href="#" class="btn-primary">+ New session</a>
+        </header>
+
+        <div class="dash-stats">
+          <div class="dash-stat">
+            <div class="dash-stat-label">This week</div>
+            <div class="dash-stat-value">12</div>
+            <div class="dash-stat-delta is-up">+3 vs last week</div>
+          </div>
+          <div class="dash-stat">
+            <div class="dash-stat-label">Tutoring hours</div>
+            <div class="dash-stat-value">9.4</div>
+            <div class="dash-stat-delta">on pace for 11</div>
+          </div>
+          <div class="dash-stat">
+            <div class="dash-stat-label">Active students</div>
+            <div class="dash-stat-value">8</div>
+            <div class="dash-stat-delta">2 inactive 14+ days</div>
+          </div>
+          <div class="dash-stat">
+            <div class="dash-stat-label">Recaps to send</div>
+            <div class="dash-stat-value">3</div>
+            <div class="dash-stat-delta is-up">all reviewed</div>
+          </div>
+        </div>
+
+        <div class="dash-cols">
+          <div class="dash-panel">
+            <div class="dash-panel-head">
+              <h3 class="dash-panel-title">Recent sessions</h3>
+              <span class="dash-panel-meta">Last 7 days</span>
+            </div>
+            <div class="dash-session">
+              <div class="dash-session-avatar">AK</div>
+              <div>
+                <div class="dash-session-name">Aiden K.</div>
+                <div class="dash-session-sub">Algebra II · 47 min · factoring trinomials</div>
+              </div>
+              <span class="dash-session-status">Recap ready</span>
+              <span class="dash-session-when">Yesterday · 4 PM</span>
+            </div>
+            <div class="dash-session">
+              <div class="dash-session-avatar">MR</div>
+              <div>
+                <div class="dash-session-name">Maya R.</div>
+                <div class="dash-session-sub">SAT prep · 52 min · reading section, timing strategy</div>
+              </div>
+              <span class="dash-session-status">Recap ready</span>
+              <span class="dash-session-when">Mon · 7 PM</span>
+            </div>
+            <div class="dash-session">
+              <div class="dash-session-avatar">JP</div>
+              <div>
+                <div class="dash-session-name">Jordan P.</div>
+                <div class="dash-session-sub">Geometry · 38 min · proofs warmup</div>
+              </div>
+              <span class="dash-session-status is-done">Sent</span>
+              <span class="dash-session-when">Mon · 3 PM</span>
+            </div>
+            <div class="dash-session">
+              <div class="dash-session-avatar">EW</div>
+              <div>
+                <div class="dash-session-name">Emma W.</div>
+                <div class="dash-session-sub">Pre-calc · 61 min · trig identities review</div>
+              </div>
+              <span class="dash-session-status is-done">Sent</span>
+              <span class="dash-session-when">Sun · 11 AM</span>
+            </div>
+            <div class="dash-session">
+              <div class="dash-session-avatar">DH</div>
+              <div>
+                <div class="dash-session-name">Devon H.</div>
+                <div class="dash-session-sub">Algebra I · 44 min · linear equations</div>
+              </div>
+              <span class="dash-session-status is-done">Sent</span>
+              <span class="dash-session-when">Sat · 10 AM</span>
+            </div>
+          </div>
+
+          <div>
+            <div class="dash-upnext">
+              <div class="dash-upnext-label">Up next · 4:00 PM today</div>
+              <h3 class="dash-upnext-name">Aiden K.</h3>
+              <div class="dash-upnext-time">Algebra II · scheduled 45 min</div>
+              <a href="#" class="dash-upnext-cta">Ready to record →</a>
+            </div>
+
+            <div class="dash-pending-summaries">
+              <div class="dash-pending-head">3 recaps waiting</div>
+              <p class="dash-pending-msg">Maya, Devon, and Emma's recaps were generated overnight. Look them over before sending.</p>
+              <a href="#" class="dash-pending-link">Review all →</a>
+            </div>
+
+            <div class="dash-panel">
+              <div class="dash-panel-head">
+                <h3 class="dash-panel-title">This month</h3>
+              </div>
+              <div style="padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); font-size: 13px;">
+                <div style="display: flex; justify-content: space-between;">
+                  <span class="prose-mute">Sessions logged</span>
+                  <span style="font-weight: 500;">47</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span class="prose-mute">Hours tutored</span>
+                  <span style="font-weight: 500;">36.2</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span class="prose-mute">Recaps sent</span>
+                  <span style="font-weight: 500;">45 / 47</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span class="prose-mute">Avg. session length</span>
+                  <span style="font-weight: 500;">46 min</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== SURFACE 3: Pre-session preview ============================== -->
+<section class="surface-block" id="s3">
+  <div class="surface-label">
+    <span class="surface-num">Surface 3</span>
+    <span class="surface-name">Pre-session preview</span>
+    <span>· The "ready to record?" moment, with mic check and last-session context</span>
+  </div>
+
+  <div class="device">
+    <div class="device-chrome">
+      <div class="chrome-dots"><span class="chrome-dot"></span><span class="chrome-dot"></span><span class="chrome-dot"></span></div>
+      <div class="chrome-url">mynk.app/org/sarah-tutoring/sessions<strong>/new</strong></div>
+    </div>
+    <div class="pre">
+      <div class="pre-eyebrow">Pre-session · pvw=8a3c</div>
+      <h1 class="heading pre-question">Ready to record with Aiden?</h1>
+      <p class="prose-mute pre-sub">We'll start recording when you tap Start. You can pause or end anytime. Aiden won't see the session in his app until you share it.</p>
+
+      <div class="pre-cards">
+        <div class="pre-card">
+          <div class="pre-card-label"><span>Microphone</span><span class="status-ok">● Sounds good</span></div>
+          <div class="mic-meter">
+            <div class="mic-bar lvl-1"></div>
+            <div class="mic-bar lvl-2"></div>
+            <div class="mic-bar lvl-3"></div>
+            <div class="mic-bar lvl-4"></div>
+            <div class="mic-bar lvl-5"></div>
+            <div class="mic-bar lvl-6"></div>
+            <div class="mic-bar lvl-4"></div>
+            <div class="mic-bar lvl-3"></div>
+          </div>
+          <div class="mic-source">Source: MacBook Pro mic · 48 kHz</div>
+        </div>
+
+        <div class="pre-card">
+          <div class="pre-card-label"><span>Whiteboard</span><span class="status-ok">● Ready</span></div>
+          <div class="pre-whiteboard">Blank — Aiden's last board will be loaded if you tap "Continue last"</div>
+          <div class="mic-source" style="margin-top: var(--space-2);">Will auto-save every 30s · wbsid will be assigned at start</div>
+        </div>
+      </div>
+
+      <div class="pre-context">
+        <div class="pre-context-label">Last session · 5 days ago</div>
+        <p class="pre-context-body">"Aiden's getting comfortable with factoring out a GCF, but kept dropping signs when distributing the negative. Worth a warmup on signed factoring before today's quadratics work."</p>
+      </div>
+
+      <div class="pre-actions">
+        <a href="#" class="btn-primary btn-lg">Start session</a>
+        <a href="#" class="btn-ghost">Continue last whiteboard</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== SURFACE 4: Active recording ============================== -->
+<section class="surface-block" id="s4">
+  <div class="surface-label">
+    <span class="surface-num">Surface 4</span>
+    <span class="surface-name">Active recording</span>
+    <span>· Mid-session, with live transcript trickling in and whiteboard work</span>
+  </div>
+
+  <div class="device">
+    <div class="device-chrome">
+      <div class="chrome-dots"><span class="chrome-dot"></span><span class="chrome-dot"></span><span class="chrome-dot"></span></div>
+      <div class="chrome-url">mynk.app/org/sarah-tutoring/sessions/<strong>aiden-2026-05-19</strong></div>
+    </div>
+    <div class="rec-screen">
+      <div class="rec-main">
+        <div class="rec-topbar">
+          <span class="rec-live"><span class="live-dot"></span> Live</span>
+          <span class="rec-with">Recording with <span class="name">Aiden K.</span> · Algebra II</span>
+          <span class="rec-timer">23:14</span>
+          <button class="rec-end-btn">End session</button>
+        </div>
+
+        <div class="rec-whiteboard">
+          <div class="rec-whiteboard-toolbar">
+            <div class="rec-tool is-active">P</div>
+            <div class="rec-tool">L</div>
+            <div class="rec-tool">T</div>
+            <div class="rec-tool">⌫</div>
+          </div>
+          <div class="rec-wb-content">
+            <div class="rec-wb-line"><span class="step">1.</span>3x² − 12x − 6</div>
+            <div class="rec-wb-line"><span class="step">2.</span>= 3(x² − 4x − 2)</div>
+            <div class="rec-wb-line"><span class="step">3.</span>= 3(x² − 4x + 4 <span class="rec-wb-emphasis">− 6</span>)</div>
+            <div class="rec-wb-line"><span class="step">4.</span>= 3((x − 2)² − 6)</div>
+          </div>
+        </div>
+
+        <div class="rec-statusbar">
+          <span class="stat-item is-ok"><span class="dot"></span> Audio capturing · rid=4a92</span>
+          <span class="stat-item is-ok"><span class="dot"></span> Whiteboard saved 4s ago · wbsid=7c1f</span>
+          <span class="stat-item"><span class="dot"></span> Upload outbox: 0 pending · obx clean</span>
+        </div>
+      </div>
+
+      <aside class="rec-side">
+        <h3 class="rec-side-title">Live transcript</h3>
+        <div class="rec-transcript">
+          <div class="rec-trans-line"><span class="rec-trans-time">21:48</span><span class="rec-trans-speaker">Sarah</span>So now we want to complete the square inside the parentheses.</div>
+          <div class="rec-trans-line is-other"><span class="rec-trans-time">21:55</span><span class="rec-trans-speaker">Aiden</span>Half of negative four is negative two, squared is four.</div>
+          <div class="rec-trans-line"><span class="rec-trans-time">22:02</span><span class="rec-trans-speaker">Sarah</span>Right. So we add four — but we have to do something to keep the equation balanced.</div>
+          <div class="rec-trans-line is-other"><span class="rec-trans-time">22:08</span><span class="rec-trans-speaker">Aiden</span>Subtract four.</div>
+          <div class="rec-trans-line"><span class="rec-trans-time">22:11</span><span class="rec-trans-speaker">Sarah</span>Subtract four <em>inside</em> the parentheses — but remember the three out front.</div>
+          <div class="rec-trans-line is-other"><span class="rec-trans-time">22:25</span><span class="rec-trans-speaker">Aiden</span>So it's actually subtracting twelve from the whole thing.</div>
+          <div class="rec-trans-line"><span class="rec-trans-time">22:31</span><span class="rec-trans-speaker">Sarah</span>Exactly. Write that as − 6 inside, since we already had − 2.</div>
+          <div class="rec-trans-line is-fresh is-other"><span class="rec-trans-time">23:14</span><span class="rec-trans-speaker">Aiden</span>So my final answer is three times the quantity x minus two squared minus six?</div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== SURFACE 5: Session detail ============================== -->
+<section class="surface-block" id="s5">
+  <div class="surface-label">
+    <span class="surface-num">Surface 5</span>
+    <span class="surface-name">Session detail</span>
+    <span>· Post-recording: AI summary editable, transcript, whiteboard snapshots</span>
+  </div>
+
+  <div class="device">
+    <div class="device-chrome">
+      <div class="chrome-dots"><span class="chrome-dot"></span><span class="chrome-dot"></span><span class="chrome-dot"></span></div>
+      <div class="chrome-url">mynk.app/org/sarah-tutoring/sessions/<strong>aiden-2026-05-19</strong>/recap</div>
+    </div>
+    <div class="session-detail">
+      <header class="session-detail-head">
+        <div>
+          <div class="session-meta">
+            <a href="#" class="session-meta-back">← Dashboard</a>
+            <span class="session-meta-when">Recorded yesterday · 4:00–4:47 PM · 47 min</span>
+          </div>
+          <h1 class="heading session-title">Aiden K. · Algebra II</h1>
+          <p class="session-subtitle">Factoring trinomials & completing the square · rid=4a92 · wbsid=7c1f</p>
+        </div>
+        <div class="session-detail-actions">
+          <a href="#" class="btn-ghost">Edit recap</a>
+          <a href="#" class="btn-primary">Share with parent</a>
+        </div>
+      </header>
+
+      <div class="session-tabs">
+        <div class="session-tab is-active">Recap</div>
+        <div class="session-tab">Transcript</div>
+        <div class="session-tab">Whiteboard <span style="font-size: 10px; opacity: 0.6;">· 4</span></div>
+        <div class="session-tab">Audio</div>
+        <div class="session-tab">Homework</div>
+      </div>
+
+      <div class="session-body">
+        <div class="session-summary-card">
+          <div class="session-summary-head">
+            <h2 class="session-summary-title">Session recap</h2>
+            <span class="session-summary-meta">AI-generated · awaiting your review</span>
+          </div>
+          <div class="session-summary-body">
+            <div class="session-summary-section">
+              <h4>What we worked on</h4>
+              <p>Continued with factoring trinomials from Friday. Pivoted into completing-the-square once Aiden was solid on factoring out the GCF.</p>
+            </div>
+            <div class="session-summary-section">
+              <h4>Where Aiden's confidence is building</h4>
+              <p>Spotting the GCF first instinctively, even when coefficients aren't obvious. He didn't need a prompt to factor out the 3 in <em>3x² − 12x − 6</em>.</p>
+            </div>
+            <div class="session-summary-section">
+              <h4>What still needs reps</h4>
+              <ul>
+                <li>Tracking what happens to the constant when adding/subtracting inside vs outside the parentheses.</li>
+                <li>Distributing the leading coefficient when balancing the equation.</li>
+              </ul>
+            </div>
+            <div class="session-summary-section">
+              <h4>Homework I suggested</h4>
+              <p class="editable">
+                <span class="edit-flag">Editable</span>
+                Five completing-the-square problems with leading coefficients other than 1. Try problems 3, 5, 7, 11, and 14 from the practice set. Aim for showing every step — the bookkeeping is the part to drill, not the arithmetic.
+              </p>
+            </div>
+            <div class="session-summary-section">
+              <h4>For next session</h4>
+              <p>Start with the vertex form translation — Aiden was right at the edge of it today. Probably 10 minutes of revisit before moving into solving by completing the square.</p>
+            </div>
+          </div>
+          <div class="session-summary-foot">
+            <span>Auto-saved 2 min ago</span>
+            <a href="#" style="color: var(--accent-text); text-decoration: none; font-weight: 500;">Regenerate recap</a>
+          </div>
+        </div>
+
+        <div class="session-side">
+          <div class="session-side-panel">
+            <h3 class="session-side-title">Transcript preview</h3>
+            <div class="transcript-line"><span class="ts">22:11</span><span class="speaker">Sarah</span>Subtract four inside the parentheses — but remember the three out front.</div>
+            <div class="transcript-line is-other"><span class="ts">22:25</span><span class="speaker">Aiden</span>So it's actually subtracting twelve from the whole thing.</div>
+            <div class="transcript-line"><span class="ts">22:31</span><span class="speaker">Sarah</span>Exactly. Write that as − 6 inside, since we already had − 2.</div>
+            <div class="transcript-line is-other"><span class="ts">23:14</span><span class="speaker">Aiden</span>So my final answer is three times the quantity x minus two squared minus six?</div>
+            <div class="transcript-more">
+              <a href="#" style="color: var(--accent-text); text-decoration: none; font-weight: 500;">Open full transcript →</a>
+            </div>
+          </div>
+
+          <div class="session-side-panel">
+            <h3 class="session-side-title">Whiteboard snapshots · 4</h3>
+            <div class="session-snapshots">
+              <div class="session-snapshot-wrap"><div class="session-snapshot">3x² − 12x − 6<span class="ts">5:02</span></div></div>
+              <div class="session-snapshot-wrap"><div class="session-snapshot">= 3(x² − 4x − 2)<span class="ts">12:18</span></div></div>
+              <div class="session-snapshot-wrap"><div class="session-snapshot">3(x² − 4x + 4 − 6)<span class="ts">22:31</span></div></div>
+              <div class="session-snapshot-wrap"><div class="session-snapshot">3((x−2)² − 6)<span class="ts">31:08</span></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== SURFACE 6: Parent share view ============================== -->
+<section class="surface-block" id="s6">
+  <div class="surface-label">
+    <span class="surface-num">Surface 6</span>
+    <span class="surface-name">Parent share view</span>
+    <span>· What Aiden's mom sees when Sarah taps "Share with parent"</span>
+  </div>
+
+  <div class="device">
+    <div class="device-chrome">
+      <div class="chrome-dots"><span class="chrome-dot"></span><span class="chrome-dot"></span><span class="chrome-dot"></span></div>
+      <div class="chrome-url">mynk.app/share<strong>/r/k7a2f3</strong></div>
+    </div>
+    <div class="parent">
+      <header class="parent-head">
+        <h1 class="wordmark">Mynk<span class="dot">·</span></h1>
+        <div class="subtitle">A session recap from Sarah</div>
+      </header>
+
+      <main class="parent-body">
+        <h1 class="parent-title">Aiden's session · Algebra II</h1>
+        <p class="parent-meta">Monday, May 18 · 4:00–4:47 PM · 47 minutes</p>
+
+        <div class="parent-section">
+          <h2>What we worked on</h2>
+          <p class="parent-prose">We continued with <strong>factoring trinomials</strong> from Friday's session, then pivoted into <strong>completing the square</strong> once Aiden was solid on factoring out the greatest common factor. He stayed engaged the whole session — this is a topic he's been steadily getting more comfortable with.</p>
+        </div>
+
+        <div class="parent-section">
+          <h2>What I noticed</h2>
+          <p class="parent-prose">Aiden's instincts are getting sharper. When I put <strong>3x² − 12x − 6</strong> on the board, he factored out the 3 without me having to prompt him — that's a meaningful shift from where he was three weeks ago. The part that still needs practice is the bookkeeping: keeping track of what changes inside vs outside the parentheses when balancing an equation. We worked through several examples and he was getting it by the end.</p>
+        </div>
+
+        <div class="parent-section">
+          <h2>Two moments worth listening to</h2>
+          <div class="parent-moment">
+            <span class="parent-moment-ts">22:25</span>
+            <p class="parent-moment-text">Aiden figures out on his own that subtracting 4 inside the parentheses means subtracting 12 from the whole equation. This is the click I was waiting for.</p>
+            <a href="#" class="parent-moment-play">▶ Play</a>
+          </div>
+          <div class="parent-moment">
+            <span class="parent-moment-ts">31:08</span>
+            <p class="parent-moment-text">He writes the final answer in vertex form unprompted — a small but real win.</p>
+            <a href="#" class="parent-moment-play">▶ Play</a>
+          </div>
+        </div>
+
+        <div class="parent-section">
+          <h2>Homework for this week</h2>
+          <p class="parent-prose">Five completing-the-square problems with leading coefficients other than 1. From the practice set: <strong>problems 3, 5, 7, 11, and 14.</strong> The arithmetic isn't the hard part — I asked Aiden to show every step, because the bookkeeping is what we're drilling.</p>
+        </div>
+
+        <div class="parent-signoff">
+          <div class="parent-signoff-avatar">S</div>
+          <div class="parent-signoff-text">
+            Sent by <strong>Sarah Mortensen</strong>
+            <span class="role">Tutor · sarah@sarahtutoring.com</span>
+          </div>
+        </div>
+
+        <div class="parent-footer">
+          Recap built with <span class="wordmark" style="display:inline; color: var(--text-muted);">Mynk</span> · this link only works for you · reply directly to Sarah by email
+        </div>
+      </main>
+    </div>
+  </div>
+</section>
+
+<section class="closing">
+  <h2>How to use this reference</h2>
+  <p>This file is now the <strong>visual source of truth</strong> for the Mynk brand. When you're building a new screen or refactoring an old one, scroll to whichever of the six surfaces is closest to what you're building and use it as the calibration target — colors, spacing rhythm, typography hierarchy, the density of coral moments, the way AI-generated content gets a serif voice while UI chrome stays sans.</p>
+  <p>The six surfaces here are the full range of Mynk product moments today:</p>
+  <ul>
+    <li><strong>Surface 1 — Marketing landing.</strong> Reference for: hero typography scale, CTA prominence, eyebrow + headline rhythm, AI-summary panel treatment.</li>
+    <li><strong>Surface 2 — Tutor dashboard.</strong> Reference for: in-app navigation, density of small data, "Sessions" tab indicator color, stat-card treatment, sidebar wordmark scale.</li>
+    <li><strong>Surface 3 — Pre-session preview.</strong> Reference for: pre-flight moments (modal-ish surfaces), consent affordances, mic-level meter palette.</li>
+    <li><strong>Surface 4 — Active recording.</strong> Reference for: chrome-recedes-to-let-the-tutor-teach mode, coral mic ring + halo, live transcript styling.</li>
+    <li><strong>Surface 5 — Session detail.</strong> Reference for: long-form recap layout, transcript previews, whiteboard snapshot grid, "AI SUMMARY" tint usage.</li>
+    <li><strong>Surface 6 — Parent share view.</strong> Reference for: external-facing prose, timestamp pills, play buttons, the warmest end of the brand voice.</li>
+  </ul>
+  <p style="margin-top: var(--space-5);"><strong>If you find yourself wanting to deviate from this reference,</strong> file a note in <code>docs/MYNK-BRAND-PHASE-2-DECISIONS.md</code> § History first so the deviation is intentional and reviewable. The brand is now a load-bearing asset; ad-hoc drift erodes the work that got us here.</p>
+  <p>Dark-mode tip: toggle Dark in the header and scan all six surfaces. The near-navy <code>#051A24</code> dark surface is where Mynka Blue most lives up to its name — the brand isn't bright, but the dark variant is unmistakably navy-blue rather than generic dark-grey, and the coral mic ring (Surface 4) is the single highest-signal moment of the dark palette working as intended.</p>
+</section>
+
+<script>
+  const body = document.body;
+  const btns = document.querySelectorAll('[data-mode-btn]');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const m = btn.dataset.modeBtn;
+      body.setAttribute('data-mode', m);
+      btns.forEach(b => b.setAttribute('aria-pressed', b.dataset.modeBtn === m ? 'true' : 'false'));
+    });
+  });
+</script>
+
+</body>
+</html>

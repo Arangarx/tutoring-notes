@@ -1,0 +1,924 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mynk — palette mocks</title>
+<style>
+  /* ---------------------------------------------------------------- */
+  /* Shared system                                                     */
+  /* ---------------------------------------------------------------- */
+  *,*::before,*::after { box-sizing: border-box; }
+
+  :root {
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-serif: "Iowan Old Style", "Palatino Linotype", "Source Serif Pro", Georgia, serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-10: 40px;
+    --space-12: 48px;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-sans);
+    background: #efece6;
+    color: #1a1a1f;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body[data-theme="dark"] {
+    background: #14141a;
+    color: #f0ece6;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Header                                                            */
+  /* ---------------------------------------------------------------- */
+  .chrome-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: rgba(239, 236, 230, 0.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    padding: var(--space-4) var(--space-6);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-6);
+  }
+  body[data-theme="dark"] .chrome-header {
+    background: rgba(20,20,26,0.92);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .chrome-title {
+    font-family: var(--font-serif);
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .chrome-sub {
+    font-size: 13px;
+    opacity: 0.6;
+    font-family: var(--font-mono);
+  }
+  .chrome-controls {
+    display: flex;
+    gap: var(--space-3);
+    align-items: center;
+  }
+  .toggle-btn {
+    border: 1px solid currentColor;
+    background: transparent;
+    color: inherit;
+    padding: 6px 14px;
+    border-radius: 999px;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    opacity: 0.75;
+    transition: opacity 0.15s ease;
+  }
+  .toggle-btn:hover { opacity: 1; }
+  .toggle-btn[aria-pressed="true"] {
+    background: currentColor;
+    color: #efece6;
+    opacity: 1;
+  }
+  body[data-theme="dark"] .toggle-btn[aria-pressed="true"] {
+    color: #14141a;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Layout                                                            */
+  /* ---------------------------------------------------------------- */
+  main {
+    padding: var(--space-8) var(--space-6) var(--space-12);
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-6);
+    max-width: 1800px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 1280px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Per-palette frame                                                 */
+  /* ---------------------------------------------------------------- */
+  .palette-frame {
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    border: 1px solid rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    color: var(--text);
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+  body[data-theme="dark"] .palette-frame {
+    border-color: rgba(255,255,255,0.08);
+  }
+
+  .palette-label {
+    padding: var(--space-4) var(--space-5);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+    background: var(--surface-raised);
+  }
+  .palette-label-name {
+    font-family: var(--font-serif);
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .palette-label-tag {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+  }
+
+  /* Swatch strip */
+  .swatches {
+    display: flex;
+    height: 32px;
+    border-bottom: 1px solid var(--border);
+  }
+  .swatch {
+    flex: 1;
+    position: relative;
+  }
+  .swatch::after {
+    content: attr(data-label);
+    position: absolute;
+    top: 50%;
+    left: 8px;
+    transform: translateY(-50%);
+    font: 10px var(--font-mono);
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    background: var(--surface);
+    padding: 2px 5px;
+    border-radius: 3px;
+    opacity: 0.85;
+  }
+
+  /* Mock surfaces stack */
+  .surfaces {
+    padding: var(--space-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Mock 1: Landing hero                                              */
+  /* ---------------------------------------------------------------- */
+  .mock-hero {
+    padding: var(--space-6) var(--space-5);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    position: relative;
+  }
+  .mock-hero-wordmark {
+    font-family: var(--font-serif);
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin: 0 0 var(--space-4);
+  }
+  .mock-hero-wordmark::after {
+    content: "·";
+    color: var(--accent);
+    margin-left: 4px;
+  }
+  .mock-hero-tag {
+    font-family: var(--font-serif);
+    font-size: 24px;
+    line-height: 1.15;
+    font-weight: 500;
+    letter-spacing: -0.015em;
+    margin: 0 0 var(--space-3);
+    color: var(--text);
+  }
+  .mock-hero-sub {
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text-muted);
+    margin: 0 0 var(--space-5);
+    max-width: 36ch;
+  }
+  .mock-hero-ctas {
+    display: flex;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+  .btn-primary, .btn-ghost {
+    font: 13px var(--font-sans);
+    font-weight: 500;
+    padding: 9px 16px;
+    border-radius: 999px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: transform 0.1s ease;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-on);
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-ghost {
+    background: transparent;
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Mock 2: Dashboard                                                 */
+  /* ---------------------------------------------------------------- */
+  .mock-dashboard {
+    padding: var(--space-5);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+  }
+  .mock-dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin: 0 0 var(--space-4);
+  }
+  .mock-dashboard-title {
+    font: 600 14px/1.2 var(--font-sans);
+    letter-spacing: -0.005em;
+    color: var(--text);
+    margin: 0;
+  }
+  .mock-dashboard-meta {
+    font: 11px/1 var(--font-mono);
+    color: var(--text-muted);
+  }
+  .session-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-2);
+    border-radius: var(--radius-sm);
+    border-bottom: 1px solid var(--border);
+  }
+  .session-row:last-child { border-bottom: none; }
+  .session-row:hover { background: var(--surface-hover); }
+  .session-student {
+    font: 500 13px/1.3 var(--font-sans);
+    color: var(--text);
+  }
+  .session-sub {
+    font: 12px/1.3 var(--font-sans);
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .session-when {
+    font: 12px var(--font-mono);
+    color: var(--text-muted);
+  }
+  .ai-tag {
+    font: 500 10px var(--font-mono);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent-text);
+    white-space: nowrap;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Mock 3: Recording strip                                           */
+  /* ---------------------------------------------------------------- */
+  .mock-recording {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-5);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+  }
+  .rec-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-soft);
+    animation: rec-pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes rec-pulse {
+    0%, 100% { box-shadow: 0 0 0 4px var(--accent-soft); }
+    50% { box-shadow: 0 0 0 8px transparent; }
+  }
+  .rec-label {
+    font: 500 13px var(--font-sans);
+    color: var(--text);
+  }
+  .rec-time {
+    font: 600 13px var(--font-mono);
+    color: var(--text);
+  }
+  .rec-mute, .rec-end {
+    font: 500 12px var(--font-sans);
+    padding: 7px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .rec-end {
+    background: var(--text);
+    color: var(--surface);
+    border-color: var(--text);
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Mock 4: AI-generated field                                        */
+  /* ---------------------------------------------------------------- */
+  .mock-ai-field {
+    padding: var(--space-5);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+  }
+  .ai-field-label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0 0 var(--space-3);
+  }
+  .ai-field-name {
+    font: 600 12px var(--font-sans);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .ai-field-body {
+    font: 14px/1.55 var(--font-serif);
+    color: var(--text);
+    padding: var(--space-3);
+    border-radius: var(--radius-sm);
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+  }
+  .ai-field-foot {
+    margin-top: var(--space-3);
+    font: 11px var(--font-mono);
+    color: var(--text-muted);
+    letter-spacing: 0.03em;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Mock 5: Mascot                                                    */
+  /* ---------------------------------------------------------------- */
+  .mock-mascot {
+    padding: var(--space-5);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-4);
+    align-items: center;
+  }
+  .mascot-svg {
+    width: 100%;
+    height: auto;
+    color: var(--text);
+  }
+  .mascot-svg.accent { color: var(--accent); }
+  .mascot-caption {
+    font: 12px var(--font-mono);
+    color: var(--text-muted);
+    letter-spacing: 0.02em;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Footer note                                                       */
+  /* ---------------------------------------------------------------- */
+  .palette-notes {
+    padding: var(--space-4) var(--space-5);
+    border-top: 1px solid var(--border);
+    background: var(--surface-raised);
+    font: 12px/1.5 var(--font-sans);
+    color: var(--text-muted);
+  }
+  .palette-notes strong { color: var(--text); font-weight: 600; }
+
+  /* ---------------------------------------------------------------- */
+  /* Palette 1: Ink + paper + highlighter                              */
+  /* ---------------------------------------------------------------- */
+  body[data-theme="light"] .palette-1 {
+    --text: #1a1a1f;
+    --text-muted: #6b6862;
+    --surface: #f8f4ed;
+    --surface-raised: #fdfaf3;
+    --surface-hover: #f1ece2;
+    --border: #e6dfd2;
+    --border-strong: #c9c0ad;
+    --accent: #fbd449;
+    --accent-hover: #e8c13d;
+    --accent-soft: #fef6cc;
+    --accent-text: #6f5a0e;
+    --accent-on: #1a1a1f;
+  }
+  body[data-theme="dark"] .palette-1 {
+    --text: #f8f4ed;
+    --text-muted: #a09a8e;
+    --surface: #14141a;
+    --surface-raised: #1d1d24;
+    --surface-hover: #25252d;
+    --border: #2c2c34;
+    --border-strong: #43434c;
+    --accent: #fbd449;
+    --accent-hover: #ffe070;
+    --accent-soft: #3a3015;
+    --accent-text: #fbd449;
+    --accent-on: #1a1a1f;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Palette 2: Mink fur tones                                         */
+  /* ---------------------------------------------------------------- */
+  body[data-theme="light"] .palette-2 {
+    --text: #2a1f1a;
+    --text-muted: #8b7565;
+    --surface: #faf6f0;
+    --surface-raised: #ffffff;
+    --surface-hover: #f3ede4;
+    --border: #e9ddcc;
+    --border-strong: #c9b89e;
+    --accent: #d4a06a;
+    --accent-hover: #c19056;
+    --accent-soft: #f5e6d2;
+    --accent-text: #6e4920;
+    --accent-on: #ffffff;
+  }
+  body[data-theme="dark"] .palette-2 {
+    --text: #faf6f0;
+    --text-muted: #a89682;
+    --surface: #15100e;
+    --surface-raised: #201813;
+    --surface-hover: #2c211a;
+    --border: #382a21;
+    --border-strong: #57422f;
+    --accent: #d4a06a;
+    --accent-hover: #e8b67f;
+    --accent-soft: #2f2014;
+    --accent-text: #d4a06a;
+    --accent-on: #15100e;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Palette 3: Quiet teal + cream                                     */
+  /* ---------------------------------------------------------------- */
+  body[data-theme="light"] .palette-3 {
+    --text: #1e4d4a;
+    --text-muted: #6b7c7a;
+    --surface: #f7f5f0;
+    --surface-raised: #fdfcf8;
+    --surface-hover: #efece5;
+    --border: #d6dad5;
+    --border-strong: #aab2ad;
+    --accent: #e27d60;
+    --accent-hover: #cc6f55;
+    --accent-soft: #f8e0d6;
+    --accent-text: #8a3c25;
+    --accent-on: #fdfcf8;
+  }
+  body[data-theme="dark"] .palette-3 {
+    --text: #f0ede4;
+    --text-muted: #8fa09e;
+    --surface: #0e2926;
+    --surface-raised: #143531;
+    --surface-hover: #1c413c;
+    --border: #234d48;
+    --border-strong: #3a6e68;
+    --accent: #e27d60;
+    --accent-hover: #f08f72;
+    --accent-soft: #3a1d15;
+    --accent-text: #e27d60;
+    --accent-on: #0e2926;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Intro                                                             */
+  /* ---------------------------------------------------------------- */
+  .intro {
+    max-width: 880px;
+    margin: 0 auto var(--space-8);
+    padding: var(--space-6);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .intro h2 {
+    font-family: var(--font-serif);
+    font-size: 28px;
+    letter-spacing: -0.02em;
+    margin: 0 0 var(--space-3);
+    font-weight: 600;
+  }
+  .intro p { margin: 0 0 var(--space-3); opacity: 0.85; }
+  .intro p:last-child { margin-bottom: 0; }
+  .intro code {
+    font: 12px var(--font-mono);
+    padding: 1px 5px;
+    background: rgba(0,0,0,0.06);
+    border-radius: 3px;
+  }
+  body[data-theme="dark"] .intro code { background: rgba(255,255,255,0.08); }
+</style>
+</head>
+
+<body data-theme="light">
+<aside class="archived-banner" style="position: sticky; top: 0; z-index: 9999; background: #fff3cd; border-bottom: 3px solid #f59e0b; padding: 12px 20px; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.5; color: #78350f; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+  <strong>ARCHIVED EXPLORATION.</strong> This file is preserved for historical reference only. The Mynk brand was finalized as <strong>Mynka Blue</strong> on 2026-05-19. Canonical visual reference: <a href="../palette-mocks-FINAL-mynka-blue.html" style="color: #78350f; text-decoration: underline;">palette-mocks-FINAL-mynka-blue.html</a>. Decision doc: <code style="background:rgba(0,0,0,0.08);padding:1px 5px;border-radius:3px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;">docs/MYNK-BRAND-PHASE-2-DECISIONS.md</code>.
+</aside>
+
+<header class="chrome-header">
+  <div>
+    <div class="chrome-title">Mynk — palette comparison</div>
+    <div class="chrome-sub">brand-walkthrough phase 2 · 2026-05-19</div>
+  </div>
+  <div class="chrome-controls">
+    <button class="toggle-btn" data-theme-btn="light" aria-pressed="true">Light</button>
+    <button class="toggle-btn" data-theme-btn="dark" aria-pressed="false">Dark</button>
+  </div>
+</header>
+
+<section class="intro">
+  <h2>Three concepts, same content.</h2>
+  <p>Each column renders the same five surfaces in one of the three candidate palettes from <code>docs/MYNK-BRAND-PHASE-2-DECISIONS.md</code>. Toggle light/dark at the top to compare both modes simultaneously.</p>
+  <p>The surfaces are: landing hero · dashboard · live recording strip · AI-generated field treatment · mascot placeholder (geometric/minimalist register, not a final sketch). Mock copy uses the agreed <strong>B-voice with D-moments</strong> framing — landing tag leans D, dashboard/recording strip lean B.</p>
+  <p>Pay attention to: (1) does this feel like a tutoring product or a financial product? (2) does the accent earn its keep as a product affordance — does "AI-generated" actually read as AI-generated? (3) at a glance, which one would a department head trust within 5 seconds?</p>
+</section>
+
+<main>
+
+  <!-- ==============================================================
+       PALETTE 1 — Ink + paper + highlighter
+       ============================================================== -->
+  <article class="palette-frame palette-1">
+    <div class="palette-label">
+      <div class="palette-label-name">Concept 1 · Ink + paper + highlighter</div>
+      <div class="palette-label-tag">editorial · product-affordance</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #1a1a1f;" data-label="ink · #1A1A1F"></div>
+      <div class="swatch" style="background: #f8f4ed;" data-label="paper · #F8F4ED"></div>
+      <div class="swatch" style="background: #c9c0ad;" data-label="rule · #C9C0AD"></div>
+      <div class="swatch" style="background: #fbd449;" data-label="highlight · #FBD449"></div>
+    </div>
+
+    <div class="surfaces">
+
+      <!-- Landing hero -->
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Record your sessions. Get clean notes. Stay present with your students — Mynk handles the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">See how it works</button>
+        </div>
+      </div>
+
+      <!-- Dashboard -->
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header">
+          <h4 class="mock-dashboard-title">Recent sessions</h4>
+          <div class="mock-dashboard-meta">last 7 days</div>
+        </div>
+        <div class="session-row">
+          <div>
+            <div class="session-student">Aiden K.</div>
+            <div class="session-sub">Algebra II · 47 min</div>
+          </div>
+          <div class="ai-tag">AI notes ready</div>
+          <div class="session-when">Yesterday</div>
+        </div>
+        <div class="session-row">
+          <div>
+            <div class="session-student">Maya R.</div>
+            <div class="session-sub">SAT prep · 52 min</div>
+          </div>
+          <div class="ai-tag">AI notes ready</div>
+          <div class="session-when">2d ago</div>
+        </div>
+        <div class="session-row">
+          <div>
+            <div class="session-student">Jordan P.</div>
+            <div class="session-sub">Geometry · 38 min</div>
+          </div>
+          <div></div>
+          <div class="session-when">4d ago</div>
+        </div>
+      </div>
+
+      <!-- Recording -->
+      <div class="mock-recording">
+        <div class="rec-dot"></div>
+        <div class="rec-label">Recording with Aiden K.</div>
+        <div class="rec-time">23:14</div>
+        <button class="rec-end">End session</button>
+      </div>
+
+      <!-- AI field -->
+      <div class="mock-ai-field">
+        <div class="ai-field-label">
+          <div class="ai-field-name">Session summary</div>
+        </div>
+        <div class="ai-field-body">Aiden worked through quadratics, identifying coefficients and applying the discriminant. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+
+      <!-- Mascot -->
+      <div class="mock-mascot">
+        <svg class="mascot-svg" viewBox="0 0 240 90" aria-label="Mink riding a pencil">
+          <rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.35"/>
+          <rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.18"/>
+          <polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.45"/>
+          <ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/>
+          <path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/>
+          <ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/>
+          <ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/>
+          <circle cx="135" cy="19" r="3.5" fill="currentColor"/>
+          <circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/>
+        </svg>
+        <svg class="mascot-svg accent" viewBox="0 0 240 90" aria-label="Mink in accent">
+          <rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.45"/>
+          <rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.28"/>
+          <polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.55"/>
+          <ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/>
+          <path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/>
+          <ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/>
+          <ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/>
+          <circle cx="135" cy="19" r="3.5" fill="currentColor"/>
+          <circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/>
+        </svg>
+      </div>
+
+    </div>
+
+    <div class="palette-notes">
+      <strong>Read.</strong> Editorial restraint. The yellow earns its keep as a real product affordance — "AI notes ready" and "AI-generated" both use it, so the brand color IS the AI-content signal. Mascot renders cleanly as ink-on-paper; accent variant feels like the pencil itself glowing. Dark mode is a trivial invert. Easiest to scale to a future kid-mode by brightening the accent.
+    </div>
+  </article>
+
+  <!-- ==============================================================
+       PALETTE 2 — Mink fur tones
+       ============================================================== -->
+  <article class="palette-frame palette-2">
+    <div class="palette-label">
+      <div class="palette-label-name">Concept 2 · Mink fur tones</div>
+      <div class="palette-label-tag">warm-minimalist · literal</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #2a1f1a;" data-label="espresso · #2A1F1A"></div>
+      <div class="swatch" style="background: #faf6f0;" data-label="cream · #FAF6F0"></div>
+      <div class="swatch" style="background: #c9b89e;" data-label="rule · #C9B89E"></div>
+      <div class="swatch" style="background: #d4a06a;" data-label="amber · #D4A06A"></div>
+    </div>
+
+    <div class="surfaces">
+
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Record your sessions. Get clean notes. Stay present with your students — Mynk handles the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">See how it works</button>
+        </div>
+      </div>
+
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header">
+          <h4 class="mock-dashboard-title">Recent sessions</h4>
+          <div class="mock-dashboard-meta">last 7 days</div>
+        </div>
+        <div class="session-row">
+          <div>
+            <div class="session-student">Aiden K.</div>
+            <div class="session-sub">Algebra II · 47 min</div>
+          </div>
+          <div class="ai-tag">AI notes ready</div>
+          <div class="session-when">Yesterday</div>
+        </div>
+        <div class="session-row">
+          <div>
+            <div class="session-student">Maya R.</div>
+            <div class="session-sub">SAT prep · 52 min</div>
+          </div>
+          <div class="ai-tag">AI notes ready</div>
+          <div class="session-when">2d ago</div>
+        </div>
+        <div class="session-row">
+          <div>
+            <div class="session-student">Jordan P.</div>
+            <div class="session-sub">Geometry · 38 min</div>
+          </div>
+          <div></div>
+          <div class="session-when">4d ago</div>
+        </div>
+      </div>
+
+      <div class="mock-recording">
+        <div class="rec-dot"></div>
+        <div class="rec-label">Recording with Aiden K.</div>
+        <div class="rec-time">23:14</div>
+        <button class="rec-end">End session</button>
+      </div>
+
+      <div class="mock-ai-field">
+        <div class="ai-field-label">
+          <div class="ai-field-name">Session summary</div>
+        </div>
+        <div class="ai-field-body">Aiden worked through quadratics, identifying coefficients and applying the discriminant. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+
+      <div class="mock-mascot">
+        <svg class="mascot-svg" viewBox="0 0 240 90" aria-label="Mink riding a pencil">
+          <rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.35"/>
+          <rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.18"/>
+          <polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.45"/>
+          <ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/>
+          <path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/>
+          <ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/>
+          <ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/>
+          <circle cx="135" cy="19" r="3.5" fill="currentColor"/>
+          <circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/>
+        </svg>
+        <svg class="mascot-svg accent" viewBox="0 0 240 90" aria-label="Mink in accent">
+          <rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.45"/>
+          <rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.28"/>
+          <polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.55"/>
+          <ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/>
+          <path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/>
+          <ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/>
+          <ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/>
+          <circle cx="135" cy="19" r="3.5" fill="currentColor"/>
+          <circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/>
+        </svg>
+      </div>
+
+    </div>
+
+    <div class="palette-notes">
+      <strong>Read.</strong> Literal mink-fur warmth. Coffee-shop hospitality. Mascot rendered in espresso on cream looks closest to "real mink." Amber accent feels luxurious but quiet — pulls slightly away from "software" and toward "small-batch artisan." Risk for dept-head landing: may read as boutique rather than serious infrastructure.
+    </div>
+  </article>
+
+  <!-- ==============================================================
+       PALETTE 3 — Quiet teal + cream
+       ============================================================== -->
+  <article class="palette-frame palette-3">
+    <div class="palette-label">
+      <div class="palette-label-name">Concept 3 · Quiet teal + cream</div>
+      <div class="palette-label-tag">sync-metaphor · calm-intelligent</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #1e4d4a;" data-label="teal · #1E4D4A"></div>
+      <div class="swatch" style="background: #f7f5f0;" data-label="cream · #F7F5F0"></div>
+      <div class="swatch" style="background: #aab2ad;" data-label="rule · #AAB2AD"></div>
+      <div class="swatch" style="background: #e27d60;" data-label="coral · #E27D60"></div>
+    </div>
+
+    <div class="surfaces">
+
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Record your sessions. Get clean notes. Stay present with your students — Mynk handles the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">See how it works</button>
+        </div>
+      </div>
+
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header">
+          <h4 class="mock-dashboard-title">Recent sessions</h4>
+          <div class="mock-dashboard-meta">last 7 days</div>
+        </div>
+        <div class="session-row">
+          <div>
+            <div class="session-student">Aiden K.</div>
+            <div class="session-sub">Algebra II · 47 min</div>
+          </div>
+          <div class="ai-tag">AI notes ready</div>
+          <div class="session-when">Yesterday</div>
+        </div>
+        <div class="session-row">
+          <div>
+            <div class="session-student">Maya R.</div>
+            <div class="session-sub">SAT prep · 52 min</div>
+          </div>
+          <div class="ai-tag">AI notes ready</div>
+          <div class="session-when">2d ago</div>
+        </div>
+        <div class="session-row">
+          <div>
+            <div class="session-student">Jordan P.</div>
+            <div class="session-sub">Geometry · 38 min</div>
+          </div>
+          <div></div>
+          <div class="session-when">4d ago</div>
+        </div>
+      </div>
+
+      <div class="mock-recording">
+        <div class="rec-dot"></div>
+        <div class="rec-label">Recording with Aiden K.</div>
+        <div class="rec-time">23:14</div>
+        <button class="rec-end">End session</button>
+      </div>
+
+      <div class="mock-ai-field">
+        <div class="ai-field-label">
+          <div class="ai-field-name">Session summary</div>
+        </div>
+        <div class="ai-field-body">Aiden worked through quadratics, identifying coefficients and applying the discriminant. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+
+      <div class="mock-mascot">
+        <svg class="mascot-svg" viewBox="0 0 240 90" aria-label="Mink riding a pencil">
+          <rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.35"/>
+          <rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.18"/>
+          <polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.45"/>
+          <ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/>
+          <path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/>
+          <ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/>
+          <ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/>
+          <circle cx="135" cy="19" r="3.5" fill="currentColor"/>
+          <circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/>
+        </svg>
+        <svg class="mascot-svg accent" viewBox="0 0 240 90" aria-label="Mink in accent">
+          <rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.45"/>
+          <rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.28"/>
+          <polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.55"/>
+          <ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/>
+          <path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/>
+          <ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/>
+          <ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/>
+          <circle cx="135" cy="19" r="3.5" fill="currentColor"/>
+          <circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/>
+        </svg>
+      </div>
+
+    </div>
+
+    <div class="palette-notes">
+      <strong>Read.</strong> Calm-intelligent. Teal carries semantic weight (sync, connection) and feels grown-up; coral accent breaks any clinical tendency. Mascot in teal silhouette reads slightly less mink-like (mink fur is brown/black, not teal) — would need to commit to "teal is the brand, not the animal." Differentiates clearly from typical edtech blue/green sea but teal had a 2021-2024 moment, so dating risk.
+    </div>
+  </article>
+
+</main>
+
+<script>
+  const body = document.body;
+  const btns = document.querySelectorAll('[data-theme-btn]');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const t = btn.dataset.themeBtn;
+      body.setAttribute('data-theme', t);
+      btns.forEach(b => b.setAttribute('aria-pressed', b.dataset.themeBtn === t ? 'true' : 'false'));
+    });
+  });
+</script>
+
+</body>
+</html>

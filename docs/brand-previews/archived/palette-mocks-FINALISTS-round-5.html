@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mynk — finalists round 5 (full 4×4 matrix)</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,SOFT,wght@9..144,0..100,400..900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  *,*::before,*::after { box-sizing: border-box; }
+  :root {
+    --font-body: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --radius-sm: 6px; --radius-md: 10px; --radius-lg: 14px;
+    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+    --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-12: 48px;
+  }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: var(--font-body);
+    background: #f0eee8; color: #1a1a1f;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body[data-mode="dark"] { background: #0a0a0c; color: #f0ece6; }
+
+  .chrome-header {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(240,238,232,0.94);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    padding: var(--space-4) var(--space-6);
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-6);
+  }
+  body[data-mode="dark"] .chrome-header {
+    background: rgba(10,10,12,0.94);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .chrome-title {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 700;
+    font-size: 18px; letter-spacing: -0.02em;
+  }
+  .chrome-sub {
+    font-size: 13px; opacity: 0.6;
+    font-family: var(--font-mono);
+  }
+  .chrome-controls { display: flex; gap: var(--space-3); align-items: center; }
+  .toggle-btn {
+    border: 1px solid currentColor; background: transparent;
+    color: inherit; padding: 6px 14px; border-radius: 999px;
+    font: inherit; font-size: 13px; cursor: pointer; opacity: 0.75;
+  }
+  .toggle-btn:hover { opacity: 1; }
+  .toggle-btn[aria-pressed="true"] {
+    background: currentColor; color: #f0eee8; opacity: 1;
+  }
+  body[data-mode="dark"] .toggle-btn[aria-pressed="true"] { color: #0a0a0c; }
+
+  .intro {
+    max-width: 1100px; margin: 0 auto;
+    padding: var(--space-8) var(--space-6) var(--space-6);
+    font-size: 14px; line-height: 1.6;
+  }
+  .intro h2 {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 600;
+    font-size: 30px; letter-spacing: -0.025em;
+    margin: 0 0 var(--space-3);
+  }
+  .intro p { margin: 0 0 var(--space-3); opacity: 0.85; }
+  .intro .callout {
+    margin: var(--space-4) 0 0;
+    padding: var(--space-3) var(--space-4);
+    border-left: 3px solid currentColor;
+    background: rgba(0,0,0,0.04);
+    font-size: 13px; opacity: 0.85;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+  body[data-mode="dark"] .intro .callout { background: rgba(255,255,255,0.04); }
+
+  /* ============================== The full 4×4 matrix
+     Grid: 1 row-header column + 4 cell columns
+            1 header row + 4 palette rows
+     Each cell is a compact specimen of one palette × one typography combo.
+     ================================================================= */
+
+  .full-matrix {
+    max-width: 2100px; margin: 0 auto;
+    padding: 0 var(--space-6) var(--space-12);
+    display: grid;
+    grid-template-columns: 140px repeat(4, minmax(260px, 1fr));
+    gap: var(--space-3);
+  }
+  @media (max-width: 1500px) {
+    .full-matrix { grid-template-columns: 120px repeat(4, minmax(220px, 1fr)); }
+  }
+  @media (max-width: 1100px) {
+    /* Collapse to 2 cells per row, palette label spans both */
+    .full-matrix {
+      grid-template-columns: 100px 1fr 1fr;
+    }
+    .full-matrix .col-header { display: none; }
+    .full-matrix .row-header { grid-column: 1 / 2; }
+  }
+  @media (max-width: 720px) {
+    .full-matrix { grid-template-columns: 1fr; }
+    .full-matrix .col-header,
+    .full-matrix .row-header { display: none; }
+    .cell::before {
+      content: attr(data-label);
+      display: block;
+      font: 500 10px var(--font-mono);
+      text-transform: uppercase; letter-spacing: 0.05em;
+      opacity: 0.65; margin-bottom: var(--space-2);
+    }
+  }
+
+  .matrix-corner {
+    background: transparent;
+    display: flex; align-items: end; justify-content: end;
+    padding: var(--space-2);
+    font: 10px var(--font-mono);
+    color: inherit; opacity: 0.4;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    text-align: right;
+  }
+  .col-header {
+    background: transparent;
+    padding: var(--space-3) var(--space-3);
+    text-align: center;
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    font: 600 12px var(--font-body);
+    color: inherit;
+  }
+  body[data-mode="dark"] .col-header { border-bottom-color: rgba(255,255,255,0.08); }
+  .col-header .axis {
+    display: block;
+    font: 10px var(--font-mono);
+    opacity: 0.6;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    margin-top: 3px;
+    font-weight: 400;
+  }
+
+  .row-header {
+    padding: var(--space-4) var(--space-3);
+    display: flex; flex-direction: column; justify-content: center;
+    border-right: 1px solid rgba(0,0,0,0.08);
+    color: inherit;
+  }
+  body[data-mode="dark"] .row-header { border-right-color: rgba(255,255,255,0.08); }
+  .row-header .row-name {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 600;
+    font-size: 15px; letter-spacing: -0.015em;
+    margin-bottom: var(--space-1);
+    line-height: 1.15;
+  }
+  .row-header .row-tag {
+    font: 10px var(--font-mono);
+    opacity: 0.6;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    line-height: 1.3;
+    margin-bottom: var(--space-3);
+  }
+  .row-header .row-swatches {
+    display: flex; height: 14px;
+    border-radius: 3px; overflow: hidden;
+    border: 1px solid rgba(0,0,0,0.08);
+  }
+  body[data-mode="dark"] .row-header .row-swatches { border-color: rgba(255,255,255,0.08); }
+  .row-header .row-swatch { flex: 1; }
+
+  /* ============================== The cells themselves */
+  .cell {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+    display: flex; flex-direction: column;
+    gap: var(--space-3);
+    min-height: 280px;
+  }
+  .cell-wordmark {
+    font-family: var(--font-display);
+    color: var(--brand);
+    font-size: 56px;
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+    margin: 0;
+  }
+  .cell-wordmark .dot { color: var(--accent); margin-left: 1px; }
+  .cell-heading {
+    font-family: var(--font-display);
+    color: var(--text);
+    font-size: 20px;
+    line-height: 1.18;
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+  .cell-sub {
+    font: 12px/1.5 var(--font-body);
+    color: var(--text-muted);
+    margin: 0;
+  }
+  .cell-body {
+    font: 12px/1.55 var(--font-body);
+    color: var(--text);
+    margin: 0;
+  }
+  .cell-cta {
+    margin-top: auto;
+    display: flex; align-items: center; gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+  .cell-btn {
+    font: 500 11px var(--font-body);
+    padding: 6px 12px;
+    background: var(--accent); color: var(--accent-on);
+    border: none; border-radius: 999px;
+    cursor: pointer;
+  }
+  .cell-tag {
+    font: 500 9px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 3px 6px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent-text);
+  }
+  .cell-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+    margin-right: var(--space-1);
+    display: inline-block;
+  }
+  .cell-rec {
+    font: 500 11px var(--font-body); color: var(--text-muted);
+    display: inline-flex; align-items: center; gap: var(--space-1);
+  }
+
+  /* ============================== Typography variant tunings */
+  .v3w-v2h .cell-wordmark { font-variation-settings: "opsz" 144, "SOFT" 0,  "wght" 900; }
+  .v3w-v2h .cell-heading  { font-variation-settings: "opsz" 144, "SOFT" 0,  "wght" 700; }
+
+  .v3w-v3h .cell-wordmark { font-variation-settings: "opsz" 144, "SOFT" 0,  "wght" 900; }
+  .v3w-v3h .cell-heading  { font-variation-settings: "opsz" 144, "SOFT" 0,  "wght" 800; }
+
+  .v4w-v2h .cell-wordmark { font-variation-settings: "opsz" 144, "SOFT" 60, "wght" 700; }
+  .v4w-v2h .cell-heading  { font-variation-settings: "opsz" 144, "SOFT" 0,  "wght" 700; }
+
+  .v4w-v3h .cell-wordmark { font-variation-settings: "opsz" 144, "SOFT" 60, "wght" 700; }
+  .v4w-v3h .cell-heading  { font-variation-settings: "opsz" 144, "SOFT" 0,  "wght" 800; }
+
+  /* ============================== Palette assignments (per-cell scoped vars)
+     We use surface-raised values as cell --surface so the cells stand out
+     against the page background. */
+
+  /* F1 — Forest-Teal Bridge v2 */
+  .cell.f1 {
+    --brand: #1e4d4a; --text: #1a2820; --text-muted: #5a6c5e;
+    --surface: #fcfbf4; --border: #c8d3c4; --border-strong: #487d68;
+    --accent: #e27d60; --accent-soft: #f8e0d6;
+    --accent-text: #8a3c25; --accent-on: #fcfbf4;
+  }
+  body[data-mode="dark"] .cell.f1 {
+    --brand: #7eb1ae; --text: #f0ede4; --text-muted: #a5b0a5;
+    --surface: #102f2b; --border: #1c3f3c; --border-strong: #85ae8e;
+    --accent: #e27d60; --accent-soft: #2e1d18;
+    --accent-text: #e8a08a; --accent-on: #07201c;
+  }
+
+  /* F2 — Bluer Bridge */
+  .cell.f2 {
+    --brand: #1e3d54; --text: #15203a; --text-muted: #5a6877;
+    --surface: #fcfbf4; --border: #c5cfd0; --border-strong: #4a6680;
+    --accent: #e27d60; --accent-soft: #f8e0d6;
+    --accent-text: #8a3c25; --accent-on: #fcfbf4;
+  }
+  body[data-mode="dark"] .cell.f2 {
+    --brand: #7ea4b1; --text: #f0ede4; --text-muted: #a5b5c0;
+    --surface: #0e2a38; --border: #1c3548; --border-strong: #6a8fa0;
+    --accent: #e27d60; --accent-soft: #2e1d18;
+    --accent-text: #e8a08a; --accent-on: #051a24;
+  }
+
+  /* F3 — Quieter Coral Bridge */
+  .cell.f3 {
+    --brand: #1e4d4a; --text: #1a2820; --text-muted: #5a6c5e;
+    --surface: #fcfbf4; --border: #c8d3c4; --border-strong: #487d68;
+    --accent: #d08d7a; --accent-soft: #f1ddd2;
+    --accent-text: #7a3a26; --accent-on: #fcfbf4;
+  }
+  body[data-mode="dark"] .cell.f3 {
+    --brand: #7eb1ae; --text: #f0ede4; --text-muted: #a5b0a5;
+    --surface: #102f2b; --border: #1c3f3c; --border-strong: #85ae8e;
+    --accent: #d08d7a; --accent-soft: #2a1d18;
+    --accent-text: #dba391; --accent-on: #07201c;
+  }
+
+  /* F4 — Softest Bridge (all three dials) */
+  .cell.f4 {
+    --brand: #1e3d54; --text: #1a2334; --text-muted: #5a6877;
+    --surface: #fcfbf4; --border: #c5cfd0; --border-strong: #4a6680;
+    --accent: #d08d7a; --accent-soft: #f1ddd2;
+    --accent-text: #7a3a26; --accent-on: #fcfbf4;
+  }
+  body[data-mode="dark"] .cell.f4 {
+    --brand: #7ea4b1; --text: #f0ede4; --text-muted: #a5b5c0;
+    --surface: #143245; --border: #1f3d4f; --border-strong: #6a8fa0;
+    --accent: #d08d7a; --accent-soft: #2a1d18;
+    --accent-text: #dba391; --accent-on: #0a2230;
+  }
+
+  /* ============================== Closing read-out */
+  .readout {
+    max-width: 1100px; margin: 0 auto;
+    padding: var(--space-8) var(--space-6) var(--space-12);
+    border-top: 1px solid rgba(0,0,0,0.08);
+    font-size: 14px; line-height: 1.6;
+  }
+  body[data-mode="dark"] .readout { border-top-color: rgba(255,255,255,0.08); }
+  .readout h3 {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 600;
+    font-size: 22px; letter-spacing: -0.02em;
+    margin: 0 0 var(--space-3);
+  }
+  .readout p { margin: 0 0 var(--space-3); opacity: 0.85; }
+  .readout ul { margin: 0 0 var(--space-3); padding-left: var(--space-5); opacity: 0.85; }
+  .readout li { margin-bottom: var(--space-2); }
+</style>
+</head>
+
+<body data-mode="light">
+<aside class="archived-banner" style="position: sticky; top: 0; z-index: 9999; background: #fff3cd; border-bottom: 3px solid #f59e0b; padding: 12px 20px; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.5; color: #78350f; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+  <strong>ARCHIVED EXPLORATION.</strong> This file is preserved for historical reference only. The Mynk brand was finalized as <strong>Mynka Blue</strong> on 2026-05-19. Canonical visual reference: <a href="../palette-mocks-FINAL-mynka-blue.html" style="color: #78350f; text-decoration: underline;">palette-mocks-FINAL-mynka-blue.html</a>. Decision doc: <code style="background:rgba(0,0,0,0.08);padding:1px 5px;border-radius:3px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;">docs/MYNK-BRAND-PHASE-2-DECISIONS.md</code>.
+</aside>
+
+<header class="chrome-header">
+  <div>
+    <div class="chrome-title">Mynk — round 5: the full matrix</div>
+    <div class="chrome-sub">4 palettes × 4 typography combos · 16 cells · 2026-05-19</div>
+  </div>
+  <div class="chrome-controls">
+    <button class="toggle-btn" data-mode-btn="light" aria-pressed="true">Light</button>
+    <button class="toggle-btn" data-mode-btn="dark" aria-pressed="false">Dark</button>
+  </div>
+</header>
+
+<section class="intro">
+  <h2>Every palette × every typography combination, in one grid.</h2>
+  <p>Round 4 showed F1–F4 with one shared typography choice, and the typography matrix in isolation against F1 only. You wanted to see all the cross-cuts. So: 4 rows (the four palette softness variants) × 4 columns (V3w+V2h, V3w+V3h, V4w+V2h, V4w+V3h) = 16 specimens.</p>
+  <p>Each cell is intentionally compact — wordmark, heading, sub, body, CTA, AI tag, recording dot. Enough to read the typography and palette together without the visual noise of a full mocked dashboard. Toggle light/dark for the dark-mode pass.</p>
+  <div class="callout">
+    <strong>How to use this:</strong> First scan vertically — which palette feels right across all four typography variants? Then scan horizontally — which typography combination holds up across all four palettes? The winner is the cell whose <em>row</em> and <em>column</em> both feel like the right answer. If you can't find one, the constraint is in either the palette set or the typography set, not in the matrix.
+  </div>
+</section>
+
+<div class="full-matrix">
+
+  <!-- ============= Header row ============= -->
+  <div class="matrix-corner">palette &nbsp;\&nbsp; type →</div>
+  <div class="col-header">V3w + V2h<span class="axis">heaviest mark · crisp heading</span></div>
+  <div class="col-header">V3w + V3h<span class="axis">heaviest mark · heavy heading</span></div>
+  <div class="col-header">V4w + V2h<span class="axis">soft mark · crisp heading</span></div>
+  <div class="col-header">V4w + V3h<span class="axis">soft mark · heavy heading</span></div>
+
+  <!-- ============= F1 row ============= -->
+  <div class="row-header">
+    <div class="row-name">F1</div>
+    <div class="row-tag">Forest-Teal<br>Bridge v2</div>
+    <div class="row-swatches">
+      <div class="row-swatch" style="background:#1e4d4a"></div>
+      <div class="row-swatch" style="background:#487d68"></div>
+      <div class="row-swatch" style="background:#f5f4ec"></div>
+      <div class="row-swatch" style="background:#e27d60"></div>
+    </div>
+  </div>
+  <article class="cell f1 v3w-v2h" data-label="F1 · V3w+V2h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+    <p class="cell-sub">Stay present. We handle the memory.</p>
+    <p class="cell-body">Every session captured, transcribed, turned into a clean parent-readable note.</p>
+    <div class="cell-cta">
+      <button class="cell-btn">Start trial</button>
+      <span class="cell-tag">AI notes</span>
+      <span class="cell-rec"><span class="cell-dot"></span>23:14</span>
+    </div>
+  </article>
+  <article class="cell f1 v3w-v3h" data-label="F1 · V3w+V3h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+    <p class="cell-sub">Stay present. We handle the memory.</p>
+    <p class="cell-body">Every session captured, transcribed, turned into a clean parent-readable note.</p>
+    <div class="cell-cta">
+      <button class="cell-btn">Start trial</button>
+      <span class="cell-tag">AI notes</span>
+      <span class="cell-rec"><span class="cell-dot"></span>23:14</span>
+    </div>
+  </article>
+  <article class="cell f1 v4w-v2h" data-label="F1 · V4w+V2h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+    <p class="cell-sub">Stay present. We handle the memory.</p>
+    <p class="cell-body">Every session captured, transcribed, turned into a clean parent-readable note.</p>
+    <div class="cell-cta">
+      <button class="cell-btn">Start trial</button>
+      <span class="cell-tag">AI notes</span>
+      <span class="cell-rec"><span class="cell-dot"></span>23:14</span>
+    </div>
+  </article>
+  <article class="cell f1 v4w-v3h" data-label="F1 · V4w+V3h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+    <p class="cell-sub">Stay present. We handle the memory.</p>
+    <p class="cell-body">Every session captured, transcribed, turned into a clean parent-readable note.</p>
+    <div class="cell-cta">
+      <button class="cell-btn">Start trial</button>
+      <span class="cell-tag">AI notes</span>
+      <span class="cell-rec"><span class="cell-dot"></span>23:14</span>
+    </div>
+  </article>
+
+  <!-- ============= F2 row ============= -->
+  <div class="row-header">
+    <div class="row-name">F2</div>
+    <div class="row-tag">Bluer<br>Bridge</div>
+    <div class="row-swatches">
+      <div class="row-swatch" style="background:#1e3d54"></div>
+      <div class="row-swatch" style="background:#4a6680"></div>
+      <div class="row-swatch" style="background:#f5f4ec"></div>
+      <div class="row-swatch" style="background:#e27d60"></div>
+    </div>
+  </div>
+  <article class="cell f2 v3w-v2h" data-label="F2 · V3w+V2h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+    <p class="cell-sub">Stay present. We handle the memory.</p>
+    <p class="cell-body">Every session captured, transcribed, turned into a clean parent-readable note.</p>
+    <div class="cell-cta">
+      <button class="cell-btn">Start trial</button>
+      <span class="cell-tag">AI notes</span>
+      <span class="cell-rec"><span class="cell-dot"></span>23:14</span>
+    </div>
+  </article>
+  <article class="cell f2 v3w-v3h" data-label="F2 · V3w+V3h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+    <p class="cell-sub">Stay present. We handle the memory.</p>
+    <p class="cell-body">Every session captured, transcribed, turned into a clean parent-readable note.</p>
+    <div class="cell-cta">
+      <button class="cell-btn">Start trial</button>
+      <span class="cell-tag">AI notes</span>
+      <span class="cell-rec"><span class="cell-dot"></span>23:14</span>
+    </div>
+  </article>
+  <article class="cell f2 v4w-v2h" data-label="F2 · V4w+V2h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+    <p class="cell-sub">Stay present. We handle the memory.</p>
+    <p class="cell-body">Every session captured, transcribed, turned into a clean parent-readable note.</p>
+    <div class="cell-cta">
+      <button class="cell-btn">Start trial</button>
+      <span class="cell-tag">AI notes</span>
+      <span class="cell-rec"><span class="cell-dot"></span>23:14</span>
+    </div>
+  </article>
+  <article class="cell f2 v4w-v3h" data-label="F2 · V4w+V3h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+    <p class="cell-sub">Stay present. We handle the memory.</p>
+    <p class="cell-body">Every session captured, transcribed, turned into a clean parent-readable note.</p>
+    <div class="cell-cta">
+      <button class="cell-btn">Start trial</button>
+      <span class="cell-tag">AI notes</span>
+      <span class="cell-rec"><span class="cell-dot"></span>23:14</span>
+    </div>
+  </article>
+
+  <!-- ============= F3 row ============= -->
+  <div class="row-header">
+    <div class="row-name">F3</div>
+    <div class="row-tag">Quieter<br>Coral Bridge</div>
+    <div class="row-swatches">
+      <div class="row-swatch" style="background:#1e4d4a"></div>
+      <div class="row-swatch" style="background:#487d68"></div>
+      <div class="row-swatch" style="background:#f5f4ec"></div>
+      <div class="row-swatch" style="background:#d08d7a"></div>
+    </div>
+  </div>
+  <article class="cell f3 v3w-v2h" data-label="F3 · V3w+V2h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+    <p class="cell-sub">Stay present. We handle the memory.</p>
+    <p class="cell-body">Every session captured, transcribed, turned into a clean parent-readable note.</p>
+    <div class="cell-cta">
+      <button class="cell-btn">Start trial</button>
+      <span class="cell-tag">AI notes</span>
+      <span class="cell-rec"><span class="cell-dot"></span>23:14</span>
+    </div>
+  </article>
+  <article class="cell f3 v3w-v3h" data-label="F3 · V3w+V3h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+    <p class="cell-sub">Stay present. We handle the memory.</p>
+    <p class="cell-body">Every session captured, transcribed, turned into a clean parent-readable note.</p>
+    <div class="cell-cta">
+      <button class="cell-btn">Start trial</button>
+      <span class="cell-tag">AI notes</span>
+      <span class="cell-rec"><span class="cell-dot"></span>23:14</span>
+    </div>
+  </article>
+  <article class="cell f3 v4w-v2h" data-label="F3 · V4w+V2h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+    <p class="cell-sub">Stay present. We handle the memory.</p>
+    <p class="cell-body">Every session captured, transcribed, turned into a clean parent-readable note.</p>
+    <div class="cell-cta">
+      <button class="cell-btn">Start trial</button>
+      <span class="cell-tag">AI notes</span>
+      <span class="cell-rec"><span class="cell-dot"></span>23:14</span>
+    </div>
+  </article>
+  <article class="cell f3 v4w-v3h" data-label="F3 · V4w+V3h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+    <p class="cell-sub">Stay present. We handle the memory.</p>
+    <p class="cell-body">Every session captured, transcribed, turned into a clean parent-readable note.</p>
+    <div class="cell-cta">
+      <button class="cell-btn">Start trial</button>
+      <span class="cell-tag">AI notes</span>
+      <span class="cell-rec"><span class="cell-dot"></span>23:14</span>
+    </div>
+  </article>
+
+  <!-- ============= F4 row ============= -->
+  <div class="row-header">
+    <div class="row-name">F4</div>
+    <div class="row-tag">Softest Bridge<br>(all dials)</div>
+    <div class="row-swatches">
+      <div class="row-swatch" style="background:#1e3d54"></div>
+      <div class="row-swatch" style="background:#4a6680"></div>
+      <div class="row-swatch" style="background:#f5f4ec"></div>
+      <div class="row-swatch" style="background:#d08d7a"></div>
+    </div>
+  </div>
+  <article class="cell f4 v3w-v2h" data-label="F4 · V3w+V2h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+    <p class="cell-sub">Stay present. We handle the memory.</p>
+    <p class="cell-body">Every session captured, transcribed, turned into a clean parent-readable note.</p>
+    <div class="cell-cta">
+      <button class="cell-btn">Start trial</button>
+      <span class="cell-tag">AI notes</span>
+      <span class="cell-rec"><span class="cell-dot"></span>23:14</span>
+    </div>
+  </article>
+  <article class="cell f4 v3w-v3h" data-label="F4 · V3w+V3h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+    <p class="cell-sub">Stay present. We handle the memory.</p>
+    <p class="cell-body">Every session captured, transcribed, turned into a clean parent-readable note.</p>
+    <div class="cell-cta">
+      <button class="cell-btn">Start trial</button>
+      <span class="cell-tag">AI notes</span>
+      <span class="cell-rec"><span class="cell-dot"></span>23:14</span>
+    </div>
+  </article>
+  <article class="cell f4 v4w-v2h" data-label="F4 · V4w+V2h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+    <p class="cell-sub">Stay present. We handle the memory.</p>
+    <p class="cell-body">Every session captured, transcribed, turned into a clean parent-readable note.</p>
+    <div class="cell-cta">
+      <button class="cell-btn">Start trial</button>
+      <span class="cell-tag">AI notes</span>
+      <span class="cell-rec"><span class="cell-dot"></span>23:14</span>
+    </div>
+  </article>
+  <article class="cell f4 v4w-v3h" data-label="F4 · V4w+V3h">
+    <h1 class="cell-wordmark">Mynk<span class="dot">·</span></h1>
+    <h2 class="cell-heading">You teach. Mynk takes the notes.</h2>
+    <p class="cell-sub">Stay present. We handle the memory.</p>
+    <p class="cell-body">Every session captured, transcribed, turned into a clean parent-readable note.</p>
+    <div class="cell-cta">
+      <button class="cell-btn">Start trial</button>
+      <span class="cell-tag">AI notes</span>
+      <span class="cell-rec"><span class="cell-dot"></span>23:14</span>
+    </div>
+  </article>
+
+</div>
+
+<section class="readout">
+  <h3>How to use the matrix to land somewhere</h3>
+  <p>The matrix isn't trying to pick a winner — it's giving you 16 anchored data points so each family member can vote on the one cell that holds together best. Suggested workflow:</p>
+  <ul>
+    <li><strong>Step 1 — each person picks a row.</strong> Just stare at each row left-to-right. Which palette do you find your eye returning to <em>across all four typography variants</em>? That row is your palette pick. If everyone picks a different row, you've found the real disagreement and it's not about typography.</li>
+    <li><strong>Step 2 — each person picks a column.</strong> Same idea vertically. Which typography combo holds up across all four palettes? That's the typography pick. If two columns tie, switch back to row mode and see which combo plays best with the row you already picked.</li>
+    <li><strong>Step 3 — confirm the intersection.</strong> Your row × column = your cell. Look at just that cell and ask: "is this Mynk?" If yes, ship it. If no, the constraint is in one of your other choices — try a different row or column and see if the intersection feels more right.</li>
+  </ul>
+  <p style="font-size: 13px; opacity: 0.7; margin-top: var(--space-4);">My priors after building this: <strong>F2 × V4w+V2h</strong> and <strong>F1 × V4w+V2h</strong> are the two strongest cells. The V4 wordmark + V2 heading column generally holds up best across palettes (soft mark, crisp message — clean hierarchy). F1 is the most distinctive palette; F2 is the calmer palette daughter will likely prefer. F3 sometimes reads as "F1 with a sleepy CTA." F4 sometimes reads as "generic calm SaaS." But trust the family vote over my priors — the matrix is the actual deliverable here.</p>
+</section>
+
+<script>
+  const body = document.body;
+  const btns = document.querySelectorAll('[data-mode-btn]');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const m = btn.dataset.modeBtn;
+      body.setAttribute('data-mode', m);
+      btns.forEach(b => b.setAttribute('aria-pressed', b.dataset.modeBtn === m ? 'true' : 'false'));
+    });
+  });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mynk — Fraunces "pop more" variants</title>
+
+<!-- Fraunces is a variable font with FIVE axes: ital, opsz, slnt, SOFT, wght.
+     We pull the full ital × opsz × SOFT × wght cube so each variant below
+     can dial any combination via font-variation-settings.                    -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,SOFT,wght@0,9..144,0..100,400..900;1,9..144,0..100,400..900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  *,*::before,*::after { box-sizing: border-box; }
+  :root {
+    /* Concept 3 base, same as the parent typography mock page */
+    --brand: #1e4d4a;
+    --text: #1e4d4a;
+    --text-muted: #6b7c7a;
+    --surface: #f7f5f0;
+    --surface-raised: #fdfcf8;
+    --border: #d6dad5;
+    --border-strong: #aab2ad;
+    --accent: #e27d60;
+    --accent-soft: #f8e0d6;
+    --accent-text: #8a3c25;
+    --accent-on: #fdfcf8;
+
+    --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+
+    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+    --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-12: 48px;
+    --radius-sm: 6px; --radius-md: 10px; --radius-lg: 16px;
+  }
+
+  html, body {
+    margin: 0; padding: 0;
+    background: #efece6; color: #1a1a1f;
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .chrome-header {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(239,236,230,0.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    padding: var(--space-4) var(--space-6);
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-6);
+  }
+  .chrome-title {
+    font: 600 18px/1 "Fraunces", serif;
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 700;
+    letter-spacing: -0.02em;
+  }
+  .chrome-sub {
+    font: 13px/1 var(--font-mono); opacity: 0.6;
+  }
+
+  .intro {
+    max-width: 1100px; margin: 0 auto;
+    padding: var(--space-8) var(--space-6) var(--space-6);
+    font-size: 14px; line-height: 1.65;
+  }
+  .intro h2 {
+    font-family: "Fraunces", serif;
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 600;
+    font-size: 30px; letter-spacing: -0.025em; margin: 0 0 var(--space-3);
+  }
+  .intro p { margin: 0 0 var(--space-3); opacity: 0.85; }
+  .intro .ref {
+    margin-top: var(--space-4); padding: var(--space-3) var(--space-4);
+    background: rgba(0,0,0,0.04); border-left: 3px solid var(--accent);
+    border-radius: var(--radius-sm); font-size: 13px;
+  }
+  .intro .ref strong { color: #1e4d4a; }
+
+  /* ============================== Hero comparison strip
+     Six wordmarks side-by-side at scale. The fast "which one pops?" view.   */
+  .hero-strip-wrap {
+    max-width: 1800px; margin: 0 auto;
+    padding: 0 var(--space-6) var(--space-6);
+  }
+  .hero-strip-title {
+    font-family: var(--font-body); font-weight: 600; font-size: 13px;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: #5a5a5a; margin-bottom: var(--space-3);
+  }
+  .hero-strip {
+    display: grid; grid-template-columns: repeat(6, 1fr);
+    gap: var(--space-3);
+  }
+  @media (max-width: 1400px) { .hero-strip { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 720px) { .hero-strip { grid-template-columns: repeat(2, 1fr); } }
+
+  .hero-cell {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-5) var(--space-3);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    min-height: 180px;
+    text-align: center;
+    cursor: default;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+  .hero-cell:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(30,77,74,0.10);
+  }
+  .hero-wordmark {
+    font-family: "Fraunces", serif;
+    color: var(--brand);
+    font-size: 88px;
+    line-height: 1;
+    margin: 0;
+    letter-spacing: -0.025em;
+  }
+  .hero-wordmark .dot { color: var(--accent); margin-left: 2px; }
+  .hero-label {
+    margin-top: var(--space-3);
+    font: 500 11px/1.3 var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted);
+  }
+  .hero-label strong { color: var(--text); font-weight: 600; display: block; margin-bottom: 2px; font-family: var(--font-body); }
+
+  /* ============================== Full card grid */
+  main {
+    padding: var(--space-6) var(--space-6) var(--space-12);
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-6);
+    max-width: 1600px; margin: 0 auto;
+  }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+  .pop-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .pop-card-header {
+    padding: var(--space-4) var(--space-5);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-raised);
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: var(--space-3);
+  }
+  .pop-card-name {
+    font: 600 15px/1.2 var(--font-body);
+    color: var(--text);
+  }
+  .pop-card-axis {
+    font: 500 10px/1.4 var(--font-mono);
+    color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.05em;
+    text-align: right;
+  }
+
+  .specimens {
+    padding: var(--space-6);
+    display: flex; flex-direction: column;
+    gap: var(--space-5);
+  }
+
+  .specimen-wordmark {
+    font-family: "Fraunces", serif;
+    color: var(--brand);
+    font-size: 120px;
+    line-height: 1;
+    margin: 0;
+    letter-spacing: -0.025em;
+  }
+  .specimen-wordmark .dot { color: var(--accent); margin-left: 2px; }
+
+  .specimen-heading {
+    font-family: "Fraunces", serif;
+    color: var(--text);
+    font-size: 34px;
+    line-height: 1.12;
+    letter-spacing: -0.025em;
+    margin: 0 0 var(--space-3);
+  }
+  .specimen-sub {
+    font: 400 15px/1.5 var(--font-body);
+    color: var(--text-muted);
+    margin: 0;
+  }
+  .specimen-body {
+    font: 400 14px/1.6 var(--font-body);
+    color: var(--text);
+    margin: 0;
+    max-width: 56ch;
+  }
+  .specimen-body em {
+    font-style: italic;
+    color: var(--accent-text);
+  }
+
+  .specimen-ui {
+    display: flex; align-items: center; gap: var(--space-3);
+    flex-wrap: wrap;
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+  }
+  .ui-btn {
+    font: 500 13px var(--font-body);
+    padding: 8px 14px;
+    background: var(--accent); color: var(--accent-on);
+    border: none; border-radius: 999px; cursor: pointer;
+  }
+  .ui-label {
+    font: 500 12px var(--font-body);
+    color: var(--text);
+  }
+  .ui-tag {
+    font: 500 10px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    padding: 4px 8px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent-text);
+  }
+  .ui-time {
+    font: 12px var(--font-mono);
+    color: var(--text-muted);
+    margin-left: auto;
+  }
+
+  .specimen-ai {
+    padding: var(--space-4) var(--space-5);
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius-sm);
+  }
+  .specimen-ai-label {
+    font: 500 10px var(--font-mono);
+    color: var(--accent-text);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: var(--space-2);
+  }
+  .specimen-ai-body {
+    font-family: "Fraunces", serif;
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--text);
+    margin: 0;
+  }
+
+  .pop-card-notes {
+    padding: var(--space-4) var(--space-5);
+    border-top: 1px solid var(--border);
+    background: var(--surface-raised);
+    font: 13px/1.55 var(--font-body);
+    color: var(--text-muted);
+  }
+  .pop-card-notes strong { color: var(--text); font-weight: 600; }
+  .pop-card-notes .axis {
+    margin-top: var(--space-2);
+    display: grid; grid-template-columns: auto 1fr; gap: var(--space-2) var(--space-3);
+    font-size: 12px;
+  }
+  .pop-card-notes .axis dt {
+    font: 600 11px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--text); white-space: nowrap;
+  }
+  .pop-card-notes .axis dd {
+    margin: 0;
+    color: var(--text-muted);
+  }
+
+  /* ============================== Per-variant Fraunces tunings.
+     The cascade reaches both .specimen-wordmark / .specimen-heading
+     / .specimen-ai-body / .hero-wordmark, since they all use Fraunces. */
+
+  /* V1 — current B (reference) */
+  .v1 .specimen-wordmark,
+  .v1 .specimen-heading,
+  .v1 .specimen-ai-body { font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 500; }
+  .v1 .specimen-ai-body { font-variation-settings: "opsz" 14, "SOFT" 0, "wght" 400; }
+
+  /* V2 — bolder (wght 700) */
+  .v2 .specimen-wordmark { font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700; }
+  .v2 .specimen-heading  { font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700; }
+  .v2 .specimen-ai-body  { font-variation-settings: "opsz" 14, "SOFT" 0, "wght" 500; }
+
+  /* V3 — heaviest (wght 900) */
+  .v3 .specimen-wordmark { font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 900; }
+  .v3 .specimen-heading  { font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 800; }
+  .v3 .specimen-ai-body  { font-variation-settings: "opsz" 14, "SOFT" 0, "wght" 500; }
+
+  /* V4 — bolder + softer (wght 700, SOFT 60) */
+  .v4 .specimen-wordmark { font-variation-settings: "opsz" 144, "SOFT" 60, "wght" 700; }
+  .v4 .specimen-heading  { font-variation-settings: "opsz" 144, "SOFT" 60, "wght" 700; }
+  .v4 .specimen-ai-body  { font-variation-settings: "opsz" 14, "SOFT" 60, "wght" 500; }
+
+  /* V5 — italic wordmark + bold body headings */
+  .v5 .specimen-wordmark { font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700; font-style: italic; }
+  .v5 .specimen-heading  { font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700; }
+  .v5 .specimen-ai-body  { font-variation-settings: "opsz" 14, "SOFT" 0, "wght" 500; font-style: italic; }
+
+  /* V6 — huge + bold (wght 700 at 160px) */
+  .v6 .specimen-wordmark { font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700; font-size: 160px; letter-spacing: -0.03em; }
+  .v6 .specimen-heading  { font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700; font-size: 40px; }
+  .v6 .specimen-ai-body  { font-variation-settings: "opsz" 14, "SOFT" 0, "wght" 500; }
+
+  /* Hero strip — each cell sets its own variation in addition to the base */
+  .hero-cell.h1 .hero-wordmark { font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 500; }
+  .hero-cell.h2 .hero-wordmark { font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700; }
+  .hero-cell.h3 .hero-wordmark { font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 900; }
+  .hero-cell.h4 .hero-wordmark { font-variation-settings: "opsz" 144, "SOFT" 60, "wght" 700; }
+  .hero-cell.h5 .hero-wordmark { font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700; font-style: italic; }
+  .hero-cell.h6 .hero-wordmark { font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700; font-size: 110px; }
+</style>
+</head>
+
+<body>
+<aside class="archived-banner" style="position: sticky; top: 0; z-index: 9999; background: #fff3cd; border-bottom: 3px solid #f59e0b; padding: 12px 20px; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.5; color: #78350f; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+  <strong>ARCHIVED EXPLORATION.</strong> This file is preserved for historical reference only. The Mynk brand was finalized as <strong>Mynka Blue</strong> on 2026-05-19. Canonical visual reference: <a href="../palette-mocks-FINAL-mynka-blue.html" style="color: #78350f; text-decoration: underline;">palette-mocks-FINAL-mynka-blue.html</a>. Decision doc: <code style="background:rgba(0,0,0,0.08);padding:1px 5px;border-radius:3px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;">docs/MYNK-BRAND-PHASE-2-DECISIONS.md</code>.
+</aside>
+
+<header class="chrome-header">
+  <div>
+    <div class="chrome-title">Mynk — Fraunces pop variants</div>
+    <div class="chrome-sub">for the daughter · "B but louder" · 2026-05-19</div>
+  </div>
+</header>
+
+<section class="intro">
+  <h2>Six ways to make "B" pop more.</h2>
+  <p>System B from the typography mocks uses Fraunces at weight 500 — restrained on purpose. But Fraunces is a <em>variable</em> font with weight (100–900), optical-size, italic, and the unusual SOFT axis (sharp ↔ rounded). Lots of room to dial up "pop" without changing the family.</p>
+  <div class="ref">
+    <strong>What "pop" can mean here, technically:</strong> heavier stroke (weight), bigger size (scale), sharper contrast (opsz at display sizes), softer/friendlier forms (SOFT axis), or italic for personality. Each variant below pulls one or two of these levers so you can compare cleanly.
+  </div>
+</section>
+
+<section class="hero-strip-wrap">
+  <div class="hero-strip-title">Wordmark comparison — quick A/B/C/D/E/F</div>
+  <div class="hero-strip">
+    <div class="hero-cell h1">
+      <h1 class="hero-wordmark">Mynk<span class="dot">·</span></h1>
+      <div class="hero-label"><strong>V1 · Current</strong>wght 500</div>
+    </div>
+    <div class="hero-cell h2">
+      <h1 class="hero-wordmark">Mynk<span class="dot">·</span></h1>
+      <div class="hero-label"><strong>V2 · Bolder</strong>wght 700</div>
+    </div>
+    <div class="hero-cell h3">
+      <h1 class="hero-wordmark">Mynk<span class="dot">·</span></h1>
+      <div class="hero-label"><strong>V3 · Heaviest</strong>wght 900</div>
+    </div>
+    <div class="hero-cell h4">
+      <h1 class="hero-wordmark">Mynk<span class="dot">·</span></h1>
+      <div class="hero-label"><strong>V4 · Soft + Bold</strong>wght 700 · soft 60</div>
+    </div>
+    <div class="hero-cell h5">
+      <h1 class="hero-wordmark">Mynk<span class="dot">·</span></h1>
+      <div class="hero-label"><strong>V5 · Italic bold</strong>wght 700 italic</div>
+    </div>
+    <div class="hero-cell h6">
+      <h1 class="hero-wordmark">Mynk<span class="dot">·</span></h1>
+      <div class="hero-label"><strong>V6 · Huge + Bold</strong>110px · wght 700</div>
+    </div>
+  </div>
+</section>
+
+<main>
+
+  <!-- ============================== V1 — Current (reference) -->
+  <article class="pop-card v1">
+    <div class="pop-card-header">
+      <div class="pop-card-name">V1 · Current (reference)</div>
+      <div class="pop-card-axis">wght 500 · opsz 144 · soft 0</div>
+    </div>
+    <div class="specimens">
+      <h1 class="specimen-wordmark">Mynk<span class="dot">·</span></h1>
+      <div>
+        <h2 class="specimen-heading">You teach. Mynk takes the notes.</h2>
+        <p class="specimen-sub">Stay present in the session. We handle the memory.</p>
+      </div>
+      <p class="specimen-body">Every session is captured, transcribed, and turned into a clean note your student's parent can actually read. You stay in the conversation; the paperwork takes care of itself. <em>Built for tutors who'd rather teach than type.</em></p>
+      <div class="specimen-ui">
+        <button class="ui-btn">Start free trial</button>
+        <span class="ui-label">Aiden K.</span>
+        <span class="ui-tag">AI notes</span>
+        <span class="ui-time">23:14</span>
+      </div>
+      <div class="specimen-ai">
+        <div class="specimen-ai-label">Session summary</div>
+        <p class="specimen-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; he still needs reps on completing the square. Recommended: 20 minutes of practice before next session.</p>
+      </div>
+    </div>
+    <div class="pop-card-notes">
+      <strong>What this is.</strong> Same as B in <code>typography-mocks.html</code>. Reference point so the next five can be compared against it.
+      <dl class="axis">
+        <dt>Pop level</dt><dd>Restrained — designer-y, refined.</dd>
+        <dt>Risk</dt><dd>The daughter's feedback: doesn't pop enough.</dd>
+      </dl>
+    </div>
+  </article>
+
+  <!-- ============================== V2 — Bolder (wght 700) -->
+  <article class="pop-card v2">
+    <div class="pop-card-header">
+      <div class="pop-card-name">V2 · Bolder (wght 700)</div>
+      <div class="pop-card-axis">wght 700 · opsz 144 · soft 0</div>
+    </div>
+    <div class="specimens">
+      <h1 class="specimen-wordmark">Mynk<span class="dot">·</span></h1>
+      <div>
+        <h2 class="specimen-heading">You teach. Mynk takes the notes.</h2>
+        <p class="specimen-sub">Stay present in the session. We handle the memory.</p>
+      </div>
+      <p class="specimen-body">Every session is captured, transcribed, and turned into a clean note your student's parent can actually read. You stay in the conversation; the paperwork takes care of itself. <em>Built for tutors who'd rather teach than type.</em></p>
+      <div class="specimen-ui">
+        <button class="ui-btn">Start free trial</button>
+        <span class="ui-label">Aiden K.</span>
+        <span class="ui-tag">AI notes</span>
+        <span class="ui-time">23:14</span>
+      </div>
+      <div class="specimen-ai">
+        <div class="specimen-ai-label">Session summary</div>
+        <p class="specimen-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; he still needs reps on completing the square. Recommended: 20 minutes of practice before next session.</p>
+      </div>
+    </div>
+    <div class="pop-card-notes">
+      <strong>What this is.</strong> Single-knob change: weight 500 → 700. Wordmark now has the visual weight of a brand sticker, not a magazine pull-quote. Headings get more presence without being aggressive. Body stays Inter so reading comfort is unchanged.
+      <dl class="axis">
+        <dt>Pop level</dt><dd>Clearly more — but still tasteful.</dd>
+        <dt>Best for</dt><dd>The simplest answer if "she wants more pop, no other complications."</dd>
+        <dt>Risk</dt><dd>Reads slightly more "confident SaaS" and slightly less "literary editorial." A worthwhile trade for most uses.</dd>
+      </dl>
+    </div>
+  </article>
+
+  <!-- ============================== V3 — Heaviest (wght 900) -->
+  <article class="pop-card v3">
+    <div class="pop-card-header">
+      <div class="pop-card-name">V3 · Heaviest (wght 900)</div>
+      <div class="pop-card-axis">wght 900 · opsz 144 · soft 0</div>
+    </div>
+    <div class="specimens">
+      <h1 class="specimen-wordmark">Mynk<span class="dot">·</span></h1>
+      <div>
+        <h2 class="specimen-heading">You teach. Mynk takes the notes.</h2>
+        <p class="specimen-sub">Stay present in the session. We handle the memory.</p>
+      </div>
+      <p class="specimen-body">Every session is captured, transcribed, and turned into a clean note your student's parent can actually read. You stay in the conversation; the paperwork takes care of itself. <em>Built for tutors who'd rather teach than type.</em></p>
+      <div class="specimen-ui">
+        <button class="ui-btn">Start free trial</button>
+        <span class="ui-label">Aiden K.</span>
+        <span class="ui-tag">AI notes</span>
+        <span class="ui-time">23:14</span>
+      </div>
+      <div class="specimen-ai">
+        <div class="specimen-ai-label">Session summary</div>
+        <p class="specimen-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; he still needs reps on completing the square. Recommended: 20 minutes of practice before next session.</p>
+      </div>
+    </div>
+    <div class="pop-card-notes">
+      <strong>What this is.</strong> Wordmark at Fraunces' top weight (black). Maximum thump. The wordmark now reads "logo," not "wordmark in a body of text."
+      <dl class="axis">
+        <dt>Pop level</dt><dd>Maximum.</dd>
+        <dt>Best for</dt><dd>Marketing surfaces — hero of the landing page, social media, app icon. Probably too heavy for in-app navigation.</dd>
+        <dt>Risk</dt><dd>Loses the "calm + warm" register from the brand brief. Reads slightly aggressive at this weight. Could split the difference by using V3 for hero/marketing and V2 for the app chrome.</dd>
+      </dl>
+    </div>
+  </article>
+
+  <!-- ============================== V4 — Bolder + Softer (SOFT 60) -->
+  <article class="pop-card v4">
+    <div class="pop-card-header">
+      <div class="pop-card-name">V4 · Soft + Bold (Fraunces SOFT axis)</div>
+      <div class="pop-card-axis">wght 700 · opsz 144 · soft 60</div>
+    </div>
+    <div class="specimens">
+      <h1 class="specimen-wordmark">Mynk<span class="dot">·</span></h1>
+      <div>
+        <h2 class="specimen-heading">You teach. Mynk takes the notes.</h2>
+        <p class="specimen-sub">Stay present in the session. We handle the memory.</p>
+      </div>
+      <p class="specimen-body">Every session is captured, transcribed, and turned into a clean note your student's parent can actually read. You stay in the conversation; the paperwork takes care of itself. <em>Built for tutors who'd rather teach than type.</em></p>
+      <div class="specimen-ui">
+        <button class="ui-btn">Start free trial</button>
+        <span class="ui-label">Aiden K.</span>
+        <span class="ui-tag">AI notes</span>
+        <span class="ui-time">23:14</span>
+      </div>
+      <div class="specimen-ai">
+        <div class="specimen-ai-label">Session summary</div>
+        <p class="specimen-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; he still needs reps on completing the square. Recommended: 20 minutes of practice before next session.</p>
+      </div>
+    </div>
+    <div class="pop-card-notes">
+      <strong>What this is.</strong> Same weight as V2 (700) but with Fraunces' SOFT axis dialed to 60 — corners get rounded, serifs get gentler. The wordmark gains warmth that the sharper variants don't have. This is the "pop without losing calm" answer.
+      <dl class="axis">
+        <dt>Pop level</dt><dd>Same as V2 in stroke weight, but reads friendlier.</dd>
+        <dt>Best for</dt><dd>If pop is desired but the brand brief's "warm + calm" requirements are non-negotiable.</dd>
+        <dt>Risk</dt><dd>The softer letterforms drift toward "friendly tech product" territory and away from "editorial." Could read more Mailchimp-y, less Stripe-Press-y. Less distinctive than V2.</dd>
+      </dl>
+    </div>
+  </article>
+
+  <!-- ============================== V5 — Italic wordmark -->
+  <article class="pop-card v5">
+    <div class="pop-card-header">
+      <div class="pop-card-name">V5 · Italic wordmark + bold headings</div>
+      <div class="pop-card-axis">wght 700 italic (wordmark + AI) · 700 roman (heading)</div>
+    </div>
+    <div class="specimens">
+      <h1 class="specimen-wordmark">Mynk<span class="dot">·</span></h1>
+      <div>
+        <h2 class="specimen-heading">You teach. Mynk takes the notes.</h2>
+        <p class="specimen-sub">Stay present in the session. We handle the memory.</p>
+      </div>
+      <p class="specimen-body">Every session is captured, transcribed, and turned into a clean note your student's parent can actually read. You stay in the conversation; the paperwork takes care of itself. <em>Built for tutors who'd rather teach than type.</em></p>
+      <div class="specimen-ui">
+        <button class="ui-btn">Start free trial</button>
+        <span class="ui-label">Aiden K.</span>
+        <span class="ui-tag">AI notes</span>
+        <span class="ui-time">23:14</span>
+      </div>
+      <div class="specimen-ai">
+        <div class="specimen-ai-label">Session summary</div>
+        <p class="specimen-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; he still needs reps on completing the square. Recommended: 20 minutes of practice before next session.</p>
+      </div>
+    </div>
+    <div class="pop-card-notes">
+      <strong>What this is.</strong> Fraunces italic is famously well-drawn — entirely different letterforms from the roman, not just slanted. Wordmark in italic + AI summary in italic doubles down on the "tutor's notebook" feeling. The "y" in italic has a swash that gives Mynk genuine personality.
+      <dl class="axis">
+        <dt>Pop level</dt><dd>High — different <em>kind</em> of pop. Personality, not loudness.</dd>
+        <dt>Best for</dt><dd>If the daughter's "pops" is really code for "has personality / feels like a brand a person made."</dd>
+        <dt>Risk</dt><dd>Italic wordmarks are uncommon in SaaS — risk of reading "boutique / artisanal" rather than "infrastructure." Some users will see it and think "is this a tutor's blog?"</dd>
+      </dl>
+    </div>
+  </article>
+
+  <!-- ============================== V6 — Huge + Bold -->
+  <article class="pop-card v6">
+    <div class="pop-card-header">
+      <div class="pop-card-name">V6 · Huge + Bold (160px wordmark)</div>
+      <div class="pop-card-axis">wght 700 · 160px · same soft 0</div>
+    </div>
+    <div class="specimens">
+      <h1 class="specimen-wordmark">Mynk<span class="dot">·</span></h1>
+      <div>
+        <h2 class="specimen-heading">You teach. Mynk takes the notes.</h2>
+        <p class="specimen-sub">Stay present in the session. We handle the memory.</p>
+      </div>
+      <p class="specimen-body">Every session is captured, transcribed, and turned into a clean note your student's parent can actually read. You stay in the conversation; the paperwork takes care of itself. <em>Built for tutors who'd rather teach than type.</em></p>
+      <div class="specimen-ui">
+        <button class="ui-btn">Start free trial</button>
+        <span class="ui-label">Aiden K.</span>
+        <span class="ui-tag">AI notes</span>
+        <span class="ui-time">23:14</span>
+      </div>
+      <div class="specimen-ai">
+        <div class="specimen-ai-label">Session summary</div>
+        <p class="specimen-ai-body">Aiden worked through quadratics today. Confidence is building on factoring; he still needs reps on completing the square. Recommended: 20 minutes of practice before next session.</p>
+      </div>
+    </div>
+    <div class="pop-card-notes">
+      <strong>What this is.</strong> Pop = weight × size. V2's weight (700) but the wordmark scaled to 160px. Sometimes "doesn't pop" really means "isn't big enough." Test that hypothesis with a single move.
+      <dl class="axis">
+        <dt>Pop level</dt><dd>Same stroke contrast as V2 but commanding the page.</dd>
+        <dt>Best for</dt><dd>Landing-page hero, social share images, anywhere the wordmark IS the content. Not for in-app navigation.</dd>
+        <dt>Risk</dt><dd>Only relevant where there's room to play. Useful as a marketing-specific variant rather than a single system-wide answer.</dd>
+      </dl>
+    </div>
+  </article>
+
+</main>
+
+</body>
+</html>

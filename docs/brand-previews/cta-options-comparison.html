@@ -1,0 +1,1047 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mynk — CTA blocker · 4 fix candidates side-by-side</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,SOFT,wght@9..144,0..100,400..900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  *,*::before,*::after { box-sizing: border-box; }
+
+  /* ============================== Mynka Blue tokens (light) */
+  :root {
+    --brand: #1e3d54;
+    --brand-on: #fcfbf4;
+    --text: #15203a;
+    --text-muted: #5a6877;
+    --surface: #f5f4ec;
+    --surface-raised: #fcfbf4;
+    --surface-sunken: #ecebe1;
+    --border: #c5cfd0;
+    --border-strong: #4a6680;
+    --accent: #e27d60;
+    --accent-soft: #f8e0d6;
+    --accent-text: #8a3c25;
+    --accent-on: #fcfbf4;
+
+    /* CTA-fill indirection: each option scopes these. */
+    --cta-fill: var(--accent);
+    --cta-on:   var(--accent-on);
+
+    --font-body: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+    --radius-sm: 6px; --radius-md: 10px; --radius-lg: 16px; --radius-xl: 24px;
+    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+    --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px;
+    --space-12: 48px; --space-16: 64px; --space-20: 80px;
+  }
+  body[data-mode="dark"] {
+    --brand: #7ea4b1;
+    --brand-on: #051a24;
+    --text: #f0ede4;
+    --text-muted: #a5b5c0;
+    --surface: #051a24;
+    --surface-raised: #0e2a38;
+    --surface-sunken: #021018;
+    --border: #1c3548;
+    --border-strong: #6a8fa0;
+    --accent: #e27d60;
+    --accent-soft: #2e1d18;
+    --accent-text: #e8a08a;
+    --accent-on: #051a24;
+  }
+
+  /* ============================== Per-option overrides
+     Each option declares --cta-fill / --cta-on EXPLICITLY (no indirection)
+     to avoid the CSS-custom-property eager-substitution gotcha.
+     Coral remains at --accent for live-dot, AI tints, eyebrow, mic ring. */
+
+  /* OPTION A — dark text on coral. Light: cream -> dark text. Dark: dark text already passed. */
+  .opt-a { --cta-fill: #e27d60; --cta-on: #15203a; }
+  body[data-mode="dark"] .opt-a { --cta-fill: #e27d60; --cta-on: #051a24; }
+
+  /* OPTION B — burnt-coral CTA fill (#8A3C25 = existing --accent-text). Cream text stays.
+     Light: 7.35 AAA. Dark: lift to peach #E8A08A with dark text — 7.53 AAA. */
+  .opt-b { --cta-fill: #8a3c25; --cta-on: #fcfbf4; }
+  body[data-mode="dark"] .opt-b { --cta-fill: #e8a08a; --cta-on: #051a24; }
+
+  /* OPTION C — add a new --accent-strong #9E3D24 for CTA fills only.
+     Light: 6.43 AA. Dark: lift to #B8593F so cream text passes on dark surface. */
+  .opt-c { --cta-fill: #9e3d24; --cta-on: #fcfbf4; }
+  body[data-mode="dark"] .opt-c { --cta-fill: #b8593f; --cta-on: #fcfbf4; }
+
+  /* OPTION D — demote coral from CTA fills entirely. Brand-blue is the sole CTA fill.
+     Light: 10.94 AAA. Dark: 6.64 AA. */
+  .opt-d { --cta-fill: #1e3d54; --cta-on: #fcfbf4; }
+  body[data-mode="dark"] .opt-d { --cta-fill: #7ea4b1; --cta-on: #051a24; }
+
+  html, body {
+    margin: 0; padding: 0;
+    font-family: var(--font-body);
+    font-weight: 400;
+    background: #ebe9e0; color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body[data-mode="dark"] { background: #02080d; }
+
+  /* ============================== Typography classes */
+  .wordmark {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 60, "wght" 700;
+    color: var(--brand);
+    letter-spacing: -0.025em;
+    margin: 0; line-height: 0.95;
+  }
+  .wordmark .dot { color: var(--accent); margin-left: 1px; }
+
+  .heading {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    line-height: 1.12;
+    margin: 0;
+  }
+
+  .prose-mute {
+    font-weight: 400;
+    color: var(--text-muted);
+    line-height: 1.55;
+  }
+
+  .ai-prose {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 14, "SOFT" 30, "wght" 400;
+    color: var(--text);
+    line-height: 1.55;
+  }
+
+  /* ============================== Page chrome (meta-header + nav) */
+  .meta-header {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(235,233,224,0.94);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    padding: var(--space-4) var(--space-6);
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-6);
+  }
+  body[data-mode="dark"] .meta-header {
+    background: rgba(2,8,13,0.94);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .meta-title {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 700;
+    font-size: 16px; letter-spacing: -0.02em;
+    color: var(--text);
+  }
+  .meta-sub {
+    font: 12px var(--font-mono);
+    color: var(--text-muted);
+  }
+  .meta-controls { display: flex; gap: var(--space-2); align-items: center; }
+  .toggle-btn {
+    border: 1px solid currentColor; background: transparent;
+    color: var(--text); padding: 6px 14px; border-radius: 999px;
+    font: 13px var(--font-body); font-weight: 500; cursor: pointer; opacity: 0.7;
+  }
+  .toggle-btn:hover { opacity: 1; }
+  .toggle-btn[aria-pressed="true"] {
+    background: var(--text); color: var(--surface); opacity: 1; border-color: var(--text);
+  }
+
+  /* ============================== Decision banner */
+  .decision-banner {
+    max-width: 1280px; margin: var(--space-8) auto 0;
+    padding: var(--space-5) var(--space-6);
+    background: var(--accent-soft);
+    border: 1px solid var(--accent);
+    border-left-width: 4px;
+    border-radius: var(--radius-md);
+  }
+  .decision-banner-label {
+    font: 600 11px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--accent-text);
+    margin-bottom: var(--space-2);
+  }
+  body[data-mode="dark"] .decision-banner-label { color: var(--accent); }
+  .decision-banner-title {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 700;
+    font-size: 22px; letter-spacing: -0.02em;
+    color: var(--text);
+    margin: 0 0 var(--space-2);
+  }
+  .decision-banner-body {
+    font-size: 14px; line-height: 1.55;
+    color: var(--text);
+    margin: 0;
+  }
+  .decision-banner-body code {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    background: rgba(255,255,255,0.5);
+    padding: 1px 5px; border-radius: 3px;
+  }
+  body[data-mode="dark"] .decision-banner-body code {
+    background: rgba(0,0,0,0.3);
+  }
+
+  /* Intro */
+  .intro {
+    max-width: 980px; margin: 0 auto;
+    padding: var(--space-10) var(--space-6) var(--space-8);
+  }
+  .intro h1 {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 600;
+    font-size: 32px; letter-spacing: -0.025em;
+    margin: 0 0 var(--space-3);
+    color: var(--text);
+  }
+  .intro p {
+    font-weight: 400;
+    font-size: 15px; line-height: 1.6;
+    color: var(--text-muted);
+    margin: 0 0 var(--space-3);
+  }
+  .intro .legend {
+    margin-top: var(--space-5);
+    display: grid; grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-3);
+  }
+  @media (max-width: 700px) { .intro .legend { grid-template-columns: 1fr; } }
+  .intro .legend-item {
+    padding: var(--space-3) var(--space-4);
+    background: rgba(0,0,0,0.04);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    font-size: 13px; line-height: 1.5;
+    color: var(--text);
+  }
+  body[data-mode="dark"] .intro .legend-item { background: rgba(255,255,255,0.04); }
+  .intro .legend-item strong { font-weight: 600; }
+  .intro .legend-item .ratio {
+    font: 600 11px var(--font-mono);
+    color: var(--accent-text);
+    text-transform: uppercase; letter-spacing: 0.04em;
+    margin-left: var(--space-2);
+  }
+  body[data-mode="dark"] .intro .legend-item .ratio { color: var(--accent); }
+
+  /* ============================== Option row */
+  .option-row {
+    max-width: 1280px; margin: 0 auto var(--space-12);
+    padding: 0 var(--space-6);
+  }
+  .option-head {
+    display: flex; align-items: baseline; gap: var(--space-3);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-4);
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--border);
+  }
+  .option-tag {
+    font-family: var(--font-mono);
+    font-size: 11px; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--accent-text);
+    font-weight: 600;
+  }
+  body[data-mode="dark"] .option-tag { color: var(--accent); }
+  .option-name {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700;
+    font-size: 26px; letter-spacing: -0.02em;
+    color: var(--text);
+    margin: 0;
+  }
+  .option-ratio {
+    font: 600 12px var(--font-mono);
+    color: var(--text-muted);
+    margin-left: auto;
+  }
+  .option-ratio.is-pass { color: var(--brand); }
+  body[data-mode="dark"] .option-ratio.is-pass { color: var(--brand); }
+  .option-blurb {
+    font-size: 14px; line-height: 1.55;
+    color: var(--text-muted);
+    margin: 0 0 var(--space-5); max-width: 80ch;
+  }
+  .option-blurb code {
+    font-family: var(--font-mono); font-size: 12px;
+    background: rgba(0,0,0,0.06);
+    padding: 1px 5px; border-radius: 3px;
+    color: var(--text);
+  }
+  body[data-mode="dark"] .option-blurb code { background: rgba(255,255,255,0.08); }
+
+  /* Token swatch row */
+  .swatches {
+    display: flex; gap: var(--space-3); flex-wrap: wrap;
+    margin-bottom: var(--space-5);
+  }
+  .swatch {
+    display: flex; align-items: center; gap: var(--space-2);
+    padding: 5px 10px 5px 5px;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font: 11px var(--font-mono);
+    color: var(--text-muted);
+  }
+  .swatch-chip {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 1px solid rgba(0,0,0,0.12);
+  }
+  body[data-mode="dark"] .swatch-chip { border-color: rgba(255,255,255,0.12); }
+  .swatch-label { color: var(--text); font-weight: 500; }
+
+  /* The 3-up strip of CTA contexts */
+  .strip {
+    display: grid; grid-template-columns: 1.4fr 1fr 1fr;
+    gap: var(--space-5);
+  }
+  @media (max-width: 1100px) { .strip { grid-template-columns: 1fr; } }
+
+  .device {
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background: var(--surface);
+    box-shadow: 0 8px 24px rgba(21, 32, 58, 0.10), 0 1px 3px rgba(21, 32, 58, 0.05);
+    border: 1px solid var(--border);
+  }
+  body[data-mode="dark"] .device {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+  .device-label {
+    padding: 7px var(--space-4);
+    background: var(--surface-sunken);
+    border-bottom: 1px solid var(--border);
+    font: 10px var(--font-mono);
+    color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+
+  /* ============================== Mini Surface 1 — marketing hero */
+  .mh {
+    padding: var(--space-8) var(--space-6) var(--space-6);
+    background: linear-gradient(135deg, var(--surface) 0%, var(--surface-raised) 100%);
+    display: grid; grid-template-columns: 1.1fr 1fr;
+    gap: var(--space-6);
+    align-items: center;
+  }
+  @media (max-width: 800px) { .mh { grid-template-columns: 1fr; } }
+  .mh-eyebrow {
+    font: 500 11px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--accent-text);
+    margin-bottom: var(--space-3);
+  }
+  body[data-mode="dark"] .mh-eyebrow { color: var(--accent); }
+  .mh-head {
+    font-size: 32px; line-height: 1.05;
+    margin-bottom: var(--space-3);
+  }
+  .mh-sub {
+    font-size: 14px; color: var(--text-muted);
+    margin: 0 0 var(--space-4); max-width: 32ch;
+    line-height: 1.5;
+  }
+  .mh-ctas {
+    display: flex; gap: var(--space-2); align-items: center;
+    flex-wrap: wrap;
+  }
+  .mh-foot {
+    margin-top: var(--space-3);
+    font: 11px var(--font-mono); color: var(--text-muted);
+    display: flex; gap: var(--space-2); align-items: center;
+  }
+  .mh-foot .checkmark { color: var(--accent); font-weight: 700; }
+  .mh-foot .dot-sep { opacity: 0.4; }
+
+  /* The hero visual mini card so coral lives somewhere */
+  .mh-visual {
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-3);
+    box-shadow: 0 12px 32px rgba(30, 61, 84, 0.08);
+  }
+  body[data-mode="dark"] .mh-visual {
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  }
+  .mh-visual-meta {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: var(--space-3);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--border);
+  }
+  .mh-visual-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 8px;
+    background: var(--accent-soft); color: var(--accent-text);
+    border-radius: 999px;
+    font: 500 10px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .live-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-soft);
+    animation: pulse 1.8s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 2px var(--accent-soft); }
+    50% { box-shadow: 0 0 0 4px transparent; }
+  }
+  .mh-visual-time {
+    font: 600 12px var(--font-mono);
+    color: var(--text);
+  }
+  .mh-visual-summary {
+    padding: var(--space-2) var(--space-3);
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+  .mh-visual-summary .label {
+    font: 600 9px var(--font-mono);
+    color: var(--accent-text);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    display: block; margin-bottom: 2px;
+  }
+  body[data-mode="dark"] .mh-visual-summary .label { color: var(--accent); }
+  .mh-visual-summary .body {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 14, "SOFT" 30, "wght" 400;
+    font-size: 12px; line-height: 1.5;
+    margin: 0; color: var(--text);
+  }
+
+  /* ============================== Buttons (CTA-driven via --cta-fill / --cta-on) */
+  .btn-primary {
+    background: var(--cta-fill); color: var(--cta-on);
+    font: 500 13px var(--font-body);
+    padding: 8px 16px; border-radius: 999px;
+    border: 1px solid transparent; cursor: pointer;
+    text-decoration: none; display: inline-block;
+  }
+  .btn-ghost {
+    background: transparent; color: var(--text);
+    font: 500 13px var(--font-body);
+    padding: 8px 16px; border-radius: 999px;
+    border: 1px solid var(--border-strong); cursor: pointer;
+    text-decoration: none; display: inline-block;
+  }
+  .btn-lg { font-size: 14px; padding: 10px 20px; }
+
+  /* ============================== Mini Surface 2 — dashboard upnext + new-session header */
+  .ds {
+    padding: var(--space-5) var(--space-5);
+    background: var(--surface);
+  }
+  .ds-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: var(--space-4);
+    gap: var(--space-3);
+  }
+  .ds-greeting {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700;
+    font-size: 20px; letter-spacing: -0.02em;
+    color: var(--text); margin: 0;
+  }
+  .ds-greeting-sub {
+    font-size: 12px; color: var(--text-muted); margin: 2px 0 0;
+  }
+
+  .ds-upnext {
+    padding: var(--space-4) var(--space-5);
+    background: var(--brand); color: var(--brand-on);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-3);
+  }
+  .ds-upnext-label {
+    font: 500 10px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    opacity: 0.7; margin-bottom: var(--space-2);
+  }
+  .ds-upnext-name {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700;
+    font-size: 18px; letter-spacing: -0.02em;
+    line-height: 1.1; margin: 0 0 var(--space-2);
+  }
+  .ds-upnext-time {
+    font: 12px var(--font-mono); opacity: 0.8;
+    margin-bottom: var(--space-3);
+  }
+  .ds-upnext-cta {
+    background: var(--cta-fill); color: var(--cta-on);
+    font: 500 12px var(--font-body);
+    padding: 7px 14px; border-radius: 999px;
+    border: none; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+    text-decoration: none;
+  }
+
+  .ds-pending {
+    padding: var(--space-3) var(--space-4);
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+  .ds-pending-head {
+    font: 600 10px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--accent-text);
+    margin-bottom: 4px;
+  }
+  body[data-mode="dark"] .ds-pending-head { color: var(--accent); }
+  .ds-pending-msg {
+    font: 12px var(--font-body); font-weight: 400;
+    color: var(--text); margin: 0;
+    line-height: 1.45;
+  }
+
+  /* ============================== Mini Surface 3 — pre-session preview */
+  .ps {
+    padding: var(--space-6) var(--space-5);
+    background: var(--surface);
+    text-align: center;
+    min-height: 220px;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .ps-eyebrow {
+    font: 500 10px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--accent-text);
+    margin-bottom: var(--space-3);
+  }
+  body[data-mode="dark"] .ps-eyebrow { color: var(--accent); }
+  .ps-question {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700;
+    font-size: 22px; line-height: 1.15;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    margin: 0 auto var(--space-3); max-width: 18ch;
+  }
+  .ps-sub {
+    font-size: 12px; color: var(--text-muted);
+    max-width: 38ch; margin: 0 auto var(--space-5);
+    line-height: 1.5;
+  }
+  .ps-mic {
+    margin: 0 auto var(--space-4);
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 5px 12px;
+    background: var(--accent-soft); color: var(--accent-text);
+    border-radius: 999px;
+    font: 500 10px var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  body[data-mode="dark"] .ps-mic { color: var(--accent); }
+  .ps-mic-bars {
+    display: inline-flex; gap: 2px; margin-right: 4px; align-items: flex-end;
+    height: 12px;
+  }
+  .ps-mic-bar {
+    width: 2px; background: var(--accent);
+    border-radius: 1px;
+  }
+  .ps-mic-bar.b1 { height: 30%; }
+  .ps-mic-bar.b2 { height: 60%; }
+  .ps-mic-bar.b3 { height: 90%; }
+  .ps-mic-bar.b4 { height: 50%; }
+  .ps-mic-bar.b5 { height: 75%; }
+
+  .ps-actions {
+    display: flex; gap: var(--space-2);
+    justify-content: center; flex-wrap: wrap;
+  }
+
+  /* ============================== Closing */
+  .closing {
+    max-width: 980px; margin: 0 auto;
+    padding: var(--space-8) var(--space-6) var(--space-20);
+    border-top: 1px solid var(--border);
+  }
+  .closing h2 {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 600;
+    font-size: 22px; letter-spacing: -0.02em;
+    margin: 0 0 var(--space-3); color: var(--text);
+  }
+  .closing p {
+    font-weight: 400;
+    font-size: 14px; line-height: 1.6;
+    color: var(--text-muted); margin: 0 0 var(--space-3);
+  }
+  .closing strong { color: var(--text); font-weight: 600; }
+</style>
+</head>
+
+<body data-mode="light">
+
+<header class="meta-header">
+  <div>
+    <div class="meta-title">Mynk — CTA blocker · 4 fix candidates side-by-side</div>
+    <div class="meta-sub">Decision needed before per-surface design specs · UX-AND-A11Y-SPEC § 2.2</div>
+  </div>
+  <div class="meta-controls">
+    <button class="toggle-btn" data-mode-btn="light" aria-pressed="true">Light</button>
+    <button class="toggle-btn" data-mode-btn="dark" aria-pressed="false">Dark</button>
+  </div>
+</header>
+
+<aside class="decision-banner">
+  <div class="decision-banner-label">⚠ BLOCKER · resolve before any v1 design ships</div>
+  <h2 class="decision-banner-title">Cream <code>#FCFBF4</code> on coral <code>#E27D60</code> = 2.76:1 — FAILS WCAG SC 1.4.3</h2>
+  <p class="decision-banner-body">
+    The current light-mode CTA combination is unreadable by WCAG's threshold (need 4.5:1 for normal text).
+    This affects every <code>.btn-primary</code> in the app and any future button using the coral fill.
+    Each option below renders three real surfaces — marketing hero, dashboard with the up-next card, and pre-session preview —
+    using that option's tokens. Coral persists for live-dot, AI summary tints, eyebrows, and mic-ring in <em>every</em> option;
+    the only thing that changes is the CTA fill and/or text. Toggle dark mode in the header to verify dark-mode parity.
+  </p>
+</aside>
+
+<section class="intro">
+  <h1>Where coral lives in each option.</h1>
+  <p>Skim the four blocks below side-by-side. Same content in each. Pay attention to: (1) how the eye moves to the primary CTA, (2) whether the live-dot + AI-summary panel still feel like the brand's "spark," (3) whether the mood goes too austere (lose energy) or too soft (lose hierarchy).</p>
+  <div class="legend">
+    <div class="legend-item"><strong>Option A</strong> — dark text on coral. Token-cheapest fix. Coral keeps the CTA role; the text on top just goes dark. <span class="ratio">5.64 AA</span></div>
+    <div class="legend-item"><strong>Option B</strong> — burnt-coral CTA fill (<code>--accent-text</code> becomes the fill). Cream text stays. Cleanest token-wise; mood goes from bright-coral to deep-burnt-coral. <span class="ratio">7.35 AAA</span></div>
+    <div class="legend-item"><strong>Option C</strong> — adds <code>--accent-strong #9E3D24</code> for CTA fills only. Coral persists for non-text accents. Most flexible; adds a 4th coral hue to manage. <span class="ratio">6.43 AA</span></div>
+    <div class="legend-item"><strong>Option D</strong> <em>(prior session's recommendation)</em> — demote coral from CTA fills entirely. Brand-blue <code>#1E3D54</code> becomes the sole CTA fill. Coral stays as live-dot, mic-ring, AI tints, eyebrow text. Tightens "Mynka Blue is the brand; coral is the spark." <span class="ratio">10.94 AAA</span></div>
+  </div>
+</section>
+
+<section class="option-row opt-a">
+  <div class="option-head">
+    <span class="option-tag">Option A</span>
+    <h2 class="option-name">Dark text on coral</h2>
+    <span class="option-ratio is-pass">5.64 : 1 · AA</span>
+  </div>
+  <p class="option-blurb">
+    Smallest token change: <code>--accent-on</code> (light) goes from cream <code>#FCFBF4</code> → text-color <code>#15203A</code>.
+    Coral retains its CTA role; the text on top just inverts to dark. Pattern used by Linear/Notion for pale-coral CTAs.
+    Slightly less "brand-soft" than cream-on-coral but readable.
+  </p>
+  <div class="swatches">
+    <span class="swatch"><span class="swatch-chip" style="background: #e27d60;"></span><span class="swatch-label">CTA fill</span> #E27D60</span>
+    <span class="swatch"><span class="swatch-chip" style="background: #15203a;"></span><span class="swatch-label">CTA text</span> #15203A</span>
+    <span class="swatch"><span class="swatch-chip" style="background: #e27d60;"></span><span class="swatch-label">Live dot / mic ring</span> #E27D60</span>
+    <span class="swatch"><span class="swatch-chip" style="background: #f8e0d6;"></span><span class="swatch-label">AI tint bg</span> #F8E0D6</span>
+  </div>
+
+  <div class="strip">
+    <div class="device">
+      <div class="device-label">Marketing landing · hero</div>
+      <div class="mh">
+        <div>
+          <div class="mh-eyebrow">For private tutors</div>
+          <h3 class="heading mh-head">You teach.<br>Mynk takes the notes.</h3>
+          <p class="mh-sub">Stay present in the session. Mynk records, transcribes, and writes a clean recap.</p>
+          <div class="mh-ctas">
+            <a href="#" class="btn-primary btn-lg">Try it for one session</a>
+            <a href="#" class="btn-ghost btn-lg">See a sample recap</a>
+          </div>
+          <div class="mh-foot">
+            <span><span class="checkmark">✓</span> No credit card</span>
+            <span class="dot-sep">·</span>
+            <span><span class="checkmark">✓</span> Cancel anytime</span>
+          </div>
+        </div>
+        <div class="mh-visual">
+          <div class="mh-visual-meta">
+            <span class="mh-visual-tag"><span class="live-dot"></span> Live · Aiden K.</span>
+            <span class="mh-visual-time">23:14</span>
+          </div>
+          <div class="mh-visual-summary">
+            <span class="label">AI summary so far</span>
+            <p class="body">Working through factoring trinomials. Aiden gets the GCF step but is dropping signs on the constant term.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="device">
+      <div class="device-label">Dashboard · up next + new session</div>
+      <div class="ds">
+        <div class="ds-head">
+          <div>
+            <h3 class="ds-greeting">Good afternoon.</h3>
+            <p class="ds-greeting-sub">Three sessions today.</p>
+          </div>
+          <a href="#" class="btn-primary">+ New session</a>
+        </div>
+        <div class="ds-upnext">
+          <div class="ds-upnext-label">Up next · 4:00 PM</div>
+          <h4 class="ds-upnext-name">Aiden K.</h4>
+          <div class="ds-upnext-time">Algebra II · 45 min</div>
+          <a href="#" class="ds-upnext-cta">Ready to record →</a>
+        </div>
+        <div class="ds-pending">
+          <div class="ds-pending-head">3 recaps waiting</div>
+          <p class="ds-pending-msg">Maya, Devon, and Emma's recaps were generated overnight.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="device">
+      <div class="device-label">Pre-session preview</div>
+      <div class="ps">
+        <div class="ps-eyebrow">Pre-session</div>
+        <h3 class="ps-question">Ready to record with Aiden?</h3>
+        <p class="ps-sub">We'll start when you tap Start. Pause or end anytime.</p>
+        <div class="ps-mic">
+          <span class="ps-mic-bars">
+            <span class="ps-mic-bar b1"></span>
+            <span class="ps-mic-bar b2"></span>
+            <span class="ps-mic-bar b3"></span>
+            <span class="ps-mic-bar b4"></span>
+            <span class="ps-mic-bar b5"></span>
+          </span>
+          Mic sounds good
+        </div>
+        <div class="ps-actions">
+          <a href="#" class="btn-primary btn-lg">Start session</a>
+          <a href="#" class="btn-ghost">Continue last whiteboard</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="option-row opt-b">
+  <div class="option-head">
+    <span class="option-tag">Option B</span>
+    <h2 class="option-name">Burnt-coral CTA fill</h2>
+    <span class="option-ratio is-pass">7.35 : 1 · AAA</span>
+  </div>
+  <p class="option-blurb">
+    Reuse the existing <code>--accent-text #8A3C25</code> token as the CTA fill. Cream text stays on top.
+    Cleanest token-wise — zero new colors. CTA becomes deep burnt-coral with cream text.
+    Mood goes from bright-coral CTA to a more "serious" deep-burnt-coral; loses the bright-CTA energy.
+  </p>
+  <div class="swatches">
+    <span class="swatch"><span class="swatch-chip" style="background: #8a3c25;"></span><span class="swatch-label">CTA fill</span> #8A3C25</span>
+    <span class="swatch"><span class="swatch-chip" style="background: #fcfbf4;"></span><span class="swatch-label">CTA text</span> #FCFBF4</span>
+    <span class="swatch"><span class="swatch-chip" style="background: #e27d60;"></span><span class="swatch-label">Live dot / mic ring</span> #E27D60</span>
+    <span class="swatch"><span class="swatch-chip" style="background: #f8e0d6;"></span><span class="swatch-label">AI tint bg</span> #F8E0D6</span>
+  </div>
+
+  <div class="strip">
+    <div class="device">
+      <div class="device-label">Marketing landing · hero</div>
+      <div class="mh">
+        <div>
+          <div class="mh-eyebrow">For private tutors</div>
+          <h3 class="heading mh-head">You teach.<br>Mynk takes the notes.</h3>
+          <p class="mh-sub">Stay present in the session. Mynk records, transcribes, and writes a clean recap.</p>
+          <div class="mh-ctas">
+            <a href="#" class="btn-primary btn-lg">Try it for one session</a>
+            <a href="#" class="btn-ghost btn-lg">See a sample recap</a>
+          </div>
+          <div class="mh-foot">
+            <span><span class="checkmark">✓</span> No credit card</span>
+            <span class="dot-sep">·</span>
+            <span><span class="checkmark">✓</span> Cancel anytime</span>
+          </div>
+        </div>
+        <div class="mh-visual">
+          <div class="mh-visual-meta">
+            <span class="mh-visual-tag"><span class="live-dot"></span> Live · Aiden K.</span>
+            <span class="mh-visual-time">23:14</span>
+          </div>
+          <div class="mh-visual-summary">
+            <span class="label">AI summary so far</span>
+            <p class="body">Working through factoring trinomials. Aiden gets the GCF step but is dropping signs on the constant term.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="device">
+      <div class="device-label">Dashboard · up next + new session</div>
+      <div class="ds">
+        <div class="ds-head">
+          <div>
+            <h3 class="ds-greeting">Good afternoon.</h3>
+            <p class="ds-greeting-sub">Three sessions today.</p>
+          </div>
+          <a href="#" class="btn-primary">+ New session</a>
+        </div>
+        <div class="ds-upnext">
+          <div class="ds-upnext-label">Up next · 4:00 PM</div>
+          <h4 class="ds-upnext-name">Aiden K.</h4>
+          <div class="ds-upnext-time">Algebra II · 45 min</div>
+          <a href="#" class="ds-upnext-cta">Ready to record →</a>
+        </div>
+        <div class="ds-pending">
+          <div class="ds-pending-head">3 recaps waiting</div>
+          <p class="ds-pending-msg">Maya, Devon, and Emma's recaps were generated overnight.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="device">
+      <div class="device-label">Pre-session preview</div>
+      <div class="ps">
+        <div class="ps-eyebrow">Pre-session</div>
+        <h3 class="ps-question">Ready to record with Aiden?</h3>
+        <p class="ps-sub">We'll start when you tap Start. Pause or end anytime.</p>
+        <div class="ps-mic">
+          <span class="ps-mic-bars">
+            <span class="ps-mic-bar b1"></span>
+            <span class="ps-mic-bar b2"></span>
+            <span class="ps-mic-bar b3"></span>
+            <span class="ps-mic-bar b4"></span>
+            <span class="ps-mic-bar b5"></span>
+          </span>
+          Mic sounds good
+        </div>
+        <div class="ps-actions">
+          <a href="#" class="btn-primary btn-lg">Start session</a>
+          <a href="#" class="btn-ghost">Continue last whiteboard</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="option-row opt-c">
+  <div class="option-head">
+    <span class="option-tag">Option C</span>
+    <h2 class="option-name">New <code style="font-family: var(--font-mono); font-size: 0.7em; background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 3px; color: var(--text);">--accent-strong</code> for CTA fills only</h2>
+    <span class="option-ratio is-pass">6.43 : 1 · AA</span>
+  </div>
+  <p class="option-blurb">
+    Add a 4th coral hue (<code>#9E3D24</code>) used <em>only</em> for CTA fills.
+    Coral <code>#E27D60</code> persists for live-dot, AI tints, mic ring, eyebrow.
+    Most flexible visually — slightly brighter than B, still readable. Cost: an extra coral hue to manage.
+  </p>
+  <div class="swatches">
+    <span class="swatch"><span class="swatch-chip" style="background: #9e3d24;"></span><span class="swatch-label">CTA fill</span> #9E3D24</span>
+    <span class="swatch"><span class="swatch-chip" style="background: #fcfbf4;"></span><span class="swatch-label">CTA text</span> #FCFBF4</span>
+    <span class="swatch"><span class="swatch-chip" style="background: #e27d60;"></span><span class="swatch-label">Live dot / mic ring</span> #E27D60</span>
+    <span class="swatch"><span class="swatch-chip" style="background: #f8e0d6;"></span><span class="swatch-label">AI tint bg</span> #F8E0D6</span>
+  </div>
+
+  <div class="strip">
+    <div class="device">
+      <div class="device-label">Marketing landing · hero</div>
+      <div class="mh">
+        <div>
+          <div class="mh-eyebrow">For private tutors</div>
+          <h3 class="heading mh-head">You teach.<br>Mynk takes the notes.</h3>
+          <p class="mh-sub">Stay present in the session. Mynk records, transcribes, and writes a clean recap.</p>
+          <div class="mh-ctas">
+            <a href="#" class="btn-primary btn-lg">Try it for one session</a>
+            <a href="#" class="btn-ghost btn-lg">See a sample recap</a>
+          </div>
+          <div class="mh-foot">
+            <span><span class="checkmark">✓</span> No credit card</span>
+            <span class="dot-sep">·</span>
+            <span><span class="checkmark">✓</span> Cancel anytime</span>
+          </div>
+        </div>
+        <div class="mh-visual">
+          <div class="mh-visual-meta">
+            <span class="mh-visual-tag"><span class="live-dot"></span> Live · Aiden K.</span>
+            <span class="mh-visual-time">23:14</span>
+          </div>
+          <div class="mh-visual-summary">
+            <span class="label">AI summary so far</span>
+            <p class="body">Working through factoring trinomials. Aiden gets the GCF step but is dropping signs on the constant term.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="device">
+      <div class="device-label">Dashboard · up next + new session</div>
+      <div class="ds">
+        <div class="ds-head">
+          <div>
+            <h3 class="ds-greeting">Good afternoon.</h3>
+            <p class="ds-greeting-sub">Three sessions today.</p>
+          </div>
+          <a href="#" class="btn-primary">+ New session</a>
+        </div>
+        <div class="ds-upnext">
+          <div class="ds-upnext-label">Up next · 4:00 PM</div>
+          <h4 class="ds-upnext-name">Aiden K.</h4>
+          <div class="ds-upnext-time">Algebra II · 45 min</div>
+          <a href="#" class="ds-upnext-cta">Ready to record →</a>
+        </div>
+        <div class="ds-pending">
+          <div class="ds-pending-head">3 recaps waiting</div>
+          <p class="ds-pending-msg">Maya, Devon, and Emma's recaps were generated overnight.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="device">
+      <div class="device-label">Pre-session preview</div>
+      <div class="ps">
+        <div class="ps-eyebrow">Pre-session</div>
+        <h3 class="ps-question">Ready to record with Aiden?</h3>
+        <p class="ps-sub">We'll start when you tap Start. Pause or end anytime.</p>
+        <div class="ps-mic">
+          <span class="ps-mic-bars">
+            <span class="ps-mic-bar b1"></span>
+            <span class="ps-mic-bar b2"></span>
+            <span class="ps-mic-bar b3"></span>
+            <span class="ps-mic-bar b4"></span>
+            <span class="ps-mic-bar b5"></span>
+          </span>
+          Mic sounds good
+        </div>
+        <div class="ps-actions">
+          <a href="#" class="btn-primary btn-lg">Start session</a>
+          <a href="#" class="btn-ghost">Continue last whiteboard</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="option-row opt-d">
+  <div class="option-head">
+    <span class="option-tag">Option D · prior recommendation</span>
+    <h2 class="option-name">Demote coral from CTA fills entirely</h2>
+    <span class="option-ratio is-pass">10.94 : 1 · AAA</span>
+  </div>
+  <p class="option-blurb">
+    Brand-blue <code>#1E3D54</code> becomes the sole CTA fill. Coral <code>#E27D60</code> stays for live-dot, mic-ring,
+    AI summary panel tints, and eyebrow text — but never as a button background.
+    Tightens "Mynka Blue is the brand; coral is the spark." Note how the up-next card's CTA now disappears against the
+    brand-blue card background — Phase 1 design specs need to handle this case (likely: invert the up-next card to surface,
+    or use brand-on-brand with a stronger affordance).
+  </p>
+  <div class="swatches">
+    <span class="swatch"><span class="swatch-chip" style="background: #1e3d54;"></span><span class="swatch-label">CTA fill</span> #1E3D54</span>
+    <span class="swatch"><span class="swatch-chip" style="background: #fcfbf4;"></span><span class="swatch-label">CTA text</span> #FCFBF4</span>
+    <span class="swatch"><span class="swatch-chip" style="background: #e27d60;"></span><span class="swatch-label">Live dot / mic ring</span> #E27D60</span>
+    <span class="swatch"><span class="swatch-chip" style="background: #f8e0d6;"></span><span class="swatch-label">AI tint bg</span> #F8E0D6</span>
+  </div>
+
+  <div class="strip">
+    <div class="device">
+      <div class="device-label">Marketing landing · hero</div>
+      <div class="mh">
+        <div>
+          <div class="mh-eyebrow">For private tutors</div>
+          <h3 class="heading mh-head">You teach.<br>Mynk takes the notes.</h3>
+          <p class="mh-sub">Stay present in the session. Mynk records, transcribes, and writes a clean recap.</p>
+          <div class="mh-ctas">
+            <a href="#" class="btn-primary btn-lg">Try it for one session</a>
+            <a href="#" class="btn-ghost btn-lg">See a sample recap</a>
+          </div>
+          <div class="mh-foot">
+            <span><span class="checkmark">✓</span> No credit card</span>
+            <span class="dot-sep">·</span>
+            <span><span class="checkmark">✓</span> Cancel anytime</span>
+          </div>
+        </div>
+        <div class="mh-visual">
+          <div class="mh-visual-meta">
+            <span class="mh-visual-tag"><span class="live-dot"></span> Live · Aiden K.</span>
+            <span class="mh-visual-time">23:14</span>
+          </div>
+          <div class="mh-visual-summary">
+            <span class="label">AI summary so far</span>
+            <p class="body">Working through factoring trinomials. Aiden gets the GCF step but is dropping signs on the constant term.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="device">
+      <div class="device-label">Dashboard · up next + new session</div>
+      <div class="ds">
+        <div class="ds-head">
+          <div>
+            <h3 class="ds-greeting">Good afternoon.</h3>
+            <p class="ds-greeting-sub">Three sessions today.</p>
+          </div>
+          <a href="#" class="btn-primary">+ New session</a>
+        </div>
+        <div class="ds-upnext">
+          <div class="ds-upnext-label">Up next · 4:00 PM</div>
+          <h4 class="ds-upnext-name">Aiden K.</h4>
+          <div class="ds-upnext-time">Algebra II · 45 min</div>
+          <a href="#" class="ds-upnext-cta">Ready to record →</a>
+        </div>
+        <div class="ds-pending">
+          <div class="ds-pending-head">3 recaps waiting</div>
+          <p class="ds-pending-msg">Maya, Devon, and Emma's recaps were generated overnight.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="device">
+      <div class="device-label">Pre-session preview</div>
+      <div class="ps">
+        <div class="ps-eyebrow">Pre-session</div>
+        <h3 class="ps-question">Ready to record with Aiden?</h3>
+        <p class="ps-sub">We'll start when you tap Start. Pause or end anytime.</p>
+        <div class="ps-mic">
+          <span class="ps-mic-bars">
+            <span class="ps-mic-bar b1"></span>
+            <span class="ps-mic-bar b2"></span>
+            <span class="ps-mic-bar b3"></span>
+            <span class="ps-mic-bar b4"></span>
+            <span class="ps-mic-bar b5"></span>
+          </span>
+          Mic sounds good
+        </div>
+        <div class="ps-actions">
+          <a href="#" class="btn-primary btn-lg">Start session</a>
+          <a href="#" class="btn-ghost">Continue last whiteboard</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="closing">
+  <h2>How to use this page</h2>
+  <p>Toggle dark mode in the header and re-scan all four options. Dark mode passes WCAG for every option (the audit's blocker is light-mode-only) — the dark renderings are here to confirm none of the options regress dark-mode parity.</p>
+  <p><strong>What to compare:</strong></p>
+  <ul style="font-size: 14px; line-height: 1.6; color: var(--text-muted); padding-left: var(--space-5);">
+    <li>The marketing hero CTAs ("Try it for one session") side-by-side — which feels most clickable without going austere?</li>
+    <li>The dashboard up-next card — does the CTA still pop against the brand-blue card? <strong>Option D specifically:</strong> the brand-blue CTA on a brand-blue card needs a Phase 1 design fix (invert the card, or use a stronger affordance).</li>
+    <li>The pre-session "Start session" — does it still feel like the obvious next thing?</li>
+    <li>The live-dot, eyebrow text, AI summary panel tint — all four options preserve coral here. Verify the brand still has its "spark."</li>
+  </ul>
+  <p style="margin-top: var(--space-5);"><strong>What this is not:</strong> the final design. This is just the four palette options applied to existing layouts. The actual Phase 1 design specs come after this decision; they may further evolve the layouts (e.g., the up-next card under Option D).</p>
+  <p><strong>Related docs:</strong> <code style="font-family: var(--font-mono); font-size: 13px; background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 3px; color: var(--text);">docs/UX-AND-A11Y-SPEC.md § 2.2</code> · <code style="font-family: var(--font-mono); font-size: 13px; background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 3px; color: var(--text);">docs/BRAND.md</code> · <code style="font-family: var(--font-mono); font-size: 13px; background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 3px; color: var(--text);">docs/brand-previews/palette-mocks-FINAL-mynka-blue.html</code></p>
+</section>
+
+<script>
+  const body = document.body;
+  const btns = document.querySelectorAll('[data-mode-btn]');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const m = btn.dataset.modeBtn;
+      body.setAttribute('data-mode', m);
+      btns.forEach(b => b.setAttribute('aria-pressed', b.dataset.modeBtn === m ? 'true' : 'false'));
+    });
+  });
+</script>
+
+</body>
+</html>

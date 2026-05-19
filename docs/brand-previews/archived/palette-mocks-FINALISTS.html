@@ -1,0 +1,1134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mynk — finalists (10 contenders)</title>
+<style>
+  *,*::before,*::after { box-sizing: border-box; }
+  :root {
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-serif: "Iowan Old Style", "Palatino Linotype", "Source Serif Pro", Georgia, serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --radius-sm: 6px; --radius-md: 10px; --radius-lg: 16px;
+    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+    --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-12: 48px;
+  }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: var(--font-sans);
+    background: #f0eee8; color: #1a1a1f;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body[data-mode="dark"] { background: #0a0a0c; color: #f0ece6; }
+
+  .chrome-header {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(240,238,232,0.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    padding: var(--space-4) var(--space-6);
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-6);
+  }
+  body[data-mode="dark"] .chrome-header {
+    background: rgba(10,10,12,0.92);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .chrome-title {
+    font-family: var(--font-serif); font-size: 18px;
+    font-weight: 600; letter-spacing: -0.01em;
+  }
+  .chrome-sub {
+    font-size: 13px; opacity: 0.6;
+    font-family: var(--font-mono);
+  }
+  .chrome-controls { display: flex; gap: var(--space-3); align-items: center; }
+  .toggle-btn {
+    border: 1px solid currentColor; background: transparent;
+    color: inherit; padding: 6px 14px; border-radius: 999px;
+    font: inherit; font-size: 13px; cursor: pointer; opacity: 0.75;
+  }
+  .toggle-btn:hover { opacity: 1; }
+  .toggle-btn[aria-pressed="true"] {
+    background: currentColor; color: #f0eee8; opacity: 1;
+  }
+  body[data-mode="dark"] .toggle-btn[aria-pressed="true"] { color: #0a0a0c; }
+
+  .intro {
+    max-width: 1100px; margin: 0 auto;
+    padding: var(--space-8) var(--space-6) var(--space-6);
+    font-size: 14px; line-height: 1.6;
+  }
+  .intro h2 {
+    font-family: var(--font-serif); font-size: 28px;
+    letter-spacing: -0.02em; margin: 0 0 var(--space-3); font-weight: 600;
+  }
+  .intro p { margin: 0 0 var(--space-3); opacity: 0.85; }
+
+  /* ============================== Comparison matrix */
+  .matrix-wrap {
+    max-width: 1400px; margin: 0 auto;
+    padding: 0 var(--space-6) var(--space-6);
+  }
+  .matrix-title {
+    font-family: var(--font-serif); font-size: 20px;
+    font-weight: 600; margin: 0 0 var(--space-3);
+  }
+  .matrix-table {
+    width: 100%; border-collapse: separate; border-spacing: 0;
+    background: rgba(0,0,0,0.02); border-radius: var(--radius-md);
+    overflow: hidden; font-size: 12px;
+    border: 1px solid rgba(0,0,0,0.08);
+  }
+  body[data-mode="dark"] .matrix-table {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .matrix-table th, .matrix-table td {
+    padding: var(--space-2) var(--space-3); text-align: left;
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+  }
+  body[data-mode="dark"] .matrix-table th, body[data-mode="dark"] .matrix-table td {
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .matrix-table tr:last-child td { border-bottom: none; }
+  .matrix-table th {
+    background: rgba(0,0,0,0.04); font: 600 11px var(--font-mono);
+    letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.7;
+  }
+  body[data-mode="dark"] .matrix-table th { background: rgba(255,255,255,0.04); }
+  .matrix-table .col-name {
+    font-family: var(--font-serif); font-weight: 600; font-size: 13px;
+    min-width: 180px;
+  }
+  .matrix-table .col-swatches { width: 110px; }
+  .mini-swatches { display: flex; height: 16px; border-radius: 3px; overflow: hidden; }
+  .mini-swatch { flex: 1; }
+  .scale {
+    display: inline-flex; gap: 2px; align-items: center;
+  }
+  .scale-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: rgba(0,0,0,0.15);
+  }
+  body[data-mode="dark"] .scale-dot { background: rgba(255,255,255,0.15); }
+  .scale-dot.on { background: currentColor; opacity: 0.85; }
+  .scale-label {
+    font: 10px var(--font-mono); opacity: 0.5;
+    margin: 0 var(--space-2);
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .risk-pill {
+    display: inline-block; padding: 1px 6px; border-radius: 999px;
+    font: 600 9px var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase;
+    margin-right: 3px;
+  }
+  .risk-pill.none { background: rgba(74, 139, 135, 0.18); color: #2a6b67; }
+  .risk-pill.yellow { background: rgba(252, 191, 73, 0.25); color: #6a4810; }
+  .risk-pill.brown { background: rgba(150, 110, 94, 0.25); color: #4a2e1c; }
+  .risk-pill.red { background: rgba(214, 40, 40, 0.18); color: #8a1818; }
+  .risk-pill.feminine { background: rgba(218, 98, 125, 0.22); color: #7a2a40; }
+  .risk-pill.dark-only { background: rgba(13, 27, 42, 0.18); color: #0d1b2a; }
+  body[data-mode="dark"] .risk-pill.none { background: rgba(122, 195, 191, 0.22); color: #b0d8d5; }
+  body[data-mode="dark"] .risk-pill.yellow { background: rgba(252, 191, 73, 0.25); color: #fcbf49; }
+  body[data-mode="dark"] .risk-pill.brown { background: rgba(196, 168, 148, 0.25); color: #d4b8a0; }
+  body[data-mode="dark"] .risk-pill.red { background: rgba(255, 107, 107, 0.22); color: #ff9b9b; }
+  body[data-mode="dark"] .risk-pill.feminine { background: rgba(255, 168, 184, 0.22); color: #ffb5c5; }
+  body[data-mode="dark"] .risk-pill.dark-only { background: rgba(150, 170, 200, 0.22); color: #c5d4e8; }
+
+  .section-header {
+    max-width: 2400px; margin: 0 auto;
+    padding: var(--space-6) var(--space-6) var(--space-4);
+    font-family: var(--font-serif); font-size: 20px;
+    font-weight: 600; letter-spacing: -0.01em;
+    border-top: 1px solid rgba(0,0,0,0.08);
+  }
+  body[data-mode="dark"] .section-header { border-top: 1px solid rgba(255,255,255,0.08); }
+  .section-header .count {
+    font-family: var(--font-mono); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    opacity: 0.55; margin-left: var(--space-2);
+    font-weight: 400;
+  }
+
+  main {
+    padding: 0 var(--space-6) var(--space-12);
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-5);
+    max-width: 2200px; margin: 0 auto;
+  }
+  @media (max-width: 1400px) { main { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 820px) { main { grid-template-columns: 1fr; } }
+
+  .palette-frame {
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    border: 1px solid rgba(0,0,0,0.1);
+    display: flex; flex-direction: column;
+    background: var(--surface); color: var(--text);
+  }
+  body[data-mode="dark"] .palette-frame { border-color: rgba(255,255,255,0.08); }
+
+  .palette-label {
+    padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--border);
+    background: var(--surface-raised);
+    display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3);
+  }
+  .palette-label-main {}
+  .palette-label-name {
+    font-family: var(--font-serif); font-size: 18px;
+    font-weight: 600; letter-spacing: -0.01em; margin: 0 0 4px;
+  }
+  .palette-label-tag {
+    font-family: var(--font-mono); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted);
+  }
+  .palette-label-source {
+    font-family: var(--font-mono); font-size: 9px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted);
+    opacity: 0.6; text-align: right; flex-shrink: 0;
+  }
+
+  .swatches {
+    display: flex; height: 38px;
+    border-bottom: 1px solid var(--border);
+  }
+  .swatch {
+    flex: 1;
+    display: flex; align-items: center; justify-content: center;
+    font: 10px/1 var(--font-mono);
+    letter-spacing: 0.04em;
+    user-select: all;
+  }
+
+  .surfaces { padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-4); }
+
+  .mock-hero {
+    padding: var(--space-5) var(--space-5);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+  }
+  .mock-hero-wordmark {
+    font-family: var(--font-serif); font-size: 20px;
+    font-weight: 600; letter-spacing: -0.02em;
+    margin: 0 0 var(--space-3); color: var(--brand);
+  }
+  .mock-hero-wordmark::after { content: "·"; color: var(--accent); margin-left: 4px; }
+  .mock-hero-tag {
+    font-family: var(--font-serif); font-size: 21px; line-height: 1.15;
+    font-weight: 500; letter-spacing: -0.015em;
+    margin: 0 0 var(--space-2); color: var(--text);
+  }
+  .mock-hero-sub {
+    font-size: 13px; line-height: 1.5; color: var(--text-muted);
+    margin: 0 0 var(--space-4);
+  }
+  .mock-hero-ctas { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+  .btn-primary, .btn-ghost {
+    font: 12px var(--font-sans); font-weight: 500;
+    padding: 7px 14px; border-radius: 999px; cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .btn-primary { background: var(--accent); color: var(--accent-on); }
+  .btn-ghost { background: transparent; color: var(--text); border-color: var(--border-strong); }
+
+  .mock-dashboard {
+    padding: var(--space-4); border-radius: var(--radius-md);
+    background: var(--surface-raised); border: 1px solid var(--border);
+  }
+  .mock-dashboard-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin: 0 0 var(--space-3);
+  }
+  .mock-dashboard-title { font: 600 13px/1.2 var(--font-sans); color: var(--text); margin: 0; }
+  .mock-dashboard-meta { font: 11px/1 var(--font-mono); color: var(--text-muted); }
+  .session-row {
+    display: grid; grid-template-columns: 1fr auto auto;
+    align-items: center; gap: var(--space-2);
+    padding: var(--space-2); border-bottom: 1px solid var(--border);
+  }
+  .session-row:last-child { border-bottom: none; }
+  .session-student { font: 500 12px/1.3 var(--font-sans); color: var(--text); }
+  .session-sub { font: 11px/1.3 var(--font-sans); color: var(--text-muted); margin-top: 2px; }
+  .session-when { font: 11px var(--font-mono); color: var(--text-muted); }
+  .ai-tag {
+    font: 500 9px var(--font-mono); letter-spacing: 0.04em;
+    text-transform: uppercase; padding: 3px 6px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent-text); white-space: nowrap;
+  }
+
+  .mock-recording {
+    display: grid; grid-template-columns: auto 1fr auto auto;
+    align-items: center; gap: var(--space-3);
+    padding: var(--space-3) var(--space-4); border-radius: var(--radius-md);
+    background: var(--surface-raised); border: 1px solid var(--border);
+  }
+  .rec-dot {
+    width: 9px; height: 9px; border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-soft);
+    animation: rec-pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes rec-pulse {
+    0%, 100% { box-shadow: 0 0 0 4px var(--accent-soft); }
+    50% { box-shadow: 0 0 0 7px transparent; }
+  }
+  .rec-label { font: 500 12px var(--font-sans); color: var(--text); }
+  .rec-time { font: 600 12px var(--font-mono); color: var(--text); }
+  .rec-end {
+    font: 500 11px var(--font-sans); padding: 6px 11px;
+    border-radius: var(--radius-sm); border: 1px solid var(--text);
+    background: var(--text); color: var(--surface); cursor: pointer;
+  }
+
+  .mock-ai-field {
+    padding: var(--space-4); border-radius: var(--radius-md);
+    background: var(--surface-raised); border: 1px solid var(--border);
+  }
+  .ai-field-name {
+    font: 600 11px var(--font-sans); letter-spacing: 0.02em;
+    text-transform: uppercase; color: var(--text-muted);
+    margin: 0 0 var(--space-3);
+  }
+  .ai-field-body {
+    font: 13px/1.55 var(--font-serif); color: var(--text);
+    padding: var(--space-3); border-radius: var(--radius-sm);
+    background: var(--accent-soft); border-left: 3px solid var(--accent);
+  }
+  .ai-field-foot {
+    margin-top: var(--space-2); font: 10px var(--font-mono);
+    color: var(--text-muted); letter-spacing: 0.03em;
+  }
+
+  .palette-notes {
+    padding: var(--space-4) var(--space-5); border-top: 1px solid var(--border);
+    background: var(--surface-raised);
+    font: 13px/1.55 var(--font-sans); color: var(--text-muted);
+  }
+  .palette-notes strong { color: var(--text); font-weight: 600; }
+  .palette-notes .vs {
+    margin-top: var(--space-3); padding-top: var(--space-3);
+    border-top: 1px dashed var(--border);
+    font-style: italic; font-size: 12px;
+  }
+
+  /* =================================================================
+     1. Concept 3 — 3a Warm graphite (dark) / Concept 3 light shared
+     ================================================================= */
+  body[data-mode="light"] .palette-3a {
+    --brand: #1e4d4a; --text: #1e4d4a; --text-muted: #6b7c7a;
+    --surface: #f7f5f0; --surface-raised: #fdfcf8;
+    --border: #d6dad5; --border-strong: #aab2ad;
+    --accent: #e27d60; --accent-soft: #f8e0d6;
+    --accent-text: #8a3c25; --accent-on: #fdfcf8;
+  }
+  body[data-mode="dark"] .palette-3a {
+    --brand: #4a8b87; --text: #e8e6e0; --text-muted: #8d9590;
+    --surface: #1a1d1c; --surface-raised: #25292a;
+    --border: #2f3433; --border-strong: #4a8b87;
+    --accent: #e27d60; --accent-soft: #2e1d18;
+    --accent-text: #e8a08a; --accent-on: #1a1d1c;
+  }
+
+  /* =================================================================
+     2. Concept 3 — 3b Elevated teal (dark) / Concept 3 light shared
+     ================================================================= */
+  body[data-mode="light"] .palette-3b {
+    --brand: #1e4d4a; --text: #1e4d4a; --text-muted: #6b7c7a;
+    --surface: #f7f5f0; --surface-raised: #fdfcf8;
+    --border: #d6dad5; --border-strong: #aab2ad;
+    --accent: #e8866d; --accent-soft: #fbe0d4;
+    --accent-text: #8a3a23; --accent-on: #fdfcf8;
+  }
+  body[data-mode="dark"] .palette-3b {
+    --brand: #7eb1ae; --text: #f0ede4; --text-muted: #98a6a4;
+    --surface: #07201d; --surface-raised: #1a4441;
+    --border: #2a5754; --border-strong: #468480;
+    --accent: #e8866d; --accent-soft: #3a1d15;
+    --accent-text: #e8a890; --accent-on: #07201d;
+  }
+
+  /* =================================================================
+     3. Mystic Waters (031926 468189 77ACA2 9DBEBB F4E9CD)
+     ================================================================= */
+  body[data-mode="light"] .palette-mw {
+    --brand: #031926; --text: #031926; --text-muted: #6a8281;
+    --surface: #f8f1dd; --surface-raised: #fdf8ea;
+    --border: #d8d4c0; --border-strong: #9dbebb;
+    --accent: #468189; --accent-soft: #d2e2e3;
+    --accent-text: #1f4f56; --accent-on: #fdf8ea;
+  }
+  body[data-mode="dark"] .palette-mw {
+    --brand: #9dbebb; --text: #f4e9cd; --text-muted: #8ea8a7;
+    --surface: #031926; --surface-raised: #0e2c39;
+    --border: #1d4451; --border-strong: #468189;
+    --accent: #77aca2; --accent-soft: #143839;
+    --accent-text: #9dbebb; --accent-on: #031926;
+  }
+
+  /* =================================================================
+     4. Mauve Twilight (E3C0D3 95818D 576066 2C514C 122932)
+     ================================================================= */
+  body[data-mode="light"] .palette-mt {
+    --brand: #2c514c; --text: #122932; --text-muted: #6e7a7d;
+    --surface: #f5edf1; --surface-raised: #fcf6f9;
+    --border: #d8cdd2; --border-strong: #95818d;
+    --accent: #2c514c; --accent-soft: #d6e0de;
+    --accent-text: #133430; --accent-on: #fcf6f9;
+  }
+  body[data-mode="dark"] .palette-mt {
+    --brand: #e3c0d3; --text: #f0e3ea; --text-muted: #95818d;
+    --surface: #122932; --surface-raised: #1c3a44;
+    --border: #2c514c; --border-strong: #576066;
+    --accent: #e3c0d3; --accent-soft: #2f3a44;
+    --accent-text: #e3c0d3; --accent-on: #122932;
+  }
+
+  /* =================================================================
+     5. Sweet Summer Melody (F6BD60 F7EDE2 F5CAC3 84A59D F28482)
+     ================================================================= */
+  body[data-mode="light"] .palette-ssm {
+    --brand: #2d3b36; --text: #2d3b36; --text-muted: #6b8077;
+    --surface: #f7ede2; --surface-raised: #fdf6ed;
+    --border: #e8d4c2; --border-strong: #c19884;
+    --accent: #f28482; --accent-soft: #f5cac3;
+    --accent-text: #a34543; --accent-on: #fdf6ed;
+  }
+  body[data-mode="dark"] .palette-ssm {
+    --brand: #f6bd60; --text: #f7ede2; --text-muted: #b5c2bc;
+    --surface: #1c2622; --surface-raised: #28332e;
+    --border: #3d504a; --border-strong: #5c6f68;
+    --accent: #f28482; --accent-soft: #3a1f1e;
+    --accent-text: #f5cac3; --accent-on: #1c2622;
+  }
+
+  /* =================================================================
+     6. Sunny Beach Day (264653 2A9D8F E9C46A F4A261 E76F51)
+     ================================================================= */
+  body[data-mode="light"] .palette-sbd {
+    --brand: #264653; --text: #264653; --text-muted: #5a7180;
+    --surface: #fdf6ea; --surface-raised: #fffbf2;
+    --border: #e8d5b8; --border-strong: #c2a878;
+    --accent: #e76f51; --accent-soft: #fbe2d9;
+    --accent-text: #a3432a; --accent-on: #fffbf2;
+  }
+  body[data-mode="dark"] .palette-sbd {
+    --brand: #e9c46a; --text: #f4f0e6; --text-muted: #b5c5cc;
+    --surface: #15303b; --surface-raised: #1f3d4a;
+    --border: #3d5c68; --border-strong: #5c7a87;
+    --accent: #e76f51; --accent-soft: #3a1c12;
+    --accent-text: #f4a261; --accent-on: #15303b;
+  }
+
+  /* =================================================================
+     7. Golden Peachy Glow (543E3A 804837 956E5E F2A27C F9DA62)
+     ================================================================= */
+  body[data-mode="light"] .palette-gpg {
+    --brand: #804837; --text: #543e3a; --text-muted: #8a6e5c;
+    --surface: #fdf6e8; --surface-raised: #fefaef;
+    --border: #ecd9b8; --border-strong: #c4a578;
+    --accent: #f2a27c; --accent-soft: #f9da62;
+    --accent-text: #804837; --accent-on: #fdf6e8;
+  }
+  body[data-mode="dark"] .palette-gpg {
+    --brand: #f9da62; --text: #fdf6e8; --text-muted: #b8a890;
+    --surface: #2a1f1c; --surface-raised: #382a26;
+    --border: #543e3a; --border-strong: #804837;
+    --accent: #f2a27c; --accent-soft: #3a2622;
+    --accent-text: #f9da62; --accent-on: #2a1f1c;
+  }
+
+  /* =================================================================
+     8. Ocean Sunset (4A7C99 BDBDCA F5BDAA FF773E 235A5A)
+     ================================================================= */
+  body[data-mode="light"] .palette-os {
+    --brand: #235a5a; --text: #235a5a; --text-muted: #5a7a7a;
+    --surface: #fef0e8; --surface-raised: #fff8f3;
+    --border: #f0d4c0; --border-strong: #bdbdca;
+    --accent: #ff773e; --accent-soft: #f5bdaa;
+    --accent-text: #a3401a; --accent-on: #fef0e8;
+  }
+  body[data-mode="dark"] .palette-os {
+    --brand: #4a7c99; --text: #f5bdaa; --text-muted: #a08882;
+    --surface: #102a2a; --surface-raised: #1a3838;
+    --border: #235a5a; --border-strong: #4a7c99;
+    --accent: #ff773e; --accent-soft: #2d1410;
+    --accent-text: #f5bdaa; --accent-on: #102a2a;
+  }
+
+  /* =================================================================
+     9. Muted Earthy Tones (C59B9B A3584D 793B39 E6D7D6 C3B1A2)
+     ================================================================= */
+  body[data-mode="light"] .palette-met {
+    --brand: #793b39; --text: #793b39; --text-muted: #8a655e;
+    --surface: #f5ece8; --surface-raised: #faf3f0;
+    --border: #ddc8c2; --border-strong: #c3b1a2;
+    --accent: #a3584d; --accent-soft: #e6d7d6;
+    --accent-text: #793b39; --accent-on: #f5ece8;
+  }
+  body[data-mode="dark"] .palette-met {
+    --brand: #c59b9b; --text: #e6d7d6; --text-muted: #a08885;
+    --surface: #1f1110; --surface-raised: #2c1a18;
+    --border: #4a2826; --border-strong: #793b39;
+    --accent: #c59b9b; --accent-soft: #38201d;
+    --accent-text: #e6d7d6; --accent-on: #1f1110;
+  }
+
+  /* =================================================================
+     10. Midnight Woodland Whimsy (85AE8E 487D68 315657 152134 0B0A18)
+     ================================================================= */
+  body[data-mode="light"] .palette-mww {
+    --brand: #152134; --text: #0b0a18; --text-muted: #5a6c5e;
+    --surface: #f2f5ee; --surface-raised: #fafbf6;
+    --border: #c8d3c4; --border-strong: #85ae8e;
+    --accent: #487d68; --accent-soft: #d4e3d8;
+    --accent-text: #224638; --accent-on: #f2f5ee;
+  }
+  body[data-mode="dark"] .palette-mww {
+    --brand: #85ae8e; --text: #c4d4c7; --text-muted: #6a8070;
+    --surface: #0b0a18; --surface-raised: #152134;
+    --border: #28384a; --border-strong: #315657;
+    --accent: #487d68; --accent-soft: #1a2820;
+    --accent-text: #85ae8e; --accent-on: #0b0a18;
+  }
+</style>
+</head>
+
+<body data-mode="light">
+<aside class="archived-banner" style="position: sticky; top: 0; z-index: 9999; background: #fff3cd; border-bottom: 3px solid #f59e0b; padding: 12px 20px; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.5; color: #78350f; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+  <strong>ARCHIVED EXPLORATION.</strong> This file is preserved for historical reference only. The Mynk brand was finalized as <strong>Mynka Blue</strong> on 2026-05-19. Canonical visual reference: <a href="../palette-mocks-FINAL-mynka-blue.html" style="color: #78350f; text-decoration: underline;">palette-mocks-FINAL-mynka-blue.html</a>. Decision doc: <code style="background:rgba(0,0,0,0.08);padding:1px 5px;border-radius:3px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;">docs/MYNK-BRAND-PHASE-2-DECISIONS.md</code>.
+</aside>
+
+<header class="chrome-header">
+  <div>
+    <div class="chrome-title">Mynk — finalists</div>
+    <div class="chrome-sub">10 contenders for the family table · 2026-05-19</div>
+  </div>
+  <div class="chrome-controls">
+    <button class="toggle-btn" data-mode-btn="light" aria-pressed="true">Light</button>
+    <button class="toggle-btn" data-mode-btn="dark" aria-pressed="false">Dark</button>
+  </div>
+</header>
+
+<section class="intro">
+  <h2>Ten finalists, all in one place, all rendered against the same five mock surfaces.</h2>
+  <p>This is the consolidation doc — everyone (you, your wife, the daughter) can sit in front of <em>one</em> screen and rank, instead of toggling between four mock pages. Each card includes its hex codes, light + dark modes, and a "vs the other finalists" note explaining what this one does that no other finalist does.</p>
+  <p>The matrix below rates each on four axes, plus flagged risks. Toggle light/dark in the header. Cards are larger than on the earlier pages so the typography and surface hierarchy read more honestly.</p>
+</section>
+
+<section class="matrix-wrap">
+  <h3 class="matrix-title">Finalists matrix</h3>
+  <table class="matrix-table">
+    <thead>
+      <tr>
+        <th class="col-name">Palette</th>
+        <th class="col-swatches">Swatches</th>
+        <th>Warmth</th>
+        <th>Contrast</th>
+        <th>Distinctive</th>
+        <th>Pro feel</th>
+        <th>Risks</th>
+        <th>Best for</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="col-name">3a · Warm graphite (Concept 3 revised dark)</td>
+        <td><div class="mini-swatches"><div class="mini-swatch" style="background:#1e4d4a"></div><div class="mini-swatch" style="background:#1a1d1c"></div><div class="mini-swatch" style="background:#4a8b87"></div><div class="mini-swatch" style="background:#e27d60"></div></div></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span></span></td>
+        <td><span class="risk-pill none">no veto</span></td>
+        <td>Sensible default. Keeps Concept 3 light, fixes dark.</td>
+      </tr>
+      <tr>
+        <td class="col-name">3b · Elevated teal (Concept 3 revised dark)</td>
+        <td><div class="mini-swatches"><div class="mini-swatch" style="background:#1e4d4a"></div><div class="mini-swatch" style="background:#07201d"></div><div class="mini-swatch" style="background:#1a4441"></div><div class="mini-swatch" style="background:#e8866d"></div></div></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span></span></td>
+        <td><span class="risk-pill none">no veto</span></td>
+        <td>Same as 3a but more "teal-forward" identity.</td>
+      </tr>
+      <tr>
+        <td class="col-name">Mystic Waters</td>
+        <td><div class="mini-swatches"><div class="mini-swatch" style="background:#031926"></div><div class="mini-swatch" style="background:#468189"></div><div class="mini-swatch" style="background:#9dbebb"></div><div class="mini-swatch" style="background:#f4e9cd"></div></div></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span><span class="scale-dot"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span></span></td>
+        <td><span class="risk-pill none">no veto</span></td>
+        <td>Concept 3 cousin — same warmth, no coral, broader gradient.</td>
+      </tr>
+      <tr>
+        <td class="col-name">Mauve Twilight</td>
+        <td><div class="mini-swatches"><div class="mini-swatch" style="background:#e3c0d3"></div><div class="mini-swatch" style="background:#95818d"></div><div class="mini-swatch" style="background:#2c514c"></div><div class="mini-swatch" style="background:#122932"></div></div></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span><span class="scale-dot"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span></span></td>
+        <td><span class="risk-pill feminine">leans fem</span></td>
+        <td>The "indie publisher / quiet-luxury" play.</td>
+      </tr>
+      <tr>
+        <td class="col-name">Sweet Summer Melody</td>
+        <td><div class="mini-swatches"><div class="mini-swatch" style="background:#f7ede2"></div><div class="mini-swatch" style="background:#f5cac3"></div><div class="mini-swatch" style="background:#84a59d"></div><div class="mini-swatch" style="background:#f28482"></div></div></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span><span class="scale-dot"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span><span class="scale-dot"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span><span class="scale-dot"></span></span></td>
+        <td><span class="risk-pill feminine">leans fem</span></td>
+        <td>Softer, lifestyle-y take on Concept 3.</td>
+      </tr>
+      <tr>
+        <td class="col-name">Sunny Beach Day</td>
+        <td><div class="mini-swatches"><div class="mini-swatch" style="background:#264653"></div><div class="mini-swatch" style="background:#2a9d8f"></div><div class="mini-swatch" style="background:#e9c46a"></div><div class="mini-swatch" style="background:#e76f51"></div></div></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span><span class="scale-dot"></span></span></td>
+        <td><span class="risk-pill yellow">yellow</span></td>
+        <td>Concept 3 structure, fuller warm palette. 124K likes.</td>
+      </tr>
+      <tr>
+        <td class="col-name">Golden Peachy Glow</td>
+        <td><div class="mini-swatches"><div class="mini-swatch" style="background:#543e3a"></div><div class="mini-swatch" style="background:#804837"></div><div class="mini-swatch" style="background:#f2a27c"></div><div class="mini-swatch" style="background:#f9da62"></div></div></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span><span class="scale-dot"></span><span class="scale-dot"></span></span></td>
+        <td><span class="risk-pill yellow">yellow</span><span class="risk-pill brown">brown</span></td>
+        <td>Maximum warmth; stacks both family vetoes.</td>
+      </tr>
+      <tr>
+        <td class="col-name">Ocean Sunset</td>
+        <td><div class="mini-swatches"><div class="mini-swatch" style="background:#235a5a"></div><div class="mini-swatch" style="background:#bdbdca"></div><div class="mini-swatch" style="background:#f5bdaa"></div><div class="mini-swatch" style="background:#ff773e"></div></div></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span></span></td>
+        <td><span class="risk-pill none">no veto</span></td>
+        <td>Concept 3 with a peach surface + brighter orange pop.</td>
+      </tr>
+      <tr>
+        <td class="col-name">Muted Earthy Tones</td>
+        <td><div class="mini-swatches"><div class="mini-swatch" style="background:#793b39"></div><div class="mini-swatch" style="background:#a3584d"></div><div class="mini-swatch" style="background:#c59b9b"></div><div class="mini-swatch" style="background:#e6d7d6"></div></div></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span><span class="scale-dot"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span><span class="scale-dot"></span></span></td>
+        <td><span class="risk-pill feminine">leans fem</span></td>
+        <td>Warm without yellow or brown. Ceramic-studio energy.</td>
+      </tr>
+      <tr>
+        <td class="col-name">Midnight Woodland Whimsy</td>
+        <td><div class="mini-swatches"><div class="mini-swatch" style="background:#0b0a18"></div><div class="mini-swatch" style="background:#152134"></div><div class="mini-swatch" style="background:#487d68"></div><div class="mini-swatch" style="background:#85ae8e"></div></div></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot"></span><span class="scale-dot"></span><span class="scale-dot"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot"></span></span></td>
+        <td><span class="scale"><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span><span class="scale-dot on"></span></span></td>
+        <td><span class="risk-pill dark-only">dark-leaning</span></td>
+        <td>Premium outdoor-brand energy. Dark mode is the star.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p style="font: 11px var(--font-mono); opacity: 0.55; margin-top: var(--space-3); letter-spacing: 0.02em;">Scales are 5-dot rough indicators, not measurements. "Risks" reference earlier family feedback: wife said no to yellow on Concept 1 and brown on Concept 2; daughter is open to feminine; dept-head audience may read "feminine" as friendly or as too-soft depending on the rep.</p>
+</section>
+
+<h3 class="section-header">Finalists <span class="count">10 cards · scroll to compare</span></h3>
+
+<main>
+
+  <!-- 1. 3a Warm graphite -->
+  <article class="palette-frame palette-3a">
+    <div class="palette-label">
+      <div class="palette-label-main">
+        <div class="palette-label-name">3a · Concept 3 (Warm graphite dark)</div>
+        <div class="palette-label-tag">teal as flavor · cream-coral light · graphite dark</div>
+      </div>
+      <div class="palette-label-source">palette-mocks.html<br>concept-3-dark · 3a</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #1e4d4a; color: #f7f5f0;">#1E4D4A</div>
+      <div class="swatch" style="background: #f7f5f0; color: #1e4d4a;">#F7F5F0</div>
+      <div class="swatch" style="background: #1a1d1c; color: #e8e6e0;">#1A1D1C</div>
+      <div class="swatch" style="background: #4a8b87; color: #1a1d1c;">#4A8B87</div>
+      <div class="swatch" style="background: #e27d60; color: #1a1d1c;">#E27D60</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What makes 3a uniquely 3a:</strong> Keeps the cream-and-teal Concept 3 light mode the whole family liked, but rebuilds dark mode around a warm near-black (#1A1D1C) instead of saturated teal. Teal becomes flavor, not foundation. Coral keeps its job as the warm pop.
+      <div class="vs"><strong>vs the field:</strong> Most "safe default" — the choice that requires the least new conviction. If the family agreed Concept 3 was 80% right, 3a is the 100% version. The closest cousin in this list is 3b; the closest in spirit is Mystic Waters.</div>
+    </div>
+  </article>
+
+  <!-- 2. 3b Elevated teal -->
+  <article class="palette-frame palette-3b">
+    <div class="palette-label">
+      <div class="palette-label-main">
+        <div class="palette-label-name">3b · Concept 3 (Elevated teal dark)</div>
+        <div class="palette-label-tag">teal stays brand · clean hierarchy in dark</div>
+      </div>
+      <div class="palette-label-source">palette-mocks.html<br>concept-3-dark · 3b</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #1e4d4a; color: #f7f5f0;">#1E4D4A</div>
+      <div class="swatch" style="background: #f7f5f0; color: #1e4d4a;">#F7F5F0</div>
+      <div class="swatch" style="background: #07201d; color: #f0ede4;">#07201D</div>
+      <div class="swatch" style="background: #1a4441; color: #f0ede4;">#1A4441</div>
+      <div class="swatch" style="background: #e8866d; color: #07201d;">#E8866D</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What makes 3b uniquely 3b:</strong> Same Concept 3 light mode as 3a, but the dark mode commits to teal — deeper bg (#07201D), clearly raised teal surface (#1A4441), brighter coral (#E8866D) so the pop survives the saturated canvas. "Mynk IS a teal product" reading.
+      <div class="vs"><strong>vs the field:</strong> 3a's identity twin, but louder. Pick 3b if "teal-forward brand" matters more than "restraint" in the dark theme. Mystic Waters does this same trick with a 5-step gradient instead.</div>
+    </div>
+  </article>
+
+  <!-- 3. Mystic Waters -->
+  <article class="palette-frame palette-mw">
+    <div class="palette-label">
+      <div class="palette-label-main">
+        <div class="palette-label-name">Mystic Waters</div>
+        <div class="palette-label-tag">deep teal · cream surface · 5-step gradient</div>
+      </div>
+      <div class="palette-label-source">round-2-coolors<br>palette B</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #031926; color: #f4e9cd;">#031926</div>
+      <div class="swatch" style="background: #468189; color: #f4e9cd;">#468189</div>
+      <div class="swatch" style="background: #77aca2; color: #031926;">#77ACA2</div>
+      <div class="swatch" style="background: #9dbebb; color: #031926;">#9DBEBB</div>
+      <div class="swatch" style="background: #f4e9cd; color: #031926;">#F4E9CD</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What makes Mystic Waters uniquely itself:</strong> 5-step gradient from near-black teal to warm cream — way more design system flexibility than Concept 3's 4 colors. Three teal mids let you build borders, hover states, and AI-content tints all from one family. <em>No coral.</em> Warmth comes entirely from the cream surface itself.
+      <div class="vs"><strong>vs the field:</strong> The Concept 3 cousin that trades coral for design-system depth. Pick this if you'd rather have one tasteful color family than a brand-color + accent pair. Closest competitor: 3a/3b for the look, but Mystic Waters has more headroom.</div>
+    </div>
+  </article>
+
+  <!-- 4. Mauve Twilight -->
+  <article class="palette-frame palette-mt">
+    <div class="palette-label">
+      <div class="palette-label-main">
+        <div class="palette-label-name">Mauve Twilight</div>
+        <div class="palette-label-tag">teal foundation · dusty pink light tint</div>
+      </div>
+      <div class="palette-label-source">round-2-coolors<br>palette E</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #e3c0d3; color: #122932;">#E3C0D3</div>
+      <div class="swatch" style="background: #95818d; color: #122932;">#95818D</div>
+      <div class="swatch" style="background: #576066; color: #e3c0d3;">#576066</div>
+      <div class="swatch" style="background: #2c514c; color: #e3c0d3;">#2C514C</div>
+      <div class="swatch" style="background: #122932; color: #e3c0d3;">#122932</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What makes Mauve Twilight uniquely itself:</strong> Inverts Soft Lavender — teal is the deep brand color, dusty pink lives in light mode as a soft tint, not as the accent. The most distinctive palette in this list. Reads "considered, slightly editorial, has taste."
+      <div class="vs"><strong>vs the field:</strong> The "unmistakably itself" option. Trades broadest-audience legibility for being memorable. If you want Mynk to look like nothing else in the tutoring category, this is the bet. Risk: the dusty pink reads feminine, which may help or hurt depending on dept-head sex.</div>
+    </div>
+  </article>
+
+  <!-- 5. Sweet Summer Melody -->
+  <article class="palette-frame palette-ssm">
+    <div class="palette-label">
+      <div class="palette-label-main">
+        <div class="palette-label-name">Sweet Summer Melody</div>
+        <div class="palette-label-tag">cream + sage + coral, with gold accent</div>
+      </div>
+      <div class="palette-label-source">warm-colors · #5</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #f6bd60; color: #2d3b36;">#F6BD60</div>
+      <div class="swatch" style="background: #f7ede2; color: #2d3b36;">#F7EDE2</div>
+      <div class="swatch" style="background: #f5cac3; color: #2d3b36;">#F5CAC3</div>
+      <div class="swatch" style="background: #84a59d; color: #f7ede2;">#84A59D</div>
+      <div class="swatch" style="background: #f28482; color: #f7ede2;">#F28482</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What makes Sweet Summer Melody uniquely itself:</strong> Concept 3 with the bass turned down — softer cream surface, blush highlights, sage instead of teal, coral instead of coral. Same structural recipe (warm + a single cool grounding hue) but everything dialed back. Reads "considered DTC brand, lifestyle-adjacent."
+      <div class="vs"><strong>vs the field:</strong> The "Concept 3 if it were a wellness brand" play. Pick this if the daughter's "soft and warm" preference outweighs the dept-head pro-feel. Caveat: includes gold (#F6BD60), so technically yellow risk, though the gold mostly sits in the swatch row not as a primary surface.</div>
+    </div>
+  </article>
+
+  <!-- 6. Sunny Beach Day -->
+  <article class="palette-frame palette-sbd">
+    <div class="palette-label">
+      <div class="palette-label-main">
+        <div class="palette-label-name">Sunny Beach Day</div>
+        <div class="palette-label-tag">deep teal + full warm gradient · 124K likes</div>
+      </div>
+      <div class="palette-label-source">warm-colors · #6</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #264653; color: #f4f0e6;">#264653</div>
+      <div class="swatch" style="background: #2a9d8f; color: #f4f0e6;">#2A9D8F</div>
+      <div class="swatch" style="background: #e9c46a; color: #264653;">#E9C46A</div>
+      <div class="swatch" style="background: #f4a261; color: #264653;">#F4A261</div>
+      <div class="swatch" style="background: #e76f51; color: #f4f0e6;">#E76F51</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What makes Sunny Beach Day uniquely itself:</strong> Structurally identical to Concept 3 — deep teal brand + warm pop accent — but fills out the warm middle with sage-teal, gold, tan, and coral. The most-loved palette on Coolors trending (124K likes) for a reason: it's the textbook example of warm-accented teal.
+      <div class="vs"><strong>vs the field:</strong> Concept 3 with a fuller design system on the warm side. If 3a/3b feel a little spare on options for warm hues, this fills that. Caveat: #E9C46A gold is the yellow your wife already flagged.</div>
+    </div>
+  </article>
+
+  <!-- 7. Golden Peachy Glow -->
+  <article class="palette-frame palette-gpg">
+    <div class="palette-label">
+      <div class="palette-label-main">
+        <div class="palette-label-name">Golden Peachy Glow</div>
+        <div class="palette-label-tag">peach + gold + brown anchor</div>
+      </div>
+      <div class="palette-label-source">daughter-picks · #4</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #543e3a; color: #fdf6e8;">#543E3A</div>
+      <div class="swatch" style="background: #804837; color: #fdf6e8;">#804837</div>
+      <div class="swatch" style="background: #956e5e; color: #fdf6e8;">#956E5E</div>
+      <div class="swatch" style="background: #f2a27c; color: #543e3a;">#F2A27C</div>
+      <div class="swatch" style="background: #f9da62; color: #543e3a;">#F9DA62</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What makes Golden Peachy Glow uniquely itself:</strong> The maximum-warmth option in this finalists list. Brown coffeehouse base + peach + bright canary yellow. Visually lush.
+      <div class="vs"><strong>vs the field:</strong> Worth showing exclusively because the daughter pulled it. <em>Stacks both family vetoes</em> (yellow from Concept 1, brown from Concept 2), so it's almost certainly not the answer — but seeing it next to the others helps everyone calibrate where "too warm" actually lives.</div>
+    </div>
+  </article>
+
+  <!-- 8. Ocean Sunset -->
+  <article class="palette-frame palette-os">
+    <div class="palette-label">
+      <div class="palette-label-main">
+        <div class="palette-label-name">Ocean Sunset</div>
+        <div class="palette-label-tag">deep teal + peach + bright orange</div>
+      </div>
+      <div class="palette-label-source">daughter-picks · #8</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #4a7c99; color: #fef0e8;">#4A7C99</div>
+      <div class="swatch" style="background: #bdbdca; color: #235a5a;">#BDBDCA</div>
+      <div class="swatch" style="background: #f5bdaa; color: #235a5a;">#F5BDAA</div>
+      <div class="swatch" style="background: #ff773e; color: #fef0e8;">#FF773E</div>
+      <div class="swatch" style="background: #235a5a; color: #fef0e8;">#235A5A</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What makes Ocean Sunset uniquely itself:</strong> Concept 3 reshuffled to a peach surface instead of cream, with a punchier orange (#FF773E) standing in for coral. The grey-lavender mid (#BDBDCA) is an unexpected sophistication note that gives the palette some neutrality the others lack.
+      <div class="vs"><strong>vs the field:</strong> Concept 3 cousin #3 (after 3a/3b/Sunny Beach Day). The differentiator is the lavender-grey — gives you a neutral mid-tone that's neither warm nor cool. No yellow risk, no brown risk, no feminine risk. Best "safer-but-warmer-than-Concept-3" pick.</div>
+    </div>
+  </article>
+
+  <!-- 9. Muted Earthy Tones -->
+  <article class="palette-frame palette-met">
+    <div class="palette-label">
+      <div class="palette-label-main">
+        <div class="palette-label-name">Muted Earthy Tones</div>
+        <div class="palette-label-tag">dusty rose + brick</div>
+      </div>
+      <div class="palette-label-source">daughter-picks · #12</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #c59b9b; color: #793b39;">#C59B9B</div>
+      <div class="swatch" style="background: #a3584d; color: #f5ece8;">#A3584D</div>
+      <div class="swatch" style="background: #793b39; color: #f5ece8;">#793B39</div>
+      <div class="swatch" style="background: #e6d7d6; color: #793b39;">#E6D7D6</div>
+      <div class="swatch" style="background: #c3b1a2; color: #793b39;">#C3B1A2</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What makes Muted Earthy Tones uniquely itself:</strong> The only finalist that's <em>warm without yellow OR brown</em>. Dusty rose + brick + warm beige. Ceramic-studio energy. No teal anchor — the warmth is the whole point.
+      <div class="vs"><strong>vs the field:</strong> The "what if warm could be allowed?" answer. If Concept 3 is "cool with a warm accent," this is "warm with a darker warm accent." Reads soft-feminine in a way that may or may not align with dept-head professionalism — depends entirely on how Sarah's institutional buyers code "warm pink-brown."</div>
+    </div>
+  </article>
+
+  <!-- 10. Midnight Woodland Whimsy -->
+  <article class="palette-frame palette-mww">
+    <div class="palette-label">
+      <div class="palette-label-main">
+        <div class="palette-label-name">Midnight Woodland Whimsy</div>
+        <div class="palette-label-tag">deep navy-black + forest greens</div>
+      </div>
+      <div class="palette-label-source">daughter-picks · #13</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #85ae8e; color: #0b0a18;">#85AE8E</div>
+      <div class="swatch" style="background: #487d68; color: #f2f5ee;">#487D68</div>
+      <div class="swatch" style="background: #315657; color: #f2f5ee;">#315657</div>
+      <div class="swatch" style="background: #152134; color: #f2f5ee;">#152134</div>
+      <div class="swatch" style="background: #0b0a18; color: #f2f5ee;">#0B0A18</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header"><h4 class="mock-dashboard-title">Recent sessions</h4><div class="mock-dashboard-meta">last 7 days</div></div>
+        <div class="session-row"><div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">Yesterday</div></div>
+        <div class="session-row"><div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div><div class="ai-tag">AI notes</div><div class="session-when">2d ago</div></div>
+        <div class="session-row"><div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div><div></div><div class="session-when">4d ago</div></div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div><div class="rec-label">Recording with Aiden K.</div><div class="rec-time">23:14</div><button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What makes Midnight Woodland Whimsy uniquely itself:</strong> The only finalist that's truly dark-mode-first. Deep navy-black foundation + sage and forest greens. The dark mode is the star — light mode loses the "midnight" feel because the green is too gentle to anchor a bright UI. Patagonia/REI energy.
+      <div class="vs"><strong>vs the field:</strong> Wildcard. The most distinctive in a different direction than Mauve Twilight. Bet this if you think your audience codes "premium outdoor brand" as legitimate. Cost: probably not the right vibe for "calm, patient tutoring."</div>
+    </div>
+  </article>
+
+</main>
+
+<script>
+  const body = document.body;
+  const btns = document.querySelectorAll('[data-mode-btn]');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const m = btn.dataset.modeBtn;
+      body.setAttribute('data-mode', m);
+      btns.forEach(b => b.setAttribute('aria-pressed', b.dataset.modeBtn === m ? 'true' : 'false'));
+    });
+  });
+</script>
+
+</body>
+</html>

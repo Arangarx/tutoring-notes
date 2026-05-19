@@ -1,0 +1,797 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mynk — Concept 3 dark mode iterations</title>
+<style>
+  *,*::before,*::after { box-sizing: border-box; }
+
+  :root {
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-serif: "Iowan Old Style", "Palatino Linotype", "Source Serif Pro", Georgia, serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-12: 48px;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-sans);
+    background: #0a0a0c;
+    color: #f0ece6;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body[data-mode="light"] {
+    background: #efece6;
+    color: #1a1a1f;
+  }
+
+  .chrome-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: rgba(10,10,12,0.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    padding: var(--space-4) var(--space-6);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-6);
+  }
+  body[data-mode="light"] .chrome-header {
+    background: rgba(239,236,230,0.92);
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+  }
+  .chrome-title {
+    font-family: var(--font-serif);
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .chrome-sub {
+    font-size: 13px;
+    opacity: 0.6;
+    font-family: var(--font-mono);
+  }
+  .chrome-controls {
+    display: flex;
+    gap: var(--space-3);
+    align-items: center;
+  }
+  .toggle-btn {
+    border: 1px solid currentColor;
+    background: transparent;
+    color: inherit;
+    padding: 6px 14px;
+    border-radius: 999px;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    opacity: 0.75;
+  }
+  .toggle-btn:hover { opacity: 1; }
+  .toggle-btn[aria-pressed="true"] {
+    background: currentColor;
+    color: #0a0a0c;
+    opacity: 1;
+  }
+  body[data-mode="light"] .toggle-btn[aria-pressed="true"] { color: #efece6; }
+
+  .intro {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: var(--space-8) var(--space-6) var(--space-6);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .intro h2 {
+    font-family: var(--font-serif);
+    font-size: 26px;
+    letter-spacing: -0.02em;
+    margin: 0 0 var(--space-3);
+    font-weight: 600;
+  }
+  .intro p { margin: 0 0 var(--space-3); opacity: 0.85; }
+  .intro code {
+    font: 12px var(--font-mono);
+    padding: 1px 5px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 3px;
+  }
+  body[data-mode="light"] .intro code { background: rgba(0,0,0,0.06); }
+
+  main {
+    padding: 0 var(--space-6) var(--space-12);
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-5);
+    max-width: 2000px;
+    margin: 0 auto;
+  }
+  @media (max-width: 1500px) {
+    main { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 820px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  .palette-frame {
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    color: var(--text);
+  }
+  body[data-mode="light"] .palette-frame {
+    border-color: rgba(0,0,0,0.1);
+  }
+
+  .palette-label {
+    padding: var(--space-4) var(--space-5);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-raised);
+  }
+  .palette-label-name {
+    font-family: var(--font-serif);
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0 0 4px;
+  }
+  .palette-label-tag {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+  }
+
+  .swatches {
+    display: flex;
+    height: 32px;
+    border-bottom: 1px solid var(--border);
+  }
+  .swatch {
+    flex: 1;
+    display: flex; align-items: center; justify-content: center;
+    font: 9px/1 var(--font-mono);
+    letter-spacing: 0.04em;
+    user-select: all;
+  }
+
+  .surfaces {
+    padding: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .mock-hero {
+    padding: var(--space-5) var(--space-4);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+  }
+  .mock-hero-wordmark {
+    font-family: var(--font-serif);
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin: 0 0 var(--space-3);
+    color: var(--brand);
+  }
+  .mock-hero-wordmark::after {
+    content: "·";
+    color: var(--accent);
+    margin-left: 4px;
+  }
+  .mock-hero-tag {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    line-height: 1.15;
+    font-weight: 500;
+    letter-spacing: -0.015em;
+    margin: 0 0 var(--space-2);
+    color: var(--text);
+  }
+  .mock-hero-sub {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-muted);
+    margin: 0 0 var(--space-4);
+  }
+  .mock-hero-ctas {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+  .btn-primary, .btn-ghost {
+    font: 12px var(--font-sans);
+    font-weight: 500;
+    padding: 7px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .btn-primary { background: var(--accent); color: var(--accent-on); }
+  .btn-ghost { background: transparent; color: var(--text); border-color: var(--border-strong); }
+
+  .mock-dashboard {
+    padding: var(--space-4);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+  }
+  .mock-dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin: 0 0 var(--space-3);
+  }
+  .mock-dashboard-title {
+    font: 600 13px/1.2 var(--font-sans);
+    color: var(--text);
+    margin: 0;
+  }
+  .mock-dashboard-meta {
+    font: 11px/1 var(--font-mono);
+    color: var(--text-muted);
+  }
+  .session-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    border-bottom: 1px solid var(--border);
+  }
+  .session-row:last-child { border-bottom: none; }
+  .session-student {
+    font: 500 12px/1.3 var(--font-sans);
+    color: var(--text);
+  }
+  .session-sub {
+    font: 11px/1.3 var(--font-sans);
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .session-when {
+    font: 11px var(--font-mono);
+    color: var(--text-muted);
+  }
+  .ai-tag {
+    font: 500 9px var(--font-mono);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 3px 6px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent-text);
+    white-space: nowrap;
+  }
+
+  .mock-recording {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+  }
+  .rec-dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-soft);
+    animation: rec-pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes rec-pulse {
+    0%, 100% { box-shadow: 0 0 0 4px var(--accent-soft); }
+    50% { box-shadow: 0 0 0 7px transparent; }
+  }
+  .rec-label { font: 500 12px var(--font-sans); color: var(--text); }
+  .rec-time { font: 600 12px var(--font-mono); color: var(--text); }
+  .rec-end {
+    font: 500 11px var(--font-sans);
+    padding: 6px 11px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--text);
+    background: var(--text);
+    color: var(--surface);
+    cursor: pointer;
+  }
+
+  .mock-ai-field {
+    padding: var(--space-4);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+  }
+  .ai-field-name {
+    font: 600 11px var(--font-sans);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 0 0 var(--space-3);
+  }
+  .ai-field-body {
+    font: 13px/1.55 var(--font-serif);
+    color: var(--text);
+    padding: var(--space-3);
+    border-radius: var(--radius-sm);
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+  }
+  .ai-field-foot {
+    margin-top: var(--space-2);
+    font: 10px var(--font-mono);
+    color: var(--text-muted);
+    letter-spacing: 0.03em;
+  }
+
+  .mock-mascot {
+    padding: var(--space-4);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
+    align-items: center;
+  }
+  .mascot-svg { width: 100%; height: auto; color: var(--text); }
+  .mascot-svg.accent { color: var(--accent); }
+  .mascot-svg.teal { color: var(--brand); }
+
+  .palette-notes {
+    padding: var(--space-4);
+    border-top: 1px solid var(--border);
+    background: var(--surface-raised);
+    font: 12px/1.5 var(--font-sans);
+    color: var(--text-muted);
+  }
+  .palette-notes strong { color: var(--text); font-weight: 600; }
+
+  /* ---------------------------------------------------------------- */
+  /* VARIANT 3 — Original (reference)                                  */
+  /* ---------------------------------------------------------------- */
+  body[data-mode="dark"] .variant-3 {
+    --brand: #5d9794;
+    --text: #f0ede4;
+    --text-muted: #8fa09e;
+    --surface: #0e2926;
+    --surface-raised: #143531;
+    --border: #234d48;
+    --border-strong: #3a6e68;
+    --accent: #e27d60;
+    --accent-soft: #3a1d15;
+    --accent-text: #e27d60;
+    --accent-on: #0e2926;
+  }
+  body[data-mode="light"] .variant-3 {
+    --brand: #1e4d4a;
+    --text: #1e4d4a;
+    --text-muted: #6b7c7a;
+    --surface: #f7f5f0;
+    --surface-raised: #fdfcf8;
+    --border: #d6dad5;
+    --border-strong: #aab2ad;
+    --accent: #e27d60;
+    --accent-soft: #f8e0d6;
+    --accent-text: #8a3c25;
+    --accent-on: #fdfcf8;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* VARIANT 3A — Warm graphite (teal as flavor, not foundation)       */
+  /* ---------------------------------------------------------------- */
+  body[data-mode="dark"] .variant-3a {
+    --brand: #4a8b87;
+    --text: #f0ede4;
+    --text-muted: #8a8e8c;
+    --surface: #1a1d1c;
+    --surface-raised: #25292a;
+    --border: #383d3b;
+    --border-strong: #4f5553;
+    --accent: #e27d60;
+    --accent-soft: #1e3a37;
+    --accent-text: #6db5b1;
+    --accent-on: #1a1d1c;
+  }
+  body[data-mode="light"] .variant-3a {
+    --brand: #1e4d4a;
+    --text: #1a1d1c;
+    --text-muted: #6b6e6c;
+    --surface: #f7f5f0;
+    --surface-raised: #fdfcf8;
+    --border: #d6dad5;
+    --border-strong: #aab2ad;
+    --accent: #e27d60;
+    --accent-soft: #e2efed;
+    --accent-text: #1e4d4a;
+    --accent-on: #fdfcf8;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* VARIANT 3B — Elevated teal (same direction, fixed hierarchy)      */
+  /* ---------------------------------------------------------------- */
+  body[data-mode="dark"] .variant-3b {
+    --brand: #6fa9a5;
+    --text: #f0ede4;
+    --text-muted: #8fa09e;
+    --surface: #07201d;
+    --surface-raised: #1a4441;
+    --border: #2d5754;
+    --border-strong: #467572;
+    --accent: #e8866d;
+    --accent-soft: #4a2017;
+    --accent-text: #f0a08c;
+    --accent-on: #07201d;
+  }
+  body[data-mode="light"] .variant-3b {
+    --brand: #1e4d4a;
+    --text: #1e4d4a;
+    --text-muted: #6b7c7a;
+    --surface: #f7f5f0;
+    --surface-raised: #fdfcf8;
+    --border: #d6dad5;
+    --border-strong: #aab2ad;
+    --accent: #e8866d;
+    --accent-soft: #f8e0d6;
+    --accent-text: #8a3c25;
+    --accent-on: #fdfcf8;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* VARIANT 3C — Teal as ink (warm neutral bg, teal as text)          */
+  /* ---------------------------------------------------------------- */
+  body[data-mode="dark"] .variant-3c {
+    --brand: #7eb1ae;
+    --text: #c2dcd9;
+    --text-muted: #8aa1a0;
+    --surface: #1d1f20;
+    --surface-raised: #282a2b;
+    --border: #393b3d;
+    --border-strong: #525558;
+    --accent: #e27d60;
+    --accent-soft: #322422;
+    --accent-text: #e27d60;
+    --accent-on: #1d1f20;
+  }
+  body[data-mode="light"] .variant-3c {
+    --brand: #1e4d4a;
+    --text: #1e4d4a;
+    --text-muted: #6b7c7a;
+    --surface: #f7f5f0;
+    --surface-raised: #fdfcf8;
+    --border: #d6dad5;
+    --border-strong: #aab2ad;
+    --accent: #e27d60;
+    --accent-soft: #f8e0d6;
+    --accent-text: #8a3c25;
+    --accent-on: #fdfcf8;
+  }
+</style>
+</head>
+
+<body data-mode="dark">
+<aside class="archived-banner" style="position: sticky; top: 0; z-index: 9999; background: #fff3cd; border-bottom: 3px solid #f59e0b; padding: 12px 20px; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.5; color: #78350f; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+  <strong>ARCHIVED EXPLORATION.</strong> This file is preserved for historical reference only. The Mynk brand was finalized as <strong>Mynka Blue</strong> on 2026-05-19. Canonical visual reference: <a href="../palette-mocks-FINAL-mynka-blue.html" style="color: #78350f; text-decoration: underline;">palette-mocks-FINAL-mynka-blue.html</a>. Decision doc: <code style="background:rgba(0,0,0,0.08);padding:1px 5px;border-radius:3px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;">docs/MYNK-BRAND-PHASE-2-DECISIONS.md</code>.
+</aside>
+
+<header class="chrome-header">
+  <div>
+    <div class="chrome-title">Mynk — Concept 3 dark mode iterations</div>
+    <div class="chrome-sub">brand-walkthrough phase 2 · daughter's note: teal too dominant in dark</div>
+  </div>
+  <div class="chrome-controls">
+    <button class="toggle-btn" data-mode-btn="dark" aria-pressed="true">Dark</button>
+    <button class="toggle-btn" data-mode-btn="light" aria-pressed="false">Light</button>
+  </div>
+</header>
+
+<section class="intro">
+  <h2>Three iterations on the dark mode.</h2>
+  <p>Original Concept 3 is in column 1 for reference. The three iterations all try to solve the same root issue (your daughter's "teal looks off with the other colors in dark mode" + your "too dominant in dark mode") but pull different design levers. Light mode is preserved across all four since the family already liked it; the toggle lets you sanity-check that each variant still has a coherent light state, but the comparison happens in dark.</p>
+  <p>Pay attention to: (1) does the coral accent now feel distinct, or does it still fight the background? (2) does the dark mode feel like Mynk, or like "any well-designed dark theme"? (3) which version would your daughter say "okay yes, this one"?</p>
+</section>
+
+<main>
+
+  <!-- ============================================================== -->
+  <!-- VARIANT 3 — Original                                             -->
+  <!-- ============================================================== -->
+  <article class="palette-frame variant-3">
+    <div class="palette-label">
+      <div class="palette-label-name">3 · Original</div>
+      <div class="palette-label-tag">reference · what you already saw</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #0e2926; color: #f0ede4;">#0E2926</div>
+      <div class="swatch" style="background: #143531; color: #f0ede4;">#143531</div>
+      <div class="swatch" style="background: #f0ede4; color: #0e2926;">#F0EDE4</div>
+      <div class="swatch" style="background: #e27d60; color: #0e2926;">#E27D60</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header">
+          <h4 class="mock-dashboard-title">Recent sessions</h4>
+          <div class="mock-dashboard-meta">last 7 days</div>
+        </div>
+        <div class="session-row">
+          <div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div>
+          <div class="ai-tag">AI notes</div>
+          <div class="session-when">Yesterday</div>
+        </div>
+        <div class="session-row">
+          <div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div>
+          <div class="ai-tag">AI notes</div>
+          <div class="session-when">2d ago</div>
+        </div>
+        <div class="session-row">
+          <div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div>
+          <div></div>
+          <div class="session-when">4d ago</div>
+        </div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div>
+        <div class="rec-label">Recording with Aiden K.</div>
+        <div class="rec-time">23:14</div>
+        <button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+      <div class="mock-mascot">
+        <svg class="mascot-svg" viewBox="0 0 240 90"><rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.45"/><rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.25"/><polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.55"/><ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/><path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/><ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/><ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/><circle cx="135" cy="19" r="3.5" fill="currentColor"/><circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/></svg>
+        <svg class="mascot-svg accent" viewBox="0 0 240 90"><rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.45"/><rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.28"/><polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.55"/><ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/><path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/><ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/><ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/><circle cx="135" cy="19" r="3.5" fill="currentColor"/><circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/></svg>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What:</strong> Cream text on deep teal bg, coral accent. <strong>Issue:</strong> teal saturates every surface, coral fights for attention against the teal-tinted competition, the whole UI feels mono-tinted.
+    </div>
+  </article>
+
+  <!-- ============================================================== -->
+  <!-- VARIANT 3A — Warm graphite                                       -->
+  <!-- ============================================================== -->
+  <article class="palette-frame variant-3a">
+    <div class="palette-label">
+      <div class="palette-label-name">3a · Warm graphite</div>
+      <div class="palette-label-tag">teal as flavor, not foundation</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #1a1d1c; color: #e8e6e0;">#1A1D1C</div>
+      <div class="swatch" style="background: #25292a; color: #e8e6e0;">#25292A</div>
+      <div class="swatch" style="background: #4a8b87; color: #1a1d1c;">#4A8B87</div>
+      <div class="swatch" style="background: #e27d60; color: #1a1d1c;">#E27D60</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header">
+          <h4 class="mock-dashboard-title">Recent sessions</h4>
+          <div class="mock-dashboard-meta">last 7 days</div>
+        </div>
+        <div class="session-row">
+          <div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div>
+          <div class="ai-tag">AI notes</div>
+          <div class="session-when">Yesterday</div>
+        </div>
+        <div class="session-row">
+          <div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div>
+          <div class="ai-tag">AI notes</div>
+          <div class="session-when">2d ago</div>
+        </div>
+        <div class="session-row">
+          <div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div>
+          <div></div>
+          <div class="session-when">4d ago</div>
+        </div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div>
+        <div class="rec-label">Recording with Aiden K.</div>
+        <div class="rec-time">23:14</div>
+        <button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+      <div class="mock-mascot">
+        <svg class="mascot-svg" viewBox="0 0 240 90"><rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.45"/><rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.25"/><polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.55"/><ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/><path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/><ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/><ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/><circle cx="135" cy="19" r="3.5" fill="currentColor"/><circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/></svg>
+        <svg class="mascot-svg teal" viewBox="0 0 240 90"><rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.45"/><rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.28"/><polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.55"/><ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/><path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/><ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/><ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/><circle cx="135" cy="19" r="3.5" fill="currentColor"/><circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/></svg>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What:</strong> Warm near-black bg (slight green warmth, not aggressively teal). Teal is repositioned as a tint for AI-content panels + heading accents, not the base layer. Coral accent gets to breathe. <strong>Tradeoff:</strong> loses some "teal product" identity; gains versatility + restraint.
+    </div>
+  </article>
+
+  <!-- ============================================================== -->
+  <!-- VARIANT 3B — Elevated teal                                       -->
+  <!-- ============================================================== -->
+  <article class="palette-frame variant-3b">
+    <div class="palette-label">
+      <div class="palette-label-name">3b · Elevated teal</div>
+      <div class="palette-label-tag">same direction · fixed hierarchy</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #07201d; color: #f0ede4;">#07201D</div>
+      <div class="swatch" style="background: #1a4441; color: #f0ede4;">#1A4441</div>
+      <div class="swatch" style="background: #f0ede4; color: #07201d;">#F0EDE4</div>
+      <div class="swatch" style="background: #e8866d; color: #07201d;">#E8866D</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header">
+          <h4 class="mock-dashboard-title">Recent sessions</h4>
+          <div class="mock-dashboard-meta">last 7 days</div>
+        </div>
+        <div class="session-row">
+          <div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div>
+          <div class="ai-tag">AI notes</div>
+          <div class="session-when">Yesterday</div>
+        </div>
+        <div class="session-row">
+          <div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div>
+          <div class="ai-tag">AI notes</div>
+          <div class="session-when">2d ago</div>
+        </div>
+        <div class="session-row">
+          <div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div>
+          <div></div>
+          <div class="session-when">4d ago</div>
+        </div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div>
+        <div class="rec-label">Recording with Aiden K.</div>
+        <div class="rec-time">23:14</div>
+        <button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+      <div class="mock-mascot">
+        <svg class="mascot-svg" viewBox="0 0 240 90"><rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.45"/><rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.25"/><polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.55"/><ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/><path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/><ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/><ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/><circle cx="135" cy="19" r="3.5" fill="currentColor"/><circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/></svg>
+        <svg class="mascot-svg accent" viewBox="0 0 240 90"><rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.45"/><rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.28"/><polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.55"/><ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/><path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/><ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/><ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/><circle cx="135" cy="19" r="3.5" fill="currentColor"/><circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/></svg>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What:</strong> Same teal direction but with a much darker base (`#07201d`) and a clearly raised teal surface (`#1a4441`) creating real elevation hierarchy. Coral pumped slightly (`#e8866d`) so it stays distinct against the more saturated teal canvas. <strong>Tradeoff:</strong> still recognizably "teal," still might feel too dominant if that's the underlying objection.
+    </div>
+  </article>
+
+  <!-- ============================================================== -->
+  <!-- VARIANT 3C — Teal as ink                                         -->
+  <!-- ============================================================== -->
+  <article class="palette-frame variant-3c">
+    <div class="palette-label">
+      <div class="palette-label-name">3c · Teal as ink</div>
+      <div class="palette-label-tag">teal lives in text · warm graphite bg</div>
+    </div>
+    <div class="swatches">
+      <div class="swatch" style="background: #1d1f20; color: #e8e6e0;">#1D1F20</div>
+      <div class="swatch" style="background: #282a2b; color: #e8e6e0;">#282A2B</div>
+      <div class="swatch" style="background: #7eb1ae; color: #1d1f20;">#7EB1AE</div>
+      <div class="swatch" style="background: #e27d60; color: #1d1f20;">#E27D60</div>
+    </div>
+    <div class="surfaces">
+      <div class="mock-hero">
+        <p class="mock-hero-wordmark">Mynk</p>
+        <h3 class="mock-hero-tag">You teach. Mynk takes the notes.</h3>
+        <p class="mock-hero-sub">Stay present. We handle the memory.</p>
+        <div class="mock-hero-ctas">
+          <button class="btn-primary">Start free trial</button>
+          <button class="btn-ghost">How it works</button>
+        </div>
+      </div>
+      <div class="mock-dashboard">
+        <div class="mock-dashboard-header">
+          <h4 class="mock-dashboard-title">Recent sessions</h4>
+          <div class="mock-dashboard-meta">last 7 days</div>
+        </div>
+        <div class="session-row">
+          <div><div class="session-student">Aiden K.</div><div class="session-sub">Algebra II · 47 min</div></div>
+          <div class="ai-tag">AI notes</div>
+          <div class="session-when">Yesterday</div>
+        </div>
+        <div class="session-row">
+          <div><div class="session-student">Maya R.</div><div class="session-sub">SAT prep · 52 min</div></div>
+          <div class="ai-tag">AI notes</div>
+          <div class="session-when">2d ago</div>
+        </div>
+        <div class="session-row">
+          <div><div class="session-student">Jordan P.</div><div class="session-sub">Geometry · 38 min</div></div>
+          <div></div>
+          <div class="session-when">4d ago</div>
+        </div>
+      </div>
+      <div class="mock-recording">
+        <div class="rec-dot"></div>
+        <div class="rec-label">Recording with Aiden K.</div>
+        <div class="rec-time">23:14</div>
+        <button class="rec-end">End</button>
+      </div>
+      <div class="mock-ai-field">
+        <div class="ai-field-name">Session summary</div>
+        <div class="ai-field-body">Aiden worked through quadratics. Confidence building on factoring; still needs reps on completing the square.</div>
+        <div class="ai-field-foot">AI-generated · edit before saving</div>
+      </div>
+      <div class="mock-mascot">
+        <svg class="mascot-svg" viewBox="0 0 240 90"><rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.45"/><rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.25"/><polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.55"/><ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/><path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/><ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/><ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/><circle cx="135" cy="19" r="3.5" fill="currentColor"/><circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/></svg>
+        <svg class="mascot-svg accent" viewBox="0 0 240 90"><rect x="14" y="48" width="6" height="14" rx="1" fill="currentColor" opacity="0.45"/><rect x="20" y="48" width="180" height="14" fill="currentColor" opacity="0.28"/><polygon points="200,48 222,55 200,62" fill="currentColor" opacity="0.55"/><ellipse cx="100" cy="38" rx="42" ry="13" fill="currentColor"/><path d="M 60 40 Q 30 35 18 22" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="round"/><ellipse cx="138" cy="30" rx="18" ry="13" fill="currentColor"/><ellipse cx="152" cy="33" rx="6" ry="4" fill="currentColor"/><circle cx="135" cy="19" r="3.5" fill="currentColor"/><circle cx="142" cy="29" r="1.5" fill="var(--surface-raised)"/></svg>
+      </div>
+    </div>
+    <div class="palette-notes">
+      <strong>What:</strong> Warm neutral graphite bg. Teal lives in the TEXT (soft cream-teal `#c2dcd9`) + headings/wordmark (`#7eb1ae`) — like ink on paper, but inverted-warm. Coral stays as the action accent. <strong>Tradeoff:</strong> most distinctive of the three; reads more "tasteful dark theme" than "teal brand"; relies on the wordmark + mascot teal to carry brand identity.
+    </div>
+  </article>
+
+</main>
+
+<script>
+  const body = document.body;
+  const btns = document.querySelectorAll('[data-mode-btn]');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const m = btn.dataset.modeBtn;
+      body.setAttribute('data-mode', m);
+      btns.forEach(b => b.setAttribute('aria-pressed', b.dataset.modeBtn === m ? 'true' : 'false'));
+    });
+  });
+</script>
+
+</body>
+</html>
