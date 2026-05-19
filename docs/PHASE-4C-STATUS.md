@@ -1,5 +1,7 @@
 # Phase 4c — AV UI + workspace/student mounting + CSP unblock — branch handoff
 
+> **Archive (2026-05-19):** ✅ **SHIPPED to master** merge `d7fd583` 2026-05-15.
+
 **Branch:** `phase-4c-av-ui-and-mounting` (off `master` at the 4b merge
 commit `e92c913`).
 **Master plan:** `~/.cursor/plans/tutoring_notes_pilot_ready_master_plan_9aaca460.plan.md`
