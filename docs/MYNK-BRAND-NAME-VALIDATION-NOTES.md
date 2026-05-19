@@ -68,6 +68,8 @@ Started from brainstorming many synonyms around learning, teaching, knowledge tr
 
 - **GoDaddy `mynk.com` listing confirmed as fixed-price-no-offer.** 2026-05-19 02:06 direct check showed $150,000 Buy It Now with no "Make Offer" affordance — seller has not enabled offers. Take-it-or-leave-it pricing through self-service; only path to negotiate would be calling broker line (480-366-3343). Confirms skip decision is correct; no further inquiry needed.
 
+- **`mynk.dev` availability mis-flagged.** 2026-05-18 research subagent reported `mynk.dev` as available via third-party WHOIS lookup. Cloudflare Registrar checkout 2026-05-18 returned the domain as unavailable. Pivoted to `usemynk.dev` (acquired cleanly). Lesson: third-party WHOIS / availability lookups can be stale or wrong, especially for short / sought-after slugs. Always verify availability through the actual registrar's checkout flow before committing to a primary-domain plan.
+
 ---
 
 ## Decisions landed 2026-05-18
@@ -78,10 +80,24 @@ Started from brainstorming many synonyms around learning, teaching, knowledge tr
 | **`mynk.com`** | SKIP | 4-5 figure broker price unaffordable at pilot stage; many successful SaaS run on alternate primaries (Notion was notion.so for years, etc.) |
 | **Primary domain** | `usemynk.com` | Available retail (~$11/yr at Cloudflare); clean SaaS CTA pattern; avoids fintech collision |
 | **Standardized social handle** | `usemynk` | Best cross-platform availability (TikTok, YouTube, GitHub, Bluesky, multiple defensives); avoids fintech-owned `mynkapp` |
-| **LinkedIn company slug** | `/company/mynk` | Only major platform where exact-Mynk identifier still claimable — grab ASAP |
+| **LinkedIn company slug** | `/company/usemynk` (claimed 2026-05-18) | `/company/mynk` held by Moroccan fintech; pivoted to `usemynk` slug |
 | **Skip from grab list** | `mynkapp.com`, `@mynkapp` everywhere | Moroccan fintech owns matching social handles; SEO collision unavoidable |
 | **Pilot scope discipline** | US-only, tutoring-not-payments | Mitigates fintech-Mynk collision; defers India trademark conflict; keeps strategic complexity low |
 | **`@usemynk` claimed across X and Bluesky** | YES | Direct signup succeeded; TwStalker mirror data was stale/wrong |
+
+### Brand asset acquisition (2026-05-18 evening – 2026-05-19)
+
+| Decision | Status | Note |
+|----------|--------|------|
+| 7 Tier 1 domains acquired via Cloudflare | DONE | usemynk.com (primary) + 6 defensives; privacy on |
+| `mynk.com` skip confirmed | DONE | $150k BIN, no Make Offer, broker-only negotiation |
+| `mynk.dev` swap to `usemynk.dev` | DONE | mynk.dev unavailable at registrar despite research signal |
+| LinkedIn `/company/usemynk` claimed | DONE | After `/company/mynk` found held by Moroccan fintech |
+| Reddit `/r/mynk` + `/u/usemynk` claimed | DONE | Subreddit under personal account; brand user created separately |
+
+## Open questions (brand walkthrough Phase 2)
+
+- **Reddit handle-claim methodology:** is creating a brand user account with `/u/usemynk` sufficient to reserve the URL, or are there additional Reddit-specific steps required to lock down the brand handle?
 
 ## Decisions deferred to brand walkthrough Phase 2
 
@@ -116,3 +132,5 @@ Started from brainstorming many synonyms around learning, teaching, knowledge tr
 
 - **2026-05-18 captured** — Orchestrator dispatched 4 parallel Composer 2.5 research subagents from Opus chat per AGENTS.md "Default execution path." Synthesized findings into yellow-flag walkthrough with Andrew. Andrew greenlit with 2 key decisions (skip mynk.com, standardize on usemynk). Capture dispatched as 5th Composer 2.5 subagent.
 - **2026-05-19 02:14 corrections** — Bluesky + X handles successfully claimed via direct signup; research methodology corrections folded into notes (TwStalker / LinkedIn slug reservation / TikTok pool exhaustion / GoDaddy listing nature).
+- **2026-05-18 evening** — Andrew acquired 7 Tier 1 domains via Cloudflare Registrar in a single checkout session; pivoted LinkedIn slug from `/company/mynk` to `/company/usemynk` after discovering Moroccan fintech holds both `/company/mynk` and `/company/mynkapp`; pivoted `mynk.dev` to `usemynk.dev` after Cloudflare checkout returned unavailable.
+- **2026-05-19 ~02:00–02:14** — Andrew created Reddit `/r/mynk` (under personal account) and `/u/usemynk` brand user; claimed X `@usemynk` and Bluesky `@usemynk.bsky.social` via direct signup using Gmail; confirmed TikTok Mynk-pattern handle pool fully exhausted; submitted YouTube facial-recognition identity verification (channel creation pending Google approval).
