@@ -1,5 +1,20 @@
 # UX Refresh — Plan + Phased Rollout
 
+> **⚠️ SUPERSEDED (2026-05-19 PM) for Phases 1+.** This doc's phased plan was written before Andrew's "v1-from-scratch" direction (no inheritance from current IA, pages, tabs, or URL structure). Phases 0 and the two shipped quick-wins are accurate history; Phases 1–4 are **historical context, not prescription**. Canonical sources for the next phase of work:
+>
+> - `docs/UX-AND-A11Y-SPEC.md` — conformance bar, contrast audit, Pre-flight, open IA decisions
+> - `docs/MYNK-BRAND-PHASE-2-DECISIONS.md` — locked palette + typography + voice
+> - `docs/BRAND.md` — engineering-ready brand reference
+> - `docs/handoff/v1-design-session-2026-05-19-pm-orchestrator-report.md` — most recent design-session handoff, including the deferred IA decisions + next-session bootstrapper template
+> - `docs/SARAH-CALL-PREP.md` — open questions for the next Sarah call that gate the remaining IA decisions
+>
+> Notable specific deltas vs. this doc:
+> - Phase 4 "parent audience deferred" → now: parent share view (`/s/[token]`) gets a formal per-surface spec in Phase 1.
+> - Phase 2 "tutor flow click-reduction" → folded into the broader v1 redesign; click-reduction is a *measurement*, not a phase.
+> - Phase 0 "Blocked on brand walkthrough" → unblocked. Brand decided.
+
+---
+
 > **Living plan doc.** Started 2026-05-17 evening on branch `feat/ux-refresh-foundation`. Update STATUS section as phases land. Treat the phased plan as the source of truth; orchestrator + executor handoffs reference this doc.
 
 ---
