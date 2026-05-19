@@ -4,16 +4,16 @@
 
 ---
 
-## STATUS (2026-05-17 evening)
+## STATUS (2026-05-19)
 
 | Phase | State | Notes |
 |-------|-------|-------|
-| Plan + audit + research | ✅ Shipped tonight | This doc + decision-fork resolutions captured below |
-| Quick win 1: landing page copy accuracy | ✅ Shipped tonight | `src/app/page.tsx` — outcome-focused copy, dropped stale "early access / we'll reach out" framing, swapped CTA hierarchy. No visual redesign yet (waits for Phase 0 primitives). |
-| Quick win 2: `AiAssistPanel` default tab → Record | ✅ Shipped tonight | One-line change — saves Sarah a click per session. Falls back to `"text"` when Blob isn't configured. |
-| Phase 0: Tailwind + shadcn foundation | ⏳ Next session | ~1 evening. NO existing screens migrated; primitives + tokens only. |
-| Phase 1: Landing + public surfaces visual redesign | ⏳ After Phase 0 | ~1 evening. Uses Phase 0 primitives. |
-| Phase 2: Tutor flow click-reduction | ⏳ After Phase 1 | ~1-2 evenings. The big wedge — Sarah's daily flow. |
+| Plan + audit + research | ✅ Shipped 2026-05-17 | This doc + decision-fork resolutions captured below |
+| Quick win 1: landing page copy accuracy | ✅ Shipped — master `f30877e` | `src/app/page.tsx` — outcome-focused copy, dropped stale waitlist framing, swapped CTA hierarchy. No visual redesign yet (waits for Phase 0 primitives). |
+| Quick win 2: `AiAssistPanel` default tab → Record | ✅ Shipped — master `f30877e` | Saves Sarah a click per session. Falls back to `"text"` when Blob isn't configured. |
+| Phase 0: Tailwind + shadcn foundation | 🚫 **Blocked** | Gated on **brand walkthrough Phase 2** (typography, color, voice) after Mynk name validation (`880f750`) + asset capture in progress. **Then** Phase 11a PostHog baseline (master plan Phase 11). Supersedes "Phase 0 first" from 2026-05-17. |
+| Phase 1: Landing + public surfaces visual redesign | ⏳ After Phase 0 + brand tokens | ~1 evening. Uses Phase 0 primitives. |
+| Phase 2: Tutor flow click-reduction | ⏳ After Phase 1 + **11a shipped** | Measurability prerequisite: PostHog funnels (`docs/handoff/posthog-analytics-tier-0-1-bootstrapper.md`). |
 | Phase 3: Micro-polish (toasts, skeletons, Cmd+K, typography) | ⏳ Ongoing | After Phase 2; can interleave with other work. |
 | Phase 4: Share-link surfaces (parent audience) | ⏳ Later | Separate audience; defer until tutor side feels right. |
 
@@ -269,7 +269,7 @@ The UX refresh is unique because it's presentation-layer for most phases. Phase-
 2. **Landing page copy rewrite** (`src/app/page.tsx`) — outcome-focused headline, dropped stale waitlist form, accurate framing, swapped CTA hierarchy (Create account = primary). No visual redesign; uses existing `globals.css` classes. Phase 1 will do the full visual.
 3. **`AiAssistPanel` default tab** (`src/app/admin/students/[id]/AiAssistPanel.tsx`) — defaults to `"record"` when `blobEnabled`, else `"text"`. Single-line behavior change.
 
-All three commit together on `feat/ux-refresh-foundation`. Branch pushed for Vercel Preview. Quick wins are low-risk + don't depend on the design system, so they're independently mergeable to master once Andrew smokes Preview (or on confidence — both changes are textual/structural-trivial).
+✅ **Merged to master `f30877e` 2026-05-17** (`feat/ux-refresh-foundation` absorbed). Legal sync to mortensenapps.com umbrella landed in the same merge train (`a747c14`, `26d66fa`, `90971fb`).
 
 ---
 

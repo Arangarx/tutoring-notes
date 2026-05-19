@@ -382,7 +382,7 @@ to know when to revisit.
 
 ## Per-page view state SHIPPED (Phase 5 task 8, tier b — May 2026)
 
-**Branch:** `feat/per-page-view-state` (merge after Andrew smoke).
+**Branch:** `feat/per-page-view-state` — ✅ **merged to master `2cccc04` 2026-05-17** (includes replay tier-c-lite + PDF auto-fit-on-insert).
 
 **Behavior:** Each board tab stores optional `viewState` (`panX`/`panY`/`zoom`) on `WhiteboardBoardDocumentV1.pageList[]`. Tutor capture runs on page switch; a **200ms debounced** flush updates the document, `sessionStorage` draft, and `pageViewState` wire envelopes for student follow-mode. Tab hide / `beforeunload` runs a best-effort viewport flush first. Student applies tutor patches only (no `pageViewState` emits).
 

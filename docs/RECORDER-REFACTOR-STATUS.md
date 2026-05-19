@@ -1,5 +1,7 @@
 # Recorder refactor — branch handoff
 
+> **Archive (2026-05-19):** ✅ All phases merged to master (B1–B5 + refactor). Sarah-unblock items in `docs/BACKLOG.md`. This doc preserved for handoff pattern reference.
+
 **Branch:** `refactor/recorder-test-modular` (not yet pushed; main is master)
 **Original plan:** `~/.cursor/plans/recorder-test-refactor_00e7871e.plan.md`
 **Wrap-up + Sarah unblock plan:** `~/.cursor/plans/recorder_refactor_wrap_and_sarah_unblock_8301e036.plan.md`

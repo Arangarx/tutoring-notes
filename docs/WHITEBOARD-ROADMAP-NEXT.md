@@ -21,6 +21,8 @@ Single execution-oriented view merging:
 
 ## Wave 0 — Verify what we already shipped (blocking further work)
 
+✅ **PDF workbook + per-page boards** — shipped master `9ff5b11` (2026-05-17). ✅ **Per-page view state (tier b) + replay viewport + PDF auto-fit** — shipped master `2cccc04` (2026-05-17). Canonical: `docs/PHASE-PDF-STATUS.md`, master plan Phase 5.
+
 Code has landed for **W2** (native image `assetUrl` + tutor/student cache) and **W6** (sessionStorage flush on hide / unload). **Do not close backlog rows** until manual smoke passes.
 
 

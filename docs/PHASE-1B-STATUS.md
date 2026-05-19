@@ -1,5 +1,7 @@
 # Phase 1b — outbox + atomic end-session — branch handoff
 
+> **Archive / handoff only (2026-05-19):** ✅ **SHIPPED to master** 2026-05-10 → 2026-05-13 (merge `eef541a` + hotfixes). Branch deleted. Active recorder architecture: `docs/RECORDER-LIFECYCLE.md`.
+
 **Branch:** `phase-1b-outbox-and-end-session` (off `master`; not yet pushed)
 **Master plan:** `~/.cursor/plans/tutoring_notes_pilot_ready_master_plan_9aaca460.plan.md`
 **Pillars in scope:** Pillar 2 (IndexedDB upload outbox) + Pillar 3 (atomic

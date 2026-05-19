@@ -1,6 +1,6 @@
 # Mynk — Pre-Trademark Implementation Backlog
 
-**STATUS update 2026-05-18**: Brand name validation COMPLETE — see `docs/MYNK-BRAND-NAME-VALIDATION-NOTES.md`. Andrew greenlit Mynk for US-only tutoring pilot. Domain primary `usemynk.com` (mynk.com skipped — unaffordable broker price). Social handle standardized `usemynk` everywhere + `linkedin.com/company/mynk`. Remaining unchecked items in P0-P4 still apply with the updated grab plan.
+**STATUS update 2026-05-19**: Brand name validation COMPLETE — see `docs/MYNK-BRAND-NAME-VALIDATION-NOTES.md` (read-only during parallel dispatches). **Tier 1 domain + partial social capture** on master `2bc5c88` / `95afcca` — canonical live checklist `docs/MYNK-BRAND-CAPTURE-CHECKLIST.md`. Primary domain `usemynk.com`; `mynk.com` skipped (~$150k). LinkedIn slug pivoted to `/company/usemynk`. P0 app-surface wiring (title, favicon, etc.) still unchecked below.
 
 **Goal:** Use "Mynk" as if it is the product name, gather real-world signal, and avoid expensive legal commitment until usage + pilot confidence increase.
 

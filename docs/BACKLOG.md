@@ -5,6 +5,8 @@ Not in priority order within sections — that comes when items move to a sprint
 
 **Authoritative for tutoring-notes:** Known open work for this app should appear in this file (or be explicitly ✅ **Shipped** here with any follow-ups cross-linked). If it is not here, assume it was never captured — add it. Day-to-day tickets/PRs can still exist; this document is the backlog of record when they disagree.
 
+**Status as of 2026-05-19:** Master plan staleness sweep (`~/.cursor/plans/tutoring_notes_pilot_ready_master_plan_9aaca460.plan.md`). Recent ships marked ✅ below with commit refs where applicable. **In flight:** `chore/security-tier-a-quick-wins` (Tier A security — not on master). **Blocked:** Phase 11 executor work until umbrella legal paragraphs publish to www.mortensenapps.com.
+
 ## Whiteboard — implementation / design queue
 
 **Roadmap (ordered waves, pilot vs maintenance vs Phase 2 gate):** see **`docs/WHITEBOARD-ROADMAP-NEXT.md`**. Execution YAML for Cursor Build: **`.cursor/plans/whiteboard_backlog_execution.plan.md`**.
@@ -13,7 +15,7 @@ Action items not yet built; design where noted. (Live status: `docs/WHITEBOARD-S
 
 | Item | Type | Notes |
 |------|------|--------|
-| **PDF workbook in Board pages** | Design + build | On insert: new **section** in the pages strip titled like the PDF file; **one board page (or row) per PDF page**, correct order; default **zoom to fit** that page; **optional:** lock/clamp pan and zoom to PDF edges (with optional user zoom). Touches `pageList` / wire `page` metadata, tutor + student, insert path. **Sarah (2026-04-24, Discord):** wants **separate pages** + **Wyzant-style page range picker** (import subset, not whole doc); **phone photos** as common as PDFs — pair with native image path below. |
+| ~~**PDF workbook in Board pages**~~ | ✅ **Shipped 2026-05-17** merge `9ff5b11` | Section-grouped per-page boards + subset page picker. Follow-ups: PDF position lock, Blob rate limit on bulk import, replay page strip — see `docs/PHASE-PDF-STATUS.md`. **Historical spec (pre-ship):** On insert: new **section** in the pages strip titled like the PDF file; **one board page per PDF page**; default **zoom to fit**; **Sarah (2026-04-24):** separate pages + Wyzant-style range picker. |
 | **Native image insert (Excalidraw drag / paste / default file flows)** | Bug + build | Smoke **2026-04:** **disk drag/drop** image → broken **placeholder on tutor and student**; native paths likely skip `uploadWhiteboardAsset` / `customData.assetUrl`. Audit and funnel like toolbar PDF. **Sarah:** phone photos are core. See **W2** in `.cursor/plans/WHITEBOARD-IMPROVEMENT-PLAN.md` + **`docs/whiteboard-smoke-log.md`**. |
 | **Whiteboard: cold refresh vs server truth** | Bug + product | Smoke **2026-04:** hard refresh could drop pages/strokes until Excalidraw **IndexedDB “Load draft”**; **Sarah:** after crash/reload, board must be **exactly as before** — **essential**. Tighten checkpoints / hydration (plan: W6, adversarial #1). Optional UX: one clear “restore” story vs two mechanisms (app gate vs Excalidraw banner). |
 | **Excalidraw recovery / “Load draft” popup** | UX + product | Smoke **2026-05:** after refresh/reconnect during live collab, Excalidraw’s **local recovery dialog** appears; the right action is usually **Discard** (follow **relay + app checkpoints / recorder truth**), not loading stale IndexedDB — easy to pick wrong and fork state. Backlog: investigate **suppression** (`resetScene`/`localStorage`/`localAppState` hooks per upstream API), automatic **clear stale draft** on controlled workspace mounts, or a **single in-app restore story** so this modal never fights collab. Cross-ref: row above — **cold refresh vs server truth**. Pilot note until fixed: prefer **Discard** when unsure. |
@@ -53,7 +55,7 @@ Reported via Discord after testing **Record → Transcribe** on phone. Treat as 
   2. **Q2 — recording on disconnect (highest leverage NEW item):** Her words: *"I don't think that the recording needs to keep going if the student is not connected. And it should pop up with a message saying student has disconnected due to connectivity or whatever reason and recording has paused. That way I know when it happens I can pause my instruction."* This **goes beyond** the timer pause we shipped today — the timer is now correct but **the audio recorder still keeps running** when she's alone. Captured as a discrete item under "Pilot feedback — action items" (`Recording auto-pause on student disconnect`). Builds directly on `bothPresent` + the new `active-ping` infra; ~1–2 hr.
   3. **Q3 — default = "show live + record":** Default OK as-is. Wants a **per-student override** *"that way if you know a student doesn't want to record it you can make the default appropriate to their situation."* Captured as `Per-student recording default preference` below.
   4. **Bonus — undo button on the whiteboard:** Standard expectation. Excalidraw has Ctrl/Cmd-Z built in — needs verification on touch (no keyboard) and a visible toolbar button on the tutor + student canvases. Captured as `Whiteboard undo (mark removal) — touch + visible button`.
-  5. **Transcription bug repro (existing item, fresh data):** Her test recording was **two segments — 50:01 + 20:13** (so auto-rollover B5 is working, segments split correctly), but the combined transcribe step failed with `"The server stopped responding before transcription finished (Server Action 60ae8e0344429ba8d13bed01577ee6c04306a335c8 was not found on the server)"`. This is the existing Server Action timeout on long combined transcriptions — not new, but worth noting Sarah hit it on her first real test. Real fix is the **background queue / async transcription** path (currently the action runs synchronously and Vercel's hobby/pro tier has a hard ~5 min timeout). Tracked under existing items in "Recording — long sessions" + "Reliability gaps" sections; not surfacing a new entry but priority bumped because this is now a *recurring* paper cut.
+  5. **Transcription bug repro (existing item, fresh data):** Her test recording was **two segments — 50:01 + 20:13** (so auto-rollover B5 is working, segments split correctly), but the combined transcribe step failed with `"The server stopped responding before transcription finished (Server Action 60ae8e0344429ba8d13bed01577ee6c04306a335c8 was not found on the server)"`. **Mitigation shipped 2026-05-17:** Vercel Pro (300s ceiling) + transcribe Tier 1 parallelize merge `5ccf1c7` — see `docs/PHASE-6-TIER-1-STATUS.md`. **Still open:** real 60–90 min smoke (item 5 under Recording — long sessions). Tier 2 background queue deferred unless Tier 1 proves insufficient.
   6. **Competitive intel (no action — note for product positioning):** *"It seems Wyzant has added a new feature of being able to record their videos as well."* Wyzant's "Lesson recordings" page screenshotted: opt-in, 30-day retention, bills the recording as a feature. Confirms the recording-the-session category is no longer a moat *just on its existing*. Our wedge stays the **AI-notes-from-the-recording** + **tutor keeps 100% of rate** angle — Wyzant gives the recording, we give the writeup. Captured under "Product positioning."
 
 **Monday readiness (process + shipped UX):** Deploy latest, then have Sarah: (1) **Hard refresh** the student page after deploy. (2) **Record tab:** confirm **Input:** shows a real device name; if “Unknown device” or junk transcription, fix **Windows sound default input** + Chrome site permission (Allow). (3) Speak **≥15 seconds** before Stop (short-clip confirm appears if under **8 seconds**). (4) **iPhone:** if “unexpected response” persists, use **Upload** with Voice Memos or **desktop Chrome** first — same account. (5) Grep Vercel for `rid=` + her **Ref:** if she reports an error. **Shipped helpers:** `maxDuration` on student page (Vercel Pro — 300s ceiling where configured), upload **retry once**, transcribe **retry once** on “Brief database hiccup”, mic label line, short-clip confirm, idle copy about mic permission.
@@ -435,6 +437,16 @@ Surfaced during a long planning conversation about naming, pricing, and competit
 - Referral nudge in-app (e.g. "give a tutor 50% off, get a month free") — costs margin, not cash.
 - Paid ads: **deferred** until conversion funnel is measured and LTV justifies CAC. Math doesn't work for B2B SaaS at low ASP without real funnel data.
 
+**Mynk brand / handle research (captured 2026-05-18 – 2026-05-19, not product code):**
+- ✅ **Tier 1 domains** — 7 acquired via Cloudflare (`usemynk.com` primary + defensives); see `docs/MYNK-BRAND-CAPTURE-CHECKLIST.md` (in-flight doc — do not edit in parallel agent dispatches).
+- ✅ **Partial Tier 1 social** — LinkedIn `/company/usemynk`, X `@usemynk`, Bluesky `@usemynk.bsky.social`, Reddit `/r/mynk` + `/u/usemynk` (`95afcca`, `2bc5c88`).
+- **YouTube** — Google identity / facial-recog verification **pending** (channel not claimed yet).
+- **TikTok** — **deferred** (Mynk-pattern username pool exhausted at capture time).
+- **Facebook Page** — **low-priority defensive grab** (Tier 2 sweep; not blocking pilot).
+- **Reddit methodology** — open question: whether to claim additional subreddit names beyond `/r/mynk` for defensive posture (orchestrator to decide before public launch).
+- **mynk.com** — **skipped** (~$150k aftermarket; `usemynk.com` is primary).
+- **Tier 2 defensive domains** — backlog for post–Tier-1 sweep (e.g. additional TLDs / typos — list in brand capture checklist when Andrew resumes).
+
 ### Legal / trust
 - **Audio recording of minors** is jurisdiction-sensitive. Need a clear consent flow, retention policy, and a "delete on request" path before live audio capture ships. Research per state/province before enabling for users outside Sarah's pilot.
 - **PII handling** (parent emails, student names, session content) — privacy policy needs to be real, not generic, before public launch. Already have stub via Trust launch bar; revisit before opening signups beyond pilot.
@@ -446,6 +458,12 @@ Surfaced during a long planning conversation about naming, pricing, and competit
 - **Track whether shipped fixes actually changed behavior** — "thanks" from a user is not the same as the metric improving.
 
 ---
+
+## Security (2026-05-18 recon + 2026-05-19 Tier A branch)
+
+- **npm audit baseline (2026-05-18):** 22 vulnerabilities (8 high) captured during security recon — full upgrade pass slotted to **Phase 9f Tier B** (`docs/SECURITY-AUDIT-INTERNAL.md` not yet written). Non-breaking bumps first; `nanoid` (Excalidraw) and `nodemailer` (next-auth) need explicit decisions.
+- **🚧 Tier A quick wins — IN FLIGHT** on branch `chore/security-tier-a-quick-wins` (commit `8cdbe58`, **not merged**): `/.well-known/security.txt`, signup generic error (anti-enumeration), `/forgot-password` enumeration check. Andrew: smoke → merge. **Phase 9f** (internal audit) fires after Tier A ships; bootstrapper not drafted yet.
+- **Phase 10-pre external pen-test** — before first paying customer; slotted in master plan; not started.
 
 ## Operational follow-ups (small, do when convenient)
 

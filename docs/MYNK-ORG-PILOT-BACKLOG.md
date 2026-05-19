@@ -4,7 +4,7 @@
 **Gating**: This work starts when all of these are true:
 1. Current solo-tutor offering is stable in Sarah pilot use (no
    active reliability fires, recorder lifecycle solid).
-2. UX refresh (docs/UX-REFRESH-PLAN.md) is complete.
+2. UX refresh (docs/UX-REFRESH-PLAN.md) is **complete** (hard refresh + brand baked in — foundation merge `f30877e` is necessary but not sufficient).
 3. Brand identity finalized: **name VALIDATED 2026-05-18** (see
    `docs/MYNK-BRAND-NAME-VALIDATION-NOTES.md`); colors/typography/voice/mascot
    decisions still pending (brand walkthrough Phase 2 — TBD, to be captured in
@@ -14,7 +14,7 @@
 `~/.cursor/plans/tutoring_notes_pilot_ready_master_plan_9aaca460.plan.md`).
 
 **Forward-compatibility hooks already flagged**:
-- UX refresh (in flight) is constrained to not preclude future
+- UX refresh (foundation on master; Phases 0–4 visual work pending brand + PostHog) is constrained to not preclude future
   `/org/[id]/...` URL scoping. See `docs/UX-REFRESH-PLAN.md` for
   the locked-in constraint.
 - **Solo-tutor non-degradation**: Org features are strictly additive.

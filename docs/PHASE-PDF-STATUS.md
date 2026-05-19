@@ -1,5 +1,7 @@
 # PHASE-PDF — PDF page picker + per-page boards
 
+> **Shipped to master `9ff5b11` 2026-05-17.** Branch `pdf-page-picker-and-per-page-boards` preserved for stale-branch sweep until pruned.
+
 ## TL;DR
 
 Shipped **subset PDF import** (inspect → picker → render) and **one board tab per PDF page**, grouped under a **collapsible section** keyed by `pdf-<uuid>` with tutor-local collapse state in `localStorage`. Wire **v3 document broadcasts** carry additive `pageList[].section` + optional `sections` map (student mirrors tutor labels).

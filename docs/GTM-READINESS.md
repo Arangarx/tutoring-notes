@@ -10,7 +10,7 @@ Pipeline rule: do not treat a release as “ready” for an audience while **kno
 
 | Stage | Ready? | Why |
 |-------|--------|-----|
-| **Private pilot (3–10 tutors you trust)** | **Mostly yes**, with caveats | Core loop works; deploy with durable DB + correct `NEXTAUTH_URL`; configure email for reset; handle Google OAuth test users; replace template Privacy/Terms if pilots expect formal policy. |
+| **Private pilot (3–10 tutors you trust)** | **Mostly yes**, with caveats | Core loop works; deploy with durable DB + correct `NEXTAUTH_URL`; configure email for reset; handle Google OAuth test users. **Privacy/Terms:** product facades at `/privacy` + `/terms` sync to canonical www.mortensenapps.com per `docs/LEGAL-SYNC.md` (shipped `f30877e`). |
 | **Paid “real” customers at scale** | **Closer; still gated** | Password reset + in-app Privacy/Terms templates are in place; you must still customize legal copy, choose durable DB/hosting, add billing/monitoring, and harden for your threat model. |
 | **Self-serve signup from the internet** | **No** | Single-admin / per-deploy model, no marketing site, OAuth consent likely still “Testing.” |
 

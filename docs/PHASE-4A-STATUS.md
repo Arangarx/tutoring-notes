@@ -1,5 +1,7 @@
 # Phase 4a — peer-mesh + signaling foundation — branch handoff
 
+> **Archive / handoff only (2026-05-19):** ✅ **SHIPPED to master** merge `59d13ad`. Branch deleted. Live A/V stack complete through 4d + device-management (`ac92137`). See `docs/LIVE-AV.md`.
+
 **Branch:** `phase-4a-peer-mesh-signaling` (off `master` at `ac9a066`).
 **Master plan:** `~/.cursor/plans/tutoring_notes_pilot_ready_master_plan_9aaca460.plan.md`
 **Pillar in scope:** Pillar 6 (Live A/V transport architecture) —

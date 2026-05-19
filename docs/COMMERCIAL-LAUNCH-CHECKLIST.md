@@ -19,8 +19,8 @@
 - [ ] Register business name if applicable
 - [ ] Separate business bank account
 - [ ] Set pricing (monthly subscription model is standard for SaaS; start simple: one tier)
-- [ ] Terms of Service → replace `/terms` placeholder with real content (consider using a legal template service like Clerky, or hire a lawyer for <$500 for a basic SaaS ToS)
-- [ ] Privacy Policy → replace `/privacy` placeholder (required for Google OAuth verification, app stores, payment processors)
+- [x] Terms of Service — **product facade shipped** (`/terms` syncs with canonical `https://www.mortensenapps.com/terms` per `docs/LEGAL-SYNC.md`, merge train `f30877e` / `a747c14`). Umbrella remains authoritative for OAuth.
+- [x] Privacy Policy — **product facade shipped** (`/privacy` syncs with canonical `https://www.mortensenapps.com/privacy`). Pending umbrella paragraphs for PostHog + AI-improvement (Phase 11) must publish to mortensenapps.com before those features ship.
 
 ---
 

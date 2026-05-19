@@ -1,6 +1,6 @@
 # Phase 6 — Tier 1 long-form transcribe (parallel + duration splits)
 
-## Shipped (2026-05-17 branch `feat/transcribe-tier-1-parallelize`)
+## Shipped (2026-05-17 — merge `5ccf1c7` to master from branch `feat/transcribe-tier-1-parallelize`, branch tip `214305b`)
 
 - **Duration-aware ffmpeg splitting:** `WHISPER_TARGET_CHUNK_SECONDS = 240` — segment count is `max(byte-based, duration-based)` so small-but-long Opus/WebM files split into parallel-sized chunks (see `planWhisperInitialSegmentCount` in `src/lib/transcribe-ffmpeg.ts`).
 - **Inner parallelism:** Up to **6** concurrent Whisper calls per recording (`WHISPER_INNER_CONCURRENCY` in `src/lib/transcribe.ts`), preserving part order when joining transcripts.
