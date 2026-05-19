@@ -5,10 +5,10 @@
 1. Current solo-tutor offering is stable in Sarah pilot use (no
    active reliability fires, recorder lifecycle solid).
 2. UX refresh (docs/UX-REFRESH-PLAN.md) is complete.
-3. Brand identity finalized (name validated, colors/typography/voice
-   decided) — see `docs/MYNK-BRAND-NAME-VALIDATION-NOTES.md` (TBD,
-   in progress 2026-05-18) and the eventual
-   `docs/MYNK-BRAND-CAPTURE-CHECKLIST.md`.
+3. Brand identity finalized: **name VALIDATED 2026-05-18** (see
+   `docs/MYNK-BRAND-NAME-VALIDATION-NOTES.md`); colors/typography/voice/mascot
+   decisions still pending (brand walkthrough Phase 2 — TBD, to be captured in
+   `docs/MYNK-BRAND-CAPTURE-CHECKLIST.md`).
 
 **Master plan tracking**: Phase 12 (tentative numbering — see
 `~/.cursor/plans/tutoring_notes_pilot_ready_master_plan_9aaca460.plan.md`).
