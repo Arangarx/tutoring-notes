@@ -1,5 +1,7 @@
 # Mynk — Pre-Trademark Implementation Backlog
 
+**STATUS update 2026-05-18**: Brand name validation COMPLETE — see `docs/MYNK-BRAND-NAME-VALIDATION-NOTES.md`. Andrew greenlit Mynk for US-only tutoring pilot. Domain primary `usemynk.com` (mynk.com skipped — unaffordable broker price). Social handle standardized `usemynk` everywhere + `linkedin.com/company/mynk`. Remaining unchecked items in P0-P4 still apply with the updated grab plan.
+
 **Goal:** Use "Mynk" as if it is the product name, gather real-world signal, and avoid expensive legal commitment until usage + pilot confidence increase.
 
 ---
@@ -16,17 +18,16 @@
   - Package / app identifiers where safe
   - Favicon placeholder
 - [ ] Reserve digital identity:
-  - `mynkapp.com` (if available)
-  - `usemynk.com` (if available)
-  - `mynkhq.com` (if available)
-  - Discord
-  - GitHub org
-  - X / Twitter
-  - Instagram
-  - TikTok
-  - YouTube
-  - Reddit
-  - Gmail / email aliases
+  - **Domains (validated grab list):**
+    - `usemynk.com` — PRIMARY (permanent; mynk.com skipped — unaffordable broker)
+    - `trymynk.com`, `mynksession.com`, `mynksessions.com`, `mynktutor.com`, `mynklearning.com`, `mynk.dev` — defensives
+    - ~~`mynkapp.com`~~ — SKIP (Moroccan fintech collision; see validation notes)
+    - `mynkhq.com` — lower priority (Tier 2 in capture checklist)
+  - **Social handles (validated):**
+    - `@usemynk` everywhere (X, Instagram, TikTok, YouTube, GitHub org, Bluesky, Reddit `u/usemynk`, etc.)
+    - `linkedin.com/company/mynk` — grab ASAP (only major platform where exact-Mynk slug still available)
+    - ~~`@mynk`~~, ~~`@mynkapp`~~ — SKIP (held by others / fintech territory)
+  - Discord, Gmail / email aliases (see `docs/MYNK-BRAND-CAPTURE-CHECKLIST.md`)
 - [ ] Create temporary logo placeholder:
   - Simple wordmark only
   - No major logo investment yet
@@ -90,6 +91,8 @@
 ---
 
 ## P4 — Metrics before filing
+
+**MYNC (Grass Valley, IC 009 video editing) is the closest USPTO conflict identified in 2026-05-18 validation research — flag for counsel when formal TESS clearance + filing begins. Different goods/channels argument expected to overcome.**
 
 **Do not file trademark until:**
 

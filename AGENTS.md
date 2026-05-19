@@ -127,6 +127,160 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
    making changes.
 4. Update the STATUS doc as you finish each sub-phase.
 
+## Model usage protocol (provisional, captured 2026-05-18 post-Composer-2.5-launch, refined same day after discovering Task-tool per-subagent model selection)
+
+Cost discipline matters because Opus on-demand burn was a non-trivial
+line item even before this pilot started charging anyone. Composer 2.5
+(released 2026-05-18) is ~30x cheaper per token than Opus 4.7 at the
+Standard tier, ~5x cheaper at the Fast tier, and demonstrated
+production-grade quality on this codebase the day it launched (security
+audit Tier A, commits `5aa16f9` + `8cdbe58` — see "Real-world
+observations" below).
+
+**Default execution path: inline subagent dispatch from the Opus
+orchestration chat.** When orchestration decides a task needs doing,
+the default is `Task(model="composer-2.5", prompt="<scope blob>")`
+from the Opus chat itself — NOT a separately-spawned Composer chat
+that Andrew has to context-switch into. Andrew stays in the
+orchestration chat; subagent runs foreground or background; results
+report back inline. This collapses the prior "Andrew switches between
+chats" friction to "Opus dispatches; Andrew sees results in flow."
+
+- **Executor work**: `subagent_type="generalPurpose"`,
+  `model="composer-2.5"`. The dispatch prompt carries the scope blob
+  the orchestrator would have otherwise asked Andrew to paste into a
+  new chat.
+- **Investigation** (read N files to understand a thing):
+  `subagent_type="explore"`, `model="composer-2.5"`. Readonly, cheap,
+  returns a focused summary instead of consuming Opus tokens on file
+  reads.
+- **Large-diff adversarial review or 5-axis reliability checks**:
+  `model="claude-4.6-sonnet-medium-thinking"`.
+- **Long-running execution**: `run_in_background=true`. Opus keeps
+  orchestrating in parallel; system notifies on completion.
+
+**Bootstrappers (`docs/handoff/*-bootstrapper.md`) are now usually
+unnecessary.** They were an artifact from when subagent context had
+to be hand-curated via paste-blob into fresh chats. With inline
+dispatch, the dispatch prompt IS the scope blob. Write a bootstrapper
+only when: (a) the work is novel architecture where Opus is doing the
+design pass and the bootstrapper IS the design artifact worth
+committing for audit trail (the "Opus designs, Composer ships"
+pattern below); (b) the work will be re-run via `best-of-n-runner`
+subagent type; (c) async handoff across days/weeks where the spec
+needs to be durable memory. Otherwise: dispatch with a scope-blob
+prompt and skip the file.
+
+**Tier assignment** (which model to dispatch — escalate only on the
+criteria in the next subsection):
+
+- **Composer 2.5** is the default. Use for executor work, spike
+  chats, code review, security audits, cleanup passes, and most
+  refactor + feature work where the pattern is clear from prior
+  similar work in the repo.
+
+- **Sonnet** when more than Composer is needed but Opus is overkill:
+  novel architecture that fits in ~half-day design, cross-cutting
+  changes needing broader context than a single feature, code review
+  of large diffs where subtle issues (concurrency, auth boundaries)
+  might be missed, 5-axis adversarial reliability reviews.
+
+- **Opus reserved for orchestration only**:
+  - Phase planning + sequencing (this chat-style orchestration
+    session).
+  - Cross-cutting design decisions that span multiple phases
+    (e.g. introducing the FSM/outbox/atomic end-session three-pillar
+    pattern back in Phase 1).
+  - Multi-day novel architecture where wrong design = days of
+    unwinding.
+  - Strategic decisions (Vercel Pro upgrade, when to merge, when to
+    defer a phase, brand resumption gating).
+  - Synthesizing results from multiple subagents back to Andrew.
+  - Tiny in-chat doc commits where dispatch overhead > task cost
+    (≤5 tool calls AND docs-only AND single coherent thought
+    already loaded).
+
+**Escalation criteria** — what triggers moving up a tier:
+
+- Composer 2.5 → Sonnet: the work surface has any of (a) auth-boundary
+  or ownership-assertion change, (b) concurrency or race-condition
+  reasoning, (c) cross-cutting refactor affecting >3 phases of code,
+  (d) a feature plan where the 5-axis reliability review has not yet
+  been done.
+- Sonnet → Opus: the work is (a) introducing a new architectural
+  pillar to the recorder lifecycle / outbox / sync layer (Pillar
+  language from RECORDER-LIFECYCLE.md), (b) revisiting a design
+  decision that has already cost us a recovery cycle in pilot, (c)
+  multi-day with high blast radius (Phase 4 series, Phase 1
+  outbox/FSM work, Phase 11d prompt iteration meta-loop), or (d)
+  determining the shape of a future Phase that doesn't yet have a
+  scope.
+
+**Proven patterns** — combine tiers when it pays off:
+
+- **"Opus dispatches inline"** (default since 2026-05-18 refinement).
+  Opus chat dispatches Composer 2.5 subagents for execution,
+  `explore` subagents for investigation, Sonnet subagents for
+  adversarial review. Andrew stays in one chat. The dispatch prompt
+  carries the scope. This very revision was committed via this
+  pattern as the inaugural demonstration.
+- **"Opus designs, Composer ships"** (validated 2026-05-17 PDF
+  feature + per-page view state). Opus does the design pass + writes
+  a bootstrapper as the design artifact; Composer 2.5 executes via
+  subagent dispatch with the bootstrapper @-referenced or paste-
+  blobbed in the prompt. Optimal when the design is high-stakes
+  (audit-trail value) and the execution is well-patterned.
+- **"Composer designs and ships"** (validated 2026-05-18 security
+  Tier A, commit `8cdbe58`). Composer 2.5 handles both spec and
+  implementation in-chat or in a single subagent dispatch. Optimal
+  when work is clearly scoped, has a definite acceptance criterion,
+  and orchestrator has prior context to write a good dispatch
+  prompt.
+
+**What Opus should NOT do in-chat** (these are subagent-dispatch
+candidates, not Opus tool calls):
+
+- Reading code files to "understand a thing" → dispatch an `explore`
+  subagent instead.
+- Writing bootstrappers for well-patterned work → dispatch a
+  Composer subagent to author (or skip the bootstrapper entirely
+  per "Default execution path" above).
+- Multi-step refactors, migrations, or feature implementation →
+  dispatch a Composer subagent with a scope blob.
+- Investigating failing CI checks → dispatch a `ci-investigator`
+  subagent.
+
+**Real-world observations** — what we've actually seen, updated when
+evidence changes:
+
+- **Composer 2.5 quality (2026-05-18, day-of-launch)**: production-grade
+  on the security Tier A scope. Read 3 files to confirm 1 claim
+  (`/forgot-password` enumeration safety); caught the silent
+  `npm audit fix` no-op via `git diff --stat`; correctly diagnosed
+  peer-dep conflict from the ERESOLVE warnings; held scope discipline
+  on zod-validation generalization. Verified pre-push via tsc + eslint.
+  Slightly verbose code comments but otherwise indistinguishable from
+  Opus-class output for this scope.
+- **Composer 2 fell short of marketing claims in practice** (Andrew,
+  pilot history). Composer 2.5's marketing is similar in shape; treat
+  this protocol as PROVISIONAL pending independent benchmark data and
+  more multi-week observation of Composer 2.5 in real work.
+- **What to watch for that would trigger protocol revision**: (a)
+  complexity ceiling — work where Composer 2.5 silently produces
+  mediocre work without obvious failure (rename to "default-with-
+  caveats" if it appears); (b) reliability ceiling — instances where
+  Composer 2.5 cuts corners on tests/lints/docs that an Opus pass
+  would have caught; (c) debugging depth ceiling — issues where
+  Composer 2.5 gives up at a layer Opus would have pushed through.
+  Capture these as dated entries under "Real-world observations"
+  when they occur.
+
+**Cost discipline rule**: default to the cheapest tier that can do
+the job. Default to inline subagent dispatch over in-chat Opus tool
+calls. Escalate only when the cost of a wrong call (hours of
+unwinding) > the marginal model cost (cents per Composer 2.5
+subagent vs dollars per Opus chat).
+
 ## Merging convention (solo-tutor pilot stage)
 
 While the pilot is solo (just Andrew + Sarah) and there's no adversarial

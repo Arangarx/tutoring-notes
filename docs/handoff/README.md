@@ -43,7 +43,7 @@ Andrew's workflow can use whichever is faster.
 **Why all three elements**:
 
 - **H1 title** — orients the executor (and Andrew's chat history) on what the work is.
-- **Model recommendation blockquote** — Andrew sees it when opening the file before spawning the chat, so he picks the right model class. Composer for well-patterned work (~2-4 hr); Opus for novel architecture / cross-cutting design / >1 day scope; Sonnet for in-between. See master plan's "Model usage protocol" section for full guidance.
+- **Model recommendation blockquote** — Andrew sees it when opening the file before spawning the chat, so he picks the right model class. **Default is Composer 2.5** (well-patterned work, executor briefings, most refactor/feature work); Sonnet when more than Composer is needed but Opus is overkill (novel half-day design, cross-cutting code review, adversarial reliability review); Opus reserved for orchestration only (phase planning, cross-cutting architectural design, multi-day novel work with high blast radius). **Canonical protocol with escalation criteria + real-world observations lives in `AGENTS.md` "Model usage protocol" section** — read that before picking the model class for a new bootstrapper. The bootstrapper's own model recommendation should cite the AGENTS protocol, not re-derive it.
 - **Briefing-intent blockquote** — disambiguates intent when the file arrives as an
   `@`-reference. Without it, the receiving agent may treat the file as
   "reference material the user wants me to know about" rather than "my

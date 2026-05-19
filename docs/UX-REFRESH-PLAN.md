@@ -107,7 +107,43 @@ Track all forks + resolutions here so future-Andrew + future-orchestrator can se
 | 2026-05-17 | Tonight scope: plan-only vs. plan+quick-wins vs. plan+Phase-0-start | **Plan + 2 quick wins** | Late night, Andrew tired, wants visible progress without committing to a multi-hour foundation build at 10 PM. Quick wins are low-risk + don't depend on the design system. |
 | 2026-05-17 | Waitlist form on landing | **Removed** | Andrew confirmed: signup is currently open (gated only by his manual email approval) and even that goes away once email verification ships. Waitlist form was misleading. |
 | 2026-05-18 | How to measure Phase 2 click-reduction success | **PostHog product analytics (Phase 11a in master plan)** lands BEFORE Phase 2 of this UX refresh resumes | Phase 2's whole charter is "cut clicks-to-primary-action from 3→1." Without analytics, "we cut clicks" is aesthetic. With PostHog funnels (`/admin → session_started → recording_stopped`), Phase 2's success criteria become measurable. PostHog Tier 0+1 is its own bootstrapper (`docs/handoff/posthog-analytics-tier-0-1-bootstrapper.md`); ships independently of the UX refresh foundation. |
-| 2026-05-18 | Build order: Tailwind/shadcn vs. PostHog first | **PostHog first, then resume Phase 0 (Tailwind/shadcn)** | PostHog gives us a baseline measurement BEFORE the refresh changes anything. Otherwise we have no before/after comparison and can't prove the refresh reduced clicks (vs. simply "feels lighter"). Marginal cost: one extra branch sequenced ahead of Phase 0. |
+| 2026-05-18 | Build order: Tailwind/shadcn vs. PostHog first | **PostHog first, then resume Phase 0 (Tailwind/shadcn)** | PostHog gives us a baseline measurement BEFORE the refresh changes anything. Otherwise we have no before/after comparison and can't prove the refresh reduced clicks (vs. simply "feels lighter"). Marginal cost: one extra branch sequenced ahead of Phase 0. **Superseded for Tailwind timing (2026-05-18):** brand identity decisions (typography, color, voice) must land before Tailwind/shadcn executes — see "Brand-feeds-refresh sequencing" below. PostHog-before-refresh baseline still holds. |
+| 2026-05-18 | Build order: brand vs PostHog vs Tailwind/shadcn | **Brand identity decisions first → PostHog baseline → Tailwind/shadcn + brand** | You cannot pick typography, color palette, or editorial voice without brand identity decided. The refresh *implements* brand visually; brand work feeds the refresh, not the other way around. Supersedes any implicit "Tailwind/shadcn first" sequencing from the 2026-05-17 foundation fork. |
+
+### Hard refresh scope clarification (2026-05-18)
+
+**"Hard refresh"** means professional product visual elevation — typography, color palette, visual language, iconography, and tonal coherence across surfaces — **not** merely copy-rewrite + click-reduction + Tailwind token swaps.
+
+- **Baseline**: the current "clean but usable" state (functional, not delightful).
+- **Target**: *looks like a real product, not a side project.*
+- Phases 1–3 of this plan still include copy, click-reduction, and primitives — but those are necessary, not sufficient, for the hard refresh bar Andrew set on 2026-05-18.
+
+### Brand-feeds-refresh sequencing (2026-05-18)
+
+Brand identity decisions (**typography, color, voice**) must be made **before** the UX refresh executes, because the refresh implements them visually.
+
+**Sequencing implication:** brand walkthrough + decisions → (domain/handle grabs once name is validated) → PostHog Tier 0+1 baseline → Phase 0 Tailwind/shadcn **with brand tokens baked in** → Phases 1–3 visual + flow work. Do not start Tailwind theme extraction or shadcn theme wiring until brand is locked.
+
+See `docs/MYNK-BRAND-NAME-VALIDATION-NOTES.md` (TBD, in progress 2026-05-18) and the eventual `docs/MYNK-BRAND-CAPTURE-CHECKLIST.md`. Mynk name is an operational commit but **not** 100% locked until step-by-step validation completes (trademark, domain, social, adjacent brand, international pronunciation, SEO). Andrew (2026-05-18): *"Let's walk through this one step by step if we need to see if I'm being dreamy or it's a realistic name to grab."*
+
+### Forward-compatibility: org-level scoping (Phase 12 hook)
+
+**Constraint** (locked in 2026-05-18, see `docs/MYNK-ORG-PILOT-BACKLOG.md`):
+
+The nav primitives and URL structure introduced by this UX refresh
+must NOT preclude introducing organization-level scoping later
+(Phase 12, gated on this refresh + pilot stability). Specifically:
+
+- Global nav should support a future "org switcher" affordance
+  (think Vercel/GitHub team switcher pattern) without requiring
+  a rewrite of the primitive.
+- New URL structures should accommodate additive `/org/[id]/...`
+  paths without colliding with the existing `/admin/students/[id]/...`
+  tutor-scoped routes.
+
+**This refresh does NOT need to BUILD any org-aware nav** — Phase 12
+is gated on this refresh completing. The constraint is purely "don't
+paint us into a corner."
 
 ---
 
