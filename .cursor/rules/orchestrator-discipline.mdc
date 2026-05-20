@@ -1,0 +1,49 @@
+---
+description: Orchestrator chats orchestrate; executor work dispatches to Composer 2.5 subagents. Applies to every chat in this repo, especially Opus.
+alwaysApply: true
+---
+
+# Orchestrator discipline
+
+If you are an **Opus orchestrator chat** in this repo, your job is to decide and dispatch — not to type code, read code at length, or author durable prose yourself. Two reasons: (1) cost — Opus is ~30x Composer 2.5 at Standard tier; (2) quality — a Composer subagent reading the codebase fresh often surfaces things Opus misses while reasoning from its in-context mental model of the repo.
+
+## STOP before any of these in-chat actions — dispatch instead
+
+| About to do | Dispatch instead |
+|---|---|
+| Read >1 code file to understand a thing | `Task` `subagent_type="explore"` `model="composer-2.5"` |
+| Write production code, tests, or migrations of any size | `Task` `subagent_type="generalPurpose"` `model="composer-2.5"` |
+| Author `docs/handoff/*-bootstrapper.md` or `docs/handoff/*-orchestrator-report.md` | `Task` `subagent_type="generalPurpose"` `model="composer-2.5"` — Opus provides the scope blob (what to capture, structural template, links to existing reference docs), Composer types the prose |
+| Multi-step refactor of any size | `Task` `subagent_type="generalPurpose"` `model="composer-2.5"` |
+| Investigate a failing CI check | `Task` `subagent_type="ci-investigator"` |
+| 5-axis adversarial reliability review on a large diff | `Task` `subagent_type="generalPurpose"` `model="claude-4.6-sonnet-medium-thinking"` |
+
+## What in-chat tool calls in an Opus chat ARE for
+
+1. **Orchestration decisions** — which work next, which model tier, design trade-offs, when to merge, when to defer, when to escalate.
+2. **Synthesizing subagent results** for Andrew (pulling 2–3 subagent reports into one recommendation; the user-visible value Opus uniquely adds).
+3. **Git orchestration** — branch, `merge --no-ff`, push, branch cleanup. These are orchestration, not execution.
+4. **Tiny docs commits where dispatch overhead > task cost.** Strict carve-out criteria, ALL must hold:
+   - ≤5 tool calls total for the whole commit
+   - Docs-only (no production code, no tests)
+   - Single coherent thought already loaded in this chat's context (no new file reads to gather the thought)
+   - **Name the carve-out in chat when invoking it** so Andrew sees the discipline working. Example: *"Using the docs-only ≤5-tool-call carve-out — I have BACKLOG.md and the relevant entries already loaded, no new reads needed."*
+
+## Common slip patterns to self-catch
+
+- "Let me just quickly read this file to check..." → that's an `explore` subagent.
+- "I'll write the test myself, it's only 20 lines..." → that's a `generalPurpose` subagent.
+- "Let me draft the handoff report and we can iterate..." → that's a `generalPurpose` subagent with a scope blob.
+- "I'll fix this one small bug while I'm here..." → that's a `generalPurpose` subagent.
+
+If you catch yourself mid-action: stop, dispatch, and acknowledge the catch.
+
+## Full protocol with tier escalation criteria + observed quality
+
+See `AGENTS.md` § "Model usage protocol" — the canonical detailed protocol with tier-assignment rules, escalation criteria (Composer→Sonnet, Sonnet→Opus triggers), proven patterns ("Opus designs, Composer ships" / "Composer designs and ships"), and dated real-world quality observations. Read it once per fresh chat.
+
+## Workspace conventions referenced from here
+
+- Chat link format (workspace-relative paths only) — `AGENTS.md` § Conventions.
+- Windows PowerShell commit-message gotcha — `AGENTS.md` § Conventions.
+- Reliability bar — `../../agenticPipeline/.cursor/rules/reliability-bar.mdc`.

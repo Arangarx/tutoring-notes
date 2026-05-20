@@ -17,6 +17,14 @@ for the full reliability standard. **Every feature plan in this app must
 include an adversarial review against the 5 reliability axes, with
 BLOCKERs folded into Phase-1 acceptance — not deferred to follow-ups.**
 
+**If you are an Opus orchestrator chat:** before doing anything in-chat
+that smells like execution (reading code, writing code/tests, drafting
+handoff docs, multi-step refactors), STOP and read
+[.cursor/rules/orchestrator-discipline.mdc](.cursor/rules/orchestrator-discipline.mdc).
+That rule defines the dispatch-vs-do boundary and the strict carve-outs
+for in-chat tool calls. Full tier-assignment + escalation criteria live
+in § "Model usage protocol" below.
+
 The whiteboard plan
 ([../../agenticPipeline/docs/whiteboard-plan](../../agenticPipeline/docs/whiteboard-plan)
 or `~/.cursor/plans/whiteboard_-_match_wyzant_for_sarah_plus_our_wedge_*.plan.md`)
@@ -117,7 +125,9 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   review applies — re-confirm the OAuth consent screen URLs as part of
   the review.
 - **This repo (`tutoring-notes`) — feature branches: commit + push by default.** After substantive work on a named branch here, create a descriptive commit and push (`origin`; retry transient network failures) unless Andrew says to hold off. (Scope is this app only, not every workspace.)
-- **Executor bootstrappers live in `docs/handoff/`** — when the orchestrator drafts a briefing for a fresh executor chat, write it as `docs/handoff/<scope>-bootstrapper.md` rather than `~/.cursor/plans/`. Two reasons: (a) Cursor's chat UI only resolves workspace-relative file paths so in-workspace bootstrappers are clickable, (b) committed bootstrappers create an audit trail pairing "what we asked for" with "what shipped." **Bootstrappers must be pure executor briefings from line 1** — no orchestrator wrapper, no "copy below the rule line" headers. They must also include a top-of-file blockquote that disambiguates intent when the file arrives via `@`-reference (so Andrew's workflow can use either paste-the-blob or single-`@`-reference, whichever is faster). See `docs/handoff/README.md` for the required top-of-file template + full lifecycle.
+- **Executor bootstrappers AND orchestrator reports live in `docs/handoff/`** — when the orchestrator drafts a briefing for a fresh executor chat, write it as `docs/handoff/<scope>-bootstrapper.md`; when the orchestrator captures session retrospectives for a future orchestrator picking up, write it as `docs/handoff/<scope>-<date>-orchestrator-report.md`. Both go here, not `~/.cursor/plans/`. Two reasons: (a) Cursor's chat UI only resolves workspace-relative file paths so in-workspace handoff docs are clickable, (b) committed handoff docs create an audit trail pairing "what we asked for" with "what shipped" (bootstrappers) and "what we did and decided" with "what's open" (orchestrator reports). **Bootstrappers must be pure executor briefings from line 1** with the required top-of-file template. **Both bootstrappers AND orchestrator reports should be Composer-2.5-authored via subagent dispatch** when length > ~3 paragraphs — Opus supplies the scope blob and structural outline; Composer types the prose. See `docs/handoff/README.md` for both templates + full lifecycle.
+- **Chat output links use workspace-relative paths only.** Cursor's chat UI clickably resolves paths like `docs/BACKLOG.md` and `src/lib/ai.ts` but renders absolute paths (`c:/Users/...`, `/Users/...`) and `file://` URIs as plain unclickable text, breaking Andrew's workflow. Same rule applies inside any `docs/handoff/*.md` since those files are designed to be `@`-referenced in fresh chats. When citing a file, always use the workspace-relative form.
+- **Windows PowerShell: multi-line commit messages via temp file, not `-m`.** PowerShell 5.x (the default on Win10/11 without an explicit pwsh install — Andrew's setup) mangles multi-line strings, Unicode escape sequences (`\u2014`), and backtick-escaped characters when passed to `git commit -m "..."`. Safe pattern: Write the message to `.git/COMMIT_MSG_DRAFT.txt`, then `git commit -F .git/COMMIT_MSG_DRAFT.txt`, then delete the temp file in a **sequential** subsequent call (NOT a parallel tool call — a parallel `Delete` races the `commit` and the file vanishes before git reads it; this has bitten us).
 
 ## When picking up work mid-feature
 
