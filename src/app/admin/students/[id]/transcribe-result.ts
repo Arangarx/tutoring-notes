@@ -39,7 +39,7 @@ export type TranscribeAndGenerateResult =
       transcript: string;
       topics: string;
       homework: string;
-      /** New in B4 — see `src/lib/ai.ts` PROMPT_VERSION v6. */
+      /** New in B4 (v6); reaction-aware extraction added in v7. See `src/lib/ai.ts` PROMPT_VERSION. */
       assessment: string;
       /** UI-facing name; persisted to the legacy `nextSteps` DB column. */
       plan: string;
