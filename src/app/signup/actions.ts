@@ -41,7 +41,20 @@ export async function signup(
   const { email, password, displayName } = parsed.data;
   const existing = await getAdminByEmail(email);
   if (existing) {
-    return { error: "An account with this email already exists. Sign in instead." };
+    // Anti-enumeration: a malicious actor can otherwise probe which emails
+    // have accounts. Redirect to the same /login?registered=1 destination
+    // a successful signup would hit, so the externally-observable outcome
+    // is identical regardless of pre-existence. Real new accounts get the
+    // expected "Sign in with the email and password you just chose"
+    // confirmation; existing accounts also land on /login (no duplicate
+    // row created, no password silently changed) and the legitimate user
+    // who genuinely forgot they had an account just signs in or uses the
+    // /forgot-password flow from there.
+    //
+    // (Tradeoff: legitimate "I forgot I already have an account" users
+    // get no explicit "account exists" hint. Acceptable; the Forgot-password
+    // affordance on /login covers that path.)
+    redirect("/login?registered=1");
   }
 
   await createAdmin(email, password, displayName ?? null);
