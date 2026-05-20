@@ -104,21 +104,39 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
 
   useImperativeHandle(ref, () => ({
     populate(payload: PopulatePayload) {
-      setTopics(payload.topics);
-      setHomework(payload.homework);
-      setAssessment(payload.assessment);
-      setPlan(payload.plan);
-      if (payload.links) setLinks(payload.links);
+      // Merge-into-empty contract: NEVER clobber a field the tutor has typed
+      // into. Protects against the in-flight race where the AI generation
+      // action takes minutes (transcribe + LLM) and the tutor types into the
+      // form during the wait. When the action returns, populate() fires and
+      // would otherwise silently overwrite their typed content.
+      //
+      // If the tutor wants to discard their edits and let AI take over, the
+      // call site (e.g. AiAssistPanel.checkOverwriteAndPrepare) calls clear()
+      // BEFORE triggering the action. By the time populate runs, the explicitly-
+      // cleared fields are empty again and AI fills them — while any content
+      // typed DURING the wait is still preserved by the same merge rule.
+      //
+      // See `docs/BACKLOG.md` — adversarial review #6 (note save vs transcribe
+      // race) and `src/__tests__/dom/NewNoteForm.populate.dom.test.tsx`.
+      if (!topics.trim() && payload.topics) setTopics(payload.topics);
+      if (!homework.trim() && payload.homework) setHomework(payload.homework);
+      if (!assessment.trim() && payload.assessment) setAssessment(payload.assessment);
+      if (!plan.trim() && payload.plan) setPlan(payload.plan);
+      if (!links.trim() && payload.links) setLinks(payload.links);
       if (payload.noteDate) setNoteDate(payload.noteDate);
+      // AI provenance + recording-attach flags are NOT tutor-typed content;
+      // populate always sets them so the saved note records "this draft came
+      // from the AI / from these recordings" even if the tutor edited every
+      // text field. shareRecordingInEmail defaults to true on first attach
+      // and stays whatever the tutor toggles thereafter.
       setAiGenerated(true);
       setAiPromptVersion(payload.promptVersion);
       if (payload.recordingIds && payload.recordingIds.length > 0) {
         setRecordingIds(payload.recordingIds);
         setShareRecordingInEmail(true);
       }
-      // Don't clobber a time the tutor already typed in by hand. Server still
-      // auto-fills missing times at save (see createNote), so this is purely a
-      // preview convenience — they can clear/edit before clicking Save note.
+      // Time fields: existing merge-into-empty (predates this fix). Server
+      // still auto-fills missing times at save (see createNote).
       if (payload.sessionStartedAt && !startTime) {
         const formatted = formatLocalTime(payload.sessionStartedAt);
         if (formatted) setStartTime(formatted);
@@ -145,7 +163,7 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
     hasUserContent() {
       return !!(topics.trim() || homework.trim() || assessment.trim() || plan.trim());
     },
-  }), [baselineNoteDate, startTime, endTime, topics, homework, assessment, plan]);
+  }), [baselineNoteDate, startTime, endTime, topics, homework, assessment, plan, links]);
 
   const hasContent = !!(topics.trim() || homework.trim() || assessment.trim() || plan.trim() || links.trim());
 

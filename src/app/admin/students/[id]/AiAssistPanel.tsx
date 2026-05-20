@@ -42,12 +42,31 @@ export default function AiAssistPanel({ studentId, formRef, enabled, blobEnabled
   const [isPending, startTransition] = useTransition();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  function checkOverwrite(): boolean {
+  /**
+   * Pre-flight check before kicking off an AI action. If the form has
+   * tutor-typed content, prompts the tutor to confirm the overwrite. When
+   * they confirm, **clears the form immediately** — this is critical because
+   * `NewNoteForm.populate()` is now merge-into-empty (it never clobbers a
+   * non-empty field). Without the clear, populate would refuse to fill any
+   * already-typed fields and the tutor's "yes replace" intent would be
+   * silently ignored.
+   *
+   * The clear-before-action behaviour ALSO preserves the race-protection
+   * win: any content the tutor types DURING the (potentially-long) AI wait
+   * lands in the now-empty fields, marks them dirty, and is preserved when
+   * populate eventually fires.
+   *
+   * See `docs/BACKLOG.md` — adversarial review #6 (note save vs transcribe
+   * race) and `src/__tests__/dom/AiAssistPanel.race.dom.test.tsx`.
+   */
+  function checkOverwriteAndPrepare(): boolean {
     const hasContent = formRef.current?.hasUserContent() ?? false;
     if (hasContent) {
-      return window.confirm(
-        "Replace your edits with AI suggestions?\n\nYour current entries will be overwritten."
+      const ok = window.confirm(
+        "Replace your edits with AI suggestions?\n\nYour current entries will be cleared first."
       );
+      if (!ok) return false;
+      formRef.current?.clear();
     }
     return true;
   }
@@ -56,7 +75,7 @@ export default function AiAssistPanel({ studentId, formRef, enabled, blobEnabled
     setError(null);
     setWarning(null);
     setWarningKind(null);
-    if (!checkOverwrite()) return;
+    if (!checkOverwriteAndPrepare()) return;
 
     startTransition(async () => {
       try {
@@ -90,7 +109,7 @@ export default function AiAssistPanel({ studentId, formRef, enabled, blobEnabled
     setError(null);
     setWarning(null);
     setWarningKind(null);
-    if (!checkOverwrite()) return;
+    if (!checkOverwriteAndPrepare()) return;
 
     startTransition(async () => {
       try {

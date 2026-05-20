@@ -575,17 +575,26 @@ items should be on the active path before the next pilot tutor is added.
 
 ### Axis 3 — Race conditions on user input
 
-6. **[BLOCKER-PROD] Note save vs transcribe race.** If a tutor types into the
-   note form while `transcribeAndGenerateAction` is running on a fresh
-   recording, the action's `populate()` callback overwrites the form fields
-   when the AI response arrives. Tutor's hand-typed text is silently lost.
-   This is a Sarah-class bug — the loss is silent and the tutor only notices
-   if they remember they had typed something. Fix options: (a) refuse to
-   `populate()` if any field has been edited since the action started (track
-   `dirtyAt` per field), (b) show a "AI is filling — your edits will be
-   merged, not overwritten" indicator, (c) merge AI fields only into empty
-   fields. (a) is the safest default. Test: dirty a field, fire the AI, assert
-   it doesn't clobber.
+6. **🟡 IN-FLIGHT (branch `chore/reliability-note-save-transcribe-race`,
+   awaiting smoke) — Note save vs transcribe race.** Was: if a tutor typed
+   into the note form while `transcribeAndGenerateAction` was running on a
+   fresh recording, the action's `populate()` callback overwrote the form
+   fields when the AI response arrived. Sarah-class silent-loss bug.
+   **Fix shipped on branch (option c, the gentlest of the three proposals):**
+   `NewNoteForm.populate()` is now **merge-into-empty** for every AI-fillable
+   text field (topics / homework / assessment / plan / links). The tutor's
+   typed content is NEVER clobbered, no matter when they typed it (before
+   the action, during the wait, etc.). `AiAssistPanel.checkOverwrite()`
+   becomes `checkOverwriteAndPrepare()`: on confirmed "yes replace," it
+   **clears the form synchronously BEFORE dispatching the action**, so the
+   tutor's explicit "discard mine, use AI" intent is honored AND the same
+   race protection applies to content typed during the wait.
+   Coverage: 19 form-level tests in
+   `src/__tests__/dom/NewNoteForm.populate.dom.test.tsx` + 7 flow-level
+   tests in `src/__tests__/dom/AiAssistPanel.race.dom.test.tsx` covering
+   empty-form populate, race-during-wait, decline-confirm, confirm-clears,
+   audio path, multiple-dirty-fields, AI provenance fields. Mark SHIPPED
+   after Andrew smokes the Preview and the merge lands on master.
 7. **[BLOCKER-PROD] Hot-swap mic / headphones unplug mid-record is silent.**
    `MediaRecorder` keeps producing data even after the underlying device
    disappears (the stream becomes silence), and `useAudioRecorder` does not
