@@ -203,32 +203,60 @@ Pre-session, I had to pick between four BLOCKER-PRODs (#1+#2, #6, #7). The pick 
 
 ```
 You're picking up after the 2026-05-20 reliability + AI prompt v7 session.
-Read this report first:
-  docs/handoff/reliability-and-prompt-v7-2026-05-20-orchestrator-report.md
 
-Then read in order:
-  AGENTS.md (reliability bar, model usage protocol)
-  docs/BACKLOG.md (top status line + § Recorder & Notes reliability gaps audit
-    + the new v7 / literal-vs-interpretive / Whisper-accuracy entries near line 274+)
-  docs/RECORDER-LIFECYCLE.md (mandatory before any recorder-lifecycle work
-    — i.e. before items #1, #2, #7)
-  docs/handoff/v1-design-session-2026-05-19-pm-orchestrator-report.md
-    (only if Sarah's call landed and we're resuming design)
+ORIENTATION READS (in order — do not skip):
+  1. .cursor/rules/orchestrator-discipline.mdc — NEW this session. You orchestrate;
+     you don't execute. Read the dispatch-vs-do table BEFORE you do anything else.
+     Every code read, code write, test write, and handoff-doc authoring goes to a
+     Composer 2.5 subagent unless it hits the strict in-chat carve-out. If you
+     catch yourself about to write code or read >1 file directly, stop and dispatch.
+  2. docs/handoff/reliability-and-prompt-v7-2026-05-20-orchestrator-report.md —
+     this report. What shipped 2026-05-20, what's still open, the Whisper-bias
+     lesson, and the candidate-pick table below.
+  3. AGENTS.md — reliability bar, full Model usage protocol, conventions (note
+     new chat-link-format and PowerShell commit-message bullets).
+  4. docs/BACKLOG.md — top status line + § Recorder & Notes reliability gaps
+     audit + the v7 / literal-vs-interpretive / Whisper-accuracy entries near
+     line 274+.
+  5. docs/RECORDER-LIFECYCLE.md — MANDATORY before any recorder-lifecycle work
+     (i.e. before reliability items #1, #2, #7). Skip if today's pick is #13 or
+     the long-form transcribe smoke.
+  6. docs/handoff/v1-design-session-2026-05-19-pm-orchestrator-report.md —
+     only if Sarah's call landed and we're resuming design.
 
-Then propose a next-item pick with rationale and wait for Andrew's go.
-Default recommendation order if Andrew says "your call":
-  1. #13 (rid coverage) if no design appetite — small, clean, ships in one session.
-  2. #1+#2 paired Opus design pass if design appetite exists — biggest blast
-     radius open, deserves Opus on the architecture.
-  3. Long-form transcribe smoke if it's the same day as Sarah's weekend session.
+Items 3–6 are dispatch-an-explore-subagent-if-you-need-depth by default. Read
+inline only if Andrew has already framed today's scope and you just need to
+confirm a specific section.
 
-Stop conditions:
+ASK ANDREW WHAT TO PICK. Default recommendation order if he says "your call":
+  1. Reliability #13 (rid coverage on remaining 7 mutating actions) if no design
+     appetite — pure-additive observability, ~60 min. DISPATCH SCOPE:
+       Task subagent_type=generalPurpose model=composer-2.5
+       "Add per-action `rid=<id>` log lines to the 7 mutating server actions
+       that BACKLOG #13 lists as missing coverage. Pattern: match existing
+       rid-instrumented actions (grep for `rid=\${` to find prior art). Branch
+       chore/reliability-rid-coverage off master. One commit total or one per
+       action — your call. Push + write the smoke checklist + Preview URL in
+       the final report."
+  2. Reliability #1+#2 paired DESIGN pass if design appetite exists — biggest
+     blast radius open. Opus does the design (or Sonnet via subagent if scope
+     feels bounded); a separate Composer subagent ships from the resulting
+     bootstrapper afterward. Core decision is the shared IndexedDB persistence
+     layer architecture across recorder + whiteboard.
+  3. Long-form transcribe Tier 1 smoke if it's the same day as Sarah's weekend
+     session — Andrew runs this solo, no dispatch.
+
+STOP CONDITIONS:
   - Anything touching src/lib/recording/lifecycle-machine.ts, upload-outbox.ts,
-    or the workspace handleEndSession path requires explicit Andrew approval
-    on the design before code (per AGENTS.md reliability bar).
+    or the workspace handleEndSession path requires explicit Andrew approval on
+    the design BEFORE the executor subagent is dispatched (per AGENTS.md
+    reliability bar).
   - Don't ship Whisper-side fixes in the same branch as LLM-side fixes.
-    Bundling was the wrong call last session; smoke isolation matters more
-    than commit-count efficiency.
+    Bundling was the wrong call last session; smoke isolation matters more than
+    commit-count efficiency. See "Lessons" section of this report.
+  - When in doubt about doing-vs-dispatching, dispatch. The dispatch cost is
+    cents; the cost of Opus silently slipping into executor work for an hour is
+    dollars AND the discipline erodes.
 ```
 
 ---
