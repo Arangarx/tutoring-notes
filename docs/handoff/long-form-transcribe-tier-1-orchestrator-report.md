@@ -1,5 +1,7 @@
 # Long-form transcribe Tier 1 — executor → orchestrator report
 
+> **⚠️ SUPERSEDED (2026-05-17 evening).** The work in this report **shipped to master as merge `5ccf1c7`** (see `docs/PHASE-6-TIER-1-STATUS.md` + BACKLOG line 88). The "executor left changes uncommitted" framing below is historical; the code is live in prod. **Only remaining open item:** the deferred 60-90 min real-audio smoke against Vercel Preview/prod (BACKLOG line 89 — slot before Sarah's next weekend session). Retain this doc for the implementation-detail context (constants, file-by-file change list, smoke checklist), but do NOT treat any of the "to be merged" / "commit story" sections as actionable.
+
 > **Audience:** orchestrator picking up after executor work on Phase 6 Task 2 (parallel transcribe + duration splits + timeout UX).  
 > **Branch:** `feat/transcribe-tier-1-parallelize` (off `master` at push time — verify tip before merge).  
 > **Commits:** Executor left changes **uncommitted** per Andrew’s “commits only when asked” rule; orchestrator should review diff, then commit/push using repo convention (`AGENTS.md`: descriptive commits + push to `origin`, retry transient network errors).
