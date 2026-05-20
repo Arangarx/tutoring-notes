@@ -16,6 +16,42 @@ const WHISPER_INNER_CONCURRENCY = 6;
 const WHISPER_CREATE_MAX_RETRIES = 3;
 const WHISPER_RETRY_BACKOFF_MS = [1000, 2000, 4000] as const;
 
+/**
+ * Whisper biasing prompt — describes the expected audio so Whisper biases
+ * toward common tutoring vocabulary when transcription is ambiguous.
+ *
+ * Historical motivation: a real WB session on 2026-05-20 transcribed "good
+ * job on that" as "did a term on that" — dropping the only assessment-shaped
+ * signal in the recording. v6's LLM prompt couldn't extract Assessment
+ * (nothing to extract); v7's reaction-aware LLM prompt can't help either
+ * unless Whisper actually writes the reaction words into the transcript.
+ * This biases Whisper toward that vocabulary.
+ *
+ * Whisper accepts up to 224 prompt tokens; this is ~60. Zero cost change
+ * (the `prompt` parameter is free) and zero latency change. Same prompt
+ * every call — pilot tutor is the only user, per-tutor customisation is
+ * out of scope for v1. Subject-agnostic on purpose so an English tutor
+ * benefits as much as a math tutor (the bias is on tutor REACTIONS, not
+ * subject vocabulary).
+ *
+ * Exported so `src/__tests__/transcribe.test.ts` can assert it's actually
+ * threaded through the Whisper API call.
+ *
+ * Paired with `src/lib/ai.ts` PROMPT_VERSION v7 (the LLM-side fix) — both
+ * shipped together on `chore/ai-prompt-v7-assessment-reactions`.
+ */
+export const TUTORING_WHISPER_PROMPT =
+  "Tutoring session: a tutor walks a student through concepts and reacts to their work. " +
+  "The tutor uses reactions like \"good job\", \"nice\", \"almost\", \"try again\", " +
+  "\"not quite\", \"yes\", \"got it\", \"perfect\", \"exactly\", and \"right on\" to " +
+  "indicate how the student is doing.";
+
+/** Language hint pinned to English — pilot tutor + pilot users are all en-US. */
+const WHISPER_LANGUAGE = "en";
+
+/** Short tag in log lines so Vercel logs show which bias profile was in effect. */
+const WHISPER_BIAS_TAG = "tutoring-v7";
+
 export type TranscribeSuccess = {
   transcript: string;
   durationSeconds: number | null;
@@ -85,6 +121,8 @@ async function transcribeSinglePart(
         model: modelRequested,
         file,
         response_format: "verbose_json",
+        language: WHISPER_LANGUAGE,
+        prompt: TUTORING_WHISPER_PROMPT,
       });
 
       const transcript =
@@ -207,7 +245,7 @@ export async function transcribeAudio(
 
   const ridLog = rid ? ` rid=${rid}` : "";
   console.log(
-    `[transcribe-parallel]${ridLog} inner-cap=${WHISPER_INNER_CONCURRENCY} parts=${parts.length} mode=parallel`
+    `[transcribe-parallel]${ridLog} inner-cap=${WHISPER_INNER_CONCURRENCY} parts=${parts.length} lang=${WHISPER_LANGUAGE} bias=${WHISPER_BIAS_TAG} mode=parallel`
   );
 
   const partResults = await mapWithConcurrency(parts, WHISPER_INNER_CONCURRENCY, async (part, idx) => {

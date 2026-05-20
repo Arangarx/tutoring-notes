@@ -49,7 +49,11 @@ jest.mock("@/lib/transcribe-ffmpeg", () => ({
 
 import { logCostEvent } from "@/lib/observability/cost-events";
 import { splitAudioIntoWhisperParts } from "@/lib/transcribe-ffmpeg";
-import { transcribeAudio, WHISPER_MAX_BYTES } from "@/lib/transcribe";
+import {
+  transcribeAudio,
+  TUTORING_WHISPER_PROMPT,
+  WHISPER_MAX_BYTES,
+} from "@/lib/transcribe";
 
 const mockSplit = splitAudioIntoWhisperParts as jest.MockedFunction<typeof splitAudioIntoWhisperParts>;
 
@@ -85,10 +89,59 @@ describe("transcribeAudio", () => {
       expect.objectContaining({
         model: "whisper-1",
         response_format: "verbose_json",
+        language: "en",
+        prompt: TUTORING_WHISPER_PROMPT,
       })
     );
     expect(mockSplit).toHaveBeenCalledWith(SMALL_BUFFER, "session.webm", "audio/webm");
     expect(jest.mocked(logCostEvent)).toHaveBeenCalledTimes(1);
+  });
+
+  describe("Whisper biasing (v7 — paired with ai.ts PROMPT_VERSION v7)", () => {
+    test("TUTORING_WHISPER_PROMPT names the reactions v7's LLM prompt looks for", () => {
+      // These are the same words the LLM prompt explicitly maps to assessment
+      // signals (see src/lib/ai.ts buildUserPrompt). If they drift apart,
+      // Whisper might still write the word but v7's LLM prompt won't recognise
+      // it, or vice-versa. Keeping both lists aligned is a soft contract.
+      for (const word of [
+        "good job",
+        "almost",
+        "try again",
+        "yes",
+        "got it",
+        "perfect",
+        "exactly",
+        "right on",
+      ]) {
+        expect(TUTORING_WHISPER_PROMPT.toLowerCase()).toContain(word);
+      }
+    });
+
+    test("passes the bias prompt + language=en on EVERY part of a multi-part split", async () => {
+      mockSplit.mockResolvedValueOnce([
+        { buffer: Buffer.alloc(8, 0), filename: "p1.webm", mimeType: "audio/webm" },
+        { buffer: Buffer.alloc(8, 1), filename: "p2.webm", mimeType: "audio/webm" },
+        { buffer: Buffer.alloc(8, 2), filename: "p3.webm", mimeType: "audio/webm" },
+      ]);
+      mockTranscriptionsCreate.mockResolvedValue({ text: "ok", duration: 1 });
+
+      const bigBuffer = Buffer.alloc(WHISPER_MAX_BYTES + 1, 0);
+      await transcribeAudio(bigBuffer, "big.webm", "audio/webm");
+
+      expect(mockTranscriptionsCreate).toHaveBeenCalledTimes(3);
+      for (const call of mockTranscriptionsCreate.mock.calls) {
+        const opts = call[0] as Record<string, unknown>;
+        expect(opts.language).toBe("en");
+        expect(opts.prompt).toBe(TUTORING_WHISPER_PROMPT);
+      }
+    });
+
+    test("bias prompt stays under Whisper's 224-token ceiling (rough char proxy)", () => {
+      // Whisper's prompt limit is 224 tokens. ~4 chars per token is the
+      // standard rough estimate; cap conservatively at 800 chars to leave
+      // headroom for future additions without silently truncating.
+      expect(TUTORING_WHISPER_PROMPT.length).toBeLessThan(800);
+    });
   });
 
   test("trims transcript whitespace", async () => {
