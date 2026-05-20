@@ -15,11 +15,32 @@ import {
  *   - Style tightened: bare essentials only, no padding sentences, no
  *     restating the field name in the value.
  *
+ * Bumped from v6 → v7 on 2026-05-20 for Andrew's WB-session feedback:
+ *   - v6's "ONLY explicit statements" rule (system + assessment field)
+ *     silently dropped assessment when the tutor's signals were the kind
+ *     real tutoring sessions actually contain: in-session reactions
+ *     ("almost!", "yes!", "got it", "try again") rather than verbatim
+ *     "she struggled with X" sentences. A scripted recording landed
+ *     Assessment fine; a real session landed Assessment empty.
+ *   - System rule (1) now accepts "the tutor's own words — either explicit
+ *     statements or clear in-session reactions" as valid signal.
+ *   - System rule (2) replaces the blanket ban on "encouragement /
+ *     progress statements" with a narrower ban on fabricated claims and
+ *     things the tutor never said.
+ *   - System rule (5) "do not infer anything" → "do not invent or
+ *     fabricate" (the old wording over-blocked grounded interpretation).
+ *   - Assessment field instruction adds concrete reaction-to-meaning
+ *     mappings ("almost!" → wrestling; "yes!" → has it) and tightens
+ *     the empty-string condition to "ONLY if NEITHER commented NOR
+ *     reacted" — directly addressing v6's silent-empty failure mode.
+ *   - Other field instructions (topics / homework / plan / links)
+ *     intentionally unchanged.
+ *
  * Bumping the version invalidates `aiPromptVersion` on existing notes so
  * the admin UI can flag them as "generated under an older prompt" if we
  * ever surface that.
  */
-export const PROMPT_VERSION = "2026-04-20-v6";
+export const PROMPT_VERSION = "2026-05-20-v7";
 
 export type RecentNoteContext = {
   date: Date;
@@ -69,18 +90,18 @@ ${input.sessionText}
 Return JSON with exactly these five fields. Write the BARE ESSENTIALS — short phrases or comma lists, not sentences. Do NOT pad with greetings, commentary, encouragement, or sentences that restate the field name (e.g. for topics write "Quadratics, factoring, negative coefficients" not "Today we worked on quadratics, factoring, and negative coefficients"). Do not prefix values with the field name. Do not invent anything not stated in the notes:
 - "topics": what was covered today (past tense, terse list — "X, Y, Z"). Empty string "" if not mentioned.
 - "homework": what the student should do before next session (terse list of items). Empty string "" if nothing assigned.
-- "assessment": where the student stands on what was covered today — strengths, struggles, mastery level. ONLY include things the tutor's notes explicitly say (e.g. "struggled with negatives", "comfortable with factoring"). Empty string "" if the notes don't comment on understanding.
+- "assessment": where the student stands on what was covered today — strengths, struggles, mastery level. Include both EXPLICIT comments ("struggled with negatives", "comfortable with factoring") AND clear reactions during the session: things like "almost!" / "try again" / "not quite" map to wrestling with that topic; "yes!" / "got it" / "perfect" / "right on" map to having it. Cluster by topic when possible. Do NOT fabricate observations the tutor never made or implied. Empty string "" only if the tutor neither commented on understanding nor reacted to the student's work.
 - "plan": what the tutor plans for a FUTURE session (future tense, terse — "Move to systems of equations", "Re-test fractions"). If the notes mention something that hasn't happened yet, put it here, not in topics. Empty string "" if not mentioned.
 - "links": any URLs or websites mentioned in the notes, one per line. Empty string "" if none.`;
 }
 
 const SYSTEM_PROMPT =
   "You are a tutoring assistant. Convert the tutor's raw session notes into clean, structured notes for a parent. " +
-  "STRICT RULES: (1) Only include information that is EXPLICITLY stated in the tutor's notes. " +
-  "(2) Do NOT add observations, encouragement, progress statements, or context from previous sessions — even if they seem natural. " +
+  "STRICT RULES: (1) Only include information that is supported by the tutor's own words — either explicit statements or clear in-session reactions (\"almost!\", \"yes!\", \"try again\", \"got it\") that signal how the student is doing. " +
+  "(2) Do NOT add claims about the student that the tutor never made, encouragement aimed at the student that was never said, or context from previous sessions. " +
   "(3) If a field has no information in the notes, return an empty string for that field. " +
   "(4) Be terse. A parent should be able to scan the note in under 10 seconds. Short phrases over sentences. No padding. " +
-  "(5) Use plain language a parent would understand. Do not invent or infer anything.";
+  "(5) Use plain language a parent would understand. Do not invent or fabricate.";
 
 /**
  * Max tokens of session text we send to the LLM. ~30000 tokens ≈ ~22.5k words ≈
