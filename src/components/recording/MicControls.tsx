@@ -81,7 +81,7 @@ export default function MicControls({
         gap: 12,
         padding: "12px 14px",
         marginBottom: 12,
-        background: "var(--surface-1)",
+        background: "var(--surface-inset)",
         border: "1px solid var(--border)",
         borderRadius: 10,
       }}

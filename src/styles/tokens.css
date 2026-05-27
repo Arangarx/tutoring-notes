@@ -114,7 +114,8 @@
     color-scheme: dark;
 
     --surface-base: #0b1020;
-    --surface-1: rgba(255, 255, 255, 0.04);
+    --surface-inset: rgba(255, 255, 255, 0.04);
+    --surface-1: rgba(255, 255, 255, 0.06);
     --surface-2: rgba(255, 255, 255, 0.08);
     --surface-3: rgba(255, 255, 255, 0.14);
     --surface-inverse: #ffffff;
@@ -199,7 +200,8 @@
   color-scheme: dark;
 
   --surface-base: #0b1020;
-  --surface-1: rgba(255, 255, 255, 0.04);
+  --surface-inset: rgba(255, 255, 255, 0.04);
+  --surface-1: rgba(255, 255, 255, 0.06);
   --surface-2: rgba(255, 255, 255, 0.08);
   --surface-3: rgba(255, 255, 255, 0.14);
   --surface-inverse: #ffffff;
