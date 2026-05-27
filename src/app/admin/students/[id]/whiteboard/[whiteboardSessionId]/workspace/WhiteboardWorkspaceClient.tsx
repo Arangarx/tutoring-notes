@@ -2885,8 +2885,8 @@ export function WhiteboardWorkspaceClient({
         data-testid="wb-tutor-page-strip"
         style={{
           padding: "12px 14px",
-          background: "rgba(37, 99, 235, 0.06)",
-          border: "1px solid rgba(37, 99, 235, 0.22)",
+          background: "var(--info-soft)",
+          border: "1px solid var(--info-border)",
         }}
       >
         <div
@@ -3194,11 +3194,11 @@ function StatusPill({
 }) {
   const palette: Record<typeof color, { bg: string; fg: string; dot: string }> =
     {
-      red: { bg: "rgba(220,38,38,0.18)", fg: "#dc2626", dot: "#dc2626" },
-      green: { bg: "rgba(34,197,94,0.18)", fg: "#16a34a", dot: "#16a34a" },
-      amber: { bg: "rgba(234,179,8,0.18)", fg: "#a16207", dot: "#ca8a04" },
-      grey: { bg: "rgba(100,116,139,0.18)", fg: "#475569", dot: "#64748b" },
-      blue: { bg: "rgba(37,99,235,0.18)", fg: "#1d4ed8", dot: "#2563eb" },
+      red: { bg: "var(--error-soft)", fg: "var(--error)", dot: "var(--error)" },
+      green: { bg: "var(--success-soft)", fg: "var(--success)", dot: "var(--success)" },
+      amber: { bg: "var(--warning-soft)", fg: "var(--warning)", dot: "var(--warning)" },
+      grey: { bg: "var(--badge-neutral-bg)", fg: "var(--badge-neutral-fg)", dot: "var(--badge-neutral-dot)" },
+      blue: { bg: "var(--info-soft)", fg: "var(--info)", dot: "var(--info)" },
     };
   const p = palette[color];
   return (
@@ -3242,9 +3242,9 @@ function Banner({
   testId?: string;
 }) {
   const palette = {
-    error: { bg: "rgba(220,38,38,0.12)", border: "rgba(220,38,38,0.4)" },
-    warning: { bg: "rgba(234,179,8,0.12)", border: "rgba(234,179,8,0.4)" },
-    info: { bg: "rgba(37,99,235,0.12)", border: "rgba(37,99,235,0.4)" },
+    error: { bg: "var(--error-soft)", border: "var(--error-border)" },
+    warning: { bg: "var(--warning-soft)", border: "var(--warning-border)" },
+    info: { bg: "var(--info-soft)", border: "var(--info-border)" },
   }[tone];
   return (
     <div
