@@ -372,8 +372,6 @@ export function WhiteboardWorkspaceClient({
    * timeout runs.
    */
   const pageSwitchProgrammaticRef = useRef(0);
-  /** Coalesced rAF flush for v3 document broadcast after local canvas edits (B3/B4). */
-  const documentBroadcastFlushRafRef = useRef<number | null>(null);
   /** Skips debounced viewport flush while applying stored/programmatic camera. */
   const isApplyingViewportProgrammaticRef = useRef(false);
   const viewportPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -1354,20 +1352,16 @@ export function WhiteboardWorkspaceClient({
     const out: Record<string, ReadonlyArray<ExcalidrawLikeElement>> = {};
     for (const p of pageListRef.current) {
       if (p.id === cur && api) {
-        // During a programmatic tab switch, onChange is suppressed — use the
-        // cached bucket so we never ship the previous tab into the new tab.
-        if (pageSwitchProgrammaticRef.current > 0) {
-          const cached = pageDataRef.current[p.id] as
-            | ExcalidrawLikeElement[]
-            | undefined;
-          out[p.id] =
-            cached ?? (api.getSceneElements() as ExcalidrawLikeElement[]);
+        // `pageDataRef` is updated from onChange; when it is defined, trust it
+        // so we don’t read `getSceneElements()` one frame after a tab switch
+        // and accidentally ship the previous tab’s pixels into the new tab.
+        const cached = pageDataRef.current[p.id] as
+          | ExcalidrawLikeElement[]
+          | undefined;
+        if (cached !== undefined) {
+          out[p.id] = cached;
         } else {
-          // Live read: captures the final freedraw point before throttle flush
-          // (B3) and image elements once Excalidraw has committed them (B4).
-          const live = api.getSceneElements() as ExcalidrawLikeElement[];
-          out[p.id] = live;
-          pageDataRef.current[p.id] = live;
+          out[p.id] = api.getSceneElements() as ExcalidrawLikeElement[];
         }
       } else {
         out[p.id] = pageDataRef.current[p.id] ?? [];
@@ -2720,16 +2714,6 @@ export function WhiteboardWorkspaceClient({
       recorderOnCanvasChange(elements as ReadonlyArray<ExcalidrawLikeElement>);
       if (sync && syncUrl) {
         scheduleDocumentBroadcast();
-        // Trailing flush so the last in-flight stroke / image lands on the
-        // student before the next page switch (B3/B4); coalesces with the
-        // 50ms document throttle via sync-client's pending slot.
-        if (documentBroadcastFlushRafRef.current !== null) {
-          cancelAnimationFrame(documentBroadcastFlushRafRef.current);
-        }
-        documentBroadcastFlushRafRef.current = requestAnimationFrame(() => {
-          documentBroadcastFlushRafRef.current = null;
-          flushDocumentBroadcastNow();
-        });
       }
       if (!isApplyingViewportProgrammaticRef.current) {
         scheduleViewportPersist();
@@ -2901,8 +2885,8 @@ export function WhiteboardWorkspaceClient({
         data-testid="wb-tutor-page-strip"
         style={{
           padding: "12px 14px",
-          background: "var(--info-soft)",
-          border: "1px solid var(--info-border)",
+          background: "rgba(37, 99, 235, 0.06)",
+          border: "1px solid rgba(37, 99, 235, 0.22)",
         }}
       >
         <div
@@ -3210,11 +3194,11 @@ function StatusPill({
 }) {
   const palette: Record<typeof color, { bg: string; fg: string; dot: string }> =
     {
-      red: { bg: "var(--error-soft)", fg: "var(--error)", dot: "var(--error)" },
-      green: { bg: "var(--success-soft)", fg: "var(--success)", dot: "var(--success)" },
-      amber: { bg: "var(--warning-soft)", fg: "var(--warning)", dot: "var(--warning)" },
-      grey: { bg: "var(--badge-neutral-bg)", fg: "var(--badge-neutral-fg)", dot: "var(--badge-neutral-dot)" },
-      blue: { bg: "var(--info-soft)", fg: "var(--info)", dot: "var(--info)" },
+      red: { bg: "rgba(220,38,38,0.18)", fg: "#dc2626", dot: "#dc2626" },
+      green: { bg: "rgba(34,197,94,0.18)", fg: "#16a34a", dot: "#16a34a" },
+      amber: { bg: "rgba(234,179,8,0.18)", fg: "#a16207", dot: "#ca8a04" },
+      grey: { bg: "rgba(100,116,139,0.18)", fg: "#475569", dot: "#64748b" },
+      blue: { bg: "rgba(37,99,235,0.18)", fg: "#1d4ed8", dot: "#2563eb" },
     };
   const p = palette[color];
   return (
@@ -3258,9 +3242,9 @@ function Banner({
   testId?: string;
 }) {
   const palette = {
-    error: { bg: "var(--error-soft)", border: "var(--error-border)" },
-    warning: { bg: "var(--warning-soft)", border: "var(--warning-border)" },
-    info: { bg: "var(--info-soft)", border: "var(--info-border)" },
+    error: { bg: "rgba(220,38,38,0.12)", border: "rgba(220,38,38,0.4)" },
+    warning: { bg: "rgba(234,179,8,0.12)", border: "rgba(234,179,8,0.4)" },
+    info: { bg: "rgba(37,99,235,0.12)", border: "rgba(37,99,235,0.4)" },
   }[tone];
   return (
     <div
