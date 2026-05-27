@@ -65,10 +65,10 @@ export default function ChangePasswordForm() {
           />
         </div>
         {state?.error ? (
-          <p style={{ color: "#ffb4b4", marginTop: 12 }}>{state.error}</p>
+          <p style={{ color: "var(--sign-out-hover-text)", marginTop: 12 }}>{state.error}</p>
         ) : null}
         {state?.ok ? (
-          <p style={{ color: "#90ee90", marginTop: 12 }}>
+          <p style={{ color: "var(--success)", marginTop: 12 }}>
             Password updated. Use your new password next time you sign in.
           </p>
         ) : null}
@@ -86,8 +86,8 @@ export default function ChangePasswordForm() {
         We’ll send a link to <strong>your signed-in email</strong> so you can set a new password without your current
         one. Requires email (SMTP or Gmail) to be configured for the app.
       </p>
-      {resetErr ? <p style={{ color: "#ffb4b4", marginTop: 12 }}>{resetErr}</p> : null}
-      {resetMsg ? <p style={{ color: "#90ee90", marginTop: 12 }}>{resetMsg}</p> : null}
+      {resetErr ? <p style={{ color: "var(--sign-out-hover-text)", marginTop: 12 }}>{resetErr}</p> : null}
+      {resetMsg ? <p style={{ color: "var(--success)", marginTop: 12 }}>{resetMsg}</p> : null}
       <button
         type="button"
         className="btn"

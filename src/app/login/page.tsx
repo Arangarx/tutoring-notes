@@ -49,7 +49,7 @@ function LoginForm() {
           Sign in with your tutor account.
         </p>
         {registeredOk ? (
-          <p style={{ marginTop: 12, color: "rgba(180,255,200,0.95)" }}>
+          <p style={{ marginTop: 12, color: "var(--success)" }}>
             Account created. Sign in with the email and password you just chose.
           </p>
         ) : null}
@@ -61,7 +61,7 @@ function LoginForm() {
           </p>
         ) : null}
         {resetOk ? (
-          <p style={{ marginTop: 12, color: "rgba(180,255,200,0.95)" }}>
+          <p style={{ marginTop: 12, color: "var(--success)" }}>
             Your password was updated. Sign in with your new password.
           </p>
         ) : null}
@@ -119,7 +119,7 @@ function LoginForm() {
           </div>
 
           {error ? (
-            <p style={{ color: "#ffb4b4", marginTop: 12 }}>{error}</p>
+            <p style={{ color: "var(--sign-out-hover-text)", marginTop: 12 }}>{error}</p>
           ) : null}
 
           <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}>

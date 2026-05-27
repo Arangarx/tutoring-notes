@@ -540,9 +540,9 @@ export function StudentWhiteboardClient({
               fontSize: 12,
               fontWeight: 600,
               background: connected
-                ? "rgba(34,197,94,0.18)"
-                : "rgba(234,179,8,0.18)",
-              color: connected ? "#16a34a" : "#a16207",
+                ? "var(--success-soft)"
+                : "var(--warning-soft)",
+              color: connected ? "var(--success)" : "var(--warning)",
             }}
           >
             <span
@@ -551,7 +551,7 @@ export function StudentWhiteboardClient({
                 width: 8,
                 height: 8,
                 borderRadius: "50%",
-                background: connected ? "#16a34a" : "#ca8a04",
+                background: connected ? "var(--success)" : "var(--warning)",
               }}
             />
             {connected ? "Connected" : "Joining…"}
@@ -566,8 +566,8 @@ export function StudentWhiteboardClient({
               borderRadius: 999,
               fontSize: 12,
               fontWeight: 600,
-              background: "rgba(59,130,246,0.15)",
-              color: "#2563eb",
+              background: "var(--info-soft)",
+              color: "var(--info)",
             }}
           >
             {showWaitingForOther
@@ -604,8 +604,8 @@ export function StudentWhiteboardClient({
               padding: "4px 10px",
               fontSize: 12,
               borderRadius: 6,
-              border: "1px solid rgba(148,163,184,0.5)",
-              background: "rgba(15,23,42,0.04)",
+              border: "1px solid var(--border-default)",
+              background: "var(--surface-tile)",
               cursor: "pointer",
             }}
           >
@@ -670,8 +670,8 @@ export function StudentWhiteboardClient({
         style={{
           marginTop: 4,
           padding: "10px 14px",
-          background: "rgba(16, 185, 129, 0.06)",
-          border: "1px solid rgba(16, 185, 129, 0.22)",
+          background: "var(--success-soft)",
+          border: "1px solid var(--success-border)",
         }}
       >
         <div
@@ -710,8 +710,8 @@ export function StudentWhiteboardClient({
           style={{
             marginTop: 10,
             padding: "10px 14px",
-            background: "rgba(59, 130, 246, 0.08)",
-            border: "1px solid rgba(59, 130, 246, 0.35)",
+            background: "var(--info-soft)",
+            border: "1px solid var(--info-border)",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -752,8 +752,8 @@ export function StudentWhiteboardClient({
           style={{
             marginTop: 10,
             padding: "10px 14px",
-            background: "rgba(234,179,8,0.12)",
-            border: "1px solid rgba(234,179,8,0.4)",
+            background: "var(--warning-soft)",
+            border: "1px solid var(--warning-border)",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",

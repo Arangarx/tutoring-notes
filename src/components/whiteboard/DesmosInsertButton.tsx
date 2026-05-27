@@ -133,7 +133,7 @@ export function DesmosInsertButton({
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(15, 23, 42, 0.45)",
+            background: "var(--surface-overlay)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -150,7 +150,7 @@ export function DesmosInsertButton({
               padding: 20,
               // Solid dark surface — translucent .card --panel + dark page text
               // would render white-on-white over the modal backdrop.
-              background: "#0d1328",
+              background: "var(--surface-drawer)",
               border: "1px solid var(--border)",
               borderRadius: 8,
               display: "grid",
@@ -202,8 +202,8 @@ export function DesmosInsertButton({
                   style={{
                     margin: 0,
                     fontSize: 12,
-                    background: "rgba(234,179,8,0.10)",
-                    border: "1px solid rgba(234,179,8,0.30)",
+                    background: "var(--warning-soft)",
+                    border: "1px solid var(--warning-border)",
                     padding: "8px 10px",
                     borderRadius: 6,
                   }}
@@ -246,7 +246,7 @@ export function DesmosInsertButton({
                   placeholder="https://www.desmos.com/calculator/abcdefghij"
                   style={{
                     padding: "8px 10px",
-                    border: "1px solid #cbd5e1",
+                    border: "1px solid var(--border-default)",
                     borderRadius: 6,
                     fontSize: 13,
                   }}
@@ -264,12 +264,12 @@ export function DesmosInsertButton({
               <div
                 role="alert"
                 style={{
-                  background: "rgba(220,38,38,0.10)",
-                  border: "1px solid rgba(220,38,38,0.30)",
+                  background: "var(--error-soft)",
+                  border: "1px solid var(--error-border)",
                   borderRadius: 6,
                   padding: "8px 10px",
                   fontSize: 13,
-                  color: "#b91c1c",
+                  color: "var(--sign-out)",
                 }}
                 data-testid="wb-desmos-error"
               >

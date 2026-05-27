@@ -234,11 +234,11 @@ export function AVTile({
     ConnectionStateColor,
     { bg: string; fg: string; dot: string }
   > = {
-    green: { bg: "rgba(34,197,94,0.18)", fg: "#16a34a", dot: "#16a34a" },
-    amber: { bg: "rgba(234,179,8,0.18)", fg: "#a16207", dot: "#ca8a04" },
-    red: { bg: "rgba(220,38,38,0.18)", fg: "#dc2626", dot: "#dc2626" },
-    grey: { bg: "rgba(100,116,139,0.18)", fg: "#475569", dot: "#64748b" },
-    blue: { bg: "rgba(59,130,246,0.18)", fg: "#1d4ed8", dot: "#2563eb" },
+    green: { bg: "var(--success-soft)", fg: "var(--success)", dot: "var(--success)" },
+    amber: { bg: "var(--warning-soft)", fg: "var(--warning)", dot: "var(--warning)" },
+    red: { bg: "var(--error-soft)", fg: "var(--error)", dot: "var(--error)" },
+    grey: { bg: "var(--badge-neutral-bg)", fg: "var(--badge-neutral-fg)", dot: "var(--badge-neutral-dot)" },
+    blue: { bg: "var(--info-soft)", fg: "var(--info)", dot: "var(--info)" },
   };
   const p = palette[pill.color];
 
@@ -264,7 +264,7 @@ export function AVTile({
         display: "flex",
         flexDirection: "column",
         width: 160,
-        background: "rgba(15,23,42,0.9)",
+        background: "var(--surface-tile)",
         color: "white",
         borderRadius: 8,
         overflow: "hidden",
@@ -276,7 +276,7 @@ export function AVTile({
           position: "relative",
           width: "100%",
           aspectRatio: "4 / 3",
-          background: "rgba(15,23,42,1)",
+          background: "var(--surface-tile-solid)",
           overflow: "hidden",
         }}
       >
@@ -307,7 +307,7 @@ export function AVTile({
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                color: "rgba(248,250,252,0.55)",
+                color: "var(--text-on-dark)",
                 fontSize: 12,
                 textAlign: "center",
                 padding: "0 6px",
@@ -337,13 +337,13 @@ export function AVTile({
                   width: 56,
                   height: 56,
                   borderRadius: "50%",
-                  background: "rgba(15,23,42,0.28)",
+                  background: "var(--surface-tile)",
                   color: "white",
                   fontSize: 22,
                   fontWeight: 700,
                   letterSpacing: "0.04em",
                   textTransform: "uppercase",
-                  border: "2px solid rgba(255,255,255,0.65)",
+                  border: "2px solid var(--text-inverse)",
                 }}
               >
                 {placeholderInitials}
@@ -367,7 +367,7 @@ export function AVTile({
               position: "absolute",
               inset: 0,
               border: 0,
-              background: "rgba(15,23,42,0.78)",
+              background: "var(--surface-tile)",
               color: "white",
               fontSize: 12,
               fontWeight: 600,
@@ -393,7 +393,7 @@ export function AVTile({
               fontSize: 10,
               fontWeight: 600,
               borderRadius: 4,
-              background: "rgba(220,38,38,0.85)",
+              background: "var(--error)",
               color: "white",
             }}
           >
@@ -408,7 +408,7 @@ export function AVTile({
           alignItems: "center",
           justifyContent: "space-between",
           gap: 6,
-          background: "rgba(15,23,42,0.95)",
+          background: "var(--surface-tile-solid)",
         }}
       >
         <span
@@ -461,9 +461,9 @@ export function AVTile({
                   fontWeight: 700,
                   lineHeight: "16px",
                   borderRadius: 4,
-                  border: "1px solid rgba(220,38,38,0.55)",
-                  background: "rgba(255,255,255,0.85)",
-                  color: "#b91c1c",
+                  border: "1px solid var(--error-border)",
+                  background: "var(--text-inverse)",
+                  color: "var(--sign-out)",
                   cursor: "pointer",
                 }}
               >

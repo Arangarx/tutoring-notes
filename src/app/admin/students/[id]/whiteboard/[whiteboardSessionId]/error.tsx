@@ -70,7 +70,7 @@ export default function WhiteboardSessionError({ error, reset }: Props) {
         className="card"
         style={{
           padding: 24,
-          background: "#0d1328",
+          background: "var(--surface-drawer)",
           border: "1px solid var(--border)",
         }}
       >
@@ -87,7 +87,7 @@ export default function WhiteboardSessionError({ error, reset }: Props) {
               <code
                 style={{
                   flex: 1,
-                  background: "rgba(0,0,0,0.35)",
+                  background: "var(--surface-nav)",
                   border: "1px solid var(--border)",
                   borderRadius: 8,
                   padding: "8px 10px",
@@ -108,7 +108,7 @@ export default function WhiteboardSessionError({ error, reset }: Props) {
           <pre
             style={{
               marginTop: 16,
-              background: "rgba(0,0,0,0.35)",
+              background: "var(--surface-nav)",
               border: "1px solid var(--border)",
               borderRadius: 8,
               padding: 12,

@@ -43,7 +43,7 @@ export default function VideoControls({
         gap: 12,
         padding: "12px 14px",
         marginBottom: 12,
-        background: "rgba(255, 255, 255, 0.04)",
+        background: "var(--surface-inset)",
         border: "1px solid var(--border)",
         borderRadius: 10,
       }}

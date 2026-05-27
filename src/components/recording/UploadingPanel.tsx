@@ -41,15 +41,15 @@ export default function UploadingPanel({
       <div data-testid="audio-record-panel">
         <MicControls {...micControls} />
         <div data-testid="audio-record-uploading-segment" style={{ marginTop: 10 }}>
-          <p style={{ margin: "0 0 8px", fontSize: 13, color: "var(--color-muted, #6b7280)" }}>
+          <p style={{ margin: "0 0 8px", fontSize: 13, color: "var(--color-muted)" }}>
             Saving segment {displayPart}… you&apos;ll keep recording in a moment.
           </p>
-          <div style={{ height: 6, background: "var(--color-border, #e5e7eb)", borderRadius: 3, overflow: "hidden" }}>
+          <div style={{ height: 6, background: "var(--color-border)", borderRadius: 3, overflow: "hidden" }}>
             <div
               style={{
                 height: "100%",
                 width: "40%",
-                background: "var(--color-primary, #2563eb)",
+                background: "var(--color-primary)",
                 borderRadius: 3,
                 animation: "uploadSweepSeg 1.2s ease-in-out infinite",
               }}
@@ -63,15 +63,15 @@ export default function UploadingPanel({
 
   return (
     <div data-testid="audio-record-uploading">
-      <p style={{ margin: "0 0 10px", fontSize: 14, color: "var(--color-muted, #6b7280)" }}>
+      <p style={{ margin: "0 0 10px", fontSize: 14, color: "var(--color-muted)" }}>
         Uploading recording…
       </p>
-      <div style={{ height: 6, background: "var(--color-border, #e5e7eb)", borderRadius: 3, overflow: "hidden" }}>
+      <div style={{ height: 6, background: "var(--color-border)", borderRadius: 3, overflow: "hidden" }}>
         <div
           style={{
             height: "100%",
             width: "40%",
-            background: "var(--color-primary, #2563eb)",
+            background: "var(--color-primary)",
             borderRadius: 3,
             animation: "uploadSweep 1.2s ease-in-out infinite",
           }}

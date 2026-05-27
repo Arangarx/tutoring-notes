@@ -59,7 +59,7 @@ export default function SignupForm() {
         </p>
       </div>
       {state?.error ? (
-        <p style={{ color: "#ffb4b4", marginTop: 12 }}>{state.error}</p>
+        <p style={{ color: "var(--sign-out-hover-text)", marginTop: 12 }}>{state.error}</p>
       ) : null}
       <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}>
         <button className="btn primary" disabled={busy} type="submit">

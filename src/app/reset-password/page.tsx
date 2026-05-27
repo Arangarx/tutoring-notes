@@ -85,7 +85,7 @@ function ResetPasswordForm() {
           />
         </div>
 
-        {error ? <p style={{ color: "#ffb4b4", marginTop: 12 }}>{error}</p> : null}
+        {error ? <p style={{ color: "var(--sign-out-hover-text)", marginTop: 12 }}>{error}</p> : null}
 
         <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}>
           <button className="btn primary" type="submit" disabled={busy}>

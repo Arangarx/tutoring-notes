@@ -138,8 +138,8 @@ export function AVPermissionsPrompt({
       className="card"
       style={{
         padding: "12px 14px",
-        background: "rgba(37, 99, 235, 0.06)",
-        border: "1px solid rgba(37, 99, 235, 0.22)",
+        background: "var(--info-soft)",
+        border: "1px solid var(--info-border)",
         display: "flex",
         flexDirection: "column",
         gap: 10,
@@ -251,8 +251,8 @@ function PermissionRow({
             lineHeight: "18px",
             textAlign: "center",
             borderRadius: 9,
-            background: "rgba(34,197,94,0.18)",
-            color: "#16a34a",
+            background: "var(--success-soft)",
+            color: "var(--success)",
             fontSize: 12,
             fontWeight: 700,
           }}
@@ -265,7 +265,7 @@ function PermissionRow({
           fontSize: 13,
           flex: 1,
           minWidth: 200,
-          color: status === "denied" ? "#a16207" : undefined,
+          color: status === "denied" ? "var(--warning)" : undefined,
         }}
       >
         {labelByStatus[status]}

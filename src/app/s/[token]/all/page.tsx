@@ -142,7 +142,7 @@ export default async function ShareAllPage({ params, searchParams }: PageProps) 
 
   return (
     <div className="container" style={{ maxWidth: 860 }}>
-      <div className="card" style={{ background: "rgba(255,255,255,0.04)" }}>
+      <div className="card" style={{ background: "var(--surface-1)" }}>
         {/* Breadcrumb */}
         <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
           <Link href={`/s/${token}`}>← Back to {student.name}&apos;s notes</Link>

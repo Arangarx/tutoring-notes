@@ -20,7 +20,7 @@ export default async function EmailSettingsPage({
     return (
       <div className="card">
         <h1 style={{ marginTop: 0 }}>Email settings</h1>
-        <p style={{ color: "#ffd700" }}>
+        <p style={{ color: "var(--warning)" }}>
           Prisma client is out of date. Run <code>npx prisma generate</code>, then restart the dev
           server (e.g. <code>npm run dev</code>).
         </p>
@@ -56,11 +56,11 @@ export default async function EmailSettingsPage({
       </p>
 
       {configured ? (
-        <p style={{ color: "#90ee90", marginBottom: 16 }}>
+        <p style={{ color: "var(--success)", marginBottom: 16 }}>
           Email is configured. &ldquo;Send update&rdquo; will deliver to the recipient&rsquo;s inbox.
         </p>
       ) : (
-        <p style={{ color: "#ffd700", marginBottom: 16 }}>
+        <p style={{ color: "var(--warning)", marginBottom: 16 }}>
           Email is not configured. Connect an account or set up SMTP below to actually send.
         </p>
       )}

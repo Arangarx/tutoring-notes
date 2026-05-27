@@ -101,8 +101,8 @@ export default function EmailConfigForm({
           />
         </div>
       </div>
-      {saved && <p style={{ color: "#90ee90", marginTop: 12 }}>Settings saved.</p>}
-      {error && <p style={{ color: "#ffb4b4", marginTop: 12 }}>{error}</p>}
+      {saved && <p style={{ color: "var(--success)", marginTop: 12 }}>Settings saved.</p>}
+      {error && <p style={{ color: "var(--sign-out-hover-text)", marginTop: 12 }}>{error}</p>}
       <div style={{ marginTop: 16 }}>
         <button className="btn primary" type="submit">
           Save email settings

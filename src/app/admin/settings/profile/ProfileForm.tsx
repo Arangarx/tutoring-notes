@@ -37,8 +37,8 @@ export default function ProfileForm({ defaultDisplayName }: { defaultDisplayName
           introduce yourself to families.
         </p>
       </div>
-      {saved && <p style={{ color: "#90ee90", marginTop: 12 }}>Saved.</p>}
-      {error && <p style={{ color: "#ffb4b4", marginTop: 12 }}>{error}</p>}
+      {saved && <p style={{ color: "var(--success)", marginTop: 12 }}>Saved.</p>}
+      {error && <p style={{ color: "var(--sign-out-hover-text)", marginTop: 12 }}>{error}</p>}
       <div style={{ marginTop: 16 }}>
         <button className="btn primary" type="submit">
           Save profile

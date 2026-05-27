@@ -150,7 +150,7 @@ export function WorkspaceResumeGate({
       {endError && (
         <p
           role="alert"
-          style={{ color: "var(--color-error, #dc2626)", marginTop: 12, fontSize: 13 }}
+          style={{ color: "var(--color-error)", marginTop: 12, fontSize: 13 }}
         >
           {endError}
         </p>

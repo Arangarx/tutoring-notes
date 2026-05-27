@@ -116,12 +116,12 @@ export default function AudioInputTabs({
     fontSize: 13,
     fontWeight: activeTab === tab ? 600 : 400,
     color: activeTab === tab
-      ? "var(--color-primary, #2563eb)"
-      : "var(--color-muted, #6b7280)",
+      ? "var(--color-primary)"
+      : "var(--color-muted)",
     background: "none",
     border: "none",
     borderBottom: activeTab === tab
-      ? "2px solid var(--color-primary, #2563eb)"
+      ? "2px solid var(--color-primary)"
       : "2px solid transparent",
     cursor: "pointer",
     paddingBottom: 8,
@@ -135,7 +135,7 @@ export default function AudioInputTabs({
         style={{
           display: "flex",
           gap: 0,
-          borderBottom: "1px solid var(--color-border, #e5e7eb)",
+          borderBottom: "1px solid var(--color-border)",
           marginBottom: 14,
         }}
       >

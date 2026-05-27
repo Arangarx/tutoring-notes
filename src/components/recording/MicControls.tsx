@@ -23,10 +23,10 @@ import {
 
 /** Decide bar colour by level — green/yellow/red zones for visible feedback. */
 export function meterColor(level: number): string {
-  if (level >= 0.85) return "var(--color-error, #dc2626)";
-  if (level >= 0.5) return "#eab308"; // amber-500
-  if (level >= 0.05) return "var(--color-success, #16a34a)";
-  return "var(--color-muted, #9ca3af)";
+  if (level >= 0.85) return "var(--color-error)";
+  if (level >= 0.5) return "var(--meter-loud)";
+  if (level >= 0.05) return "var(--color-success)";
+  return "var(--color-muted)";
 }
 
 export type MicControlsProps = {
@@ -81,7 +81,7 @@ export default function MicControls({
         gap: 12,
         padding: "12px 14px",
         marginBottom: 12,
-        background: "rgba(255, 255, 255, 0.04)",
+        background: "var(--surface-inset)",
         border: "1px solid var(--border)",
         borderRadius: 10,
       }}
@@ -201,7 +201,7 @@ export default function MicControls({
           style={{
             flex: 1,
             height: 10,
-            background: "rgba(255, 255, 255, 0.08)",
+            background: "var(--surface-2)",
             border: "1px solid var(--border)",
             borderRadius: 5,
             overflow: "hidden",
@@ -232,7 +232,7 @@ export default function MicControls({
           gap: 10,
           rowGap: 8,
           paddingTop: 4,
-          borderTop: "1px solid rgba(255, 255, 255, 0.06)",
+          borderTop: "1px solid var(--border-subtle)",
         }}
       >
         <label
@@ -317,14 +317,14 @@ export default function MicControls({
             to right,
             var(--accent) 0%,
             var(--accent) var(--gain-pct, 0%),
-            rgba(255, 255, 255, 0.15) var(--gain-pct, 0%),
-            rgba(255, 255, 255, 0.15) 100%
+            var(--slider-track) var(--gain-pct, 0%),
+            var(--slider-track) 100%
           );
         }
         .mic-gain-slider::-moz-range-track {
           height: 4px;
           border-radius: 2px;
-          background: rgba(255, 255, 255, 0.15);
+          background: var(--slider-track);
         }
         .mic-gain-slider::-moz-range-progress {
           height: 4px;
@@ -338,19 +338,19 @@ export default function MicControls({
           height: 14px;
           margin-top: -5px; /* centre the 14px thumb on the 4px track */
           border-radius: 50%;
-          background: #fff;
+          background: var(--slider-thumb);
           border: 2px solid var(--accent);
           cursor: pointer;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+          box-shadow: 0 1px 3px var(--slider-shadow);
         }
         .mic-gain-slider::-moz-range-thumb {
           width: 14px;
           height: 14px;
           border-radius: 50%;
-          background: #fff;
+          background: var(--slider-thumb);
           border: 2px solid var(--accent);
           cursor: pointer;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+          box-shadow: 0 1px 3px var(--slider-shadow);
         }
         .mic-chime-slider {
           flex: 1;
@@ -373,14 +373,14 @@ export default function MicControls({
             to right,
             var(--accent) 0%,
             var(--accent) var(--chime-pct, 0%),
-            rgba(255, 255, 255, 0.15) var(--chime-pct, 0%),
-            rgba(255, 255, 255, 0.15) 100%
+            var(--slider-track) var(--chime-pct, 0%),
+            var(--slider-track) 100%
           );
         }
         .mic-chime-slider::-moz-range-track {
           height: 4px;
           border-radius: 2px;
-          background: rgba(255, 255, 255, 0.15);
+          background: var(--slider-track);
         }
         .mic-chime-slider::-moz-range-progress {
           height: 4px;
@@ -394,19 +394,19 @@ export default function MicControls({
           height: 12px;
           margin-top: -4px;
           border-radius: 50%;
-          background: #fff;
+          background: var(--slider-thumb);
           border: 2px solid var(--accent);
           cursor: pointer;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+          box-shadow: 0 1px 3px var(--slider-shadow);
         }
         .mic-chime-slider::-moz-range-thumb {
           width: 12px;
           height: 12px;
           border-radius: 50%;
-          background: #fff;
+          background: var(--slider-thumb);
           border: 2px solid var(--accent);
           cursor: pointer;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+          box-shadow: 0 1px 3px var(--slider-shadow);
         }
       `}</style>
     </div>

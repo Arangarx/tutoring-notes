@@ -26,6 +26,7 @@
  * (paste-near-cursor) so Sarah's muscle memory carries over.
  */
 
+import { EXCALIDRAW_STROKE_HEX } from "@/styles/token-values";
 import { uploadWhiteboardAsset } from "@/lib/whiteboard/upload";
 import type { PdfPageRender } from "@/lib/whiteboard/pdf-render";
 
@@ -978,7 +979,7 @@ function buildEmbeddableElement(args: {
     width: args.width,
     height: args.height,
     angle: 0,
-    strokeColor: "#1e293b",
+    strokeColor: EXCALIDRAW_STROKE_HEX,
     backgroundColor: "transparent",
     fillStyle: "solid",
     strokeWidth: 1,

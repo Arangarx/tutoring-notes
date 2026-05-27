@@ -125,7 +125,7 @@ export default async function SharePage({
 
   return (
     <div className="container" style={{ maxWidth: 860 }}>
-      <div className="card" style={{ background: "rgba(255,255,255,0.04)" }}>
+      <div className="card" style={{ background: "var(--surface-1)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
           <div>
             <h1 style={{ marginTop: 0, marginBottom: 4 }}>{student.name}</h1>
@@ -164,18 +164,18 @@ export default async function SharePage({
                     margin: "4px 0",
                   }}
                 >
-                  <div style={{ flex: 1, height: 1, background: "var(--color-primary, #2563eb)", opacity: 0.5 }} />
+                  <div style={{ flex: 1, height: 1, background: "var(--color-primary)", opacity: 0.5 }} />
                   <span
                     style={{
                       fontSize: 12,
                       fontWeight: 600,
-                      color: "var(--color-primary, #2563eb)",
+                      color: "var(--color-primary)",
                       whiteSpace: "nowrap",
                     }}
                   >
                     New since your last visit
                   </span>
-                  <div style={{ flex: 1, height: 1, background: "var(--color-primary, #2563eb)", opacity: 0.5 }} />
+                  <div style={{ flex: 1, height: 1, background: "var(--color-primary)", opacity: 0.5 }} />
                 </div>
 
                 {unseenNotes.map((n) => (
@@ -191,11 +191,11 @@ export default async function SharePage({
                       margin: "4px 0",
                     }}
                   >
-                    <div style={{ flex: 1, height: 1, background: "var(--color-border, #374151)" }} />
+                    <div style={{ flex: 1, height: 1, background: "var(--color-border)" }} />
                     <span className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
                       Previously seen
                     </span>
-                    <div style={{ flex: 1, height: 1, background: "var(--color-border, #374151)" }} />
+                    <div style={{ flex: 1, height: 1, background: "var(--color-border)" }} />
                   </div>
                 )}
               </>
@@ -213,7 +213,7 @@ export default async function SharePage({
                   style={{
                     cursor: "pointer",
                     fontSize: 13,
-                    color: "var(--color-muted, #6b7280)",
+                    color: "var(--color-muted)",
                     padding: "8px 0",
                     userSelect: "none",
                   }}

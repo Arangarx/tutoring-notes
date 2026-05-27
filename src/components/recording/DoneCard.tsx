@@ -21,13 +21,13 @@ export default function DoneCard({ doneSegmentSeconds, onReset }: DoneCardProps)
         alignItems: "center",
         gap: 10,
         padding: "10px 14px",
-        background: "var(--color-success-bg, #f0fdf4)",
+        background: "var(--color-success-bg)",
         borderRadius: 6,
-        border: "1px solid var(--color-success-border, #bbf7d0)",
+        border: "1px solid var(--color-success-border)",
       }}
       data-testid="audio-record-done"
     >
-      <span style={{ color: "var(--color-success, #16a34a)", fontWeight: 600, fontSize: 14 }}>
+      <span style={{ color: "var(--color-success)", fontWeight: 600, fontSize: 14 }}>
         ✓ Recording saved ({formatDuration(doneSegmentSeconds)})
       </span>
       <button

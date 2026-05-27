@@ -50,7 +50,7 @@ export function StartWhiteboardSession({
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(0,0,0,0.5)",
+            background: "var(--overlay-scrim)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -72,7 +72,7 @@ export function StartWhiteboardSession({
               // Override .card's translucent --panel with a solid dark surface
               // so the modal pops from the backdrop and inherited white text
               // stays readable. Matches .admin-nav-drawer's hex.
-              background: "#0d1328",
+              background: "var(--surface-drawer)",
               border: "1px solid var(--border)",
             }}
           >
@@ -184,7 +184,7 @@ export function StartWhiteboardSession({
                 <p
                   role="alert"
                   style={{
-                    color: "var(--color-error, #dc2626)",
+                    color: "var(--color-error)",
                     fontSize: 13,
                     marginBottom: 12,
                     whiteSpace: "pre-wrap",

@@ -292,7 +292,7 @@ export function PdfImageUploadButton({
             style={{
               position: "fixed",
               inset: 0,
-              background: "rgba(0,0,0,0.5)",
+              background: "var(--overlay-scrim)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -319,7 +319,7 @@ export function PdfImageUploadButton({
                 maxWidth: 540,
                 width: "calc(100% - 32px)",
                 padding: 24,
-                background: "#0d1328",
+                background: "var(--surface-drawer)",
                 border: "1px solid var(--border)",
                 display: "grid",
                 gap: 12,
@@ -348,8 +348,8 @@ export function PdfImageUploadButton({
                     fontSize: 13,
                     padding: "10px 12px",
                     borderRadius: 8,
-                    background: "rgba(234,179,8,0.12)",
-                    border: "1px solid rgba(234,179,8,0.4)",
+                    background: "var(--warning-soft)",
+                    border: "1px solid var(--warning-border)",
                   }}
                 >
                   <strong>iPhone/iPad note:</strong> Safari on iOS limits memory
@@ -428,8 +428,8 @@ export function PdfImageUploadButton({
                     fontSize: 14,
                     padding: "10px 12px",
                     borderRadius: 8,
-                    background: "rgba(220,38,38,0.12)",
-                    border: "1px solid rgba(220,38,38,0.4)",
+                    background: "var(--error-soft)",
+                    border: "1px solid var(--error-border)",
                   }}
                 >
                   {state.message}
@@ -443,8 +443,8 @@ export function PdfImageUploadButton({
                     fontSize: 14,
                     padding: "10px 12px",
                     borderRadius: 8,
-                    background: "rgba(34,197,94,0.12)",
-                    border: "1px solid rgba(34,197,94,0.4)",
+                    background: "var(--success-soft)",
+                    border: "1px solid var(--success-border)",
                   }}
                 >
                   {state.message}
@@ -602,7 +602,7 @@ function PdfPickerPanel(props: {
             padding: "6px 8px",
             borderRadius: 6,
             border: "1px solid var(--border)",
-            background: "rgba(15,23,42,0.5)",
+            background: "var(--surface-overlay)",
             color: "inherit",
           }}
         />
@@ -623,7 +623,7 @@ function PdfPickerPanel(props: {
       ) : (
         <p
           role="alert"
-          style={{ margin: 0, fontSize: 13, color: "#fca5a5" }}
+          style={{ margin: 0, fontSize: 13, color: "var(--error)" }}
           data-testid="wb-pdf-pick-error"
         >
           {pickingDerived.error}
@@ -678,7 +678,7 @@ function ProgressStrip({ state }: { state: DialogState }) {
         style={{
           height: 6,
           borderRadius: 999,
-          background: "rgba(100,116,139,0.2)",
+          background: "var(--badge-neutral-bg)",
           overflow: "hidden",
         }}
       >
@@ -686,7 +686,7 @@ function ProgressStrip({ state }: { state: DialogState }) {
           style={{
             width: `${percent}%`,
             height: "100%",
-            background: "#2563eb",
+            background: "var(--info)",
             transition: "width 200ms ease",
           }}
         />

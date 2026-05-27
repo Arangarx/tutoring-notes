@@ -318,7 +318,7 @@ export function MathInsertButton({
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(0,0,0,0.5)",
+            background: "var(--overlay-scrim)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -336,7 +336,7 @@ export function MathInsertButton({
               padding: 24,
               // Solid dark surface — the math field below keeps a white
               // background of its own so equations stay dark-on-white.
-              background: "#0d1328",
+              background: "var(--surface-drawer)",
               border: "1px solid var(--border)",
               display: "grid",
               gap: 12,
@@ -361,7 +361,7 @@ export function MathInsertButton({
             <div
               ref={fieldHostRef}
               style={{
-                border: "1px solid rgba(100,116,139,0.3)",
+                border: "1px solid var(--border-default)",
                 borderRadius: 8,
                 padding: 8,
                 minHeight: 80,
@@ -403,8 +403,8 @@ export function MathInsertButton({
                   fontSize: 14,
                   padding: "10px 12px",
                   borderRadius: 8,
-                  background: "rgba(220,38,38,0.12)",
-                  border: "1px solid rgba(220,38,38,0.4)",
+                  background: "var(--error-soft)",
+                  border: "1px solid var(--error-border)",
                 }}
               >
                 {state.message}
@@ -418,8 +418,8 @@ export function MathInsertButton({
                   fontSize: 14,
                   padding: "10px 12px",
                   borderRadius: 8,
-                  background: "rgba(34,197,94,0.12)",
-                  border: "1px solid rgba(34,197,94,0.4)",
+                  background: "var(--success-soft)",
+                  border: "1px solid var(--success-border)",
                 }}
               >
                 Equation inserted.

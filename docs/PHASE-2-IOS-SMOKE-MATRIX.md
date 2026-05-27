@@ -50,7 +50,7 @@ Prove Mynk is **trustworthy on iOS Safari** for the pilot path Sarah actually us
 
 ---
 
-## 3. Test scenarios (S1–S13)
+## 3. Test scenarios (S1–S14)
 
 For each row: run **Steps**, compare to **Expected**, if mismatch capture per **§4**.
 
@@ -191,6 +191,17 @@ For each row: run **Steps**, compare to **Expected**, if mismatch capture per **
 
 ---
 
+### S14 — System light/dark theme follows `prefers-color-scheme`
+
+| | |
+|---|---|
+| **Steps** | 1. iOS **Settings → Display & Brightness** → Light. 2. Open app (logged in, any admin page). 3. Confirm cream/Mynka light surfaces (not legacy forced-dark purple). 4. Switch iOS to **Dark**; force-quit Safari and reopen app. 5. Confirm dark surfaces return (Sarah baseline). 6. Optional: append `?theme=light` — page stays light even on dark system. |
+| **Expected** | Theme tracks OS without JS detection (`src/styles/tokens.css`); native checkboxes readable (`color-scheme` matches active theme). iOS 13+ Safari supports `prefers-color-scheme`. |
+| **Routes** | Any authenticated route; `src/app/globals.css` + `src/styles/tokens.css` |
+| **Phase 0** | Cross-platform parity check for design-token theme layer (2026-05-27). |
+
+---
+
 ## 4. What to capture per scenario (on Fail / Partial)
 
 Minimum bundle for any non-Pass row:
@@ -234,6 +245,8 @@ Fill **Status** with `Pass` | `Fail` | `Partial` | `Skip` (with reason).
 | S11 Whiteboard workspace | D1 | ___ | | SSR 500 opportunistic |
 | S12 Live A/V join | D2 student phone | ___ | | Tap to hear |
 | S13 Mic denied | D1 | ___ | | |
+| S14 OS light/dark theme | D1 | ___ | | |
+| S14 OS light/dark theme | D2 Sarah iPhone | ___ | | |
 | S3 Solo record start | D3 iPad ___ | ___ | | optional |
 | S11 Whiteboard workspace | D3 | ___ | | optional |
 

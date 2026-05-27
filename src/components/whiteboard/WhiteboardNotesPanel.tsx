@@ -157,8 +157,8 @@ export default function WhiteboardNotesPanel({
         <div
           style={{
             fontSize: 13,
-            background: "rgba(34,197,94,0.10)",
-            border: "1px solid rgba(34,197,94,0.30)",
+            background: "var(--success-soft)",
+            border: "1px solid var(--success-border)",
             borderRadius: 6,
             padding: "8px 10px",
           }}
@@ -180,12 +180,12 @@ export default function WhiteboardNotesPanel({
         <div
           role="alert"
           style={{
-            background: "rgba(220,38,38,0.10)",
-            border: "1px solid rgba(220,38,38,0.30)",
+            background: "var(--error-soft)",
+            border: "1px solid var(--error-border)",
             borderRadius: 6,
             padding: "8px 10px",
             fontSize: 13,
-            color: "#b91c1c",
+            color: "var(--sign-out)",
           }}
         >
           {error}

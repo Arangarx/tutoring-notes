@@ -1,5 +1,5 @@
 /**
- * Lightweight regression tests for src/app/globals.css.
+ * Lightweight regression tests for src/app/globals.css + src/styles/tokens.css.
  *
  * These guard against three failure modes that have repeatedly caused
  * dark-mode UI bugs (Sarah's recording-share card was invisible / mis-sized
@@ -8,33 +8,31 @@
  *   1. Inline styles all over the admin UI reference CSS variables named
  *      var(--color-muted), var(--color-border), var(--color-primary),
  *      var(--color-success-*), var(--color-error). Those variables MUST be
- *      defined in :root, otherwise every fallback hex is a LIGHT-mode
- *      colour that's invisible against this dark theme.
+ *      defined via tokens.css legacy aliases.
  *
  *   2. The global `input { width: 100%; padding: 10px 12px; ... }` rule
  *      also matches <input type="checkbox">. Without an override, checkboxes
  *      stretch to fill their flex container and push adjacent label text past
- *      the edge of the card. Keep the override that restores native sizing.
+ *      the edge of the card.
  *
- *   3. `color-scheme: dark` on :root is what tells the browser to
- *      render NATIVE form controls (checkbox tick, radio dot,
- *      scrollbar, date/time picker chrome, file input) in dark mode.
- *      Without it, controls fall back to the user's SYSTEM color
- *      scheme — so a Windows-light-mode tutor sees a near-invisible
- *      light-mode checkbox on our dark dialogs and can't tell whether
- *      a click registered. Sarah hit this on the consent modal in
- *      Apr 2026.
+ *   3. `color-scheme` follows prefers-color-scheme + data-theme overrides
+ *      so native form controls match the active theme.
  */
 
 import { readFileSync } from "fs";
 import { join } from "path";
 
-const CSS = readFileSync(
+const GLOBALS = readFileSync(
   join(__dirname, "..", "..", "app", "globals.css"),
   "utf8"
 );
+const TOKENS = readFileSync(
+  join(__dirname, "..", "..", "styles", "tokens.css"),
+  "utf8"
+);
+const CSS = `${GLOBALS}\n${TOKENS}`;
 
-describe("globals.css — dark-mode variable definitions", () => {
+describe("tokens.css — legacy variable definitions", () => {
   const REQUIRED_VARS = [
     "--color-muted",
     "--color-border",
@@ -46,12 +44,12 @@ describe("globals.css — dark-mode variable definitions", () => {
     "--color-warning",
     "--color-warning-bg",
     "--color-warning-border",
+    "--surface-base",
+    "--surface-1",
+    "--meter-loud",
   ];
 
-  test.each(REQUIRED_VARS)("defines %s in :root", (varName) => {
-    // Match `--name:` somewhere inside a :root block. Loose check, but enough
-    // to catch accidental deletion. (Inline styles use these names with
-    // light-mode hex fallbacks that look invisible on the dark theme.)
+  test.each(REQUIRED_VARS)("defines %s", (varName) => {
     const re = new RegExp(`${varName}\\s*:`, "m");
     expect(re.test(CSS)).toBe(true);
   });
@@ -59,9 +57,7 @@ describe("globals.css — dark-mode variable definitions", () => {
 
 describe("globals.css — checkbox/radio sizing override", () => {
   test("includes input[type=\"checkbox\"] override resetting width and padding", () => {
-    // Without this override, the global `input` rule sets width:100%; padding:10px 12px
-    // on checkboxes too — which broke the share-recording card layout.
-    const checkboxBlockMatch = CSS.match(
+    const checkboxBlockMatch = GLOBALS.match(
       /input\[type="checkbox"\][^{]*\{[^}]*\}/
     );
     expect(checkboxBlockMatch).not.toBeNull();
@@ -71,24 +67,33 @@ describe("globals.css — checkbox/radio sizing override", () => {
   });
 
   test("checkbox override applies to radio too", () => {
-    // Same fix should cover radio inputs to prevent the same class of bug.
-    expect(CSS).toMatch(/input\[type="radio"\]/);
+    expect(GLOBALS).toMatch(/input\[type="radio"\]/);
   });
 });
 
-describe("globals.css — dark color-scheme declaration", () => {
-  test("declares color-scheme: dark on :root", () => {
-    // Match any whitespace / comment between the property name and `dark`.
-    // The :root block can contain other declarations between the brace
-    // and color-scheme, so we look for the property anywhere in the file
-    // — there's only one :root in this stylesheet, so this is safe.
-    expect(CSS).toMatch(/color-scheme\s*:\s*dark\b/);
+describe("tokens.css — theme + color-scheme", () => {
+  test("declares color-scheme: light on :root default", () => {
+    expect(TOKENS).toMatch(/:root[\s\S]*color-scheme\s*:\s*light\b/);
   });
 
-  test("declares an accent-color so checkmark / radio dot is visible", () => {
-    // Without accent-color, the checked state uses the browser default
-    // (typically a low-contrast blue-grey) which on our dark surfaces
-    // has caused tutors to think the click didn't register.
-    expect(CSS).toMatch(/accent-color\s*:/);
+  test("declares color-scheme: dark under prefers-color-scheme media", () => {
+    expect(TOKENS).toMatch(
+      /@media\s*\(prefers-color-scheme:\s*dark\)[\s\S]*color-scheme\s*:\s*dark\b/
+    );
+  });
+
+  test("supports explicit data-theme light and dark overrides", () => {
+    expect(TOKENS).toMatch(/\[data-theme="light"\]/);
+    expect(TOKENS).toMatch(/\[data-theme="dark"\]/);
+  });
+
+  test("declares accent-color so checkmark / radio dot is visible", () => {
+    expect(TOKENS).toMatch(/accent-color\s*:/);
+  });
+});
+
+describe("globals.css — imports token layer", () => {
+  test("imports tokens.css", () => {
+    expect(GLOBALS).toMatch(/@import\s+["'].*tokens\.css["']/);
   });
 });

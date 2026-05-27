@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { FAVICON_BRAND_BG } from "@/styles/token-values";
 
 export const runtime = "edge";
 export const size = { width: 32, height: 32 };
@@ -15,7 +16,7 @@ export default function Icon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#7c5cff",
+          background: FAVICON_BRAND_BG,
           color: "white",
           fontSize: 20,
           fontWeight: 700,
