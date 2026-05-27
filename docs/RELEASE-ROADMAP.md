@@ -1,6 +1,6 @@
 # Release roadmap — solo tutor floor → university pitch readiness
 
-**Last updated:** 2026-05-20
+**Last updated:** 2026-05-27
 
 > Audience: orchestrators, executors, and Andrew sequencing work across
 > the tutoring-notes pilot through Aug 2026. This doc is a **thin
@@ -18,6 +18,8 @@ example; no specific meeting committed).
 
 Use this doc to answer: *what ships in what order, what can run in
 parallel, and what stays deferred with an explicit reason.*
+
+**Pilot readiness has three stages** — (1) **private pilot** with attested users (current: Sarah + trusted tutors), (2) **paid + scaled** (post–Wave 1 reliability floor + legal/OAuth hardening), (3) **self-serve** (post–brand/UX refresh + billing + verification). Each stage has a different reliability and legal bar; do not treat stage-3 requirements as blockers for stage 1. For scale-readiness checklist items see [`docs/COMMERCIAL-LAUNCH-CHECKLIST.md`](COMMERCIAL-LAUNCH-CHECKLIST.md); for minimum pilot deploy bar today see [`docs/DEPLOY.md`](DEPLOY.md) § Pilot readiness checklist.
 
 Re-validate wave ordering **quarterly** or when Sarah pilot adds
 significant new feedback. Update at end of any session that ships items

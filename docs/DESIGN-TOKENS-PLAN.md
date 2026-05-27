@@ -204,7 +204,7 @@ don't require code edits beyond the `:root` block.
 ### Interaction
 
 ```css
---focus-ring         /* keyboard-focus outline (currently var(--accent)) */
+--focus-ring         /* keyboard-focus outline (use var(--border-strong) per UX-AND-A11Y-SPEC § 5.1, NOT var(--accent) — focus ring must not double as a CTA color) */
 --overlay-scrim      /* modal/drawer backdrops (currently rgba(0,0,0,0.5)) */
 --selection          /* ::selection background */
 ```
@@ -461,12 +461,9 @@ and we swap it later in one PR.
    The Mynka Blue light surface is what was designed against in the
    reference mockup, but switching Sarah's default is a separate
    call.
-2. **Tailwind decision.** Do we want to add Tailwind as part of
-   Phase 3, or stay vanilla? Affects whether the token names
-   should also exist as Tailwind config entries from the start.
-3. **Sub-agent delegation.** Phase 0c is the perfect Composer 2.5
+2. **Sub-agent delegation.** Phase 0c is the perfect Composer 2.5
    job — mechanical, well-bounded, file-by-file. Worth setting up
    when you have a quiet morning, OR doing in one focused session.
-4. ~~**Palette decision blocking.**~~ ✅ Resolved 2026-05-19 — Mynka
+3. ~~**Palette decision blocking.**~~ ✅ Resolved 2026-05-19 — Mynka
    Blue is locked. Phase 0 is now unblocked from the brand-decision
    side; the only question is when to start the engineering work.

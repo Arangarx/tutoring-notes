@@ -1,3 +1,5 @@
+> **SUPERSEDED 2026-05-27.** See [`docs/PHASE-4B-STATUS.md`](../PHASE-4B-STATUS.md) for the shipped-state record. This file is preserved for archival reference; do not act on it directly. Reason: work shipped to master (Phase 4b in the 4c train).
+
 # Phase 4b — Executor bootstrapper
 
 Copy everything below the rule line into a fresh executor chat. Do NOT include this header.

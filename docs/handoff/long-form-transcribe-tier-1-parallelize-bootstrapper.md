@@ -1,3 +1,5 @@
+> **SUPERSEDED 2026-05-27.** See [`docs/PHASE-6-TIER-1-STATUS.md`](../PHASE-6-TIER-1-STATUS.md) for the shipped-state record. This file is preserved for archival reference; do not act on it directly. Reason: work shipped to master as merge `5ccf1c7` 2026-05-17.
+
 # Long-form transcribe — Tier 1 parallelize + duration-cap split + friendly-error UX — executor briefing
 
 > **Recommended model: Composer.** Small, well-trodden surfaces — extend an existing ffmpeg-split helper, parallelize two existing `for` loops behind concurrency caps, add one UX copy patch. No novel architecture. Vercel Pro is now live (300s server-action ceiling, upgraded 2026-05-17 ~9:00 PM); this build's whole point is to give that 300s budget real headroom for 60-90+ min Sarah sessions. ~30-60 min Composer time + ~30 min Andrew validation on Vercel Preview.

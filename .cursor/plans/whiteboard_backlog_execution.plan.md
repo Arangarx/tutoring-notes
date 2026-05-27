@@ -1,3 +1,5 @@
+> **SUPERSEDED 2026-05-27 (morning cleanup).** See [`docs/RELEASE-ROADMAP.md`](../../docs/RELEASE-ROADMAP.md), [`docs/WHITEBOARD-STATUS.md`](../../docs/WHITEBOARD-STATUS.md), and [`docs/BACKLOG.md`](../../docs/BACKLOG.md) for current sequencing and open work. This file is preserved for archival reference; do not act on it directly. Reason: YAML waves reference pre-ship scope (e.g. PDF workbook still pending); PDF and W2/W6 shipped; roadmap consolidated.
+
 ---
 name: Whiteboard backlog execution (post-W2/W6)
 overview: "Phased execution: validate smoke → pilot trust (audio + disconnect pause) → PDF/replay/multipage backlog → maintenance follow-ups. Do not code Phase 2 surfaces until WHITEBOARD-STATUS demo gate clears. Canonical narrative: docs/WHITEBOARD-ROADMAP-NEXT.md."

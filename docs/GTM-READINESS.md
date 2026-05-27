@@ -1,3 +1,5 @@
+> **SUPERSEDED 2026-05-27 (morning cleanup).** See [`docs/RELEASE-ROADMAP.md`](RELEASE-ROADMAP.md) (sequencing), [`docs/DEPLOY.md`](DEPLOY.md) (pilot readiness checklist + env-only reset caveat), [`docs/GOOGLE-OAUTH-VERIFICATION.md`](GOOGLE-OAUTH-VERIFICATION.md) (OAuth Testing-mode workflow), and [`docs/COMMERCIAL-LAUNCH-CHECKLIST.md`](COMMERCIAL-LAUNCH-CHECKLIST.md) (scale-readiness) for the current canonical references. § 1 hosting facts (SQLite/serverless concerns) are stale — the current production stack is Neon Postgres + Vercel Pro per `docs/PLATFORM-ASSUMPTIONS.md`. This file is preserved for archival reference; do not act on it directly.
+
 # Go-to-market readiness — Tutoring Notes (no-holds-barred)
 
 This is an **honest** checklist: what is solid enough for a **small private pilot**, what is **not** production-grade yet, and what blocks **broad** launch.

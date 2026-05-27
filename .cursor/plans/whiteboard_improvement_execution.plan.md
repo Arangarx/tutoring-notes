@@ -1,3 +1,5 @@
+> **SUPERSEDED 2026-05-27 (morning cleanup).** See [`docs/WHITEBOARD-STATUS.md`](../../docs/WHITEBOARD-STATUS.md) and [`docs/BACKLOG.md`](../../docs/BACKLOG.md) for shipped state and remaining whiteboard work. This file is preserved for archival reference; do not act on it directly. Reason: all YAML todos marked completed; manual smoke and follow-ups live in BACKLOG + whiteboard-smoke-log.
+
 ---
 name: Whiteboard improvement execution
 overview: Whiteboard pilot-hardening pass: W2 tutor+student native image sync, W6 sessionStorage + beforeunload, Playwright workspace spec. **Manual smoke still required** (docs/whiteboard-smoke-log.md § Pending).

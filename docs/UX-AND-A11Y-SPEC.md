@@ -750,6 +750,35 @@ The recording UI gets a fourth tier: **recording-error** is always serious becau
 | **axe-core** in Playwright tests | All routes covered by Playwright | **Enable `color-contrast` rule** (currently excluded — see audit). PR-blocking once Phase 0 ships. |
 | **Playwright visual regression** | The 5 surfaces already in `tests/visual/pages.spec.ts` + add: recording UI, whiteboard workspace, AV tile (per audit's HIGH-RISK list) | PR-blocking once baselines committed |
 | **ESLint rule** | Block raw hex/rgba in `.tsx`/`.css` outside `globals.css` and `docs/brand-previews/` | PR-blocking (per `DESIGN-TOKENS-PLAN.md`) |
+
+From `docs/DESIGN-TOKENS-PLAN.md` Phase 0 execution playbook (mirrored here for canonical reference).
+
+Concrete rule for `eslint.config.mjs` (or `.eslintrc`):
+
+```js
+{
+  files: ["src/**/*.{ts,tsx,js,jsx,css}"],
+  ignores: ["src/app/globals.css", "docs/brand-previews/**"],
+  rules: {
+    "no-restricted-syntax": [
+      "error",
+      {
+        selector: "Literal[value=/#[0-9a-fA-F]{3,8}/]",
+        message: "Use a design token from globals.css (e.g., var(--accent)) instead of a hardcoded hex color. See docs/DESIGN-TOKENS-PLAN.md."
+      },
+      {
+        selector: "Literal[value=/rgba?\\(/]",
+        message: "Use a design token from globals.css instead of an inline rgba() value. See docs/DESIGN-TOKENS-PLAN.md."
+      }
+    ]
+  }
+}
+```
+
+(The ESLint selector for template literals containing colors is
+trickier — a simpler practical version is a CI grep step that fails
+the build if new hardcoded colors appear in PR diffs. Either works;
+pick whichever the team will actually keep on.)
 | **TypeScript** | shadcn primitives have typed props for `aria-*` where applicable | Already enforced |
 
 ### 13.2 Manual per-release

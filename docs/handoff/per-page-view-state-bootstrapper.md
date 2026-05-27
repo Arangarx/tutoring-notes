@@ -1,3 +1,5 @@
+> **SUPERSEDED 2026-05-27 (morning cleanup).** Tutor-side per-page view state (zoom + position retained per page) shipped per Andrew's confirmation. See [`docs/WHITEBOARD-STATUS.md`](../WHITEBOARD-STATUS.md) for current canonical state. Student-side validation is a known gap — tracked in [`docs/BACKLOG.md`](../BACKLOG.md) under "Per-page view state — student-side validation." This file is preserved for archival reference; do not act on it directly.
+
 # Per-page view state (pan + zoom) — executor briefing (tier b: persisted across reloads)
 
 > **Recommended model: Composer.** This is a feature build with three small but distinct surfaces — additive schema extension to a JSON document type, Excalidraw viewport API integration on both tutor + student sides, and a debounced wire-v3 event for follow-mode propagation. The surfaces are well-trodden (schema-extension pattern from PDF page work, Excalidraw `appState.scrollX/scrollY/zoom` API, existing sync-client event-add pattern). No novel architecture. Opus is overkill. ~1-1.5 days Composer time.

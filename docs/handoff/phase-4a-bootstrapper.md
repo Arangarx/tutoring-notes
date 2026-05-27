@@ -1,3 +1,5 @@
+> **SUPERSEDED 2026-05-27.** See [`docs/PHASE-4A-STATUS.md`](../PHASE-4A-STATUS.md) for the shipped-state record. This file is preserved for archival reference; do not act on it directly. Reason: work shipped to master as merge `59d13ad` (Phase 4a peer-mesh + signaling foundation).
+
 # Phase 4a — Executor bootstrapper
 
 Copy everything below the rule line into a fresh executor chat. Do NOT include this header.

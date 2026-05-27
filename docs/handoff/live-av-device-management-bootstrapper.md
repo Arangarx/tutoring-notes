@@ -1,3 +1,5 @@
+> **SUPERSEDED 2026-05-27.** See [`docs/PHASE-LIVE-AV-DEVICE-MGMT-STATUS.md`](../PHASE-LIVE-AV-DEVICE-MGMT-STATUS.md) for the shipped-state record. This file is preserved for archival reference; do not act on it directly. Reason: work shipped to master as merge `ac92137` 2026-05-17.
+
 # Live A/V device management — mic + camera picker + hotswap — Executor bootstrapper
 
 Copy everything below the rule line into a fresh Composer chat. Do NOT include this header.

@@ -1,3 +1,5 @@
+> **SUPERSEDED 2026-05-27.** See [`docs/handoff/long-form-transcribe-tier-1-orchestrator-report.md`](long-form-transcribe-tier-1-orchestrator-report.md) for the outcome artifact. This file is preserved for archival reference; do not act on it directly. Reason: spike completed; the orchestrator report is the canonical outcome.
+
 # Spike — long-form transcribe controlled smoke (pre-Sarah-Monday)
 
 Copy everything below the rule line into a fresh Composer chat. Do NOT include this header.

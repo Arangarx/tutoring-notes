@@ -1,3 +1,5 @@
+> **SUPERSEDED 2026-05-27.** See [`AGENTS.md`](../AGENTS.md) and [`docs/INDEX.md`](INDEX.md) for the current canonical reading list and "where do I look for X" map. This file is preserved for archival reference; do not act on it directly. Reason: old-style bootstrap pre-dating the AGENTS.md + handoff pattern; references stale branch names and plan file paths.
+
 # New session bootstrap (tutoring-notes)
 
 **Paste this file (or the block below) at the start of a new agent chat** when you will touch `tutoring-notes`, especially whiteboard or recorder work.

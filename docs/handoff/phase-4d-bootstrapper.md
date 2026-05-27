@@ -1,3 +1,5 @@
+> **SUPERSEDED 2026-05-27.** See [`docs/PHASE-4D-STATUS.md`](../PHASE-4D-STATUS.md) for the shipped-state record. This file is preserved for archival reference; do not act on it directly. Reason: work shipped to master as merge `41bf006` 2026-05-16.
+
 # Phase 4d — Executor bootstrapper
 
 Copy everything below the rule line into a fresh executor chat. Do NOT include this header.

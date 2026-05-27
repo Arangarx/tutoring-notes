@@ -1,3 +1,5 @@
+> **SUPERSEDED 2026-05-27 (morning cleanup).** See [`docs/RELEASE-ROADMAP.md`](../../docs/RELEASE-ROADMAP.md), [`docs/WHITEBOARD-STATUS.md`](../../docs/WHITEBOARD-STATUS.md), and [`docs/BACKLOG.md`](../../docs/BACKLOG.md) for current whiteboard sequencing, shipped state, and the implementation queue. This file is preserved for archival reference; do not act on it directly. Reason: W-item checklist and lockstep pointers consolidated into BACKLOG + STATUS + RELEASE-ROADMAP.
+
 # Whiteboard — engineering checklist (W-items + smoke folds)
 
 **Canonical location:** this file in the **tutoring-notes** repo (`.cursor/plans/WHITEBOARD-IMPROVEMENT-PLAN.md`). Cursor **Build** reads the companion file `whiteboard_improvement_execution.plan.md` in this folder.

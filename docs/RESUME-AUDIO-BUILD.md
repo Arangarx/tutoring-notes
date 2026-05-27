@@ -1,3 +1,5 @@
+> **SUPERSEDED 2026-05-27.** See [`docs/RECORDER-LIFECYCLE.md`](RECORDER-LIFECYCLE.md) for the current recorder architecture. This file is preserved for archival reference; do not act on it directly. Reason: the audio build shipped; the file itself said "delete this once shipped."
+
 # Resume — Audio session capture build
 
 Paused mid-manual-setup on **2026-04-16** due to unrelated GPU glitch. No code committed yet (working tree was clean at pause).

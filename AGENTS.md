@@ -32,6 +32,15 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
 
 ## Key docs
 
+- [docs/INDEX.md](docs/INDEX.md) — **start here.** Literal "where do I
+  look for X" map: every canonical doc, spoke, and smoke runbook indexed
+  by topic (sequencing, reliability, brand/UX, pilot feedback, deploy,
+  legal, security, smoke runbooks, recorder lifecycle gate, handoff docs).
+  Updated 2026-05-27 doc-cleanup pass.
+- [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) — canonical
+  sequencing source. Wave-by-wave ordering from solo-tutor reliability
+  floor to Aug 2026 university-pitch readiness. Re-validate quarterly or
+  after major Sarah feedback.
 - [docs/BACKLOG.md](docs/BACKLOG.md) — pilot feedback, known follow-ups,
   reliability gaps audit.
 - [docs/RECORDER-LIFECYCLE.md](docs/RECORDER-LIFECYCLE.md) — **read
@@ -44,6 +53,11 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   pattern for STATUS docs (per-feature handoff between sessions).
 - [docs/WHITEBOARD-STATUS.md](docs/WHITEBOARD-STATUS.md) — current
   whiteboard build status, guardrails, adversarial review, demo gate.
+- [docs/LIVE-AV.md](docs/LIVE-AV.md) — **read before touching
+  `peer-mesh.ts`, `useLiveAV.ts`, `mic-recorder-audio.ts`, or anything
+  claiming to "simplify" peer connection or remote audio recording.**
+  Live A/V architecture cheat sheet — peer-mesh, signaling, recording
+  outbox integration, participants-reconcile effect.
 - [docs/PHASE-1B-STATUS.md](docs/PHASE-1B-STATUS.md) — outbox + atomic
   end-session branch handoff (Pillars 2 + 3).
 - [docs/PHASE-4A-STATUS.md](docs/PHASE-4A-STATUS.md) — live-A/V peer-mesh
@@ -60,19 +74,14 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
 - [docs/LEGAL-SYNC.md](docs/LEGAL-SYNC.md) — **read before touching
   `src/app/privacy/page.tsx`, `src/app/terms/page.tsx`, the Gmail OAuth
   consent flow, or any external policy reference.**
-  **`https://www.mortensenapps.com/privacy` + `https://www.mortensenapps.com/terms`**
-  is the **canonical legal source** and the URLs registered in the shared
-  "Mortensen Apps" OAuth consent screen that Tutoring Notes uses
-  (confirmed from Google Cloud Console 2026-05-17). Verification history
-  lives in the mortensenapps.com site repo. The product's `/privacy` and
-  `/terms` are **local subordinate facades** that supplement the umbrella
-  with product-specific sections (Vercel Blob audio, OpenAI Whisper,
-  whiteboard data, minor-data tutor-consent specifics) — they are NOT
-  registered with Google as policy URLs for this OAuth client. This doc
-  maps which sections are umbrella-derived vs. product-specific, the
-  sync protocol when the umbrella changes (incl. Google OAuth
-  Limited-Use re-verification check), and the quarterly drift review
-  cadence.
+- [docs/SARAH-CALL-PREP.md](docs/SARAH-CALL-PREP.md) — rolling doc for
+  pilot questions: next-call open questions + answered questions from
+  all prior calls (newest at top). Read before any Sarah call or when
+  acting on pilot questions.
+- [docs/handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md](docs/handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md) —
+  latest pilot call capture (2026-05-26, commit `c75e946`): Sarah's 3
+  questions, key themes, strategic reframe (notes as institutional
+  memory), action items, brand-awareness check deferral.
 
 ## Conventions
 
@@ -126,6 +135,7 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   the review.
 - **This repo (`tutoring-notes`) — feature branches: commit + push by default.** After substantive work on a named branch here, create a descriptive commit and push (`origin`; retry transient network failures) unless Andrew says to hold off. (Scope is this app only, not every workspace.)
 - **Executor bootstrappers AND orchestrator reports live in `docs/handoff/`** — when the orchestrator drafts a briefing for a fresh executor chat, write it as `docs/handoff/<scope>-bootstrapper.md`; when the orchestrator captures session retrospectives for a future orchestrator picking up, write it as `docs/handoff/<scope>-<date>-orchestrator-report.md`. Both go here, not `~/.cursor/plans/`. Two reasons: (a) Cursor's chat UI only resolves workspace-relative file paths so in-workspace handoff docs are clickable, (b) committed handoff docs create an audit trail pairing "what we asked for" with "what shipped" (bootstrappers) and "what we did and decided" with "what's open" (orchestrator reports). **Bootstrappers must be pure executor briefings from line 1** with the required top-of-file template. **Both bootstrappers AND orchestrator reports should be Composer-2.5-authored via subagent dispatch** when length > ~3 paragraphs — Opus supplies the scope blob and structural outline; Composer types the prose. See `docs/handoff/README.md` for both templates + full lifecycle.
+- **Orchestrator state checkpoints — keep a fresh-chat bootstrap current.** When the current orchestrator chat shows signs of truncation/slowdown **or** on user request, the orchestrator dispatches Composer 2.5 to write `docs/handoff/orchestrator-state-<YYYY-MM-DD>-<HHMM>.md` using the template at [`docs/handoff/orchestrator-state-template.md`](docs/handoff/orchestrator-state-template.md). Timestamp is Mountain time (UTC-6). The next orchestrator chat opens with that state file `@`-referenced as bootstrap context — pre-loaded with project arc, current wave focus, uncommitted state, in-flight subagents, open Andrew-confirms, recent architectural decisions, and a reading list. State files are versioned per checkpoint (not overwritten); old ones stay as audit trail without SUPERSEDED headers. **Authoring tier:** Composer 2.5 always (Opus provides the scope blob; Composer types the prose). Do not write the state file as Opus tool calls inline — that is the cost discipline this rule addresses.
 - **Chat output links use workspace-relative paths only.** Cursor's chat UI clickably resolves paths like `docs/BACKLOG.md` and `src/lib/ai.ts` but renders absolute paths (`c:/Users/...`, `/Users/...`) and `file://` URIs as plain unclickable text, breaking Andrew's workflow. Same rule applies inside any `docs/handoff/*.md` since those files are designed to be `@`-referenced in fresh chats. When citing a file, always use the workspace-relative form.
 - **Windows PowerShell: multi-line commit messages via temp file, not `-m`.** PowerShell 5.x (the default on Win10/11 without an explicit pwsh install — Andrew's setup) mangles multi-line strings, Unicode escape sequences (`\u2014`), and backtick-escaped characters when passed to `git commit -m "..."`. Safe pattern: Write the message to `.git/COMMIT_MSG_DRAFT.txt`, then `git commit -F .git/COMMIT_MSG_DRAFT.txt`, then delete the temp file in a **sequential** subsequent call (NOT a parallel tool call — a parallel `Delete` races the `commit` and the file vanishes before git reads it; this has bitten us).
 

@@ -144,6 +144,8 @@ Resend's free tier covers 3 000 emails/month — more than enough for early pilo
 
 Reset emails use the same SMTP/Gmail config as other emails. If email is not configured, the reset link will not be delivered — configure email before advertising this feature to users.
 
+**Env-only admin accounts** (`ADMIN_EMAIL` / `ADMIN_PASSWORD` with no database admin row) **cannot** be reset in-app — change server config. Captured from `docs/GTM-READINESS.md` 2026-05-27 cleanup pass.
+
 ---
 
 ## Add another admin (pilot) — quick path
@@ -175,6 +177,18 @@ Each **student** row is tied to the signed-in **database admin** (`Student.admin
 
 - **`/signup`** creates a new **tutor account** (email + password) in the database. No invite required. Link it from your landing page (already linked from **Home** and **Login**).
 - **`GMAIL_CONNECT_ALLOWLIST`** (optional): comma-separated emails that may use **Connect Gmail**. If **unset**, any signed-in tutor may connect Gmail (same as before). If **set** (e.g. `you@gmail.com,pilot@school.edu`), only those accounts see the **Connect Gmail** button; everyone else uses **SMTP** for outbound mail. Use this when you are fine with random signups but do not want them on Gmail OAuth.
+
+---
+
+## Pilot readiness checklist (minimum bar before onboarding a new pilot tutor)
+
+1. **Deployed URL** with `NEXTAUTH_URL` = that URL; `NEXTAUTH_SECRET` strong and unique.
+2. **Persistent DB** (volume or Postgres) — not disposable SQLite on serverless.
+3. **Google:** Gmail API enabled; OAuth client has **production redirect URI**; test users added **or** verification path started.
+4. **You** set **Profile** name on the deployed instance (or ask pilot to set after setup).
+5. **Pilot brief:** one-pager — “Create account → add student → note → send update → parent opens link.”
+6. **Support channel:** your email or Calendly for **15‑min feedback** calls.
+7. **Your calendar:** reminders for OAuth test users, domain renewal, and “ping pilots” (see agenticPipeline `docs/pilot-ops-playbook.md`).
 
 ---
 

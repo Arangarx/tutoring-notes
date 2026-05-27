@@ -1,3 +1,5 @@
+> **SUPERSEDED 2026-05-27.** See [`docs/PHASE-PDF-STATUS.md`](../PHASE-PDF-STATUS.md) for the shipped-state record. This file is preserved for archival reference; do not act on it directly. Reason: work shipped to master as merge `9ff5b11` 2026-05-17.
+
 # PDF page-picker + per-PDF-page boards — Executor bootstrapper
 
 Copy everything below the rule line into a fresh Composer chat. Do NOT include this header.

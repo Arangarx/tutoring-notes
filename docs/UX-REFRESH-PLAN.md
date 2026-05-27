@@ -1,3 +1,5 @@
+> **SUPERSEDED 2026-05-27.** See [`docs/UX-AND-A11Y-SPEC.md`](UX-AND-A11Y-SPEC.md), [`docs/MYNK-BRAND-PHASE-2-DECISIONS.md`](MYNK-BRAND-PHASE-2-DECISIONS.md), and [`docs/BRAND.md`](BRAND.md) for the current canonical UX and brand references. This file is preserved for archival reference; do not act on it directly. Reason: v1 redesign from scratch superseded the phased-refresh plan; internal SUPERSEDED notice added 2026-05-19 PM.
+
 # UX Refresh — Plan + Phased Rollout
 
 > **⚠️ SUPERSEDED (2026-05-19 PM) for Phases 1+.** This doc's phased plan was written before Andrew's "v1-from-scratch" direction (no inheritance from current IA, pages, tabs, or URL structure). Phases 0 and the two shipped quick-wins are accurate history; Phases 1–4 are **historical context, not prescription**. Canonical sources for the next phase of work:

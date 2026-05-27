@@ -1,3 +1,5 @@
+> **SUPERSEDED 2026-05-27 (morning cleanup, C3 follow-up).** This consolidated whiteboard roadmap merging older plans + backlog + status is superseded by the canonical hub-and-spoke set: [`docs/RELEASE-ROADMAP.md`](RELEASE-ROADMAP.md) (sequencing), [`docs/WHITEBOARD-STATUS.md`](WHITEBOARD-STATUS.md) (current state, follow-ups, gates), and [`docs/BACKLOG.md`](BACKLOG.md) (whiteboard implementation/design queue). Andrew confirmed the SUPERSEDE 2026-05-27 morning. This file is preserved for archival reference; do not act on it directly.
+
 # Whiteboard — what’s left (consolidated roadmap)
 
 Single execution-oriented view merging:
