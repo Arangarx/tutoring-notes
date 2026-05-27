@@ -384,18 +384,32 @@ tutorTimezone       String      // e.g. "America/Denver" — locked at close
 sessionDateLocal    String      // e.g. "2026-05-27" — locked at close, for billing-period grouping
 
 // NEW from Wave 2.5 (what Sarah saw — FROZEN at session-close, NEVER recomputed)
-billedStartLocal    String      // e.g. "10:00" — frozen at close
-billedEndLocal      String      // e.g. "10:55" — frozen at close
-billedDurationMin   Int         // e.g. 55 — frozen at close
+billedStartLocal              String   // e.g. "10:00" — frozen at close
+billedEndLocal                String   // e.g. "10:55" — frozen at close
+billedDurationMin             Int      // e.g. 55 — frozen at close
+
+// NEW from Wave 2.5 (rounding RULE applied at close — frozen alongside the result so the audit trail captures WHICH rule produced billed*)
+billedRoundingIncrementMin    Int      // e.g. 5 / 15 / 30; 1 = no rounding
+billedRoundingMode            String   // "nearest" | "up" | "down"
 
 // DEFERRED until in-app billing ships
 // ratePerHour       Decimal?
 // billedAmount      Decimal?
 ```
 
-> **Invariant: `billed*Local` + `billedDurationMin` are FROZEN at session-close.** Sarah is already billing externally (Wyzant 25-word/session; UVU per-pay-period) off whatever Mynk displays. Once a session closes and shows "10:00am-10:55am, 55 minutes," that displayed range becomes part of her external audit trail — we cannot retroactively change it by tweaking rounding logic later. If we revise rounding rules in the future, only NEW sessions use the new rules; existing rows keep their frozen values. `actualStartUtc` / `actualEndUtc` / `disconnectGapMs` are also frozen but are the FULL-PRECISION truth (audit-trail-of-the-truth, in case any forensic question comes up later); they are NOT displayed for billing — `billed*Local` + `billedDurationMin` are.
+**Tutor settings additions on `User`:**
 
-The naming convention `billed*` rather than `displayed*` or `reported*` is intentional: when in-app billing ships, the column names already match the billing semantics. If Andrew prefers `reported*` instead, it's a rename in this doc — flag in handoff for confirmation.
+```prisma
+// NEW from Wave 2.5 (tutor's default rounding rule for new sessions; flows onto the session at start, freezes onto the session at close)
+defaultRoundingIncrementMin   Int      @default(15)   // 5 / 15 / 30 are common; 1 = no rounding
+defaultRoundingMode           String   @default("up") // tutors typically round up for billing
+```
+
+The tutor's default flows onto each new session at start (so the rule is locked before the close event), and freezes onto the session at close (so the audit trail captures both the result AND the rule). If the tutor changes their default later, in-flight sessions keep the rule that started with them; only new sessions pick up the new default. Organization-level rounding rules (UVU, Wyzant, etc.) will eventually override the tutor default per-session — see BACKLOG "Organization-aware rounding rules" follow-up.
+
+> **Invariant: `billed*Local`, `billedDurationMin`, `billedRounding*` are FROZEN at session-close.** Sarah is already billing externally (Wyzant 25-word/session; UVU per-pay-period) off whatever Mynk displays. Once a session closes and shows "10:00am-10:55am, 55 minutes," that displayed range becomes part of her external audit trail — we cannot retroactively change it by tweaking rounding logic later. If we revise rounding rules (or the tutor changes their default) in the future, only NEW sessions use the new rules; existing rows keep their frozen values for both the result AND the rule that produced it. `actualStartUtc` / `actualEndUtc` / `disconnectGapMs` are also frozen but are the FULL-PRECISION truth (audit-trail-of-the-truth, in case any forensic question comes up later); they are NOT displayed for billing — `billed*Local` + `billedDurationMin` are.
+
+The naming convention `billed*` rather than `displayed*` or `reported*` is intentional: even when the tutor isn't using Mynk for in-app billing yet, this IS the value they bill from externally. Andrew confirmed 2026-05-27.
 
 A separate `SessionBillingLog` entity is NOT recommended for v1. The session IS the billing unit; adding a second table adds join complexity for the common case (show sessions list with billing info). Use a separate entity only if billing needs to span multiple sessions (e.g. a monthly aggregate) — that's a Wave 5+ concern.
 
