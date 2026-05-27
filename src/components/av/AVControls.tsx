@@ -75,8 +75,8 @@ export function AVControls({
         display: "flex",
         flexDirection: "column",
         gap: 10,
-        background: "rgba(15,23,42,0.04)",
-        border: "1px solid rgba(100,116,139,0.25)",
+        background: "var(--surface-tile)",
+        border: "1px solid var(--border-default)",
       }}
     >
       <div className="row" style={{ gap: 8, alignItems: "center" }}>
@@ -109,14 +109,14 @@ export function AVControls({
             flexDirection: "column",
             gap: 6,
             paddingTop: 6,
-            borderTop: "1px solid rgba(100,116,139,0.2)",
+            borderTop: "1px solid var(--badge-neutral-bg)",
           }}
         >
           <span
             style={{
               fontSize: 12,
               fontWeight: 600,
-              color: "rgba(15,23,42,0.85)",
+              color: "var(--text-default)",
             }}
           >
             Recording moderation

@@ -49,7 +49,7 @@ export function NoteCardActions({
       <div className="row">
         <span className="muted" style={{ fontSize: 14 }}>Delete this note? This is permanent.</span>
         <form action={async () => { await deleteNote(noteId, studentId); }}>
-          <button className="btn" type="submit" style={{ color: "#ffb4b4" }}>Delete</button>
+          <button className="btn" type="submit" style={{ color: "var(--sign-out-hover-text)" }}>Delete</button>
         </form>
         <button className="btn" type="button" onClick={() => setConfirmDelete(false)}>Cancel</button>
       </div>
@@ -145,7 +145,7 @@ export function NoteCardActions({
         className="btn"
         type="button"
         onClick={() => setConfirmDelete(true)}
-        style={{ color: "#ffb4b4" }}
+        style={{ color: "var(--sign-out-hover-text)" }}
       >
         Delete
       </button>

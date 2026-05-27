@@ -18,14 +18,14 @@
  */
 
 const PALETTE: ReadonlyArray<string> = Object.freeze([
-  "#f97316", // orange-500
-  "#f59e0b", // amber-500
-  "#84cc16", // lime-500
-  "#10b981", // emerald-500
-  "#06b6d4", // cyan-500
-  "#3b82f6", // blue-500
-  "#6366f1", // indigo-500
-  "#d946ef", // fuchsia-500
+  "var(--avatar-1)",
+  "var(--avatar-2)",
+  "var(--avatar-3)",
+  "var(--avatar-4)",
+  "var(--avatar-5)",
+  "var(--avatar-6)",
+  "var(--avatar-7)",
+  "var(--avatar-8)",
 ]);
 
 /**

@@ -28,6 +28,30 @@ These are **not** re-smoked in CI yet; run in a real browser when touching white
 
 ---
 
+## 2026-05-27 — B1–B4 sync reliability sweep (`reliability/sync-b1-b4`)
+
+**Code fixes (app layer only; relay unchanged):**
+
+| Bug | Root cause (code) | Fix |
+|-----|-------------------|-----|
+| **B1** follow-tutor checkbox | `followTutorView` only applied on next wire packet; snap used stale `excalidrawAPI` closure | Toggle-on `useEffect` + `pageList` `viewState` for snap/follow; `excalidrawApiRef` |
+| **B2** Match tutor view button | Snap relied on `lastTutorFollowRef` only (often empty when tutor sends `pageViewState`) | Snap prefers per-page `viewState` from `pageList` |
+| **B3** last stroke until page change | Tutor v3 snapshot read stale `pageDataRef`; student v3 applies could complete out-of-order | Live `getSceneElements()` for active tab; serial v3 apply queue + rev regression guard |
+| **B4** images/PDF until page change | Same stale snapshot + delayed flush | Same live snapshot + rAF-coalesced `flushDocumentBroadcastNow` after tutor `onChange` |
+
+**Manual smoke checklist (required before merge):**
+
+1. **2-peer session** — tutor workspace + student `/w/…#k=…`; confirm strokes appear on student within ~1s while drawing.
+2. **Mid-session reload** — student hard-refresh; board + active page recover without tutor page flip.
+3. **Network drop + reconnect** — disable student network ~10s, re-enable; strokes resume without tutor page change.
+4. **Simultaneous edits** — both draw; neither side loses the other’s elements.
+5. **Follow tutor** — check **Keep pan & zoom synced to tutor** → student camera tracks tutor pan/zoom; **Match tutor’s view now** snaps immediately.
+6. **Replay determinism** — end session; replay shows same final scene as live (no missing last stroke).
+
+**Pending verification:** rows above are **not** re-smoked in CI on this branch yet.
+
+---
+
 ## 2026-04 — session notes
 
 ### Core smoke (earlier run)

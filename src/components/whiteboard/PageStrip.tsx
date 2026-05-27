@@ -180,8 +180,8 @@ export function PageStrip(props: PageStripProps) {
               style={{
                 justifyContent: "flex-start",
                 textAlign: "left",
-                background: "rgba(148, 163, 184, 0.08)",
-                border: "1px solid rgba(148, 163, 184, 0.22)",
+                background: "var(--surface-1)",
+                border: "1px solid var(--border-default)",
                 fontWeight: 600,
                 fontSize: 13,
               }}
@@ -262,7 +262,7 @@ function PageChip(props: {
           opacity: active ? 1 : 0.75,
           fontWeight: active ? 700 : 400,
           borderWidth: active ? 2 : 1,
-          borderColor: "var(--border-strong, #999)",
+          borderColor: "var(--border-strong)",
           cursor: "default",
           paddingLeft: indented ? 18 : undefined,
         }}
@@ -292,7 +292,7 @@ function PageChip(props: {
             ? {
                 fontWeight: 700,
                 borderWidth: 2,
-                borderColor: "var(--border-strong, #999)",
+                borderColor: "var(--border-strong)",
               }
             : undefined
         }

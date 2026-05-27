@@ -41,7 +41,7 @@ export default function AudioPreview({ src, mimeType }: AudioPreviewProps) {
   if (hasError) {
     return (
       <p
-        style={{ margin: 0, fontSize: 12, color: "var(--color-muted, #6b7280)" }}
+        style={{ margin: 0, fontSize: 12, color: "var(--color-muted)" }}
         data-testid="audio-preview-error"
       >
         Preview unavailable in this browser, but the recording was saved and can

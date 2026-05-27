@@ -40,25 +40,25 @@ export default function SendUpdateForm({
         </div>
       </form>
       {state?.ok === true && state.sent && (
-        <p style={{ color: "#90ee90", marginTop: 12 }}>
+        <p style={{ color: "var(--success)", marginTop: 12 }}>
           Sent to {state.toEmail}. They’ll receive the link in their inbox (check junk if not).
         </p>
       )}
       {state?.ok === true && state.outboxOnly && (
-        <p style={{ color: "#ffd700", marginTop: 12 }}>
+        <p style={{ color: "var(--warning)", marginTop: 12 }}>
           Email is not configured. Message saved to outbox — copy the share link from above or from{" "}
           <a href="/admin/outbox">Outbox</a> to send it yourself. To actually send email, add SMTP
           settings to your server environment.
         </p>
       )}
       {state?.ok === true && state.error && !state.sent && !state.outboxOnly && (
-        <p style={{ color: "#ffb4b4", marginTop: 12 }}>
+        <p style={{ color: "var(--sign-out-hover-text)", marginTop: 12 }}>
           Failed to send: {state.error}. Message saved to outbox — you can copy the link and send
           manually.
         </p>
       )}
       {state?.ok === false && state.error && (
-        <p style={{ color: "#ffb4b4", marginTop: 12 }}>{state.error}</p>
+        <p style={{ color: "var(--sign-out-hover-text)", marginTop: 12 }}>{state.error}</p>
       )}
     </>
   );

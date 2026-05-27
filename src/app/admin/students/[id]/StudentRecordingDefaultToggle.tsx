@@ -83,7 +83,7 @@ export function StudentRecordingDefaultToggle({
       {error && (
         <span
           role="alert"
-          style={{ color: "var(--color-error, #dc2626)", fontSize: 12 }}
+          style={{ color: "var(--color-error)", fontSize: 12 }}
         >
           {error}
         </span>

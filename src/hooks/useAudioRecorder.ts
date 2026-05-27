@@ -245,10 +245,10 @@ export type UseAudioRecorderReturn = {
 
 /** Decide bar colour by level — green/yellow/red zones for visible feedback. */
 function meterColor(level: number): string {
-  if (level >= 0.85) return "var(--color-error, #dc2626)";
-  if (level >= 0.5) return "#eab308"; // amber-500
-  if (level >= 0.05) return "var(--color-success, #16a34a)";
-  return "var(--color-muted, #9ca3af)";
+  if (level >= 0.85) return "var(--color-error)";
+  if (level >= 0.5) return "var(--meter-loud)";
+  if (level >= 0.05) return "var(--color-success)";
+  return "var(--color-muted)";
 }
 
 export function useAudioRecorder({

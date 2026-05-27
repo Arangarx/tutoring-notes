@@ -17,7 +17,7 @@ export default function ErrorCard({ error, onReset }: ErrorCardProps) {
       {error && (
         <p
           role="alert"
-          style={{ fontSize: 13, color: "var(--color-error, #dc2626)", margin: "0 0 10px" }}
+          style={{ fontSize: 13, color: "var(--color-error)", margin: "0 0 10px" }}
           data-testid="audio-record-error"
         >
           {error}

@@ -71,7 +71,7 @@ export default function MainPanel({
           >
             {state === "acquiring" ? "● Connecting…" : "● Start recording"}
           </button>
-          <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--color-muted, #6b7280)" }}>
+          <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--color-muted)" }}>
             {state === "ready"
               ? "Speak — watch the level bar — then click Start."
               : `Long sessions auto-save every ~${Math.round(effectiveSegmentMaxSeconds() / 60)} min so you can keep recording. Speak at least 15–20 seconds per segment when possible.`}
@@ -91,8 +91,8 @@ export default function MainPanel({
                 borderRadius: "50%",
                 background:
                   state === "recording"
-                    ? "var(--color-error, #dc2626)"
-                    : "var(--color-muted, #9ca3af)",
+                    ? "var(--color-error)"
+                    : "var(--color-muted)",
                 animation: state === "recording" ? "pulse 1s infinite" : undefined,
               }}
             />
@@ -103,19 +103,19 @@ export default function MainPanel({
                 fontVariantNumeric: "tabular-nums",
                 fontWeight: 600,
                 fontSize: 18,
-                color: isWarning ? "var(--color-error, #dc2626)" : undefined,
+                color: isWarning ? "var(--color-error)" : undefined,
               }}
             >
               Part {displayPart} · {formatDuration(elapsed)}
             </span>
             {isWarning && (
-              <span role="alert" style={{ fontSize: 12, color: "var(--color-error, #dc2626)" }}>
+              <span role="alert" style={{ fontSize: 12, color: "var(--color-error)" }}>
                 {formatSegmentTimeLeft(effectiveSegmentMaxSeconds() - elapsed)} in this segment — will save &amp; continue automatically
               </span>
             )}
             <span
               aria-live="polite"
-              style={{ marginLeft: "auto", fontSize: 12, color: "var(--color-muted, #6b7280)" }}
+              style={{ marginLeft: "auto", fontSize: 12, color: "var(--color-muted)" }}
             >
               {state === "paused" ? "Paused" : "Recording…"}
             </span>

@@ -36,9 +36,9 @@ export function ActiveWhiteboardSessionsList({
       style={{
         marginTop: 16,
         padding: "12px 14px",
-        border: "1px solid var(--border, rgba(255,255,255,0.12))",
+        border: "1px solid var(--border)",
         borderRadius: 8,
-        background: "var(--panel, rgba(255,255,255,0.04))",
+        background: "var(--panel, var(--surface-1))",
       }}
     >
       <h4 style={{ margin: "0 0 4px", fontSize: 14 }}>Open whiteboard sessions</h4>
@@ -60,7 +60,7 @@ export function ActiveWhiteboardSessionsList({
                 gap: 8,
                 alignItems: "center",
                 padding: "8px 0",
-                borderTop: "1px solid var(--border, rgba(255,255,255,0.08))",
+                borderTop: "1px solid var(--border, var(--surface-2))",
               }}
             >
               <span className="muted" style={{ fontSize: 13, flex: "1 1 160px" }}>

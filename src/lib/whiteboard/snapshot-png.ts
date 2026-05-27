@@ -41,6 +41,7 @@
  * Tests: `src/__tests__/whiteboard/snapshot-png.test.ts`.
  */
 
+import { EXCALIDRAW_BG_LIGHT_HEX } from "@/styles/token-values";
 import type { ExcalidrawApiLike } from "@/lib/whiteboard/insert-asset";
 
 // -----------------------------------------------------------------
@@ -219,7 +220,7 @@ export async function generateSessionSnapshotPng(
     const exportAppState: Record<string, unknown> = {
       ...appState,
       exportBackground: true,
-      viewBackgroundColor: opts.backgroundColor ?? "#ffffff",
+      viewBackgroundColor: opts.backgroundColor ?? EXCALIDRAW_BG_LIGHT_HEX,
       exportWithDarkMode: false,
     };
     const result = await exportToCanvas({

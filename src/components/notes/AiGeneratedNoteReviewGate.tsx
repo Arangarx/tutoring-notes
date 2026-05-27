@@ -25,20 +25,20 @@ export default function AiGeneratedNoteReviewGate({
       style={{
         padding: "12px 14px",
         background: warning
-          ? "var(--color-warning-bg, #fefce8)"
-          : "var(--color-success-bg, #f0fdf4)",
+          ? "var(--color-warning-bg)"
+          : "var(--color-success-bg)",
         borderRadius: 6,
         border: warning
-          ? "1px solid var(--color-warning-border, #fde68a)"
-          : "1px solid var(--color-success-border, #bbf7d0)",
+          ? "1px solid var(--color-warning-border)"
+          : "1px solid var(--color-success-border)",
       }}
       data-testid="ai-generated-note-review-gate"
     >
       <span
         style={{
           color: warning
-            ? "var(--color-warning, #a16207)"
-            : "var(--color-success, #16a34a)",
+            ? "var(--color-warning)"
+            : "var(--color-success)",
           fontWeight: 600,
           display: "block",
           marginBottom: warning ? 6 : 10,
@@ -56,7 +56,7 @@ export default function AiGeneratedNoteReviewGate({
           style={{
             margin: "0 0 10px",
             fontSize: 13,
-            color: "var(--color-warning, #a16207)",
+            color: "var(--color-warning)",
             lineHeight: 1.4,
           }}
           data-testid="ai-warning"

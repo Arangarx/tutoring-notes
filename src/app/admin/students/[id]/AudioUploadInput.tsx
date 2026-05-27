@@ -106,13 +106,13 @@ export default function AudioUploadInput({ studentId, onUploaded, disabled }: Pr
           alignItems: "center",
           gap: 10,
           padding: "10px 14px",
-          background: "var(--color-success-bg, #f0fdf4)",
+          background: "var(--color-success-bg)",
           borderRadius: 6,
-          border: "1px solid var(--color-success-border, #bbf7d0)",
+          border: "1px solid var(--color-success-border)",
         }}
         data-testid="audio-upload-done"
       >
-        <span style={{ color: "var(--color-success, #16a34a)", fontWeight: 600, fontSize: 14 }}>
+        <span style={{ color: "var(--color-success)", fontWeight: 600, fontSize: 14 }}>
           ✓ {filename ?? "Audio uploaded"}
         </span>
         <button
@@ -138,7 +138,7 @@ export default function AudioUploadInput({ studentId, onUploaded, disabled }: Pr
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") inputRef.current?.click(); }}
         data-testid="audio-upload-dropzone"
         style={{
-          border: "2px dashed var(--color-border, #d1d5db)",
+          border: "2px dashed var(--color-border)",
           borderRadius: 8,
           padding: "20px 16px",
           textAlign: "center",
@@ -149,13 +149,13 @@ export default function AudioUploadInput({ studentId, onUploaded, disabled }: Pr
       >
         {state === "uploading" ? (
           <div>
-            <p style={{ margin: "0 0 10px", fontSize: 14, color: "var(--color-muted, #6b7280)" }}>
+            <p style={{ margin: "0 0 10px", fontSize: 14, color: "var(--color-muted)" }}>
               Uploading {filename}…
             </p>
             <div
               style={{
                 height: 6,
-                background: "var(--color-border, #e5e7eb)",
+                background: "var(--color-border)",
                 borderRadius: 3,
                 overflow: "hidden",
               }}
@@ -164,7 +164,7 @@ export default function AudioUploadInput({ studentId, onUploaded, disabled }: Pr
                 style={{
                   height: "100%",
                   width: "40%",
-                  background: "var(--color-primary, #2563eb)",
+                  background: "var(--color-primary)",
                   borderRadius: 3,
                   animation: "uploadSweep 1.2s ease-in-out infinite",
                 }}
@@ -182,7 +182,7 @@ export default function AudioUploadInput({ studentId, onUploaded, disabled }: Pr
             <p style={{ margin: "0 0 4px", fontSize: 14, fontWeight: 500 }}>
               Drop audio file here or click to browse
             </p>
-            <p style={{ margin: 0, fontSize: 12, color: "var(--color-muted, #6b7280)" }}>
+            <p style={{ margin: 0, fontSize: 12, color: "var(--color-muted)" }}>
               MP3, MP4, M4A, WebM, OGG, WAV · up to {MAX_MB} MB
             </p>
           </>
@@ -201,7 +201,7 @@ export default function AudioUploadInput({ studentId, onUploaded, disabled }: Pr
 
       {error && (
         <p
-          style={{ marginTop: 8, fontSize: 13, color: "var(--color-error, #dc2626)" }}
+          style={{ marginTop: 8, fontSize: 13, color: "var(--color-error)" }}
           data-testid="audio-upload-error"
         >
           {error}

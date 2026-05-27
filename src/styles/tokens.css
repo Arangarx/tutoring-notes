@@ -1,0 +1,303 @@
+/**
+ * Design tokens — Phase 0 canonical source.
+ * Theme resolution (Andrew 2026-05-27):
+ *   1. [data-theme="light"|"dark"] on <html> wins (tutor preference, dev ?theme=)
+ *   2. else prefers-color-scheme: dark → dark palette (current Sarah look)
+ *   3. else light (Mynka Blue — docs/BRAND.md)
+ */
+
+/* ------------------------------------------------------------------ */
+/* Light — default + explicit [data-theme="light"]                    */
+/* ------------------------------------------------------------------ */
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* Surfaces — Mynka Blue light (docs/BRAND.md) */
+  --surface-base: #f5f4ec;
+  --surface-1: #fcfbf4;
+  --surface-2: #ecebe1;
+  --surface-3: #e3e2d8;
+  --surface-inverse: #15203a;
+  --surface-drawer: #fcfbf4;
+  --surface-nav: rgba(0, 0, 0, 0.04);
+  --surface-elevated: #4a6680;
+  --surface-input: rgba(0, 0, 0, 0.04);
+  --surface-overlay: rgba(15, 23, 42, 0.45);
+  --surface-tile: rgba(15, 23, 42, 0.04);
+  --surface-tile-solid: #0f172a;
+
+  --border-subtle: #e3e8e9;
+  --border-default: #c5cfd0;
+  --border-strong: #4a6680;
+
+  --shadow-sm: rgba(0, 0, 0, 0.08);
+  --shadow-md: rgba(0, 0, 0, 0.12);
+  --shadow-lg: rgba(0, 0, 0, 0.2);
+
+  --text-strong: #15203a;
+  --text-default: #15203a;
+  --text-muted: #5a6877;
+  --text-disabled: #94a3b8;
+  --text-inverse: #fcfbf4;
+  --text-on-dark: rgba(248, 250, 252, 0.55);
+
+  --brand: #1e3d54;
+  --brand-on: #fcfbf4;
+
+  --accent: #e27d60;
+  --accent-soft: #f8e0d6;
+  --accent-strong: #c96a50;
+  --accent-on: #15203a;
+  --accent-text: #8a3c25;
+
+  --success: #16a34a;
+  --success-soft: rgba(34, 197, 94, 0.12);
+  --success-border: rgba(34, 197, 94, 0.35);
+
+  --warning: #a16207;
+  --warning-soft: rgba(234, 179, 8, 0.12);
+  --warning-border: rgba(234, 179, 8, 0.4);
+
+  --error: #dc2626;
+  --error-soft: rgba(220, 38, 38, 0.12);
+  --error-border: rgba(220, 38, 38, 0.4);
+
+  --info: #2563eb;
+  --info-soft: rgba(37, 99, 235, 0.12);
+  --info-border: rgba(37, 99, 235, 0.4);
+
+  --focus-ring: var(--border-strong);
+  --overlay-scrim: rgba(0, 0, 0, 0.4);
+  --selection: rgba(226, 125, 96, 0.25);
+
+  --meter-quiet: #6b7280;
+  --meter-good: #16a34a;
+  --meter-loud: #eab308;
+  --meter-clip: #dc2626;
+
+  --sign-out: #b91c1c;
+  --sign-out-hover-bg: rgba(220, 38, 38, 0.1);
+  --sign-out-hover-text: #dc2626;
+
+  --slider-track: rgba(0, 0, 0, 0.12);
+  --slider-thumb: var(--text-strong);
+  --slider-shadow: var(--shadow-md);
+
+  --badge-neutral-bg: rgba(100, 116, 139, 0.18);
+  --badge-neutral-fg: #475569;
+  --badge-neutral-dot: #64748b;
+
+  --avatar-1: #f97316;
+  --avatar-2: #f59e0b;
+  --avatar-3: #84cc16;
+  --avatar-4: #10b981;
+  --avatar-5: #06b6d4;
+  --avatar-6: #3b82f6;
+  --avatar-7: #6366f1;
+  --avatar-8: #d946ef;
+
+  --excalidraw-stroke: #1e293b;
+  --excalidraw-bg: #ffffff;
+  --excalidraw-bg-dark: #121212;
+
+  accent-color: var(--accent);
+}
+
+/* ------------------------------------------------------------------ */
+/* Dark — system preference (current production look, unchanged)      */
+/* ------------------------------------------------------------------ */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --surface-base: #0b1020;
+    --surface-1: rgba(255, 255, 255, 0.04);
+    --surface-2: rgba(255, 255, 255, 0.08);
+    --surface-3: rgba(255, 255, 255, 0.14);
+    --surface-inverse: #ffffff;
+    --surface-drawer: #0d1328;
+    --surface-nav: rgba(0, 0, 0, 0.35);
+    --surface-elevated: #1a2558;
+    --surface-input: rgba(0, 0, 0, 0.25);
+    --surface-overlay: rgba(0, 0, 0, 0.5);
+    --surface-tile: rgba(15, 23, 42, 0.9);
+    --surface-tile-solid: #0f172a;
+
+    --border-subtle: rgba(255, 255, 255, 0.06);
+    --border-default: rgba(255, 255, 255, 0.12);
+    --border-strong: rgba(255, 255, 255, 0.18);
+
+    --shadow-sm: rgba(0, 0, 0, 0.25);
+    --shadow-md: rgba(0, 0, 0, 0.4);
+    --shadow-lg: rgba(0, 0, 0, 0.5);
+
+    --text-strong: rgba(255, 255, 255, 0.92);
+    --text-default: rgba(255, 255, 255, 0.92);
+    --text-muted: rgba(255, 255, 255, 0.7);
+    --text-disabled: rgba(255, 255, 255, 0.35);
+    --text-inverse: #ffffff;
+    --text-on-dark: rgba(248, 250, 252, 0.55);
+
+    --brand: #7c5cff;
+    --brand-on: #ffffff;
+
+    --accent: #7c5cff;
+    --accent-soft: rgba(124, 92, 255, 0.18);
+    --accent-strong: #7c5cff;
+    --accent-on: #ffffff;
+    --accent-text: #7c5cff;
+
+    --success: #4ade80;
+    --success-soft: rgba(34, 197, 94, 0.12);
+    --success-border: rgba(34, 197, 94, 0.35);
+
+    --warning: #fde047;
+    --warning-soft: rgba(234, 179, 8, 0.12);
+    --warning-border: rgba(234, 179, 8, 0.4);
+
+    --error: #fca5a5;
+    --error-soft: rgba(239, 68, 68, 0.12);
+    --error-border: rgba(239, 68, 68, 0.35);
+
+    --info: #60a5fa;
+    --info-soft: rgba(37, 99, 235, 0.12);
+    --info-border: rgba(37, 99, 235, 0.4);
+
+    --focus-ring: var(--border-strong);
+    --overlay-scrim: rgba(0, 0, 0, 0.5);
+    --selection: rgba(124, 92, 255, 0.35);
+
+    --meter-quiet: rgba(255, 255, 255, 0.65);
+    --meter-good: #4ade80;
+    --meter-loud: #eab308;
+    --meter-clip: #fca5a5;
+
+    --sign-out: rgba(255, 180, 180, 0.8);
+    --sign-out-hover-bg: rgba(255, 100, 100, 0.12);
+    --sign-out-hover-text: #ffb4b4;
+
+    --slider-track: rgba(255, 255, 255, 0.15);
+    --slider-thumb: #ffffff;
+    --slider-shadow: rgba(0, 0, 0, 0.4);
+
+    --badge-neutral-bg: rgba(100, 116, 139, 0.18);
+    --badge-neutral-fg: #94a3b8;
+    --badge-neutral-dot: #64748b;
+
+    accent-color: var(--accent);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Dark — explicit [data-theme="dark"]                                */
+/* ------------------------------------------------------------------ */
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --surface-base: #0b1020;
+  --surface-1: rgba(255, 255, 255, 0.04);
+  --surface-2: rgba(255, 255, 255, 0.08);
+  --surface-3: rgba(255, 255, 255, 0.14);
+  --surface-inverse: #ffffff;
+  --surface-drawer: #0d1328;
+  --surface-nav: rgba(0, 0, 0, 0.35);
+  --surface-elevated: #1a2558;
+  --surface-input: rgba(0, 0, 0, 0.25);
+  --surface-overlay: rgba(0, 0, 0, 0.5);
+  --surface-tile: rgba(15, 23, 42, 0.9);
+  --surface-tile-solid: #0f172a;
+
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.12);
+  --border-strong: rgba(255, 255, 255, 0.18);
+
+  --shadow-sm: rgba(0, 0, 0, 0.25);
+  --shadow-md: rgba(0, 0, 0, 0.4);
+  --shadow-lg: rgba(0, 0, 0, 0.5);
+
+  --text-strong: rgba(255, 255, 255, 0.92);
+  --text-default: rgba(255, 255, 255, 0.92);
+  --text-muted: rgba(255, 255, 255, 0.7);
+  --text-disabled: rgba(255, 255, 255, 0.35);
+  --text-inverse: #ffffff;
+  --text-on-dark: rgba(248, 250, 252, 0.55);
+
+  --brand: #7c5cff;
+  --brand-on: #ffffff;
+
+  --accent: #7c5cff;
+  --accent-soft: rgba(124, 92, 255, 0.18);
+  --accent-strong: #7c5cff;
+  --accent-on: #ffffff;
+  --accent-text: #7c5cff;
+
+  --success: #4ade80;
+  --success-soft: rgba(34, 197, 94, 0.12);
+  --success-border: rgba(34, 197, 94, 0.35);
+
+  --warning: #fde047;
+  --warning-soft: rgba(234, 179, 8, 0.12);
+  --warning-border: rgba(234, 179, 8, 0.4);
+
+  --error: #fca5a5;
+  --error-soft: rgba(239, 68, 68, 0.12);
+  --error-border: rgba(239, 68, 68, 0.35);
+
+  --info: #60a5fa;
+  --info-soft: rgba(37, 99, 235, 0.12);
+  --info-border: rgba(37, 99, 235, 0.4);
+
+  --focus-ring: var(--border-strong);
+  --overlay-scrim: rgba(0, 0, 0, 0.5);
+  --selection: rgba(124, 92, 255, 0.35);
+
+  --meter-quiet: rgba(255, 255, 255, 0.65);
+  --meter-good: #4ade80;
+  --meter-loud: #eab308;
+  --meter-clip: #fca5a5;
+
+  --sign-out: rgba(255, 180, 180, 0.8);
+  --sign-out-hover-bg: rgba(255, 100, 100, 0.12);
+  --sign-out-hover-text: #ffb4b4;
+
+  --slider-track: rgba(255, 255, 255, 0.15);
+  --slider-thumb: #ffffff;
+  --slider-shadow: rgba(0, 0, 0, 0.4);
+
+  --badge-neutral-bg: rgba(100, 116, 139, 0.18);
+  --badge-neutral-fg: #94a3b8;
+  --badge-neutral-dot: #64748b;
+
+  accent-color: var(--accent);
+}
+
+/* ------------------------------------------------------------------ */
+/* Legacy aliases — keep existing var(--bg) consumers working         */
+/* ------------------------------------------------------------------ */
+
+:root,
+[data-theme="light"],
+[data-theme="dark"] {
+  --bg: var(--surface-base);
+  --panel: var(--surface-1);
+  --text: var(--text-default);
+  --muted: var(--text-muted);
+  --border: var(--border-default);
+
+  --color-muted: var(--text-muted);
+  --color-border: var(--border-strong);
+  --color-primary: var(--accent);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-soft);
+  --color-success-border: var(--success-border);
+  --color-error: var(--error);
+  --color-error-bg: var(--error-soft);
+  --color-error-border: var(--error-border);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-soft);
+  --color-warning-border: var(--warning-border);
+}

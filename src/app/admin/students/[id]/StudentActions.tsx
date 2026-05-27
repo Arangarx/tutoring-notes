@@ -26,7 +26,7 @@ export function StudentActions({
             router.push("/admin/students");
           }}
         >
-          <button className="btn" type="submit" style={{ color: "#ffb4b4" }}>Delete</button>
+          <button className="btn" type="submit" style={{ color: "var(--sign-out-hover-text)" }}>Delete</button>
         </form>
         <button className="btn" type="button" onClick={() => setConfirmDelete(false)}>
           Cancel
@@ -60,7 +60,7 @@ export function StudentActions({
         Rename
       </button>
       <button className="btn" type="button" onClick={() => setConfirmDelete(true)}
-        style={{ color: "#ffb4b4" }}>
+        style={{ color: "var(--sign-out-hover-text)" }}>
         Delete student
       </button>
     </div>

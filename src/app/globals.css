@@ -1,43 +1,4 @@
-:root {
-  /* Tell the browser native form controls (checkbox, radio, scrollbar,
-     date/time picker, file input) belong on a DARK surface. Without
-     this, browsers fall back to the user's SYSTEM color-scheme — so a
-     Sarah-style Windows-light-mode visitor sees a light-mode checkbox
-     against our dark dialog, the checkmark is barely visible, and
-     clicking the box looks like nothing happened. Sarah Apr 2026
-     demo: "I can't click to accept even after I click the check
-     mark, I think the coloring is borked in dark mode." See
-     globals-css.test.ts for the regression. */
-  color-scheme: dark;
-  /* Brand-colored checkbox / radio fill so the checked state is
-     unambiguous and matches the rest of the UI accent palette. */
-  accent-color: #7c5cff;
-
-  --bg: #0b1020;
-  --panel: rgba(255, 255, 255, 0.06);
-  --text: rgba(255, 255, 255, 0.92);
-  --muted: rgba(255, 255, 255, 0.7);
-  --border: rgba(255, 255, 255, 0.12);
-  --accent: #7c5cff;
-
-  /* Status palette (dark-mode friendly).
-     Inline styles across the admin UI use var(--color-X, lightModeFallback);
-     those fallbacks are LIGHT-mode hex values (#6b7280, #d1d5db, etc.) and
-     are INVISIBLE on this dark theme. Defining the variables here is what
-     makes those inline colors actually render. Do not remove. */
-  --color-muted: rgba(255, 255, 255, 0.65);
-  --color-border: rgba(255, 255, 255, 0.18);
-  --color-primary: #7c5cff;
-  --color-success: #4ade80;
-  --color-success-bg: rgba(34, 197, 94, 0.12);
-  --color-success-border: rgba(34, 197, 94, 0.35);
-  --color-error: #fca5a5;
-  --color-error-bg: rgba(239, 68, 68, 0.12);
-  --color-error-border: rgba(239, 68, 68, 0.35);
-  --color-warning: #fde047;
-  --color-warning-bg: rgba(234, 179, 8, 0.12);
-  --color-warning-border: rgba(234, 179, 8, 0.4);
-}
+@import "../styles/tokens.css";
 
 * {
   box-sizing: border-box;
@@ -53,7 +14,11 @@ body {
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica,
     Arial, "Apple Color Emoji", "Segoe UI Emoji";
   color: var(--text);
-  background: radial-gradient(1200px 600px at 20% 0%, #1a2558 0%, var(--bg) 55%)
+  background: radial-gradient(
+      1200px 600px at 20% 0%,
+      var(--surface-elevated) 0%,
+      var(--bg) 55%
+    )
     fixed;
 }
 
@@ -88,7 +53,7 @@ a {
   align-items: center;
   gap: 8px;
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--surface-2);
   color: var(--text);
   border-radius: 10px;
   padding: 10px 12px;
@@ -107,7 +72,7 @@ a {
 }
 
 .btn:not(:disabled):hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--surface-3);
 }
 
 .btn.primary:not(:disabled):hover {
@@ -116,7 +81,8 @@ a {
 
 .btn.primary {
   background: var(--accent);
-  border-color: rgba(0, 0, 0, 0.1);
+  border-color: var(--shadow-sm);
+  color: var(--accent-on);
 }
 
 input,
@@ -125,7 +91,7 @@ select {
   width: 100%;
   border-radius: 10px;
   border: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--surface-input);
   color: var(--text);
   padding: 10px 12px;
 }
@@ -186,7 +152,7 @@ label {
    ------------------------------------------------------------------ */
 
 .admin-nav {
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--surface-nav);
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(12px);
   position: sticky;
@@ -231,19 +197,19 @@ label {
   font-family: inherit;
 }
 .admin-nav-link:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--surface-2);
   color: var(--text);
 }
 .admin-nav-link.active {
-  background: rgba(124, 92, 255, 0.18);
+  background: var(--accent-soft);
   color: var(--text);
 }
 .admin-nav-link.sign-out {
-  color: rgba(255, 180, 180, 0.8);
+  color: var(--sign-out);
 }
 .admin-nav-link.sign-out:hover {
-  background: rgba(255, 100, 100, 0.12);
-  color: #ffb4b4;
+  background: var(--sign-out-hover-bg);
+  color: var(--sign-out-hover-text);
 }
 
 /* Hamburger — hidden on desktop */
@@ -272,7 +238,7 @@ label {
 .admin-nav-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--overlay-scrim);
   z-index: 90;
 }
 .admin-nav-drawer {
@@ -281,7 +247,7 @@ label {
   right: 0;
   bottom: 0;
   width: 260px;
-  background: #0d1328;
+  background: var(--surface-drawer);
   border-left: 1px solid var(--border);
   z-index: 95;
   padding: 16px 12px;
@@ -305,12 +271,11 @@ label {
   font-family: inherit;
   width: 100%;
 }
-.admin-nav-drawer-link:hover { background: rgba(255, 255, 255, 0.06); }
-.admin-nav-drawer-link.active { background: rgba(124, 92, 255, 0.18); color: var(--text); }
-.admin-nav-drawer-link.sign-out { color: rgba(255, 180, 180, 0.8); }
+.admin-nav-drawer-link:hover { background: var(--surface-1); }
+.admin-nav-drawer-link.active { background: var(--accent-soft); color: var(--text); }
+.admin-nav-drawer-link.sign-out { color: var(--sign-out); }
 
 @media (max-width: 768px) {
   .admin-nav-links { display: none; }
   .admin-nav-hamburger { display: flex; }
 }
-

@@ -166,7 +166,7 @@ export default async function WhiteboardReviewPage({
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 4,
-                  color: "#dc2626",
+                  color: "var(--error)",
                   fontSize: 12,
                   fontWeight: 600,
                 }}
@@ -177,7 +177,7 @@ export default async function WhiteboardReviewPage({
                     width: 7,
                     height: 7,
                     borderRadius: "50%",
-                    background: "#dc2626",
+                    background: "var(--error)",
                     display: "inline-block",
                   }}
                 />
@@ -212,8 +212,8 @@ export default async function WhiteboardReviewPage({
           className="card"
           style={{
             padding: "10px 14px",
-            background: "rgba(234,179,8,0.10)",
-            border: "1px solid rgba(234,179,8,0.30)",
+            background: "var(--warning-soft)",
+            border: "1px solid var(--warning-border)",
             fontSize: 13,
             marginBottom: 12,
           }}

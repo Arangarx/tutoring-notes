@@ -22,6 +22,10 @@ import {
   type ExportToCanvasFn,
 } from "@/lib/whiteboard/snapshot-png";
 import type { ExcalidrawApiLike } from "@/lib/whiteboard/insert-asset";
+import {
+  EXCALIDRAW_BG_DARK_HEX,
+  EXCALIDRAW_BG_LIGHT_HEX,
+} from "@/styles/token-values";
 
 const SILENT_LOGGER = {
   log: () => {},
@@ -162,15 +166,19 @@ describe("generateSessionSnapshotPng — happy path", () => {
       loadExcalidraw: async () => ({ exportToCanvas }),
       logger: SILENT_LOGGER,
     });
-    expect(spy.mock.calls[0][0].appState.viewBackgroundColor).toBe("#ffffff");
+    expect(spy.mock.calls[0][0].appState.viewBackgroundColor).toBe(
+      EXCALIDRAW_BG_LIGHT_HEX
+    );
     expect(spy.mock.calls[0][0].appState.exportBackground).toBe(true);
 
     await generateSessionSnapshotPng(makeApi(), {
       loadExcalidraw: async () => ({ exportToCanvas }),
       logger: SILENT_LOGGER,
-      backgroundColor: "#121212",
+      backgroundColor: EXCALIDRAW_BG_DARK_HEX,
     });
-    expect(spy.mock.calls[1][0].appState.viewBackgroundColor).toBe("#121212");
+    expect(spy.mock.calls[1][0].appState.viewBackgroundColor).toBe(
+      EXCALIDRAW_BG_DARK_HEX
+    );
   });
 });
 

@@ -274,7 +274,7 @@ export default function AiAssistPanel({ studentId, formRef, enabled, blobEnabled
           )}
 
           {error && (
-            <p role="alert" style={{ color: "var(--color-error, #dc2626)", marginTop: 8 }}>{error}</p>
+            <p role="alert" style={{ color: "var(--color-error)", marginTop: 8 }}>{error}</p>
           )}
 
           <div className="row" style={{ justifyContent: "flex-end", marginTop: 10 }}>

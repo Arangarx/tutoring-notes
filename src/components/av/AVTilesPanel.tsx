@@ -110,7 +110,7 @@ export function AVTilesPanel({
           data-testid="av-tiles-panel-empty"
           style={{
             fontSize: 12,
-            color: "rgba(100,116,139,0.85)",
+            color: "var(--badge-neutral-fg)",
           }}
         >
           No live A/V participants yet.

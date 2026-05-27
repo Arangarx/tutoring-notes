@@ -96,7 +96,9 @@ export function useTutorLiveDocumentWire(options: {
       timerRef.current = null;
     }
     emitDocument();
-    sync.flushPendingBroadcast();
+    if (typeof sync.flushPendingBroadcast === "function") {
+      sync.flushPendingBroadcast();
+    }
   }, [emitDocument, enabled, sync]);
 
   return { scheduleDocumentBroadcast, flushDocumentBroadcastNow, revRef };

@@ -192,8 +192,8 @@ export default async function WhiteboardWorkspacePage({
             className="card"
             style={{
               padding: "8px 12px",
-              background: "rgba(234,179,8,0.12)",
-              border: "1px solid rgba(234,179,8,0.4)",
+              background: "var(--warning-soft)",
+              border: "1px solid var(--warning-border)",
               fontSize: 13,
               maxWidth: 360,
             }}

@@ -60,7 +60,7 @@ export default function ForgotPasswordPage() {
             />
           </div>
 
-          {error ? <p style={{ color: "#ffb4b4", marginTop: 12 }}>{error}</p> : null}
+          {error ? <p style={{ color: "var(--sign-out-hover-text)", marginTop: 12 }}>{error}</p> : null}
           {message ? <p style={{ marginTop: 12 }}>{message}</p> : null}
 
           <div className="row" style={{ justifyContent: "space-between", marginTop: 16 }}>

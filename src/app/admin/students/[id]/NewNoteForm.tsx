@@ -343,8 +343,8 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
             marginTop: 16,
             padding: "12px 14px",
             borderRadius: 6,
-            border: "1px solid var(--color-border, #d1d5db)",
-            borderLeft: "3px solid var(--color-primary, #2563eb)",
+            border: "1px solid var(--color-border)",
+            borderLeft: "3px solid var(--color-primary)",
             minWidth: 0,
             overflow: "hidden",
           }}
@@ -369,7 +369,7 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
             />
             <span>
               <span style={{ fontWeight: 600 }}>🎙 Attach recording{recordingIds.length > 1 ? "s" : ""} to share link</span>
-              <span style={{ display: "block", fontSize: 11, color: "var(--color-muted, #6b7280)", marginTop: 2, overflowWrap: "break-word", wordBreak: "break-word" }}>
+              <span style={{ display: "block", fontSize: 11, color: "var(--color-muted)", marginTop: 2, overflowWrap: "break-word", wordBreak: "break-word" }}>
                 Confirm student consent before sharing with parents/guardians.
               </span>
             </span>

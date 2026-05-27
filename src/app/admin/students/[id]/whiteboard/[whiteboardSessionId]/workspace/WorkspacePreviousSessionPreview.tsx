@@ -397,8 +397,8 @@ export function WorkspacePreviousSessionPreview(
         className="card"
         style={{
           padding: "12px 14px",
-          background: "rgba(37, 99, 235, 0.06)",
-          border: "1px solid rgba(37, 99, 235, 0.22)",
+          background: "var(--info-soft)",
+          border: "1px solid var(--info-border)",
         }}
       >
         <div style={{ fontWeight: 700, fontSize: 14 }}>

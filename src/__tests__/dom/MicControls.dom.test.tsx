@@ -105,7 +105,7 @@ describe("meterColor", () => {
     expect(meterColor(0.9)).toMatch(/error|dc2626/);
   });
   test("returns amber-ish for medium loud", () => {
-    expect(meterColor(0.6)).toBe("#eab308");
+    expect(meterColor(0.6)).toBe("var(--meter-loud)");
   });
   test("returns success/green for talking-range", () => {
     expect(meterColor(0.2)).toMatch(/success|16a34a/);

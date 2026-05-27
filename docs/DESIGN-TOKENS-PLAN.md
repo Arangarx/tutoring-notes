@@ -110,18 +110,23 @@ light variant, which is exactly what Phase 0 does.
 
 ## Goal (definition of done)
 
+**Status: SHIPPED 2026-05-27** on branch `phase-0/design-tokens`. Theme
+resolution: `prefers-color-scheme` first (undetectable → light fallback);
+`[data-theme="light"|"dark"]` overrides; dev `?theme=` via `ThemeInit`.
+Canonical tokens: `src/styles/tokens.css`; legacy aliases preserved.
+
 Phase 0 is **done** when all five of these are true:
 
-1. **Expanded token set is defined** in `src/app/globals.css` for both
-   `[data-theme="dark"]` (current look, unchanged) AND
-   `[data-theme="light"]` (new, populated with **Mynka Blue light** values
-   from [`docs/BRAND.md`](BRAND.md) — no placeholder, the final values
-   go in directly).
+1. **Expanded token set is defined** in `src/styles/tokens.css` (imported
+   by `globals.css`) for both dark (current look via
+   `prefers-color-scheme: dark` + `[data-theme="dark"]`) AND light
+   (Mynka Blue values from [`docs/BRAND.md`](BRAND.md)).
 2. **All ~120 hardcoded inline colors** in components are replaced
    with `var(--token)` references. No `rgba(255,255,255,X)` or
    `rgba(0,0,0,X)` or bare hex values remain in `.tsx` files.
 3. **A lint rule** blocks new hardcoded colors in `.tsx` / `.css`
-   files (allowlist `globals.css` only).
+   files (allowlist `globals.css`, `tokens.css`, `token-values.ts`,
+   `icon.tsx`; tests excluded).
 4. **Visual diff is zero** against the current dark-mode-only app.
    Playwright visual regression tests pass without snapshot updates
    (or, where snapshots need updating, the only changes are anti-
@@ -455,12 +460,10 @@ and we swap it later in one PR.
 
 ## Open questions for Andrew before kickoff
 
-1. **Default-mode question.** When Phase 1 ships, should the app
-   default to light or dark for a new user? Sarah uses dark today;
-   her students will see whatever we default to on the share view.
-   The Mynka Blue light surface is what was designed against in the
-   reference mockup, but switching Sarah's default is a separate
-   call.
+1. ~~**Default-mode question.**~~ **Resolved 2026-05-27:** CSS-first
+   `prefers-color-scheme` detection; undetectable → **light** fallback;
+   `[data-theme]` overrides when tutor preference is stored; dev
+   `?theme=light|dark` for smoke.
 2. **Sub-agent delegation.** Phase 0c is the perfect Composer 2.5
    job — mechanical, well-bounded, file-by-file. Worth setting up
    when you have a quiet morning, OR doing in one focused session.

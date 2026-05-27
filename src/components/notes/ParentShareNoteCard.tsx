@@ -122,8 +122,8 @@ export function ParentShareNoteCard(props: {
                 fontWeight: 700,
                 padding: "2px 8px",
                 borderRadius: 12,
-                background: "var(--color-primary, #2563eb)",
-                color: "#fff",
+                background: "var(--color-primary)",
+                color: "var(--slider-thumb)",
                 letterSpacing: "0.04em",
               }}
             >
@@ -220,7 +220,7 @@ export function ParentShareNoteCard(props: {
                 </div>
               );
             })}
-            <p style={{ margin: "6px 0 0", fontSize: 11, color: "var(--color-muted, #6b7280)" }}>
+            <p style={{ margin: "6px 0 0", fontSize: 11, color: "var(--color-muted)" }}>
               Recording shared by your tutor for your review.
             </p>
           </section>

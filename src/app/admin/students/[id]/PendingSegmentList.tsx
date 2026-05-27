@@ -37,12 +37,12 @@ export default function PendingSegmentList({
             marginBottom: 6,
             padding: "6px 8px",
             borderRadius: 4,
-            border: "1px solid var(--color-border, #d1d5db)",
-            background: "var(--color-surface-subtle, rgba(0,0,0,0.02))",
+            border: "1px solid var(--color-border)",
+            background: "var(--surface-1)",
           }}
         >
           <span
-            style={{ fontSize: 12, color: "var(--color-muted, #6b7280)", flexShrink: 0 }}
+            style={{ fontSize: 12, color: "var(--color-muted)", flexShrink: 0 }}
           >
             Part {i + 1}
             {audios.length > 1 ? ` of ${audios.length}` : ""}
@@ -50,7 +50,7 @@ export default function PendingSegmentList({
           {audio.previewUrl ? (
             <AudioPreview src={audio.previewUrl} mimeType={audio.mimeType} />
           ) : (
-            <span style={{ fontSize: 12, flex: 1, color: "var(--color-muted, #6b7280)" }}>
+            <span style={{ fontSize: 12, flex: 1, color: "var(--color-muted)" }}>
               Saved — no preview
             </span>
           )}
@@ -62,7 +62,7 @@ export default function PendingSegmentList({
               border: "none",
               cursor: "pointer",
               fontSize: 14,
-              color: "var(--color-muted, #6b7280)",
+              color: "var(--color-muted)",
               padding: "0 2px",
               flexShrink: 0,
             }}
@@ -73,7 +73,7 @@ export default function PendingSegmentList({
           </button>
         </div>
       ))}
-      <p style={{ margin: "0 0 8px", fontSize: 11, color: "var(--color-muted, #6b7280)" }}>
+      <p style={{ margin: "0 0 8px", fontSize: 11, color: "var(--color-muted)" }}>
         Add another segment below, or click Transcribe &amp; generate notes.
       </p>
     </div>

@@ -25,7 +25,7 @@ export default function OAuthEmailSection({
 
       {gmailConnected ? (
         <div className="row" style={{ alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <span style={{ color: "#90ee90" }}>Connected as {gmailConnected.email}</span>
+          <span style={{ color: "var(--success)" }}>Connected as {gmailConnected.email}</span>
           <form action={disconnectGmail}>
             <button type="submit" className="btn">
               Disconnect Gmail
@@ -54,28 +54,28 @@ export default function OAuthEmailSection({
       )}
 
       {connectSuccess === "gmail" && (
-        <p style={{ color: "#90ee90", marginTop: 12 }}>Gmail connected. You can send from that address now.</p>
+        <p style={{ color: "var(--success)", marginTop: 12 }}>Gmail connected. You can send from that address now.</p>
       )}
       {connectError === "google_oauth_not_configured" && (
-        <p style={{ color: "#ffd700", marginTop: 12 }}>
+        <p style={{ color: "var(--warning)", marginTop: 12 }}>
           Google OAuth is not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to the server environment, or use SMTP below.
         </p>
       )}
       {connectError === "gmail_denied" && (
-        <p style={{ color: "#ffb4b4", marginTop: 12 }}>You declined access. You can try again or use SMTP.</p>
+        <p style={{ color: "var(--sign-out-hover-text)", marginTop: 12 }}>You declined access. You can try again or use SMTP.</p>
       )}
       {connectError === "no_refresh_token" && (
-        <p style={{ color: "#ffb4b4", marginTop: 12 }}>
+        <p style={{ color: "var(--sign-out-hover-text)", marginTop: 12 }}>
           Google didn’t return a refresh token. Try disconnecting and connecting again, or use SMTP.
         </p>
       )}
       {connectError === "db_not_ready" && (
-        <p style={{ color: "#ffd700", marginTop: 12 }}>
+        <p style={{ color: "var(--warning)", marginTop: 12 }}>
           Run <code>npx prisma generate</code> and <code>npx prisma db push</code>, then try again.
         </p>
       )}
       {connectError === "gmail_connect_not_allowlisted" && (
-        <p style={{ color: "#ffd700", marginTop: 12 }}>
+        <p style={{ color: "var(--warning)", marginTop: 12 }}>
           This account isn&apos;t allowed to use Connect Gmail here. Use SMTP below, or ask the person who runs
           this app to add your email to <code>GMAIL_CONNECT_ALLOWLIST</code>.
         </p>
