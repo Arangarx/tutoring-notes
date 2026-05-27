@@ -49,14 +49,11 @@ export function useStudentWhiteboardCanvas(
   onHydrateResult?: (result: HydrateRemoteImageFilesResult) => void,
   options?: {
     joinToken: string;
-    whiteboardSessionId?: string;
     followTutorView?: boolean;
     onTutorPageMeta?: (page: WhiteboardWirePage) => void;
   }
 ) {
   const joinToken = options?.joinToken ?? "";
-  const wbsid = options?.whiteboardSessionId ?? "";
-  const wbsidTag = wbsid ? `wbsid=${wbsid} ` : "";
   const followTutorView = options?.followTutorView === true;
   const onTutorPageMeta = options?.onTutorPageMeta;
   const { onLocalElementSnapshot, shouldDropRemoteElement } =
@@ -95,8 +92,6 @@ export function useStudentWhiteboardCanvas(
    * (rev counter restarts) is not mis-read as a stale, dropped packet.
    */
   const lastTutorV3RevRef = useRef(0);
-  /** Serializes v3 applies so a slow packet cannot overwrite a newer rev (B3). */
-  const v3ApplyChainRef = useRef(Promise.resolve());
   const [tutorStreamReady, setTutorStreamReady] = useState(false);
   const prevOtherPeersForRevResetRef = useRef(-1);
 
@@ -120,21 +115,17 @@ export function useStudentWhiteboardCanvas(
     details?: WhiteboardWireRemoteDetails;
   } | null>(null);
 
-  const applyViewportToCanvas = useCallback(
-    (
-      api: ExcalidrawApiLike,
-      scrollX: number,
-      scrollY: number,
-      zoom: number,
-      logAction: string
-    ) => {
+  const applyTutorFollow = useCallback(
+    (f: WhiteboardWireFollow) => {
+      if (!excalidrawAPI) return;
+      const { scrollX, scrollY, zoom } = f;
       applyingRemoteRef.current = true;
       try {
-        const prev = api.getAppState() as Record<string, unknown>;
-        const a = api as ExcalidrawApiLike & {
+        const prev = excalidrawAPI.getAppState() as Record<string, unknown>;
+        const api = excalidrawAPI as ExcalidrawApiLike & {
           updateScene: (s: { appState?: unknown; elements?: unknown }) => void;
         };
-        a.updateScene({
+        api.updateScene({
           appState: {
             ...prev,
             scrollX,
@@ -142,54 +133,17 @@ export function useStudentWhiteboardCanvas(
             zoom: { value: zoom },
           },
         });
-        console.info(
-          `[pvs] ${wbsidTag}pvs=${activePageIdRef.current} action=${logAction} panX=${scrollX} panY=${scrollY} zoom=${zoom}`
-        );
       } finally {
         applyingRemoteRef.current = false;
       }
     },
-    [wbsidTag]
-  );
-
-  const applyTutorFollow = useCallback(
-    (f: WhiteboardWireFollow) => {
-      const api = excalidrawApiRef.current;
-      if (!api) return;
-      applyViewportToCanvas(api, f.scrollX, f.scrollY, f.zoom, "snap-follow");
-    },
-    [applyViewportToCanvas]
+    [excalidrawAPI]
   );
 
   const snapToTutorView = useCallback(() => {
-    const api = excalidrawApiRef.current;
-    if (!api) {
-      console.info(
-        `[useStudentWhiteboardCanvas] ${wbsidTag}snap-to-tutor skip=no-api`
-      );
-      return;
-    }
-    const act = activePageIdRef.current;
-    const wireRow = pageListRef.current.find((p) => p.id === act);
-    const vs = wireRow?.viewState;
-    if (vs) {
-      applyViewportToCanvas(api, vs.panX, vs.panY, vs.zoom, "snap-pageViewState");
-      return;
-    }
     const f = lastTutorFollowRef.current;
-    if (f) {
-      applyTutorFollow(f);
-      return;
-    }
-    console.info(
-      `[useStudentWhiteboardCanvas] ${wbsidTag}snap-to-tutor skip=no-view-state`
-    );
-  }, [applyTutorFollow, applyViewportToCanvas, wbsidTag]);
-
-  useEffect(() => {
-    if (!followTutorView) return;
-    snapToTutorView();
-  }, [followTutorView, snapToTutorView]);
+    if (f) applyTutorFollow(f);
+  }, [applyTutorFollow]);
 
   const getPageBroadcastExtras = useCallback((): WhiteboardWireBroadcastExtras => {
     const id = activePageIdRef.current;
@@ -491,55 +445,20 @@ export function useStudentWhiteboardCanvas(
     [followTutorView, joinToken, onHydrateResult, onTutorPageMeta, shouldDropRemoteElement]
   );
 
-  const shouldAcceptTutorRev = useCallback((r: number, last: number): boolean => {
-    if (r === last) return false;
-    if (r < last && last - r <= 2) return false;
-    return true;
-  }, []);
-
-  const enqueueV3Apply = useCallback(
-    (r: number, details: WhiteboardWireRemoteDetails) => {
-      v3ApplyChainRef.current = v3ApplyChainRef.current
-        .then(async () => {
-          const last = lastTutorV3RevRef.current;
-          if (!shouldAcceptTutorRev(r, last)) {
-            return;
-          }
-          const apiNow = excalidrawApiRef.current;
-          if (!apiNow) {
-            const prevB = pendingV3Ref.current;
-            if (prevB && !shouldAcceptTutorRev(r, prevB.rev)) {
-              return;
-            }
-            pendingV3Ref.current = { rev: r, details };
-            return;
-          }
-          await runV3Apply(apiNow, details);
-          lastTutorV3RevRef.current = Math.max(lastTutorV3RevRef.current, r);
-        })
-        .catch((err) => {
-          console.warn(
-            `[useStudentWhiteboardCanvas] ${wbsidTag}v3 apply chain failed:`,
-            (err as Error)?.message ?? String(err)
-          );
-        });
-    },
-    [runV3Apply, shouldAcceptTutorRev, wbsidTag]
-  );
-
   useEffect(() => {
     if (!excalidrawAPI) return;
     const p3 = pendingV3Ref.current;
     if (p3) {
       pendingV3Ref.current = null;
-      enqueueV3Apply(p3.rev, p3.details);
+      lastTutorV3RevRef.current = p3.rev;
+      void runV3Apply(excalidrawAPI, p3.details);
     }
     const p2 = pendingV2Ref.current;
     if (p2) {
       pendingV2Ref.current = null;
       void runV2Apply(excalidrawAPI, p2.elements, p2.details);
     }
-  }, [enqueueV3Apply, excalidrawAPI, runV2Apply]);
+  }, [excalidrawAPI, runV3Apply, runV2Apply]);
 
   useEffect(() => {
     if (!sync) return;
@@ -572,13 +491,29 @@ export function useStudentWhiteboardCanvas(
       const docV3 = details?.document;
       if (docV3) {
         const r = docV3.rev;
-        if (!shouldAcceptTutorRev(r, lastTutorV3RevRef.current)) {
-          const pending = pendingV3Ref.current;
-          if (!pending || !shouldAcceptTutorRev(r, pending.rev)) {
+        const last = lastTutorV3RevRef.current;
+        if (r === last) {
+          return;
+        }
+        if (r < last) {
+          if (last - r <= 2) {
             return;
           }
         }
-        enqueueV3Apply(r, details!);
+        const apiNow = excalidrawApiRef.current;
+        if (!apiNow) {
+          const prevB = pendingV3Ref.current;
+          if (prevB) {
+            if (r === prevB.rev) return;
+            if (r < prevB.rev && prevB.rev - r <= 2) {
+              return;
+            }
+          }
+          pendingV3Ref.current = { rev: r, details: details! };
+          return;
+        }
+        lastTutorV3RevRef.current = r;
+        void runV3Apply(apiNow, details!);
         return;
       }
       if (!excalidrawApiRef.current) {
@@ -595,7 +530,7 @@ export function useStudentWhiteboardCanvas(
       );
     });
     return off;
-  }, [enqueueV3Apply, runV2Apply, shouldAcceptTutorRev, sync]);
+  }, [runV2Apply, runV3Apply, sync]);
 
   useEffect(() => {
     if (!sync || typeof sync.onRemotePageViewState !== "function") return;
@@ -616,20 +551,33 @@ export function useStudentWhiteboardCanvas(
       const api = excalidrawApiRef.current;
       if (!followTutorView || !api || msg.pageId !== activePageIdRef.current) {
         console.info(
-          `[pvs] ${wbsidTag}pvs=${msg.pageId} action=wire-recv follow=off panX=${msg.panX} panY=${msg.panY} zoom=${msg.zoom}`
+          `[pvs] pvs=${msg.pageId} action=wire-recv source=wire-recv panX=${msg.panX} panY=${msg.panY} zoom=${msg.zoom}`
         );
         return;
       }
-      applyViewportToCanvas(
-        api,
-        msg.panX,
-        msg.panY,
-        msg.zoom,
-        "wire-recv"
-      );
+      applyingRemoteRef.current = true;
+      try {
+        const prevState = api.getAppState() as Record<string, unknown>;
+        const a = api as ExcalidrawApiLike & {
+          updateScene: (s: { appState?: unknown; elements?: unknown }) => void;
+        };
+        a.updateScene({
+          appState: {
+            ...prevState,
+            scrollX: msg.panX,
+            scrollY: msg.panY,
+            zoom: { value: msg.zoom },
+          },
+        });
+        console.info(
+          `[pvs] pvs=${msg.pageId} action=wire-recv source=wire-recv panX=${msg.panX} panY=${msg.panY} zoom=${msg.zoom}`
+        );
+      } finally {
+        applyingRemoteRef.current = false;
+      }
     });
     return off;
-  }, [applyViewportToCanvas, followTutorView, sync, wbsidTag]);
+  }, [sync, followTutorView]);
 
   const syncActivePageElements = useCallback(
     (elements: ReadonlyArray<ExcalidrawLikeElement>) => {
