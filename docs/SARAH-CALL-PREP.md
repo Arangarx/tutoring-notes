@@ -4,51 +4,37 @@
 
 ---
 
-## Next call — target Friday 2026-05-22+
+## Next call (next Sarah thread after 2026-05-26)
 
-**Context.** V1 design session paused 2026-05-19 PM because IA decisions hit a feature-scope question we didn't have an answer for. See `docs/handoff/v1-design-session-2026-05-19-pm-orchestrator-report.md` for the full record.
+**Context.** 2026-05-26 evening call + 12:03–12:17 AM Discord follow-up largely answered the prior prep list. Full capture: [`docs/handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md). See § Answers landed (2026-05-26) below for what landed.
 
-### 1. Scheduling-in-v1 — THE gating question
-
-> **Ask Sarah:** "Do you currently use a calendar tool to track your tutoring sessions (Google Calendar, Calendly, iCloud Calendar, paper planner, anything)? If we built scheduling into Mynk, would you actually move your sessions there — or is your current calendar fine and you'd rather Mynk just be the recording/recap tool?"
-
-**Why this gates everything.** The FINAL palette mockup's "Up next · Aiden K. at 4 PM today" assumed scheduling was in v1 scope. But scheduling is a meaningful product surface (calendar UI, recurring sessions, time-zone handling, parent visibility, conflict detection) — not free. Without scheduling, "Today" is meaningless inside Mynk because Sarah can't type "4 PM" into existence.
-
-The three plausible shapes Sarah's answer puts us in:
-
-| Answer | What v1 default-landing surface becomes | Rough v1 scope delta |
-|---|---|---|
-| **No scheduling — calendar lives elsewhere** | "Next actions" dashboard: start a session + finish pending recaps. No "Today" concept. | Smaller v1. Faster ship. |
-| **Yes, lightweight** — recurring weekly schedule of standing sessions | "Today" landing works. "Next session" computed from the schedule. | Adds a schedule-setup surface + recurring-event model. ~1-2 weeks. |
-| **Yes, full** — calendar surface, drag-to-schedule, conflict detection | Full calendar landing. Parent-side schedule visibility. | Multi-week feature in its own right. |
-
-Andrew's instinct (2026-05-19): probably (1) for v1 — Sarah likely already lives in Google Calendar and we shouldn't try to replace it. But this needs Sarah's actual answer, not our guess.
-
-**This question gates:** mental anchor noun (formal lock), default landing surface, start-recording affordance surface, URL structure, ~half of Phase 2 tutor surface specs.
-
-### 2. Sarah's full 3–10 most-frequent actions
-
-> **Ask Sarah:** "If we were redesigning the app from scratch, what 3–10 things should be the most frictionless? Top 2 you already gave us: starting a session with a known student, ending a session and sending the recap. What's #3? #4? Through ~10 if you have them."
-
-**Why we need this.** Tells us what gets the front page vs. one click in vs. behind a menu. Currently we only have top-2 (confirmed via Discord mid-session, last week of school context).
-
-**This question gates:** information architecture below the default-landing surface, Phase 2 surface specs, what we put in a Cmd+K palette vs. inline buttons.
-
-### 3. (Optional, time-permitting) Recap reading patterns
-
-> **Ask Sarah:** "When you send a recap to a parent, do they reply? Do they read it on phone or desktop? Have any parents asked you for something the recap doesn't currently have?"
-
-**Why.** The parent share view (`/s/[token]`) is getting a formal Phase 1 spec; knowing how parents actually engage with it changes the priority order of states (mobile-first vs. desktop, "ask follow-up" affordance, etc.).
-
-**This question gates:** parent share view spec depth (Phase 1).
-
-### 4. (Optional, time-permitting) Pain point you've been working around
+### 1. Q4 — pain point you've been working around (still never asked)
 
 > **Ask Sarah:** "Is there anything you do *every session* that's annoying — that you've just learned to work around — that you've never told us about because it didn't feel like a 'bug'?"
 
-**Why.** Sarah is patient (per AGENTS.md North Star). Patient users underreport friction. Direct ask occasionally surfaces a big workflow win we couldn't have predicted.
+**Why.** Patient users underreport friction. Direct ask occasionally surfaces a workflow win we couldn't have predicted.
 
-**This question gates:** nothing structural, but informs Phase 3 polish priority.
+### 2. Sarah-drives-tutor-side follow-up (methodology)
+
+Andrew drove the tutor side for most of the 2026-05-26 live session; Sarah was on the **student side** on iPhone. Schedule a session where **Sarah drives the tutor side end-to-end** before heavy n=1 dependency on tutor-side UX we may have missed.
+
+**Detail:** [`docs/handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md) — Generalization caveat (methodology sub-bullet).
+
+### 3. Wyzant + UVU forms (artifacts)
+
+Sarah said she'll share what Wyzant and UVU require her to fill out — screenshots / form templates / fields. These inform **session-log + reporting + search** design from the log-the-time answer.
+
+**Detail:** [`docs/handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md#q2-follow-up--log-the-time--notes-verbatim-much-bigger-than-the-prior-interpretation`](handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md#q2-follow-up--log-the-time--notes-verbatim-much-bigger-than-the-prior-interpretation).
+
+### 4. Brand awareness check — **defer until AFTER UI refresh ships**
+
+Correction post-call (2026-05-27 12:26 AM): tonight's late thread WAS the brand reveal — the UI refresh would be the first time "Mynk" + logo appear on Sarah's surface, and Andrew hadn't told anyone outside immediate family before tonight. Cold pronunciation "Mink" landed clean and Sarah liked the mascot direction, so the reveal itself was a green light. Real "does she notice the brand in the UI?" feedback is **only meaningful after Wave 3 UI/brand refresh lands** — defer until then. **Not a question for the next thread.**
+
+**Detail:** [`docs/handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md#10-brand-reveal--first-surface-to-sarah-clean-cold-pronunciation-test`](handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md#10-brand-reveal--first-surface-to-sarah-clean-cold-pronunciation-test).
+
+### 5. Anything else she remembers wanting to add
+
+Invite her to share anything else (*"if I do I'll let you know"* from Q1 continuation).
 
 ---
 
@@ -61,6 +47,18 @@ Andrew's instinct (2026-05-19): probably (1) for v1 — Sarah likely already liv
 ---
 
 ## Answers landed
+
+### 2026-05-26 / 2026-05-27 (evening call + 12:03–12:17 AM follow-up thread)
+
+Full verbatim capture: [`docs/handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md).
+
+- **Q1 (top 10 actions)** — #1–#6: whiteboard session (bundled A/V + notes), homework image import, annotate, graph insert, shapes/geometry, log time + notes. **#7 retroactive:** looking back at notes (ties to session-log surface). **Use-case shift:** solo / in-person tutor mode — not a new verb, first-class need. → [§ 9 Solo / in-person tutor mode](handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md#9-first-class-feature-solo--in-person-tutor-mode)
+- **Q2 (scheduling)** — No scheduling in v1; iPhone/Google calendar stays external; Mynk = recording/recap tool. → [§ 1 Q2](handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md#q2-scheduling-yn--the-gating-question)
+- **Log-the-time clarification** — Much richer than prior interpretation: session-log + reporting + search, billing/compliance (Wyzant/UVU), round-to-5-min, disconnect gap adjustment, consolidated export. Reclassified off Wave 6 polish. → [Q2 follow-up](handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md#q2-follow-up--log-the-time--notes-verbatim-much-bigger-than-the-prior-interpretation)
+- **Q3 (parent recap reading patterns)** — Devices unknown (assume both); Wyzant 25-word/session + UVU pay-period sheet; prefers in-person recaps; ~50/50 parent engagement; self-acquired students want conversational status, not notes artifacts. → [§ 1 Q3](handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md#q3-recap-reading-patterns--parent-engagement-answered-12031204-am)
+- **Strategic reframe** — Wedge = **whiteboard + live recording** (live session unique); AI notes "pretty cool" but secondary; notes-to-parents mostly institutional compliance. → [§ 8 Strategic reframe](handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md#8-strategic-reframe-called-out-by-sarah-validated-explicitly)
+- **Brand reveal** — Tonight was the **first reveal** of "Mynk" to Sarah (UI refresh hadn't shipped to her surface; Andrew hadn't told anyone outside immediate family). Cold pronunciation "Mink" landed clean; positive on mascot/logo direction. Reveal landed cleanly. → [§ 10 Brand reveal](handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md#10-brand-reveal--first-surface-to-sarah-clean-cold-pronunciation-test)
+- **iPhone live-A/V smoke** — extensive breakage + UX requests captured in orchestrator report § 2 (not repeated here).
 
 ### 2026-05-19 (Discord, mid-session)
 

@@ -1,0 +1,74 @@
+Iphone Smoke
+We both seem to be getting video but sound doesn't seem to be going either way.
+	turns out discord stole sound.  Can we get sound back without complete refresh?
+On Iphone is it asking her every time to allow camera (she doesn't want to have to allow it every time) She's talking about our button
+	She wants the camera to go straight to on.
+	She's actually thinking a waiting room might be better. Like google meet/teams etc
+		Session timer shouldn't start till they've left the waiting room.
+she likes the delete
+the order in which things are aligned at the top
+	Can the icons on the whiteboard be re-arranged
+		Cursor
+		Pencil
+		Eraser
+		Typing
+		Can line and arrow be consolidated into dropdown
+		Can square/diamond/circle be consolidated into dropdown
+Sloppiness should default to architect and Edges should default to sharp
+she's reloading the page or something but it says she's connected and the timer is running...guess she's just taking time to load
+when she reloads into the page there are two things often at first.  The old one reloads with the new one (the camera tile)
+When she leaves safari the camera goes black (this is possibly normal)
+the board goes off her phone (get picture from discord)
+would be nice to get video closer to the whiteboard on the phone
+She's not sure if she needs the student to be able to add a page.  She says she'd have to work with it to know if it's annoying or not.
+she has the checkbox checked to sync to my view, it doesn't seem to be following
+sync button doesn't seem to go to my view
+	both should match my center and zoom
+An alarm went off on her phone and messed with the session? (sound and possibly video)
+When she disconnected the auto-pause from the student perspective isn't happening fast enough.  From tutor side it only pauses once they've completely disconnected.
+	I wonder if there is a way to detect that their browser closed/disconnected faster.
+	timer stopped at 28:09 and picked up as soon as she connected.
+		She doesn't think she or the student cares to see the seconds on the timer
+		When she does her time she rounds to 5/15 minutes
+		she does NOT want to see seconds.  Only minutes.
+Camera swap works
+	when she switches to front camera the view is inverted for her (can we swap her view) (is it even possible to detect when it's inverted programmatically)
+	can we limit the camera options to just front and back?
+PDFs
+	She sees text, not placeholder.
+Laser pointer is waaay off cursor (to the right right now)
+	She does not see the laser pointer
+Sync pan and zoom to tutor should be checked by default (and working)
+Sometimes last stroke isn't syncing till page change
+Images and possibly pdfs are not syncing till page change.
+Right now you have to click back on the color pallette thing on the phone to switch off of it.
+	Can it close with just click away.
+She likes that she can zoom in for precise labeling
+
+Ended the session and tried dragging the scrubber ->
+	After session ended she had a hard time getting back into discord
+	When session ends it needs to let go of her audio and camera
+	
+She's not sure there should be a homework section. (She think's it could be taken out and that plan probably covers it) Make sure prompts are updated.  Plan should be plan moving forward, what to do next, and it would also be homework if she gives any.  Typically though she's helping them to be ABLE to complete their homework.  Quite often they're working on specific homework already anyway.  She might tell someone to use AI or redo some homework problems or tell them to get more practice on those kinds of problems.  Often it's just "complete your homework and we'll meet again in two days to work on the next one" kind of stuff.  Other tutors might be more task oriented but she doesn't see herself assigning homework directly.
+
+She's wondering if students wouldn't want to actually have to be able to log in for privacy and security reasons.  So students might need a basic account.  So we need another account type for the students.  She thinks if just anyone with the link can see the audio and stuff people would be upset.
+
+She would think the student should be the one to give consent to be recorded or not.
+	Also maybe a question indicating if it's okay to be used for educational purposes or not.
+	Remember consent for recording
+	Remember consent for educational purposes
+	Video and audio should be able to be toggled individually
+	If a child is under 18 they have to have written permission to do photos or videos of children.
+		So she's wondering if kids should have it off by default.
+		Until we get an age verification system in, maybe we don't record audio by default.
+	"Your video will not be recorded, but are you okay with audio being used for educational purposes."
+	Tutor might want their video recorded.
+	Live video is great, recorded video is actually lower priority.
+This means the tutor doesn't need to ask for consent every time.
+
+Her highest priorities:
+	The syncing needs to be fixed.  Centering, viewport accomodation, etc.  Sync to tutor needs to be on by default and needs to work.
+	She would really like a writing pad to work. She currently has an XPPen Star G640
+	Then the tools lined up by most used
+	Being able to close the styles window without hitting the button again
+	
