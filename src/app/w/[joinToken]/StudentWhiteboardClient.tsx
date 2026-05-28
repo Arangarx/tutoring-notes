@@ -387,6 +387,7 @@ export function StudentWhiteboardClient({
     pageList,
     sectionsRegistry,
     activePageId: studentActivePageId,
+    selectStudentPage,
     tutorStreamReady,
   } = useStudentWhiteboardCanvas(
     syncClient,
@@ -394,6 +395,7 @@ export function StudentWhiteboardClient({
     onRemoteHydrateResult,
     {
       joinToken: pathJoinToken,
+      whiteboardSessionId,
       followTutorView: !independentView,
     }
   );
@@ -698,6 +700,7 @@ export function StudentWhiteboardClient({
             pageList={pageList}
             sections={sectionsRegistry}
             activePageId={studentActivePageId}
+            onSelectPage={(id) => void selectStudentPage(id)}
           />
         </div>
       </div>

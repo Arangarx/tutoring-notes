@@ -372,6 +372,7 @@ export function WhiteboardWorkspaceClient({
    * timeout runs.
    */
   const pageSwitchProgrammaticRef = useRef(0);
+  const tutorApplyIdRef = useRef(0);
   /** Skips debounced viewport flush while applying stored/programmatic camera. */
   const isApplyingViewportProgrammaticRef = useRef(false);
   const viewportPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -498,6 +499,10 @@ export function WhiteboardWorkspaceClient({
       // `scenePageId` is which page this `elements` snapshot belongs to (may
       // lag the tutor's visible tab when the wire diff is throttled).
       const targetId = details?.scenePageId ?? details?.page?.activePageId ?? "p1";
+      const applyId = String((tutorApplyIdRef.current += 1));
+      console.info(
+        `[tutor-apply] wbsid=${whiteboardSessionId} wba=${applyId} author=student action=apply-v2-start page=${targetId} elements=${elements.length}`
+      );
 
       // Smoke-3 root cause: this used to capture `curActive` BEFORE the
       // hydrate await and use it as the bucket key. During the await the
@@ -587,8 +592,14 @@ export function WhiteboardWorkspaceClient({
         // also proof-of-session — releases the audio-flow gate
         // even if both mics are silent / muted.
         markWbActivity();
+        console.info(
+          `[tutor-apply] wbsid=${whiteboardSessionId} wba=${applyId} author=student action=apply-v2-complete page=${targetId} mergedCount=${merged.length} writeToCanvas=true`
+        );
         return { recordScene: merged };
       }
+      console.info(
+        `[tutor-apply] wbsid=${whiteboardSessionId} wba=${applyId} author=student action=apply-v2-complete page=${targetId} mergedCount=${merged.length} writeToCanvas=false`
+      );
       return { record: "skip" };
     },
     [markWbActivity, shouldDropRemoteElement, whiteboardSessionId]
@@ -1320,12 +1331,21 @@ export function WhiteboardWorkspaceClient({
       scrollX: number;
       scrollY: number;
       zoom: { value: number };
+      width?: number;
+      height?: number;
     };
+    const vw =
+      typeof st.width === "number" && st.width > 0 ? st.width : undefined;
+    const vh =
+      typeof st.height === "number" && st.height > 0 ? st.height : undefined;
     return {
       follow: {
         scrollX: st.scrollX,
         scrollY: st.scrollY,
         zoom: st.zoom.value,
+        ...(vw !== undefined && vh !== undefined
+          ? { viewportWidth: vw, viewportHeight: vh }
+          : {}),
       },
       page: {
         // Ref — not React state — so rapid tab switches don’t lag one frame

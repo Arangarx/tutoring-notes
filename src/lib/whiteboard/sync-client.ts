@@ -74,6 +74,9 @@ export type WhiteboardWireFollow = {
   scrollY: number;
   /** Excalidraw stores zoom in appState as `{ value: number }` — we send the scalar. */
   zoom: number;
+  /** Tutor's Excalidraw viewport at broadcast time — center-align on student. */
+  viewportWidth?: number;
+  viewportHeight?: number;
 };
 
 /** Page tabs: tutor’s active list + which tab is on screen. */
