@@ -89,7 +89,8 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   uses `wbsid=<id>`. New capture/sync features pick a 3-letter prefix and
   log every state transition. Without this, prod debugging is impossible.
   Currently in use: `rid` (audio recorder), `wbsid` (whiteboard session),
-  `obx` (upload-outbox row), `snp` (snapshot generation), `pvw`
+  `wba` (whiteboard apply-path — paired with `author=tutor` or `author=student`
+  on every apply-path log line), `obx` (upload-outbox row), `snp` (snapshot generation), `pvw`
   (workspace preview-before-Start), `pvs` (per-page whiteboard pan/zoom —
   Phase 5 task 8), `avx` (live-A/V session — Phase 4a;
   per-peer events also carry `peer=<peerId>`), `cev` (cost-event row —
