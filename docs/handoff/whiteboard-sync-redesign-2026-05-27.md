@@ -10,6 +10,19 @@
 >
 > **Authored by:** Sonnet 4.6 subagent dispatched by Opus orchestrator, 2026-05-27.
 >
+> **Revision 2 (2026-05-27 evening):** original premise that "students don't draw"
+> was incorrect — students have full bidirectional editing in the current production
+> system (`StudentWhiteboardClient.tsx` mounts a real Excalidraw with `UndoRedoButtons`
+> and broadcasts on every `onChange`; the on-screen copy reads "What you draw is
+> visible live"; BACKLOG entry "Whiteboard undo (mark removal)" is marked SHIPPED
+> for both tutor + student). Sections §4, §5.1, §5.6, §5.7, §6, §7, §9 revised to
+> reflect symmetric authoring. Diagnosis (§1), library matrix data (§2), and relay
+> evaluation data (§3) remain valid; some §2/§3 verdicts updated. The tutor's
+> existing `applyRemoteToCanvas` (`WhiteboardWorkspaceClient.tsx:491–595`) is the
+> reference for the disciplined symmetric apply path Phase 1 brings to the student
+> side. See [Revision 2 changelog](#revision-2-changelog) at end of doc for the
+> diff summary.
+>
 > **Companion docs read during this pass:**
 > [`docs/RELIABILITY-REDESIGN-2026-05-27.md`](../RELIABILITY-REDESIGN-2026-05-27.md) ·
 > [`docs/handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md`](sarah-pilot-feedback-2026-05-26-orchestrator-report.md) ·
@@ -211,7 +224,7 @@ the rest of this document delivers.
 
 | Dimension | Assessment |
 |---|---|
-| Collaboration architecture | Last-write-wins with `reconcileElements()` (version-vector per element). No native CRDT. Multi-user is built in but the sync layer is left to the application. |
+| Collaboration architecture | Last-write-wins with `reconcileElements()` (version-vector per element + `versionNonce` tiebreaker). No native CRDT, but per-element merge is deterministic and handles concurrent edits to different elements losslessly. **Revision 2 verification:** the tutor's `applyRemoteToCanvas` in `WhiteboardWorkspaceClient.tsx:491` already runs this reconcile path against student broadcasts in production and has been reliable for the bidirectional surface we exercise (tutor + 1 student, both drawing). Concurrent edits to the SAME element are LWW-by-version with deterministic tiebreak; that's a known LWW limitation but not one our workload exercises (Sarah and the student aren't dragging the same PDF at the same instant). Multi-user collaboration is built in; the sync layer is left to the application. |
 | TypeScript/React fit | Excellent. First-class TypeScript, React component. |
 | Mobile UX quality | Good for drawing; Excalidraw's touch events are well-tested. Safari quirks (no `timeslice`, MP4 mime) are already handled. |
 | Customization | Rich customization API: `renderTopRightUI`, `renderBottomRightUI`, `UIOptions.tools` to hide/show tools, `initialData.appState` for defaults. Sarah's toolbar-reorder + default-draw-type requests are satisfiable with ~1 day of work. |
@@ -219,12 +232,14 @@ the rest of this document delivers.
 | Ecosystem velocity | Active; Excalidraw.com is the primary consumer. Upstream breaking changes are infrequent but happen on major versions. Pin to minor. |
 | Integration cost | Zero migration. Everything we've built (recorder adapter, event log, PDF insert, math, Desmos, per-page strip, join token flow) stays. |
 | Recorder-integration risk | Zero. The recorder and Excalidraw are decoupled at the `excalidraw-adapter.ts` boundary. |
-| **Verdict** | **Best choice for Wave 1. Architecture redesign is in how WE build the sync layer, not in Excalidraw itself.** |
+| **Verdict** | **Best choice for Wave 1, re-affirmed under Revision 2's bidirectional premise.** Architecture redesign is in how WE build the *student-side* apply path — the tutor already shows the discipline works. `reconcileElements` handles the bidirectional surface we actually exercise. Library migration would not eliminate the apply-path discipline work; it would just move it onto a different substrate. |
 
 **Key constraint:** Excalidraw exposes exactly ONE canvas at a time. Our multi-page
 architecture is built on top of this single canvas. This is a mismatch — but it's a
-mismatch we've been living with since Phase 1. The correct fix is to make our sync layer
-explicitly model this constraint, not to migrate libraries.
+mismatch we've been living with since Phase 1, and the tutor's `applyRemoteToCanvas`
+(WhiteboardWorkspaceClient.tsx:491) is concrete proof we can model it correctly.
+The correct fix is to make the *student* sync layer match that discipline, not to
+migrate libraries.
 
 ### Option B — tldraw (OSS SDK)
 
@@ -250,9 +265,9 @@ explicitly model this constraint, not to migrate libraries.
 | Customization | Same as Excalidraw — Yjs only touches the sync layer, not the UI. Sarah's customization requests remain satisfiable. |
 | License/cost | Yjs: MIT. `y-excalidraw`: MIT. Relay: y-websocket (MIT) self-hosted ~$5/mo, or Cloudflare Durable Objects ~$5/mo base. $0 library license. |
 | Ecosystem velocity | Yjs is very active and has become the de-facto CRDT standard in the web collaboration space. `y-excalidraw` is less actively maintained — check for Excalidraw ^0.18 compatibility before committing. |
-| Integration cost | Significant refactor. The `pageDataRef` + v3 wire apply path is replaced by a Yjs Y.Doc per page. The relay changes from excalidraw-room to y-websocket (or Cloudflare Durable Objects). The recorder adapter stays (Yjs state maps through the same `ExcalidrawLikeElement` shape). ~2-3 weeks of Sonnet + Composer dispatches. |
+| Integration cost | Significant refactor. The `pageDataRef` + v3 wire apply path on BOTH tutor and student is replaced by a Yjs Y.Doc per page. The relay changes from excalidraw-room to y-websocket (or Cloudflare Durable Objects). The recorder adapter stays (Yjs state maps through the same `ExcalidrawLikeElement` shape). ~2-3 weeks of Sonnet + Composer dispatches. **Caveat:** the page-bleed/timing/state-authority discipline still has to be built — Yjs doesn't fix "I read from the wrong source of truth"; it only fixes "two writers concurrently modified the same field." |
 | Recorder-integration risk | Low. Yjs state changes are observable via `Y.Doc.observe`. The recorder adapter can listen to Yjs changes instead of Excalidraw's `onChange`. |
-| **Verdict** | **Wave 3 research item. Structurally solves the CRDT problem. Not a Wave 1 option — the integration cost is too high to validate before Sarah's immediate sync issues are fixed. Revisit if the Wave 1 Excalidraw fix still produces regressions.** |
+| **Verdict (revised under Revision 2)** | **Escalation contingency, not Wave 1.** The original §5.6 conditional ("if students draw, flip to Yjs") was the right *shape* of decision rule but had the wrong threshold. Bidirectional editing with two peers does NOT structurally require CRDT — `reconcileElements`'s per-element version vectors handle it deterministically, AND the tutor already runs that path in production today. Yjs becomes the right answer when: (a) Phase 1 (disciplined symmetric LWW apply path) still produces regressions after one well-designed implementation attempt, (b) the workload grows to 3+ simultaneous concurrent editors on the same element, or (c) we need offline editing with later sync. Defer to Wave 3 contingency. |
 
 ### Option D — Yjs + custom canvas
 
@@ -269,9 +284,9 @@ explicitly model this constraint, not to migrate libraries.
 
 | Library | Overall | Notes |
 |---|---|---|
-| **Excalidraw (current)** | **Recommended for Wave 1** | Architecture redesign is in OUR sync layer. No migration cost. Sarah's customization requests are satisfiable. |
+| **Excalidraw (current)** | **Recommended for Wave 1 (Revision 2 re-affirms)** | Architecture redesign is in the STUDENT sync layer — the tutor's `applyRemoteToCanvas` already shows the discipline works. No migration cost. Sarah's customization requests are satisfiable. `reconcileElements` handles the bidirectional workload deterministically. |
 | tldraw | Eliminated | $6k/year production license. |
-| Yjs + Excalidraw | Wave 3 option | Structural CRDT improvement, moderate integration cost, valid if Wave 1 still produces regressions. |
+| Yjs + Excalidraw | Wave 3 escalation contingency | Structural CRDT improvement, moderate integration cost. **Revision 2:** not flipped to as the Wave 1 answer because the bidirectional bugs we've seen are state-authority/timing, not concurrent-edit conflict resolution. Yjs would not fix those; the apply discipline still has to be built. |
 | Yjs + custom canvas | Not recommended | Cost prohibitive. |
 
 **Where RELIABILITY-REDESIGN diverged:** The earlier Sonnet pass said "the relay and
@@ -356,53 +371,126 @@ compatible host.
 
 | Relay | Verdict | Notes |
 |---|---|---|
-| **excalidraw-room/Fly.io** | **Keep (Wave 1 and beyond)** | Proven, $2/mo, E2E encryption is excellent |
+| **excalidraw-room/Fly.io** | **Keep (Wave 1 and beyond)** | Proven, $2/mo, E2E encryption is excellent. Bidirectional broadcasts already flow through it correctly today. |
 | PartyKit/CF DO | Future upgrade | Global edge, stateful welcome packets, ~$5-15/mo |
 | Liveblocks | Not recommended | Encryption model weaker, cost jumps |
-| y-websocket | Wave 3 only (if Yjs) | Correct relay for Yjs migration |
+| y-websocket | Wave 3 escalation contingency (paired with Yjs library verdict) | Correct relay if/when Yjs migration is triggered. Not promoted to Wave 1 because Yjs itself isn't. |
 
 ---
 
 ## 4. Recommendation with rationale
 
-### The recommendation: Excalidraw + disciplined sync layer + excalidraw-room relay
+> **Revision 2 note:** The Revision 1 §4 was written under the incorrect premise
+> that "the tutor is the only author." Under the corrected bidirectional premise,
+> the verdict shape stays the same (Option A — Excalidraw + excalidraw-room + LWW)
+> but the *rationale* is genuinely different, and the §5/§6/§7 specs that follow
+> are meaningfully revised. This section is fully rewritten.
 
-**In one sentence:** Keep Excalidraw and the excalidraw-room relay; redesign the
-client-side sync layer with a single canonical state authority, v3-only protocol, and
-explicit render-timing contract.
+### The three plausible verdicts, evaluated under the corrected bidirectional premise
+
+**Option A — Excalidraw + disciplined symmetric apply layer + excalidraw-room (recommended).**
+Mirror the tutor's already-working `applyRemoteToCanvas` discipline onto the student's
+`runV3Apply`. Keep `reconcileElements`. Keep excalidraw-room. The bidirectional model
+is already shipping; what's missing is consistent apply-path discipline on the student
+side.
+
+**Option B — Yjs + y-excalidraw + y-websocket (rejected for Wave 1, retained as escalation contingency).**
+Migrate both sides to a CRDT. Would deliver structurally deterministic merge across
+all peers. Cost: 2-3 weeks. Rejected because the bugs we've seen are NOT concurrent-edit
+conflicts — they are state-authority/timing bugs in the apply path. A CRDT migration
+does not eliminate the need to write the disciplined apply layer; it just changes the
+substrate the discipline is written against. We'd pay the migration cost AND still
+have to do the apply-path work.
+
+**Option C — Excalidraw + LWW + an explicit symmetric apply protocol (effectively Option A).**
+This is what Option A actually is once the spec is written. Listing it separately would
+be artificial; the apply-path spec in §5 below IS the explicit symmetric protocol.
+Treat C as a notational variant of A, not a distinct option.
+
+### Recommendation: Option A (Excalidraw + symmetric apply layer + excalidraw-room)
+
+**In one sentence:** Keep Excalidraw, keep `reconcileElements`, keep excalidraw-room;
+redesign the *student-side* apply path to match the tutor's existing symmetric-authoring
+discipline (`activePageIdRef` + `pageSwitchProgrammaticRef`-equivalent guard + read
+from `pageDataRef[targetId]` when off-target, from canvas only when on-target and no
+switch in flight).
+
+**The decisive evidence:**
+
+1. **The tutor's `applyRemoteToCanvas` already implements the correct symmetric pattern**
+   (`WhiteboardWorkspaceClient.tsx:491–595`). It receives student broadcasts, runs
+   `mergeScenesReconciled` with `localForMerge` resolved from `pageDataRef[targetId]`
+   when off-target or mid-page-switch, writes the merged result to `pageDataRef[targetId]`
+   unconditionally, and updates the live canvas only when STILL on-target at write
+   time. Returns `{ record: "skip" }` for off-page peer broadcasts so the recording
+   event log doesn't pick up phantom diffs. This pattern has been reliable in production
+   for the entire pilot.
+
+2. **`reconcileElements` IS sufficient for the bidirectional surface we exercise.** It
+   merges by per-element `version` with `versionNonce` tiebreaker. Concurrent edits
+   to *different* elements both survive. Tombstones (`isDeleted: true`) propagate
+   correctly. Same-element simultaneous edits resolve LWW (one wins deterministically) —
+   a known LWW limitation, but not one our workload exercises (Sarah and the student
+   are not dragging the same PDF at the same instant in the pilot).
+
+3. **All three rounds of B1-B4 fixes were state-authority/timing bugs, not concurrent-edit failures.**
+   Round 1 was a smoke-on-wrong-branch artifact. Round 2 broke when `runV3Apply`
+   read `api.getSceneElements()` for the leaving tab after `activePageIdRef` had
+   already advanced. Round 3 added "freeze leaving tab, prefetch incoming tab" but
+   missed the equivalent of the tutor's `pageSwitchProgrammaticRef` and didn't extend
+   `viewport-align.ts`'s contract for missing `viewportWidth/Height`. None of these
+   failures are what a CRDT would fix — Yjs would inherit the same class of
+   `activePageIdRef`-vs-canvas race if the apply discipline isn't written.
+
+4. **Student → tutor strokes have been reliable across all three rounds.** Andrew's
+   explicit "reverse direction" verification passed every smoke. This is empirical
+   evidence that `reconcileElements`'s bidirectional handling works for our workload —
+   when the apply path is correctly disciplined (as it is on the tutor side, where
+   inbound = student broadcasts).
 
 **What we lose vs the current implementation:**
-- v2 wire compatibility (old student clients from before v3 adoption, if any exist — there are no such clients in production given solo pilot)
-- The flexibility of reading from the canvas arbitrarily during applies (bad flexibility; we're trading it away intentionally)
+- v2-on-student inbound (rare; only matters if a stale tab cached an old protocol — log-and-drop instead of crashing)
+- Uncontrolled flexibility to read from the canvas mid-apply (trading away intentionally; the tutor pattern shows the controlled equivalent)
 
 **What we gain:**
-- A sync layer that a Composer executor can reason about in one pass without a multi-round retry cycle
-- No page-switch bleed (structurally impossible when the architecture is correct)
-- No viewport-timing race (the render-timing contract makes the race explicit and eliminates it)
-- Shorter B1-B4 fix: one focused Composer dispatch to the redesigned student apply hook
+- Symmetric apply discipline across both peers (the student catches up to where the tutor already lives)
+- No page-switch bleed (structurally impossible when `pageSwitchProgrammaticRef`-equivalent guard is in place)
+- No viewport-timing race (`viewport-align.ts` contract closes the missing `viewportWidth/Height` gap from round 3)
+- Shorter B1-B4 fix: one focused Composer dispatch with the apply-path spec in hand
+
+**On the original conditional in §5.6 ("if students draw, flip to Yjs"):**
+
+The conditional was directionally right (CRDT is a stronger model than LWW) but had
+the wrong threshold. Two peers exchanging non-overlapping element edits do NOT need
+CRDT — they need disciplined per-element LWW with consistent local-state reads. We
+already have that on the tutor side. Yjs is the right answer when (a) the disciplined
+LWW apply path STILL produces regressions, (b) the workload grows to 3+ simultaneous
+editors on the same element, or (c) we need offline editing with later sync. None
+of those apply today.
 
 **Comparison with the RELIABILITY-REDESIGN call:**
 
 The prior Sonnet pass called B1-B4 "application bugs" and recommended "one focused
-Composer dispatch to target the sync surface holistically." This pass agrees with the
-prognosis (one Composer dispatch IS the right execution vehicle) but disagrees that the
-scope is a "targeted fix." The scope is a **disciplined redesign of the student apply
-path** — same Composer dispatch, but the Composer is given a clear architecture spec
-(this document) rather than "fix the bugs."
+Composer dispatch to target the sync surface holistically." This pass agrees that one
+Composer dispatch IS the right execution vehicle, but escalates the scope diagnosis:
+the bugs are structural (asymmetric apply discipline between tutor and student) and
+the fix is to bring the student to parity with the tutor's already-working pattern.
+Same Composer dispatch — different spec it's given.
 
 **On library migration (tldraw):**
 
 tldraw 4.0 (Sep 2025) requires a $6k/year production commercial license. This directly
 violates Andrew's stated constraint. Do not evaluate tldraw further at any timeline.
 
-**On Yjs + Excalidraw:**
+**On Yjs + Excalidraw (held as escalation contingency):**
 
-This is the structurally correct long-term path IF the disciplined Excalidraw sync layer
-still produces regressions after one well-designed implementation attempt. The `y-excalidraw`
-binding maps Excalidraw elements into a Yjs Y.Doc and gets true CRDT merging. The cost
-is a meaningful refactor (2-3 weeks) and a new relay (y-websocket or Cloudflare DO).
-**Defer to Wave 3 as a contingency.** Do not start the Yjs migration before the
-Excalidraw fix is validated in Sarah's sessions.
+Yjs is the structurally correct long-term path IF the disciplined Excalidraw sync
+layer still produces regressions after one well-designed implementation attempt under
+the Revision 2 spec. The `y-excalidraw` binding maps Excalidraw elements into a Yjs
+Y.Doc and gets true CRDT merging. The cost is a meaningful refactor (2-3 weeks) and
+a new relay (y-websocket or Cloudflare DO). **Defer to Wave 3 as a contingency.**
+Do not start the Yjs migration before the Excalidraw apply-discipline fix is validated
+in Sarah's sessions.
 
 **What we lose vs tldraw (for the record):**
 - Native CRDT (tldraw's TLStore has deterministic conflict resolution vs our
@@ -420,48 +508,100 @@ Excalidraw fix is validated in Sarah's sessions.
 
 ## 5. Sync architecture for the recommended stack
 
-### 5.1 Single canonical state owner per state type
+### 5.1 Canonical state owners under symmetric authoring
 
-The root cause of all three rounds is that the student-side sync layer had no clear
-answer to "where does the authoritative element list for page X come from right now?"
+> **Revision 2 note:** Revision 1's "NEVER read back from canvas" rule was a
+> hard-line generalization of a more nuanced principle the tutor's already-shipping
+> `applyRemoteToCanvas` actually follows. Under bidirectional authoring, BOTH peers
+> have local edits that must be preserved across remote applies — so `pageDataRef`
+> IS a canonical *local-state* cache that's read during merge, kept in sync with
+> the canvas via `onChange`. The forbidden read is from `api.getSceneElements()`
+> mid-apply when off-target or during a programmatic page switch, NOT all canvas
+> reads always.
 
-The new architecture has exactly one rule:
+The root cause of all three rounds is that the student-side `runV3Apply` had no clear
+answer to "where do MY local edits for page X live right now, given that Excalidraw
+exposes one canvas and I may not be on page X right now?" — even though the tutor's
+`applyRemoteToCanvas` already had a precise answer to the same question.
+
+The new architecture spec inherits the tutor's discipline, made symmetric:
 
 ```
-Wire payload → pageDataRef → canvas
-                              ↑
-                       NEVER read back
+Local edits  →  pageDataRef[activePageId]  (synced via onChange, gate-guarded by applyingRemoteRef)
+                              ↓
+Remote wire arrives  →  reconcileElements(pageDataRef[targetPageId], remote.pages[targetPageId])
+                              ↓
+                      pageDataRef[targetPageId]  (always written)
+                              ↓
+                      canvas (only if STILL on-target AND no programmatic page switch in flight)
 ```
 
-**Canonical owners:**
+**Canonical owners (both peers, symmetric):**
 
 | State type | Canonical owner | Who reads it | Who writes it |
 |---|---|---|---|
-| All elements, all pages | Tutor's Excalidraw canvas (active page) + tutor's `pageDataRef` (non-active pages) | Tutor `getPagesSnapshot()` at broadcast time | Tutor's drawing actions |
-| Student's copy of elements | `pageDataRef[pageId]` (wire-populated) | Student canvas display path | ONLY v3 wire apply |
-| Active page id | `activePageIdRef.current` | All apply paths | ONLY `runV3Apply`, on page-change confirmation |
-| Tutor's viewport (for follow) | `lastTutorFollowRef.current` | `applyTutorFollow()` | ONLY v3 wire apply |
-| Page list | `pageListRef.current` | Page strip UI | ONLY v3 wire apply |
+| **Per-page elements (any peer)** | `pageDataRef[pageId]` | Apply path (merge input); broadcast snapshot builder; page-switch hydration | `onCanvasChange` (local edits, when not applying remote); `runV3Apply` / `applyRemoteToCanvas` (after `reconcileElements` merge) |
+| Active page id | `activePageIdRef.current` | All apply paths; broadcast snapshot builder | `runV3Apply` (page-change detection); tutor page-strip click handler; student page-strip click handler |
+| **Mid-page-switch flag (NEW on student)** | `pageSwitchProgrammaticRef` (counter) | Apply path (read-at-write-time check before touching canvas) | Page-strip click handlers; rev-reset re-hydration helper |
+| Tutor's viewport (for follow) | `lastTutorFollowRef.current` | `applyTutorFollow()`; `snapToTutorView()` | v3 wire apply on receive |
+| Page list | `pageListRef.current` | Page strip UI; broadcast snapshot builder | v3 wire apply on receive (student); page-create/rename actions (tutor) |
+| Apply-in-flight gate | `applyingRemoteRef.current` | `onCanvasChange` (suppress local broadcast during remote apply) | Apply path (try/finally) |
 
-**The invariant that eliminates the page-bleed bug:**
+**The invariants that eliminate the page-bleed bug (replaces Revision 1's "never read back"):**
 
-> `api.getSceneElements()` is NEVER called inside `runV3Apply` for any purpose.
+> **I1 (gate the canvas read by on-target-AND-no-switch).** `api.getSceneElements()`
+> is read inside the student's `runV3Apply` only when BOTH (a) the targetPageId of
+> the current merge equals `activePageIdRef.current` AND (b) `pageSwitchProgrammaticRef.current === 0`.
+> When EITHER condition fails, the merge's local input MUST come from
+> `pageDataRef[targetPageId]` (which is the canonical local-edit cache for that page).
+> This mirrors `WhiteboardWorkspaceClient.tsx:554` (tutor's `onTargetReadTime`).
 >
-> The student's v3 apply path reads ONLY from `docV3.pages[pageId]` (wire truth) and
-> `pageDataRef[pageId]` (previous wire truth). The canvas is a DISPLAY SURFACE, not a
-> state store, from the student's perspective.
+> **I2 (gate the canvas write by on-target-AND-no-switch at WRITE time, re-checked).**
+> After `mergeScenesReconciled` resolves (which does a microtask hop for the dynamic
+> import of `reconcileElements`), re-check the on-target-AND-no-switch condition
+> before calling `api.updateScene({ elements: merged })`. If the tutor/student page
+> moved during the await, write only to `pageDataRef[targetPageId]` and let the next
+> page-switch hydrate surface the change visually. This mirrors
+> `WhiteboardWorkspaceClient.tsx:576` (tutor's `stillOnTargetWriteTime`).
+>
+> **I3 (page-switch is a separate operation from apply).** Page-change detection
+> (`previous !== followTarget` in `runV3Apply`) MUST freeze the leaving page's
+> elements from `pageDataRef[previous]`, NOT from `api.getSceneElements()` — because
+> by the time `runV3Apply` is examining `details.page.activePageId`, Excalidraw may
+> not yet have re-rendered the leaving page's canvas state. The
+> `pageDataRef[previous]` value is the most recent local truth (synced via the
+> `onCanvasChange` snapshot at the moment of the last local edit).
+>
+> **I4 (broadcast snapshot honors the same rules).** When the student or tutor
+> builds the outbound broadcast snapshot, the per-page element arrays come from
+> `pageDataRef[pageId]` for non-active pages and from the canvas only for the
+> current active page (gated by the same on-target check). The tutor's
+> `getTutorDocumentPagesSnapshot` already follows this pattern; the student's
+> `onCanvasChange` (which broadcasts the active-page elements directly) does too —
+> the change is to ensure `pageDataRef[activePageId]` is updated BEFORE the
+> broadcast call inside `onCanvasChange`, which it already is on line 596 of
+> `useStudentWhiteboardCanvas.ts`.
 
-This is the rule that rounds 2 and 3 broke. Round 2 added `api.getSceneElements()` as a
-merge input "to get live local strokes." Students don't draw in the current session model.
-Even if they did, the correct pattern is: capture local state BEFORE applying remote,
-then merge. Not: call `getSceneElements()` in the middle of the apply, after
-`activePageIdRef` has already been updated.
+**Where Revision 1's rule was wrong, and what it should have said:**
 
-**The tutor side is different and correct:**
-The tutor's `getPagesSnapshot()` (in `useTutorLiveDocumentWire.ts`) reads from
-`pageDataRef` for non-active pages and IMPLICITLY reads the canvas for the active page
-(the tutor's `pageDataRef[activePage]` is kept in sync with the canvas via Excalidraw's
-`onChange` callback). This is correct because the tutor IS the state source.
+Revision 1's "NEVER read back from canvas" would have BROKEN student-side local-edit
+preservation: the student types a stroke → `onChange` fires and writes to
+`pageDataRef` and broadcasts → almost simultaneously the tutor's v3 message arrives →
+without reading the student's local edit during merge, the student's stroke is wiped
+on next render. The fix is reading the local edit from `pageDataRef[targetPageId]`,
+which IS kept in sync with the canvas via the synchronous `onChange` handler at
+`useStudentWhiteboardCanvas.ts:596`.
+
+The principle is: **`pageDataRef` is the symmetric canonical local-state cache for
+both peers; the canvas is read only when it definitely belongs to the page being
+merged AND no async re-render is in flight; otherwise reads come from the cache.**
+
+**Why the tutor side already works — and what changes on the student:**
+
+The tutor's `applyRemoteToCanvas` already enforces I1+I2 via `onTargetReadTime` +
+`stillOnTargetWriteTime`, and has `pageSwitchProgrammaticRef` as the in-flight switch
+counter. The student's `runV3Apply` lacks an equivalent. Phase 1 adds it. Same data
+shape, same merge function, same rules — symmetric apply discipline.
 
 ### 5.2 Wire protocol: v3 only, v2 retired
 
@@ -486,31 +626,47 @@ labels) — but the student does NOT broadcast scene elements.
 component re-renders on the next paint frame. Reading `getSceneElements()` in the same
 synchronous frame as `updateScene()` returns the PRE-update state.
 
-**The contract:**
+**The contract (revised under Revision 2 for symmetric authoring):**
 
 ```
-Rule 1: During runV3Apply, NEVER call api.getSceneElements() for ANY purpose.
-         Use pageDataRef exclusively.
+Rule 1 (revised): Reading api.getSceneElements() inside the apply path is gated
+         by I1 from §5.1: ALLOWED only when targetPageId === activePageIdRef.current
+         AND pageSwitchProgrammaticRef.current === 0. Otherwise, read local
+         elements from pageDataRef[targetPageId]. This matches the tutor's
+         existing onTargetReadTime pattern in WhiteboardWorkspaceClient.tsx:554.
 
-Rule 2: The canvas (api.updateScene) is written EXACTLY ONCE per apply:
-         api.updateScene({ elements: pageDataRef[activePageId] })
-         at the END of runV3Apply, after all pageDataRef buckets are updated.
+Rule 2 (revised): The canvas (api.updateScene with elements) is written EXACTLY
+         ONCE per apply, ONLY when the I2 write-time re-check from §5.1 passes
+         (still-on-target AND no programmatic switch in flight). pageDataRef
+         is written for the targetPageId regardless. The on-active-page invariant
+         (P5 in §5.5) ensures pageDataRef[activePageId] tracks the canvas.
 
-Rule 3: Page-switch detection happens BEFORE any api.getSceneElements() read.
-         The "freeze leaving tab" pattern is correct in concept but must freeze
-         from pageDataRef[leaving], not from api.getSceneElements() (which is
-         unreliable during the switch).
+Rule 3: Page-switch detection happens BEFORE any per-page merge work runs.
+         The "freeze leaving tab" pattern must freeze from pageDataRef[leaving],
+         not from api.getSceneElements() (which may belong to either the
+         leaving or the incoming page depending on Excalidraw's re-render timing).
+         The freeze-to-pageDataRef is a no-op when pageDataRef[leaving] is
+         already current via onCanvasChange — which is the common case.
 
-Rule 4: Viewport alignment applies AFTER Rule 2's updateScene.
-         Only apply the viewport if the student's container has non-zero
-         dimensions. This is checked via api.getAppState().width/height,
-         with a retry scheduled for the next requestAnimationFrame if zero.
+Rule 4: Viewport alignment applies AFTER Rule 2's updateScene resolution.
+         Only apply if the student's container has non-zero dimensions
+         (read from api.getAppState().width/height). If zero, retry on next
+         requestAnimationFrame (max ~2 retries, then fall back to raw scroll).
+         DO NOT read DOM (.excalidraw-container.getBoundingClientRect()) —
+         the round-3 DOM fallback was a workaround for the zero-dimension
+         race; rAF retry handles it more reliably across browsers.
 
-Rule 5: The waitDoubleRaf() call in apply-reconciled-remote-scene.ts is
-         eliminated for the student-side path. It was compensating for
-         "stale getSceneElements" which no longer occurs (Rule 1).
-         For reconcileElements calls, pass the last-known local elements from
-         pageDataRef directly — no canvas read needed.
+Rule 5 (revised): The waitDoubleRaf() call in updateSceneMergingWithRemote
+         (apply-reconciled-remote-scene.ts:30-40, currently called by the
+         TUTOR's recorder path via updateSceneMergingWithRemote) MAY be
+         retained ONLY for the tutor's tutor→tutor-recorder-canvas merge
+         path where local elements come directly from the live canvas
+         (rather than pageDataRef). For the STUDENT's runV3Apply and the
+         TUTOR's applyRemoteToCanvas (both of which now route through
+         mergeScenesReconciled with pageDataRef-resolved local input),
+         waitDoubleRaf is NOT needed and SHOULD NOT be inserted. If
+         testing reveals it is needed somewhere, that's a sign the I1/I2
+         gates are being bypassed — fix the gate, not the timing.
 ```
 
 **The viewport-timing solution (Rule 4 detail):**
@@ -584,20 +740,29 @@ absent (old/student clients), the student falls back to raw scroll.
 
 ### 5.5 Per-page invariants
 
-These invariants must hold after every `runV3Apply` completes. The executor implementing
-Phase 1 MUST include a test for each.
+These invariants must hold after every `runV3Apply` (student) and `applyRemoteToCanvas`
+(tutor) completes. The executor implementing Phase 1 MUST include a test for each on
+the student side; corresponding tutor-side coverage already exists for P1-P5.
 
-1. **No cross-page contamination:** `pageDataRef["p1"]` contains only elements from the
-   tutor's v3 document `pages["p1"]`. An element's `id` never appears in more than one
-   page bucket after an apply.
+1. **No cross-page contamination:** `pageDataRef["p1"]` contains only elements that
+   belong to page p1 after the reconcile merge — i.e., elements whose ownership is
+   determined by the incoming wire's `pages["p1"]` array plus any local elements
+   already in `pageDataRef["p1"]` before the apply. An element's `id` never appears
+   in more than one page bucket after an apply. (This invariant is what round 2 broke.)
 
-2. **Active page matches canvas:** After `runV3Apply` completes,
-   `pageDataRef[activePageIdRef.current]` is exactly what was passed to
-   `api.updateScene({ elements })`.
+2. **Active page matches canvas:** After `runV3Apply` completes AND the I2 write-time
+   re-check passed, `pageDataRef[activePageIdRef.current]` is exactly what was passed
+   to `api.updateScene({ elements })`. If the I2 check failed (page moved during
+   merge), `pageDataRef[targetPageId]` is updated but the canvas write is skipped —
+   in which case `pageDataRef[activePageIdRef.current]` reflects whatever the
+   CURRENT active page's prior state was, and the canvas is unchanged.
 
 3. **Frozen leaving page:** When `runV3Apply` detects a page change (new
    `page.activePageId !== old activePageId`), `pageDataRef[old activePageId]` is NOT
-   updated by reading from the canvas. It retains its value from the previous apply.
+   updated by reading from the canvas. It retains its value from the previous
+   `onCanvasChange` snapshot. If `pageDataRef[old activePageId]` is `undefined` (the
+   student never visited that page locally), it is initialized from the wire's
+   `docV3.pages[old activePageId]` if present, otherwise left undefined.
 
 4. **Monotonic rev guard:** `runV3Apply` ignores (drops with a warn log) any v3 message
    with `rev <= lastTutorV3RevRef.current`, EXCEPT after a tutor reconnect (detected by
@@ -613,41 +778,152 @@ Phase 1 MUST include a test for each.
    once per `runV3Apply`, after `api.updateScene` for elements. It NEVER runs for pages
    that are NOT the active page.
 
-### 5.6 Conflict resolution
+7. **Local-edit preservation across remote apply (NEW under Revision 2):** When a
+   remote v3 message arrives while the student has local elements in
+   `pageDataRef[targetPageId]` that are NOT in the tutor's `docV3.pages[targetPageId]`
+   (e.g., a student stroke drawn between the tutor's last broadcast and the current
+   one), those local-only elements MUST survive the merge. `reconcileElements`
+   preserves elements present only on one side; the test must assert this with a
+   scenario where the student adds an element, the tutor broadcasts without it, and
+   the merged page bucket contains BOTH sets of elements after the apply. (This is
+   what the original Revision 1 §5.1 "never read back" rule would have broken.)
 
-For the current session model (tutor draws, student follows), conflict resolution is
-simple:
+8. **No echo loop (NEW under Revision 2):** When the student broadcasts via
+   `onCanvasChange` (line 600 of `useStudentWhiteboardCanvas.ts`), the broadcast
+   travels to the tutor and is filtered against the student's own peerId on the
+   tutor's `onRemoteScene` callback (already correct in sync-client). The student
+   does NOT receive its own broadcast back. Conversely, when the student applies an
+   incoming tutor broadcast and writes via `api.updateScene`, `applyingRemoteRef`
+   is set to `true` so the resulting `onCanvasChange` early-returns (line 595) and
+   does NOT re-broadcast the merged result back to the tutor. The test must assert
+   `sync.broadcastScene` is NOT called during a `runV3Apply`.
 
-> **Tutor wins on all scene state. Student's local canvas edits (if any) are local-only.**
+### 5.6 Conflict resolution (revised — symmetric bidirectional authoring)
 
-`reconcileElements` (from Excalidraw) resolves per-element by version vector. Since the
-tutor is the only author, the tutor's version vector always dominates. Students do not
-need CRDT conflict resolution in the current model.
+> **Revision 2 note:** Revision 1's "tutor wins on all scene state" was incorrect.
+> Both peers author. The conflict model is symmetric per-element LWW via
+> Excalidraw's `reconcileElements` — already in production on the tutor side via
+> `applyRemoteToCanvas`, and confirmed working for student → tutor across all three
+> rounds of B1-B4 smokes.
 
-If students are eventually allowed to draw (a future Wave 3+ feature), the conflict
-model must be revisited. At that point, Yjs + y-excalidraw becomes the right answer
-(see § 2 Option C).
+**The data-model rule:**
 
-### 5.7 Failure modes and recovery
+> **Per-element LWW with deterministic tiebreak. Both peers are authors.**
+>
+> `reconcileElements(local, remote, appState)` is called on both peers' apply
+> paths. For each element id present in both local and remote: keep the one with
+> the higher `version`; if `version` ties, keep the one with the higher
+> `versionNonce` (Excalidraw's pseudo-random nonce assigned at create/edit time).
+> Elements present in only one side are kept as-is. Tombstoned elements
+> (`isDeleted: true`) propagate via the same merge — the tombstone with higher
+> version wins, ensuring deletes are not silently reverted.
+
+**The concrete bidirectional cases — verified:**
+
+1. **Concurrent edits to DIFFERENT elements (most common case).**
+   Tutor draws element A on page P; student draws element B on page P. Both
+   elements live in different ids → `reconcileElements` keeps both. After both
+   broadcasts have round-tripped, both peers see {A, B}. **Verified empirically:**
+   this is the workload student → tutor has been running reliably across all three
+   rounds; the asymmetry has been only in TUTOR → STUDENT reliability, which is
+   apply-path discipline, not data-model semantics.
+
+2. **Concurrent edits to the SAME element (rare for our workload).**
+   Both peers grab the same PDF and drag it at the same instant. Each edit bumps
+   `version` and emits a new `versionNonce`. `reconcileElements` picks one
+   deterministically (higher version, then higher versionNonce). The losing edit
+   is dropped — the user whose edit was "lost" sees the element snap to the winner's
+   position. **Known LWW limitation; acceptable because:** (a) the workload doesn't
+   exercise this (Sarah and the student are not dragging the same PDF simultaneously);
+   (b) when it does happen, the resolution is deterministic and visible, not silent
+   corruption; (c) the loser can simply repeat the action and their edit becomes
+   the latest version, which then wins. If this becomes a real problem in pilot,
+   the escalation is Yjs (CRDT), not a custom OT layer.
+
+3. **Concurrent moves of different elements.** Same as case 1 — independent ids,
+   both survive.
+
+4. **Concurrent inserts (different ids).** Same as case 1.
+
+5. **Concurrent deletes vs edits on the same element.** Excalidraw represents
+   deletes as `isDeleted: true` with bumped `version`. If peer A deletes while peer
+   B edits, the higher `version` wins. If peer B's edit was later, the element
+   "comes back" with the edit applied (and the delete is reverted). If peer A's
+   delete was later, the element stays deleted. This is correct LWW and matches
+   user expectation ("the most recent action wins").
+
+6. **PDF/image insert colliding with a page change.** The insert is one or more
+   elements with new ids on `pageDataRef[insertPageId]`. The page-change updates
+   `activePageIdRef`. These commute (the insert lands in its target page's bucket
+   regardless of which page is currently active). The peer that performed the
+   insert remains on its own active page; the other peer sees the insert when
+   they next visit (or merge into) the insert's target page. **Verified by the
+   tutor's `applyRemoteToCanvas` which already handles this — `targetId =
+   details.scenePageId` is independent of the tutor's local `activePageIdRef`.**
+
+7. **Mobile peer on flaky network, broadband peer rapid-broadcasts.**
+   Socket.io's websocket transport delivers in-order over a single TCP connection.
+   On a reconnect, the flaky peer's `lastTutorV3RevRef` is reset (per the
+   tutor-disappear-from-peers-map detection on `useStudentWhiteboardCanvas.ts:475`)
+   and the broadband peer's `onNewRemotePeer` callback fires, triggering a fresh
+   full-document broadcast. The flaky peer's local edits made during the disconnect
+   are NOT lost because they live in `pageDataRef` (and on the canvas) — when the
+   peer reconnects, its first `onCanvasChange` broadcast carries them; the
+   broadband peer's apply path merges them back in via `reconcileElements`. The
+   round-trip "fully heals" within ~2 broadcast cycles after reconnect.
+
+**What `reconcileElements` does NOT handle (intentional; not in scope):**
+
+- **Operational transformation of text within a single element.** Excalidraw doesn't
+  support multi-user simultaneous text editing inside one text element at all —
+  text edit is single-author at the Excalidraw layer. We inherit this constraint.
+- **Atomic group operations (e.g., transactionally moving a group of 10 elements as
+  one).** Each element's move is an independent per-element LWW. Two peers moving
+  overlapping groups can produce a partial-merge where some elements moved and
+  others didn't. Not exercised by Sarah's workload (groups are inserted by one
+  peer at a time, e.g., a PDF insert is one peer's action).
+- **Causal ordering across peers.** Two edits made independently by different peers
+  have no enforced ordering. `version` is per-element-monotonic on a single peer
+  but does NOT establish a global timeline. For most edits this is invisible; for
+  same-element conflicts it's the LWW limitation from case 2 above.
+
+**Why CRDT is not required for Wave 1:**
+
+A CRDT (Yjs Y.Map/Y.Array via `y-excalidraw`) would: (a) replace LWW with
+mathematically-mergeable operations, eliminating case 2's lose-an-edit behavior;
+(b) provide a global causal order via vector clocks; (c) handle offline editing
+with eventual convergence. The cost is a 2-3 week migration. The trigger to pay
+that cost is: case 2 becomes a real pilot complaint, OR a third concurrent editor
+joins (e.g., a parent observing), OR offline-editing is added to the roadmap.
+None of these apply today. Documented as Wave 3 escalation contingency.
+
+### 5.7 Failure modes and recovery (revised under Revision 2 for bidirectional authoring)
 
 | Failure | Detection | Recovery |
 |---|---|---|
 | Relay disconnect mid-session | `onDisconnect` fires → `sync-disconnect` marker in event log | Auto-reconnect (socket.io backoff: 500ms → 10s max). Tutor recording continues. Tutor sees "Reconnecting to student…" banner after 3s. |
 | Initial hydration races first broadcast | Student hook buffers `pendingV3Ref` for the canvas-not-ready case | `excalidrawApiRef.current` watcher effect flushes buffer when API arrives |
-| Page-switch during apply | Detected by `page.activePageId !== activePageIdRef.current` BEFORE any pageDataRef write | Freeze old page's last-known state (from pageDataRef, not canvas), update activePageIdRef, apply new page from wire |
-| Student on mobile, network flutter | Socket.io reconnects transparently | Same as relay disconnect. The rev guard resets on tutor-peer re-detection so a missed rev doesn't stall the student permanently |
-| Tutor page refresh mid-session | Tutor sync client disconnects, reconnects, resets rev counter | Rev reset: the student hook detects the tutor peer disappearing from `onRoomPeersChange` → sets `lastTutorV3RevRef.current = 0`. On next tutor broadcast, the full page-document arrives and the student applies cleanly |
-| Welcome packet missing (student joins before tutor draws) | Canvas blank; student sees "Waiting for tutor" indicator | Tutor's `onNewRemotePeer` callback fires; tutor re-broadcasts the full v3 document; student's buffered `pendingV3Ref` applies on canvas mount |
-| Relay restart | All rooms evicted; all clients disconnect | Same as relay disconnect. After reconnect, `new-user` fires; tutor re-broadcasts welcome packet |
-| Viewport dimensions zero on follow-apply | `api.getAppState().width === 0` | Schedule `requestAnimationFrame` retry (Rule 4). At most 1-2 retries before the canvas is laid out |
-| Asset hydration fails (private blob URL 403) | `hydrateRemoteImageFilesForScene` returns with `giveUpFileIds` populated | Elements stored in pageDataRef without the resolved asset (broken image tile). Future applies with the same asset skip re-fetch (giveUpFileIds guard). Not a blocking failure |
+| Page-switch during remote apply (the round-2 bug class) | Detected by `page.activePageId !== activePageIdRef.current` BEFORE any pageDataRef write; ALSO by `pageSwitchProgrammaticRef.current > 0` for student-initiated switches mid-apply | Freeze old page's state from `pageDataRef[old]`. Update `activePageIdRef`. For the merge, use `pageDataRef[targetPageId]` as local input (per I1). Canvas write gated by I2 re-check. |
+| **Student page-switch races tutor broadcast (NEW under R2)** | Student clicks a page tab; this bumps `pageSwitchProgrammaticRef.current`. A tutor v3 broadcast arrives in the same frame | Apply path reads I1 ⇒ off-target ⇒ reads from `pageDataRef[targetPageId]`. Merge result written to `pageDataRef[targetPageId]`. Canvas write gated by I2; if the student's switch finished and the target page matches, canvas is updated; otherwise the merge is silently absorbed into the bucket and surfaces on the student's next visit to that page. |
+| **Student local edit races inbound tutor broadcast (NEW under R2)** | Student draws stroke ⇒ `onChange` ⇒ `pageDataRef[active]` updated + `broadcastScene` fired (filtered by `applyingRemoteRef`). Inbound tutor v3 arrives micro-task later | Apply path reads local from `pageDataRef[active]` which now includes the student's just-drawn stroke. `reconcileElements` merges: both elements survive (different ids). Result written to `pageDataRef[active]` AND canvas. Student's stroke is NOT clobbered. (Invariant P7 in §5.5.) |
+| **Bidirectional echo loop suppression (NEW under R2)** | During `runV3Apply`, `applyingRemoteRef.current = true`. Excalidraw's `updateScene` triggers `onCanvasChange`; the handler early-returns at line 595 | No echo broadcast back to the tutor. Tutor sees ONE broadcast per real edit, not 2-N from a feedback loop. (Invariant P8 in §5.5.) |
+| Student on mobile, network flutter | Socket.io reconnects transparently | Same as relay disconnect. The rev guard resets on tutor-peer re-detection so a missed rev doesn't stall the student permanently. **NEW under R2:** local edits made during the disconnect window remain in `pageDataRef[active]` and on the canvas; on reconnect, the first `onCanvasChange` broadcast carries them; the tutor's `applyRemoteToCanvas` merges them in via `reconcileElements`. Heals within 2 broadcast cycles. |
+| **Student loses connection while drawing mid-stroke (NEW under R2)** | Stroke completion fires `onChange`; broadcast attempt fails silently (socket.io buffers) | Stroke stays in `pageDataRef[active]` and on canvas. When socket reconnects, the next `onCanvasChange` (could be a no-op tick or any subsequent edit) will broadcast the full active-page elements including the dropped stroke. **Mitigation:** explicitly re-broadcast the active page's elements on `sync.onConnect` (after a disconnect) — Phase 1 should add this. Without it, a student stroke can sit in `pageDataRef[active]` unbroadcasted until the next local edit. |
+| Tutor page refresh mid-session | Tutor sync client disconnects, reconnects, resets rev counter | Rev reset: the student hook detects the tutor peer disappearing from `onRoomPeersChange` → sets `lastTutorV3RevRef.current = 0`. On next tutor broadcast, the full page-document arrives and the student applies cleanly. **R2 nuance:** the tutor's fresh page load reads its OWN state from the server's saved snapshot (per `getBoardDocumentForCheckpoint`), so any student-only edits made before the refresh are visible to the tutor only via the student's next broadcast — which fires on the student's first post-tutor-reconnect canvas change. The rev-reset path covers this. |
+| Welcome packet missing (student joins before tutor draws) | Canvas blank; student sees "Waiting for tutor" indicator | Tutor's `onNewRemotePeer` callback fires; tutor re-broadcasts the full v3 document; student's buffered `pendingV3Ref` applies on canvas mount. **R2:** if the student starts drawing BEFORE the welcome packet arrives, their strokes are on `pageDataRef[active]` and on canvas. The welcome packet's merge via `reconcileElements` preserves them. |
+| Relay restart | All rooms evicted; all clients disconnect | Same as relay disconnect. After reconnect, `new-user` fires; tutor re-broadcasts welcome packet. Same student-local-edit preservation as above. |
+| Viewport dimensions zero on follow-apply | `api.getAppState().width === 0` | Schedule `requestAnimationFrame` retry (Rule 4). At most 1-2 retries before the canvas is laid out. If still zero after 500ms, fall back to raw scroll (no center-align). |
+| Asset hydration fails (private blob URL 403) | `hydrateRemoteImageFilesForScene` returns with `giveUpFileIds` populated | Elements stored in pageDataRef without the resolved asset (broken image tile). Future applies with the same asset skip re-fetch (giveUpFileIds guard). Not a blocking failure. |
+| **Student tab crash mid-session (NEW under R2)** | Tab process killed; sync socket drops | Student must re-open via the same join link. On re-open, the encryption key is in localStorage (per `readKeyFromHash`), `pageDataRef` is empty (fresh hook), and the tutor's `onNewRemotePeer` callback fires a fresh welcome packet. **Pre-crash local edits made by the student that hadn't broadcast yet are LOST.** Acceptable for the pilot (students don't author lesson-defining content); if this changes, the escalation is IndexedDB-backed `pageDataRef` for the student (analogous to the tutor's IDB-backed outbox). Captured as a follow-up, not a Phase 1 BLOCKER. |
 
 ---
 
-## 6. 5-axis adversarial review
+## 6. 5-axis adversarial review (revised under Revision 2 for bidirectional authoring)
 
 Per `../../agenticPipeline/.cursor/rules/reliability-bar.mdc`: BLOCKERs folded into
-Phase-1 acceptance criteria, not deferred.
+Phase-1 acceptance criteria, not deferred. Under the corrected bidirectional premise,
+the failure surface is roughly 2x what Revision 1 considered — both peers author,
+both run apply paths, both can race.
 
 ### Axis 1 — Data durability
 
@@ -655,30 +931,55 @@ Phase-1 acceptance criteria, not deferred.
 - Tutor: `handleEndSession` persists the events.json to Blob and the audio segment to
   IDB outbox. A crash before End-session loses the current recording segment (BACKLOG
   BLOCKER-PROD #1 — IDB partial-segment persistence — pre-existing, out of this redesign's scope).
-- Student: Nothing to persist. Student's canvas state comes from the tutor's next broadcast.
+- **Student (NEW under R2):** Student's `pageDataRef` is in-memory only. On tab
+  crash, all student-authored elements that have NOT yet been broadcast (or that
+  the tutor's `applyRemoteToCanvas` hasn't yet merged into the tutor's own
+  `pageDataRef`) are lost. The vast majority of student edits ARE broadcast within
+  ~50ms of the local edit and merged on the tutor side immediately; the window for
+  loss is small but nonzero. **Not a Phase-1 BLOCKER** (the pilot's student
+  workload is annotation/exploration, not lesson-defining authoring), captured
+  as a follow-up. Escalation path: IndexedDB-backed student `pageDataRef`
+  analogous to the tutor's audio IDB outbox.
 
 **What survives a mid-session network drop:**
 - Tutor recording: continues via the audio outbox; `sync-disconnect` markers land in
   the event log. The whiteboard visual on the tutor side stays intact (Excalidraw canvas
   is local).
-- Student: canvas freezes. When the student reconnects (socket.io auto-reconnect),
-  the tutor's `onNewRemotePeer` fires and re-broadcasts the full v3 document. Student
-  canvas restores.
-- **BLOCKER** (pre-existing, not introduced here): If the student's browser tab crashes
-  during a session, the student must re-join via the same join link. No student-side
-  session recovery. Acceptable for current model (students are passive).
+- **Tutor's view of student edits (NEW under R2):** Student edits made during the
+  tutor's disconnect window are NOT visible to the tutor in real time. When the
+  tutor reconnects, the student's next `onCanvasChange` broadcast carries the
+  active-page elements (including any edits made during the disconnect), and the
+  tutor's `applyRemoteToCanvas` merges them in. **BLOCKER (folded into Phase 1):**
+  the student MUST re-broadcast the active-page elements on `sync.onConnect`
+  (after a prior disconnect detected by a `sawDisconnectSinceLastConnectRef`-style
+  latch). Without this, a student stroke made during the tutor's disconnect can
+  sit unbroadcasted until the student makes another edit (which may be hours
+  later or never in the session).
+- Student: canvas freezes for inbound. When the student reconnects (socket.io
+  auto-reconnect), the tutor's `onNewRemotePeer` fires and re-broadcasts the full
+  v3 document. Student canvas restores. Local edits made during the disconnect
+  remain in `pageDataRef[active]` and on the canvas, and the welcome-packet
+  merge preserves them via `reconcileElements`.
 
 **What survives a relay restart:**
 - Same as mid-session drop. All clients disconnect → auto-reconnect → welcome packet.
-- Risk: if the relay restarts while a tutor-to-student v3 broadcast is in-flight, the
-  student may miss one update. The rev guard + tutor reconnect re-broadcast covers this.
+- Risk: if the relay restarts while a v3 broadcast in EITHER direction is in-flight,
+  one update may be missed. The rev guard + reconnect re-broadcast covers tutor→student.
+  The student-side `onConnect` re-broadcast (BLOCKER above) covers student→tutor.
 
-**BLOCKER folded into Phase-1 acceptance:** The tutor's `getPagesSnapshot()` must
-capture the current canvas state for the active page BEFORE `broadcastDocument`. If the
-snapshot captures a stale `pageDataRef[activePageId]` that hasn't been updated since the
-last `onChange` event, the wire payload is stale by up to 50ms (the throttle interval).
-This is acceptable (50ms stale is invisible) but the executor MUST ensure the tutor's
-`onChange` → `pageDataRef` update is synchronous (no async gap in the tutor path).
+**BLOCKER folded into Phase-1 acceptance:**
+1. The tutor's `getPagesSnapshot()` must capture the current canvas state for the
+   active page BEFORE `broadcastDocument`. If the snapshot captures a stale
+   `pageDataRef[activePageId]` that hasn't been updated since the last `onChange`
+   event, the wire payload is stale by up to 50ms (the throttle interval). This is
+   acceptable (50ms stale is invisible) but the executor MUST ensure the tutor's
+   `onChange` → `pageDataRef` update is synchronous (no async gap in the tutor path).
+2. **NEW under R2:** The student MUST re-broadcast `pageDataRef[active]` on a
+   `sync.onConnect` event that follows a `sync.onDisconnect` event (using a
+   `sawDisconnectSinceLastConnectRef` latch, mirroring the existing pattern at
+   `StudentWhiteboardClient.tsx:239–272` for mesh.restart). Without this, student
+   edits made during a tutor or relay outage can be silently lost from the tutor's
+   view.
 
 ### Axis 2 — Clock and ordering
 
@@ -700,15 +1001,49 @@ during a rapid page-switch (page A → page B in under 50ms). With the throttle,
 are coalesced into one v3 message — the most recent one wins. This is correct (last
 write wins for display state).
 
+**Per-element `version`/`versionNonce` ordering (NEW under R2 — symmetric authoring):**
+Excalidraw bumps `version` on every element mutation and assigns a fresh `versionNonce`.
+Under bidirectional authoring, both peers independently bump their elements'
+versions. For elements with disjoint ids, this is fine (no conflict). For elements
+with shared ids (the same-element-concurrent-edit case from §5.6 case 2),
+`reconcileElements` resolves deterministically — higher version, then higher
+versionNonce. **Cross-peer version comparison is sound** because both peers receive
+each other's broadcasts and merge them in; the loser's version becomes the
+"previous" version and any subsequent edit by the loser bumps PAST the winner's
+version (per-element-monotonic). **BLOCKER test:** simulate two concurrent edits
+to the same element from both peers; assert that after both broadcasts have
+round-tripped, both peers see the same element (no divergence).
+
+**Clock drift between peers:** Wire payloads do NOT carry wall-clock timestamps.
+The session timer is anchored to `bothConnectedAt` from the server, so clock drift
+between peers is irrelevant to the timer. **`version`/`versionNonce` are NOT
+wall-clock-based** — they're per-element monotonic counters with pseudo-random
+tiebreaker. Clock drift between peers does NOT affect merge outcomes.
+
 **Timestamp drift:** The student's session timer is anchored to `bothConnectedAt`
 from the server — unaffected by this redesign. No additional clock drift risk.
 
 ### Axis 3 — Race conditions
 
-**Page-switch-during-apply race:** Addressed by the render-timing contract (§ 5.3).
-The key rule: `activePageIdRef.current` is only updated AFTER we've determined what to
-freeze for the leaving page — and that freeze reads from `pageDataRef`, not from the
-canvas (so the page identity of `getSceneElements()` is irrelevant).
+**Page-switch-during-apply race:** Addressed by the render-timing contract (§ 5.3)
+and invariants I1+I2 (§ 5.1). The key rule: `activePageIdRef.current` is updated only
+after the leaving page's state is preserved from `pageDataRef[leaving]`. The merge's
+local input is `pageDataRef[targetPageId]`, NOT the canvas — so the canvas's actual
+contents during the switch don't matter.
+
+**Student local-edit race vs inbound tutor broadcast (NEW under R2):** Student
+draws stroke → `onChange` writes to `pageDataRef[active]` and broadcasts (filtered
+by `applyingRemoteRef`). Microtask later, tutor v3 arrives → `runV3Apply` reads
+`pageDataRef[active]` (which includes the student's stroke) → merges with tutor's
+elements → both survive. **BLOCKER test:** simulate a tutor broadcast arriving
+within 1ms after the student's `onCanvasChange`; assert the student's element
+survives the merge.
+
+**Echo-loop suppression (NEW under R2):** During `runV3Apply`, `api.updateScene` is
+called inside `applyingRemoteRef.current = true`. The resulting `onCanvasChange`
+early-returns at line 595 → no echo broadcast. **BLOCKER test:** assert
+`sync.broadcastScene` is NOT called during a `runV3Apply` execution (mock the
+broadcast and assert call count).
 
 **Mount/unmount race:** The student hook subscribes to `sync.onRemoteScene` in a
 `useEffect`. If the tutor broadcasts a v3 message before the student's `useEffect` has
@@ -717,16 +1052,20 @@ flushes `pendingV3Ref`. This pattern is already in the codebase and is correct.
 
 **Recorder-pause-during-disconnect:** When the student disconnects (FSM → `paused`
 state), the tutor's recording pauses. The whiteboard sync client disconnects too. On the
-student side, the canvas freezes. On reconnect, the FSM resumes recording; the sync
-client reconnects; the welcome packet restores the student canvas. The recorder and sync
-are independent flows — no race between them.
+student side, the canvas freezes for inbound; local edits persist. On reconnect, the FSM
+resumes recording; the sync client reconnects; the welcome packet restores the
+student canvas; the student re-broadcasts active-page elements (per Axis 1 BLOCKER).
+The recorder and sync are independent flows — no race between them.
 
 **Initial hydration vs first broadcast:** The student's `excalidrawApiRef` is null until
 Excalidraw mounts (lazy-loaded via `next/dynamic`). The `pendingV3Ref` buffer holds any
 broadcast that arrives before the API. The hook's `useEffect` watches `excalidrawAPI`
 and flushes the buffer on non-null transition. **BLOCKER test case:** The first broadcast
 arrives while Excalidraw is still loading (network-slow student). The test must assert
-that the student canvas shows the tutor's scene after Excalidraw finishes loading.
+that the student canvas shows the tutor's scene after Excalidraw finishes loading. If
+the student also makes a local edit BEFORE the API mounts (impossible today since
+the canvas isn't on screen yet, but worth a regression guard), the local edit lives
+in `pageDataRef` and survives the welcome merge.
 
 **applyingRemoteRef guard:** The student hook sets `applyingRemoteRef.current = true`
 during applies. This is used by the student's `onChange` handler to suppress local
@@ -734,11 +1073,26 @@ during applies. This is used by the student's `onChange` handler to suppress loc
 is always reset to `false` even when `runV3Apply` throws (it must be in a `finally` block).
 Currently it IS in a `try/finally` in the codebase — confirm this stays intact.
 
+**`pageSwitchProgrammaticRef`-equivalent NEW on student (BLOCKER under R2):** The
+tutor has `pageSwitchProgrammaticRef` (a counter incremented during programmatic
+page switches initiated by tutor clicks, used in I1/I2 read-time/write-time gates).
+The student must introduce the same counter and use it in `runV3Apply`'s I1/I2
+checks. Without it, the student's page-strip click can race with an inbound tutor
+broadcast and the round-2 page-bleed class of bugs returns through a slightly
+different door.
+
 ### Axis 4 — Cross-platform parity
 
-**Desktop tutor + mobile student:** The primary production scenario. The viewport-align
-fix (Rule 4 — rAF retry on zero dimensions) is specifically designed for mobile, where
-Excalidraw may take longer to lay out due to the mobile browser's rendering pipeline.
+**Desktop tutor + mobile student (drawing on mobile, NEW emphasis under R2):**
+The primary production scenario, and under bidirectional authoring the mobile peer
+is doing real authoring — not just receiving. Touch-stroke broadcasts at mobile-typical
+frame rates (could be 30-60Hz at low end), each carrying a full active-page scene
+snapshot. The bandwidth of student → tutor on mobile drawing is non-trivial. **BLOCKER
+test:** smoke a student-on-iPhone-Safari drawing a long continuous stroke; verify
+that (a) the stroke broadcasts and renders on the tutor canvas in real time
+(< 200ms perceived lag is acceptable), (b) the tutor's recorder event log shows
+the strokes correctly attributed to the student peer, (c) no socket throttling /
+buffer-overflow errors in either console.
 
 **iOS Safari quirks:**
 - Dynamic URL bar: The student's `appState.height` may be reported as the full height,
@@ -752,11 +1106,18 @@ Excalidraw may take longer to lay out due to the mobile browser's rendering pipe
   **BLOCKER:** Add this timeout-fallback to the rAF retry in `applyViewportAligned`.
 - Touch event handling: Excalidraw handles touch internally. The sync layer doesn't
   intercept touch events — no change needed.
+- **Touch + stylus pressure (NEW under R2):** Student drawing with iOS Pencil
+  produces pressure-sensitive strokes. These are Excalidraw-internal element
+  attributes that travel through `reconcileElements` like any other element data.
+  No special sync handling needed; just verify the smoke includes a pressure-sensitive
+  stroke from a stylus-capable mobile student.
 
-**Chrome vs Safari:** The `waitDoubleRaf()` removal (Rule 5) removes a Safari-friendly
-timing hack. Before removing it, verify that the new approach (no canvas read during apply)
-works on Safari. The unit tests should cover this; a real smoke on Safari iOS is
-required as a Phase-1 smoke gate.
+**Chrome vs Safari:** The `waitDoubleRaf()` removal from `runV3Apply` and
+`applyRemoteToCanvas` (under Revision 2: retained ONLY in the tutor-recorder's
+`updateSceneMergingWithRemote` path if still needed there) removes a Safari-friendly
+timing hack. Before removing, verify that the new approach (gated canvas reads via
+I1/I2) works on Safari. The unit tests should cover this; a real smoke on Safari iOS
+is required as a Phase-1 smoke gate.
 
 **Color palette dismiss on click-away (I7, Sarah's bug):** This is an Excalidraw
 behavior not related to the sync redesign. Excalidraw's `onPointerDown` dismisses the
@@ -767,63 +1128,128 @@ Excalidraw config option. Out of scope for this redesign; keep in BACKLOG.
 
 **Current `wbsid` coverage in sync-client.ts:** The sync client logs every state
 transition with `wbsync=${roomId.slice(0, 8)}`. This is good but partial — it doesn't
-log the v3 `rev` number on receives or the `pageId` being applied.
+log the v3 `rev` number on receives, the `pageId` being applied, or (under R2) the
+*author* of each event so we can distinguish tutor-originated from student-originated
+work in the logs.
 
-**Required log additions for this redesign (all `wbsid=<id>` format per AGENTS.md):**
+**Required log additions for this redesign (all `wbsid=<id>` format per AGENTS.md,
+with new `wba=<id>` apply-path prefix and `author=<role>` tag NEW under R2):**
 
 ```
-[student-apply] wbsid=<id> action=apply-v3-start rev=<n> activePageId=<pid> pageIds=[...]
-[student-apply] wbsid=<id> action=page-switch from=<pid> to=<pid>
-[student-apply] wbsid=<id> action=apply-v3-complete rev=<n> elementsOnActiveTab=<N>
-[student-apply] wbsid=<id> action=rev-drop reason=stale rev=<n> last=<m>
-[student-apply] wbsid=<id> action=rev-reset reason=tutor-reconnect
+[student-apply] wbsid=<id> wba=<applyId> author=tutor action=apply-v3-start rev=<n> activePageId=<pid> pageIds=[...]
+[student-apply] wbsid=<id> wba=<applyId> author=tutor action=page-switch from=<pid> to=<pid>
+[student-apply] wbsid=<id> wba=<applyId> author=tutor action=apply-v3-complete rev=<n> elementsOnActiveTab=<N>
+[student-apply] wbsid=<id> wba=<applyId> action=rev-drop reason=stale rev=<n> last=<m>
+[student-apply] wbsid=<id> wba=<applyId> action=rev-reset reason=tutor-reconnect
 [student-apply] wbsid=<id> action=viewport-align-defer reason=zero-dimensions retry=<N>
 [student-apply] wbsid=<id> action=viewport-align-applied panX=<x> panY=<y> zoom=<z>
-[tutor-wire]    wbsid=<id> action=broadcast-v3 rev=<n> pages=[<pid>,...] activePageId=<pid>
+[student-broadcast] wbsid=<id> author=student action=broadcast-v2 page=<pid> elements=<N> reason=onChange|reconnect
+[tutor-apply]    wbsid=<id> wba=<applyId> author=student action=apply-v2-start page=<pid> elements=<N>
+[tutor-apply]    wbsid=<id> wba=<applyId> author=student action=apply-v2-complete page=<pid> mergedCount=<N> writeToCanvas=true|false
+[tutor-wire]     wbsid=<id> author=tutor action=broadcast-v3 rev=<n> pages=[<pid>,...] activePageId=<pid>
 ```
+
+The `author=` tag is the key R2 addition: when debugging "where did that element come
+from", `grep author=student wb-logs` immediately surfaces student-originated work.
+Conversely `grep author=tutor wb-logs` shows tutor-originated work. Without this
+tag, the bidirectional log stream is much harder to read.
 
 These logs MUST be present in the Phase-1 implementation. Without them, debugging a
 Sarah production issue is impossible without a screen recording.
 
 **BLOCKER:** The `pvs` prefix (per-page view state, per AGENTS.md) should be used for
-all viewport-state events. The `wbsid` prefix is session-level. Both should be
-co-emitted: `pvs=<pageId> wbsid=<sessionId>` on viewport-align events.
+all viewport-state events. The `wbsid` prefix is session-level. The new `wba` prefix
+(apply-path-level) MUST be registered in AGENTS.md § Conventions alongside `wbsid`,
+`pvs`, and the other 3-letter prefixes. All three are co-emitted when relevant:
+`pvs=<pageId> wba=<applyId> wbsid=<sessionId>` on viewport-align events that occur
+during an apply.
 
 ---
 
 ## 7. Sequenced implementation plan
 
-### Phase 1 — Disciplined sync layer redesign (Wave 1, highest priority)
+### Phase 1 — Disciplined symmetric apply layer (Wave 1, highest priority)
 
-**Scope:** Rewrite `useStudentWhiteboardCanvas.ts` `runV3Apply` to comply with the
-canonical state authority rules (§ 5.1), render-timing contract (§ 5.3), and per-page
-invariants (§ 5.5). Add `viewportWidth`/`viewportHeight` to the tutor's wire payload.
-Retire the v2 apply path.
+> **Revision 2 scope expansion:** Phase 1 still primarily rewrites the student's
+> `runV3Apply` to match the tutor's `applyRemoteToCanvas` discipline (the bulk of
+> the work), but now also adds (a) the new `pageSwitchProgrammaticRef`-equivalent
+> on the student side, (b) the student-side `onConnect-after-disconnect` re-broadcast
+> latch, (c) the new bidirectional invariant tests (P7+P8), and (d) the `author=`
+> log tag everywhere. Effort estimate updated from 3-4h to 5-7h Composer 2.5
+> dispatch.
+
+**Scope:**
+1. Rewrite `useStudentWhiteboardCanvas.ts` `runV3Apply` to comply with the
+   canonical state authority rules (§ 5.1: I1/I2/I3/I4), render-timing contract
+   (§ 5.3 revised), and per-page invariants (§ 5.5: P1-P8).
+2. Add `pageSwitchProgrammaticRef` (counter) to `useStudentWhiteboardCanvas.ts`,
+   mirroring the tutor's pattern. Increment in the student's page-strip click
+   handler; decrement after Excalidraw confirms the re-render. Use in I1/I2
+   gates within `runV3Apply`.
+3. Add `viewportWidth`/`viewportHeight` to the tutor's `WhiteboardWireFollow`
+   wire payload and to the tutor's `getFollow()`. Update `viewport-align.ts`
+   to require these fields for center-align (fall back to raw scroll without).
+4. Add rAF-retry fallback and 500ms timeout backstop to `viewport-align.ts`'s
+   apply-viewport path.
+5. Add the student-side `onConnect-after-disconnect` re-broadcast: when the
+   student's sync client reconnects following a disconnect, re-broadcast
+   `pageDataRef[activePageIdRef.current]` so any local edits made during the
+   outage reach the tutor.
+6. Add the new `author=<role>` and `wba=<applyId>` log tags to every apply-path
+   log line (student and tutor).
+7. Retire the v2 INBOUND apply path on the student (`runV2Apply`) — drop with
+   a warn log if v2 inbound arrives. The student's OUTBOUND v2 `broadcastScene`
+   STAYS (it's how the tutor receives student edits).
+8. Add unit tests for all per-page invariants (P1-P8) and the new failure modes
+   in § 5.7 (bidirectional race cases).
+9. Register the new `wba` prefix in `AGENTS.md` § Conventions.
 
 **Files changed (rough list):**
-- `src/hooks/useStudentWhiteboardCanvas.ts` — primary changes: `runV3Apply`, `applyTutorFollow`, rev-reset logic
-- `src/lib/whiteboard/viewport-align.ts` — add rAF-retry fallback and timeout backstop
-- `src/lib/whiteboard/sync-client.ts` — add `viewportWidth`/`viewportHeight` to `WhiteboardWireFollow` type
-- `src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceClient.tsx` — include `viewportWidth`/`viewportHeight` in `getFollow()` return
-- `src/__tests__/whiteboard/use-student-canvas.test.ts` — add test cases for all per-page invariants (§ 5.5) and failure modes (§ 5.7)
+- `src/hooks/useStudentWhiteboardCanvas.ts` — primary changes: `runV3Apply` to mirror
+  tutor's `applyRemoteToCanvas`; add `pageSwitchProgrammaticRef`; add
+  onConnect-after-disconnect re-broadcast; replace v2-inbound with drop-and-warn
+- `src/lib/whiteboard/viewport-align.ts` — rAF-retry fallback + 500ms timeout
+  backstop; require `viewportWidth`/`viewportHeight` from tutor wire
+- `src/lib/whiteboard/sync-client.ts` — extend `WhiteboardWireFollow` type with
+  `viewportWidth?: number; viewportHeight?: number`
+- `src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceClient.tsx` —
+  include `viewportWidth`/`viewportHeight` in `getWireBroadcastExtras` follow payload
+- `src/app/w/[joinToken]/StudentWhiteboardClient.tsx` — wire the page-strip click
+  to bump `pageSwitchProgrammaticRef`; ensure the on-connect re-broadcast is wired
+- `src/__tests__/whiteboard/use-student-canvas.test.ts` — add test cases for
+  invariants P1-P8 and bidirectional race failure modes in § 5.7
+- `AGENTS.md` § Conventions — register `wba` prefix
 - `docs/WHITEBOARD-STATUS.md` — update phase status
 
-**What NOT to change:**
-- `sync-client.ts` wire logic (it's correct and well-tested)
-- `apply-reconciled-remote-scene.ts` — the `mergeScenesReconciled` function itself is correct; we just stop using it with a live canvas read
-- `useTutorLiveDocumentWire.ts` — the tutor broadcast path is correct
+**What NOT to change (carries forward unchanged):**
+- `sync-client.ts` socket/crypto/subscription logic (it's correct and well-tested)
+- `apply-reconciled-remote-scene.ts` `mergeScenesReconciled` (the merge logic is
+  correct; the change is in HOW the student's `runV3Apply` calls it)
+- `apply-reconciled-remote-scene.ts` `updateSceneMergingWithRemote` and its
+  `waitDoubleRaf()` (still used by the tutor's recorder path, may stay)
+- `useTutorLiveDocumentWire.ts` (tutor broadcast path is correct)
+- `WhiteboardWorkspaceClient.tsx` `applyRemoteToCanvas` (already implements the
+  pattern the student is being brought to; do not modify other than the new
+  `wba`+`author` log tags)
+- Encryption, join token flow, room policy, recorder integration, Phase 0 brand
+  tokens (see § 8 for the full list)
 
 **Acceptance criteria (all must pass before Sarah smoke):**
 
-1. [ ] Student applies tutor strokes on page 1 while tutor is drawing: strokes appear < 100ms (visible in Sarah's real session smoke)
-2. [ ] Tutor switches from page 1 → page 2: student canvas switches to page 2; page 1 content unchanged on page 1
+1. [ ] Student applies tutor strokes on page 1 while tutor is drawing: strokes appear < 100ms
+2. [ ] Tutor switches from page 1 → page 2: student canvas switches to page 2; page 1 content unchanged
 3. [ ] Tutor inserts PDF (multi-page): all pages populate on student; strokes on page 1 don't appear on pages 2-3
 4. [ ] Tutor moves a PDF element: student sees the move without page change
 5. [ ] Student loads in on a blank canvas then tutor draws: student sees the strokes (welcome packet path)
 6. [ ] Tutor refreshes mid-session: student canvas freezes, then restores after tutor reconnects (rev-reset + welcome packet)
 7. [ ] Student on iPhone Safari: viewport-align applies correctly (center matches tutor's view)
-8. [ ] All per-page invariants (§ 5.5 items 1-6) pass as unit tests
-9. [ ] All required log lines (§ 6 Axis 5) appear in the test suite's logger
+8. [ ] **NEW (R2):** Student draws a stroke while tutor is broadcasting a different stroke; both peers see both strokes (P7 — local-edit preservation across remote apply)
+9. [ ] **NEW (R2):** During a student `runV3Apply`, `sync.broadcastScene` is NOT called (P8 — echo loop suppression)
+10. [ ] **NEW (R2):** Student draws a stroke while tutor is disconnected; on tutor reconnect, the stroke appears on tutor canvas within 2 broadcast cycles (Axis 1 BLOCKER — onConnect re-broadcast)
+11. [ ] **NEW (R2):** Student clicks a page tab in the same frame as an inbound tutor broadcast for a DIFFERENT page; no element bleed (page-switch race + bidirectional)
+12. [ ] **NEW (R2):** Both peers concurrently edit the same element; both peers converge on the same final state (per-element LWW determinism)
+13. [ ] All per-page invariants (§ 5.5 items 1-8) pass as unit tests
+14. [ ] All required log lines (§ 6 Axis 5, with `author=` and `wba=` tags) appear in the test suite's logger
 
 **Smoke checklist (for Andrew to run on Vercel Preview):**
 - [ ] Solo: Tutor draws circle on P1 → student sees circle < 2s
@@ -835,15 +1261,24 @@ Retire the v2 apply path.
 - [ ] iPhone: Student on iPhone Safari; repeat above smoke scenarios
 - [ ] Reconnect: Kill relay (`fly machine suspend`), wait for disconnect banner, restart → student canvas restores
 - [ ] Refresh: Tutor hard-refreshes → student canvas freezes ~3s then restores
+- [ ] **NEW (R2):** Bidirectional concurrent stroke: tutor draws on P1, student draws on P1 simultaneously → both peers see both strokes
+- [ ] **NEW (R2):** Student-during-tutor-disconnect: tutor disconnects (close relay tab), student draws on P1, tutor reconnects → tutor sees student's stroke within 2 seconds
+- [ ] **NEW (R2):** Student-on-iPhone bidirectional: student draws on iPhone Safari while tutor draws on desktop → tutor sees student's pressure-sensitive stroke; student sees tutor's stroke; recorder event log attributes correctly
 
-**Rollback plan:** `git revert <commit>`. The Phase 1 changes are in the student hook
-only — rolling back restores round-3's behavior (page-bleed fixed, lag bug present).
-The lag bug is less severe than the page-bleed was; rollback is safe.
+**Rollback plan:** `git revert <commit>`. The Phase 1 changes are in the student hook,
+viewport-align, and the wire-type extension. Rolling back restores round-3's behavior
+(page-bleed fixed, lag bug present, viewport-align partially wrong). The lag bug is
+less severe than the page-bleed was; rollback is safe.
 
-**Honest effort estimate:** 3-4 hours Composer 2.5 dispatch. The scope is well-defined
-and the architecture is explicit. No design ambiguity. Risk: Composer may need a second
-pass if a test reveals a timing issue not anticipated here — budget a follow-up 1-2 hour
-dispatch if the smoke finds a regression.
+**Honest effort estimate (revised under R2):** 5-7 hours Composer 2.5 dispatch. The
+scope is broader than Revision 1 estimated (the bidirectional test surface roughly
+doubles, and `pageSwitchProgrammaticRef`-equivalent + onConnect re-broadcast are
+new). Architecture is explicit (this doc); no design ambiguity. Risk: Composer may
+need a second pass if a bidirectional race surfaces in iPhone smoke that the unit
+tests didn't catch — budget a follow-up 2-3 hour dispatch if the smoke finds a
+regression. **Total worst case:** 10 hours Composer 2.5 across one design-correct
+pass + one targeted regression pass. Still well inside the budget envelope; far
+under the 2-3 week Yjs migration alternative.
 
 ### Phase 2 — Relay observability (Wave 2, low priority)
 
@@ -926,36 +1361,94 @@ The following are explicitly preserved by the Phase 1 redesign:
 
 ---
 
-## 9. Open questions for Andrew
+## 9. Open questions for Andrew (revised under Revision 2)
 
 These decisions are required before the Phase 1 Composer dispatch can be written.
-Each has 2-3 viable answers and a clear recommendation.
+Each has 2-3 viable answers and a clear recommendation. **Q1 (the Excalidraw-vs-Yjs
+escalation decision) is now Wave-1-relevant under the corrected bidirectional premise
+— promoted to first position.**
 
 ---
 
-**Q1: Should Phase 1 include retiring the v2 `broadcastScene` call from the STUDENT side?**
+**Q1 (NEW under Revision 2, promoted to position 1): Commit to "Excalidraw + symmetric apply discipline" for Wave 1, or jump directly to Yjs + y-excalidraw?**
 
-Context: The student hook currently calls `sync.broadcastScene` with its own elements
-(for attribution labels). This is a v2 outbound broadcast from student to tutor. It's
-used for the student's cursor attribution in the tutor's participant tiles.
+Context: Revision 1 said "students don't draw, so Yjs is a future contingency."
+Revision 2 confirms students DO draw bidirectionally today. That means the
+Excalidraw-vs-Yjs decision is no longer a "future Wave 3 thing" — it's the actual
+Wave 1 architectural choice. The doc's §4 verdict, §5 spec, and §7 plan all assume
+Option A (Excalidraw + symmetric LWW apply). If Andrew wants to escalate to Yjs
+NOW, much of the doc is still valid for diagnosis but §5 needs a parallel CRDT spec
+and §7 needs a longer Phase 1.
 
-- Option A: Keep it — student still broadcasts v2 for attribution. The tutor's apply
-  path handles v2 inbound from students. Low risk, less cleanup.
-- Option B: Retire it — student broadcasts a presence-only `WhiteboardWirePresence`
-  message (already exists) and never sends scene elements. Attribution comes from the
-  presence map. Cleaner.
-- **Recommendation: Option B.** Students don't own scene elements. The presence system
-  (Phase 4b) already handles identity. Letting students broadcast elements creates a
-  confusing second writer in the room.
+- Option A: Excalidraw + symmetric apply discipline (this doc's recommendation).
+  3-4 hr dispatch under R1's estimate; 5-7 hr under R2's expanded scope. Relies on
+  `reconcileElements`'s per-element LWW being sufficient for the actual workload.
+- Option B: Jump directly to Yjs + y-excalidraw + y-websocket (or CF DO).
+  2-3 weeks of Sonnet design + multiple Composer dispatches. Structurally
+  conflict-free. Migration cost is real but predictable. Pays off if the
+  same-element concurrent edit case (§ 5.6 case 2) is a real problem in pilot.
+- Option C: Pre-build the Excalidraw fix AND book a Yjs migration as a planned
+  Wave 3 deliverable regardless of Phase 1 outcome. Defensive but pays twice.
+- **Recommendation: Option A.** The decisive evidence is in §4 — the tutor's
+  `applyRemoteToCanvas` already implements the discipline this doc proposes, and
+  student → tutor strokes have been reliable through it the entire pilot.
+  Bidirectional editing is not what's been broken; the asymmetric apply discipline
+  on the student side is. Fix the asymmetry first; escalate to Yjs only if Phase 1
+  validates and still produces regressions. The cost of Option A is ~5-7 hours;
+  the cost of being wrong about Option A is one more Composer dispatch. The cost
+  of Option B is 2-3 weeks; the cost of being wrong about B is the same plus the
+  migration overhead.
 
 ---
 
-**Q2: Should `viewportWidth`/`viewportHeight` be added to the v3 `WhiteboardWireFollow` type or to the `WhiteboardWirePage` type?**
+**Q2 (was Q1): Retire the v2 INBOUND apply path on the student?**
 
-Context: Both are broadcast in the same v3 message. The viewport size belongs
-semantically with the follow info (it's needed to compute center-alignment on the student
-side), but it could also be per-page (since each page's viewport might differ if the
-tutor zoomed differently per page).
+Context: The student receives v2 only in degenerate cases (very old browser tab
+caching a pre-v3 protocol, or the tutor's recorder emitting v2 in a legacy code path).
+The student CONTINUES to broadcast v2 outbound (that's how the tutor receives student
+edits — see Q3 below). The question is only about the v2 INBOUND handler on the
+student.
+
+- Option A: Keep `runV2Apply` — defensive, handles any v2 sender. Marginal cost.
+- Option B: Drop `runV2Apply` — log-and-return on v2 inbound. Tighter surface.
+- **Recommendation: Option B.** No one broadcasts v2 to the student in production
+  (the tutor uses v3 via `broadcastDocument`; the student doesn't broadcast to
+  itself). The v2 inbound code path is dead. Drop it with a warn log; reduces
+  bidirectional surface area.
+
+---
+
+**Q3 (NEW under Revision 2): Keep the student's OUTBOUND `broadcastScene` (v2 from student to tutor) or migrate it to v3?**
+
+Context: Today the student broadcasts via `sync.broadcastScene(elements,
+getPageBroadcastExtras())` (v2 with scenePageId). The tutor's `applyRemoteToCanvas`
+receives this as a v2 inbound and routes by `scenePageId`. The v3 protocol
+(`broadcastDocument`) sends a full multi-page document; the student's broadcast is
+only for the active page, which is what v2 carries.
+
+- Option A: Keep student outbound on v2. The tutor's `applyRemoteToCanvas` already
+  handles it correctly. No protocol change. Phase 1 only touches v2 inbound on the
+  student (Q2).
+- Option B: Migrate student outbound to v3 (full multi-page document). Symmetric
+  with tutor. But: the student's `pageDataRef` only contains pages the student
+  has visited; sending it as v3 would be incomplete (missing pages the student
+  hasn't visited yet). Could backfill from the tutor's v3 the student has received,
+  but this adds complexity.
+- Option C: Add a new student-specific wire kind (e.g., `student-page-update`)
+  that carries one page's elements with explicit page identity. Cleaner than
+  reusing v2 for student → tutor; less complex than full v3.
+- **Recommendation: Option A.** The v2 outbound from student is working in
+  production; the tutor's `applyRemoteToCanvas` handles it correctly with the
+  same `reconcileElements` discipline as v3. Changing it adds risk without clear
+  benefit. The "asymmetric protocol" (tutor v3 outbound, student v2 outbound) is
+  ugly but stable; the asymmetric APPLY discipline (which Phase 1 fixes) is what
+  was actually broken.
+
+---
+
+**Q4 (was Q2): `viewportWidth`/`viewportHeight` on `WhiteboardWireFollow` or per-page?**
+
+(Unchanged from Revision 1.)
 
 - Option A: Add to `WhiteboardWireFollow` — one pair of numbers for the currently-active
   page's viewport. Simple.
@@ -968,13 +1461,9 @@ tutor zoomed differently per page).
 
 ---
 
-**Q3: Should the Phase 1 redesign fix the eraser cursor mismatch (round-3 symptom) or defer it?**
+**Q5 (was Q3): Fix the eraser cursor mismatch in Phase 1 or defer?**
 
-Context: The eraser cursor mismatch (delete-position differs from cursor visual) is
-almost certainly a coordinate-transform bug in how the eraser's scene coordinates are
-computed. It may be a separate issue from the sync redesign (it might exist in solo mode
-too). Scope creep risk: it's a different class of bug (rendering) from the sync
-redesign (state flow).
+(Unchanged from Revision 1.)
 
 - Option A: Fix in Phase 1 — determine if it's sync-related or rendering-related and fix it.
 - Option B: Defer to a separate BACKLOG entry — keep Phase 1 scope tight.
@@ -985,26 +1474,27 @@ redesign (state flow).
 
 ---
 
-**Q4: Should Yjs + Excalidraw be on a formal timeline for Wave 3, or deferred indefinitely?**
+**Q6 (was Q4, repointed under R2): Yjs as Wave 3 contingency timeline?**
 
-Context: The Phase 1 redesign SHOULD solve the structural issues. If it does, the Yjs
-migration is not needed. If it doesn't (another regression in Sarah's sessions), the Yjs
-migration becomes the next escalation path.
+Context: If Q1's verdict is Option A (Excalidraw), Yjs becomes the documented
+escalation path. The question is whether to formalize a timeline for it (defensive)
+or genuinely contingent on Phase 1 results.
 
 - Option A: Commit to Yjs for Wave 3 regardless of Phase 1 results — ensures we have a
   clear path off the current architecture.
 - Option B: Defer Yjs contingent on Phase 1 results — do Phase 1, validate with Sarah,
-  only begin Yjs design if Phase 1 still produces regressions.
-- **Recommendation: Option B.** The Phase 1 redesign is architecturally sound. Do not
-  commit to a 10-14 day migration before proving we need it. "If Phase 1 regressions
-  appear, escalate to Yjs" is the right contingency plan.
+  only begin Yjs design if Phase 1 still produces regressions or if the workload
+  grows (3+ peers, same-element concurrent edits become common, offline editing).
+- **Recommendation: Option B.** The Phase 1 redesign is architecturally sound (mirrors
+  the tutor's already-working pattern). Do not commit to a 10-14 day migration before
+  proving we need it. "If Phase 1 regressions appear, escalate to Yjs" is the right
+  contingency plan.
 
 ---
 
-**Q5: Should we migrate the relay to PartyKit/Cloudflare DOs in Phase 2 or stay on fly.io?**
+**Q7 (was Q5): Migrate relay to PartyKit/Cloudflare DOs in Phase 2 or stay on fly.io?**
 
-Context: excalidraw-room on Fly.io is working. PartyKit offers global edge latency and
-stateful welcome packets. The migration cost is moderate (~2-3 hours Composer dispatch).
+(Unchanged from Revision 1.)
 
 - Option A: Stay on Fly.io — relay works, don't fix what isn't broken.
 - Option B: Migrate to PartyKit/CF DO — better global latency, relay observability,
@@ -1016,24 +1506,135 @@ stateful welcome packets. The migration cost is moderate (~2-3 hours Composer di
 
 ---
 
-**Q6: Should per-session logging use a new `wbs` prefix or the existing `wbsid` convention?**
+**Q8 (was Q6): New `wba` prefix or extend `wbsid` for apply-path logging?**
 
-Context: AGENTS.md says "new capture/sync features pick a 3-letter prefix." The
-whiteboard sync has `wbsid` for session-level events. The student apply path needs its
-own prefix for apply-level events.
+(Unchanged from Revision 1; under R2 the `wba` prefix is paired with a new `author=`
+tag — see § 6 Axis 5.)
 
 - Option A: Use `wba` (whiteboard apply) for apply-path events.
 - Option B: Continue using `wbsid` with additional action tags.
 - **Recommendation: Option A.** Keeps the grep-ability clean: `grep wba= logs` shows only
   apply events; `grep wbsid= logs` shows session lifecycle events. Register `wba` in
-  AGENTS.md § Conventions.
+  AGENTS.md § Conventions. **Under R2:** combine with `author=tutor`/`author=student`
+  to distinguish bidirectional event origins.
 
 ---
 
-## Changelog
+## Revision 2 changelog
 
-- **2026-05-27:** Initial pass. Authored by Sonnet 4.6 subagent during Opus orchestrator
-  redesign session. Code read: 4 source files + 3 git diffs. External research: tldraw
-  SDK 4.0 license change confirmed ($6k/year); PartyKit acquisition by Cloudflare
-  confirmed (now CF DOs). Recommendation: keep Excalidraw + excalidraw-room; redesign
-  client sync layer with single canonical state authority.
+- **2026-05-27 evening:** Revision 2. Authored by Sonnet 4.6 subagent (resumed from
+  Revision 1 by the same Opus orchestrator) after Andrew flagged a foundational
+  premise error in Revision 1's §5.6: "tutor is the only author" was incorrect;
+  students have full bidirectional editing in production today.
+
+  **Premise verification (concrete evidence):**
+  - `src/app/w/[joinToken]/StudentWhiteboardClient.tsx` mounts a full Excalidraw via
+    `ExcalidrawDynamic` (no `viewModeEnabled` flag) with `<UndoRedoButtons />`; the
+    on-screen copy at line 519 reads literally "What you draw is visible live"; the
+    `handleExcalidrawChange` handler at line 414 calls `syncClient?.broadcastScene`
+    at line 451 with full element payload + page extras.
+  - `src/hooks/useStudentWhiteboardCanvas.ts:600` calls `sync.broadcastScene` from
+    `onCanvasChange` on every local edit (gated by `applyingRemoteRef`).
+  - `docs/BACKLOG.md` line 261: "Whiteboard undo (mark removal) — touch + visible
+    button (Sarah, Apr 24). ✅ Tutor + student shipped" with explicit student-side
+    Excalidraw mount notation.
+  - The tutor's `applyRemoteToCanvas` (`WhiteboardWorkspaceClient.tsx:491–595`)
+    already runs `mergeScenesReconciled` against student broadcasts in production
+    with proper `pageSwitchProgrammaticRef` + `onTargetReadTime`/`stillOnTargetWriteTime`
+    discipline — the working reference for the symmetric pattern Phase 1 brings
+    to the student.
+
+  **Sections revised:**
+  - **Top banner:** Added Revision 2 note (lines ~12-20) with premise correction
+    and cross-reference to this changelog.
+  - **§2 Library matrix:**
+    - Excalidraw row updated: collaboration-architecture cell adds verification
+      that `reconcileElements` handles the bidirectional workload via tutor
+      `applyRemoteToCanvas`; verdict cell re-affirms Wave 1 under bidirectional.
+    - Yjs+Excalidraw row updated: verdict cell explicitly addresses the original
+      §5.6 conditional ("if students draw, flip to Yjs") and explains why the
+      threshold was wrong; Yjs remains Wave 3 escalation contingency.
+    - Summary table updated.
+  - **§3 Relay matrix summary:** y-websocket row noted as paired with Yjs (Wave 3
+    only because Yjs is); excalidraw-room verdict notes bidirectional traffic
+    already flows correctly.
+  - **§4 Recommendation (FULL REDO):** Now presents three options (A/B/C) and
+    grounds Verdict A in four evidence points; references the tutor's working
+    pattern as the model for the student's Phase 1 spec; explicitly addresses
+    the original §5.6 conditional that triggered this revision.
+  - **§5.1 (FULL REDO):** "NEVER read back from canvas" replaced with the more
+    nuanced I1/I2/I3/I4 invariants. `pageDataRef` is articulated as the symmetric
+    canonical local-state cache; canvas reads are gated by on-target + no-
+    programmatic-switch (mirroring the tutor's existing `onTargetReadTime` and
+    `stillOnTargetWriteTime` checks). Adds `pageSwitchProgrammaticRef` to the
+    canonical-owners table.
+  - **§5.3 Render-timing contract:** Rule 1 revised from "never call
+    getSceneElements" to "gated by I1/I2". Rule 2 revised symmetrically.
+    Rule 5 revised: `waitDoubleRaf()` removal scoped to apply paths that route
+    through `pageDataRef`; retained for the tutor-recorder's
+    `updateSceneMergingWithRemote` path if still needed.
+  - **§5.5 Per-page invariants:** Adds P7 (local-edit preservation across remote
+    apply) and P8 (no echo loop). P1 and P3 wording clarified for bidirectional.
+  - **§5.6 Conflict resolution (FULL REDO):** Replaces "tutor wins" with
+    symmetric per-element LWW via `reconcileElements`. Enumerates 7 concrete
+    bidirectional cases with the resolution model for each. Explains what
+    `reconcileElements` does NOT handle (intentional non-scope) and articulates
+    why CRDT is not required for Wave 1.
+  - **§5.7 Failure modes:** Adds 4 new bidirectional rows (page-switch races
+    inbound; local edit races inbound; echo-loop suppression; student-during-
+    tutor-disconnect; student tab crash mid-session). Existing rows annotated
+    for R2 nuances.
+  - **§6 5-axis adversarial review (FULL REDO under bidirectional):** Each axis
+    re-examined with both peers as authors. Adds BLOCKER #2 under Axis 1
+    (student onConnect-after-disconnect re-broadcast). Adds per-element
+    `version`/`versionNonce` cross-peer-ordering analysis under Axis 2. Adds
+    bidirectional race tests under Axis 3 (local-edit vs inbound, echo-loop,
+    page-switch race). Adds mobile-student-as-author emphasis under Axis 4
+    (touch + stylus pressure smoke). Adds `author=<role>` and `wba=<applyId>`
+    log tags throughout Axis 5; registers `wba` prefix.
+  - **§7 Implementation plan:** Phase 1 scope expanded to include
+    `pageSwitchProgrammaticRef`-equivalent on student, onConnect-after-disconnect
+    re-broadcast, P7/P8 invariant tests, `author=` log tags. Effort estimate
+    revised from 3-4h to 5-7h (worst case 10h with one regression pass).
+    Acceptance criteria gains 5 new R2-specific items. Smoke checklist gains
+    3 new bidirectional scenarios.
+  - **§9 Open questions (RESTRUCTURED):** Q1 (was deferred Yjs decision) promoted
+    to position 1 as a Wave-1-relevant choice under bidirectional. New Q3
+    (student outbound v2 vs v3 vs new wire kind). Q2/Q4/Q5/Q6/Q7/Q8 renumbered
+    accordingly. All recommendations grounded in the bidirectional premise.
+
+  **Sections unchanged (per Andrew's "don't redo" guidance):**
+  - **§1 Diagnosis:** Round-by-round timeline, four state authorities, four
+    fragility hypothesis verifications. All factually correct under either premise.
+  - **§3 Relay evaluation data:** Per-relay comparison data is fine; only verdict
+    annotations updated.
+  - **§8 What carries forward:** Unchanged. The list of preserved components is
+    the same under both premises (encryption, join token flow, room policy,
+    recorder integration boundary, Phase 0 tokens, page-UI affordances,
+    undo/redo, `sync-client.ts`, `apply-reconciled-remote-scene.ts`,
+    `hydrate-remote-files.ts`, `board-document-snapshot.ts`, Excalidraw version,
+    relay, CSP). Under R2 the table's "minor change" rows expand slightly to
+    cover the bidirectional-specific additions (the `viewportWidth/Height`
+    wire fields, the new `wba`+`author=` log tags, the new
+    `pageSwitchProgrammaticRef` on student) — these are documented in §7's
+    files-changed list rather than restated in §8.
+
+  **Sections that hold up well under R2 despite premise change:**
+  - The diagnosis of the 4 state authorities (§1.2) is correct under either
+    premise — the authorities exist and conflict regardless of who's authoring.
+  - The verification of the 4 structural fragility hypotheses (§1.3) is correct
+    — these are structural patterns in the code, not premise-dependent.
+  - The library elimination of tldraw on the $6k license is correct under any
+    premise.
+  - The relay verdict (keep excalidraw-room) is correct under any premise; the
+    relay forwards encrypted bytes and doesn't care about authoring topology.
+
+- **2026-05-27:** Initial pass (Revision 1). Authored by Sonnet 4.6 subagent during
+  Opus orchestrator redesign session. Code read: 4 source files + 3 git diffs.
+  External research: tldraw SDK 4.0 license change confirmed ($6k/year); PartyKit
+  acquisition by Cloudflare confirmed (now CF DOs). Recommendation: keep Excalidraw
+  + excalidraw-room; redesign client sync layer with single canonical state
+  authority. **Premise error subsequently identified by Andrew** (Revision 1
+  assumed "students don't draw" — incorrect; bidirectional editing has been
+  shipping in production since the Apr 24 student-undo PR). Revision 2 (above)
+  corrects this.
