@@ -21,7 +21,9 @@
 > existing `applyRemoteToCanvas` (`WhiteboardWorkspaceClient.tsx:491–595`) is the
 > reference for the disciplined symmetric apply path Phase 1 brings to the student
 > side. See [Revision 2 changelog](#revision-2-changelog) at end of doc for the
-> diff summary.
+> diff summary, and the [Revision 1 → Revision 2 verdict reconciliation](#revision-1--revision-2-verdict-reconciliation)
+> section (immediately below the TOC) for the direct answer to "if Revision 1
+> said bidirectional ⇒ Yjs, why does Revision 2 stay on Excalidraw?"
 >
 > **Companion docs read during this pass:**
 > [`docs/RELIABILITY-REDESIGN-2026-05-27.md`](../RELIABILITY-REDESIGN-2026-05-27.md) ·
@@ -41,6 +43,7 @@
 
 ## Table of contents
 
+- [Revision 1 → Revision 2 verdict reconciliation](#revision-1--revision-2-verdict-reconciliation) *(added 2026-05-27 evening in response to Andrew's clarification question)*
 1. [Diagnosis of current architecture](#1-diagnosis-of-current-architecture)
 2. [Library evaluation matrix](#2-library-evaluation-matrix)
 3. [Relay evaluation](#3-relay-evaluation)
@@ -50,6 +53,237 @@
 7. [Sequenced implementation plan](#7-sequenced-implementation-plan)
 8. [What carries forward from current code](#8-what-carries-forward-from-current-code)
 9. [Open questions for Andrew](#9-open-questions-for-andrew)
+- [Revision 2 changelog](#revision-2-changelog)
+
+---
+
+## Revision 1 → Revision 2 verdict reconciliation
+
+> **Reader: this section was added 2026-05-27 evening in response to Andrew's direct
+> question after first read of Revision 2.** It addresses an apparent contradiction
+> between Revision 1's §5.6 ("if students draw, Yjs becomes the right answer") and
+> Revision 2's §4 verdict (stay on Excalidraw + `reconcileElements` even now that
+> the bidirectional premise is confirmed). Read this before re-reading §4.
+
+### The apparent contradiction
+
+Revision 1 §5.6 stated, verbatim:
+
+> *"If students are eventually allowed to draw (a future Wave 3+ feature), the
+> conflict model must be revisited. At that point, Yjs + y-excalidraw becomes the
+> right answer (see § 2 Option C)."*
+
+Revision 2 confirms the antecedent — students DO draw bidirectionally in production
+today, and have since the Apr 24 student-undo ship. By Revision 1's own
+"if X then Y" framing, the recommendation should flip to Yjs + y-excalidraw.
+But §4's revised verdict stays on Excalidraw + `reconcileElements` + excalidraw-room.
+Andrew flagged this as a sharp inconsistency. The honest reconciliation has three
+factors that compound; none of them alone is the whole answer.
+
+### Factor 1 (biggest): Revision 1's conditional was methodologically lazy
+
+The "if students draw → Yjs" claim was an aside, not a vetted conclusion. R1 was
+authored under time pressure and the §5.6 statement reflected conventional wisdom
+("bidirectional collaboration → CRDT") without rigorous investigation of what
+Excalidraw's `reconcileElements` actually does under bidirectional editing.
+Concretely, R1 did not:
+
+- Read the `reconcileElements` source at the pinned version (`^0.18.1`) to verify
+  what its merge semantics actually are
+- Examine the tutor's `applyRemoteToCanvas` (`WhiteboardWorkspaceClient.tsx:491–595`),
+  which has been running `reconcileElements`-based bidirectional applies in production
+  since the Apr 24 student-undo PR
+- Account for the empirical observation that student → tutor strokes have been
+  reliable through all three rounds of B1–B4 smokes — direct production evidence
+  that the per-element LWW model handles the workload at our scale
+- Verify the maintenance state of `y-excalidraw` itself (it described it as
+  "official Excalidraw-team binding" — **factually wrong**, see Factor 2 below)
+
+Under R2's deeper investigation, the conditional turns out to be directionally
+suggestive but factually overstated. "Bidirectional ⇒ CRDT" is a heuristic that
+holds at scales R1 didn't characterize; at our actual scale, per-element LWW with
+deterministic tiebreak is genuinely sufficient. R2 caught this; R1 missed it.
+
+### Factor 2: What `reconcileElements` actually does (cited from source)
+
+Now grounded in the actual implementation at
+`node_modules/@excalidraw/excalidraw/dist/dev/index.js:32859–32890` (pinned
+`^0.18.1`), the merge predicate at line 32825–32838:
+
+```js
+// shouldDiscardRemoteElement: true ⇒ keep local
+local.id === localAppState.editingTextElement?.id ||
+local.id === localAppState.resizingElement?.id ||
+local.id === localAppState.newElement?.id ||
+local.version > remote.version ||
+(local.version === remote.version && local.versionNonce < remote.versionNonce)
+```
+
+And the merge loop at lines 32859–32890 — iterates remote first applying the
+predicate; then iterates local for ids not yet added; then `orderByFractionalIndex`
++ `syncInvalidIndices` to deterministically resolve z-order via Excalidraw's
+fractional-indexing scheme. This gives us:
+
+| Scenario | `reconcileElements` behavior | Verdict for our pilot |
+|---|---|---|
+| Concurrent edits to DIFFERENT elements (95%+ of our load) | Both survive (set-based merge by id) | ✅ Fully correct |
+| Concurrent strokes from both peers | Both survive (different ids) | ✅ Fully correct |
+| Tombstones (`isDeleted: true`) | Higher-version tombstone wins | ✅ Deletes propagate correctly |
+| Sequential edits to the same element | Per-peer-monotonic version wins | ✅ Fully correct |
+| **Concurrent edits to the SAME element at the same instant** | LWW: higher version, then LOWER versionNonce wins; loser's edit dropped | ⚠️ Known LWW degeneracy. **Not exercised by our workload** (Sarah and student aren't dragging the same PDF simultaneously) |
+| User actively editing/resizing/drawing — `editingTextElement` etc. | **Local ALWAYS wins regardless of version** — protects in-progress edits from being yanked | ✅ Crucial UX safety net I'd been unaware of in R1 |
+| Concurrent z-order moves of same element | Fractional indexing + `orderByFractionalIndex` deterministically resolves; both peers converge | ✅ Correct in common case; edge cases possible but rare |
+| Multi-character text edit in same text element by both peers | Excalidraw doesn't expose multi-user text editing at all | N/A — feature not present |
+
+**What I had slightly wrong in R2's first pass** (caught during this reconciliation
+research and now corrected in §2 + §5.6): the `versionNonce` tiebreak picks the
+LOWER nonce, not the higher one. And `y-excalidraw` is community-maintained
+(single contributor, 27 weekly downloads, last release Aug 2025 — ~9 months
+stale at time of writing) — **not** the "official Excalidraw-team binding" R1
+described. R2 §2 and §5.6 are now corrected.
+
+### Factor 3: What y-excalidraw genuinely adds above `reconcileElements`
+
+The honest list, with our pilot workload in mind:
+
+| y-excalidraw advantage | Does it matter for our pilot? |
+|---|---|
+| Delta-based wire payloads (sends what changed, not full scene per broadcast) | **Probably yes, eventually.** Currently unmeasured. Full-scene broadcasts at every stroke could become a mobile-data cost issue for long sessions on flaky networks. Worth measuring in Phase 1 smoke. |
+| Offline editing with later merge | **No, not today.** Our pilot is real-time; both peers are online by design (the recorder pauses when student disconnects). If "students do homework on the train and merge later" enters the roadmap, this changes. |
+| Multi-peer (3+) consistent merge | **No, not today.** 1 tutor + 1 student per session. Phase 4 adds at most 1 observer. With 2 LWW peers same-element races are rare; with 5 peers they'd be common. |
+| Same-element concurrent-edit determinism without loser-drop | **Theoretically nicer, but not a real complaint today.** When this case fires, the loser sees their drag "snap" to the winner; user just repeats the action. Not silent corruption. |
+| Causal ordering / vector clocks for cross-peer events | **No, not today.** Our event-log replay derives ordering from the tutor's session-time clock, which is the authoritative timeline. |
+| Built-in awareness (presence) | **No** — we already have our own `WhiteboardWirePresence`. |
+
+There IS a genuine y-excalidraw win — **delta wire payloads** — that R1 didn't
+characterize and R2 also doesn't quantify yet. This is the strongest argument for
+the Yjs path and the one place R2's verdict has acknowledged uncertainty. Phase 1
+smoke should include wire-bandwidth measurement on a real Sarah session; if it's
+problematic, that becomes a real trigger.
+
+### Factor 4 (NEW under R2's deeper investigation): The y-excalidraw maintenance situation is materially weaker than R1 represented
+
+R1 described `y-excalidraw` as "maintained by the Excalidraw team as
+`@excalidraw/excalidraw`'s official Yjs binding." This is **wrong**, and Andrew
+deserves to know this changes the calculus. The actual situation as of
+2026-05-27 from npm registry:
+
+- Package name: `@mizuka-wu/y-excalidraw` (a republish of Rahul Badenkal's
+  `y-excalidraw` repo)
+- Latest version: `2.0.16`, published 2025-08-16 (~9 months stale)
+- Weekly downloads: 27
+- Single maintainer
+- Listed Excalidraw peer dep: `^0.18.0` (our 0.18.1 is in range, but the
+  compatibility hasn't been formally verified by the maintainer at 0.18.1
+  specifically; a pre-migration compatibility spike is mandatory)
+
+This is real bus-factor / supply-chain risk. A community fork by one person with
+no recent activity is fundamentally different from a first-party binding. If we
+migrate to Yjs we're effectively also taking on co-maintenance of this binding
+package (or vendoring its source). That's a non-trivial commitment beyond the
+2-3 weeks of migration work itself.
+
+### Cost-of-being-wrong analysis (the practical kill-shot for "just do Yjs now")
+
+The clean question: **if we ship Phase 1 (Excalidraw + symmetric apply discipline)
+and it turns out we should have done Yjs instead, what's the migration cost from
+"shipped Phase 1" to "Yjs"?**
+
+**Most of Phase 1's work transfers verbatim.** Phase 1 builds the discipline
+patterns: `pageSwitchProgrammaticRef`, on-target read/write-time gates, render-timing
+contract (rAF retries, viewport-align fallback), per-page invariants P1–P8, the
+bidirectional test suite, `author=`/`wba=` log infrastructure, on-connect-after-
+disconnect re-broadcast latch. **None of this discipline goes away under Yjs** —
+Yjs has its own version of "I read from the wrong page's Y.Doc at the wrong time"
+and "the canvas re-render races the Y.Doc apply" and "the relay reconnect needs to
+flush local edits." A Yjs implementation re-writes the discipline against Y.Doc
+instead of `pageDataRef`, but the discipline itself is identical in shape.
+
+So:
+
+| Path | Phase 1 cost | If wrong, migration to Yjs cost | Total worst case |
+|---|---|---|---|
+| **A: Phase 1 first, escalate to Yjs only if needed** | 5–7h Composer 2.5 | ~2 weeks Sonnet + Composer (most discipline work transfers from Phase 1; new substrate + relay + schema) | 5–7h to ~2 weeks |
+| **B: Skip Phase 1, jump to Yjs now** | 0 | ~3–4 weeks (Phase-1-equivalent discipline against Y.Doc + Yjs substrate + new relay + schema + y-excalidraw co-maintenance) | ~3–4 weeks |
+
+Path A dominates Path B unless we're highly confident Phase 1 will fail. We are
+NOT highly confident it will fail: we have direct production evidence (the tutor's
+`applyRemoteToCanvas`) that the same discipline pattern works for one direction
+of bidirectional traffic in our workload. Phase 1 mirrors that pattern to the
+student.
+
+If Path A's Phase 1 ships and is right, we saved ~3 weeks. If Path A's Phase 1
+ships and we have to migrate anyway, we lose ~5–7h of "throwaway" Composer dispatch
+— but most of that work (discipline patterns, tests, log infra) carries forward
+into the Yjs implementation. Net loss: ~1–2 days of code that gets re-written
+against a different API.
+
+If Path B ships Yjs unnecessarily, we spent ~3 weeks on infrastructure we didn't
+need + took on `y-excalidraw` co-maintenance burden + added a new relay (y-websocket
+or CF DO) to our PLATFORM-ASSUMPTIONS surface for no marginal user-visible gain.
+Net loss: 2–3 weeks plus durable maintenance overhead.
+
+The asymmetry strongly favors Path A. R2's verdict stands.
+
+### Triggers for re-evaluation (when Yjs becomes the right answer after all)
+
+We commit to migrating to Yjs + y-excalidraw + y-websocket if **any** of these
+becomes an observed reality:
+
+1. **Sarah reports a "PDF snap-back" / "where did my edit go" complaint** rooted
+   in same-element concurrent editing. One report: file it. Two reports: escalate.
+2. **The session model grows to 3+ concurrent bidirectional editors.** With 3+
+   LWW peers, race-to-version-and-versionNonce becomes substantially more likely
+   to produce visible edit loss.
+3. **Offline editing enters the roadmap.** `reconcileElements` requires both peers
+   online; Yjs naturally handles delayed merges via update buffering.
+4. **Phase 1 ships to spec and Sarah smokes still find sync bugs** that are NOT
+   apply-path discipline failures. Evidence the substrate (not the implementation)
+   is wrong.
+5. **Phase 1 smoke measures wire bandwidth on a real session and it's a measured
+   problem** for mobile data plans or perceived lag. Yjs delta-based payloads
+   would help. (This is the genuine y-excalidraw advantage R2 has NOT quantified;
+   measuring it is a Phase 1 add-on.)
+6. **`y-excalidraw` maintenance situation improves** such that taking it on isn't
+   a co-maintenance burden — e.g., Excalidraw team officially adopts a Yjs binding,
+   or a well-funded fork emerges with predictable release cadence.
+
+Any one of these is sufficient. If none materialize within ~6 months of Phase 1
+ship, the Excalidraw + discipline path is validated and Yjs stays a documented
+contingency we never need to invoke.
+
+### Was the §4 verdict changed by this reconciliation pass?
+
+**No, the §4 verdict still stands at Option A (Excalidraw + symmetric apply
+discipline + excalidraw-room).** What changed is the rigor of the reconciliation
+itself. §4 made the right call but presented it as a forward-looking decision
+without directly engaging the R1 contradiction. This section makes the engagement
+explicit, with cited source, named uncertainty (wire-bandwidth not yet measured),
+named corrections to R2's own first-pass errors (`versionNonce` tiebreak direction,
+y-excalidraw maintainership), and a concrete trigger list.
+
+The biggest correction this pass surfaces is methodological, not architectural:
+**don't ship "if X then Y" conditionals in design docs without verifying X and Y.**
+R1's "bidirectional ⇒ Yjs" passed the heuristic test but failed factual verification.
+R2's first pass made smaller versions of the same mistake (wrong tiebreak direction,
+wrong maintainership claim). This reconciliation pass catches and fixes those.
+Phase 1's executor brief should include explicit instructions to verify any
+"if X then Y" claims against the actual source — both for `reconcileElements`
+behavior and for Excalidraw API contracts more broadly.
+
+### Honest residual uncertainty
+
+Three things this pass does NOT have evidence for, called out explicitly so the
+next pass knows what's still open:
+
+1. **Wire bandwidth under realistic load.** Full-scene broadcasts may or may not
+   be a problem on Sarah's actual sessions. Measure during Phase 1 smoke.
+2. **`reconcileElements` z-order edge cases.** Fractional-indexing collisions
+   between concurrent peer moves of the same element are theoretically possible
+   but not observed. Worth a targeted unit test in Phase 1.
+3. **`y-excalidraw` 0.18.1 compatibility.** The peer dep is `^0.18.0`; whether it
+   works in practice against 0.18.1 needs a spike before any migration decision.
+   Documented as a Q1-option-B prerequisite if Andrew picks option B.
 
 ---
 
@@ -224,7 +458,7 @@ the rest of this document delivers.
 
 | Dimension | Assessment |
 |---|---|
-| Collaboration architecture | Last-write-wins with `reconcileElements()` (version-vector per element + `versionNonce` tiebreaker). No native CRDT, but per-element merge is deterministic and handles concurrent edits to different elements losslessly. **Revision 2 verification:** the tutor's `applyRemoteToCanvas` in `WhiteboardWorkspaceClient.tsx:491` already runs this reconcile path against student broadcasts in production and has been reliable for the bidirectional surface we exercise (tutor + 1 student, both drawing). Concurrent edits to the SAME element are LWW-by-version with deterministic tiebreak; that's a known LWW limitation but not one our workload exercises (Sarah and the student aren't dragging the same PDF at the same instant). Multi-user collaboration is built in; the sync layer is left to the application. |
+| Collaboration architecture | Last-write-wins with `reconcileElements()` (per-element version vector + `versionNonce` tiebreaker — **LOWER versionNonce wins on tie**, deterministic per `shouldDiscardRemoteElement` at `dist/dev/index.js:32834` in pinned `^0.18.1`). No native CRDT, but per-element merge is deterministic and handles concurrent edits to different elements losslessly. **In-progress local edits (`editingTextElement`, `resizingElement`, `newElement`) ALWAYS win over remote regardless of version** — a critical UX protection so a remote update doesn't yank your active drag. **Revision 2 verification:** the tutor's `applyRemoteToCanvas` in `WhiteboardWorkspaceClient.tsx:491` already runs this reconcile path against student broadcasts in production and has been reliable for the bidirectional surface we exercise (tutor + 1 student, both drawing). Concurrent edits to the SAME element are LWW-by-version with deterministic tiebreak; that's a known LWW limitation but not one our workload exercises (Sarah and the student aren't dragging the same PDF at the same instant). Multi-user collaboration is built in; the sync layer is left to the application. |
 | TypeScript/React fit | Excellent. First-class TypeScript, React component. |
 | Mobile UX quality | Good for drawing; Excalidraw's touch events are well-tested. Safari quirks (no `timeslice`, MP4 mime) are already handled. |
 | Customization | Rich customization API: `renderTopRightUI`, `renderBottomRightUI`, `UIOptions.tools` to hide/show tools, `initialData.appState` for defaults. Sarah's toolbar-reorder + default-draw-type requests are satisfiable with ~1 day of work. |
@@ -259,12 +493,12 @@ migrate libraries.
 
 | Dimension | Assessment |
 |---|---|
-| Collaboration architecture | Yjs is a CRDT (Y.Doc with Y.Map/Y.Array). `y-excalidraw` (maintained by the Excalidraw team as `@excalidraw/excalidraw`'s official Yjs binding) maps Excalidraw elements into a Yjs Y.Map, giving true CRDT merging. No more `reconcileElements` version-vector conflicts. |
+| Collaboration architecture | Yjs is a CRDT (Y.Doc with Y.Map/Y.Array). `y-excalidraw` (**community-maintained by a single individual — Rahul Badenkal — NOT an official Excalidraw-team package; corrected from Revision 1's incorrect claim**) maps Excalidraw elements into a Yjs Y.Map, giving true CRDT merging where applicable. No more `reconcileElements` version-vector conflicts. |
 | TypeScript/React fit | Yjs has TypeScript types. `y-excalidraw` is a thin React hook. |
 | Mobile UX quality | Inherits Excalidraw's mobile UX (good). The Yjs layer doesn't change the rendering surface. |
 | Customization | Same as Excalidraw — Yjs only touches the sync layer, not the UI. Sarah's customization requests remain satisfiable. |
 | License/cost | Yjs: MIT. `y-excalidraw`: MIT. Relay: y-websocket (MIT) self-hosted ~$5/mo, or Cloudflare Durable Objects ~$5/mo base. $0 library license. |
-| Ecosystem velocity | Yjs is very active and has become the de-facto CRDT standard in the web collaboration space. `y-excalidraw` is less actively maintained — check for Excalidraw ^0.18 compatibility before committing. |
+| Ecosystem velocity | Yjs is very active and has become the de-facto CRDT standard in the web collaboration space. `y-excalidraw` is community-maintained: latest version `2.0.16` was published August 16, 2025 (~9 months stale at time of writing); 27 weekly downloads on npm; single maintainer; lists `@excalidraw/excalidraw ^0.18.0` as peer dep so 0.18.1 is supported in principle. **Real bus-factor / maintenance risk that R1 understated.** Compatibility with Excalidraw ^0.18.1 specifically still needs a spike before any migration commitment — a 9-month maintenance gap during a period when Excalidraw shipped 0.18 with substantial API changes is non-trivial. |
 | Integration cost | Significant refactor. The `pageDataRef` + v3 wire apply path on BOTH tutor and student is replaced by a Yjs Y.Doc per page. The relay changes from excalidraw-room to y-websocket (or Cloudflare Durable Objects). The recorder adapter stays (Yjs state maps through the same `ExcalidrawLikeElement` shape). ~2-3 weeks of Sonnet + Composer dispatches. **Caveat:** the page-bleed/timing/state-authority discipline still has to be built — Yjs doesn't fix "I read from the wrong source of truth"; it only fixes "two writers concurrently modified the same field." |
 | Recorder-integration risk | Low. Yjs state changes are observable via `Y.Doc.observe`. The recorder adapter can listen to Yjs changes instead of Excalidraw's `onChange`. |
 | **Verdict (revised under Revision 2)** | **Escalation contingency, not Wave 1.** The original §5.6 conditional ("if students draw, flip to Yjs") was the right *shape* of decision rule but had the wrong threshold. Bidirectional editing with two peers does NOT structurally require CRDT — `reconcileElements`'s per-element version vectors handle it deterministically, AND the tutor already runs that path in production today. Yjs becomes the right answer when: (a) Phase 1 (disciplined symmetric LWW apply path) still produces regressions after one well-designed implementation attempt, (b) the workload grows to 3+ simultaneous concurrent editors on the same element, or (c) we need offline editing with later sync. Defer to Wave 3 contingency. |
@@ -385,6 +619,12 @@ compatible host.
 > the verdict shape stays the same (Option A — Excalidraw + excalidraw-room + LWW)
 > but the *rationale* is genuinely different, and the §5/§6/§7 specs that follow
 > are meaningfully revised. This section is fully rewritten.
+>
+> **If you're reading §4 to evaluate "should we have flipped to Yjs?" — read the
+> [Revision 1 → Revision 2 verdict reconciliation](#revision-1--revision-2-verdict-reconciliation)
+> section first.** It addresses that question head-on with source citations, cost-of-being-wrong
+> analysis, and the concrete trigger conditions under which we WOULD migrate to
+> Yjs.
 
 ### The three plausible verdicts, evaluated under the corrected bidirectional premise
 
@@ -812,11 +1052,17 @@ the student side; corresponding tutor-side coverage already exists for P1-P5.
 >
 > `reconcileElements(local, remote, appState)` is called on both peers' apply
 > paths. For each element id present in both local and remote: keep the one with
-> the higher `version`; if `version` ties, keep the one with the higher
-> `versionNonce` (Excalidraw's pseudo-random nonce assigned at create/edit time).
+> the higher `version`; if `version` ties, keep the one with the LOWER
+> `versionNonce` (Excalidraw's pseudo-random nonce assigned at create/edit time —
+> verified at `node_modules/@excalidraw/excalidraw/dist/dev/index.js:32834`,
+> the `shouldDiscardRemoteElement` predicate: `local.version === remote.version &&
+> local.versionNonce < remote.versionNonce` ⇒ keep local).
 > Elements present in only one side are kept as-is. Tombstoned elements
 > (`isDeleted: true`) propagate via the same merge — the tombstone with higher
-> version wins, ensuring deletes are not silently reverted.
+> version wins, ensuring deletes are not silently reverted. **Additional protection:**
+> if the local element is currently being edited (`editingTextElement`,
+> `resizingElement`, or `newElement` in `localAppState`), the local element wins
+> regardless of version — so a remote update never yanks the user's active drag.
 
 **The concrete bidirectional cases — verified:**
 
@@ -831,7 +1077,7 @@ the student side; corresponding tutor-side coverage already exists for P1-P5.
 2. **Concurrent edits to the SAME element (rare for our workload).**
    Both peers grab the same PDF and drag it at the same instant. Each edit bumps
    `version` and emits a new `versionNonce`. `reconcileElements` picks one
-   deterministically (higher version, then higher versionNonce). The losing edit
+   deterministically (higher version, then LOWER versionNonce). The losing edit
    is dropped — the user whose edit was "lost" sees the element snap to the winner's
    position. **Known LWW limitation; acceptable because:** (a) the workload doesn't
    exercise this (Sarah and the student are not dragging the same PDF simultaneously);
@@ -1522,7 +1768,29 @@ tag — see § 6 Axis 5.)
 
 ## Revision 2 changelog
 
-- **2026-05-27 evening:** Revision 2. Authored by Sonnet 4.6 subagent (resumed from
+- **2026-05-27 evening (reconciliation pass — third pass on this doc):** Andrew
+  flagged an apparent contradiction: Revision 1 §5.6 said "if students draw,
+  Yjs becomes the right answer"; Revision 2 confirmed students draw but kept
+  the Excalidraw recommendation. This pass added the
+  [Revision 1 → Revision 2 verdict reconciliation](#revision-1--revision-2-verdict-reconciliation)
+  section immediately below the TOC, answering the question with cited source
+  for `reconcileElements` (from `node_modules/@excalidraw/excalidraw/dist/dev/index.js:32825–32890`
+  at pinned version `^0.18.1`), a corrected understanding of what
+  `reconcileElements` actually does (including the in-progress-edit-protection
+  predicate I'd been unaware of in R1), an honest enumeration of what
+  `y-excalidraw` adds above it (with delta-wire-payloads called out as a real
+  win we haven't measured), a corrected `y-excalidraw` maintenance assessment
+  (R1's "official Excalidraw-team binding" claim was factually wrong — it's a
+  community fork at 27 weekly downloads, ~9 months stale, single maintainer),
+  cost-of-being-wrong analysis showing Path A (Phase 1 first) dominates Path B
+  (Yjs now), and a concrete trigger list for when to escalate to Yjs after all.
+  Two factual errors in R2's first pass also caught and fixed: (1) `versionNonce`
+  tiebreak picks LOWER not higher (corrected in §2 Excalidraw row + §5.6 wire
+  rule + §5.6 case 2); (2) `y-excalidraw` maintainership claim (corrected in
+  §2 Option C row + ecosystem-velocity row). §4 verdict UNCHANGED; only rigor
+  of the rationale improved.
+
+- **2026-05-27 evening (Revision 2):** Authored by Sonnet 4.6 subagent (resumed from
   Revision 1 by the same Opus orchestrator) after Andrew flagged a foundational
   premise error in Revision 1's §5.6: "tutor is the only author" was incorrect;
   students have full bidirectional editing in production today.
