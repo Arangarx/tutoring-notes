@@ -1,5 +1,5 @@
 {
   "buildCommand": "npm run test:regression && npm run build",
   "installCommand": "npm ci",
-  "ignoreCommand": "PREV=${VERCEL_GIT_PREVIOUS_SHA:-HEAD^}; ! git diff $PREV HEAD --name-only | grep -qvE '^(docs/|.*\\.md$)'"
+  "ignoreCommand": "if [ -z \"$VERCEL_GIT_PREVIOUS_SHA\" ]; then exit 1; fi; ! git diff \"$VERCEL_GIT_PREVIOUS_SHA\" HEAD --name-only | grep -qvE '^(docs/|.*\\.md$)'"
 }
