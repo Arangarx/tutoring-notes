@@ -139,30 +139,30 @@ export function useStudentWhiteboardCanvas(
       logCtx: { wba: string; pageId: string; source: string }
     ) => {
       applyingRemoteRef.current = true;
-      try {
-        applyViewportAligned(api, follow, {
-          wbsid: wbsid || undefined,
-          wba: logCtx.wba,
-          pageId: logCtx.pageId,
-          onDefer: (retry) => {
-            console.info(
-              `[student-apply] ${wbsidTag}wba=${logCtx.wba} action=viewport-align-defer reason=zero-dimensions retry=${retry} source=${logCtx.source}`
-            );
-          },
-          onApplied: (scrollX, scrollY, zoom) => {
-            console.info(
-              `[student-apply] ${wbsidTag}pvs=${logCtx.pageId} wba=${logCtx.wba} action=viewport-align-applied panX=${scrollX} panY=${scrollY} zoom=${zoom} source=${logCtx.source}`
-            );
-          },
-          onTimeoutFallback: () => {
-            console.info(
-              `[student-apply] ${wbsidTag}wba=${logCtx.wba} action=viewport-align-timeout source=${logCtx.source}`
-            );
-          },
-        });
-      } finally {
+      const releaseApplyingRemote = () => {
         applyingRemoteRef.current = false;
-      }
+      };
+      applyViewportAligned(api, follow, {
+        wbsid: wbsid || undefined,
+        wba: logCtx.wba,
+        pageId: logCtx.pageId,
+        onDefer: (retry) => {
+          console.info(
+            `[student-apply] ${wbsidTag}wba=${logCtx.wba} action=viewport-align-defer reason=zero-dimensions retry=${retry} source=${logCtx.source}`
+          );
+        },
+        onApplied: (scrollX, scrollY, zoom) => {
+          console.info(
+            `[student-apply] ${wbsidTag}pvs=${logCtx.pageId} wba=${logCtx.wba} action=viewport-align-applied panX=${scrollX} panY=${scrollY} zoom=${zoom} source=${logCtx.source}`
+          );
+          releaseApplyingRemote();
+        },
+        onTimeoutFallback: () => {
+          console.info(
+            `[student-apply] ${wbsidTag}wba=${logCtx.wba} action=viewport-align-timeout source=${logCtx.source}`
+          );
+        },
+      });
     },
     [wbsid, wbsidTag]
   );
@@ -419,16 +419,24 @@ export function useStudentWhiteboardCanvas(
           const act = activePageIdRef.current;
           const wireRow = page.pageList.find((r) => r.id === act);
           const vs = wireRow ? wireRowViewState(wireRow) : undefined;
-          if (vs) {
+          // Prefer `details.follow` (camera on this v3 packet); page-row viewState
+          // is debounced on the tutor and can lag pan/zoom during live follow.
+          if (details.follow) {
+            applyViewportToCanvas(api, details.follow, {
+              wba,
+              pageId: act,
+              source: "wire-v3-follow",
+            });
+          } else if (vs) {
             const followLike: WhiteboardWireFollow = {
               scrollX: vs.panX,
               scrollY: vs.panY,
               zoom: vs.zoom,
-              ...(details.follow?.viewportWidth &&
-              details.follow?.viewportHeight
+              ...(lastTutorFollowRef.current?.viewportWidth &&
+              lastTutorFollowRef.current?.viewportHeight
                 ? {
-                    viewportWidth: details.follow.viewportWidth,
-                    viewportHeight: details.follow.viewportHeight,
+                    viewportWidth: lastTutorFollowRef.current.viewportWidth,
+                    viewportHeight: lastTutorFollowRef.current.viewportHeight,
                   }
                 : {}),
             };
@@ -436,12 +444,6 @@ export function useStudentWhiteboardCanvas(
               wba,
               pageId: act,
               source: "wire-v3-pageViewState",
-            });
-          } else if (details.follow) {
-            applyViewportToCanvas(api, details.follow, {
-              wba,
-              pageId: act,
-              source: "wire-v3-follow",
             });
           }
         }

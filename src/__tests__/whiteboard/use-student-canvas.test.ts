@@ -8,11 +8,39 @@ import { renderHook, act } from "@testing-library/react";
 import type { ExcalidrawApiLike } from "@/lib/whiteboard/insert-asset";
 
 jest.mock("@/lib/whiteboard/hydrate-remote-files", () => ({
-  hydrateRemoteImageFilesForScene: jest.fn(async (_api, elements) => ({
-    elements,
-    fetchFailed: [],
-    missingAssetUrlFileIds: [],
-  })),
+  hydrateRemoteImageFilesForScene: jest.fn(
+    async (
+      api: ExcalidrawApiLike,
+      elements: ReadonlyArray<ExcalidrawLikeElement | unknown>
+    ) => {
+      const images = (elements as ExcalidrawLikeElement[]).filter(
+        (e) =>
+          e.type === "image" &&
+          typeof e.customData?.assetUrl === "string" &&
+          e.customData.assetUrl.length >= 8 &&
+          typeof e.fileId === "string"
+      );
+      if (images.length > 0 && api.addFiles) {
+        api.addFiles(
+          images.map((e) => ({
+            id: e.fileId as string,
+            mimeType: "image/png" as const,
+            dataURL: "data:image/png;base64,aa",
+            created: 1,
+          }))
+        );
+      }
+      const missingAssetUrlFileIds = (elements as ExcalidrawLikeElement[])
+        .filter((e) => e.type === "image" && !e.customData?.assetUrl)
+        .map((e) => e.fileId as string)
+        .filter(Boolean);
+      return {
+        addedFileCount: images.length,
+        fetchFailed: [],
+        missingAssetUrlFileIds,
+      };
+    }
+  ),
 }));
 
 /** Per-element LWW test double (mirrors reconcileElements rules; no Excalidraw import in Jest). */
@@ -47,6 +75,7 @@ jest.mock("@/lib/whiteboard/apply-reconciled-remote-scene", () => ({
 }));
 
 import { mergeScenesReconciled } from "@/lib/whiteboard/apply-reconciled-remote-scene";
+import { hydrateRemoteImageFilesForScene } from "@/lib/whiteboard/hydrate-remote-files";
 import { useStudentWhiteboardCanvas } from "@/hooks/useStudentWhiteboardCanvas";
 import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter";
 import type {
@@ -651,6 +680,106 @@ describe("useStudentWhiteboardCanvas", () => {
     // tutor center (100,50)+(1200/2,900/2) scene center → student 800x600 aligned
     expect(last.appState.scrollX).toBeCloseTo(300, 5);
     expect(last.appState.scrollY).toBeCloseTo(200, 5);
+  });
+
+  it("follows tutor pan/zoom via pageViewState wire (live viewport cadence)", async () => {
+    const { sync, emitRemote, emitPageViewState } = makeMockSync();
+    const { api, updateScene } = makeApi({
+      elements: [],
+      appState: {
+        scrollX: 0,
+        scrollY: 0,
+        zoom: { value: 1 },
+        width: 800,
+        height: 600,
+      },
+    });
+    renderHook(() =>
+      useStudentWhiteboardCanvas(sync, api, undefined, {
+        joinToken: "jt",
+        followTutorView: true,
+      })
+    );
+
+    await act(async () => {
+      emitRemote("tutor", [], {
+        document: { rev: 1, pages: { p1: [] } },
+        page: { activePageId: "p1", pageList: [{ id: "p1", title: "P" }] },
+        follow: {
+          scrollX: 0,
+          scrollY: 0,
+          zoom: 1,
+          viewportWidth: 1200,
+          viewportHeight: 900,
+        },
+      });
+    });
+    await flushAsyncWork();
+
+    act(() => {
+      emitPageViewState({
+        v: 1,
+        kind: "pageViewState",
+        peerId: "tutor-peer",
+        role: "tutor",
+        pageId: "p1",
+        panX: 100,
+        panY: 50,
+        zoom: 1.25,
+      });
+    });
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 60));
+    });
+
+    const appStateCalls = updateScene.mock.calls.filter(
+      (c) => (c[0] as { appState?: { scrollX?: number } }).appState
+    );
+    const last = appStateCalls[appStateCalls.length - 1]![0] as {
+      appState: { scrollX: number; scrollY: number; zoom: { value: number } };
+    };
+    expect(last.appState.zoom.value).toBeCloseTo(1.25, 5);
+    // center-aligned scroll for tutor pan (100,50) @ zoom 1.25, student 800×600
+    expect(last.appState.scrollX).toBeCloseTo(260, 5);
+    expect(last.appState.scrollY).toBeCloseTo(170, 5);
+  });
+
+  it("hydrates tutor image binaries when v3 elements carry assetUrl", async () => {
+    const hydrateSpy = hydrateRemoteImageFilesForScene as jest.MockedFunction<
+      typeof hydrateRemoteImageFilesForScene
+    >;
+    const { sync, emitRemote } = makeMockSync();
+    const imageEl = {
+      id: "pdf-img",
+      type: "image",
+      fileId: "file-pdf",
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 300,
+      customData: { assetUrl: "https://blob.example/worksheet.png" },
+    } as ExcalidrawLikeElement;
+    const { api } = makeApi({ elements: [] });
+
+    renderHook(() =>
+      useStudentWhiteboardCanvas(sync, api, undefined, { joinToken: "jt" })
+    );
+
+    await act(async () => {
+      emitRemote("tutor", [], {
+        document: { rev: 1, pages: { p1: [imageEl] } },
+        page: { activePageId: "p1", pageList: [{ id: "p1", title: "P" }] },
+      });
+    });
+    await flushAsyncWork();
+
+    expect(hydrateSpy).toHaveBeenCalled();
+    expect(api.addFiles).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "file-pdf" }),
+      ])
+    );
   });
 
   it("concurrent same-element edits converge via per-element LWW (real reconcile)", async () => {
