@@ -20,6 +20,7 @@ import { useSyncTombstonedElementIds } from "@/hooks/useSyncTombstonedElementIds
 import { resolveWhiteboardAssetReadUrl } from "@/lib/whiteboard/resolve-asset-read-url";
 import {
   applyViewportAligned,
+  readViewportSizeFromAppState,
   resolveStudentScrollForTutorViewport,
 } from "@/lib/whiteboard/viewport-align";
 
@@ -193,8 +194,16 @@ export function useStudentWhiteboardCanvas(
             zoom: { value: aligned.zoom },
           },
         });
+        const studentSize = readViewportSizeFromAppState(api.getAppState());
+        const tutorVw = f.viewportWidth;
+        const tutorVh = f.viewportHeight;
         console.info(
-          `[student-apply] ${wbsidTag}pvs=${activePageIdRef.current} wba=${wba} action=snap-follow panX=${aligned.scrollX} panY=${aligned.scrollY} zoom=${aligned.zoom}`
+          `[student-apply] ${wbsidTag}pvs=${activePageIdRef.current} wba=${wba} action=snap-follow` +
+            (tutorVw && tutorVh && studentSize
+              ? ` tutorVw=${tutorVw} tutorVh=${tutorVh} studentVw=${studentSize.viewportWidth} studentVh=${studentSize.viewportHeight}` +
+                ` tutorPanX=${f.scrollX} tutorPanY=${f.scrollY} tutorZoom=${f.zoom}`
+              : "") +
+            ` studentPanX=${aligned.scrollX} studentPanY=${aligned.scrollY} studentZoom=${aligned.zoom}`
         );
       } finally {
         applyingRemoteRef.current = false;

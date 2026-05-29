@@ -1,6 +1,16 @@
 /**
  * Pan/zoom alignment so two peers with different viewport sizes share the
- * same scene-coordinate center (Excalidraw scroll convention).
+ * same scene-coordinate center at matched zoom ("follow mode B").
+ *
+ * Excalidraw 0.18 convention in this repo (verified in insert-asset via
+ * viewportCoordsToSceneCoords): viewport center in scene space is
+ *   centerX = scrollX + viewportWidth / (2 * zoom)
+ * (equivalently scrollX = centerX - viewportWidth / (2 * zoom)). This differs
+ * from the alternate notation center = (vw/2)/zoom - scrollX by a sign flip
+ * on scroll only; center-matching at equal zoom yields:
+ *   scrollX_student = scrollX_tutor + (viewportWidth_tutor - viewportWidth_student) / (2 * zoom)
+ *   scrollY_student = scrollY_tutor + (viewportHeight_tutor - viewportHeight_student) / (2 * zoom)
+ *   zoom_student = zoom_tutor
  */
 
 import type { ExcalidrawApiLike } from "@/lib/whiteboard/insert-asset";
@@ -174,6 +184,17 @@ export function applyViewportAligned(
         studentSize.viewportWidth,
         studentSize.viewportHeight
       );
+      if (options?.wba) {
+        const tag = options.wbsid ? `wbsid=${options.wbsid} ` : "";
+        console.info(
+          `[student-apply] ${tag}wba=${options.wba} action=viewport-follow-align` +
+            ` tutorVw=${tutorW} tutorVh=${tutorH} studentVw=${studentSize.viewportWidth}` +
+            ` studentVh=${studentSize.viewportHeight}` +
+            ` tutorPanX=${tutorFollow.scrollX} tutorPanY=${tutorFollow.scrollY} tutorZoom=${tutorFollow.zoom}` +
+            ` studentPanX=${aligned.scrollX} studentPanY=${aligned.scrollY} studentZoom=${aligned.zoom}` +
+            (options.pageId ? ` pvs=${options.pageId}` : "")
+        );
+      }
       writeAppState(aligned.scrollX, aligned.scrollY, aligned.zoom);
       return;
     }
