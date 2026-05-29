@@ -270,9 +270,13 @@ describe("useStudentWhiteboardCanvas", () => {
     const tutorStroke = makeElement("tutor-stroke", 1, 50);
     const { api } = makeApi({ elements: [localStroke] });
 
-    renderHook(() =>
+    const { result } = renderHook(() =>
       useStudentWhiteboardCanvas(sync, api, undefined, { joinToken: "jt" })
     );
+
+    act(() => {
+      result.current.onCanvasChange([localStroke]);
+    });
 
     await act(async () => {
       emitRemote("tutor", [], {
@@ -329,7 +333,41 @@ describe("useStudentWhiteboardCanvas", () => {
     ).toBe(false);
   });
 
-  it("defers merge read to pageDataRef when pageSwitchProgrammaticRef is non-zero", async () => {
+  it("merges active page from pageDataRef and repaints live on same-page apply", async () => {
+    const { sync, emitRemote } = makeMockSync();
+    const bucketP1 = [makeElement("cached-p1", 5, 5)];
+    const liveWrong = [makeElement("live-wrong", 9, 9)];
+    const { api, updateScene } = makeApi({ elements: liveWrong });
+    renderHook(() =>
+      useStudentWhiteboardCanvas(sync, api, undefined, { joinToken: "jt" })
+    );
+
+    await act(async () => {
+      emitRemote("tutor", [], {
+        document: {
+          rev: 1,
+          pages: { p1: [makeElement("remote", 1, 1)] },
+        },
+        page: { activePageId: "p1", pageList: [{ id: "p1", title: "P" }] },
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const [localArg] = mergeSpy.mock.calls[0]!;
+    expect((localArg as ExcalidrawLikeElement[]).some((e) => e.id === "cached-p1")).toBe(
+      false
+    );
+    expect((localArg as ExcalidrawLikeElement[]).some((e) => e.id === "live-wrong")).toBe(
+      false
+    );
+    const elementWrites = updateScene.mock.calls.filter(
+      (c) => (c[0] as { elements?: unknown }).elements
+    );
+    expect(elementWrites.length).toBeGreaterThan(0);
+  });
+
+  it("defers live repaint when pageSwitchProgrammaticRef is non-zero", async () => {
     const { sync, emitRemote } = makeMockSync();
     const bucketP1 = [makeElement("cached-p1", 5, 5)];
     const liveWrong = [makeElement("live-wrong", 9, 9)];
@@ -513,7 +551,13 @@ describe("useStudentWhiteboardCanvas", () => {
     const remoteLoser = makeElement(sharedId, 2, 99);
     const { api } = makeApi({ elements: [localWinner] });
 
-    renderHook(() => useStudentWhiteboardCanvas(sync, api, undefined, { joinToken: "jt" }));
+    const { result } = renderHook(() =>
+      useStudentWhiteboardCanvas(sync, api, undefined, { joinToken: "jt" })
+    );
+
+    act(() => {
+      result.current.onCanvasChange([localWinner]);
+    });
 
     await act(async () => {
       emitRemote("tutor", [], {

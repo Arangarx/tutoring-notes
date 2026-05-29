@@ -364,8 +364,6 @@ export function useStudentWhiteboardCanvas(
       applyingRemoteRef.current = true;
       try {
         const appState = api.getAppState() as unknown;
-        const actAtStartForMerge = actAtStart;
-        const switchedPageForMerge = switchedPage;
         for (const pageId of pageIds) {
           const base = (docV3.pages[pageId] ?? []) as ReadonlyArray<ExcalidrawLikeElement>;
           const remoteCopy = base.map((e) => ({ ...e }) as ExcalidrawLikeElement);
@@ -389,14 +387,9 @@ export function useStudentWhiteboardCanvas(
           );
           onHydrateResult?.(hydrate);
 
-          const onTargetReadTime =
-            pageId === actAtStartForMerge &&
-            !switchedPageForMerge &&
-            pageSwitchProgrammaticRef.current === 0;
-          const local: ExcalidrawLikeElement[] = onTargetReadTime
-            ? (api.getSceneElements() as ExcalidrawLikeElement[])
-            : ((pageDataRef.current[pageId] as ExcalidrawLikeElement[] | undefined) ??
-              []);
+          const local: ExcalidrawLikeElement[] =
+            (pageDataRef.current[pageId] as ExcalidrawLikeElement[] | undefined) ??
+            [];
 
           const merged = await mergeScenesReconciled(
             local,
@@ -416,13 +409,10 @@ export function useStudentWhiteboardCanvas(
 
         const actEnd = activePageIdRef.current;
         const toShow = pageDataRef.current[actEnd];
-        if (
-          toShow &&
-          actEnd === actAtStartForMerge &&
-          !switchedPageForMerge &&
-          pageSwitchProgrammaticRef.current === 0
-        ) {
+        let liveWrite = 0;
+        if (toShow && pageSwitchProgrammaticRef.current === 0) {
           api.updateScene({ elements: toShow as ReadonlyArray<unknown> });
+          liveWrite = 1;
         }
 
         if (followTutorView) {
@@ -460,7 +450,7 @@ export function useStudentWhiteboardCanvas(
           (pageDataRef.current[actEnd] as ExcalidrawLikeElement[] | undefined) ??
           [];
         console.info(
-          `[student-apply] ${wbsidTag}wba=${wba} author=tutor action=apply-v3-complete rev=${rev} elementsOnActiveTab=${onActive.length}`
+          `[student-apply] ${wbsidTag}wba=${wba} author=tutor action=apply-v3-complete rev=${rev} liveWrite=${liveWrite} elementsOnActiveTab=${onActive.length}`
         );
         setTutorStreamReady(true);
       } catch (err) {
