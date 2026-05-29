@@ -6,6 +6,11 @@
  */
 import { renderHook, act } from "@testing-library/react";
 import type { ExcalidrawApiLike } from "@/lib/whiteboard/insert-asset";
+import {
+  followWireFromTutorAppState,
+  studentScrollFromFollowCenter,
+} from "@/lib/whiteboard/viewport-align";
+import type { WhiteboardWireFollow } from "@/lib/whiteboard/sync-client";
 
 jest.mock("@/lib/whiteboard/hydrate-remote-files", () => ({
   hydrateRemoteImageFilesForScene: jest.fn(
@@ -86,6 +91,24 @@ import type {
 const mergeSpy = mergeScenesReconciled as jest.MockedFunction<
   typeof mergeScenesReconciled
 >;
+
+function tutorFollowWire(
+  scrollX: number,
+  scrollY: number,
+  zoom: number,
+  viewportWidth: number,
+  viewportHeight: number
+): WhiteboardWireFollow {
+  const wire = followWireFromTutorAppState({
+    scrollX,
+    scrollY,
+    zoom: { value: zoom },
+    width: viewportWidth,
+    height: viewportHeight,
+  });
+  if (!wire) throw new Error("tutor viewport dims required");
+  return wire;
+}
 
 function makeElement(
   id: string,
@@ -551,13 +574,7 @@ describe("useStudentWhiteboardCanvas", () => {
       emitRemote("tutor", [], {
         document: { rev: 1, pages: { p1: [] } },
         page: { activePageId: "p1", pageList: [{ id: "p1", title: "P" }] },
-        follow: {
-          scrollX: 100,
-          scrollY: 50,
-          zoom: 1,
-          viewportWidth: 1200,
-          viewportHeight: 900,
-        },
+        follow: tutorFollowWire(100, 50, 1, 1200, 900),
       });
       await Promise.resolve();
       await Promise.resolve();
@@ -566,15 +583,23 @@ describe("useStudentWhiteboardCanvas", () => {
     act(() => {
       result.current.snapToTutorView();
     });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 60));
+    });
 
+    const expected = studentScrollFromFollowCenter(
+      tutorFollowWire(100, 50, 1, 1200, 900),
+      800,
+      600
+    );
     const appStateCalls = updateScene.mock.calls.filter(
       (c) => (c[0] as { appState?: { scrollX?: number } }).appState
     );
     const last = appStateCalls[appStateCalls.length - 1]![0] as {
       appState: { scrollX: number; scrollY: number; zoom: { value: number } };
     };
-    expect(last.appState.scrollX).toBeCloseTo(300, 5);
-    expect(last.appState.scrollY).toBeCloseTo(200, 5);
+    expect(last.appState.scrollX).toBeCloseTo(expected.scrollX, 5);
+    expect(last.appState.scrollY).toBeCloseTo(expected.scrollY, 5);
   });
 
   // ----------------------------------------------------------------------
@@ -654,13 +679,7 @@ describe("useStudentWhiteboardCanvas", () => {
       emitRemote("tutor", [], {
         document: { rev: 1, pages: { p1: [makeElement("m", 1, 1)] } },
         page: { activePageId: "p1", pageList: [{ id: "p1", title: "P" }] },
-        follow: {
-          scrollX: 100,
-          scrollY: 50,
-          zoom: 1,
-          viewportWidth: 1200,
-          viewportHeight: 900,
-        },
+        follow: tutorFollowWire(100, 50, 1, 1200, 900),
       });
     });
     await flushAsyncWork();
@@ -670,6 +689,11 @@ describe("useStudentWhiteboardCanvas", () => {
       await new Promise((r) => setTimeout(r, 60));
     });
 
+    const expected = studentScrollFromFollowCenter(
+      tutorFollowWire(100, 50, 1, 1200, 900),
+      800,
+      600
+    );
     const appStateCalls = updateScene.mock.calls.filter(
       (c) => (c[0] as { appState?: { scrollX?: number } }).appState
     );
@@ -677,12 +701,11 @@ describe("useStudentWhiteboardCanvas", () => {
     const last = appStateCalls[appStateCalls.length - 1]![0] as {
       appState: { scrollX: number; scrollY: number };
     };
-    // tutor center (100,50)+(1200/2,900/2) scene center → student 800x600 aligned
-    expect(last.appState.scrollX).toBeCloseTo(300, 5);
-    expect(last.appState.scrollY).toBeCloseTo(200, 5);
+    expect(last.appState.scrollX).toBeCloseTo(expected.scrollX, 5);
+    expect(last.appState.scrollY).toBeCloseTo(expected.scrollY, 5);
   });
 
-  it("follows tutor pan/zoom via pageViewState wire (live viewport cadence)", async () => {
+  it("follows tutor pan/zoom via v3 follow wire (live viewport cadence)", async () => {
     const { sync, emitRemote, emitPageViewState } = makeMockSync();
     const { api, updateScene } = makeApi({
       elements: [],
@@ -705,34 +728,27 @@ describe("useStudentWhiteboardCanvas", () => {
       emitRemote("tutor", [], {
         document: { rev: 1, pages: { p1: [] } },
         page: { activePageId: "p1", pageList: [{ id: "p1", title: "P" }] },
-        follow: {
-          scrollX: 0,
-          scrollY: 0,
-          zoom: 1,
-          viewportWidth: 1200,
-          viewportHeight: 900,
-        },
+        follow: tutorFollowWire(0, 0, 1, 1200, 900),
       });
     });
     await flushAsyncWork();
 
-    act(() => {
-      emitPageViewState({
-        v: 1,
-        kind: "pageViewState",
-        peerId: "tutor-peer",
-        role: "tutor",
-        pageId: "p1",
-        panX: 100,
-        panY: 50,
-        zoom: 1.25,
+    const followAfterPan = tutorFollowWire(100, 50, 1.25, 1200, 900);
+
+    await act(async () => {
+      emitRemote("tutor", [], {
+        document: { rev: 2, pages: { p1: [] } },
+        page: { activePageId: "p1", pageList: [{ id: "p1", title: "P" }] },
+        follow: followAfterPan,
       });
     });
+    await flushAsyncWork();
 
     await act(async () => {
       await new Promise((r) => setTimeout(r, 60));
     });
 
+    const expected = studentScrollFromFollowCenter(followAfterPan, 800, 600);
     const appStateCalls = updateScene.mock.calls.filter(
       (c) => (c[0] as { appState?: { scrollX?: number } }).appState
     );
@@ -740,9 +756,8 @@ describe("useStudentWhiteboardCanvas", () => {
       appState: { scrollX: number; scrollY: number; zoom: { value: number } };
     };
     expect(last.appState.zoom.value).toBeCloseTo(1.25, 5);
-    // center-aligned scroll for tutor pan (100,50) @ zoom 1.25, student 800×600
-    expect(last.appState.scrollX).toBeCloseTo(260, 5);
-    expect(last.appState.scrollY).toBeCloseTo(170, 5);
+    expect(last.appState.scrollX).toBeCloseTo(expected.scrollX, 5);
+    expect(last.appState.scrollY).toBeCloseTo(expected.scrollY, 5);
   });
 
   it("hydrates tutor image binaries when v3 elements carry assetUrl", async () => {

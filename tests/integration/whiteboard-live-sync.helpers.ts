@@ -6,8 +6,9 @@ import {
   seedOpenWhiteboardSession,
 } from "../visual/helpers";
 import {
-  alignStudentScrollToTutorCenter,
-  sceneCenterFromScroll,
+  followWireFromTutorAppState,
+  studentScrollFromFollowCenter,
+  viewportSceneCenterFromScroll,
 } from "../../src/lib/whiteboard/viewport-align";
 
 export type WbLiveSyncSession = {
@@ -309,21 +310,29 @@ export function expectedAlignedStudentScroll(
   tutor: ViewportSnapshot,
   student: Pick<ViewportSnapshot, "width" | "height">
 ) {
-  return alignStudentScrollToTutorCenter(
-    {
-      panX: tutor.scrollX,
-      panY: tutor.scrollY,
+  const follow = followWireFromTutorAppState({
+    scrollX: tutor.scrollX,
+    scrollY: tutor.scrollY,
+    zoom: { value: tutor.zoom },
+    width: tutor.width,
+    height: tutor.height,
+  });
+  if (!follow) {
+    return {
+      scrollX: tutor.scrollX,
+      scrollY: tutor.scrollY,
       zoom: tutor.zoom,
-      viewportWidth: tutor.width,
-      viewportHeight: tutor.height,
-    },
+    };
+  }
+  return studentScrollFromFollowCenter(
+    follow,
     student.width,
     student.height
   );
 }
 
 export function tutorSceneCenter(tutor: ViewportSnapshot) {
-  return sceneCenterFromScroll(
+  return viewportSceneCenterFromScroll(
     tutor.scrollX,
     tutor.scrollY,
     tutor.zoom,

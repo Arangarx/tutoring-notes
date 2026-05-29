@@ -32,7 +32,7 @@ function makeWire(broadcastDocument: jest.Mock, flushPendingBroadcast: jest.Mock
         pageList: [{ id: "p1", title: "Page 1" }],
         activePageId: "p1",
       }),
-      getFollow: () => ({ scrollX: 0, scrollY: 0, zoom: 1 }),
+      getFollow: () => ({ centerSceneX: 0, centerSceneY: 0, zoom: 1 }),
     })
   );
 }

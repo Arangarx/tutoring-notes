@@ -20,8 +20,7 @@ import { useSyncTombstonedElementIds } from "@/hooks/useSyncTombstonedElementIds
 import { resolveWhiteboardAssetReadUrl } from "@/lib/whiteboard/resolve-asset-read-url";
 import {
   applyViewportAligned,
-  readViewportSizeFromAppState,
-  resolveStudentScrollForTutorViewport,
+  hasFollowSceneCenter,
 } from "@/lib/whiteboard/viewport-align";
 
 function wireRowViewState(
@@ -158,10 +157,11 @@ export function useStudentWhiteboardCanvas(
           );
           releaseApplyingRemote();
         },
-        onTimeoutFallback: () => {
+        onHold: (reason) => {
           console.info(
-            `[student-apply] ${wbsidTag}wba=${logCtx.wba} action=viewport-align-timeout source=${logCtx.source}`
+            `[student-apply] ${wbsidTag}wba=${logCtx.wba} action=viewport-follow-hold reason=${reason} source=${logCtx.source}`
           );
+          releaseApplyingRemote();
         },
       });
     },
@@ -171,45 +171,15 @@ export function useStudentWhiteboardCanvas(
   const applyTutorFollow = useCallback(
     (f: WhiteboardWireFollow) => {
       const api = excalidrawApiRef.current;
-      if (!api) return;
+      if (!api || !hasFollowSceneCenter(f)) return;
       const wba = nextApplyId(wbaCounterRef);
-      const aligned = resolveStudentScrollForTutorViewport(
-        api,
-        f.scrollX,
-        f.scrollY,
-        f.zoom,
-        f
-      );
-      applyingRemoteRef.current = true;
-      try {
-        const prev = api.getAppState() as Record<string, unknown>;
-        const a = api as ExcalidrawApiLike & {
-          updateScene: (s: { appState?: unknown }) => void;
-        };
-        a.updateScene({
-          appState: {
-            ...prev,
-            scrollX: aligned.scrollX,
-            scrollY: aligned.scrollY,
-            zoom: { value: aligned.zoom },
-          },
-        });
-        const studentSize = readViewportSizeFromAppState(api.getAppState());
-        const tutorVw = f.viewportWidth;
-        const tutorVh = f.viewportHeight;
-        console.info(
-          `[student-apply] ${wbsidTag}pvs=${activePageIdRef.current} wba=${wba} action=snap-follow` +
-            (tutorVw && tutorVh && studentSize
-              ? ` tutorVw=${tutorVw} tutorVh=${tutorVh} studentVw=${studentSize.viewportWidth} studentVh=${studentSize.viewportHeight}` +
-                ` tutorPanX=${f.scrollX} tutorPanY=${f.scrollY} tutorZoom=${f.zoom}`
-              : "") +
-            ` studentPanX=${aligned.scrollX} studentPanY=${aligned.scrollY} studentZoom=${aligned.zoom}`
-        );
-      } finally {
-        applyingRemoteRef.current = false;
-      }
+      applyViewportToCanvas(api, f, {
+        wba,
+        pageId: activePageIdRef.current,
+        source: "snap-follow",
+      });
     },
-    [wbsidTag]
+    [applyViewportToCanvas, wbsidTag]
   );
 
   const snapToTutorView = useCallback(() => {
@@ -217,36 +187,19 @@ export function useStudentWhiteboardCanvas(
     if (!api) return;
     const act = activePageIdRef.current;
     const wireRow = pageListRef.current.find((p) => p.id === act);
-    const vs = wireRow?.viewState;
-    if (vs) {
-      const f = lastTutorFollowRef.current;
-      const aligned = resolveStudentScrollForTutorViewport(
-        api,
-        vs.panX,
-        vs.panY,
-        vs.zoom,
-        f ?? undefined
-      );
-      applyingRemoteRef.current = true;
-      try {
-        const prev = api.getAppState() as Record<string, unknown>;
-        const a = api as ExcalidrawApiLike & {
-          updateScene: (s: { appState?: unknown }) => void;
-        };
-        a.updateScene({
-          appState: {
-            ...prev,
-            scrollX: aligned.scrollX,
-            scrollY: aligned.scrollY,
-            zoom: { value: aligned.zoom },
-          },
-        });
-      } finally {
-        applyingRemoteRef.current = false;
-      }
+    const f = lastTutorFollowRef.current;
+    if (f && hasFollowSceneCenter(f)) {
+      const vs = wireRow?.viewState;
+      const follow: WhiteboardWireFollow = vs
+        ? {
+            centerSceneX: f.centerSceneX,
+            centerSceneY: f.centerSceneY,
+            zoom: vs.zoom,
+          }
+        : f;
+      applyTutorFollow(follow);
       return;
     }
-    const f = lastTutorFollowRef.current;
     if (f) applyTutorFollow(f);
   }, [applyTutorFollow]);
 
@@ -436,24 +389,24 @@ export function useStudentWhiteboardCanvas(
               pageId: act,
               source: "wire-v3-follow",
             });
-          } else if (vs) {
-            const followLike: WhiteboardWireFollow = {
-              scrollX: vs.panX,
-              scrollY: vs.panY,
-              zoom: vs.zoom,
-              ...(lastTutorFollowRef.current?.viewportWidth &&
-              lastTutorFollowRef.current?.viewportHeight
-                ? {
-                    viewportWidth: lastTutorFollowRef.current.viewportWidth,
-                    viewportHeight: lastTutorFollowRef.current.viewportHeight,
-                  }
-                : {}),
-            };
-            applyViewportToCanvas(api, followLike, {
-              wba,
-              pageId: act,
-              source: "wire-v3-pageViewState",
-            });
+          } else if (
+            vs &&
+            lastTutorFollowRef.current &&
+            hasFollowSceneCenter(lastTutorFollowRef.current)
+          ) {
+            applyViewportToCanvas(
+              api,
+              {
+                centerSceneX: lastTutorFollowRef.current.centerSceneX,
+                centerSceneY: lastTutorFollowRef.current.centerSceneY,
+                zoom: vs.zoom,
+              },
+              {
+                wba,
+                pageId: act,
+                source: "wire-v3-pageViewState",
+              }
+            );
           }
         }
 
@@ -676,24 +629,22 @@ export function useStudentWhiteboardCanvas(
       if (!followTutorView || !api || msg.pageId !== activePageIdRef.current) {
         return;
       }
-      const follow = lastTutorFollowRef.current;
-      const followLike: WhiteboardWireFollow = {
-        scrollX: msg.panX,
-        scrollY: msg.panY,
-        zoom: msg.zoom,
-        ...(follow?.viewportWidth && follow?.viewportHeight
-          ? {
-              viewportWidth: follow.viewportWidth,
-              viewportHeight: follow.viewportHeight,
-            }
-          : {}),
-      };
+      const cached = lastTutorFollowRef.current;
+      if (!cached || !hasFollowSceneCenter(cached)) return;
       const wba = nextApplyId(wbaCounterRef);
-      applyViewportToCanvas(api, followLike, {
-        wba,
-        pageId: msg.pageId,
-        source: "wire-recv",
-      });
+      applyViewportToCanvas(
+        api,
+        {
+          centerSceneX: cached.centerSceneX,
+          centerSceneY: cached.centerSceneY,
+          zoom: msg.zoom,
+        },
+        {
+          wba,
+          pageId: msg.pageId,
+          source: "wire-recv",
+        }
+      );
     });
     return off;
   }, [applyViewportToCanvas, followTutorView, sync]);

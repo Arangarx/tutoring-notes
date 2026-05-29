@@ -244,7 +244,7 @@ describe("useWhiteboardRecorder", () => {
           sync,
           getScenePageIdForBroadcast: () => activePage.current,
           getWireBroadcastExtras: () => ({
-            follow: { scrollX: 0, scrollY: 0, zoom: 1 },
+            follow: { centerSceneX: 0, centerSceneY: 0, zoom: 1 },
             page: { activePageId: activePage.current, pageList: pl },
             scenePageId: activePage.current,
           }),

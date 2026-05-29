@@ -5,7 +5,7 @@
  */
 import type { ExcalidrawApiLike } from "@/lib/whiteboard/insert-asset";
 import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter";
-import { sceneCenterFromScroll } from "@/lib/whiteboard/viewport-align";
+import { viewportSceneCenterFromScroll } from "@/lib/whiteboard/viewport-align";
 
 export type WbE2eRole = "tutor" | "student";
 
@@ -163,7 +163,13 @@ export function registerWbE2eSceneBridge(
       const zoom = readZoom(st as Record<string, unknown>);
       const vw = typeof st.width === "number" && st.width > 0 ? st.width : 800;
       const vh = typeof st.height === "number" && st.height > 0 ? st.height : 600;
-      const center = sceneCenterFromScroll(st.scrollX, st.scrollY, zoom, vw, vh);
+      const center = viewportSceneCenterFromScroll(
+        st.scrollX,
+        st.scrollY,
+        zoom,
+        vw,
+        vh
+      );
       const size = 24;
       const el = makeRectangle(
         markerId,

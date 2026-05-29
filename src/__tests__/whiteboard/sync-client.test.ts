@@ -335,7 +335,7 @@ describe("sync-client lifecycle", () => {
           { id: "p2", title: "Page 2" },
         ],
       },
-      follow: { scrollX: 1, scrollY: 2, zoom: 1.5 },
+      follow: { centerSceneX: 10, centerSceneY: 20, zoom: 1.5, scrollX: 1, scrollY: 2 },
     });
     client.flushPendingBroadcast();
     await realTick(20);

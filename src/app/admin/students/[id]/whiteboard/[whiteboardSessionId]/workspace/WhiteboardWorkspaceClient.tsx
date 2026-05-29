@@ -124,6 +124,7 @@ import {
   registerWbE2eSceneMutationHook,
 } from "@/lib/whiteboard/wb-e2e-scene-bridge";
 import { mergeScenesReconciled } from "@/lib/whiteboard/apply-reconciled-remote-scene";
+import { followWireFromTutorAppState } from "@/lib/whiteboard/viewport-align";
 import type { RemoteSceneIngestLogHint } from "@/hooks/useWhiteboardRecorder";
 import {
   adaptWBElementsToExcalidraw,
@@ -1340,20 +1341,19 @@ export function WhiteboardWorkspaceClient({
       zoom: { value: number };
       width?: number;
       height?: number;
+      offsetLeft?: number;
+      offsetTop?: number;
     };
-    const vw =
-      typeof st.width === "number" && st.width > 0 ? st.width : undefined;
-    const vh =
-      typeof st.height === "number" && st.height > 0 ? st.height : undefined;
-    return {
-      follow: {
+    const follow =
+      followWireFromTutorAppState(st) ?? {
+        centerSceneX: 0,
+        centerSceneY: 0,
+        zoom: st.zoom.value,
         scrollX: st.scrollX,
         scrollY: st.scrollY,
-        zoom: st.zoom.value,
-        ...(vw !== undefined && vh !== undefined
-          ? { viewportWidth: vw, viewportHeight: vh }
-          : {}),
-      },
+      };
+    return {
+      follow,
       page: {
         // Ref — not React state — so rapid tab switches don’t lag one frame
         // behind the canvas (state updates async; ref updates in selectTutorPage).
@@ -1548,7 +1548,7 @@ export function WhiteboardWorkspaceClient({
   const getTutorLiveFollow = useCallback((): WhiteboardWireFollow => {
     const api = excalidrawAPIRef.current;
     if (!api) {
-      return { scrollX: 0, scrollY: 0, zoom: 1 };
+      return { centerSceneX: 0, centerSceneY: 0, zoom: 1 };
     }
     const st = api.getAppState() as {
       scrollX: number;
@@ -1556,19 +1556,18 @@ export function WhiteboardWorkspaceClient({
       zoom: { value: number };
       width?: number;
       height?: number;
+      offsetLeft?: number;
+      offsetTop?: number;
     };
-    const vw =
-      typeof st.width === "number" && st.width > 0 ? st.width : undefined;
-    const vh =
-      typeof st.height === "number" && st.height > 0 ? st.height : undefined;
-    return {
-      scrollX: st.scrollX,
-      scrollY: st.scrollY,
-      zoom: st.zoom.value,
-      ...(vw !== undefined && vh !== undefined
-        ? { viewportWidth: vw, viewportHeight: vh }
-        : {}),
-    };
+    return (
+      followWireFromTutorAppState(st) ?? {
+        centerSceneX: 0,
+        centerSceneY: 0,
+        zoom: st.zoom.value,
+        scrollX: st.scrollX,
+        scrollY: st.scrollY,
+      }
+    );
   }, []);
 
   const getTutorPageListAndActive = useCallback(
