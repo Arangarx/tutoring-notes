@@ -112,6 +112,7 @@ import {
   type BinaryFileFromExcalidraw,
 } from "@/lib/whiteboard/ensure-native-image-asset-urls-for-sync";
 import { hydrateRemoteImageFilesForScene } from "@/lib/whiteboard/hydrate-remote-files";
+import { preserveImageAssetUrlsOnSceneWrite } from "@/lib/whiteboard/preserve-image-asset-urls";
 import { resolveWhiteboardAssetReadUrl } from "@/lib/whiteboard/resolve-asset-read-url";
 import type {
   WhiteboardWireBroadcastExtras,
@@ -392,6 +393,8 @@ export function WhiteboardWorkspaceClient({
   const recorderRecordViewportRef = useRef<
     ((panX: number, panY: number, zoom: number) => void) | null
   >(null);
+  /** `flushViewportPersistNow` is declared before `useTutorLiveDocumentWire`. */
+  const scheduleDocumentBroadcastRef = useRef<() => void>(() => undefined);
   /**
    * Monotonic switch token — smoke-2 root cause.
    *
@@ -1383,9 +1386,16 @@ export function WhiteboardWorkspaceClient({
           | ExcalidrawLikeElement[]
           | undefined;
         if (cached !== undefined) {
-          out[p.id] = cached;
+          out[p.id] = preserveImageAssetUrlsOnSceneWrite(
+            cached,
+            pageDataRef.current[p.id] as ExcalidrawLikeElement[] | undefined
+          );
         } else {
-          out[p.id] = api.getSceneElements() as ExcalidrawLikeElement[];
+          const live = api.getSceneElements() as ExcalidrawLikeElement[];
+          out[p.id] = preserveImageAssetUrlsOnSceneWrite(
+            live,
+            pageDataRef.current[p.id] as ExcalidrawLikeElement[] | undefined
+          );
         }
       } else {
         out[p.id] = pageDataRef.current[p.id] ?? [];
@@ -1480,6 +1490,9 @@ export function WhiteboardWorkspaceClient({
         console.info(
           `[pvs] pvs=${pid} action=wire-emit source=${srcTag} panX=${vs.panX} panY=${vs.panY} zoom=${vs.zoom}`
         );
+        // v3 document carries `follow` + per-row viewState; pageViewState alone
+        // is not enough for first-time origin-aligned follow on the student.
+        scheduleDocumentBroadcastRef.current();
       }
       // Phase 5 task 8 (replay tier-c-lite): also append to the event log
       // so replay's camera tracks the same cadence as live. No-op when
@@ -1578,6 +1591,7 @@ export function WhiteboardWorkspaceClient({
       getPageListAndActive: getTutorPageListAndActive,
       getFollow: getTutorLiveFollow,
     });
+  scheduleDocumentBroadcastRef.current = scheduleDocumentBroadcast;
 
   useEffect(() => {
     if (process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK !== "1") return;
@@ -2740,7 +2754,14 @@ export function WhiteboardWorkspaceClient({
       if (applyingRemoteToCanvasRef.current) return;
       if (pageSwitchProgrammaticRef.current > 0) return;
       const els = elements as ReadonlyArray<ExcalidrawLikeElement>;
-      pageDataRef.current[activePageIdRef.current] = [...els];
+      const pageId = activePageIdRef.current;
+      const prevBucket = pageDataRef.current[pageId] as
+        | ExcalidrawLikeElement[]
+        | undefined;
+      pageDataRef.current[pageId] = preserveImageAssetUrlsOnSceneWrite(
+        els,
+        prevBucket
+      );
       onLocalElementSnapshot(elements);
       // Smoke-4 (May 17, 2026): real local activity counts as
       // proof-of-session for the audio-flow gate (see
