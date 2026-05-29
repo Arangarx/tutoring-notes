@@ -180,6 +180,25 @@ chats" friction to "Opus dispatches; Andrew sees results in flow."
 - **Long-running execution**: `run_in_background=true`. Opus keeps
   orchestrating in parallel; system notifies on completion.
 
+**ALWAYS specify `model` explicitly on EVERY dispatch — including
+`resume`.** Observed 2026-05-29 (Andrew caught it): a `Task` `resume`
++ `interrupt` call with `model` omitted ran on the **parent** chat's
+model (Opus 4.8 High), NOT the resumed subagent's prior `composer-2.5`
+— contradicting the tool's own claim that "prior model will be used."
+Two short redirect turns silently burned Opus. The tool description
+also says resume should not take a model and will inherit; in practice
+that inheritance is unreliable. Therefore:
+  - **Do not rely on `resume` to preserve the subagent's model.** When
+    model/cost control matters (it always does here), prefer
+    dispatching a **fresh `Task` with `model="composer-2.5"` set
+    explicitly** over resuming — a fresh dispatch is deterministic,
+    resume is not. The fresh dispatch prompt restates the scope; the
+    re-establishment cost is trivial versus an accidental Opus turn.
+  - If you must `resume` (to preserve in-context findings), assume the
+    model may silently fall back to the Opus parent, and weigh that
+    cost before interrupting. Check the subagent's row in the agents
+    panel after dispatch to confirm the tier actually used.
+
 **Bootstrappers (`docs/handoff/*-bootstrapper.md`) are now usually
 unnecessary.** They were an artifact from when subagent context had
 to be hand-curated via paste-blob into fresh chats. With inline
