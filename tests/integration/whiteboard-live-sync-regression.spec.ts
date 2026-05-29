@@ -5,9 +5,11 @@ import {
   drawTestStrokeOnRole,
   ensureStudentFollowsTutor,
   expectedAlignedStudentScroll,
+  growStrokeOnRole,
   placeMarkerAtViewportCenter,
   readEncryptionKeyFromHash,
   readSceneElementIds,
+  readStrokeWidth,
   readViewportSnapshot,
   seedWbLiveSyncSession,
   waitForElementOnPeer,
@@ -118,6 +120,51 @@ test.describe("whiteboard live-sync regression (Phase A)", () => {
       }
       expect(liveIds).toContain(tutorStroke);
       expect(liveIds).toContain(studentStroke);
+    } finally {
+      await peers.close();
+    }
+  });
+
+  // Invariant 1b — STANDING live-render guard for stroke continuations.
+  //
+  // A real freehand stroke is ONE element id whose extent/version grows across
+  // many onChange ticks (v1 → vN). This guard asserts the student's REAL scene
+  // tracks the tutor's growing stroke to its final extent without a page switch.
+  //
+  // NOTE (Phase A round 2): this did NOT exhibit red-before on pre-fix 23cb473
+  // — the rewrite's in-loop per-page `updateScene(merged)` (gated only on
+  // `activePageIdRef === pageId`) already repaints the active page for both new
+  // ids and version bumps, masking the gated post-loop repaint the diagnosis
+  // flagged. The headline "student never sees tutor strokes until a page switch"
+  // therefore could not be reproduced on 23cb473 (see orchestrator report).
+  // This is kept as a forward regression net: if a future change breaks the
+  // active-page live repaint, this goes red. Invariant 4 is the proven-teeth
+  // red/green for this round.
+  test("invariant 1b — tutor stroke continuation grows live on student", async ({
+    browser,
+  }) => {
+    test.setTimeout(180_000);
+    const session = await seedWbLiveSyncSession();
+    const peers = await openTutorAndStudent(browser, session);
+    try {
+      const strokeId = `pw-grow-${Date.now()}`;
+      await growStrokeOnRole(peers.tutorPage, "tutor", strokeId, 20, 1);
+      await waitForElementOnPeer(peers.studentPage, "student", strokeId, 30_000);
+
+      for (let v = 2; v <= 8; v++) {
+        await growStrokeOnRole(peers.tutorPage, "tutor", strokeId, 20 + v * 40, v);
+        await peers.tutorPage.waitForTimeout(120);
+      }
+      const finalWidth = 20 + 8 * 40;
+
+      let studentWidth = -1;
+      const deadline = Date.now() + 12_000;
+      while (Date.now() < deadline) {
+        studentWidth = await readStrokeWidth(peers.studentPage, "student", strokeId);
+        if (studentWidth >= finalWidth - 1) break;
+        await peers.studentPage.waitForTimeout(300);
+      }
+      expect(studentWidth).toBeGreaterThanOrEqual(finalWidth - 1);
     } finally {
       await peers.close();
     }

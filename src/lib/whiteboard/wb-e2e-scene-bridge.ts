@@ -16,6 +16,17 @@ export type WbE2eSceneBridge = {
   placeMarkerAtViewportCenter: (markerId: string) => void;
   /** Freedraw-style line segment (triggers onChange + sync). */
   drawTestStroke: (strokeId: string, x1: number, y1: number, x2: number, y2: number) => void;
+  /**
+   * Create-or-update the SAME element id with a higher version and a wider
+   * extent — mimics a real freehand stroke growing across onChange ticks
+   * (one id, version 1→2→…→N). This is the live-render path that the
+   * version-no-op bug suppresses (continuations of an already-seen id).
+   */
+  growStroke: (strokeId: string, width: number, version: number) => void;
+  /** Read the `version` (or -1) of a given element id from the live scene. */
+  versionOf: (strokeId: string) => number;
+  /** Read the `width` (or -1) of a given element id from the live scene. */
+  widthOf: (strokeId: string) => number;
 };
 
 type WbE2eSceneMutationHook = () => void;
@@ -170,6 +181,40 @@ export function registerWbE2eSceneBridge(
       const el = makeLine(strokeId, x1, y1, x2, y2);
       api.updateScene({ elements: [...existing, el] });
       invokeSceneMutationHook(role);
+    },
+    growStroke(strokeId, width, version) {
+      const now = Date.now();
+      const existing = api.getSceneElements() as ExcalidrawLikeElement[];
+      const others = existing.filter(
+        (e) => (e as { id?: string }).id !== strokeId
+      );
+      const el = makeLine(strokeId, 100, 300, 100 + width, 300) as Record<
+        string,
+        unknown
+      >;
+      el.version = version;
+      el.versionNonce = now + version;
+      el.updated = now;
+      api.updateScene({
+        elements: [...others, el] as ReadonlyArray<unknown>,
+      });
+      invokeSceneMutationHook(role);
+    },
+    versionOf(strokeId) {
+      const els = api.getSceneElements() as Array<{
+        id?: string;
+        version?: number;
+      }>;
+      const el = els.find((e) => e.id === strokeId);
+      return el && typeof el.version === "number" ? el.version : -1;
+    },
+    widthOf(strokeId) {
+      const els = api.getSceneElements() as Array<{
+        id?: string;
+        width?: number;
+      }>;
+      const el = els.find((e) => e.id === strokeId);
+      return el && typeof el.width === "number" ? el.width : -1;
     },
   };
 

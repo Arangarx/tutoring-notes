@@ -16,11 +16,15 @@ jest.mock("@/lib/whiteboard/hydrate-remote-files", () => ({
 }));
 
 /** Per-element LWW test double (mirrors reconcileElements rules; no Excalidraw import in Jest). */
+type LwwElement = { id: string; version: number; versionNonce: number };
+
 async function lwwMergeForTests(
-  localElements: ReadonlyArray<{ id: string; version: number; versionNonce: number }>,
-  remoteElements: ReadonlyArray<{ id: string; version: number; versionNonce: number }>
+  localElementsRaw: ReadonlyArray<unknown>,
+  remoteElementsRaw: ReadonlyArray<unknown>
 ) {
-  const byId = new Map<string, (typeof localElements)[number]>();
+  const localElements = localElementsRaw as ReadonlyArray<LwwElement>;
+  const remoteElements = remoteElementsRaw as ReadonlyArray<LwwElement>;
+  const byId = new Map<string, LwwElement>();
   for (const el of localElements) byId.set(el.id, el);
   for (const remote of remoteElements) {
     const local = byId.get(remote.id);
@@ -34,7 +38,7 @@ async function lwwMergeForTests(
         remote.versionNonce < local.versionNonce);
     byId.set(remote.id, keepRemote ? remote : local);
   }
-  return [...byId.values()];
+  return [...byId.values()] as unknown as ReadonlyArray<ExcalidrawLikeElement>;
 }
 
 jest.mock("@/lib/whiteboard/apply-reconciled-remote-scene", () => ({

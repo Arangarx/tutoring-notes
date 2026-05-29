@@ -112,6 +112,50 @@ export async function drawTestStrokeOnRole(
   );
 }
 
+export async function growStrokeOnRole(
+  page: Page,
+  role: "tutor" | "student",
+  strokeId: string,
+  width: number,
+  version: number
+): Promise<void> {
+  await page.evaluate(
+    ({ r, id, w, v }) => {
+      const bridge = (
+        window as Window & {
+          __TN_WB_E2E__?: Record<
+            string,
+            { growStroke: (id: string, w: number, v: number) => void }
+          >;
+        }
+      ).__TN_WB_E2E__?.[r];
+      if (!bridge?.growStroke) {
+        throw new Error(`E2E bridge missing growStroke for ${r}`);
+      }
+      bridge.growStroke(id, w, v);
+    },
+    { r: role, id: strokeId, w: width, v: version }
+  );
+}
+
+export async function readStrokeWidth(
+  page: Page,
+  role: "tutor" | "student",
+  strokeId: string
+): Promise<number> {
+  return page.evaluate(
+    ({ r, id }) => {
+      const bridge = (
+        window as Window & {
+          __TN_WB_E2E__?: Record<string, { widthOf: (id: string) => number }>;
+        }
+      ).__TN_WB_E2E__?.[r];
+      return bridge?.widthOf ? bridge.widthOf(id) : -1;
+    },
+    { r: role, id: strokeId }
+  );
+}
+
 export async function placeMarkerAtViewportCenter(
   page: Page,
   role: "tutor" | "student",
