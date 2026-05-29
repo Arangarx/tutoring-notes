@@ -9,6 +9,7 @@ import type { ExcalidrawApiLike } from "@/lib/whiteboard/insert-asset";
 import {
   followWireFromTutorAppState,
   studentScrollFromFollowCenter,
+  viewportCoordsToSceneCoords,
 } from "@/lib/whiteboard/viewport-align";
 import type { WhiteboardWireFollow } from "@/lib/whiteboard/sync-client";
 
@@ -109,6 +110,40 @@ function tutorFollowWire(
   if (!wire) throw new Error("tutor viewport dims required");
   return wire;
 }
+
+/** Scene point at viewport center after a student scroll/zoom apply. */
+function sceneCenterAtStudentViewport(
+  scrollX: number,
+  scrollY: number,
+  zoom: number,
+  viewportWidth: number,
+  viewportHeight: number
+): { x: number; y: number } {
+  return viewportCoordsToSceneCoords(
+    { clientX: viewportWidth / 2, clientY: viewportHeight / 2 },
+    {
+      zoom: { value: zoom },
+      offsetLeft: 0,
+      offsetTop: 0,
+      scrollX,
+      scrollY,
+    }
+  );
+}
+
+function appStateViewportCalls(updateScene: jest.Mock) {
+  return updateScene.mock.calls.filter(
+    (c) => (c[0] as { appState?: { scrollX?: number } }).appState
+  );
+}
+
+const studentViewport = {
+  scrollX: 0,
+  scrollY: 0,
+  zoom: { value: 1 },
+  width: 800,
+  height: 600,
+};
 
 function makeElement(
   id: string,
@@ -549,6 +584,160 @@ describe("useStudentWhiteboardCanvas", () => {
     expect(consoleInfoSpy).toHaveBeenCalledWith(
       expect.stringMatching(/wba=\d+ author=tutor action=apply-v3-complete/)
     );
+  });
+
+  // ----------------------------------------------------------------------
+  // Follow gating (owner spec) — continuous sync vs independent view vs snap
+  // ----------------------------------------------------------------------
+  describe("follow gating (owner spec)", () => {
+    it("with follow OFF, tutor follow broadcasts do not move student scroll/zoom", async () => {
+      const { sync, emitRemote, emitPageViewState } = makeMockSync();
+      const { api, updateScene } = makeApi({
+        elements: [],
+        appState: { ...studentViewport },
+      });
+      renderHook(() =>
+        useStudentWhiteboardCanvas(sync, api, undefined, {
+          joinToken: "jt",
+          followTutorView: false,
+        })
+      );
+
+      await act(async () => {
+        emitRemote("tutor", [], {
+          document: { rev: 1, pages: { p1: [] } },
+          page: { activePageId: "p1", pageList: [{ id: "p1", title: "P" }] },
+          follow: tutorFollowWire(100, 50, 1, 1200, 900),
+        });
+      });
+      await flushAsyncWork();
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 60));
+      });
+
+      expect(appStateViewportCalls(updateScene)).toHaveLength(0);
+
+      await act(async () => {
+        emitRemote("tutor", [], {
+          document: { rev: 2, pages: { p1: [] } },
+          page: { activePageId: "p1", pageList: [{ id: "p1", title: "P" }] },
+          follow: tutorFollowWire(200, 80, 1.5, 1200, 900),
+        });
+        emitPageViewState({
+          v: 1,
+          kind: "pageViewState",
+          peerId: "tutor-peer",
+          role: "tutor",
+          pageId: "p1",
+          panX: 10,
+          panY: 20,
+          zoom: 1.5,
+        });
+      });
+      await flushAsyncWork();
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 60));
+      });
+
+      expect(appStateViewportCalls(updateScene)).toHaveLength(0);
+    });
+
+    it("with follow ON, tutor follow moves student viewport center to broadcast centerScene", async () => {
+      const { sync, emitRemote } = makeMockSync();
+      const { api, updateScene } = makeApi({
+        elements: [],
+        appState: { ...studentViewport },
+      });
+      renderHook(() =>
+        useStudentWhiteboardCanvas(sync, api, undefined, {
+          joinToken: "jt",
+          followTutorView: true,
+        })
+      );
+
+      const follow = tutorFollowWire(100, 50, 1.25, 1200, 900);
+
+      await act(async () => {
+        emitRemote("tutor", [], {
+          document: { rev: 1, pages: { p1: [] } },
+          page: { activePageId: "p1", pageList: [{ id: "p1", title: "P" }] },
+          follow,
+        });
+      });
+      await flushAsyncWork();
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 60));
+      });
+
+      const vpCalls = appStateViewportCalls(updateScene);
+      expect(vpCalls.length).toBeGreaterThan(0);
+      const last = vpCalls[vpCalls.length - 1]![0] as {
+        appState: {
+          scrollX: number;
+          scrollY: number;
+          zoom: { value: number };
+        };
+      };
+      const center = sceneCenterAtStudentViewport(
+        last.appState.scrollX,
+        last.appState.scrollY,
+        last.appState.zoom.value,
+        studentViewport.width,
+        studentViewport.height
+      );
+      expect(center.x).toBeCloseTo(follow.centerSceneX!, 5);
+      expect(center.y).toBeCloseTo(follow.centerSceneY!, 5);
+      expect(last.appState.zoom.value).toBeCloseTo(follow.zoom!, 5);
+    });
+
+    it("snap-follow applies once with follow OFF and does not enable continuous follow", async () => {
+      const { sync, emitRemote } = makeMockSync();
+      const { api, updateScene } = makeApi({
+        elements: [],
+        appState: { ...studentViewport },
+      });
+      const { result } = renderHook(() =>
+        useStudentWhiteboardCanvas(sync, api, undefined, {
+          joinToken: "jt",
+          followTutorView: false,
+        })
+      );
+
+      const follow = tutorFollowWire(100, 50, 1, 1200, 900);
+
+      await act(async () => {
+        emitRemote("tutor", [], {
+          document: { rev: 1, pages: { p1: [] } },
+          page: { activePageId: "p1", pageList: [{ id: "p1", title: "P" }] },
+          follow,
+        });
+      });
+      await flushAsyncWork();
+      expect(appStateViewportCalls(updateScene)).toHaveLength(0);
+
+      act(() => {
+        result.current.snapToTutorView();
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 60));
+      });
+
+      expect(appStateViewportCalls(updateScene)).toHaveLength(1);
+
+      await act(async () => {
+        emitRemote("tutor", [], {
+          document: { rev: 2, pages: { p1: [] } },
+          page: { activePageId: "p1", pageList: [{ id: "p1", title: "P" }] },
+          follow: tutorFollowWire(300, 120, 2, 1200, 900),
+        });
+      });
+      await flushAsyncWork();
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 60));
+      });
+
+      expect(appStateViewportCalls(updateScene)).toHaveLength(1);
+    });
   });
 
   it("snapToTutorView center-aligns when tutor viewport size is on follow wire", async () => {

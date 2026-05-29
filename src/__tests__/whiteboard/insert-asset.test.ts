@@ -28,6 +28,7 @@ import {
   validateDesmosUrl,
   type ExcalidrawApiLike,
 } from "@/lib/whiteboard/insert-asset";
+import { viewportSceneCenterFromScroll } from "@/lib/whiteboard/viewport-align";
 
 jest.mock("@/lib/whiteboard/upload", () => ({
   uploadWhiteboardAsset: jest.fn(),
@@ -176,6 +177,53 @@ describe("insertImageOnCanvas", () => {
       (inserted.customData as { altText?: string })?.altText
     ).toBe("Worksheet");
     expect(inserted.id).toBe(result.elementId);
+  });
+
+  it("centers inserted image on viewport scene center (Excalidraw transform oracle)", async () => {
+    uploadMock.mockResolvedValue({
+      ok: true,
+      blobUrl: "https://blob.example/wb-asset.png",
+      sizeBytes: 1024,
+    });
+    const { api, scenes } = makeFakeApi();
+    const scrollX = -50;
+    const scrollY = 30;
+    const zoom = 1.25;
+    const width = 1024;
+    const height = 768;
+    api.getAppState = () => ({
+      scrollX,
+      scrollY,
+      width,
+      height,
+      zoom: { value: zoom },
+    });
+    const file = makePngFile("worksheet.png", 1024);
+
+    const result = await insertImageOnCanvas({
+      excalidrawAPI: api,
+      whiteboardSessionId: "wb-1",
+      studentId: "s-1",
+      file,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const inserted = scenes[0][0] as {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    };
+    const oracle = viewportSceneCenterFromScroll(
+      scrollX,
+      scrollY,
+      zoom,
+      width,
+      height
+    );
+    expect(inserted.x + inserted.width / 2).toBeCloseTo(oracle.x, 5);
+    expect(inserted.y + inserted.height / 2).toBeCloseTo(oracle.y, 5);
   });
 
   it("surfaces upload failures without mutating the scene", async () => {

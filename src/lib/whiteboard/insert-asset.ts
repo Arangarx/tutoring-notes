@@ -29,6 +29,7 @@
 import { EXCALIDRAW_STROKE_HEX } from "@/styles/token-values";
 import { uploadWhiteboardAsset } from "@/lib/whiteboard/upload";
 import type { PdfPageRender } from "@/lib/whiteboard/pdf-render";
+import { viewportSceneCenterFromScroll } from "@/lib/whiteboard/viewport-align";
 
 /**
  * Minimal structural type for the bits of Excalidraw's `ExcalidrawImperativeAPI`
@@ -173,15 +174,45 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
 }
 
 function viewportCenter(api: ExcalidrawApiLike): { x: number; y: number } {
-  const s = api.getAppState();
+  const s = api.getAppState() as {
+    scrollX: number;
+    scrollY: number;
+    width: number;
+    height: number;
+    zoom: { value: number };
+    offsetLeft?: number;
+    offsetTop?: number;
+  };
   const zoom = s.zoom?.value || 1;
-  // Excalidraw's scrollX/scrollY are in scene coords AFTER zoom; the
-  // viewport center in scene space is computed as scrollX +
-  // (width / zoom) / 2. (Reverse-engineered from
-  // viewportCoordsToSceneCoords; verified on 0.18.)
-  const cx = s.scrollX + s.width / 2 / zoom;
-  const cy = s.scrollY + s.height / 2 / zoom;
-  return { x: cx, y: cy };
+  const w = s.width;
+  const h = s.height;
+  if (
+    typeof w === "number" &&
+    Number.isFinite(w) &&
+    w > 0 &&
+    typeof h === "number" &&
+    Number.isFinite(h) &&
+    h > 0
+  ) {
+    const offsetLeft =
+      typeof s.offsetLeft === "number" && Number.isFinite(s.offsetLeft)
+        ? s.offsetLeft
+        : 0;
+    const offsetTop =
+      typeof s.offsetTop === "number" && Number.isFinite(s.offsetTop)
+        ? s.offsetTop
+        : 0;
+    return viewportSceneCenterFromScroll(
+      s.scrollX,
+      s.scrollY,
+      zoom,
+      w,
+      h,
+      offsetLeft,
+      offsetTop
+    );
+  }
+  return { x: s.scrollX, y: s.scrollY };
 }
 
 /**
