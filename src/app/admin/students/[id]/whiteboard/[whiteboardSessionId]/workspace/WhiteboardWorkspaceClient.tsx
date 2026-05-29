@@ -118,6 +118,10 @@ import type {
   WhiteboardWireRemoteDetails,
 } from "@/lib/whiteboard/sync-client";
 import { validateExcalidrawEmbeddable } from "@/lib/whiteboard/validate-embeddable";
+import {
+  registerWbE2eSceneBridge,
+  registerWbE2eSceneMutationHook,
+} from "@/lib/whiteboard/wb-e2e-scene-bridge";
 import { mergeScenesReconciled } from "@/lib/whiteboard/apply-reconciled-remote-scene";
 import type { RemoteSceneIngestLogHint } from "@/hooks/useWhiteboardRecorder";
 import {
@@ -1537,8 +1541,21 @@ export function WhiteboardWorkspaceClient({
       scrollX: number;
       scrollY: number;
       zoom: { value: number };
+      width?: number;
+      height?: number;
     };
-    return { scrollX: st.scrollX, scrollY: st.scrollY, zoom: st.zoom.value };
+    const vw =
+      typeof st.width === "number" && st.width > 0 ? st.width : undefined;
+    const vh =
+      typeof st.height === "number" && st.height > 0 ? st.height : undefined;
+    return {
+      scrollX: st.scrollX,
+      scrollY: st.scrollY,
+      zoom: st.zoom.value,
+      ...(vw !== undefined && vh !== undefined
+        ? { viewportWidth: vw, viewportHeight: vh }
+        : {}),
+    };
   }, []);
 
   const getTutorPageListAndActive = useCallback(
@@ -1561,6 +1578,18 @@ export function WhiteboardWorkspaceClient({
       getPageListAndActive: getTutorPageListAndActive,
       getFollow: getTutorLiveFollow,
     });
+
+  useEffect(() => {
+    if (process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK !== "1") return;
+    registerWbE2eSceneMutationHook("tutor", () => {
+      const api = excalidrawAPIRef.current;
+      if (!api) return;
+      pageDataRef.current[activePageIdRef.current] = [
+        ...(api.getSceneElements() as ExcalidrawLikeElement[]),
+      ];
+      flushDocumentBroadcastNow();
+    });
+  }, [flushDocumentBroadcastNow]);
 
   const recorder = useWhiteboardRecorder({
     whiteboardSessionId,
@@ -3170,6 +3199,7 @@ export function WhiteboardWorkspaceClient({
               const like = api as ExcalidrawApiLike;
               excalidrawAPIRef.current = like;
               setExcalidrawAPI(like);
+              registerWbE2eSceneBridge("tutor", like);
             }}
             theme={excalidrawTheme}
             UIOptions={{

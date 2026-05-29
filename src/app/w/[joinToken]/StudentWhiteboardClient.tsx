@@ -34,6 +34,10 @@ import type { HydrateRemoteImageFilesResult } from "@/lib/whiteboard/hydrate-rem
 import { ensureNativeImageAssetUrlsForSync } from "@/lib/whiteboard/ensure-native-image-asset-urls-for-sync";
 import type { BinaryFileFromExcalidraw } from "@/lib/whiteboard/ensure-native-image-asset-urls-for-sync";
 import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter";
+import {
+  registerWbE2eSceneBridge,
+  registerWbE2eSceneMutationHook,
+} from "@/lib/whiteboard/wb-e2e-scene-bridge";
 
 type JoinUnavailableReason =
   | "session_ended"
@@ -377,7 +381,7 @@ export function StudentWhiteboardClient({
     []
   );
 
-  const [independentView, setIndependentView] = useState(true);
+  const [independentView, setIndependentView] = useState(false);
 
   const {
     onCanvasChange: studentSyncOnCanvas,
@@ -412,6 +416,16 @@ export function StudentWhiteboardClient({
     const t = window.setTimeout(() => setBoardWaitElapsed(true), 8000);
     return () => clearTimeout(t);
   }, [connected, otherPeerCount, tutorStreamReady]);
+
+  useEffect(() => {
+    if (process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK !== "1") return;
+    registerWbE2eSceneMutationHook("student", () => {
+      const api = excalidrawAPIRef.current;
+      if (!api) return;
+      const elements = api.getSceneElements();
+      studentSyncOnCanvas(elements);
+    });
+  }, [studentSyncOnCanvas]);
 
   const handleExcalidrawChange = useCallback(
     (
@@ -825,6 +839,7 @@ export function StudentWhiteboardClient({
               const like = api as ExcalidrawApiLike;
               excalidrawAPIRef.current = like;
               setExcalidrawAPI(like);
+              registerWbE2eSceneBridge("student", like);
             }}
             theme={excalidrawTheme}
             UIOptions={{
