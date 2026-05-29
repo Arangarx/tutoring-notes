@@ -80,9 +80,14 @@ export function useTutorLiveDocumentWire(options: {
 
   const scheduleDocumentBroadcast = useCallback(() => {
     if (!enabled || !sync) return;
-    if (timerRef.current !== null) {
-      clearTimeout(timerRef.current);
-    }
+    // Trailing-edge THROTTLE (arm-if-null), NOT a debounce. A debounce that
+    // clears+resets the timer on every onChange never fires during a continuous
+    // gesture (the tutor's pointer is rarely still for THROTTLE_MS), so the
+    // student saw nothing until the tutor paused or switched pages (a page
+    // switch force-flushes). Arming-if-null fires once per THROTTLE_MS for the
+    // duration of the gesture — matching the student/recorder direction
+    // (`DIFF_INTERVAL_MS`), which is why the reverse path always felt live.
+    if (timerRef.current !== null) return;
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
       emitDocument();

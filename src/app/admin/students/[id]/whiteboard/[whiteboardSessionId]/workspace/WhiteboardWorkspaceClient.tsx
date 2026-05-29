@@ -1587,9 +1587,13 @@ export function WhiteboardWorkspaceClient({
       pageDataRef.current[activePageIdRef.current] = [
         ...(api.getSceneElements() as ExcalidrawLikeElement[]),
       ];
-      flushDocumentBroadcastNow();
+      // Drive the REAL production cadence: a tutor scene change schedules a
+      // throttled/debounced document broadcast exactly as `handleExcalidrawChange`
+      // does on every onChange. NO manual `flushDocumentBroadcastNow()` — that
+      // force-flush is the page-swap equivalent that masked the live-sync bug.
+      scheduleDocumentBroadcast();
     });
-  }, [flushDocumentBroadcastNow]);
+  }, [scheduleDocumentBroadcast]);
 
   const recorder = useWhiteboardRecorder({
     whiteboardSessionId,

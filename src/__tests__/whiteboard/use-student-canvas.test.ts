@@ -548,6 +548,111 @@ describe("useStudentWhiteboardCanvas", () => {
     expect(last.appState.scrollY).toBeCloseTo(200, 5);
   });
 
+  // ----------------------------------------------------------------------
+  // Headline live-render: consecutive SAME-PAGE tutor broadcasts must each
+  // paint on the student WITHOUT any page switch and WITHOUT a manual flush.
+  // This drives the real receipt → enqueue → runV3Apply → merge → updateScene
+  // path (the production apply cadence). If the rewrite's gated/bucketed apply
+  // only paints on a page switch, this goes RED.
+  // ----------------------------------------------------------------------
+  it("paints consecutive SAME-PAGE tutor strokes live (no page switch)", async () => {
+    const { sync, emitRemote } = makeMockSync();
+    const { api } = makeApi({ elements: [] });
+    renderHook(() =>
+      useStudentWhiteboardCanvas(sync, api, undefined, {
+        joinToken: "jt",
+        whiteboardSessionId: "sess-live",
+      })
+    );
+
+    const emitSamePageDoc = (rev: number, els: ExcalidrawLikeElement[]) =>
+      emitRemote("tutor", [], {
+        document: { rev, pages: { p1: els } },
+        page: { activePageId: "p1", pageList: [{ id: "p1", title: "P" }] },
+      });
+
+    const a = makeElement("stroke-A", 1, 11);
+    const b = makeElement("stroke-B", 1, 12);
+    const c = makeElement("stroke-C", 1, 13);
+
+    await act(async () => {
+      emitSamePageDoc(1, [a]);
+    });
+    await flushAsyncWork();
+    let ids = (api.getSceneElements() as ExcalidrawLikeElement[]).map((e) => e.id);
+    expect(ids).toContain("stroke-A");
+
+    await act(async () => {
+      emitSamePageDoc(2, [a, b]);
+    });
+    await flushAsyncWork();
+    ids = (api.getSceneElements() as ExcalidrawLikeElement[]).map((e) => e.id);
+    expect(ids).toEqual(expect.arrayContaining(["stroke-A", "stroke-B"]));
+
+    await act(async () => {
+      emitSamePageDoc(3, [a, b, c]);
+    });
+    await flushAsyncWork();
+    ids = (api.getSceneElements() as ExcalidrawLikeElement[]).map((e) => e.id);
+    expect(ids).toEqual(
+      expect.arrayContaining(["stroke-A", "stroke-B", "stroke-C"])
+    );
+  });
+
+  // Inv 4 analogue: viewport center-align must apply on a SAME-PAGE apply
+  // (it rides the same v3 broadcast as the strokes). No page switch.
+  it("applies tutor viewport center-align on same-page apply (inv 4)", async () => {
+    const { sync, emitRemote } = makeMockSync();
+    const { api, updateScene } = makeApi({
+      elements: [],
+      appState: {
+        scrollX: 0,
+        scrollY: 0,
+        zoom: { value: 1 },
+        width: 800,
+        height: 600,
+      },
+    });
+    renderHook(() =>
+      useStudentWhiteboardCanvas(sync, api, undefined, {
+        joinToken: "jt",
+        whiteboardSessionId: "sess-vp",
+        followTutorView: true,
+      })
+    );
+
+    await act(async () => {
+      emitRemote("tutor", [], {
+        document: { rev: 1, pages: { p1: [makeElement("m", 1, 1)] } },
+        page: { activePageId: "p1", pageList: [{ id: "p1", title: "P" }] },
+        follow: {
+          scrollX: 100,
+          scrollY: 50,
+          zoom: 1,
+          viewportWidth: 1200,
+          viewportHeight: 900,
+        },
+      });
+    });
+    await flushAsyncWork();
+    // applyViewportAligned defers the appState write via requestAnimationFrame;
+    // flush rAF + its writeAppState before asserting.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 60));
+    });
+
+    const appStateCalls = updateScene.mock.calls.filter(
+      (c) => (c[0] as { appState?: { scrollX?: number } }).appState
+    );
+    expect(appStateCalls.length).toBeGreaterThan(0);
+    const last = appStateCalls[appStateCalls.length - 1]![0] as {
+      appState: { scrollX: number; scrollY: number };
+    };
+    // tutor center (100,50)+(1200/2,900/2) scene center → student 800x600 aligned
+    expect(last.appState.scrollX).toBeCloseTo(300, 5);
+    expect(last.appState.scrollY).toBeCloseTo(200, 5);
+  });
+
   it("concurrent same-element edits converge via per-element LWW (real reconcile)", async () => {
     const { sync, emitRemote } = makeMockSync();
     const sharedId = "shared-rect";
