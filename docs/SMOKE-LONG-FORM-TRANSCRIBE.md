@@ -94,9 +94,9 @@ Use Wi-Fi; keep the tab **foregrounded** on mobile (iOS background throttling �
 
 When no DB rows exist:
 
-1. Build a **60–75 min** English speech file (Voice Memos, Audacity, or ffmpeg concat of shorter clips).
+1. Build a **60–75 min** English speech file (Voice Memos, Audacity, ffmpeg concat of shorter clips, or **`node scripts/make-test-audio.cjs`** — see `scripts/make-test-audio.README.md`; prefer `--source` with a short real speech clip for Whisper-faithful smokes).
 2. **Upload** tab → client-direct Blob upload (`/api/upload/audio` token route).
-3. For **multi-segment** smoke, upload **two** files (~50 min + ~20 min) to mirror Sarah's repro.
+3. For **multi-segment** smoke, upload **two** files (~50 min + ~20 min) to mirror Sarah's repro (`--split` on the script emits ~50 min + remainder).
 
 **ffmpeg concat sketch** (local machine; re-encode if codecs differ):
 
@@ -340,5 +340,6 @@ When committing smoke outcomes, use the **PowerShell-safe** pattern from `AGENTS
 | Tier 1 status | `docs/PHASE-6-TIER-1-STATUS.md` |
 | Platform ceiling | `docs/PLATFORM-ASSUMPTIONS.md` §1 |
 | Prior handoff | `docs/handoff/long-form-transcribe-tier-1-orchestrator-report.md` |
+| Long audio fixture | `scripts/make-test-audio.cjs`, `scripts/make-test-audio.README.md` |
 
-**Companion script:** Not shipped in this artifact — `transcribeAndGenerateAction` requires an authenticated Next.js Server Action invocation; manual UI procedure above is canonical until a dedicated API or test-only route exists.
+**Companion script:** Not shipped for headless transcribe — `transcribeAndGenerateAction` requires an authenticated Next.js Server Action invocation; manual UI procedure above is canonical until a dedicated API or test-only route exists. Use `make-test-audio.cjs` only to **fabricate upload fixtures** for Path C.
