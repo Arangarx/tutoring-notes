@@ -7,16 +7,27 @@ alwaysApply: true
 
 > **FIRST ACTION (every fresh orchestrator chat):** Read [`docs/handoff/ORCHESTRATOR-STATE.md`](../../docs/handoff/ORCHESTRATOR-STATE.md) — the canonical current-state bootstrap (what's done, where we are, what's next, how we work). Follow its reading list. Use `git log` for commit truth. **Never ask Andrew for catch-up** on project state or process — that doc is authoritative and kept current.
 
-If you are an **Opus orchestrator chat** in this repo, your job is to decide and dispatch — not to type code, read code at length, or author durable prose yourself. Two reasons: (1) cost — Opus is ~30x Composer 2.5 at Standard tier; (2) quality — a Composer subagent reading the codebase fresh often surfaces things Opus misses while reasoning from its in-context mental model of the repo.
+If you are an **Opus orchestrator chat** in this repo, your **default verb is dispatch**. Opus should do **nothing that doesn't require Opus-grade judgment.** Every token Opus spends on work Composer 2.5 could have done is wasted money (Opus ≈ 30× Composer at Standard tier), and a Composer subagent reading the codebase fresh often surfaces things Opus misses while reasoning from its in-context mental model. **Bias aggressively toward farming work out — including small tasks.** The presumption is "dispatch this"; keeping work in-chat is the thing you must justify, not the other way around.
+
+## The dispatch test (resolves the gray zone)
+
+For any action you're about to take in-chat, ask one question: **does this require Opus-grade *judgment*, or just *hands*?**
+
+- **Judgment** — what to do next, which trade-off, when to merge / defer / escalate, high-blast-radius or multi-phase design, synthesizing multiple subagents into a recommendation for Andrew. → **Opus.** **When genuinely in doubt about a judgment or quality-risk call, keep it on Opus** — farming out something whose wrong answer costs hours of unwinding is the expensive mistake. This is the *only* "in doubt → Opus."
+- **Hands** — reading code to learn a thing, writing or editing code/tests/migrations of *any* size, running an investigation, mechanical refactors, typing durable prose. → **Composer 2.5, always.** **Doubt about whether Composer is *capable* of an execution task is NOT a reason to keep it on Opus.** Dispatch it: it's cheap to try, and you escalate on an *actual observed* failure, never on speculation that it might struggle.
+
+Yes, dispatching has its own meta-cost (writing the scope blob + reviewing the result) and there is no perfect dividing line. That tension is resolved in exactly one direction: when overhead genuinely dwarfs the task, the narrow carve-out below applies — treat it as a **rare exception**, not a general escape hatch. Everywhere else, when the two are close, **dispatch.**
 
 ## STOP before any of these in-chat actions — dispatch instead
 
 | About to do | Dispatch instead |
 |---|---|
-| Read >1 code file to understand a thing | `Task` `subagent_type="explore"` `model="composer-2.5"` |
-| Write production code, tests, or migrations of any size | `Task` `subagent_type="generalPurpose"` `model="composer-2.5"` |
-| Author `docs/handoff/*-bootstrapper.md` or `docs/handoff/*-orchestrator-report.md` | `Task` `subagent_type="generalPurpose"` `model="composer-2.5"` — Opus provides the scope blob (what to capture, structural template, links to existing reference docs), Composer types the prose |
+| Read code to understand a thing — **even ONE file beyond a quick glance** | `Task` `subagent_type="explore"` `model="composer-2.5"` |
+| Write **or edit** production code, tests, or migrations — **any size, including a "one-line" fix** | `Task` `subagent_type="generalPurpose"` `model="composer-2.5"` |
+| Investigate / debug / trace behavior through the codebase | `Task` `subagent_type="explore"` (`generalPurpose` if it needs edits) `model="composer-2.5"` |
+| Author **any** durable doc/report/bootstrapper longer than a few lines | `Task` `subagent_type="generalPurpose"` `model="composer-2.5"` — Opus provides the scope blob (what to capture, structural template, links to existing reference docs), Composer types the prose |
 | Multi-step refactor of any size | `Task` `subagent_type="generalPurpose"` `model="composer-2.5"` |
+| Run a verification pass (tsc/eslint/jest/build) to *check* something | `Task` `subagent_type="generalPurpose"` `model="composer-2.5"` — don't burn Opus tokens watching a build |
 | Investigate a failing CI check | `Task` `subagent_type="ci-investigator"` |
 | 5-axis adversarial reliability review on a large diff | `Task` `subagent_type="generalPurpose"` `model="claude-4.6-sonnet-medium-thinking"` |
 
@@ -25,11 +36,12 @@ If you are an **Opus orchestrator chat** in this repo, your job is to decide and
 1. **Orchestration decisions** — which work next, which model tier, design trade-offs, when to merge, when to defer, when to escalate.
 2. **Synthesizing subagent results** for Andrew (pulling 2–3 subagent reports into one recommendation; the user-visible value Opus uniquely adds).
 3. **Git orchestration** — branch, `merge --no-ff`, push, branch cleanup. These are orchestration, not execution.
-4. **Tiny docs commits where dispatch overhead > task cost.** Strict carve-out criteria, ALL must hold:
+4. **Tiny docs commits where dispatch overhead genuinely > task cost — RARE exception, not an escape hatch.** ALL criteria must hold:
    - ≤5 tool calls total for the whole commit
-   - Docs-only (no production code, no tests)
-   - Single coherent thought already loaded in this chat's context (no new file reads to gather the thought)
+   - Docs-only (no production code, no tests — those dispatch regardless of size)
+   - Single coherent thought already loaded in this chat's context (no new file reads to gather the thought — if you need to read to understand, that's an `explore` dispatch)
    - **Name the carve-out in chat when invoking it** so Andrew sees the discipline working. Example: *"Using the docs-only ≤5-tool-call carve-out — I have BACKLOG.md and the relevant entries already loaded, no new reads needed."*
+   - If you find yourself reaching for this more than occasionally, you're using it as an escape hatch — stop and dispatch.
 
 ## Common slip patterns to self-catch
 
@@ -37,6 +49,9 @@ If you are an **Opus orchestrator chat** in this repo, your job is to decide and
 - "I'll write the test myself, it's only 20 lines..." → that's a `generalPurpose` subagent.
 - "Let me draft the handoff report and we can iterate..." → that's a `generalPurpose` subagent with a scope blob.
 - "I'll fix this one small bug while I'm here..." → that's a `generalPurpose` subagent.
+- "It's a one-line change, dispatch overhead isn't worth it..." → if it touches code/tests, **dispatch anyway**; the carve-out is docs-only.
+- "Let me run tsc/the build real quick to confirm..." → that's a `generalPurpose` subagent; don't spend Opus tokens watching output scroll.
+- "I'm not sure Composer can handle this, I'd better do it..." → capability doubt on an *execution* task is not a reason to keep it; dispatch and escalate only on observed failure.
 
 If you catch yourself mid-action: stop, dispatch, and acknowledge the catch.
 
