@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const { WB_REGRESSION_LOCAL_DATABASE_URL } = require("./scripts/wb-regression-local-db.cjs");
+
 /**
  * Playwright config — visual regression, a11y, smoke, e2e, and integration tests.
  *
@@ -13,11 +15,12 @@ import { defineConfig, devices } from "@playwright/test";
  * Run default Playwright (all non-integration projects): npm run test:e2e
  * Update baselines: npm run test:visual:update
  *
- * Local: ensure `.env` has a valid `DATABASE_URL` (PostgreSQL) and run
- * `npx prisma db push` if needed — the web server reuses that URL (no longer
- * forces sqlite `file:./pw.db`).
+ * Database: Playwright webServer + globalSetup force local Docker Postgres
+ * (`127.0.0.1:5432/tutoring_notes`) and abort if DATABASE_URL host is not local.
+ * Your `.env` may still point at Neon for normal dev; the harness never uses it.
  */
 export default defineConfig({
+  globalSetup: require.resolve("./tests/integration/wb-regression-global-setup.ts"),
   testDir: "./tests",
   timeout: 60_000,
   retries: process.env.CI ? 1 : 0,
@@ -42,7 +45,7 @@ export default defineConfig({
   webServer: [
     {
       command:
-        'cmd /c "set WHITEBOARD_SYNC_URL=ws://localhost:3002&& set NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT=1&& set NEXT_PUBLIC_WB_E2E_SCENE_HOOK=1&& set NEXTAUTH_URL=http://localhost:3100&& npx prisma db push --skip-generate&& npm run dev -- --port 3100"',
+        `cmd /c "set DATABASE_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set DIRECT_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set WHITEBOARD_SYNC_URL=ws://localhost:3002&& set NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT=1&& set NEXT_PUBLIC_WB_E2E_SCENE_HOOK=1&& set NEXTAUTH_URL=http://localhost:3100&& node scripts/wb-regression-assert-local-db.cjs&& npx prisma db push --skip-generate&& npm run dev -- --port 3100"`,
       url: "http://localhost:3100",
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,

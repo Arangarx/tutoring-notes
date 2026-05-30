@@ -90,9 +90,11 @@ Or **`scripts\push-schema-neon.ps1`** (uses `db push` — prefer `migrate deploy
 
 ## Whiteboard regression net (`npm run test:wb-sync`)
 
-Real-browser Playwright tests over a **local Docker relay** (not production `wss://wb.mortensenapps.com`). Requires Docker Desktop, Node 20+, and `.env` with local `DATABASE_URL` + `BLOB_READ_WRITE_TOKEN` (for image/PDF invariants 7 and 8).
+Real-browser Playwright tests over a **local Docker relay** (not production `wss://wb.mortensenapps.com`). Requires Docker Desktop, Node 20+, and local Postgres (`npm run db:up`). Optional: `BLOB_READ_WRITE_TOKEN` in `.env` for image/PDF invariants 7 and 8 (tests self-skip if unset).
 
-1. `npm run db:up` and `npm run db:push` (if schema not applied).
+**You do not need to edit `.env` for `DATABASE_URL`.** The harness forces local Docker Postgres (`postgresql://postgres:postgres@127.0.0.1:5432/tutoring_notes`) for the Playwright runner (globalSetup + seed), the dev `webServer` (`prisma db push` + `npm run dev`), and both set `DIRECT_URL` to the same value. A **host safety rail** aborts immediately if the effective `DATABASE_URL` host is not `localhost` / `127.0.0.1` — so Neon/production URLs in `.env` cannot be used even by mistake.
+
+1. `npm run db:up` (schema is applied by Playwright’s `prisma db push` on first run; `npm run db:push` is optional beforehand).
 2. One-time relay image: `npm run relay:build` (builds `wb-relay-local` from sibling `../whiteboard-sync`).
 3. Run the gate: `npm run test:wb-sync` (Jest whiteboard suites + Playwright `wb-regression` project).
 
