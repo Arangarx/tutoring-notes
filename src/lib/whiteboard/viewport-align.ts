@@ -57,7 +57,10 @@ export function viewportSceneCenterFromScroll(
   offsetTop = 0
 ): { x: number; y: number } {
   return viewportCoordsToSceneCoords(
-    { clientX: viewportWidth / 2, clientY: viewportHeight / 2 },
+    {
+      clientX: offsetLeft + viewportWidth / 2,
+      clientY: offsetTop + viewportHeight / 2,
+    },
     coordSlice(
       scrollX,
       scrollY,
@@ -77,13 +80,13 @@ export function scrollForViewportSceneCenter(
   zoom: number,
   viewportWidth: number,
   viewportHeight: number,
-  offsetLeft = 0,
-  offsetTop = 0
+  _offsetLeft = 0,
+  _offsetTop = 0
 ): { scrollX: number; scrollY: number } {
-  const scrollX =
-    (viewportWidth / 2 - offsetLeft) / zoom - centerSceneX;
-  const scrollY =
-    (viewportHeight / 2 - offsetTop) / zoom - centerSceneY;
+  // Inverse of center at client (offset + size/2): scene = (size/2)/zoom - scroll.
+  // Offsets cancel in the forward transform; scroll must not depend on them.
+  const scrollX = viewportWidth / 2 / zoom - centerSceneX;
+  const scrollY = viewportHeight / 2 / zoom - centerSceneY;
   return { scrollX, scrollY };
 }
 
