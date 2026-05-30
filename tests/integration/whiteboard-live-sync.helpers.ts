@@ -1,4 +1,6 @@
 import { expect, type Page } from "@playwright/test";
+import fs from "node:fs";
+import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import {
   seedTestAdmin,
@@ -10,6 +12,15 @@ import {
   studentScrollFromFollowCenter,
   viewportSceneCenterFromScroll,
 } from "../../src/lib/whiteboard/viewport-align";
+
+/** Screen-pixel tolerance for viewport center / PDF fit (owner: 16px). */
+export const WB_VIEWPORT_CENTER_PASS_TOLERANCE_PX = 16;
+
+/** Scene-unit tolerance for zoom-invariant center (independent oracle). */
+export const WB_ZOOM_INVARIANT_CENTER_TOLERANCE_SCENE = 4;
+
+/** Scene-unit tolerance for live MOVE propagation. */
+export const WB_MOVE_PROPAGATION_TOLERANCE_SCENE = 2;
 
 export type WbLiveSyncSession = {
   adminUserId: string;
@@ -181,21 +192,201 @@ export async function placeMarkerAtViewportCenter(
   );
 }
 
+export async function moveElementOnRole(
+  page: Page,
+  role: "tutor" | "student",
+  elementId: string,
+  deltaX: number,
+  deltaY: number
+): Promise<void> {
+  await page.evaluate(
+    ({ r, id, dx, dy }) => {
+      const bridge = (
+        window as Window & {
+          __TN_WB_E2E__?: Record<
+            string,
+            {
+              moveElement: (
+                id: string,
+                deltaX: number,
+                deltaY: number
+              ) => void;
+            }
+          >;
+        }
+      ).__TN_WB_E2E__?.[r];
+      if (!bridge?.moveElement) {
+        throw new Error(`E2E bridge missing moveElement for ${r}`);
+      }
+      bridge.moveElement(id, dx, dy);
+    },
+    { r: role, id: elementId, dx: deltaX, dy: deltaY }
+  );
+}
+
+export async function readElementPosition(
+  page: Page,
+  role: "tutor" | "student",
+  elementId: string
+): Promise<{ x: number; y: number } | null> {
+  return page.evaluate(
+    ({ r, id }) => {
+      const bridge = (
+        window as Window & {
+          __TN_WB_E2E__?: Record<
+            string,
+            {
+              elementPosition: (
+                id: string
+              ) => { x: number; y: number } | null;
+            }
+          >;
+        }
+      ).__TN_WB_E2E__?.[r];
+      return bridge?.elementPosition ? bridge.elementPosition(id) : null;
+    },
+    { r: role, id: elementId }
+  );
+}
+
+export async function readAppStateCenterXY(
+  page: Page,
+  role: "tutor" | "student"
+): Promise<{ x: number; y: number }> {
+  return page.evaluate((r) => {
+    const bridge = (
+      window as Window & {
+        __TN_WB_E2E__?: Record<
+          string,
+          { appStateCenterXY: () => { x: number; y: number } }
+        >;
+      }
+    ).__TN_WB_E2E__?.[r];
+    if (!bridge?.appStateCenterXY) {
+      throw new Error(`E2E bridge missing appStateCenterXY for ${r}`);
+    }
+    return bridge.appStateCenterXY();
+  }, role);
+}
+
+export async function setViewportOnRole(
+  page: Page,
+  role: "tutor" | "student",
+  scrollX: number,
+  scrollY: number,
+  zoom?: number
+): Promise<void> {
+  await page.evaluate(
+    ({ r, sx, sy, z }) => {
+      const bridge = (
+        window as Window & {
+          __TN_WB_E2E__?: Record<
+            string,
+            {
+              setViewport: (
+                scrollX: number,
+                scrollY: number,
+                zoom?: number
+              ) => void;
+            }
+          >;
+        }
+      ).__TN_WB_E2E__?.[r];
+      if (!bridge?.setViewport) {
+        throw new Error(`E2E bridge missing setViewport for ${r}`);
+      }
+      bridge.setViewport(sx, sy, z);
+    },
+    { r: role, sx: scrollX, sy: scrollY, z: zoom }
+  );
+}
+
 export async function waitForElementOnPeer(
   page: Page,
   role: "tutor" | "student",
   elementId: string,
   timeoutMs = 45_000
 ): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const ids = await readSceneElementIds(page, role);
-    if (ids.includes(elementId)) return;
-    await page.waitForTimeout(250);
-  }
-  throw new Error(
-    `Timed out waiting for element ${elementId} on ${role} canvas (last ids: ${(await readSceneElementIds(page, role)).join(", ")})`
+  await page.waitForFunction(
+    ({ r, id }) => {
+      const bridge = (
+        window as Window & {
+          __TN_WB_E2E__?: Record<
+            string,
+            { getElements: () => Array<{ id: string }> }
+          >;
+        }
+      ).__TN_WB_E2E__?.[r];
+      if (!bridge?.getElements) return false;
+      return bridge.getElements().some((e) => e.id === id);
+    },
+    { r: role, id: elementId },
+    { timeout: timeoutMs }
   );
+}
+
+export async function waitForStrokeWidthAtLeast(
+  page: Page,
+  role: "tutor" | "student",
+  strokeId: string,
+  minWidth: number,
+  timeoutMs = 12_000
+): Promise<void> {
+  await page.waitForFunction(
+    ({ r, id, minW }) => {
+      const bridge = (
+        window as Window & {
+          __TN_WB_E2E__?: Record<string, { widthOf: (id: string) => number }>;
+        }
+      ).__TN_WB_E2E__?.[r];
+      if (!bridge?.widthOf) return false;
+      return bridge.widthOf(id) >= minW - 1;
+    },
+    { r: role, id: strokeId, minW: minWidth },
+    { timeout: timeoutMs }
+  );
+}
+
+export async function waitForViewportAligned(
+  page: Page,
+  role: "tutor" | "student",
+  expectedScrollX: number,
+  expectedScrollY: number,
+  toleranceUnits = 8,
+  timeoutMs = 12_000
+): Promise<void> {
+  await page.waitForFunction(
+    ({ r, ex, ey, tol }) => {
+      const bridge = (
+        window as Window & {
+          __TN_WB_E2E__?: Record<string, { getAppState: () => Record<string, unknown> }>;
+        }
+      ).__TN_WB_E2E__?.[r];
+      if (!bridge?.getAppState) return false;
+      const st = bridge.getAppState();
+      const scrollX = Number(st.scrollX) || 0;
+      const scrollY = Number(st.scrollY) || 0;
+      return (
+        Math.abs(scrollX - ex) <= tol && Math.abs(scrollY - ey) <= tol
+      );
+    },
+    {
+      r: role,
+      ex: expectedScrollX,
+      ey: expectedScrollY,
+      tol: toleranceUnits,
+    },
+    { timeout: timeoutMs }
+  );
+}
+
+export async function waitForSceneElementIdsContaining(
+  page: Page,
+  role: "tutor" | "student",
+  elementId: string,
+  timeoutMs = 12_000
+): Promise<void> {
+  await waitForElementOnPeer(page, role, elementId, timeoutMs);
 }
 
 export async function readEncryptionKeyFromHash(page: Page): Promise<string> {
@@ -223,6 +414,18 @@ export async function ensureStudentFollowsTutor(page: Page): Promise<void> {
   if (!(await checkbox.isChecked())) {
     await checkbox.check();
   }
+}
+
+export async function setStudentFollowTutor(
+  page: Page,
+  enabled: boolean
+): Promise<void> {
+  const checkbox = page.getByRole("checkbox", {
+    name: /keep pan.*zoom synced/i,
+  });
+  const checked = await checkbox.isChecked();
+  if (enabled && !checked) await checkbox.check();
+  if (!enabled && checked) await checkbox.uncheck();
 }
 
 export type ViewportSnapshot = {
@@ -258,7 +461,10 @@ export async function readViewportSnapshot(
   }, role);
 }
 
-/** Distance from element center to viewport center in screen pixels (student). */
+/**
+ * Distance from element center to viewport center in screen pixels.
+ * Uses Excalidraw's sceneCoordsToViewportCoords (offsetLeft/offsetTop included).
+ */
 export async function markerCenterOffsetFromViewportCenter(
   page: Page,
   role: "tutor" | "student",
@@ -294,16 +500,122 @@ export async function markerCenterOffsetFromViewportCenter(
       const vh = Number(st.height) || 1;
       const scrollX = Number(st.scrollX) || 0;
       const scrollY = Number(st.scrollY) || 0;
+      const offsetLeft = Number(st.offsetLeft) || 0;
+      const offsetTop = Number(st.offsetTop) || 0;
       const ex = (Number(el.x) || 0) + (Number(el.width) || 0) / 2;
       const ey = (Number(el.y) || 0) + (Number(el.height) || 0) / 2;
-      const screenX = (ex - scrollX) * zoom;
-      const screenY = (ey - scrollY) * zoom;
-      const cx = vw / 2;
-      const cy = vh / 2;
+      const screenX = (ex + scrollX) * zoom + offsetLeft;
+      const screenY = (ey + scrollY) * zoom + offsetTop;
+      const cx = offsetLeft + vw / 2;
+      const cy = offsetTop + vh / 2;
       return Math.hypot(screenX - cx, screenY - cy);
     },
     { r: role, id: markerId }
   );
+}
+
+export async function clickBoardPageTab(
+  page: Page,
+  side: "tutor" | "student",
+  pageTitle: string
+): Promise<void> {
+  const strip = page.getByTestId(
+    side === "tutor" ? "wb-tutor-page-strip" : "student-board-pages-strip"
+  );
+  await strip.getByRole("button", { name: pageTitle, exact: true }).click();
+}
+
+/** Insert PNG via production `insertImageOnCanvas` + Blob upload (E2E bridge). */
+export async function insertPngFixtureOnRole(
+  page: Page,
+  role: "tutor",
+  fixturePath: string,
+  session: WbLiveSyncSession
+): Promise<string> {
+  const base64 = fs.readFileSync(fixturePath).toString("base64");
+  const filename = path.basename(fixturePath);
+  return page.evaluate(
+    async ({ r, b64, name, wbsid, stid }) => {
+      const bridge = (
+        window as Window & {
+          __TN_WB_E2E__?: Record<
+            string,
+            {
+              insertImageFixture: (
+                base64: string,
+                filename: string,
+                whiteboardSessionId: string,
+                studentId: string
+              ) => Promise<string>;
+            }
+          >;
+        }
+      ).__TN_WB_E2E__?.[r];
+      if (!bridge?.insertImageFixture) {
+        throw new Error(`E2E bridge missing insertImageFixture for ${r}`);
+      }
+      return bridge.insertImageFixture(b64, name, wbsid, stid);
+    },
+    {
+      r: role,
+      b64: base64,
+      name: filename,
+      wbsid: session.whiteboardSessionId,
+      stid: session.studentId,
+    }
+  );
+}
+
+export async function readImageElementState(
+  page: Page,
+  role: "tutor" | "student",
+  elementId: string
+): Promise<{
+  fileId: string | null;
+  isPlaceholder: boolean;
+  hasBinary: boolean;
+  assetUrl: string | null;
+} | null> {
+  return page.evaluate(
+    ({ r, id }) => {
+      const bridge = (
+        window as Window & {
+          __TN_WB_E2E__?: Record<
+            string,
+            {
+              imageElementState: (id: string) => {
+                fileId: string | null;
+                isPlaceholder: boolean;
+                hasBinary: boolean;
+                assetUrl: string | null;
+              } | null;
+            }
+          >;
+        }
+      ).__TN_WB_E2E__?.[r];
+      return bridge?.imageElementState ? bridge.imageElementState(id) : null;
+    },
+    { r: role, id: elementId }
+  );
+}
+
+export async function findFirstImageElementId(
+  page: Page,
+  role: "tutor" | "student"
+): Promise<string | null> {
+  return page.evaluate((r) => {
+    const bridge = (
+      window as Window & {
+        __TN_WB_E2E__?: Record<
+          string,
+          { getElements: () => Array<{ id: string; type?: string }> }
+        >;
+      }
+    ).__TN_WB_E2E__?.[r];
+    if (!bridge?.getElements) return null;
+    const img = bridge.getElements().find((e) => e.type === "image");
+    return img?.id ?? null;
+  }, role);
 }
 
 export function expectedAlignedStudentScroll(
@@ -339,4 +651,11 @@ export function tutorSceneCenter(tutor: ViewportSnapshot) {
     tutor.width,
     tutor.height
   );
+}
+
+export function sceneCenterDistance(
+  a: { x: number; y: number },
+  b: { x: number; y: number }
+): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
 }

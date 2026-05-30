@@ -2,11 +2,13 @@ import { type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
+const { assertLocalDatabaseUrlForHarness } = require("../../scripts/wb-regression-local-db.cjs");
+
 /**
  * Test admin credentials and seed helpers for Playwright tests.
  *
- * The test database (pw.db / DATABASE_URL from playwright webServer command)
- * is a separate SQLite file, so seeding here never touches production data.
+ * Playwright globalSetup + webServer force local Docker Postgres; the host
+ * guard below aborts if DATABASE_URL ever points at a non-local host.
  *
  * Credentials are fixed so tests are reproducible and don't rely on env vars.
  * Change them here if the test DB is reset and you need a fresh admin.
@@ -22,6 +24,7 @@ export const TEST_ADMIN = {
  * Idempotent — safe to call at the start of every test or in global setup.
  */
 export async function seedTestAdmin(): Promise<string> {
+  assertLocalDatabaseUrlForHarness();
   const prisma = new PrismaClient();
   try {
     const existing = await prisma.adminUser.findUnique({

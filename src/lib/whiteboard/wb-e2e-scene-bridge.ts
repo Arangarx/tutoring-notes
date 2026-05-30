@@ -3,7 +3,10 @@
  * (`getSceneElements`, `getAppState`, controlled scene mutations) when
  * `NEXT_PUBLIC_WB_E2E_SCENE_HOOK=1`. Not a mock: same instances the app uses.
  */
-import type { ExcalidrawApiLike } from "@/lib/whiteboard/insert-asset";
+import {
+  insertImageOnCanvas,
+  type ExcalidrawApiLike,
+} from "@/lib/whiteboard/insert-asset";
 import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter";
 import { viewportSceneCenterFromScroll } from "@/lib/whiteboard/viewport-align";
 
@@ -27,6 +30,28 @@ export type WbE2eSceneBridge = {
   versionOf: (strokeId: string) => number;
   /** Read the `width` (or -1) of a given element id from the live scene. */
   widthOf: (strokeId: string) => number;
+  /** Move an element by delta in scene units (bumps version, triggers sync). */
+  moveElement: (elementId: string, deltaX: number, deltaY: number) => void;
+  /** Scene center at viewport center via {@link viewportSceneCenterFromScroll} (oracle). */
+  appStateCenterXY: () => { x: number; y: number };
+  /** Set scroll/zoom on the live canvas (triggers onChange + sync). */
+  setViewport: (scrollX: number, scrollY: number, zoom?: number) => void;
+  /** Scene x/y of an element (or null). */
+  elementPosition: (elementId: string) => { x: number; y: number } | null;
+  /** Image element file/binary inspection for sync-hydration regressions. */
+  imageElementState: (elementId: string) => {
+    fileId: string | null;
+    isPlaceholder: boolean;
+    hasBinary: boolean;
+    assetUrl: string | null;
+  } | null;
+  /** PNG fixture → real Blob upload + scene insert (Playwright inv 7). */
+  insertImageFixture: (
+    base64: string,
+    filename: string,
+    whiteboardSessionId: string,
+    studentId: string
+  ) => Promise<string>;
 };
 
 type WbE2eSceneMutationHook = () => void;
@@ -221,6 +246,115 @@ export function registerWbE2eSceneBridge(
       }>;
       const el = els.find((e) => e.id === strokeId);
       return el && typeof el.width === "number" ? el.width : -1;
+    },
+    moveElement(elementId, deltaX, deltaY) {
+      const now = Date.now();
+      const existing = api.getSceneElements() as ExcalidrawLikeElement[];
+      const idx = existing.findIndex((e) => (e as { id?: string }).id === elementId);
+      if (idx < 0) {
+        throw new Error(`moveElement: ${elementId} not in scene`);
+      }
+      const el = { ...existing[idx] } as Record<string, unknown> & {
+        x?: number;
+        y?: number;
+        version?: number;
+      };
+      el.x = (Number(el.x) || 0) + deltaX;
+      el.y = (Number(el.y) || 0) + deltaY;
+      el.version = (typeof el.version === "number" ? el.version : 0) + 1;
+      el.versionNonce = now;
+      el.updated = now;
+      const next = [...existing];
+      next[idx] = el as ExcalidrawLikeElement;
+      api.updateScene({ elements: next });
+      invokeSceneMutationHook(role);
+    },
+    appStateCenterXY() {
+      const st = api.getAppState() as {
+        scrollX: number;
+        scrollY: number;
+        width?: number;
+        height?: number;
+      };
+      const zoom = readZoom(st as Record<string, unknown>);
+      const vw = typeof st.width === "number" && st.width > 0 ? st.width : 800;
+      const vh = typeof st.height === "number" && st.height > 0 ? st.height : 600;
+      return viewportSceneCenterFromScroll(
+        st.scrollX,
+        st.scrollY,
+        zoom,
+        vw,
+        vh
+      );
+    },
+    setViewport(scrollX, scrollY, zoom) {
+      const st = api.getAppState() as Record<string, unknown>;
+      const prevZoom = readZoom(st);
+      const nextZoom = typeof zoom === "number" && Number.isFinite(zoom) ? zoom : prevZoom;
+      (
+        api.updateScene as (data: {
+          elements?: ReadonlyArray<unknown>;
+          appState?: Record<string, unknown>;
+        }) => void
+      )({
+        appState: {
+          ...st,
+          scrollX,
+          scrollY,
+          zoom: { value: nextZoom },
+        },
+      });
+      invokeSceneMutationHook(role);
+    },
+    elementPosition(elementId) {
+      const el = (api.getSceneElements() as Array<{ id?: string; x?: number; y?: number }>).find(
+        (e) => e.id === elementId
+      );
+      if (!el) return null;
+      return { x: Number(el.x) || 0, y: Number(el.y) || 0 };
+    },
+    imageElementState(elementId) {
+      const el = (api.getSceneElements() as Array<{
+        id?: string;
+        type?: string;
+        fileId?: string;
+        customData?: { isPlaceholder?: boolean; assetUrl?: string };
+      }>).find((e) => e.id === elementId);
+      if (!el || el.type !== "image") return null;
+      const fileId = typeof el.fileId === "string" ? el.fileId : null;
+      const custom = el.customData;
+      const isPlaceholder = custom?.isPlaceholder === true;
+      const assetUrl =
+        typeof custom?.assetUrl === "string" ? custom.assetUrl : null;
+      let hasBinary = false;
+      if (fileId && api.getFiles) {
+        const files = api.getFiles() as Record<string, { dataURL?: string }>;
+        const entry = files[fileId];
+        hasBinary =
+          Boolean(entry) &&
+          typeof entry.dataURL === "string" &&
+          entry.dataURL.length > 0;
+      }
+      return { fileId, isPlaceholder, hasBinary, assetUrl };
+    },
+    async insertImageFixture(base64, filename, whiteboardSessionId, studentId) {
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      const file = new File([bytes], filename, { type: "image/png" });
+      const result = await insertImageOnCanvas({
+        excalidrawAPI: api,
+        whiteboardSessionId,
+        studentId,
+        file,
+      });
+      if (!result.ok) {
+        throw new Error(result.reason);
+      }
+      invokeSceneMutationHook(role);
+      return result.elementId;
     },
   };
 

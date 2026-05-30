@@ -220,8 +220,9 @@ Complete setup sequence from scratch on a fresh dev machine:
 ```powershell
 # Prerequisites:
 #   - Docker Desktop running
-#   - .env has DATABASE_URL pointing to local Postgres (or db:up docker compose)
 #   - Node 20+, npm ci run already
+#   - .env may still point DATABASE_URL at Neon for normal dev — the harness
+#     forces local Docker Postgres and aborts on non-local hosts (see LOCAL-DEV.md)
 
 # 1. Start local Postgres (if not already running)
 npm run db:up
@@ -241,6 +242,8 @@ docker run --rm -p 3002:3002 -e PORT=3002 -e CORS_ORIGIN=http://localhost:3100 w
 ```
 
 Playwright waits for `http://localhost:3002/` to respond before launching tests. The relay's HTTP response at `/` is the health signal.
+
+**Database safety (prod impossible):** `globalSetup` and the dev `webServer` command force `DATABASE_URL` / `DIRECT_URL` to `postgresql://postgres:postgres@127.0.0.1:5432/tutoring_notes`. `node scripts/wb-regression-assert-local-db.cjs` runs immediately before `prisma db push`. `assertLocalDatabaseUrlForHarness()` in `scripts/wb-regression-local-db.cjs` also runs in Playwright `globalSetup` and before Prisma seed helpers — aborting with a fatal error if the host is not `localhost` / `127.0.0.1`. Unit tests: `src/__tests__/wb-regression-local-db.test.ts`.
 
 ---
 
@@ -481,3 +484,9 @@ Add to `docs/PLATFORM-ASSUMPTIONS.md` under section 9 ("OS / development environ
 | New invariants | Add 3 (MOVE), 6 (zoom-invariant center), 7 (real image), 8 (PDF center+fit), 10 (follow gating) |
 | Anti-flake | No arbitrary sleeps — use bridge-ready/connected waits; `retries: 1` for wb-regression; relay startup via Playwright webServer URL polling |
 | Teeth-verify | Revert `123e60e`, confirm inv 4 goes red; restore, confirm green; run same protocol for each new invariant |
+
+---
+
+## Regression net: inv 8 (PDF) quarantine — pdfjs headless prerequisite
+
+**Invariant 8** (`tests/integration/whiteboard-live-sync-regression.spec.ts`, `"invariant 8 — PDF page opens centered+fit on student viewport"`) is **quarantined** with an explicit `test.skip` reason in the wb-regression suite. Headless Playwright cannot load `pdfjs-dist` (`Object.defineProperty called on non-object`), so the test fails before any centering assertion — this is a **gate/env prerequisite**, not a production PDF-centering bug. PDF center+fit on the student viewport is covered by **manual smoke** and Andrew’s **real-hardware smoke** (passed). **Fast-follow:** fix pdfjs-dist worker loading in headless Playwright (worker copy / `postinstall` path used by `scripts/copy-pdfjs-worker.mjs`), then remove the quarantine and re-enable inv 8 in `npm run test:wb-sync`.
