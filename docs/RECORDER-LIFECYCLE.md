@@ -362,11 +362,12 @@ explicit precedence, add tests in
 `src/__tests__/recording/lifecycle-machine.test.ts`. Then thread the
 input from the host. Do NOT introduce side effects in the FSM.
 
-**Q: Where do I see the rid / wbsid / obx / pvw / snp / avx / pvs prefixes
+**Q: Where do I see the rid / wbsid / obx / dft / pvw / snp / avx / pvs prefixes
 documented?**
 A: AGENTS.md "Per-session ID logging is mandatory." section. The
 3-letter prefixes used in this stack are `wbsid` (whiteboard
-session id), `obx` (outbox row), `snp` (snapshot generation),
+session id), `obx` (outbox row), `dft` (in-progress audio draft
+IndexedDB row — W1 crash/refresh durability), `snp` (snapshot generation),
 `pvw` (preview-before-start), `pvs` (per-page whiteboard pan/zoom —
 Phase 5 task 8), `rid` (audio recorder), `avx`
 (live-A/V session — Phase 4a `peer-mesh.ts` + `signaling.ts`; per-peer
@@ -392,6 +393,7 @@ students apply tutor patches only.
 | Tutor reports "lost a session" | `WhiteboardWorkspaceClient.handleEndSession` step ordering, `drainOutboxOrTimeout` timeout, atomic-action server logs grepped by `wbsid=` |
 | "Recording pill says off but I'm recording" | FSM inputs at the top of `WhiteboardWorkspaceClient` — usually `everHadParticipants` not latched, or `inputStreams` missing |
 | "End button is grey forever" | `inFlightStreamCount` from the outbox observer; check `obx=` lines for permanent failure |
+| "Tab died mid-recording — audio gone" | `dft=` lines + `tutoring-notes-recording-draft` IDB; workspace recovery banner (`wb-audio-draft-recovery-banner`) should offer Keep → outbox enqueue |
 | "Replay/preview shows blank canvas" | `parseEventLogBySchema` rejected the log (schema version), or `restoreElements` failed; check the replay/`pvw=` console lines |
 | "Snapshot link is missing on the share page" | Best-effort by design. Grep `snp=` lines in the workspace console for the skip reason; null means End succeeded without a snapshot |
 | "Group session paused even though one student is still here" | FSM input `participants` — make sure the sync layer is putting peer ids in, and `participants.size >= 1` for non-paused state |

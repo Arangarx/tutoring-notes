@@ -346,6 +346,7 @@
 - **Assumption**: iOS Safari requires `audio/mp4` mimeType (not `audio/webm`). `MediaRecorder.isTypeSupported` is checked at recording-start.
 - **Where baked in**: `src/lib/recording/...` (mime selection logic).
 - **What breaks if violated**: recording fails silently on iPhone. Phase 2 task 2 (iOS Safari matrix) covers exhaustive testing.
+- **Draft durability (`timeslice`, W1 Surface 1, 2026-05-30)**: The whiteboard workspace enables `MediaRecorder.start(30000)` plus a 30s `setInterval` draft checkpoint to IndexedDB (`tutoring-notes-recording-draft`). iOS Safari may **not** emit intermediate `ondataavailable` events on the timeslice interval before `stop()` — the hook logs a warning and still checkpoints on `stop()` / `pagehide` (stop-only path). Mid-recording crash recovery on iOS without timeslice events is **coarser** (only data flushed at last interval or tab hide). **Gate:** Andrew validates on a real iPhone that `timeslice: 30000` fires at least once before `stop()`; if not, accept stop-only + interval checkpoints and document the smoke finding here.
 
 ### 8.2 Excalidraw mount lifecycle (canvas wipe race)
 
@@ -366,8 +367,8 @@
 ### 8.5 IndexedDB for upload outbox + checkpoints
 
 - **Assumption**: IndexedDB available with reasonable storage budget. iOS Safari ITP (Intelligent Tracking Prevention) may evict storage after 7 days of inactivity for non-installed PWAs.
-- **Where baked in**: `src/lib/recording/upload-outbox.ts`, IndexedDB checkpoint paths.
-- **What breaks if violated**: cross-day recording session resumption fails on iOS Safari. Acceptable today (sessions are intra-day); flag if persistence across days becomes a feature.
+- **Where baked in**: `src/lib/recording/upload-outbox.ts`, `src/lib/recording/recording-draft-store.ts` (`tutoring-notes-recording-draft`), whiteboard checkpoint paths (`tutoring-notes-checkpoints`).
+- **What breaks if violated**: cross-day recording session resumption fails on iOS Safari. Acceptable today (sessions are intra-day); flag if persistence across days becomes a feature. The **recording draft** store is subject to the same 7-day ITP eviction risk as the outbox; intra-day sessions are safe.
 
 ---
 
