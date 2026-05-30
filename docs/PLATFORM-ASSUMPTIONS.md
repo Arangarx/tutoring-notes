@@ -62,13 +62,12 @@
 
 ### 1.4 Build execution
 
-- **Assumption**: Build environment has git available (`ignoreCommand` uses `git diff`).
-- **Where baked in**: `vercel.json:4`
-  ```json
-  "ignoreCommand": "PREV=${VERCEL_GIT_PREVIOUS_SHA:-HEAD^}; ! git diff $PREV HEAD --name-only | grep -qvE '^(docs/|.*\\.md$)'"
-  ```
-- **What breaks if violated**: docs-only commits would trigger unnecessary rebuilds (cost + time). Non-git build environments (rare) would error on `ignoreCommand` and either always-build or always-skip depending on exit-code semantics.
-- **Migration check**: confirm new platform exposes a previous-deploy SHA env var (Vercel: `VERCEL_GIT_PREVIOUS_SHA`) and supports an `ignoreCommand`-equivalent.
+- **Assumption**: Build environment has **git** and **Node** available. `ignoreCommand` runs `node scripts/vercel-ignore-build.cjs`, which shells out to `git diff $VERCEL_GIT_PREVIOUS_SHA HEAD --name-only`.
+- **Where baked in**: `vercel.json` (`ignoreCommand`), `scripts/vercel-ignore-build.cjs`.
+- **Env var**: `VERCEL_GIT_PREVIOUS_SHA` — last commit deployed on this branch. When unset (first deploy on a branch), the script **builds** (fail-safe).
+- **Polarity**: exit **0 = skip** deploy, exit **1 = run** build (Vercel convention; inverted polarity previously shipped — see `docs/BACKLOG.md` Vercel ignored build step).
+- **What breaks if violated**: docs/rule-only commits re-trigger full builds (cost + time). Missing git/Node or `VERCEL_GIT_PREVIOUS_SHA` on a new platform → script fails safe to BUILD. Wrong exit polarity would skip real code deploys.
+- **Migration check**: confirm new platform exposes a previous-deploy SHA env var and supports an `ignoreCommand`-equivalent with the same exit-code semantics; port or reimplement `scripts/vercel-ignore-build.cjs`.
 
 ### 1.5 Prisma migrate at deploy time
 
@@ -289,11 +288,11 @@
 - **Where baked in**: `package.json:8` (`postinstall`), `scripts/copy-pdfjs-worker.mjs`.
 - **What breaks if violated**: PDF-page picker (Phase 5 task 1) fails — workers can't load from `node_modules` directly via the Next.js public-asset pattern.
 
-### 6.4 Vercel `ignoreCommand` for docs-only commits
+### 6.4 Vercel `ignoreCommand` for docs/rules-only commits
 
-- **Assumption**: Docs-only commits (`docs/**`, `*.md`) skip the Vercel deploy. Saves CI cycles + cost.
-- **Where baked in**: `vercel.json:4`.
-- **What breaks if violated**: every doc edit re-triggers a full Vercel build. Wasteful but harmless.
+- **Assumption**: Commits whose diff contains **only** non-build-affecting paths skip the Vercel deploy: `docs/**`, `.cursor/**`, `*.md`, `*.mdc`. Mixed diffs (any `src/`, `package.json`, etc.) always build. Script fails safe to BUILD when `VERCEL_GIT_PREVIOUS_SHA` is missing, git fails, or the diff is empty.
+- **Where baked in**: `vercel.json` (`ignoreCommand`), `scripts/vercel-ignore-build.cjs`, `src/__tests__/vercel-ignore-build.test.ts`.
+- **What breaks if violated**: orchestrator/doc churn re-triggers full builds (wasteful); or, if polarity/safe-set regresses, real code changes could be skipped (dangerous — predicate is unit-tested).
 
 ### 6.5 Branch + smoke + direct merge (no PR ceremony)
 
