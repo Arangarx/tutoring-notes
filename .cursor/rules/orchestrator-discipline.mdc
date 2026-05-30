@@ -5,6 +5,8 @@ alwaysApply: true
 
 # Orchestrator discipline
 
+> **FIRST ACTION (every fresh orchestrator chat):** Read [`docs/handoff/ORCHESTRATOR-STATE.md`](../../docs/handoff/ORCHESTRATOR-STATE.md) — the canonical current-state bootstrap (what's done, where we are, what's next, how we work). Follow its reading list. Use `git log` for commit truth. **Never ask Andrew for catch-up** on project state or process — that doc is authoritative and kept current.
+
 If you are an **Opus orchestrator chat** in this repo, your job is to decide and dispatch — not to type code, read code at length, or author durable prose yourself. Two reasons: (1) cost — Opus is ~30x Composer 2.5 at Standard tier; (2) quality — a Composer subagent reading the codebase fresh often surfaces things Opus misses while reasoning from its in-context mental model of the repo.
 
 ## STOP before any of these in-chat actions — dispatch instead
@@ -38,18 +40,22 @@ If you are an **Opus orchestrator chat** in this repo, your job is to decide and
 
 If you catch yourself mid-action: stop, dispatch, and acknowledge the catch.
 
-## Keep orchestrator state durable — checkpoint at milestones, not just on truncation
+## Keep orchestrator state durable — living doc + milestone restructures
 
-The mechanism + template live in `AGENTS.md` § Conventions ("Orchestrator state checkpoints"); the state files are `docs/handoff/orchestrator-state-<YYYY-MM-DD>-<HHMM>.md`. The failure mode this guards against: a chat dies (truncation, crash, Andrew closes it) and the only durable snapshot is days stale, so a fresh orchestrator picks up believing already-resolved work is still in-flight.
+Canonical source: [`docs/handoff/ORCHESTRATOR-STATE.md`](../../docs/handoff/ORCHESTRATOR-STATE.md) — updated **in place**; `git log -p` on that file is the audit trail. Dated `docs/handoff/orchestrator-state-<YYYY-MM-DD>-<HHMM>.md` files are **legacy snapshots** only.
 
-**Fire a checkpoint (dispatch Composer 2.5 to author it — NEVER write it inline as Opus) at ANY of these triggers, not only "truncation/slowdown or user request":**
+**Every turn that materially changes state:** keep the lightweight head current **inline** (cheap docs edit, same cadence as a todo list) — **Last action completed**, **Next action(s)**, **Open Andrew-confirms**, **In-flight subagents**, **Uncommitted / unmerged state**. Opus may do this head update in-chat (docs-only carve-out).
+
+**Heavy full restructure** (dispatch Composer 2.5 from a scope blob — do not have Opus retype the whole doc) at ANY of these triggers:
 
 - Immediately after a `merge --no-ff` to master of any feature/wave branch.
 - After closing a multi-day thread or a long-standing bug (e.g. a recurring regression finally fixed).
-- Before kicking off a new major thread (new Wave/Phase/SEC item) — checkpoint the old state first.
-- At a natural session wind-down, if anything material changed since the last checkpoint.
+- Before kicking off a new major thread (new Wave/Phase/SEC item) — refresh state first.
+- At a natural session wind-down, if anything material changed since the last update.
 
-**Self-catch:** if you just merged to master, or just declared a hard-won bug resolved, and the newest `docs/handoff/orchestrator-state-*.md` predates that event — STOP and dispatch a checkpoint before starting the next thing. A stale durable state is a silent failure; treat "I'll checkpoint later" the same as "I'll write this test later."
+Template for heavy passes: [`docs/handoff/orchestrator-state-template.md`](../../docs/handoff/orchestrator-state-template.md). Mechanism detail: `AGENTS.md` § Conventions ("Orchestrator state checkpoints").
+
+**Self-catch:** if you just merged to master, or just declared a hard-won bug resolved, and `ORCHESTRATOR-STATE.md` still describes the old reality — STOP and update (head inline now; dispatch Composer for full restructure if warranted) before starting the next thing. A stale durable state is a silent failure; treat "I'll update state later" the same as "I'll write this test later."
 
 ## Full protocol with tier escalation criteria + observed quality
 
