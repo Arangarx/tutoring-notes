@@ -8,7 +8,7 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 ## Last action completed
 
-Orchestrator state durability hardening (milestone checkpoint rules in `.cursor/rules/orchestrator-discipline.mdc`, dated snapshot `docs/handoff/orchestrator-state-2026-05-30-1500.md`) plus **whiteboard/regression-net** merged at `fc7b12b` (standing `npm run test:wb-sync` gate green, teeth-verified).
+**Durability + deploy-hygiene hardening** (the "zero-catch-up fresh chat" thread): this canonical living bootstrap + auto-read wiring into the always-applied rule and `AGENTS.md` (`e10a315`); milestone-checkpoint trigger added to `.cursor/rules/orchestrator-discipline.mdc` (`8637471`); and a **testable Node Vercel ignore-build predicate** (`scripts/vercel-ignore-build.cjs` + 12/12 unit tests, `f6a3d7e`) so `docs/` / `.cursor/` / `*.md` / `*.mdc` state-tracking commits **skip Vercel deploys** (fail-safe to build on anything else). Earlier in the session: **whiteboard/regression-net** merged at `fc7b12b` (standing `npm run test:wb-sync` gate green, teeth-verified).
 
 ## Next action(s)
 
@@ -38,16 +38,16 @@ None.
 
 **Working tree:** clean.
 
-**`master` HEAD:** `8637471` — `docs(rules): orchestrator must checkpoint state at milestones, not just on truncation`
+**`master` HEAD:** `f6a3d7e` — `fix(vercel): testable Node ignore-build predicate — skip deploys for docs + .cursor/.mdc, fail-safe to build`
 
 Recent `master` (newest first):
 
 ```
+f6a3d7e fix(vercel): testable Node ignore-build predicate — skip deploys for docs + .cursor/.mdc, fail-safe to build
+e10a315 docs(handoff): canonical living ORCHESTRATOR-STATE.md + auto-read bootstrap (zero-catch-up fresh chats)
 8637471 docs(rules): orchestrator must checkpoint state at milestones, not just on truncation
 36350ce docs(handoff): orchestrator state checkpoint 2026-05-30-1500 (whiteboard sync resolved + regression net merged; SEC-1 next)
 fc7b12b Merge whiteboard/regression-net: standing real-browser whiteboard regression net (green + teeth-verified, inv 8 PDF quarantined)
-16e48c1 docs(backlog): sign-in button reverts to idle before auth completes
-07e671a test(whiteboard): finalize real-browser regression net — green + teeth-verified
 ```
 
 **Merged branches (preserved for stale-sweep):**
