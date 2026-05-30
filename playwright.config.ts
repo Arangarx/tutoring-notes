@@ -41,7 +41,7 @@ export default defineConfig({
 
   webServer: {
     command:
-      'cmd /c "set NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT=1&& set NEXTAUTH_URL=http://localhost:3100&& npx prisma db push --skip-generate&& npm run dev -- --port 3100"',
+      'cmd /c "set NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT=1&& set NEXT_PUBLIC_WB_E2E_SCENE_HOOK=1&& set NEXTAUTH_URL=http://localhost:3100&& npx prisma db push --skip-generate&& npm run dev -- --port 3100"',
     url: "http://localhost:3100",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

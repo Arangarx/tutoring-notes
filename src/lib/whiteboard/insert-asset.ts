@@ -29,6 +29,10 @@
 import { EXCALIDRAW_STROKE_HEX } from "@/styles/token-values";
 import { uploadWhiteboardAsset } from "@/lib/whiteboard/upload";
 import type { PdfPageRender } from "@/lib/whiteboard/pdf-render";
+import {
+  scrollForViewportSceneCenter,
+  viewportSceneCenterFromScroll,
+} from "@/lib/whiteboard/viewport-align";
 
 /**
  * Minimal structural type for the bits of Excalidraw's `ExcalidrawImperativeAPI`
@@ -173,15 +177,45 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
 }
 
 function viewportCenter(api: ExcalidrawApiLike): { x: number; y: number } {
-  const s = api.getAppState();
+  const s = api.getAppState() as {
+    scrollX: number;
+    scrollY: number;
+    width: number;
+    height: number;
+    zoom: { value: number };
+    offsetLeft?: number;
+    offsetTop?: number;
+  };
   const zoom = s.zoom?.value || 1;
-  // Excalidraw's scrollX/scrollY are in scene coords AFTER zoom; the
-  // viewport center in scene space is computed as scrollX +
-  // (width / zoom) / 2. (Reverse-engineered from
-  // viewportCoordsToSceneCoords; verified on 0.18.)
-  const cx = s.scrollX + s.width / 2 / zoom;
-  const cy = s.scrollY + s.height / 2 / zoom;
-  return { x: cx, y: cy };
+  const w = s.width;
+  const h = s.height;
+  if (
+    typeof w === "number" &&
+    Number.isFinite(w) &&
+    w > 0 &&
+    typeof h === "number" &&
+    Number.isFinite(h) &&
+    h > 0
+  ) {
+    const offsetLeft =
+      typeof s.offsetLeft === "number" && Number.isFinite(s.offsetLeft)
+        ? s.offsetLeft
+        : 0;
+    const offsetTop =
+      typeof s.offsetTop === "number" && Number.isFinite(s.offsetTop)
+        ? s.offsetTop
+        : 0;
+    return viewportSceneCenterFromScroll(
+      s.scrollX,
+      s.scrollY,
+      zoom,
+      w,
+      h,
+      offsetLeft,
+      offsetTop
+    );
+  }
+  return { x: s.scrollX, y: s.scrollY };
 }
 
 /**
@@ -211,58 +245,59 @@ function viewportSize(
 }
 
 /**
- * Compute the camera (panX, panY, zoom) that fits a single image
- * element centered at `(centerX, centerY)` of size `width × height`
- * into a viewport of size `viewW × viewH`, with ~10% margin so the
- * page doesn't kiss the chrome.
+ * Compute the camera (panX, panY, zoom) that fits a content rectangle
+ * centered at `(centerSceneX, centerSceneY)` into a viewport, with a
+ * consistent margin so the page is fully visible but not edge-to-edge.
  *
- * Returns null when the math is undefined (zero viewport, zero
- * element). Caller falls through to the anchor-page camera path.
+ * Uses {@link scrollForViewportSceneCenter} (offset-invariant) so the
+ * vendored Excalidraw transform oracle agrees with the stored viewState.
  *
  * Phase 5 task 8 — drives PDF insert auto-fit. The new page's
  * `viewState` is set to this triple so `selectTutorPage` restores it
  * the moment the tutor lands on the page.
  */
-function fitViewportToImage(args: {
-  centerX: number;
-  centerY: number;
-  imageWidth: number;
-  imageHeight: number;
+export function computeFitCameraForRect(args: {
+  centerSceneX: number;
+  centerSceneY: number;
+  contentWidth: number;
+  contentHeight: number;
   viewportWidth: number;
   viewportHeight: number;
   /** Zoom is clamped to [min, max] so a wildly-sized PDF can't push the camera into a state Excalidraw fights. */
   minZoom?: number;
   maxZoom?: number;
-  /** Margin around the image as a fraction of the viewport (0.1 = 10%). */
-  marginFraction?: number;
+  /** Fraction of viewport used for fit (0.9 ≈ 10% margin). */
+  fitPadding?: number;
 }): { panX: number; panY: number; zoom: number } | null {
   const {
-    centerX,
-    centerY,
-    imageWidth,
-    imageHeight,
+    centerSceneX,
+    centerSceneY,
+    contentWidth,
+    contentHeight,
     viewportWidth,
     viewportHeight,
     minZoom = 0.1,
     maxZoom = 2,
-    marginFraction = 0.1,
+    fitPadding = 0.9,
   } = args;
   if (
     !(viewportWidth > 0 && viewportHeight > 0) ||
-    !(imageWidth > 0 && imageHeight > 0)
+    !(contentWidth > 0 && contentHeight > 0)
   ) {
     return null;
   }
-  const usableW = viewportWidth * (1 - marginFraction);
-  const usableH = viewportHeight * (1 - marginFraction);
-  const rawZoom = Math.min(usableW / imageWidth, usableH / imageHeight);
+  const usableW = viewportWidth * fitPadding;
+  const usableH = viewportHeight * fitPadding;
+  const rawZoom = Math.min(usableW / contentWidth, usableH / contentHeight);
   const zoom = Math.min(maxZoom, Math.max(minZoom, rawZoom));
-  // Excalidraw scrollX/scrollY convention: viewport-center-in-scene =
-  // scrollX + (viewportWidth / zoom) / 2. Solving for scrollX given a
-  // target scene-center:
-  const panX = centerX - viewportWidth / 2 / zoom;
-  const panY = centerY - viewportHeight / 2 / zoom;
-  return { panX, panY, zoom };
+  const { scrollX, scrollY } = scrollForViewportSceneCenter(
+    centerSceneX,
+    centerSceneY,
+    zoom,
+    viewportWidth,
+    viewportHeight
+  );
+  return { panX: scrollX, panY: scrollY, zoom };
 }
 
 const IMAGE_MIME_WHITELIST: ReadonlyArray<string> = [
@@ -786,25 +821,21 @@ export async function insertPdfPagesAsBoardPages(
     const aspect = page.heightPx / page.widthPx;
     const width = PDF_PAGE_RENDER_WIDTH;
     const height = width * aspect;
-    const center = viewportCenter(excalidrawAPI);
-    const x = center.x - width / 2;
-    const y = center.y - height / 2;
-    // Phase 5 task 8 — fit-to-PDF camera. Without this the new page
-    // inherits the anchor page's pan/zoom (selectTutorPage's vsNext-
-    // absent branch) which leaves the fixed-720px PDF dwarfed or
-    // off-screen depending on where the tutor was looking when they
-    // hit Insert. By stamping a per-page viewState now, the existing
-    // restore path in selectTutorPage lands the camera centered on
-    // the PDF with margin — same place the tutor would have manually
-    // panned to anyway, and replay sees the camera-jump because
-    // selectTutorPage also emits the viewport-event for it.
+    // Each PDF board page owns an isolated scene: place the page image
+    // at scene origin so the camera is deterministic (scroll/zoom to
+    // center+fit the rect) regardless of where the tutor was looking
+    // on the anchor tab when they hit Insert.
+    const x = 0;
+    const y = 0;
+    const centerSceneX = width / 2;
+    const centerSceneY = height / 2;
     const vp = viewportSize(excalidrawAPI);
     const initialViewState = vp
-      ? fitViewportToImage({
-          centerX: center.x,
-          centerY: center.y,
-          imageWidth: width,
-          imageHeight: height,
+      ? computeFitCameraForRect({
+          centerSceneX,
+          centerSceneY,
+          contentWidth: width,
+          contentHeight: height,
           viewportWidth: vp.width,
           viewportHeight: vp.height,
         })

@@ -68,12 +68,19 @@ export type WhiteboardWireMessage = {
   elements: ExcalidrawLikeElement[];
 };
 
-/** Tutor camera + zoom for peer “follow me” (wire v2). */
+/** Tutor camera for peer “follow me” (wire v3): scene center + zoom. */
 export type WhiteboardWireFollow = {
-  scrollX: number;
-  scrollY: number;
+  /** Scene coordinate at the center of the tutor viewport (follow mode B). */
+  centerSceneX: number;
+  centerSceneY: number;
   /** Excalidraw stores zoom in appState as `{ value: number }` — we send the scalar. */
   zoom: number;
+  /** Tutor scroll at broadcast time (diagnostic / legacy readers only). */
+  scrollX?: number;
+  scrollY?: number;
+  /** @deprecated Student apply ignores tutor viewport dimensions. */
+  viewportWidth?: number;
+  viewportHeight?: number;
 };
 
 /** Page tabs: tutor’s active list + which tab is on screen. */

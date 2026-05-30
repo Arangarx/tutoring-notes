@@ -24,6 +24,7 @@ import {
   computeDisplayActiveMs,
 } from "@/lib/whiteboard/active-time";
 import { ExcalidrawDynamic } from "@/components/whiteboard/ExcalidrawDynamic";
+import { WhiteboardDebugHud } from "@/components/whiteboard/WhiteboardDebugHud";
 import { validateExcalidrawEmbeddable } from "@/lib/whiteboard/validate-embeddable";
 import { getOrCreateLocalPeerId } from "@/lib/whiteboard/local-peer-id";
 import { useStudentWhiteboardCanvas } from "@/hooks/useStudentWhiteboardCanvas";
@@ -34,6 +35,11 @@ import type { HydrateRemoteImageFilesResult } from "@/lib/whiteboard/hydrate-rem
 import { ensureNativeImageAssetUrlsForSync } from "@/lib/whiteboard/ensure-native-image-asset-urls-for-sync";
 import type { BinaryFileFromExcalidraw } from "@/lib/whiteboard/ensure-native-image-asset-urls-for-sync";
 import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter";
+import {
+  registerWbE2eSceneBridge,
+  registerWbE2eSceneMutationHook,
+} from "@/lib/whiteboard/wb-e2e-scene-bridge";
+import { createWbFollowDebugTelemetry } from "@/lib/whiteboard/wb-follow-debug-telemetry";
 
 type JoinUnavailableReason =
   | "session_ended"
@@ -156,6 +162,7 @@ export function StudentWhiteboardClient({
     null
   );
   const excalidrawAPIRef = useRef<ExcalidrawApiLike | null>(null);
+  const followDebugTelemetry = useMemo(() => createWbFollowDebugTelemetry(), []);
   const [otherPeerCount, setOtherPeerCount] = useState(0);
   const [relayShowsCollaborator, setRelayShowsCollaborator] =
     useState(false);
@@ -377,7 +384,7 @@ export function StudentWhiteboardClient({
     []
   );
 
-  const [independentView, setIndependentView] = useState(true);
+  const [independentView, setIndependentView] = useState(false);
 
   const {
     onCanvasChange: studentSyncOnCanvas,
@@ -387,6 +394,7 @@ export function StudentWhiteboardClient({
     pageList,
     sectionsRegistry,
     activePageId: studentActivePageId,
+    selectStudentPage,
     tutorStreamReady,
   } = useStudentWhiteboardCanvas(
     syncClient,
@@ -394,7 +402,9 @@ export function StudentWhiteboardClient({
     onRemoteHydrateResult,
     {
       joinToken: pathJoinToken,
+      whiteboardSessionId,
       followTutorView: !independentView,
+      followDebugTelemetry,
     }
   );
 
@@ -410,6 +420,16 @@ export function StudentWhiteboardClient({
     const t = window.setTimeout(() => setBoardWaitElapsed(true), 8000);
     return () => clearTimeout(t);
   }, [connected, otherPeerCount, tutorStreamReady]);
+
+  useEffect(() => {
+    if (process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK !== "1") return;
+    registerWbE2eSceneMutationHook("student", () => {
+      const api = excalidrawAPIRef.current;
+      if (!api) return;
+      const elements = api.getSceneElements();
+      studentSyncOnCanvas(elements);
+    });
+  }, [studentSyncOnCanvas]);
 
   const handleExcalidrawChange = useCallback(
     (
@@ -698,6 +718,7 @@ export function StudentWhiteboardClient({
             pageList={pageList}
             sections={sectionsRegistry}
             activePageId={studentActivePageId}
+            onSelectPage={(id) => void selectStudentPage(id)}
           />
         </div>
       </div>
@@ -822,12 +843,20 @@ export function StudentWhiteboardClient({
               const like = api as ExcalidrawApiLike;
               excalidrawAPIRef.current = like;
               setExcalidrawAPI(like);
+              registerWbE2eSceneBridge("student", like);
             }}
             theme={excalidrawTheme}
             UIOptions={{
               canvasActions: { saveToActiveFile: false, loadScene: false },
             }}
             validateEmbeddable={validateExcalidrawEmbeddable}
+          />
+          <WhiteboardDebugHud
+            role="student"
+            syncOn={!independentView}
+            activePageId={studentActivePageId}
+            excalidrawAPI={excalidrawAPI}
+            telemetry={followDebugTelemetry}
           />
         </div>
       </div>

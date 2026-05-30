@@ -103,6 +103,7 @@ import { MathInsertButton } from "@/components/whiteboard/MathInsertButton";
 import { DesmosInsertButton } from "@/components/whiteboard/DesmosInsertButton";
 import { UndoRedoButtons } from "@/components/whiteboard/UndoRedoButtons";
 import { ExcalidrawDynamic } from "@/components/whiteboard/ExcalidrawDynamic";
+import { WhiteboardDebugHud } from "@/components/whiteboard/WhiteboardDebugHud";
 import {
   type ExcalidrawApiLike,
   type InsertPdfBoardPagesIntegrate,
@@ -112,13 +113,23 @@ import {
   type BinaryFileFromExcalidraw,
 } from "@/lib/whiteboard/ensure-native-image-asset-urls-for-sync";
 import { hydrateRemoteImageFilesForScene } from "@/lib/whiteboard/hydrate-remote-files";
+import { preserveImageAssetUrlsOnSceneWrite } from "@/lib/whiteboard/preserve-image-asset-urls";
 import { resolveWhiteboardAssetReadUrl } from "@/lib/whiteboard/resolve-asset-read-url";
 import type {
   WhiteboardWireBroadcastExtras,
   WhiteboardWireRemoteDetails,
 } from "@/lib/whiteboard/sync-client";
 import { validateExcalidrawEmbeddable } from "@/lib/whiteboard/validate-embeddable";
+import {
+  registerWbE2eSceneBridge,
+  registerWbE2eSceneMutationHook,
+} from "@/lib/whiteboard/wb-e2e-scene-bridge";
 import { mergeScenesReconciled } from "@/lib/whiteboard/apply-reconciled-remote-scene";
+import { followWireFromTutorAppState } from "@/lib/whiteboard/viewport-align";
+import {
+  createWbFollowDebugTelemetry,
+  inferBroadcastTrigger,
+} from "@/lib/whiteboard/wb-follow-debug-telemetry";
 import type { RemoteSceneIngestLogHint } from "@/hooks/useWhiteboardRecorder";
 import {
   adaptWBElementsToExcalidraw,
@@ -361,6 +372,7 @@ export function WhiteboardWorkspaceClient({
     null
   );
   const excalidrawAPIRef = useRef<ExcalidrawApiLike | null>(null);
+  const followDebugTelemetry = useMemo(() => createWbFollowDebugTelemetry(), []);
   const applyingRemoteToCanvasRef = useRef(false);
   /**
    * Ref-count for programmatic `updateScene` when switching/adding board tabs.
@@ -372,6 +384,7 @@ export function WhiteboardWorkspaceClient({
    * timeout runs.
    */
   const pageSwitchProgrammaticRef = useRef(0);
+  const tutorApplyIdRef = useRef(0);
   /** Skips debounced viewport flush while applying stored/programmatic camera. */
   const isApplyingViewportProgrammaticRef = useRef(false);
   const viewportPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -387,6 +400,8 @@ export function WhiteboardWorkspaceClient({
   const recorderRecordViewportRef = useRef<
     ((panX: number, panY: number, zoom: number) => void) | null
   >(null);
+  /** `flushViewportPersistNow` is declared before `useTutorLiveDocumentWire`. */
+  const scheduleDocumentBroadcastRef = useRef<() => void>(() => undefined);
   /**
    * Monotonic switch token — smoke-2 root cause.
    *
@@ -498,6 +513,10 @@ export function WhiteboardWorkspaceClient({
       // `scenePageId` is which page this `elements` snapshot belongs to (may
       // lag the tutor's visible tab when the wire diff is throttled).
       const targetId = details?.scenePageId ?? details?.page?.activePageId ?? "p1";
+      const applyId = String((tutorApplyIdRef.current += 1));
+      console.info(
+        `[tutor-apply] wbsid=${whiteboardSessionId} wba=${applyId} author=student action=apply-v2-start page=${targetId} elements=${elements.length}`
+      );
 
       // Smoke-3 root cause: this used to capture `curActive` BEFORE the
       // hydrate await and use it as the bucket key. During the await the
@@ -587,8 +606,14 @@ export function WhiteboardWorkspaceClient({
         // also proof-of-session — releases the audio-flow gate
         // even if both mics are silent / muted.
         markWbActivity();
+        console.info(
+          `[tutor-apply] wbsid=${whiteboardSessionId} wba=${applyId} author=student action=apply-v2-complete page=${targetId} mergedCount=${merged.length} writeToCanvas=true`
+        );
         return { recordScene: merged };
       }
+      console.info(
+        `[tutor-apply] wbsid=${whiteboardSessionId} wba=${applyId} author=student action=apply-v2-complete page=${targetId} mergedCount=${merged.length} writeToCanvas=false`
+      );
       return { record: "skip" };
     },
     [markWbActivity, shouldDropRemoteElement, whiteboardSessionId]
@@ -1320,13 +1345,21 @@ export function WhiteboardWorkspaceClient({
       scrollX: number;
       scrollY: number;
       zoom: { value: number };
+      width?: number;
+      height?: number;
+      offsetLeft?: number;
+      offsetTop?: number;
     };
-    return {
-      follow: {
+    const follow =
+      followWireFromTutorAppState(st) ?? {
+        centerSceneX: 0,
+        centerSceneY: 0,
+        zoom: st.zoom.value,
         scrollX: st.scrollX,
         scrollY: st.scrollY,
-        zoom: st.zoom.value,
-      },
+      };
+    return {
+      follow,
       page: {
         // Ref — not React state — so rapid tab switches don’t lag one frame
         // behind the canvas (state updates async; ref updates in selectTutorPage).
@@ -1359,9 +1392,16 @@ export function WhiteboardWorkspaceClient({
           | ExcalidrawLikeElement[]
           | undefined;
         if (cached !== undefined) {
-          out[p.id] = cached;
+          out[p.id] = preserveImageAssetUrlsOnSceneWrite(
+            cached,
+            pageDataRef.current[p.id] as ExcalidrawLikeElement[] | undefined
+          );
         } else {
-          out[p.id] = api.getSceneElements() as ExcalidrawLikeElement[];
+          const live = api.getSceneElements() as ExcalidrawLikeElement[];
+          out[p.id] = preserveImageAssetUrlsOnSceneWrite(
+            live,
+            pageDataRef.current[p.id] as ExcalidrawLikeElement[] | undefined
+          );
         }
       } else {
         out[p.id] = pageDataRef.current[p.id] ?? [];
@@ -1456,6 +1496,9 @@ export function WhiteboardWorkspaceClient({
         console.info(
           `[pvs] pvs=${pid} action=wire-emit source=${srcTag} panX=${vs.panX} panY=${vs.panY} zoom=${vs.zoom}`
         );
+        // v3 document carries `follow` + per-row viewState; pageViewState alone
+        // is not enough for first-time origin-aligned follow on the student.
+        scheduleDocumentBroadcastRef.current();
       }
       // Phase 5 task 8 (replay tier-c-lite): also append to the event log
       // so replay's camera tracks the same cadence as live. No-op when
@@ -1511,14 +1554,26 @@ export function WhiteboardWorkspaceClient({
   const getTutorLiveFollow = useCallback((): WhiteboardWireFollow => {
     const api = excalidrawAPIRef.current;
     if (!api) {
-      return { scrollX: 0, scrollY: 0, zoom: 1 };
+      return { centerSceneX: 0, centerSceneY: 0, zoom: 1 };
     }
     const st = api.getAppState() as {
       scrollX: number;
       scrollY: number;
       zoom: { value: number };
+      width?: number;
+      height?: number;
+      offsetLeft?: number;
+      offsetTop?: number;
     };
-    return { scrollX: st.scrollX, scrollY: st.scrollY, zoom: st.zoom.value };
+    return (
+      followWireFromTutorAppState(st) ?? {
+        centerSceneX: 0,
+        centerSceneY: 0,
+        zoom: st.zoom.value,
+        scrollX: st.scrollX,
+        scrollY: st.scrollY,
+      }
+    );
   }, []);
 
   const getTutorPageListAndActive = useCallback(
@@ -1533,6 +1588,19 @@ export function WhiteboardWorkspaceClient({
     []
   );
 
+  const onFollowDocumentEmitted = useCallback(
+    (follow: WhiteboardWireFollow) => {
+      const prev = followDebugTelemetry.lastSentFollow.current;
+      followDebugTelemetry.lastSentTrigger.current = inferBroadcastTrigger(
+        prev,
+        follow
+      );
+      followDebugTelemetry.lastSentFollow.current = follow;
+      followDebugTelemetry.lastSentAt.current = Date.now();
+    },
+    [followDebugTelemetry]
+  );
+
   const { scheduleDocumentBroadcast, flushDocumentBroadcastNow } =
     useTutorLiveDocumentWire({
       enabled: Boolean(sync) && Boolean(syncUrl),
@@ -1540,7 +1608,25 @@ export function WhiteboardWorkspaceClient({
       getPagesSnapshot: getTutorDocumentPagesSnapshot,
       getPageListAndActive: getTutorPageListAndActive,
       getFollow: getTutorLiveFollow,
+      onDocumentEmitted: onFollowDocumentEmitted,
     });
+  scheduleDocumentBroadcastRef.current = scheduleDocumentBroadcast;
+
+  useEffect(() => {
+    if (process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK !== "1") return;
+    registerWbE2eSceneMutationHook("tutor", () => {
+      const api = excalidrawAPIRef.current;
+      if (!api) return;
+      pageDataRef.current[activePageIdRef.current] = [
+        ...(api.getSceneElements() as ExcalidrawLikeElement[]),
+      ];
+      // Drive the REAL production cadence: a tutor scene change schedules a
+      // throttled/debounced document broadcast exactly as `handleExcalidrawChange`
+      // does on every onChange. NO manual `flushDocumentBroadcastNow()` — that
+      // force-flush is the page-swap equivalent that masked the live-sync bug.
+      scheduleDocumentBroadcast();
+    });
+  }, [scheduleDocumentBroadcast]);
 
   const recorder = useWhiteboardRecorder({
     whiteboardSessionId,
@@ -2687,7 +2773,14 @@ export function WhiteboardWorkspaceClient({
       if (applyingRemoteToCanvasRef.current) return;
       if (pageSwitchProgrammaticRef.current > 0) return;
       const els = elements as ReadonlyArray<ExcalidrawLikeElement>;
-      pageDataRef.current[activePageIdRef.current] = [...els];
+      const pageId = activePageIdRef.current;
+      const prevBucket = pageDataRef.current[pageId] as
+        | ExcalidrawLikeElement[]
+        | undefined;
+      pageDataRef.current[pageId] = preserveImageAssetUrlsOnSceneWrite(
+        els,
+        prevBucket
+      );
       onLocalElementSnapshot(elements);
       // Smoke-4 (May 17, 2026): real local activity counts as
       // proof-of-session for the audio-flow gate (see
@@ -3150,6 +3243,7 @@ export function WhiteboardWorkspaceClient({
               const like = api as ExcalidrawApiLike;
               excalidrawAPIRef.current = like;
               setExcalidrawAPI(like);
+              registerWbE2eSceneBridge("tutor", like);
             }}
             theme={excalidrawTheme}
             UIOptions={{
@@ -3160,6 +3254,13 @@ export function WhiteboardWorkspaceClient({
             // safety boundary — this just stops Excalidraw from showing
             // its "untrusted source" warning panel for Desmos.
             validateEmbeddable={validateExcalidrawEmbeddable}
+          />
+          <WhiteboardDebugHud
+            role="tutor"
+            syncOn={Boolean(syncUrl)}
+            activePageId={activePageId}
+            excalidrawAPI={excalidrawAPI}
+            telemetry={followDebugTelemetry}
           />
         </div>
       </div>

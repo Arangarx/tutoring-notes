@@ -157,6 +157,15 @@ points below are gated as **Phase 1 blockers** unless explicitly tagged
 
 ---
 
+## Sync redesign — Phase 1 (disciplined symmetric apply)
+
+**Design:** `docs/handoff/whiteboard-sync-redesign-2026-05-27.md`  
+**Branch:** `whiteboard/sync-redesign-phase-1` — **in flight** (2026-05-27).  
+**Scope:** Student `runV3Apply` mirrors tutor `applyRemoteToCanvas` (I1/I2/I3/I4), `pageSwitchProgrammaticRef`, v2 inbound drop, onConnect re-broadcast, tutor `follow.viewportWidth/Height`, `viewport-align` rAF retry + 500ms backstop, `wba=`/`author=` logs, P1–P8 unit tests.  
+**Not in scope:** Yjs migration, relay changes, eraser cursor (BACKLOG verify post-smoke).
+
+---
+
 ## Phase 1 sub-section status
 
 | # | Sub-section | Status | Notes / commit |
