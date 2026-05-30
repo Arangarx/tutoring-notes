@@ -365,7 +365,16 @@ evidence changes:
 the job. Default to inline subagent dispatch over in-chat Opus tool
 calls. Escalate only when the cost of a wrong call (hours of
 unwinding) > the marginal model cost (cents per Composer 2.5
-subagent vs dollars per Opus chat).
+subagent vs dollars per Opus chat). **Opus's default verb is
+dispatch** (Andrew 2026-05-30, "even more aggressive on farming to
+Composer"): Opus does nothing that doesn't need Opus-grade
+*judgment*; *hands* work (reading code to learn, editing code/tests
+of any size, investigations, verification runs, durable prose) farms
+to Composer 2.5 — and capability-doubt on an *execution* task is not
+a reason to keep it on Opus. The only "in doubt → Opus" is for
+*judgment/quality-risk* calls. See the **dispatch test** in
+[`.cursor/rules/orchestrator-discipline.mdc`](.cursor/rules/orchestrator-discipline.mdc),
+the always-applied authority on this.
 
 ## Merging convention (solo-tutor pilot stage)
 

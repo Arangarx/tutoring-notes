@@ -41,7 +41,16 @@ The reliability redesign pass (`docs/RELIABILITY-REDESIGN-2026-05-27.md` § Surf
 
 ---
 
-## Open questions — Andrew must ratify before Composer ships
+## Open questions — ratification status
+
+> **✅ RATIFIED 2026-05-30** — full rulings in design doc § [Ratification (Andrew 2026-05-30)](w1-audio-durability-design-2026-05-27.md#ratification-andrew-2026-05-30). Summary:
+>
+> 1. Recovery copy — approved as-is.
+> 2. Cross-session stuck/orphaned drafts — **backlogged**; principles: never delete without explicit confirm; auto-recover tutor-tied orphans.
+> 3. macOS debounce — unvalidated (no MacBook); leave open.
+> 4. iOS `timeslice` — **not a release gate**; backlogged risk, validate on Sarah sessions or when test device acquired.
+
+Original questions (archived):
 
 1. **Recovery UX copy** — Design proposes two-button: "Keep and resume" / "Discard interrupted audio." Is this copy right for Sarah? Alternative: "Recover [N:NN] of audio" / "Start fresh." Low stakes; Andrew picks.
 
