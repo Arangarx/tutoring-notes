@@ -8,15 +8,14 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 ## Last action completed
 
-**Andrew ratified W1 + SEC-1 rulings (2026-05-30, this turn).** W1: recovery copy approved as-is; cross-session stuck/orphaned drafts **backlogged** (never-delete + auto-recover principles recorded); macOS debounce unvalidated; **iOS not a release gate**. SEC-1: 6 open Qs **orchestrator-discretion delegated** (escalate on test fail / blocking Q only). **New scope finding:** W1 ship A covers workspace recorder only — student-page note recorder (surface A) unprotected; BACKLOG item + priority gate OPEN. Prior: W1 ship A on `feat/audio-draft-store` (`63d1897`); SEC-1 design merged (`a1c6c3f`); tsc fix merged (`de3e9c0`).
+**2026-05-30 session decisions captured (docs-only).** Surface-A **RESOLVED** — workspace is Sarah's primary recording surface; ship A protected the right path. **Long-form upload re-baselined** — Sarah's prior failures likely free-tier Vercel (10–60s) + free Neon artifacts; infra now Pro 300s + paid Neon; no fix ships until upload-focused smoke on paid Preview establishes ground truth (`scripts/make-test-audio.cjs`, [`docs/SMOKE-LONG-FORM-TRANSCRIBE.md`](../SMOKE-LONG-FORM-TRANSCRIBE.md)). W1 ship B = upload-reliability (BACKLOG item #2), prioritized next build after smoke. `feat/audio-draft-store` updated-to-master @ `2cde72e`, tsc + recorder-tests green, happy-path verifier GREEN — **awaiting Andrew smoke or waive before `--no-ff` merge.**
 
 ## Next action(s)
 
-1. **W1 ship A awaiting smoke** (`feat/audio-draft-store` @ `63d1897`, pushed) — Andrew smokes crash/refresh recovery on **workspace recorder** (surface B); **iOS not blocking** merge. Then `merge --no-ff`.
-2. **W1 ships B + C** after A smoke-passes: B = upload-failure persistence (outbox `stuck` semantics); C = device health. Cross-session stuck/orphaned draft surfacing is **backlogged** (principles in BACKLOG § W1 durability). B/C may parallelize via isolated worktrees if files don't conflict (see [`AGENTS.md`](../../AGENTS.md) § parallel-execution), else serial.
-3. **SEC-1 Composer ships** — design merged (`a1c6c3f`); [`docs/handoff/sec-1-impersonation-design-2026-05-30.md`](sec-1-impersonation-design-2026-05-30.md). **6 open Qs orchestrator-discretion delegated** — use design-doc defaults; escalate to Andrew only on test failures or a specific blocking question.
-4. **W1 surface-A coverage decision (OPEN)** — does Sarah record in workspace or note recorder? Gates whether surface-A draft protection is A-prime or lower-priority backlog. See [`docs/BACKLOG.md`](../BACKLOG.md) § W1 surface-A.
-5. **Transcription speed (Tier 2)** — backlogged (BACKLOG § Recording item 6): VAD/silence-boundary chunking + provider/concurrency levers; Sonnet design pass when prioritized.
+1. **W1 ship A merge gate** — `feat/audio-draft-store` @ `2cde72e` (pushed). Andrew smokes crash/refresh recovery on **workspace recorder** (surface B) or waives; **iOS not blocking**. Then `merge --no-ff`.
+2. **Upload re-baseline smoke (gating)** — paid Preview: ~50 MB / ~90 min audio via Upload tab (`make-test-audio.cjs` Path C); paste ~90k chars (pass) + ~150k chars (reject at 120k wall). Confirms Bucket A/B ground truth before any long-form fix. See BACKLOG § Recording item 5.
+3. **W1 ship B** (after smoke) — upload-failure persistence (BACKLOG item #2): hold blob in IndexedDB on retry-exhaustion, retry/resume, survive navigation (Sarah on flaky cellular). Ship C = device health. Cross-session stuck/orphaned drafts **backlogged**. B/C may parallelize via isolated worktrees if files don't conflict.
+4. **SEC-1 Composer ships** — design merged (`a1c6c3f`); [`docs/handoff/sec-1-impersonation-design-2026-05-30.md`](sec-1-impersonation-design-2026-05-30.md). **6 open Qs orchestrator-discretion delegated.**
 
 Update this file's head as each lands.
 
@@ -26,7 +25,9 @@ Update this file's head as each lands.
 |----------|-------|-------|
 | ~~SEC-1 design ratification~~ | — | ✅ **DELEGATED 2026-05-30**: Andrew trusts orchestrator on all 6 open Qs until tests fail or a specific blocking Q surfaces. Use design-doc defaults; **do not mark Qs individually answered**. |
 | ~~W1 audio durability ratification~~ | — | ✅ **RATIFIED 2026-05-30**: (1) recovery copy approved as-is; (2) cross-session stuck/orphaned drafts **backlogged** — principles: never delete without explicit confirm; auto-recover tutor-tied orphans; (3) macOS debounce unvalidated (no MacBook); (4) **iOS not a release gate** — validate on Sarah sessions or when test device acquired. |
-| **W1 surface-A coverage** | Priority of note-recorder draft protection vs backlog | **OPEN.** Ship A protects workspace recorder only; student-page note recorder unprotected. Gates A-prime vs lower-priority. Question: does Sarah record in workspace or via note recorder? |
+| ~~W1 surface-A coverage~~ | — | ✅ **RESOLVED 2026-05-30:** Sarah almost always records in the whiteboard workspace (even solo); note recorder is rarer. Ship A protected the right surface. Surface-A stays **lower-priority backlog**, not A-prime. |
+| **Upload re-baseline smoke** | Gates W1 ship B + long-form fix decisions | **NEXT.** Paid Preview smoke per BACKLOG § Recording item 5 + `scripts/make-test-audio.cjs`. No long-form/upload fix until ground truth confirmed. |
+| **W1 ship A merge** | `--no-ff` `feat/audio-draft-store` | **PENDING.** Branch @ `2cde72e`, verifier GREEN — Andrew happy-path smoke or waive. |
 | **fast-variant user rule** | Auto-select FAST model variants in orchestrator | **Offered, unconfirmed** — never auto-select unless Andrew explicitly approves. |
 | **DNS admin one-liner** | Transient first-try git/Docker DNS failures | 192.168.1.1 → 1.1.1.1/8.8.8.8 — given, **not applied**. |
 | Default theme light vs dark | DESIGN-TOKENS Phase 0 | See `docs/DESIGN-TOKENS-PLAN.md`. |
@@ -40,19 +41,19 @@ Update this file's head as each lands.
 
 **Working tree:** clean.
 
-**`master` HEAD:** `a1c6c3f` — `Merge feat/sec-1-design: SEC-1 design doc (docs-only; 6 open Qs await ratification)`. Also landed this turn: tsc gate fix (`de3e9c0`) + iOS validation-debt note (`4b2f29f`, BACKLOG § Axis 4 matrix — W1-A banner + whiteboard sync untested on real iPhone; no device on hand).
+**`master` HEAD:** `588999f` — `Add make-test-audio script for long-form transcribe smokes.`
 
 Recent `master` (newest first):
 
 ```
-de3e9c0 Merge fix/tsc-vercel-ignore-types: restore clean tsc --noEmit gate (typed .d.ts)
-b951be0 fix(types): declare vercel-ignore-build.cjs exports for tsc
-574d890 docs: W1 ratified (plain copy + cross-session stuck surfacing) + transcription-speed Tier 2 backlog
-2f25782 docs: codify parallel-subagent worktree safety policy (serialize-by-default, parallelize-when-safe)
-f6a3d7e fix(vercel): testable Node ignore-build predicate — skip deploys for docs + .cursor/.mdc, fail-safe to build
+588999f Add make-test-audio script for long-form transcribe smokes.
+4cb81a7 docs(rules): sharpen orchestrator cost discipline — default verb is dispatch
+dd9f12b docs(backlog): item 1c — consolidate post-crash recovery banner PRESENTATION only
+34441a8 docs: Andrew 2026-05-30 W1/SEC-1 ratifications + surface-A scope gap
+a1c6c3f Merge feat/sec-1-design: SEC-1 design doc (docs-only)
 ```
 
-**Unmerged branches awaiting gates:** `feat/audio-draft-store` (`63d1897`, pushed — awaiting W1-A smoke; iOS not blocking); ~~`feat/sec-1-design`~~ merged (`a1c6c3f`).
+**Unmerged branches awaiting gates:** `feat/audio-draft-store` (`2cde72e`, pushed — updated-to-master, tsc + recorder-tests green, happy-path verifier GREEN; awaiting Andrew smoke or waive); ~~`feat/sec-1-design`~~ merged (`a1c6c3f`).
 
 **Merged branches (preserved for stale-sweep):**
 

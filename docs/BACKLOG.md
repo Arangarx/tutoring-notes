@@ -91,8 +91,13 @@ Reported via Discord after testing **Record → Transcribe** on phone. Treat as 
 2. **Alert sound library:** Presets (gentle chime / single beep / silent + vibrate-only on mobile). **Vibrate-only** when sound is off (accessibility). Optional mirror in a future **Settings** page.
 3. ~~**Revisit the hard 90m stop**~~ — Superseded by per-segment rollover + safety cap; only **tune segment length** if needed.
 4. ✅ **Shipped (feat/transcribe-tier-1-parallelize, merge 2026-05-17 evening):** **Tier 1 long-form transcribe parallelize.** Duration-cap ffmpeg split (`WHISPER_TARGET_CHUNK_SECONDS = 240` → small-but-long files now split into parallel-friendly chunks), inner Whisper-call concurrency cap 6, outer per-segment concurrency cap 3, 429/5xx retry with exponential backoff inside `transcribeSinglePart`, friendly timeout copy (`FRIENDLY_TRANSCRIPTION_TIMEOUT_MESSAGE`) on Vercel 300s ceiling. Order preservation across both parallel layers preserved via indexed result aggregation. See `docs/PHASE-6-TIER-1-STATUS.md`. **Smoke deferred** — Andrew chose to backlog the long-form smoke (60-min synthetic recording) rather than do it tonight; merged on the basis of 42 passing targeted tests + clean tsc + structural review. **Smoke task slotted below.**
-5. **Long-form transcribe Tier 1 — smoke against real 60-90 min audio** (slotted 2026-05-17 from deferred Tier 1 smoke). Run a real or synthetic 60-90 min recording end-to-end through Vercel Preview (or production once merged). Confirm: (a) `[transcribe-parallel]` logs show `inner-cap=6 parts=N` with N > 1 for long audio; (b) `outer-cap=3 segments=N` shows for multi-segment cases; (c) `CostEvent` table accumulates ~one row per Whisper part; (d) total wall-clock fits comfortably under 300s; (e) order preservation in final transcript matches recording order; (f) friendly timeout copy renders correctly if you deliberately push past 300s with a ~3 hour fixture. If anything regresses, the merge can be reverted via `git revert -m 1 <merge-commit>`. **Operationally low risk now**: existing short-form path is unchanged (`mapWithConcurrency` with N=1 = sequential), so Sarah's typical session flow is unaffected. The risk is exclusively on the long-form path, which was already broken pre-Tier-1 — so a regression is at worst "still broken, not fixed." ~30 min of Andrew's time when convenient.
-6. **Transcription SPEED — Tier 2 design discussion (VAD / silence-boundary chunking + speed levers).** Andrew (2026-05-30): *"until we need perfect fidelity, find audio breaks that seem like more than a pause between two words and chunk the audio out for final transcription into parallel calls."* Tier 1 (item 4) ALREADY parallelizes, but it splits on a **fixed `WHISPER_TARGET_CHUNK_SECONDS = 240` duration boundary**, which can sever a word mid-utterance and is coarse. The enhancement Andrew is describing: **silence/VAD-aware chunking** — detect inter-word gaps above a threshold (ffmpeg `silencedetect` or a lightweight VAD pass) and split at natural pauses, so (a) no boundary word-splitting artifacts, (b) smaller / more-numerous chunks → more parallelism → lower wall-clock. **Broader speed levers to weigh in the design pass (not just chunking):** (i) VAD chunk boundaries (above); (ii) raise inner/outer concurrency caps (currently 6 / 3) — bounded by OpenAI rate limits + cost; (iii) **model / provider choice** — faster transcription models/providers (e.g. OpenAI `gpt-4o-transcribe`, or Groq-hosted Whisper which is dramatically faster) as an explicit speed/fidelity/cost tradeoff Andrew flagged he's open to "until we need perfect fidelity"; (iv) the real wall-clock ceiling is the **Vercel 300s** function limit — past a point, more speed needs the deferred **Tier 2 background queue**, not just more parallelism. **Correctness constraints for any chunking change:** order preservation (already indexed), no dropped/duplicated audio at boundaries (silence-aligned cuts or small overlap), `CostEvent` accounting per part. **Next step:** Sonnet design pass over the transcription pipeline (correctness + cost + provider tradeoffs) that quantifies expected speedup per lever before building. Files: `src/lib/transcribe.ts`, `src/lib/transcribe-ffmpeg.ts`; context `docs/PHASE-6-TIER-1-STATUS.md`.
+5. **Long-form upload + transcribe — re-baseline smoke on paid infra (GATING, 2026-05-30).** **Do not re-investigate or ship fixes until this smoke passes.** Two prior investigations + Andrew's disclosure converged: when Sarah hit failures (weeks ago), stack was **free Vercel (10–60s timeouts) + free Neon**; now **Vercel Pro (300s) + paid Neon** — many failures were likely tier artifacts, not live bugs.
+   **Bucket A — likely already fixed, confirm via smoke:** (a) large audio upload — B1 (`e0e8917`) direct-to-Vercel-Blob (`BLOB_MAX_BYTES` 100 MB, 1 retry), eliminating the old 4.5 MB Server Action wall that killed Sarah's 17.9 MB m4a; (b) transcribe timeouts — free 10–60s → 300s on Pro.
+   **Bucket B — live code limits:** (a) text paste — `generateNoteFromTextAction` was **~16k chars (4k tokens) pre-`85e248d`** (smoking gun for "couldn't paste a transcript"); **now ~120k chars (30k tokens)** — plain 60–90 min transcripts (~70–80k) pass; verbose exports **>120k** still fail with "Session text is too long." (b) 60–90 min audio transcribe wall-clock vs **300s ceiling UNPROVEN** on paid infra (time risk, not upload size).
+   **Andrew priority (2026-05-30):** pipeline must **WORK** for Sarah; **upload is the fragile link** — transcription-quality work de-scoped; trust Whisper quality.
+   **Tooling:** `scripts/make-test-audio.cjs` (`588999f`) — loop short clip (`--source`), synthetic, or `--split` for 50-min rollover; see `scripts/make-test-audio.README.md` + Path C in [`docs/SMOKE-LONG-FORM-TRANSCRIBE.md`](SMOKE-LONG-FORM-TRANSCRIBE.md).
+   **Checklist (paid Preview):** upload ~50 MB / ~90 min via Upload tab → no 413, blob lands → Transcribe → completes under 300s or fails explicitly on time; paste ~90k chars (pass) + ~150k chars (reject). Tier 1 parallelize checks still apply when audio path runs: (a) `[transcribe-parallel]` `inner-cap=6 parts=N>1`; (b) `outer-cap=3`; (c) `CostEvent` per part; (d) order preservation; (e) friendly timeout copy if deliberately pushed past 300s.
+6. **Transcription SPEED — Tier 2 design (VAD / silence-boundary chunking + speed levers).** **Deprioritized 2026-05-30** unless item 5 smoke surfaces an actual **300s timeout** — Andrew trusts Whisper quality; reliability focus is upload/pipeline working, not speed. Original ask (2026-05-30): silence/VAD-aware chunking vs Tier 1's fixed `WHISPER_TARGET_CHUNK_SECONDS = 240`; levers include concurrency caps (6/3), faster providers, 300s ceiling. **Next step when revived:** Sonnet design pass quantifying speedup per lever. Files: `src/lib/transcribe.ts`, `src/lib/transcribe-ffmpeg.ts`; `docs/PHASE-6-TIER-1-STATUS.md`.
 
 ---
 
@@ -569,25 +574,28 @@ items should be on the active path before the next pilot tutor is added.
    30-second cadence, surface a "Recover unfinished recording from XX:XX?"
    banner on next mount. Same `findInProgressSession` shape works for both
    features.
-   **Partial fix (Ship A, `feat/audio-draft-store` @ `63d1897`):** workspace
+   **Partial fix (Ship A, `feat/audio-draft-store` @ `2cde72e`):** workspace
    recorder only (`WhiteboardWorkspaceClient`, key `{whiteboardSessionId}:tutor:mic`).
-   Student-page note recorder (surface A) still unprotected — see **W1 surface-A
-   coverage** below.
-1a. **[DECISION PENDING — Andrew] W1 surface-A coverage — protect the student-page note recorder against crash/refresh.**
-   W1 ship A wires IndexedDB draft store + recovery banner **only** into the
-   whiteboard workspace recorder (surface B). The student-detail AI-assist note
-   recorder (surface A: `NoteEntrySection → AiAssistPanel → AudioInputTabs → AudioRecordInput`) does **not** pass `recordingDraft`, writes no draft, and
-   has no recovery banner — Sarah's primary note-taking recordings remain
-   unprotected against crash/refresh. **Intended Ship A scope** (per `63d1897` +
-   design doc "recovery is host-level at workspace mount") but diverges from
-   item #1's generic "any mount of `useAudioRecorder`" wording.
-   **To close:** pass a stable session key into `AudioRecordInput`'s
-   `useAudioRecorder` via `recordingDraft` opt-in; mount-time `findInProgress` +
-   recovery banner; decide what `sessionId` means for note-only recordings
+   Student-page note recorder (surface A) unprotected — **lower-priority** (see 1a).
+1a. **[RESOLVED 2026-05-30 — Andrew] W1 surface-A coverage — protect the student-page note recorder against crash/refresh.**
+   **Decision:** Sarah almost always records inside the whiteboard workspace (even
+   one-sided solo sessions); straight note-recorder use is rarer. W1 ship A
+   protected the **right** surface (workspace). Surface-A coverage stays
+   **LOWER-PRIORITY backlog**, not ship A-prime.
+   W1 ship A wires IndexedDB draft store + recovery banner **only** into surface B.
+   Surface A (`NoteEntrySection → AiAssistPanel → AudioInputTabs → AudioRecordInput`)
+   does **not** pass `recordingDraft` — by design for ship A scope.
+   **To close (when prioritized):** pass a stable session key into
+   `AudioRecordInput`'s `useAudioRecorder` via `recordingDraft` opt-in; mount-time
+   `findInProgress` + recovery banner; decide `sessionId` for note-only recordings
    (studentId? ephemeral per mount?).
-   **Priority gate (OPEN):** Does Sarah record her sessions in the whiteboard
-   workspace or via the note recorder? Andrew's answer determines whether this
-   jumps the queue as **W1 ship A-prime** or stays lower-priority backlog.
+1d. **[FOLLOW-UP — ship-B-adjacent] Draft `clear()` failure after clean End → spurious recovery banner.**
+   Pre-merge verifier on `feat/audio-draft-store`: if IDB `clear()` fails after a
+   clean End, next session shows recovery banner; Keep re-enqueues with draft's
+   `segmentId` → **duplicate outbox row / duplicate audio** (not data loss). Low/medium.
+1e. **[FOLLOW-UP — ship-B-adjacent] `handleReset` clears scheduling but not IDB draft.**
+   Same verifier: reset path leaves draft in store; can contribute to spurious recovery.
+   Low/medium; worst case = duplicate audio, not loss.
 1b. **[FOLLOW-UP] Cross-session stuck/orphaned draft surfacing (backlogged 2026-05-30).**
    Stuck rows and orphaned drafts from prior sessions only surface when the user
    reopens that specific session's workspace. Andrew ratified **backlog, not Ship
@@ -617,15 +625,15 @@ items should be on the active path before the next pilot tutor is added.
    shape: one "Recover everything? Y/N" that couples audio and board (or that
    swallows the live-state notice). Stacking-order + dedup logic lives in
    `WhiteboardWorkspaceClient.tsx`.
-2. **[BLOCKER-PROD] Upload-failure persistence dies on page navigation.**
-   `uploadAudioWithRetry` retries once. If both attempts fail (genuine network
-   outage, Vercel Blob 5xx storm), the user sees the friendly error — and the
-   blob in browser memory dies the moment they close the tab or click "back to
-   the student page." There is no IndexedDB hold-the-blob-until-retry flow.
-   Sarah-level mitigation: persist the blob to IndexedDB on retry exhaustion,
-   surface a "Upload failed — your recording is saved on this device. [Retry]"
-   banner that survives page navigation in the same browser. Same pattern as
-   whiteboard plan blocker #7.
+2. **[BLOCKER-PROD] Upload-failure persistence dies on page navigation — W1 ship B (prioritized next build).**
+   Andrew (2026-05-30): **upload has to work** — this is the prioritized reliability
+   build after upload re-baseline smoke (Recording item 5) confirms actual failure modes.
+   **Do not dispatch until smoke lands.**
+   `uploadAudioWithRetry` retries once. If both attempts fail (network outage, Blob 5xx),
+   the blob in browser memory dies on navigation. No IndexedDB hold-the-blob-until-retry.
+   **Ship B scope:** persist blob to IndexedDB on retry exhaustion; retry/resume;
+   survive page navigation — targeting Sarah on flaky cellular. Same pattern as
+   whiteboard plan blocker #7. Hardening adjacents: items 1d/1e (draft clear/reset edge cases).
 3. **[FOLLOW-UP] No cross-device recovery.** Even with IndexedDB persistence,
    a tutor who switches from desktop to phone mid-session loses the local copy.
    Acceptable for v1; track if anyone reports it.
