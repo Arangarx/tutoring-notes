@@ -3,7 +3,10 @@
  * (`getSceneElements`, `getAppState`, controlled scene mutations) when
  * `NEXT_PUBLIC_WB_E2E_SCENE_HOOK=1`. Not a mock: same instances the app uses.
  */
-import type { ExcalidrawApiLike } from "@/lib/whiteboard/insert-asset";
+import {
+  insertImageOnCanvas,
+  type ExcalidrawApiLike,
+} from "@/lib/whiteboard/insert-asset";
 import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter";
 import { viewportSceneCenterFromScroll } from "@/lib/whiteboard/viewport-align";
 
@@ -42,6 +45,13 @@ export type WbE2eSceneBridge = {
     hasBinary: boolean;
     assetUrl: string | null;
   } | null;
+  /** PNG fixture → real Blob upload + scene insert (Playwright inv 7). */
+  insertImageFixture: (
+    base64: string,
+    filename: string,
+    whiteboardSessionId: string,
+    studentId: string
+  ) => Promise<string>;
 };
 
 type WbE2eSceneMutationHook = () => void;
@@ -326,6 +336,25 @@ export function registerWbE2eSceneBridge(
           entry.dataURL.length > 0;
       }
       return { fileId, isPlaceholder, hasBinary, assetUrl };
+    },
+    async insertImageFixture(base64, filename, whiteboardSessionId, studentId) {
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      const file = new File([bytes], filename, { type: "image/png" });
+      const result = await insertImageOnCanvas({
+        excalidrawAPI: api,
+        whiteboardSessionId,
+        studentId,
+        file,
+      });
+      if (!result.ok) {
+        throw new Error(result.reason);
+      }
+      invokeSceneMutationHook(role);
+      return result.elementId;
     },
   };
 

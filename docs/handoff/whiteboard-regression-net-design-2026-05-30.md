@@ -484,3 +484,9 @@ Add to `docs/PLATFORM-ASSUMPTIONS.md` under section 9 ("OS / development environ
 | New invariants | Add 3 (MOVE), 6 (zoom-invariant center), 7 (real image), 8 (PDF center+fit), 10 (follow gating) |
 | Anti-flake | No arbitrary sleeps — use bridge-ready/connected waits; `retries: 1` for wb-regression; relay startup via Playwright webServer URL polling |
 | Teeth-verify | Revert `123e60e`, confirm inv 4 goes red; restore, confirm green; run same protocol for each new invariant |
+
+---
+
+## Regression net: inv 8 (PDF) quarantine — pdfjs headless prerequisite
+
+**Invariant 8** (`tests/integration/whiteboard-live-sync-regression.spec.ts`, `"invariant 8 — PDF page opens centered+fit on student viewport"`) is **quarantined** with an explicit `test.skip` reason in the wb-regression suite. Headless Playwright cannot load `pdfjs-dist` (`Object.defineProperty called on non-object`), so the test fails before any centering assertion — this is a **gate/env prerequisite**, not a production PDF-centering bug. PDF center+fit on the student viewport is covered by **manual smoke** and Andrew’s **real-hardware smoke** (passed). **Fast-follow:** fix pdfjs-dist worker loading in headless Playwright (worker copy / `postinstall` path used by `scripts/copy-pdfjs-worker.mjs`), then remove the quarantine and re-enable inv 8 in `npm run test:wb-sync`.

@@ -24,3 +24,6 @@ public/pdfjs/
 # Scratch file used to pass multi-line commit messages on PowerShell
 # (which doesn't accept bash heredocs in `git commit -m`).
 .git-commit-msg.tmp
+
+# Local tee logs from the whiteboard regression-net gate (npm run test:wb-sync).
+wb-sync*.log

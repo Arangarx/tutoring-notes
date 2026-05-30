@@ -1,4 +1,6 @@
 import { expect, type Page } from "@playwright/test";
+import fs from "node:fs";
+import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import {
   seedTestAdmin,
@@ -459,7 +461,10 @@ export async function readViewportSnapshot(
   }, role);
 }
 
-/** Distance from element center to viewport center in screen pixels. */
+/**
+ * Distance from element center to viewport center in screen pixels.
+ * Uses Excalidraw's sceneCoordsToViewportCoords (offsetLeft/offsetTop included).
+ */
 export async function markerCenterOffsetFromViewportCenter(
   page: Page,
   role: "tutor" | "student",
@@ -495,15 +500,69 @@ export async function markerCenterOffsetFromViewportCenter(
       const vh = Number(st.height) || 1;
       const scrollX = Number(st.scrollX) || 0;
       const scrollY = Number(st.scrollY) || 0;
+      const offsetLeft = Number(st.offsetLeft) || 0;
+      const offsetTop = Number(st.offsetTop) || 0;
       const ex = (Number(el.x) || 0) + (Number(el.width) || 0) / 2;
       const ey = (Number(el.y) || 0) + (Number(el.height) || 0) / 2;
-      const screenX = (ex - scrollX) * zoom;
-      const screenY = (ey - scrollY) * zoom;
-      const cx = vw / 2;
-      const cy = vh / 2;
+      const screenX = (ex + scrollX) * zoom + offsetLeft;
+      const screenY = (ey + scrollY) * zoom + offsetTop;
+      const cx = offsetLeft + vw / 2;
+      const cy = offsetTop + vh / 2;
       return Math.hypot(screenX - cx, screenY - cy);
     },
     { r: role, id: markerId }
+  );
+}
+
+export async function clickBoardPageTab(
+  page: Page,
+  side: "tutor" | "student",
+  pageTitle: string
+): Promise<void> {
+  const strip = page.getByTestId(
+    side === "tutor" ? "wb-tutor-page-strip" : "student-board-pages-strip"
+  );
+  await strip.getByRole("button", { name: pageTitle, exact: true }).click();
+}
+
+/** Insert PNG via production `insertImageOnCanvas` + Blob upload (E2E bridge). */
+export async function insertPngFixtureOnRole(
+  page: Page,
+  role: "tutor",
+  fixturePath: string,
+  session: WbLiveSyncSession
+): Promise<string> {
+  const base64 = fs.readFileSync(fixturePath).toString("base64");
+  const filename = path.basename(fixturePath);
+  return page.evaluate(
+    async ({ r, b64, name, wbsid, stid }) => {
+      const bridge = (
+        window as Window & {
+          __TN_WB_E2E__?: Record<
+            string,
+            {
+              insertImageFixture: (
+                base64: string,
+                filename: string,
+                whiteboardSessionId: string,
+                studentId: string
+              ) => Promise<string>;
+            }
+          >;
+        }
+      ).__TN_WB_E2E__?.[r];
+      if (!bridge?.insertImageFixture) {
+        throw new Error(`E2E bridge missing insertImageFixture for ${r}`);
+      }
+      return bridge.insertImageFixture(b64, name, wbsid, stid);
+    },
+    {
+      r: role,
+      b64: base64,
+      name: filename,
+      wbsid: session.whiteboardSessionId,
+      stid: session.studentId,
+    }
   );
 }
 
