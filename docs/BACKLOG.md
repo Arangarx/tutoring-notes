@@ -649,11 +649,26 @@ items should be on the active path before the next pilot tutor is added.
     | Hot-swap from speaker to headphones  | **untested**    | no    | no                |
     | Sign-out → sign-in (BACKLOG line 30) | **broken**      | no    | no                |
     | Upload of >10 MB blob                | **untested**    | yes   | yes               |
+    | Audio draft recovery banner (W1-A)   | **untested**    | yes   | no                |
+    | Whiteboard cross-device view-sync    | **untested**    | n/a   | Chromium harness  |
 
     Each "untested" cell is a Sarah-might-hit-it bug waiting to happen. Either
-    test on real hardware (Andrew has an iPhone) and tick the cell, or add an
-    explicit iOS-Safari "limitations" copy block in the recorder UI so the
-    user knows what we have and haven't validated.
+    test on real hardware and tick the cell, or add an explicit iOS-Safari
+    "limitations" copy block in the recorder UI so the user knows what we have
+    and haven't validated.
+
+    **iOS-device status (2026-05-30):** Andrew currently has **no iOS device**
+    on hand. All `untested` iOS-Safari cells stay open until a Sarah session or
+    a purchased test iPhone is available. **Recent work explicitly pending iOS
+    validation:** (1) **W1-A audio draft recovery banner** — the `MediaRecorder`
+    `timeslice` + `pagehide`/`visibilitychange` checkpoint path that persists
+    the draft is the exact surface iOS Safari/WebKit historically diverges on
+    (no-timeslice MP4 guard already exists for live recording, but the new
+    *checkpoint-on-hide* path is unproven on iOS); (2) **Whiteboard Phase-1
+    cross-device view-sync fix** — the 5/5 real-hardware smoke that resolved the
+    2-week offset bug was **Android (student) + desktop**, never re-smoked on a
+    real iPhone since the `123e60e` offset-invariant fix. Both are
+    desktop/Android-green; iOS is the only unvalidated axis.
 11. **[FOLLOW-UP] Android Chrome is "passes Sarah's flow" but otherwise
     untested.** Same matrix as #10 should be filled in for Android Chrome
     once a second pilot tutor or PO test happens.
