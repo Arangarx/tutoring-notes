@@ -140,6 +140,20 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
 - **Chat output links use workspace-relative paths only.** Cursor's chat UI clickably resolves paths like `docs/BACKLOG.md` and `src/lib/ai.ts` but renders absolute paths (`c:/Users/...`, `/Users/...`) and `file://` URIs as plain unclickable text, breaking Andrew's workflow. Same rule applies inside any `docs/handoff/*.md` since those files are designed to be `@`-referenced in fresh chats. When citing a file, always use the workspace-relative form.
 - **Windows PowerShell: multi-line commit messages via temp file, not `-m`.** PowerShell 5.x (the default on Win10/11 without an explicit pwsh install — Andrew's setup) mangles multi-line strings, Unicode escape sequences (`\u2014`), and backtick-escaped characters when passed to `git commit -m "..."`. Safe pattern: Write the message to `.git/COMMIT_MSG_DRAFT.txt`, then `git commit -F .git/COMMIT_MSG_DRAFT.txt`, then delete the temp file in a **sequential** subsequent call (NOT a parallel tool call — a parallel `Delete` races the `commit` and the file vanishes before git reads it; this has bitten us).
 
+## Hard-won lessons
+
+Cross-cutting rules from production debugging. Add dated evidence under **Real-world observations** (Model usage protocol) when new ones land.
+
+### Layout / coordinates — jsdom blind spot (2026-05-30, whiteboard viewport sync)
+
+- **Coordinate and layout math is not verified in jsdom.** jsdom reports `offsetLeft`/`offsetTop` as 0 and applies transforms synchronously, so offset-contamination and version-skip bugs are **invisible** to unit tests (the buggy viewport-center formula matched the correct one for ~2 weeks). **Rule:** prove geometry on a **real browser** — on-device debug HUD, Playwright/WebKit, or tutor+student hardware — before calling viewport/sync work done.
+- **Requirement-not-code tests.** Assert the user-observable requirement via an **independent oracle** (e.g. the library's real transform), never constants back-derived from the implementation's own formula. **Canonical pattern:** vary `offsetLeft`/`offsetTop` and assert scene viewport center unchanged (offset-invariance). A green Jest suite is necessary, not sufficient, for layout.
+- **No-theater / real-render gate.** Red-before / green-after, or it does not count. Force-triggered harnesses can **mask** cadence bugs; prefer real event cadence or hardware HUD when the symptom is device-only.
+
+### In-chat model cost (Cursor UI)
+
+- **Reasoning effort drives spend.** Context window size, **reasoning effort**, and the thinking-visibility toggle are separate; **effort** (not the thinking toggle) is the main token-spend driver. The inline model label in the picker is billed.
+
 ## When picking up work mid-feature
 
 1. Read the feature's `*-STATUS.md` first. Find the phase status table.

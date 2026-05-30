@@ -160,9 +160,32 @@ points below are gated as **Phase 1 blockers** unless explicitly tagged
 ## Sync redesign — Phase 1 (disciplined symmetric apply)
 
 **Design:** `docs/handoff/whiteboard-sync-redesign-2026-05-27.md`  
-**Branch:** `whiteboard/sync-redesign-phase-1` — **in flight** (2026-05-27).  
-**Scope:** Student `runV3Apply` mirrors tutor `applyRemoteToCanvas` (I1/I2/I3/I4), `pageSwitchProgrammaticRef`, v2 inbound drop, onConnect re-broadcast, tutor `follow.viewportWidth/Height`, `viewport-align` rAF retry + 500ms backstop, `wba=`/`author=` logs, P1–P8 unit tests.  
+**Status:** ✅ **Merged to `master`** — merge commit [`750d494`](https://github.com/Arangarx/tutoring-notes/commit/750d494) (2026-05-30).  
+**Scope shipped:** Student `runV3Apply` mirrors tutor `applyRemoteToCanvas` (I1/I2/I3/I4), `pageSwitchProgrammaticRef`, v2 inbound drop, onConnect re-broadcast, tutor `follow.viewportWidth/Height`, `viewport-align` rAF retry + 500ms backstop, `wba=`/`author=` logs, P1–P8 unit tests.  
 **Not in scope:** Yjs migration, relay changes, eraser cursor (BACKLOG verify post-smoke).
+
+### Viewport-center root cause + fix (2026-05-30)
+
+~2 weeks of cross-device drift (10–20 fix iterations) traced to **offset-contaminated viewport-center math**: the "viewport center in scene coords" formula leaked the canvas element's `offsetLeft`/`offsetTop`, which never canceled against real browser chrome (toolbar, scroll, orientation). **Correct math (offset-invariant):** scene center = `(viewportWidth/2)/zoom - scrollX` (and Y analog) — offsets must not enter the center calculation. **Why Jest missed it:** jsdom reports `offsetLeft`/`offsetTop` = 0, so the buggy and correct formulas were identical in every unit test; only real devices showed drift. **Fix:** [`123e60e`](https://github.com/Arangarx/tutoring-notes/commit/123e60e) + on-screen debug HUD (below) used to compare stable `scroll` vs drifting `myCenter` on tutor and student screens.
+
+### Real-hardware smoke — 5/5 pass (2026-05-30)
+
+Desktop tutor + phone student on merged `master` (`750d494` lineage): (1) centered strokes land centered **both directions**; (2) object move syncs; (3) sync-OFF independent pan/zoom then snap-back on re-follow; (4) page isolation (strokes stay on their page); (5) PDF insert centers + fit. Treat as the regression bar for any follow-up viewport/sync work.
+
+### On-device debug HUD (permanent instrument)
+
+Gated **no-op by default**; ships on tutor + student whiteboard surfaces for production diagnosis.
+
+| | |
+|---|---|
+| **Enable** | Append `?wbdebug=1` to the route **before** any `#hash` fragment (query string). Putting it after `#` breaks student join decryption and/or fails to read the flag. Example: `/admin/students/…/workspace?wbdebug=1` or `/w/<token>?wbdebug=1#k=…`. Once set, `sessionStorage` key `wbdebug` keeps the HUD for the tab session. |
+| **Refresh** | ~120ms tick; reads live Excalidraw `appState` + follow telemetry. |
+| **Common fields** | `role`, `sync` (on/off), `pvs` (active page id), `scroll`, `zoom`, `viewportW`/`viewportH`, `offsetL`/`offsetT`, `myCenter` |
+| **Tutor-only** | `sentCenter`, `sentZoom`, `age` (ms since last send), `trigger` (why follow was broadcast) |
+| **Student-only** | `recvCenter`, `recvZoom`, `age`, `appliedCenter`, `match` (myCenter vs recv) |
+| **Logs** | Apply-path uses `wba=` + `author=tutor|student` per `AGENTS.md`; viewport/page wire uses `pvs=` + `wbsid=` (see `docs/RECORDER-LIFECYCLE.md` prefix registry). |
+
+Component: `src/components/whiteboard/WhiteboardDebugHud.tsx`; flag hook: `src/lib/whiteboard/use-wb-debug-enabled.ts`.
 
 ---
 
