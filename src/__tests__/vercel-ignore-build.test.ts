@@ -1,4 +1,4 @@
-import { shouldSkipBuild } from "../../scripts/vercel-ignore-build.cjs";
+import { shouldSkipBuild } from "../../scripts/vercel-ignore-build";
 
 describe("shouldSkipBuild", () => {
   it("skips docs-only changes", () => {
