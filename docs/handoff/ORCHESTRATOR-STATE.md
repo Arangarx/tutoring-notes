@@ -8,23 +8,23 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 ## Last action completed
 
-**Durability + deploy-hygiene hardening** (the "zero-catch-up fresh chat" thread): this canonical living bootstrap + auto-read wiring into the always-applied rule and `AGENTS.md` (`e10a315`); milestone-checkpoint trigger added to `.cursor/rules/orchestrator-discipline.mdc` (`8637471`); and a **testable Node Vercel ignore-build predicate** (`scripts/vercel-ignore-build.cjs` + 12/12 unit tests, `f6a3d7e`) so `docs/` / `.cursor/` / `*.md` / `*.mdc` state-tracking commits **skip Vercel deploys** (fail-safe to build on anything else). Earlier in the session: **whiteboard/regression-net** merged at `fc7b12b` (standing `npm run test:wb-sync` gate green, teeth-verified).
+**W1 audio durability RATIFIED** (Andrew 2026-05-30) + **ship A dispatched.** Decisions: recovery banner copy = plain *"Audio recording was interrupted. We recovered [N:NN] of audio."* (Keep / Discard); cross-session stuck-audio surfacing = **YES** (top-level "unsaved audio from [date]" nudge); any new UI kept **minimal** (full UI redesign imminent). Ship A = Composer on `feat/audio-draft-store` (crash/refresh draft store + recovery banner). Just prior this session: durability/deploy-hygiene hardening (`e10a315` bootstrap + `8637471` milestone-checkpoint rule + `f6a3d7e` testable Vercel deploy-skip predicate) and **whiteboard/regression-net** merged (`fc7b12b`).
 
 ## Next action(s)
 
-Pick one (**dependency-independent** — no logical ordering, different code layers — but code execution must be **serialized in the shared working tree** unless run in isolated worktrees; see [`AGENTS.md`](../../AGENTS.md) § "Parallel subagent execution + shared-working-tree safety"):
+1. **W1 ship A in flight** (`feat/audio-draft-store`) — when it reports: smoke (incl. the iOS `timeslice` real-iPhone gate Andrew owns), then `merge --no-ff`.
+2. **W1 ships B + C** after A smoke-passes: B = upload-failure persistence + **cross-session stuck surfacing** (the ratified YES); C = device health. B/C may parallelize via isolated worktrees if files don't conflict (see [`AGENTS.md`](../../AGENTS.md) § parallel-execution), else serial.
+3. **SEC-1** — still queued; dispatch Sonnet auth/threat-model design pass on Andrew's **go** (dependency-independent of W1; serialize code execution per worktree policy). See [`docs/BACKLOG.md`](../BACKLOG.md) § SEC-1.
+4. **Transcription speed (Tier 2)** — backlogged (BACKLOG § Recording item 6): VAD/silence-boundary chunking + provider/concurrency levers; Sonnet design pass when prioritized.
 
-1. **SEC-1** — on Andrew's **go**, dispatch Sonnet auth/threat-model design pass → then Composer ships A/B/C per [`docs/BACKLOG.md`](../BACKLOG.md) § SEC-1.
-2. **W1 audio durability** — Andrew ratifies 3 open Qs in [`docs/handoff/w1-audio-durability-design-2026-05-27.md`](w1-audio-durability-design-2026-05-27.md) → then Composer ships A/B/C.
-
-After either lands, update this file's head (Last / Next / Open confirms) before the next dispatch.
+Update this file's head as each lands.
 
 ## Open Andrew-confirms / pending decisions
 
 | Decision | Gates | Notes |
 |----------|-------|-------|
 | **SEC-1 design dispatch go** | Sonnet design → 3× Composer ship (schema/role/OAuth, endpoint+log+banner, dashboard UI) | Sequencing confirmed (after whiteboard Phase 1, before GTM/pen-test). **Awaiting explicit go.** |
-| **W1 audio durability ratification** | 3× Composer ship A/B/C | 3 Qs: recovery UX copy, cross-session stuck-row surfacing, timeslice gate ownership — [`w1-audio-durability-design-2026-05-27.md`](w1-audio-durability-design-2026-05-27.md). |
+| ~~W1 audio durability ratification~~ | — | ✅ **RATIFIED 2026-05-30**: plain recovery copy + YES cross-session surfacing; minimal UI (redesign imminent). iOS `timeslice` real-iPhone validation is Andrew-owned at smoke time. |
 | **fast-variant user rule** | Auto-select FAST model variants in orchestrator | **Offered, unconfirmed** — never auto-select unless Andrew explicitly approves. |
 | **DNS admin one-liner** | Transient first-try git/Docker DNS failures | 192.168.1.1 → 1.1.1.1/8.8.8.8 — given, **not applied**. |
 | Default theme light vs dark | DESIGN-TOKENS Phase 0 | See `docs/DESIGN-TOKENS-PLAN.md`. |
@@ -32,7 +32,7 @@ After either lands, update this file's head (Last / Next / Open confirms) before
 
 ## In-flight subagents
 
-None.
+**W1 ship A** — Composer 2.5, branch `feat/audio-draft-store` (crash/refresh draft store + recovery banner). Dispatched 2026-05-30 ~15:55 MT.
 
 ## Uncommitted / unmerged state
 
