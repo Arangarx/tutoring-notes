@@ -8,13 +8,13 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 ## Last action completed
 
-**W1 audio durability RATIFIED** (Andrew 2026-05-30) + **ship A dispatched.** Decisions: recovery banner copy = plain *"Audio recording was interrupted. We recovered [N:NN] of audio."* (Keep / Discard); cross-session stuck-audio surfacing = **YES** (top-level "unsaved audio from [date]" nudge); any new UI kept **minimal** (full UI redesign imminent). Ship A = Composer on `feat/audio-draft-store` (crash/refresh draft store + recovery banner). Just prior this session: durability/deploy-hygiene hardening (`e10a315` bootstrap + `8637471` milestone-checkpoint rule + `f6a3d7e` testable Vercel deploy-skip predicate) and **whiteboard/regression-net** merged (`fc7b12b`).
+**Three parallel-worktree subagents landed; tsc fix merged.** (1) **W1 ship A** done on `feat/audio-draft-store` (`63d1897`, pushed) — IndexedDB draft store + recovery banner; **awaiting Andrew smoke** (incl. iOS `timeslice` real-iPhone gate). (2) **SEC-1 design pass** done — `docs/handoff/sec-1-impersonation-design-2026-05-30.md` (785L) on `feat/sec-1-design` (`e04bcf4`, now pushed); **6 open Qs await Andrew ratification before any code ships**. (3) **tsc-gate fix MERGED** to `master` (`de3e9c0`, --no-ff over `b951be0`) — typed `.d.ts` for `vercel-ignore-build.cjs`; verdict was tsc-gate-only (deploy never broke) but restores clean `tsc --noEmit`. Prior session: W1 ratification (`574d890`) + parallel-worktree policy (`2f25782`) + durability/deploy-hygiene (`f6a3d7e`).
 
 ## Next action(s)
 
-1. **W1 ship A in flight** (`feat/audio-draft-store`) — when it reports: smoke (incl. the iOS `timeslice` real-iPhone gate Andrew owns), then `merge --no-ff`.
+1. **W1 ship A awaiting smoke** (`feat/audio-draft-store` @ `63d1897`, pushed) — Andrew smokes crash/refresh recovery + iOS `timeslice` real-iPhone gate, then `merge --no-ff`.
 2. **W1 ships B + C** after A smoke-passes: B = upload-failure persistence + **cross-session stuck surfacing** (the ratified YES); C = device health. B/C may parallelize via isolated worktrees if files don't conflict (see [`AGENTS.md`](../../AGENTS.md) § parallel-execution), else serial.
-3. **SEC-1** — still queued; dispatch Sonnet auth/threat-model design pass on Andrew's **go** (dependency-independent of W1; serialize code execution per worktree policy). See [`docs/BACKLOG.md`](../BACKLOG.md) § SEC-1.
+3. **SEC-1 design AUTHORED, awaiting ratification** — `docs/handoff/sec-1-impersonation-design-2026-05-30.md` (`feat/sec-1-design` @ `e04bcf4`, pushed). Andrew reviews the **6 open Qs** before any Composer ship dispatches. Doc merge to `master` held until ratified (keeps master's design reflecting final decisions). See [`docs/BACKLOG.md`](../BACKLOG.md) § SEC-1.
 4. **Transcription speed (Tier 2)** — backlogged (BACKLOG § Recording item 6): VAD/silence-boundary chunking + provider/concurrency levers; Sonnet design pass when prioritized.
 
 Update this file's head as each lands.
@@ -23,7 +23,7 @@ Update this file's head as each lands.
 
 | Decision | Gates | Notes |
 |----------|-------|-------|
-| **SEC-1 design dispatch go** | Sonnet design → 3× Composer ship (schema/role/OAuth, endpoint+log+banner, dashboard UI) | Sequencing confirmed (after whiteboard Phase 1, before GTM/pen-test). **Awaiting explicit go.** |
+| **SEC-1 design ratification** | 6 open Qs in `sec-1-impersonation-design-2026-05-30.md` → unblocks 3× Composer ship | Design pass **DONE** (`feat/sec-1-design` @ `e04bcf4`, pushed). **Awaiting Andrew's answers to the 6 Qs** + doc-merge greenlight. |
 | ~~W1 audio durability ratification~~ | — | ✅ **RATIFIED 2026-05-30**: plain recovery copy + YES cross-session surfacing; minimal UI (redesign imminent). iOS `timeslice` real-iPhone validation is Andrew-owned at smoke time. |
 | **fast-variant user rule** | Auto-select FAST model variants in orchestrator | **Offered, unconfirmed** — never auto-select unless Andrew explicitly approves. |
 | **DNS admin one-liner** | Transient first-try git/Docker DNS failures | 192.168.1.1 → 1.1.1.1/8.8.8.8 — given, **not applied**. |
@@ -32,23 +32,25 @@ Update this file's head as each lands.
 
 ## In-flight subagents
 
-**W1 ship A** — Composer 2.5, branch `feat/audio-draft-store` (crash/refresh draft store + recovery banner). Dispatched 2026-05-30 ~15:55 MT.
+**None.** All three parallel-worktree subagents (W1 ship A, SEC-1 design, tsc fix) completed 2026-05-30 ~16:10 MT.
 
 ## Uncommitted / unmerged state
 
 **Working tree:** clean.
 
-**`master` HEAD:** `f6a3d7e` — `fix(vercel): testable Node ignore-build predicate — skip deploys for docs + .cursor/.mdc, fail-safe to build`
+**`master` HEAD:** `de3e9c0` — `Merge fix/tsc-vercel-ignore-types: restore clean tsc --noEmit gate`
 
 Recent `master` (newest first):
 
 ```
+de3e9c0 Merge fix/tsc-vercel-ignore-types: restore clean tsc --noEmit gate (typed .d.ts)
+b951be0 fix(types): declare vercel-ignore-build.cjs exports for tsc
+574d890 docs: W1 ratified (plain copy + cross-session stuck surfacing) + transcription-speed Tier 2 backlog
+2f25782 docs: codify parallel-subagent worktree safety policy (serialize-by-default, parallelize-when-safe)
 f6a3d7e fix(vercel): testable Node ignore-build predicate — skip deploys for docs + .cursor/.mdc, fail-safe to build
-e10a315 docs(handoff): canonical living ORCHESTRATOR-STATE.md + auto-read bootstrap (zero-catch-up fresh chats)
-8637471 docs(rules): orchestrator must checkpoint state at milestones, not just on truncation
-36350ce docs(handoff): orchestrator state checkpoint 2026-05-30-1500 (whiteboard sync resolved + regression net merged; SEC-1 next)
-fc7b12b Merge whiteboard/regression-net: standing real-browser whiteboard regression net (green + teeth-verified, inv 8 PDF quarantined)
 ```
+
+**Unmerged branches awaiting gates:** `feat/audio-draft-store` (`63d1897`, pushed — awaiting W1-A smoke); `feat/sec-1-design` (`e04bcf4`, pushed — awaiting SEC-1 ratification).
 
 **Merged branches (preserved for stale-sweep):**
 
