@@ -102,8 +102,9 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     serverActions: {
-      // Match Whisper's 25 MB transcription limit — anything larger won't
-      // transcribe anyway, so 25 MB is the natural ceiling for audio uploads.
+      // Server Action body cap (100 MB). Audio uploads go direct-to-Vercel-Blob
+      // (`BLOB_MAX_BYTES` = 100 MB). Whisper's 25 MB per-request limit is
+      // handled separately via server-side ffmpeg splitting in transcribe.
       bodySizeLimit: "100mb",
     },
   },
