@@ -38,6 +38,19 @@ If you are an **Opus orchestrator chat** in this repo, your job is to decide and
 
 If you catch yourself mid-action: stop, dispatch, and acknowledge the catch.
 
+## Keep orchestrator state durable — checkpoint at milestones, not just on truncation
+
+The mechanism + template live in `AGENTS.md` § Conventions ("Orchestrator state checkpoints"); the state files are `docs/handoff/orchestrator-state-<YYYY-MM-DD>-<HHMM>.md`. The failure mode this guards against: a chat dies (truncation, crash, Andrew closes it) and the only durable snapshot is days stale, so a fresh orchestrator picks up believing already-resolved work is still in-flight.
+
+**Fire a checkpoint (dispatch Composer 2.5 to author it — NEVER write it inline as Opus) at ANY of these triggers, not only "truncation/slowdown or user request":**
+
+- Immediately after a `merge --no-ff` to master of any feature/wave branch.
+- After closing a multi-day thread or a long-standing bug (e.g. a recurring regression finally fixed).
+- Before kicking off a new major thread (new Wave/Phase/SEC item) — checkpoint the old state first.
+- At a natural session wind-down, if anything material changed since the last checkpoint.
+
+**Self-catch:** if you just merged to master, or just declared a hard-won bug resolved, and the newest `docs/handoff/orchestrator-state-*.md` predates that event — STOP and dispatch a checkpoint before starting the next thing. A stale durable state is a silent failure; treat "I'll checkpoint later" the same as "I'll write this test later."
+
 ## Full protocol with tier escalation criteria + observed quality
 
 See `AGENTS.md` § "Model usage protocol" — the canonical detailed protocol with tier-assignment rules, escalation criteria (Composer→Sonnet, Sonnet→Opus triggers), proven patterns ("Opus designs, Composer ships" / "Composer designs and ships"), and dated real-world quality observations. Read it once per fresh chat.
