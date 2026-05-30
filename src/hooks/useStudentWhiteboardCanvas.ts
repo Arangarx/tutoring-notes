@@ -21,7 +21,10 @@ import { resolveWhiteboardAssetReadUrl } from "@/lib/whiteboard/resolve-asset-re
 import {
   applyViewportAligned,
   hasFollowSceneCenter,
+  viewportSceneCenterFromScroll,
+  readViewportSizeFromAppState,
 } from "@/lib/whiteboard/viewport-align";
+import type { WbFollowDebugTelemetry } from "@/lib/whiteboard/wb-follow-debug-telemetry";
 
 function wireRowViewState(
   p: WhiteboardWirePage["pageList"][number]
@@ -61,6 +64,8 @@ export function useStudentWhiteboardCanvas(
     whiteboardSessionId?: string;
     followTutorView?: boolean;
     onTutorPageMeta?: (page: WhiteboardWirePage) => void;
+    /** Observability only — HUD reads these refs; does not affect apply path. */
+    followDebugTelemetry?: WbFollowDebugTelemetry;
   }
 ) {
   const joinToken = options?.joinToken ?? "";
@@ -68,6 +73,16 @@ export function useStudentWhiteboardCanvas(
   const wbsidTag = wbsid ? `wbsid=${wbsid} ` : "";
   const followTutorView = options?.followTutorView === true;
   const onTutorPageMeta = options?.onTutorPageMeta;
+  const followDebugTelemetry = options?.followDebugTelemetry;
+
+  const recordRecvFollow = useCallback(
+    (f: WhiteboardWireFollow) => {
+      if (!followDebugTelemetry) return;
+      followDebugTelemetry.lastRecvFollow.current = f;
+      followDebugTelemetry.lastRecvAt.current = Date.now();
+    },
+    [followDebugTelemetry]
+  );
   const { onLocalElementSnapshot, shouldDropRemoteElement } =
     useSyncTombstonedElementIds();
   const applyingRemoteRef = useRef(false);
@@ -155,6 +170,34 @@ export function useStudentWhiteboardCanvas(
           console.info(
             `[student-apply] ${wbsidTag}pvs=${logCtx.pageId} wba=${logCtx.wba} action=viewport-align-applied panX=${scrollX} panY=${scrollY} zoom=${zoom} source=${logCtx.source}`
           );
+          if (followDebugTelemetry) {
+            const studentSize = readViewportSizeFromAppState(api.getAppState());
+            const st = api.getAppState() as {
+              offsetLeft?: number;
+              offsetTop?: number;
+            };
+            const offsetLeft =
+              typeof st.offsetLeft === "number" && Number.isFinite(st.offsetLeft)
+                ? st.offsetLeft
+                : 0;
+            const offsetTop =
+              typeof st.offsetTop === "number" && Number.isFinite(st.offsetTop)
+                ? st.offsetTop
+                : 0;
+            if (studentSize) {
+              const center = viewportSceneCenterFromScroll(
+                scrollX,
+                scrollY,
+                zoom,
+                studentSize.viewportWidth,
+                studentSize.viewportHeight,
+                offsetLeft,
+                offsetTop
+              );
+              followDebugTelemetry.lastAppliedCenter.current = center;
+              followDebugTelemetry.lastAppliedAt.current = Date.now();
+            }
+          }
           releaseApplyingRemote();
         },
         onHold: (reason) => {
@@ -165,7 +208,7 @@ export function useStudentWhiteboardCanvas(
         },
       });
     },
-    [wbsid, wbsidTag]
+    [followDebugTelemetry, wbsid, wbsidTag]
   );
 
   const applyTutorFollow = useCallback(
@@ -269,6 +312,7 @@ export function useStudentWhiteboardCanvas(
 
       if (details.follow) {
         lastTutorFollowRef.current = details.follow;
+        recordRecvFollow(details.follow);
       }
       if (page.pageList && page.pageList.length > 0) {
         commitPageList(
@@ -433,6 +477,7 @@ export function useStudentWhiteboardCanvas(
       joinToken,
       onHydrateResult,
       onTutorPageMeta,
+      recordRecvFollow,
       shouldDropRemoteElement,
       wbsidTag,
     ]

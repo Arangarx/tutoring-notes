@@ -103,6 +103,7 @@ import { MathInsertButton } from "@/components/whiteboard/MathInsertButton";
 import { DesmosInsertButton } from "@/components/whiteboard/DesmosInsertButton";
 import { UndoRedoButtons } from "@/components/whiteboard/UndoRedoButtons";
 import { ExcalidrawDynamic } from "@/components/whiteboard/ExcalidrawDynamic";
+import { WhiteboardDebugHud } from "@/components/whiteboard/WhiteboardDebugHud";
 import {
   type ExcalidrawApiLike,
   type InsertPdfBoardPagesIntegrate,
@@ -125,6 +126,10 @@ import {
 } from "@/lib/whiteboard/wb-e2e-scene-bridge";
 import { mergeScenesReconciled } from "@/lib/whiteboard/apply-reconciled-remote-scene";
 import { followWireFromTutorAppState } from "@/lib/whiteboard/viewport-align";
+import {
+  createWbFollowDebugTelemetry,
+  inferBroadcastTrigger,
+} from "@/lib/whiteboard/wb-follow-debug-telemetry";
 import type { RemoteSceneIngestLogHint } from "@/hooks/useWhiteboardRecorder";
 import {
   adaptWBElementsToExcalidraw,
@@ -367,6 +372,7 @@ export function WhiteboardWorkspaceClient({
     null
   );
   const excalidrawAPIRef = useRef<ExcalidrawApiLike | null>(null);
+  const followDebugTelemetry = useMemo(() => createWbFollowDebugTelemetry(), []);
   const applyingRemoteToCanvasRef = useRef(false);
   /**
    * Ref-count for programmatic `updateScene` when switching/adding board tabs.
@@ -1582,6 +1588,19 @@ export function WhiteboardWorkspaceClient({
     []
   );
 
+  const onFollowDocumentEmitted = useCallback(
+    (follow: WhiteboardWireFollow) => {
+      const prev = followDebugTelemetry.lastSentFollow.current;
+      followDebugTelemetry.lastSentTrigger.current = inferBroadcastTrigger(
+        prev,
+        follow
+      );
+      followDebugTelemetry.lastSentFollow.current = follow;
+      followDebugTelemetry.lastSentAt.current = Date.now();
+    },
+    [followDebugTelemetry]
+  );
+
   const { scheduleDocumentBroadcast, flushDocumentBroadcastNow } =
     useTutorLiveDocumentWire({
       enabled: Boolean(sync) && Boolean(syncUrl),
@@ -1589,6 +1608,7 @@ export function WhiteboardWorkspaceClient({
       getPagesSnapshot: getTutorDocumentPagesSnapshot,
       getPageListAndActive: getTutorPageListAndActive,
       getFollow: getTutorLiveFollow,
+      onDocumentEmitted: onFollowDocumentEmitted,
     });
   scheduleDocumentBroadcastRef.current = scheduleDocumentBroadcast;
 
@@ -3234,6 +3254,13 @@ export function WhiteboardWorkspaceClient({
             // safety boundary — this just stops Excalidraw from showing
             // its "untrusted source" warning panel for Desmos.
             validateEmbeddable={validateExcalidrawEmbeddable}
+          />
+          <WhiteboardDebugHud
+            role="tutor"
+            syncOn={Boolean(syncUrl)}
+            activePageId={activePageId}
+            excalidrawAPI={excalidrawAPI}
+            telemetry={followDebugTelemetry}
           />
         </div>
       </div>
