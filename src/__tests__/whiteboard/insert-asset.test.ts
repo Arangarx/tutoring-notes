@@ -19,6 +19,7 @@
  */
 
 import {
+  computeFitCameraForRect,
   insertDesmosEmbedOnCanvas,
   insertImageOnCanvas,
   insertMathSvgOnCanvas,
@@ -28,7 +29,10 @@ import {
   validateDesmosUrl,
   type ExcalidrawApiLike,
 } from "@/lib/whiteboard/insert-asset";
-import { viewportSceneCenterFromScroll } from "@/lib/whiteboard/viewport-align";
+import {
+  viewportCoordsToSceneCoords,
+  viewportSceneCenterFromScroll,
+} from "@/lib/whiteboard/viewport-align";
 
 jest.mock("@/lib/whiteboard/upload", () => ({
   uploadWhiteboardAsset: jest.fn(),
@@ -258,6 +262,165 @@ describe("pdfBoardPageTitle", () => {
   });
 });
 
+describe("computeFitCameraForRect (PDF page center+fit)", () => {
+  const PDF_RENDER_WIDTH = 720;
+
+  /** Independent oracle: scene point at the visual viewport center. */
+  function sceneAtViewportCenter(
+    scrollX: number,
+    scrollY: number,
+    zoom: number,
+    viewportWidth: number,
+    viewportHeight: number,
+    offsetLeft: number,
+    offsetTop: number
+  ) {
+    return viewportCoordsToSceneCoords(
+      {
+        clientX: offsetLeft + viewportWidth / 2,
+        clientY: offsetTop + viewportHeight / 2,
+      },
+      {
+        zoom: { value: zoom },
+        offsetLeft,
+        offsetTop,
+        scrollX,
+        scrollY,
+      }
+    );
+  }
+
+  function expectedFitZoom(
+    contentWidth: number,
+    contentHeight: number,
+    viewportWidth: number,
+    viewportHeight: number,
+    fitPadding = 0.9
+  ) {
+    const usableW = viewportWidth * fitPadding;
+    const usableH = viewportHeight * fitPadding;
+    return Math.min(usableW / contentWidth, usableH / contentHeight);
+  }
+
+  const cases: Array<{
+    name: string;
+    viewportWidth: number;
+    viewportHeight: number;
+    pdfWidthPx: number;
+    pdfHeightPx: number;
+  }> = [
+    {
+      name: "portrait PDF on landscape viewport",
+      viewportWidth: 1440,
+      viewportHeight: 900,
+      pdfWidthPx: 720,
+      pdfHeightPx: 960,
+    },
+    {
+      name: "landscape PDF on landscape viewport",
+      viewportWidth: 1440,
+      viewportHeight: 900,
+      pdfWidthPx: 960,
+      pdfHeightPx: 720,
+    },
+    {
+      name: "portrait PDF on portrait viewport",
+      viewportWidth: 390,
+      viewportHeight: 844,
+      pdfWidthPx: 720,
+      pdfHeightPx: 960,
+    },
+    {
+      name: "landscape PDF on portrait viewport",
+      viewportWidth: 390,
+      viewportHeight: 844,
+      pdfWidthPx: 960,
+      pdfHeightPx: 720,
+    },
+  ];
+
+  it.each(cases)(
+    "centers PDF at viewport center and zooms to fit ($name)",
+    ({ viewportWidth, viewportHeight, pdfWidthPx, pdfHeightPx }) => {
+      const aspect = pdfHeightPx / pdfWidthPx;
+      const contentWidth = PDF_RENDER_WIDTH;
+      const contentHeight = PDF_RENDER_WIDTH * aspect;
+      const centerSceneX = contentWidth / 2;
+      const centerSceneY = contentHeight / 2;
+
+      const camera = computeFitCameraForRect({
+        centerSceneX,
+        centerSceneY,
+        contentWidth,
+        contentHeight,
+        viewportWidth,
+        viewportHeight,
+      });
+      expect(camera).not.toBeNull();
+      if (!camera) return;
+
+      const fitZoom = expectedFitZoom(
+        contentWidth,
+        contentHeight,
+        viewportWidth,
+        viewportHeight
+      );
+      expect(camera.zoom).toBeCloseTo(fitZoom, 10);
+
+      const oracleCenter = sceneAtViewportCenter(
+        camera.panX,
+        camera.panY,
+        camera.zoom,
+        viewportWidth,
+        viewportHeight,
+        0,
+        0
+      );
+      expect(oracleCenter.x).toBeCloseTo(centerSceneX, 5);
+      expect(oracleCenter.y).toBeCloseTo(centerSceneY, 5);
+    }
+  );
+
+  it.each(cases)(
+    "camera is offset-invariant ($name)",
+    ({ viewportWidth, viewportHeight, pdfWidthPx, pdfHeightPx }) => {
+      const aspect = pdfHeightPx / pdfWidthPx;
+      const contentWidth = PDF_RENDER_WIDTH;
+      const contentHeight = PDF_RENDER_WIDTH * aspect;
+      const baseline = computeFitCameraForRect({
+        centerSceneX: contentWidth / 2,
+        centerSceneY: contentHeight / 2,
+        contentWidth,
+        contentHeight,
+        viewportWidth,
+        viewportHeight,
+      });
+      expect(baseline).not.toBeNull();
+      if (!baseline) return;
+
+      const offsetPairs: Array<[number, number]> = [
+        [0, 0],
+        [73, 250],
+        [120, 64],
+        [-40, 88],
+      ];
+      for (const [offsetLeft, offsetTop] of offsetPairs) {
+        const oracleCenter = sceneAtViewportCenter(
+          baseline.panX,
+          baseline.panY,
+          baseline.zoom,
+          viewportWidth,
+          viewportHeight,
+          offsetLeft,
+          offsetTop
+        );
+        expect(oracleCenter.x).toBeCloseTo(contentWidth / 2, 5);
+        expect(oracleCenter.y).toBeCloseTo(contentHeight / 2, 5);
+      }
+    }
+  );
+});
+
 describe("insertPdfPagesAsBoardPages", () => {
   it("commits a single atomic batch with section + rows + first page", async () => {
     uploadMock.mockResolvedValue({
@@ -363,19 +526,16 @@ describe("insertPdfPagesAsBoardPages", () => {
       blobUrl: "https://blob.example/p.png",
       sizeBytes: 4,
     });
-    // 1000 x 800 viewport (from makeFakeApi getAppState), anchor camera at
-    // (0,0,1). PDF rendered at 720 x 720*aspect; for aspect=4/3 the PDF
-    // is 720x960 scene-units. Fit math:
-    //   zoom = min(1000*0.9 / 720, 800*0.9 / 960) = min(1.25, 0.75) = 0.75
-    //   centerX = 0 + 1000/2/1 = 500, centerY = 0 + 800/2/1 = 400
-    //   panX = 500 - 1000/2/0.75 ≈ -166.67
-    //   panY = 400 - 800/2/0.75 ≈ -133.33
+    const viewportWidth = 1000;
+    const viewportHeight = 800;
     const { api } = makeFakeApi();
     const commit = jest.fn();
     const integrate = {
       getActivePageId: () => "p1",
       commitPdfBatch: commit,
     };
+    const pdfWidthPx = 720;
+    const pdfHeightPx = 960;
     const result = await insertPdfPagesAsBoardPages({
       excalidrawAPI: api,
       whiteboardSessionId: "wb",
@@ -384,8 +544,8 @@ describe("insertPdfPagesAsBoardPages", () => {
         {
           pageIndex: 1,
           pngBlob: new Blob([new Uint8Array(4)], { type: "image/png" }),
-          widthPx: 720,
-          heightPx: 960,
+          widthPx: pdfWidthPx,
+          heightPx: pdfHeightPx,
         },
       ],
       filename: "x.pdf",
@@ -393,14 +553,42 @@ describe("insertPdfPagesAsBoardPages", () => {
     });
     expect(result.ok).toBe(true);
     const arg = commit.mock.calls[0]?.[0] as {
-      rows: Array<{ viewState?: { panX: number; panY: number; zoom: number } }>;
+      rows: Array<{
+        viewState?: { panX: number; panY: number; zoom: number };
+        elements: Array<{ x: number; y: number; width: number; height: number }>;
+      }>;
     };
-    const vs = arg.rows[0]?.viewState;
-    expect(vs).toBeDefined();
-    if (!vs) return;
-    expect(vs.zoom).toBeCloseTo(0.75, 5);
-    expect(vs.panX).toBeCloseTo(-1000 / 1.5 + 500, 5); // 500 - 666.667
-    expect(vs.panY).toBeCloseTo(-800 / 1.5 + 400, 5); // 400 - 533.333
+    const row = arg.rows[0];
+    expect(row?.elements[0]?.x).toBe(0);
+    expect(row?.elements[0]?.y).toBe(0);
+    const contentWidth = 720;
+    const contentHeight = 720 * (pdfHeightPx / pdfWidthPx);
+    const expected = computeFitCameraForRect({
+      centerSceneX: contentWidth / 2,
+      centerSceneY: contentHeight / 2,
+      contentWidth,
+      contentHeight,
+      viewportWidth,
+      viewportHeight,
+    });
+    const vs = row?.viewState;
+    expect(vs).toEqual(expected);
+    if (!vs || !expected) return;
+    const oracle = viewportCoordsToSceneCoords(
+      {
+        clientX: viewportWidth / 2,
+        clientY: viewportHeight / 2,
+      },
+      {
+        zoom: { value: vs.zoom },
+        offsetLeft: 0,
+        offsetTop: 0,
+        scrollX: vs.panX,
+        scrollY: vs.panY,
+      }
+    );
+    expect(oracle.x).toBeCloseTo(contentWidth / 2, 5);
+    expect(oracle.y).toBeCloseTo(contentHeight / 2, 5);
   });
 
   it("omits viewState when the canvas hasn't measured yet (fallback to anchor camera)", async () => {
