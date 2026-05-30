@@ -594,6 +594,29 @@ items should be on the active path before the next pilot tutor is added.
    B** — but the never-delete + auto-recover principles above shape any future
    surfacing work (Ship B outbox stuck UI + surface-A coverage). Exact copy and
    metadata to surface TBD; expected edge cases.
+1c. **[UX — fold into upcoming redesign] Consolidate the *presentation* of post-crash recovery affordances — WITHOUT merging the underlying systems.**
+   After a hard crash / tab-kill, the workspace can stack **three independent
+   banners at once** with no de-duplication (verified 2026-05-30, Andrew's
+   screenshot): (1) **W1-A audio draft** — "Audio recording was interrupted. We
+   recovered MM:SS." Keep/Discard, store `tutoring-notes-recording-draft`; (2)
+   **whiteboard event-draft** — "Browser recovery (IndexedDB): … Load draft into
+   board" / Discard, store `tutoring-notes-checkpoints` (pre-existing, separate
+   from W1-A); (3) **"Student disconnected — recording paused"** — live FSM
+   state, **NOT a recovery prompt**. Goal: one coherent recovery *moment* in the
+   redesign instead of three overlapping "something interrupted" prompts.
+   **CRITICAL CONSTRAINT (Andrew 2026-05-30): consolidate VISUAL/stacking
+   treatment only — do NOT merge the mechanisms or force a single shared
+   Keep/Discard.** These recover genuinely different things and must stay
+   **individually decidable**: audio tail (store A) vs board events (store B) are
+   separate decisions — a tutor may legitimately want to Keep audio but Discard a
+   board draft, or vice versa, so each needs its own Keep/Discard. And banner (3)
+   is a **live-state notice, not recovery** — it must NOT be folded into a
+   "recover?" construct at all; it should coexist (styled distinctly) or render in
+   the normal session-status area. Acceptable shape: a single recovery *container*
+   with per-item Keep/Discard rows + preserved per-system semantics; unacceptable
+   shape: one "Recover everything? Y/N" that couples audio and board (or that
+   swallows the live-state notice). Stacking-order + dedup logic lives in
+   `WhiteboardWorkspaceClient.tsx`.
 2. **[BLOCKER-PROD] Upload-failure persistence dies on page navigation.**
    `uploadAudioWithRetry` retries once. If both attempts fail (genuine network
    outage, Vercel Blob 5xx storm), the user sees the friendly error — and the
