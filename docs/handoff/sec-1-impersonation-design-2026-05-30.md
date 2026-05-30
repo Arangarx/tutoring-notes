@@ -705,6 +705,12 @@ Must be verified before each dispatch's branch is declared smoke-ready.
 
 ## 9. Open questions Andrew must ratify
 
+> **Status (Andrew 2026-05-30): orchestrator-discretion delegated.** Andrew is
+> not answering the 6 Qs individually — trusts the orchestrator to use the
+> recommended defaults below until tests fail or a specific blocking question
+> surfaces. **Do not mark Qs individually answered**; escalate to Andrew only on
+> test failures or a blocking Q.
+
 ### Q1 — Real admin: Google-OAuth-only or password-also-allowed?
 
 After SEC-1, should Andrew's real `arangarx@gmail.com` row have `passwordHash = null` (Google-OAuth-only) or also allow a password?

@@ -488,7 +488,7 @@ Surfaced during a long planning conversation about naming, pricing, and competit
 
 - **🔵 Account-takeover defense (3/3) — notify on first sign-in from a new device or IP (scoped 2026-05-19, FUTURE).** Defense-in-depth. After a successful login, fingerprint the request (user-agent + IP geolocation bucket, NOT raw IP for privacy), check against a small `KnownSignInFingerprint` table per `adminUserId`, send "New sign-in from <city, country> at <time>" if novel + record the fingerprint. **Why FUTURE:** mitigations (1) and (2) above close most of the practical risk; (3) is the polish layer that matters once a pilot has 10+ tutors and the surface area for "I share my laptop with a kid who clicked the wrong link" stories grows. Capture for completeness; don't build until 9f or post-pilot expansion. **Effort:** ~3-4 hrs including the fingerprint privacy review.
 
-- **🟡 SEC-1 — Admin impersonation + test-account isolation (scoped 2026-05-28).** Andrew's pilot smoke testing currently uses `arangarx+test1@gmail.com` with a regular password login — insecure (browser-saved password is sensitive, easy to leak in screenshots / commits) and produces prompt-fatigue across Vercel preview subdomains (Chrome's "save password" prompt fires per new preview hostname). **Pattern:** industry-standard admin impersonation (Stripe / Auth0 / Linear / Vercel all do this). Mark certain accounts as `isTestAccount = true`; password login on those accounts is **disabled at the auth layer**; the only way in is the admin user clicks "Log in as <user>" from the admin dashboard, which mints a session as the target user. Combine with **Google OAuth for the admin login** (replaces password auth on the admin tier — kills the per-preview save-password prompt forever, inherits Google's 2FA + recovery flow). **Floor-level requirements:** (1) `isTestAccount` boolean on `AdminUser` (additive migration); (2) impersonation server action with admin role check at the mutation boundary, mirroring `assertOwnsStudent` pattern; (3) audit log table `ImpersonationLog` rows (`adminUserId`, `impersonatedUserId`, `startedAt`, `endedAt`, `vercelDeploymentUrl`); (4) persistent "You are signed in as <email>. [Exit impersonation]" banner with working exit that restores the admin session; (5) admin-only authorization — test users cannot impersonate other test users; (6) Google OAuth wired for admin login (existing Gmail OAuth infra serves tutor-side parent-email sending — that's a separate OAuth surface; admin-login OAuth may share the consent screen but uses different scopes); (7) admin dashboard UI listing test users with a "Log in as" button per row (nice-to-have: create-test-user form in the UI; can defer initial seed to a SQL script). **Sequencing:** runs as small Wave SEC-1 — Sonnet design pass (auth model, threat model, schema, OAuth integration approach, banner UX, exit-impersonation contract) + ~3 Composer ship dispatches (A: schema + admin role + Google OAuth wiring; B: impersonation endpoint + audit log + banner; C: admin dashboard UI for list + "Log in as"). **Lands AFTER Phase 1 whiteboard sync redesign smoke-passes + merges** so smoke surfaces don't compound. Probably parallel-able with W1 audio durability since they touch different layers. **Lands BEFORE any GTM / school outreach + before Phase 10-pre external pen-test** — this directly affects security posture for any non-Sarah human touching the system. **Migration for `arangarx+test1@gmail.com`:** flip `isTestAccount = true` and null-out the password hash on that row; Andrew's real admin account (created via Google OAuth in dispatch A) becomes the new login surface. **Effort:** Sonnet design ~2-3 hr; Composer ship ~6-10 hr across the 3 dispatches; total ~1-2 working days. **Cross-link:** Phase 9f internal audit + the three account-takeover-defense entries above are unrelated but adjacent — both tracks raise the auth bar; orchestrator can sequence either way, no hard dependency. **Why now:** Sarah is the only real tutor today; growing past 2-3 tutors or doing the school pilot needs admin-impersonation in place before the surface expands.
+- **🟡 SEC-1 — Admin impersonation + test-account isolation (scoped 2026-05-28).** Andrew's pilot smoke testing currently uses `arangarx+test1@gmail.com` with a regular password login — insecure (browser-saved password is sensitive, easy to leak in screenshots / commits) and produces prompt-fatigue across Vercel preview subdomains (Chrome's "save password" prompt fires per new preview hostname). **Pattern:** industry-standard admin impersonation (Stripe / Auth0 / Linear / Vercel all do this). Mark certain accounts as `isTestAccount = true`; password login on those accounts is **disabled at the auth layer**; the only way in is the admin user clicks "Log in as <user>" from the admin dashboard, which mints a session as the target user. Combine with **Google OAuth for the admin login** (replaces password auth on the admin tier — kills the per-preview save-password prompt forever, inherits Google's 2FA + recovery flow). **Floor-level requirements:** (1) `isTestAccount` boolean on `AdminUser` (additive migration); (2) impersonation server action with admin role check at the mutation boundary, mirroring `assertOwnsStudent` pattern; (3) audit log table `ImpersonationLog` rows (`adminUserId`, `impersonatedUserId`, `startedAt`, `endedAt`, `vercelDeploymentUrl`); (4) persistent "You are signed in as <email>. [Exit impersonation]" banner with working exit that restores the admin session; (5) admin-only authorization — test users cannot impersonate other test users; (6) Google OAuth wired for admin login (existing Gmail OAuth infra serves tutor-side parent-email sending — that's a separate OAuth surface; admin-login OAuth may share the consent screen but uses different redirect URIs); (7) admin dashboard UI listing test users with a "Log in as" button per row (nice-to-have: create-test-user form in the UI; can defer initial seed to a SQL script). **Design doc merged 2026-05-30:** [`docs/handoff/sec-1-impersonation-design-2026-05-30.md`](handoff/sec-1-impersonation-design-2026-05-30.md) (`a1c6c3f`). **Ratification (Andrew 2026-05-30):** 6 open Qs **orchestrator-discretion delegated** — use design-doc defaults; escalate to Andrew only on test failures or a specific blocking question; **do not mark Qs individually answered**. **Sequencing:** ~3 Composer ship dispatches (A: schema + admin role + Google OAuth wiring; B: impersonation endpoint + audit log + banner; C: admin dashboard UI for list + "Log in as"). **Lands BEFORE any GTM / school outreach + before Phase 10-pre external pen-test**. **Effort:** Composer ship ~6-10 hr across the 3 dispatches; total ~1-2 working days.
 
 ## Operational follow-ups (small, do when convenient)
 
@@ -555,6 +555,11 @@ items should be on the active path before the next pilot tutor is added.
 
 ### Axis 1 — Data durability (recorder)
 
+**W1 durability principles (Andrew 2026-05-30, ratified):**
+
+- **Never delete without confirm** — no recording or draft is removed without explicit user confirmation.
+- **Auto-recover tutor-tied orphans** — attempt auto-recovery on anything orphaned that is tied to the tutor; leave it recoverable until pilot feedback says auto-recovery is annoying. Exact copy + metadata TBD.
+
 1. **[BLOCKER-PROD] In-progress segment dies on browser crash / refresh / OOM.**
    `useAudioRecorder` keeps the live `MediaRecorder`'s chunks in `chunksRef`
    (in-memory only). A 50-min segment with 49 min recorded + tab crash = 49 min
@@ -564,6 +569,31 @@ items should be on the active path before the next pilot tutor is added.
    30-second cadence, surface a "Recover unfinished recording from XX:XX?"
    banner on next mount. Same `findInProgressSession` shape works for both
    features.
+   **Partial fix (Ship A, `feat/audio-draft-store` @ `63d1897`):** workspace
+   recorder only (`WhiteboardWorkspaceClient`, key `{whiteboardSessionId}:tutor:mic`).
+   Student-page note recorder (surface A) still unprotected — see **W1 surface-A
+   coverage** below.
+1a. **[DECISION PENDING — Andrew] W1 surface-A coverage — protect the student-page note recorder against crash/refresh.**
+   W1 ship A wires IndexedDB draft store + recovery banner **only** into the
+   whiteboard workspace recorder (surface B). The student-detail AI-assist note
+   recorder (surface A: `NoteEntrySection → AiAssistPanel → AudioInputTabs → AudioRecordInput`) does **not** pass `recordingDraft`, writes no draft, and
+   has no recovery banner — Sarah's primary note-taking recordings remain
+   unprotected against crash/refresh. **Intended Ship A scope** (per `63d1897` +
+   design doc "recovery is host-level at workspace mount") but diverges from
+   item #1's generic "any mount of `useAudioRecorder`" wording.
+   **To close:** pass a stable session key into `AudioRecordInput`'s
+   `useAudioRecorder` via `recordingDraft` opt-in; mount-time `findInProgress` +
+   recovery banner; decide what `sessionId` means for note-only recordings
+   (studentId? ephemeral per mount?).
+   **Priority gate (OPEN):** Does Sarah record her sessions in the whiteboard
+   workspace or via the note recorder? Andrew's answer determines whether this
+   jumps the queue as **W1 ship A-prime** or stays lower-priority backlog.
+1b. **[FOLLOW-UP] Cross-session stuck/orphaned draft surfacing (backlogged 2026-05-30).**
+   Stuck rows and orphaned drafts from prior sessions only surface when the user
+   reopens that specific session's workspace. Andrew ratified **backlog, not Ship
+   B** — but the never-delete + auto-recover principles above shape any future
+   surfacing work (Ship B outbox stuck UI + surface-A coverage). Exact copy and
+   metadata to surface TBD; expected edge cases.
 2. **[BLOCKER-PROD] Upload-failure persistence dies on page navigation.**
    `uploadAudioWithRetry` retries once. If both attempts fail (genuine network
    outage, Vercel Blob 5xx storm), the user sees the friendly error — and the
@@ -659,8 +689,11 @@ items should be on the active path before the next pilot tutor is added.
 
     **iOS-device status (2026-05-30):** Andrew currently has **no iOS device**
     on hand. All `untested` iOS-Safari cells stay open until a Sarah session or
-    a purchased test iPhone is available. **Recent work explicitly pending iOS
-    validation:** (1) **W1-A audio draft recovery banner** — the `MediaRecorder`
+    a purchased test iPhone is available. **Andrew ratified 2026-05-30: iOS
+    validation is NOT a release gate** — no evidence modern Safari diverges from
+    modern Chrome; track as backlogged risk, prioritize on Sarah sessions or when
+    a test device is acquired. **Recent work pending iOS validation (non-blocking):**
+    (1) **W1-A audio draft recovery banner** — the `MediaRecorder`
     `timeslice` + `pagehide`/`visibilitychange` checkpoint path that persists
     the draft is the exact surface iOS Safari/WebKit historically diverges on
     (no-timeslice MP4 guard already exists for live recording, but the new

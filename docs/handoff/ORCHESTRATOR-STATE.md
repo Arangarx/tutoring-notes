@@ -8,14 +8,15 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 ## Last action completed
 
-**Three parallel-worktree subagents landed; tsc fix merged.** (1) **W1 ship A** done on `feat/audio-draft-store` (`63d1897`, pushed) — IndexedDB draft store + recovery banner; **awaiting Andrew smoke** (incl. iOS `timeslice` real-iPhone gate). (2) **SEC-1 design pass** done — `docs/handoff/sec-1-impersonation-design-2026-05-30.md` (785L) on `feat/sec-1-design` (`e04bcf4`, now pushed); **6 open Qs await Andrew ratification before any code ships**. (3) **tsc-gate fix MERGED** to `master` (`de3e9c0`, --no-ff over `b951be0`) — typed `.d.ts` for `vercel-ignore-build.cjs`; verdict was tsc-gate-only (deploy never broke) but restores clean `tsc --noEmit`. Prior session: W1 ratification (`574d890`) + parallel-worktree policy (`2f25782`) + durability/deploy-hygiene (`f6a3d7e`).
+**Andrew ratified W1 + SEC-1 rulings (2026-05-30, this turn).** W1: recovery copy approved as-is; cross-session stuck/orphaned drafts **backlogged** (never-delete + auto-recover principles recorded); macOS debounce unvalidated; **iOS not a release gate**. SEC-1: 6 open Qs **orchestrator-discretion delegated** (escalate on test fail / blocking Q only). **New scope finding:** W1 ship A covers workspace recorder only — student-page note recorder (surface A) unprotected; BACKLOG item + priority gate OPEN. Prior: W1 ship A on `feat/audio-draft-store` (`63d1897`); SEC-1 design merged (`a1c6c3f`); tsc fix merged (`de3e9c0`).
 
 ## Next action(s)
 
-1. **W1 ship A awaiting smoke** (`feat/audio-draft-store` @ `63d1897`, pushed) — Andrew smokes crash/refresh recovery + iOS `timeslice` real-iPhone gate, then `merge --no-ff`.
-2. **W1 ships B + C** after A smoke-passes: B = upload-failure persistence + **cross-session stuck surfacing** (the ratified YES); C = device health. B/C may parallelize via isolated worktrees if files don't conflict (see [`AGENTS.md`](../../AGENTS.md) § parallel-execution), else serial.
-3. **SEC-1 design AUTHORED + MERGED to master** (`a1c6c3f`, docs-only) for reviewability — [`docs/handoff/sec-1-impersonation-design-2026-05-30.md`](sec-1-impersonation-design-2026-05-30.md). Andrew answers the **6 open Qs** before any Composer ship dispatches (reviewing the doc IS the ratification step; merge made it clickable/durable, open Qs stay tracked in-doc + here). See [`docs/BACKLOG.md`](../BACKLOG.md) § SEC-1.
-4. **Transcription speed (Tier 2)** — backlogged (BACKLOG § Recording item 6): VAD/silence-boundary chunking + provider/concurrency levers; Sonnet design pass when prioritized.
+1. **W1 ship A awaiting smoke** (`feat/audio-draft-store` @ `63d1897`, pushed) — Andrew smokes crash/refresh recovery on **workspace recorder** (surface B); **iOS not blocking** merge. Then `merge --no-ff`.
+2. **W1 ships B + C** after A smoke-passes: B = upload-failure persistence (outbox `stuck` semantics); C = device health. Cross-session stuck/orphaned draft surfacing is **backlogged** (principles in BACKLOG § W1 durability). B/C may parallelize via isolated worktrees if files don't conflict (see [`AGENTS.md`](../../AGENTS.md) § parallel-execution), else serial.
+3. **SEC-1 Composer ships** — design merged (`a1c6c3f`); [`docs/handoff/sec-1-impersonation-design-2026-05-30.md`](sec-1-impersonation-design-2026-05-30.md). **6 open Qs orchestrator-discretion delegated** — use design-doc defaults; escalate to Andrew only on test failures or a specific blocking question.
+4. **W1 surface-A coverage decision (OPEN)** — does Sarah record in workspace or note recorder? Gates whether surface-A draft protection is A-prime or lower-priority backlog. See [`docs/BACKLOG.md`](../BACKLOG.md) § W1 surface-A.
+5. **Transcription speed (Tier 2)** — backlogged (BACKLOG § Recording item 6): VAD/silence-boundary chunking + provider/concurrency levers; Sonnet design pass when prioritized.
 
 Update this file's head as each lands.
 
@@ -23,8 +24,9 @@ Update this file's head as each lands.
 
 | Decision | Gates | Notes |
 |----------|-------|-------|
-| **SEC-1 design ratification** | 6 open Qs in `sec-1-impersonation-design-2026-05-30.md` → unblocks 3× Composer ship | Design pass **DONE** (`feat/sec-1-design` @ `e04bcf4`, pushed). **Awaiting Andrew's answers to the 6 Qs** + doc-merge greenlight. |
-| ~~W1 audio durability ratification~~ | — | ✅ **RATIFIED 2026-05-30**: plain recovery copy + YES cross-session surfacing; minimal UI (redesign imminent). iOS `timeslice` real-iPhone validation is Andrew-owned at smoke time. |
+| ~~SEC-1 design ratification~~ | — | ✅ **DELEGATED 2026-05-30**: Andrew trusts orchestrator on all 6 open Qs until tests fail or a specific blocking Q surfaces. Use design-doc defaults; **do not mark Qs individually answered**. |
+| ~~W1 audio durability ratification~~ | — | ✅ **RATIFIED 2026-05-30**: (1) recovery copy approved as-is; (2) cross-session stuck/orphaned drafts **backlogged** — principles: never delete without explicit confirm; auto-recover tutor-tied orphans; (3) macOS debounce unvalidated (no MacBook); (4) **iOS not a release gate** — validate on Sarah sessions or when test device acquired. |
+| **W1 surface-A coverage** | Priority of note-recorder draft protection vs backlog | **OPEN.** Ship A protects workspace recorder only; student-page note recorder unprotected. Gates A-prime vs lower-priority. Question: does Sarah record in workspace or via note recorder? |
 | **fast-variant user rule** | Auto-select FAST model variants in orchestrator | **Offered, unconfirmed** — never auto-select unless Andrew explicitly approves. |
 | **DNS admin one-liner** | Transient first-try git/Docker DNS failures | 192.168.1.1 → 1.1.1.1/8.8.8.8 — given, **not applied**. |
 | Default theme light vs dark | DESIGN-TOKENS Phase 0 | See `docs/DESIGN-TOKENS-PLAN.md`. |
@@ -50,7 +52,7 @@ b951be0 fix(types): declare vercel-ignore-build.cjs exports for tsc
 f6a3d7e fix(vercel): testable Node ignore-build predicate — skip deploys for docs + .cursor/.mdc, fail-safe to build
 ```
 
-**Unmerged branches awaiting gates:** `feat/audio-draft-store` (`63d1897`, pushed — awaiting W1-A smoke); `feat/sec-1-design` (`e04bcf4`, pushed — awaiting SEC-1 ratification).
+**Unmerged branches awaiting gates:** `feat/audio-draft-store` (`63d1897`, pushed — awaiting W1-A smoke; iOS not blocking); ~~`feat/sec-1-design`~~ merged (`a1c6c3f`).
 
 **Merged branches (preserved for stale-sweep):**
 

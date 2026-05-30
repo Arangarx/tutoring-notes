@@ -340,3 +340,12 @@ These must be verified before the executor's branch is declared smoke-ready:
 
 - `PLATFORM-ASSUMPTIONS.md` §8.1 — extend with `timeslice` behavior finding (BLOCKER item 1 above)
 - `PLATFORM-ASSUMPTIONS.md` §8.5 — note that IDB draft store is also subject to iOS Safari ITP 7-day eviction; intra-day sessions are safe
+
+---
+
+## Ratification (Andrew 2026-05-30)
+
+1. **Recovery banner copy** — approved as-is for now ("plain copy seems fine for now").
+2. **Cross-session stuck/orphaned drafts** — **backlogged** (not this ship). Durable principles for Ship B + any surface-A work: **(a)** never delete any recording/draft without explicit user confirmation; **(b)** attempt auto-recovery on anything orphaned that is tied to the tutor — leave it recoverable until pilot feedback says auto-recovery is annoying. Exact copy + metadata to surface TBD; expected edge cases.
+3. **`ondevicechange` debounce / macOS Safari** — unvalidated (Andrew has no MacBook); leave open.
+4. **iOS Safari divergence** — **not a release gate.** No evidence modern Safari behaves differently from modern Chrome; track iOS validation for Sarah sessions or when a test device is acquired. Resolves BLOCKER #1 above as **backlogged risk**, not Phase-1 acceptance. Blockers #2–#4 needed no Andrew input.
