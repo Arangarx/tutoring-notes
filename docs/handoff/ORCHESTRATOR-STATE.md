@@ -4,7 +4,7 @@
 
 ## Current focus
 
-We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug is **resolved**, Phase 1 sync redesign and the standing real-browser regression net are **merged and smoked**. Wave 1 security (**SEC-1** admin impersonation + test-account isolation) is the likely next orchestration thread once Andrew greenlights the Sonnet design pass; **W1 audio durability** ratification is parallel-able on a different layer.
+We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug is **resolved**, Phase 1 sync redesign and the standing real-browser regression net are **merged and smoked**. Wave 1 security (**SEC-1** admin impersonation + test-account isolation) is the likely next orchestration thread once Andrew greenlights the Sonnet design pass; **W1 audio durability** ratification is dependency-independent (different layer) — execution still serialized in the shared tree unless run in isolated worktrees.
 
 ## Last action completed
 
@@ -12,7 +12,7 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 ## Next action(s)
 
-Pick one (both parallel-able; neither needs the other):
+Pick one (**dependency-independent** — no logical ordering, different code layers — but code execution must be **serialized in the shared working tree** unless run in isolated worktrees; see [`AGENTS.md`](../../AGENTS.md) § "Parallel subagent execution + shared-working-tree safety"):
 
 1. **SEC-1** — on Andrew's **go**, dispatch Sonnet auth/threat-model design pass → then Composer ships A/B/C per [`docs/BACKLOG.md`](../BACKLOG.md) § SEC-1.
 2. **W1 audio durability** — Andrew ratifies 3 open Qs in [`docs/handoff/w1-audio-durability-design-2026-05-27.md`](w1-audio-durability-design-2026-05-27.md) → then Composer ships A/B/C.

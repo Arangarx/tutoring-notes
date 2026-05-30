@@ -196,6 +196,35 @@ chats" friction to "Opus dispatches; Andrew sees results in flow."
 - **Long-running execution**: `run_in_background=true`. Opus keeps
   orchestrating in parallel; system notifies on completion.
 
+**Parallel subagent execution + shared-working-tree safety** (policy
+ratified 2026-05-30 by Andrew; PROVISIONAL — refine if agents keep
+stepping on each other):
+
+Default Composer / `generalPurpose` subagents all share **one working
+tree** — there is no git isolation between them. Two code-writing
+dispatches running at the same wall-clock moment clobber each other's
+uncommitted files and race the git index (the Wave A 2026-05-27
+lesson).
+
+- **Parallelize whenever it's safe.** "Safe" = you know the two agents
+  will provably (a) **not touch the same files/resources**, OR (b) run
+  in **isolated git worktrees** and know how to **clean-merge on their
+  way out**. When either holds, parallelize to save wall-clock.
+- **When in doubt, serial.** One branch in flight → smoke →
+  `merge --no-ff` → next.
+- **True wall-clock parallelism = isolated worktrees.** The
+  `best-of-n-runner` subagent type auto-creates its own git worktree +
+  branch per run (no manual setup by Andrew). Use it for parallel
+  code-authoring + isolated unit tests; merge each branch `--no-ff`
+  after smoke.
+- **Worktrees isolate files/git, NOT shared runtime services.** The
+  local Postgres (`tutoring_notes_test` @ 5432), the Docker relay
+  (`wb-relay-local`), the dev-server port (3100), and `node_modules`
+  (each worktree needs its own `npm ci`) are single-instance. **Never
+  run two live-stack tasks** (dev server, DB migrations,
+  `npm run test:wb-sync`) against the shared services at once —
+  serialize those regardless of worktree isolation.
+
 **ALWAYS specify `model` explicitly on EVERY dispatch — including
 `resume`.** Observed 2026-05-29 (Andrew caught it): a `Task` `resume`
 + `interrupt` call with `model` omitted ran on the **parent** chat's
