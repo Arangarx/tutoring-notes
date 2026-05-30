@@ -58,4 +58,45 @@ describe("WhiteboardDebugHud", () => {
     expect(screen.getByText(/pvs=p2/)).toBeTruthy();
     expect(sessionStorage.getItem("wbdebug")).toBe("1");
   });
+
+  it("does not throw when appState lacks zoom (pre-ready Excalidraw)", () => {
+    window.history.replaceState({}, "", "/?wbdebug=1");
+    const partialApi = {
+      getAppState: jest.fn(() => ({
+        scrollX: 0,
+        scrollY: 0,
+        width: 800,
+        height: 600,
+      })),
+    } as unknown as ExcalidrawApiLike;
+    const { container } = render(
+      <WhiteboardDebugHud
+        role="student"
+        syncOn
+        activePageId="p1"
+        excalidrawAPI={partialApi}
+        telemetry={createWbFollowDebugTelemetry()}
+      />
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("does not throw when getAppState throws", () => {
+    window.history.replaceState({}, "", "/?wbdebug=1");
+    const throwingApi = {
+      getAppState: jest.fn(() => {
+        throw new Error("Excalidraw not ready");
+      }),
+    } as unknown as ExcalidrawApiLike;
+    const { container } = render(
+      <WhiteboardDebugHud
+        role="student"
+        syncOn
+        activePageId="p1"
+        excalidrawAPI={throwingApi}
+        telemetry={createWbFollowDebugTelemetry()}
+      />
+    );
+    expect(container.firstChild).toBeNull();
+  });
 });

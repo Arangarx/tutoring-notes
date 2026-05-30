@@ -38,27 +38,45 @@ type AppStateSlice = {
 
 function readAppStateSlice(api: ExcalidrawApiLike | null): AppStateSlice | null {
   if (!api) return null;
-  const st = api.getAppState() as AppStateSlice;
-  if (!st || typeof st !== "object") return null;
-  return st;
+  try {
+    const st = api.getAppState() as AppStateSlice;
+    if (!st || typeof st !== "object") return null;
+    return st;
+  } catch {
+    return null;
+  }
+}
+
+function zoomValue(st: AppStateSlice | null): number | null {
+  const z = st?.zoom?.value;
+  return typeof z === "number" && Number.isFinite(z) ? z : null;
+}
+
+/** HUD reads live appState on every tick — only render when safe to read. */
+function isHudAppStateReady(st: AppStateSlice | null): boolean {
+  if (!st) return false;
+  if (!Number.isFinite(st.scrollX) || !Number.isFinite(st.scrollY)) return false;
+  if (zoomValue(st) === null) return false;
+  return readViewportSizeFromAppState(st) !== null;
 }
 
 function myCenterFromAppState(st: AppStateSlice | null): { x: number; y: number } | null {
-  if (!st) return null;
+  if (!isHudAppStateReady(st)) return null;
   const size = readViewportSizeFromAppState(st);
-  if (!size) return null;
+  const zoom = zoomValue(st);
+  if (!size || zoom === null) return null;
   const offsetLeft =
-    typeof st.offsetLeft === "number" && Number.isFinite(st.offsetLeft)
-      ? st.offsetLeft
+    typeof st!.offsetLeft === "number" && Number.isFinite(st!.offsetLeft)
+      ? st!.offsetLeft
       : 0;
   const offsetTop =
-    typeof st.offsetTop === "number" && Number.isFinite(st.offsetTop)
-      ? st.offsetTop
+    typeof st!.offsetTop === "number" && Number.isFinite(st!.offsetTop)
+      ? st!.offsetTop
       : 0;
   return viewportSceneCenterFromScroll(
-    st.scrollX,
-    st.scrollY,
-    st.zoom.value,
+    st!.scrollX,
+    st!.scrollY,
+    zoom,
     size.viewportWidth,
     size.viewportHeight,
     offsetLeft,
@@ -88,7 +106,7 @@ function HudLines({
   myCenter: { x: number; y: number } | null;
   telemetry: WbFollowDebugTelemetry;
 }) {
-  const zoom = st?.zoom.value;
+  const zoom = zoomValue(st);
   const sent = telemetry.lastSentFollow.current;
   const recv = telemetry.lastRecvFollow.current;
   const applied = telemetry.lastAppliedCenter.current;
@@ -161,6 +179,8 @@ export function WhiteboardDebugHud(props: WhiteboardDebugHudProps) {
   if (!enabled) return null;
 
   const st = readAppStateSlice(props.excalidrawAPI);
+  if (!isHudAppStateReady(st)) return null;
+
   const myCenter = myCenterFromAppState(st);
 
   return (
