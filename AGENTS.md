@@ -349,6 +349,11 @@ CI agent reviewing PRs automatically:
 - **Direct pushes to master WITHOUT a smoked branch are still
   forbidden** — branch + commit + push + smoke + merge is the
   discipline; only the PR step is dropped.
+- **Whiteboard sync changes** (any file touching `src/lib/whiteboard/`,
+  `src/components/whiteboard/`, or `tests/integration/whiteboard*`) MUST
+  pass `npm run test:wb-sync` locally before `git merge --no-ff`. Pre-build
+  the local relay image once (`npm run relay:build`; requires Docker). Green
+  output proves real-browser coverage via the hermetic relay, not jsdom alone.
 - **When this changes:** revisit the convention if (a) the team grows
   beyond solo or (b) an adversarial agentic CI pipeline lands that auto-
   reviews PRs. At that point, PRs become the right shape again. Until

@@ -18,6 +18,10 @@
     "test:regression": "jest --testPathPatterns=regressions",
     "test:e2e": "playwright test",
     "test:integration": "playwright test --project=integration",
+    "relay:build": "docker build -t wb-relay-local ../whiteboard-sync",
+    "test:wb-jest": "jest --testPathPatterns=whiteboard --testPathPatterns=sync-client --testPathPatterns=viewport-align",
+    "test:wb-playwright": "playwright test --project=integration-setup && playwright test --project=wb-regression",
+    "test:wb-sync": "npm run test:wb-jest && npm run test:wb-playwright",
     "test:e2e:smoke": "playwright test tests/smoke",
     "test:visual:update": "playwright test tests/visual --update-snapshots",
     "test:all": "npm run test && npm run test:e2e"

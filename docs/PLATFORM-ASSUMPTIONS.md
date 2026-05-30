@@ -393,6 +393,20 @@
 - **Where baked in**: AGENTS.md `git-push-retry` rule; should be ported to `scripts/branch-sweep.mjs` (open follow-up).
 - **Migration check**: any CI / dev environment with restrictive networking needs the retry pattern; firewalled environments may need a git proxy.
 
+### 9.4 Docker required for whiteboard regression net (wb-regression harness)
+
+- **Assumption**: `npm run test:wb-sync` and `npm run relay:build` require Docker Desktop (or equivalent daemon) on the dev machine. The local relay container (`wb-relay-local`) wraps the same `excalidraw-room` sha used in production (`03ff435860b508d7cd9e005cfc90f7977ae2a593`).
+- **Where baked in**: `package.json` `relay:build` script; `playwright.config.ts` wb-regression `webServer` entry; `docs/LOCAL-DEV.md` setup steps.
+- **What breaks if violated**: `npm run relay:build` fails; Playwright's relay `webServer` fails to start; wb-regression tests fail immediately. Fallback to production relay (`wss://wb.mortensenapps.com`) reintroduces prod dependency for local tests — explicitly avoided by the regression net.
+- **Migration check**: GitHub Actions Phase 2 gate should use `docker/setup-buildx-action` + build `../whiteboard-sync/Dockerfile`. Image already exists in sibling `whiteboard-sync/` repo.
+
+### 9.5 Local relay CORS allowlist for test runs
+
+- **Assumption**: `wb-relay-local` runs with `CORS_ORIGIN=http://localhost:3100`, matching Playwright `baseURL`.
+- **Where baked in**: `playwright.config.ts` relay `webServer` docker command (`-e CORS_ORIGIN=http://localhost:3100`).
+- **What breaks if violated**: Socket.IO connections from `http://localhost:3100` are rejected; both peers fail to connect; all wb-regression tests time out on `"student connected"`.
+- **Migration check**: If dev server port changes from 3100, update relay `CORS_ORIGIN` in `playwright.config.ts` and document in `docs/LOCAL-DEV.md`.
+
 ---
 
 ## 10. Operational + secrets

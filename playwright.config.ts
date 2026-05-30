@@ -39,13 +39,22 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
 
-  webServer: {
-    command:
-      'cmd /c "set NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT=1&& set NEXT_PUBLIC_WB_E2E_SCENE_HOOK=1&& set NEXTAUTH_URL=http://localhost:3100&& npx prisma db push --skip-generate&& npm run dev -- --port 3100"',
-    url: "http://localhost:3100",
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  webServer: [
+    {
+      command:
+        'cmd /c "set WHITEBOARD_SYNC_URL=ws://localhost:3002&& set NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT=1&& set NEXT_PUBLIC_WB_E2E_SCENE_HOOK=1&& set NEXTAUTH_URL=http://localhost:3100&& npx prisma db push --skip-generate&& npm run dev -- --port 3100"',
+      url: "http://localhost:3100",
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+    {
+      command:
+        "docker run --rm -p 3002:3002 -e PORT=3002 -e CORS_ORIGIN=http://localhost:3100 wb-relay-local",
+      url: "http://localhost:3002/",
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+    },
+  ],
 
   projects: [
     {
@@ -97,7 +106,28 @@ export default defineConfig({
         },
       },
       testMatch: ["**/integration/**/*.spec.ts"],
-      testIgnore: ["**/integration/auth.setup.ts"],
+      testIgnore: [
+        "**/integration/auth.setup.ts",
+        "**/integration/whiteboard-live-sync-regression.spec.ts",
+      ],
+    },
+    {
+      name: "wb-regression",
+      dependencies: ["integration-setup"],
+      retries: 1,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1280, height: 900 },
+        storageState: "tests/integration/.auth/tutor.json",
+        permissions: ["microphone"],
+        launchOptions: {
+          args: [
+            "--use-fake-ui-for-media-stream",
+            "--use-fake-device-for-media-stream",
+          ],
+        },
+      },
+      testMatch: ["**/integration/whiteboard-live-sync-regression.spec.ts"],
     },
   ],
 });

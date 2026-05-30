@@ -88,6 +88,18 @@ npx prisma migrate deploy
 
 Or **`scripts\push-schema-neon.ps1`** (uses `db push` — prefer `migrate deploy` when possible). See **[DEPLOY.md](./DEPLOY.md)**.
 
+## Whiteboard regression net (`npm run test:wb-sync`)
+
+Real-browser Playwright tests over a **local Docker relay** (not production `wss://wb.mortensenapps.com`). Requires Docker Desktop, Node 20+, and `.env` with local `DATABASE_URL` + `BLOB_READ_WRITE_TOKEN` (for image/PDF invariants 7 and 8).
+
+1. `npm run db:up` and `npm run db:push` (if schema not applied).
+2. One-time relay image: `npm run relay:build` (builds `wb-relay-local` from sibling `../whiteboard-sync`).
+3. Run the gate: `npm run test:wb-sync` (Jest whiteboard suites + Playwright `wb-regression` project).
+
+Playwright starts the Next dev server on port **3100** with `WHITEBOARD_SYNC_URL=ws://localhost:3002` and polls `http://localhost:3002/` until the relay is up. See `docs/PLATFORM-ASSUMPTIONS.md` §9.4–9.5.
+
+Pre-merge: any whiteboard-touching branch must show green `npm run test:wb-sync` before `git merge --no-ff` (see `AGENTS.md`).
+
 ## Migrating from old SQLite `dev.db`
 
 If you previously used SQLite, that file is obsolete for this schema. Start Postgres (Docker or Neon), point `.env` at it, run `npm run db:push`, and recreate admin data via `/setup` if needed. Optionally export/import data separately — not automated here.

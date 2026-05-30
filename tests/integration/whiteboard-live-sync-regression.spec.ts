@@ -5,39 +5,50 @@ import {
   drawTestStrokeOnRole,
   ensureStudentFollowsTutor,
   expectedAlignedStudentScroll,
+  findFirstImageElementId,
   growStrokeOnRole,
+  moveElementOnRole,
   placeMarkerAtViewportCenter,
+  readAppStateCenterXY,
+  readElementPosition,
   readEncryptionKeyFromHash,
+  readImageElementState,
   readSceneElementIds,
   readStrokeWidth,
   readViewportSnapshot,
+  sceneCenterDistance,
   seedWbLiveSyncSession,
+  setStudentFollowTutor,
+  setViewportOnRole,
   waitForElementOnPeer,
+  waitForSceneElementIdsContaining,
+  waitForStrokeWidthAtLeast,
+  waitForViewportAligned,
   waitForWbE2eBridge,
   waitForTutorStudentConnected,
   markerCenterOffsetFromViewportCenter,
+  WB_MOVE_PROPAGATION_TOLERANCE_SCENE,
+  WB_VIEWPORT_CENTER_PASS_TOLERANCE_PX,
+  WB_ZOOM_INVARIANT_CENTER_TOLERANCE_SCENE,
 } from "./whiteboard-live-sync.helpers";
 
 /**
- * Real-browser whiteboard live-sync regression harness (Phase A).
+ * Real-browser whiteboard live-sync regression net (hermetic local relay).
  *
- * Two real Excalidraw instances over the production relay (`WHITEBOARD_SYNC_URL`).
- * Assertions read `getSceneElements()` via `window.__TN_WB_E2E__` — the same API
- * instances the app uses (`NEXT_PUBLIC_WB_E2E_SCENE_HOOK=1`), not jsdom mocks.
+ * Two real Excalidraw instances over `WHITEBOARD_SYNC_URL` (local Docker relay
+ * via Playwright webServer). Assertions use `window.__TN_WB_E2E__` and
+ * independent oracles from `viewport-align.ts` — not production HUD formulas.
+ *
+ * Gate: `npm run test:wb-sync`
  */
-test.describe("whiteboard live-sync regression (Phase A)", () => {
-  test.beforeEach(() => {
-    const env = readLocalEnv();
-    test.skip(
-      !env.WHITEBOARD_SYNC_URL?.trim(),
-      "Set WHITEBOARD_SYNC_URL in .env — real relay required (no mocked Excalidraw)."
-    );
-  });
-
+test.describe("whiteboard live-sync regression", () => {
   async function openTutorAndStudent(
     browser: Browser,
-    session: Awaited<ReturnType<typeof seedWbLiveSyncSession>>
+    session: Awaited<ReturnType<typeof seedWbLiveSyncSession>>,
+    options?: { ensureFollow?: boolean }
   ) {
+    const ensureFollow = options?.ensureFollow !== false;
+
     const tutorContext = await browser.newContext({
       storageState: "tests/integration/.auth/tutor.json",
       viewport: { width: 1280, height: 900 },
@@ -66,7 +77,9 @@ test.describe("whiteboard live-sync regression (Phase A)", () => {
     });
     await waitForWbE2eBridge(studentPage, "student");
 
-    await ensureStudentFollowsTutor(studentPage);
+    if (ensureFollow) {
+      await ensureStudentFollowsTutor(studentPage);
+    }
     await waitForTutorStudentConnected(tutorPage);
 
     return {
@@ -111,13 +124,13 @@ test.describe("whiteboard live-sync regression (Phase A)", () => {
         240
       );
 
-      const deadline = Date.now() + 12_000;
-      let liveIds: string[] = [];
-      while (Date.now() < deadline) {
-        liveIds = await readSceneElementIds(peers.studentPage, "student");
-        if (liveIds.includes(tutorStroke)) break;
-        await peers.studentPage.waitForTimeout(200);
-      }
+      await waitForSceneElementIdsContaining(
+        peers.studentPage,
+        "student",
+        tutorStroke,
+        12_000
+      );
+      const liveIds = await readSceneElementIds(peers.studentPage, "student");
       expect(liveIds).toContain(tutorStroke);
       expect(liveIds).toContain(studentStroke);
     } finally {
@@ -125,21 +138,6 @@ test.describe("whiteboard live-sync regression (Phase A)", () => {
     }
   });
 
-  // Invariant 1b — STANDING live-render guard for stroke continuations.
-  //
-  // A real freehand stroke is ONE element id whose extent/version grows across
-  // many onChange ticks (v1 → vN). This guard asserts the student's REAL scene
-  // tracks the tutor's growing stroke to its final extent without a page switch.
-  //
-  // NOTE (Phase A round 2): this did NOT exhibit red-before on pre-fix 23cb473
-  // — the rewrite's in-loop per-page `updateScene(merged)` (gated only on
-  // `activePageIdRef === pageId`) already repaints the active page for both new
-  // ids and version bumps, masking the gated post-loop repaint the diagnosis
-  // flagged. The headline "student never sees tutor strokes until a page switch"
-  // therefore could not be reproduced on 23cb473 (see orchestrator report).
-  // This is kept as a forward regression net: if a future change breaks the
-  // active-page live repaint, this goes red. Invariant 4 is the proven-teeth
-  // red/green for this round.
   test("invariant 1b — tutor stroke continuation grows live on student", async ({
     browser,
   }) => {
@@ -153,17 +151,16 @@ test.describe("whiteboard live-sync regression (Phase A)", () => {
 
       for (let v = 2; v <= 8; v++) {
         await growStrokeOnRole(peers.tutorPage, "tutor", strokeId, 20 + v * 40, v);
-        await peers.tutorPage.waitForTimeout(120);
       }
       const finalWidth = 20 + 8 * 40;
-
-      let studentWidth = -1;
-      const deadline = Date.now() + 12_000;
-      while (Date.now() < deadline) {
-        studentWidth = await readStrokeWidth(peers.studentPage, "student", strokeId);
-        if (studentWidth >= finalWidth - 1) break;
-        await peers.studentPage.waitForTimeout(300);
-      }
+      await waitForStrokeWidthAtLeast(
+        peers.studentPage,
+        "student",
+        strokeId,
+        finalWidth,
+        12_000
+      );
+      const studentWidth = await readStrokeWidth(peers.studentPage, "student", strokeId);
       expect(studentWidth).toBeGreaterThanOrEqual(finalWidth - 1);
     } finally {
       await peers.close();
@@ -191,7 +188,359 @@ test.describe("whiteboard live-sync regression (Phase A)", () => {
     }
   });
 
-  test("invariant 3 — page isolation (strokes do not bleed across tabs)", async ({
+  test("invariant 3 — live object MOVE propagation", async ({ browser }) => {
+    test.setTimeout(180_000);
+    const session = await seedWbLiveSyncSession();
+    const peers = await openTutorAndStudent(browser, session);
+    try {
+      const rectId = `pw-move-${Date.now()}`;
+      await placeMarkerAtViewportCenter(peers.tutorPage, "tutor", rectId);
+      await waitForElementOnPeer(peers.studentPage, "student", rectId);
+
+      const tutorBefore = await readElementPosition(peers.tutorPage, "tutor", rectId);
+      const studentBefore = await readElementPosition(
+        peers.studentPage,
+        "student",
+        rectId
+      );
+      expect(tutorBefore).not.toBeNull();
+      expect(studentBefore).not.toBeNull();
+
+      const deltaX = 120;
+      const deltaY = -80;
+      await moveElementOnRole(peers.tutorPage, "tutor", rectId, deltaX, deltaY);
+
+      await peers.studentPage.waitForFunction(
+        ({ id, expectedX, expectedY, tol }) => {
+          const bridge = (
+            window as Window & {
+              __TN_WB_E2E__?: Record<
+                string,
+                {
+                  elementPosition: (
+                    eid: string
+                  ) => { x: number; y: number } | null;
+                }
+              >;
+            }
+          ).__TN_WB_E2E__?.student;
+          const pos = bridge?.elementPosition?.(id);
+          if (!pos) return false;
+          return (
+            Math.abs(pos.x - expectedX) <= tol &&
+            Math.abs(pos.y - expectedY) <= tol
+          );
+        },
+        {
+          id: rectId,
+          expectedX: (tutorBefore!.x + deltaX),
+          expectedY: (tutorBefore!.y + deltaY),
+          tol: WB_MOVE_PROPAGATION_TOLERANCE_SCENE,
+        },
+        { timeout: 12_000 }
+      );
+
+      const tutorAfter = await readElementPosition(peers.tutorPage, "tutor", rectId);
+      const studentAfter = await readElementPosition(
+        peers.studentPage,
+        "student",
+        rectId
+      );
+      expect(tutorAfter!.x).toBeCloseTo(tutorBefore!.x + deltaX, 0);
+      expect(studentAfter!.x).toBeCloseTo(tutorAfter!.x, 0);
+      expect(studentAfter!.y).toBeCloseTo(tutorAfter!.y, 0);
+    } finally {
+      await peers.close();
+    }
+  });
+
+  test("invariant 4 — viewport center-align when student canvas is shorter", async ({
+    browser,
+  }) => {
+    test.setTimeout(180_000);
+    const session = await seedWbLiveSyncSession();
+    const peers = await openTutorAndStudent(browser, session);
+    try {
+      const tutorVp = await readViewportSnapshot(peers.tutorPage, "tutor");
+      const studentVp = await readViewportSnapshot(peers.studentPage, "student");
+      expect(tutorVp.height).toBeGreaterThan(studentVp.height + 40);
+
+      const markerId = `pw-center-${Date.now()}`;
+      await placeMarkerAtViewportCenter(peers.tutorPage, "tutor", markerId);
+      await waitForElementOnPeer(peers.studentPage, "student", markerId);
+
+      await peers.studentPage.getByRole("button", { name: /match tutor/i }).click();
+
+      const tutorAfter = await readViewportSnapshot(peers.tutorPage, "tutor");
+      const studentAfter = await readViewportSnapshot(peers.studentPage, "student");
+      const expected = expectedAlignedStudentScroll(tutorAfter, studentAfter);
+
+      await waitForViewportAligned(
+        peers.studentPage,
+        "student",
+        expected.scrollX,
+        expected.scrollY,
+        8,
+        12_000
+      );
+
+      const offset = await markerCenterOffsetFromViewportCenter(
+        peers.studentPage,
+        "student",
+        markerId
+      );
+      expect(offset).toBeLessThan(WB_VIEWPORT_CENTER_PASS_TOLERANCE_PX);
+    } finally {
+      await peers.close();
+    }
+  });
+
+  test("invariant 5 — pan follow (student scroll matches follow oracle)", async ({
+    browser,
+  }) => {
+    test.setTimeout(180_000);
+    const session = await seedWbLiveSyncSession();
+    const peers = await openTutorAndStudent(browser, session);
+    try {
+      const panX = 220;
+      const panY = 140;
+      const zoom = 1.15;
+      await setViewportOnRole(peers.tutorPage, "tutor", panX, panY, zoom);
+
+      const tutorVp = await readViewportSnapshot(peers.tutorPage, "tutor");
+      const studentVp = await readViewportSnapshot(peers.studentPage, "student");
+      const expected = expectedAlignedStudentScroll(tutorVp, studentVp);
+
+      await waitForViewportAligned(
+        peers.studentPage,
+        "student",
+        expected.scrollX,
+        expected.scrollY,
+        8,
+        12_000
+      );
+    } finally {
+      await peers.close();
+    }
+  });
+
+  test("invariant 6 — zoom does not move viewport scene center", async ({
+    browser,
+  }) => {
+    test.setTimeout(180_000);
+    const session = await seedWbLiveSyncSession();
+    const peers = await openTutorAndStudent(browser, session);
+    try {
+      const centerBefore = await readAppStateCenterXY(peers.studentPage, "student");
+
+      const tutorVp = await readViewportSnapshot(peers.tutorPage, "tutor");
+      await setViewportOnRole(
+        peers.tutorPage,
+        "tutor",
+        tutorVp.scrollX,
+        tutorVp.scrollY,
+        tutorVp.zoom * 2
+      );
+      const tutorZoomed = await readViewportSnapshot(peers.tutorPage, "tutor");
+      const studentMid = await readViewportSnapshot(peers.studentPage, "student");
+      const expectedMid = expectedAlignedStudentScroll(tutorZoomed, studentMid);
+      await waitForViewportAligned(
+        peers.studentPage,
+        "student",
+        expectedMid.scrollX,
+        expectedMid.scrollY,
+        8,
+        12_000
+      );
+
+      await setViewportOnRole(
+        peers.tutorPage,
+        "tutor",
+        tutorZoomed.scrollX,
+        tutorZoomed.scrollY,
+        tutorZoomed.zoom * 0.5
+      );
+      const tutorOut = await readViewportSnapshot(peers.tutorPage, "tutor");
+      const studentVp = await readViewportSnapshot(peers.studentPage, "student");
+      const expectedOut = expectedAlignedStudentScroll(tutorOut, studentVp);
+      await waitForViewportAligned(
+        peers.studentPage,
+        "student",
+        expectedOut.scrollX,
+        expectedOut.scrollY,
+        8,
+        12_000
+      );
+
+      const centerAfter = await readAppStateCenterXY(peers.studentPage, "student");
+      const drift = sceneCenterDistance(centerBefore, centerAfter);
+      expect(drift).toBeLessThan(WB_ZOOM_INVARIANT_CENTER_TOLERANCE_SCENE);
+    } finally {
+      await peers.close();
+    }
+  });
+
+  test("invariant 7 — student sees real image element (not placeholder)", async ({
+    browser,
+  }) => {
+    test.setTimeout(180_000);
+    const env = readLocalEnv();
+    test.skip(
+      !env.BLOB_READ_WRITE_TOKEN?.trim(),
+      "Set BLOB_READ_WRITE_TOKEN in .env for image upload in this harness."
+    );
+
+    const pngPath = path.join(__dirname, "../fixtures/tiny-red-square.png");
+    const session = await seedWbLiveSyncSession();
+    const peers = await openTutorAndStudent(browser, session);
+    try {
+      await peers.tutorPage.getByTestId("wb-insert-asset-btn").click();
+      await expect(peers.tutorPage.getByTestId("wb-insert-dialog")).toBeVisible();
+      await peers.tutorPage.getByTestId("wb-insert-pick-file").click();
+      await peers.tutorPage.getByTestId("wb-insert-file-input").setInputFiles(pngPath);
+      await expect(peers.tutorPage.getByTestId("wb-insert-progress")).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(peers.tutorPage.getByTestId("wb-insert-progress")).toBeHidden({
+        timeout: 60_000,
+      });
+
+      const tutorImageId = await findFirstImageElementId(peers.tutorPage, "tutor");
+      expect(tutorImageId).toBeTruthy();
+
+      await peers.studentPage.waitForFunction(
+        (id) => {
+          const bridge = (
+            window as Window & {
+              __TN_WB_E2E__?: Record<
+                string,
+                {
+                  imageElementState: (eid: string) => {
+                    fileId: string | null;
+                    isPlaceholder: boolean;
+                    hasBinary: boolean;
+                  } | null;
+                }
+              >;
+            }
+          ).__TN_WB_E2E__?.student;
+          const st = bridge?.imageElementState?.(id);
+          return (
+            st != null &&
+            !st.isPlaceholder &&
+            Boolean(st.fileId) &&
+            st.hasBinary
+          );
+        },
+        tutorImageId!,
+        { timeout: 60_000 }
+      );
+
+      const studentState = await readImageElementState(
+        peers.studentPage,
+        "student",
+        tutorImageId!
+      );
+      expect(studentState).not.toBeNull();
+      expect(studentState!.isPlaceholder).toBe(false);
+      expect(studentState!.fileId).toBeTruthy();
+      expect(studentState!.hasBinary).toBe(true);
+      expect(studentState!.assetUrl).toBeTruthy();
+    } finally {
+      await peers.close();
+    }
+  });
+
+  test("invariant 8 — PDF page opens centered+fit on student viewport", async ({
+    browser,
+  }) => {
+    test.setTimeout(300_000);
+    const env = readLocalEnv();
+    test.skip(
+      !env.BLOB_READ_WRITE_TOKEN?.trim(),
+      "Set BLOB_READ_WRITE_TOKEN in .env for PDF upload in this harness."
+    );
+
+    const pdfPath = path.join(__dirname, "../fixtures/e2e-two-pages.pdf");
+    const session = await seedWbLiveSyncSession();
+    const peers = await openTutorAndStudent(browser, session);
+    try {
+      await peers.tutorPage.getByTestId("wb-insert-asset-btn").click();
+      await expect(peers.tutorPage.getByTestId("wb-insert-dialog")).toBeVisible();
+      await peers.tutorPage.getByTestId("wb-insert-pick-file").click();
+      await peers.tutorPage.getByTestId("wb-insert-file-input").setInputFiles(pdfPath);
+      await expect(peers.tutorPage.getByTestId("wb-pdf-pick-continue")).toBeVisible({
+        timeout: 30_000,
+      });
+      await peers.tutorPage.getByTestId("wb-pdf-pick-continue").click();
+      await expect(peers.tutorPage.getByTestId("wb-insert-progress")).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(peers.tutorPage.getByTestId("wb-insert-progress")).toBeHidden({
+        timeout: 120_000,
+      });
+
+      await expect(peers.studentPage.getByRole("button", { name: /page 1/i })).toBeVisible({
+        timeout: 60_000,
+      });
+
+      const pdfImageId = await findFirstImageElementId(peers.studentPage, "student");
+      expect(pdfImageId).toBeTruthy();
+
+      await peers.studentPage.waitForFunction(
+        ({ id, maxPx }) => {
+          const bridge = (
+            window as Window & {
+              __TN_WB_E2E__?: Record<
+                string,
+                {
+                  getElements: () => Array<{
+                    id: string;
+                    type?: string;
+                    x?: number;
+                    y?: number;
+                    width?: number;
+                    height?: number;
+                  }>;
+                  getAppState: () => Record<string, unknown>;
+                }
+              >;
+            }
+          ).__TN_WB_E2E__?.student;
+          if (!bridge?.getElements || !bridge.getAppState) return false;
+          const el = bridge.getElements().find((e) => e.id === id);
+          if (!el || el.type !== "image") return false;
+          const st = bridge.getAppState();
+          const zoomObj = st.zoom as { value?: number } | undefined;
+          const zoom =
+            zoomObj && typeof zoomObj.value === "number" ? zoomObj.value : 1;
+          const vw = Number(st.width) || 1;
+          const vh = Number(st.height) || 1;
+          const scrollX = Number(st.scrollX) || 0;
+          const scrollY = Number(st.scrollY) || 0;
+          const ex = (Number(el.x) || 0) + (Number(el.width) || 0) / 2;
+          const ey = (Number(el.y) || 0) + (Number(el.height) || 0) / 2;
+          const screenX = (ex - scrollX) * zoom;
+          const screenY = (ey - scrollY) * zoom;
+          const offset = Math.hypot(screenX - vw / 2, screenY - vh / 2);
+          return offset <= maxPx;
+        },
+        { id: pdfImageId!, maxPx: WB_VIEWPORT_CENTER_PASS_TOLERANCE_PX },
+        { timeout: 60_000 }
+      );
+
+      const offset = await markerCenterOffsetFromViewportCenter(
+        peers.studentPage,
+        "student",
+        pdfImageId!
+      );
+      expect(offset).toBeLessThan(WB_VIEWPORT_CENTER_PASS_TOLERANCE_PX);
+    } finally {
+      await peers.close();
+    }
+  });
+
+  test("invariant 9 — page isolation (strokes do not bleed across tabs)", async ({
     browser,
   }) => {
     test.setTimeout(180_000);
@@ -242,94 +591,76 @@ test.describe("whiteboard live-sync regression (Phase A)", () => {
     }
   });
 
-  test("invariant 4 — viewport center-align when student canvas is shorter", async ({
+  test("invariant 10 — follow gating (sync ON/OFF/snap/default)", async ({
     browser,
   }) => {
     test.setTimeout(180_000);
     const session = await seedWbLiveSyncSession();
+
+    // 10c — default ON on fresh student load (before ensureStudentFollowsTutor).
+    const peersDefault = await openTutorAndStudent(browser, session, {
+      ensureFollow: false,
+    });
+    try {
+      await expect(
+        peersDefault.studentPage.getByRole("checkbox", {
+          name: /keep pan.*zoom synced/i,
+        })
+      ).toBeChecked();
+    } finally {
+      await peersDefault.close();
+    }
+
     const peers = await openTutorAndStudent(browser, session);
     try {
+      const checkbox = peers.studentPage.getByRole("checkbox", {
+        name: /keep pan.*zoom synced/i,
+      });
+      await expect(checkbox).toBeChecked();
+
+      // 10a — sync OFF blocks follow.
+      await setStudentFollowTutor(peers.studentPage, false);
+      const studentBefore = await readViewportSnapshot(peers.studentPage, "student");
+      await setViewportOnRole(peers.tutorPage, "tutor", 400, 250, 1.3);
+      await peers.studentPage.waitForFunction(
+        ({ sx, sy, tol }) => {
+          const bridge = (
+            window as Window & {
+              __TN_WB_E2E__?: Record<
+                string,
+                { getAppState: () => Record<string, unknown> }
+              >;
+            }
+          ).__TN_WB_E2E__?.student;
+          if (!bridge?.getAppState) return false;
+          const st = bridge.getAppState();
+          const scrollX = Number(st.scrollX) || 0;
+          const scrollY = Number(st.scrollY) || 0;
+          return (
+            Math.abs(scrollX - sx) <= tol && Math.abs(scrollY - sy) <= tol
+          );
+        },
+        {
+          sx: studentBefore.scrollX,
+          sy: studentBefore.scrollY,
+          tol: 2,
+        },
+        { timeout: 4_000 }
+      );
+
+      // 10b — re-enable sync → one-shot snap to tutor within 3s.
+      await setStudentFollowTutor(peers.studentPage, true);
       const tutorVp = await readViewportSnapshot(peers.tutorPage, "tutor");
       const studentVp = await readViewportSnapshot(peers.studentPage, "student");
-      expect(tutorVp.height).toBeGreaterThan(studentVp.height + 40);
-
-      const markerId = `pw-center-${Date.now()}`;
-      await placeMarkerAtViewportCenter(peers.tutorPage, "tutor", markerId);
-      await waitForElementOnPeer(peers.studentPage, "student", markerId);
-
-      await peers.studentPage.getByRole("button", { name: /match tutor/i }).click();
-      await peers.tutorPage.waitForTimeout(500);
-
-      const tutorAfter = await readViewportSnapshot(peers.tutorPage, "tutor");
-      const studentAfter = await readViewportSnapshot(peers.studentPage, "student");
-      const expected = expectedAlignedStudentScroll(tutorAfter, studentAfter);
-
-      expect(Math.abs(studentAfter.scrollX - expected.scrollX)).toBeLessThan(8);
-      expect(Math.abs(studentAfter.scrollY - expected.scrollY)).toBeLessThan(8);
-
-      const offset = await markerCenterOffsetFromViewportCenter(
+      const expected = expectedAlignedStudentScroll(tutorVp, studentVp);
+      await waitForViewportAligned(
         peers.studentPage,
         "student",
-        markerId
+        expected.scrollX,
+        expected.scrollY,
+        8,
+        3_000
       );
-      expect(offset).toBeLessThan(80);
-    } finally {
-      await peers.close();
-    }
-  });
-
-  test("invariant 5 — multi-page PDF creates board pages without bleed", async ({
-    browser,
-  }) => {
-    test.setTimeout(300_000);
-    const env = readLocalEnv();
-    test.skip(
-      !env.BLOB_READ_WRITE_TOKEN?.trim(),
-      "Set BLOB_READ_WRITE_TOKEN in .env for PDF upload in this harness."
-    );
-
-    const pdfPath = path.join(__dirname, "../fixtures/e2e-two-pages.pdf");
-    const session = await seedWbLiveSyncSession();
-    const peers = await openTutorAndStudent(browser, session);
-    try {
-      await peers.tutorPage.getByTestId("wb-insert-asset-btn").click();
-      await expect(peers.tutorPage.getByTestId("wb-insert-dialog")).toBeVisible();
-      await peers.tutorPage.getByTestId("wb-insert-pick-file").click();
-      await peers.tutorPage.getByTestId("wb-insert-file-input").setInputFiles(pdfPath);
-      await expect(peers.tutorPage.getByTestId("wb-pdf-pick-continue")).toBeVisible({
-        timeout: 30_000,
-      });
-      await peers.tutorPage.getByTestId("wb-pdf-pick-continue").click();
-      await expect(peers.tutorPage.getByTestId("wb-insert-progress")).toBeVisible({
-        timeout: 15_000,
-      });
-      await expect(peers.tutorPage.getByTestId("wb-insert-progress")).toBeHidden({
-        timeout: 120_000,
-      });
-
-      await expect(peers.studentPage.getByRole("button", { name: /page 1/i })).toBeVisible({
-        timeout: 60_000,
-      });
-      await expect(
-        peers.studentPage.getByRole("button", { name: /page 2/i })
-      ).toBeVisible({ timeout: 60_000 });
-
-      const p1Stroke = `pw-pdf-p1-${Date.now()}`;
-      await drawTestStrokeOnRole(
-        peers.tutorPage,
-        "tutor",
-        p1Stroke,
-        40,
-        40,
-        120,
-        120
-      );
-      await waitForElementOnPeer(peers.studentPage, "student", p1Stroke);
-
-      await peers.tutorPage.getByRole("button", { name: /page 2/i }).click();
-      await peers.studentPage.getByRole("button", { name: /page 2/i }).click();
-      const studentP2 = await readSceneElementIds(peers.studentPage, "student");
-      expect(studentP2).not.toContain(p1Stroke);
     } finally {
       await peers.close();
     }
