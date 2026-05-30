@@ -107,6 +107,16 @@ ffmpeg -f concat -safe 0 -i files.txt -c copy long-session.m4a
 
 Match **mime** the app expects: `audio/m4a`, `audio/webm`, etc. (`AiAssistPanel` payload uses each segment's `mimeType`).
 
+#### Path C2 — Field-coverage long session (90 min, five note fields)
+
+When you need to prove **upload size** and **beginning / middle / end transcript retention** into all five AI note fields (`topics`, `homework`, `assessment`, `plan`, `links` — see `src/lib/ai.ts`), use the dedicated kit:
+
+1. Record five short tutor clips per [`docs/handoff/long-session-smoke-scripts.md`](handoff/long-session-smoke-scripts.md).
+2. Stitch with **`node scripts/make-test-session.cjs`** (clip1 at start, clip5 near end, silence filler — not `make-test-audio` loop).
+3. Upload on paid Preview → **Transcribe & generate** → verify every field in the coverage table is non-empty.
+
+Run sparingly (~$0.60/order-of-magnitude Preview cost per full pass). Re-stitching is free.
+
 ---
 
 ## 3. Run procedure
@@ -341,5 +351,6 @@ When committing smoke outcomes, use the **PowerShell-safe** pattern from `AGENTS
 | Platform ceiling | `docs/PLATFORM-ASSUMPTIONS.md` §1 |
 | Prior handoff | `docs/handoff/long-form-transcribe-tier-1-orchestrator-report.md` |
 | Long audio fixture | `scripts/make-test-audio.cjs`, `scripts/make-test-audio.README.md` |
+| Field-coverage 90 min kit | `scripts/make-test-session.cjs`, `docs/handoff/long-session-smoke-scripts.md` |
 
-**Companion script:** Not shipped for headless transcribe — `transcribeAndGenerateAction` requires an authenticated Next.js Server Action invocation; manual UI procedure above is canonical until a dedicated API or test-only route exists. Use `make-test-audio.cjs` only to **fabricate upload fixtures** for Path C.
+**Companion script:** Not shipped for headless transcribe — `transcribeAndGenerateAction` requires an authenticated Next.js Server Action invocation; manual UI procedure above is canonical until a dedicated API or test-only route exists. Use `make-test-audio.cjs` for **loop/synthetic** upload fixtures (Path C); use `make-test-session.cjs` for **multi-clip field-coverage** smokes (Path C2).
