@@ -14,7 +14,7 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 1. **W1 ship A awaiting smoke** (`feat/audio-draft-store` @ `63d1897`, pushed) — Andrew smokes crash/refresh recovery + iOS `timeslice` real-iPhone gate, then `merge --no-ff`.
 2. **W1 ships B + C** after A smoke-passes: B = upload-failure persistence + **cross-session stuck surfacing** (the ratified YES); C = device health. B/C may parallelize via isolated worktrees if files don't conflict (see [`AGENTS.md`](../../AGENTS.md) § parallel-execution), else serial.
-3. **SEC-1 design AUTHORED, awaiting ratification** — `docs/handoff/sec-1-impersonation-design-2026-05-30.md` (`feat/sec-1-design` @ `e04bcf4`, pushed). Andrew reviews the **6 open Qs** before any Composer ship dispatches. Doc merge to `master` held until ratified (keeps master's design reflecting final decisions). See [`docs/BACKLOG.md`](../BACKLOG.md) § SEC-1.
+3. **SEC-1 design AUTHORED + MERGED to master** (`a1c6c3f`, docs-only) for reviewability — [`docs/handoff/sec-1-impersonation-design-2026-05-30.md`](sec-1-impersonation-design-2026-05-30.md). Andrew answers the **6 open Qs** before any Composer ship dispatches (reviewing the doc IS the ratification step; merge made it clickable/durable, open Qs stay tracked in-doc + here). See [`docs/BACKLOG.md`](../BACKLOG.md) § SEC-1.
 4. **Transcription speed (Tier 2)** — backlogged (BACKLOG § Recording item 6): VAD/silence-boundary chunking + provider/concurrency levers; Sonnet design pass when prioritized.
 
 Update this file's head as each lands.
@@ -38,7 +38,7 @@ Update this file's head as each lands.
 
 **Working tree:** clean.
 
-**`master` HEAD:** `de3e9c0` — `Merge fix/tsc-vercel-ignore-types: restore clean tsc --noEmit gate`
+**`master` HEAD:** `a1c6c3f` — `Merge feat/sec-1-design: SEC-1 design doc (docs-only; 6 open Qs await ratification)`. Also landed this turn: tsc gate fix (`de3e9c0`) + iOS validation-debt note (`4b2f29f`, BACKLOG § Axis 4 matrix — W1-A banner + whiteboard sync untested on real iPhone; no device on hand).
 
 Recent `master` (newest first):
 
