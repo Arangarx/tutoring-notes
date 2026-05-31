@@ -396,6 +396,18 @@ CI agent reviewing PRs automatically:
   pass `npm run test:wb-sync` locally before `git merge --no-ff`. Pre-build
   the local relay image once (`npm run relay:build`; requires Docker). Green
   output proves real-browser coverage via the hermetic relay, not jsdom alone.
+- **Build-surface changes** (fonts, CSS, or build configuration — e.g.
+  `src/app/fonts.ts`, `src/styles/*.css`, `eslint.config.*`, `next.config.*`,
+  Tailwind/PostCSS config, `package.json` build scripts) MUST pass a real
+  **`npx next build`** locally (full compile + ESLint lint step + TypeScript
+  type-check; exit 0; route table printed) before `git merge --no-ff` — NOT
+  jest alone (`npm run test:regression` does not exercise the Next
+  build/lint/type-check pipeline). On 2026-05-31 Phase A (`5aa3c7d`) shipped
+  stacked `next/font` `axes`+fixed-`weight` and ESLint parsing
+  `src/styles/typography.css` as JS (bad `css` glob in `eslint.config.mjs`)
+  failures invisible to jest; every intervening `v1-redesign` Vercel deploy
+  broke until `754dbe5` + `e51d23f`. A green jest run is necessary but not
+  sufficient for any build-surface change.
 - **When this changes:** revisit the convention if (a) the team grows
   beyond solo or (b) an adversarial agentic CI pipeline lands that auto-
   reviews PRs. At that point, PRs become the right shape again. Until

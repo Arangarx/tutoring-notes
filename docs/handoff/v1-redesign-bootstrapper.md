@@ -95,6 +95,7 @@ The spine's **decisions ledger overrides any older doc** if anything conflicts.
 - Quality bar is **"first-class"**: true V1, low-friction, "invisible" UI, instrumented for real usage. Do **not** preserve current IA/components just because they exist.
 - **Cost-conscious** about model tiers (see §5).
 - He smokes on **REAL hardware** — jsdom can't see layout/render (hard-won lesson). **"Green in Jest" ≠ done** for anything visual/geometric.
+- **Build-surface merges:** if the branch touches fonts/CSS/build config, run **`npx next build`** before merge — [AGENTS.md § Merging convention](../../AGENTS.md) (Phase A `@5aa3c7d` deploy-break lesson).
 - **Windows PowerShell:** multi-line commit messages via temp file + `git commit -F`, then delete the temp file in a **SEQUENTIAL** (not parallel) call.
 - **Chat output:** workspace-relative paths only (absolute/`file://` render as dead text).
 - **This repo:** feature branches commit + push by default; merge via `--no-ff` after a smoked branch (solo-pilot convention, no PRs yet).

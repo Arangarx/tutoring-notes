@@ -74,6 +74,10 @@ Fresh orchestrator on `master`: `git checkout v1-redesign` → read this spine f
 - **Pilot purge:** scope finished-class real-minor records → confirm → delete on prod (PURGE APPROVED).
 - Component Phase A @ `5aa3c7d`: Andrew real-hardware smoke when ready.
 
+### Pre-merge verification (build-surface)
+
+Branches that touch **fonts, CSS, or build configuration** must pass a real **`npx next build`** locally (exit 0) before `git merge --no-ff` — jest/regression alone is not enough. Canonical file list + rationale: [AGENTS.md § Merging convention](../../AGENTS.md). **Incident (2026-05-31):** Phase A `@5aa3c7d` stacked `next/font` + ESLint-glob breaks invisible to jest; broke every `v1-redesign` deploy until `754dbe5` + `e51d23f`.
+
 ---
 
 ## Sub-pass tracker
