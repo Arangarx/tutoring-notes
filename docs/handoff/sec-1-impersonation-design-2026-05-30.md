@@ -779,6 +779,38 @@ The current design allows a second click to hit `startImpersonation()` before th
 
 ---
 
+## Ratifications & amendments (Andrew 2026-05-30)
+
+Andrew ratified three decisions that override or extend the design defaults above. These are authoritative for Dispatch C and for cross-milestone sequencing; they do **not** retroactively change Dispatch A/B as-built unless noted.
+
+### R1 — Q1 reversed: real admin keeps a password (NOT OAuth-only)
+
+**Reverses** the Q1 default (A): `passwordHash = null` / Google-OAuth-only for the real admin.
+
+**Decision:** The real admin (`arangarx@gmail.com`, `isTestAccount = false`) **keeps a strong password** — credential login stays enabled. **Do NOT null** the real admin `passwordHash`. Google OAuth is an **additional** convenience path for production, not the only way in.
+
+**Rationale:** Credentials login is **host-agnostic** — works on any Vercel preview with zero per-host OAuth config; browser autofill makes it one click. Google OAuth requires an **exact redirect URI registered per preview host**, which is recurring friction on every new feature branch and directly defeats the goal of frictionless preview logins.
+
+**Unchanged:** Test accounts remain passwordless / impersonation-only (`passwordHash = null`, credentials rejected).
+
+### R2 — Admin lands on a dedicated admin dashboard (not the tutor view)
+
+Today, admin login drops into the tutor ("fake tutor") experience. Andrew wants the **real admin** (non-impersonating, `isTestAccount = false`) to land on a **dedicated admin dashboard** after login — stupid-simple is fine for v1 — from which the tutor experience is reached **only** via impersonation ("Log in as"). **Exit impersonation** returns to the dashboard.
+
+**Shapes Dispatch C:** Build the minimal dashboard as the post-login landing + routing; replace the interim `TestAccountsSection` trigger from Dispatch B. Motivation: one consistent admin login and one-click switch into any test tutor, without juggling separate test logins per feature branch.
+
+### R3 — Cross-preview SSO desired (gated on brand-domain cutover, NOT SEC-1)
+
+Andrew wants **zero re-login** when opening a new preview branch. The mechanism is a **parent-domain session cookie** (`cookies.domain = .usemynk.com`) shared across all `*.usemynk.com` preview subdomains — **impossible on `*.vercel.app`** (Public Suffix List blocks parent-domain cookies).
+
+This requires Vercel **wildcard preview domains** under the custom domain; it is specced in [`docs/handoff/usemynk-domain-cutover-bootstrapper.md`](usemynk-domain-cutover-bootstrapper.md), **not** in SEC-1.
+
+**Interim (SEC-1 as-built):** Per-preview cookie isolation remains correct until the brand domain is wired for previews — see §5-axis cross-platform review row ("Vercel preview subdomains — per-subdomain cookie scope"). That isolation is intentional interim behavior, not a product bug.
+
+**Sequencing:** Cross-preview SSO is independent of SEC-1 shipping; layer it on (or after) the Phase-1 production `usemynk.com` cutover per the cutover bootstrapper.
+
+---
+
 ## Appendix: code findings that deviate from BACKLOG assumptions
 
 | BACKLOG assumption | Actual code finding | Design adjustment |

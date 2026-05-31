@@ -277,6 +277,36 @@ Run on **desktop Chrome** (Sarah’s primary); add **iPhone Safari** spot-check 
 
 ---
 
+## Cross-preview SSO via parent-domain cookie (optional, high-value)
+
+> **Cross-reference:** [`docs/handoff/sec-1-impersonation-design-2026-05-30.md`](sec-1-impersonation-design-2026-05-30.md) § "Ratifications & amendments" — R3 (Andrew 2026-05-30). SEC-1 intentionally keeps per-preview cookie isolation on `*.vercel.app` until this lands.
+
+### Goal
+
+Log in **once**; every preview branch under the shared parent domain is already authenticated (session cookie carries). Re-login only when the session TTL expires (8h per current NextAuth max-age).
+
+### Why it needs the custom domain
+
+Browsers **cannot** set a parent-domain cookie on `*.vercel.app` — the Public Suffix List treats `vercel.app` as a public suffix, so `Domain=.vercel.app` is rejected. Previews must be served under **`*.usemynk.com`** (or another domain you fully control) for a shared cookie.
+
+### Steps
+
+| Step | Owner | Action |
+|------|-------|--------|
+| Wildcard preview domains | **[Andrew-manual: Vercel]** | Configure **wildcard preview domains** under the custom domain (Vercel **Pro** capability). Example pattern: previews at `<branch>.preview.usemynk.com` or equivalent — Andrew confirms the exact preview-domain pattern in the Vercel dashboard. |
+| NextAuth cookie domain | **[repo change]** | Set NextAuth `cookies.sessionToken` (and related session cookies) `domain: ".usemynk.com"` with `secure: true`, `sameSite: "lax"`. Edit site: [`src/auth-options.ts`](../../src/auth-options.ts) cookie config. **`__Host-` prefix is incompatible with a `Domain` attribute** — domain-scoped cookies must use the **`__Secure-`** prefix, not `__Host-`. |
+| Google redirect URIs for previews | **[Andrew-manual: Google Console]** | Add redirect URIs for wildcard/preview hosts if Google OAuth on previews is required. With the SEC-1 Q1 reversal (credentials login by default on previews), **Google OAuth on previews is optional** — credential login works without per-preview Console churn. |
+
+### Security note
+
+A `.usemynk.com` cookie is readable by **any** subdomain under `usemynk.com`. Keep that domain **dedicated to this app**; do not host untrusted or third-party subdomains there.
+
+### Sequencing
+
+Enhancement layered on the **Phase-1 production cutover** (custom domain attach + `NEXTAUTH_URL` flip). Do after (or alongside) apex `usemynk.com` going live. **Independent of SEC-1** merge/smoke order.
+
+---
+
 ## Done criteria / acceptance
 
 - [ ] `https://usemynk.com` is **Valid Configuration** in Vercel with working SSL.
