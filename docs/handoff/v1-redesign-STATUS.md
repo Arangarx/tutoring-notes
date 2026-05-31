@@ -44,6 +44,38 @@
 
 ---
 
+## BRANCH & COMMIT REALITY (as of 2026-05-31)
+
+| Branch | Commit | Notes |
+|--------|--------|-------|
+| **`master`** | `a621a5b` | Production integration line; **does not** contain the V1 doc corpus, Component Phase A, or product legal facades. |
+| **`v1-redesign`** | `90f9bfa` (HEAD — moves with commits) | Long-running V1 epic integration branch. **This spine + bootstrapper + consent/identity/component design docs + Phase A (dark tokens + fonts) + product `/privacy` + `/terms` facades live ONLY here** until the epic merges. |
+| **`interim-capture-attestation`** | `3807e44` | Pushed, **NOT merged.** Interim capture-attestation gate implemented. **Andrew:** `prisma migrate deploy` on preview/prod → real-hardware smoke → `merge --no-ff` to `master`. |
+
+Fresh orchestrator on `master`: `git checkout v1-redesign` → read this spine first, then [`v1-redesign-bootstrapper.md`](v1-redesign-bootstrapper.md).
+
+---
+
+## FLY-PLAN (dispatch when Andrew says "fly")
+
+**Headline — single Sonnet-tier session-lifecycle + consent design pass** (recommend-and-proceed; Andrew ratifies later):
+
+1. **Waiting room** → session start / invite UX (session-centric IA).
+2. **Frictionless mid-session learner swap** — students see a simple "switch learner"; under the hood = full seamless consent-context swap (new `SessionConsentSnapshot` for the new learner; prior learner's segment finalized cleanly; recorder-Pillar reliability).
+3. **Tiered consent model** — Opus proposes the **exact essentials-vs-optional split** for Andrew approval (essentials = contract to use live services + VPC for minors, NOT toggles; optional = explicit unchecked opt-in toggles).
+4. **Capture types** — audio, **whiteboard-activity recording** (stroke replay; distinct from live stroke rendering), notes/transcripts, educational-use, messaging; **video (camera) = forward-compatible toggle only, NOT built in V1.**
+5. **Inline resolution of consent-gates design §9** — all 6 open questions get Opus recommendations flagged for Andrew ratification (not blocking).
+
+**Parallel Andrew-owned actions (do NOT block Opus dispatch):**
+
+- Interim branch: `prisma migrate deploy` → smoke → `merge --no-ff` `interim-capture-attestation` to `master`.
+- Umbrella repo: review + deploy `coppa-312-10-disclosure` @ `f77ed4b` (separate mortensen-apps-site repo).
+- Verify/execute **OpenAI DPA**; monitor disclosed deletion-request inbox.
+- **Pilot purge:** scope finished-class real-minor records → confirm → delete on prod (PURGE APPROVED).
+- Component Phase A @ `5aa3c7d`: Andrew real-hardware smoke when ready.
+
+---
+
 ## Sub-pass tracker
 
 | Pass | Status | Artifact |
@@ -63,18 +95,19 @@
 - ~~Consent toggle list + `allowAudioRecording` default~~ **SARAH-ANSWERED 2026-05-31.** Toggle list (parent-set ceiling, child-narrows-only): **audio recording, whiteboard-activity recording, notes/transcripts, educational-use, messaging** — Sarah confirmed "covers it." **`allowAudioRecording` default → Sarah prefers ON** (so students can review). **⚠ NEW Andrew-decision (Q-S1, audio default):** default-ON collides with COPPA for MINORS — audio of a minor needs **verifiable parental consent (VPC), NOT a buried ToS/user-agreement clause** (Sarah's "part of the user agreement" works for ADULTS only). **Refined (Andrew):** consent set ONCE up-front, student-side, no per-session friction; frame audio as HIGH-PRIORITY recommended w/ clear "declining reduces your child's ability to review recordings." **RESOLVED 2026-05-31:** **explicit RECOMMENDED but UNCHECKED opt-in** (no pre-check, no forced-on); consent up-front + student-side; frame audio high-priority with clear "declining reduces your student's ability to review recordings" messaging.
 - **Test-students audit (NEW 2026-05-31):** which students Sarah entered are REAL vs test? Real → prompt claim+consent (no exemption from consent-gates-capture). Test → purge. **What stored data does she need to keep?** (preserve until she answers).
 
-### Andrew-decision (7)
+### Identity / policy decisions (Q-3..Q-9, Q-S1 — RESOLVED 2026-05-31)
 
-- **Q-3 — Recording retention on revocation** — interim posture LOCKED (see ledger); end-state (proactive-offer vs on-request) GATED on COPPA legal review. Admin deletion-capability build approved. Educational-use consent toggle approved.
-- ~~**Q-3b — Retention timeframe**~~ RESOLVED 2026-05-31: active + 24mo post-closure.
-- **Q-3c — OpenAI/Whisper classification** — research landed (`73790d4`, `docs/handoff/openai-data-retention-2026-05-31.md`): `/v1/audio/transcriptions` shows abuse-monitoring=None + app-state=None + no-train-by-default + DPA names OpenAI as processor ⇒ **favors service-provider reading; NO consent-gate needed.** Operational guardrails (not counsel-gated): (a) use **only `/v1/audio/transcriptions`** for session audio (avoid Realtime/Files routes — different retention); (b) confirm Mynk's OpenAI **DPA is executed**; (c) **disclose OpenAI as a subprocessor** in privacy notice (part of disclosure floor). Counsel-later only if a retention surprise appears.
-- **Q-3d — Business-record retention vs PII deletion** (counsel-later): confirm session-occurred + billed-duration + amount + audit logs may persist after a child-PII deletion + required scrubbing standard. **Largely mooted** by the separation principle (records hold no PII by design).
-- ~~**Q-4 — Child device session lifetime**~~ RESOLVED 2026-05-31: Option B, 90-day sliding, parent-revocable, join + child-narrowing scope.
-- **Q-5 — Tutor 2FA lockout recovery path** — **LOCKED 2026-05-31 (Option 1):** backup codes → admin reset only; **NO email self-serve on first pass** (documented Phase-6+ candidate; if ever added, must be step-up, never email-alone). Compromised-email liability noted for counsel. (Lower-privilege parent/student email-recovery-after-identity-verification already in design.) ⇒ Phase 1 policy gate cleared; only the **TOTP-encrypt-at-rest BLOCKER** remains before Phase 1.
-- **Q-6 — ShareLink sunset / existing-data migration — DIRECTION SHIFTED 2026-05-31 (Andrew, premise catch):** REJECT the design doc's "indefinite grandfather / zero forced migration." Existing students+data are NOT exempt from the new consent structure. Instead: bring existing into the structure (claim+consent to continue), **preserve (don't delete) stored data** until Andrew asks Sarah what she needs to keep, then migrate/quarantine. Sunset/grandfather window becomes a transition-to-consent window, not a permanent bypass. **Mechanics need a design pass** (see capture-gate principle in ledger). Sarah test-students must be audited (real → prompt claim+consent; test → purge).
-- ~~**Q-7 — Student-in-messaging scope**~~ LOCKED 2026-05-31: parent-only send for v1; student read-only (where in conversation + consent); student-send designed-but-gated (email-verified LearnerProfile + parent "include student" toggle) as fast-follow, not launch.
-- ~~**Q-8 — Adult self-managed age threshold**~~ LOCKED 2026-05-31: **18+ self-consents** (`isSelfLearner`); under-18 requires parent AccountHolder. Age is **parent-reported + child-immutable**; **child cannot self-promote to self-managed until parent-reported age reaches 18**. Parent misreporting age = accepted residual risk (nothing we can do).
-- ~~**Q-9 — Messaging email provider**~~ LOCKED 2026-05-31: **app-signed transactional** (Resend/Postmark) for messaging notifications (platform message, deliverability, keeps tutor Gmail scope limited). Cost: new provider + CSP origin + PLATFORM-ASSUMPTIONS update (Phase 5).
+- **Q-3 — Recording retention on revocation — RESOLVED (on-request):** end-state = **ON-REQUEST deletion** (COPPA §312.6(a)(2) — parent directs, operator complies). **Retain-by-default**; no never-delete claims; **no self-serve delete button** first pass. Build **admin-executed deletion capability** + a **DISCLOSED parent request path** (contact email suffices). **NOT blocked on legal counsel** — disclosure floor required regardless; counsel deferred for edge interpretation only (Q-3c/Q-3d tagged). Educational-use consent toggle approved.
+- ~~**Q-3b — Retention timeframe**~~ RESOLVED: active relationship + **24 months post-closure**; deletion-on-request honored sooner.
+- **Q-3c — OpenAI/Whisper** — research landed (`73790d4`): favors **service-provider** (no consent-gate) with operational guardrails: `/v1/audio/transcriptions` only; **execute OpenAI DPA**; disclose subprocessor. Counsel-later only on retention surprise.
+- **Q-3d — Business-record vs PII deletion** — largely mooted by PII/business-record **separation principle** (ledger); counsel-later tag only.
+- ~~**Q-4 — Child device session lifetime**~~ **LOCKED:** **90-day sliding** (renews on activity; idle devices expire), parent-revocable device list. *(Supersedes identity design doc "180 days proposed.")*
+- ~~**Q-5 — Tutor 2FA recovery**~~ **LOCKED Option 1:** backup codes → **admin reset**; **NO email self-serve** first pass. Phase 1 policy gate cleared; **TOTP-encrypt-at-rest BLOCKER** remains.
+- ~~**Q-6 — ShareLink / existing-data migration**~~ **LOCKED:** **NO indefinite grandfather**; existing data **NOT exempt** from consent-gates-capture; migration when V1 lands; interim attestation gate bridges. *(Supersedes identity design doc "90-day ShareLink grandfather.")*
+- ~~**Q-7 — Messaging**~~ **LOCKED:** parent send v1; student **read-only** v1; student-send fast-follow.
+- ~~**Q-8 — Adult self threshold**~~ **LOCKED:** **18+** = `isSelfLearner` self-manage; parent-reported age; child cannot self-promote until reported age 18.
+- ~~**Q-9 — Email provider**~~ **LOCKED:** app-signed transactional (Resend/Postmark class).
+- ~~**Q-S1 — Audio default**~~ **RESOLVED:** explicit **RECOMMENDED but UNCHECKED** opt-in (no pre-check, no forced-on); consent up-front + student-side.
 
 ### BLOCKERs (3)
 
@@ -87,20 +120,19 @@
 
 ### Legal / business threads (Andrew + counsel)
 
-- **COPPA legal review** — run the dispatched research brief (`docs/handoff/coppa-compliance-research-2026-05-31.md`) past actual counsel before Phase 3; resolves Q-3 end-state (proactive-offer vs on-request deletion).
+- **COPPA counsel (deferred, non-blocking):** research brief (`docs/handoff/coppa-compliance-research-2026-05-31.md`) for edge interpretation (Q-3c/Q-3d, compromised-email recovery liability). **Q-3 end-state already RESOLVED (on-request)** — implement disclosure floor + admin deletion capability regardless of counsel timing.
 - **LLC formation** — Andrew raised twice; prudent liability shield before scaling minor-data handling. Business/legal call for Andrew + counsel; tracked so it doesn't evaporate.
 
 ### Approved-to-build (from Q-3 ratification)
 
-- **Admin-only recording-deletion capability** — manual now, auto-able later; behind the scenes, not customer-facing; honors legal/COPPA deletion requests. Not wired to any auto/proactive revocation trigger until legal answers Q-3 end-state.
+- **Admin-only recording-deletion capability** — manual now, auto-able later; honors on-request deletion (disclosed contact path); retain-by-default on revocation.
 
 ---
 
 ## Next actions
 
-1. Andrew addresses the **7 identity decisions** + acknowledges **BLOCKERs**.
-2. Fold Sarah answers when they arrive.
-3. Component Phase A (dark+fonts) can start in parallel anytime.
-4. Identity Phase 1 (tutor 2FA) gated on TOTP-encrypt BLOCKER + Q-5 recovery decision.
-5. Lifecycle-flow design pass runs after identity ratification.
-6. Keep this spine + the chat todo list in sync at every handoff.
+1. **Andrew says "fly"** → Opus dispatches the **FLY-PLAN** Sonnet session-lifecycle + consent design pass (see above).
+2. **BLOCKERs remain:** TOTP encrypt-at-rest (Phase 1); `assertOwnsLearnerProfile` (Phase 2); umbrella deploy + OpenAI DPA + functioning deletion-request inbox (disclosure floor).
+3. **Andrew parallel:** interim `interim-capture-attestation` migrate → smoke → merge; umbrella `coppa-312-10-disclosure` review+deploy; Phase A real-hardware smoke; pilot purge confirm+execute.
+4. **Sarah-pending:** test-students audit (real vs test; what to keep) — pilot real-minor data purge already approved.
+5. Keep this spine + bootstrapper + chat todo list in sync at every handoff.

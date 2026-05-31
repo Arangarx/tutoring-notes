@@ -30,7 +30,8 @@ Andrew ratified this principle on 2026-05-31 upon identifying a dangerous bypass
 | **Text/note upload** | Session notes or transcript saved/shared | `allowNoteSending = true` in `SessionConsentSnapshot` |
 
 **Scope note — what is NOT a capture action:**
-- Whiteboard strokes written during a live session (these are session events, not uploaded data — treated as session participation, gated on `allowLiveSession`).
+- **Live whiteboard stroke rendering** during a session (essential to conducting the session — session participation, gated on `allowLiveSession`; NOT a capture).
+- **Whiteboard-activity recording** (stroke replay for later review) **IS** a consent-gated capture type — distinct toggle, same bar as audio (`allowWhiteboardRecording` or equivalent in `SessionConsentSnapshot`).
 - Reading/viewing existing session data (gated by access control, not consent-gates-capture).
 
 **Adults:** `isSelfLearner = true` — the AccountHolder IS the learner. They self-manage capture consent. See §7.

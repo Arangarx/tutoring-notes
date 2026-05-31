@@ -36,7 +36,8 @@ The spine's **decisions ledger overrides any older doc** if anything conflicts.
 | Doc | Purpose |
 |-----|---------|
 | [`docs/handoff/v1-redesign-STATUS.md`](v1-redesign-STATUS.md) | Epic spine / decisions ledger / sub-pass tracker (**READ FIRST**). |
-| [`docs/handoff/session-identity-access-design-2026-05-31.md`](session-identity-access-design-2026-05-31.md) | Identity/accounts/consent/auth/2FA architecture + 9 open Qs + 3 BLOCKERs. |
+| [`docs/handoff/session-identity-access-design-2026-05-31.md`](session-identity-access-design-2026-05-31.md) | Identity/accounts/consent/auth/2FA architecture; §11 Q-4/Q-6 proposals SUPERSEDED by spine. |
+| [`docs/handoff/consent-gates-capture-design-2026-05-31.md`](consent-gates-capture-design-2026-05-31.md) | Consent-gates-capture enforcement + interim attestation; §9 open Qs delegated to Opus fly-pass. |
 | [`docs/handoff/v1-component-redesign-design-2026-05-31.md`](v1-component-redesign-design-2026-05-31.md) | Visual/component + IA/URL layer; §8 has ratified Q-1..Q-10; §5.4 billing immutability. |
 | [`docs/RELIABILITY-REDESIGN-2026-05-27.md`](../RELIABILITY-REDESIGN-2026-05-27.md) | 7-surface reliability redesign (Surface 7 = session-log billing freeze; student-mobile breaking; URL/IA; solo mode). |
 | [`docs/UX-AND-A11Y-SPEC.md`](../UX-AND-A11Y-SPEC.md) | Global UX/a11y bar (WCAG 2.2 AA), carry-forward invariants A1–A10, IA §14. |
@@ -49,52 +50,40 @@ The spine's **decisions ledger overrides any older doc** if anything conflicts.
 
 ## §3 — State snapshot (as of 2026-05-31)
 
-### LOCKED
+**Read order:** spine → this bootstrapper → design docs below. **Branch:** `v1-redesign` @ `90f9bfa` (HEAD moves). **`master`** @ `a621a5b` does not have the V1 corpus yet.
 
-- **Brand:** Mynka Blue — light tokens done; dark + fonts not yet implemented.
-- **IA/URLs:** session-centric `/sessions/[id]`, `/join/[token]`, `/share/`; operator `/superadmin`; `/admin/` removed from tutor surface; no scheduling → next-actions landing.
-- **Identity model:** 3 principals; parent-primary default for K-12; clean adult collapse.
-- **Consent lattice:** parent ceiling ∩ child narrowing; frozen-at-session-start.
-- **2FA:** mandatory for tutors/admins; opt-in parents.
-- **Access:** participant-set access replaces anyone-with-link.
-- **Billing:** value immutable / frozen-at-close.
-- **Q-1..Q-10** ratified.
+### LOCKED (do not re-litigate)
+
+- **Brand:** Mynka Blue; Component Phase A (dark tokens + fonts) **implemented** @ `5aa3c7d` — pending Andrew real-hardware smoke.
+- **IA/URLs:** session-centric; `/sessions/[wsid]`; `/join/`; `/share/`; `/superadmin`; no scheduling.
+- **Identity model:** 3 principals; parent-primary K-12; `isSelfLearner` adult collapse.
+- **Consent:** tiered **two mechanisms** — (1) **Essentials** = contract to use live services (NOT toggles; VPC for minors); (2) **Optional** = explicit **unchecked** opt-in toggles. Exact essentials-vs-optional split → **Opus PROPOSES in fly-pass** for Andrew approval.
+- **Consent-gates-capture:** no capture without effective consent; **no indefinite grandfather**; migration when V1 lands.
+- **Whiteboard nuance:** **live stroke rendering** during a session = NOT a capture (essential); **whiteboard-activity recording** (stroke replay) = consent-gated capture type.
+- **Video (camera):** POST-V1 fast-follow; design forward-compatible, **do not build in V1**.
+- **Q-3..Q-9 + Q-S1 RESOLVED** (spine ledger): on-request deletion + disclosed parent request path (NOT counsel-gated); 90-day sliding child device sessions; 2FA recovery = backup codes → admin reset; no ShareLink grandfather; messaging parent-send / student-read-only v1; 18+ self-manage; app-signed transactional email; audio = recommended **unchecked** opt-in.
+- **§9 consent-gates open questions (6):** **DELEGATED to Opus** in fly-pass — recommend-and-proceed, Andrew ratifies later.
+- **Auth notice:** mortensenapps.com auth disclosure at every auth-initiation click-point (Google reviewer commitment).
+- **Pilot:** PURGE APPROVED for finished-class real-minor data (Opus scopes → confirm → prod delete).
+- **Sarah:** mid-session learner swap (seamless consent-context swap) is a headline fly-pass input.
 
 ### DONE
 
-- Component-redesign design.
-- Identity/access design.
-- Ratification capture.
-- Spine (this epic's STATUS doc).
+- Component + identity/access + consent-gates-capture **design** docs.
+- Interim capture-attestation gate **implemented** on `interim-capture-attestation` @ `3807e44` (pushed, NOT merged).
+- Product legal facades on `v1-redesign` (`29f5e88`); umbrella `coppa-312-10-disclosure` @ `f77ed4b` in separate repo (Andrew review+deploy).
 
-### QUEUED
+### QUEUED / IN FLIGHT
 
-- Session-lifecycle flow design (waiting room + session-start UX).
-- Component Phase A (dark+fonts).
-- Identity 6-phase implementation.
+- **FLY-PLAN** session-lifecycle + consent design pass (waiting room → start/invite → learner swap → tiered consent + capture types + §9 recommendations) — **starts when Andrew says "fly"** (see spine FLY-PLAN).
+- Identity 6-phase **implementation** (after design + BLOCKERs).
+- Interim branch: Andrew migrate → smoke → merge to `master`.
 
-### OPEN (from spine — do not re-derive)
+### STILL OPEN (not re-ask Andrew for resolved Qs)
 
-**Sarah-pending**
+**Sarah-pending:** test-students audit (real vs test; any data to keep).
 
-- Account-ownership default (parent vs adult-self).
-- Consent toggle list + `allowAudioRecording` default.
-
-**Andrew-decision (7)**
-
-- **Q-3 — Recording retention on revocation** (**LEGAL — do not implement either direction without explicit guidance**).
-- **Q-4 — Child device session lifetime** (180d proposed).
-- **Q-5 — Tutor 2FA lockout recovery path**.
-- **Q-6 — ShareLink sunset timeline** (90d proposed).
-- **Q-7 — Student-in-messaging scope**.
-- **Q-8 — Adult self-managed age threshold**.
-- **Q-9 — Messaging email provider** (tutor-signed Gmail vs app-signed transactional).
-
-**BLOCKERs (3)**
-
-- TOTP secrets encrypted at rest **before Phase 1**.
-- `assertOwnsLearnerProfile` exists + negative-tested **before Phase 2** data routes.
-- Umbrella mortensenapps.com privacy/terms updated: COPPA consent mechanism + minor data inventory **before Phase 2**; messaging as data surface **before Phase 5**.
+**BLOCKERs (3):** TOTP encrypt-at-rest (Phase 1); `assertOwnsLearnerProfile` (Phase 2); disclosure floor (umbrella deploy + OpenAI DPA + deletion-request inbox) — product facades on branch; VPC method disclosure waits until consent UI ships.
 
 ---
 
@@ -127,14 +116,12 @@ The spine's **decisions ledger overrides any older doc** if anything conflicts.
 
 ## §6 — First actions for this session
 
-1. Read [`docs/handoff/v1-redesign-STATUS.md`](v1-redesign-STATUS.md) (the spine).
-2. Get Andrew's answers to the **7 identity decisions** + **BLOCKER acknowledgement** (esp. the LEGAL retention question + COPPA umbrella gate).
-3. Fold Sarah's pending answers if they've arrived.
-4. **Sequence the work:**
-   - Component Phase A (dark+fonts) has **no deps** and can start now.
-   - Identity Phase 1 (tutor 2FA) gated on TOTP-encrypt BLOCKER + Q-5.
-   - Lifecycle-flow design pass **after** identity ratification.
-5. Name/keep the `v1-redesign` integration branch.
+1. Read [`docs/handoff/v1-redesign-STATUS.md`](v1-redesign-STATUS.md) (**spine — source of truth**), then **this bootstrapper**, then design docs per §2.
+2. Confirm branch reality (spine **BRANCH & COMMIT REALITY**): work on `v1-redesign`; do not assume V1 docs exist on `master`.
+3. **If Andrew says "fly":** dispatch the spine **FLY-PLAN** Sonnet pass (session lifecycle + tiered consent proposal + capture types + §9 recommendations). Do **not** re-open Q-3..Q-9 / Q-S1 — they are RESOLVED in the spine.
+4. **Parallel Andrew track (non-blocking):** interim branch migrate+smoke+merge; umbrella deploy; Phase A smoke; OpenAI DPA; pilot purge; deletion-request inbox.
+5. **Implementation sequencing:** Identity Phase 1 (tutor 2FA) still gated on TOTP-encrypt BLOCKER; Phases 2–3 Sonnet-tier after fly-pass design lands.
+6. Keep spine + todos current every handoff.
 
 ---
 
@@ -142,7 +129,7 @@ The spine's **decisions ledger overrides any older doc** if anything conflicts.
 
 1. Don't launch a design/code pass on an **unconfirmed premise** — confirm framing with Andrew first.
 2. Don't **resume** Sonnet/Composer design subagents (Opus-model gotcha) — **fresh-dispatch** instead.
-3. Don't implement **retention-on-revocation** either direction without explicit legal guidance.
+3. Don't implement **retention-on-revocation** contrary to spine (**on-request** deletion + disclosed request path; retain-by-default; counsel deferred for edges only).
 4. Don't ship identity **Phase 2** or **Phase 5** before the umbrella privacy/terms update.
 5. Don't store TOTP secrets in **plaintext**.
 6. Don't preserve current IA/components for preservation's sake.
