@@ -57,16 +57,17 @@ Update this file's head as each lands.
 
 ## Uncommitted / unmerged state
 
-**Working tree:** clean on `master` (pending this docs commit: usemynk cutover watch-items).
+**Working tree:** clean on `master`.
 
 **Unmerged branches awaiting gates:** none for usemynk cutover (merged `291288c`).
 
-**`master` HEAD:** `291288c` Merge ops/usemynk-domain-cutover (after this commit: docs watch-items).
+**`master` HEAD:** `a1f5d6e` docs: usemynk cutover watch-items (post-merge smoke).
 
 Recent `master` (newest first):
 
 ```
-291288c Merge ops/usemynk-domain-cutover  ← HEAD (pre-docs-watch-items)
+a1f5d6e docs: usemynk cutover watch-items  ← HEAD
+291288c Merge ops/usemynk-domain-cutover
 7dadd7a Merge SEC-1 admin-vs-tutor role split
 a00557d docs(backlog): feedback page (admin view) has no nav back
 8ff3a93 feat(sec-1): AdminRole enum + role-based routing (tutor-vs-admin distinction)
