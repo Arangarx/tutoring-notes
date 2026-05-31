@@ -4,11 +4,11 @@
 
 ## Current focus
 
-We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug is **resolved**, Phase 1 sync redesign and the standing real-browser regression net are **merged and smoked**. **SEC-1 admin impersonation is COMPLETE** — A (`27fb0d3`) + B (`6e29d57`) + C (`8bb7449`) all merged + smoked GREEN. **W1 audio durability:** Ship A merged; Ships B/C shelved (upload treated as working).
+We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug is **resolved**, Phase 1 sync redesign and the standing real-browser regression net are **merged and smoked**. **SEC-1 admin impersonation is COMPLETE + EXTENDED** — A (`27fb0d3`) + B (`6e29d57`) + C (`8bb7449`) + role-split follow-up (`7dadd7a`) all merged + smoked GREEN. Genuine ADMIN-vs-TUTOR account types now exist. **W1 audio durability:** Ship A merged; Ships B/C shelved (upload treated as working). **Next: pick a "new and shiny" wave.**
 
 ## Last action completed
 
-**2026-05-30 — SEC-1 Role follow-up IMPLEMENTED** (`feat/sec-1-admin-tutor-role`, pushed, awaiting Andrew smoke + merge): `AdminRole` enum (`ADMIN|TUTOR`) added to `AdminUser`; migration backfills `arangarx@gmail.com → ADMIN`, all others → `TUTOR`; routing now role-based (`TUTOR` logins → `/admin/students`, ADMIN → `/admin`); `assertIsAdmin()` blocks TUTOR from impersonating (covers real TUTOR logins like Sarah AND test accounts); JWT/session carries `role`; 50 tests green; `tsc --noEmit` clean; eslint clean. BACKLOG item flipped ✅.
+**2026-05-30 — SEC-1 Role follow-up SMOKED + MERGED** (`--no-ff` merge `7dadd7a`): `AdminRole` enum (`ADMIN|TUTOR`, default TUTOR) added to `AdminUser`, orthogonal to `isTestAccount`; migration backfills `arangarx@gmail.com → ADMIN` idempotently on deploy (preview-dev + production via `migrate deploy`); routing now role-based (`TUTOR` logins → `/admin/students`, ADMIN → `/admin` dashboard, tutor paths blocked); `assertIsAdmin()` blocks TUTOR from impersonating (covers real TUTOR logins like Sarah AND test accounts); JWT/session carries `role`; 50 tests green. Andrew smoke **PASS** (test1 direct login blocked, reachable via impersonation). This is the long-asked-for genuine admin-vs-tutor account-type separation; protects a future Sarah login from being stranded on the admin dashboard.
 
 **2026-05-30 — SEC-1 Dispatch C SMOKED + MERGED** (`--no-ff` merge `8bb7449`): real-admin `/admin` dashboard landing + routing (tutor paths impersonation-only; exit → dashboard) + `AdminTestAccountsPanel` replacing interim `TestAccountsSection` + login default callback `/admin` + 39 SEC-1 tests green. Andrew real-hardware smoke **PASS** (dashboard landing, guard redirects, impersonate round-trip, exit-to-dashboard, test-account credential rejection). **SEC-1 (A+B+C) is DONE.** Open nit: banner not amber (cosmetic). **Account cleanup done on BOTH branches 2026-05-30:** `+test1` flipped to `isTestAccount=true` (sole impersonation target; password login disabled by gate; **prod 126 wb-sessions / 116 recordings preserved**); `+test2/3/4` deleted on both; dev-only `+sec1smoke` throwaway deleted. Kept everywhere: `arangarx@gmail.com` (real admin) + all non-arangarx (`malmesae@gmail.com`, dev `playwright@test.local`).
 
@@ -16,8 +16,8 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 ## Next action(s)
 
-1. **Smoke + merge `feat/sec-1-admin-tutor-role`** — Andrew smokes per SEC-1-STATUS.md role follow-up checklist (ADMIN dashboard still works; TUTOR simulated via `UPDATE role='TUTOR'` on preview-dev; impersonation round-trip). Merge `--no-ff` → master; then `prisma migrate deploy` applies on Vercel preview-dev + production.
-2. **Pick next wave** — after role follow-up merged. Candidates: usemynk.com cutover (unblocks cross-preview SSO), Wave 2.5 session-log greenfield, W3 mobile/URL. Andrew wants "new and shiny."
+1. **Pick next wave** — SEC-1 fully done (incl role split). Candidates: usemynk.com cutover (unblocks cross-preview SSO), Wave 2.5 session-log greenfield, W3 mobile/URL. Andrew wants "new and shiny." Orchestrator lean: usemynk cutover (short, high-leverage) then Wave 2.5 (visual payoff).
+2. **Verify role migration on production deploy** — confirm `migrate deploy` applied the `role` column + `arangarx@gmail.com → ADMIN` backfill on the production Neon branch after the `7dadd7a` deploy (preview-dev too). Quick Neon `SELECT email, role` check.
 3. ~~Upload re-baseline smoke~~ — 🟢 **CLOSED 2026-05-30 (Andrew):** treat upload as WORKING (58 MB cleared fast on paid Preview). **W1 Ship B not being built** — revive only if a real upload failure resurfaces.
 
 Update this file's head as each lands.
@@ -40,9 +40,10 @@ Update this file's head as each lands.
 
 ## In-flight subagents
 
-**None actively running.** `feat/sec-1-admin-tutor-role` awaits Andrew smoke + merge.
+**None.** All SEC-1 work merged.
 
 **Recently completed:**
+- **SEC-1 role split (ADMIN vs TUTOR)** — ✅ MERGED `7dadd7a` (2026-05-30, Sonnet). Andrew smoke PASS.
 - **SEC-1 Dispatch C (admin dashboard + routing)** — ✅ MERGED `8bb7449` (2026-05-30). Andrew smoke PASS.
 - **SEC-1 Dispatch B (impersonation runtime)** — ✅ MERGED `6e29d57` (2026-05-30). Andrew smoke PASS.
 - **SEC-1 Dispatch A (Foundation)** — ✅ MERGED `27fb0d3`. Andrew password-login regression smoke GREEN on Preview.
@@ -54,27 +55,27 @@ Update this file's head as each lands.
 
 ## Uncommitted / unmerged state
 
-**Working tree:** `feat/sec-1-admin-tutor-role` — pushed, awaiting smoke + merge.
+**Working tree:** clean on `master`.
 
-**Unmerged branches awaiting gates:** `feat/sec-1-admin-tutor-role` (SEC-1 role follow-up).
+**Unmerged branches awaiting gates:** none.
 
-**`master` HEAD:** `30ac6b1 docs: prod account cleanup done + log tutor-vs-admin role gap`.
+**`master` HEAD:** `7dadd7a Merge SEC-1 admin-vs-tutor role split`.
 
 Recent `master` (newest first):
 
 ```
-30ac6b1 docs: prod account cleanup done + log tutor-vs-admin role gap  ← HEAD
+7dadd7a Merge SEC-1 admin-vs-tutor role split  ← HEAD
+a00557d docs(backlog): feedback page (admin view) has no nav back
+8ff3a93 feat(sec-1): AdminRole enum + role-based routing (tutor-vs-admin distinction)
+30ac6b1 docs: prod account cleanup done + log tutor-vs-admin role gap
 b4c026c docs(state): preview-dev account cleanup
-291d6e0 docs(state): SEC-1 complete (A+B+C, 8bb7449); banner-color nit + test1-flip captured
-8bb7449 Merge SEC-1 Dispatch C: real-admin dashboard landing + routing
-a806939 docs(state): close upload re-baseline; W1 Ship B not built unless failure resurfaces
 ```
 
 **Merged branches (preserved for stale-sweep):**
 
 | Branch | Merge commit | Notes |
 |--------|--------------|-------|
-| `feat/sec-1-admin-tutor-role` | pending | SEC-1 role follow-up (awaiting smoke) |
+| `feat/sec-1-admin-tutor-role` | `7dadd7a` | SEC-1 ADMIN-vs-TUTOR role split |
 | `feat/sec-1-admin-dashboard` | `8bb7449` | SEC-1 Dispatch C admin dashboard + routing |
 | `feat/sec-1-impersonation-runtime` | `6e29d57` | SEC-1 Dispatch B impersonation runtime + banner |
 | `feat/sec-1-foundation` | `27fb0d3` | SEC-1 Dispatch A auth foundation |
