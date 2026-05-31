@@ -7,8 +7,8 @@
 
 | Dispatch | Scope | Status | Branch |
 |---|---|---|---|
-| **A — Foundation** | Schema + auth changes + impersonation.ts partial | ✅ Done | `feat/sec-1-foundation` |
-| **B — Actions + banner** | `startImpersonation()`, `exitImpersonation()`, `ImpersonationBanner` | ⬜ Pending | — |
+| **A — Foundation** | Schema + auth changes + impersonation.ts partial | ✅ Done | `feat/sec-1-foundation` (merged to master) |
+| **B — Actions + banner** | `startImpersonation()`, `exitImpersonation()`, `ImpersonationBanner` | ✅ Done | `feat/sec-1-impersonation-runtime` |
 | **C — Dashboard UI** | Admin page "Test accounts" section + "Log in as" button | ⬜ Pending | — |
 
 ---
@@ -44,6 +44,97 @@
 | 5 | Migration is additive: no `DROP COLUMN`, correct DDL | `auth-sec1.test.ts` "Blocker #5" | ✅ |
 | 6 | `assertIsRealAdmin()` throws `ImpersonationForbiddenError` for test account | `auth-sec1.test.ts` "Blocker #6" | ✅ |
 | 7 | `GOOGLE_CLIENT_ID/SECRET` absent → `GoogleProvider` skipped gracefully | `auth-sec1.test.ts` "Blocker #7" | ✅ |
+
+---
+
+## Dispatch B — Done
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `src/app/admin/actions/impersonate.ts` | *(new)* `startImpersonation()` + `exitImpersonation()` server actions |
+| `src/components/ImpersonationBanner.tsx` | *(new)* Amber banner rendered when `isImpersonating=true` |
+| `src/app/admin/layout.tsx` | Wire `ImpersonationBanner` in (conditional on `isImpersonating`) |
+| `src/app/admin/TestAccountsSection.tsx` | *(new)* Interim B trigger: lists test accounts + "Log in as" buttons |
+| `src/app/admin/page.tsx` | Import + render `TestAccountsSection` (bottom of dashboard) |
+| `src/__tests__/impersonation-b.test.ts` | *(new)* 8 Dispatch B blocker + privilege-escalation unit tests |
+| `docs/SEC-1-STATUS.md` | *(this file)* Dispatch B marked done, B smoke checklist added |
+
+### Blocker acceptance gates (Dispatch B)
+
+| # | Blocker | Test | Status |
+|---|---|---|---|
+| 8 | Banner present when impersonating | smoke: visit `/admin` as impersonated session → amber banner shows `<testEmail>` | ⬜ Smoke pending |
+| 9 | Exit restores admin session | `impersonation-b.test.ts` "exitImpersonation closes log and restores admin" | ✅ Unit |
+| 10 | `startImpersonation()` called as test account → Forbidden | `impersonation-b.test.ts` "Blocker #10" | ✅ Unit |
+| 11 | Password login rejected for test account | `impersonation-b.test.ts` "Blocker #11" | ✅ Unit |
+
+Additional privilege-escalation negatives tested:
+- Already-impersonating session → blocked (isTestAccount=true scope)
+- Targeting a non-test-account → rejected
+- Idempotency: existing open log row → re-mints without creating a second row
+
+---
+
+## Smoke checklist for Preview (Dispatch B)
+
+### One-time setup: create a throwaway test account (DO NOT use test1)
+
+**IMPORTANT:** Do NOT flip `arangarx+test1@gmail.com` to `isTestAccount=true` yet — that is PART 2 of the seed SQL, which runs only after B is smoke-proven (see Sequencing guard below).
+
+Instead, create a **throwaway test account** for B smoke testing using the `createTestAccount` helper. Run this snippet once against Neon (e.g. via `psql` or the Neon SQL editor):
+
+```sql
+-- Create a throwaway test account for Dispatch B smoke.
+-- Use a fake email — this account has no password and cannot log in via credentials.
+-- Replace 'throwaway-b-smoke@example.com' with any dummy email you like.
+INSERT INTO "AdminUser" (id, email, "passwordHash", "isTestAccount", "displayName", "createdAt", "updatedAt")
+VALUES (
+  gen_random_uuid(),
+  'throwaway-b-smoke@example.com',
+  NULL,
+  true,
+  'B Smoke Test Account',
+  NOW(),
+  NOW()
+)
+ON CONFLICT (email) DO NOTHING;
+```
+
+Or use the `createTestAccount` helper from a Node script:
+```ts
+import { createTestAccount } from "@/lib/auth-db";
+await createTestAccount("throwaway-b-smoke@example.com", "B Smoke Test Account");
+```
+
+### Smoke steps (Dispatch B)
+
+- [ ] Vercel preview deploys without build errors
+- [ ] `npx tsc --noEmit` clean on branch
+- [ ] `npx eslint` no new errors on changed files
+- [ ] `npx jest src/__tests__/impersonation-b.test.ts` — all tests green
+- [ ] **Throwaway test account created** (see above; NOT test1)
+- [ ] Log in as real admin (password or Google OAuth)
+- [ ] `/admin` dashboard shows "Test accounts (interim)" section with throwaway account listed
+- [ ] Click "Log in as" for the throwaway account
+  - [ ] Redirects to `/admin`
+  - [ ] **Amber banner appears** with throwaway email + "Exit impersonation" button (Blocker #8)
+  - [ ] Can browse admin pages normally as the test account (students list, settings, etc.)
+  - [ ] `ImpersonationLog` row created in DB with `endedAt=null`
+- [ ] Click "Exit impersonation"
+  - [ ] Redirects to `/admin`
+  - [ ] **Amber banner is gone** (Blocker #9)
+  - [ ] Real admin email shown in nav/session
+  - [ ] `ImpersonationLog` row has `endedAt` populated
+- [ ] Attempt credentials login as throwaway account (any password) → rejected (Blocker #11)
+- [ ] `arangarx+test1@gmail.com` credentials login with its real password → still accepted (regression guard — test1 NOT yet flipped)
+
+### test1 guard (confirm UNTOUCHED after B smoke)
+
+- [ ] `SELECT email, "isTestAccount", "passwordHash" IS NOT NULL as has_hash FROM "AdminUser" WHERE email = 'arangarx+test1@gmail.com';`
+  - Expected: `isTestAccount = false`, `has_hash = true`
+  - If this shows `isTestAccount = true` — STOP, something went wrong. test1 password login is now blocked.
 
 ---
 

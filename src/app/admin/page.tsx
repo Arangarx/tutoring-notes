@@ -6,6 +6,7 @@ import { authOptions } from "@/auth-options";
 import { getStudentScope, studentsWhereForScope } from "@/lib/student-scope";
 import { isOperatorEmail } from "@/lib/operator";
 import { formatDateOnlyDisplay } from "@/lib/date-only";
+import { TestAccountsSection } from "./TestAccountsSection";
 
 export const dynamic = "force-dynamic";
 
@@ -125,6 +126,8 @@ export default async function AdminDashboardPage() {
           Settings
         </Link>
       </div>
+
+      <TestAccountsSection isImpersonating={session?.user?.isImpersonating ?? false} />
     </div>
   );
 }
