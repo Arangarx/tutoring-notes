@@ -62,6 +62,7 @@ import {
 } from "@/lib/whiteboard/scene-paint";
 import { useExcalidrawThemeFromSystem } from "@/hooks/useExcalidrawThemeFromSystem";
 import { attachWebmDurationFix } from "@/lib/audio/webm-duration-fix";
+import { attachReplayScrubAudioDefer } from "@/lib/whiteboard/replay-scrub-audio-defer";
 import { resolveWhiteboardAssetReadUrl } from "@/lib/whiteboard/resolve-asset-read-url";
 
 /**
@@ -182,6 +183,10 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   const [replayExcaliRestoreReady, setReplayExcaliRestoreReady] =
     useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  /** Playhead allowed to trigger audio range requests (see replay-scrub-audio-defer). */
+  const audioCommittedSecRef = useRef(0);
+  /** Drops stale `loop.seek()` after a superseding scrub-drop. */
+  const scrubCommitGenerationRef = useRef(0);
   /** Excalidraw may clear scene on `updateScene({ appState })`; re-send last paint. */
   const lastSceneElementsRef = useRef<readonly unknown[]>([]);
   /**
@@ -432,6 +437,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     const initialT = noSessionAudio ? finalClockMs : 0;
     applySceneAt(initialT);
     setAudioElapsedMs(initialT);
+    audioCommittedSecRef.current = initialT / 1000;
 
     const container = excalCanvasContainerRef.current;
     if (!container) return;
@@ -519,13 +525,35 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     });
 
     const onPlay = () => loop.play();
-    const onPause = () => loop.pause();
-    const onSeeked = () => loop.seek();
+    const onPause = () => {
+      audioCommittedSecRef.current = el.currentTime;
+      loop.pause();
+    };
 
     el.addEventListener("play", onPlay);
     el.addEventListener("pause", onPause);
     el.addEventListener("ended", onPause);
-    el.addEventListener("seeked", onSeeked);
+
+    // Scrub drag: paint scene from in-memory log while deferring audio
+    // range fetches until pointer release (BACKLOG "Replay scrub drag").
+    const detachScrubDefer = attachReplayScrubAudioDefer(el, {
+      getCommittedSec: () => audioCommittedSecRef.current,
+      setCommittedSec: (sec) => {
+        audioCommittedSecRef.current = sec;
+      },
+      onVisualSeekMs: (ms) => {
+        setAudioElapsedMs(ms);
+        applySceneAtRef.current(ms);
+      },
+      onAudioCommitSec: (_sec, generation) => {
+        scrubCommitGenerationRef.current = generation;
+        const runSeek = () => {
+          if (generation !== scrubCommitGenerationRef.current) return;
+          loop.seek();
+        };
+        runSeek();
+      },
+    });
 
     // WebM duration / scrubber fix.
     //
@@ -549,7 +577,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       el.removeEventListener("play", onPlay);
       el.removeEventListener("pause", onPause);
       el.removeEventListener("ended", onPause);
-      el.removeEventListener("seeked", onSeeked);
+      detachScrubDefer();
       detachDurationFix();
     };
   }, [
