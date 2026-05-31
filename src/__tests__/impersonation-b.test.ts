@@ -221,7 +221,7 @@ describe("Blocker #10 — startImpersonation blocked for test-account session", 
 // ---------------------------------------------------------------------------
 
 describe("startImpersonation happy path", () => {
-  it("creates ImpersonationLog row, mints session, redirects to /admin", async () => {
+  it("creates ImpersonationLog row, mints session, redirects to tutor landing", async () => {
     jest.resetModules();
     const mockMintImpersonationSession = jest.fn().mockResolvedValue(undefined);
     const mockMintAdminSession = jest.fn().mockResolvedValue(undefined);
@@ -289,7 +289,7 @@ describe("startImpersonation happy path", () => {
     );
 
     expect(redirected).toBe(true);
-    expect(redirectTo).toBe("/admin");
+    expect(redirectTo).toBe("/admin/students");
     expect(mockCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({

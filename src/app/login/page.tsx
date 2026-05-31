@@ -7,7 +7,7 @@ import { Suspense, useState, useEffect } from "react";
 
 function LoginForm() {
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/admin/students";
+  const callbackUrl = searchParams.get("callbackUrl") ?? "/admin";
   const resetOk = searchParams.get("reset") === "1";
   const registeredOk = searchParams.get("registered") === "1";
   const [email, setEmail] = useState("");
