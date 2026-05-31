@@ -371,7 +371,10 @@ IndexedDB row — W1 crash/refresh durability), `snp` (snapshot generation),
 `pvw` (preview-before-start), `pvs` (per-page whiteboard pan/zoom —
 Phase 5 task 8), `rid` (audio recorder), `avx`
 (live-A/V session — Phase 4a `peer-mesh.ts` + `signaling.ts`; per-peer
-events also carry a `peer=<remotePeerId>` subkey), and the
+events also carry a `peer=<remotePeerId>` subkey), `imp`
+(impersonation lifecycle — SEC-1; key lines:
+`[imp] imp=<logId> admin=<adminId> impersonating=<targetId> start`,
+`[imp] imp=<logId> exit admin=<adminId>`), and the
 component-specific ones in `useAudioRecorder` (`aud=`).
 
 ### Whiteboard per-page viewport (`pvs`, Phase 5 task 8)
