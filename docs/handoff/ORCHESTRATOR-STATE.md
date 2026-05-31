@@ -34,7 +34,9 @@ Update this file's head as each lands.
 
 ## In-flight subagents
 
-**None.** All three parallel-worktree subagents (W1 ship A, SEC-1 design, tsc fix) completed 2026-05-30 ~16:10 MT.
+**SEC-1 Dispatch A (Foundation)** — Sonnet (`82427ac2`), background, dispatched 2026-05-30 ~18:30 MT. Branch `feat/sec-1-foundation` off master. Additive schema (`isTestAccount`, nullable `passwordHash`, `ImpersonationLog`) + GoogleProvider + `assertIsRealAdmin()` + auth gates. **Andrew greenlit SEC-1** (goal: kill weak password "password" test logins).
+
+**SEC-1 sequencing guard (HARD — Andrew 2026-05-30):** no account loses its current login until its replacement is proven. Order: A ships → Andrew verifies Google login works → B ships working impersonation → **only then** flip `arangarx+test1@gmail.com` to `isTestAccount=true` (its destined first impersonation target) and null real-admin password. Migration is strictly additive (no user wipes); test1 flip + password-null are MANUAL seed steps gated behind B smoke, NOT auto-migrations.
 
 ## Uncommitted / unmerged state
 
