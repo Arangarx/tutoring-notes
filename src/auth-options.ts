@@ -1,6 +1,7 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
+import type { AdminRole } from "@prisma/client";
 import { env } from "@/lib/env";
 import { getAdminByEmail, hasAdminUsers, verifyPassword } from "@/lib/auth-db";
 
@@ -54,17 +55,21 @@ export const authOptions: NextAuthOptions = {
             email: admin.email,
             name: admin.displayName ?? "Admin",
             isTestAccount: admin.isTestAccount,
+            role: admin.role,
           };
         }
 
         if (env.ADMIN_EMAIL && env.ADMIN_PASSWORD) {
           if (email !== env.ADMIN_EMAIL || password !== env.ADMIN_PASSWORD)
             return null;
+          // Legacy env-only admin: map to ADMIN role so it keeps its existing
+          // tutor-experience access (sub=admin path in getAdminSessionMode).
           return {
             id: "admin",
             email: env.ADMIN_EMAIL,
             name: "Admin",
             isTestAccount: false,
+            role: "ADMIN" as AdminRole,
           };
         }
 
@@ -95,8 +100,10 @@ export const authOptions: NextAuthOptions = {
 
     async jwt({ token, user, account }) {
       if (user) {
-        // CredentialsProvider: authorize() sets isTestAccount on the returned user.
-        token.isTestAccount = (user as { isTestAccount?: boolean }).isTestAccount ?? false;
+        // CredentialsProvider: authorize() sets isTestAccount + role on the returned user.
+        const u = user as { isTestAccount?: boolean; role?: AdminRole };
+        token.isTestAccount = u.isTestAccount ?? false;
+        if (u.role !== undefined) token.role = u.role;
       }
       if (account?.provider === "google" && user?.email) {
         // Google sign-in: resolve the DB row to get the canonical id + flags.
@@ -104,10 +111,11 @@ export const authOptions: NextAuthOptions = {
         if (admin) {
           token.sub = admin.id;
           token.isTestAccount = admin.isTestAccount;
+          token.role = admin.role;
         }
       }
       // Impersonation fields (isImpersonating, originalAdminId, originalAdminEmail,
-      // impersonationLogId) are already in the token when set by
+      // impersonationLogId, role) are already in the token when set by
       // mintImpersonationSession() in src/lib/impersonation.ts; they persist
       // across token refreshes without any extra logic here.
       return token;
@@ -125,6 +133,7 @@ export const authOptions: NextAuthOptions = {
           (token.originalAdminEmail as string | null | undefined) ?? null;
         session.user.impersonationLogId =
           (token.impersonationLogId as string | null | undefined) ?? null;
+        session.user.role = (token.role as AdminRole | undefined);
       }
       return session;
     },

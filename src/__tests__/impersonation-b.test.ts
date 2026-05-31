@@ -48,6 +48,7 @@ function makeAdminRow(overrides: Record<string, unknown> = {}) {
     email: "admin@example.com",
     passwordHash: "$2a$10$fakehashhash",
     isTestAccount: false,
+    role: "ADMIN",
     displayName: "Admin",
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -61,6 +62,7 @@ function makeTestAccountRow(overrides: Record<string, unknown> = {}) {
     email: "throwaway-test@example.com",
     passwordHash: null,
     isTestAccount: true,
+    role: "TUTOR",
     displayName: null,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -132,7 +134,7 @@ describe("Blocker #10 — startImpersonation blocked for test-account session", 
       ImpersonationForbiddenError
     );
     await expect(startImpersonation("some-target-id")).rejects.toThrow(
-      "Test accounts cannot impersonate"
+      "TUTOR accounts cannot impersonate"
     );
   });
 
@@ -175,6 +177,55 @@ describe("Blocker #10 — startImpersonation blocked for test-account session", 
 
     await expect(startImpersonation("another-target")).rejects.toThrow(
       ImpersonationForbiddenError
+    );
+  });
+
+  it("throws ImpersonationForbiddenError when caller has role=TUTOR (real tutor login)", async () => {
+    // A TUTOR with isTestAccount=false (e.g. Sarah) cannot impersonate anyone.
+    jest.doMock("@/lib/student-scope", () => ({
+      requireStudentScope: jest.fn().mockResolvedValue({
+        kind: "admin",
+        adminId: "sarah-tutor-id",
+        email: "sarah@example.com",
+      }),
+    }));
+
+    jest.doMock("@/lib/db", () => ({
+      db: {
+        adminUser: {
+          findUnique: jest.fn().mockResolvedValue(
+            makeAdminRow({
+              id: "sarah-tutor-id",
+              email: "sarah@example.com",
+              isTestAccount: false,
+              role: "TUTOR",  // Real tutor login — TUTOR role, NOT a test account
+            })
+          ),
+          findFirst: jest.fn().mockResolvedValue(null),
+        },
+        impersonationLog: {
+          create: jest.fn(),
+          findFirst: jest.fn().mockResolvedValue(null),
+        },
+      },
+    }));
+
+    jest.doMock("@/lib/env", () => ({
+      env: { NEXTAUTH_SECRET: "test-secret-32-chars-minimum-pad" },
+    }));
+
+    const { startImpersonation } = await import(
+      "@/app/admin/actions/impersonate"
+    );
+    const { ImpersonationForbiddenError } = await import(
+      "@/lib/impersonation"
+    );
+
+    await expect(startImpersonation("some-target-id")).rejects.toThrow(
+      ImpersonationForbiddenError
+    );
+    await expect(startImpersonation("some-target-id")).rejects.toThrow(
+      "TUTOR accounts cannot impersonate"
     );
   });
 
@@ -376,6 +427,10 @@ describe("Blocker #9 — exitImpersonation closes log and restores admin", () =>
 
     jest.doMock("@/lib/db", () => ({
       db: {
+        adminUser: {
+          // Called in exitImpersonation to re-fetch the admin's current role.
+          findUnique: jest.fn().mockResolvedValue({ role: "ADMIN" }),
+        },
         impersonationLog: {
           update: mockUpdate,
         },
@@ -417,6 +472,7 @@ describe("Blocker #9 — exitImpersonation closes log and restores admin", () =>
     expect(mockMintAdminSession).toHaveBeenCalledWith({
       adminId: "admin-real-123",
       adminEmail: "admin@example.com",
+      adminRole: "ADMIN",
     });
   });
 

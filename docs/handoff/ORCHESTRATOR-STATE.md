@@ -8,13 +8,16 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 ## Last action completed
 
-**2026-05-30 — SEC-1 Dispatch C SMOKED + MERGED** (`--no-ff` merge `8bb7449`): real-admin `/admin` dashboard landing + routing (tutor paths impersonation-only; exit → dashboard) + `AdminTestAccountsPanel` replacing interim `TestAccountsSection` + login default callback `/admin` + 39 SEC-1 tests green. Andrew real-hardware smoke **PASS** (dashboard landing, guard redirects, impersonate round-trip, exit-to-dashboard, test-account credential rejection). **SEC-1 (A+B+C) is DONE.** Open nit: banner not amber (cosmetic). **Account cleanup done on BOTH branches 2026-05-30:** `+test1` flipped to `isTestAccount=true` (sole impersonation target; password login disabled by gate; **prod 126 wb-sessions / 116 recordings preserved**); `+test2/3/4` deleted on both; dev-only `+sec1smoke` throwaway deleted. Kept everywhere: `arangarx@gmail.com` (real admin) + all non-arangarx (`malmesae@gmail.com`, dev `playwright@test.local`). Andrew confirmed he's the only direct login; Sarah uses her own email + hasn't logged in under new schema (testing was Sarah-as-student, no login yet). **🔴 Latent gap logged (BACKLOG):** routing has no tutor-vs-admin ROLE — every `isTestAccount=false` admin → dashboard + blocked from tutor paths; a 2nd real prod login (Sarah) would be cut off from her students. Needs `role` enum before multi-tutor / Sarah-login. Safe now (single admin).
+**2026-05-30 — SEC-1 Role follow-up IMPLEMENTED** (`feat/sec-1-admin-tutor-role`, pushed, awaiting Andrew smoke + merge): `AdminRole` enum (`ADMIN|TUTOR`) added to `AdminUser`; migration backfills `arangarx@gmail.com → ADMIN`, all others → `TUTOR`; routing now role-based (`TUTOR` logins → `/admin/students`, ADMIN → `/admin`); `assertIsAdmin()` blocks TUTOR from impersonating (covers real TUTOR logins like Sarah AND test accounts); JWT/session carries `role`; 50 tests green; `tsc --noEmit` clean; eslint clean. BACKLOG item flipped ✅.
+
+**2026-05-30 — SEC-1 Dispatch C SMOKED + MERGED** (`--no-ff` merge `8bb7449`): real-admin `/admin` dashboard landing + routing (tutor paths impersonation-only; exit → dashboard) + `AdminTestAccountsPanel` replacing interim `TestAccountsSection` + login default callback `/admin` + 39 SEC-1 tests green. Andrew real-hardware smoke **PASS** (dashboard landing, guard redirects, impersonate round-trip, exit-to-dashboard, test-account credential rejection). **SEC-1 (A+B+C) is DONE.** Open nit: banner not amber (cosmetic). **Account cleanup done on BOTH branches 2026-05-30:** `+test1` flipped to `isTestAccount=true` (sole impersonation target; password login disabled by gate; **prod 126 wb-sessions / 116 recordings preserved**); `+test2/3/4` deleted on both; dev-only `+sec1smoke` throwaway deleted. Kept everywhere: `arangarx@gmail.com` (real admin) + all non-arangarx (`malmesae@gmail.com`, dev `playwright@test.local`).
 
 **Also 2026-05-30:** Andrew ratified three SEC-1 / platform decisions (Q1 reversal, admin-dashboard landing, cross-preview SSO gated on usemynk) — captured in [`docs/handoff/sec-1-impersonation-design-2026-05-30.md`](sec-1-impersonation-design-2026-05-30.md) § Ratifications and [`docs/handoff/usemynk-domain-cutover-bootstrapper.md`](usemynk-domain-cutover-bootstrapper.md) § Cross-preview SSO.
 
 ## Next action(s)
 
-1. **Pick next wave** — SEC-1 done, W1 settled. Candidates: usemynk.com cutover (unblocks cross-preview SSO), Wave 2.5 session-log greenfield, W3 mobile/URL, whiteboard regression-net standing-gate finish. Andrew wants "new and shiny."
+1. **Smoke + merge `feat/sec-1-admin-tutor-role`** — Andrew smokes per SEC-1-STATUS.md role follow-up checklist (ADMIN dashboard still works; TUTOR simulated via `UPDATE role='TUTOR'` on preview-dev; impersonation round-trip). Merge `--no-ff` → master; then `prisma migrate deploy` applies on Vercel preview-dev + production.
+2. **Pick next wave** — after role follow-up merged. Candidates: usemynk.com cutover (unblocks cross-preview SSO), Wave 2.5 session-log greenfield, W3 mobile/URL. Andrew wants "new and shiny."
 3. ~~Upload re-baseline smoke~~ — 🟢 **CLOSED 2026-05-30 (Andrew):** treat upload as WORKING (58 MB cleared fast on paid Preview). **W1 Ship B not being built** — revive only if a real upload failure resurfaces.
 
 Update this file's head as each lands.
@@ -37,7 +40,7 @@ Update this file's head as each lands.
 
 ## In-flight subagents
 
-**None** — SEC-1 fully merged.
+**None actively running.** `feat/sec-1-admin-tutor-role` awaits Andrew smoke + merge.
 
 **Recently completed:**
 - **SEC-1 Dispatch C (admin dashboard + routing)** — ✅ MERGED `8bb7449` (2026-05-30). Andrew smoke PASS.
@@ -51,26 +54,27 @@ Update this file's head as each lands.
 
 ## Uncommitted / unmerged state
 
-**Working tree:** clean on `master`.
+**Working tree:** `feat/sec-1-admin-tutor-role` — pushed, awaiting smoke + merge.
 
-**Unmerged branches awaiting gates:** none.
+**Unmerged branches awaiting gates:** `feat/sec-1-admin-tutor-role` (SEC-1 role follow-up).
 
-**`master` HEAD:** `8bb7449 Merge SEC-1 Dispatch C: real-admin dashboard landing + routing`.
+**`master` HEAD:** `30ac6b1 docs: prod account cleanup done + log tutor-vs-admin role gap`.
 
 Recent `master` (newest first):
 
 ```
-8bb7449 Merge SEC-1 Dispatch C: real-admin dashboard landing + routing  ← HEAD
+30ac6b1 docs: prod account cleanup done + log tutor-vs-admin role gap  ← HEAD
+b4c026c docs(state): preview-dev account cleanup
+291d6e0 docs(state): SEC-1 complete (A+B+C, 8bb7449); banner-color nit + test1-flip captured
+8bb7449 Merge SEC-1 Dispatch C: real-admin dashboard landing + routing
 a806939 docs(state): close upload re-baseline; W1 Ship B not built unless failure resurfaces
-6e29d57 Merge SEC-1 Dispatch B: impersonation runtime + banner
-c82e017 docs(sec-1): ratify Q1 reversal (keep admin password) + admin-dashboard landing + cross-preview SSO spec
-27fb0d3 Merge SEC-1 Dispatch A: auth foundation (schema + GoogleProvider + impersonation primitives)
 ```
 
 **Merged branches (preserved for stale-sweep):**
 
 | Branch | Merge commit | Notes |
 |--------|--------------|-------|
+| `feat/sec-1-admin-tutor-role` | pending | SEC-1 role follow-up (awaiting smoke) |
 | `feat/sec-1-admin-dashboard` | `8bb7449` | SEC-1 Dispatch C admin dashboard + routing |
 | `feat/sec-1-impersonation-runtime` | `6e29d57` | SEC-1 Dispatch B impersonation runtime + banner |
 | `feat/sec-1-foundation` | `27fb0d3` | SEC-1 Dispatch A auth foundation |

@@ -40,7 +40,7 @@ export async function startImpersonation(targetUserId: string): Promise<void> {
 
   const target = await db.adminUser.findUnique({
     where: { id: targetUserId },
-    select: { id: true, email: true, isTestAccount: true },
+    select: { id: true, email: true, isTestAccount: true, role: true },
   });
   if (!target?.isTestAccount) {
     throw new Error("Can only impersonate test accounts.");
@@ -56,11 +56,12 @@ export async function startImpersonation(targetUserId: string): Promise<void> {
   });
   if (existingLog) {
     console.log(
-      `[imp] imp=${existingLog.id} admin=${admin.adminId} impersonating=${target.id} start-idempotent`
+      `[imp] imp=${existingLog.id} admin=${admin.adminId} impersonating=${target.id} role=${target.role} start-idempotent`
     );
     await mintImpersonationSession({
       targetId: target.id,
       targetEmail: target.email,
+      targetRole: target.role,
       originalAdminId: admin.adminId,
       originalAdminEmail: admin.email,
       impersonationLogId: existingLog.id,
@@ -78,12 +79,13 @@ export async function startImpersonation(targetUserId: string): Promise<void> {
   });
 
   console.log(
-    `[imp] imp=${logRow.id} admin=${admin.adminId} impersonating=${target.id} start`
+    `[imp] imp=${logRow.id} admin=${admin.adminId} impersonating=${target.id} role=${target.role} start`
   );
 
   await mintImpersonationSession({
     targetId: target.id,
     targetEmail: target.email,
+    targetRole: target.role,
     originalAdminId: admin.adminId,
     originalAdminEmail: admin.email,
     impersonationLogId: logRow.id,
@@ -139,9 +141,18 @@ export async function exitImpersonation(): Promise<void> {
     redirect("/login");
   }
 
+  // Re-fetch the original admin's current role from the DB so the restored
+  // session always carries the up-to-date role, even if it was changed while
+  // the impersonation was active.
+  const originalAdmin = await db.adminUser.findUnique({
+    where: { id: originalAdminId },
+    select: { role: true },
+  });
+
   await mintAdminSession({
     adminId: originalAdminId,
     adminEmail: originalAdminEmail,
+    adminRole: originalAdmin?.role ?? "ADMIN",
   });
 
   redirect("/admin");
