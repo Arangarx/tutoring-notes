@@ -4,11 +4,13 @@
 
 ## Current focus
 
-We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug is **resolved**, Phase 1 sync redesign and the standing real-browser regression net are **merged and smoked**. **SEC-1 admin impersonation is COMPLETE + EXTENDED** — A (`27fb0d3`) + B (`6e29d57`) + C (`8bb7449`) + role-split follow-up (`7dadd7a`) all merged + smoked GREEN. **usemynk.com brand-domain cutover MERGED** (`291288c`) -- production on apex; Sarah still on `tutoring-notes.vercel.app` until Safe Browsing + OAuth watch-items clear. **W1 audio durability:** Ship A merged; Ships B/C shelved (upload treated as working). **Next: pick wave** (end-session "0 segments" is top reliability candidate).
+We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug is **resolved**, Phase 1 sync redesign and the standing real-browser regression net are **merged and smoked**. **SEC-1 admin impersonation is COMPLETE + EXTENDED** — A (`27fb0d3`) + B (`6e29d57`) + C (`8bb7449`) + role-split follow-up (`7dadd7a`) all merged + smoked GREEN. **usemynk.com brand-domain cutover MERGED** (`291288c`) -- production on apex; Sarah still on `tutoring-notes.vercel.app` until Search Console "Deceptive pages" review + OAuth watch-items clear. **W1 audio durability:** Ship A merged; Ships B/C shelved (upload treated as working). **End-session "0 segments":** RESOLVED as cosmetic (audio confirmed in prod); copy fix in flight on `fix/end-session-segment-copy`.
 
 ## Last action completed
 
-**2026-05-30 — usemynk.com brand-domain cutover MERGED to `master`** (merge commit `291288c`). DNS + Vercel custom domains + Production-only `NEXTAUTH_URL` flip + repo artifacts all landed. **4/4 integration smoke pass** on usemynk.com (Gmail connect proven in incognito; whiteboard / upload / share via impersonating test1). **Final smoke (~10pm) watch-items captured in [`docs/BACKLOG.md`](../BACKLOG.md):** (a) Chrome Safe Browsing false-positive on `/api/auth/gmail/connect` in Andrew's main profile only — report submitted, re-test normal profile in 24-48h before Sarah comms; (b) OAuth brand re-verification submitted 2026-05-30, awaiting approval; (c) end-session "saving 0 segments" recurrence — candidate for next reliability task. **HOLD:** do not send Sarah to usemynk.com until Safe Browsing wall confirmed gone (she stays on `tutoring-notes.vercel.app`, zero disruption).
+**2026-05-31 — usemynk Safe Browsing / end-session triage (docs on `master`).** Search Console now shows domain-level **"Deceptive pages"** (Sample URLs: N/A); **Request Review** filed 2026-05-31 (supersedes 2026-05-30 `report_error`). Re-test at 48h; no repeated reviews. End-session **"0 segments"** downgraded to **cosmetic** -- prod `SessionRecording` `8a34b5f5-3aa8-48d5-bb1f-0248fa4762a8` (~1.5MB, same smoke session). Copy fix branch `fix/end-session-segment-copy` in flight.
+
+**2026-05-30 — usemynk.com brand-domain cutover MERGED to `master`** (merge commit `291288c`). DNS + Vercel custom domains + Production-only `NEXTAUTH_URL` flip + repo artifacts all landed. **4/4 integration smoke pass** on usemynk.com (Gmail connect proven in incognito; whiteboard / upload / share via impersonating test1). **HOLD:** do not send Sarah to usemynk.com until deceptive-pages review clears + OAuth re-verify (she stays on `tutoring-notes.vercel.app`, zero disruption).
 
 **2026-05-30 — SEC-1 Role follow-up SMOKED + MERGED** (`--no-ff` merge `7dadd7a`): `AdminRole` enum (`ADMIN|TUTOR`, default TUTOR) added to `AdminUser`, orthogonal to `isTestAccount`; migration backfills `arangarx@gmail.com → ADMIN` idempotently on deploy (preview-dev + production via `migrate deploy`); routing now role-based (`TUTOR` logins → `/admin/students`, ADMIN → `/admin` dashboard, tutor paths blocked); `assertIsAdmin()` blocks TUTOR from impersonating (covers real TUTOR logins like Sarah AND test accounts); JWT/session carries `role`; 50 tests green. Andrew smoke **PASS** (test1 direct login blocked, reachable via impersonation). This is the long-asked-for genuine admin-vs-tutor account-type separation; protects a future Sarah login from being stranded on the admin dashboard.
 
@@ -18,7 +20,7 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 ## Next action(s)
 
-1. **Pick next wave** — SEC-1 + usemynk cutover done. **Gate Sarah on usemynk:** Safe Browsing re-test (main Chrome profile, Connect Gmail) clear first. Strong reliability candidate: end-session "0 segments" investigation (BACKLOG 3c). Other candidates: Wave 2.5 session-log greenfield, W3 mobile/URL, cross-preview SSO (post-wildcard previews on `.usemynk.com`). Andrew wants "new and shiny."
+1. **Pick next wave** — SEC-1 + usemynk cutover done. **Gate Sarah on usemynk:** Search Console "Deceptive pages" review clock (filed 2026-05-31) -- re-test Connect Gmail at **48h**; do not repeat review submissions. **In flight:** `fix/end-session-segment-copy` (end-session phase copy; BACKLOG 3c cosmetic). Other candidates: Wave 2.5 session-log greenfield, W3 mobile/URL, cross-preview SSO (post-wildcard previews on `.usemynk.com`). Andrew wants "new and shiny."
 2. **Verify role migration on production deploy** — confirm `migrate deploy` applied the `role` column + `arangarx@gmail.com → ADMIN` backfill on the production Neon branch after the `7dadd7a` deploy (preview-dev too). Quick Neon `SELECT email, role` check.
 3. ~~Upload re-baseline smoke~~ — 🟢 **CLOSED 2026-05-30 (Andrew):** treat upload as WORKING (58 MB cleared fast on paid Preview). **W1 Ship B not being built** — revive only if a real upload failure resurfaces.
 
@@ -42,7 +44,9 @@ Update this file's head as each lands.
 
 ## In-flight subagents
 
-**None.** All SEC-1 work merged.
+**Branch in flight (not merged):** `fix/end-session-segment-copy` -- end-session End-button phase copy (no bare "0 segments"; cosmetic BACKLOG 3c).
+
+**None** (subagent dispatches). All SEC-1 work merged.
 
 **Recently completed:**
 - **SEC-1 role split (ADMIN vs TUTOR)** — ✅ MERGED `7dadd7a` (2026-05-30, Sonnet). Andrew smoke PASS.
