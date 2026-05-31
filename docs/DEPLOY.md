@@ -19,7 +19,7 @@ Use this with **[GTM-READINESS.md](./GTM-READINESS.md)** (what "ready" means for
 | `DATABASE_URL` | Neon **pooled** connection string (use for queries in serverless) |
 | `DIRECT_URL` | Neon **direct** (unpooled) connection string (required for migrations) |
 | `NEXTAUTH_SECRET` | Long random string; unique per environment |
-| `NEXTAUTH_URL` | Public origin, e.g. `https://notes.example.com` — required for reset links + OAuth |
+| `NEXTAUTH_URL` | Public origin, e.g. `https://notes.example.com` — required for reset links + OAuth. **Production canonical (2026-05-30):** `https://usemynk.com`. |
 | `SETUP_SECRET` | **Production:** long random string (≥16 chars). Required to use `/setup` — open `/setup?token=…` with the **same** value so the first admin cannot be claimed by a random visitor. Optional locally (omit for an open `/setup` on dev). |
 | `OPERATOR_EMAILS` | **Recommended in production:** comma-separated emails that may view the **global** feedback inbox and waitlist. `ADMIN_EMAIL` is always included. If no operator emails resolve, those pages are unreachable until you configure this (tutors still use `/feedback` to submit). |
 

@@ -47,6 +47,7 @@ for the shared "Mortensen Apps" OAuth client. Confirmed values:
 | Application terms of service link | **`https://www.mortensenapps.com/terms`** |
 | Authorized domain 1 | `tutoring-notes.vercel.app` |
 | Authorized domain 2 | `mortensenapps.com` |
+| Authorized domain 3 | `usemynk.com` (added 2026-05-30; production canonical app host) |
 | Developer contact | `arangarx@gmail.com` |
 
 **What this means operationally:**
@@ -75,6 +76,31 @@ re-verification check is **the consent screen settings + the live
 The tutoring-notes pages should still be synced (so users + search
 engines see consistent text), but that sync is in-product hygiene, not
 a Google compliance gate.
+
+## Decision (2026-05-30) -- Path A: keep umbrella OAuth
+
+**Andrew's decision after a legal/OAuth analysis (usemynk.com brand-domain
+cutover, 2026-05-30):** keep the shared **"Mortensen Apps"** Google OAuth
+consent screen for ALL products for now (**Path A -- umbrella OAuth**).
+
+- The consent screen's registered **homepage / privacy / terms URLs stay
+  `https://www.mortensenapps.com/*`** (already brand-verified). These are
+  NOT changing.
+- **`usemynk.com` is added ONLY as an Authorized domain + redirect URIs**
+  (see operational-snapshot table above -- Authorized domain 3). It is
+  **NOT** registered as a legal-surface (homepage/privacy/terms) URL.
+- The product `usemynk.com/privacy` + `/terms` pages remain **subordinate
+  facades**, unchanged, and are **NOT** inspected by Google verification.
+- **Rationale:** avoid per-app legal-surface verification overhead. Revisit
+  a usemynk-branded consent screen (**Path B -- dedicated per-product OAuth
+  brand**) only if/when a dedicated per-product OAuth brand is justified
+  (Andrew: "maybe hire someone to set that up later").
+
+**To-do (re-verification round):** adding `usemynk.com` as an authorized
+domain requires re-submitting branding for Google verification. Verify
+`usemynk.com` ownership in Google Search Console under `arangarx@gmail.com`
+first, then re-submit. The consent screen will continue to display
+"Mortensen Apps".
 
 ## Source of truth
 

@@ -19,7 +19,7 @@
 | Auth | NextAuth | v4.24.x | Credentials + Google OAuth. Session JWT. |
 | AI | OpenAI API | Tier 1 paid (presumed) | Whisper for transcribe; gpt-4o-mini for notes/AI assist. |
 | Email | SMTP (optional) | depends on operator config | Falls back to no-op when unset. |
-| Domain | (operator-managed) | n/a | NEXTAUTH_URL must match. |
+| Domain | Vercel custom + legacy alias | n/a | Production canonical **`https://usemynk.com`** (cutover 2026-05-30); legacy **`tutoring-notes.vercel.app`**. `NEXTAUTH_URL` must match the browser origin. |
 
 **Total fixed/mo as of this audit**: ~$39 (Neon $19 + Vercel $20). OpenAI variable, tracked via `CostEvent`.
 
@@ -190,6 +190,7 @@
 - **Where baked in**: `src/lib/env.ts` (optional env vars); `GMAIL_CONNECT_ALLOWLIST` for per-admin gating.
 - **What breaks if violated**: Gmail send fails; degrades gracefully (no email sent, no crash).
 - **Migration check**: changing `NEXTAUTH_URL` (e.g. moving to a new domain) requires re-adding the callback URL in Google Cloud Console.
+- **Production cutover (2026-05-30)**: canonical app host is `https://usemynk.com`; Production `NEXTAUTH_URL` matches. Preview/Dev remain on `*.vercel.app` unless explicitly re-pointed.
 
 ### 4.4 SMTP (real email)
 
@@ -247,6 +248,7 @@
 - **Assumption**: `NEXTAUTH_URL` matches the deployed origin. Session cookies are scoped to that origin.
 - **What breaks if violated**: login redirects loop; sessions don't persist; Google OAuth callback fails.
 - **Migration check**: changing primary domain requires updating `NEXTAUTH_URL` AND Google OAuth redirect URIs simultaneously.
+- **Production cutover (2026-05-30)**: Production `NEXTAUTH_URL` is `https://usemynk.com` (apex; `www` 308-redirects). Preview/Dev `NEXTAUTH_URL` unchanged on `*.vercel.app`.
 
 ### 5.6 Server-action ownership assertions
 

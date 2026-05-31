@@ -10,12 +10,13 @@
 Contact: mailto:arangarx+security@gmail.com
 Expires: 2027-05-18T00:00:00.000Z
 Preferred-Languages: en
-Canonical: https://tutoring-notes.vercel.app/.well-known/security.txt
+Canonical: https://usemynk.com/.well-known/security.txt
 
 # About scope
 #
 # This file applies to the Tutoring Notes web application at
-# https://tutoring-notes.vercel.app and to the umbrella site at
+# https://usemynk.com (primary production host; legacy alias
+# https://tutoring-notes.vercel.app) and to the umbrella site at
 # https://www.mortensenapps.com. Reports against other Mortensen Apps
 # products may also be sent here; we will route internally.
 #
@@ -23,4 +24,4 @@ Canonical: https://tutoring-notes.vercel.app/.well-known/security.txt
 # Neon, Vercel Blob, OpenAI, PostHog) — please report those directly to
 # the vendor.
 
-# Last reviewed: 2026-05-18
+# Last reviewed: 2026-05-30
