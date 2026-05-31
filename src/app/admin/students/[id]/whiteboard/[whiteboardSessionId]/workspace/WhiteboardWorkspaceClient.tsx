@@ -2383,17 +2383,19 @@ export function WhiteboardWorkspaceClient({
     "idle" | "finalizing" | "ending" | "error"
   >("idle");
   const [finalizingSegmentCount, setFinalizingSegmentCount] = useState(0);
+  const [finalizingOutboxState, setFinalizingOutboxState] = useState<
+    "idle" | "uploading" | "registering" | "failed"
+  >("idle");
   const [endingError, setEndingError] = useState<string | null>(null);
   const audioBridgeRef = useRef<WhiteboardWorkspaceAudioBridgeHandle | null>(
     null
   );
 
   /**
-   * Live the outbox's in-flight count into `finalizingSegmentCount`
-   * while the End-session flow is waiting on uploads. The button copy
-   * reads "Saving last N segment(s)…" — without this subscription,
-   * `drainOutboxOrTimeout` would await silently and the tutor would
-   * see "Saving last 0 segments" for the entire wait.
+   * Live outbox observer state while End-session is in the upload/drain
+   * phase. Copy uses `inFlightStreamCount` only when `state ===
+   * "uploading"` (meaningful N); otherwise "Finalizing…" so we never
+   * show a bare "0 segments" after uploads finish-before-enqueue.
    *
    * Scoped to `endingState === "finalizing"` so we don't pay the IDB
    * round-trip during normal recording.
@@ -2403,9 +2405,12 @@ export function WhiteboardWorkspaceClient({
     if (typeof window === "undefined" || !globalThis.indexedDB) return;
     const outbox = getOrCreateUploadOutbox();
     const obs = outbox.observe(whiteboardSessionId);
-    setFinalizingSegmentCount(obs.getState().inFlightStreamCount);
+    const initial = obs.getState();
+    setFinalizingSegmentCount(initial.inFlightStreamCount);
+    setFinalizingOutboxState(initial.state);
     return obs.subscribe((next) => {
       setFinalizingSegmentCount(next.inFlightStreamCount);
+      setFinalizingOutboxState(next.state);
     });
   }, [endingState, whiteboardSessionId]);
 
@@ -2413,6 +2418,7 @@ export function WhiteboardWorkspaceClient({
     setEndingState("finalizing");
     setEndingError(null);
     setFinalizingSegmentCount(0);
+    setFinalizingOutboxState("idle");
     try {
       // Step 1 — stop the recorder. Two things have to happen here
       // synchronously, BEFORE we start awaiting anything:
@@ -3160,9 +3166,12 @@ export function WhiteboardWorkspaceClient({
             data-testid="wb-end-session"
           >
             {endingState === "finalizing"
-              ? `Saving last ${finalizingSegmentCount} segment${finalizingSegmentCount === 1 ? "" : "s"}…`
+              ? finalizingOutboxState === "uploading" &&
+                finalizingSegmentCount > 0
+                ? `Saving ${finalizingSegmentCount} segment${finalizingSegmentCount === 1 ? "" : "s"}…`
+                : "Finalizing…"
               : endingState === "ending"
-                ? "Ending…"
+                ? "Finalizing…"
                 : "End session"}
           </button>
         </div>

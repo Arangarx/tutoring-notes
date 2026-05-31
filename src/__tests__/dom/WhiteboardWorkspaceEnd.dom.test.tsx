@@ -417,7 +417,64 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     });
   });
 
-  test("'Saving last N segments' copy reflects live outbox count during drain", async () => {
+  test("never shows bare '0 segments' copy during end-session finalizing", async () => {
+    let resolveDrain!: (r: DrainResult) => void;
+    mockDrainOutboxOrTimeout.mockImplementation(
+      () =>
+        new Promise<DrainResult>((r) => {
+          resolveDrain = r;
+        })
+    );
+
+    render(
+      <WhiteboardWorkspaceClient
+        whiteboardSessionId="ws-end-zero-copy"
+        studentId="stu-1"
+        studentName="Test Student"
+        adminUserId="admin-1"
+        startedAtIso="2026-05-09T10:00:00.000Z"
+        bothConnectedAtIso={null}
+        initialActiveMs={0}
+        initialLastActiveAtIso={null}
+        syncUrl={null}
+        initialUserWantsRecording
+      />
+    );
+
+    await screen.findByTestId("wb-mock-excalidraw-canvas");
+
+    act(() => {
+      setObserverState({
+        state: "registering",
+        inFlightStreamCount: 0,
+        byStream: new Map(),
+        lastError: null,
+      });
+    });
+
+    await userEvent.click(screen.getByTestId("wb-end-session"));
+
+    expect(
+      await screen.findByRole("button", { name: /Finalizing/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /0 segment/i })
+    ).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveDrain({
+        timedOut: false,
+        remainingCount: 0,
+        remainingByStream: new Map<string, number>(),
+        lastError: null,
+      });
+    });
+    await waitFor(() => {
+      expect(mockEnd).toHaveBeenCalled();
+    });
+  });
+
+  test("'Saving N segments' copy reflects live outbox count during drain", async () => {
     // Deferred drain so we can inspect the intermediate UI.
     let resolveDrain!: (r: DrainResult) => void;
     mockDrainOutboxOrTimeout.mockImplementation(
@@ -459,7 +516,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     await userEvent.click(screen.getByTestId("wb-end-session"));
 
     expect(
-      await screen.findByRole("button", { name: /Saving last 2 segments/i })
+      await screen.findByRole("button", { name: /Saving 2 segments/i })
     ).toBeInTheDocument();
 
     // Push count down to 1; copy should update live.
@@ -472,7 +529,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
       });
     });
     expect(
-      await screen.findByRole("button", { name: /Saving last 1 segment/i })
+      await screen.findByRole("button", { name: /Saving 1 segment/i })
     ).toBeInTheDocument();
 
     // Resolve drain so the rest of the flow runs.
