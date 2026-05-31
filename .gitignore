@@ -34,3 +34,6 @@ test-audio*.m4a
 test-audio*.mp3
 test-session*.m4a
 test-session*.mp3
+
+# SEC-1 seed SQL — contains real admin emails; run manually, never commit.
+scripts/seed-admin-google.sql

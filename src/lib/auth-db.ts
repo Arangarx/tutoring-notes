@@ -12,8 +12,20 @@ export async function getAdminByEmail(email: string) {
   return db.adminUser.findUnique({ where: { email: email.trim().toLowerCase() } });
 }
 
-export async function verifyPassword(plain: string, hash: string): Promise<boolean> {
+export async function verifyPassword(plain: string, hash: string | null): Promise<boolean> {
+  if (!hash) return false;
   return bcrypt.compare(plain, hash);
+}
+
+export async function createTestAccount(email: string, displayName?: string | null) {
+  return db.adminUser.create({
+    data: {
+      email: email.trim().toLowerCase(),
+      passwordHash: null,
+      isTestAccount: true,
+      displayName: displayName?.trim() || null,
+    },
+  });
 }
 
 export async function createAdmin(

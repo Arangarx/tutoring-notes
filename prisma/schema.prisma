@@ -356,8 +356,15 @@ model FeedbackItem {
 model AdminUser {
   id            String   @id @default(uuid())
   email         String   @unique
-  passwordHash  String
+  /// Null for Google-OAuth-only admins and test accounts. Never null for
+  /// password-login admins. Making this nullable (SEC-1 Dispatch A) is
+  /// additive — existing rows keep their hashes.
+  passwordHash  String?
   displayName   String?
+  /// When true: credentials login is blocked; this account is an
+  /// impersonation target only. Default false = all existing rows are
+  /// real admins until explicitly updated (see scripts/seed-admin-google.sql).
+  isTestAccount Boolean  @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   students      Student[]
@@ -367,6 +374,26 @@ model AdminUser {
   recordings    SessionRecording[] @relation("AdminRecordings")
   whiteboardSessions WhiteboardSession[] @relation("AdminWhiteboards")
   costEvents    CostEvent[]
+  initiatedImpersonations ImpersonationLog[] @relation("AdminImpersonations")
+  wasImpersonatedIn       ImpersonationLog[] @relation("ImpersonatedBy")
+}
+
+/// Audit log for every admin impersonation session. endedAt = null means
+/// the session is still active or expired without an explicit exit.
+/// Log prefix: imp= (see AGENTS.md § Conventions).
+model ImpersonationLog {
+  id                  String    @id @default(uuid())
+  adminUserId         String
+  adminUser           AdminUser @relation("AdminImpersonations", fields: [adminUserId], references: [id], onDelete: Cascade)
+  impersonatedUserId  String
+  impersonatedUser    AdminUser @relation("ImpersonatedBy", fields: [impersonatedUserId], references: [id], onDelete: Cascade)
+  startedAt           DateTime  @default(now())
+  endedAt             DateTime?
+  /// process.env.VERCEL_URL at action time; null in local dev.
+  vercelDeploymentUrl String?
+
+  @@index([adminUserId, startedAt])
+  @@index([impersonatedUserId])
 }
 
 // One-time password reset links (hashed token, email delivery).
