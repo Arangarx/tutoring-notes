@@ -463,6 +463,7 @@ Surfaced during a long planning conversation about naming, pricing, and competit
 - **Facebook Page** — **low-priority defensive grab** (Tier 2 sweep; not blocking pilot).
 - **Reddit methodology** — open question: whether to claim additional subreddit names beyond `/r/mynk` for defensive posture (orchestrator to decide before public launch).
 - **mynk.com** — **skipped** (~$150k aftermarket; `usemynk.com` is primary).
+- **usemynk.com brand-domain cutover** — Point primary DNS + Vercel custom domain at current production (`tutoring-notes.vercel.app` today); flip Production `NEXTAUTH_URL`; pre-register Google OAuth authorized domain + redirect URIs **now** (~15 min, no DNS) so cutover day is not blocked. Independent of SEC-1. Runbook: [`docs/handoff/usemynk-domain-cutover-bootstrapper.md`](handoff/usemynk-domain-cutover-bootstrapper.md).
 - **Tier 2 defensive domains** — backlog for post–Tier-1 sweep (e.g. additional TLDs / typos — list in brand capture checklist when Andrew resumes).
 
 ### Legal / trust
