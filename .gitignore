@@ -27,3 +27,10 @@ public/pdfjs/
 
 # Local tee logs from the whiteboard regression-net gate (npm run test:wb-sync).
 wb-sync*.log
+
+# Generated long-form test audio (scripts/make-test-audio.cjs, make-test-session.cjs).
+# Large binaries used for upload/transcribe smokes — never commit.
+test-audio*.m4a
+test-audio*.mp3
+test-session*.m4a
+test-session*.mp3

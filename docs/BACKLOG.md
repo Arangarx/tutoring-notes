@@ -637,6 +637,18 @@ items should be on the active path before the next pilot tutor is added.
 3. **[FOLLOW-UP] No cross-device recovery.** Even with IndexedDB persistence,
    a tutor who switches from desktop to phone mid-session loses the local copy.
    Acceptable for v1; track if anyone reports it.
+3b. **[SEEN — NOT REPRODUCED 2026-05-30] "No audio recorded" on End after student-drop auto-pause.**
+   Andrew on `fix/replay-audio-fetch-on-scrub-drop` (master-based, no W1-A): recorded with
+   student → student dropped (recording auto-paused, confirmed seen) → ended a bit later →
+   review said "no audio recorded" despite believing audio was captured. **Re-ran with console
+   open (`rid=`/`obx=` filter): could NOT reproduce** — recording timer climbed to 1:14,
+   capture logs fired, auto-pause on drop, clean stop/save worked. Code trace (paused→End →
+   `stopAndUpload("final")` → `recorder.stop()`) shows no path that discards paused chunks;
+   end-session explicitly flushes a paused recorder. Most-likely original cause: capture never
+   reached `recordingActive` that first time (audio-flow gate / both muted at start) so "no audio"
+   was technically correct, OR a one-off upload/outbox failure. **Watch-item, not an active chase.**
+   If it recurs: capture `rid=` blob size on stop + `obx=` enqueue/upload/drain at End. W1 ship A
+   (draft store) + ship B (upload persistence) are the structural safety nets if it's real.
 
 ### Axis 2 — Clock + ordering correctness
 
