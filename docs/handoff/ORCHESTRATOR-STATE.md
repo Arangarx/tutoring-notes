@@ -34,9 +34,11 @@ Update this file's head as each lands.
 
 ## In-flight subagents
 
-**None.** Both 2026-05-30 evening dispatches complete:
-- **SEC-1 Dispatch A (Foundation) — ✅ DONE** (Sonnet `82427ac2`). Branch `feat/sec-1-foundation` @ `b8d4863` pushed; 20 tests green, all 7 blocker gates pass; migration confirmed non-destructive. **Andrew greenlit SEC-1** (goal: kill weak password "password" test logins). Awaiting Andrew prep (Google redirect URI) + smoke + `--no-ff` merge → then Dispatch B (impersonation runtime, Sonnet) → C (admin UI, Composer). `docs/SEC-1-STATUS.md` tracks; seed SQL PART 2 (test1 flip) gated behind B smoke.
-- **usemynk domain cutover bootstrapper — ✅ DONE** (Composer `85ca844b`). Branch `docs/usemynk-cutover-bootstrapper` @ `3acf707` pushed (docs-only, NOT merged): `docs/handoff/usemynk-domain-cutover-bootstrapper.md` OPS runbook + BACKLOG milestone. Brand cutover is a standalone later milestone, independent of SEC-1. DNS = Cloudflare per brand-capture docs.
+**SEC-1 Dispatch B (impersonation runtime)** — Sonnet, dispatched 2026-05-30 ~19:00 MT, off master @ `27fb0d3` (A merged). `startImpersonation`/`exitImpersonation` server actions + `ImpersonationBanner` + admin-layout wiring + audit `[imp]` logs. Branch `feat/sec-1-impersonation-runtime`. Do NOT do in-chat git ops while it runs (shared-tree lesson).
+
+**Recently completed:**
+- **SEC-1 Dispatch A (Foundation) — ✅ MERGED** `27fb0d3` (2026-05-30). Andrew password-login regression smoke GREEN on Preview (real admin `arangarx@gmail.com` logs in with real password). Additive migration ran on prod Neon. `docs/SEC-1-STATUS.md` tracks. **Andrew's remaining A-side ops (post-merge, whenever):** register prod redirect URI `https://tutoring-notes.vercel.app/api/auth/callback/google`; run seed PART 1 (idempotent — his row already keyed on `arangarx@gmail.com`); smoke Google login via `/api/auth/signin/google` on prod. NOTE: no `/login` Google button on the branch (UI belongs to Dispatch C; smoke via direct NextAuth URL). Seed PART 2 (test1 flip) still gated behind B smoke.
+- **usemynk domain cutover bootstrapper — ✅ MERGED** `e4f5833` (docs-only runbook + BACKLOG milestone). Standalone later milestone. DNS = Cloudflare.
 
 **Process note (2026-05-30):** background `generalPurpose`/explore subagents share the working tree — the usemynk Composer switched the shared branch out from under the orchestrator mid-session, landing a state commit on the wrong branch (reconciled). Lesson reinforced: avoid in-chat git commits while a background code/doc subagent is mid-run in the shared tree, or use isolated worktrees (`best-of-n-runner`).
 
@@ -46,21 +48,19 @@ Update this file's head as each lands.
 
 **Working tree:** clean.
 
-**`master` HEAD:** `3c2e634` — `Merge W1 ship A audio draft store (crash/refresh recovery) into master`.
+**`master` HEAD:** `27fb0d3` — `Merge SEC-1 Dispatch A: auth foundation`.
 
 Recent `master` (newest first):
 
 ```
+27fb0d3 Merge SEC-1 Dispatch A: auth foundation (schema + GoogleProvider + impersonation primitives)
+e4f5833 Merge usemynk.com domain cutover bootstrapper (docs-only runbook + BACKLOG milestone)
+c38ffe6 docs(state): SEC-1 A + usemynk bootstrapper complete; note shared-tree branch slip
 3c2e634 Merge W1 ship A audio draft store (crash/refresh recovery) into master
 1aaacdd Merge replay scrub audio-defer fix + watch-item into master
-42e7dfe docs(backlog): log SEEN-NOT-REPRODUCED empty-recording-after-student-drop watch-item
-588999f Add make-test-audio script for long-form transcribe smokes.
-4cb81a7 docs(rules): sharpen orchestrator cost discipline — default verb is dispatch
 ```
 
-**Unmerged branches awaiting gates:**
-- `feat/sec-1-foundation` (`b8d4863`, pushed) — SEC-1 Dispatch A; awaiting Andrew prep + smoke + `--no-ff` merge.
-- `docs/usemynk-cutover-bootstrapper` (`3acf707`, pushed) — docs-only brand-cutover runbook; merge whenever (no gate).
+**Unmerged branches awaiting gates:** none active. SEC-1 Dispatch B branch (`feat/sec-1-impersonation-runtime`) in-flight — will await smoke after it lands.
 
 **Merged branches (preserved for stale-sweep):**
 
@@ -71,6 +71,8 @@ Recent `master` (newest first):
 | `phase-0/design-tokens` | `2a574cd` | Design tokens Phase 0 |
 | `fix/replay-audio-fetch-on-scrub-drop` | `1aaacdd` | Replay scrub audio-defer (no drag storm) |
 | `feat/audio-draft-store` | `3c2e634` | W1 ship A audio draft store + recovery banner |
+| `docs/usemynk-cutover-bootstrapper` | `e4f5833` | Brand-domain cutover runbook (docs) |
+| `feat/sec-1-foundation` | `27fb0d3` | SEC-1 Dispatch A auth foundation |
 
 **Dead (historical only):** `reliability/sync-b1-b4` — superseded by sync redesign.
 
