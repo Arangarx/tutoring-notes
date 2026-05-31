@@ -8,14 +8,13 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 ## Last action completed
 
-**2026-05-30 session decisions captured (docs-only).** Surface-A **RESOLVED** — workspace is Sarah's primary recording surface; ship A protected the right path. **Long-form upload re-baselined** — Sarah's prior failures likely free-tier Vercel (10–60s) + free Neon artifacts; infra now Pro 300s + paid Neon; no fix ships until upload-focused smoke on paid Preview establishes ground truth (`scripts/make-test-audio.cjs`, [`docs/SMOKE-LONG-FORM-TRANSCRIBE.md`](../SMOKE-LONG-FORM-TRANSCRIBE.md)). W1 ship B = upload-reliability (BACKLOG item #2), prioritized next build after smoke. `feat/audio-draft-store` updated-to-master @ `2cde72e`, tsc + recorder-tests green, happy-path verifier GREEN — **awaiting Andrew smoke or waive before `--no-ff` merge.**
+**2026-05-30 — W1 ship A + replay scrub fix MERGED to master (`3c2e634`, pushed).** Two `--no-ff` merges: (1) `fix/replay-audio-fetch-on-scrub-drop` — defer replay audio range-fetches until scrubber release (no more console-storm on drag; Andrew smoke-confirmed clean); (2) `feat/audio-draft-store` — W1 ship A IndexedDB audio draft store + crash/refresh recovery banner (workspace recorder / surface B). Andrew smoked happy-path GREEN (record → timer to 1:14 → student-drop auto-pause → clean stop/save, `rid=` capture logs fired). Disjoint file sets, zero merge conflicts. Production deploy for Sarah triggered. One **SEEN-NOT-REPRODUCED** watch-item logged (BACKLOG Axis 1 item 3b): "no audio recorded" on End after student-drop auto-pause — could not reproduce with console logging; code trace shows paused→End flushes; theories = capture never reached `recordingActive` first time, or one-off upload failure.
 
 ## Next action(s)
 
-1. **W1 ship A merge gate** — `feat/audio-draft-store` @ `2cde72e` (pushed). Andrew smokes crash/refresh recovery on **workspace recorder** (surface B) or waives; **iOS not blocking**. Then `merge --no-ff`.
-2. **Upload re-baseline smoke (gating)** — paid Preview: ~50 MB / ~90 min audio via Upload tab (`make-test-audio.cjs` Path C); paste ~90k chars (pass) + ~150k chars (reject at 120k wall). Confirms Bucket A/B ground truth before any long-form fix. See BACKLOG § Recording item 5.
-3. **W1 ship B** (after smoke) — upload-failure persistence (BACKLOG item #2): hold blob in IndexedDB on retry-exhaustion, retry/resume, survive navigation (Sarah on flaky cellular). Ship C = device health. Cross-session stuck/orphaned drafts **backlogged**. B/C may parallelize via isolated worktrees if files don't conflict.
-4. **SEC-1 Composer ships** — design merged (`a1c6c3f`); [`docs/handoff/sec-1-impersonation-design-2026-05-30.md`](sec-1-impersonation-design-2026-05-30.md). **6 open Qs orchestrator-discretion delegated.**
+1. **Upload re-baseline smoke (gating)** — paid Preview: ~50 MB / ~90 min audio via Upload tab (`make-test-audio.cjs` Path C); paste ~90k chars (pass) + ~150k chars (reject at 120k wall). Confirms Bucket A/B ground truth before any long-form fix. See BACKLOG § Recording item 5.
+2. **W1 ship B** (after smoke) — upload-failure persistence (BACKLOG item #2): hold blob in IndexedDB on retry-exhaustion, retry/resume, survive navigation (Sarah on flaky cellular). Ship C = device health. Cross-session stuck/orphaned drafts **backlogged**. B/C may parallelize via isolated worktrees if files don't conflict.
+3. **SEC-1 Composer ships** — design merged (`a1c6c3f`); [`docs/handoff/sec-1-impersonation-design-2026-05-30.md`](sec-1-impersonation-design-2026-05-30.md). **6 open Qs orchestrator-discretion delegated.**
 
 Update this file's head as each lands.
 
@@ -27,7 +26,7 @@ Update this file's head as each lands.
 | ~~W1 audio durability ratification~~ | — | ✅ **RATIFIED 2026-05-30**: (1) recovery copy approved as-is; (2) cross-session stuck/orphaned drafts **backlogged** — principles: never delete without explicit confirm; auto-recover tutor-tied orphans; (3) macOS debounce unvalidated (no MacBook); (4) **iOS not a release gate** — validate on Sarah sessions or when test device acquired. |
 | ~~W1 surface-A coverage~~ | — | ✅ **RESOLVED 2026-05-30:** Sarah almost always records in the whiteboard workspace (even solo); note recorder is rarer. Ship A protected the right surface. Surface-A stays **lower-priority backlog**, not A-prime. |
 | **Upload re-baseline smoke** | Gates W1 ship B + long-form fix decisions | **NEXT.** Paid Preview smoke per BACKLOG § Recording item 5 + `scripts/make-test-audio.cjs`. No long-form/upload fix until ground truth confirmed. |
-| **W1 ship A merge** | `--no-ff` `feat/audio-draft-store` | **PENDING.** Branch @ `2cde72e`, verifier GREEN — Andrew happy-path smoke or waive. |
+| ~~W1 ship A merge~~ | — | ✅ **MERGED 2026-05-30** (`3c2e634`). Andrew happy-path smoke GREEN; iOS validation tracked as debt, not a gate. |
 | **fast-variant user rule** | Auto-select FAST model variants in orchestrator | **Offered, unconfirmed** — never auto-select unless Andrew explicitly approves. |
 | **DNS admin one-liner** | Transient first-try git/Docker DNS failures | 192.168.1.1 → 1.1.1.1/8.8.8.8 — given, **not applied**. |
 | Default theme light vs dark | DESIGN-TOKENS Phase 0 | See `docs/DESIGN-TOKENS-PLAN.md`. |
@@ -41,19 +40,19 @@ Update this file's head as each lands.
 
 **Working tree:** clean.
 
-**`master` HEAD:** `588999f` — `Add make-test-audio script for long-form transcribe smokes.`
+**`master` HEAD:** `3c2e634` — `Merge W1 ship A audio draft store (crash/refresh recovery) into master`.
 
 Recent `master` (newest first):
 
 ```
+3c2e634 Merge W1 ship A audio draft store (crash/refresh recovery) into master
+1aaacdd Merge replay scrub audio-defer fix + watch-item into master
+42e7dfe docs(backlog): log SEEN-NOT-REPRODUCED empty-recording-after-student-drop watch-item
 588999f Add make-test-audio script for long-form transcribe smokes.
 4cb81a7 docs(rules): sharpen orchestrator cost discipline — default verb is dispatch
-dd9f12b docs(backlog): item 1c — consolidate post-crash recovery banner PRESENTATION only
-34441a8 docs: Andrew 2026-05-30 W1/SEC-1 ratifications + surface-A scope gap
-a1c6c3f Merge feat/sec-1-design: SEC-1 design doc (docs-only)
 ```
 
-**Unmerged branches awaiting gates:** `feat/audio-draft-store` (`2cde72e`, pushed — updated-to-master, tsc + recorder-tests green, happy-path verifier GREEN; awaiting Andrew smoke or waive); ~~`feat/sec-1-design`~~ merged (`a1c6c3f`).
+**Unmerged branches awaiting gates:** none active (both W1 ship A + replay fix merged 2026-05-30). SEC-1 design merged (`a1c6c3f`); SEC-1 Composer ships not yet dispatched.
 
 **Merged branches (preserved for stale-sweep):**
 
@@ -62,6 +61,8 @@ a1c6c3f Merge feat/sec-1-design: SEC-1 design doc (docs-only)
 | `whiteboard/regression-net` | `fc7b12b` | Standing real-browser regression net |
 | `whiteboard/sync-redesign-phase-1` | `750d494` | Phase 1 sync redesign |
 | `phase-0/design-tokens` | `2a574cd` | Design tokens Phase 0 |
+| `fix/replay-audio-fetch-on-scrub-drop` | `1aaacdd` | Replay scrub audio-defer (no drag storm) |
+| `feat/audio-draft-store` | `3c2e634` | W1 ship A audio draft store + recovery banner |
 
 **Dead (historical only):** `reliability/sync-b1-b4` — superseded by sync redesign.
 
