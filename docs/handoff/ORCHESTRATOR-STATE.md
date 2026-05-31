@@ -34,7 +34,11 @@ Update this file's head as each lands.
 
 ## In-flight subagents
 
-**SEC-1 Dispatch A (Foundation)** — Sonnet (`82427ac2`), background, dispatched 2026-05-30 ~18:30 MT. Branch `feat/sec-1-foundation` off master. Additive schema (`isTestAccount`, nullable `passwordHash`, `ImpersonationLog`) + GoogleProvider + `assertIsRealAdmin()` + auth gates. **Andrew greenlit SEC-1** (goal: kill weak password "password" test logins).
+**None.** Both 2026-05-30 evening dispatches complete:
+- **SEC-1 Dispatch A (Foundation) — ✅ DONE** (Sonnet `82427ac2`). Branch `feat/sec-1-foundation` @ `b8d4863` pushed; 20 tests green, all 7 blocker gates pass; migration confirmed non-destructive. **Andrew greenlit SEC-1** (goal: kill weak password "password" test logins). Awaiting Andrew prep (Google redirect URI) + smoke + `--no-ff` merge → then Dispatch B (impersonation runtime, Sonnet) → C (admin UI, Composer). `docs/SEC-1-STATUS.md` tracks; seed SQL PART 2 (test1 flip) gated behind B smoke.
+- **usemynk domain cutover bootstrapper — ✅ DONE** (Composer `85ca844b`). Branch `docs/usemynk-cutover-bootstrapper` @ `3acf707` pushed (docs-only, NOT merged): `docs/handoff/usemynk-domain-cutover-bootstrapper.md` OPS runbook + BACKLOG milestone. Brand cutover is a standalone later milestone, independent of SEC-1. DNS = Cloudflare per brand-capture docs.
+
+**Process note (2026-05-30):** background `generalPurpose`/explore subagents share the working tree — the usemynk Composer switched the shared branch out from under the orchestrator mid-session, landing a state commit on the wrong branch (reconciled). Lesson reinforced: avoid in-chat git commits while a background code/doc subagent is mid-run in the shared tree, or use isolated worktrees (`best-of-n-runner`).
 
 **SEC-1 sequencing guard (HARD — Andrew 2026-05-30):** no account loses its current login until its replacement is proven. Order: A ships → Andrew verifies Google login works → B ships working impersonation → **only then** flip `arangarx+test1@gmail.com` to `isTestAccount=true` (its destined first impersonation target) and null real-admin password. Migration is strictly additive (no user wipes); test1 flip + password-null are MANUAL seed steps gated behind B smoke, NOT auto-migrations.
 
@@ -54,7 +58,9 @@ Recent `master` (newest first):
 4cb81a7 docs(rules): sharpen orchestrator cost discipline — default verb is dispatch
 ```
 
-**Unmerged branches awaiting gates:** none active (both W1 ship A + replay fix merged 2026-05-30). SEC-1 design merged (`a1c6c3f`); SEC-1 Composer ships not yet dispatched.
+**Unmerged branches awaiting gates:**
+- `feat/sec-1-foundation` (`b8d4863`, pushed) — SEC-1 Dispatch A; awaiting Andrew prep + smoke + `--no-ff` merge.
+- `docs/usemynk-cutover-bootstrapper` (`3acf707`, pushed) — docs-only brand-cutover runbook; merge whenever (no gate).
 
 **Merged branches (preserved for stale-sweep):**
 
