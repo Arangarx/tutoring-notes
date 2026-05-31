@@ -78,6 +78,15 @@ import {
   type RecordState,
   type UploadMode,
 } from "@/lib/recording/recording-state";
+import {
+  draftRowKey,
+  getOrCreateRecordingDraftStore,
+} from "@/lib/recording/recording-draft-store";
+
+/** Draft checkpoint interval (W1 Surface 1) — matches design cadence. */
+const DRAFT_CHECKPOINT_INTERVAL_MS = 30_000;
+/** MediaRecorder timeslice when draft durability is enabled (iOS may not fire — see PLATFORM-ASSUMPTIONS §8.1). */
+const DRAFT_TIMESLICE_MS = 30_000;
 
 export type RecordedAudio = {
   blobUrl: string;
@@ -130,6 +139,15 @@ export type UseAudioRecorderOptions = {
    * `mic-recorder-audio` swap logs.
    */
   avLogSessionId?: string;
+  /**
+   * When set (whiteboard workspace), checkpoint in-progress chunks to the
+   * separate recording-draft IndexedDB store every 30s, on stop, and on
+   * page hide. Recorder-tab consumers omit this.
+   */
+  recordingDraft?: {
+    sessionId: string;
+    streamId: string;
+  };
 };
 
 export type UseAudioRecorderReturn = {
@@ -257,6 +275,7 @@ export function useAudioRecorder({
   onRecordingActive,
   initialElapsedSeconds = 0,
   avLogSessionId,
+  recordingDraft,
 }: UseAudioRecorderOptions): UseAudioRecorderReturn {
   const [recordState, setRecordState] = useState<RecordState>("idle");
   const [elapsed, setElapsed] = useState(initialElapsedSeconds);
@@ -316,6 +335,20 @@ export function useAudioRecorder({
    * unboundedly — we only add one entry per onstop fire.
    */
   const pendingUploadsRef = useRef<Set<Promise<void>>>(new Set());
+  /** Stable segment id for the current MediaRecorder segment (draft + outbox dedupe on recovery). */
+  const segmentIdForDraftRef = useRef<string | null>(null);
+  const draftCheckpointIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
+    null
+  );
+  const firstChunkMsRef = useRef<number | null>(null);
+  /**
+   * True when at least one intermediate `ondataavailable` arrived while the
+   * recorder was in the `recording` state (timeslice path). iOS Safari may
+   * never set this — stop-only checkpoint still runs on `stop()`.
+   */
+  const timesliceDataReceivedRef = useRef(false);
+  const draftPagehideHandlerRef = useRef<(() => void) | null>(null);
+  const draftVisibilityHandlerRef = useRef<(() => void) | null>(null);
 
   /**
    * Synchronously add a deferred Promise to `pendingUploadsRef` and
@@ -450,6 +483,81 @@ export function useAudioRecorder({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function mintDraftSegmentId(): string {
+    if (typeof globalThis.crypto?.randomUUID === "function") {
+      return globalThis.crypto.randomUUID();
+    }
+    return `seg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  }
+
+  function clearDraftCheckpointScheduling() {
+    if (draftCheckpointIntervalRef.current) {
+      clearInterval(draftCheckpointIntervalRef.current);
+      draftCheckpointIntervalRef.current = null;
+    }
+    if (typeof window !== "undefined") {
+      if (draftPagehideHandlerRef.current) {
+        window.removeEventListener("pagehide", draftPagehideHandlerRef.current);
+        draftPagehideHandlerRef.current = null;
+      }
+      if (draftVisibilityHandlerRef.current) {
+        document.removeEventListener(
+          "visibilitychange",
+          draftVisibilityHandlerRef.current
+        );
+        draftVisibilityHandlerRef.current = null;
+      }
+    }
+  }
+
+  async function checkpointDraftToStore(): Promise<void> {
+    if (!recordingDraft || typeof window === "undefined") return;
+    const segmentId = segmentIdForDraftRef.current;
+    if (!segmentId) return;
+    const chunks = chunksRef.current;
+    if (chunks.length === 0) return;
+    try {
+      const mimeType =
+        mediaRecorderRef.current?.mimeType || chooseMimeType() || "audio/webm";
+      const store = getOrCreateRecordingDraftStore();
+      await store.checkpoint({
+        key: draftRowKey(recordingDraft.sessionId, recordingDraft.streamId),
+        sessionId: recordingDraft.sessionId,
+        streamId: recordingDraft.streamId,
+        segmentId,
+        mimeType,
+        chunks: [...chunks],
+        chunkCount: chunks.length,
+        firstChunkMs: firstChunkMsRef.current ?? Date.now(),
+        lastChunkMs: Date.now(),
+        checkpointedAt: Date.now(),
+        estimatedDurationSec: elapsedRef.current,
+      });
+    } catch (err) {
+      console.warn("[useAudioRecorder] recording draft checkpoint failed:", err);
+    }
+  }
+
+  function startDraftCheckpointScheduling() {
+    if (!recordingDraft || typeof window === "undefined") return;
+    clearDraftCheckpointScheduling();
+    draftCheckpointIntervalRef.current = setInterval(() => {
+      void checkpointDraftToStore();
+    }, DRAFT_CHECKPOINT_INTERVAL_MS);
+    const onPageHide = () => {
+      void checkpointDraftToStore();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        void checkpointDraftToStore();
+      }
+    };
+    draftPagehideHandlerRef.current = onPageHide;
+    draftVisibilityHandlerRef.current = onVisibilityChange;
+    window.addEventListener("pagehide", onPageHide);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+  }
+
   function stopTimer() {
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -471,6 +579,7 @@ export function useAudioRecorder({
   }
 
   function teardownMicStream() {
+    clearDraftCheckpointScheduling();
     stopMeter();
     graphRef.current?.dispose();
     graphRef.current = null;
@@ -609,10 +718,30 @@ export function useAudioRecorder({
     setSegmentNumber(oldPartIndex + 1);
 
     newRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data);
+      if (e.data.size > 0) {
+        chunksRef.current.push(e.data);
+        if (recordingDraft) {
+          if (firstChunkMsRef.current === null) {
+            firstChunkMsRef.current = Date.now();
+          }
+          if (newRecorder.state === "recording") {
+            timesliceDataReceivedRef.current = true;
+          }
+        }
+      }
     };
-    // Same iOS-Safari guard as startMediaRecorder: NO timeslice.
-    newRecorder.start();
+    if (recordingDraft) {
+      segmentIdForDraftRef.current = mintDraftSegmentId();
+      firstChunkMsRef.current = null;
+      timesliceDataReceivedRef.current = false;
+      try {
+        newRecorder.start(DRAFT_TIMESLICE_MS);
+      } catch {
+        newRecorder.start();
+      }
+    } else {
+      newRecorder.start();
+    }
     mediaRecorderRef.current = newRecorder;
 
     // Step 5: background upload of the OLD segment.
@@ -622,6 +751,7 @@ export function useAudioRecorder({
     // right after a rollover doesn't race past this segment the way
     // the End-session flow used to race past the final segment.
     const rolloverTracking = registerPendingStop();
+    void checkpointDraftToStore();
     oldRecorder.onstop = () => {
       void (async () => {
         try {
@@ -959,6 +1089,12 @@ export function useAudioRecorder({
       segmentNumberRef.current = 1;
       totalSessionElapsedRef.current = 0;
     }
+    if (recordingDraft) {
+      segmentIdForDraftRef.current = mintDraftSegmentId();
+      firstChunkMsRef.current = null;
+      timesliceDataReceivedRef.current = false;
+      startDraftCheckpointScheduling();
+    }
 
     const mimeType = chooseMimeType();
     // Prefer the processed (gain-adjusted) stream; fall back to raw for browsers / tests
@@ -976,13 +1112,38 @@ export function useAudioRecorder({
     }
 
     recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data);
+      if (e.data.size > 0) {
+        chunksRef.current.push(e.data);
+        if (recordingDraft) {
+          if (firstChunkMsRef.current === null) {
+            firstChunkMsRef.current = Date.now();
+          }
+          if (recorder.state === "recording") {
+            timesliceDataReceivedRef.current = true;
+          }
+        }
+      }
     };
 
-    // IMPORTANT: do NOT pass a timeslice argument to start(). Chunked output
-    // (start(1000)) makes iOS Safari emit fragmented MP4 pieces that don't
-    // concatenate into a playable / Whisper-decodable file.
-    recorder.start();
+    // Workspace draft durability: optional 30s timeslice so chunks exist
+    // between stop() events (see PLATFORM-ASSUMPTIONS §8.1). Recorder-tab
+    // path keeps start() without timeslice (iOS MP4 fragmentation guard).
+    if (recordingDraft) {
+      try {
+        recorder.start(DRAFT_TIMESLICE_MS);
+      } catch (err) {
+        console.warn(
+          "[useAudioRecorder] draft timeslice start failed; using stop-only checkpoints:",
+          err
+        );
+        recorder.start();
+      }
+    } else {
+      // IMPORTANT: do NOT pass a timeslice argument to start(). Chunked output
+      // (start(1000)) makes iOS Safari emit fragmented MP4 pieces that don't
+      // concatenate into a playable / Whisper-decodable file.
+      recorder.start();
+    }
     mediaRecorderRef.current = recorder;
     setRecordState("recording");
     startTimer();
@@ -1059,9 +1220,16 @@ export function useAudioRecorder({
     // bug the Phase 1b smoke test hit on master.
     const stopTracking = registerPendingStop();
 
+    void checkpointDraftToStore();
+
     recorder.onstop = () => {
       void (async () => {
         try {
+          if (recordingDraft && !timesliceDataReceivedRef.current) {
+            console.warn(
+              "[useAudioRecorder] draft durability: no intermediate timeslice ondataavailable before stop; relying on stop-only checkpoint (common on iOS Safari — validate on real iPhone)"
+            );
+          }
           const mimeType = recorder.mimeType || chooseMimeType();
           const blob = new Blob(chunksRef.current, { type: mimeType });
           chunksRef.current = [];
@@ -1172,6 +1340,7 @@ export function useAudioRecorder({
 
   function handleReset() {
     stopTimer();
+    clearDraftCheckpointScheduling();
     teardownMicStream();
     mediaRecorderRef.current = null;
     chunksRef.current = [];
