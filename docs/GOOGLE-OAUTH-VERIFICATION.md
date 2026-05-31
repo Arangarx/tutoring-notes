@@ -4,7 +4,16 @@
 
 ---
 
-## Current state: Testing mode
+## Current state: published + verified
+
+> **Status (2026-05-30, Andrew-confirmed): app is fully brand-verified and
+> published -- NOT in Testing mode.** It is past the 100-user / public-signup
+> gate. The Testing-mode notes below are historical / for reference only and
+> no longer describe the live OAuth client. The consent screen displays
+> "Mortensen Apps" (umbrella OAuth, Path A -- see `docs/LEGAL-SYNC.md`
+> 2026-05-30).
+
+### Historical: Testing mode (for reference)
 
 Your Google Cloud project is in **Testing mode**. This means:
 - Only **manually-added test users** (up to 100) can grant OAuth consent.

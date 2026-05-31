@@ -77,6 +77,31 @@ The tutoring-notes pages should still be synced (so users + search
 engines see consistent text), but that sync is in-product hygiene, not
 a Google compliance gate.
 
+## Decision (2026-05-30) -- Path A: keep umbrella OAuth
+
+**Andrew's decision after a legal/OAuth analysis (usemynk.com brand-domain
+cutover, 2026-05-30):** keep the shared **"Mortensen Apps"** Google OAuth
+consent screen for ALL products for now (**Path A -- umbrella OAuth**).
+
+- The consent screen's registered **homepage / privacy / terms URLs stay
+  `https://www.mortensenapps.com/*`** (already brand-verified). These are
+  NOT changing.
+- **`usemynk.com` is added ONLY as an Authorized domain + redirect URIs**
+  (see operational-snapshot table above -- Authorized domain 3). It is
+  **NOT** registered as a legal-surface (homepage/privacy/terms) URL.
+- The product `usemynk.com/privacy` + `/terms` pages remain **subordinate
+  facades**, unchanged, and are **NOT** inspected by Google verification.
+- **Rationale:** avoid per-app legal-surface verification overhead. Revisit
+  a usemynk-branded consent screen (**Path B -- dedicated per-product OAuth
+  brand**) only if/when a dedicated per-product OAuth brand is justified
+  (Andrew: "maybe hire someone to set that up later").
+
+**To-do (re-verification round):** adding `usemynk.com` as an authorized
+domain requires re-submitting branding for Google verification. Verify
+`usemynk.com` ownership in Google Search Console under `arangarx@gmail.com`
+first, then re-submit. The consent screen will continue to display
+"Mortensen Apps".
+
 ## Source of truth
 
 - **Umbrella canonical text + verification history:** the
