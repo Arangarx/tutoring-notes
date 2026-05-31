@@ -19,6 +19,7 @@ export default async function AdminHomePage() {
           sub: session.user.id,
           isImpersonating: session.user.isImpersonating,
           isTestAccount: session.user.isTestAccount,
+          role: session.user.role,
         }
       : null
   );

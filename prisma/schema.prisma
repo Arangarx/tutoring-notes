@@ -27,6 +27,15 @@ enum CostEventKind {
   GPT_ASSESSMENT_EXTRACTION
 }
 
+/// Role for AdminUser — determines which experience the account gets.
+/// ADMIN: full operator dashboard + impersonation capability.
+/// TUTOR: tutor workspace directly (students, outbox, whiteboard) — cannot impersonate.
+/// Default TUTOR so any new account is safe until explicitly promoted.
+enum AdminRole {
+  ADMIN
+  TUTOR
+}
+
 model Student {
   id          String       @id @default(uuid())
   name        String
@@ -354,8 +363,8 @@ model FeedbackItem {
 }
 
 model AdminUser {
-  id            String   @id @default(uuid())
-  email         String   @unique
+  id            String    @id @default(uuid())
+  email         String    @unique
   /// Null for Google-OAuth-only admins and test accounts. Never null for
   /// password-login admins. Making this nullable (SEC-1 Dispatch A) is
   /// additive — existing rows keep their hashes.
@@ -364,7 +373,12 @@ model AdminUser {
   /// When true: credentials login is blocked; this account is an
   /// impersonation target only. Default false = all existing rows are
   /// real admins until explicitly updated (see scripts/seed-admin-google.sql).
-  isTestAccount Boolean  @default(false)
+  isTestAccount Boolean   @default(false)
+  /// Role determines experience + capabilities (SEC-1 follow-up).
+  /// ADMIN: dashboard + impersonation. TUTOR: workspace only, cannot impersonate.
+  /// Default TUTOR — new accounts land in the safe/restricted role by default.
+  /// Orthogonal to isTestAccount (a TUTOR can be a real login OR a test account target).
+  role          AdminRole @default(TUTOR)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   students      Student[]

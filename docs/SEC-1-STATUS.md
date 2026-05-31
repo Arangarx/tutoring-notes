@@ -1,7 +1,6 @@
 # SEC-1 Admin Impersonation + Test-Account Isolation — Status
 
 > **Design doc:** [`docs/handoff/sec-1-impersonation-design-2026-05-30.md`](handoff/sec-1-impersonation-design-2026-05-30.md)
-> **Branch (Dispatch C):** `feat/sec-1-admin-dashboard`
 
 ## Dispatch status
 
@@ -9,24 +8,87 @@
 |---|---|---|---|
 | **A — Foundation** | Schema + auth changes + impersonation.ts partial | ✅ Done | `feat/sec-1-foundation` (merged to master) |
 | **B — Actions + banner** | `startImpersonation()`, `exitImpersonation()`, `ImpersonationBanner` | ✅ Done | `feat/sec-1-impersonation-runtime` (merged) |
-| **C — Dashboard + routing** | Real-admin dashboard, post-login routing, retire interim trigger | ✅ Done | `feat/sec-1-admin-dashboard` |
+| **C — Dashboard + routing** | Real-admin dashboard, post-login routing, retire interim trigger | ✅ Done | `feat/sec-1-admin-dashboard` (merged) |
+| **Role follow-up** | `AdminRole` enum, role-based routing, TUTOR blocks impersonation | ✅ Done | `feat/sec-1-admin-tutor-role` |
 
 ---
 
-## Routing model (Dispatch C)
+## Role model (follow-up)
 
-| Session | Lands on | Tutor paths (`/admin/students`, `/admin/outbox`) |
-|---|---|---|
-| Real DB admin, not impersonating | `/admin` (minimal dashboard + Test accounts) | **Blocked** → redirect to `/admin` |
-| Impersonating (`isImpersonating=true`) | `/admin/students` (via redirect from `/admin` or after Log in as) | Allowed |
-| Legacy env-only admin (`sub=admin`) | `/admin/students` (unchanged) | Allowed |
-| Unauthenticated | `/login` | N/A |
+Two orthogonal concepts on `AdminUser`:
+- **`role AdminRole` (`ADMIN` \| `TUTOR`)** — determines experience + capabilities. Default `TUTOR`.
+- **`isTestAccount Boolean`** (unchanged) — whether password login is disabled (impersonation target only).
 
-**Actions:** `startImpersonation` → `/admin/students`; `exitImpersonation` → `/admin`. Login default `callbackUrl` → `/admin`.
+Account matrix:
+| Email | Role | isTestAccount | Login method | Lands on |
+|---|---|---|---|---|
+| `arangarx@gmail.com` | `ADMIN` | `false` | password + Google | `/admin` dashboard |
+| `arangarx+test1@gmail.com` | `TUTOR` | `true` | ADMIN impersonation only | (via Log in as) |
+| Sarah / any new real account | `TUTOR` | `false` | password / Google | `/admin/students` |
+| Legacy env-only (`sub=admin`) | n/a | `false` | env creds | `/admin/students` (unchanged) |
 
-**Nav:** Real-admin-home sessions hide Students / Outbox links; Settings + operator links remain.
+Impersonation guards: `assertIsAdmin()` checks `role === ADMIN` — **TUTOR role is blocked even if `isTestAccount=false`** (Sarah cannot impersonate anyone).
 
-**Logging:** `[imp] route=… mode=…` on admin-home vs tutor redirects and middleware blocks.
+---
+
+## Routing model (Dispatch C + Role follow-up)
+
+| Session | Lands on | Tutor paths (`/admin/students`, `/admin/outbox`) | Impersonate? |
+|---|---|---|---|
+| `ADMIN`, not impersonating | `/admin` (dashboard + Log-in-as) | **Blocked** → `/admin` | yes |
+| `ADMIN`, impersonating | `/admin/students` (redirected from `/admin`) | Allowed | n/a |
+| `TUTOR` (real login, e.g. Sarah) | `/admin/students` (redirected) | Allowed | **NO — Forbidden** |
+| `TUTOR` + `isTestAccount=true` | (only via ADMIN Log-in-as) | Allowed | no |
+| Legacy env-only (`sub=admin`) | `/admin/students` (unchanged) | Allowed | no |
+| Unauthenticated | `/login` | N/A | — |
+
+**Actions:** `startImpersonation` → `/admin/students`; `exitImpersonation` → `/admin`. Login `callbackUrl` → `/admin` (page.tsx redirects TUTORs to `/admin/students`).
+
+**Nav:** `real-admin-home` sessions hide Students / Outbox links; Settings + operator links remain.
+
+**Logging:** `[imp] route=… mode=… role=…` on admin-home vs tutor redirects and middleware blocks.
+
+---
+
+## Role follow-up — Done
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `prisma/schema.prisma` | `AdminRole` enum + `role AdminRole @default(TUTOR)` on `AdminUser` |
+| `prisma/migrations/20260530200000_sec1_admin_tutor_role/migration.sql` | Create enum, add column, backfill `arangarx@gmail.com` → `ADMIN` |
+| `src/lib/admin-routing.ts` | Routing now uses `role` field; fallback heuristic for old tokens |
+| `src/lib/impersonation.ts` | `assertIsAdmin()` checks `role === ADMIN`; `assertIsRealAdmin` kept as alias; `mintImpersonationSession` + `mintAdminSession` carry `role` in JWT |
+| `src/app/admin/actions/impersonate.ts` | Look up target `role`; pass to `mintImpersonationSession`; re-fetch admin role on exit |
+| `src/app/admin/page.tsx` | Pass `role` to `getAdminSessionMode` |
+| `src/middleware.ts` | Pass `role` to `getAdminSessionMode`; early-redirect TUTOR sessions from `/admin` to `/admin/students` |
+| `src/auth-options.ts` | JWT + session callbacks populate `role` from DB row / authorize result |
+| `src/types/next-auth.d.ts` | `role?: AdminRole` on `Session.user` and `JWT` |
+| `src/__tests__/admin-routing.test.ts` | Full role-based routing matrix; backward-compat fallback; replaces old isTestAccount tests |
+| `src/__tests__/auth-sec1.test.ts` | Blocker #6 updated (assertIsAdmin + alias); Role #1/#2/#3 added; role in session |
+| `src/__tests__/impersonation-b.test.ts` | TUTOR-role blocks impersonation test; helper rows include `role`; exit test updated |
+| `src/__tests__/impersonation-c.test.ts` | TUTOR-landing test; session mocks include `role` |
+| `docs/SEC-1-STATUS.md` | This file — role model + updated routing table |
+| `docs/BACKLOG.md` | `🔴 tutor-vs-admin role distinction` flipped to ✅ |
+
+### Smoke checklist (Role follow-up)
+
+See the full Dispatch C smoke steps below; add these for the role follow-up:
+
+- [ ] **ADMIN login** (`arangarx@gmail.com`) → still lands on `/admin` dashboard; Log-in-as visible
+- [ ] Direct visit `/admin/students` as ADMIN → still blocked → `/admin`
+- [ ] **Simulate TUTOR login** (see instructions below) → lands on `/admin/students`; no "Log in as" visible; direct `/admin` visit redirects to `/admin/students`
+- [ ] TUTOR cannot reach `/admin/students` of another tutor (ownership asserts unchanged)
+- [ ] **Log in as** (ADMIN impersonating test account) → `/admin/students` + banner; exit → `/admin` dashboard
+- [ ] Migration applied on preview-dev: `SELECT email, role FROM "AdminUser"` → `arangarx@gmail.com = ADMIN`, others `= TUTOR`
+
+**How to simulate a TUTOR login without a second real account (on preview-dev Neon):**
+1. Run: `UPDATE "AdminUser" SET role='TUTOR' WHERE email='arangarx@gmail.com';` on the preview-dev branch.
+2. Log in normally → should land on `/admin/students`.
+3. Try to click Log in as → should be forbidden (impersonation guard rejects TUTOR).
+4. Direct visit `/admin` → should redirect to `/admin/students`.
+5. After verifying, restore: `UPDATE "AdminUser" SET role='ADMIN' WHERE email='arangarx@gmail.com';`
 
 ---
 

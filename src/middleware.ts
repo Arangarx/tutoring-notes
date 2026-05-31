@@ -11,6 +11,7 @@ import {
   getAdminSessionMode,
   isTutorExperiencePath,
   realAdminHomePath,
+  tutorExperienceLandingPath,
 } from "@/lib/admin-routing";
 
 // ---------------------------------------------------------------------------
@@ -129,15 +130,39 @@ export async function middleware(req: NextRequest) {
       sub: token.sub,
       isImpersonating: token.isImpersonating as boolean | undefined,
       isTestAccount: token.isTestAccount as boolean | undefined,
+      role: token.role as string | undefined,
     });
+
+    // ADMIN (not impersonating) is blocked from tutor-only paths → redirect to dashboard.
     if (mode === "real-admin-home" && isTutorExperiencePath(pathname)) {
       console.log(
-        `[imp] route=${realAdminHomePath()} mode=real-admin-home blocked=${pathname}`
+        `[imp] route=${realAdminHomePath()} mode=real-admin-home blocked=${pathname} role=${token.role ?? "unknown"}`
       );
       const home = req.nextUrl.clone();
       home.pathname = realAdminHomePath();
       home.search = "";
       return addSecurityHeaders(NextResponse.redirect(home), pathname);
+    }
+
+    // TUTOR sessions (real login, e.g. Sarah) landing on /admin dashboard → send to workspace.
+    // Page-level redirect in page.tsx already handles this for SSR, but middleware catches it
+    // early (avoids a double-render and gives Sarah a clean redirect on direct URL entry).
+    if (
+      mode === "tutor-experience" &&
+      pathname === realAdminHomePath() &&
+      !token.isImpersonating
+    ) {
+      // Only redirect TUTOR role — impersonating sessions get the same treatment via page.tsx
+      // (the dashboard is already blocked from non-admin sessions at the panel level).
+      if (token.role === "TUTOR") {
+        console.log(
+          `[imp] route=${tutorExperienceLandingPath()} mode=tutor-experience role=TUTOR redirected-from=${pathname}`
+        );
+        const students = req.nextUrl.clone();
+        students.pathname = tutorExperienceLandingPath();
+        students.search = "";
+        return addSecurityHeaders(NextResponse.redirect(students), pathname);
+      }
     }
   }
 

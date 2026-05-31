@@ -120,6 +120,35 @@ describe("Admin home page routing", () => {
           email: "throwaway-test@example.com",
           isImpersonating: true,
           isTestAccount: true,
+          role: "TUTOR",
+        },
+      }),
+    }));
+
+    jest.doMock("@/app/admin/AdminTestAccountsPanel", () => ({
+      AdminTestAccountsPanel: jest.fn(),
+    }));
+
+    const page = await import("@/app/admin/page");
+
+    await expect(page.default()).rejects.toMatchObject({ digest: "NEXT_REDIRECT" });
+    expect(mockNavRedirect).toHaveBeenCalledWith("/admin/students");
+  });
+
+  it("redirects TUTOR-role (real login) to tutor landing — not dashboard", async () => {
+    // Requirement: A real TUTOR (e.g. Sarah) landing on /admin should be sent
+    // to /admin/students — they have no admin dashboard to see.
+    jest.resetModules();
+    mockNavRedirect.mockClear();
+
+    jest.doMock("next-auth", () => ({
+      getServerSession: jest.fn().mockResolvedValue({
+        user: {
+          id: "sarah-tutor-id",
+          email: "sarah@example.com",
+          isImpersonating: false,
+          isTestAccount: false,
+          role: "TUTOR",
         },
       }),
     }));
@@ -145,6 +174,7 @@ describe("Admin home page routing", () => {
           email: "admin@example.com",
           isImpersonating: false,
           isTestAccount: false,
+          role: "ADMIN",
         },
       }),
     }));

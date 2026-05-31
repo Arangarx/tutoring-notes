@@ -1,13 +1,17 @@
 /**
  * SEC-1 Dispatch A — unit tests for the 7 acceptance-gate BLOCKERs.
+ * SEC-1 role follow-up — additional tests for AdminRole model.
  *
  * Blocker #1: isTestAccount blocks credentials login
  * Blocker #2: verifyPassword(plain, null) returns false, does not throw
  * Blocker #3: Google signIn callback rejects unknown email
  * Blocker #4: Google signIn callback rejects test-account email
  * Blocker #5: Migration SQL is additive (no DROP COLUMN, correct DDL shape)
- * Blocker #6: assertIsRealAdmin() throws ImpersonationForbiddenError for test account session
+ * Blocker #6: assertIsAdmin() throws ImpersonationForbiddenError for TUTOR/test account session
  * Blocker #7: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET absent → GoogleProvider skipped, tsc passes
+ * Role #1: role=ADMIN appears in JWT for ADMIN-role DB user
+ * Role #2: role=TUTOR appears in JWT for TUTOR-role DB user
+ * Role #3: assertIsAdmin() throws for TUTOR role even when isTestAccount=false
  */
 
 import fs from "fs";
@@ -23,6 +27,7 @@ function makeAdminRow(overrides: Record<string, unknown> = {}) {
     email: "admin@example.com",
     passwordHash: "$2a$10$fakehashfakehashfakehashfakehashfakehash",
     isTestAccount: false,
+    role: "ADMIN",
     displayName: "Admin",
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -93,12 +98,12 @@ describe("Blockers #1, #3, #4, #7 — authOptions", () => {
   });
 
   // ---- Blocker #1 (corollary): real admin with non-null hash passes ----
-  it("Blocker #1 (corollary) — real admin with valid password passes", async () => {
+  it("Blocker #1 (corollary) — real admin with valid password passes and includes role", async () => {
     jest.doMock("@/lib/auth-db", () => ({
       hasAdminUsers: jest.fn().mockResolvedValue(true),
       getAdminByEmail: jest
         .fn()
-        .mockResolvedValue(makeAdminRow({ isTestAccount: false })),
+        .mockResolvedValue(makeAdminRow({ isTestAccount: false, role: "ADMIN" })),
       verifyPassword: jest.fn().mockResolvedValue(true),
     }));
 
@@ -112,6 +117,7 @@ describe("Blockers #1, #3, #4, #7 — authOptions", () => {
     });
     expect(result).not.toBeNull();
     expect(result?.email).toBe("admin@example.com");
+    expect((result as any)?.role).toBe("ADMIN");
   });
 
   // ---- Blocker #1 (null hash): real admin with null passwordHash cannot log in ----
@@ -300,9 +306,10 @@ describe("Blocker #5 — migration SQL is additive", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Blocker #6: assertIsRealAdmin() throws for test-account session
+// Blocker #6: assertIsAdmin() throws for TUTOR/test-account sessions
+// (assertIsRealAdmin is kept as an alias — both names are tested)
 // ---------------------------------------------------------------------------
-describe("Blocker #6 — assertIsRealAdmin rejects test accounts", () => {
+describe("Blocker #6 — assertIsAdmin rejects non-ADMIN accounts", () => {
   beforeEach(() => {
     jest.resetModules();
     process.env.NEXTAUTH_SECRET = "test-secret-32-chars-minimum-pad";
@@ -310,8 +317,7 @@ describe("Blocker #6 — assertIsRealAdmin rejects test accounts", () => {
     process.env.DIRECT_URL = "file:./test.db";
   });
 
-  it("throws ImpersonationForbiddenError when DB row is isTestAccount=true", async () => {
-    // Mock requireStudentScope to return a scope for our test account.
+  it("throws ImpersonationForbiddenError when DB row is isTestAccount=true (role=TUTOR)", async () => {
     jest.doMock("@/lib/student-scope", () => ({
       requireStudentScope: jest.fn().mockResolvedValue({
         kind: "admin",
@@ -320,7 +326,6 @@ describe("Blocker #6 — assertIsRealAdmin rejects test accounts", () => {
       }),
     }));
 
-    // Mock the DB lookup to return the test account row.
     jest.doMock("@/lib/db", () => ({
       db: {
         adminUser: {
@@ -328,20 +333,58 @@ describe("Blocker #6 — assertIsRealAdmin rejects test accounts", () => {
             makeAdminRow({
               id: "test-account-id",
               isTestAccount: true,
+              role: "TUTOR",
             })
           ),
         },
       },
     }));
 
-    const { assertIsRealAdmin, ImpersonationForbiddenError } = await import(
+    const { assertIsAdmin, assertIsRealAdmin, ImpersonationForbiddenError } = await import(
       "@/lib/impersonation"
     );
 
+    await expect(assertIsAdmin()).rejects.toThrow(ImpersonationForbiddenError);
+    await expect(assertIsAdmin()).rejects.toThrow("TUTOR accounts cannot impersonate");
+    // Alias still works
     await expect(assertIsRealAdmin()).rejects.toThrow(ImpersonationForbiddenError);
-    await expect(assertIsRealAdmin()).rejects.toThrow(
-      "Test accounts cannot impersonate"
+  });
+
+  // Role #3: TUTOR with isTestAccount=false (e.g. Sarah's real login) is also blocked.
+  it("Role #3 — throws for TUTOR role even when isTestAccount=false (real tutor login)", async () => {
+    jest.doMock("@/lib/student-scope", () => ({
+      requireStudentScope: jest.fn().mockResolvedValue({
+        kind: "admin",
+        adminId: "sarah-tutor-id",
+        email: "sarah@example.com",
+      }),
+    }));
+
+    jest.doMock("@/lib/db", () => ({
+      db: {
+        adminUser: {
+          findUnique: jest.fn().mockResolvedValue(
+            makeAdminRow({
+              id: "sarah-tutor-id",
+              email: "sarah@example.com",
+              isTestAccount: false,
+              role: "TUTOR",
+            })
+          ),
+        },
+      },
+    }));
+
+    jest.doMock("@/lib/env", () => ({
+      env: { NEXTAUTH_SECRET: "test-secret-32-chars-minimum-pad" },
+    }));
+
+    const { assertIsAdmin, ImpersonationForbiddenError } = await import(
+      "@/lib/impersonation"
     );
+
+    await expect(assertIsAdmin()).rejects.toThrow(ImpersonationForbiddenError);
+    await expect(assertIsAdmin()).rejects.toThrow("TUTOR accounts cannot impersonate");
   });
 
   it("throws ImpersonationForbiddenError for env-only admin", async () => {
@@ -360,15 +403,15 @@ describe("Blocker #6 — assertIsRealAdmin rejects test accounts", () => {
       },
     }));
 
-    const { assertIsRealAdmin, ImpersonationForbiddenError } = await import(
+    const { assertIsAdmin, ImpersonationForbiddenError } = await import(
       "@/lib/impersonation"
     );
 
-    await expect(assertIsRealAdmin()).rejects.toThrow(ImpersonationForbiddenError);
-    await expect(assertIsRealAdmin()).rejects.toThrow("Env-only admin");
+    await expect(assertIsAdmin()).rejects.toThrow(ImpersonationForbiddenError);
+    await expect(assertIsAdmin()).rejects.toThrow("Env-only admin");
   });
 
-  it("returns adminId + email for a real admin (isTestAccount=false)", async () => {
+  it("returns adminId + email for a real admin (role=ADMIN)", async () => {
     jest.doMock("@/lib/student-scope", () => ({
       requireStudentScope: jest.fn().mockResolvedValue({
         kind: "admin",
@@ -384,23 +427,103 @@ describe("Blocker #6 — assertIsRealAdmin rejects test accounts", () => {
             makeAdminRow({
               id: "real-admin-id",
               isTestAccount: false,
+              role: "ADMIN",
             })
           ),
         },
       },
     }));
 
-    // Need to also mock env for impersonation.ts
     jest.doMock("@/lib/env", () => ({
       env: {
         NEXTAUTH_SECRET: "test-secret-32-chars-minimum-pad",
       },
     }));
 
-    const { assertIsRealAdmin } = await import("@/lib/impersonation");
+    const { assertIsAdmin, assertIsRealAdmin } = await import("@/lib/impersonation");
 
-    const result = await assertIsRealAdmin();
+    const result = await assertIsAdmin();
     expect(result.adminId).toBe("real-admin-id");
     expect(result.email).toBe("admin@example.com");
+    // Alias also returns correctly
+    const result2 = await assertIsRealAdmin();
+    expect(result2.adminId).toBe("real-admin-id");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Role #1 + #2: role propagated through JWT callback
+// ---------------------------------------------------------------------------
+describe("Role model — JWT callback propagates role from DB", () => {
+  beforeEach(() => {
+    jest.resetModules();
+    process.env.ADMIN_EMAIL = "admin@example.com";
+    process.env.ADMIN_PASSWORD = "replace-me";
+    process.env.NEXTAUTH_SECRET = "test-secret-32-chars-minimum-pad";
+    process.env.DATABASE_URL = "file:./test.db";
+    process.env.DIRECT_URL = "file:./test.db";
+  });
+
+  it("Role #1 — credentials authorize returns role=ADMIN for ADMIN-role account", async () => {
+    jest.doMock("@/lib/auth-db", () => ({
+      hasAdminUsers: jest.fn().mockResolvedValue(true),
+      getAdminByEmail: jest.fn().mockResolvedValue(
+        makeAdminRow({ isTestAccount: false, role: "ADMIN" })
+      ),
+      verifyPassword: jest.fn().mockResolvedValue(true),
+    }));
+
+    const { authOptions } = await import("@/auth-options");
+    const provider: any = authOptions.providers?.[0];
+    const authorize = provider.options?.authorize ?? provider.authorize;
+
+    const result = await authorize({ email: "admin@example.com", password: "pw" });
+    expect(result).not.toBeNull();
+    expect((result as any)?.role).toBe("ADMIN");
+  });
+
+  it("Role #2 — credentials authorize returns role=TUTOR for TUTOR-role account", async () => {
+    jest.doMock("@/lib/auth-db", () => ({
+      hasAdminUsers: jest.fn().mockResolvedValue(true),
+      getAdminByEmail: jest.fn().mockResolvedValue(
+        makeAdminRow({ isTestAccount: false, role: "TUTOR" })
+      ),
+      verifyPassword: jest.fn().mockResolvedValue(true),
+    }));
+
+    const { authOptions } = await import("@/auth-options");
+    const provider: any = authOptions.providers?.[0];
+    const authorize = provider.options?.authorize ?? provider.authorize;
+
+    const result = await authorize({ email: "sarah@example.com", password: "pw" });
+    expect(result).not.toBeNull();
+    expect((result as any)?.role).toBe("TUTOR");
+  });
+
+  it("Role in session — session callback exposes role from token", async () => {
+    jest.doMock("@/lib/auth-db", () => ({
+      hasAdminUsers: jest.fn().mockResolvedValue(true),
+      getAdminByEmail: jest.fn().mockResolvedValue(
+        makeAdminRow({ isTestAccount: false, role: "ADMIN" })
+      ),
+      verifyPassword: jest.fn().mockResolvedValue(false),
+    }));
+
+    const { authOptions } = await import("@/auth-options");
+    const sessionCallback = authOptions.callbacks?.session as Function;
+
+    const mockSession = {
+      user: { id: "admin-123", email: "admin@example.com" },
+      expires: new Date().toISOString(),
+    };
+    const mockToken = {
+      sub: "admin-123",
+      isTestAccount: false,
+      isImpersonating: false,
+      role: "ADMIN",
+    };
+
+    const result = await sessionCallback({ session: mockSession, token: mockToken });
+    expect(result.user.role).toBe("ADMIN");
   });
 });
