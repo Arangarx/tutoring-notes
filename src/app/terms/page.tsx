@@ -4,7 +4,7 @@ import Link from "next/link";
 /**
  * Terms of Service — Tutoring Notes (product subordinate facade).
  *
- * SYNCED FROM https://www.mortensenapps.com/terms as of 2026-05-17.
+ * SYNCED FROM https://www.mortensenapps.com/terms as of 2026-05-31.
  *
  * The Mortensen Apps umbrella terms at www.mortensenapps.com/terms are
  * the CANONICAL legal source for eligibility / acceptable use /
@@ -35,7 +35,7 @@ export default function TermsPage() {
     <div className="container" style={{ maxWidth: 720 }}>
       <div className="card">
         <h1 style={{ marginTop: 0 }}>Terms of Use</h1>
-        <p className="muted" style={{ fontSize: 14 }}>Last updated: May 2026</p>
+        <p className="muted" style={{ fontSize: 14 }}>Last updated: May 31, 2026</p>
 
         <p className="muted" style={{ marginTop: 12, fontSize: 14, lineHeight: 1.6 }}>
           These terms govern your use of <strong>Tutoring Notes</strong>, a web
@@ -126,6 +126,30 @@ export default function TermsPage() {
               Features may change or be removed. We will make reasonable efforts to
               notify users of significant changes via the app or by email where
               practical.
+            </p>
+          </div>
+
+          <div>
+            <h2 style={{ fontSize: 18, margin: 0 }}>Children and parental consent</h2>
+            <p style={{ margin: "8px 0 0" }}>
+              Tutoring Notes knowingly serves students who may be under 13 and is subject
+              to the Children&rsquo;s Online Privacy Protection Act (COPPA),
+              16&nbsp;CFR Part&nbsp;312. By entering a child under 13 into the platform as
+              a student, the account holder (parent or guardian) represents that they are
+              that child&rsquo;s parent or legal guardian and that they have reviewed and
+              consented to the privacy practices described in our{" "}
+              <Link href="/privacy">privacy policy</Link>, including the collection of
+              session audio recordings, transcripts, and notes.
+            </p>
+            <p style={{ margin: "8px 0 0" }}>
+              Parents and legal guardians retain the right to review, request deletion of,
+              and revoke consent for their child&rsquo;s personal information at any time.
+              See the <Link href="/privacy">privacy policy</Link> — specifically the{" "}
+              &ldquo;Children&rsquo;s data and parental rights (COPPA)&rdquo; section — for
+              how to exercise these rights, the retention schedule, and the contact address
+              for deletion requests. Withdrawing consent stops future data collection; it
+              does not automatically delete data already collected under prior consent.
+              Deletion requests are honored upon verification.
             </p>
           </div>
 
