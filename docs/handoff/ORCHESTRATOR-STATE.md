@@ -4,11 +4,11 @@
 
 ## Current focus
 
-We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug is **resolved**, Phase 1 sync redesign and the standing real-browser regression net are **merged and smoked**. **SEC-1 admin impersonation is COMPLETE + EXTENDED** — A (`27fb0d3`) + B (`6e29d57`) + C (`8bb7449`) + role-split follow-up (`7dadd7a`) all merged + smoked GREEN. Genuine ADMIN-vs-TUTOR account types now exist. **W1 audio durability:** Ship A merged; Ships B/C shelved (upload treated as working). **Next: pick a "new and shiny" wave.**
+We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug is **resolved**, Phase 1 sync redesign and the standing real-browser regression net are **merged and smoked**. **SEC-1 admin impersonation is COMPLETE + EXTENDED** — A (`27fb0d3`) + B (`6e29d57`) + C (`8bb7449`) + role-split follow-up (`7dadd7a`) all merged + smoked GREEN. **usemynk.com brand-domain cutover MERGED** (`291288c`) -- production on apex; Sarah still on `tutoring-notes.vercel.app` until Safe Browsing + OAuth watch-items clear. **W1 audio durability:** Ship A merged; Ships B/C shelved (upload treated as working). **Next: pick wave** (end-session "0 segments" is top reliability candidate).
 
 ## Last action completed
 
-**2026-05-30 — usemynk.com brand-domain cutover LIVE + verified healthy.** DNS + Vercel custom domains + **Production-only** `NEXTAUTH_URL` flip to `https://usemynk.com` are **DONE and verified healthy** (usemynk.com serves the app; login persists). `www.usemynk.com` 308-redirects to apex; legacy `tutoring-notes.vercel.app` retained as a working alias. Preview/Dev `NEXTAUTH_URL` unchanged on `*.vercel.app`. **Path A (umbrella OAuth) LOCKED** — consent screen stays "Mortensen Apps", legal-surface URLs stay `www.mortensenapps.com/*`, **no legal-page changes**; `usemynk.com` added only as authorized domain + redirect URIs ([`docs/LEGAL-SYNC.md`](../LEGAL-SYNC.md) § Decision 2026-05-30 -- Path A). Repo artifacts captured on branch **`ops/usemynk-domain-cutover`** (branch tip before this docs commit was `dbd8f15`): `security.txt` Canonical, `PLATFORM-ASSUMPTIONS.md`, `DEPLOY.md`, `LEGAL-SYNC.md` Path-A decision + authorized domain, `GOOGLE-OAUTH-VERIFICATION.md` stale-status fix (app is **published + verified**, NOT Testing mode), `BACKLOG.md` two items. **Open:** (a) Andrew smokes rows 4-7 (Gmail connect / whiteboard / upload / share link) on usemynk.com, then orchestrator `merge --no-ff ops/usemynk-domain-cutover`; (b) Search Console verify `usemynk.com` + OAuth branding re-submit; (c) backlogged auth-button umbrella-OAuth notice.
+**2026-05-30 — usemynk.com brand-domain cutover MERGED to `master`** (merge commit `291288c`). DNS + Vercel custom domains + Production-only `NEXTAUTH_URL` flip + repo artifacts all landed. **4/4 integration smoke pass** on usemynk.com (Gmail connect proven in incognito; whiteboard / upload / share via impersonating test1). **Final smoke (~10pm) watch-items captured in [`docs/BACKLOG.md`](../BACKLOG.md):** (a) Chrome Safe Browsing false-positive on `/api/auth/gmail/connect` in Andrew's main profile only — report submitted, re-test normal profile in 24-48h before Sarah comms; (b) OAuth brand re-verification submitted 2026-05-30, awaiting approval; (c) end-session "saving 0 segments" recurrence — candidate for next reliability task. **HOLD:** do not send Sarah to usemynk.com until Safe Browsing wall confirmed gone (she stays on `tutoring-notes.vercel.app`, zero disruption).
 
 **2026-05-30 — SEC-1 Role follow-up SMOKED + MERGED** (`--no-ff` merge `7dadd7a`): `AdminRole` enum (`ADMIN|TUTOR`, default TUTOR) added to `AdminUser`, orthogonal to `isTestAccount`; migration backfills `arangarx@gmail.com → ADMIN` idempotently on deploy (preview-dev + production via `migrate deploy`); routing now role-based (`TUTOR` logins → `/admin/students`, ADMIN → `/admin` dashboard, tutor paths blocked); `assertIsAdmin()` blocks TUTOR from impersonating (covers real TUTOR logins like Sarah AND test accounts); JWT/session carries `role`; 50 tests green. Andrew smoke **PASS** (test1 direct login blocked, reachable via impersonation). This is the long-asked-for genuine admin-vs-tutor account-type separation; protects a future Sarah login from being stranded on the admin dashboard.
 
@@ -18,7 +18,7 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 ## Next action(s)
 
-1. **Pick next wave** — SEC-1 fully done (incl role split). Candidates: usemynk.com cutover (unblocks cross-preview SSO), Wave 2.5 session-log greenfield, W3 mobile/URL. Andrew wants "new and shiny." Orchestrator lean: usemynk cutover (short, high-leverage) then Wave 2.5 (visual payoff).
+1. **Pick next wave** — SEC-1 + usemynk cutover done. **Gate Sarah on usemynk:** Safe Browsing re-test (main Chrome profile, Connect Gmail) clear first. Strong reliability candidate: end-session "0 segments" investigation (BACKLOG 3c). Other candidates: Wave 2.5 session-log greenfield, W3 mobile/URL, cross-preview SSO (post-wildcard previews on `.usemynk.com`). Andrew wants "new and shiny."
 2. **Verify role migration on production deploy** — confirm `migrate deploy` applied the `role` column + `arangarx@gmail.com → ADMIN` backfill on the production Neon branch after the `7dadd7a` deploy (preview-dev too). Quick Neon `SELECT email, role` check.
 3. ~~Upload re-baseline smoke~~ — 🟢 **CLOSED 2026-05-30 (Andrew):** treat upload as WORKING (58 MB cleared fast on paid Preview). **W1 Ship B not being built** — revive only if a real upload failure resurfaces.
 
@@ -57,20 +57,19 @@ Update this file's head as each lands.
 
 ## Uncommitted / unmerged state
 
-**Working tree:** clean on `master`.
+**Working tree:** clean on `master` (pending this docs commit: usemynk cutover watch-items).
 
-**Unmerged branches awaiting gates:** `ops/usemynk-domain-cutover` — repo artifacts for the usemynk.com cutover (live cutover already DONE on Vercel/DNS). Awaiting Andrew smoke rows 4-7 on usemynk.com, then `merge --no-ff`. **Do not merge before smoke.**
+**Unmerged branches awaiting gates:** none for usemynk cutover (merged `291288c`).
 
-**`master` HEAD:** `7dadd7a Merge SEC-1 admin-vs-tutor role split`.
+**`master` HEAD:** `291288c` Merge ops/usemynk-domain-cutover (after this commit: docs watch-items).
 
 Recent `master` (newest first):
 
 ```
-7dadd7a Merge SEC-1 admin-vs-tutor role split  ← HEAD
+291288c Merge ops/usemynk-domain-cutover  ← HEAD (pre-docs-watch-items)
+7dadd7a Merge SEC-1 admin-vs-tutor role split
 a00557d docs(backlog): feedback page (admin view) has no nav back
 8ff3a93 feat(sec-1): AdminRole enum + role-based routing (tutor-vs-admin distinction)
-30ac6b1 docs: prod account cleanup done + log tutor-vs-admin role gap
-b4c026c docs(state): preview-dev account cleanup
 ```
 
 **Merged branches (preserved for stale-sweep):**
@@ -82,6 +81,7 @@ b4c026c docs(state): preview-dev account cleanup
 | `feat/sec-1-impersonation-runtime` | `6e29d57` | SEC-1 Dispatch B impersonation runtime + banner |
 | `feat/sec-1-foundation` | `27fb0d3` | SEC-1 Dispatch A auth foundation |
 | `docs/usemynk-cutover-bootstrapper` | `e4f5833` | Brand-domain cutover runbook |
+| `ops/usemynk-domain-cutover` | `291288c` | usemynk.com DNS + Vercel domains + NEXTAUTH_URL + repo artifacts |
 | `feat/audio-draft-store` | `3c2e634` | W1 ship A |
 | `fix/replay-audio-fetch-on-scrub-drop` | `1aaacdd` | Replay scrub audio-defer |
 | `whiteboard/regression-net` | `fc7b12b` | Standing real-browser regression net |
