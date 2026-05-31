@@ -4,19 +4,18 @@
 
 ## Current focus
 
-We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug is **resolved**, Phase 1 sync redesign and the standing real-browser regression net are **merged and smoked**. **SEC-1** admin impersonation is in flight: Dispatch A merged; **Dispatch B complete on branch** (`feat/sec-1-impersonation-runtime` @ `2b6c0aa`) awaiting Andrew B smoke → merge → **Dispatch C** (admin dashboard landing + routing). **W1 audio durability** ratification is dependency-independent — execution still serialized in the shared tree unless run in isolated worktrees.
+We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug is **resolved**, Phase 1 sync redesign and the standing real-browser regression net are **merged and smoked**. **SEC-1** admin impersonation is in flight: Dispatch A merged; **Dispatch B smoked GREEN + MERGED** (`6e29d57`); **Dispatch C dispatched** (admin dashboard landing + routing + replace interim trigger). **W1 audio durability** ratification is dependency-independent — execution still serialized in the shared tree unless run in isolated worktrees.
 
 ## Last action completed
 
-**2026-05-30 — SEC-1 Dispatch B DONE** on `feat/sec-1-impersonation-runtime` @ `2b6c0aa` (pushed, **not merged**): impersonation runtime (`startImpersonation` / `exitImpersonation`) + `ImpersonationBanner` + interim `TestAccountsSection` trigger + 9 tests (4 blockers + privilege-escalation negatives) green; tsc/eslint clean. **Awaiting Andrew B smoke** (create throwaway test account per `docs/SEC-1-STATUS.md` on that branch, "Log in as" → amber banner → exit; test1 untouched) → then `--no-ff` merge → Dispatch C.
+**2026-05-30 — SEC-1 Dispatch B SMOKED + MERGED** (`--no-ff` merge `6e29d57`, pushed `c82e017..6e29d57`): impersonation runtime (`startImpersonation` / `exitImpersonation`) + `ImpersonationBanner` + interim `TestAccountsSection` trigger + 9 tests green. Andrew real-hardware smoke **PASS** (impersonate throwaway → amber banner → exit → admin; test1 password login intact). Throwaway test account `arangarx+sec1smoke@gmail.com` (`isTestAccount=true`, passwordless, id `ddb7ead8-…`) created on the **`preview-dev` Neon branch** (`br-crimson-mode-amape02v`) only — production untouched. test1 NOT yet flipped (sequencing guard).
 
 **Also 2026-05-30:** Andrew ratified three SEC-1 / platform decisions (Q1 reversal, admin-dashboard landing, cross-preview SSO gated on usemynk) — captured in [`docs/handoff/sec-1-impersonation-design-2026-05-30.md`](sec-1-impersonation-design-2026-05-30.md) § Ratifications and [`docs/handoff/usemynk-domain-cutover-bootstrapper.md`](usemynk-domain-cutover-bootstrapper.md) § Cross-preview SSO.
 
 ## Next action(s)
 
-1. **SEC-1 Dispatch B smoke (Andrew)** — on Preview for `feat/sec-1-impersonation-runtime`: throwaway test account, "Log in as" → amber banner → exit; do **not** flip test1 yet. Then orchestrator `--no-ff` merge to `master`.
-2. **SEC-1 Dispatch C** — after B merges; full scope detailed in `docs/SEC-1-STATUS.md` *after B merges* (branch owns that file until merge). Embeds ratified decisions: real admin → **admin dashboard** landing (not tutor view); tutor experience **only** via impersonation; exit returns to dashboard; **keep admin password** (Q1 reversal); replace interim `TestAccountsSection`.
-3. **Upload re-baseline smoke (gating)** — paid Preview: ~50 MB / ~90 min audio via Upload tab; paste limits. Gates W1 ship B. See BACKLOG § Recording item 5.
+1. **SEC-1 Dispatch C (IN FLIGHT — Composer 2.5)** — minimal real-admin **dashboard** landing replacing interim `TestAccountsSection`; post-login routing (real admin → dashboard; tutor view only via impersonation; exit → dashboard); keep admin password (Q1). Smokeable branch, no merge. Andrew smoke on Preview → `--no-ff` merge.
+2. **Upload re-baseline smoke (gating)** — paid Preview: ~50 MB / ~90 min audio via Upload tab; paste limits. Gates W1 ship B. See BACKLOG § Recording item 5.
 
 Update this file's head as each lands.
 
@@ -24,7 +23,7 @@ Update this file's head as each lands.
 
 | Decision | Gates | Notes |
 |----------|-------|-------|
-| **SEC-1 B smoke** | B merge to `master` | Andrew: impersonation happy path on Preview (`2b6c0aa` branch). test1 flip still gated post-merge per sequencing guard. |
+| ~~SEC-1 B smoke~~ | — | ✅ **PASS + MERGED 2026-05-30** (`6e29d57`). test1 flip still gated per sequencing guard (after C). |
 | **SEC-1 Q1 reversed — keep admin password** | Dispatch C | ✅ **RATIFIED 2026-05-30:** Real admin keeps strong password + credentials login; Google OAuth is additional, not exclusive. Do NOT null real-admin `passwordHash`. Test accounts unchanged (passwordless). Design doc § Ratifications R1. |
 | **SEC-1 admin dashboard landing** | Dispatch C | ✅ **RATIFIED 2026-05-30:** Real admin (`isTestAccount=false`, not impersonating) lands on dedicated admin dashboard; tutor view only via "Log in as"; exit returns to dashboard. Design doc § Ratifications R2. |
 | **Cross-preview SSO** | usemynk cutover + wildcard previews | ✅ **RATIFIED 2026-05-30 (deferred):** Parent-domain cookie `.usemynk.com` after wildcard preview domains on custom domain — NOT SEC-1; interim per-preview isolation on `vercel.app` is correct. [`usemynk-domain-cutover-bootstrapper.md`](usemynk-domain-cutover-bootstrapper.md) § Cross-preview SSO; design doc § Ratifications R3. |
@@ -38,10 +37,10 @@ Update this file's head as each lands.
 
 ## In-flight subagents
 
-**None** — SEC-1 Dispatch B complete on branch; awaiting Andrew smoke.
+**SEC-1 Dispatch C** (Composer 2.5) — admin dashboard landing + routing + replace interim `TestAccountsSection`. Dispatched 2026-05-30 after B merge. Shared-tree: no orchestrator git commits while it runs.
 
 **Recently completed:**
-- **SEC-1 Dispatch B (impersonation runtime)** — ✅ on branch `feat/sec-1-impersonation-runtime` @ `2b6c0aa` (2026-05-30). Not merged until B smoke.
+- **SEC-1 Dispatch B (impersonation runtime)** — ✅ MERGED `6e29d57` (2026-05-30). Andrew smoke PASS.
 - **SEC-1 Dispatch A (Foundation)** — ✅ MERGED `27fb0d3`. Andrew password-login regression smoke GREEN on Preview.
 - **usemynk domain cutover bootstrapper** — ✅ MERGED `e4f5833`; cross-preview SSO section added 2026-05-30 (docs).
 
@@ -51,29 +50,25 @@ Update this file's head as each lands.
 
 **Working tree:** clean on `master`.
 
-**Unmerged branches awaiting gates:**
+**Unmerged branches awaiting gates:** none open (SEC-1 C branch will appear once the subagent reports).
 
-| Branch | Tip | Gates |
-|--------|-----|-------|
-| `feat/sec-1-impersonation-runtime` | `2b6c0aa` | Andrew B smoke → `--no-ff` merge → Dispatch C |
-
-**`master` HEAD:** `docs(sec-1): ratify Q1 reversal (keep admin password) + admin-dashboard landing + cross-preview SSO spec` — confirm SHA via `git log -1 --oneline`.
+**`master` HEAD:** `6e29d57 Merge SEC-1 Dispatch B: impersonation runtime + banner`.
 
 Recent `master` (newest first):
 
 ```
-docs(sec-1): ratify Q1 reversal (keep admin password) + admin-dashboard landing + cross-preview SSO spec  ← HEAD
+6e29d57 Merge SEC-1 Dispatch B: impersonation runtime + banner  ← HEAD
+c82e017 docs(sec-1): ratify Q1 reversal (keep admin password) + admin-dashboard landing + cross-preview SSO spec
 27fb0d3 Merge SEC-1 Dispatch A: auth foundation (schema + GoogleProvider + impersonation primitives)
 e4f5833 Merge usemynk.com domain cutover bootstrapper (docs-only runbook + BACKLOG milestone)
 c38ffe6 docs(state): SEC-1 A + usemynk bootstrapper complete; note shared-tree branch slip
-3c2e634 Merge W1 ship A audio draft store (crash/refresh recovery) into master
-1aaacdd Merge replay scrub audio-defer fix + watch-item into master
 ```
 
 **Merged branches (preserved for stale-sweep):**
 
 | Branch | Merge commit | Notes |
 |--------|--------------|-------|
+| `feat/sec-1-impersonation-runtime` | `6e29d57` | SEC-1 Dispatch B impersonation runtime + banner |
 | `feat/sec-1-foundation` | `27fb0d3` | SEC-1 Dispatch A auth foundation |
 | `docs/usemynk-cutover-bootstrapper` | `e4f5833` | Brand-domain cutover runbook |
 | `feat/audio-draft-store` | `3c2e634` | W1 ship A |
