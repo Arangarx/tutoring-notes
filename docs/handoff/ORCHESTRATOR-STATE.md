@@ -15,7 +15,7 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 ## Next action(s)
 
 1. **SEC-1 Dispatch C (IN FLIGHT — Composer 2.5)** — minimal real-admin **dashboard** landing replacing interim `TestAccountsSection`; post-login routing (real admin → dashboard; tutor view only via impersonation; exit → dashboard); keep admin password (Q1). Smokeable branch, no merge. Andrew smoke on Preview → `--no-ff` merge.
-2. **Upload re-baseline smoke (gating)** — paid Preview: ~50 MB / ~90 min audio via Upload tab; paste limits. Gates W1 ship B. See BACKLOG § Recording item 5.
+2. ~~Upload re-baseline smoke~~ — 🟢 **CLOSED 2026-05-30 (Andrew):** treat upload as WORKING until proven otherwise (58 MB cleared fast on paid Preview). **W1 Ship B not being built** — revive only if a real upload failure resurfaces. See BACKLOG § Recording item 5.
 
 Update this file's head as each lands.
 
@@ -29,7 +29,7 @@ Update this file's head as each lands.
 | **Cross-preview SSO** | usemynk cutover + wildcard previews | ✅ **RATIFIED 2026-05-30 (deferred):** Parent-domain cookie `.usemynk.com` after wildcard preview domains on custom domain — NOT SEC-1; interim per-preview isolation on `vercel.app` is correct. [`usemynk-domain-cutover-bootstrapper.md`](usemynk-domain-cutover-bootstrapper.md) § Cross-preview SSO; design doc § Ratifications R3. |
 | ~~SEC-1 design ratification (6 open Qs)~~ | — | ✅ **DELEGATED 2026-05-30** for Q2–Q6 defaults; **Q1 superseded** by explicit reversal above. |
 | ~~W1 audio durability ratification~~ | — | ✅ **RATIFIED 2026-05-30** (recovery copy, cross-session backlog, iOS not a gate). |
-| **Upload re-baseline smoke** | Gates W1 ship B | Paid Preview smoke per BACKLOG § Recording item 5. |
+| ~~Upload re-baseline smoke~~ | — | 🟢 **CLOSED 2026-05-30 (Andrew):** upload treated as working; W1 Ship B not built unless a real failure resurfaces. |
 | **fast-variant user rule** | Orchestrator model pick | Offered, unconfirmed — never auto-select FAST unless Andrew approves. |
 | **DNS admin one-liner** | Transient git/Docker DNS | 192.168.1.1 → 1.1.1.1/8.8.8.8 — given, not applied. |
 | Default theme light vs dark | DESIGN-TOKENS Phase 0 | See `docs/DESIGN-TOKENS-PLAN.md`. |
