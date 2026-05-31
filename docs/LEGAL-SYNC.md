@@ -47,6 +47,7 @@ for the shared "Mortensen Apps" OAuth client. Confirmed values:
 | Application terms of service link | **`https://www.mortensenapps.com/terms`** |
 | Authorized domain 1 | `tutoring-notes.vercel.app` |
 | Authorized domain 2 | `mortensenapps.com` |
+| Authorized domain 3 | `usemynk.com` (added 2026-05-30; production canonical app host) |
 | Developer contact | `arangarx@gmail.com` |
 
 **What this means operationally:**
