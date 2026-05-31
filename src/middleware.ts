@@ -7,6 +7,11 @@ import {
   buildContentSecurityPolicy,
   buildPermissionsPolicy,
 } from "@/lib/security/csp";
+import {
+  getAdminSessionMode,
+  isTutorExperiencePath,
+  realAdminHomePath,
+} from "@/lib/admin-routing";
 
 // ---------------------------------------------------------------------------
 // Security headers — applied to every response
@@ -118,6 +123,21 @@ export async function middleware(req: NextRequest) {
       loginUrl.pathname = "/login";
       loginUrl.searchParams.set("callbackUrl", pathname);
       return addSecurityHeaders(NextResponse.redirect(loginUrl), pathname);
+    }
+
+    const mode = getAdminSessionMode({
+      sub: token.sub,
+      isImpersonating: token.isImpersonating as boolean | undefined,
+      isTestAccount: token.isTestAccount as boolean | undefined,
+    });
+    if (mode === "real-admin-home" && isTutorExperiencePath(pathname)) {
+      console.log(
+        `[imp] route=${realAdminHomePath()} mode=real-admin-home blocked=${pathname}`
+      );
+      const home = req.nextUrl.clone();
+      home.pathname = realAdminHomePath();
+      home.search = "";
+      return addSecurityHeaders(NextResponse.redirect(home), pathname);
     }
   }
 

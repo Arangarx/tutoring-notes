@@ -18,6 +18,7 @@ import {
   mintImpersonationSession,
   mintAdminSession,
 } from "@/lib/impersonation";
+import { tutorExperienceLandingPath } from "@/lib/admin-routing";
 
 // ---------------------------------------------------------------------------
 // startImpersonation
@@ -64,7 +65,7 @@ export async function startImpersonation(targetUserId: string): Promise<void> {
       originalAdminEmail: admin.email,
       impersonationLogId: existingLog.id,
     });
-    redirect("/admin");
+    redirect(tutorExperienceLandingPath());
   }
 
   const logRow = await db.impersonationLog.create({
@@ -88,7 +89,7 @@ export async function startImpersonation(targetUserId: string): Promise<void> {
     impersonationLogId: logRow.id,
   });
 
-  redirect("/admin");
+  redirect(tutorExperienceLandingPath());
 }
 
 // ---------------------------------------------------------------------------

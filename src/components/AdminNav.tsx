@@ -5,16 +5,25 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { signOut } from "next-auth/react";
 
+import type { AdminSessionMode } from "@/lib/admin-routing";
+
 type AdminNavProps = {
   /** Global feedback inbox + waitlist — only for addresses in OPERATOR_EMAILS / ADMIN_EMAIL. */
   showOperatorLinks?: boolean;
+  sessionMode?: AdminSessionMode;
 };
 
-export function AdminNav({ showOperatorLinks = false }: AdminNavProps) {
-  const adminLinks = [
-    { href: "/admin", label: "Dashboard" },
+export function AdminNav({
+  showOperatorLinks = false,
+  sessionMode = "tutor-experience",
+}: AdminNavProps) {
+  const tutorLinks = [
     { href: "/admin/students", label: "Students" },
     { href: "/admin/outbox", label: "Outbox" },
+  ];
+  const adminLinks = [
+    { href: "/admin", label: "Dashboard" },
+    ...(sessionMode === "tutor-experience" ? tutorLinks : []),
     ...(showOperatorLinks
       ? [
           { href: "/admin/feedback", label: "Feedback inbox" } as const,
