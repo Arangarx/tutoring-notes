@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { AuthMortensenNotice } from "@/components/auth/AuthMortensenNotice";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { hasAdminUsers } from "@/lib/auth-db";
 import {
@@ -56,9 +55,6 @@ export default async function SetupPage({ searchParams }: Props) {
           </p>
           <p className="text-xs">See docs/DEPLOY.md for the full checklist.</p>
         </div>
-        <div className="mt-6">
-          <AuthMortensenNotice />
-        </div>
       </AuthShell>
     );
   }
@@ -79,7 +75,7 @@ export default async function SetupPage({ searchParams }: Props) {
           </Link>
         }
       >
-        <AuthMortensenNotice />
+        {null}
       </AuthShell>
     );
   }

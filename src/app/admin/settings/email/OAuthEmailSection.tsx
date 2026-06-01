@@ -1,5 +1,7 @@
 "use client";
 
+import { AuthMortensenNotice } from "@/components/auth/AuthMortensenNotice";
+
 import { disconnectGmail } from "./actions";
 
 export default function OAuthEmailSection({
@@ -39,6 +41,11 @@ export default function OAuthEmailSection({
           <a href="/api/auth/gmail/connect" className="btn primary">
             Connect Gmail
           </a>
+          <AuthMortensenNotice
+            variant="connect"
+            className="muted"
+            style={{ marginTop: 12, fontSize: 14, lineHeight: 1.5 }}
+          />
         </div>
       ) : googleOAuthAvailable && !canUseGmailConnect ? (
         <p className="muted" style={{ fontSize: 14 }}>

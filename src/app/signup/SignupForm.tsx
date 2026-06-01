@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useActionState, useId, useState } from "react";
 
 import { AuthFieldError } from "@/components/auth/AuthFieldError";
-import { AuthMortensenNotice } from "@/components/auth/AuthMortensenNotice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -76,7 +75,6 @@ export default function SignupForm() {
       {state?.error ? <AuthFieldError id={formErrorId} message={state.error} /> : null}
 
       <div className="flex flex-col gap-3 pt-1">
-        <AuthMortensenNotice />
         <Button
           type="submit"
           disabled={busy}

@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useId, useState } from "react";
 
 import { AuthFieldError } from "@/components/auth/AuthFieldError";
-import { AuthMortensenNotice } from "@/components/auth/AuthMortensenNotice";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,7 +31,7 @@ function ResetPasswordForm() {
           </Link>
         }
       >
-        <AuthMortensenNotice />
+        {null}
       </AuthShell>
     );
   }
@@ -110,7 +109,6 @@ function ResetPasswordForm() {
         {error ? <AuthFieldError id={formErrorId} message={error} /> : null}
 
         <div className="flex flex-col gap-3 pt-1">
-          <AuthMortensenNotice />
           <Button
             type="submit"
             disabled={busy}
