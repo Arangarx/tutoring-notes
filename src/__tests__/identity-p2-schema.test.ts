@@ -157,13 +157,18 @@ describe("StudentClaimInvite model fields", () => {
     expect(field.type).toBe("String");
   });
 
-  it("token is required", () => {
-    const field = getField("StudentClaimInvite", "token");
+  it("tokenHash is required (§6.4: hash-only storage; renamed from token in P2a)", () => {
+    const field = getField("StudentClaimInvite", "tokenHash");
     expect(field.isRequired).toBe(true);
   });
 
   it("claimedAt is optional", () => {
     const field = getField("StudentClaimInvite", "claimedAt");
+    expect(field.isRequired).toBe(false);
+  });
+
+  it("revokedAt is optional (added in P2a)", () => {
+    const field = getField("StudentClaimInvite", "revokedAt");
     expect(field.isRequired).toBe(false);
   });
 });
@@ -184,4 +189,73 @@ describe("Separation principle — business tables do NOT carry learnerProfileId
       expect(bad).toBeUndefined();
     }
   );
+});
+
+// ---------------------------------------------------------------------------
+// Identity Phase 2a — new models and fields
+// ---------------------------------------------------------------------------
+
+describe("Identity Phase 2a — AccountHolderSession model", () => {
+  it("AccountHolderSession model exists in generated client", () => {
+    getModel("AccountHolderSession");
+  });
+
+  it("tokenHash, expiresAt, twoFactorVerified are required", () => {
+    const tokenHash = getField("AccountHolderSession", "tokenHash");
+    expect(tokenHash.isRequired).toBe(true);
+    const expiresAt = getField("AccountHolderSession", "expiresAt");
+    expect(expiresAt.isRequired).toBe(true);
+    const tfa = getField("AccountHolderSession", "twoFactorVerified");
+    expect(tfa.isRequired).toBe(true);
+  });
+
+  it("revokedAt and deviceInfo are optional", () => {
+    const revoked = getField("AccountHolderSession", "revokedAt");
+    expect(revoked.isRequired).toBe(false);
+    const device = getField("AccountHolderSession", "deviceInfo");
+    expect(device.isRequired).toBe(false);
+  });
+});
+
+describe("Identity Phase 2a — AccountHolder new fields", () => {
+  it("passwordHash is optional (nullable)", () => {
+    const f = getField("AccountHolder", "passwordHash");
+    expect(f.isRequired).toBe(false);
+    expect(f.type).toBe("String");
+  });
+
+  it("emailVerifiedAt is optional", () => {
+    const f = getField("AccountHolder", "emailVerifiedAt");
+    expect(f.isRequired).toBe(false);
+  });
+
+  it("displayName is optional", () => {
+    const f = getField("AccountHolder", "displayName");
+    expect(f.isRequired).toBe(false);
+  });
+});
+
+describe("Identity Phase 2a — LearnerProfile accessMode", () => {
+  it("accessMode field exists on LearnerProfile", () => {
+    const f = getField("LearnerProfile", "accessMode");
+    expect(f.isRequired).toBe(true);
+    expect(f.type).toBe("LearnerAccessMode");
+  });
+
+  it("LearnerAccessMode enum has expected values", () => {
+    const enumDef = dmmf.datamodel.enums.find((e) => e.name === "LearnerAccessMode");
+    expect(enumDef).toBeDefined();
+    const values = enumDef!.values.map((v) => v.name);
+    expect(values).toContain("parent_session_select");
+    expect(values).toContain("child_pin_required");
+  });
+});
+
+describe("Identity Phase 2a — AccountHolderEmailToken new fields", () => {
+  it("payload and targetLearnerProfileId are optional", () => {
+    const payload = getField("AccountHolderEmailToken", "payload");
+    expect(payload.isRequired).toBe(false);
+    const target = getField("AccountHolderEmailToken", "targetLearnerProfileId");
+    expect(target.isRequired).toBe(false);
+  });
 });
