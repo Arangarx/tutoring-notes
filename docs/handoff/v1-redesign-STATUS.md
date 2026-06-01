@@ -12,8 +12,8 @@
 - **IA/URL:** session-centric; `/sessions/[wsid]`; parent share `/s/`→`/share/`; student join `/w/`→`/join/`; operator tools `/superadmin`; `/admin/` removed from tutor surface; 301 redirects; no scheduling in v1 (next-actions landing).
 - **Identity model (LOCKED, Opus-designed):** 3 principals — AccountHolder (parent for minors / student for adults; email-verified; holds billing/consent/comms/2FA), LearnerProfile (child; first-class but low-privilege access principal; optional own email+login), tutor Student record links on claim. Child login = parent-provisioned username+PIN + sticky device sessions + optional child-email upgrade.
 - **Consent = permission lattice:** parent sets ceiling at claim time; child narrows-only; effective = parent ∩ child; server-side enforced; versioned + frozen-effective-at-session-start; revocation stops future capture.
-- **Consent model = tiered, two distinct mechanisms (LOCKED 2026-05-31, Andrew):** **(1) Essentials are NOT consent toggles — they are the *contract to use the live services*** (the minimal processing needed to deliver live tutoring; agreeing to use the service = agreeing to these; can't decline and still use it). For **minors** these still need explicit **VPC**, never a buried ToS clause. **(2) Optional/enhancement = explicit, UNCHECKED opt-in toggles** (audio recording, video recording, whiteboard-replay recording, transcripts/notes, educational-use, messaging) — decline-able without losing core service; **NO pre-checked / forced-on "you can technically opt out" patterns** (Andrew: not newsletter-style). Consent set **ONCE up-front** (claim/account setup), **lives student/account-side**, must **NOT interrupt sessions** (Sarah standout). Keep essentials TRULY minimal (data-minimization). **Exact essentials-vs-optional split → Opus PROPOSES in the design pass for Andrew approval.**
-- **CONSENT-GATES-CAPTURE (LOCKED 2026-05-31, Andrew — foundational premise catch):** capturing a learner's content — **uploading text, uploading audio, OR recording live audio** — MUST be gated on an **effective consent record** permitting that capture type. No upload/record of a minor's content without consent. The prior design's "anyone-with-link + grandfather existing" left a **dangerous bypass**: a tutor could capture minor audio with zero consent on record (a COPPA collection-without-VPC risk). **Existing data is NOT exempt** — bring it into the consent structure; preserve-don't-delete pending Sarah's keep-list. **Sequencing reality:** the gate can only be ENFORCED once the consent system ships (Phase 3); until then, current pilot capture rides Sarah's tutor-obtained relationship + the disclosure floor, and existing students get claim+consent to continue. **Needs a focused design pass** (Sonnet-tier: consent + recorder/capture flow + existing-data migration + pilot transition) — PENDING Andrew go. This supersedes design-doc §7.2/§7.6 "zero forced migration / indefinite unclaimed links." **Refinements (Andrew 2026-05-31):** hard bar for K-12; applies to everyone but ADULTS self-manage their own capture consent (`isSelfLearner`). Migration path delivered **when V1 lands** (Sarah carries forward test sessions she wants past pilot). **INTERIM MASTER GATE APPROVED:** lightweight tutor attestation before text-upload / audio-upload / live-record (~"capture must be COPPA-gated; parent-side enforcement comes with V1; for now confirm you have consent for this session or it's your own test data") — recorded as a flag+log; MUST be a precondition that does NOT wedge the recorder start path (reliability bar). Design LANDED 2026-05-31 (`29c184e`) → `docs/handoff/consent-gates-capture-design-2026-05-31.md` (9 sections; 5-axis review w/ 3 Phase-3 BLOCKERs; `endWhiteboardSession` split so a consent failure never wedges session-close). **Interim master gate IMPLEMENTED** on branch `interim-capture-attestation` (`3807e44`, pushed, NOT merged) — `captureAttestationAt` column + migration `20260531120000_whiteboard_capture_attestation` + attestation modal + `att` prefix; gate placed before `setUserWantsRecording(true)` (FSM never arms pre-confirm); server belt on generate-notes + audio-segment-register; tsc/eslint/jest + `test:wb-sync` (511 jest + 11 Playwright) all green. **Andrew: apply migration on preview/prod DB (`prisma migrate deploy`) BEFORE smoke; then smoke → merge --no-ff to master.** **§9 design open-Qs → DELEGATED to Opus (Andrew 2026-05-31): recommend-and-proceed, Andrew ratifies later.** The 6 (self-learner consent model, `allowNoteSending` rename, 60d unclaimed sunset, orphaned-audio admin path, soft-poll option, legacy-column retention) live in the design doc §9; Opus resolves each with a recommendation as part of the lifecycle/consent design pass and flags the decisions for Andrew's later ratification rather than blocking on them.
+- **Consent model = tiered, two distinct mechanisms (LOCKED 2026-05-31, Andrew):** **(1) Essentials are NOT consent toggles — they are the *contract to use the live services*** (the minimal processing needed to deliver live tutoring; agreeing to use the service = agreeing to these; can't decline and still use it). For **minors** these still need explicit **VPC**, never a buried ToS clause. **(2) Optional/enhancement = explicit, UNCHECKED opt-in toggles** (audio recording, video recording, whiteboard-replay recording, transcripts/notes, educational-use, messaging) — decline-able without losing core service; **NO pre-checked / forced-on "you can technically opt out" patterns** (Andrew: not newsletter-style). Consent set **ONCE up-front** (claim/account setup), **lives student/account-side**, must **NOT interrupt sessions** (Sarah standout). Keep essentials TRULY minimal (data-minimization). **Exact essentials-vs-optional split → PROPOSED in session-lifecycle design §4.1 (awaiting Andrew ratification — see Open items);** do NOT treat as locked until ratified.
+- **CONSENT-GATES-CAPTURE (LOCKED 2026-05-31, Andrew — foundational premise catch):** capturing a learner's content — **uploading text, uploading audio, OR recording live audio** — MUST be gated on an **effective consent record** permitting that capture type. No upload/record of a minor's content without consent. The prior design's "anyone-with-link + grandfather existing" left a **dangerous bypass**: a tutor could capture minor audio with zero consent on record (a COPPA collection-without-VPC risk). **Existing data is NOT exempt** — bring it into the consent structure; preserve-don't-delete pending Sarah's keep-list. **Sequencing reality:** the gate can only be ENFORCED once the consent system ships (Phase 3); until then, current pilot capture rides Sarah's tutor-obtained relationship + the disclosure floor, and existing students get claim+consent to continue. This supersedes design-doc §7.2/§7.6 "zero forced migration / indefinite unclaimed links." **Refinements (Andrew 2026-05-31):** hard bar for K-12; applies to everyone but ADULTS self-manage their own capture consent (`isSelfLearner`). Migration path delivered **when V1 lands** (Sarah carries forward test sessions she wants past pilot). **INTERIM MASTER GATE APPROVED:** lightweight tutor attestation before text-upload / audio-upload / live-record (~"capture must be COPPA-gated; parent-side enforcement comes with V1; for now confirm you have consent for this session or it's your own test data") — recorded as a flag+log; MUST be a precondition that does NOT wedge the recorder start path (reliability bar). Design LANDED 2026-05-31 (`29c184e`) → [`docs/handoff/consent-gates-capture-design-2026-05-31.md`](consent-gates-capture-design-2026-05-31.md) (9 sections; 5-axis review w/ 3 Phase-3 BLOCKERs; `endWhiteboardSession` split so a consent failure never wedges session-close). **Interim master gate IMPLEMENTED** on branch `interim-capture-attestation` (`3807e44`, pushed, NOT merged) — `captureAttestationAt` column + migration `20260531120000_whiteboard_capture_attestation` + attestation modal + `att` prefix; gate placed before `setUserWantsRecording(true)` (FSM never arms pre-confirm); server belt on generate-notes + audio-segment-register; tsc/eslint/jest + `test:wb-sync` (511 jest + 11 Playwright) all green. **Andrew: apply migration on preview/prod DB (`prisma migrate deploy`) BEFORE smoke; then smoke → merge --no-ff to master.** **§9 design open-Qs → RESOLVED 2026-05-31** (recommend-and-proceed; **ACCEPTED by Opus** — Andrew may revisit, not blocking). Locked-pending-ratification decisions: **Q-CGC-1** self-learner = `null` `consentRecord` + `isSelfLearner` bypass; add `selfLearnerConsent Boolean` on session consent snapshot for auditability. **Q-CGC-2** `allowNoteSending`: keep DB column name; parent-facing label "Generate and share session notes and transcripts." **Q-CGC-3** unclaimed-student sunset: **90 days post-V1** (interim attestation gate stays meanwhile). **Q-CGC-4** orphaned-audio admin path: minimal admin-only endpoint, **deferred to post-Phase-3 backlog**. **Q-CGC-5** mid-session soft-poll: **deferred indefinitely** unless Sarah requests. **Q-CGC-6** `captureAttestationAt` retention: **retain permanently** as audit history. Detail: [`session-lifecycle-consent-design-2026-05-31.md`](session-lifecycle-consent-design-2026-05-31.md) §5.
 - **Recording retention on revocation (Q-3) — INTERIM posture LOCKED 2026-05-31, REFINED by COPPA brief (`210e4f4`):** retain existing recordings by default; **no self-serve delete button first pass**; **no "never-delete" claims**. Build an **admin-only deletion *capability*** to execute requests. COPPA brief (`docs/handoff/coppa-compliance-research-2026-05-31.md`) findings:
   - **Q-3 end-state RESOLVED to on-request** (not proactive): §312.6(a)(2) — parent directs, operator complies. No proactive deletion prompt required. Retain-by-default validated.
   - **NEW REQUIREMENT (corrects "admin-only behind the scenes"):** a parent-facing deletion-**request** path MUST be DISCLOSED (a stated contact email suffices) and described in the privacy notice. No self-serve button still OK; a totally hidden path is NOT (§312.6 "means at any time").
@@ -27,8 +27,8 @@
 - **Child device session (Q-4 LOCKED 2026-05-31, Option B):** **90-day sliding** (renews on activity; idle devices expire), **parent-revocable** device list. Child session grants **join sessions + adjust the privacy/consent options exposed to them** (child-side *narrowing only*, within the parent ceiling) — low-privilege: narrowing only restricts further, cannot expand beyond parent ceiling, touch billing, or change account. Fail-safe on a lost/shared device.
 - **2FA:** opt-in/encouraged for parents+students; MANDATORY for tutors+admins/superadmins (TOTP+backup codes+recovery; never locked out pre-session). **Recovery (Q-5 LOCKED, Option 1):** backup codes → admin reset; no email self-serve first pass (Phase-6+ candidate, step-up only if ever added).
 - **Sarah pilot inputs (2026-05-31, validated):**
-  - **Mid-session student switching (NEW REQUIREMENT):** back-to-back students on one computer/account is common; per-kid sub-profiles welcome IF switching is frictionless **even while connected to a live session**, re-attributing subsequently-saved content to the newly-selected learner. **Consent implication:** switching learner = new consent context / new `SessionConsentSnapshot` for the new learner; the prior learner's captured segment stays attributed to them. → headline input to the QUEUED session-lifecycle flow design; also touches consent-gates-capture. **Design (Andrew 2026-05-31):** students-facing = simple "switch learner"; under-the-hood = FULL seamless consent-context swap. Must (a) enforce the NEW learner's consent (their parent didn't consent to recording → recording stops/doesn't start) and (b) cleanly finalize the prior learner's recorder segment before starting the next (recorder-Pillar reliability concern).
-  - **Capture types now distinct, each its own consent toggle (Andrew 2026-05-31):** **audio recording**, **whiteboard-activity recording** (stroke replay), and **video recording (actual camera/webcam — SEPARATE toggle)** — Sarah's "video" = real video, not just whiteboard replay. All consent-gated like audio; plus notes/transcripts, educational-use, messaging. **Camera-video recording = POST-V1 FAST-FOLLOW (Andrew 2026-05-31):** Sarah would value it; deferred past V1 ONLY because it's seamlessly addable later → **current design MUST stay forward-compatible (don't preclude a video capture type/toggle), but do NOT build it in V1.**
+  - **Mid-session student switching (NEW REQUIREMENT) — DESIGNED 2026-05-31:** back-to-back students on one computer/account is common; per-kid sub-profiles welcome IF switching is frictionless **even while connected to a live session**, re-attributing subsequently-saved content to the newly-selected learner. **Consent implication:** switching learner = new consent context / new `SessionConsentSnapshot` for the new learner; the prior learner's captured segment stays attributed to them. **Design LANDED** → [`docs/handoff/session-lifecycle-consent-design-2026-05-31.md`](session-lifecycle-consent-design-2026-05-31.md) §3 (atomic silent session handoff; recorder-Pillar invariants; swap sequence). Students-facing = simple "switch learner"; under-the-hood = FULL seamless consent-context swap. Must (a) enforce the NEW learner's consent (their parent didn't consent to recording → recording stops/doesn't start) and (b) cleanly finalize the prior learner's recorder segment before starting the next. **Implementation downstream** (Identity Phase 3+4); **H-1/H-2** still open for Andrew (see Open items).
+  - **Capture types now distinct, each its own consent toggle (Andrew 2026-05-31) — DESIGNED:** **audio recording** (`allowAudioRecording`), **whiteboard-activity recording** (`allowWhiteboardRecording` — stroke replay, distinct from live rendering), and **video recording** (`allowVideoRecording` — actual camera/webcam, SEPARATE toggle) — Sarah's "video" = real video, not just whiteboard replay. All consent-gated like audio; plus notes/transcripts (`allowNoteSending`), educational-use (`allowEducationalUse`), messaging (`allowMessaging`). **Camera-video recording = POST-V1 FAST-FOLLOW:** forward-compatible toggle only in V1. Full tiered model + enforcement placement: session-lifecycle design §4–§6.
   - **Messaging (refines Phase 5 scope):** highest value for **live-session setup** + **AV-failure fallback**; "needs to be part of the whiteboard." Outside that Sarah just texts. Prioritize in-session/whiteboard-integrated messaging over general async.
   - **Mandatory tutor 2FA — pilot-tutor buy-in CONFIRMED:** Sarah fine with required 2FA given video storage; the friction-nope-out concern is addressed.
   - **Adult mix ~40% college / 50% HS / 10% middle-elementary:** `isSelfLearner` path heavily used (~40%); college students have own accounts, parent rarely involved even when funding. Validates Q-8 (18+ self-manage).
@@ -40,6 +40,7 @@
 - **Identity/access schema (LOCKED, design landed 2026-05-31):** `AccountHolder` (with `isSelfLearner` for adult collapse), `LearnerProfile`, `LearnerCredential` + `LearnerDeviceSession` (username+PIN + device-bound sticky sessions), `ConsentRecord` (parent ceiling, versioned) ∩ `ConsentRestriction` (child narrowing) → `SessionConsentSnapshot` frozen at session start (`onDelete: Restrict`, no UPDATE endpoint), `StudentClaimInvite`, `SessionParticipant`.
 - **Identity/access assertions (LOCKED):** `assertOwnsLearnerProfile`, `assertIsSessionParticipant`, `assertEffectiveConsent`.
 - **Identity/access log prefixes (LOCKED):** `ahx`, `lpr`, `clm`, `cns`, `tfa`, `msg`.
+- **Session-lifecycle log prefixes (registered in design, implement with Phase 3/4):** `slc` (session lifecycle — create/start/end/swap), `wtr` (waiting room — learner arrived/admitted). Spec + event catalog: [`session-lifecycle-consent-design-2026-05-31.md`](session-lifecycle-consent-design-2026-05-31.md) §7; add to `AGENTS.md` per-session-ID registry when implementation starts.
 - **Identity/access execution plan (LOCKED, 6 phases):** 1 tutor-2FA → 2 identity → 3 consent → 4 access-swap → 5 messaging → 6 hardening; phases 3+4 Sonnet-tier.
 
 ---
@@ -49,24 +50,26 @@
 | Branch | Commit | Notes |
 |--------|--------|-------|
 | **`master`** | `a621a5b` | Production integration line; **does not** contain the V1 doc corpus, Component Phase A, or product legal facades. |
-| **`v1-redesign`** | `90f9bfa` (HEAD — moves with commits) | Long-running V1 epic integration branch. **This spine + bootstrapper + consent/identity/component design docs + Phase A (dark tokens + fonts) + product `/privacy` + `/terms` facades live ONLY here** until the epic merges. |
+| **`v1-redesign`** | `23c65c0` (HEAD — moves with commits) | Long-running V1 epic integration branch. **This spine + bootstrapper + consent/identity/component/**session-lifecycle** design docs + Phase A (dark tokens + fonts) + product `/privacy` + `/terms` facades live ONLY here** until the epic merges. |
 | **`interim-capture-attestation`** | `3807e44` | Pushed, **NOT merged.** Interim capture-attestation gate implemented. **Andrew:** `prisma migrate deploy` on preview/prod → real-hardware smoke → `merge --no-ff` to `master`. |
 
 Fresh orchestrator on `master`: `git checkout v1-redesign` → read this spine first, then [`v1-redesign-bootstrapper.md`](v1-redesign-bootstrapper.md).
 
 ---
 
-## FLY-PLAN (dispatch when Andrew says "fly")
+## FLY-PLAN
 
-**Headline — single Sonnet-tier session-lifecycle + consent design pass** (recommend-and-proceed; Andrew ratifies later):
+**Headline Sonnet pass — LANDED 2026-05-31** (`23c65c0`) → [`docs/handoff/session-lifecycle-consent-design-2026-05-31.md`](session-lifecycle-consent-design-2026-05-31.md). **Implementation is downstream** (Identity Phases 2–4 per design §8); partly gated on Andrew ratification of the PROPOSED essentials-vs-optional split + H-1/H-2.
 
-1. **Waiting room** → session start / invite UX (session-centric IA).
-2. **Frictionless mid-session learner swap** — students see a simple "switch learner"; under the hood = full seamless consent-context swap (new `SessionConsentSnapshot` for the new learner; prior learner's segment finalized cleanly; recorder-Pillar reliability).
-3. **Tiered consent model** — Opus proposes the **exact essentials-vs-optional split** for Andrew approval (essentials = contract to use live services + VPC for minors, NOT toggles; optional = explicit unchecked opt-in toggles).
-4. **Capture types** — audio, **whiteboard-activity recording** (stroke replay; distinct from live stroke rendering), notes/transcripts, educational-use, messaging; **video (camera) = forward-compatible toggle only, NOT built in V1.**
-5. **Inline resolution of consent-gates design §9** — all 6 open questions get Opus recommendations flagged for Andrew ratification (not blocking).
+Delivered as design (was the fly-pass scope):
 
-**Parallel Andrew-owned actions (do NOT block Opus dispatch):**
+1. **Waiting room** → session start / invite UX (session-centric IA) — §2.
+2. **Frictionless mid-session learner swap** — §3.
+3. **Tiered consent model** — §4.1 PROPOSED split (Andrew ratifies).
+4. **Capture types** — incl. `allowWhiteboardRecording`; video forward-compat only in V1.
+5. **Consent-gates §9 resolutions** — §5 (Opus-accepted; Andrew may revisit).
+
+**Parallel Andrew-owned actions (do NOT block implementation dispatch):**
 
 - Interim branch: `prisma migrate deploy` → smoke → `merge --no-ff` `interim-capture-attestation` to `master`.
 - Umbrella repo: review + deploy `coppa-312-10-disclosure` @ `f77ed4b` (separate mortensen-apps-site repo).
@@ -86,12 +89,54 @@ Branches that touch **fonts, CSS, or build configuration** must pass a real **`n
 |------|--------|----------|
 | Component redesign (visual/component layer) | DONE | [`docs/handoff/v1-component-redesign-design-2026-05-31.md`](v1-component-redesign-design-2026-05-31.md) |
 | Session identity + access + consent + auth foundation | **DONE** | [`docs/handoff/session-identity-access-design-2026-05-31.md`](session-identity-access-design-2026-05-31.md) (1122 lines) |
-| Session-lifecycle flow (waiting room + start/invite) | QUEUED (depends on identity model) | TBD |
+| Session-lifecycle + tiered consent (waiting room, swap, consent split, §9) | **DONE (design)** @ `23c65c0` | [`docs/handoff/session-lifecycle-consent-design-2026-05-31.md`](session-lifecycle-consent-design-2026-05-31.md) — implementation slots Identity Phases 2–4 |
 | Component Phase A (dark tokens + fonts) | IMPLEMENTED on `v1-redesign` @ `5aa3c7d` (pushed); **pending Andrew real-hardware smoke** | dark tokens migrated off legacy purple `#7c5cff` → Mynka Blue; Fraunces/Inter/JetBrains Mono via `next/font`; CSP unchanged; 25/25 token tests pass |
 
 ---
 
+## Session-lifecycle design — Phase-3 acceptance BLOCKERs
+
+Folded from 5-axis review in [`session-lifecycle-consent-design-2026-05-31.md`](session-lifecycle-consent-design-2026-05-31.md) §6 (detail there; do not duplicate fully here):
+
+| ID | Summary |
+|---|---|
+| **BLOCKER-D1** | Swap timeout must NOT finalize Session A IDB rows; must NOT create Session B |
+| **BLOCKER-D2** | `allowWhiteboardRecording` gates events.json replay blob upload |
+| **BLOCKER-R1** | Swap Phase-2 failure leaves workspace recoverable, not hung |
+| **BLOCKER-C1** | `activeSwapId` optimistic lock prevents concurrent swaps (409 on second) |
+| **BLOCKER-C2** | Unique partial index on `(studentId, endedAt IS NULL)` — one active session per student |
+| **BLOCKER-A1** | Negative auth: cross-tutor swap → 403 |
+| **BLOCKER-A2** | `allowLiveSession=false` → swap rejected 400/403 before Phase 1 |
+| **BLOCKER-O1** | All `slc=` / `wtr=` log events emit before production |
+
+*(Plus consent-gates-capture design Phase-3 BLOCKERs from the earlier pass — still in force.)*
+
+---
+
+## PROPOSED essentials-vs-optional consent split
+
+> **AWAITING ANDREW RATIFICATION** — do NOT mark locked. Opus designed per spine mandate; Andrew ratifies or amends. Full rationale: session-lifecycle design §4.1.
+
+| Toggle | Tier | Default |
+|---|---|---|
+| Live whiteboard / Live A/V transport / Session metadata / Account identity | ESSENTIAL — not toggles | N/A |
+| allowAudioRecording | Optional — HIGHLY RECOMMENDED | false unchecked |
+| allowWhiteboardRecording (new, distinct from live rendering) | Optional — Recommended | false unchecked |
+| allowNoteSending | Optional — Recommended | false unchecked |
+| allowEducationalUse | Optional — Neutral | false unchecked |
+| allowMessaging | Optional — Recommended | false unchecked |
+| allowVideoRecording | Optional — POST-V1 only | false forward-compat |
+| allowLiveSession | Session-access kill-switch (not a capture toggle) | true |
+
+---
+
 ## Open items
+
+### Andrew-decisions (ratification / product)
+
+- **Ratify (or amend) the PROPOSED essentials-vs-optional split** (table above; session-lifecycle design §4.1).
+- **H-1 — Canvas on swap:** Session B carry forward Session A whiteboard canvas state, or start blank? (Design assumes carry-forward.)
+- **H-2 — Swap in solo mode:** Mid-session learner swap allowed when no learner has joined Session A yet (solo/whiteboard-only)? (Design allows; confirm UX.)
 
 ### Sarah-pending
 
@@ -135,8 +180,8 @@ Branches that touch **fonts, CSS, or build configuration** must pass a real **`n
 
 ## Next actions
 
-1. **Andrew says "fly"** → Opus dispatches the **FLY-PLAN** Sonnet session-lifecycle + consent design pass (see above).
-2. **BLOCKERs remain:** TOTP encrypt-at-rest (Phase 1); `assertOwnsLearnerProfile` (Phase 2); umbrella deploy + OpenAI DPA + functioning deletion-request inbox (disclosure floor).
+1. **Andrew ratification:** essentials-vs-optional split (PROPOSED table); H-1 canvas carry-forward; H-2 solo-mode swap — then dispatch Identity Phase implementation (design corpus complete for Phases 1–4 sequencing).
+2. **BLOCKERs remain:** TOTP encrypt-at-rest (Phase 1); `assertOwnsLearnerProfile` (Phase 2); umbrella deploy + OpenAI DPA + functioning deletion-request inbox (disclosure floor); **plus** session-lifecycle Phase-3 BLOCKERs (table above).
 3. **Andrew parallel:** interim `interim-capture-attestation` migrate → smoke → merge; umbrella `coppa-312-10-disclosure` review+deploy; Phase A real-hardware smoke; pilot purge confirm+execute.
 4. **Sarah-pending:** test-students audit (real vs test; what to keep) — pilot real-minor data purge already approved.
 5. Keep this spine + bootstrapper + chat todo list in sync at every handoff.
