@@ -44,6 +44,15 @@
 - **Session-lifecycle log prefixes (registered in design, implement with Phase 3/4):** `slc` (session lifecycle — create/start/end/swap), `wtr` (waiting room — learner arrived/admitted). Spec + event catalog: [`session-lifecycle-consent-design-2026-05-31.md`](session-lifecycle-consent-design-2026-05-31.md) §7; add to `AGENTS.md` per-session-ID registry when implementation starts.
 - **Identity/access execution plan (LOCKED, 6 phases):** 1 tutor-2FA → 2 identity → 3 consent → 4 access-swap → 5 messaging → 6 hardening; phases 3+4 Sonnet-tier.
 
+### Phase-1 implementation defaults (RATIFIED-PENDING Andrew)
+
+Opus decided these Phase-1 micro-defaults under autonomous drive; **flagged for Andrew ratification on smoke** (not blocking merge if smoke passes):
+
+- **F1:** single `TOTP_ENCRYPTION_KEY`; rotating/losing it = re-enroll all tutors (documented in `.env.example` + [`docs/PLATFORM-ASSUMPTIONS.md`](../PLATFORM-ASSUMPTIONS.md) §10.4); dual-key decrypt = future hardening, not built.
+- **F2:** gate enforced in middleware after ANY successful auth (credentials AND Google) so neither is a bypass; JWT-only `twoFactorVerified` state in edge, DB lookup on the setup page.
+- **F3:** `isTestAccount=true` (plus impersonation + env-only `sub=admin`) exempt from the gate.
+- **F4:** routes under `/admin/settings/2fa/*` (app's existing settings tree), not the design doc's `/settings/2fa`.
+
 ---
 
 ## BRANCH & COMMIT REALITY (as of 2026-05-31)
@@ -51,7 +60,8 @@
 | Branch | Commit | Notes |
 |--------|--------|-------|
 | **`master`** | `a621a5b` | Production integration line; **does not** contain the V1 doc corpus, Component Phase A, or product legal facades. |
-| **`v1-redesign`** | `b798494` (HEAD — moves with commits) | Long-running V1 epic integration branch. Advanced through design-integration commits + **Component Phase B1** (`b798494`, pushed). **This spine + bootstrapper + consent/identity/component/session-lifecycle design docs + Phase A (dark tokens + fonts) + Phase B1 (Tailwind 4.3 + shadcn + auth surfaces) + product `/privacy` + `/terms` facades live ONLY here** until the epic merges. **B1 Vercel deploy VERIFIED READY** (`dpl_2LK8drfHx8tuVhVMsxhVSjFvrbjH`) — Tailwind/shadcn build green on Vercel; local `npx next build` + jest 92/92 + tsc passed. |
+| **`v1-redesign`** | `165084e` (HEAD — advances with spine commits) | Long-running V1 epic integration branch. Advanced through design-integration commits + **Component Phase A** (`5aa3c7d`) + **Component Phase B1** (`b798494`, pushed) + legal facades (`29f5e88`). **This spine + bootstrapper + consent/identity/component/session-lifecycle design docs + Phase A (dark tokens + fonts) + Phase B1 (Tailwind 4.3 + shadcn + auth surfaces) + product `/privacy` + `/terms` facades live ONLY here** until the epic merges. **B1 Vercel deploy VERIFIED READY** (`dpl_2LK8drfHx8tuVhVMsxhVSjFvrbjH`) — Tailwind/shadcn build green on Vercel; local `npx next build` + jest 92/92 + tsc passed. |
+| **`identity-p1-2fa`** | `4aeeb28` | Branched off `v1-redesign` `165084e`. Pushed, **NOT merged.** **Identity Phase 1** — mandatory tutor/admin TOTP 2FA (see sub-pass tracker). **Awaiting:** Andrew `TOTP_ENCRYPTION_KEY` on Vercel (all envs) → real-hardware smoke → ratify F1–F4 → `merge --no-ff` to `v1-redesign`. |
 | **`interim-capture-attestation`** | `3807e44` | Pushed, **NOT merged.** Interim capture-attestation gate implemented. **Andrew:** `prisma migrate deploy` on preview/prod → real-hardware smoke → `merge --no-ff` to `master`. |
 
 Fresh orchestrator on `master`: `git checkout v1-redesign` → read this spine first, then [`v1-redesign-bootstrapper.md`](v1-redesign-bootstrapper.md).
@@ -60,7 +70,7 @@ Fresh orchestrator on `master`: `git checkout v1-redesign` → read this spine f
 
 ## FLY-PLAN
 
-**Headline Sonnet pass — LANDED 2026-05-31** (`23c65c0`) → [`docs/handoff/session-lifecycle-consent-design-2026-05-31.md`](session-lifecycle-consent-design-2026-05-31.md). **Implementation is downstream** (Identity Phases 2–4 per design §8); **decision-unblocked 2026-05-31** (essentials-vs-optional split RATIFIED; H-1/H-2 RESOLVED; §9 accepted). Remaining gates: existing BLOCKERs (TOTP encrypt-at-rest; `assertOwnsLearnerProfile`; session-lifecycle Phase-3 BLOCKERs).
+**Headline Sonnet pass — LANDED 2026-05-31** (`23c65c0`) → [`docs/handoff/session-lifecycle-consent-design-2026-05-31.md`](session-lifecycle-consent-design-2026-05-31.md). **Implementation is downstream** (Identity Phases 2–4 per design §8); **decision-unblocked 2026-05-31** (essentials-vs-optional split RATIFIED; H-1/H-2 RESOLVED; §9 accepted). Remaining gates: existing BLOCKERs (`assertOwnsLearnerProfile`; legal/umbrella disclosure floor; session-lifecycle Phase-3 BLOCKERs). **TOTP encrypt-at-rest SATISFIED** on `identity-p1-2fa` @ `4aeeb28` (formally closes on merge to `v1-redesign`).
 
 Delivered as design (was the fly-pass scope):
 
@@ -94,7 +104,8 @@ Branches that touch **fonts, CSS, or build configuration** must pass a real **`n
 | Session-lifecycle + tiered consent (waiting room, swap, consent split, §9) | **DONE (design)** @ `23c65c0` | [`docs/handoff/session-lifecycle-consent-design-2026-05-31.md`](session-lifecycle-consent-design-2026-05-31.md) — implementation slots Identity Phases 2–4 |
 | Component Phase A (dark tokens + fonts) | IMPLEMENTED on `v1-redesign` @ `5aa3c7d` (pushed); **pending Andrew real-hardware smoke** | dark tokens migrated off legacy purple `#7c5cff` → Mynka Blue; Fraunces/Inter/JetBrains Mono via `next/font`; CSP unchanged; 25/25 token tests pass |
 | Component Phase B1 (Tailwind 4 + shadcn + auth surfaces) | **IMPLEMENTED** @ `b798494` (pushed); **Vercel deploy VERIFIED READY** (`dpl_2LK8drfHx8tuVhVMsxhVSjFvrbjH`); **awaiting Andrew** real-hardware smoke | Tailwind 4.3 + shadcn/ui install; auth surfaces redesigned (login/signup/forgot-password/reset-password/setup) on existing routes; shared `AuthShell`/`MynkWordmark`; mortensenapps.com auth notice on all five surfaces; existing server-action wiring unchanged. Local: `npx next build` + jest 92/92 + tsc green. **B1 follow-ups:** Playwright visual snapshots need `--update-snapshots` after redesign; `color-contrast` axe moved to Playwright fixtures (jsx-a11y v6 removed ESLint rule) — may surface issues on non-auth admin pages when visual tests run. **Andrew:** confirm/reword proposed notice ("Sign-in is securely handled by Mortensen Apps (mortensenapps.com)."). |
-| Component Phase B2 (dashboard / student list / detail) | **NEXT visible-UI candidate** (after B1 smoke) | Per component-redesign design — dispatch after B1 Andrew sign-off |
+| Identity Phase 1 (mandatory tutor/admin TOTP 2FA) | **DELIVERED** on sub-branch `identity-p1-2fa` @ `4aeeb28` (pushed, **NOT merged**) | `AdminUser2FA` + `AdminUser2FABackupCode` additive migration; AES-256-GCM encrypt-at-rest ([`src/lib/crypto/totp-secret.ts`](../../src/lib/crypto/totp-secret.ts), key from `TOTP_ENCRYPTION_KEY`); backup codes (bcrypt hash, shown once); ADMIN-only reset (`adminResetTwoFactor`); middleware gate (non-test TUTOR/ADMIN must enroll+verify; `isTestAccount`/`isImpersonating`/env-`sub=admin` exempt); routes under `/admin/settings/2fa/*`; `tfa=` log prefix. Verification: `npx next build` exit 0, `tsc` exit 0, jest **1384 pass** (1 **PRE-EXISTING** unrelated fail in `auth.test.ts` — uses `file:./test.db` on a PG-only schema; confirmed failing before this branch). **Status: awaiting Andrew env-var + smoke + `merge --no-ff` to `v1-redesign`.** |
+| Component Phase B2 (dashboard / student list / detail) | **SEQUENCED AFTER identity schema** (Phase 2 additive tables) | Per component-redesign design — avoids rework; dispatch after B1 smoke + Identity Phase 2 schema lands |
 
 ---
 
@@ -134,6 +145,16 @@ Folded from 5-axis review in [`session-lifecycle-consent-design-2026-05-31.md`](
 
 ---
 
+## ACTION (Andrew) — Identity Phase 1 smoke gate
+
+> **Set `TOTP_ENCRYPTION_KEY` (32-byte base64url) on Vercel, ALL environments, BEFORE smoking `identity-p1-2fa` or enrolling.** Without it the preview boots but 2FA enroll/verify throws and enrolled users lock out.
+>
+> Generate: `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`
+>
+> Then: smoke the 2FA flow on real hardware → ratify **F1–F4** (Decisions ledger § Phase-1 defaults) → `git merge --no-ff identity-p1-2fa` into `v1-redesign`.
+
+---
+
 ## Open items
 
 ### Andrew-decisions (ratification / product)
@@ -155,17 +176,17 @@ Folded from 5-axis review in [`session-lifecycle-consent-design-2026-05-31.md`](
 - **Q-3c — OpenAI/Whisper** — research landed (`73790d4`): favors **service-provider** (no consent-gate) with operational guardrails: `/v1/audio/transcriptions` only; **execute OpenAI DPA**; disclose subprocessor. Counsel-later only on retention surprise.
 - **Q-3d — Business-record vs PII deletion** — largely mooted by PII/business-record **separation principle** (ledger); counsel-later tag only.
 - ~~**Q-4 — Child device session lifetime**~~ **LOCKED:** **90-day sliding** (renews on activity; idle devices expire), parent-revocable device list. *(Supersedes identity design doc "180 days proposed.")*
-- ~~**Q-5 — Tutor 2FA recovery**~~ **LOCKED Option 1:** backup codes → **admin reset**; **NO email self-serve** first pass. Phase 1 policy gate cleared; **TOTP-encrypt-at-rest BLOCKER** remains.
+- ~~**Q-5 — Tutor 2FA recovery**~~ **LOCKED Option 1:** backup codes → **admin reset**; **NO email self-serve** first pass. Phase 1 policy gate cleared. **TOTP-encrypt-at-rest BLOCKER SATISFIED** on `identity-p1-2fa` @ `4aeeb28` (formally closes when branch merges to `v1-redesign`).
 - ~~**Q-6 — ShareLink / existing-data migration**~~ **LOCKED:** **NO indefinite grandfather**; existing data **NOT exempt** from consent-gates-capture; migration when V1 lands; interim attestation gate bridges. *(Supersedes identity design doc "90-day ShareLink grandfather.")*
 - ~~**Q-7 — Messaging**~~ **LOCKED:** parent send v1; student **read-only** v1; student-send fast-follow.
 - ~~**Q-8 — Adult self threshold**~~ **LOCKED:** **18+** = `isSelfLearner` self-manage; parent-reported age; child cannot self-promote until reported age 18.
 - ~~**Q-9 — Email provider**~~ **LOCKED:** app-signed transactional (Resend/Postmark class).
 - ~~**Q-S1 — Audio default**~~ **RESOLVED:** explicit **RECOMMENDED but UNCHECKED** opt-in (no pre-check, no forced-on); consent up-front + student-side.
 
-### BLOCKERs (3)
+### BLOCKERs (2 active + 1 satisfied-pending-merge)
 
-- TOTP secrets encrypted at rest **before Phase 1**.
-- `assertOwnsLearnerProfile` exists + negative-tested **before Phase 2** data routes.
+- ~~TOTP secrets encrypted at rest **before Phase 1**.~~ **SATISFIED on `identity-p1-2fa` @ `4aeeb28`** (AES-256-GCM via `TOTP_ENCRYPTION_KEY`; formally closes on `merge --no-ff` to `v1-redesign`).
+- `assertOwnsLearnerProfile` exists + negative-tested **before Phase 2** data routes *(Phase 2 dispatch = additive schema only — no production route wiring until this clears + Phase-1 smoke)*.
 - Umbrella mortensenapps.com privacy/terms updated: COPPA consent mechanism + minor data inventory **before Phase 2**; messaging as data surface **before Phase 5**. **⚠ NOW URGENT (not just Phase-2 gated):** §312.10 specific-retention-timeframe deadline (2026-04-22) already passed → umbrella likely currently non-compliant. **Andrew GREENLIT pull-forward 2026-05-31** as a DISCLOSURE-floor task (NOT counsel-gated). Must publish: (1) retention timeframe = **active + 24mo post-closure**, (2) disclosed parent deletion-request path, (3) data inventory incl. minor audio + OpenAI processing, (4) revocation + educational-use mechanics. Spans umbrella (canonical, **separate repo** — static HTML `privacy/index.html`+`terms/index.html`) + product `/privacy` + `/terms` facades per LEGAL-SYNC. **HARD RULE (Andrew 2026-05-31):** umbrella privacy/terms are the **Google-OAuth-APPROVED** docs — child/product sites may **EXPAND but NEVER TRUNCATE**; all umbrella edits must be **PURELY ADDITIVE** (no deletion/reword-to-shorten/restructure of existing approved disclosures). Capture this in LEGAL-SYNC.md. **DONE (additive-only verified):** umbrella on branch `coppa-312-10-disclosure` (`f77ed4b`, pushed, NOT merged/deployed — Andrew reviews+deploys); product facades on `v1-redesign` (`29f5e88`). Diff 66+/2− (the 2 deletions = "Last updated" strings only); before/after inventory confirms no approved clause lost. (COPPA brief `210e4f4` informs it.)
   - **RESOLVED 2026-05-31 (Andrew):** the product app serves only Sarah until v1 is live → **full disclosures land WITH the `v1-redesign` branch; NO separate master facade patch.** Umbrella branch (`coppa-312-10-disclosure`) remains for Andrew review+deploy (public canonical + OAuth-registered; additive+safe — recommend deploying soon, but not gating).
   - **ACTION (Andrew, has teeth):** (a) **verify/execute the OpenAI DPA** in dashboard — we DISCLOSED "subprocessor under a DPA"; must be made true or the copy is inaccurate. (b) **Monitor `arangarx+tutoringnotes@gmail.com`** + be able to honor deletion requests manually from day one (disclosed path must function). (c) Review+deploy umbrella branch.
@@ -184,10 +205,12 @@ Folded from 5-axis review in [`session-lifecycle-consent-design-2026-05-31.md`](
 
 ## Next actions
 
-1. **Session-lifecycle + consent implementation — DECISION-UNBLOCKED (2026-05-31):** essentials-vs-optional split RATIFIED; H-1/H-2 RESOLVED; consent-gates §9 accepted. Dispatch Identity Phases 2–4 per design §8 when BLOCKERs clear. **Remaining gates (unchanged):** TOTP encrypt-at-rest **before** Identity Phase 1; `assertOwnsLearnerProfile` **before** Phase 2 data routes; **plus** session-lifecycle Phase-3 acceptance BLOCKERs (table above).
-2. **BLOCKERs remain:** TOTP encrypt-at-rest (Phase 1); `assertOwnsLearnerProfile` (Phase 2); umbrella deploy + OpenAI DPA + functioning deletion-request inbox (disclosure floor); session-lifecycle Phase-3 BLOCKERs.
-3. **Component UI:** **Phase B2** (dashboard / student list / detail) = next visible-UI candidate **after** B1 Andrew smoke. **B1 awaiting Andrew:** real-hardware smoke redesigned auth on v1-redesign preview; confirm/reword mortensenapps.com notice; Playwright `--update-snapshots` + possible `color-contrast` findings on non-auth admin pages.
-4. **Andrew parallel:** interim `interim-capture-attestation` migrate → smoke → merge; umbrella `coppa-312-10-disclosure` review+deploy; Phase A real-hardware smoke; pilot purge confirm+execute.
-5. **Sarah-pending:** test-students audit (real vs test; what to keep) — pilot real-minor data purge already approved.
-6. **Solo in-person recording (V1 prod goal):** implement with consent gating + component design **B-5** acceptance before enabling `soloEnabled` in production.
-7. Keep this spine + bootstrapper + chat todo list in sync at every handoff.
+1. **Identity Phase 1 (Andrew, blocking merge):** set `TOTP_ENCRYPTION_KEY` on Vercel (all envs) → smoke `identity-p1-2fa` @ `4aeeb28` on real hardware → ratify F1–F4 → `merge --no-ff` to `v1-redesign`. See **ACTION (Andrew) — Identity Phase 1 smoke gate** above.
+2. **Identity Phase 2 (next dispatch — ADDITIVE-SCHEMA-ONLY subset):** 3-principal tables (`AccountHolder`, `LearnerProfile`, claim-invite, device-session) + nullable `Student.learnerProfileId` (all-null backfill) + PII-separation tombstone columns. **Explicitly NO behavior change, NO route rewiring, NO `assertOwnsLearnerProfile` in production routes** — those behavioral parts gate on Phase-1 smoke + ratification + the `assertOwnsLearnerProfile` BLOCKER. Lands on its own sub-branch.
+3. **Session-lifecycle + consent implementation — DECISION-UNBLOCKED (2026-05-31):** essentials-vs-optional split RATIFIED; H-1/H-2 RESOLVED; consent-gates §9 accepted. Dispatch Identity Phases 3–4 per design §8 when Phase-2 schema + BLOCKERs clear. **Remaining gates:** `assertOwnsLearnerProfile` **before** Phase 2 behavioral routes; legal/umbrella disclosure floor; session-lifecycle Phase-3 acceptance BLOCKERs (table above).
+4. **BLOCKERs remain (active):** `assertOwnsLearnerProfile` (Phase 2 behavioral); umbrella deploy + OpenAI DPA + functioning deletion-request inbox (disclosure floor); session-lifecycle Phase-3 BLOCKERs. **Satisfied-pending-merge:** TOTP encrypt-at-rest on `identity-p1-2fa`.
+5. **Component UI:** **Phase B2** (dashboard / student list / detail) sequenced **after** Identity Phase 2 additive schema (avoids rework). **B1 awaiting Andrew:** real-hardware smoke redesigned auth on v1-redesign preview; confirm/reword mortensenapps.com notice; Playwright `--update-snapshots` + possible `color-contrast` findings on non-auth admin pages.
+6. **Andrew parallel:** interim `interim-capture-attestation` migrate → smoke → merge; umbrella `coppa-312-10-disclosure` review+deploy; Phase A real-hardware smoke; pilot purge confirm+execute.
+7. **Sarah-pending:** test-students audit (real vs test; what to keep) — pilot real-minor data purge already approved.
+8. **Solo in-person recording (V1 prod goal):** implement with consent gating + component design **B-5** acceptance before enabling `soloEnabled` in production.
+9. Keep this spine + bootstrapper + chat todo list in sync at every handoff.
