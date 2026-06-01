@@ -27,5 +27,18 @@
 
 10. **Username hand-off.** After setup, clearly surface the child's **exact** username ("signs in with username: **pooky**") + the child-login URL, so parents/kids know precisely what to enter.
 
+11. **Auto-copy claim link on "Create claim link"** (tutor student detail, `ClaimInviteSection`). Currently shown for manual copy; Andrew accidentally sent the wrong link. **FIX:** auto-copy to clipboard on create + a "Copied!" confirmation; label which student each link belongs to so links can't be mis-sent.
+
+12. **Device list/count live-refresh.** Revoke relies on a full page reload and the device count doesn't stay current. **FIX:** refresh the list/count on revoke (optimistic update or `router.refresh()`) so it reflects state without a manual reload. Polish.
+
+13. **Verify-link "expired/invalid" UX for already-verified / existing account.** Tokens are single-use + 24h (not actually fast-expiring). An existing account hits the anti-enumeration path (gets a "you already have an account" email, no new token); a re-clicked/used token shows "expired." **FIX:** friendlier copy distinguishing "this link was already used / your account is already active → just log in" from a genuinely expired link, WITHOUT weakening anti-enumeration. Not a security hole (verify essentially auto-logs-in anyway, per Andrew's check).
+
+14. **Child-login session-context clarity.** Parent felt they had to log out to do the child login (separate cookies — `mynk_ah_session` vs `mynk_learner_session` — so it's NOT actually required). **FIX:** on the dashboard / child-login hand-off, clarify "send your child to the student login — you don't need to log out." Ties to #10.
+
+## Clarifications surfaced in smoke (NOT bugs — no code change, may improve copy)
+- **`NEXT_PUBLIC_CLAIM_INVITES_ENABLED` needs a fresh deploy to take effect** — `NEXT_PUBLIC_*` vars are inlined at **build** time, so changing the env var alone does nothing until a redeploy (hence "had to redeploy to get Create claim link to show up"). Expected Vercel/Next behavior; consider documenting in `PLATFORM-ASSUMPTIONS.md`.
+- **Two device sessions for one kid in one browser** isn't reproducible: `createLearnerSession` re-uses the existing `mynk_learner_session` cookie if present, and one browser jar holds one learner cookie — so logging a second kid in the same jar replaces the first. Need two real devices / separate cookie jars to see two `LearnerDeviceSession` rows. Testing-mechanics, not a bug.
+- **"Revoke → next request fails" couldn't be smoked** because `/join` 404s (see #2). Testable once the `/join` placeholder lands.
+
 ## Out of scope (still deferred)
 Phase-3 consent models + the consent panel; full `/join` live-session wiring; AccountHolder 2FA (Phase 6); child email-upgrade (P2c).
