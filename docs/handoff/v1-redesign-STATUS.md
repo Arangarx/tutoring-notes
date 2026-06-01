@@ -62,18 +62,20 @@ Andrew real-hardware smoke **PASSED** on `identity-p1-2fa` @ `d782430` before me
 | Branch | Commit | Notes |
 |--------|--------|-------|
 | **`master`** | `a621a5b` | Production integration line; **does not** contain the V1 doc corpus, Component Phase A, or product legal facades. |
-| **`v1-redesign`** | *(advances with spine commit after AH-7)* | Long-running V1 epic integration branch. **`identity-p1-2fa` MERGED `--no-ff` 2026-06-01** @ `b5ef4fe` (smoked @ `d782430`). **`component-b2-dashboard-students` MERGED `--no-ff` 2026-06-01** @ `0424206`. **`identity-p2-schema` MERGED `--no-ff` 2026-06-01** @ `242c6b2` (AH-7; migration `20260531190000` **as-is**, no rename — already applied on preview-dev). **`identity-p2-ownership-guard` MERGED `--no-ff` 2026-06-01** @ `1a06a65` (AH-7; `assertOwnsLearnerProfile` + 14 tests). **P2a next:** session-infra build branch (AccountHolder/child sessions + claim back-end — **not** in this merge). **Epic corpus + Phase A + B1 + B2 + p2 schema/guard live ONLY here** until epic merges to `master`. **PRODUCTION:** apply p1 + p2 migrations at/after next deploy (`20260531180000`, `20260601120000`, `20260531190000`). |
+| **`v1-redesign`** | **`6c4a268`** | Long-running V1 epic integration branch. **`identity-p1-2fa` MERGED `--no-ff` 2026-06-01** @ `b5ef4fe`. **`component-b2-dashboard-students` MERGED `--no-ff` 2026-06-01** @ `0424206`. **`identity-p2-schema` MERGED `--no-ff` 2026-06-01** @ `242c6b2` (AH-7). **`identity-p2-ownership-guard` MERGED `--no-ff` 2026-06-01** @ `1a06a65` (AH-7). **`identity-p2a-session-infra` MERGED `--no-ff` 2026-06-01** @ **`6c4a268`** (P2a build; gates green post-merge). **`docs/road-to-ga` MERGED `--no-ff` 2026-06-01** @ `eca63b5` (docs only — [`docs/ROAD-TO-GA.md`](../ROAD-TO-GA.md) launch-readiness hub, 3 gates). **P2b next:** AccountHolder UI + child login UI. **Epic corpus + Phase A + B1 + B2 + p2 schema/guard + P2a live ONLY here** until epic merges to `master`. **PRODUCTION / preview:** apply p1 + p2 + **P2a** migrations at/after next deploy (`20260531180000`, `20260601120000`, `20260531190000`, **`20260602000000_identity_p2a_session_infra`**). |
+| **`identity-p2a-session-infra`** | `a37fb90` | **MERGED `--no-ff` into `v1-redesign` @ `6c4a268` (2026-06-01).** AccountHolder realm + learner PIN sessions + claim/connect back-end; migration `20260602000000_identity_p2a_session_infra`. Branch preserved for stale-sweep. |
+| **`docs/road-to-ga`** | `adcb60e` | **MERGED `--no-ff` into `v1-redesign` @ `eca63b5` (2026-06-01, docs only).** [`docs/ROAD-TO-GA.md`](../ROAD-TO-GA.md). |
 | **`component-b2-dashboard-students`** | `20de6fa` | **MERGED `--no-ff` into `v1-redesign` @ `0424206` (2026-06-01).** Andrew visual smoke **PASSED as-scoped** (reskin only). Branch preserved for stale-sweep. |
 | **`identity-p1-2fa`** | `d782430` | **MERGED `--no-ff` into `v1-redesign` @ `b5ef4fe` (2026-06-01).** Andrew real-hardware smoke **PASSED** (QR gen, land-on-dashboard-after-signup, land-on-dashboard-after-login, exit-impersonation-keeps-2FA, sign-out-impersonation-exits, backup-code-hold + autofocus, **backup-code works once + rejected on reuse**). Branch preserved for stale-sweep. |
 | **`identity-p2-schema`** | `e305d0b` | **MERGED `--no-ff` into `v1-redesign` @ `242c6b2` (2026-06-01, AH-7).** Migration `20260531190000_identity_p2_principals` merged **unchanged** (non-monotonic vs `20260601120000` is benign; `190000` already on preview-dev `_prisma_migrations`). |
 | **`identity-p2-ownership-guard`** | `f74f164` | **MERGED `--no-ff` into `v1-redesign` @ `1a06a65` (2026-06-01, AH-7).** `assertOwnsLearnerProfile` + 14 tests. |
 | **`interim-capture-attestation`** | `3807e44` | Pushed, **NOT merged.** Interim capture-attestation gate implemented. **Andrew:** `prisma migrate deploy` on preview/prod → real-hardware smoke → `merge --no-ff` to `master`. |
 
-> **ORCHESTRATOR — next identity step:** **P2a session-infra build** — design **RATIFIED 2026-06-01** ([`identity-phase2-auth-session-design-2026-06-01.md`](identity-phase2-auth-session-design-2026-06-01.md)). Held p2 branches **MERGED to `v1-redesign` 2026-06-01 (AH-7):** `identity-p2-schema` @ `242c6b2` → `identity-p2-ownership-guard` @ `1a06a65`. Dispatch P2a branch: AccountHolder/child session tables + shared auth primitives + claim/connect back-end (7 BLOCKERs + no-dup-code + connect interstitial). **Do NOT** fold P2a into a mega-migration beyond design §9 additive gaps.
+> **ORCHESTRATOR — next identity step:** **P2b AccountHolder UI + child login UI** — design §10.2 ([`identity-phase2-auth-session-design-2026-06-01.md`](identity-phase2-auth-session-design-2026-06-01.md)). **Andrew first:** set `AH_SESSION_HMAC_SECRET`, `LEARNER_SESSION_HMAC_SECRET`, `AH_TOTP_ENCRYPTION_KEY` on Vercel preview/prod; verify preview-dev migration for P2a (`token`→`tokenHash` on empty column). Real-hardware smoke gate; Sonnet tier.
 
-> **ORCHESTRATOR — migrations on `v1-redesign`:** **p1** (`20260531180000`, `20260601120000`) + **p2 principals** (`20260531190000`) all present; **`190000` merged as-is** (Andrew AH-7: no rename — already applied on preview-dev; non-monotonic folder order vs `120000` is benign for `migrate deploy`). **PROD:** apply all three (+ any prior not yet applied) on next `v1-redesign` production deploy.
+> **ORCHESTRATOR — migrations on `v1-redesign`:** **p1** (`20260531180000`, `20260601120000`) + **p2 principals** (`20260531190000`) + **P2a** (`20260602000000_identity_p2a_session_infra`). **`190000` merged as-is** (already on preview-dev). **PROD / preview:** apply all four (+ any prior not yet applied) on next `v1-redesign` deploy.
 
-> **Overnight autonomous mode (2026-06-01):** **`identity-p1-2fa` + `component-b2` merged after Andrew smoke PASS.** **AH-7 (2026-06-01):** **`identity-p2-schema` + `identity-p2-ownership-guard` merged to `v1-redesign`.** **NO merge to master/prod** for the epic yet.
+> **Overnight autonomous mode (2026-06-01):** **`identity-p1-2fa` + `component-b2` + AH-7 p2 schema/guard + P2a session-infra merged.** **NO merge to master/prod** for the epic yet.
 
 ## OVERNIGHT SESSION SUMMARY (2026-06-01)
 
@@ -94,7 +96,7 @@ Fresh orchestrator: `git checkout v1-redesign` → read this spine → [`v1-rede
 
 ## FLY-PLAN
 
-**Headline Sonnet pass — LANDED 2026-05-31** (`23c65c0`) → [`docs/handoff/session-lifecycle-consent-design-2026-05-31.md`](session-lifecycle-consent-design-2026-05-31.md). **Implementation is downstream** (Identity Phases 2–4 per design §8); **decision-unblocked 2026-05-31** (essentials-vs-optional split RATIFIED; H-1/H-2 RESOLVED; §9 accepted). Remaining gates: legal/umbrella disclosure floor; session-lifecycle Phase-3 BLOCKERs; **P2a session-infra build** (design ratified 2026-06-01; p2 schema + ownership guard **MERGED** AH-7). **`assertOwnsLearnerProfile` SATISFIED+MERGED** (`identity-p2-ownership-guard` → `v1-redesign` @ `1a06a65`, 2026-06-01). **TOTP encrypt-at-rest SATISFIED+MERGED** (`identity-p1-2fa` → `v1-redesign` @ `b5ef4fe`, smoke 2026-06-01).
+**Headline Sonnet pass — LANDED 2026-05-31** (`23c65c0`) → [`docs/handoff/session-lifecycle-consent-design-2026-05-31.md`](session-lifecycle-consent-design-2026-05-31.md). **Implementation is downstream** (Identity Phases 2–4 per design §8); **decision-unblocked 2026-05-31** (essentials-vs-optional split RATIFIED; H-1/H-2 RESOLVED; §9 accepted). Remaining gates: legal/umbrella disclosure floor; session-lifecycle Phase-3 BLOCKERs; **P2b UI** (P2a session-infra **MERGED** @ `6c4a268`, 2026-06-01). **`assertOwnsLearnerProfile` SATISFIED+MERGED** (`identity-p2-ownership-guard` → `v1-redesign` @ `1a06a65`, 2026-06-01). **TOTP encrypt-at-rest SATISFIED+MERGED** (`identity-p1-2fa` → `v1-redesign` @ `b5ef4fe`, smoke 2026-06-01).
 
 Delivered as design (was the fly-pass scope):
 
@@ -136,8 +138,18 @@ Because all subagents share **one working tree**, the generated Prisma client (`
 | Identity Phase 2 (additive schema foundation) | **DONE + MERGED** to `v1-redesign` @ `242c6b2` (2026-06-01, AH-7) | Scope: 6 new Prisma models (`AccountHolder`, `AccountHolderEmailToken`, `LearnerProfile`, `LearnerCredential`, `LearnerDeviceSession`, `StudentClaimInvite`) + `AccountHolderEmailTokenPurpose` enum; `Student.learnerProfileId String? @unique` (nullable, `onDelete: SetNull`) + `claimInvites` back-relation; COPPA tombstone columns; migration `20260531190000_identity_p2_principals` **unchanged** (already on preview-dev). **Merge resolution:** `prisma/schema.prisma` union — kept v1-redesign `AdminUser2FA` / `AdminUser2FABackupCode` + p2 `claimInvites` on `AdminUser`. **Purely additive, ZERO route wiring.** Gates post-merge: `tsc` + `next build` exit 0; `test:regression` 92/92; identity-2fa 115/115; impersonation 24/24. |
 | Identity Phase 2 ownership guard (`assertOwnsLearnerProfile`) | **DONE + MERGED** to `v1-redesign` @ `1a06a65` (2026-06-01, AH-7) | `assertOwnsLearnerProfile` in `src/lib/learner-profile-scope.ts` + **14/14** tests. **`lpr=`** logs on denial. Gates post-merge: ownership 14/14 + regression 92/92 + identity-2fa + impersonation green. |
 | **Identity Phase-2 AUTH + SESSION INFRASTRUCTURE design** | **DONE + RATIFIED** (2026-06-01) @ `f41a445` | Design-only: separate Operator vs AccountHolder realms + child PIN mechanism; AH-1..AH-7 + amendments (parent-first linking, per-child access mode, no-dup-code primitives, impersonation unchanged / cross-realm deferred, connect-link identity interstitial). 7 P2a BLOCKERs: S1, S2, S3, R1, C1, A1, O1. [`identity-phase2-auth-session-design-2026-06-01.md`](identity-phase2-auth-session-design-2026-06-01.md) |
-| **Identity Phase 2a (build — session infra + claim back-end)** | **PENDING — NEXT** | **Prerequisites DONE (AH-7):** p2 schema @ `242c6b2` + ownership guard @ `1a06a65` on `v1-redesign`. **P2a branch:** `AccountHolderSession`, `LearnerDeviceSession.expiresAt`, `AccountHolderEmailToken.payload` + `.targetLearnerProfileId`, `StudentClaimInvite.token`→`tokenHash` (later build item per AH-7 — held merge left `token` as-is), shared auth primitives + thin realm adapters, claim/connect back-end (tutor-initiated + existing-account path w/ interstitial), child login back-end, guards + middleware. **Acceptance:** 7 BLOCKERs (design §12) + no duplicated auth logic + connect identity interstitial. No UI (P2b). Design §10.2. |
+| **Identity Phase 2a (build — session infra + claim back-end)** | **DONE + MERGED** to `v1-redesign` @ **`6c4a268`** (2026-06-01) | **Delivered:** separate AccountHolder realm (`mynk_ah_session` + `AccountHolderSession` table, `getAccountHolderSession`); learner PIN device sessions (`getLearnerSession`, soft-lockout never-hard-lock per AH-4); claim/connect back-end (`/api/students/[id]/claim-invites`, `/api/claim/[token]/complete|setup`); AccountHolder auth routes (signup/login/logout/forgot/reset + `/verify-email`); shared auth primitives in common modules (no-dup-auth: `src/lib/crypto/session-tokens.ts`, `src/lib/account-holder-auth.ts`); middleware cookie-presence gates for `/account/*` + `/join/*` (Operator `/admin/*` gate untouched — I-1/I-2/A1). Migration `20260602000000_identity_p2a_session_infra`: `AccountHolderSession`; `LearnerDeviceSession.expiresAt`+`deviceInfo`; `AccountHolderEmailToken.payload`+`targetLearnerProfileId`; `AccountHolder.passwordHash`+`displayName`+`emailVerifiedAt`; `LearnerAccessMode` enum + `LearnerProfile.accessMode` default `parent_session_select`; **`StudentClaimInvite.token`→`tokenHash`** (empty column) + `revokedAt`+`claimedByAccountHolderId`. **Acceptance MET:** 7 BLOCKERs (S1/S2/S3/R1/C1/A1/O1) + I-1..I-6 + soft-lockout tiers green (225 identity-suite tests @ post-merge gates). **P2a stubs (Phase-3 wiring):** `assertEffectiveConsent` (void, tutor-acknowledged fallback), `assertIsSessionParticipant` (`notFound()` stub), `assertOwnsConsentRecord` (`notFound()` stub) — await `SessionConsentSnapshot`, `SessionParticipant`, `ConsentRecord`, `ConsentRestriction` (not on branch yet). No UI (P2b). |
 | Component Phase B2 (dashboard / student list / detail) | **DONE + MERGED** to `v1-redesign` @ `0424206` (smoked as-scoped **2026-06-01**) | **Reskin floor only** — admin nav + layout, dashboard, student-list + detail restyled to B1 shadcn + Mynka Blue; new primitives `AdminPageShell`, `AdminSectionCard`, `StudentAvatar`, `StudentsRoster`. Behavior/routes/ownership unchanged. **Merge resolution:** `AdminNav.tsx` kept B2 shadcn `Button` styling **and** 2FA impersonation sign-out (`exitImpersonation` form when `isImpersonating`; `layout.tsx` passes `isImpersonating` + B2 max-width container). **Deferred by design** (land in Phase C + B3–B6, not B2): full next-actions dashboard, two-column layout, shadcn form controls on note forms, nav redesign. **Andrew decisions (2026-06-01):** (1) B2 merged as reskin floor; (2) nav redesign waits for real surface redesign — **not** pulled forward; (3) landing/hero + `/about` are **V1-required** gap-close → component plan **Phase D** ([`v1-component-redesign-design-2026-05-31.md`](v1-component-redesign-design-2026-05-31.md)). **B2 smoke → backlog:** pre-existing UX/a11y items logged in [`docs/BACKLOG.md`](../BACKLOG.md) § "Component redesign — B2 smoke (2026-06-01)". Gates @ merge: `tsc`, `next build`, `test:regression` 92/92, identity+impersonation 139/139. |
+
+### Phase-3 consent stubs (P2a — executor note)
+
+P2a shipped **stub** implementations that must be replaced when Phase-3 consent models land (`SessionConsentSnapshot`, `SessionParticipant`, `ConsentRecord`, `ConsentRestriction` — **not on `v1-redesign` yet**):
+
+| Stub | Location | P2a behavior | Phase-3 wiring |
+|------|----------|--------------|------------------|
+| `assertEffectiveConsent` | `src/lib/consent-scope.ts` | Returns void; logs `[cns] … fallback=tutor_acknowledged` | Enforce effective consent from frozen snapshot |
+| `assertIsSessionParticipant` | `src/lib/session-participant-scope.ts` | Always `notFound()` | Check `SessionParticipant` set |
+| `assertOwnsConsentRecord` | consent-scope (stub) | Always `notFound()` | Parent/child consent-record ownership |
 
 ---
 
@@ -180,8 +192,16 @@ Folded from 5-axis review in [`session-lifecycle-consent-design-2026-05-31.md`](
 ## ACTION (Andrew) — Identity Phase 1 smoke gate
 
 > ✅ **COMPLETE 2026-06-01.** Consolidated smoke **PASSED** on `identity-p1-2fa` @ `d782430`; **F1–F4 ratified**; merged `--no-ff` to `v1-redesign` @ `b5ef4fe`. **`TOTP_ENCRYPTION_KEY`** must remain set on Vercel all envs. **PROD:** `prisma migrate deploy` both p1 migrations on next `v1-redesign` production deploy.
+
+## ACTION (Andrew) — before P2b smoke
+
+> **P2a build MERGED 2026-06-01** @ `6c4a268`. Before P2b UI + real-hardware smoke, set on **Vercel preview + prod:**
 >
-> **Phase 2 merges UNBLOCKED (2026-06-01)** — auth/session design ratified; proceed per P2a row (migration-ordering hazard check first).
+> 1. **`AH_SESSION_HMAC_SECRET`** — 32+ byte base64 (live now).
+> 2. **`LEARNER_SESSION_HMAC_SECRET`** — 32+ byte base64 (live now).
+> 3. **`AH_TOTP_ENCRYPTION_KEY`** — reserved for Phase 6; set now for env parity.
+>
+> P2a **fails closed (401)** if session secrets absent but does **not** crash build. **Preview-dev migration:** applies on next `v1-redesign` deploy (`20260602000000` — `token`→`tokenHash` rename on an empty column). If fussy, Andrew's "reset preview-dev to master" valve is the fallback.
 
 ---
 
@@ -236,20 +256,21 @@ Folded from 5-axis review in [`session-lifecycle-consent-design-2026-05-31.md`](
 
 ## Next actions
 
-> **2026-06-01:** Identity Phase 1 **MERGED** @ `b5ef4fe`; Component Phase B2 **MERGED** @ `0424206`; **Identity Phase-2 auth/session design RATIFIED**; **AH-7:** p2 schema **MERGED** @ `242c6b2` + ownership guard **MERGED** @ `1a06a65` (migrations as-is, no rename).
+> **2026-06-01:** Identity Phase 1 **MERGED** @ `b5ef4fe`; Component Phase B2 **MERGED** @ `0424206`; **AH-7** p2 schema @ `242c6b2` + ownership guard @ `1a06a65`; **P2a session-infra MERGED** @ **`6c4a268`**; **Road-to-GA doc** @ `eca63b5` ([`docs/ROAD-TO-GA.md`](../ROAD-TO-GA.md) — launch-readiness hub, 3 gates).
 
 **Orchestrator / executor queue:**
 
-1. **P2a session-infra build (NEXT):** branch from current `v1-redesign` — AccountHolder/child session infra + claim/connect back-end with **7 BLOCKERs** (S1, S2, S3, R1, C1, A1, O1) + **no duplicated auth logic** + **connect-link identity interstitial** in acceptance. **Do NOT** re-merge held p2 branches (done).
-2. **Schema gaps in P2a migration (additive):** `AccountHolderSession` (new table); `LearnerDeviceSession.expiresAt`; `StudentClaimInvite.token` → `tokenHash`; `AccountHolderEmailToken.payload` + `.targetLearnerProfileId`; per-`LearnerProfile` child access mode field(s). See design doc §9 + [RATIFIED + AMENDED](identity-phase2-auth-session-design-2026-06-01.md#ratified--amended-andrew-2026-06-01).
-3. **PROD deploy hygiene:** on next `v1-redesign` production deploy, **`prisma migrate deploy`** p1 + p2 (`20260531180000`, `20260601120000`, `20260531190000`) if not applied. Confirm `TOTP_ENCRYPTION_KEY` on all Vercel envs; reserve `AH_SESSION_HMAC_SECRET`, `LEARNER_SESSION_HMAC_SECRET`, `AH_TOTP_ENCRYPTION_KEY` for P2a.
+1. **P2b (NEXT):** AccountHolder UI + child login UI (`/account/*`, `/claim/[token]` wizard, `/students/login`); activate `NEXT_PUBLIC_CLAIM_INVITES_ENABLED`; real-hardware smoke gate; **Sonnet tier**. Design §10.2. Wire Phase-3 consent stubs when models ship.
+2. **Phase 3 consent models:** `SessionConsentSnapshot`, `SessionParticipant`, `ConsentRecord`, `ConsentRestriction` — replace P2a stubs (see § Phase-3 consent stubs above).
+3. **PROD / preview deploy hygiene:** **`prisma migrate deploy`** p1 + p2 + P2a (`20260531180000`, `20260601120000`, `20260531190000`, `20260602000000_identity_p2a_session_infra`) if not applied. Confirm `TOTP_ENCRYPTION_KEY` + set P2a session secrets (Andrew ACTION above).
 
 **Andrew's queue:**
 
-4. **Component next:** Phase **B3** (session list / billing log UI) or **Phase D** gap-close (landing/hero + `/about`). Nav redesign stays with B3–B6.
-5. **Session-lifecycle + consent (Phases 3–4):** dispatch **after** P2a live (schema + session infra).
-6. **BLOCKERs (active):** umbrella deploy + OpenAI DPA + deletion-request inbox; session-lifecycle Phase-3 BLOCKERs.
-7. **Andrew parallel:** interim `interim-capture-attestation` migrate → smoke → merge; umbrella `coppa-312-10-disclosure` review+deploy; Phase A + B1 smoke; B2 BACKLOG; optional visual snapshot update.
-8. **Sarah-pending:** test-students audit.
-9. **Solo in-person recording:** B-5 acceptance before `soloEnabled` in production.
-10. Keep this spine + bootstrapper in sync at every handoff.
+4. **Env vars + preview-dev migration** before P2b smoke (see ACTION above).
+5. **Component next:** Phase **B3** (session list / billing log UI) or **Phase D** gap-close (landing/hero + `/about`). Nav redesign stays with B3–B6.
+6. **Session-lifecycle + consent (Phases 3–4):** dispatch after P2b UI + Phase-3 models.
+7. **BLOCKERs (active):** umbrella deploy + OpenAI DPA + deletion-request inbox; session-lifecycle Phase-3 BLOCKERs.
+8. **Andrew parallel:** interim `interim-capture-attestation` migrate → smoke → merge; umbrella `coppa-312-10-disclosure` review+deploy; Phase A + B1 smoke; B2 BACKLOG; optional visual snapshot update.
+9. **Sarah-pending:** test-students audit.
+10. **Solo in-person recording:** B-5 acceptance before `soloEnabled` in production.
+11. Keep this spine + bootstrapper in sync at every handoff.

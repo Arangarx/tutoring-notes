@@ -12,9 +12,9 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 ## Last action completed
 
-**2026-06-01 — Component Phase B2 merged to `v1-redesign`.** Andrew visual smoke **PASSED as-scoped** (reskin floor); `merge --no-ff` `component-b2-dashboard-students` → `v1-redesign` @ **`0424206`**. `AdminNav` merge kept B2 shadcn styling + 2FA impersonation sign-out. Docs: Phase D gap-close (landing/hero + `/about`) in component plan; B2 smoke items → BACKLOG. Gates: `tsc`, `next build`, `test:regression` 92/92, identity+impersonation 139/139.
+**2026-06-01 — Identity Phase 2a (session infra + claim back-end) merged to `v1-redesign`.** `merge --no-ff` `identity-p2a-session-infra` → `v1-redesign` @ **`6c4a268`**. Post-merge gates green: `prisma generate`, `tsc`, `next build`, `test:regression` 92/92, identity-p2a 35/35, identity-2fa+impersonation+p2-schema+ownership 190/190. **Also merged:** `docs/road-to-ga` → `v1-redesign` @ **`eca63b5`** (docs only — [`docs/ROAD-TO-GA.md`](../ROAD-TO-GA.md)).
 
-**2026-06-01 — Identity Phase 1 (mandatory tutor/admin TOTP 2FA) merged to `v1-redesign`.** Andrew real-hardware smoke **PASSED** on `identity-p1-2fa` @ `d782430`; `merge --no-ff` → `v1-redesign` @ **`b5ef4fe`**. F1–F4 ratified. **NOT merged:** `identity-p2-schema`, `identity-p2-ownership-guard` (gate: AccountHolder auth/session design with Andrew).
+**2026-06-01 — Component Phase B2 merged to `v1-redesign` @ `0424206`; Identity Phase 1 @ `b5ef4fe`; AH-7 p2 schema @ `242c6b2` + ownership guard @ `1a06a65`.** (Earlier same-day merges — detail in [`v1-redesign-STATUS.md`](v1-redesign-STATUS.md).)
 
 **2026-05-31 — usemynk Safe Browsing / end-session triage (docs on `master`).** Search Console now shows domain-level **"Deceptive pages"** (Sample URLs: N/A); **Request Review** filed 2026-05-31 (supersedes 2026-05-30 `report_error`). Re-test at 48h; no repeated reviews. End-session **"0 segments"** downgraded to **cosmetic** -- prod `SessionRecording` `8a34b5f5-3aa8-48d5-bb1f-0248fa4762a8` (~1.5MB, same smoke session). Copy fix branch `fix/end-session-segment-copy` in flight.
 
@@ -28,11 +28,13 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 ## Next action(s)
 
-**V1 epic (`v1-redesign`):**
+**V1 epic (`v1-redesign` @ `6c4a268`):**
 
-1. **PROD:** `prisma migrate deploy` both p1 2FA migrations on next `v1-redesign` production deploy (`20260531180000` + `20260601120000`).
-2. **AccountHolder auth/session design** with Andrew — **before** merging `identity-p2-schema` / `identity-p2-ownership-guard`.
-3. **Component:** B3 session-list UI and/or **Phase D** gap-close design (landing/hero + `/about`, V1-required). Nav redesign stays with B3–B6 surfaces, not pulled forward.
+1. **Andrew:** set `AH_SESSION_HMAC_SECRET`, `LEARNER_SESSION_HMAC_SECRET`, `AH_TOTP_ENCRYPTION_KEY` on Vercel preview/prod; verify preview-dev P2a migration (`20260602000000`) on next deploy.
+2. **P2b (NEXT build):** AccountHolder UI + child login UI (`/account/*`, `/claim/[token]` wizard, `/students/login`); `NEXT_PUBLIC_CLAIM_INVITES_ENABLED`; real-hardware smoke; Sonnet tier. Design §10.2.
+3. **Phase 3 consent models** — replace P2a stubs (`assertEffectiveConsent`, `assertIsSessionParticipant`, `assertOwnsConsentRecord`).
+4. **Component:** B3 session-list UI and/or **Phase D** gap-close (landing/hero + `/about`). Nav redesign stays with B3–B6.
+5. **PROD / preview:** `prisma migrate deploy` p1 + p2 + P2a migrations on next `v1-redesign` deploy.
 
 **Master / pilot (parallel):**
 
@@ -45,6 +47,8 @@ Update this file's head as each lands.
 
 | Decision | Gates | Notes |
 |----------|-------|-------|
+| **P2a env vars on Vercel** | P2b smoke | Set `AH_SESSION_HMAC_SECRET` + `LEARNER_SESSION_HMAC_SECRET` (32+ byte base64 each) + `AH_TOTP_ENCRYPTION_KEY` (Phase 6 reserved) on preview/prod before P2b real-hardware smoke. |
+| **Preview-dev P2a migration** | Next `v1-redesign` deploy | `20260602000000` (`token`→`tokenHash` on empty column); reset preview-dev to master if fussy. |
 | ~~SEC-1 B smoke~~ | — | ✅ **PASS + MERGED 2026-05-30** (`6e29d57`). test1 flip still gated per sequencing guard (after C). |
 | **SEC-1 Q1 reversed — keep admin password** | Dispatch C | ✅ **RATIFIED 2026-05-30:** Real admin keeps strong password + credentials login; Google OAuth is additional, not exclusive. Do NOT null real-admin `passwordHash`. Test accounts unchanged (passwordless). Design doc § Ratifications R1. |
 | **SEC-1 admin dashboard landing** | Dispatch C | ✅ **RATIFIED 2026-05-30:** Real admin (`isTestAccount=false`, not impersonating) lands on dedicated admin dashboard; tutor view only via "Log in as"; exit returns to dashboard. Design doc § Ratifications R2. |
@@ -59,9 +63,9 @@ Update this file's head as each lands.
 
 ## In-flight subagents
 
-**Branch in flight (not merged):** `fix/end-session-segment-copy` -- end-session End-button phase copy (no bare "0 segments"; cosmetic BACKLOG 3c).
+**Branch in flight (not merged):** `fix/end-session-segment-copy` — end-session End-button phase copy (cosmetic BACKLOG 3c).
 
-**None** (subagent dispatches). All SEC-1 work merged.
+**None** (subagent dispatches).
 
 **Recently completed:**
 - **SEC-1 role split (ADMIN vs TUTOR)** — ✅ MERGED `7dadd7a` (2026-05-30, Sonnet). Andrew smoke PASS.
@@ -76,11 +80,9 @@ Update this file's head as each lands.
 
 ## Uncommitted / unmerged state
 
-**Working tree:** on `v1-redesign` @ `0424206` (docs commit pending push after Step 2).
+**Working tree:** on `v1-redesign` @ **`6c4a268`** (docs spine + orchestrator-state commit pending push).
 
-**V1 epic — merged to `v1-redesign`:** `identity-p1-2fa` @ **`b5ef4fe`**, `component-b2-dashboard-students` @ **`0424206`** (2026-06-01).
-
-**V1 epic — PUSHED-BUT-HELD (not merged):** `identity-p2-schema` @ `e305d0b`, `identity-p2-ownership-guard` @ `f74f164`.
+**V1 epic — merged to `v1-redesign`:** `identity-p1-2fa` @ `b5ef4fe`, `component-b2-dashboard-students` @ `0424206`, `identity-p2-schema` @ `242c6b2`, `identity-p2-ownership-guard` @ `1a06a65`, **`identity-p2a-session-infra` @ `6c4a268`**, `docs/road-to-ga` @ `eca63b5` (2026-06-01).
 
 **`master` HEAD:** `a1f5d6e` (does not include V1 epic / 2FA).
 
