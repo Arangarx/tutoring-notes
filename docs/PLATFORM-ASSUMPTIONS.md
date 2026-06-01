@@ -459,6 +459,38 @@
 
 ---
 
+### 10.5 AH_SESSION_HMAC_SECRET — AccountHolder session token signing (Identity Phase 2a)
+
+- **Assumption**: `AH_SESSION_HMAC_SECRET` env var must be present (32+ bytes, base64) on any deployment where AccountHolder auth is active. Missing key causes `getAccountHolderSession()` and `createAccountHolderSession()` to fail-closed (return null / throw) without crashing the build.
+- **Where baked in**:
+  - `src/lib/account-holder-session.ts` — read at call time via `process.env.AH_SESSION_HMAC_SECRET`.
+  - `src/lib/crypto/session-tokens.ts` — `hmacToken()` throws if secret is empty.
+- **Security tier**: same as `NEXTAUTH_SECRET` — treat as a session signing key. An attacker who obtains this secret can forge valid AccountHolder session cookies.
+- **Rotation**: rotating this key invalidates ALL active AccountHolder sessions (all existing tokenHash values become unverifiable). Coordinate with a maintenance window if rotating in production. No dual-key support in V1.
+- **Build safety**: key is optional in `env.ts` Zod schema — `next build` succeeds without it. Auth fails at request time only.
+- **Migration check**: MUST add `AH_SESSION_HMAC_SECRET` to all envs before P2b goes live. Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`.
+
+### 10.6 LEARNER_SESSION_HMAC_SECRET — Learner device session token signing (Identity Phase 2a)
+
+- **Assumption**: `LEARNER_SESSION_HMAC_SECRET` env var must be present (32+ bytes, base64) on any deployment where learner PIN login is active. Fail-closed at request time; does not crash build.
+- **Where baked in**:
+  - `src/lib/learner-session.ts` — read at call time.
+  - `src/lib/crypto/session-tokens.ts` — same `hmacToken()` path.
+- **Security tier**: same tier as `AH_SESSION_HMAC_SECRET`. An attacker with this key can forge learner session cookies.
+- **Rotation**: invalidates ALL active learner device sessions. Children must re-login with their PIN on all devices. Inform parents before rotating.
+- **Build safety**: optional in `env.ts`; build succeeds without it.
+- **Migration check**: MUST add `LEARNER_SESSION_HMAC_SECRET` to all envs before P2b goes live.
+
+### 10.7 AH_TOTP_ENCRYPTION_KEY — AccountHolder TOTP secret encryption (Phase 6, reserved)
+
+- **Assumption**: Reserved now (Identity Phase 2a) so Phase 6 executor does not pick a conflicting name. Must decode to exactly 32 bytes (base64url) when Phase 6 AccountHolder 2FA enrollment is activated.
+- **Where baked in**:
+  - `src/lib/env.ts` — validated (same 32-byte base64url check as `TOTP_ENCRYPTION_KEY`).
+  - Phase 6 will add `src/lib/crypto/ah-totp-secret.ts` reading this key.
+- **Isolation from TOTP_ENCRYPTION_KEY (AH-3 LOCKED)**: rotating tutor TOTP key (`TOTP_ENCRYPTION_KEY`) must NOT affect parent 2FA. Separate key achieves this.
+- **Build safety**: optional in `env.ts`; build and P2a auth succeed without it.
+- **Migration check**: NOT required until Phase 6. Set before Phase 6 AccountHolder 2FA enrollment ships.
+
 ## Migration checklist — copy + check yes/no before deploying to a new platform
 
 > When considering AWS, Cloudflare, self-hosted, or any other platform migration, walk this list. Every "no" or "unsure" is a regression risk.
@@ -517,10 +549,14 @@
 - [ ] Per-session ID logging preserved across all new code paths. (§10.3)
 - [ ] Cost-events instrumentation continues firing on new AI call sites. (§10.2)
 - [ ] `TOTP_ENCRYPTION_KEY` set on all envs (32-byte base64url); key-rotation story documented to tutors. (§10.4)
+- [ ] `AH_SESSION_HMAC_SECRET` set on all envs before P2b AccountHolder auth goes live (§10.5)
+- [ ] `LEARNER_SESSION_HMAC_SECRET` set on all envs before P2b learner login goes live (§10.6)
+- [ ] `AH_TOTP_ENCRYPTION_KEY` reserved; required before Phase 6 AccountHolder 2FA ships (§10.7)
 
 ---
 
 ## Change log
 
+- **2026-06-02** — Identity Phase 2a (session infra + claim flow): added §10.5 AH_SESSION_HMAC_SECRET, §10.6 LEARNER_SESSION_HMAC_SECRET, §10.7 AH_TOTP_ENCRYPTION_KEY. Migration checklist updated.
 - **2026-05-31** — Identity Phase 1 (2FA): added §10.4 TOTP_ENCRYPTION_KEY assumption. Key-rotation story documented. Migration checklist updated.
 - **2026-05-17** — initial inventory. Audited post-Vercel-Pro upgrade. Captures: Vercel Pro 300s ceiling now real (§1.1), housekeeping smoke lessons (§2.3, §3.1, §3.3, §9.1), cost-events shipped (§10.2), per-page view state shipped (§7.5).

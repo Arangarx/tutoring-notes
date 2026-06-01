@@ -85,6 +85,47 @@ const EnvSchema = z.object({
       })
       .optional()
   ),
+  /**
+   * HMAC-SHA-256 signing secret for AccountHolder session tokens (Identity Phase 2a).
+   * 32+ bytes random, base64 encoded.
+   * Generate: node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+   * Optional at build time — fails-closed at request time if unset in auth paths.
+   */
+  AH_SESSION_HMAC_SECRET: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().optional()
+  ),
+  /**
+   * HMAC-SHA-256 signing secret for LearnerDeviceSession tokens (Identity Phase 2a).
+   * 32+ bytes random, base64 encoded.
+   * Optional at build time — fails-closed at request time if unset in auth paths.
+   */
+  LEARNER_SESSION_HMAC_SECRET: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().optional()
+  ),
+  /**
+   * AES-256-GCM key for AccountHolder TOTP secret encryption (Phase 6).
+   * Isolated from TOTP_ENCRYPTION_KEY so rotating tutor 2FA doesn't affect parent 2FA.
+   * Reserved in Phase 2a so Phase 6 executor doesn't pick a conflicting name.
+   * Optional at build time — Phase 6 enrollment will fail if unset.
+   */
+  AH_TOTP_ENCRYPTION_KEY: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z
+      .string()
+      .refine(
+        (v) => {
+          try {
+            return Buffer.from(v, "base64url").length === 32;
+          } catch {
+            return false;
+          }
+        },
+        { message: "must be a base64url string that decodes to exactly 32 bytes" }
+      )
+      .optional()
+  ),
 });
 
 const parsed = EnvSchema.safeParse({
@@ -108,6 +149,9 @@ const parsed = EnvSchema.safeParse({
   BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN,
   TOTP_ENCRYPTION_KEY: process.env.TOTP_ENCRYPTION_KEY,
   WHITEBOARD_SYNC_URL: process.env.WHITEBOARD_SYNC_URL,
+  AH_SESSION_HMAC_SECRET: process.env.AH_SESSION_HMAC_SECRET,
+  LEARNER_SESSION_HMAC_SECRET: process.env.LEARNER_SESSION_HMAC_SECRET,
+  AH_TOTP_ENCRYPTION_KEY: process.env.AH_TOTP_ENCRYPTION_KEY,
 });
 
 if (!parsed.success) {
