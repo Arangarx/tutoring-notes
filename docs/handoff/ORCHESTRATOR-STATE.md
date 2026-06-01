@@ -12,7 +12,9 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 ## Last action completed
 
-**2026-06-01 — Identity Phase 1 (mandatory tutor/admin TOTP 2FA) merged to `v1-redesign`.** Andrew real-hardware smoke **PASSED** on `identity-p1-2fa` @ `d782430`; `merge --no-ff` → `v1-redesign` @ **`b5ef4fe`**. F1–F4 ratified. **NOT merged:** `identity-p2-schema`, `identity-p2-ownership-guard` (gate: AccountHolder auth/session design with Andrew). Gates on merge: `tsc`, `next build`, 124 2FA+impersonation tests, `test:regression` 92/92.
+**2026-06-01 — Component Phase B2 merged to `v1-redesign`.** Andrew visual smoke **PASSED as-scoped** (reskin floor); `merge --no-ff` `component-b2-dashboard-students` → `v1-redesign` @ **`0424206`**. `AdminNav` merge kept B2 shadcn styling + 2FA impersonation sign-out. Docs: Phase D gap-close (landing/hero + `/about`) in component plan; B2 smoke items → BACKLOG. Gates: `tsc`, `next build`, `test:regression` 92/92, identity+impersonation 139/139.
+
+**2026-06-01 — Identity Phase 1 (mandatory tutor/admin TOTP 2FA) merged to `v1-redesign`.** Andrew real-hardware smoke **PASSED** on `identity-p1-2fa` @ `d782430`; `merge --no-ff` → `v1-redesign` @ **`b5ef4fe`**. F1–F4 ratified. **NOT merged:** `identity-p2-schema`, `identity-p2-ownership-guard` (gate: AccountHolder auth/session design with Andrew).
 
 **2026-05-31 — usemynk Safe Browsing / end-session triage (docs on `master`).** Search Console now shows domain-level **"Deceptive pages"** (Sample URLs: N/A); **Request Review** filed 2026-05-31 (supersedes 2026-05-30 `report_error`). Re-test at 48h; no repeated reviews. End-session **"0 segments"** downgraded to **cosmetic** -- prod `SessionRecording` `8a34b5f5-3aa8-48d5-bb1f-0248fa4762a8` (~1.5MB, same smoke session). Copy fix branch `fix/end-session-segment-copy` in flight.
 
@@ -30,7 +32,7 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 1. **PROD:** `prisma migrate deploy` both p1 2FA migrations on next `v1-redesign` production deploy (`20260531180000` + `20260601120000`).
 2. **AccountHolder auth/session design** with Andrew — **before** merging `identity-p2-schema` / `identity-p2-ownership-guard`.
-3. **Component B2** visual smoke → optional `merge --no-ff` `component-b2-dashboard-students` @ `20de6fa`.
+3. **Component:** B3 session-list UI and/or **Phase D** gap-close design (landing/hero + `/about`, V1-required). Nav redesign stays with B3–B6 surfaces, not pulled forward.
 
 **Master / pilot (parallel):**
 
@@ -74,11 +76,11 @@ Update this file's head as each lands.
 
 ## Uncommitted / unmerged state
 
-**Working tree:** on `v1-redesign` (docs spine commit pending push after merge milestone).
+**Working tree:** on `v1-redesign` @ `0424206` (docs commit pending push after Step 2).
 
-**V1 epic — merged to `v1-redesign`:** `identity-p1-2fa` @ merge **`b5ef4fe`** (2026-06-01).
+**V1 epic — merged to `v1-redesign`:** `identity-p1-2fa` @ **`b5ef4fe`**, `component-b2-dashboard-students` @ **`0424206`** (2026-06-01).
 
-**V1 epic — PUSHED-BUT-HELD (not merged):** `identity-p2-schema` @ `e305d0b`, `identity-p2-ownership-guard` @ `f74f164`, `component-b2-dashboard-students` @ `20de6fa`.
+**V1 epic — PUSHED-BUT-HELD (not merged):** `identity-p2-schema` @ `e305d0b`, `identity-p2-ownership-guard` @ `f74f164`.
 
 **`master` HEAD:** `a1f5d6e` (does not include V1 epic / 2FA).
 

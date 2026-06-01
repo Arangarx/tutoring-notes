@@ -46,8 +46,11 @@ This document supersedes both planned files with a single, more complete spec th
 | **A — Foundations** | Dark-mode tokens + fonts (no IA change, no component change) | Low |
 | **B — Per-surface component redesign** | Redesign component by component, starting with public surfaces → dashboard → workspace | Medium |
 | **C — IA / URL restructure** | URL renames + 301 redirects + OAuth coordination | High (Andrew-gated, coordinated deploy) |
+| **D — V1 gap-close (required for V1)** | Landing/hero marketing page redesign + net-new `/about` route | Medium (design pass needed; dedicated follow-up phase acceptable) |
 
-Phases A and B can run in parallel with Wave 1 reliability work on separate branches. Phase C is gated on Andrew ratifying the URL proposals in §2 and coordinating the OAuth callback deploy.
+Phases A and B can run in parallel with Wave 1 reliability work on separate branches. Phase C is gated on Andrew ratifying the URL proposals in §2 and coordinating the OAuth callback deploy. **Phase D** ships before V1 launch (Andrew 2026-06-01) — may run as its own sub-pass after B/C surfaces are stable.
+
+**Nav redesign — NOT pulled forward (Andrew 2026-06-01):** global nav / IA chrome redesign is **not** a standalone early pass. It lands with the real surface redesign per §5.1 (dashboard), §5.2 (student list), §5.10 (settings), and the corresponding B batches (B3–B6) — do not re-litigate.
 
 ---
 
@@ -67,7 +70,7 @@ Phases A and B can run in parallel with Wave 1 reliability work on separate bran
 
 | Current route | Proposed route | Redirect? | Notes |
 |---|---|---|---|
-| `/` | `/` | — | Landing/marketing page (unchanged) |
+| `/` | `/` | — | **Landing/marketing page — V1 redesign required** (Phase D; was "unchanged" pre-2026-06-01) |
 | `/login` | `/login` | — | Keep |
 | `/signup` | `/signup` | — | Keep |
 | `/forgot-password` | `/forgot-password` | — | Keep |
@@ -76,6 +79,7 @@ Phases A and B can run in parallel with Wave 1 reliability work on separate bran
 | `/privacy` | `/privacy` | — | Keep (legal facade) |
 | `/terms` | `/terms` | — | Keep (legal facade) |
 | `/feedback` | `/feedback` | — | Keep |
+| — | `/about` | NEW | Product/about page — **V1-required** (Phase D; net-new route, not previously planned) |
 | `/w/[joinToken]` | `/join/[token]` | 301: `/w/*` → `/join/*` | "Join" is the verb Sarah says to students. Token extraction unchanged. |
 | `/s/[token]` | `/share/[token]` | 301: `/s/*` → `/share/*` | Cleaner URL for parents, still tokenized. |
 | `/s/[token]/all` | `/share/[token]/all` | 301 | |
@@ -100,6 +104,7 @@ Phases A and B can run in parallel with Wave 1 reliability work on separate bran
 
 | New route | Purpose | Wave |
 |---|---|---|
+| `/about` | Product/about page (company story, trust, pilot positioning) | **V1 — Phase D** (design pass TBD) |
 | `/sessions` | Session list + billing log view | W3 UI (W2.5 data) |
 | `/sessions/[id]/workspace` | Live workspace (new URL for existing workspace) | W3 (with 301 from old) |
 | `/settings/billing` | Rounding defaults, timezone, billing format | W2.5 |
@@ -1085,6 +1090,41 @@ Redesign `/join/[token]` — mobile-first layout, `100dvh`, camera tile overlay,
 - [ ] A7 (tokenized shares): existing tokens still work after redirect
 
 **Andrew decisions gating Phase C:** Q-1, Q-2, Q-3 — ✅ ratified 2026-05-31 (§8).
+
+---
+
+### Phase D — V1 gap-close (required for V1)
+
+> **Andrew 2026-06-01:** These items were **not** in the original component plan but are **V1-required**. A dedicated gap-close phase (after core B batches and/or alongside late B work) is acceptable. Detailed visual specs are **not** written here yet — placeholder scope only.
+
+**Decision recorded (do not re-litigate):** **Nav redesign is NOT pulled forward** into its own early pass. Global nav / top chrome redesign ships with the real surface specs in §5.1, §5.2, §5.10 and batches B3–B6 — not as standalone work ahead of those surfaces.
+
+#### D1 — Landing / hero / marketing page (`/`)
+
+**Current state:** Public `/` is a minimal marketing shell; the original plan marked it "unchanged."
+
+**V1 intent:** Full landing/hero redesign — Andrew: the public landing "needs a lot of work." Apply Mynka Blue tokens, Fraunces/Inter typography, and shadcn primitives consistent with B1 auth surfaces. Scope includes hero, value props, primary CTA(s), and trust/social-proof blocks as appropriate.
+
+**Status:** Needs design pass before Composer dispatch (wireframes or reference mocks acceptable).
+
+**Does NOT include:** Post-login dashboard (§5.1 / B2 reskin is the interim floor on `/admin` routes until Phase C URL flattening).
+
+#### D2 — About page (`/about`)
+
+**Current state:** Route does not exist.
+
+**V1 intent:** Net-new public `/about` — product story, who we are, how Mynk relates to tutoring (align with brand voice in `docs/MYNK-BRAND-PHASE-2-DECISIONS.md`). Linked from landing footer and/or global public nav when that nav is redesigned.
+
+**Status:** Needs design pass before Composer dispatch.
+
+**Dependencies:** Phase A (tokens/fonts). May share layout primitives with D1 landing pass.
+
+**Acceptance criteria (placeholder — refine at design pass):**
+- [ ] `/` no longer ships as pre-redesign marketing stub
+- [ ] `/about` returns 200 with on-brand layout; linked from `/`
+- [ ] WCAG 2.2 AA on both surfaces (axe with `color-contrast` enabled)
+- [ ] No new CSP origins; fonts via `next/font` only
+- [ ] Invariants A1–A10 unaffected (marketing routes only)
 
 ---
 
