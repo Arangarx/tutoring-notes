@@ -12,6 +12,8 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 ## Last action completed
 
+**2026-06-01 — Identity Phase 1 (mandatory tutor/admin TOTP 2FA) merged to `v1-redesign`.** Andrew real-hardware smoke **PASSED** on `identity-p1-2fa` @ `d782430`; `merge --no-ff` → `v1-redesign` @ **`b5ef4fe`**. F1–F4 ratified. **NOT merged:** `identity-p2-schema`, `identity-p2-ownership-guard` (gate: AccountHolder auth/session design with Andrew). Gates on merge: `tsc`, `next build`, 124 2FA+impersonation tests, `test:regression` 92/92.
+
 **2026-05-31 — usemynk Safe Browsing / end-session triage (docs on `master`).** Search Console now shows domain-level **"Deceptive pages"** (Sample URLs: N/A); **Request Review** filed 2026-05-31 (supersedes 2026-05-30 `report_error`). Re-test at 48h; no repeated reviews. End-session **"0 segments"** downgraded to **cosmetic** -- prod `SessionRecording` `8a34b5f5-3aa8-48d5-bb1f-0248fa4762a8` (~1.5MB, same smoke session). Copy fix branch `fix/end-session-segment-copy` in flight.
 
 **2026-05-30 — usemynk.com brand-domain cutover MERGED to `master`** (merge commit `291288c`). DNS + Vercel custom domains + Production-only `NEXTAUTH_URL` flip + repo artifacts all landed. **4/4 integration smoke pass** on usemynk.com (Gmail connect proven in incognito; whiteboard / upload / share via impersonating test1). **HOLD:** do not send Sarah to usemynk.com until deceptive-pages review clears + OAuth re-verify (she stays on `tutoring-notes.vercel.app`, zero disruption).
@@ -24,9 +26,16 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 ## Next action(s)
 
-1. **Pick next wave** — SEC-1 + usemynk cutover done. **Gate Sarah on usemynk:** Search Console "Deceptive pages" review clock (filed 2026-05-31) -- re-test Connect Gmail at **48h**; do not repeat review submissions. **In flight:** `fix/end-session-segment-copy` (end-session phase copy; BACKLOG 3c cosmetic). Other candidates: Wave 2.5 session-log greenfield, W3 mobile/URL, cross-preview SSO (post-wildcard previews on `.usemynk.com`). Andrew wants "new and shiny."
-2. **Verify role migration on production deploy** — confirm `migrate deploy` applied the `role` column + `arangarx@gmail.com → ADMIN` backfill on the production Neon branch after the `7dadd7a` deploy (preview-dev too). Quick Neon `SELECT email, role` check.
-3. ~~Upload re-baseline smoke~~ — 🟢 **CLOSED 2026-05-30 (Andrew):** treat upload as WORKING (58 MB cleared fast on paid Preview). **W1 Ship B not being built** — revive only if a real upload failure resurfaces.
+**V1 epic (`v1-redesign`):**
+
+1. **PROD:** `prisma migrate deploy` both p1 2FA migrations on next `v1-redesign` production deploy (`20260531180000` + `20260601120000`).
+2. **AccountHolder auth/session design** with Andrew — **before** merging `identity-p2-schema` / `identity-p2-ownership-guard`.
+3. **Component B2** visual smoke → optional `merge --no-ff` `component-b2-dashboard-students` @ `20de6fa`.
+
+**Master / pilot (parallel):**
+
+4. **Gate Sarah on usemynk:** Search Console "Deceptive pages" review (filed 2026-05-31) — re-test Connect Gmail at **48h**.
+5. **`fix/end-session-segment-copy`** — end-session phase copy (BACKLOG 3c cosmetic).
 
 Update this file's head as each lands.
 
@@ -65,11 +74,13 @@ Update this file's head as each lands.
 
 ## Uncommitted / unmerged state
 
-**Working tree:** clean on `master`.
+**Working tree:** on `v1-redesign` (docs spine commit pending push after merge milestone).
 
-**Unmerged branches awaiting gates:** none for usemynk cutover (merged `291288c`).
+**V1 epic — merged to `v1-redesign`:** `identity-p1-2fa` @ merge **`b5ef4fe`** (2026-06-01).
 
-**`master` HEAD:** `a1f5d6e` docs: usemynk cutover watch-items (post-merge smoke).
+**V1 epic — PUSHED-BUT-HELD (not merged):** `identity-p2-schema` @ `e305d0b`, `identity-p2-ownership-guard` @ `f74f164`, `component-b2-dashboard-students` @ `20de6fa`.
+
+**`master` HEAD:** `a1f5d6e` (does not include V1 epic / 2FA).
 
 Recent `master` (newest first):
 
