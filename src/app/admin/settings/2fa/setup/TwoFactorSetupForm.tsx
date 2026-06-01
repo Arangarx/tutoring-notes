@@ -10,7 +10,7 @@
  * never leaves our infrastructure.
  */
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useCallback } from "react";
 import { startTotpEnrollment, confirmTotpEnrollment } from "../actions";
 
 type Step =
@@ -29,6 +29,24 @@ export function TwoFactorSetupForm() {
   const [tokenInput, setTokenInput] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [isPending, startTransition] = useTransition();
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(async () => {
+    await navigator.clipboard.writeText(backupCodes.join("\n"));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [backupCodes]);
+
+  const handleDownload = useCallback(() => {
+    const header = "Mynk 2FA Backup Codes — store these in a safe place.\n\n";
+    const blob = new Blob([header + backupCodes.join("\n") + "\n"], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "mynk-2fa-backup-codes.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [backupCodes]);
 
   function handleStart() {
     setStep("loading-start");
@@ -126,7 +144,10 @@ export function TwoFactorSetupForm() {
             Enter the code from your authenticator app to complete setup.
           </p>
           {error && <p className="text-sm text-destructive mb-2">{error}</p>}
-          <div className="flex gap-2">
+          <form
+            onSubmit={(e) => { e.preventDefault(); handleConfirm(); }}
+            className="flex gap-2"
+          >
             <input
               type="text"
               inputMode="numeric"
@@ -139,13 +160,13 @@ export function TwoFactorSetupForm() {
               autoComplete="one-time-code"
             />
             <button
-              onClick={handleConfirm}
+              type="submit"
               disabled={isPending || tokenInput.length < 6}
               className="bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
             >
               {isPending ? "Verifying…" : "Confirm"}
             </button>
-          </div>
+          </form>
         </div>
       </div>
     );
@@ -168,6 +189,22 @@ export function TwoFactorSetupForm() {
                 {c}
               </code>
             ))}
+          </div>
+          <div className="flex gap-2 mt-3">
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="text-xs border rounded-md px-3 py-1.5 hover:bg-muted transition-colors"
+            >
+              {copied ? "Copied!" : "Copy codes"}
+            </button>
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="text-xs border rounded-md px-3 py-1.5 hover:bg-muted transition-colors"
+            >
+              Download .txt
+            </button>
           </div>
         </div>
         <p className="text-sm text-muted-foreground">

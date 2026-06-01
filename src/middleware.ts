@@ -64,8 +64,12 @@ function addSecurityHeaders(
 // ---------------------------------------------------------------------------
 // Rate-limit configurations per route group
 // ---------------------------------------------------------------------------
-const AUTH_RATE_LIMIT = { max: 10, windowMs: 60_000 };  // 10 req/min
-const SETUP_RATE_LIMIT = { max: 5, windowMs: 60_000 };  // 5 req/min
+const AUTH_RATE_LIMIT = { max: 10, windowMs: 60_000 };       // 10 req/min (login / password-reset)
+// 2FA verify/setup gets its own bucket so a legit smoke session (mistype +
+// code rotation + reload) doesn't exhaust the shared login budget.
+// 20/min is still strong brute-force protection: 10^6 codes ÷ 20/min = 34+ days.
+const TOTP_RATE_LIMIT = { max: 20, windowMs: 60_000 };       // 20 req/min (2FA verify + setup)
+const SETUP_RATE_LIMIT = { max: 5, windowMs: 60_000 };       // 5 req/min (initial onboarding setup)
 
 function getClientIp(req: NextRequest): string {
   return (
@@ -103,11 +107,15 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith("/api/auth/") ||
     pathname === "/login" ||
     pathname === "/forgot-password" ||
-    pathname === "/reset-password" ||
+    pathname === "/reset-password"
+  ) {
+    const rl = rateLimit(`auth:${ip}`, AUTH_RATE_LIMIT.max, AUTH_RATE_LIMIT.windowMs);
+    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);
+  } else if (
     pathname.startsWith("/admin/settings/2fa/verify") ||
     pathname.startsWith("/admin/settings/2fa/setup")
   ) {
-    const rl = rateLimit(`auth:${ip}`, AUTH_RATE_LIMIT.max, AUTH_RATE_LIMIT.windowMs);
+    const rl = rateLimit(`2fa:${ip}`, TOTP_RATE_LIMIT.max, TOTP_RATE_LIMIT.windowMs);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);
   } else if (pathname.startsWith("/api/")) {
     const bucket = apiRateBucketForPath(pathname);

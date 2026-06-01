@@ -24,8 +24,8 @@ import { generateBackupCodes, storeBackupCodes, redeemBackupCode } from "@/lib/t
 import { mintTwoFactorVerifiedSession } from "@/lib/two-factor-session";
 import { requireStudentScope } from "@/lib/student-scope";
 import { assertIsAdmin } from "@/lib/impersonation";
-import { getToken } from "next-auth/jwt";
-import { headers } from "next/headers";
+import { decode } from "next-auth/jwt";
+import { cookies } from "next/headers";
 
 const APP_ISSUER = "Mynk";
 const TOTP_DIGITS = 6;
@@ -261,18 +261,25 @@ export async function verifyTotpCode(codeInput: string): Promise<VerifyTotpResul
   });
 
   // Mint a new session with twoFactorVerified=true.
-  // We need the current JWT token to preserve all existing claims.
-  // Use next/headers to build a synthetic Request-like object for getToken.
+  // Read the session token directly from the cookie store — the fake-Request pattern
+  // (getToken + synthetic req object) fails in server action context because Next.js's
+  // SessionStore reads req.cookies (an object), not req.headers.get("cookie"), so
+  // req.cookies=undefined always yields a null token and the session is never updated.
   try {
-    const hdrs = await headers();
-    const cookieHeader = hdrs.get("cookie") ?? "";
-    const fakeReq = { headers: { get: (name: string) => (name === "cookie" ? cookieHeader : null) } } as unknown as Request;
-    const currentToken = await getToken({
-      req: fakeReq as Parameters<typeof getToken>[0]["req"],
-      secret: process.env.NEXTAUTH_SECRET,
-    });
-    if (currentToken) {
-      await mintTwoFactorVerifiedSession(currentToken as Record<string, unknown>);
+    const cookieName =
+      process.env.NODE_ENV === "production"
+        ? "__Secure-next-auth.session-token"
+        : "next-auth.session-token";
+    const cookieStore = await cookies();
+    const sessionToken = cookieStore.get(cookieName)?.value;
+    if (sessionToken) {
+      const currentToken = await decode({
+        token: sessionToken,
+        secret: process.env.NEXTAUTH_SECRET!,
+      });
+      if (currentToken) {
+        await mintTwoFactorVerifiedSession(currentToken as Record<string, unknown>);
+      }
     }
   } catch (e) {
     // If session minting fails (e.g. in test env), log but don't fail the verify.

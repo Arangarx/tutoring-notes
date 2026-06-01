@@ -32,6 +32,7 @@
  *     - setup action type returns qrDataUri (not otpauthUri)
  */
 
+import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 
@@ -374,6 +375,156 @@ describe("backup codes (BLOCKER #3 — only codeHash persisted)", () => {
       // bcrypt hash starts with $2a$ or $2b$
       expect(hash).toMatch(/^\$2[ab]\$/);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Non-self-referential TOTP oracle tests
+// ---------------------------------------------------------------------------
+//
+// These tests compute TOTP codes using a FULLY INDEPENDENT implementation
+// (raw Node.js crypto, RFC 4648 base32 decode, RFC 6238 HOTP truncation)
+// and assert that the production OTPAuth library accepts those codes.
+//
+// This is the interoperability guard that self-referential tests cannot
+// provide: it proves our verifier accepts codes from a standard authenticator
+// (Google Authenticator, Authy, etc.) rather than just from itself.
+//
+// RED-BEFORE / GREEN-AFTER: the last test in this suite is a regression guard
+// for DEFECT 3 (session minting). It FAILED before the fix because actions.ts
+// contained `getToken` + `fakeReq`. It PASSES now because the fix replaced
+// that pattern with `decode` + `cookies()`.
+
+/** RFC 4648 §6 base32 decode — independent of the OTPAuth library. */
+function base32DecodeIndependent(s: string): Buffer {
+  const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const clean = s.toUpperCase().replace(/=+$/, "");
+  let bits = 0;
+  let value = 0;
+  const output: number[] = [];
+  for (const char of clean) {
+    const idx = ALPHABET.indexOf(char);
+    if (idx < 0) throw new Error(`Invalid base32 char: ${char}`);
+    value = (value << 5) | idx;
+    bits += 5;
+    if (bits >= 8) {
+      output.push((value >>> (bits - 8)) & 0xff);
+      bits -= 8;
+    }
+  }
+  return Buffer.from(output);
+}
+
+/**
+ * RFC 6238 TOTP — pure Node.js crypto, no OTPAuth dependency.
+ * Implements HOTP (RFC 4226) with counter = floor(ts / period).
+ */
+function computeTotpOracle(
+  base32Secret: string,
+  timestampMs: number,
+  period = 30,
+  digits = 6
+): string {
+  const keyBytes = base32DecodeIndependent(base32Secret);
+  const counter = Math.floor(timestampMs / 1000 / period);
+  const counterBuf = Buffer.alloc(8);
+  counterBuf.writeBigUInt64BE(BigInt(counter));
+  const mac = crypto.createHmac("sha1", keyBytes).update(counterBuf).digest();
+  const offset = mac[mac.length - 1] & 0x0f;
+  const code =
+    ((mac[offset] & 0x7f) << 24) |
+    ((mac[offset + 1] & 0xff) << 16) |
+    ((mac[offset + 2] & 0xff) << 8) |
+    (mac[offset + 3] & 0xff);
+  return String(code % Math.pow(10, digits)).padStart(digits, "0");
+}
+
+describe("TOTP oracle — non-self-referential interoperability", () => {
+  // Well-known test secret; also used in the QR security tests above.
+  const TEST_SECRET_B32 = "JBSWY3DPEHPK3PXP";
+  // Fixed past timestamp so the test is deterministic (not clock-sensitive).
+  const FIXED_TS_MS = 1_600_000_000_000; // 2020-09-13T12:26:40Z
+
+  it("RFC 4648 base32 decode: known secret produces expected byte count", () => {
+    const bytes = base32DecodeIndependent(TEST_SECRET_B32);
+    // JBSWY3DPEHPK3PXP = 10 bytes
+    expect(bytes.length).toBe(10);
+  });
+
+  it("independent oracle produces a 6-digit string", () => {
+    const code = computeTotpOracle(TEST_SECRET_B32, FIXED_TS_MS);
+    expect(code).toMatch(/^\d{6}$/);
+  });
+
+  it("OTPAuth library generate() returns identical code as oracle at same timestamp", async () => {
+    const OTPAuth = await import("otpauth");
+    const oracle = computeTotpOracle(TEST_SECRET_B32, FIXED_TS_MS);
+    const totp = new OTPAuth.TOTP({
+      secret: OTPAuth.Secret.fromBase32(TEST_SECRET_B32),
+      algorithm: "SHA1",
+      digits: 6,
+      period: 30,
+    });
+    const libraryCode = totp.generate({ timestamp: FIXED_TS_MS });
+    expect(libraryCode).toBe(oracle);
+  });
+
+  it("OTPAuth.TOTP.validate accepts oracle-computed code at same timestamp (window=1)", async () => {
+    const OTPAuth = await import("otpauth");
+    const oracleCode = computeTotpOracle(TEST_SECRET_B32, FIXED_TS_MS);
+    const totp = new OTPAuth.TOTP({
+      secret: OTPAuth.Secret.fromBase32(TEST_SECRET_B32),
+      algorithm: "SHA1",
+      digits: 6,
+      period: 30,
+    });
+    const delta = totp.validate({ token: oracleCode, timestamp: FIXED_TS_MS, window: 1 });
+    // Non-null means the code was accepted; delta=0 means exact current step.
+    expect(delta).not.toBeNull();
+  });
+
+  it("base32 secret round-trips: fromBase32(secret.base32).buffer equals original", async () => {
+    const OTPAuth = await import("otpauth");
+    const secret = OTPAuth.Secret.fromBase32(TEST_SECRET_B32);
+    const roundTripped = OTPAuth.Secret.fromBase32(secret.base32);
+    expect(Buffer.from(roundTripped.buffer)).toEqual(Buffer.from(secret.buffer));
+  });
+
+  it("oracle bytes match what OTPAuth uses internally (secret.buffer)", async () => {
+    const OTPAuth = await import("otpauth");
+    const oracleBytes = base32DecodeIndependent(TEST_SECRET_B32);
+    const secret = OTPAuth.Secret.fromBase32(TEST_SECRET_B32);
+    // The buffer OTPAuth feeds to HMAC must equal what we decoded independently.
+    expect(Buffer.from(secret.buffer)).toEqual(oracleBytes);
+  });
+
+  /**
+   * REGRESSION GUARD — DEFECT 3 session minting.
+   *
+   * RED before fix: actions.ts used `getToken` + a hand-crafted `fakeReq`
+   *   object that lacked `req.cookies`. Inside next-auth v4, SessionStore
+   *   reads `req.cookies` (not headers), so `getToken` returned null and
+   *   `mintTwoFactorVerifiedSession` was never called. The user's session
+   *   never received `twoFactorVerified: true`, so middleware kept redirecting
+   *   back to the verify page — perceived as "code rejected".
+   *
+   * GREEN after fix: `verifyTotpCode` reads the session cookie directly via
+   *   `cookies()` from next/headers, then decodes it with `decode` from
+   *   next-auth/jwt. This bypasses the broken fake-request path entirely.
+   */
+  it("DEFECT-3 regression: verifyTotpCode uses decode+cookies, NOT getToken+fakeReq", () => {
+    const actionsPath = path.resolve(
+      __dirname,
+      "../app/admin/settings/2fa/actions.ts"
+    );
+    const content = fs.readFileSync(actionsPath, "utf-8");
+    // Fix must be in place: decode (not getToken) is imported from next-auth/jwt
+    expect(content).toContain('import { decode } from "next-auth/jwt"');
+    // cookies() helper from next/headers must be present
+    expect(content).toContain('import { cookies } from "next/headers"');
+    // The broken pattern must be absent: no fakeReq variable and no getToken import
+    expect(content).not.toContain("fakeReq");
+    expect(content).not.toContain('import { getToken }');
   });
 });
 
