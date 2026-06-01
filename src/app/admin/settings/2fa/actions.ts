@@ -212,6 +212,25 @@ export async function confirmTotpEnrollment(
     console.error("[tfa] mintTwoFactorVerifiedSession after enroll-confirm failed:", e);
   }
 
+  // Suppress the setup page's enrolled+verified redirect while the client is on the
+  // backup-codes step. The Server Action re-render reads this cookie (Next.js App Router
+  // makes cookies set during an action visible to the post-action RSC re-render) and
+  // the setup page skips its redirect, letting React surface the show-backup state.
+  // Cookie is scoped to /admin/settings/2fa/setup and expires in 5 minutes.
+  try {
+    const cs = await cookies();
+    cs.set("tfa-post-enroll", "1", {
+      maxAge: 300,
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/admin/settings/2fa/setup",
+      secure: process.env.NODE_ENV === "production",
+    });
+  } catch (_) {
+    // Non-critical — worst case: setup page redirects to management view immediately.
+    // Backup codes were already returned to the client; they flash briefly before redirect.
+  }
+
   return { ok: true, backupCodes: codes.map((c) => c.plaintext) };
 }
 

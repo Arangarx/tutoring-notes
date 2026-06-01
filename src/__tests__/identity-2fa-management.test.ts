@@ -455,6 +455,81 @@ describe("adminResetTwoFactor — ADMIN-only guard (source check)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Backup-code acknowledgment: rotate + regen require explicit action before leaving
+// ---------------------------------------------------------------------------
+describe("BUG-FIX 2026-06-01: rotate and regen backup-code display requires explicit acknowledgment", () => {
+  /**
+   * Companion to the post-enroll backup-code fix. Rotate and regen also show codes
+   * "once only" — the user must explicitly click Done before navigation occurs.
+   *
+   * These are regression guards: they prove the invariant is structurally enforced
+   * (navigation only in the Done button onClick, not in the action handlers).
+   * They would fail if someone added router.push/refresh to handleRotateConfirm or
+   * handleRegenStart.
+   */
+  const manageViewPath = path.resolve(
+    __dirname,
+    "../app/admin/settings/2fa/TwoFactorManageView.tsx"
+  );
+  let content: string;
+
+  beforeAll(() => {
+    content = fs.readFileSync(manageViewPath, "utf-8");
+  });
+
+  it("handleRotateConfirm does not navigate — sets view to rotating-done only", () => {
+    const handleConfirmIdx = content.indexOf("function handleRotateConfirm");
+    const handleCancelIdx = content.indexOf("function handleRotateCancel");
+    expect(handleConfirmIdx).toBeGreaterThan(-1);
+    expect(handleCancelIdx).toBeGreaterThan(handleConfirmIdx);
+    const section = content.slice(handleConfirmIdx, handleCancelIdx);
+    // Sets view to rotating-done on success.
+    expect(section).toContain('"rotating-done"');
+    // Must NOT auto-navigate — navigation is the Done button's job.
+    expect(section).not.toContain("router.push");
+    expect(section).not.toContain("router.refresh");
+    expect(section).not.toContain("router.replace");
+  });
+
+  it("handleRegenStart does not navigate — sets view to regen-done only", () => {
+    const handleRegenIdx = content.indexOf("function handleRegenStart");
+    // Find the next function after handleRegenStart.
+    const nextFnIdx = content.indexOf("\n  const handleCopyRegenCodes", handleRegenIdx + 1);
+    expect(handleRegenIdx).toBeGreaterThan(-1);
+    expect(nextFnIdx).toBeGreaterThan(handleRegenIdx);
+    const section = content.slice(handleRegenIdx, nextFnIdx);
+    // Sets view to regen-done on success.
+    expect(section).toContain('"regen-done"');
+    // Must NOT auto-navigate.
+    expect(section).not.toContain("router.push");
+    expect(section).not.toContain("router.refresh");
+    expect(section).not.toContain("router.replace");
+  });
+
+  it("rotating-done view has an explicit Done button that is the sole navigation trigger", () => {
+    const rotatingDoneIdx = content.indexOf('view === "rotating-done"');
+    const regenLoadingIdx = content.indexOf('view === "regen-loading"');
+    expect(rotatingDoneIdx).toBeGreaterThan(-1);
+    expect(regenLoadingIdx).toBeGreaterThan(rotatingDoneIdx);
+    const section = content.slice(rotatingDoneIdx, regenLoadingIdx);
+    // Done button must be present and must call router.refresh to sync server state.
+    expect(section).toContain("Done");
+    expect(section).toContain("router.refresh");
+  });
+
+  it("regen-done view has an explicit Done button that is the sole navigation trigger", () => {
+    const regenDoneIdx = content.indexOf('view === "regen-done"');
+    const resetConfirmIdx = content.indexOf('view === "reset-confirm"');
+    expect(regenDoneIdx).toBeGreaterThan(-1);
+    expect(resetConfirmIdx).toBeGreaterThan(regenDoneIdx);
+    const section = content.slice(regenDoneIdx, resetConfirmIdx);
+    // Done button must be present and must call router.refresh.
+    expect(section).toContain("Done");
+    expect(section).toContain("router.refresh");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Pending rotation migration sanity
 // ---------------------------------------------------------------------------
 describe("pending-secret migration (additive-only check)", () => {

@@ -1,5 +1,6 @@
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { authOptions } from "@/auth-options";
 import { db } from "@/lib/db";
 import { TwoFactorSetupForm } from "./TwoFactorSetupForm";
@@ -34,12 +35,19 @@ export default async function TwoFactorSetupPage() {
       // Confirmed enrollment but not verified this session → gate.
       redirect("/admin/settings/2fa/verify");
     }
-    if (isConfirmed && session.user.twoFactorVerified) {
-      // Already enrolled and verified — send to management page.
+
+    // After confirmTotpEnrollment, the Server Action sets tfa-post-enroll=1 so that
+    // this redirect is suppressed during the post-action RSC re-render. That lets the
+    // client TwoFactorSetupForm stay on the backup-codes step until the user clicks
+    // Continue. Without this guard, the re-render sees enrolled+verified and redirects
+    // before the user can read their codes (the bug fixed here, 2026-06-01).
+    const postEnroll = (await cookies()).get("tfa-post-enroll")?.value === "1";
+    if (isConfirmed && session.user.twoFactorVerified && !postEnroll) {
+      // Already enrolled and verified (not mid-enrollment) — send to management page.
       // (The post-login flow after /verify still goes to /admin via callbackUrl.)
       redirect("/admin/settings/2fa");
     }
-    // Falls through: not enrolled OR interrupted (unconfirmed) → show setup form.
+    // Falls through: not enrolled, interrupted (unconfirmed), OR mid-enrollment backup display.
   }
 
   return (

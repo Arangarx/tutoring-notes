@@ -699,6 +699,88 @@ describe("auth-flow redirect mechanics", () => {
     });
   });
 
+  describe("BUG-FIX 2026-06-01: post-enroll backup-code display must not be preempted by redirect", () => {
+    /**
+     * The bug: confirmTotpEnrollment mints twoFactorVerified in the session AND creates
+     * backup codes (isConfirmed=true). The Next.js Server Action triggers a full RSC
+     * re-render of setup/page.tsx, which then sees enrolled+confirmed+verified and fires
+     * redirect("/admin/settings/2fa") — before the client can display the backup codes.
+     *
+     * The fix: confirmTotpEnrollment sets a tfa-post-enroll=1 cookie; the setup page reads
+     * it during the post-action re-render (App Router makes cookies set during an action
+     * visible to that same re-render) and skips the redirect, letting the client's
+     * show-backup state surface normally.
+     *
+     * RED-BEFORE: tfa-post-enroll not present in actions.ts or setup/page.tsx → both
+     *   expects below fail on the unpatched branch.
+     * GREEN-AFTER: both present after the 2026-06-01 fix.
+     */
+    const actionsPath = path.resolve(__dirname, "../app/admin/settings/2fa/actions.ts");
+    const setupPagePath = path.resolve(__dirname, "../app/admin/settings/2fa/setup/page.tsx");
+    const formPath = path.resolve(__dirname, "../app/admin/settings/2fa/setup/TwoFactorSetupForm.tsx");
+
+    it("confirmTotpEnrollment sets tfa-post-enroll cookie to suppress the setup-page redirect", () => {
+      const content = fs.readFileSync(actionsPath, "utf-8");
+      const confirmIdx = content.indexOf("async function confirmTotpEnrollment");
+      const verifyIdx = content.indexOf("async function verifyTotpCode");
+      const confirmSection = content.slice(confirmIdx, verifyIdx);
+      // The cookie name must appear inside confirmTotpEnrollment (not elsewhere).
+      expect(confirmSection).toContain("tfa-post-enroll");
+      // Must be a .set() call (not just a read).
+      expect(confirmSection).toMatch(/\.set\(\s*["']tfa-post-enroll["']/);
+    });
+
+    it("setup page guards the enrolled+verified redirect with the tfa-post-enroll cookie check", () => {
+      const content = fs.readFileSync(setupPagePath, "utf-8");
+      // Cookie guard must be present.
+      expect(content).toContain("tfa-post-enroll");
+      // The postEnroll variable (or equivalent) must exist.
+      expect(content).toMatch(/postEnroll/);
+      // The enrolled+verified redirect is still there — but conditional.
+      expect(content).toContain('redirect("/admin/settings/2fa")');
+      // The redirect condition must exclude the post-enroll state.
+      expect(content).toMatch(/!postEnroll/);
+    });
+
+    it("setup page still redirects enrolled+verified users who are NOT mid-enrollment (direct navigation)", () => {
+      const content = fs.readFileSync(setupPagePath, "utf-8");
+      // The redirect must remain — it's just guarded, not removed.
+      const redirectCount = (content.match(/redirect\("\/admin\/settings\/2fa"\)/g) ?? []).length;
+      expect(redirectCount).toBeGreaterThanOrEqual(1);
+      // The condition must still reference isConfirmed and twoFactorVerified.
+      expect(content).toMatch(/isConfirmed && session\.user\.twoFactorVerified/);
+    });
+
+    it("TwoFactorSetupForm Continue button navigates without router.refresh (no re-render while leaving)", () => {
+      const content = fs.readFileSync(formPath, "utf-8");
+      const showBackupIdx = content.indexOf('step === "show-backup"');
+      expect(showBackupIdx).toBeGreaterThan(-1);
+      const returnNullIdx = content.lastIndexOf("return null;");
+      const backupSection = content.slice(showBackupIdx, returnNullIdx > showBackupIdx ? returnNullIdx : content.length);
+      // Continue must navigate to /admin.
+      expect(backupSection).toContain('router.push("/admin")');
+      // Must NOT call router.refresh() — that would trigger another server re-render
+      // while still on the backup-codes page, risking a redirect bounce.
+      expect(backupSection).not.toContain("router.refresh");
+    });
+
+    it("TwoFactorSetupForm handleConfirm does not call router navigation (only sets client state)", () => {
+      const content = fs.readFileSync(formPath, "utf-8");
+      const handleConfirmIdx = content.indexOf("function handleConfirm");
+      expect(handleConfirmIdx).toBeGreaterThan(-1);
+      // Find next top-level function after handleConfirm (used to isolate the function body).
+      const nextFnIdx = content.indexOf("\n  function ", handleConfirmIdx + 1);
+      const confirmBody = content.slice(
+        handleConfirmIdx,
+        nextFnIdx > handleConfirmIdx ? nextFnIdx : handleConfirmIdx + 600
+      );
+      // Navigation must NOT occur in the confirm handler — only after explicit user action.
+      expect(confirmBody).not.toContain("router.push");
+      expect(confirmBody).not.toContain("router.refresh");
+      expect(confirmBody).not.toContain("router.replace");
+    });
+  });
+
   describe("verify page open-redirect guard in source", () => {
     it("verify page uses safeReturnTo guard rejecting // prefix (source check)", () => {
       const verifyPagePath = path.resolve(
