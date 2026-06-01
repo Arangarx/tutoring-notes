@@ -25,6 +25,11 @@
  *     - impersonating session → no 2FA redirect (exempt)
  *     - env-only admin (sub="admin") → no 2FA redirect (exempt)
  *     - 2FA exempt paths: setup and verify pages pass through
+ *
+ *   Local QR generation (SECURITY — TOTP secret must never egress):
+ *     - qrcode generates a data: URI for a given otpauth URI
+ *     - no reference to api.qrserver.com anywhere in the source files
+ *     - setup action type returns qrDataUri (not otpauthUri)
  */
 
 import fs from "fs";
@@ -369,5 +374,63 @@ describe("backup codes (BLOCKER #3 — only codeHash persisted)", () => {
       // bcrypt hash starts with $2a$ or $2b$
       expect(hash).toMatch(/^\$2[ab]\$/);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Local QR generation (SECURITY — secret must never egress to third parties)
+// ---------------------------------------------------------------------------
+describe("local QR generation (SECURITY — secret stays server-side)", () => {
+  it("qrcode.toDataURL produces a data: URI for an otpauth URI", async () => {
+    const QRCode = await import("qrcode");
+    const testUri = "otpauth://totp/Mynk:admin-123?secret=JBSWY3DPEHPK3PXP&issuer=Mynk";
+    const dataUri = await QRCode.toDataURL(testUri, { width: 200, margin: 1 });
+    expect(dataUri).toMatch(/^data:image\/png;base64,/);
+    // Must be a non-trivial PNG payload
+    expect(dataUri.length).toBeGreaterThan(100);
+  });
+
+  it("no reference to api.qrserver.com in 2FA setup/verify source files", () => {
+    const filesToCheck = [
+      path.resolve(__dirname, "../app/admin/settings/2fa/setup/TwoFactorSetupForm.tsx"),
+      path.resolve(__dirname, "../app/admin/settings/2fa/setup/page.tsx"),
+      path.resolve(__dirname, "../app/admin/settings/2fa/verify/TwoFactorVerifyForm.tsx"),
+      path.resolve(__dirname, "../app/admin/settings/2fa/verify/page.tsx"),
+      path.resolve(__dirname, "../app/admin/settings/2fa/actions.ts"),
+    ];
+    for (const filePath of filesToCheck) {
+      const content = fs.readFileSync(filePath, "utf-8");
+      expect(content).not.toContain("api.qrserver.com");
+    }
+  });
+
+  it("StartEnrollmentResult ok branch includes qrDataUri field name in actions.ts source", () => {
+    const actionsPath = path.resolve(
+      __dirname,
+      "../app/admin/settings/2fa/actions.ts"
+    );
+    const content = fs.readFileSync(actionsPath, "utf-8");
+    expect(content).toContain("qrDataUri");
+    // Confirm it's generated from the qrcode library, not an external URL
+    expect(content).toContain("QRCode.toDataURL");
+    expect(content).not.toContain("api.qrserver.com");
+  });
+
+  it("TwoFactorSetupForm does not import AuthMortensenNotice", () => {
+    const formPath = path.resolve(
+      __dirname,
+      "../app/admin/settings/2fa/setup/TwoFactorSetupForm.tsx"
+    );
+    const content = fs.readFileSync(formPath, "utf-8");
+    expect(content).not.toContain("AuthMortensenNotice");
+  });
+
+  it("TwoFactorVerifyForm does not import AuthMortensenNotice", () => {
+    const formPath = path.resolve(
+      __dirname,
+      "../app/admin/settings/2fa/verify/TwoFactorVerifyForm.tsx"
+    );
+    const content = fs.readFileSync(formPath, "utf-8");
+    expect(content).not.toContain("AuthMortensenNotice");
   });
 });

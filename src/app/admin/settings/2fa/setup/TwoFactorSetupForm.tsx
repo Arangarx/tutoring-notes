@@ -5,10 +5,12 @@
  * Handles the two-step enrollment flow:
  *   Step 1: Show QR code + base32 secret (start enrollment)
  *   Step 2: Confirm with first TOTP code → show backup codes
+ *
+ * QR code is rendered from a server-generated data: URI — the TOTP secret
+ * never leaves our infrastructure.
  */
 
 import { useState, useTransition } from "react";
-import { AuthMortensenNotice } from "@/components/auth/AuthMortensenNotice";
 import { startTotpEnrollment, confirmTotpEnrollment } from "../actions";
 
 type Step =
@@ -21,7 +23,7 @@ type Step =
 
 export function TwoFactorSetupForm() {
   const [step, setStep] = useState<Step>("idle");
-  const [otpauthUri, setOtpauthUri] = useState<string>("");
+  const [qrDataUri, setQrDataUri] = useState<string>("");
   const [secret, setSecret] = useState<string>("");
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [tokenInput, setTokenInput] = useState<string>("");
@@ -38,7 +40,7 @@ export function TwoFactorSetupForm() {
         setStep("error");
         return;
       }
-      setOtpauthUri(result.otpauthUri);
+      setQrDataUri(result.qrDataUri);
       setSecret(result.secret);
       setStep("show-qr");
     });
@@ -74,7 +76,6 @@ export function TwoFactorSetupForm() {
         >
           {isPending ? "Starting…" : "Set up 2FA"}
         </button>
-        <AuthMortensenNotice />
       </div>
     );
   }
@@ -94,7 +95,6 @@ export function TwoFactorSetupForm() {
   }
 
   if (step === "show-qr" || step === "confirming") {
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(otpauthUri)}`;
     return (
       <div className="space-y-6">
         <div>
@@ -104,7 +104,7 @@ export function TwoFactorSetupForm() {
           </p>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={qrUrl}
+            src={qrDataUri}
             alt="TOTP QR code"
             width={200}
             height={200}
@@ -147,7 +147,6 @@ export function TwoFactorSetupForm() {
             </button>
           </div>
         </div>
-        <AuthMortensenNotice />
       </div>
     );
   }
@@ -180,7 +179,6 @@ export function TwoFactorSetupForm() {
         >
           Back to Settings
         </a>
-        <AuthMortensenNotice />
       </div>
     );
   }

@@ -7,7 +7,6 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AuthMortensenNotice } from "@/components/auth/AuthMortensenNotice";
 import { verifyTotpCode } from "../actions";
 
 export function TwoFactorVerifyForm({ callbackUrl }: { callbackUrl: string }) {
@@ -66,7 +65,6 @@ export function TwoFactorVerifyForm({ callbackUrl }: { callbackUrl: string }) {
           {isPending ? "Verifying…" : "Verify"}
         </button>
       </div>
-      <AuthMortensenNotice />
     </div>
   );
 }

@@ -14,6 +14,7 @@
  */
 
 import * as OTPAuth from "otpauth";
+import QRCode from "qrcode";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/auth-options";
@@ -55,7 +56,7 @@ async function getCurrentAdminId(): Promise<{ adminId: string; isTestAccount: bo
 // startTotpEnrollment
 // ---------------------------------------------------------------------------
 export type StartEnrollmentResult =
-  | { ok: true; otpauthUri: string; secret: string }
+  | { ok: true; qrDataUri: string; secret: string }
   | { ok: false; error: string };
 
 /**
@@ -108,7 +109,11 @@ export async function startTotpEnrollment(): Promise<StartEnrollmentResult> {
     },
   });
 
-  return { ok: true, otpauthUri, secret };
+  // Generate QR code locally — the secret must never leave our infrastructure.
+  // toDataURL returns a data: URI (PNG base64); safe for img src, never egresses.
+  const qrDataUri = await QRCode.toDataURL(otpauthUri, { width: 200, margin: 1 });
+
+  return { ok: true, qrDataUri, secret };
 }
 
 // ---------------------------------------------------------------------------
