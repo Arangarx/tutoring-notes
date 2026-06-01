@@ -8,6 +8,9 @@ import {
   tutorExperienceLandingPath,
 } from "@/lib/admin-routing";
 import { AdminTestAccountsPanel } from "./AdminTestAccountsPanel";
+import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
 
@@ -37,24 +40,26 @@ export default async function AdminHomePage() {
   console.log(`[imp] route=${realAdminHomePath()} mode=real-admin-home admin=${email}`);
 
   return (
-    <div className="card">
-      <h1 style={{ marginTop: 0 }}>Admin</h1>
-      <p className="muted" style={{ marginTop: 0 }}>
-        Signed in as <strong>{email}</strong>. Use a test account below to open the tutor
-        workspace, or manage your credentials in settings.
-      </p>
-
-      <div className="divider" />
-
-      <AdminTestAccountsPanel />
-
-      <div className="divider" />
-
-      <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-        <Link className="btn" href="/admin/settings">
-          Settings
-        </Link>
-      </div>
-    </div>
+    <AdminPageShell
+      title="Admin dashboard"
+      description={
+        <>
+          Signed in as <span className="font-medium text-foreground">{email}</span>. Open a test
+          account to use the tutor workspace, or manage credentials in settings.
+        </>
+      }
+      actions={
+        <Button asChild variant="outline" className="min-h-11">
+          <Link href="/admin/settings">Settings</Link>
+        </Button>
+      }
+    >
+      <AdminSectionCard
+        title="Test accounts"
+        description="Log in as a test tutor without signing out your admin session. Use Exit impersonation to return here."
+      >
+        <AdminTestAccountsPanel />
+      </AdminSectionCard>
+    </AdminPageShell>
   );
 }

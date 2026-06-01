@@ -6,6 +6,9 @@ import { useState } from "react";
 import { signOut } from "next-auth/react";
 import { exitImpersonation } from "@/app/admin/actions/impersonate";
 
+import { MynkWordmark } from "@/components/auth/MynkWordmark";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { AdminSessionMode } from "@/lib/admin-routing";
 
 type AdminNavProps = {
@@ -50,66 +53,109 @@ export function AdminNav({
     return pathname.startsWith(href);
   }
 
+  const linkClass = (href: string, mobile?: boolean) =>
+    cn(
+      "inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium transition-colors",
+      "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+      isActive(href)
+        ? "bg-accent-soft text-foreground"
+        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+      mobile && "w-full justify-start"
+    );
+
   return (
     <>
-      <nav className="admin-nav">
-        <div className="admin-nav-inner">
-          <Link href="/admin" className="admin-nav-brand">
-            Tutoring Notes
+      <header className="sticky top-0 z-50 border-b border-border bg-background/85 backdrop-blur-md">
+        <div className="mx-auto flex h-14 max-w-4xl items-center justify-between gap-4 px-4">
+          <Link
+            href="/admin"
+            className="inline-flex min-h-11 min-w-11 items-center rounded-md focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            aria-label="Mynk home"
+          >
+            <MynkWordmark size="sm" />
           </Link>
 
-          {/* Desktop links */}
-          <div className="admin-nav-links">
+          <nav className="hidden items-center gap-1 md:flex" aria-label="Main">
             {adminLinks.map((l) => (
-              <Link
-                key={l.href}
-                href={l.href}
-                className={`admin-nav-link${isActive(l.href) ? " active" : ""}`}
-              >
+              <Link key={l.href} href={l.href} className={linkClass(l.href)}>
                 {l.label}
               </Link>
             ))}
             {isImpersonating ? (
               <form action={exitImpersonation}>
-                <button type="submit" className="admin-nav-link sign-out">
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  className="min-h-11 text-muted-foreground hover:text-destructive"
+                >
                   Sign out
-                </button>
+                </Button>
               </form>
             ) : (
-              <button
+              <Button
                 type="button"
-                className="admin-nav-link sign-out"
+                variant="ghost"
+                className="min-h-11 text-muted-foreground hover:text-destructive"
                 onClick={() => signOut({ callbackUrl: "/login" })}
               >
                 Sign out
-              </button>
+              </Button>
             )}
-          </div>
+          </nav>
 
-          {/* Mobile hamburger */}
-          <button
+          <Button
             type="button"
-            className="admin-nav-hamburger"
+            variant="outline"
+            size="icon"
+            className="min-h-11 min-w-11 md:hidden"
             onClick={() => setOpen(!open)}
+            aria-expanded={open}
+            aria-controls="admin-mobile-nav"
             aria-label={open ? "Close menu" : "Open menu"}
           >
-            <span className={`hamburger-bar${open ? " open" : ""}`} />
-            <span className={`hamburger-bar${open ? " open" : ""}`} />
-            <span className={`hamburger-bar${open ? " open" : ""}`} />
-          </button>
+            <span className="sr-only">{open ? "Close" : "Menu"}</span>
+            <span className="flex flex-col gap-1.5" aria-hidden>
+              <span
+                className={cn(
+                  "block h-0.5 w-5 rounded-full bg-foreground transition-transform",
+                  open && "translate-y-2 rotate-45"
+                )}
+              />
+              <span
+                className={cn(
+                  "block h-0.5 w-5 rounded-full bg-foreground transition-opacity",
+                  open && "opacity-0"
+                )}
+              />
+              <span
+                className={cn(
+                  "block h-0.5 w-5 rounded-full bg-foreground transition-transform",
+                  open && "-translate-y-2 -rotate-45"
+                )}
+              />
+            </span>
+          </Button>
         </div>
-      </nav>
+      </header>
 
-      {/* Mobile drawer */}
-      {open && (
+      {open ? (
         <>
-          <div className="admin-nav-backdrop" onClick={() => setOpen(false)} />
-          <div className="admin-nav-drawer">
+          <button
+            type="button"
+            className="fixed inset-0 z-40 bg-black/50 md:hidden"
+            aria-label="Close menu"
+            onClick={() => setOpen(false)}
+          />
+          <nav
+            id="admin-mobile-nav"
+            className="fixed inset-y-0 right-0 z-50 flex w-[min(100%,280px)] flex-col gap-1 border-l border-border bg-card p-4 shadow-lg md:hidden"
+            aria-label="Main"
+          >
             {adminLinks.map((l) => (
               <Link
                 key={l.href}
                 href={l.href}
-                className={`admin-nav-drawer-link${isActive(l.href) ? " active" : ""}`}
+                className={linkClass(l.href, true)}
                 onClick={() => setOpen(false)}
               >
                 {l.label}
@@ -117,22 +163,31 @@ export function AdminNav({
             ))}
             {isImpersonating ? (
               <form action={exitImpersonation}>
-                <button type="submit" className="admin-nav-drawer-link sign-out">
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  className="mt-2 min-h-11 w-full justify-start text-destructive"
+                  onClick={() => setOpen(false)}
+                >
                   Sign out
-                </button>
+                </Button>
               </form>
             ) : (
-              <button
+              <Button
                 type="button"
-                className="admin-nav-drawer-link sign-out"
-                onClick={() => { setOpen(false); signOut({ callbackUrl: "/login" }); }}
+                variant="ghost"
+                className="mt-2 min-h-11 w-full justify-start text-destructive"
+                onClick={() => {
+                  setOpen(false);
+                  signOut({ callbackUrl: "/login" });
+                }}
               >
                 Sign out
-              </button>
+              </Button>
             )}
-          </div>
+          </nav>
         </>
-      )}
+      ) : null}
     </>
   );
 }

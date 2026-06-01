@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { LocalDateTimeText } from "@/components/LocalDateTimeText";
 import { SubmitButton } from "@/components/SubmitButton";
+import { Button } from "@/components/ui/button";
 import { endOpenWhiteboardFromStudentPage } from "./actions";
 
 export type ActiveWbListItem = {
@@ -12,13 +13,6 @@ export type ActiveWbListItem = {
  * Renders still-open (endedAt = null) whiteboard sessions for this
  * student so tutors can **Continue** the workspace or **End** a
  * straggler without hunting down an old tab.
- *
- * If we only exposed "Start whiteboard session", every click minted
- * a new `WhiteboardSession` row; without ending the previous one
- * in-app, the DB could accumulate many live rooms — each with its own
- * join-token surface + relay room id. This list is the light-touch
- * inventory + kill-switch (Sarah-pilot / Andrew session-flow question,
- * Apr 2026).
  */
 export function ActiveWhiteboardSessionsList({
   studentId,
@@ -32,54 +26,34 @@ export function ActiveWhiteboardSessionsList({
   }
 
   return (
-    <div
-      style={{
-        marginTop: 16,
-        padding: "12px 14px",
-        border: "1px solid var(--border)",
-        borderRadius: 8,
-        background: "var(--panel, var(--surface-1))",
-      }}
-    >
-      <h4 style={{ margin: "0 0 4px", fontSize: 14 }}>Open whiteboard sessions</h4>
-      <p className="muted" style={{ margin: "0 0 10px", fontSize: 12, lineHeight: 1.45 }}>
-        These rooms are still not ended from the whiteboard. Continue
-        to pick up where you left off, or end a room to revoke its join
-        link. You can also start a new room above — that creates
-        an additional open session, so end ones you do not need.
+    <div className="mt-4 rounded-lg border border-border bg-muted/20 p-4">
+      <h4 className="m-0 text-sm font-semibold text-foreground">Open whiteboard sessions</h4>
+      <p className="mt-1 mb-3 text-xs leading-relaxed text-muted-foreground">
+        These rooms are still not ended from the whiteboard. Continue to pick up where you left
+        off, or end a room to revoke its join link. You can also start a new room above — that
+        creates an additional open session, so end ones you do not need.
       </p>
-      <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+      <ul className="m-0 list-none divide-y divide-border p-0">
         {sessions.map((s) => {
           const startedAtIso = s.startedAt.toISOString();
           return (
             <li
               key={s.id}
-              className="row"
-              style={{
-                flexWrap: "wrap",
-                gap: 8,
-                alignItems: "center",
-                padding: "8px 0",
-                borderTop: "1px solid var(--border, var(--surface-2))",
-              }}
+              className="flex flex-wrap items-center gap-3 py-3 first:pt-0 last:pb-0"
             >
-              <span className="muted" style={{ fontSize: 13, flex: "1 1 160px" }}>
+              <span className="min-w-[10rem] flex-1 text-sm text-muted-foreground">
                 Started{" "}
-                <LocalDateTimeText
-                  dateTime={startedAtIso}
-                  className="muted"
-                />
-                <span style={{ fontSize: 11, marginLeft: 6, opacity: 0.7 }}>
-                  ({s.id.slice(0, 8)}…)
-                </span>
+                <LocalDateTimeText dateTime={startedAtIso} className="text-muted-foreground" />
+                <span className="label-mono ml-2 text-[11px] opacity-70">({s.id.slice(0, 8)}…)</span>
               </span>
-              <div className="row" style={{ gap: 8 }}>
-                <Link
-                  className="btn btn-primary"
-                  href={`/admin/students/${studentId}/whiteboard/${s.id}/workspace`}
-                >
-                  Continue
-                </Link>
+              <div className="flex flex-wrap gap-2">
+                <Button asChild className="min-h-11">
+                  <Link
+                    href={`/admin/students/${studentId}/whiteboard/${s.id}/workspace`}
+                  >
+                    Continue
+                  </Link>
+                </Button>
                 <form action={endOpenWhiteboardFromStudentPage} title={`Session ${s.id}`}>
                   <input type="hidden" name="whiteboardSessionId" value={s.id} />
                   <SubmitButton

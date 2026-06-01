@@ -5,6 +5,7 @@
 import { db } from "@/lib/db";
 import { assertIsRealAdmin } from "@/lib/impersonation";
 import { startImpersonation } from "@/app/admin/actions/impersonate";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export async function AdminTestAccountsPanel() {
   await assertIsRealAdmin();
@@ -15,48 +16,33 @@ export async function AdminTestAccountsPanel() {
     orderBy: { createdAt: "asc" },
   });
 
-  return (
-    <section aria-labelledby="test-accounts-heading">
-      <h2 id="test-accounts-heading" style={{ marginTop: 0 }}>
-        Test accounts
-      </h2>
-      <p className="muted" style={{ marginTop: 0, fontSize: 14 }}>
-        Open the tutor workspace as a test account. Your admin session stays signed in
-        behind the scenes — use Exit impersonation to return here.
+  if (testAccounts.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        No test accounts yet. Seed <code className="text-xs">isTestAccount=true</code> rows in the
+        database.
       </p>
+    );
+  }
 
-      {testAccounts.length === 0 ? (
-        <p className="muted" style={{ fontSize: 13 }}>
-          No test accounts yet. Seed <code>isTestAccount=true</code> rows in the database.
-        </p>
-      ) : (
-        <div style={{ display: "grid", gap: 8, marginTop: 16 }}>
-          {testAccounts.map((acct) => (
-            <div
-              key={acct.id}
-              className="card"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "10px 14px",
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{acct.email}</div>
-                <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-                  Created {acct.createdAt.toLocaleDateString()}
-                </div>
-              </div>
-              <form action={startImpersonation.bind(null, acct.id)}>
-                <button type="submit" className="btn primary" style={{ fontSize: 13 }}>
-                  Log in as
-                </button>
-              </form>
+  return (
+    <ul className="m-0 flex list-none flex-col gap-3 p-0">
+      {testAccounts.map((acct) => (
+        <li
+          key={acct.id}
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3"
+        >
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold text-foreground">{acct.email}</div>
+            <div className="label-mono mt-0.5 text-xs text-muted-foreground">
+              Created {acct.createdAt.toLocaleDateString()}
             </div>
-          ))}
-        </div>
-      )}
-    </section>
+          </div>
+          <form action={startImpersonation.bind(null, acct.id)}>
+            <SubmitButton label="Log in as" pendingLabel="Opening…" className="primary" />
+          </form>
+        </li>
+      ))}
+    </ul>
   );
 }

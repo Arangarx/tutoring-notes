@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { setStudentRecordingDefault } from "./actions";
+import { cn } from "@/lib/utils";
 
 /**
  * Per-student "default to recording on" toggle for the whiteboard
@@ -53,17 +54,13 @@ export function StudentRecordingDefaultToggle({
   };
 
   return (
-    <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+    <div className="flex flex-wrap items-center gap-3">
       <label
         htmlFor={`record-default-${studentId}`}
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 8,
-          fontSize: 13,
-          cursor: pending ? "wait" : "pointer",
-          opacity: pending ? 0.7 : 1,
-        }}
+        className={cn(
+          "inline-flex min-h-11 cursor-pointer items-center gap-3 text-sm",
+          pending && "cursor-wait opacity-70"
+        )}
       >
         <input
           id={`record-default-${studentId}`}
@@ -72,22 +69,18 @@ export function StudentRecordingDefaultToggle({
           onChange={(e) => handleChange(e.target.checked)}
           disabled={pending}
           data-testid="student-recording-default-toggle"
+          className="size-4 shrink-0 rounded border border-input"
         />
-        <span>
+        <span className="text-foreground">
           Start whiteboard recording on by default
-          <span className="muted" style={{ marginLeft: 6, fontSize: 12 }}>
-            ({enabled ? "on" : "off"})
-          </span>
+          <span className="ml-2 text-xs text-muted-foreground">({enabled ? "on" : "off"})</span>
         </span>
       </label>
-      {error && (
-        <span
-          role="alert"
-          style={{ color: "var(--color-error)", fontSize: 12 }}
-        >
+      {error ? (
+        <span role="alert" className="text-xs text-destructive">
           {error}
         </span>
-      )}
+      ) : null}
     </div>
   );
 }

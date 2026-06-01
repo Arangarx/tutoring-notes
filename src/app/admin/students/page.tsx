@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { createStudent } from "./actions";
-import { SubmitButton } from "@/components/SubmitButton";
+import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { StudentsRoster } from "@/components/admin/StudentsRoster";
+import { Button } from "@/components/ui/button";
 import { getStudentScope, studentsWhereForScope } from "@/lib/student-scope";
 
 export const dynamic = "force-dynamic";
@@ -17,58 +18,22 @@ export default async function StudentsPage() {
   });
 
   return (
-    <div className="card">
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <h1 style={{ margin: 0 }}>Students</h1>
-        <Link className="btn" href="/admin/outbox">
-          View outbox
-        </Link>
-      </div>
-
-      <div className="divider" />
-
-      <form action={createStudent}>
-        <div className="row" style={{ alignItems: "flex-end" }}>
-          <div style={{ flex: 1, minWidth: 260 }}>
-            <label htmlFor="studentName">Student name</label>
-            <input
-              id="studentName"
-              name="name"
-              placeholder="e.g. Jordan S."
-              required
-            />
-          </div>
-          <SubmitButton label="Add student" />
-        </div>
-      </form>
-
-      <div className="divider" />
-
-      {students.length === 0 ? (
-        <p className="muted">No students yet. Add one above.</p>
-      ) : (
-        <div style={{ display: "grid", gap: 12 }}>
-          {students.map((s) => (
-            <Link
-              key={s.id}
-              href={`/admin/students/${s.id}`}
-              className="card"
-              style={{ display: "block" }}
-            >
-              <div className="row" style={{ justifyContent: "space-between" }}>
-                <div>
-                  <div style={{ fontWeight: 700 }}>{s.name}</div>
-                  <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                    Created {new Date(s.createdAt).toLocaleString()}
-                  </div>
-                </div>
-                <div className="muted">Open →</div>
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
-    </div>
+    <AdminPageShell
+      title="Students"
+      description="Your roster — add students, open profiles, and start whiteboard sessions."
+      actions={
+        <Button asChild variant="outline" className="min-h-11">
+          <Link href="/admin/outbox">View outbox</Link>
+        </Button>
+      }
+    >
+      <StudentsRoster
+        students={students.map((s) => ({
+          id: s.id,
+          name: s.name,
+          createdAt: s.createdAt.toISOString(),
+        }))}
+      />
+    </AdminPageShell>
   );
 }
-

@@ -17,6 +17,10 @@ import { StudentRecordingDefaultToggle } from "./StudentRecordingDefaultToggle";
 import { env } from "@/lib/env";
 import { formatDateOnlyDisplay } from "@/lib/date-only";
 import { getRequestBaseUrl } from "@/lib/public-url";
+import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { StudentAvatar } from "@/components/admin/StudentAvatar";
+import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
 
@@ -78,40 +82,65 @@ export default async function StudentDetailPage({
   // URL via `baseUrl()` in the action so parents always get the stable host.
   const shareDisplayBaseUrl = activeShare ? await getRequestBaseUrl() : null;
 
+  const noteCount = student._count.notes;
+  const lastNote = student.notes[0];
+  const openSessions = student.whiteboardSessions.length;
+
   return (
-    <div className="card">
-      <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-        <div>
-          <div className="muted" style={{ fontSize: 12 }}>
-            <Link href="/admin/students">Students</Link> / {student.name}
-          </div>
-          <h1 style={{ margin: "6px 0 0" }}>{student.name}</h1>
-        </div>
-        <div className="row">
+    <AdminPageShell
+      eyebrow={
+        <Link
+          href="/admin/students"
+          className="inline-flex min-h-11 items-center text-brand underline-offset-2 hover:underline"
+        >
+          ← Students
+        </Link>
+      }
+      title={student.name}
+      description={
+        <span className="label-mono text-sm">
+          {noteCount} note{noteCount !== 1 ? "s" : ""}
+          {lastNote ? <> · last {formatDateOnlyDisplay(lastNote.date)}</> : null}
+          {openSessions > 0 ? (
+            <>
+              {" "}
+              · {openSessions} open session{openSessions !== 1 ? "s" : ""}
+            </>
+          ) : null}
+        </span>
+      }
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
           <StudentActions studentId={student.id} currentName={student.name} />
-          <Link className="btn" href="/admin/outbox">
-            Outbox
-          </Link>
+          <Button asChild variant="outline" className="min-h-11">
+            <Link href="/admin/outbox">Outbox</Link>
+          </Button>
+        </div>
+      }
+    >
+      <div className="flex items-center gap-4 rounded-xl border border-border bg-card px-4 py-4 shadow-sm">
+        <StudentAvatar name={student.name} size="lg" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm text-muted-foreground">
+            Start a whiteboard session to record and generate notes for this student.
+          </p>
         </div>
       </div>
 
-      <div className="divider" />
-
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>Share link (for parents/students)</h3>
+      <AdminSectionCard
+        title="Share link (for parents/students)"
+        description="This link does not require login. You can revoke or regenerate it anytime."
+      >
         {activeShare ? (
           <>
-            <p className="muted" style={{ marginTop: 0 }}>
-              This link does not require login. You can revoke/regenerate anytime.
-            </p>
             {(() => {
               const url = `${shareDisplayBaseUrl ?? "http://localhost:3000"}/s/${activeShare.token}`;
               return (
                 <>
                   <ShareLinkRow url={url} />
-                  <div className="row" style={{ marginTop: 8 }}>
+                  <div className="mt-4 flex flex-wrap gap-2">
                     <form action={regenerateShareLink.bind(null, student.id)}>
-                      <SubmitButton label="Regenerate" pendingLabel="Regenerating…" />
+                      <SubmitButton label="Regenerate" pendingLabel="Regenerating…" className="btn" />
                     </form>
                     <form action={revokeShareLink.bind(null, student.id)}>
                       <SubmitButton label="Revoke" pendingLabel="Revoking…" className="btn" />
@@ -122,79 +151,65 @@ export default async function StudentDetailPage({
             })()}
           </>
         ) : (
-          <div className="row" style={{ justifyContent: "space-between" }}>
-            <p className="muted" style={{ margin: 0 }}>
-              No active share link yet.
-            </p>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">No active share link yet.</p>
             <form action={regenerateShareLink.bind(null, student.id)}>
-              <SubmitButton label="Create share link" />
+              <SubmitButton label="Create share link" className="primary" />
             </form>
           </div>
         )}
-      </div>
+      </AdminSectionCard>
 
-      <div className="divider" />
+      <NoteEntrySection
+        studentId={student.id}
+        aiEnabled={!!env.OPENAI_API_KEY}
+        blobEnabled={!!env.BLOB_READ_WRITE_TOKEN}
+      />
 
-      <NoteEntrySection studentId={student.id} aiEnabled={!!env.OPENAI_API_KEY} blobEnabled={!!env.BLOB_READ_WRITE_TOKEN} />
-
-      <div className="divider" />
-
-      <div className="card">
-        <div className="row" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-          <div>
-            <h3 style={{ margin: 0 }}>Whiteboard session</h3>
-            <p className="muted" style={{ margin: "4px 0 0", fontSize: 13 }}>
-              Live whiteboard with audio recording for tutoring sessions.
-              Generates session notes from what you wrote and said.
-            </p>
-          </div>
-          <StartWhiteboardSession studentId={student.id} />
-        </div>
+      <AdminSectionCard
+        title="Whiteboard session"
+        description="Live whiteboard with audio recording for tutoring sessions. Generates session notes from what you wrote and said."
+        actions={<StartWhiteboardSession studentId={student.id} />}
+      >
         <ActiveWhiteboardSessionsList
           studentId={student.id}
           sessions={student.whiteboardSessions}
         />
-        <div style={{ marginTop: 10 }}>
+        <div className="mt-4 border-t border-border pt-4">
           <StudentRecordingDefaultToggle
             studentId={student.id}
             initialEnabled={student.recordingDefaultEnabled}
           />
         </div>
-      </div>
+      </AdminSectionCard>
 
-      <div className="divider" />
-
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>Send update email</h3>
-        <p className="muted">
-          Sends the share link to the parent. The parent email address is saved for this student
-          for next time.
-        </p>
+      <AdminSectionCard
+        title="Send update email"
+        description="Sends the share link to the parent. The parent email address is saved for this student for next time."
+      >
         <SendUpdateForm studentId={student.id} defaultToEmail={student.parentEmail} />
-      </div>
+      </AdminSectionCard>
 
-      <div className="divider" />
-
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-        <div>
-          <h3 style={{ margin: 0 }}>Session notes</h3>
-          <p className="muted" style={{ margin: "4px 0 0", fontSize: 13 }}>
-            {student._count.notes === 0 ? (
-              "No notes yet."
-            ) : (
-              <>
-                {student._count.notes} note{student._count.notes !== 1 ? "s" : ""}
-                {student.notes[0] && (
-                  <> · last {formatDateOnlyDisplay(student.notes[0].date)}</>
-                )}
-              </>
-            )}
-          </p>
-        </div>
-        <Link className="btn" href={`/admin/students/${id}/notes`}>
-          View all notes →
-        </Link>
-      </div>
-    </div>
+      <AdminSectionCard
+        title="Session notes"
+        description={
+          noteCount === 0 ? (
+            "No notes yet."
+          ) : (
+            <>
+              {noteCount} note{noteCount !== 1 ? "s" : ""}
+              {lastNote ? <> · last {formatDateOnlyDisplay(lastNote.date)}</> : null}
+            </>
+          )
+        }
+        actions={
+          <Button asChild variant="outline" className="min-h-11">
+            <Link href={`/admin/students/${id}/notes`}>View all notes →</Link>
+          </Button>
+        }
+      >
+        <span className="sr-only">Open the notes list to view or edit saved session notes.</span>
+      </AdminSectionCard>
+    </AdminPageShell>
   );
 }

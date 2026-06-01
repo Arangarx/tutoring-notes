@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { ModalPortal } from "@/components/ModalPortal";
 import { SubmitButton } from "@/components/SubmitButton";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createWhiteboardSession } from "./actions";
 
 /**
@@ -47,45 +49,25 @@ export function StartWhiteboardSession({
           aria-modal="true"
           aria-labelledby="wb-consent-title"
           aria-describedby="wb-consent-body"
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "var(--overlay-scrim)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-          }}
+          className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 p-4"
           onClick={(e) => {
-            // Close only when the backdrop itself is clicked, not on
-            // child clicks. This keeps stray clicks inside the dialog
-            // from accidentally dismissing the consent flow.
             if (e.target === e.currentTarget) handleClose();
           }}
         >
-          <div
-            className="card"
-            style={{
-              maxWidth: 520,
-              width: "calc(100% - 32px)",
-              padding: 24,
-              // Override .card's translucent --panel with a solid dark surface
-              // so the modal pops from the backdrop and inherited white text
-              // stays readable. Matches .admin-nav-drawer's hex.
-              background: "var(--surface-drawer)",
-              border: "1px solid var(--border)",
-            }}
-          >
-            <h3 id="wb-consent-title" style={{ marginTop: 0 }}>
-              Start a whiteboard session
-            </h3>
-            <p id="wb-consent-body" className="muted" style={{ fontSize: 14 }}>
+          <Card className="w-full max-w-lg border-border bg-card shadow-lg">
+            <CardHeader className="pb-2">
+              <CardTitle id="wb-consent-title" className="text-lg">
+                Start a whiteboard session
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-0">
+            <p id="wb-consent-body" className="text-sm text-muted-foreground">
               The whiteboard records both the audio of the session and a
               timestamped log of every stroke drawn on the canvas — by you
               and by the student. The recording is stored in your account
               and is used to generate session notes after the session ends.
             </p>
-            <p className="muted" style={{ fontSize: 13 }}>
+            <p className="text-sm text-muted-foreground">
               Confirm with the student before clicking Start that they are
               comfortable being recorded for the duration of the session.
             </p>
@@ -148,17 +130,10 @@ export function StartWhiteboardSession({
                   );
                 }
               }}
-              style={{ marginTop: 16 }}
             >
               <label
                 htmlFor="wb-consent-checkbox"
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: 10,
-                  marginBottom: 16,
-                  cursor: "pointer",
-                }}
+                className="flex min-h-11 cursor-pointer items-start gap-3 text-sm leading-relaxed"
               >
                 <input
                   id="wb-consent-checkbox"
@@ -173,53 +148,49 @@ export function StartWhiteboardSession({
                   // "fill in this field" tooltip that obscures the real
                   // copy.
                 />
-                <span style={{ fontSize: 14, lineHeight: 1.4 }}>
+                <span>
                   I have informed the student that audio and whiteboard
                   activity will be recorded for the duration of this
                   session, and they are comfortable with that.
                 </span>
               </label>
 
-              {error && (
+              {error ? (
                 <p
                   role="alert"
-                  style={{
-                    color: "var(--color-error)",
-                    fontSize: 13,
-                    marginBottom: 12,
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                  }}
+                  className="text-sm whitespace-pre-wrap text-destructive break-words"
                 >
                   {error}
                 </p>
-              )}
+              ) : null}
 
-              <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
-                <button type="button" className="btn" onClick={handleClose}>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button type="button" variant="outline" className="min-h-11" onClick={handleClose}>
                   Cancel
-                </button>
+                </Button>
                 <SubmitButton
                   label="Start session"
                   pendingLabel="Starting…"
                   disabled={!consent}
+                  className="primary"
                 />
               </div>
             </form>
-          </div>
+            </CardContent>
+          </Card>
         </div>
       ) : null;
 
   return (
     <>
-      <button
+      <Button
         type="button"
-        className="btn"
+        className="min-h-11"
         onClick={() => setOpen(true)}
         data-testid="start-whiteboard-session-btn"
       >
         Start whiteboard session
-      </button>
+      </Button>
       {modal ? <ModalPortal>{modal}</ModalPortal> : null}
     </>
   );
