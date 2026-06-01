@@ -78,10 +78,17 @@ export async function startTotpEnrollment(): Promise<StartEnrollmentResult> {
     return { ok: false, error: String(e) };
   }
 
+  // Authenticator apps show issuer:label — use email, not internal id.
+  const adminUser = await db.adminUser.findUnique({
+    where: { id: adminId },
+    select: { email: true },
+  });
+  const totpAccountLabel = adminUser?.email?.trim() || adminId;
+
   // Generate TOTP secret.
   const totp = new OTPAuth.TOTP({
     issuer: APP_ISSUER,
-    label: adminId,
+    label: totpAccountLabel,
     algorithm: TOTP_ALGORITHM,
     digits: TOTP_DIGITS,
     period: TOTP_PERIOD,

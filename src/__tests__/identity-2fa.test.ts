@@ -567,6 +567,17 @@ describe("local QR generation (SECURITY — secret stays server-side)", () => {
     expect(content).not.toContain("api.qrserver.com");
   });
 
+  it("startTotpEnrollment otpauth label uses AdminUser email (fallback to id)", () => {
+    const actionsPath = path.resolve(
+      __dirname,
+      "../app/admin/settings/2fa/actions.ts"
+    );
+    const content = fs.readFileSync(actionsPath, "utf-8");
+    expect(content).toContain("select: { email: true }");
+    expect(content).toContain("totpAccountLabel");
+    expect(content).toMatch(/label:\s*totpAccountLabel/);
+  });
+
   it("TwoFactorSetupForm does not import AuthMortensenNotice", () => {
     const formPath = path.resolve(
       __dirname,
@@ -583,5 +594,50 @@ describe("local QR generation (SECURITY — secret stays server-side)", () => {
     );
     const content = fs.readFileSync(formPath, "utf-8");
     expect(content).not.toContain("AuthMortensenNotice");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TOTP enrollment otpauth URI label (display — email, not GUID)
+// ---------------------------------------------------------------------------
+describe("TOTP enrollment otpauth URI label", () => {
+  const APP_ISSUER = "Mynk";
+  const TEST_EMAIL = "arangarx@gmail.com";
+  const TEST_ADMIN_ID = "00000000-0000-4000-8000-000000000001";
+
+  async function enrollmentOtpauthUri(label: string): Promise<string> {
+    const OTPAuth = await import("otpauth");
+    const totp = new OTPAuth.TOTP({
+      issuer: APP_ISSUER,
+      label,
+      algorithm: "SHA1",
+      digits: 6,
+      period: 30,
+    });
+    return totp.toString();
+  }
+
+  it("otpauth URI label segment contains user email; issuer unchanged", async () => {
+    const totpAccountLabel = TEST_EMAIL.trim() || TEST_ADMIN_ID;
+    const uri = await enrollmentOtpauthUri(totpAccountLabel);
+    expect(uri).toContain(`issuer=${APP_ISSUER}`);
+    expect(uri).toMatch(new RegExp(`otpauth://totp/${APP_ISSUER}:`));
+    const pathAfterScheme = uri.replace(/^otpauth:\/\/totp\//, "").split("?")[0]!;
+    const labelSegment = pathAfterScheme.includes(":")
+      ? pathAfterScheme.slice(pathAfterScheme.indexOf(":") + 1)
+      : pathAfterScheme;
+    expect(decodeURIComponent(labelSegment)).toBe(TEST_EMAIL);
+    expect(labelSegment).not.toContain(TEST_ADMIN_ID);
+  });
+
+  it("falls back to admin id when email is missing", async () => {
+    const totpAccountLabel = "".trim() || TEST_ADMIN_ID;
+    const uri = await enrollmentOtpauthUri(totpAccountLabel);
+    expect(uri).toContain(`issuer=${APP_ISSUER}`);
+    const pathAfterScheme = uri.replace(/^otpauth:\/\/totp\//, "").split("?")[0]!;
+    const labelSegment = pathAfterScheme.includes(":")
+      ? pathAfterScheme.slice(pathAfterScheme.indexOf(":") + 1)
+      : pathAfterScheme;
+    expect(decodeURIComponent(labelSegment)).toBe(TEST_ADMIN_ID);
   });
 });
