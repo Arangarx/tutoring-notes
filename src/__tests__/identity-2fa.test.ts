@@ -640,18 +640,33 @@ describe("auth-flow redirect mechanics", () => {
     });
   });
 
-  describe("setup page redirect — enrolled+verified user", () => {
-    it("setup page source redirects enrolled+verified users to /admin, not the form", () => {
+  describe("setup page redirect — enrolled+confirmed+verified user", () => {
+    it("setup page source redirects enrolled+confirmed+verified users to management page", () => {
       const setupPagePath = path.resolve(
         __dirname,
         "../app/admin/settings/2fa/setup/page.tsx"
       );
       const content = fs.readFileSync(setupPagePath, "utf-8");
-      // The enrolled+verified branch must redirect to /admin.
-      expect(content).toMatch(/isEnrolled && session\.user\.twoFactorVerified/);
-      expect(content).toContain('redirect("/admin")');
-      // Must NOT still have the old fallthrough comment that allowed showing the form.
-      expect(content).not.toContain("Fall through to show the setup form");
+      // The enrolled+confirmed+verified branch must redirect to the management page.
+      expect(content).toMatch(/isConfirmed && session\.user\.twoFactorVerified/);
+      expect(content).toContain('redirect("/admin/settings/2fa")');
+      // The old blunt redirect pattern must be gone.
+      // (redirect("/admin") is still OK for test-account exemption; the enrolled+verified branch must NOT use it)
+      expect(content).not.toMatch(/isEnrolled && session\.user\.twoFactorVerified/);
+    });
+
+    it("setup page source does NOT trap unconfirmed (interrupted) enrollment at /verify", () => {
+      const setupPagePath = path.resolve(
+        __dirname,
+        "../app/admin/settings/2fa/setup/page.tsx"
+      );
+      const content = fs.readFileSync(setupPagePath, "utf-8");
+      // p1-reenroll-trap fix: check backup codes count for confirmation, not just row existence.
+      expect(content).toContain("isConfirmed");
+      // The old trap pattern (redirect to verify based on row existence alone) must be gone.
+      expect(content).not.toMatch(/isEnrolled && !session\.user\.twoFactorVerified/);
+      // Falls through to setup form for unconfirmed — comment confirms intent.
+      expect(content).toContain("p1-reenroll-trap");
     });
   });
 

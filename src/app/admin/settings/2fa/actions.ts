@@ -321,6 +321,215 @@ export async function verifyTotpCode(codeInput: string): Promise<VerifyTotpResul
 }
 
 // ---------------------------------------------------------------------------
+// rotateTotpStart
+// ---------------------------------------------------------------------------
+export type RotateStartResult =
+  | { ok: true; qrDataUri: string; secret: string }
+  | { ok: false; error: string };
+
+/**
+ * Starts TOTP authenticator rotation for the current user.
+ * Generates a new secret and stores it in pendingTotpSecretEnc.
+ * The existing totpSecretEnc is NOT touched — the current authenticator remains
+ * valid until rotateTotpConfirm() swaps the secrets atomically (no-lockout guarantee).
+ *
+ * Requires: caller must be session-2FA-verified.
+ */
+export async function rotateTotpStart(): Promise<RotateStartResult> {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.twoFactorVerified) {
+    return { ok: false, error: "Session 2FA verification required to rotate authenticator." };
+  }
+
+  let adminId: string;
+  try {
+    const result = await getCurrentAdminId();
+    if (result.isTestAccount) return { ok: false, error: "Test accounts do not require 2FA." };
+    adminId = result.adminId;
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+
+  const row = await db.adminUser2FA.findUnique({
+    where: { adminUserId: adminId },
+    select: { id: true, _count: { select: { backupCodes: true } } },
+  });
+  if (!row || row._count.backupCodes === 0) {
+    return { ok: false, error: "No confirmed 2FA enrollment found. Complete initial setup first." };
+  }
+
+  const adminUser = await db.adminUser.findUnique({
+    where: { id: adminId },
+    select: { email: true },
+  });
+  const totpAccountLabel = adminUser?.email?.trim() || adminId;
+
+  const totp = new OTPAuth.TOTP({
+    issuer: APP_ISSUER,
+    label: totpAccountLabel,
+    algorithm: TOTP_ALGORITHM,
+    digits: TOTP_DIGITS,
+    period: TOTP_PERIOD,
+  });
+  const newSecret = totp.secret.base32;
+  const otpauthUri = totp.toString();
+
+  let enc: string;
+  try {
+    enc = encryptTotpSecret(newSecret);
+  } catch (e) {
+    console.error("[tfa] encrypt failed:", e);
+    return { ok: false, error: "2FA encryption not available. Contact your administrator." };
+  }
+
+  await db.adminUser2FA.update({
+    where: { id: row.id },
+    data: { pendingTotpSecretEnc: enc, pendingEnrolledAt: new Date() },
+  });
+
+  const qrDataUri = await QRCode.toDataURL(otpauthUri, { width: 200, margin: 1 });
+
+  console.log(`[tfa] tfa=${row.id} adminUserId=${adminId} action=rotate-start`);
+  return { ok: true, qrDataUri, secret: newSecret };
+}
+
+// ---------------------------------------------------------------------------
+// rotateTotpConfirm
+// ---------------------------------------------------------------------------
+export type RotateConfirmResult =
+  | { ok: true; backupCodes: string[] }
+  | { ok: false; error: string };
+
+/**
+ * Confirms rotation by verifying a code from the NEW authenticator.
+ * On success, atomically:
+ *   - Swaps pendingTotpSecretEnc → totpSecretEnc
+ *   - Clears pendingTotpSecretEnc + pendingEnrolledAt
+ *   - Deletes old backup codes and generates fresh ones
+ *   - Returns plaintext codes (shown once)
+ *
+ * NO-LOCKOUT: totpSecretEnc is only replaced after successful verification
+ * of a code from the new authenticator. If the user cannot produce a valid
+ * code, the old secret remains active and rotation is aborted.
+ *
+ * Requires: caller must be session-2FA-verified.
+ */
+export async function rotateTotpConfirm(token: string): Promise<RotateConfirmResult> {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.twoFactorVerified) {
+    return { ok: false, error: "Session 2FA verification required to confirm rotation." };
+  }
+
+  let adminId: string;
+  try {
+    const result = await getCurrentAdminId();
+    if (result.isTestAccount) return { ok: false, error: "Test accounts do not require 2FA." };
+    adminId = result.adminId;
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+
+  const row = await db.adminUser2FA.findUnique({
+    where: { adminUserId: adminId },
+    select: { id: true, pendingTotpSecretEnc: true },
+  });
+  if (!row?.pendingTotpSecretEnc) {
+    return { ok: false, error: "No rotation in progress. Start rotation first." };
+  }
+
+  let pendingSecret: string;
+  try {
+    pendingSecret = decryptTotpSecret(row.pendingTotpSecretEnc);
+  } catch (e) {
+    console.error("[tfa] decrypt failed:", e);
+    return { ok: false, error: "Encryption key mismatch. Contact your administrator." };
+  }
+
+  const totp = new OTPAuth.TOTP({
+    issuer: APP_ISSUER,
+    label: adminId,
+    algorithm: TOTP_ALGORITHM,
+    digits: TOTP_DIGITS,
+    period: TOTP_PERIOD,
+    secret: OTPAuth.Secret.fromBase32(pendingSecret),
+  });
+
+  const delta = totp.validate({ token: token.replace(/\s/g, ""), window: 1 });
+  if (delta === null) {
+    console.log(`[tfa] tfa=${row.id} adminUserId=${adminId} action=rotate-fail`);
+    return { ok: false, error: "Invalid code from new authenticator. Try again." };
+  }
+
+  // Atomically: swap secret, clear pending, delete old backup codes, create new ones.
+  const codes = await generateBackupCodes();
+  await db.$transaction(async (tx) => {
+    await tx.adminUser2FA.update({
+      where: { id: row.id },
+      data: {
+        totpSecretEnc: row.pendingTotpSecretEnc!,
+        pendingTotpSecretEnc: null,
+        pendingEnrolledAt: null,
+        enrolledAt: new Date(),
+      },
+    });
+    await tx.adminUser2FABackupCode.deleteMany({ where: { twoFaId: row.id } });
+    await tx.adminUser2FABackupCode.createMany({
+      data: codes.map((c) => ({ twoFaId: row.id, codeHash: c.hash })),
+    });
+  });
+
+  console.log(`[tfa] tfa=${row.id} adminUserId=${adminId} action=rotate-confirm`);
+  return { ok: true, backupCodes: codes.map((c) => c.plaintext) };
+}
+
+// ---------------------------------------------------------------------------
+// regenerateBackupCodes
+// ---------------------------------------------------------------------------
+export type RegenBackupCodesResult =
+  | { ok: true; backupCodes: string[] }
+  | { ok: false; error: string };
+
+/**
+ * Regenerates backup codes for the current user.
+ * Deletes all existing codes, generates 10 fresh ones, bcrypt-hashes them,
+ * and returns the plaintext codes (shown once — never returned again).
+ *
+ * Requires: caller must be session-2FA-verified.
+ */
+export async function regenerateBackupCodes(): Promise<RegenBackupCodesResult> {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.twoFactorVerified) {
+    return { ok: false, error: "Session 2FA verification required to regenerate backup codes." };
+  }
+
+  let adminId: string;
+  try {
+    const result = await getCurrentAdminId();
+    if (result.isTestAccount) return { ok: false, error: "Test accounts do not require 2FA." };
+    adminId = result.adminId;
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+
+  const row = await db.adminUser2FA.findUnique({
+    where: { adminUserId: adminId },
+    select: { id: true },
+  });
+  if (!row) return { ok: false, error: "2FA not enrolled." };
+
+  const codes = await generateBackupCodes();
+  await db.$transaction(async (tx) => {
+    await tx.adminUser2FABackupCode.deleteMany({ where: { twoFaId: row.id } });
+    await tx.adminUser2FABackupCode.createMany({
+      data: codes.map((c) => ({ twoFaId: row.id, codeHash: c.hash })),
+    });
+  });
+
+  console.log(`[tfa] tfa=${row.id} adminUserId=${adminId} action=regen-backup`);
+  return { ok: true, backupCodes: codes.map((c) => c.plaintext) };
+}
+
+// ---------------------------------------------------------------------------
 // adminResetTwoFactor
 // ---------------------------------------------------------------------------
 export type AdminResetResult =

@@ -14,20 +14,32 @@ export default async function TwoFactorSetupPage() {
   // (middleware skips them), but guard here too.
   if (session.user.isTestAccount) redirect("/admin");
 
-  // If already enrolled but NOT yet verified this session → redirect to verify.
   if (session.user.id) {
     const admin = await db.adminUser.findUnique({
       where: { id: session.user.id },
-      include: { twoFactor: { select: { id: true } } },
+      include: {
+        twoFactor: {
+          include: { _count: { select: { backupCodes: true } } },
+        },
+      },
     });
-    const isEnrolled = !!admin?.twoFactor;
-    if (isEnrolled && !session.user.twoFactorVerified) {
+    // An enrollment is CONFIRMED when backup codes exist (created by confirmTotpEnrollment).
+    // If no backup codes → interrupted enrollment (row exists but never confirmed).
+    // Treat interrupted enrollment as "not enrolled" — allow fresh QR generation.
+    // This closes p1-reenroll-trap: previously any row caused a redirect to /verify,
+    // trapping users who started but never completed enrollment.
+    const isConfirmed = (admin?.twoFactor?._count?.backupCodes ?? 0) > 0;
+
+    if (isConfirmed && !session.user.twoFactorVerified) {
+      // Confirmed enrollment but not verified this session → gate.
       redirect("/admin/settings/2fa/verify");
     }
-    if (isEnrolled && session.user.twoFactorVerified) {
-      // Already enrolled and verified — send to the dashboard, not the re-enroll form.
-      redirect("/admin");
+    if (isConfirmed && session.user.twoFactorVerified) {
+      // Already enrolled and verified — send to management page.
+      // (The post-login flow after /verify still goes to /admin via callbackUrl.)
+      redirect("/admin/settings/2fa");
     }
+    // Falls through: not enrolled OR interrupted (unconfirmed) → show setup form.
   }
 
   return (

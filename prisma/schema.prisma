@@ -409,6 +409,11 @@ model AdminUser2FA {
   totpSecretEnc  String
   enrolledAt     DateTime  @default(now())
   lastVerifiedAt DateTime?
+  /// Rotation: new pending secret stored here while current totpSecretEnc remains valid.
+  /// Swapped atomically to totpSecretEnc on rotateTotpConfirm; cleared on success/abandon.
+  pendingTotpSecretEnc String?
+  /// When rotation was started. Null when no rotation is in progress.
+  pendingEnrolledAt    DateTime?
   backupCodes    AdminUser2FABackupCode[]
 }
 

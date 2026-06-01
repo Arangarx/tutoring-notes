@@ -113,7 +113,8 @@ export async function middleware(req: NextRequest) {
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);
   } else if (
     pathname.startsWith("/admin/settings/2fa/verify") ||
-    pathname.startsWith("/admin/settings/2fa/setup")
+    pathname.startsWith("/admin/settings/2fa/setup") ||
+    pathname.startsWith("/admin/settings/2fa")
   ) {
     const rl = rateLimit(`2fa:${ip}`, TOTP_RATE_LIMIT.max, TOTP_RATE_LIMIT.windowMs);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);
