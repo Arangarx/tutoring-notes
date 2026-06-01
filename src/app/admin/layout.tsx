@@ -20,18 +20,16 @@ export default async function AdminLayout({
           sub: session.user.id,
           isImpersonating: session.user.isImpersonating,
           isTestAccount: session.user.isTestAccount,
+          role: session.user.role,
         }
       : null
   );
 
   return (
     <>
-      {isImpersonating && <ImpersonationBanner email={impersonatedEmail} />}
-      <AdminNav
-        showOperatorLinks={showOperatorLinks}
-        sessionMode={sessionMode}
-      />
-      <div className="container">{children}</div>
+      {isImpersonating ? <ImpersonationBanner email={impersonatedEmail} /> : null}
+      <AdminNav showOperatorLinks={showOperatorLinks} sessionMode={sessionMode} />
+      <div className="mx-auto w-full max-w-4xl px-4 py-8 md:py-10">{children}</div>
     </>
   );
 }

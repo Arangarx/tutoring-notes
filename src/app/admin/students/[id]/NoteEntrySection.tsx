@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import AiAssistPanel from "./AiAssistPanel";
 import NewNoteForm from "./NewNoteForm";
 import type { NewNoteFormHandle } from "./NewNoteForm";
+import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
 
 type Props = {
   studentId: string;
@@ -16,14 +17,7 @@ export default function NoteEntrySection({ studentId, aiEnabled, blobEnabled }: 
   const [panelKey, setPanelKey] = useState(0);
 
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-        gap: 12,
-        alignItems: "start",
-      }}
-    >
+    <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
       <AiAssistPanel
         key={panelKey}
         studentId={studentId}
@@ -31,10 +25,9 @@ export default function NoteEntrySection({ studentId, aiEnabled, blobEnabled }: 
         enabled={aiEnabled}
         blobEnabled={blobEnabled}
       />
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>New session note</h3>
+      <AdminSectionCard title="New session note">
         <NewNoteForm ref={formRef} studentId={studentId} onSaved={() => setPanelKey((k) => k + 1)} />
-      </div>
+      </AdminSectionCard>
     </div>
   );
 }

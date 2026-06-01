@@ -7,6 +7,10 @@ import AiGeneratedNoteReviewGate from "@/components/notes/AiGeneratedNoteReviewG
 import type { NewNoteFormHandle } from "./NewNoteForm";
 import AudioInputTabs, { type AudioResult } from "./AudioInputTabs";
 import PendingSegmentList from "./PendingSegmentList";
+import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 
 type Tab = "text" | "upload" | "record";
 
@@ -197,19 +201,20 @@ export default function AiAssistPanel({ studentId, formRef, enabled, blobEnabled
 
   if (!enabled) {
     return (
-      <div className="card" style={{ opacity: 0.6 }}>
-        <h3 style={{ marginTop: 0 }}>Auto-fill from session</h3>
-        <p className="muted" style={{ margin: 0 }}>
+      <AdminSectionCard title="Auto-fill from session" className="opacity-60">
+        <p className="text-sm text-muted-foreground">
           AI generation is not configured on this server.
         </p>
-      </div>
+      </AdminSectionCard>
     );
   }
 
   return (
-    <div className="card" data-testid="ai-assist-panel" style={{ flex: 1, minWidth: 280 }}>
-      <h3 style={{ marginTop: 0 }}>Auto-fill from session</h3>
-
+    <AdminSectionCard
+      title="Auto-fill from session"
+      data-testid="ai-assist-panel"
+      className="min-w-0 flex-1"
+    >
       {panelState === "filled" ? (
         <div data-testid="ai-filled-hint">
           <AiGeneratedNoteReviewGate
@@ -220,17 +225,17 @@ export default function AiAssistPanel({ studentId, formRef, enabled, blobEnabled
         </div>
       ) : (
         <>
-          <p className="muted" style={{ marginTop: 0, marginBottom: 4 }}>
+          <p className="text-sm text-muted-foreground">
             Paste notes, upload a recording, or record directly. AI will fill the note form — you
             can edit before saving.
           </p>
-          <p className="muted" style={{ marginTop: 0, marginBottom: 12, fontSize: 12 }}>
+          <p className="text-xs text-muted-foreground">
             Your text/audio is sent to OpenAI to structure it.{" "}
             <a
               href="https://openai.com/enterprise-privacy"
               target="_blank"
               rel="noreferrer"
-              style={{ fontSize: 12 }}
+              className="text-brand underline-offset-2 hover:underline"
             >
               OpenAI does not use API data for training.
             </a>
@@ -257,9 +262,9 @@ export default function AiAssistPanel({ studentId, formRef, enabled, blobEnabled
 
           {activeTab === "text" && (
             <>
-              <label htmlFor="ai-session-text" className="muted" style={{ fontSize: 12, marginBottom: 4, display: "block" }}>
+              <Label htmlFor="ai-session-text" className="text-muted-foreground">
                 Session notes
-              </label>
+              </Label>
               <textarea
                 id="ai-session-text"
                 ref={textareaRef}
@@ -267,46 +272,51 @@ export default function AiAssistPanel({ studentId, formRef, enabled, blobEnabled
                 onChange={(e) => setSessionText(e.target.value)}
                 rows={4}
                 placeholder="e.g. We worked on quadratic equations, factoring practice with worksheet pg 4-6, she struggled with negative coefficients..."
-                style={{ width: "100%", boxSizing: "border-box", marginTop: 2 }}
+                className={cn(
+                  "mt-2 w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs",
+                  "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                )}
                 data-testid="ai-session-text"
               />
             </>
           )}
 
-          {error && (
-            <p role="alert" style={{ color: "var(--color-error)", marginTop: 8 }}>{error}</p>
-          )}
+          {error ? (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          ) : null}
 
-          <div className="row" style={{ justifyContent: "flex-end", marginTop: 10 }}>
+          <div className="flex justify-end pt-2">
             {activeTab === "text" ? (
-              <button
+              <Button
                 type="button"
-                className="btn primary"
                 disabled={isPending || !sessionText.trim()}
                 onClick={handleGenerateFromText}
                 data-testid="ai-generate-btn"
+                className="min-h-11"
               >
                 {isPending ? "Generating…" : error ? "Try again" : "Generate notes"}
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
                 type="button"
-                className="btn primary"
                 disabled={isPending || isRecordingActive || pendingAudios.length === 0}
                 onClick={handleGenerateFromAudio}
                 data-testid="ai-transcribe-btn"
                 title={isRecordingActive ? "Stop the recording first" : undefined}
+                className="min-h-11"
               >
                 {isPending
                   ? `Transcribing${pendingAudios.length > 1 ? ` ${pendingAudios.length} segments` : ""}…`
                   : error
-                  ? "Try again"
-                  : "Transcribe & generate notes"}
-              </button>
+                    ? "Try again"
+                    : "Transcribe & generate notes"}
+              </Button>
             )}
           </div>
         </>
       )}
-    </div>
+    </AdminSectionCard>
   );
 }

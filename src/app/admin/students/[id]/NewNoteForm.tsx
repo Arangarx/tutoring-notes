@@ -9,6 +9,7 @@ import {
 } from "react";
 import { createNote } from "./actions";
 import { formatLocalTimeSnapped, TIME_INPUT_STEP_SECONDS } from "@/lib/time/snap";
+import { Button } from "@/components/ui/button";
 
 export type PopulatePayload = {
   topics: string;
@@ -377,18 +378,19 @@ const NewNoteForm = forwardRef<NewNoteFormHandle, Props>(function NewNoteForm(
         </div>
       )}
 
-      <div className="row" style={{ justifyContent: "flex-end", marginTop: 12, gap: 8 }}>
-        <button
+      <div className="mt-4 flex flex-wrap justify-end gap-2">
+        <Button
           type="button"
-          className="btn"
+          variant="outline"
+          className="min-h-11"
           disabled={!hasContent || submitting}
           onClick={handleClear}
         >
           Clear form
-        </button>
-        <button className="btn primary" type="submit" disabled={submitting || !hasContent}>
+        </Button>
+        <Button type="submit" className="min-h-11" disabled={submitting || !hasContent}>
           {submitting ? "Saving…" : "Save note"}
-        </button>
+        </Button>
       </div>
     </form>
   );
