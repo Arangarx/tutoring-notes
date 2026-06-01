@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { signOut } from "next-auth/react";
+import { exitImpersonation } from "@/app/admin/actions/impersonate";
 
 import type { AdminSessionMode } from "@/lib/admin-routing";
 
@@ -11,11 +12,18 @@ type AdminNavProps = {
   /** Global feedback inbox + waitlist — only for addresses in OPERATOR_EMAILS / ADMIN_EMAIL. */
   showOperatorLinks?: boolean;
   sessionMode?: AdminSessionMode;
+  /**
+   * When true, the "Sign out" button routes through exitImpersonation() instead
+   * of next-auth signOut() — dropping the impersonation and restoring the admin's
+   * verified session rather than terminating it entirely.
+   */
+  isImpersonating?: boolean;
 };
 
 export function AdminNav({
   showOperatorLinks = false,
   sessionMode = "tutor-experience",
+  isImpersonating = false,
 }: AdminNavProps) {
   const tutorLinks = [
     { href: "/admin/students", label: "Students" },
@@ -61,13 +69,21 @@ export function AdminNav({
                 {l.label}
               </Link>
             ))}
-            <button
-              type="button"
-              className="admin-nav-link sign-out"
-              onClick={() => signOut({ callbackUrl: "/login" })}
-            >
-              Sign out
-            </button>
+            {isImpersonating ? (
+              <form action={exitImpersonation}>
+                <button type="submit" className="admin-nav-link sign-out">
+                  Sign out
+                </button>
+              </form>
+            ) : (
+              <button
+                type="button"
+                className="admin-nav-link sign-out"
+                onClick={() => signOut({ callbackUrl: "/login" })}
+              >
+                Sign out
+              </button>
+            )}
           </div>
 
           {/* Mobile hamburger */}
@@ -99,13 +115,21 @@ export function AdminNav({
                 {l.label}
               </Link>
             ))}
-            <button
-              type="button"
-              className="admin-nav-drawer-link sign-out"
-              onClick={() => { setOpen(false); signOut({ callbackUrl: "/login" }); }}
-            >
-              Sign out
-            </button>
+            {isImpersonating ? (
+              <form action={exitImpersonation}>
+                <button type="submit" className="admin-nav-drawer-link sign-out">
+                  Sign out
+                </button>
+              </form>
+            ) : (
+              <button
+                type="button"
+                className="admin-nav-drawer-link sign-out"
+                onClick={() => { setOpen(false); signOut({ callbackUrl: "/login" }); }}
+              >
+                Sign out
+              </button>
+            )}
           </div>
         </>
       )}

@@ -155,12 +155,20 @@ export async function mintImpersonationSession(opts: {
  * Called by exitImpersonation() (Dispatch B).
  *
  * The restored token has no impersonation fields, a fresh iat, and role=ADMIN.
+ *
+ * twoFactorVerified is always restored as true. Invariant: the middleware 2FA
+ * gate blocks non-verified, non-impersonating admins from all /admin/* routes
+ * except the setup/verify pages. An admin can only reach the impersonation
+ * controls if they already passed 2FA. Exiting impersonation never re-challenges.
  */
 export async function mintAdminSession(opts: {
   adminId: string;
   adminEmail: string;
   adminRole?: AdminRole;
 }): Promise<void> {
+  console.log(
+    `[tfa] mintAdminSession adminId=${opts.adminId} twoFactorVerified=true (restored from impersonation exit)`
+  );
   const token = await encode({
     token: {
       sub: opts.adminId,
@@ -169,6 +177,9 @@ export async function mintAdminSession(opts: {
       isTestAccount: false,
       role: opts.adminRole ?? "ADMIN",
       // No impersonation fields — clean admin session.
+      // twoFactorVerified: invariant — any admin who started impersonation
+      // necessarily had twoFactorVerified=true (middleware gate proof above).
+      twoFactorVerified: true,
     },
     secret: env.NEXTAUTH_SECRET,
     maxAge: SESSION_MAX_AGE_S,
