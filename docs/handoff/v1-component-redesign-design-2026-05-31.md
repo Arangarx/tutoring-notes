@@ -500,7 +500,7 @@ Dark Mynka Blue is deliberately **"study at night with one lamp"** — a sophist
 
 ### 5.0 Cross-surface layout principles
 
-- **Whiteboard gets maximal screen real estate.** The live whiteboard workspace should be near-full-screen; surrounding chrome (nav, panels, toolbars) stays minimal and unobtrusive so the drawing surface dominates. Rationale: pilot tutor (Sarah) wants a larger whiteboard area — the whiteboard is the core live-tutoring surface. Do **not** clone Wyzant's exact UI; honor the "big canvas, light chrome" intent. Treat as a from-the-start layout constraint for any workspace/component redesign, not a retrofit. (Captured 2026-06-01.)
+- **Whiteboard gets maximal screen real estate.** The live whiteboard workspace should use most of the available viewport — the canvas dominates, surrounding chrome (nav, panels, toolbars) stays minimal and unobtrusive — **not** a literal browser-fullscreen (F11) or Fullscreen-API toggle. Rationale: pilot tutor (Sarah) wants a larger whiteboard area — the whiteboard is the core live-tutoring surface. Do **not** clone Wyzant's exact UI; honor the "big canvas, light chrome" intent. Treat as a from-the-start layout constraint for any workspace/component redesign, not a retrofit. (Captured 2026-06-01; viewport-vs-F11 clarified 2026-06-01.)
 
 ---
 
