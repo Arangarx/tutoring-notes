@@ -9,6 +9,15 @@ interface Props {
   searchParams: Promise<{ callbackUrl?: string }>;
 }
 
+/**
+ * Validates a returnTo/callbackUrl to prevent open-redirect attacks.
+ * Accepts only same-origin relative paths (starts with / but not //).
+ */
+function safeReturnTo(url: string | undefined | null): string {
+  if (url && /^\/(?!\/)/.test(url)) return url;
+  return "/admin";
+}
+
 export default async function TwoFactorVerifyPage({ searchParams }: Props) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) redirect("/login");
@@ -19,11 +28,11 @@ export default async function TwoFactorVerifyPage({ searchParams }: Props) {
   // Already verified this session.
   if (session.user.twoFactorVerified) {
     const { callbackUrl } = await searchParams;
-    redirect(callbackUrl || "/admin");
+    redirect(safeReturnTo(callbackUrl));
   }
 
   const { callbackUrl } = await searchParams;
-  const safe = callbackUrl?.startsWith("/") ? callbackUrl : "/admin";
+  const safe = safeReturnTo(callbackUrl);
 
   return (
     <div className="card" style={{ maxWidth: 480 }}>

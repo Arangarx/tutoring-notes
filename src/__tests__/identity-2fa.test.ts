@@ -598,6 +598,109 @@ describe("local QR generation (SECURITY — secret stays server-side)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Auth-flow redirect mechanics (post-enrollment/verify navigation)
+// ---------------------------------------------------------------------------
+describe("auth-flow redirect mechanics", () => {
+  /**
+   * Local copy of safeReturnTo from verify/page.tsx — kept in sync.
+   * Tests the regex guard logic independently of the Next.js page.
+   */
+  function safeReturnTo(url: string | undefined | null): string {
+    if (url && /^\/(?!\/)/.test(url)) return url;
+    return "/admin";
+  }
+
+  describe("safeReturnTo open-redirect guard", () => {
+    it("relative path starting with / is accepted", () => {
+      expect(safeReturnTo("/admin")).toBe("/admin");
+      expect(safeReturnTo("/admin/students/abc")).toBe("/admin/students/abc");
+      expect(safeReturnTo("/admin/settings")).toBe("/admin/settings");
+    });
+
+    it("protocol-relative URL (//) is rejected — falls back to /admin", () => {
+      expect(safeReturnTo("//evil.com")).toBe("/admin");
+      expect(safeReturnTo("//evil.com/steal")).toBe("/admin");
+    });
+
+    it("absolute http/https URL is rejected — falls back to /admin", () => {
+      expect(safeReturnTo("https://evil.com/steal")).toBe("/admin");
+      expect(safeReturnTo("http://evil.com")).toBe("/admin");
+    });
+
+    it("undefined falls back to /admin", () => {
+      expect(safeReturnTo(undefined)).toBe("/admin");
+    });
+
+    it("null falls back to /admin", () => {
+      expect(safeReturnTo(null)).toBe("/admin");
+    });
+
+    it("empty string falls back to /admin", () => {
+      expect(safeReturnTo("")).toBe("/admin");
+    });
+  });
+
+  describe("setup page redirect — enrolled+verified user", () => {
+    it("setup page source redirects enrolled+verified users to /admin, not the form", () => {
+      const setupPagePath = path.resolve(
+        __dirname,
+        "../app/admin/settings/2fa/setup/page.tsx"
+      );
+      const content = fs.readFileSync(setupPagePath, "utf-8");
+      // The enrolled+verified branch must redirect to /admin.
+      expect(content).toMatch(/isEnrolled && session\.user\.twoFactorVerified/);
+      expect(content).toContain('redirect("/admin")');
+      // Must NOT still have the old fallthrough comment that allowed showing the form.
+      expect(content).not.toContain("Fall through to show the setup form");
+    });
+  });
+
+  describe("enrollment confirm — mints verified session", () => {
+    it("confirmTotpEnrollment calls mintTwoFactorVerifiedSession (source check)", () => {
+      const actionsPath = path.resolve(
+        __dirname,
+        "../app/admin/settings/2fa/actions.ts"
+      );
+      const content = fs.readFileSync(actionsPath, "utf-8");
+      const confirmIdx = content.indexOf("async function confirmTotpEnrollment");
+      const verifyIdx = content.indexOf("async function verifyTotpCode");
+      expect(confirmIdx).toBeGreaterThan(-1);
+      expect(verifyIdx).toBeGreaterThan(-1);
+      // Mint call must appear inside confirmTotpEnrollment (before verifyTotpCode starts).
+      const confirmSection = content.slice(confirmIdx, verifyIdx);
+      expect(confirmSection).toContain("mintTwoFactorVerifiedSession");
+    });
+
+    it("TwoFactorSetupForm backup-codes step navigates to /admin (source check)", () => {
+      const formPath = path.resolve(
+        __dirname,
+        "../app/admin/settings/2fa/setup/TwoFactorSetupForm.tsx"
+      );
+      const content = fs.readFileSync(formPath, "utf-8");
+      // Must use router.push to /admin, not a link to /admin/settings.
+      expect(content).toContain('router.push("/admin")');
+      // The old href link to /admin/settings must be gone.
+      expect(content).not.toContain('href="/admin/settings"');
+    });
+  });
+
+  describe("verify page open-redirect guard in source", () => {
+    it("verify page uses safeReturnTo guard rejecting // prefix (source check)", () => {
+      const verifyPagePath = path.resolve(
+        __dirname,
+        "../app/admin/settings/2fa/verify/page.tsx"
+      );
+      const content = fs.readFileSync(verifyPagePath, "utf-8");
+      // The guard regex must be present — rejects //evil.com.
+      expect(content).toContain("safeReturnTo");
+      expect(content).toMatch(/\/\^\\\/\(\?!\\\/\)\//); // /^\/(?!\/)/ regex in source
+      // Must not use the weaker starts-with-/ only check that allows //.
+      expect(content).not.toMatch(/callbackUrl\?\.startsWith\("\/"\)/);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // TOTP enrollment otpauth URI label (display — email, not GUID)
 // ---------------------------------------------------------------------------
 describe("TOTP enrollment otpauth URI label", () => {

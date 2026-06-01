@@ -189,6 +189,29 @@ export async function confirmTotpEnrollment(
 
   console.log(`[tfa] tfa=${row.id} adminUserId=${adminId} action=enroll-confirm`);
 
+  // Mint twoFactorVerified session immediately — the user just proved they know the
+  // TOTP code, so they are considered verified for this session without a separate
+  // /verify step. Mirrors the same pattern used in verifyTotpCode.
+  try {
+    const cookieName =
+      process.env.NODE_ENV === "production"
+        ? "__Secure-next-auth.session-token"
+        : "next-auth.session-token";
+    const cookieStore = await cookies();
+    const sessionToken = cookieStore.get(cookieName)?.value;
+    if (sessionToken) {
+      const currentToken = await decode({
+        token: sessionToken,
+        secret: process.env.NEXTAUTH_SECRET!,
+      });
+      if (currentToken) {
+        await mintTwoFactorVerifiedSession(currentToken as Record<string, unknown>);
+      }
+    }
+  } catch (e) {
+    console.error("[tfa] mintTwoFactorVerifiedSession after enroll-confirm failed:", e);
+  }
+
   return { ok: true, backupCodes: codes.map((c) => c.plaintext) };
 }
 

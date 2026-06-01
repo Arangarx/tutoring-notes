@@ -11,6 +11,7 @@
  */
 
 import { useState, useTransition, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { startTotpEnrollment, confirmTotpEnrollment } from "../actions";
 
 type Step =
@@ -22,6 +23,7 @@ type Step =
   | "error";
 
 export function TwoFactorSetupForm() {
+  const router = useRouter();
   const [step, setStep] = useState<Step>("idle");
   const [qrDataUri, setQrDataUri] = useState<string>("");
   const [secret, setSecret] = useState<string>("");
@@ -210,12 +212,13 @@ export function TwoFactorSetupForm() {
         <p className="text-sm text-muted-foreground">
           ✓ 2FA is now active. You will be asked to verify on each new login.
         </p>
-        <a
-          href="/admin/settings"
-          className="inline-block bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm font-medium hover:bg-primary/90"
+        <button
+          type="button"
+          onClick={() => { router.push("/admin"); router.refresh(); }}
+          className="bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm font-medium hover:bg-primary/90"
         >
-          Back to Settings
-        </a>
+          Continue to dashboard
+        </button>
       </div>
     );
   }

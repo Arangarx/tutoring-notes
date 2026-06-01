@@ -25,8 +25,8 @@ export default async function TwoFactorSetupPage() {
       redirect("/admin/settings/2fa/verify");
     }
     if (isEnrolled && session.user.twoFactorVerified) {
-      // Already enrolled and verified — show re-enrollment option.
-      // Fall through to show the setup form (allows re-enrollment to rotate secret).
+      // Already enrolled and verified — send to the dashboard, not the re-enroll form.
+      redirect("/admin");
     }
   }
 
