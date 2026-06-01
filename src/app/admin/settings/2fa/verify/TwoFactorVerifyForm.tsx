@@ -6,14 +6,12 @@
  */
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { verifyTotpCode } from "../actions";
 
 export function TwoFactorVerifyForm({ callbackUrl }: { callbackUrl: string }) {
   const [codeInput, setCodeInput] = useState("");
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
-  const router = useRouter();
 
   function handleVerify() {
     const input = codeInput.replace(/\s/g, "");
@@ -25,9 +23,10 @@ export function TwoFactorVerifyForm({ callbackUrl }: { callbackUrl: string }) {
         setError(result.error);
         return;
       }
-      // Reload so the new JWT cookie is picked up and middleware re-validates.
-      router.push(callbackUrl || "/admin");
-      router.refresh();
+      // Hard navigation: bypasses the Next.js client router cache so the browser
+      // makes a fresh request with the newly-minted twoFactorVerified session cookie,
+      // avoiding any client-router-cache race that could surface a stale page.
+      window.location.replace(callbackUrl || "/admin");
     });
   }
 

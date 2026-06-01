@@ -12,7 +12,7 @@
 
 import { useState, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { startTotpEnrollment, confirmTotpEnrollment } from "../actions";
+import { startTotpEnrollment, confirmTotpEnrollment, clearPostEnrollCookie } from "../actions";
 
 type Step =
   | "idle"
@@ -160,6 +160,7 @@ export function TwoFactorSetupForm() {
               onChange={(e) => setTokenInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
               className="border rounded-md px-3 py-2 text-sm w-32 font-mono tracking-widest"
               autoComplete="one-time-code"
+              autoFocus
             />
             <button
               type="submit"
@@ -214,7 +215,10 @@ export function TwoFactorSetupForm() {
         </p>
         <button
           type="button"
-          onClick={() => router.push("/admin")}
+          onClick={async () => {
+            await clearPostEnrollCookie();
+            router.push("/admin");
+          }}
           className="bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm font-medium hover:bg-primary/90"
         >
           Continue to dashboard

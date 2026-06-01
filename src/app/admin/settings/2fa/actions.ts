@@ -583,3 +583,34 @@ export async function adminResetTwoFactor(
 
   return { ok: true };
 }
+
+// ---------------------------------------------------------------------------
+// clearPostEnrollCookie
+// ---------------------------------------------------------------------------
+/**
+ * Clears the tfa-post-enroll=1 cookie set by confirmTotpEnrollment.
+ *
+ * Must be called when the user explicitly leaves the backup-code display step
+ * via the Continue button. Without this, the cookie survives a signout (NextAuth
+ * only clears its own session cookies) and can suppress the /setup management
+ * redirect on the next login once the session is re-verified — causing the
+ * enroll form to render instead of the management view (hypothesis-b bug).
+ *
+ * The 5-min TTL in confirmTotpEnrollment remains as a safety net, but explicit
+ * clearing ensures the cookie cannot leak into a subsequent login session.
+ */
+export async function clearPostEnrollCookie(): Promise<void> {
+  try {
+    const cookieStore = await cookies();
+    cookieStore.set("tfa-post-enroll", "", {
+      maxAge: 0,
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/admin/settings/2fa/setup",
+      secure: process.env.NODE_ENV === "production",
+    });
+    console.log("[tfa] action=clear-post-enroll-cookie");
+  } catch (_) {
+    // Non-critical.
+  }
+}

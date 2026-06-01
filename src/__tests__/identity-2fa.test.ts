@@ -841,3 +841,107 @@ describe("TOTP enrollment otpauth URI label", () => {
     expect(decodeURIComponent(labelSegment)).toBe(TEST_ADMIN_ID);
   });
 });
+
+// ---------------------------------------------------------------------------
+// BUG-FIX item-1: post-login verify must land on /admin, not setup/enroll form
+// ---------------------------------------------------------------------------
+describe("BUG-FIX item-1: verify success navigation + post-enroll cookie lifecycle", () => {
+  /**
+   * Root cause: tfa-post-enroll=1 cookie (set by confirmTotpEnrollment, 5-min TTL,
+   * path-scoped to /admin/settings/2fa/setup) is NOT cleared on signout. After re-login
+   * + successful TOTP verify, twoFactorVerified=true is in the new session. The
+   * router.push("/admin") + router.refresh() combo in TwoFactorVerifyForm causes a
+   * Next.js client-router race: the refresh re-renders the current URL's server components
+   * while the push is in-flight, and the router may serve /admin/settings/2fa/setup from
+   * its cache with (twoFactorVerified=true + postEnroll=true), suppressing the management
+   * redirect and showing the enroll form instead.
+   *
+   * Fix:
+   *   (a) TwoFactorVerifyForm: replace router.push+refresh with window.location.replace
+   *       (hard navigation bypasses the client router cache entirely).
+   *   (b) TwoFactorSetupForm Continue: call clearPostEnrollCookie() before router.push
+   *       so the cookie cannot survive into a later login session.
+   *
+   * RED-BEFORE / GREEN-AFTER:
+   *   - verify form currently HAS router.refresh → first test below fails before fix.
+   *   - actions.ts lacks clearPostEnrollCookie → second test fails before fix.
+   *   - setup form backup section lacks clearPostEnrollCookie call → third test fails.
+   */
+  const verifyFormPath = path.resolve(
+    __dirname, "../app/admin/settings/2fa/verify/TwoFactorVerifyForm.tsx"
+  );
+  const setupFormPath = path.resolve(
+    __dirname, "../app/admin/settings/2fa/setup/TwoFactorSetupForm.tsx"
+  );
+  const actionsPath = path.resolve(
+    __dirname, "../app/admin/settings/2fa/actions.ts"
+  );
+  const setupPagePath = path.resolve(
+    __dirname, "../app/admin/settings/2fa/setup/page.tsx"
+  );
+
+  it("TwoFactorVerifyForm uses hard navigation (window.location) not router.push+refresh", () => {
+    const content = fs.readFileSync(verifyFormPath, "utf-8");
+    // window.location.replace bypasses the client router cache so the browser makes a
+    // fresh request with the newly-minted session cookie — no push+refresh race.
+    expect(content).toContain("window.location");
+    // router.refresh() here risks re-rendering /verify while the push is in-flight,
+    // which can serve a stale cached /setup page with (verified + postEnroll) state.
+    expect(content).not.toContain("router.refresh");
+  });
+
+  it("clearPostEnrollCookie server action is exported from actions.ts", () => {
+    const content = fs.readFileSync(actionsPath, "utf-8");
+    expect(content).toContain("export async function clearPostEnrollCookie");
+    // Must zero-out the cookie (maxAge: 0) so it is immediately expired.
+    const fnIdx = content.indexOf("async function clearPostEnrollCookie");
+    expect(fnIdx).toBeGreaterThan(-1);
+    const fnBody = content.slice(fnIdx, fnIdx + 800);
+    expect(fnBody).toMatch(/maxAge.*0|tfa-post-enroll.*""/);
+  });
+
+  it("TwoFactorSetupForm Continue button clears post-enroll cookie before navigating to /admin", () => {
+    const content = fs.readFileSync(setupFormPath, "utf-8");
+    const showBackupIdx = content.indexOf('step === "show-backup"');
+    expect(showBackupIdx).toBeGreaterThan(-1);
+    const returnNullIdx = content.lastIndexOf("return null;");
+    const backupSection = content.slice(
+      showBackupIdx,
+      returnNullIdx > showBackupIdx ? returnNullIdx : content.length
+    );
+    // The backup-codes step must call clearPostEnrollCookie before navigating away.
+    expect(backupSection).toContain("clearPostEnrollCookie");
+    // Must still navigate to /admin.
+    expect(backupSection).toContain('router.push("/admin")');
+  });
+
+  it("setup page enrolled+verified user with NO post-enroll cookie redirects to management", () => {
+    const content = fs.readFileSync(setupPagePath, "utf-8");
+    // The redirect to /admin/settings/2fa fires when confirmed+verified+!postEnroll.
+    expect(content).toContain('redirect("/admin/settings/2fa")');
+    expect(content).toMatch(/!postEnroll/);
+    expect(content).toMatch(/isConfirmed && session\.user\.twoFactorVerified/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Item 2: autofocus on code entry inputs
+// ---------------------------------------------------------------------------
+describe("Item 2: autofocus code entry fields on 2FA screens", () => {
+  it("TwoFactorVerifyForm code input has autoFocus", () => {
+    const formPath = path.resolve(
+      __dirname, "../app/admin/settings/2fa/verify/TwoFactorVerifyForm.tsx"
+    );
+    const content = fs.readFileSync(formPath, "utf-8");
+    expect(content).toContain("autoFocus");
+  });
+
+  it("TwoFactorSetupForm TOTP confirmation input has autoFocus", () => {
+    const formPath = path.resolve(
+      __dirname, "../app/admin/settings/2fa/setup/TwoFactorSetupForm.tsx"
+    );
+    const content = fs.readFileSync(formPath, "utf-8");
+    // The 6-digit code input in the show-qr/confirming step must have autoFocus.
+    expect(content).toContain("autoFocus");
+  });
+});
