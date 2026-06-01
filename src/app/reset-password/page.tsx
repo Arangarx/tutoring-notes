@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useId, useState } from "react";
+
+import { AuthFieldError } from "@/components/auth/AuthFieldError";
+import { AuthMortensenNotice } from "@/components/auth/AuthMortensenNotice";
+import { AuthShell } from "@/components/auth/AuthShell";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
@@ -12,27 +19,36 @@ function ResetPasswordForm() {
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const formErrorId = useId();
 
   if (!token) {
     return (
-      <div className="card">
-        <h1 style={{ marginTop: 0 }}>Invalid link</h1>
-        <p className="muted">This page needs a reset token from your email.</p>
-        <p style={{ marginTop: 16 }}>
-          <Link href="/forgot-password" style={{ textDecoration: "underline" }}>
+      <AuthShell
+        title="Invalid link"
+        description="This page needs a reset token from your email."
+        footer={
+          <Link href="/forgot-password" className="text-brand underline-offset-2 hover:underline">
             Request a new link
           </Link>
-        </p>
-      </div>
+        }
+      >
+        <AuthMortensenNotice />
+      </AuthShell>
     );
   }
 
   return (
-    <div className="card">
-      <h1 style={{ marginTop: 0 }}>Set a new password</h1>
-      <p className="muted">Choose a strong password (at least 8 characters).</p>
-
+    <AuthShell
+      title="Set a new password"
+      description="Choose a strong password (at least 8 characters)."
+      footer={
+        <Link href="/login" className="text-brand underline-offset-2 hover:underline">
+          Back to sign in
+        </Link>
+      }
+    >
       <form
+        className="flex flex-col gap-4"
         onSubmit={async (e) => {
           e.preventDefault();
           setError(null);
@@ -54,15 +70,15 @@ function ResetPasswordForm() {
             }
             router.push("/login?reset=1");
           } catch {
-            setError("Network error. Try again.");
+            setError("Couldn't reach Mynk. Check your internet, then try again.");
           } finally {
             setBusy(false);
           }
         }}
       >
-        <div style={{ marginTop: 16 }}>
-          <label htmlFor="password">New password</label>
-          <input
+        <div className="space-y-2">
+          <Label htmlFor="password">New password</Label>
+          <Input
             id="password"
             type="password"
             value={password}
@@ -70,11 +86,14 @@ function ResetPasswordForm() {
             autoComplete="new-password"
             minLength={8}
             required
+            className="min-h-11"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? formErrorId : undefined}
           />
         </div>
-        <div style={{ marginTop: 12 }}>
-          <label htmlFor="confirm">Confirm password</label>
-          <input
+        <div className="space-y-2">
+          <Label htmlFor="confirm">Confirm password</Label>
+          <Input
             id="confirm"
             type="password"
             value={confirm}
@@ -82,33 +101,40 @@ function ResetPasswordForm() {
             autoComplete="new-password"
             minLength={8}
             required
+            className="min-h-11"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? formErrorId : undefined}
           />
         </div>
 
-        {error ? <p style={{ color: "var(--sign-out-hover-text)", marginTop: 12 }}>{error}</p> : null}
+        {error ? <AuthFieldError id={formErrorId} message={error} /> : null}
 
-        <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}>
-          <button className="btn primary" type="submit" disabled={busy}>
+        <div className="flex flex-col gap-3 pt-1">
+          <AuthMortensenNotice />
+          <Button
+            type="submit"
+            disabled={busy}
+            aria-busy={busy}
+            className="min-h-11 w-full text-base"
+          >
             {busy ? "Saving…" : "Save password"}
-          </button>
+          </Button>
         </div>
       </form>
-    </div>
+    </AuthShell>
   );
 }
 
 export default function ResetPasswordPage() {
   return (
-    <div className="container" style={{ maxWidth: 560 }}>
-      <Suspense
-        fallback={
-          <div className="card">
-            <p className="muted">Loading…</p>
-          </div>
-        }
-      >
-        <ResetPasswordForm />
-      </Suspense>
-    </div>
+    <Suspense
+      fallback={
+        <AuthShell title="Set a new password" description="Loading…">
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        </AuthShell>
+      }
+    >
+      <ResetPasswordForm />
+    </Suspense>
   );
 }

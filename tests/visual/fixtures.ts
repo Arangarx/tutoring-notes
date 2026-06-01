@@ -71,11 +71,10 @@ export const test = base.extend<ConsoleGuardFixtures>({
       await checkA11y(guardedPage, undefined, {
         detailedReport: true,
         detailedReportOptions: { html: true },
-        // Ignore colour-contrast violations for now — dark theme values need
-        // a proper design audit. All other rules are hard failures.
+        // Phase B1+: color-contrast enabled (Mynka Blue tokens + auth redesign).
         axeOptions: {
           rules: {
-            "color-contrast": { enabled: false },
+            "color-contrast": { enabled: true },
           },
         },
       });

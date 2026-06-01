@@ -1,4 +1,8 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
 @import "../styles/tokens.css";
+@import "../styles/shadcn-theme.css";
 @import "../styles/typography.css";
 
 * {
@@ -137,7 +141,7 @@ label {
 }
 
 .muted {
-  color: var(--muted);
+  color: var(--text-muted);
 }
 
 .divider {

@@ -1,78 +1,104 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useId, useState } from "react";
+
+import { AuthFieldError } from "@/components/auth/AuthFieldError";
+import { AuthMortensenNotice } from "@/components/auth/AuthMortensenNotice";
+import { AuthShell } from "@/components/auth/AuthShell";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const formErrorId = useId();
+  const statusId = useId();
 
   return (
-    <div className="container" style={{ maxWidth: 560 }}>
-      <div className="card">
-        <h1 style={{ marginTop: 0 }}>Forgot password</h1>
-        <p className="muted">
-          Enter the email for your admin account. If it exists and email is configured, we will send a
-          reset link.
-        </p>
-        <p className="muted" style={{ fontSize: 13 }}>
-          Accounts that only use <code style={{ fontSize: 12 }}>ADMIN_EMAIL</code> /{" "}
-          <code style={{ fontSize: 12 }}>ADMIN_PASSWORD</code> in server config are not reset here —
-          update the server environment instead.
-        </p>
-
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setBusy(true);
-            setError(null);
-            setMessage(null);
-            try {
-              const res = await fetch("/api/auth/forgot-password", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email }),
-              });
-              const data = (await res.json()) as { ok?: boolean; message?: string; error?: string };
-              if (!res.ok || !data.ok) {
-                setError(data.error ?? "Something went wrong.");
-                return;
-              }
-              setMessage(data.message ?? "Check your email.");
-            } catch {
-              setError("Network error. Try again.");
-            } finally {
-              setBusy(false);
+    <AuthShell
+      title="Reset your password"
+      description={
+        <>
+          We&apos;ll send a reset link to your email if an account exists and email is configured.
+          <span className="mt-2 block text-sm">
+            Accounts that only use <code className="text-xs">ADMIN_EMAIL</code> /{" "}
+            <code className="text-xs">ADMIN_PASSWORD</code> in server config are not reset here —
+            update the server environment instead.
+          </span>
+        </>
+      }
+      footer={
+        <Link href="/login" className="text-brand underline-offset-2 hover:underline">
+          Back to sign in
+        </Link>
+      }
+    >
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setBusy(true);
+          setError(null);
+          setMessage(null);
+          try {
+            const res = await fetch("/api/auth/forgot-password", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email }),
+            });
+            const data = (await res.json()) as { ok?: boolean; message?: string; error?: string };
+            if (!res.ok || !data.ok) {
+              setError(data.error ?? "Something went wrong.");
+              return;
             }
-          }}
-        >
-          <div style={{ marginTop: 16 }}>
-            <label htmlFor="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-              required
-            />
-          </div>
+            setMessage(data.message ?? "Check your email.");
+          } catch {
+            setError("Couldn't reach Mynk. Check your internet, then try again.");
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <div className="space-y-2">
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
+            required
+            className="min-h-11"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={
+              error ? formErrorId : message ? statusId : undefined
+            }
+          />
+        </div>
 
-          {error ? <p style={{ color: "var(--sign-out-hover-text)", marginTop: 12 }}>{error}</p> : null}
-          {message ? <p style={{ marginTop: 12 }}>{message}</p> : null}
+        {error ? <AuthFieldError id={formErrorId} message={error} /> : null}
+        {message ? (
+          <p id={statusId} className="text-sm text-success" role="status">
+            {message}
+          </p>
+        ) : null}
 
-          <div className="row" style={{ justifyContent: "space-between", marginTop: 16 }}>
-            <Link href="/login" className="muted" style={{ fontSize: 14, textDecoration: "underline" }}>
-              Back to login
-            </Link>
-            <button className="btn primary" type="submit" disabled={busy}>
-              {busy ? "Sending…" : "Send reset link"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="flex flex-col gap-3 pt-1">
+          <AuthMortensenNotice />
+          <Button
+            type="submit"
+            disabled={busy}
+            aria-busy={busy}
+            className="min-h-11 w-full text-base"
+          >
+            {busy ? "Sending…" : "Send reset link"}
+          </Button>
+        </div>
+      </form>
+    </AuthShell>
   );
 }

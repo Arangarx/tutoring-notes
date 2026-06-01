@@ -19,6 +19,8 @@ export default [
       "src/__tests__/**",
     ],
     rules: {
+      // color-contrast: removed from eslint-plugin-jsx-a11y v6; enforced via axe-playwright
+      // (tests/visual/fixtures.ts — color-contrast enabled for Phase B1+).
       "no-restricted-syntax": [
         "error",
         {

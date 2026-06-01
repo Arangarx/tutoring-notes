@@ -91,6 +91,7 @@ Branches that touch **fonts, CSS, or build configuration** must pass a real **`n
 | Session identity + access + consent + auth foundation | **DONE** | [`docs/handoff/session-identity-access-design-2026-05-31.md`](session-identity-access-design-2026-05-31.md) (1122 lines) |
 | Session-lifecycle + tiered consent (waiting room, swap, consent split, §9) | **DONE (design)** @ `23c65c0` | [`docs/handoff/session-lifecycle-consent-design-2026-05-31.md`](session-lifecycle-consent-design-2026-05-31.md) — implementation slots Identity Phases 2–4 |
 | Component Phase A (dark tokens + fonts) | IMPLEMENTED on `v1-redesign` @ `5aa3c7d` (pushed); **pending Andrew real-hardware smoke** | dark tokens migrated off legacy purple `#7c5cff` → Mynka Blue; Fraunces/Inter/JetBrains Mono via `next/font`; CSP unchanged; 25/25 token tests pass |
+| Component Phase B1 (Tailwind 4 + shadcn + auth surfaces) | IMPLEMENTED on `v1-redesign` (pending push) | Tailwind 4 compat + shadcn/ui wired to Mynka tokens; login/signup/forgot/reset/setup redesigned; mortensenapps.com auth notice on all auth-initiation surfaces; axe `color-contrast` re-enabled in Playwright fixtures |
 
 ---
 

@@ -1,0 +1,104 @@
+/**
+ * shadcn/ui theme — maps to Phase A Mynka Blue tokens (tokens.css).
+ * Does NOT redefine --accent or --muted (legacy token aliases); uses @theme + shadcn-only vars.
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--shadcn-muted);
+  --color-muted-foreground: var(--shadcn-muted-foreground);
+  --color-accent: var(--shadcn-accent);
+  --color-accent-foreground: var(--shadcn-accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-brand: var(--brand);
+  --color-success: var(--success);
+}
+
+:root,
+[data-theme="light"] {
+  --radius: 0.625rem;
+
+  --background: var(--surface-base);
+  --foreground: var(--text-default);
+  --card: var(--surface-1);
+  --card-foreground: var(--text-default);
+  --popover: var(--surface-1);
+  --popover-foreground: var(--text-default);
+  --primary: var(--accent);
+  --primary-foreground: var(--accent-on);
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--text-default);
+  --shadcn-muted: var(--surface-2);
+  --shadcn-muted-foreground: var(--text-muted);
+  --shadcn-accent: var(--accent-soft);
+  --shadcn-accent-foreground: var(--text-default);
+  --destructive: var(--error);
+  --destructive-foreground: var(--text-default);
+  --border: var(--border-default);
+  --input: var(--surface-input);
+  --ring: var(--focus-ring);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: var(--surface-base);
+    --foreground: var(--text-default);
+    --card: var(--surface-1);
+    --card-foreground: var(--text-default);
+    --popover: var(--surface-1);
+    --popover-foreground: var(--text-default);
+    --primary: var(--accent);
+    --primary-foreground: var(--accent-on);
+    --secondary: var(--surface-2);
+    --secondary-foreground: var(--text-default);
+    --shadcn-muted: var(--surface-2);
+    --shadcn-muted-foreground: var(--text-muted);
+    --shadcn-accent: var(--accent-soft);
+    --shadcn-accent-foreground: var(--text-default);
+    --destructive: var(--error);
+    --destructive-foreground: var(--text-default);
+    --border: var(--border-default);
+    --input: var(--surface-input);
+    --ring: var(--focus-ring);
+  }
+}
+
+[data-theme="dark"] {
+  --background: var(--surface-base);
+  --foreground: var(--text-default);
+  --card: var(--surface-1);
+  --card-foreground: var(--text-default);
+  --popover: var(--surface-1);
+  --popover-foreground: var(--text-default);
+  --primary: var(--accent);
+  --primary-foreground: var(--accent-on);
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--text-default);
+  --shadcn-muted: var(--surface-2);
+  --shadcn-muted-foreground: var(--text-muted);
+  --shadcn-accent: var(--accent-soft);
+  --shadcn-accent-foreground: var(--text-default);
+  --destructive: var(--error);
+  --destructive-foreground: var(--text-default);
+  --border: var(--border-default);
+  --input: var(--surface-input);
+  --ring: var(--focus-ring);
+}

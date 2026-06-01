@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+
+import { AuthShell } from "@/components/auth/AuthShell";
 import SignupForm from "./SignupForm";
 
 export const metadata: Metadata = {
@@ -9,18 +11,16 @@ export const metadata: Metadata = {
 
 export default function SignupPage() {
   return (
-    <div className="container" style={{ maxWidth: 560 }}>
-      <div className="card">
-        <h1 style={{ marginTop: 0 }}>Create account</h1>
-        <p className="muted">
-          Sign up with email and password. Each account is separate — your students and notes stay in your
-          workspace.
-        </p>
-        <SignupForm />
-        <p className="muted" style={{ marginTop: 24, fontSize: 13 }}>
-          <Link href="/">← Home</Link>
-        </p>
-      </div>
-    </div>
+    <AuthShell
+      title="Create your account"
+      description="Sign up with email and password. Each account is separate — your students and notes stay in your workspace."
+      footer={
+        <Link href="/" className="text-brand underline-offset-2 hover:underline">
+          ← Home
+        </Link>
+      }
+    >
+      <SignupForm />
+    </AuthShell>
   );
 }
