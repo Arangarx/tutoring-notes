@@ -1,8 +1,8 @@
-// Type augmentation for NextAuth v4 — SEC-1 impersonation fields + role (follow-up).
+// Type augmentation for NextAuth v4 — SEC-1 impersonation fields + role + Identity Phase 1 2FA.
 //
 // These extend the built-in Session and JWT interfaces so TypeScript
-// knows about the custom fields we write in auth-options.ts callbacks
-// and src/lib/impersonation.ts token-minting helpers.
+// knows about the custom fields we write in auth-options.ts callbacks,
+// src/lib/impersonation.ts token-minting helpers, and 2FA verify action.
 import "next-auth";
 import type { AdminRole } from "@prisma/client";
 
@@ -30,6 +30,13 @@ declare module "next-auth" {
        * Impersonation sessions carry the TARGET's role (TUTOR).
        */
       role?: AdminRole;
+      /**
+       * Identity Phase 1 — TOTP 2FA.
+       * True when the user has completed TOTP (or backup-code) verification
+       * in the current session. False or undefined = must verify before /admin access.
+       * isTestAccount accounts are exempt and always treated as verified.
+       */
+      twoFactorVerified?: boolean;
     };
   }
 }
@@ -43,5 +50,11 @@ declare module "next-auth/jwt" {
     impersonationLogId?: string | null;
     /** AdminRole enum value — persisted in JWT so middleware reads without a DB call. */
     role?: AdminRole;
+    /**
+     * Identity Phase 1 — 2FA verification state.
+     * Set to true by mintTwoFactorVerifiedSession() after successful TOTP/backup-code verify.
+     * Absent or false means the user must complete 2FA before accessing /admin.
+     */
+    twoFactorVerified?: boolean;
   }
 }

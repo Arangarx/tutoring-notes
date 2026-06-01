@@ -104,6 +104,13 @@ export const authOptions: NextAuthOptions = {
         const u = user as { isTestAccount?: boolean; role?: AdminRole };
         token.isTestAccount = u.isTestAccount ?? false;
         if (u.role !== undefined) token.role = u.role;
+        // Fresh login: 2FA not yet verified this session (non-test accounts must pass the gate).
+        // isTestAccount accounts are exempt — we mark them pre-verified so middleware skips them.
+        if (u.isTestAccount) {
+          token.twoFactorVerified = true;
+        } else {
+          token.twoFactorVerified = false;
+        }
       }
       if (account?.provider === "google" && user?.email) {
         // Google sign-in: resolve the DB row to get the canonical id + flags.
@@ -112,12 +119,20 @@ export const authOptions: NextAuthOptions = {
           token.sub = admin.id;
           token.isTestAccount = admin.isTestAccount;
           token.role = admin.role;
+          // Google login: same 2FA gate — not verified yet.
+          // isTestAccount exempts (Google path can't produce test accounts per signIn callback,
+          // but guard anyway for safety).
+          token.twoFactorVerified = admin.isTestAccount ? true : false;
         }
       }
       // Impersonation fields (isImpersonating, originalAdminId, originalAdminEmail,
       // impersonationLogId, role) are already in the token when set by
       // mintImpersonationSession() in src/lib/impersonation.ts; they persist
       // across token refreshes without any extra logic here.
+      //
+      // twoFactorVerified: once set to true by mintTwoFactorVerifiedSession(),
+      // it persists across refreshes here (no code clears it — the flag is only
+      // cleared by a full sign-out which issues a new session).
       return token;
     },
 
@@ -134,6 +149,8 @@ export const authOptions: NextAuthOptions = {
         session.user.impersonationLogId =
           (token.impersonationLogId as string | null | undefined) ?? null;
         session.user.role = (token.role as AdminRole | undefined);
+        session.user.twoFactorVerified =
+          (token.twoFactorVerified as boolean | undefined) ?? false;
       }
       return session;
     },

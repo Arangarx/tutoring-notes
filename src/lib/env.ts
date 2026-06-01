@@ -43,6 +43,30 @@ const EnvSchema = z.object({
     z.string().optional()
   ),
   /**
+   * AES-256-GCM key for TOTP secret encryption (Identity Phase 1).
+   * Must decode to exactly 32 bytes when interpreted as base64url.
+   * Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+   * REQUIRED in production for any deployment with real admins.
+   * Losing this key requires re-enrolling all tutors — see docs/PLATFORM-ASSUMPTIONS.md.
+   * Optional in local dev (2FA enrollment will fail gracefully if missing).
+   */
+  TOTP_ENCRYPTION_KEY: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z
+      .string()
+      .refine(
+        (v) => {
+          try {
+            return Buffer.from(v, "base64url").length === 32;
+          } catch {
+            return false;
+          }
+        },
+        { message: "must be a base64url string that decodes to exactly 32 bytes" }
+      )
+      .optional()
+  ),
+  /**
    * URL of the excalidraw-room sync server (Phase 1 whiteboard live
    * collaboration). Format: `wss://wb.example.com` — no trailing
    * slash. Optional in dev: when unset, the whiteboard runs in
@@ -82,6 +106,7 @@ const parsed = EnvSchema.safeParse({
   OPERATOR_EMAILS: process.env.OPERATOR_EMAILS,
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
   BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN,
+  TOTP_ENCRYPTION_KEY: process.env.TOTP_ENCRYPTION_KEY,
   WHITEBOARD_SYNC_URL: process.env.WHITEBOARD_SYNC_URL,
 });
 
