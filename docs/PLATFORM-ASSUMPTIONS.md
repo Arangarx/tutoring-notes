@@ -433,6 +433,30 @@
 - **What breaks if violated**: prod debugging becomes impossible. Sarah-reported bug ("my session lost audio") can't be traced without per-session IDs.
 - **Migration check**: this is a code-discipline assumption; preserve across phases. Each new feature with a state machine MUST register a prefix.
 
+### 10.4 TOTP_ENCRYPTION_KEY — AES-256-GCM key for 2FA secrets (Identity Phase 1)
+
+- **Assumption**: `TOTP_ENCRYPTION_KEY` env var must be present and decode to exactly 32 bytes (base64url) on any deployment that has real (non-test) admins. Missing or wrong key causes 2FA enrollment and verification to fail.
+- **Where baked in**:
+  - `src/lib/crypto/totp-secret.ts` — `loadKey()` reads and validates at call time.
+  - `src/lib/env.ts` — optional at boot (to not break local dev without 2FA), but the crypto module throws if absent when actually called.
+  - `AdminUser2FA.totpSecretEnc` column — ciphertext is unreadable without the key.
+- **Key-rotation story**:
+  - V1 ships **single-key**: one `TOTP_ENCRYPTION_KEY` encrypts all TOTP secrets.
+  - There is **NO dual-key decrypt path** in V1. Rotating the key means:
+    1. All `AdminUser2FA` rows become unreadable with the old key.
+    2. Every enrolled tutor must re-enroll after the key is rotated.
+  - **Future hardening**: dual-key decrypt (new key for new enrollments, old key for existing rows) is documented here as the path forward but intentionally deferred to Phase 2.
+  - **Rotation procedure (V1)**:
+    1. Export `AdminUser2FA` rows for backup.
+    2. `DELETE FROM "AdminUser2FA";` (all re-enroll on next login).
+    3. Set new `TOTP_ENCRYPTION_KEY` on all envs.
+    4. Redeploy.
+- **What breaks if violated**:
+  - Missing key: 2FA setup/verify server actions return error; enrolled users cannot access `/admin`.
+  - Wrong key: decryption fails with auth-tag mismatch (GCM integrity check) — same user-facing error.
+  - Leaked key: attacker with DB access can decrypt TOTP secrets and clone authenticators.
+- **Migration check**: MUST add `TOTP_ENCRYPTION_KEY` to all envs (Vercel env vars for prod/preview; local `.env`). Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`.
+
 ---
 
 ## Migration checklist — copy + check yes/no before deploying to a new platform
@@ -492,9 +516,11 @@
 - [ ] `.env` discipline preserved; no secrets in source control. (§10.1)
 - [ ] Per-session ID logging preserved across all new code paths. (§10.3)
 - [ ] Cost-events instrumentation continues firing on new AI call sites. (§10.2)
+- [ ] `TOTP_ENCRYPTION_KEY` set on all envs (32-byte base64url); key-rotation story documented to tutors. (§10.4)
 
 ---
 
 ## Change log
 
+- **2026-05-31** — Identity Phase 1 (2FA): added §10.4 TOTP_ENCRYPTION_KEY assumption. Key-rotation story documented. Migration checklist updated.
 - **2026-05-17** — initial inventory. Audited post-Vercel-Pro upgrade. Captures: Vercel Pro 300s ceiling now real (§1.1), housekeeping smoke lessons (§2.3, §3.1, §3.3, §9.1), cost-events shipped (§10.2), per-page view state shipped (§7.5).

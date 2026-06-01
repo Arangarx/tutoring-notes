@@ -21,6 +21,12 @@ export default async function SettingsIndexPage() {
             Connect Gmail or SMTP so &ldquo;Send update&rdquo; and password reset emails deliver.
           </p>
         </Link>
+        <Link href="/admin/settings/2fa" className="card" style={{ textDecoration: "none", display: "block" }}>
+          <div style={{ fontWeight: 700 }}>Two-Factor Authentication</div>
+          <p className="muted" style={{ margin: "8px 0 0", fontSize: 14 }}>
+            Set up or rotate your TOTP authenticator for mandatory 2FA.
+          </p>
+        </Link>
       </div>
 
       <p className="muted" style={{ marginTop: 24, fontSize: 14 }}>

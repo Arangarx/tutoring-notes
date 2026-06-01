@@ -64,8 +64,12 @@ function addSecurityHeaders(
 // ---------------------------------------------------------------------------
 // Rate-limit configurations per route group
 // ---------------------------------------------------------------------------
-const AUTH_RATE_LIMIT = { max: 10, windowMs: 60_000 };  // 10 req/min
-const SETUP_RATE_LIMIT = { max: 5, windowMs: 60_000 };  // 5 req/min
+const AUTH_RATE_LIMIT = { max: 10, windowMs: 60_000 };       // 10 req/min (login / password-reset)
+// 2FA verify/setup gets its own bucket so a legit smoke session (mistype +
+// code rotation + reload) doesn't exhaust the shared login budget.
+// 20/min is still strong brute-force protection: 10^6 codes ÷ 20/min = 34+ days.
+const TOTP_RATE_LIMIT = { max: 20, windowMs: 60_000 };       // 20 req/min (2FA verify + setup)
+const SETUP_RATE_LIMIT = { max: 5, windowMs: 60_000 };       // 5 req/min (initial onboarding setup)
 
 function getClientIp(req: NextRequest): string {
   return (
@@ -107,6 +111,13 @@ export async function middleware(req: NextRequest) {
   ) {
     const rl = rateLimit(`auth:${ip}`, AUTH_RATE_LIMIT.max, AUTH_RATE_LIMIT.windowMs);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);
+  } else if (
+    pathname.startsWith("/admin/settings/2fa/verify") ||
+    pathname.startsWith("/admin/settings/2fa/setup") ||
+    pathname.startsWith("/admin/settings/2fa")
+  ) {
+    const rl = rateLimit(`2fa:${ip}`, TOTP_RATE_LIMIT.max, TOTP_RATE_LIMIT.windowMs);
+    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);
   } else if (pathname.startsWith("/api/")) {
     const bucket = apiRateBucketForPath(pathname);
     const rl = rateLimit(`${bucket.prefix}:${ip}`, bucket.max, bucket.windowMs);
@@ -132,6 +143,40 @@ export async function middleware(req: NextRequest) {
       isTestAccount: token.isTestAccount as boolean | undefined,
       role: token.role as string | undefined,
     });
+
+    // ---------------------------------------------------------------------------
+    // 2FA gate (Identity Phase 1)
+    //
+    // Non-test TUTOR/ADMIN must complete 2FA before accessing /admin/*.
+    // Exemptions:
+    //   - isTestAccount=true accounts (impersonation targets) — always exempt
+    //   - Impersonating sessions (the real admin already passed 2FA as themselves)
+    //   - The 2FA setup and verify routes themselves (must be reachable unenrolled)
+    //   - env-only admin (sub="admin", no DB row — no 2FA support in V1)
+    // ---------------------------------------------------------------------------
+    const is2faExemptPath =
+      pathname.startsWith("/admin/settings/2fa/setup") ||
+      pathname.startsWith("/admin/settings/2fa/verify");
+
+    if (!is2faExemptPath) {
+      const isTestAccount = token.isTestAccount as boolean | undefined;
+      const isImpersonating = token.isImpersonating as boolean | undefined;
+      const isEnvAdmin = token.sub === "admin";
+      const twoFactorVerified = token.twoFactorVerified as boolean | undefined;
+
+      // Real non-test, non-impersonating, non-env-admin accounts must pass 2FA.
+      if (!isTestAccount && !isImpersonating && !isEnvAdmin) {
+        if (!twoFactorVerified) {
+          // We can't query the DB in middleware (edge-compatible), so we check twoFactorVerified
+          // from the JWT. If it's false/absent, redirect to the appropriate 2FA route.
+          // The 2FA setup page itself checks enrollment status and redirects to verify if enrolled.
+          const setupUrl = req.nextUrl.clone();
+          setupUrl.pathname = "/admin/settings/2fa/setup";
+          setupUrl.search = "";
+          return addSecurityHeaders(NextResponse.redirect(setupUrl), pathname);
+        }
+      }
+    }
 
     // ADMIN (not impersonating) is blocked from tutor-only paths → redirect to dashboard.
     if (mode === "real-admin-home" && isTutorExperiencePath(pathname)) {

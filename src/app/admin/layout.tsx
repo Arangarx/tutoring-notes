@@ -30,6 +30,7 @@ export default async function AdminLayout({
       <AdminNav
         showOperatorLinks={showOperatorLinks}
         sessionMode={sessionMode}
+        isImpersonating={isImpersonating}
       />
       <div className="container">{children}</div>
     </>

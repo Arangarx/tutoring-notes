@@ -374,10 +374,16 @@ Phase 5 task 8), `rid` (audio recorder), `avx`
 events also carry a `peer=<remotePeerId>` subkey), `imp`
 (impersonation lifecycle — SEC-1; key lines:
 `[imp] imp=<logId> admin=<adminId> impersonating=<targetId> start`,
-`[imp] imp=<logId> exit admin=<adminId>`), `tfa` (tutor/admin TOTP 2FA —
-identity Phase 1), `lpr` (LearnerProfile ownership-assertion denials —
-`assertOwnsLearnerProfile`), and the component-specific ones in
-`useAudioRecorder` (`aud=`).
+`[imp] imp=<logId> exit admin=<adminId>`), `tfa`
+(TOTP 2FA lifecycle — Identity Phase 1; key lines:
+`[tfa] tfa=<id> adminUserId=<id> action=enroll-start`,
+`[tfa] tfa=<id> adminUserId=<id> action=enroll-confirm`,
+`[tfa] tfa=<id> adminUserId=<id> action=verify-success`,
+`[tfa] tfa=<id> adminUserId=<id> action=verify-fail`,
+`[tfa] tfa=<id> adminUserId=<id> action=backup-code-used codeId=<id>`,
+`[tfa] adminUserId=<id> action=reset reset-by=<adminId>`), `lpr`
+(LearnerProfile ownership-assertion denials — `assertOwnsLearnerProfile`), and
+the component-specific ones in `useAudioRecorder` (`aud=`).
 
 ### Whiteboard per-page viewport (`pvs`, Phase 5 task 8)
 

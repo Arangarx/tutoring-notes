@@ -99,13 +99,13 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   per-peer events also carry `peer=<peerId>`), `cev` (cost-event row —
   OpenAI usage observability), `blb` (blob cleanup CLI), `brs` (branch
   sweep CLI), `imp` (impersonation lifecycle — SEC-1; every start/exit
-  writes `[imp] imp=<logId> ...`), `tfa` (tutor/admin TOTP 2FA — identity
-  Phase 1; enroll/verify/middleware gate), `lpr` (LearnerProfile ownership-
+  writes `[imp] imp=<logId> ...`), `tfa` (TOTP 2FA lifecycle — Identity
+  Phase 1; every enroll/verify/reset transition writes `[tfa] ...
+  adminUserId=<id> action=<action>`), `lpr` (LearnerProfile ownership-
   assertion denials — `assertOwnsLearnerProfile`; `[lpr] lpr=<id>
   assert_owns_denied ...`). See
   [docs/RECORDER-LIFECYCLE.md](docs/RECORDER-LIFECYCLE.md) for the
-  registry.
-- **Migrations are additive.** Production runs on Neon; never drop or
+  registry.- **Migrations are additive.** Production runs on Neon; never drop or
   rename a column without a multi-step migration.
 - **Server actions assert ownership.** `assertOwnsStudent(adminUserId,
   studentId)` (or the equivalent for the resource) runs before any
