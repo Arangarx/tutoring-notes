@@ -14,7 +14,7 @@ export default async function globalSetup() {
   process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "replace-me";
 
   try {
-    execSync("npx prisma db push --skip-generate", {
+    execSync("npx prisma db push --skip-generate --accept-data-loss", {
       stdio: "inherit",
       env: process.env,
     });

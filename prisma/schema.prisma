@@ -27,6 +27,14 @@ enum CostEventKind {
   GPT_ASSESSMENT_EXTRACTION
 }
 
+/// Purpose values for one-time email tokens issued to AccountHolders.
+enum AccountHolderEmailTokenPurpose {
+  SIGNUP_VERIFY
+  PASSWORD_RESET
+  EMAIL_CHANGE
+  CRITICAL_ACTION
+}
+
 /// Role for AdminUser — determines which experience the account gets.
 /// ADMIN: full operator dashboard + impersonation capability.
 /// TUTOR: tutor workspace directly (students, outbox, whiteboard) — cannot impersonate.
@@ -59,6 +67,14 @@ model Student {
   recordings  SessionRecording[]
   whiteboardSessions WhiteboardSession[]
   costEvents  CostEvent[]
+
+  /// Identity Phase 2: nullable FK to LearnerProfile (NULL until the student
+  /// is claimed by a parent/self-learner via a StudentClaimInvite flow).
+  /// @unique enforces 1-to-1 Student↔LearnerProfile; SetNull so deleting
+  /// a LearnerProfile un-links the student without destroying tutor history.
+  learnerProfileId String?          @unique
+  learnerProfile   LearnerProfile?  @relation(fields: [learnerProfileId], references: [id], onDelete: SetNull)
+  claimInvites     StudentClaimInvite[]
 
   @@index([adminUserId])
 }
@@ -390,6 +406,7 @@ model AdminUser {
   costEvents    CostEvent[]
   initiatedImpersonations ImpersonationLog[] @relation("AdminImpersonations")
   wasImpersonatedIn       ImpersonationLog[] @relation("ImpersonatedBy")
+  claimInvites            StudentClaimInvite[] @relation("TutorClaimInvites")
 }
 
 /// Audit log for every admin impersonation session. endedAt = null means
@@ -487,5 +504,118 @@ model CostEvent {
   @@index([adminUserId, createdAt])
   @@index([studentId, createdAt])
   @@index([createdAt])
+}
+
+// =============================================================================
+// IDENTITY PHASE 2 — Three-Principal Data Model (ADDITIVE, schema-only pass)
+// New tables are empty on deploy; Student.learnerProfileId is all NULL.
+// Business/audit tables (WhiteboardSession, SessionRecording, CostEvent, etc.)
+// continue referencing Student by opaque id — no PII columns added to them.
+// =============================================================================
+
+/// Parent or self-learner account that holds the legal/billing relationship.
+/// PII isolation: billing, consent, and contact data lives here; business/audit
+/// tables (Sessions, Recordings, CostEvents) reference Student by opaque id.
+/// Tombstone pattern: on COPPA deletion-on-request, PII is redacted but the
+/// row is kept so business FK references (SessionNote, etc.) stay intact.
+model AccountHolder {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  /// true when the account holder IS the learner (adult self-learner flow).
+  isSelfLearner Boolean   @default(false)
+  /// On honored COPPA deletion: email and name are redacted, row is retained
+  /// so tutor business records (notes, recordings) remain coherent.
+  tombstonedAt  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  learnerProfiles LearnerProfile[]
+  emailTokens     AccountHolderEmailToken[]
+
+  @@index([email])
+}
+
+/// One-time email tokens for AccountHolder flows (signup, password-reset, etc.).
+model AccountHolderEmailToken {
+  id              String    @id @default(uuid())
+  accountHolderId String
+  accountHolder   AccountHolder @relation(fields: [accountHolderId], references: [id], onDelete: Cascade)
+  tokenHash       String    @unique
+  purpose         AccountHolderEmailTokenPurpose
+  expiresAt       DateTime
+  consumedAt      DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([accountHolderId])
+}
+
+/// A single learner identity under an AccountHolder.
+/// One AccountHolder can have multiple LearnerProfiles (e.g. two kids).
+/// Tombstone pattern: on COPPA deletion, displayName is replaced with a
+/// redacted placeholder ("Deleted learner") and tombstonedAt is set.
+/// Restrict on AccountHolder delete: must tombstone profiles first so
+/// business references remain consistent.
+model LearnerProfile {
+  id              String    @id @default(uuid())
+  accountHolderId String
+  accountHolder   AccountHolder @relation(fields: [accountHolderId], references: [id], onDelete: Restrict)
+  /// After tombstone: replaced with a redacted placeholder, e.g. "Deleted learner".
+  displayName     String
+  tombstonedAt    DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  credential      LearnerCredential?
+  deviceSessions  LearnerDeviceSession[]
+  /// At most one Student per LearnerProfile (enforced by @unique on Student.learnerProfileId).
+  student         Student?
+
+  @@index([accountHolderId])
+}
+
+/// PIN/password credential for learner login (optional — token-only flows skip this).
+model LearnerCredential {
+  id               String    @id @default(uuid())
+  learnerProfileId String    @unique
+  learnerProfile   LearnerProfile @relation(fields: [learnerProfileId], references: [id], onDelete: Cascade)
+  username         String    @unique
+  /// bcrypt hash of the learner's PIN or password.
+  secretHash       String
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+/// Long-lived device session token for a learner (issued after successful auth).
+/// Q-4 LOCKED: 90-day sliding window, parent-revocable.
+/// Store expiry and revocation timestamp here; enforcement logic is a later phase.
+model LearnerDeviceSession {
+  id               String    @id @default(uuid())
+  learnerProfileId String
+  learnerProfile   LearnerProfile @relation(fields: [learnerProfileId], references: [id], onDelete: Cascade)
+  tokenHash        String    @unique
+  /// Q-4 LOCKED: 90-day sliding expiry. Parent can revoke early via revokedAt.
+  expiresAt        DateTime
+  lastSeenAt       DateTime  @default(now())
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([learnerProfileId])
+}
+
+/// Invitation the tutor mints so an AccountHolder can claim a Student record.
+/// The token is the credential — scoped, time-limited, single-use (claimedAt set on use).
+/// adminUserId (not tutorId) follows the repo's AdminUser FK naming convention.
+model StudentClaimInvite {
+  id          String    @id @default(uuid())
+  studentId   String
+  student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  /// Tutor (AdminUser) who minted this invite.
+  adminUserId String
+  adminUser   AdminUser @relation("TutorClaimInvites", fields: [adminUserId], references: [id], onDelete: Cascade)
+  token       String    @unique
+  expiresAt   DateTime
+  claimedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([studentId])
+  @@index([adminUserId])
 }
 
