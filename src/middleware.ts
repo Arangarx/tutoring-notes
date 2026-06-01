@@ -211,8 +211,50 @@ export async function middleware(req: NextRequest) {
     }
   }
 
+  // --- AccountHolder route protection (cookie-presence only — UX redirect) ---
+  // Full DB validation happens in the route handler. This is a fast redirect
+  // to avoid loading a full server component just to 401 an unauthenticated user.
+  // SECURITY NOTE: the handler-level check is the authoritative gate.
+  if (pathname.startsWith("/account/") && !isPublicAccountPath(pathname)) {
+    const ahCookie = req.cookies.get("mynk_ah_session");
+    if (!ahCookie) {
+      const loginUrl = req.nextUrl.clone();
+      loginUrl.pathname = "/account/login";
+      loginUrl.searchParams.set("returnTo", pathname);
+      return addSecurityHeaders(NextResponse.redirect(loginUrl), pathname);
+    }
+  }
+
+  // --- Learner (child) route protection (cookie-presence only) ---
+  if (pathname.startsWith("/join/") && !isPublicLearnerPath(pathname)) {
+    const learnerCookie = req.cookies.get("mynk_learner_session");
+    if (!learnerCookie) {
+      const loginUrl = req.nextUrl.clone();
+      loginUrl.pathname = "/students/login";
+      loginUrl.searchParams.set("returnTo", pathname);
+      return addSecurityHeaders(NextResponse.redirect(loginUrl), pathname);
+    }
+  }
+
   // --- All other routes: pass through with security headers ---
   return addSecurityHeaders(NextResponse.next(), pathname);
+}
+
+// Paths that are publicly accessible under /account/* without a session cookie.
+function isPublicAccountPath(pathname: string): boolean {
+  const publicPaths = [
+    "/account/login",
+    "/account/signup",
+    "/account/forgot-password",
+    "/account/reset-password",
+  ];
+  // /claim/* and /verify-email are at the root, not under /account/
+  return publicPaths.some((p) => pathname === p || pathname.startsWith(p + "?"));
+}
+
+// Paths that are publicly accessible under /join/* without a learner cookie.
+function isPublicLearnerPath(pathname: string): boolean {
+  return pathname === "/students/login" || pathname.startsWith("/students/login?");
 }
 
 export const config = {
