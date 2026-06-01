@@ -148,6 +148,12 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
 
 Cross-cutting rules from production debugging. Add dated evidence under **Real-world observations** (Model usage protocol) when new ones land.
 
+### Secret handling — third-party egress (2026-05-31, 2FA QR)
+
+- A "secret encrypted at rest" guarantee is incomplete if the plaintext secret is later transmitted to a third party. The Phase-1 2FA acceptance verified no plaintext secret in DB/logs but **missed** that the enrollment QR was rendered via an external API (`api.qrserver.com`) with the secret in the URL — caught only in smoke via a CSP block, not by tests or the acceptance checklist.
+- **Rule:** for any secret/credential, the acceptance bar includes **no plaintext secret egress to external services** (QR generation, analytics, error trackers, logging sinks, CDNs). Generate/handle secrets locally (server-side or in-browser), never by handing them to a third-party URL. Add a grep-guard test against known external-service hosts where practical.
+- **Corollary:** a tight CSP is a real safety net — it converted a silent secret leak into a visible failure. Don't reflexively allowlist a blocked third-party origin to "fix" a feature; first ask why we're sending it data at all.
+
 ### Layout / coordinates — jsdom blind spot (2026-05-30, whiteboard viewport sync)
 
 - **Coordinate and layout math is not verified in jsdom.** jsdom reports `offsetLeft`/`offsetTop` as 0 and applies transforms synchronously, so offset-contamination and version-skip bugs are **invisible** to unit tests (the buggy viewport-center formula matched the correct one for ~2 weeks). **Rule:** prove geometry on a **real browser** — on-device debug HUD, Playwright/WebKit, or tutor+student hardware — before calling viewport/sync work done.
