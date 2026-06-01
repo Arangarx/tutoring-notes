@@ -1,7 +1,7 @@
 # Identity Phase-2 AUTH + SESSION INFRASTRUCTURE Design
 
 > **Design date:** 2026-06-01
-> **Branch:** `v1-redesign` (HEAD `e466a26` at time of authoring)
+> **Branch:** `v1-redesign` (HEAD `f41a445` at ratification; design authored @ `e466a26`)
 > **Authored by:** Sonnet 4.6 subagent, commissioned by Opus orchestrator
 > **Deliverable type:** Design document only — no production code, no migrations applied
 > **Prerequisite reads (in order):**
@@ -18,9 +18,11 @@
 
 ---
 
-## §0. DECISIONS NEEDING ANDREW RATIFICATION
+## §0. DECISIONS — RATIFIED (Andrew 2026-06-01)
 
-> **Style:** recommend-and-proceed. The executor dispatched from this doc implements each recommendation unless Andrew overrides before implementation starts. Blast radius describes the cost of choosing the wrong option — heavier blast radius = higher review priority.
+> **Status:** **RATIFIED AS RECOMMENDED** (2026-06-01). Table below is the original recommend-and-proceed fork analysis (retained for blast-radius context). **Amendments and clarifications** that extend or refine the recommendations → [§ RATIFIED + AMENDED (Andrew 2026-06-01)](#ratified--amended-andrew-2026-06-01). P2a dispatch is unblocked.
+>
+> **Original style note:** blast radius describes the cost of choosing the wrong option — heavier blast radius = higher review priority.
 
 | # | Topic | Fork | Recommendation | Blast radius if recommendation is wrong |
 |---|---|---|---|---|
@@ -31,6 +33,77 @@
 | **AH-5** | `LearnerDeviceSession` sliding renewal | **A: Extend expiry in-place** — update `lastUsedAt` + `expiresAt`; same `tokenHash`; no cookie change. **B: Token rotation on renewal** — issue new token, revoke old, rewrite cookie on every renewal. | **A — Extend in-place** | B chosen but wrong: if a renewal fires mid-flight (two concurrent tab requests), the first renewal writes the new token while the second request carries the old cookie → the second request is rejected as revoked → spurious session death. Especially dangerous for a learner mid-session. **MEDIUM** — UX reliability risk. |
 | **AH-6** | AccountHolder session lifetime | **A: 30-day rolling** (slides on activity, revoked on password change / explicit sign-out). **B: 14-day rolling.** **C: 7-day fixed.** | **A — 30-day rolling** | The session is DB-backed and immediately revocable (per AH-2), so the lifetime is a pure UX question. 30 days matches consumer app expectations for a parent portal without being indefinite. If wrong: increase or decrease; migration is a one-line env var change. **LOW** blast radius. |
 | **AH-7** | Held branch merge order | **A: Merge `identity-p2-schema` AS-IS → merge `identity-p2-ownership-guard` AS-IS → P2a adds `AccountHolderSession` + new fields on top** (serial, preserves tested migrations). **B: Fold all three into one P2a mega-migration.** | **A — Serial merge** | B chosen: the `identity-p2-schema` migration is already tested (`tsc` + `next build` green per STATUS doc). Folding adds those verified changes into a larger unverified migration — harder to bisect a regression. **LOW** blast radius but higher migration debugging cost. |
+
+---
+
+## RATIFIED + AMENDED (Andrew 2026-06-01)
+
+> **Authority:** Andrew ratified AH-1..AH-7 and the items below in one pass. This section is the durable record for P2a executors; it does not replace §0 (blast-radius rationale) or §1 (locked upstream inputs).
+
+### Realm architecture (AH-1 = SEPARATE — ratified with clarification)
+
+**Two realms + one child mechanism** (not three operator tiers):
+
+| Realm / mechanism | Who | Stack |
+|---|---|---|
+| **(1) Operator realm** | Tutor + **admin** + superadmin | **Existing NextAuth** (`src/auth-options.ts`, `src/middleware.ts`). **Admin is a higher-privileged ROLE within this realm — NOT a separate third realm.** |
+| **(2) AccountHolder realm** | Parents / adult self-learners | **Separate custom realm:** cookie `mynk_ah_session`, own `AccountHolderSession` DB table, own auth helpers — **entirely outside NextAuth.** |
+| **Child mechanism** | LearnerProfile (minor) | **Device-bound PIN session** under an AccountHolder (`LearnerDeviceSession` + `mynk_learner_session` cookie) — not a third auth realm. |
+
+**Architecture constraint (hard):** separate realms must **NOT** mean duplicated auth logic. Shared **primitives** (password hashing, TOTP encrypt/decrypt, backup-code logic, rate-limiting, the DB-session-table pattern) live in **common modules** consumed by both realms; only the **thin per-realm layer** differs (cookie name, session table, identity resolver, route guard). Standard multi-guard pattern (Laravel guards / Passport strategies).
+
+**P2a acceptance (new):** **No duplicated auth logic** — shared primitives + thin per-realm adapters only; code review + grep/test guard that bcrypt/TOTP/session-token/HMAC logic is not copy-pasted into realm-specific route handlers.
+
+### AH-2..AH-7 — ratified as recommended
+
+| # | Decision (locked) |
+|---|---|
+| **AH-2** | DB-backed `AccountHolderSession` (opaque, immediately revocable) |
+| **AH-3** | Separate env var `AH_TOTP_ENCRYPTION_KEY` (isolated from tutor `TOTP_ENCRYPTION_KEY`) |
+| **AH-4** | Child PIN **soft-lockout with exponential backoff; NEVER hard account lock** (reliability bar — missed session > brute-force risk) |
+| **AH-5** | `LearnerDeviceSession` sliding renewal **in-place** (update `lastUsedAt` + `expiresAt`; same `tokenHash`; no token rotation) |
+| **AH-6** | AccountHolder session **30-day rolling** (DB-backed; revocable anytime; password reset bulk-revokes) |
+| **AH-7** | Merge held branches **as-is, serial:** `identity-p2-schema` → `identity-p2-ownership-guard` → P2a session-infra on top |
+
+### Impersonation (unchanged + deferred)
+
+- **SEC-1 admin→tutor impersonation:** **UNCHANGED** — lives entirely within the **Operator realm** (NextAuth JWT). The separate AccountHolder realm does not affect it.
+- **Cross-realm impersonation (admin → parent/child):** **DEFERRED** to a later scoped + audited feature. Separate realms make deliberate addition safer (no accidental privilege bleed). **V1 impersonation stays Operator-realm only.**
+
+### Parent-first / linking (amendment — do not assume claim-first)
+
+- Schema and auth must **NOT** assume an `AccountHolder` is created only via a tutor claim invite. An AccountHolder (and its `LearnerProfile` rows) can exist **standalone with zero tutor linkage**. Claim invite is **one** entry path, not **the** entry path.
+- **Linking is bidirectional:** a tutor's `Student` stub can be claimed by a **brand-new** account **or** an **already-existing** `AccountHolder`; a pre-existing parent can be **connected to a tutor later**.
+- **V1 build line (ratified):** model + realm are **parent-first-READY** in P2; **built flows for V1** = tutor-initiated claim **plus** "claim/connect by existing account" (parent signs in — or is already signed in — to complete the tie). **Standalone parent self-signup UI** = **fast-follow** (realm supports it; not in P2 build surface).
+- **Connect-link / existing-account path — P2 acceptance (hard):** MUST show an **identity-confirmation interstitial** before binding:
+  - Copy pattern: *"You're signed in as [email]. Tie [Learner name(s)] to [Tutor]?"*
+  - **"Not you? Switch account"** escape (clears session or routes to login with `returnTo`).
+  - **Rationale:** prevents a connect link from silently binding learners to whatever ambient `mynk_ah_session` is active (accidental / CSRF-ish mis-bind).
+
+### Type-by-provisioning-path guardrail (clarified)
+
+The guardrail's job is **only** that **self-signup can never reach the PRIVILEGED (tutor/admin) tier** — tutors and admins remain **operator-provisioned** (invite / internal setup). **AccountHolder (parent) self-signup IS permitted** — standard consumer onboarding. Summary: **no self-serve path into tutor/admin; parent self-signup fine.**
+
+### Parent-selectable per-child access mode (new)
+
+Per **`LearnerProfile`**, the parent chooses:
+
+| Mode | Behavior | Typical use |
+|---|---|---|
+| **`parent_session_select`** (name TBD in schema) | Child accesses via the **parent's authenticated session**; parent **selects the learner** — no independent child login | Young kids, shared family device |
+| **`child_pin_required`** (name TBD) | Child must use **own username + PIN** via the device-session mechanism | Older / independent kids |
+
+- Stored as a **per-`LearnerProfile` parent setting** (enum or boolean pair on `LearnerProfile`; executor confirms field names in P2a migration).
+- **Recommended defaults (executor may refine):** default **`parent_session_select`** when parent-reported age &lt; 13; default **`child_pin_required`** at 13+; parent can override anytime in account settings.
+- Fits **multi-kid-on-one-device** + mid-session learner swap (parent picks active learner when in `parent_session_select` mode).
+
+### P2a acceptance — seven BLOCKERs (unchanged IDs)
+
+Fold into P2a smoke/merge gate per §12 summary: **BLOCKER-P2-S1**, **S2**, **S3**, **R1**, **C1**, **A1**, **O1** — plus the **no-duplicated-auth-logic** and **connect-link identity interstitial** items above.
+
+### Migration-ordering hazard (record only — executor resolves at merge)
+
+`identity-p2-schema` migration `20260531190000` has a timestamp **earlier** than the already-merged (and preview-dev-applied) Phase-1 2FA migration `20260601120000`. **P2a merge executor MUST** inspect `_prisma_migrations` on preview-dev and decide whether to **bump** the p2-schema migration timestamp for a monotonic timeline **before** merging. **Do not resolve in this doc pass** — see spine sub-pass tracker + Next actions.
 
 ---
 
@@ -984,7 +1057,7 @@ AccountHolder and LearnerProfile features introduce entirely new routes (`/accou
 The identity design §9 defines 6 phases. Phase 2 is refined here into three shippable sub-batches:
 
 **P2a: Core session infrastructure + claim flow back-end**
-*Gate: Andrew ratifies AH-1..AH-7 in this doc*
+*Gate: **PASSED** — AH-1..AH-7 + amendments ratified 2026-06-01 ([RATIFIED + AMENDED](#ratified--amended-andrew-2026-06-01))*
 
 - New models: `AccountHolderSession`, `expiresAt` on `LearnerDeviceSession`, `payload` + `targetLearnerProfileId` on `AccountHolderEmailToken`, rename `StudentClaimInvite.token` → `tokenHash`
 - Auth helpers: `getAccountHolderSession()`, `getLearnerSession()`, `getAccountHolderFromSession()`
