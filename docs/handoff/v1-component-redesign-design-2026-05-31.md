@@ -498,6 +498,10 @@ Dark Mynka Blue is deliberately **"study at night with one lamp"** — a sophist
 
 > Voice column follows `docs/BRAND.md` surface split: B = helpful colleague; D = smart-friend playful. For each surface: layout, components, brand voice, and D-list answers.
 
+### 5.0 Cross-surface layout principles
+
+- **Whiteboard gets maximal screen real estate.** The live whiteboard workspace should be near-full-screen; surrounding chrome (nav, panels, toolbars) stays minimal and unobtrusive so the drawing surface dominates. Rationale: pilot tutor (Sarah) wants a larger whiteboard area — the whiteboard is the core live-tutoring surface. Do **not** clone Wyzant's exact UI; honor the "big canvas, light chrome" intent. Treat as a from-the-start layout constraint for any workspace/component redesign, not a retrofit. (Captured 2026-06-01.)
+
 ---
 
 ### 5.1 Surface 1 — Dashboard / Next-actions landing (`/` after login)
