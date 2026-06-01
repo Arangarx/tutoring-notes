@@ -12,6 +12,8 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 ## Last action completed
 
+**2026-06-01 — Identity Phase 2b (parent/child UI surfaces) BUILT, awaiting Andrew smoke.** Branch **`identity-p2b-ui`** @ **`cd7555b`** (base `ca49787`, pushed, **NOT merged**). Shipped: `/account/{login,signup,forgot-password,reset-password}` + `/verify-email` UI, `/account/dashboard`, `/account/children/[id]` (+ ChangePinForm), `/account/children/[id]/devices` (revoke one/all), `/students/login` (child PIN, soft-lockout countdown), `/claim/[token]` wizard (all states + **identity-confirmation interstitial** on existing-session path w/ "Not you?" escape) → `/claim/[token]/setup` (child credential; **consent panel = labeled Phase-3 placeholder, no ConsentRecord writes**), tutor "Send invite" behind `NEXT_PUBLIC_CLAIM_INVITES_ENABLED`. New APIs: device revoke one/all, credential PATCH (PIN change bulk-revokes sessions). Gates green: `tsc`, `next build` (35 routes), `test:regression` 92/92, identity 225/225 + 16 new P2b. **Andrew real-hardware smoke gate** (parent signup→verify-via-logged-link→claim→child login→device list→revoke→401; email STUBBED to logs; smoke w/ non-2FA account). Env: HMAC secrets already set Production+Preview (2026-06-01); set `NEXT_PUBLIC_CLAIM_INVITES_ENABLED=true` on Preview to test tutor side. After smoke PASS → `merge --no-ff` to `v1-redesign`.
+
 **2026-06-01 — Identity Phase 2a (session infra + claim back-end) merged to `v1-redesign`.** `merge --no-ff` `identity-p2a-session-infra` → `v1-redesign` @ **`6c4a268`**. Post-merge gates green: `prisma generate`, `tsc`, `next build`, `test:regression` 92/92, identity-p2a 35/35, identity-2fa+impersonation+p2-schema+ownership 190/190. **Also merged:** `docs/road-to-ga` → `v1-redesign` @ **`eca63b5`** (docs only — [`docs/ROAD-TO-GA.md`](../ROAD-TO-GA.md)).
 
 **2026-06-01 — Component Phase B2 merged to `v1-redesign` @ `0424206`; Identity Phase 1 @ `b5ef4fe`; AH-7 p2 schema @ `242c6b2` + ownership guard @ `1a06a65`.** (Earlier same-day merges — detail in [`v1-redesign-STATUS.md`](v1-redesign-STATUS.md).)
@@ -30,8 +32,8 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 **V1 epic (`v1-redesign` @ `6c4a268`):**
 
-1. **Andrew:** set `AH_SESSION_HMAC_SECRET`, `LEARNER_SESSION_HMAC_SECRET`, `AH_TOTP_ENCRYPTION_KEY` on Vercel preview/prod; verify preview-dev P2a migration (`20260602000000`) on next deploy.
-2. **P2b (NEXT build):** AccountHolder UI + child login UI (`/account/*`, `/claim/[token]` wizard, `/students/login`); `NEXT_PUBLIC_CLAIM_INVITES_ENABLED`; real-hardware smoke; Sonnet tier. Design §10.2.
+1. **Andrew:** ✅ 3 env vars set on Vercel Production+Preview (2026-06-01); ✅ preview-dev P2a migration `20260602000000` applied clean (not rolled back, 2026-06-01 20:01). **REMAINING:** smoke P2b on `identity-p2b-ui` preview (set `NEXT_PUBLIC_CLAIM_INVITES_ENABLED=true` on Preview for tutor side).
+2. **P2b — BUILT, awaiting Andrew smoke** on `identity-p2b-ui` @ `cd7555b` (see Last action). After smoke PASS → orchestrator `merge --no-ff` to `v1-redesign`.
 3. **Phase 3 consent models** — replace P2a stubs (`assertEffectiveConsent`, `assertIsSessionParticipant`, `assertOwnsConsentRecord`).
 4. **Component:** B3 session-list UI and/or **Phase D** gap-close (landing/hero + `/about`). Nav redesign stays with B3–B6.
 5. **PROD / preview:** `prisma migrate deploy` p1 + p2 + P2a migrations on next `v1-redesign` deploy.
