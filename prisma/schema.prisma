@@ -35,6 +35,14 @@ enum AccountHolderEmailTokenPurpose {
   CRITICAL_ACTION
 }
 
+/// Per-LearnerProfile access mode chosen by the parent.
+/// parent_session_select: child accesses via parent's authenticated session.
+/// child_pin_required: child must use own username + PIN.
+enum LearnerAccessMode {
+  parent_session_select
+  child_pin_required
+}
+
 /// Role for AdminUser — determines which experience the account gets.
 /// ADMIN: full operator dashboard + impersonation capability.
 /// TUTOR: tutor workspace directly (students, outbox, whiteboard) — cannot impersonate.
@@ -561,6 +569,14 @@ model CostEvent {
 model AccountHolder {
   id            String    @id @default(uuid())
   email         String    @unique
+  /// Bcrypt hash (12 rounds) of the AccountHolder's password.
+  /// Null for accounts created via OAuth or before P2a is applied.
+  passwordHash  String?
+  /// Display name chosen at signup. Nullable for legacy rows.
+  displayName   String?
+  /// Timestamp when the AccountHolder verified their email. Null = unverified.
+  /// Required before login is permitted (anti-spam; prevents orphaned accounts).
+  emailVerifiedAt DateTime?
   /// true when the account holder IS the learner (adult self-learner flow).
   isSelfLearner Boolean   @default(false)
   /// On honored COPPA deletion: email and name are redacted, row is retained
@@ -570,6 +586,7 @@ model AccountHolder {
   updatedAt     DateTime  @updatedAt
   learnerProfiles LearnerProfile[]
   emailTokens     AccountHolderEmailToken[]
+  sessions        AccountHolderSession[]
 
   @@index([email])
 }
@@ -583,6 +600,12 @@ model AccountHolderEmailToken {
   purpose         AccountHolderEmailTokenPurpose
   expiresAt       DateTime
   consumedAt      DateTime?
+  /// For CRITICAL_ACTION tokens: JSON payload binding this token to a specific action.
+  /// Example: '{"action":"change_consent","learnerProfileId":"..."}'
+  payload         String?
+  /// For SIGNUP_VERIFY tokens sent to a child's email (optional email upgrade §4.8):
+  /// identifies which LearnerProfile the verification applies to. Null = AH email verify.
+  targetLearnerProfileId String?
   createdAt       DateTime  @default(now())
 
   @@index([accountHolderId])
@@ -601,6 +624,9 @@ model LearnerProfile {
   /// After tombstone: replaced with a redacted placeholder, e.g. "Deleted learner".
   displayName     String
   tombstonedAt    DateTime?
+  /// Parent-chosen access mode: parent selects learner vs child uses own PIN.
+  /// Default: parent_session_select (parent picks active learner).
+  accessMode      LearnerAccessMode @default(parent_session_select)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   credential      LearnerCredential?
@@ -635,14 +661,17 @@ model LearnerDeviceSession {
   expiresAt        DateTime
   lastSeenAt       DateTime  @default(now())
   revokedAt        DateTime?
+  /// User-agent snippet for device-management UI (truncated to 128 chars on write).
+  deviceInfo       String?
   createdAt        DateTime  @default(now())
 
   @@index([learnerProfileId])
 }
 
 /// Invitation the tutor mints so an AccountHolder can claim a Student record.
-/// The token is the credential — scoped, time-limited, single-use (claimedAt set on use).
+/// The tokenHash is the credential — scoped, time-limited, single-use (claimedAt set on use).
 /// adminUserId (not tutorId) follows the repo's AdminUser FK naming convention.
+/// §6.4: token renamed to tokenHash (SHA-256 of raw token; hash-only storage).
 model StudentClaimInvite {
   id          String    @id @default(uuid())
   studentId   String
@@ -650,12 +679,49 @@ model StudentClaimInvite {
   /// Tutor (AdminUser) who minted this invite.
   adminUserId String
   adminUser   AdminUser @relation("TutorClaimInvites", fields: [adminUserId], references: [id], onDelete: Cascade)
-  token       String    @unique
+  /// SHA-256(rawToken). Raw token is emailed; never stored here.
+  tokenHash   String    @unique
   expiresAt   DateTime
+  /// Set when the invite is successfully used to complete a claim.
   claimedAt   DateTime?
+  /// Set when the tutor revokes the invite OR post-claim sibling cleanup runs.
+  revokedAt   DateTime?
+  /// AccountHolder who completed the claim (set alongside claimedAt in same transaction).
+  claimedByAccountHolderId String?
   createdAt   DateTime  @default(now())
 
   @@index([studentId])
   @@index([adminUserId])
+}
+
+/// Server-side opaque session for AccountHolder (parent / adult self-learner).
+/// Immediately revocable: set revokedAt or bulk-revoke on password reset / compromise.
+/// Raw token stored ONLY in the HttpOnly cookie `mynk_ah_session`.
+/// Only HMAC-SHA-256(rawToken, AH_SESSION_HMAC_SECRET) is persisted here.
+model AccountHolderSession {
+  id               String        @id @default(uuid())
+  accountHolderId  String
+  accountHolder    AccountHolder @relation(fields: [accountHolderId], references: [id], onDelete: Cascade)
+
+  /// HMAC-SHA-256(rawToken, AH_SESSION_HMAC_SECRET). Raw token is never stored or logged.
+  tokenHash        String        @unique
+
+  /// True once AccountHolder has passed TOTP verification (if enrolled in Phase 6).
+  /// Always false in Phase 2 — wired now so Phase 6 needs no ALTER TABLE.
+  twoFactorVerified Boolean      @default(false)
+
+  /// User-agent snippet for session management UI.
+  deviceInfo       String?
+
+  /// Absolute expiry timestamp; renewed via sliding window on each validated request.
+  expiresAt        DateTime
+
+  lastUsedAt       DateTime      @default(now())
+  revokedAt        DateTime?
+  createdAt        DateTime      @default(now())
+
+  @@index([accountHolderId])
+  @@index([tokenHash])
+  @@index([expiresAt])
 }
 
