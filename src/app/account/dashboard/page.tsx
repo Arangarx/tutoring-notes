@@ -94,14 +94,14 @@ export default async function AccountDashboardPage() {
       {learnerProfiles.some((p) => p.credential) ? (
         <div className="rounded-md border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
           <p>
-            {"Your child signs in separately at the "}
+            {"Your child signs in with their own username + PIN at the "}
             <a
               href="/students/login"
               className="text-brand underline-offset-2 hover:underline"
             >
               student login page
             </a>
-            {" — you don't need to log out first. Your accounts are separate."}
+            {" — it's a separate login from yours, so you can both be signed in at once."}
           </p>
         </div>
       ) : null}

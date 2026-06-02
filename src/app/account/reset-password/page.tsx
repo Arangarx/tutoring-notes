@@ -137,7 +137,7 @@ function ResetPasswordForm() {
         {error === "too_weak" ? (
           <AuthFieldError
             id={formErrorId}
-            message="Password is too weak. Try a longer phrase or mix of words."
+            message="That password is too weak — add another word or two. Uncommon words are stronger."
           />
         ) : null}
         {error === "expired" ? (

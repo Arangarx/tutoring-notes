@@ -197,7 +197,7 @@ function ClaimSignupForm({
       {error === "password_too_weak" && (
         <AuthFieldError
           id={`${fid}-pw-weak-err`}
-          message="Password is too weak. Try a longer phrase or mix of words."
+          message="That password is too weak — add another word or two. Uncommon words are stronger."
         />
       )}
       {(error === "server" || error === "network") && (
