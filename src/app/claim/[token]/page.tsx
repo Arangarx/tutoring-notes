@@ -1,7 +1,6 @@
-import { headers } from "next/headers";
 import { hashToken } from "@/lib/crypto/session-tokens";
 import { db } from "@/lib/db";
-import { getAccountHolderSession } from "@/lib/account-holder-session";
+import { getAccountHolderSessionFromHeaders } from "@/lib/server-session";
 import { MynkWordmark } from "@/components/auth/MynkWordmark";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ClaimAuthGate } from "./ClaimAuthGate";
@@ -170,11 +169,10 @@ export default async function ClaimPage({
     );
   }
 
-  // PENDING -- check for existing session (identity interstitial path)
-  const headersList = await headers();
-  const cookieHeader = headersList.get("cookie") ?? "";
-  const req = new Request("http://localhost/", { headers: { cookie: cookieHeader } });
-  const ahSession = await getAccountHolderSession(req);
+  // PENDING -- check for existing session (identity interstitial path).
+  // Uses getAccountHolderSessionFromHeaders() which reads via cookies() — the
+  // idiomatic RSC cookie API — rather than parsing headers().get("cookie") inline.
+  const ahSession = await getAccountHolderSessionFromHeaders();
 
   let signedInEmail: string | null = null;
   if (ahSession) {
