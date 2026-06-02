@@ -2,18 +2,22 @@
 
 import { useSearchParams } from "next/navigation";
 import { Suspense, useId, useState } from "react";
+import zxcvbn from "zxcvbn";
 
 import { AuthFieldError } from "@/components/auth/AuthFieldError";
 import { AuthShell } from "@/components/auth/AuthShell";
+import { PasswordStrengthField } from "@/components/auth/PasswordStrengthField";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MIN_PASSWORD_LENGTH } from "@/lib/password-strength";
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token") ?? "";
 
   const [newPassword, setNewPassword] = useState("");
+  const [passwordScore, setPasswordScore] = useState<number | null>(null);
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -56,6 +60,8 @@ function ResetPasswordForm() {
           setError("expired");
         } else if (data.error === "password_too_short") {
           setError("too_short");
+        } else if (data.error === "password_too_weak") {
+          setError("too_weak");
         } else {
           setError("server");
         }
@@ -80,20 +86,27 @@ function ResetPasswordForm() {
       <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
         <div className="space-y-2">
           <Label htmlFor="ah-reset-password">New password</Label>
-          <Input
+          <PasswordStrengthField
             id="ah-reset-password"
             name="newPassword"
-            type="password"
             autoComplete="new-password"
             required
-            minLength={8}
+            minLength={MIN_PASSWORD_LENGTH}
             value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            className="min-h-11"
-            aria-invalid={error === "too_short" || error === "mismatch" ? true : undefined}
+            onChange={(e) => {
+              const val = e.target.value;
+              setNewPassword(val);
+              setPasswordScore(val.length > 0 ? zxcvbn(val).score : null);
+            }}
+            strengthScore={passwordScore}
+            aria-invalid={
+              error === "too_short" || error === "too_weak" || error === "mismatch"
+                ? true
+                : undefined
+            }
             aria-describedby={error ? formErrorId : undefined}
           />
-          <p className="text-xs text-muted-foreground">Minimum 8 characters.</p>
+          <p className="text-xs text-muted-foreground">Minimum {MIN_PASSWORD_LENGTH} characters.</p>
         </div>
 
         <div className="space-y-2">
@@ -116,7 +129,16 @@ function ResetPasswordForm() {
           <AuthFieldError id={formErrorId} message="Passwords don't match." />
         ) : null}
         {error === "too_short" ? (
-          <AuthFieldError id={formErrorId} message="Password must be at least 8 characters." />
+          <AuthFieldError
+            id={formErrorId}
+            message={`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`}
+          />
+        ) : null}
+        {error === "too_weak" ? (
+          <AuthFieldError
+            id={formErrorId}
+            message="Password is too weak. Try a longer phrase or mix of words."
+          />
         ) : null}
         {error === "expired" ? (
           <AuthFieldError

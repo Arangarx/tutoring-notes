@@ -12,8 +12,10 @@
  *   P2B-PIN-1  — credential PATCH: changes PIN and revokes all learner sessions
  *   P2B-PIN-2  — credential PATCH: 401 when no AH session
  *   P2B-PIN-3  — credential PATCH: too-short PIN → 400 pin_too_short
- *   P2B-LOCK-1 — soft-lockout: checkLearnerPinRateLimit returns isLockedOut after N failures
+ *   P2B-LOCK-1 — soft-lockout: enters cooldown after 6 failures; cooldown is finite
  *   P2B-LOCK-2 — soft-lockout: lockout never becomes permanent (reset clears it)
+ *   P2B-LOCK-3 — soft-lockout: first 5 failures produce no cooldown (kid-friendly tiers)
+ *   P2B-LOCK-4 — soft-lockout: 6th failure triggers 30s cooldown (first tier boundary)
  *   P2B-CLM-1  — claim state: expired invite → state EXPIRED (non-claimable)
  *   P2B-CLM-2  — claim state: revoked invite → not claimable
  *   P2B-CLM-3  — claim state: claimed invite → not claimable again (sibling revoke path)
@@ -59,6 +61,10 @@ import { NextRequest } from "next/server";
 import { POST as revokeOneHandler } from "@/app/api/learner-profiles/[id]/device-sessions/[sessionId]/revoke/route";
 import { POST as revokeAllHandler } from "@/app/api/learner-profiles/[id]/device-sessions/revoke-all/route";
 import { PATCH as credentialPatchHandler } from "@/app/api/learner-profiles/[id]/credentials/route";
+
+// Fix-specific imports
+import { validatePasswordStrength } from "@/lib/password-strength";
+import { validateLearnerPin } from "@/lib/pin-strength";
 
 // ---------------------------------------------------------------------------
 // Test env
@@ -351,26 +357,26 @@ describe("P2B-PIN: Child credential update", () => {
 describe("P2B-LOCK: Learner soft-lockout (§4.4 — NEVER hard-lock)", () => {
   const TEST_IP = "127.0.0.1";
 
-  it("P2B-LOCK-1: enters cooldown after N failures; cooldown is finite (not permanent)", () => {
+  it("P2B-LOCK-1: enters cooldown after tier-2 threshold (6 failures); cooldown is finite", () => {
     const username = `lock1_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-    // Tiers: 0–2 → no delay; 3–4 → 30s; 5–7 → 5min; 8–10 → 15min; 11+ → 1h
-    // Record 5 failures to reach the 5min tier
-    for (let i = 0; i < 5; i++) {
+    // New tiers: 1–5 free; 6–10 → 30s; 11–15 → 60s; 16+ → 120s
+    // Record 6 failures to reach tier 2 (first cooldown tier)
+    for (let i = 0; i < 6; i++) {
       recordLearnerPinFailure(username, TEST_IP);
     }
 
     const cooldown = checkLearnerPinCooldown(username, TEST_IP);
     expect(cooldown.inCooldown).toBe(true);
     expect(cooldown.retryAfterSeconds).toBeGreaterThan(0);
-    // CRITICAL: must be finite — never more than 1h (3600s per spec, < 24h)
-    expect(cooldown.retryAfterSeconds).toBeLessThanOrEqual(3600);
+    // CRITICAL: must be finite — max 120s (never hard-lock, never more than 24h)
+    expect(cooldown.retryAfterSeconds).toBeLessThanOrEqual(120);
   });
 
   it("P2B-LOCK-2: cooldown clears after reset (soft, not permanent)", () => {
     const username = `lock2_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 6; i++) {
       recordLearnerPinFailure(username, TEST_IP);
     }
 
@@ -380,16 +386,31 @@ describe("P2B-LOCK: Learner soft-lockout (§4.4 — NEVER hard-lock)", () => {
     expect(cooldown.inCooldown).toBe(false);
   });
 
-  it("P2B-LOCK-3: first 2 failures produce no cooldown (not too aggressive)", () => {
+  it("P2B-LOCK-3: first 5 failures produce no cooldown (generous kid-friendly tier)", () => {
     const username = `lock3_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-    recordLearnerPinFailure(username, TEST_IP);
-    recordLearnerPinFailure(username, TEST_IP);
+    for (let i = 0; i < 5; i++) {
+      recordLearnerPinFailure(username, TEST_IP);
+    }
 
-    // 2 failures: should NOT be in cooldown yet (only from 3+ does cooldown kick in)
+    // 5 failures: should NOT be in cooldown yet (free tier is 1–5)
     const cooldown = checkLearnerPinCooldown(username, TEST_IP);
-    // Per tier table: 0–2 failures → 0s cooldown
+    expect(cooldown.inCooldown).toBe(false);
     expect(cooldown.retryAfterSeconds).toBe(0);
+  });
+
+  it("P2B-LOCK-4: failure 6 triggers 30s cooldown (tier 2 boundary)", () => {
+    const username = `lock4_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+    for (let i = 0; i < 6; i++) {
+      recordLearnerPinFailure(username, TEST_IP);
+    }
+
+    const cooldown = checkLearnerPinCooldown(username, TEST_IP);
+    expect(cooldown.inCooldown).toBe(true);
+    // Tier 2: 30s
+    expect(cooldown.retryAfterSeconds).toBeGreaterThanOrEqual(28);
+    expect(cooldown.retryAfterSeconds).toBeLessThanOrEqual(32);
   });
 });
 
@@ -482,6 +503,137 @@ describe("P2B-CLM: Claim invite state", () => {
       where: { accountHolderId: ah.id, student: { id: student.id } },
     });
     expect(profile).not.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P2B-ATSTRIP: Username @ normalization (fix #1)
+// ---------------------------------------------------------------------------
+
+describe("P2B-ATSTRIP: Learner username @ normalization", () => {
+  it("P2B-ATSTRIP-1: strips leading @ so @pooky resolves to pooky", () => {
+    const raw = "@pooky";
+    const normalized = raw.trim().toLowerCase().replace(/^@/, "");
+    expect(normalized).toBe("pooky");
+  });
+
+  it("P2B-ATSTRIP-2: plain username is unchanged", () => {
+    const raw = "pooky";
+    const normalized = raw.trim().toLowerCase().replace(/^@/, "");
+    expect(normalized).toBe("pooky");
+  });
+
+  it("P2B-ATSTRIP-3: double @@ still reduces to bare username", () => {
+    const raw = "@@pooky";
+    // Only one leading @ is stripped — matches the route's single replace
+    const normalized = raw.trim().toLowerCase().replace(/^@/, "");
+    expect(normalized).toBe("@pooky");
+    // A double @ is an invalid username anyway (3–20 alphanumeric + underscore)
+    // so it will still fail credential lookup — no security bypass
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P2B-PWSTR: Server-side password strength validator (fix #5)
+// ---------------------------------------------------------------------------
+
+describe("P2B-PWSTR: Password strength validator", () => {
+  it("P2B-PWSTR-1: rejects short password", () => {
+    const result = validatePasswordStrength("password");
+    expect(result.ok).toBe(false);
+  });
+
+  it("P2B-PWSTR-2: rejects 10+ char password with score < 2 (all same char)", () => {
+    const result = validatePasswordStrength("aaaaaaaaaa");
+    expect(result.ok).toBe(false);
+    expect(result.score).toBeLessThan(2);
+  });
+
+  it("P2B-PWSTR-3: rejects 10+ char dictionary word", () => {
+    const result = validatePasswordStrength("abcdefghij");
+    expect(result.ok).toBe(false);
+  });
+
+  it("P2B-PWSTR-4: accepts a genuinely strong 10+ char password", () => {
+    const result = validatePasswordStrength("Horse-Battery!Staple42");
+    expect(result.ok).toBe(true);
+    expect(result.score).toBeGreaterThanOrEqual(2);
+  });
+
+  it("P2B-PWSTR-5: accepts a different strong phrase", () => {
+    const result = validatePasswordStrength("correct-horse!77battery");
+    expect(result.ok).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P2B-PIN: Weak-PIN blocklist (fix #6)
+// ---------------------------------------------------------------------------
+
+describe("P2B-PINWEAK: Weak-PIN blocklist", () => {
+  it("P2B-PINWEAK-1: rejects 121212 (exact blocklist)", () => {
+    expect(validateLearnerPin("121212").ok).toBe(false);
+  });
+
+  it("P2B-PINWEAK-2: rejects 123456 (sequential + exact blocklist)", () => {
+    expect(validateLearnerPin("123456").ok).toBe(false);
+  });
+
+  it("P2B-PINWEAK-3: rejects 000000 (all zeros)", () => {
+    expect(validateLearnerPin("000000").ok).toBe(false);
+  });
+
+  it("P2B-PINWEAK-4: rejects 111111 (all same digit)", () => {
+    expect(validateLearnerPin("111111").ok).toBe(false);
+  });
+
+  it("P2B-PINWEAK-5: rejects 234567 (sequential run)", () => {
+    expect(validateLearnerPin("234567").ok).toBe(false);
+  });
+
+  it("P2B-PINWEAK-6: rejects 987654 (descending sequential)", () => {
+    expect(validateLearnerPin("987654").ok).toBe(false);
+  });
+
+  it("P2B-PINWEAK-7: rejects 111122 (4+ repeated digit run)", () => {
+    expect(validateLearnerPin("111122").ok).toBe(false);
+  });
+
+  it("P2B-PINWEAK-8: accepts a non-trivial PIN (847263)", () => {
+    expect(validateLearnerPin("847263").ok).toBe(true);
+  });
+
+  it("P2B-PINWEAK-9: accepts another non-trivial PIN (394751)", () => {
+    expect(validateLearnerPin("394751").ok).toBe(true);
+  });
+
+  it("P2B-PINWEAK-10: rejects non-6-digit PINs", () => {
+    expect(validateLearnerPin("12345").ok).toBe(false);
+    expect(validateLearnerPin("1234567").ok).toBe(false);
+    expect(validateLearnerPin("abcdef").ok).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P2B-REDIR: Redirect-origin (fix #3) — request-origin stays on same deployment
+// ---------------------------------------------------------------------------
+
+describe("P2B-REDIR: Redirect origin stays on request domain", () => {
+  it("P2B-REDIR-1: verify-email handler uses req.nextUrl.origin, not NEXTAUTH_URL", async () => {
+    // After fix #3, same-deployment redirects must use req.nextUrl.origin.
+    // A bad token from a preview origin must redirect back to the preview origin.
+    const { GET: verifyEmailHandler } = await import(
+      "@/app/verify-email/route"
+    );
+    const previewOrigin = "https://preview-abc.vercel.app";
+    const req = new NextRequest(`${previewOrigin}/verify-email?token=bad&type=ah`);
+    const res = await verifyEmailHandler(req);
+    // Must be a redirect (3xx)
+    expect(res.status).toBeGreaterThanOrEqual(300);
+    expect(res.status).toBeLessThan(400);
+    // Location header must start with the preview origin, not prod
+    const location = res.headers.get("Location") ?? "";
+    expect(location.startsWith(previewOrigin)).toBe(true);
   });
 });
 

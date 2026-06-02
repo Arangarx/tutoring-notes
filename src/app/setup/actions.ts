@@ -5,6 +5,7 @@ import { hasAdminUsers, createAdmin } from "@/lib/auth-db";
 import { sendMail } from "@/lib/email";
 import { getPublicBaseUrl } from "@/lib/public-url";
 import { setupBlockedNoSecretInProduction, setupTokenValid } from "@/lib/setup-guard";
+import { validatePasswordStrength, MIN_PASSWORD_LENGTH } from "@/lib/password-strength";
 
 export async function createFirstAdmin(
   _prev: { error?: string } | null,
@@ -28,8 +29,15 @@ export async function createFirstAdmin(
   const displayName = String(formData.get("displayName") ?? "").trim() || null;
 
   if (!email || !password) return { error: "Email and password required" };
-  if (password.length < 6) return { error: "Password must be at least 6 characters" };
   if (password !== passwordConfirm) return { error: "Passwords do not match." };
+  const strengthCheck = validatePasswordStrength(password);
+  if (!strengthCheck.ok) {
+    return {
+      error:
+        strengthCheck.feedback ||
+        `Password must be at least ${MIN_PASSWORD_LENGTH} characters and not too simple.`,
+    };
+  }
 
   await createAdmin(email, password, displayName);
 

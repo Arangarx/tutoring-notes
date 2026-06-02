@@ -3,12 +3,15 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useId, useState } from "react";
+import zxcvbn from "zxcvbn";
 
 import { AuthFieldError } from "@/components/auth/AuthFieldError";
 import { AuthShell } from "@/components/auth/AuthShell";
+import { PasswordStrengthField } from "@/components/auth/PasswordStrengthField";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MIN_PASSWORD_LENGTH } from "@/lib/password-strength";
 
 function AccountSignupForm() {
   const searchParams = useSearchParams();
@@ -18,6 +21,7 @@ function AccountSignupForm() {
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordScore, setPasswordScore] = useState<number | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -100,11 +104,19 @@ function AccountSignupForm() {
       }
     >
       {linkExpired ? (
-        <div className="mb-4 rounded-md border border-border bg-muted/40 p-3 text-sm">
-          <p className="font-medium text-foreground">Verification link expired</p>
-          <p className="mt-1 text-muted-foreground">
-            Sign up again with the same email address and we&apos;ll send you a fresh
-            verification link.
+        <div className="mb-4 rounded-md border border-border bg-muted/40 p-3 text-sm space-y-1">
+          <p className="font-medium text-foreground">Verification link used or expired</p>
+          <p className="text-muted-foreground">
+            This link has already been used or has expired.{" "}
+            <a
+              href="/account/login"
+              className="text-brand underline-offset-2 hover:underline"
+            >
+              If your account is already active, just log in →
+            </a>
+          </p>
+          <p className="text-muted-foreground">
+            Need a new link? Sign up again with the same email and we&apos;ll send one.
           </p>
         </div>
       ) : null}
@@ -142,24 +154,36 @@ function AccountSignupForm() {
 
         <div className="space-y-2">
           <Label htmlFor="ah-signup-password">Password</Label>
-          <Input
+          <PasswordStrengthField
             id="ah-signup-password"
             name="password"
-            type="password"
             autoComplete="new-password"
             required
-            minLength={8}
+            minLength={MIN_PASSWORD_LENGTH}
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="min-h-11"
-            aria-invalid={error === "password_too_short" ? true : undefined}
+            onChange={(e) => {
+              const val = e.target.value;
+              setPassword(val);
+              setPasswordScore(val.length > 0 ? zxcvbn(val).score : null);
+            }}
+            strengthScore={passwordScore}
+            aria-invalid={
+              error === "password_too_short" || error === "password_too_weak" ? true : undefined
+            }
             aria-describedby={error ? formErrorId : undefined}
           />
-          <p className="text-xs text-muted-foreground">Minimum 8 characters.</p>
+          <p className="text-xs text-muted-foreground">Minimum {MIN_PASSWORD_LENGTH} characters.</p>
         </div>
 
-        {error === "password_too_short" ? (
-          <AuthFieldError id={formErrorId} message="Password must be at least 8 characters." />
+        {error === "password_too_short" || error === "password_too_weak" ? (
+          <AuthFieldError
+            id={formErrorId}
+            message={
+              error === "password_too_short"
+                ? `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`
+                : "Password is too weak. Try a longer phrase or mix of words."
+            }
+          />
         ) : null}
         {error === "invalid_email" ? (
           <AuthFieldError id={formErrorId} message="Enter a valid email address." />

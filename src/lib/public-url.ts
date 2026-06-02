@@ -1,8 +1,28 @@
 import { headers } from "next/headers";
 import { env } from "@/lib/env";
 
-/** Public site URL for links in emails (reset, etc.). Set NEXTAUTH_URL in production. */
+/**
+ * Public site URL for links in emails (reset, verify, etc.).
+ *
+ * Production:  always NEXTAUTH_URL (canonical domain; host-injection-safe).
+ * Preview:     VERCEL_URL (deployment-scoped) so smoke-testing email links
+ *              point at the preview deployment, not prod. We use VERCEL_URL
+ *              (not the request Host header) to avoid host-injection attacks.
+ * Local dev:   NEXTAUTH_URL if set, else localhost:3000.
+ *
+ * Security note: we use VERCEL_URL (deployment-scoped) for preview environments
+ * rather than the request Host header, which would be vulnerable to host-injection attacks.
+ * Email links on production always use NEXTAUTH_URL (canonical prod URL).
+ */
 export function getPublicBaseUrl(): string {
+  // On Vercel preview deployments, use the deployment-scoped URL for email links
+  // so smoke-testing works (NEXTAUTH_URL points at prod on preview builds).
+  if (process.env.VERCEL_ENV === "preview") {
+    const vercelUrl = process.env.VERCEL_URL?.trim().replace(/\/$/, "");
+    if (vercelUrl) {
+      return vercelUrl.startsWith("http") ? vercelUrl : `https://${vercelUrl}`;
+    }
+  }
   const fromEnv = env.NEXTAUTH_URL?.trim().replace(/\/$/, "");
   if (fromEnv) return fromEnv;
   const vercel = process.env.VERCEL_URL?.trim().replace(/\/$/, "");

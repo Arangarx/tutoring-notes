@@ -1,15 +1,19 @@
 /**
  * Learner PIN rate limiter — tiered soft-lockout (AH-4 LOCKED).
  *
- * Policy (§4.4): NEVER hard-lock; use exponential backoff cooldowns only.
+ * Policy (§4.4): NEVER hard-lock; use tiered cooldowns only.
  * A missed session due to lockout is a reliability failure equivalent to recorder crash.
+ * Tiers are intentionally generous — kids mistype PINs frequently.
  *
  * Failure count (per username+IP) → cooldown tiers:
- *   0–2:  no delay (return 401 immediately — allow the attempt)
- *   3–4:  30s cooldown (HTTP 429 + Retry-After: 30) — BEFORE the attempt
- *   5–7:  5min cooldown
- *   8–10: 15min cooldown
- *   11+:  1h cooldown; emit lockout_threshold_reached event
+ *   1–5:   no cooldown (free attempts — 5 tries before any delay)
+ *   6–10:  30s cooldown per attempt
+ *   11–15: 60s cooldown per attempt
+ *   16+:   120s cooldown per attempt; emit lockout_threshold_reached event
+ *
+ * Cooldown message copy (for the login UI):
+ *   During cooldown: "Slow down — try again in [X] seconds."
+ *   After cooldown:  show the normal form, no scary "locked out" message.
  *
  * Usage in login handler:
  *   1. checkLearnerPinCooldown(username, ip) → if in cooldown, return 429
@@ -41,16 +45,19 @@ function cleanup() {
   if (now - lastCleanup < CLEANUP_INTERVAL_MS) return;
   lastCleanup = now;
   for (const [key, state] of failureStore) {
-    if (state.cooldownUntil <= now && state.count <= 2) failureStore.delete(key);
+    if (state.cooldownUntil <= now && state.count <= 5) failureStore.delete(key);
   }
 }
 
 function cooldownSecondsForCount(count: number): number {
-  if (count <= 2) return 0;
-  if (count <= 4) return 30;
-  if (count <= 7) return 300;
-  if (count <= 10) return 900;
-  return 3600;
+  // Tier 1: first 5 attempts — no cooldown (kids mistype frequently)
+  if (count <= 5) return 0;
+  // Tier 2: attempts 6–10 — 30s cooldown
+  if (count <= 10) return 30;
+  // Tier 3: attempts 11–15 — 60s cooldown
+  if (count <= 15) return 60;
+  // Tier 4: 16+ — 120s cooldown; NEVER hard-lock (AH-4 LOCKED)
+  return 120;
 }
 
 export interface LearnerPinCooldownResult {
@@ -117,7 +124,7 @@ export function recordLearnerPinFailure(
 
   failureStore.set(key, { count: newCount, cooldownUntil });
 
-  const lockoutThresholdReached = newCount === 11;
+  const lockoutThresholdReached = newCount === 16;
   return { newCooldownSeconds: cooldownSeconds, failureCount: newCount, lockoutThresholdReached };
 }
 

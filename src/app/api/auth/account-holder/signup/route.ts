@@ -15,6 +15,7 @@ import { hashToken, EMAIL_TOKEN_TTL_MS_24H } from "@/lib/crypto/session-tokens";
 import { generateRawToken } from "@/lib/crypto/session-tokens";
 import { stubSendAccountHolderEmail } from "@/lib/account-holder-email";
 import { getPublicBaseUrl } from "@/lib/public-url";
+import { validatePasswordStrength, MIN_PASSWORD_LENGTH } from "@/lib/password-strength";
 
 const OK_RESPONSE = {
   message: "If that email is registered, you'll receive an email. Check your inbox.",
@@ -40,8 +41,12 @@ export async function POST(req: NextRequest) {
   if (!normalizedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
     return NextResponse.json({ error: "invalid_email" }, { status: 400 });
   }
-  if (!password || password.length < 8) {
+  if (!password || password.length < MIN_PASSWORD_LENGTH) {
     return NextResponse.json({ error: "password_too_short" }, { status: 400 });
+  }
+  const strengthCheck = validatePasswordStrength(password);
+  if (!strengthCheck.ok) {
+    return NextResponse.json({ error: "password_too_weak" }, { status: 400 });
   }
 
   const existing = await db.accountHolder.findUnique({ where: { email: normalizedEmail } });

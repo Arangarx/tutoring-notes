@@ -17,8 +17,6 @@ import {
   buildAhSessionCookie,
   AH_SESSION_TTL_MS,
 } from "@/lib/account-holder-session";
-import { getPublicBaseUrl } from "@/lib/public-url";
-
 const isDev = process.env.NODE_ENV === "development";
 
 export async function GET(req: NextRequest) {
@@ -27,9 +25,12 @@ export async function GET(req: NextRequest) {
   const type = searchParams.get("type") ?? "";
   const returnToRaw = searchParams.get("returnTo") ?? "";
 
+  // Use req.nextUrl.origin for same-deployment redirects (not getPublicBaseUrl)
+  // so preview smoke-testing stays on the preview domain.
+  const origin = req.nextUrl.origin;
+
   if (type !== "ah" || !rawToken) {
-    const base = getPublicBaseUrl();
-    return NextResponse.redirect(`${base}/account/signup?error=link_invalid`);
+    return NextResponse.redirect(`${origin}/account/signup?error=link_invalid`);
   }
 
   const tokenHash = hashToken(rawToken.trim());
@@ -40,17 +41,19 @@ export async function GET(req: NextRequest) {
     include: { accountHolder: true },
   });
 
-  if (
-    !tokenRow ||
-    tokenRow.purpose !== "SIGNUP_VERIFY" ||
-    tokenRow.consumedAt ||
-    tokenRow.expiresAt < now
-  ) {
-    if (tokenRow && tokenRow.expiresAt < now) {
-      console.log(`[ahx] ahx=${tokenRow.accountHolderId} action=verify_email_expired`);
-    }
-    const base = getPublicBaseUrl();
-    return NextResponse.redirect(`${base}/account/signup?error=link_expired`);
+  if (!tokenRow || tokenRow.purpose !== "SIGNUP_VERIFY") {
+    return NextResponse.redirect(`${origin}/account/signup?error=link_invalid`);
+  }
+
+  if (tokenRow.consumedAt) {
+    // Token already used — account should already be active. Point user at login.
+    console.log(`[ahx] ahx=${tokenRow.accountHolderId} action=verify_email_already_used`);
+    return NextResponse.redirect(`${origin}/account/login?notice=link_already_used`);
+  }
+
+  if (tokenRow.expiresAt < now) {
+    console.log(`[ahx] ahx=${tokenRow.accountHolderId} action=verify_email_expired`);
+    return NextResponse.redirect(`${origin}/account/signup?error=link_expired`);
   }
 
   const accountHolder = tokenRow.accountHolder;
@@ -82,8 +85,7 @@ export async function GET(req: NextRequest) {
   // Sanitize returnTo: only relative paths starting with /
   const safeReturn =
     returnToRaw && /^\/[a-zA-Z0-9\-/_?=&%]*$/.test(returnToRaw) ? returnToRaw : null;
-  const base = getPublicBaseUrl();
-  const redirectUrl = safeReturn ? `${base}${safeReturn}` : `${base}/account/dashboard`;
+  const redirectUrl = safeReturn ? `${origin}${safeReturn}` : `${origin}/account/dashboard`;
 
   return NextResponse.redirect(redirectUrl, {
     headers: { "Set-Cookie": cookie },

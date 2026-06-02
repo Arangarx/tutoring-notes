@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useId, useState } from "react";
+import { validateLearnerPin } from "@/lib/pin-strength";
 
 import { AuthFieldError } from "@/components/auth/AuthFieldError";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,8 @@ export function CredentialSetupForm({
   const [username, setUsername] = useState("");
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
+  const [showPin, setShowPin] = useState(false);
+  const [showConfirmPin, setShowConfirmPin] = useState(false);
   const [done, setDone] = useState(false);
   const [finalUsername, setFinalUsername] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +34,12 @@ export function CredentialSetupForm({
 
     if (pin !== confirmPin) {
       setError("pin_mismatch");
+      return;
+    }
+
+    const pinCheck = validateLearnerPin(pin);
+    if (!pinCheck.ok) {
+      setError("pin_too_weak");
       return;
     }
 
@@ -57,6 +66,8 @@ export function CredentialSetupForm({
           setError("invalid_username");
         } else if (data.error === "pin_too_short") {
           setError("pin_too_short");
+        } else if (data.error === "pin_too_weak") {
+          setError("pin_too_weak");
         } else {
           setError("server");
         }
@@ -73,21 +84,40 @@ export function CredentialSetupForm({
   }
 
   if (done) {
+    const loginUrl =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/students/login`
+        : "/students/login";
     return (
-      <div className="space-y-3">
+      <div className="space-y-4">
         <p className="text-sm font-medium text-foreground">
           ✓ Login set up for {studentName}
         </p>
-        <p className="text-sm text-muted-foreground">
-          Username: <strong>@{finalUsername}</strong>
-        </p>
-        <p className="text-sm text-muted-foreground">
-          {studentName} can now sign in at{" "}
-          <a href="/students/login" className="text-brand underline-offset-2 hover:underline">
-            the student login page
-          </a>
-          .
-        </p>
+        <div className="rounded-md border border-border bg-muted/40 p-4 space-y-2">
+          <p className="text-sm text-foreground font-medium">
+            Share this with {studentName}:
+          </p>
+          <dl className="space-y-1.5 text-sm">
+            <div>
+              <dt className="text-xs text-muted-foreground">Username</dt>
+              <dd className="font-mono font-medium text-foreground">{finalUsername}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Sign-in link</dt>
+              <dd>
+                <a
+                  href="/students/login"
+                  className="text-brand underline-offset-2 hover:underline break-all"
+                >
+                  {loginUrl}
+                </a>
+              </dd>
+            </div>
+          </dl>
+          <p className="text-xs text-muted-foreground pt-1">
+            {studentName} enters their username (not starting with @) and PIN at the student login page.
+          </p>
+        </div>
         <Link
           href="/account/dashboard"
           className="inline-block text-sm text-brand underline-offset-2 hover:underline"
@@ -130,39 +160,66 @@ export function CredentialSetupForm({
 
       <div className="space-y-2">
         <Label htmlFor="cred-pin">PIN for {studentName}</Label>
-        <Input
-          id="cred-pin"
-          name="pin"
-          type="password"
-          inputMode="numeric"
-          autoComplete="new-password"
-          required
-          minLength={6}
-          value={pin}
-          onChange={(e) => setPin(e.target.value)}
-          placeholder="6+ digit PIN"
-          className="min-h-11"
-          aria-invalid={error === "pin_too_short" || error === "pin_mismatch" ? true : undefined}
-          aria-describedby={error ? formErrorId : undefined}
-        />
-        <p className="text-xs text-muted-foreground">At least 6 digits. Keep this private.</p>
+        <div className="relative flex items-center">
+          <Input
+            id="cred-pin"
+            name="pin"
+            type={showPin ? "text" : "password"}
+            inputMode="numeric"
+            autoComplete="new-password"
+            required
+            minLength={6}
+            maxLength={6}
+            value={pin}
+            onChange={(e) => setPin(e.target.value)}
+            placeholder="6-digit PIN"
+            className="min-h-11 pr-16"
+            aria-invalid={
+              error === "pin_too_short" ||
+              error === "pin_too_weak" ||
+              error === "pin_mismatch"
+                ? true
+                : undefined
+            }
+            aria-describedby={error ? formErrorId : undefined}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPin((v) => !v)}
+            className="absolute right-3 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            aria-label={showPin ? "Hide PIN" : "Show PIN"}
+          >
+            {showPin ? "Hide" : "Show"}
+          </button>
+        </div>
+        <p className="text-xs text-muted-foreground">Exactly 6 digits. Keep this private.</p>
       </div>
 
       <div className="space-y-2">
         <Label htmlFor="cred-pin-confirm">Confirm PIN</Label>
-        <Input
-          id="cred-pin-confirm"
-          name="confirmPin"
-          type="password"
-          inputMode="numeric"
-          autoComplete="new-password"
-          required
-          value={confirmPin}
-          onChange={(e) => setConfirmPin(e.target.value)}
-          className="min-h-11"
-          aria-invalid={error === "pin_mismatch" ? true : undefined}
-          aria-describedby={error ? formErrorId : undefined}
-        />
+        <div className="relative flex items-center">
+          <Input
+            id="cred-pin-confirm"
+            name="confirmPin"
+            type={showConfirmPin ? "text" : "password"}
+            inputMode="numeric"
+            autoComplete="new-password"
+            required
+            value={confirmPin}
+            onChange={(e) => setConfirmPin(e.target.value)}
+            className="min-h-11 pr-16"
+            aria-invalid={error === "pin_mismatch" ? true : undefined}
+            aria-describedby={error ? formErrorId : undefined}
+          />
+          <button
+            type="button"
+            onClick={() => setShowConfirmPin((v) => !v)}
+            className="absolute right-3 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            aria-label={showConfirmPin ? "Hide PIN" : "Show PIN"}
+          >
+            {showConfirmPin ? "Hide" : "Show"}
+          </button>
+        </div>
       </div>
 
       {error === "username_taken" ? (
@@ -175,7 +232,13 @@ export function CredentialSetupForm({
         />
       ) : null}
       {error === "pin_too_short" ? (
-        <AuthFieldError id={formErrorId} message="PIN must be at least 6 digits." />
+        <AuthFieldError id={formErrorId} message="PIN must be exactly 6 digits." />
+      ) : null}
+      {error === "pin_too_weak" ? (
+        <AuthFieldError
+          id={formErrorId}
+          message="That PIN is too easy to guess. Try a less obvious combination."
+        />
       ) : null}
       {error === "pin_mismatch" ? (
         <AuthFieldError id={formErrorId} message="PINs don't match." />

@@ -44,7 +44,8 @@ export async function POST(req: NextRequest) {
 
   const { username, pin } = body as { username?: string; pin?: string };
 
-  const normalizedUsername = (username ?? "").trim().toLowerCase();
+  // Strip a leading @ so parents who typed "@pooky" (from the success screen) resolve correctly.
+  const normalizedUsername = (username ?? "").trim().toLowerCase().replace(/^@/, "");
   if (!normalizedUsername || !pin) {
     return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
   }

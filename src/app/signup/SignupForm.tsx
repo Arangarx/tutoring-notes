@@ -2,16 +2,21 @@
 
 import Link from "next/link";
 import { useActionState, useId, useState } from "react";
+import zxcvbn from "zxcvbn";
 
 import { AuthFieldError } from "@/components/auth/AuthFieldError";
+import { PasswordStrengthField } from "@/components/auth/PasswordStrengthField";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MIN_PASSWORD_LENGTH } from "@/lib/password-strength";
 import { signup } from "./actions";
 
 export default function SignupForm() {
   const [state, formAction] = useActionState(signup, null);
   const [busy, setBusy] = useState(false);
+  const [password, setPassword] = useState("");
+  const [passwordScore, setPasswordScore] = useState<number | null>(null);
   const formErrorId = useId();
 
   return (
@@ -31,14 +36,19 @@ export default function SignupForm() {
       </div>
       <div className="space-y-2">
         <Label htmlFor="signup-password">Password</Label>
-        <Input
+        <PasswordStrengthField
           id="signup-password"
           name="password"
-          type="password"
           autoComplete="new-password"
-          minLength={8}
+          minLength={MIN_PASSWORD_LENGTH}
           required
-          className="min-h-11"
+          value={password}
+          onChange={(e) => {
+            const val = e.target.value;
+            setPassword(val);
+            setPasswordScore(val.length > 0 ? zxcvbn(val).score : null);
+          }}
+          strengthScore={passwordScore}
           aria-invalid={state?.error ? true : undefined}
           aria-describedby={state?.error ? formErrorId : undefined}
         />
@@ -50,7 +60,7 @@ export default function SignupForm() {
           name="passwordConfirm"
           type="password"
           autoComplete="new-password"
-          minLength={8}
+          minLength={MIN_PASSWORD_LENGTH}
           required
           className="min-h-11"
           aria-invalid={state?.error ? true : undefined}

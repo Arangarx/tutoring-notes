@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { hashToken } from "@/lib/crypto/session-tokens";
 import { hashAccountHolderPassword } from "@/lib/account-holder-auth";
+import { validatePasswordStrength, MIN_PASSWORD_LENGTH } from "@/lib/password-strength";
 import {
   createAccountHolderSession,
   buildAhSessionCookie,
@@ -34,8 +35,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
 
-  if (newPassword.length < 8) {
+  if (newPassword.length < MIN_PASSWORD_LENGTH) {
     return NextResponse.json({ error: "password_too_short" }, { status: 400 });
+  }
+  const strengthCheck = validatePasswordStrength(newPassword);
+  if (!strengthCheck.ok) {
+    return NextResponse.json({ error: "password_too_weak" }, { status: 400 });
   }
 
   const tokenHash = hashToken(token.trim());

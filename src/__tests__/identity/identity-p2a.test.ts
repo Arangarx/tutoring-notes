@@ -548,26 +548,23 @@ describe("Soft-lockout tiers (AH-4)", () => {
     return { username: `lockout-u-${Date.now()}-${testIndex}`, ip: `10.99.${testIndex++}.1` };
   }
 
-  it("0–2 failures: allowed immediately (no cooldown)", () => {
+  it("1–5 failures: allowed immediately, no cooldown (generous kid-friendly tier)", () => {
     const { username, ip } = uniqueTestKey();
-    // First 2 failures: no cooldown (counts 1 and 2 → cooldownSeconds = 0)
-    checkLearnerPinCooldown(username, ip); // pre-check: not in cooldown
-    recordLearnerPinFailure(username, ip); // count = 1, cooldown = 0
-    let cd = checkLearnerPinCooldown(username, ip);
+    // New tiers: 1–5 free; 6–10 → 30s; 11–15 → 60s; 16+ → 120s
+    for (let i = 0; i < 5; i++) {
+      recordLearnerPinFailure(username, ip);
+    }
+    const cd = checkLearnerPinCooldown(username, ip);
     expect(cd.inCooldown).toBe(false);
-
-    recordLearnerPinFailure(username, ip); // count = 2, cooldown = 0
-    cd = checkLearnerPinCooldown(username, ip);
-    expect(cd.inCooldown).toBe(false);
+    expect(cd.retryAfterSeconds).toBe(0);
   });
 
-  it("3rd failure triggers 30s cooldown (3–4 tier)", () => {
+  it("6th failure triggers 30s cooldown (tier 2)", () => {
     const { username, ip } = uniqueTestKey();
-    recordLearnerPinFailure(username, ip); // count 1
-    recordLearnerPinFailure(username, ip); // count 2
-    const result = recordLearnerPinFailure(username, ip); // count 3 → 30s cooldown
+    for (let i = 0; i < 5; i++) recordLearnerPinFailure(username, ip);
+    const result = recordLearnerPinFailure(username, ip); // count 6 → 30s cooldown
     expect(result.newCooldownSeconds).toBe(30);
-    expect(result.failureCount).toBe(3);
+    expect(result.failureCount).toBe(6);
 
     // Next attempt is in cooldown
     const cd = checkLearnerPinCooldown(username, ip);
@@ -576,33 +573,31 @@ describe("Soft-lockout tiers (AH-4)", () => {
     expect(cd.retryAfterSeconds).toBeLessThanOrEqual(30);
   });
 
-  it("5th failure triggers 5min cooldown (5–7 tier)", () => {
+  it("11th failure triggers 60s cooldown (tier 3)", () => {
     const { username, ip } = uniqueTestKey();
-    for (let i = 0; i < 4; i++) recordLearnerPinFailure(username, ip);
-    resetLearnerPinFailures(username, ip); // reset between so we can reach count 5 without cooldown gate
-    // Force count to 5 by direct failures
-    for (let i = 0; i < 5; i++) {
-      // bypass existing cooldown between failures
-      const result = recordLearnerPinFailure(username, ip);
-      if (result.failureCount === 5) {
-        expect(result.newCooldownSeconds).toBe(300);
-        return;
-      }
+    // Record up to 11 failures — count is cumulative in the store
+    for (let i = 0; i < 11; i++) {
+      recordLearnerPinFailure(username, ip);
     }
-    // Fallback: manually check counts
     const count = getLearnerPinFailureCount(username, ip);
-    expect(count).toBeGreaterThanOrEqual(3);
+    expect(count).toBe(11);
+    // At count 11, cooldown tier is 60s
+    const cd = checkLearnerPinCooldown(username, ip);
+    expect(cd.inCooldown).toBe(true);
+    // Tier 3: 60s (allow some drift from test timing)
+    expect(cd.retryAfterSeconds).toBeGreaterThan(0);
+    expect(cd.retryAfterSeconds).toBeLessThanOrEqual(60);
   });
 
-  it("11th failure triggers 1h cooldown and lockout_threshold_reached", () => {
+  it("16th failure triggers 120s cooldown and lockout_threshold_reached", () => {
     const { username, ip } = uniqueTestKey();
     let hitThreshold = false;
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < 20; i++) {
       const result = recordLearnerPinFailure(username, ip);
       if (result.lockoutThresholdReached) {
         hitThreshold = true;
-        expect(result.failureCount).toBe(11);
-        expect(result.newCooldownSeconds).toBe(3600);
+        expect(result.failureCount).toBe(16);
+        expect(result.newCooldownSeconds).toBe(120);
         break;
       }
     }
@@ -611,9 +606,9 @@ describe("Soft-lockout tiers (AH-4)", () => {
 
   it("NEVER hard-locks: failure count resets on successful login", () => {
     const { username, ip } = uniqueTestKey();
-    recordLearnerPinFailure(username, ip);
-    recordLearnerPinFailure(username, ip);
-    recordLearnerPinFailure(username, ip); // now in 30s cooldown
+    for (let i = 0; i < 6; i++) {
+      recordLearnerPinFailure(username, ip); // trigger tier 2 cooldown
+    }
 
     // Success clears the state
     resetLearnerPinFailures(username, ip);

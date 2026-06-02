@@ -89,7 +89,7 @@ export default async function ChildDetailPage({
         title="Child login"
         description={
           fullProfile.credential
-            ? `Username: @${fullProfile.credential.username}`
+            ? `Username: ${fullProfile.credential.username}`
             : "No login credentials set up yet."
         }
         actions={
@@ -112,7 +112,7 @@ export default async function ChildDetailPage({
               >
                 the student login page
               </a>
-              {" using their username and PIN."}
+              {" using their username and PIN. You don't need to log out first — your account and your child's are separate."}
             </p>
             <ChangePinForm learnerProfileId={id} />
           </div>

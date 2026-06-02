@@ -28,6 +28,7 @@ function StudentLoginForm() {
 
   const [username, setUsername] = useState("");
   const [pin, setPin] = useState("");
+  const [showPin, setShowPin] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryAfter, setRetryAfter] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -109,9 +110,9 @@ function StudentLoginForm() {
                 </Label>
                 <Input
                   id={`${fid}-username`}
-                  name="username"
+                  name="learner-username"
                   type="text"
-                  autoComplete="username"
+                  autoComplete="off"
                   autoCapitalize="none"
                   autoCorrect="off"
                   spellCheck={false}
@@ -128,20 +129,31 @@ function StudentLoginForm() {
                 <Label htmlFor={`${fid}-pin`} className="text-base">
                   PIN
                 </Label>
-                <Input
-                  id={`${fid}-pin`}
-                  name="pin"
-                  type="password"
-                  autoComplete="current-password"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  required
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value)}
-                  disabled={busy || isLockedOut}
-                  className="h-12 text-base tracking-widest"
-                  aria-required="true"
-                />
+                <div className="relative flex items-center">
+                  <Input
+                    id={`${fid}-pin`}
+                    name="learner-pin"
+                    type={showPin ? "text" : "password"}
+                    autoComplete="off"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    required
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value)}
+                    disabled={busy || isLockedOut}
+                    className="h-12 pr-16 text-base tracking-widest"
+                    aria-required="true"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPin((v) => !v)}
+                    className="absolute right-3 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                    aria-label={showPin ? "Hide PIN" : "Show PIN"}
+                    tabIndex={-1}
+                  >
+                    {showPin ? "Hide" : "Show"}
+                  </button>
+                </div>
               </div>
 
               {error === "invalid_credentials" && (
@@ -161,11 +173,8 @@ function StudentLoginForm() {
                   role="status"
                   aria-live="polite"
                 >
-                  <p className="font-medium text-amber-800 dark:text-amber-300">
-                    {"Too many tries!"}
-                  </p>
-                  <p className="mt-0.5 text-amber-700 dark:text-amber-400">
-                    {`Wait ${formatCooldown(retryAfter!)} and then try again.`}
+                  <p className="text-amber-800 dark:text-amber-300">
+                    {`Slow down — try again in ${formatCooldown(retryAfter!)}.`}
                   </p>
                 </div>
               )}

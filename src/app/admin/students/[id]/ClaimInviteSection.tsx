@@ -61,7 +61,16 @@ export function ClaimInviteSection({
         return;
       }
 
-      setInviteLink(data.inviteLink ?? null);
+      const link = data.inviteLink ?? null;
+      setInviteLink(link);
+
+      // Auto-copy to clipboard on create
+      if (link) {
+        const fullUrl = `${window.location.origin}${link}`;
+        await navigator.clipboard.writeText(fullUrl).catch(() => undefined);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
     } catch {
       setError("network");
     } finally {
@@ -82,7 +91,9 @@ export function ClaimInviteSection({
       {inviteLink ? (
         <>
           <p className="text-sm text-muted-foreground">
-            {`Share this link with ${studentName}'s parent. It expires in 7 days.`}
+            {copied
+              ? `Claim link for ${studentName} — copied to clipboard!`
+              : `Share this link with ${studentName}'s parent. It expires in 7 days.`}
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <code className="flex-1 overflow-hidden text-ellipsis rounded border border-border bg-muted px-3 py-2 text-xs">
@@ -91,7 +102,7 @@ export function ClaimInviteSection({
                 : inviteLink}
             </code>
             <Button variant="outline" size="sm" onClick={handleCopy}>
-              {copied ? "Copied!" : "Copy"}
+              {copied ? "Copied!" : "Copy again"}
             </Button>
           </div>
           <Button variant="ghost" size="sm" onClick={handleSendInvite} disabled={busy}>

@@ -26,7 +26,9 @@ function AccountLoginForm() {
       ? "That verification link has expired. Sign in to your existing account, or request a new verification link."
       : notice === "reset_ok"
         ? "Your password was updated. Sign in with your new password."
-        : null;
+        : notice === "link_already_used"
+          ? "That verification link has already been used — your account is active. Sign in below."
+          : null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

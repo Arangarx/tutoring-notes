@@ -73,7 +73,7 @@ export default async function AccountDashboardPage() {
                     <p className="font-medium text-foreground">{profile.displayName}</p>
                     <p className="text-sm text-muted-foreground">
                       {profile.credential
-                        ? `@${profile.credential.username}`
+                        ? profile.credential.username
                         : "No login set up yet"}
                       {" \u00b7 "}
                       {profile.accessMode === "child_pin_required"
@@ -90,6 +90,21 @@ export default async function AccountDashboardPage() {
           </ul>
         )}
       </AccountSectionCard>
+
+      {learnerProfiles.some((p) => p.credential) ? (
+        <div className="rounded-md border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+          <p>
+            {"Your child signs in separately at the "}
+            <a
+              href="/students/login"
+              className="text-brand underline-offset-2 hover:underline"
+            >
+              student login page
+            </a>
+            {" — you don't need to log out first. Your accounts are separate."}
+          </p>
+        </div>
+      ) : null}
 
       <AccountSectionCard title="Account" description="Your email and security settings.">
         <div className="space-y-2 text-sm">

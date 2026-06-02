@@ -16,6 +16,7 @@ import { getAccountHolderSession } from "@/lib/account-holder-session";
 import { hashToken } from "@/lib/crypto/session-tokens";
 import { hashLearnerPin } from "@/lib/account-holder-auth";
 import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
+import { validateLearnerPin } from "@/lib/pin-strength";
 
 export async function POST(
   req: NextRequest,
@@ -82,13 +83,15 @@ export async function POST(
       return NextResponse.json({ error: "invalid_username" }, { status: 400 });
     }
 
-    // PIN validation: min 6 numeric digits OR min 8 chars alphanumeric
-    const isNumericPin = /^\d+$/.test(pin);
-    if (isNumericPin && pin.length < 6) {
-      return NextResponse.json({ error: "pin_too_short" }, { status: 400 });
-    }
-    if (!isNumericPin && pin.length < 8) {
-      return NextResponse.json({ error: "pin_too_short" }, { status: 400 });
+    // PIN validation: 6 numeric digits, block obvious patterns
+    const pinCheck = validateLearnerPin(pin);
+    if (!pinCheck.ok) {
+      const errorCode =
+        pinCheck.error?.includes("6 digits") ? "pin_too_short" : "pin_too_weak";
+      return NextResponse.json(
+        { error: errorCode, message: pinCheck.error },
+        { status: 400 }
+      );
     }
 
     // Check username uniqueness
