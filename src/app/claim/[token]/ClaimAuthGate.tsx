@@ -115,6 +115,7 @@ function ClaimSignupForm({
       }
       if (!res.ok) {
         if (data.error === "password_too_short") setError("password_too_short");
+        else if (data.error === "password_too_weak") setError("password_too_weak");
         else setError("server");
       }
     } catch {
@@ -192,6 +193,12 @@ function ClaimSignupForm({
 
       {error === "password_too_short" && (
         <AuthFieldError id={`${fid}-pw-err`} message="Password must be at least 8 characters." />
+      )}
+      {error === "password_too_weak" && (
+        <AuthFieldError
+          id={`${fid}-pw-weak-err`}
+          message="Password is too weak. Try a longer phrase or mix of words."
+        />
       )}
       {(error === "server" || error === "network") && (
         <AuthFieldError

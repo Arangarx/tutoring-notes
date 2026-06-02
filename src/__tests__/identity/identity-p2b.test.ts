@@ -61,6 +61,7 @@ import { NextRequest } from "next/server";
 import { POST as revokeOneHandler } from "@/app/api/learner-profiles/[id]/device-sessions/[sessionId]/revoke/route";
 import { POST as revokeAllHandler } from "@/app/api/learner-profiles/[id]/device-sessions/revoke-all/route";
 import { PATCH as credentialPatchHandler } from "@/app/api/learner-profiles/[id]/credentials/route";
+import { POST as accountHolderSignupHandler } from "@/app/api/auth/account-holder/signup/route";
 
 // Fix-specific imports
 import { validatePasswordStrength } from "@/lib/password-strength";
@@ -563,6 +564,36 @@ describe("P2B-PWSTR: Password strength validator", () => {
   it("P2B-PWSTR-5: accepts a different strong phrase", () => {
     const result = validatePasswordStrength("correct-horse!77battery");
     expect(result.ok).toBe(true);
+  });
+
+  it("P2B-PWSTR-6: rejects password10 (long but dictionary-heavy)", () => {
+    const result = validatePasswordStrength("password10");
+    expect(result.ok).toBe(false);
+    expect(result.score).toBeLessThan(2);
+    expect(result.feedback.length).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P2B-AHSIGN: AccountHolder signup route — password strength errors
+// ---------------------------------------------------------------------------
+
+describe("P2B-AHSIGN: AccountHolder signup route", () => {
+  it("P2B-AHSIGN-1: weak-but-long password returns 400 password_too_weak", async () => {
+    const req = new NextRequest("http://localhost/api/auth/account-holder/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: `p2b-weak-${Date.now()}@test.example`,
+        password: "password10",
+      }),
+    });
+
+    const res = await accountHolderSignupHandler(req);
+    const body = (await res.json()) as { error?: string };
+
+    expect(res.status).toBe(400);
+    expect(body.error).toBe("password_too_weak");
   });
 });
 

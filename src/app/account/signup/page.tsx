@@ -51,6 +51,8 @@ function AccountSignupForm() {
       if (!res.ok) {
         if (data.error === "password_too_short") {
           setError("password_too_short");
+        } else if (data.error === "password_too_weak") {
+          setError("password_too_weak");
         } else if (data.error === "invalid_email") {
           setError("invalid_email");
         } else {
