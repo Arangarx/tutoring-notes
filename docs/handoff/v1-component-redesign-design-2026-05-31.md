@@ -1105,6 +1105,8 @@ Redesign `/join/[token]` — mobile-first layout, `100dvh`, camera tile overlay,
 
 **V1 intent:** Full landing/hero redesign — Andrew: the public landing "needs a lot of work." Apply Mynka Blue tokens, Fraunces/Inter typography, and shadcn primitives consistent with B1 auth surfaces. Scope includes hero, value props, primary CTA(s), and trust/social-proof blocks as appropriate.
 
+**REQUIRED — separate parent sign-in entry (Andrew 2026-06-02):** The landing/hero MUST expose a distinct **"Sign in (parents)"** affordance pointing at `/account/login`, separate from the tutor `/login` entry. Root cause this fixes: the two auth realms (Operator/tutor `/login` vs AccountHolder/parent `/account/login`) have separate login URLs with no cross-link, so a parent who lands on the default tutor login gets a dead-end "email or password didn't match" with no nudge. Landing must make the parent path obvious. (Companion lightweight follow-up — cross-links *between* `/login` and `/account/login` themselves — tracked as a P2b/auth-IA papercut; the landing entry is the V1-required piece.)
+
 **Status:** Needs design pass before Composer dispatch (wireframes or reference mocks acceptable).
 
 **Does NOT include:** Post-login dashboard (§5.1 / B2 reskin is the interim floor on `/admin` routes until Phase C URL flattening).
@@ -1121,6 +1123,7 @@ Redesign `/join/[token]` — mobile-first layout, `100dvh`, camera tile overlay,
 
 **Acceptance criteria (placeholder — refine at design pass):**
 - [ ] `/` no longer ships as pre-redesign marketing stub
+- [ ] `/` exposes a distinct **"Sign in (parents)" → `/account/login`** entry, separate from the tutor `/login` link (Andrew 2026-06-02)
 - [ ] `/about` returns 200 with on-brand layout; linked from `/`
 - [ ] WCAG 2.2 AA on both surfaces (axe with `color-contrast` enabled)
 - [ ] No new CSP origins; fonts via `next/font` only
