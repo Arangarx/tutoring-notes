@@ -62,6 +62,8 @@ import { POST as revokeOneHandler } from "@/app/api/learner-profiles/[id]/device
 import { POST as revokeAllHandler } from "@/app/api/learner-profiles/[id]/device-sessions/revoke-all/route";
 import { PATCH as credentialPatchHandler } from "@/app/api/learner-profiles/[id]/credentials/route";
 import { POST as accountHolderSignupHandler } from "@/app/api/auth/account-holder/signup/route";
+import { POST as forgotPasswordHandler } from "@/app/api/auth/account-holder/forgot-password/route";
+import { POST as resetPasswordHandler } from "@/app/api/auth/account-holder/reset-password/route";
 
 // Fix-specific imports
 import { validatePasswordStrength } from "@/lib/password-strength";
@@ -696,5 +698,164 @@ describe("P2B-INT: Interstitial path — AH session on pending invite", () => {
     const ahSession = await getAccountHolderSession(req);
     expect(ahSession).toBeNull();
     // ClaimAuthGate (Case A/B) renders when this returns null
+  });
+
+  it("P2B-INT-3: non-fresh existing session (created earlier) is still readable — existing-session interstitial path", async () => {
+    // Simulates a user who logged in BEFORE navigating to a claim link.
+    // The session should be detected regardless of when it was created.
+    const ah = await createAH();
+    const { rawToken: sessionToken } = await createAccountHolderSession(ah.id);
+
+    // Move the session's lastUsedAt back (simulate it was created earlier)
+    const session = await db.accountHolderSession.findFirst({ where: { accountHolderId: ah.id } });
+    await db.accountHolderSession.update({
+      where: { id: session!.id },
+      data: { lastUsedAt: new Date(Date.now() - 60 * 60 * 1000) }, // 1 hour ago
+    });
+
+    const req = new Request("https://localhost/claim/some-token", {
+      headers: { cookie: `mynk_ah_session=${sessionToken}` },
+    });
+
+    const ahSession = await getAccountHolderSession(req);
+    expect(ahSession).not.toBeNull();
+    expect(ahSession!.accountHolderId).toBe(ah.id);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P2B-RESET: Password-reset flow security (Round 3, Item A3)
+//
+//   P2B-RESET-1  forgot-password does NOT mutate passwordHash on request
+//   P2B-RESET-2  forgot-password creates a PASSWORD_RESET token for a verified account
+//   P2B-RESET-3  forgot-password does NOT create token for unverified account
+//   P2B-RESET-4  reset-password POST changes hash only with a valid token
+//   P2B-RESET-5  reset-password POST with invalid token does NOT change passwordHash
+//   P2B-RESET-6  reset-password with weak password returns 400 password_too_weak
+// ---------------------------------------------------------------------------
+
+describe("P2B-RESET: Password-reset security", () => {
+  it("P2B-RESET-1: forgot-password POST does NOT mutate passwordHash", async () => {
+    const ah = await createAH({ verified: true });
+    const originalHash = ah.passwordHash;
+
+    const req = new NextRequest("https://localhost/api/auth/account-holder/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: ah.email }),
+    });
+    const res = await forgotPasswordHandler(req);
+
+    expect(res.status).toBe(200); // anti-enumeration always 200
+
+    const ahNow = await db.accountHolder.findUnique({ where: { id: ah.id } });
+    expect(ahNow!.passwordHash).toBe(originalHash);
+  });
+
+  it("P2B-RESET-2: forgot-password creates PASSWORD_RESET token for verified account", async () => {
+    const ah = await createAH({ verified: true });
+
+    const req = new NextRequest("https://localhost/api/auth/account-holder/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: ah.email }),
+    });
+    await forgotPasswordHandler(req);
+
+    const token = await db.accountHolderEmailToken.findFirst({
+      where: { accountHolderId: ah.id, purpose: "PASSWORD_RESET" },
+    });
+    expect(token).not.toBeNull();
+    expect(token!.consumedAt).toBeNull();
+  });
+
+  it("P2B-RESET-3: forgot-password does NOT create token for unverified account", async () => {
+    const ah = await createAH({ verified: false });
+
+    const req = new NextRequest("https://localhost/api/auth/account-holder/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: ah.email }),
+    });
+    await forgotPasswordHandler(req);
+
+    const token = await db.accountHolderEmailToken.findFirst({
+      where: { accountHolderId: ah.id, purpose: "PASSWORD_RESET" },
+    });
+    expect(token).toBeNull();
+  });
+
+  it("P2B-RESET-4: reset-password POST changes hash only with a valid unconsumed token", async () => {
+    const ah = await createAH({ verified: true });
+    const originalHash = ah.passwordHash;
+
+    const rawToken = generateRawToken();
+    await db.accountHolderEmailToken.create({
+      data: {
+        accountHolderId: ah.id,
+        tokenHash: hashToken(rawToken),
+        purpose: "PASSWORD_RESET",
+        expiresAt: new Date(Date.now() + 3_600_000),
+      },
+    });
+
+    const req = new NextRequest("https://localhost/api/auth/account-holder/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: rawToken, newPassword: "correct-horse-battery-staple" }),
+    });
+    const res = await resetPasswordHandler(req);
+
+    expect(res.status).toBe(200);
+    const ahNow = await db.accountHolder.findUnique({ where: { id: ah.id } });
+    expect(ahNow!.passwordHash).not.toBe(originalHash);
+  });
+
+  it("P2B-RESET-5: reset-password with invalid token does NOT change passwordHash", async () => {
+    const ah = await createAH({ verified: true });
+    const originalHash = ah.passwordHash;
+
+    const req = new NextRequest("https://localhost/api/auth/account-holder/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: "invalid-bad-token", newPassword: "correct-horse-battery-staple" }),
+    });
+    const res = await resetPasswordHandler(req);
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error?: string };
+    expect(body.error).toBe("link_expired");
+
+    const ahNow = await db.accountHolder.findUnique({ where: { id: ah.id } });
+    expect(ahNow!.passwordHash).toBe(originalHash);
+  });
+
+  it("P2B-RESET-6: reset-password with weak password returns 400 password_too_weak", async () => {
+    const ah = await createAH({ verified: true });
+
+    const rawToken = generateRawToken();
+    await db.accountHolderEmailToken.create({
+      data: {
+        accountHolderId: ah.id,
+        tokenHash: hashToken(rawToken),
+        purpose: "PASSWORD_RESET",
+        expiresAt: new Date(Date.now() + 3_600_000),
+      },
+    });
+
+    const req = new NextRequest("https://localhost/api/auth/account-holder/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: rawToken, newPassword: "password10" }),
+    });
+    const res = await resetPasswordHandler(req);
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error?: string };
+    expect(body.error).toBe("password_too_weak");
+
+    // passwordHash must be unchanged
+    const ahNow = await db.accountHolder.findUnique({ where: { id: ah.id } });
+    expect(ahNow!.passwordHash).toBe(ah.passwordHash);
   });
 });
