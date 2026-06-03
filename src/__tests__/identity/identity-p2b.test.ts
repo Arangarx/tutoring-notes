@@ -366,59 +366,59 @@ describe("P2B-LOCK: Learner soft-lockout (IAC-10)", () => {
 
   function makeCredKey(username: string) { return `testfam:${username}`; }
 
-  it("P2B-LOCK-1: enters cooldown after tier-2 threshold (4 failures); cooldown is finite", () => {
+  it("P2B-LOCK-1: enters cooldown after tier-2 threshold (4 failures); cooldown is finite", async () => {
     const username = `lock1_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const credKey = makeCredKey(username);
 
     // IAC-10 tiers: 1–3 free; 4–6 → 30s; 7–9 → 5min; 10–12 → 15min; 13+ → hard lock
     for (let i = 0; i < 4; i++) {
-      recordLearnerPinFailure(username, TEST_IP, credKey);
+      await recordLearnerPinFailure(username, TEST_IP, credKey);
     }
 
-    const cooldown = checkLearnerPinCooldown(username, TEST_IP);
+    const cooldown = await checkLearnerPinCooldown(username, TEST_IP);
     expect(cooldown.inCooldown).toBe(true);
     expect(cooldown.retryAfterSeconds).toBeGreaterThan(0);
     // Must be finite (30s for tier 2)
     expect(cooldown.retryAfterSeconds).toBeLessThanOrEqual(30);
   });
 
-  it("P2B-LOCK-2: cooldown clears after reset (soft lock)", () => {
+  it("P2B-LOCK-2: cooldown clears after reset (soft lock)", async () => {
     const username = `lock2_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const credKey = makeCredKey(username);
 
     for (let i = 0; i < 4; i++) {
-      recordLearnerPinFailure(username, TEST_IP, credKey);
+      await recordLearnerPinFailure(username, TEST_IP, credKey);
     }
 
-    resetLearnerPinFailures(username, TEST_IP, credKey);
+    await resetLearnerPinFailures(username, TEST_IP, credKey);
 
-    const cooldown = checkLearnerPinCooldown(username, TEST_IP);
+    const cooldown = await checkLearnerPinCooldown(username, TEST_IP);
     expect(cooldown.inCooldown).toBe(false);
   });
 
-  it("P2B-LOCK-3: first 3 failures produce no cooldown (fat-finger grace)", () => {
+  it("P2B-LOCK-3: first 3 failures produce no cooldown (fat-finger grace)", async () => {
     const username = `lock3_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const credKey = makeCredKey(username);
 
     for (let i = 0; i < 3; i++) {
-      recordLearnerPinFailure(username, TEST_IP, credKey);
+      await recordLearnerPinFailure(username, TEST_IP, credKey);
     }
 
     // 3 failures: should NOT be in cooldown yet
-    const cooldown = checkLearnerPinCooldown(username, TEST_IP);
+    const cooldown = await checkLearnerPinCooldown(username, TEST_IP);
     expect(cooldown.inCooldown).toBe(false);
     expect(cooldown.retryAfterSeconds).toBe(0);
   });
 
-  it("P2B-LOCK-4: failure 4 triggers 30s cooldown (tier 2 boundary)", () => {
+  it("P2B-LOCK-4: failure 4 triggers 30s cooldown (tier 2 boundary)", async () => {
     const username = `lock4_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const credKey = makeCredKey(username);
 
     for (let i = 0; i < 4; i++) {
-      recordLearnerPinFailure(username, TEST_IP, credKey);
+      await recordLearnerPinFailure(username, TEST_IP, credKey);
     }
 
-    const cooldown = checkLearnerPinCooldown(username, TEST_IP);
+    const cooldown = await checkLearnerPinCooldown(username, TEST_IP);
     expect(cooldown.inCooldown).toBe(true);
     // Tier 2: 30s
     expect(cooldown.retryAfterSeconds).toBeGreaterThanOrEqual(28);

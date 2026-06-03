@@ -843,3 +843,25 @@ These are **recorder-and-note** gaps, and BACKLOG.md is the canonical list
 for the recorder/note flow. The whiteboard feature gets its own
 `docs/WHITEBOARD-STATUS.md` for its sub-phases and audit. Both are governed
 by the same `.cursor/rules/reliability-bar.mdc` standard.
+
+---
+
+## Security — in-memory rate limiters (cold-start / multi-instance gap)
+
+**Context (2026-06-03):** Vercel serverless isolates each cold start with fresh in-memory state, and concurrent instances never share memory. Any rate limiter backed only by module-global `Map`/`Set` will reset on cold start and not accumulate across instances, weakening brute-force protection. The learner PIN hard lock was the highest-severity instance (minor data, short PINs, parent-unlockable hard lock).
+
+**✅ Fixed (commit on `identity-p2-multitutor`, 2026-06-03):** `LearnerLoginThrottle` Neon table — durable learner PIN soft cooldown + hard lock. The durable pattern (Prisma `LearnerLoginThrottle`, atomic `INSERT … ON CONFLICT DO UPDATE … RETURNING`) is the **template** for migrating the remaining limiters below.
+
+**[SECURITY] Remaining in-memory rate limiters — migrate to Neon using `LearnerLoginThrottle` pattern:**
+
+| Limiter | Key | Severity | Notes |
+|---|---|---|---|
+| `learner_ip:<ip>` 30 req/min | `rateLimit()` in `checkLearnerPinCooldown` | **LOW** | Per-IP overflow guard for learner PIN login. Cold-start reset is *more* generous (harder to DDoS). Lower priority; no auth state. |
+| `auth:<ip>` AH login | `rateLimit()` in `src/middleware.ts` | **MEDIUM** | AccountHolder (parent/tutor) login rate limit. In-memory reset means a cold start gives an attacker a fresh 30-req window. Recommend Neon-backed before broad rollout. |
+| `2fa:<ip>` TOTP verify | `rateLimit()` in `src/middleware.ts` | **MEDIUM** | 2FA verification rate limit. Same cold-start gap as AH login; TOTP codes are short-lived (30s) so window reset is partially mitigated but not eliminated. |
+| `api:<ip>` / `api-wb-poll:<ip>` general API | `rateLimit()` in middleware via `api-rate-buckets.ts` | **LOW** | General API abuse prevention. Reset on cold start is acceptable for pilot scale; upgrade before high-volume traffic. |
+| `setup:<ip>` setup route | `rateLimit()` in `src/middleware.ts` | **LOW** | One-time claim/setup routes. Low risk. |
+
+**How to migrate each:** Create a `<prefix>RateLimit` Neon table or reuse a generic `IpRateLimit` table with a `scopeKey` column (same pattern as `LearnerLoginThrottle`). Use the atomic `INSERT … ON CONFLICT DO UPDATE SET count = count + 1 … RETURNING count` pattern. Make the check async and update any call sites.
+
+**Scope discipline:** Do NOT fix these in the same pass as the learner PIN limiter (already fixed above). Each needs its own branch + smoke + `--no-ff` merge.

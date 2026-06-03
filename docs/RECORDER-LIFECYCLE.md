@@ -382,7 +382,14 @@ events also carry a `peer=<remotePeerId>` subkey), `imp`
 `[tfa] tfa=<id> adminUserId=<id> action=verify-fail`,
 `[tfa] tfa=<id> adminUserId=<id> action=backup-code-used codeId=<id>`,
 `[tfa] adminUserId=<id> action=reset reset-by=<adminId>`), `lpr`
-(LearnerProfile ownership-assertion denials — `assertOwnsLearnerProfile`), and
+(LearnerProfile ownership-assertion denials + learner login events — `assertOwnsLearnerProfile`,
+`action=login`, `action=login_failed`, `action=hard_lock_triggered`,
+`action=hard_lock_cleared_by_parent`; hard lock and unlock also written by the Neon-backed
+`LearnerLoginThrottle` layer via call sites in `src/app/api/auth/learner/login/route.ts` and
+`src/app/account/children/[id]/actions.ts`; key lines:
+`[lpr] lpr=<learnerProfileId> action=login device=<sessionId>`,
+`[lpr] lpr=unknown action=hard_lock_triggered handle=<familyId>:<username>`,
+`[lpr] lpr=<learnerProfileId> action=hard_lock_cleared_by_parent credKey=<familyId>:<username>`), and
 the component-specific ones in `useAudioRecorder` (`aud=`).
 
 ### Whiteboard per-page viewport (`pvs`, Phase 5 task 8)

@@ -305,7 +305,7 @@ describe("IAC-10: account-scoped hard lockout (IP-independent)", () => {
 
     let triggered = false;
     for (let i = 0; i < 15; i++) {
-      const result = recordLearnerPinFailure(username, ip, credKey);
+      const result = await recordLearnerPinFailure(username, ip, credKey);
       if (result.hardLockTriggered) {
         triggered = true;
         break;
@@ -320,7 +320,7 @@ describe("IAC-10: account-scoped hard lockout (IP-independent)", () => {
 
     // Trigger hard lock from IP A
     for (let i = 0; i < 15; i++) {
-      recordLearnerPinFailure(username, "192.168.1.1", credKey);
+      await recordLearnerPinFailure(username, "192.168.1.1", credKey);
     }
     expect(await isCredentialHardLocked(credKey)).toBe(true);
 
@@ -333,36 +333,36 @@ describe("IAC-10: account-scoped hard lockout (IP-independent)", () => {
     const { username, ip, credKey } = uniqueCredKey();
 
     for (let i = 0; i < 15; i++) {
-      recordLearnerPinFailure(username, ip, credKey);
+      await recordLearnerPinFailure(username, ip, credKey);
     }
     expect(await isCredentialHardLocked(credKey)).toBe(true);
-    expect(getCredentialFailureCount(credKey)).toBeGreaterThanOrEqual(13);
+    expect(await getCredentialFailureCount(credKey)).toBeGreaterThanOrEqual(13);
 
-    clearCredentialHardLock(credKey);
+    await clearCredentialHardLock(credKey);
 
     expect(await isCredentialHardLocked(credKey)).toBe(false);
-    expect(getCredentialFailureCount(credKey)).toBe(0);
+    expect(await getCredentialFailureCount(credKey)).toBe(0);
   });
 
   it("resetLearnerPinFailures clears soft state but NOT hard lock", async () => {
     const { username, ip, credKey } = uniqueCredKey();
 
     for (let i = 0; i < 15; i++) {
-      recordLearnerPinFailure(username, ip, credKey);
+      await recordLearnerPinFailure(username, ip, credKey);
     }
     expect(await isCredentialHardLocked(credKey)).toBe(true);
 
-    resetLearnerPinFailures(username, ip, credKey);
+    await resetLearnerPinFailures(username, ip, credKey);
 
     // Soft cooldown should be cleared
-    const cd = checkLearnerPinCooldown(username, ip);
+    const cd = await checkLearnerPinCooldown(username, ip);
     expect(cd.inCooldown).toBe(false);
 
     // Hard lock should NOT be cleared by login success
     expect(await isCredentialHardLocked(credKey)).toBe(true);
 
     // Cleanup
-    clearCredentialHardLock(credKey);
+    await clearCredentialHardLock(credKey);
   });
 });
 

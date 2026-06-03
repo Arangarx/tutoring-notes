@@ -751,3 +751,27 @@ model AccountHolderSession {
   @@index([expiresAt])
 }
 
+/// Durable rate-limit state for learner PIN login (IAC-10).
+/// Replaces module-global Map/Set in learner-pin-rate-limit.ts so state
+/// survives Vercel cold starts and is shared across serverless instances.
+///
+/// Two row kinds share this table:
+///   kind="soft"  scopeKey="soft:<username>:<ip>"         — per-username+IP soft cooldown
+///   kind="hard"  scopeKey="hard:<familyId>:<username>"   — per-credential hard lock (IP-independent)
+model LearnerLoginThrottle {
+  id            String    @id @default(cuid())
+  /// "soft:<normalizedUsername>:<ip>" or "hard:<familyId>:<username>"
+  scopeKey      String    @unique
+  /// "soft" | "hard"
+  kind          String
+  failureCount  Int       @default(0)
+  /// Soft cooldown expiry. Null = no active cooldown.
+  cooldownUntil DateTime?
+  /// Hard-lock timestamp. Non-null = locked; set idempotently once count ≥ 13.
+  hardLockedAt  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([kind, updatedAt])
+}
+

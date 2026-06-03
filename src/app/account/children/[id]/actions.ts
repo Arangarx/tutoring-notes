@@ -43,7 +43,7 @@ export async function unlockChildPinAction(
   }
 
   const credKey = `${familyId}:${profile.credential.username}`;
-  clearCredentialHardLock(credKey);
+  await clearCredentialHardLock(credKey);
 
   console.log(
     `[lpr] lpr=${learnerProfileId} action=hard_lock_cleared_by_parent credKey=${credKey}`

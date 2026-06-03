@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Check soft cooldown BEFORE attempting bcrypt (fail fast)
-  const cooldown = checkLearnerPinCooldown(username, ip);
+  const cooldown = await checkLearnerPinCooldown(username, ip);
   if (cooldown.inCooldown) {
     return NextResponse.json(
       { error: "too_many_attempts" },
@@ -174,7 +174,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!matched) {
-    const failResult = recordLearnerPinFailure(username, ip, hardLockKey);
+    const failResult = await recordLearnerPinFailure(username, ip, hardLockKey);
 
     console.log(
       `[lpr] lpr=unknown action=login_failed handle=${familyId}:${username} attempt=${failResult.failureCount}`
@@ -214,7 +214,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Success: reset failure counts
-  resetLearnerPinFailures(username, ip, hardLockKey);
+  await resetLearnerPinFailures(username, ip, hardLockKey);
 
   const existingRawToken = req.cookies.get(LEARNER_SESSION_COOKIE)?.value ?? null;
   const deviceInfo = req.headers.get("user-agent")?.substring(0, 128) ?? null;
