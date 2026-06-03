@@ -113,6 +113,31 @@ The disconnect-while-drawing case is precisely where these failures would surfac
 
 Each transcript segment must carry **wall-clock start/end offset** and be assembled **by timestamp**, never by naive concatenation.
 
+#### Design input — spike verification confirms LTX violates P0 (2026-06-03)
+
+Verification on `spike/live-transcription` @ **`c3c627f`** proves the spike **does not** meet this corollary today. Detail: [`live-transcription-spike-STATUS.md`](live-transcription-spike-STATUS.md) § VERDICT: P0 INVARIANT GAP.
+
+| Finding | Implication |
+|---------|-------------|
+| Assembly = `transcripts.join("\n\n")` by `segmentIndex` only | No `timelineStartMs` at capture, persist, or assembly |
+| `totalDurationSeconds` sums audio durations | 30s pause between 5s segments → timeline shows 10s, not 40s |
+| Six RED tests @ `c3c627f` (`ltx-timeline-assembly.test.ts`) | Executable spec; fix is **blocked on this brief's timeline decision** |
+
+**The LTX assembly fix DEPENDS on resolving the timeline pause-semantics question below** — audio and whiteboard must anchor to the **same** clock.
+
+#### Open question (MUST resolve in design pass) — freeze vs advance on pause
+
+Whiteboard events today anchor to **`getAudioMs()`**, which **freezes during pause**. So the canonical whiteboard timeline itself may **compress pauses** (same class of bug as naive LTX concat, different layer).
+
+The design pass **must** decide:
+
+- **Freeze-during-pause** — session timeline compresses gaps (clock stops with recording); or  
+- **Advance on wall-clock** — session timeline preserves real-duration gaps (clock runs while session continues).
+
+Audio **and** whiteboard must use **one** chosen semantics. The concrete untested scenario remains: **tutor draws while student disconnected / timer stopped** — where do those strokes and the next audio segment land on the timeline? (Named hardware test case above.)
+
+Until this is locked, do **not** implement the four-part LTX fix outline in the spike STATUS doc (stamp `timelineStartMs` → persist → assemble by timestamp → gap-inclusive coverage).
+
 #### Verification
 
 **Real-hardware only.** jsdom is blind to timeline/sync math — see [AGENTS.md](../../AGENTS.md) § Hard-won lessons (layout / coordinates — jsdom blind spot).
@@ -138,10 +163,10 @@ Treat as a **dependency / related thread** for this redesign — not in scope to
 
 | Step | Owner | Notes |
 |------|-------|-------|
-| **0. Live-transcription spike** | Done | Landed on `spike/live-transcription` @ `7671a25` — see § Live-transcription spike landing below |
-| **1. Empirically determine pause / disconnect / draw-during-disconnect behavior** | Sonnet design pass | **FIRST** — at code level **and** on real tutor+student hardware: what **actually** happens in pause / disconnect / draw-during-disconnect? If the code does not even attempt gap-preservation, surface that as a confirmed latent desync bug immediately — do **not** assume it works. |
-| **2. Design around preserving P0** | Sonnet + Opus review | High blast radius — recorder FSM is the sacred pillar ([`RECORDER-LIFECYCLE.md`](../RECORDER-LIFECYCLE.md)); design only after step 1 proves or disproves current behavior |
-| **3. Verify LTX segment assembly** | Executor + hardware | Timestamp-anchored assembly, not concat — orchestrator queue item |
+| **0. Live-transcription spike** | Done (P0 gap known) | Landed @ `7671a25`; **verified P0 assembly gap** @ `c3c627f` — [`live-transcription-spike-STATUS.md`](live-transcription-spike-STATUS.md) |
+| **1. Empirically determine pause / disconnect / draw-during-disconnect behavior** | Sonnet design pass | **FIRST** — at code level **and** on real tutor+student hardware; **lock freeze-vs-advance timeline semantics** (`getAudioMs()` behavior today). LTX concat gap is **confirmed in code**; whiteboard stamping may share the same pause-compression failure mode. |
+| **2. Design around preserving P0** | Sonnet + Opus review | High blast radius — recorder FSM is the sacred pillar ([`RECORDER-LIFECYCLE.md`](../RECORDER-LIFECYCLE.md)); design only after step 1 |
+| **3. Implement LTX timestamp-anchored assembly** | Executor + hardware | **After** step 2 decision + hardware gate — not concat; see spike STATUS fix outline |
 
 This redesign was **deliberately deferred** until the live-transcription spike stopped modifying the same FSM.
 
@@ -159,9 +184,9 @@ This redesign was **deliberately deferred** until the live-transcription spike s
 
 ## Live-transcription spike landing (reference)
 
-**Branch:** `spike/live-transcription` @ **`7671a25`** (branched off `master`)  
-**Status:** Built, gates green, **NOT merged** to `master` / V1 epic  
-**Detail doc:** [`live-transcription-spike-STATUS.md`](live-transcription-spike-STATUS.md) (smoke checklist, architecture)
+**Branch:** `spike/live-transcription` @ **`c3c627f`** (verified 2026-06-03; landed @ `7671a25`)  
+**Status:** Built, gates green, **P0 assembly gap confirmed**, **NOT merged** to `master` / V1 epic  
+**Detail doc:** [`live-transcription-spike-STATUS.md`](live-transcription-spike-STATUS.md) (VERDICT, smoke checklist, architecture)
 
 ### Gates (2026-06-02)
 
@@ -233,7 +258,7 @@ After Andrew smokes (multitutor preview, Phase D preview, spike B1 on real hardw
 1. Batched copy/UX pass on `feature/phase-d-landing-about` (commission + hit-record split)  
 2. In-session-audio privacy clarification ([`docs/LEGAL-SYNC.md`](../LEGAL-SYNC.md))  
 3. **This redesign** — Sonnet design pass + Opus review (empirically verify pause/disconnect/draw-during-disconnect first)  
-4. Verify spike does timestamp-anchored segment assembly (P0 invariant)  
+4. Implement LTX timestamp-anchored assembly — **after** timeline pause-semantics locked (P0 gap @ `c3c627f`; see spike STATUS)  
 
 ---
 

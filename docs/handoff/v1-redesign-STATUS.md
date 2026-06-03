@@ -9,7 +9,7 @@
 | Field | Value |
 |---|---|
 | **Last action completed** | **Live-transcription spike landed** on `spike/live-transcription` @ `7671a25` (gates green; B2–B5 baked; B1 hardware-pending). **Session-lifecycle redesign decisions** captured → [`session-lifecycle-redesign-brief-2026-06-02.md`](session-lifecycle-redesign-brief-2026-06-02.md). |
-| **Next action(s)** | Andrew **smokes:** multitutor preview, Phase D preview, spike **B1** on real hardware. Orchestrator queue (serial): (1) batched copy/UX on Phase D (commission + hit-record split), (2) in-session-audio LEGAL-SYNC, (3) session-lifecycle redesign design pass (Sonnet + Opus review), (4) verify LTX timestamp-anchored segment assembly. After multitutor smoke PASS → `merge --no-ff` to `v1-redesign`. |
+| **Next action(s)** | Andrew **smokes:** multitutor preview, Phase D preview, spike **B1** on real hardware. Orchestrator queue (serial): (1) batched copy/UX on Phase D (commission + hit-record split), (2) in-session-audio LEGAL-SYNC, (3) session-lifecycle redesign design pass (Sonnet + Opus review; lock freeze-vs-advance timeline), (4) implement LTX timestamp-anchored assembly **after** (3). After multitutor smoke PASS → `merge --no-ff` to `v1-redesign`. |
 | **Open Andrew-confirms** | Multitutor preview smoke; Phase D brand review (+ queued copy decisions below); spike B1 hardware; `interim-capture-attestation` migrate+smoke+merge. |
 | **In-flight subagents** | **None.** |
 | **Uncommitted / unmerged** | `identity-p2-multitutor`, `feature/phase-d-landing-about`, `design/live-incremental-transcription-2026-06-02`, `spike/live-transcription` — all **pushed**, **none merged**. |
@@ -35,7 +35,7 @@
 | **C — recording-as-consequence** | After consent-at-create + student present + media → auto-record; toolbar `userWantsRecording` / duplicate Start affordances consolidate |
 | **Timer integrity** | Presence-driven only; neither party controls clock |
 | **Session-active vs recording** | Diverge legitimately on A/V-fallback + chat-only (session live, recording paused) |
-| **P0 wall-clock timeline** | **REQUIREMENT — UNVERIFIED** (broken until proven on hardware) — gaps at true offset; no concat; LTX segments by timestamp; **draw-during-disconnect** = named hardware test case |
+| **P0 wall-clock timeline** | **REQUIREMENT — UNVERIFIED** (broken until proven on hardware) — gaps at true offset; no concat; LTX segments by timestamp; **draw-during-disconnect** = named hardware test case. **LTX spike @ `c3c627f`:** P0 assembly gap confirmed (naive concat) — design-gated; see [`live-transcription-spike-STATUS.md`](live-transcription-spike-STATUS.md) + lifecycle brief freeze-vs-advance question |
 
 **Sequencing:** Sonnet design pass + Opus review **after** LTX spike landed; pass must **first** empirically determine what actually happens in pause / disconnect / draw-during-disconnect (code + real hardware), then design around FSM ([`RECORDER-LIFECYCLE.md`](../RECORDER-LIFECYCLE.md)). Gap-preservation proven by that hardware test is a **hard acceptance gate** (same class as LTX B1).
 
@@ -43,9 +43,10 @@
 
 | Item | Value |
 |------|-------|
-| Branch / SHA | `spike/live-transcription` @ **`7671a25`** (off `master`) |
+| Branch / SHA | `spike/live-transcription` @ **`c3c627f`** (landed `7671a25`; P0 gap verified 2026-06-03) |
 | Gates | tsc 0; `next build` 0; `test:regression` 131/1358; `auth.test.ts` DB fail pre-existing on master |
 | BLOCKERs in | B2 IDB-before-network; B3 10s end-session drain; B4 ownership; B5 `ltx=` logs |
+| **P0 assembly** | **KNOWN-BROKEN** @ `c3c627f` — naive concat, no `timelineStartMs`; 6 RED spec tests; fix design+hardware-gated → [`live-transcription-spike-STATUS.md`](live-transcription-spike-STATUS.md) |
 | BLOCKER pending | **B1** primary recording byte-unaffected — **hardware only** |
 | Flag | `NEXT_PUBLIC_LIVE_TRANSCRIPTION_ENABLED` (default OFF) |
 | Migration | `20260602120000_ltx_incremental_transcript_segment` → `IncrementalTranscriptSegment`; **not** on preview/prod |

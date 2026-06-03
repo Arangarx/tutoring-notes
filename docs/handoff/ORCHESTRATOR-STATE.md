@@ -19,6 +19,7 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 - **Decisions this session (Andrew):** (a) **editable familyId (IAC-7) DEFERRED** — keep auto-gen; backlogged w/ cascade caveat (changing it breaks memorized child handles). (b) **accessMode "no specific error" = BY DESIGN, not a bug** — parent-managed/self children have no `LearnerCredential`, so `/students/login` fails earlier (generic) and never reaches the `access_mode_mismatch` guard; guard is correctly wired but **unreachable via any UI path** (dead-code) — login-page guidance gap backlogged. (c) **attach-existing confirmed working** (requires a 2nd-tutor claim link — testing-ergonomics gap noted; no parent-dashboard "add child"). (d) confirm-password: **standardize ON**; full unification deferred to component redesign.
 - **Known (track separately):** a **pre-existing** schema test failure (`student` vs `students` naming) exists on the branch — confirmed NOT introduced by this work.
 - **Re-smoke unblocked:** once the branch redeploys w/ the migration, the **hard lock now actually accumulates to 13 and sticks across instances** → smoke hard-lock → parent-unlock at `/account/children/[id]`.
+- **Live-transcription spike verified → P0 wall-clock invariant GAP** @ `c3c627f` on `spike/live-transcription`: naive `segmentIndex` concat (no timeline anchor); 6 intentionally RED spec tests (`ltx-timeline-assembly.test.ts`); ltx fix **design-gated** (freeze-vs-advance timeline — `getAudioMs()` freezes on pause) **+ hardware-gated**; see [`live-transcription-spike-STATUS.md`](live-transcription-spike-STATUS.md) + [`session-lifecycle-redesign-brief-2026-06-02.md`](session-lifecycle-redesign-brief-2026-06-02.md).
 
 **2026-06-02 (afternoon) — Live-transcription spike landed + session-lifecycle decisions captured (docs).** Spike on **`spike/live-transcription`** @ **`7671a25`** (off `master`, pushed, NOT merged): tsc 0, `next build` 0, `test:regression` 131 suites / 1358 tests; B2–B5 baked; B1 hardware-pending ([`live-transcription-spike-STATUS.md`](live-transcription-spike-STATUS.md)). **Session-lifecycle redesign brief** → [`session-lifecycle-redesign-brief-2026-06-02.md`](session-lifecycle-redesign-brief-2026-06-02.md) (auto-record reframe, presence timer, P0 wall-clock invariant, copy queue, in-person gate). Spine: [`v1-redesign-STATUS.md`](v1-redesign-STATUS.md) § 2026-06-02 checkpoints.
 
@@ -53,7 +54,7 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 1. Batched copy/UX pass on `feature/phase-d-landing-about` (commission + hit-record split).
 2. In-session-audio privacy clarification ([`docs/LEGAL-SYNC.md`](../LEGAL-SYNC.md)).
 3. Session-lifecycle redesign **design pass** (Sonnet + Opus review) — [`session-lifecycle-redesign-brief-2026-06-02.md`](session-lifecycle-redesign-brief-2026-06-02.md); empirically verify pause/disconnect/draw-during-disconnect first (P0 wall-clock timeline **UNVERIFIED**).
-4. Verify spike timestamp-anchored segment assembly (P0 wall-clock invariant).
+4. Implement LTX timestamp-anchored assembly — **after** timeline pause-semantics locked (P0 gap @ `c3c627f`; see spike STATUS + lifecycle brief).
 
 **V1 epic (`v1-redesign` @ `6c4a268`):**
 
