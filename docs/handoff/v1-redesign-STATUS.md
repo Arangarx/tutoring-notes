@@ -8,10 +8,18 @@
 
 | Field | Value |
 |---|---|
-| **Last action completed** | **IAC-12** appended (Andrew's wife, 2026-06-02) — Parent/Guardian copy + conditional guardian framing (V1, round-4/IAC copy); co-guardian **FUTURE** → [`docs/BACKLOG.md`](../BACKLOG.md). Ledger IAC-1..12 in [`identity-phase2-auth-session-design-2026-06-01.md`](identity-phase2-auth-session-design-2026-06-01.md) § IAC refinements — 2026-06-02. |
-| **Next action(s)** | **P2 multi-tutor + accessMode/family-id schema change + round-4 UX** build (IAC-2..IAC-12, incl. **IAC-12** copy) on `identity-p2b-ui` after Andrew finishes current P2b smoke / round-3 fixes; then Phase-3 consent models. |
-| **Open Andrew-confirms** | P2b real-hardware smoke on preview (`NEXT_PUBLIC_CLAIM_INVITES_ENABLED`); ratify round-4 UX copy when implemented; test-students audit (Sarah-pending). |
-| **Uncommitted / unmerged** | `identity-p2b-ui` @ `ccd8d22` (IAC-12 docs, pushed); branch **NOT** merged to `v1-redesign`. |
+| **Last action completed** | **IAC multi-tutor + round-4 UX build** on `identity-p2-multitutor` @ `e2c5c7c` (pushed, gates green); **preview-dev cutover** (Neon reset + full migration chain replayed, 6 identity migrations applied); **Phase D first cut** on `feature/phase-d-landing-about` @ `37d8178` (pushed, isolated worktree). |
+| **Next action(s)** | Andrew **smokes** `identity-p2-multitutor` preview (IAC-2..12 + round-4 UX); Andrew **brand-reviews** Phase D landing + `/about` first cut. After multitutor smoke PASS → `merge --no-ff` to `v1-redesign`. Phase-3 consent models next in executor queue. |
+| **Open Andrew-confirms** | Multitutor preview smoke; Phase D brand review; ratify round-4 UX copy if tweaks needed; test-students audit (Sarah-pending). |
+| **In-flight subagents** | **None.** |
+| **Uncommitted / unmerged** | `identity-p2-multitutor` @ `e2c5c7c` + `feature/phase-d-landing-about` @ `37d8178` — both **pushed**, **NOT merged** to `v1-redesign`. Spine docs commit pending this update. |
+
+### Smoke targets (Andrew — 2026-06-02, both READY)
+
+| Target | Branch | Preview URL |
+|---|---|---|
+| **Identity P2 multi-tutor + round-4 UX** | `identity-p2-multitutor` @ `e2c5c7c` | [Multitutor preview](https://tutoring-notes-git-identity-p2-m-9cb486-arangarx-5209s-projects.vercel.app) |
+| **Phase D landing + `/about` (first cut)** | `feature/phase-d-landing-about` @ `37d8178` | [Phase D preview](https://tutoring-notes-git-feature-phase-26c42f-arangarx-5209s-projects.vercel.app) |
 
 ---
 
@@ -68,12 +76,15 @@ Andrew real-hardware smoke **PASSED** on `identity-p1-2fa` @ `d782430` before me
 
 ---
 
-## BRANCH & COMMIT REALITY (as of 2026-06-01)
+## BRANCH & COMMIT REALITY (as of 2026-06-02)
 
 | Branch | Commit | Notes |
 |--------|--------|-------|
 | **`master`** | `a621a5b` | Production integration line; **does not** contain the V1 doc corpus, Component Phase A, or product legal facades. |
-| **`v1-redesign`** | **`6c4a268`** | Long-running V1 epic integration branch. **`identity-p1-2fa` MERGED `--no-ff` 2026-06-01** @ `b5ef4fe`. **`component-b2-dashboard-students` MERGED `--no-ff` 2026-06-01** @ `0424206`. **`identity-p2-schema` MERGED `--no-ff` 2026-06-01** @ `242c6b2` (AH-7). **`identity-p2-ownership-guard` MERGED `--no-ff` 2026-06-01** @ `1a06a65` (AH-7). **`identity-p2a-session-infra` MERGED `--no-ff` 2026-06-01** @ **`6c4a268`** (P2a build; gates green post-merge). **`docs/road-to-ga` MERGED `--no-ff` 2026-06-01** @ `eca63b5` (docs only — [`docs/ROAD-TO-GA.md`](../ROAD-TO-GA.md) launch-readiness hub, 3 gates). **P2b next:** AccountHolder UI + child login UI. **Epic corpus + Phase A + B1 + B2 + p2 schema/guard + P2a live ONLY here** until epic merges to `master`. **PRODUCTION / preview:** apply p1 + p2 + **P2a** migrations at/after next deploy (`20260531180000`, `20260601120000`, `20260531190000`, **`20260602000000_identity_p2a_session_infra`**). |
+| **`v1-redesign`** | **`6c4a268`** | Long-running V1 epic integration branch. **`identity-p1-2fa` MERGED `--no-ff` 2026-06-01** @ `b5ef4fe`. **`component-b2-dashboard-students` MERGED `--no-ff` 2026-06-01** @ `0424206`. **`identity-p2-schema` MERGED `--no-ff` 2026-06-01** @ `242c6b2` (AH-7). **`identity-p2-ownership-guard` MERGED `--no-ff` 2026-06-01** @ `1a06a65` (AH-7). **`identity-p2a-session-infra` MERGED `--no-ff` 2026-06-01** @ **`6c4a268`** (P2a build; gates green post-merge). **`docs/road-to-ga` MERGED `--no-ff` 2026-06-01** @ `eca63b5` (docs only — [`docs/ROAD-TO-GA.md`](../ROAD-TO-GA.md) launch-readiness hub, 3 gates). **In flight (NOT merged):** `identity-p2-multitutor` @ `e2c5c7c`, `feature/phase-d-landing-about` @ `37d8178`. **Epic corpus + Phase A + B1 + B2 + p2 schema/guard + P2a live ONLY here** until epic merges to `master`. |
+| **`identity-p2-multitutor`** | **`e2c5c7c`** | **BUILT 2026-06-02, pushed, NOT merged.** IAC multi-tutor + round-4 UX (5 commits atop `aa6194a`/`identity-p2b-ui`). Migrations `20260602110000_identity_p2_enum`, `20260602120000_identity_p2_multitutor`. Preview-dev cutover applied. [Preview READY](https://tutoring-notes-git-identity-p2-m-9cb486-arangarx-5209s-projects.vercel.app). |
+| **`feature/phase-d-landing-about`** | **`37d8178`** | **FIRST CUT 2026-06-02, pushed (isolated worktree), NOT merged.** Landing `/` + `/about`. [Preview READY](https://tutoring-notes-git-feature-phase-26c42f-arangarx-5209s-projects.vercel.app). Awaiting Andrew brand review. |
+| **`identity-p2b-ui`** | `aa6194a` | **Superseded by `identity-p2-multitutor`** — round-3 fixes + IAC-12 docs base; merged into multitutor branch stack. |
 | **`identity-p2a-session-infra`** | `a37fb90` | **MERGED `--no-ff` into `v1-redesign` @ `6c4a268` (2026-06-01).** AccountHolder realm + learner PIN sessions + claim/connect back-end; migration `20260602000000_identity_p2a_session_infra`. Branch preserved for stale-sweep. |
 | **`docs/road-to-ga`** | `adcb60e` | **MERGED `--no-ff` into `v1-redesign` @ `eca63b5` (2026-06-01, docs only).** [`docs/ROAD-TO-GA.md`](../ROAD-TO-GA.md). |
 | **`component-b2-dashboard-students`** | `20de6fa` | **MERGED `--no-ff` into `v1-redesign` @ `0424206` (2026-06-01).** Andrew visual smoke **PASSED as-scoped** (reskin only). Branch preserved for stale-sweep. |
@@ -82,11 +93,11 @@ Andrew real-hardware smoke **PASSED** on `identity-p1-2fa` @ `d782430` before me
 | **`identity-p2-ownership-guard`** | `f74f164` | **MERGED `--no-ff` into `v1-redesign` @ `1a06a65` (2026-06-01, AH-7).** `assertOwnsLearnerProfile` + 14 tests. |
 | **`interim-capture-attestation`** | `3807e44` | Pushed, **NOT merged.** Interim capture-attestation gate implemented. **Andrew:** `prisma migrate deploy` on preview/prod → real-hardware smoke → `merge --no-ff` to `master`. |
 
-> **ORCHESTRATOR — next identity step:** **P2b AccountHolder UI + child login UI** — design §10.2 ([`identity-phase2-auth-session-design-2026-06-01.md`](identity-phase2-auth-session-design-2026-06-01.md)). **Andrew first:** set `AH_SESSION_HMAC_SECRET`, `LEARNER_SESSION_HMAC_SECRET`, `AH_TOTP_ENCRYPTION_KEY` on Vercel preview/prod; verify preview-dev migration for P2a (`token`→`tokenHash` on empty column). Real-hardware smoke gate; Sonnet tier.
+> **ORCHESTRATOR — next identity step:** **Andrew smoke** `identity-p2-multitutor` @ `e2c5c7c` → merge `--no-ff` to `v1-redesign` on PASS → **Phase 3 consent models** (IAC-9). Detail: § Build milestones (2026-06-02).
 
-> **ORCHESTRATOR — migrations on `v1-redesign`:** **p1** (`20260531180000`, `20260601120000`) + **p2 principals** (`20260531190000`) + **P2a** (`20260602000000_identity_p2a_session_infra`). **`190000` merged as-is** (already on preview-dev). **PROD / preview:** apply all four (+ any prior not yet applied) on next `v1-redesign` deploy.
+> **ORCHESTRATOR — preview-dev (2026-06-02):** **Reset + full migration chain replayed** — 6 identity migrations applied incl. `20260602120000_identity_p2_multitutor`. Andrew real admin + 2FA intact. Recreate `playwright@test.local` before CI e2e against preview-dev.
 
-> **Overnight autonomous mode (2026-06-01):** **`identity-p1-2fa` + `component-b2` + AH-7 p2 schema/guard + P2a session-infra merged.** **NO merge to master/prod** for the epic yet.
+> **Overnight autonomous mode (2026-06-01):** **`identity-p1-2fa` + `component-b2` + AH-7 p2 schema/guard + P2a session-infra merged.** **NO merge to master/prod** for the epic yet. **2026-06-02:** multitutor build + preview-dev cutover + Phase D first cut — **NOT merged** to `v1-redesign` yet.
 
 ## OVERNIGHT SESSION SUMMARY (2026-06-01)
 
@@ -149,7 +160,8 @@ Because all subagents share **one working tree**, the generated Prisma client (`
 | Identity Phase 2 (additive schema foundation) | **DONE + MERGED** to `v1-redesign` @ `242c6b2` (2026-06-01, AH-7) | Scope: 6 new Prisma models (`AccountHolder`, `AccountHolderEmailToken`, `LearnerProfile`, `LearnerCredential`, `LearnerDeviceSession`, `StudentClaimInvite`) + `AccountHolderEmailTokenPurpose` enum; `Student.learnerProfileId String? @unique` (nullable, `onDelete: SetNull`) + `claimInvites` back-relation; COPPA tombstone columns; migration `20260531190000_identity_p2_principals` **unchanged** (already on preview-dev). **Merge resolution:** `prisma/schema.prisma` union — kept v1-redesign `AdminUser2FA` / `AdminUser2FABackupCode` + p2 `claimInvites` on `AdminUser`. **Purely additive, ZERO route wiring.** Gates post-merge: `tsc` + `next build` exit 0; `test:regression` 92/92; identity-2fa 115/115; impersonation 24/24. |
 | Identity Phase 2 ownership guard (`assertOwnsLearnerProfile`) | **DONE + MERGED** to `v1-redesign` @ `1a06a65` (2026-06-01, AH-7) | `assertOwnsLearnerProfile` in `src/lib/learner-profile-scope.ts` + **14/14** tests. **`lpr=`** logs on denial. Gates post-merge: ownership 14/14 + regression 92/92 + identity-2fa + impersonation green. |
 | **Identity Phase-2 AUTH + SESSION INFRASTRUCTURE design** | **DONE + RATIFIED** (2026-06-01) @ `f41a445` | Design-only: separate Operator vs AccountHolder realms + child PIN mechanism; AH-1..AH-7 + amendments (parent-first linking, per-child access mode, no-dup-code primitives, impersonation unchanged / cross-realm deferred, connect-link identity interstitial). 7 P2a BLOCKERs: S1, S2, S3, R1, C1, A1, O1. [`identity-phase2-auth-session-design-2026-06-01.md`](identity-phase2-auth-session-design-2026-06-01.md) |
-| **Identity P2 — multi-tutor + accessMode/family-id + round-4 UX** | **PENDING** (design **LOCKED** 2026-06-02) | **Scope:** IAC-2 schema (`@@unique([adminUserId, learnerProfileId])`, `AccountHolder.familyId`, per-family `LearnerCredential` uniqueness); IAC-3 claim attach-first interstitial; IAC-6 `accessMode` enforcement on learner login; IAC-7 `username@familyid` UX; IAC-8 signup self-learner; **IAC-12** Parent/Guardian + conditional guardian copy; round-4 smoke E/G/I ([`p2b-smoke-fixes.md`](p2b-smoke-fixes.md) § Round 4). **Branch:** continue on `identity-p2b-ui` after current smoke/fix pass. **Tier:** Sonnet. **Prereq:** Andrew P2b smoke on current UI; IAC doc § IAC refinements — 2026-06-02. |
+| **Identity P2 — multi-tutor + accessMode/family-id + round-4 UX** | **DONE — BUILT 2026-06-02** @ `e2c5c7c` on `identity-p2-multitutor` (pushed, **NOT merged**) | **5 commits** atop `aa6194a`/`identity-p2b-ui`: `553631d` (schema + migrations), `5cb4794` (learner login + accessMode + lockout), `3d17f50` (claim attach-to-existing + self-learner signup), `d1ee4b3` (round-4 UX/copy), `e2c5c7c` (tests). **Gates:** tsc 0; `next build` exit 0 (36 static pages); identity suite 115/115; `test:regression` 92/92; pin/learner/claim/account-holder 23/23. **IAC delivered:** IAC-2 (Student `@@unique([adminUserId, learnerProfileId])`; LearnerProfile.students → Student[]), IAC-3 (claim attach-to-existing pick-list; attach_existing links Student to existing profile), IAC-5 (`LearnerProfile.isSelfLearner`), IAC-6 (account_holder_session rejected at PIN login — 403 `access_mode_mismatch`), IAC-7 (`AccountHolder.familyId` unique; `LearnerCredential.accountHolderId`; per-family `@@unique([accountHolderId, username])`; login `username@familyid`), IAC-8 (self-learner signup + `connect_self` claim), IAC-10 (layered PIN lockout: soft per-username+IP 1–3 free then 30s/5min/15min + hard per-credential at 13 failures; parent unlock via `unlockChildPinAction`), IAC-11-E/G/I (password-strength copy; PIN `maxLength={6}` + `inputMode="numeric"`; child-session independence copy on `/students/login`), IAC-12 (conditional Parent/Guardian framing). **IAC-4** co-guardian forward-compat only. **IAC-9** consent lattice **DEFERRED** to Phase 3 (schema forward-compatible). **Supersedes** prior P2a-build-sequence / p2a-build-sequence pending entries. **Awaiting Andrew smoke** — [preview](https://tutoring-notes-git-identity-p2-m-9cb486-arangarx-5209s-projects.vercel.app). |
+| **Component Phase D (landing + `/about`)** | **FIRST CUT — BUILT 2026-06-02** @ `37d8178` on `feature/phase-d-landing-about` (pushed, isolated worktree, **NOT merged**) | Redesigned `/` (hero, value props, how-it-works, trust/pilot CTA, legal micro-copy, dual parent sign-in → `/account/login`) + net-new `/about`. Layout diagrams in [`v1-component-redesign-design-2026-05-31.md`](v1-component-redesign-design-2026-05-31.md) (subagent updated — do not re-edit). **Gates:** tsc 0; `next build` exit 0; `test:regression` 92/92. **Awaiting Andrew brand review** — [preview](https://tutoring-notes-git-feature-phase-26c42f-arangarx-5209s-projects.vercel.app). |
 | **Identity Phase 2a (build — session infra + claim back-end)** | **DONE + MERGED** to `v1-redesign` @ **`6c4a268`** (2026-06-01) | **Delivered:** separate AccountHolder realm (`mynk_ah_session` + `AccountHolderSession` table, `getAccountHolderSession`); learner PIN device sessions (`getLearnerSession`, soft-lockout never-hard-lock per AH-4); claim/connect back-end (`/api/students/[id]/claim-invites`, `/api/claim/[token]/complete|setup`); AccountHolder auth routes (signup/login/logout/forgot/reset + `/verify-email`); shared auth primitives in common modules (no-dup-auth: `src/lib/crypto/session-tokens.ts`, `src/lib/account-holder-auth.ts`); middleware cookie-presence gates for `/account/*` + `/join/*` (Operator `/admin/*` gate untouched — I-1/I-2/A1). Migration `20260602000000_identity_p2a_session_infra`: `AccountHolderSession`; `LearnerDeviceSession.expiresAt`+`deviceInfo`; `AccountHolderEmailToken.payload`+`targetLearnerProfileId`; `AccountHolder.passwordHash`+`displayName`+`emailVerifiedAt`; `LearnerAccessMode` enum + `LearnerProfile.accessMode` default `parent_session_select`; **`StudentClaimInvite.token`→`tokenHash`** (empty column) + `revokedAt`+`claimedByAccountHolderId`. **Acceptance MET:** 7 BLOCKERs (S1/S2/S3/R1/C1/A1/O1) + I-1..I-6 + soft-lockout tiers green (225 identity-suite tests @ post-merge gates). **P2a stubs (Phase-3 wiring):** `assertEffectiveConsent` (void, tutor-acknowledged fallback), `assertIsSessionParticipant` (`notFound()` stub), `assertOwnsConsentRecord` (`notFound()` stub) — await `SessionConsentSnapshot`, `SessionParticipant`, `ConsentRecord`, `ConsentRestriction` (not on branch yet). No UI (P2b). |
 | Component Phase B2 (dashboard / student list / detail) | **DONE + MERGED** to `v1-redesign` @ `0424206` (smoked as-scoped **2026-06-01**) | **Reskin floor only** — admin nav + layout, dashboard, student-list + detail restyled to B1 shadcn + Mynka Blue; new primitives `AdminPageShell`, `AdminSectionCard`, `StudentAvatar`, `StudentsRoster`. Behavior/routes/ownership unchanged. **Merge resolution:** `AdminNav.tsx` kept B2 shadcn `Button` styling **and** 2FA impersonation sign-out (`exitImpersonation` form when `isImpersonating`; `layout.tsx` passes `isImpersonating` + B2 max-width container). **Deferred by design** (land in Phase C + B3–B6, not B2): full next-actions dashboard, two-column layout, shadcn form controls on note forms, nav redesign. **Andrew decisions (2026-06-01):** (1) B2 merged as reskin floor; (2) nav redesign waits for real surface redesign — **not** pulled forward; (3) landing/hero + `/about` are **V1-required** gap-close → component plan **Phase D** ([`v1-component-redesign-design-2026-05-31.md`](v1-component-redesign-design-2026-05-31.md)). **B2 smoke → backlog:** pre-existing UX/a11y items logged in [`docs/BACKLOG.md`](../BACKLOG.md) § "Component redesign — B2 smoke (2026-06-01)". Gates @ merge: `tsc`, `next build`, `test:regression` 92/92, identity+impersonation 139/139. |
 
@@ -266,25 +278,69 @@ Folded from 5-axis review in [`session-lifecycle-consent-design-2026-05-31.md`](
 
 ---
 
+## Build milestones (2026-06-02)
+
+### IAC multi-tutor + round-4 UX — `identity-p2-multitutor` @ `e2c5c7c`
+
+**Branch:** `identity-p2-multitutor` (5 commits atop `aa6194a` / `identity-p2b-ui`), pushed to origin.
+
+| Commit | Summary |
+|--------|---------|
+| `553631d` | Schema refinements + migrations (`20260602110000_identity_p2_enum`, `20260602120000_identity_p2_multitutor`) |
+| `5cb4794` | Learner login + `accessMode` enforcement + layered PIN lockout |
+| `3d17f50` | Claim attach-to-existing + self-learner signup |
+| `d1ee4b3` | Round-4 UX/copy (IAC-11-E/G/I, IAC-12) |
+| `e2c5c7c` | Tests |
+
+**Gates (all green):** tsc 0 errors; `npx next build` exit 0 (36 static pages); identity suite 115/115; `test:regression` 92/92; pin/learner/claim/account-holder 23/23.
+
+**Per-IAC delivery:** IAC-2, IAC-3, IAC-5, IAC-6, IAC-7, IAC-8, IAC-10, IAC-11-E/G/I, IAC-12 — detail in sub-pass tracker row above. IAC-4 forward-compat only. **IAC-9 deferred** to Phase 3.
+
+### Preview-dev cutover (2026-06-02)
+
+Andrew pre-approved reset of **`preview-dev`** (Neon branch `br-crimson-mode-amape02v`) from parent/production — previous P2 smoke data **not preserved** (Andrew explicitly OK).
+
+- **`prisma migrate deploy`** against reset preview-dev: **24 migrations** present; **6 identity migrations** applied onto reset production base:
+  - `20260531180000_admin_user_2fa`
+  - `20260531190000_identity_p2_principals`
+  - `20260601120000_admin_user_2fa_pending_secret`
+  - `20260602000000_identity_p2a_session_infra`
+  - `20260602110000_identity_p2_enum`
+  - `20260602120000_identity_p2_multitutor`
+- Exit 0; all applied successfully.
+- **Non-additive migration** `20260602120000_identity_p2_multitutor` (Student constraint swap, NOT NULL `LearnerCredential.accountHolderId` with backfill, drop global username unique) applied cleanly — on freshly-reset base backfill is no-op (zero `LearnerCredential` rows).
+- Because preview-dev was reset from production, Andrew's **real admin login + 2FA enrollment intact** on preview-dev (better for smoking than before).
+- **Follow-up backlog:** `playwright@test.local` CI fixture **NOT recreated** after reset — CI-only; recreate before e2e/playwright suite runs against preview-dev.
+
+**Preview URLs (both READY):** [multitutor](https://tutoring-notes-git-identity-p2-m-9cb486-arangarx-5209s-projects.vercel.app) · [Phase D](https://tutoring-notes-git-feature-phase-26c42f-arangarx-5209s-projects.vercel.app)
+
+### Phase D landing + `/about` — `feature/phase-d-landing-about` @ `37d8178`
+
+Built in isolated worktree; pushed. First cut awaiting Andrew brand review. Detail in sub-pass tracker row above.
+
+> **Supersedes:** prior "P2 multi-tutor + accessMode/family-id + round-4 UX" **PENDING** build queue item and any p2a-build-sequence pending entries — **DONE** via multitutor build + preview-dev cutover (2026-06-02).
+
+---
+
 ## Next actions
 
-> **2026-06-02:** **IAC co-design RATIFIED** — ledger in [`identity-phase2-auth-session-design-2026-06-01.md`](identity-phase2-auth-session-design-2026-06-01.md) § IAC refinements — 2026-06-02. **2026-06-01:** Identity Phase 1 **MERGED** @ `b5ef4fe`; Component Phase B2 **MERGED** @ `0424206`; **AH-7** p2 schema @ `242c6b2` + ownership guard @ `1a06a65`; **P2a session-infra MERGED** @ **`6c4a268`**; **Road-to-GA doc** @ `eca63b5` ([`docs/ROAD-TO-GA.md`](../ROAD-TO-GA.md) — launch-readiness hub, 3 gates).
+> **2026-06-02:** **IAC multi-tutor build SHIPPED** @ `e2c5c7c`; preview-dev cutover complete; **Phase D first cut** @ `37d8178`. **2026-06-02 (earlier):** IAC co-design RATIFIED. **2026-06-01:** Identity Phase 1 **MERGED** @ `b5ef4fe`; Component Phase B2 **MERGED** @ `0424206`; **AH-7** p2 schema @ `242c6b2` + ownership guard @ `1a06a65`; **P2a session-infra MERGED** @ **`6c4a268`**; **Road-to-GA doc** @ `eca63b5`.
 
 **Orchestrator / executor queue:**
 
-1. **P2b smoke (in flight):** Andrew real-hardware smoke on `identity-p2b-ui` preview; round-3 fixes per [`p2b-smoke-fixes.md`](p2b-smoke-fixes.md). After PASS → `merge --no-ff` to `v1-redesign` **or** stack next build on same branch per Andrew.
-2. **P2 multi-tutor + accessMode/family-id + round-4 UX (NEXT BUILD):** IAC-2..IAC-12 — schema migration + claim attach-first + `accessMode` enforcement + family-id + **IAC-12** copy + round-4 E/G/I; **Sonnet tier**. Design: IAC § 2026-06-02. **Not** Phase-3 consent models (separate queue item).
-3. **P2b UI (baseline shipped):** AccountHolder UI + child login UI on `identity-p2b-ui` @ `cd7555b`; consent panel = Phase-3 placeholder.
-4. **Phase 3 consent models:** `SessionConsentSnapshot`, `SessionParticipant`, `ConsentRecord`, `ConsentRestriction` + IAC-9 template seeding — replace P2a stubs (see § Phase-3 consent stubs above).
-5. **PROD / preview deploy hygiene:** **`prisma migrate deploy`** p1 + p2 + P2a (`20260531180000`, `20260601120000`, `20260531190000`, `20260602000000_identity_p2a_session_infra`) if not applied. Confirm `TOTP_ENCRYPTION_KEY` + set P2a session secrets (Andrew ACTION above).
+1. **After Andrew multitutor smoke PASS:** `merge --no-ff` `identity-p2-multitutor` → `v1-redesign`.
+2. **Phase 3 consent models (NEXT BUILD):** `SessionConsentSnapshot`, `SessionParticipant`, `ConsentRecord`, `ConsentRestriction` + IAC-9 template seeding — replace P2a stubs (see § Phase-3 consent stubs above).
+3. **After Andrew Phase D brand review:** iterate or merge `feature/phase-d-landing-about` → `v1-redesign`.
+4. **Preview-dev follow-up:** recreate `playwright@test.local` CI fixture before e2e/playwright runs against preview-dev.
+5. **Component:** Phase **B3** (session list / billing log UI). Nav redesign stays with B3–B6.
 
 **Andrew's queue:**
 
-4. **Env vars + preview-dev migration** before P2b smoke (see ACTION above).
-5. **Component next:** Phase **B3** (session list / billing log UI) or **Phase D** gap-close (landing/hero + `/about`). Nav redesign stays with B3–B6.
-6. **Session-lifecycle + consent (Phases 3–4):** dispatch after P2b UI + Phase-3 models.
-7. **BLOCKERs (active):** umbrella deploy + OpenAI DPA + deletion-request inbox; session-lifecycle Phase-3 BLOCKERs.
-8. **Andrew parallel:** interim `interim-capture-attestation` migrate → smoke → merge; umbrella `coppa-312-10-disclosure` review+deploy; Phase A + B1 smoke; B2 BACKLOG; optional visual snapshot update.
-9. **Sarah-pending:** test-students audit.
-10. **Solo in-person recording:** B-5 acceptance before `soloEnabled` in production.
-11. Keep this spine + bootstrapper in sync at every handoff.
+1. **Smoke** [multitutor preview](https://tutoring-notes-git-identity-p2-m-9cb486-arangarx-5209s-projects.vercel.app) — IAC-2..12 + round-4 UX on preview-dev (real admin + 2FA intact).
+2. **Brand-review** [Phase D preview](https://tutoring-notes-git-feature-phase-26c42f-arangarx-5209s-projects.vercel.app) — landing `/` + `/about` first cut.
+3. **Session-lifecycle + consent (Phases 3–4):** after multitutor merge + Phase-3 models.
+4. **BLOCKERs (active):** umbrella deploy + OpenAI DPA + deletion-request inbox; session-lifecycle Phase-3 BLOCKERs.
+5. **Andrew parallel:** interim `interim-capture-attestation` migrate → smoke → merge; umbrella `coppa-312-10-disclosure` review+deploy; Phase A + B1 smoke; B2 BACKLOG; optional visual snapshot update.
+6. **Sarah-pending:** test-students audit.
+7. **Solo in-person recording:** B-5 acceptance before `soloEnabled` in production.
+8. Keep this spine + bootstrapper in sync at every handoff.
