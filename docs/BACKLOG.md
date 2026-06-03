@@ -544,6 +544,14 @@ Source: Andrew visual smoke of Component Phase B2 (`component-b2-dashboard-stude
 
 ---
 
+## Identity / access — V1 redesign
+
+Items tied to the identity/access/consent epic ([`docs/handoff/v1-redesign-STATUS.md`](handoff/v1-redesign-STATUS.md), IAC ledger in [`docs/handoff/identity-phase2-auth-session-design-2026-06-01.md`](handoff/identity-phase2-auth-session-design-2026-06-01.md)).
+
+- **Co-guardian / delegated access to a child learner (FUTURE — not V1).** Source: Andrew's wife, 2026-06-02. Allow the primary Mynk family account owner to grant **another individual** access to a **specific** child `LearnerProfile` **without** sharing the primary guardian's credentials — e.g. a divorced/separated co-parent who will not share one login. Sketch: co-guardian gets their **own** adult-style account (password-based, own `@familyid`-style identity where applicable), access **scoped** to that child only, flow **initiated/authorized by the primary account owner**, co-guardian completes their own credential setup. **Forward-compat for schema (do not block in IAC-2 / V1):** implies `AccountHolder`↔`LearnerProfile` becomes a **many-to-many** guardianship relation (multiple guardians per child), vs today's single `LearnerProfile.accountHolderId` owner. **Additive later:** introduce a guardian join table; migrate existing single owner to "primary guardian." Current single-owner model + IAC-2 one-child-many-tutors **do not** need to build this now, but **must not** add DB constraints that would prevent a future many-guardians-per-child join table. **Open when built:** which guardian controls consent (likely primary owner; co-guardian scoped/limited), what the co-guardian can see/do, owner-initiated invite + co-guardian self-setup UX.
+
+---
+
 ## Decisions deferred (revisit when triggered)
 
 - **Whiteboard: feature of tutoring-notes vs sibling product?** Currently leaning toward **feature** (single app, single account, one subscription). "Tutoring Notes" branding may need to grow into something broader once whiteboard + recording ship — the current name undersells the product. Worth a deliberate naming decision before public launch. **Shortlist + clearance checklist:** see *Strategic lessons captured (ChatGPT brainstorm, May 15 2026) → Naming shortlist* under *Research / calibration* above; condensed: practical = TutorStudio / SessionPilot / TutorOS / LessonLoop; brand-distinctive = Mentivo / Lumora / SkillNest / Pathloom / SkillSpring; drop = TutorFlow / LearnHub / TutorPro / anything `.ai` or AI-suffix. Run Google / USPTO / `.com` / App Store / social-handle clearance before committing.

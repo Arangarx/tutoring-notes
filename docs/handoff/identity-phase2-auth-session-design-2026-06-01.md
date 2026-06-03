@@ -1236,7 +1236,7 @@ Prefixes already registered: `ahx`, `lpr`, `clm`, `cns`, `tfa`, `msg`. All Phase
 | PIN lockout | AH-4: soft-lock only, **never hard lock**; rate-limit keyed username+IP | Insufficient vs distributed brute force; no parent unlock path |
 | Child login handle | Round-3 smoke stripped decorative `@`; login strips leading `@` | **Superseded** — `@` becomes **required** separator for `username@familyid` (round-4) |
 
-### Decision ledger (IAC-1..IAC-11)
+### Decision ledger (IAC-1..IAC-12)
 
 | ID | Topic | Decision (LOCKED) | Rationale |
 |---|---|---|---|
@@ -1251,6 +1251,7 @@ Prefixes already registered: `ahx`, `lpr`, `clm`, `cns`, `tfa`, `msg`. All Phase
 | **IAC-9** | Consent model + defaults | Consent per `(LearnerProfile, tutor)` (`ConsentRecord`); effective = parent ceiling ∩ child restriction (unchanged). **NEW:** per-child **consent default/template** on parent privacy-defaults screen. New tutor `ConsentRecord`s **seeded from template if set**, else nothing pre-selected (respects **optional = explicit unchecked opt-in**). **GUARDRAIL:** template pre-fills but **NEVER auto-grants** — every new tutor relationship requires **explicit parent confirm**. **TRANSPARENCY:** seeded toggles show **"from your saved defaults"** until parent edits/confirms that field. Claim-time **"Save as my default for future tutors?"** updates template. | Reduces repetitive claim friction without newsletter-style pre-check; VPC/opt-in bar preserved. |
 | **IAC-10** | PIN lockout | **CHANGE — supersedes AH-4 "never hard lock":** layered policy — gentle early tiers (honest fat-finger) → nudge "ask a parent" → escalate → **HARD lockout** requiring **parent-side unlock**, well before brute-force viable. **SECURITY:** persistent per-credential, **IP-independent** failure counter (distributed / multi-IP attack on one handle still locks); **retain** per-IP global limit (one IP cannot sweep many accounts). Verify exact keying at build time against `src/lib/learner-pin-rate-limit.ts`. **BACKLOG (fast-follow):** "Ask parent to log in" + "Request parent approval to join this session" (temporary parent-approved join without kid PIN). | Reliability bar still favors kid-not-locked-out-*before session*; hard lock is parent-recoverable, not support-ticket permanent. AH-4 blast-radius row retained for history; **policy locked here**. |
 | **IAC-11** | Round-4 UX (E/G/I) | See [`p2b-smoke-fixes.md`](p2b-smoke-fixes.md) § Round 4 — password copy (E), PIN `maxLength` audit (G), child-session independence copy (I). | UX acceptance for next smoke; method-agnostic strength + accurate child-login framing. |
+| **IAC-12** | Parent/Guardian copy + conditional guardian framing (V1) | **NEW — copy principle (V1; folds into round-4 + IAC build):** **(1)** Where guardian-context copy says "Parent," use **"Parent/Guardian"** (not every caregiver is a parent). **(2)** **Do NOT surface parent/guardian framing until child learners are relevant to that account** — fresh accounts and adult self-learners (`isSelfLearner`) get **neutral** copy (e.g. `/account/login`: "Use your account credentials," not "Use your parent / account holder credentials"; dashboard avoids parent/guardian language). Guardian framing appears only once the account **has** (or is actively adding) a child `LearnerProfile` (≥1 non-self child learner, or in-flow add-child). Apply during round-4/IAC copy pass: signup, account login, dashboard, claim interstitial, settings. | People are sensitive to assumptions about children; don't imply the account holder has kids before they do. Source: Andrew's wife, 2026-06-02. |
 
 ### Supersession map (quick reference)
 
@@ -1267,6 +1268,8 @@ Prefixes already registered: `ahx`, `lpr`, `clm`, `cns`, `tfa`, `msg`. All Phase
 - **Claim transaction (BLOCKER-P2-R1 / C1):** extend atomic steps for attach-existing + IAC-2 uniqueness; concurrent attach → 409 on `@@unique([adminUserId, learnerProfileId])`.
 - **Consent stubs:** seeding (IAC-9) lands with Phase-3 models; P2b placeholder panel remains until `ConsentRecord` exists.
 - **Observability:** extend `clm=` / `ahx=` events for interstitial branch (`attach_existing` vs `create_child` vs `connect_self`) and family-id assignment (`family_id_assigned`).
+- **Copy (IAC-12):** round-4 + account surfaces — audit "Parent" → "Parent/Guardian" where guardian-context applies; gate guardian-framed strings on account has (or is adding) a child learner (neutral copy for self-only / empty accounts).
+- **Schema forward-compat (co-guardian, NOT V1):** IAC-2 migration must **not** add constraints that would block a future many-to-many `AccountHolder`↔`LearnerProfile` guardianship join — see [`docs/BACKLOG.md`](../BACKLOG.md) § Identity / access — V1 redesign.
 
 ---
 
