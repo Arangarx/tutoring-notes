@@ -20,6 +20,8 @@ export default async function AccountDashboardPage() {
     select: {
       email: true,
       displayName: true,
+      isSelfLearner: true,
+      familyId: true,
       learnerProfiles: {
         where: { tombstonedAt: null },
         orderBy: { createdAt: "asc" },
@@ -27,9 +29,10 @@ export default async function AccountDashboardPage() {
           id: true,
           displayName: true,
           accessMode: true,
+          isSelfLearner: true,
           createdAt: true,
           credential: { select: { username: true } },
-          student: { select: { name: true } },
+          students: { select: { name: true }, take: 1 },
         },
       },
     },
@@ -39,28 +42,36 @@ export default async function AccountDashboardPage() {
     redirect("/account/login");
   }
 
-  const { email, displayName, learnerProfiles } = accountHolder;
+  const { email, displayName, isSelfLearner, familyId, learnerProfiles } = accountHolder;
   const greeting = displayName ? `Welcome back, ${displayName}` : "Your account";
+
+  // IAC-12: show guardian/child framing only when the account has child learner profiles.
+  // Fresh accounts and self-learner-only accounts get neutral copy.
+  const childProfiles = learnerProfiles.filter((p) => !p.isSelfLearner);
+  const hasChildren = childProfiles.length > 0;
+
+  const sectionTitle = hasChildren ? "Your learners" : (isSelfLearner ? "Your learner profile" : "Learners");
+  const sectionDescription = hasChildren
+    ? `${learnerProfiles.length} ${learnerProfiles.length !== 1 ? "learners" : "learner"} linked to your account.`
+    : isSelfLearner
+    ? "You are set up as a learner on this account."
+    : "No learners linked yet. Your tutor will send you a link to connect.";
 
   return (
     <AccountPageShell
       title={greeting}
-      description="Manage your children's tutoring access."
+      description={hasChildren ? "Manage your learners' tutoring access." : "Your account."}
       userEmail={email}
     >
       <AccountSectionCard
-        title="Your children"
-        description={
-          learnerProfiles.length === 0
-            ? "No children linked yet. Your tutor will send you a link to connect."
-            : `${learnerProfiles.length} ${learnerProfiles.length !== 1 ? "children" : "child"} linked to your account.`
-        }
+        title={sectionTitle}
+        description={sectionDescription}
       >
         {learnerProfiles.length === 0 ? (
           <div className="py-4 text-sm text-muted-foreground">
             <p>
-              When your tutor sends you a claim link, click it to connect your child&apos;s
-              tutoring account. You&apos;ll then be able to manage their login and session access
+              When your tutor sends you a claim link, click it to connect a learner
+              to your account. You&apos;ll then be able to manage their login and session access
               from here.
             </p>
           </div>
@@ -70,7 +81,12 @@ export default async function AccountDashboardPage() {
               <li key={profile.id} className="py-4 first:pt-0 last:pb-0">
                 <div className="flex items-center justify-between gap-4">
                   <div className="min-w-0">
-                    <p className="font-medium text-foreground">{profile.displayName}</p>
+                    <p className="font-medium text-foreground">
+                      {profile.displayName}
+                      {profile.isSelfLearner ? (
+                        <span className="ml-2 text-xs text-muted-foreground font-normal">(you)</span>
+                      ) : null}
+                    </p>
                     <p className="text-sm text-muted-foreground">
                       {profile.credential
                         ? profile.credential.username
@@ -78,7 +94,7 @@ export default async function AccountDashboardPage() {
                       {" \u00b7 "}
                       {profile.accessMode === "child_pin_required"
                         ? "Uses own PIN"
-                        : "Parent selects"}
+                        : "Account holder selects"}
                     </p>
                   </div>
                   <Button asChild variant="outline" size="sm" className="shrink-0">
@@ -91,17 +107,23 @@ export default async function AccountDashboardPage() {
         )}
       </AccountSectionCard>
 
-      {learnerProfiles.some((p) => p.credential) ? (
+      {/* IAC-11-I / IAC-12: child login independence copy — only shown when child learners have credentials */}
+      {childProfiles.some((p) => p.credential) ? (
         <div className="rounded-md border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
           <p>
-            {"Your child signs in with their own username + PIN at the "}
+            {"Your child signs in on their own device using "}
+            <strong>{"username@" + (familyId ?? "familyid")}</strong>
+            {" + PIN — it's a completely separate login from yours. No need to log out."}
+          </p>
+          <p className="mt-1">
+            {"Go to "}
             <a
               href="/students/login"
               className="text-brand underline-offset-2 hover:underline"
             >
-              student login page
+              the student login page
             </a>
-            {" — it's a separate login from yours, so you can both be signed in at once."}
+            {"."}
           </p>
         </div>
       ) : null}

@@ -4,10 +4,12 @@ import { redirect, notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { getAccountHolderSessionFromHeaders } from "@/lib/server-session";
 import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
+import { isCredentialHardLocked } from "@/lib/learner-pin-rate-limit";
 import { AccountPageShell } from "@/components/account/AccountPageShell";
 import { AccountSectionCard } from "@/components/account/AccountSectionCard";
 import { Button } from "@/components/ui/button";
 import { ChangePinForm } from "./ChangePinForm";
+import { UnlockPinButton } from "./UnlockPinButton";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +41,7 @@ export default async function ChildDetailPage({
       accessMode: true,
       createdAt: true,
       credential: { select: { id: true, username: true } },
-      student: { select: { name: true } },
+      students: { select: { name: true }, take: 1 },
     },
   });
 
@@ -48,6 +50,19 @@ export default async function ChildDetailPage({
   const activeDeviceCount = await db.learnerDeviceSession.count({
     where: { learnerProfileId: id, revokedAt: null },
   });
+
+  // IAC-10: check hard-lock state (in-memory; null if no credential)
+  let isPinHardLocked = false;
+  if (fullProfile.credential) {
+    const familyId = await db.accountHolder.findUnique({
+      where: { id: session.accountHolderId },
+      select: { familyId: true },
+    });
+    if (familyId?.familyId) {
+      const credKey = `${familyId.familyId}:${fullProfile.credential.username}`;
+      isPinHardLocked = await isCredentialHardLocked(credKey);
+    }
+  }
 
   return (
     <AccountPageShell
@@ -68,10 +83,10 @@ export default async function ChildDetailPage({
             <dt className="text-muted-foreground">Name</dt>
             <dd className="font-medium text-foreground">{fullProfile.displayName}</dd>
           </div>
-          {fullProfile.student ? (
+          {fullProfile.students[0] ? (
             <div className="flex items-center justify-between gap-4">
               <dt className="text-muted-foreground">{"Tutor's name for this student"}</dt>
-              <dd className="font-medium text-foreground">{fullProfile.student.name}</dd>
+              <dd className="font-medium text-foreground">{fullProfile.students[0].name}</dd>
             </div>
           ) : null}
           <div className="flex items-center justify-between gap-4">
@@ -79,7 +94,7 @@ export default async function ChildDetailPage({
             <dd className="font-medium text-foreground">
               {fullProfile.accessMode === "child_pin_required"
                 ? "Child uses own username + PIN"
-                : "Parent selects learner (no independent login)"}
+                : "Parent/Guardian selects learner (no independent login)"}
             </dd>
           </div>
         </dl>
@@ -112,8 +127,11 @@ export default async function ChildDetailPage({
               >
                 the student login page
               </a>
-              {" using their username and PIN. You don't need to log out first — your account and your child's are separate."}
+              {" using their username and PIN — completely separate from your account."}
             </p>
+            {isPinHardLocked ? (
+              <UnlockPinButton learnerProfileId={id} />
+            ) : null}
             <ChangePinForm learnerProfileId={id} />
           </div>
         ) : (

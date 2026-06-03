@@ -22,6 +22,7 @@ function AccountSignupForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordScore, setPasswordScore] = useState<number | null>(null);
+  const [isSelfLearner, setIsSelfLearner] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -42,6 +43,7 @@ function AccountSignupForm() {
           email,
           password,
           displayName: displayName.trim() || undefined,
+          isSelfLearner,
           returnTo: returnTo ?? undefined,
         }),
       });
@@ -95,7 +97,7 @@ function AccountSignupForm() {
   return (
     <AuthShell
       title="Create your account"
-      description="Parent or adult learner? Sign up here."
+      description="Sign up to manage your tutoring account."
       footer={
         <p>
           {"Already have an account? "}
@@ -154,6 +156,24 @@ function AccountSignupForm() {
           />
         </div>
 
+        {/* IAC-8: self-learner signup option */}
+        <div className="rounded-md border border-border bg-muted/30 p-3 space-y-2">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={isSelfLearner}
+              onChange={(e) => setIsSelfLearner(e.target.checked)}
+              className="mt-0.5 h-4 w-4 accent-brand"
+            />
+            <div>
+              <p className="text-sm font-medium text-foreground">{"I'll be taking the lessons myself"}</p>
+              <p className="text-xs text-muted-foreground">
+                {"Check this if you are the learner, not a parent or guardian managing a child's account."}
+              </p>
+            </div>
+          </label>
+        </div>
+
         <div className="space-y-2">
           <Label htmlFor="ah-signup-password">Password</Label>
           <PasswordStrengthField
@@ -174,18 +194,18 @@ function AccountSignupForm() {
             }
             aria-describedby={error ? formErrorId : undefined}
           />
-          <p className="text-xs text-muted-foreground">Minimum {MIN_PASSWORD_LENGTH} characters.</p>
         </div>
 
         {error === "password_too_short" || error === "password_too_weak" ? (
-          <AuthFieldError
-            id={formErrorId}
-            message={
-              error === "password_too_short"
-                ? `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`
-                : "Password is too weak. Try a longer phrase or mix of words."
-            }
-          />
+          <div id={formErrorId} role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive space-y-1">
+            <p className="font-medium">{"That password is too weak."}</p>
+            <ul className="list-disc list-inside space-y-0.5 text-xs">
+              <li>{"Make it longer"}</li>
+              <li>{"Mix unrelated words, numbers, and symbols"}</li>
+              <li>{"Avoid common words and names"}</li>
+              <li>{"Or let a password manager generate one for you"}</li>
+            </ul>
+          </div>
         ) : null}
         {error === "invalid_email" ? (
           <AuthFieldError id={formErrorId} message="Enter a valid email address." />

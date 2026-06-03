@@ -14,6 +14,7 @@ interface InviteData {
   id: string;
   studentName: string;
   tutorName: string | null;
+  tutorAdminUserId: string;
   expiresAt: Date;
   state: ClaimState;
 }
@@ -49,6 +50,7 @@ async function resolveInvite(rawToken: string): Promise<InviteData | null> {
     id: invite.id,
     studentName: invite.student.name,
     tutorName: invite.adminUser.displayName ?? null,
+    tutorAdminUserId: invite.adminUserId,
     expiresAt: invite.expiresAt,
     state,
   };
@@ -170,18 +172,40 @@ export default async function ClaimPage({
   }
 
   // PENDING -- check for existing session (identity interstitial path).
-  // Uses getAccountHolderSessionFromHeaders() which reads via cookies() — the
-  // idiomatic RSC cookie API — rather than parsing headers().get("cookie") inline.
   const ahSession = await getAccountHolderSessionFromHeaders();
 
   let signedInEmail: string | null = null;
+  let ownedProfiles: Array<{ id: string; displayName: string; isSelfLearner: boolean }> = [];
+
   if (ahSession) {
     const ah = await db.accountHolder.findUnique({
       where: { id: ahSession.accountHolderId },
-      select: { email: true, tombstonedAt: true },
+      select: {
+        email: true,
+        tombstonedAt: true,
+        isSelfLearner: true,
+        learnerProfiles: {
+          where: { tombstonedAt: null },
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            displayName: true,
+            isSelfLearner: true,
+            // IAC-3: filter out profiles already connected to this tutor's student
+            students: {
+              where: { adminUserId: invite.tutorAdminUserId },
+              select: { id: true },
+            },
+          },
+        },
+      },
     });
     if (ah && !ah.tombstonedAt) {
       signedInEmail = ah.email;
+      // IAC-3: only show profiles NOT already linked to this tutor
+      ownedProfiles = ah.learnerProfiles
+        .filter((p) => p.students.length === 0)
+        .map((p) => ({ id: p.id, displayName: p.displayName, isSelfLearner: p.isSelfLearner }));
     }
   }
 
@@ -201,12 +225,13 @@ export default async function ClaimPage({
         </CardHeader>
         <CardContent className="pt-6">
           {signedInEmail ? (
-            // Case C: already signed in -- IDENTITY INTERSTITIAL (HARD requirement)
+            // Case C: already signed in -- IDENTITY INTERSTITIAL (IAC-3 HARD requirement)
             <ClaimInterstitial
               rawToken={rawToken}
               studentName={invite.studentName}
               tutorName={invite.tutorName}
               signedInEmail={signedInEmail}
+              ownedProfiles={ownedProfiles}
             />
           ) : (
             // Case A/B: not signed in -- show signup or login

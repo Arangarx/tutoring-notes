@@ -29,10 +29,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
 
-  const { email, password, displayName, returnTo } = body as {
+  const { email, password, displayName, isSelfLearner, returnTo } = body as {
     email?: string;
     password?: string;
     displayName?: string;
+    isSelfLearner?: boolean;
     returnTo?: string;
   };
 
@@ -66,14 +67,29 @@ export async function POST(req: NextRequest) {
 
   // New account
   const passwordHash = await hashAccountHolderPassword(password);
+  const selfLearner = isSelfLearner === true;
   const accountHolder = await db.accountHolder.create({
     data: {
       email: normalizedEmail,
       passwordHash,
       displayName: displayName?.trim() || null,
-      isSelfLearner: false,
+      isSelfLearner: selfLearner,
     },
   });
+
+  // IAC-8: if signing up as self-learner, create the self-LearnerProfile immediately
+  if (selfLearner) {
+    const selfName = displayName?.trim() || normalizedEmail.split("@")[0] || "Me";
+    await db.learnerProfile.create({
+      data: {
+        accountHolderId: accountHolder.id,
+        displayName: selfName,
+        isSelfLearner: true,
+        accessMode: "account_holder_session",
+      },
+    });
+    console.log(`[ahx] ahx=${accountHolder.id} action=self_learner_profile_created`);
+  }
 
   const rawToken = generateRawToken();
   const tokenHash = hashToken(rawToken);

@@ -5,6 +5,7 @@ import { AuthFieldError } from "@/components/auth/AuthFieldError";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MIN_PASSWORD_LENGTH } from "@/lib/password-strength";
 
 type Mode = "choose" | "signup" | "login";
 
@@ -182,23 +183,25 @@ function ClaimSignupForm({
           type="password"
           autoComplete="new-password"
           required
-          minLength={8}
+          minLength={MIN_PASSWORD_LENGTH}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           disabled={busy}
           aria-required="true"
         />
-        <p className="text-xs text-muted-foreground">Minimum 8 characters.</p>
+        <p className="text-xs text-muted-foreground">{`Minimum ${MIN_PASSWORD_LENGTH} characters — strength meter must reach "Good" or better.`}</p>
       </div>
 
-      {error === "password_too_short" && (
-        <AuthFieldError id={`${fid}-pw-err`} message="Password must be at least 8 characters." />
-      )}
-      {error === "password_too_weak" && (
-        <AuthFieldError
-          id={`${fid}-pw-weak-err`}
-          message="That password is too weak — add another word or two. Uncommon words are stronger."
-        />
+      {(error === "password_too_short" || error === "password_too_weak") && (
+        <div id={`${fid}-pw-err`} role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive space-y-1">
+          <p className="font-medium">{"That password is too weak."}</p>
+          <ul className="list-disc list-inside space-y-0.5 text-xs">
+            <li>{"Make it longer"}</li>
+            <li>{"Mix unrelated words, numbers, and symbols"}</li>
+            <li>{"Avoid common words and names"}</li>
+            <li>{"Or let a password manager generate one for you"}</li>
+          </ul>
+        </div>
       )}
       {(error === "server" || error === "network") && (
         <AuthFieldError
