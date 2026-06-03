@@ -113,3 +113,49 @@ Branch HEAD at dispatch: `f4e4097` (off `identity-p2b-ui`). Items are lettered A
 **Diagnosis:** `src/app/account/children/[id]/devices/DeviceRevokeButtons.tsx` already calls `router.refresh()` after every revoke. This updates the device list/count in the acting tab without a manual reload. Verified correct.
 
 **No code change.** Cross-tab live sync (revoke tab A → watch tab B) remains out of scope; backlogged.
+
+---
+
+## Round 4 — pending (from round-3 re-read, Andrew 2026-06-02)
+
+> **Status:** **PENDING** — design **LOCKED** in [`identity-phase2-auth-session-design-2026-06-01.md`](identity-phase2-auth-session-design-2026-06-01.md) § IAC refinements — 2026-06-02 (**IAC-7**, **IAC-11**). Dispatch with **P2 multi-tutor + accessMode/family-id** build on `identity-p2b-ui`. **Supersedes** round-3 items **E**, **F**, and **I** where noted below.
+
+### E. Password-strength copy — method-agnostic (supersedes round-3 E)
+
+**Locked UX (Andrew 2026-06-02):**
+
+- **On rejection:** headline **"That password is too weak."** + bullet list of suggestions:
+  - Make it longer
+  - Mix unrelated words, numbers, and symbols
+  - Avoid common words and names
+  - Or let a password manager generate one for you
+- **Up front (not only on failure):** show requirements under the field — **minimum 10 characters** + strength meter must reach **"Good" or better** before submit.
+- **Scope:** all adult-password surfaces — AccountHolder signup, forgot/reset, claim signup (`ClaimAuthGate`), tutor signup/setup/reset (shared validator component).
+
+**Note:** round-3 E's single-sentence "add another word or two" copy is **superseded** by the above.
+
+### F. `@` clarification — superseded by family-id (IAC-7)
+
+Round-3 **F** removed "(not starting with @)" because `@` was decorative. **IAC-7** re-introduces `@` as the **required** separator in `username@familyid`. **Do not** re-apply round-3 F as written; round-4 child-login + credential-setup UX must teach the **full handle** (family id assigned lazily at first `child_pin_required` setup).
+
+### G. PIN field length cap — audit ALL PIN inputs (extends round-3 G)
+
+**Locked (Andrew 2026-06-02):** audit **every** PIN input across the app and apply consistently:
+
+| Surface | File(s) (starting points) |
+|---|---|
+| Credential setup PIN + confirm | `src/app/claim/[token]/setup/CredentialSetupForm.tsx` |
+| Child login PIN | `src/app/students/login/page.tsx` |
+| Parent change-child-PIN | account children flow (`ChangePinForm` or equivalent) |
+
+**Required attributes:** `maxLength={6}`, `inputMode="numeric"` on **all** PIN fields (round-3 G only partially covered setup confirm + login).
+
+### I. Child-session copy — fully independent login (supersedes round-3 I)
+
+**Locked framing (Andrew 2026-06-02):** child login is **fully independent** — own device, **`username@familyid` + PIN**, separate from the parent's AccountHolder account. **Drop** round-3 I wording *"you can both be signed in at once"* (implies parent session state matters). Copy must reflect **`accessMode`** (`child_pin_required` vs `account_holder_session` fast-follow).
+
+**Surfaces:** account dashboard child hand-off, post-setup success screen, `/students/login` intro copy.
+
+### Cross-reference
+
+Full IAC ledger (IAC-1..IAC-11): [`identity-phase2-auth-session-design-2026-06-01.md`](identity-phase2-auth-session-design-2026-06-01.md) § IAC refinements — 2026-06-02. Spine: [`v1-redesign-STATUS.md`](v1-redesign-STATUS.md) decisions ledger + sub-pass tracker row **Identity P2 — multi-tutor…**.

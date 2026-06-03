@@ -1218,4 +1218,56 @@ Prefixes already registered: `ahx`, `lpr`, `clm`, `cns`, `tfa`, `msg`. All Phase
 
 ---
 
+## IAC refinements — 2026-06-02 (Andrew co-design)
+
+> **Status:** **RATIFIED** (Andrew + Opus co-design, 2026-06-02). This section records identity/access/consent (IAC) decisions that **refine or supersede** items in [§ RATIFIED + AMENDED (Andrew 2026-06-01)](#ratified--amended-andrew-2026-06-01), [§0](#0-decisions--ratified-andrew-2026-06-01) (notably **AH-4**), and the upstream data model in [`session-identity-access-design-2026-05-31.md`](session-identity-access-design-2026-05-31.md). **Does not** replace §1 (locked upstream inputs) wholesale — it amends where noted.
+>
+> **Build sequencing:** schema + claim/connect + `accessMode` enforcement + family-id + round-4 UX land in the **next identity build** ("P2 multi-tutor + accessMode/family-id schema change + round-4 UX") on top of `identity-p2b-ui`; Phase-3 consent models consume §9 below.
+
+### Evidence / current-state anchors
+
+| Topic | Current code/schema (pre-refinement) | Gap |
+|---|---|---|
+| Tutor content isolation | Session artifacts anchor on tutor-scoped `studentId` + `adminUserId`; `assertOwnsStudent` / `assertOwnsWhiteboardSession` | **Verified enforced** — no change required |
+| One child, many tutors | `Student.learnerProfileId @unique` (global) | **Contradicts** Phase-3 `ConsentRecord @@unique([learnerProfileId, tutorId, version])` — only one tutor can link a given profile |
+| Claim with existing AccountHolder | Claim flow **creates** a new `LearnerProfile` per claim | Fragments one real child across tutors |
+| `LearnerProfile.accessMode` | Stored (`LearnerAccessMode` enum); **learner login route ignores it** | Stored-but-ignored gap |
+| Child username | `LearnerCredential.username @unique` (global) | Cannot have `dragon` in two families |
+| PIN lockout | AH-4: soft-lock only, **never hard lock**; rate-limit keyed username+IP | Insufficient vs distributed brute force; no parent unlock path |
+| Child login handle | Round-3 smoke stripped decorative `@`; login strips leading `@` | **Superseded** — `@` becomes **required** separator for `username@familyid` (round-4) |
+
+### Decision ledger (IAC-1..IAC-11)
+
+| ID | Topic | Decision (LOCKED) | Rationale |
+|---|---|---|---|
+| **IAC-1** | Tutor↔tutor content isolation | **INVARIANT (verified, no schema change):** all session artifacts (`SessionNote`, `SessionRecording`, `WhiteboardSession`, `ShareLink`, `NoteView`, `CostEvent`, etc.) anchor on tutor-scoped `studentId` (+ `adminUserId`), gated by `assertOwnsStudent` / `assertOwnsWhiteboardSession`. **Content NEVER anchors on `LearnerProfile` or `AccountHolder`.** | Cross-tutor leakage is prevented by tutor ownership of `Student`, not by a global learner principal. Upstream: [`session-identity-access-design-2026-05-31.md`](session-identity-access-design-2026-05-31.md) ownership model. |
+| **IAC-2** | One child, many tutors | **CHANGE:** replace `Student.learnerProfileId @unique` with `@@unique([adminUserId, learnerProfileId])`. One canonical `LearnerProfile` → **N** tutor-scoped `Student` rows. A tutor cannot double-claim the same child; multiple tutors may each link the same child. | Unblocks Phase-3 consent keyed `(learnerProfileId, tutorId)`; matches Sarah "multiple kids per parent" + multi-tutor reality. **Supersedes** global `@unique` in p2 schema + upstream design doc `Student` sketch. |
+| **IAC-3** | Claim = attach-to-existing-first | **CHANGE:** signed-in `AccountHolder` on a tutor claim link sees an **interstitial** listing owned `LearnerProfile`s **not already connected to that tutor** (children + self-profile if `isSelfLearner`), plus **"add a new child"** and **"connect yourself as a learner."** Selection creates a tutor-scoped `Student` linked to the **existing** profile. **Supersedes** always-`create`-new-`LearnerProfile` on claim (identity fragmentation). | Implements ratified parent-first / bidirectional linking ([§ RATIFIED + AMENDED](#ratified--amended-andrew-2026-06-01) connect-link interstitial) with explicit attach-first UX. |
+| **IAC-4** | Parent-first creation | Parent may create a child `LearnerProfile` **without** a prior tutor claim. Account dashboard gains **"add a child"** affordance. Model supports in this build; **standalone polish UI may fast-follow** if schedule-tight. | Realm already parent-first-ready; reduces claim-only dependency. |
+| **IAC-5** | AccountHolder vs LearnerProfile reframe | **REFINES** locked "AccountHolder = student for adults" wording (Andrew **2026-06-02**): **`AccountHolder`** = auth / billing / consent-owner principal. **`LearnerProfile`** = session / content principal, **always** owned by an `AccountHolder`. Adult self-learner = `AccountHolder` owning exactly one `LearnerProfile` with `isSelfLearner`, authenticated via AccountHolder session, self-consenting (18+, no VPC). **Uniform rule:** tutor `Student` **always** links to a `LearnerProfile`; content isolation + consent identical for children and adults. **No** special-case `Student` → `AccountHolder` direct link. | One lattice for consent + participants; removes dual "adult collapse" code paths. Aligns with [`session-identity-access-design-2026-05-31.md`](session-identity-access-design-2026-05-31.md) three-principal model, clarifies roles. |
+| **IAC-6** | `accessMode` enforcement | **CHANGE:** enforce `LearnerProfile.accessMode` + `isSelfLearner`. Values: `child_pin_required` → independent `username@familyid` + PIN login; `account_holder_session` → authenticate via owning AccountHolder session (parent-selects-child **or** adult-self). **V1 floor:** `child_pin_required` + family-id path. **`parent_session_select`** (parent picks child to act as under AccountHolder session) = **FAST-FOLLOW**, not V1. Learner login route **must** branch on `accessMode` (closes stored-but-ignored gap). | Matches per-child access mode ratified 2026-06-01; child PIN path is Sarah-critical for independent devices. |
+| **IAC-7** | Family identifier | **NEW:** `AccountHolder.familyId` **globally unique**. Child independent login = `username@familyid` + PIN. `LearnerCredential` uniqueness: `@@unique([accountHolderId, username])` (per-family "dragon"). **Lazy creation:** first `child_pin_required` learner setup — suggest default, allow custom edit, validate global uniqueness; editable later via family-settings. **Adult self-learners** and `account_holder_session` families **do not** need a family id. **`@` is REQUIRED** as separator (`pooky@mortensen1847`) — **supersedes** round-3 `@`-strip / cosmetic de-emphasis; round-4 reworks child-login + credential-setup username UX around the full handle. | Human-memorable scoped login without global username squatting; `@` disambiguates username vs family id. |
+| **IAC-8** | "I am a learner" at signup | Account signup offers option (copy TBD, e.g. "I'll be taking lessons myself") → sets `isSelfLearner` + creates self-`LearnerProfile`. Claim interstitial includes self-profile in pick-list; **"connect yourself as a learner"** on-demand creates self-profile if signup option skipped. | Supports ~40% adult-self mix (Sarah); avoids orphan AccountHolders without learner principal. |
+| **IAC-9** | Consent model + defaults | Consent per `(LearnerProfile, tutor)` (`ConsentRecord`); effective = parent ceiling ∩ child restriction (unchanged). **NEW:** per-child **consent default/template** on parent privacy-defaults screen. New tutor `ConsentRecord`s **seeded from template if set**, else nothing pre-selected (respects **optional = explicit unchecked opt-in**). **GUARDRAIL:** template pre-fills but **NEVER auto-grants** — every new tutor relationship requires **explicit parent confirm**. **TRANSPARENCY:** seeded toggles show **"from your saved defaults"** until parent edits/confirms that field. Claim-time **"Save as my default for future tutors?"** updates template. | Reduces repetitive claim friction without newsletter-style pre-check; VPC/opt-in bar preserved. |
+| **IAC-10** | PIN lockout | **CHANGE — supersedes AH-4 "never hard lock":** layered policy — gentle early tiers (honest fat-finger) → nudge "ask a parent" → escalate → **HARD lockout** requiring **parent-side unlock**, well before brute-force viable. **SECURITY:** persistent per-credential, **IP-independent** failure counter (distributed / multi-IP attack on one handle still locks); **retain** per-IP global limit (one IP cannot sweep many accounts). Verify exact keying at build time against `src/lib/learner-pin-rate-limit.ts`. **BACKLOG (fast-follow):** "Ask parent to log in" + "Request parent approval to join this session" (temporary parent-approved join without kid PIN). | Reliability bar still favors kid-not-locked-out-*before session*; hard lock is parent-recoverable, not support-ticket permanent. AH-4 blast-radius row retained for history; **policy locked here**. |
+| **IAC-11** | Round-4 UX (E/G/I) | See [`p2b-smoke-fixes.md`](p2b-smoke-fixes.md) § Round 4 — password copy (E), PIN `maxLength` audit (G), child-session independence copy (I). | UX acceptance for next smoke; method-agnostic strength + accurate child-login framing. |
+
+### Supersession map (quick reference)
+
+| Prior locked item | Superseded by |
+|---|---|
+| AH-4 (PIN soft-lock, never hard account lock) | **IAC-10** (layered + parent-unlock hard cap) |
+| `Student.learnerProfileId @unique` (p2 schema) | **IAC-2** (`@@unique([adminUserId, learnerProfileId])`) |
+| Claim always creates new `LearnerProfile` | **IAC-3** (attach-to-existing-first interstitial) |
+| Round-3 `@` strip / "not starting with @" copy | **IAC-7** (`username@familyid` required) |
+| "AccountHolder = student for adults" (spine shorthand) | **IAC-5** (AccountHolder owns LearnerProfile; self via `isSelfLearner`) |
+
+### P2a / Phase-3 wiring notes (executors)
+
+- **Claim transaction (BLOCKER-P2-R1 / C1):** extend atomic steps for attach-existing + IAC-2 uniqueness; concurrent attach → 409 on `@@unique([adminUserId, learnerProfileId])`.
+- **Consent stubs:** seeding (IAC-9) lands with Phase-3 models; P2b placeholder panel remains until `ConsentRecord` exists.
+- **Observability:** extend `clm=` / `ahx=` events for interstitial branch (`attach_existing` vs `create_child` vs `connect_self`) and family-id assignment (`family_id_assigned`).
+
+---
+
 *End of design document.*
