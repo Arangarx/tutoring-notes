@@ -13,6 +13,11 @@
 
 import { db } from "@/lib/db";
 
+/** Full handle the child types at the student login page. */
+export function formatLearnerLoginHandle(username: string, familyId: string): string {
+  return `${username}@${familyId}`;
+}
+
 /**
  * Generate a candidate family id from account holder display name or email prefix.
  * Normalizes to lowercase alphanumeric + underscores only.

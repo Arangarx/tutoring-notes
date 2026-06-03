@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useId, useState } from "react";
 import { validateLearnerPin } from "@/lib/pin-strength";
-
+import { CopyableLearnerHandle } from "@/components/account/CopyableLearnerHandle";
 import { AuthFieldError } from "@/components/auth/AuthFieldError";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +26,7 @@ export function CredentialSetupForm({
   const [pinFocused, setPinFocused] = useState(false);
   const [confirmPinFocused, setConfirmPinFocused] = useState(false);
   const [done, setDone] = useState(false);
-  const [finalUsername, setFinalUsername] = useState("");
+  const [finalLoginHandle, setFinalLoginHandle] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const formErrorId = useId();
@@ -60,7 +60,10 @@ export function CredentialSetupForm({
         }),
       });
 
-      const data = (await res.json()) as { error?: string };
+      const data = (await res.json()) as {
+        error?: string;
+        loginHandle?: string;
+      };
 
       if (!res.ok) {
         if (data.error === "username_taken") {
@@ -77,7 +80,9 @@ export function CredentialSetupForm({
         return;
       }
 
-      setFinalUsername(username.trim().toLowerCase());
+      setFinalLoginHandle(
+        data.loginHandle ?? `${username.trim().toLowerCase()}@familyid`
+      );
       setDone(true);
     } catch {
       setError("network");
@@ -100,11 +105,11 @@ export function CredentialSetupForm({
           <p className="text-sm text-foreground font-medium">
             Share this with {studentName}:
           </p>
+          <CopyableLearnerHandle
+            loginHandle={finalLoginHandle}
+            label="Login handle (username@familyid)"
+          />
           <dl className="space-y-1.5 text-sm">
-            <div>
-              <dt className="text-xs text-muted-foreground">Username</dt>
-              <dd className="font-mono font-medium text-foreground">{finalUsername}</dd>
-            </div>
             <div>
               <dt className="text-xs text-muted-foreground">Sign-in link</dt>
               <dd>
@@ -118,7 +123,7 @@ export function CredentialSetupForm({
             </div>
           </dl>
           <p className="text-xs text-muted-foreground pt-1">
-            {studentName} enters their username and PIN at the student login page.
+            {studentName} enters this handle and their PIN at the student login page.
           </p>
         </div>
         <Link

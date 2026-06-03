@@ -5,7 +5,9 @@ import { db } from "@/lib/db";
 import { getAccountHolderSessionFromHeaders } from "@/lib/server-session";
 import { AccountPageShell } from "@/components/account/AccountPageShell";
 import { AccountSectionCard } from "@/components/account/AccountSectionCard";
+import { CopyableLearnerHandle } from "@/components/account/CopyableLearnerHandle";
 import { Button } from "@/components/ui/button";
+import { formatLearnerLoginHandle } from "@/lib/family-id";
 
 export const dynamic = "force-dynamic";
 
@@ -87,11 +89,23 @@ export default async function AccountDashboardPage() {
                         <span className="ml-2 text-xs text-muted-foreground font-normal">(you)</span>
                       ) : null}
                     </p>
-                    <p className="text-sm text-muted-foreground">
-                      {profile.credential
-                        ? profile.credential.username
-                        : "No login set up yet"}
-                      {" \u00b7 "}
+                    {profile.credential && familyId ? (
+                      <CopyableLearnerHandle
+                        className="mt-2"
+                        loginHandle={formatLearnerLoginHandle(
+                          profile.credential.username,
+                          familyId
+                        )}
+                        label="Login handle"
+                      />
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        {profile.credential
+                          ? profile.credential.username
+                          : "No login set up yet"}
+                      </p>
+                    )}
+                    <p className="mt-1 text-sm text-muted-foreground">
                       {profile.accessMode === "child_pin_required"
                         ? "Uses own PIN"
                         : "Account holder selects"}

@@ -7,7 +7,9 @@ import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
 import { isCredentialHardLocked } from "@/lib/learner-pin-rate-limit";
 import { AccountPageShell } from "@/components/account/AccountPageShell";
 import { AccountSectionCard } from "@/components/account/AccountSectionCard";
+import { CopyableLearnerHandle } from "@/components/account/CopyableLearnerHandle";
 import { Button } from "@/components/ui/button";
+import { formatLearnerLoginHandle } from "@/lib/family-id";
 import { ChangePinForm } from "./ChangePinForm";
 import { UnlockPinButton } from "./UnlockPinButton";
 
@@ -27,7 +29,7 @@ export default async function ChildDetailPage({
 
   const accountHolder = await db.accountHolder.findUnique({
     where: { id: session.accountHolderId },
-    select: { email: true },
+    select: { email: true, familyId: true },
   });
 
   // assertOwnsLearnerProfile will notFound() if not owned or tombstoned
@@ -53,16 +55,16 @@ export default async function ChildDetailPage({
 
   // IAC-10: check hard-lock state (in-memory; null if no credential)
   let isPinHardLocked = false;
-  if (fullProfile.credential) {
-    const familyId = await db.accountHolder.findUnique({
-      where: { id: session.accountHolderId },
-      select: { familyId: true },
-    });
-    if (familyId?.familyId) {
-      const credKey = `${familyId.familyId}:${fullProfile.credential.username}`;
-      isPinHardLocked = await isCredentialHardLocked(credKey);
-    }
+  const familyId = accountHolder?.familyId;
+  if (fullProfile.credential && familyId) {
+    const credKey = `${familyId}:${fullProfile.credential.username}`;
+    isPinHardLocked = await isCredentialHardLocked(credKey);
   }
+
+  const loginHandle =
+    fullProfile.credential && familyId
+      ? formatLearnerLoginHandle(fullProfile.credential.username, familyId)
+      : null;
 
   return (
     <AccountPageShell
@@ -104,7 +106,7 @@ export default async function ChildDetailPage({
         title="Child login"
         description={
           fullProfile.credential
-            ? `Username: ${fullProfile.credential.username}`
+            ? "Your child signs in with the handle below and their PIN."
             : "No login credentials set up yet."
         }
         actions={
@@ -119,6 +121,9 @@ export default async function ChildDetailPage({
       >
         {fullProfile.credential ? (
           <div className="space-y-4">
+            {loginHandle ? (
+              <CopyableLearnerHandle loginHandle={loginHandle} label="Login handle" />
+            ) : null}
             <p className="text-sm text-muted-foreground">
               {"Your child signs in at "}
               <a

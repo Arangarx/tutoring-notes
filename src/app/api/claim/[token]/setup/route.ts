@@ -17,7 +17,7 @@ import { hashToken } from "@/lib/crypto/session-tokens";
 import { hashLearnerPin } from "@/lib/account-holder-auth";
 import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
 import { validateLearnerPin } from "@/lib/pin-strength";
-import { ensureFamilyId } from "@/lib/family-id";
+import { ensureFamilyId, formatLearnerLoginHandle } from "@/lib/family-id";
 
 export async function POST(
   req: NextRequest,
@@ -137,12 +137,12 @@ export async function POST(
     });
 
     // IAC-7: lazily assign familyId to AccountHolder if not already set.
-    // Suggest a default (email prefix + random suffix); parent can change later.
-    await ensureFamilyId(learnerProfile.accountHolderId);
+    const familyId = await ensureFamilyId(learnerProfile.accountHolderId);
+    const loginHandle = formatLearnerLoginHandle(normalizedUsername, familyId);
 
     console.log(`[lpr] lpr=${learnerProfileId} action=credential_created`);
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, familyId, loginHandle });
   }
 
   return NextResponse.json({ error: "unknown_action" }, { status: 400 });
