@@ -22,6 +22,7 @@ function AccountSignupForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordScore, setPasswordScore] = useState<number | null>(null);
+  const [confirm, setConfirm] = useState("");
   const [isSelfLearner, setIsSelfLearner] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,6 +33,10 @@ function AccountSignupForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (password !== confirm) {
+      setError("mismatch");
+      return;
+    }
     setBusy(true);
     setError(null);
 
@@ -190,12 +195,35 @@ function AccountSignupForm() {
             }}
             strengthScore={passwordScore}
             aria-invalid={
-              error === "password_too_short" || error === "password_too_weak" ? true : undefined
+              error === "password_too_short" ||
+              error === "password_too_weak" ||
+              error === "mismatch"
+                ? true
+                : undefined
             }
             aria-describedby={error ? formErrorId : undefined}
           />
         </div>
 
+        <div className="space-y-2">
+          <Label htmlFor="ah-signup-confirm">Confirm password</Label>
+          <Input
+            id="ah-signup-confirm"
+            name="confirmPassword"
+            type="password"
+            autoComplete="new-password"
+            required
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            className="min-h-11"
+            aria-invalid={error === "mismatch" ? true : undefined}
+            aria-describedby={error ? formErrorId : undefined}
+          />
+        </div>
+
+        {error === "mismatch" ? (
+          <AuthFieldError id={formErrorId} message="Passwords don't match." />
+        ) : null}
         {error === "password_too_short" || error === "password_too_weak" ? (
           <div id={formErrorId} role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive space-y-1">
             <p className="font-medium">{"That password is too weak."}</p>

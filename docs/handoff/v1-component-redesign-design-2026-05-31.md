@@ -1048,6 +1048,7 @@ Redesign `/join/[token]` — mobile-first layout, `100dvh`, camera tile overlay,
 **Dependencies:** Phase A must complete first (tokens and fonts must be in place). Tailwind 4 + shadcn install (B1) must complete before B2+. Phase B5 depends on Wave 1 P4 (solo mode schema + FSM wiring) being complete before production enable.
 
 **Acceptance criteria (per batch):**
+- [ ] **Reusable password primitive** — one shared component (password + confirm + show/hide + zxcvbn strength) applied across all **8** credential forms (tutor signup/reset/forgot-adjacent, AccountHolder signup/reset, admin change-password, claim signup, Change-PIN), closing tutor-reset **minLength 8 vs signup 10 + zxcvbn** policy drift (`src/app/reset-password/page.tsx` vs signup paths)
 - [ ] WCAG 2.2 AA: axe-core passes with `color-contrast` ENABLED (currently disabled — must be re-enabled in Phase B1 and kept on)
 - [ ] Touch targets ≥44×44 CSS px on all interactive elements
 - [ ] Keyboard navigation sweep: all primary actions reachable, focus ring visible
