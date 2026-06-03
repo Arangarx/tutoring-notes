@@ -107,11 +107,15 @@ async function createLearnerProfile(accountHolderId: string) {
   });
 }
 
-async function createLearnerCredential(learnerProfileId: string, username?: string) {
+async function createLearnerCredential(
+  learnerProfileId: string,
+  accountHolderId: string,
+  username?: string
+) {
   const un = username ?? `kid_${Math.random().toString(36).slice(2, 8)}`;
   const secretHash = await hashLearnerPin("123456");
   return db.learnerCredential.create({
-    data: { learnerProfileId, username: un, secretHash },
+    data: { learnerProfileId, accountHolderId, username: un, secretHash },
   });
 }
 
@@ -282,7 +286,7 @@ describe("P2B-PIN: Child credential update", () => {
   it("P2B-PIN-1: changes PIN and bulk-revokes all device sessions", async () => {
     const ah = await createAH();
     const profile = await createLearnerProfile(ah.id);
-    await createLearnerCredential(profile.id);
+    await createLearnerCredential(profile.id, ah.id);
     const ds1 = await createLearnerDeviceSession(profile.id);
     const ds2 = await createLearnerDeviceSession(profile.id);
 
@@ -318,7 +322,7 @@ describe("P2B-PIN: Child credential update", () => {
   it("P2B-PIN-2: returns 401 without AH session", async () => {
     const ah = await createAH();
     const profile = await createLearnerProfile(ah.id);
-    await createLearnerCredential(profile.id);
+    await createLearnerCredential(profile.id, ah.id);
 
     const req = await buildNextRequest(
       `https://localhost/api/learner-profiles/${profile.id}/credentials`,
@@ -335,7 +339,7 @@ describe("P2B-PIN: Child credential update", () => {
   it("P2B-PIN-3: returns 400 pin_too_short for < 6 digit PIN", async () => {
     const ah = await createAH();
     const profile = await createLearnerProfile(ah.id);
-    await createLearnerCredential(profile.id);
+    await createLearnerCredential(profile.id, ah.id);
 
     const { rawToken } = await createAccountHolderSession(ah.id);
     const req = await buildNextRequest(
@@ -354,59 +358,64 @@ describe("P2B-PIN: Child credential update", () => {
 });
 
 // ---------------------------------------------------------------------------
-// P2B-LOCK: Learner soft-lockout (§4.4 — NEVER hard-lock)
+// P2B-LOCK: Learner soft-lockout (IAC-10 tiers)
 // ---------------------------------------------------------------------------
 
-describe("P2B-LOCK: Learner soft-lockout (§4.4 — NEVER hard-lock)", () => {
+describe("P2B-LOCK: Learner soft-lockout (IAC-10)", () => {
   const TEST_IP = "127.0.0.1";
 
-  it("P2B-LOCK-1: enters cooldown after tier-2 threshold (6 failures); cooldown is finite", () => {
-    const username = `lock1_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  function makeCredKey(username: string) { return `testfam:${username}`; }
 
-    // New tiers: 1–5 free; 6–10 → 30s; 11–15 → 60s; 16+ → 120s
-    // Record 6 failures to reach tier 2 (first cooldown tier)
-    for (let i = 0; i < 6; i++) {
-      recordLearnerPinFailure(username, TEST_IP);
+  it("P2B-LOCK-1: enters cooldown after tier-2 threshold (4 failures); cooldown is finite", () => {
+    const username = `lock1_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const credKey = makeCredKey(username);
+
+    // IAC-10 tiers: 1–3 free; 4–6 → 30s; 7–9 → 5min; 10–12 → 15min; 13+ → hard lock
+    for (let i = 0; i < 4; i++) {
+      recordLearnerPinFailure(username, TEST_IP, credKey);
     }
 
     const cooldown = checkLearnerPinCooldown(username, TEST_IP);
     expect(cooldown.inCooldown).toBe(true);
     expect(cooldown.retryAfterSeconds).toBeGreaterThan(0);
-    // CRITICAL: must be finite — max 120s (never hard-lock, never more than 24h)
-    expect(cooldown.retryAfterSeconds).toBeLessThanOrEqual(120);
+    // Must be finite (30s for tier 2)
+    expect(cooldown.retryAfterSeconds).toBeLessThanOrEqual(30);
   });
 
-  it("P2B-LOCK-2: cooldown clears after reset (soft, not permanent)", () => {
+  it("P2B-LOCK-2: cooldown clears after reset (soft lock)", () => {
     const username = `lock2_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const credKey = makeCredKey(username);
 
-    for (let i = 0; i < 6; i++) {
-      recordLearnerPinFailure(username, TEST_IP);
+    for (let i = 0; i < 4; i++) {
+      recordLearnerPinFailure(username, TEST_IP, credKey);
     }
 
-    resetLearnerPinFailures(username, TEST_IP);
+    resetLearnerPinFailures(username, TEST_IP, credKey);
 
     const cooldown = checkLearnerPinCooldown(username, TEST_IP);
     expect(cooldown.inCooldown).toBe(false);
   });
 
-  it("P2B-LOCK-3: first 5 failures produce no cooldown (generous kid-friendly tier)", () => {
+  it("P2B-LOCK-3: first 3 failures produce no cooldown (fat-finger grace)", () => {
     const username = `lock3_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const credKey = makeCredKey(username);
 
-    for (let i = 0; i < 5; i++) {
-      recordLearnerPinFailure(username, TEST_IP);
+    for (let i = 0; i < 3; i++) {
+      recordLearnerPinFailure(username, TEST_IP, credKey);
     }
 
-    // 5 failures: should NOT be in cooldown yet (free tier is 1–5)
+    // 3 failures: should NOT be in cooldown yet
     const cooldown = checkLearnerPinCooldown(username, TEST_IP);
     expect(cooldown.inCooldown).toBe(false);
     expect(cooldown.retryAfterSeconds).toBe(0);
   });
 
-  it("P2B-LOCK-4: failure 6 triggers 30s cooldown (tier 2 boundary)", () => {
+  it("P2B-LOCK-4: failure 4 triggers 30s cooldown (tier 2 boundary)", () => {
     const username = `lock4_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const credKey = makeCredKey(username);
 
-    for (let i = 0; i < 6; i++) {
-      recordLearnerPinFailure(username, TEST_IP);
+    for (let i = 0; i < 4; i++) {
+      recordLearnerPinFailure(username, TEST_IP, credKey);
     }
 
     const cooldown = checkLearnerPinCooldown(username, TEST_IP);
@@ -476,15 +485,18 @@ describe("P2B-CLM: Claim invite state", () => {
       },
     });
 
-    // Simulate the claim-complete logic
+    // Simulate the claim-complete logic (IAC-2: set learnerProfileId on Student directly)
     const now = new Date();
     await db.$transaction(async (tx) => {
       const profile = await tx.learnerProfile.create({
         data: {
           accountHolderId: ah.id,
           displayName: student.name,
-          student: { connect: { id: student.id } },
         },
+      });
+      await tx.student.update({
+        where: { id: student.id },
+        data: { learnerProfileId: profile.id },
       });
       await tx.studentClaimInvite.update({
         where: { id: invite.id },
@@ -503,7 +515,7 @@ describe("P2B-CLM: Claim invite state", () => {
     // A second claim attempt: invite is already claimed → state COMPLETE
     // (the /api/claim/[token]/complete handler returns 409 claim_already_completed)
     const profile = await db.learnerProfile.findFirst({
-      where: { accountHolderId: ah.id, student: { id: student.id } },
+      where: { accountHolderId: ah.id, students: { some: { id: student.id } } },
     });
     expect(profile).not.toBeNull();
   });

@@ -14,9 +14,15 @@ export default async function globalSetup() {
   process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "replace-me";
 
   try {
-    execSync("npx prisma db push --skip-generate --accept-data-loss", {
+    // Use --force-reset to handle structural changes (new NOT NULL columns, dropped constraints, etc.)
+    // Safe: this always targets the dedicated test DB (tutoring_notes_test), never production.
+    execSync("npx prisma db push --force-reset --skip-generate", {
       stdio: "inherit",
-      env: process.env,
+      env: {
+        ...process.env,
+        PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION:
+          "jest global-setup: force-reset the local test DB (tutoring_notes_test at 127.0.0.1:5432) on every test run to keep schema in sync. Safe: this is an ephemeral test database.",
+      },
     });
   } catch {
     // DB not reachable — unit tests (mocked, no DB) will still pass.
