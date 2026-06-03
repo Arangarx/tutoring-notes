@@ -8,8 +8,8 @@
 
 | Field | Value |
 |---|---|
-| **Last action completed** | **IAC-12** appended (Andrew's wife, 2026-06-02) — Parent/Guardian copy + conditional guardian framing (V1, round-4/IAC copy); co-guardian **FUTURE** → [`docs/BACKLOG.md`](../BACKLOG.md). Ledger IAC-1..12 in [`identity-phase2-auth-session-design-2026-06-01.md`](identity-phase2-auth-session-design-2026-06-01.md) § IAC refinements — 2026-06-02. |
-| **Next action(s)** | **P2 multi-tutor + accessMode/family-id schema change + round-4 UX** build (IAC-2..IAC-12, incl. **IAC-12** copy) on `identity-p2b-ui` after Andrew finishes current P2b smoke / round-3 fixes; then Phase-3 consent models. |
+| **Last action completed** | **Phase D v2** brand-review revision on `feature/phase-d-landing-about` — landing `/` + `/features` (was `/about`), single Sign-in menu, no time/no-login marketing copy; About-us + Parents page + async-transcription → [`docs/BACKLOG.md`](../BACKLOG.md). |
+| **Next action(s)** | Andrew **re-smoke** Phase D preview (landing + `/features`); merge `feature/phase-d-landing-about` after PASS. Parallel: `identity-p2-multitutor` smoke → merge to `v1-redesign`. |
 | **Open Andrew-confirms** | P2b real-hardware smoke on preview (`NEXT_PUBLIC_CLAIM_INVITES_ENABLED`); ratify round-4 UX copy when implemented; test-students audit (Sarah-pending). |
 | **Uncommitted / unmerged** | `identity-p2b-ui` @ `ccd8d22` (IAC-12 docs, pushed); branch **NOT** merged to `v1-redesign`. |
 

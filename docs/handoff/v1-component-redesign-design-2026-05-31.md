@@ -1219,6 +1219,29 @@ This satisfies the Andrew 2026-06-02 requirement: two auth realms are clearly su
 - [x] No new CSP origins; fonts via `next/font` only
 - [x] Invariants A1–A10 unaffected (marketing routes only, no recorder/outbox/auth logic touched)
 
+#### Phase D v2 — brand review (Andrew + wife, 2026-06-02)
+
+**Scope:** Copy + light IA + route rename on `feature/phase-d-landing-about` after first-cut brand review. Marketing pages, `MarketingHeader`, `SiteFooter`, and docs only — no auth/identity/schema/migrations.
+
+| Decision | Outcome |
+|---|---|
+| **Header sign-in** | Single **Sign in** control opens an accessible menu: Tutor → `/login`, Parent → `/account/login`, Student → `/students/login`. Hero body keeps contextual parent sign-in line. Authenticated tutor state (Dashboard) unchanged. |
+| **Features vs About** | First-cut `/about` reframed as **Features** at **`/features`**. All internal links updated. Route **`/about` reserved** (removed) for a future company-story About-us page — **not built this pass**. |
+| **Parents marketing page** | **Backlogged** — parent-targeted public page (what families get, privacy posture, how parent/student login works). |
+| **No time promises** | Remove all temporal/speed marketing copy (`90 seconds`, `two minutes`, `instantly`, etc.) from public surfaces. Reframe value: AI drafts notes for tutor review when ready; no latency claims until async transcription reliability ships (see BACKLOG). |
+| **Tutor-targeted hero** | State plainly near top: Mynk is for **independent/professional tutors** (buyer); parents/students invited by tutor. |
+| **Headline** | Keep **"Session notes that write themselves."** — de-emphasize as sole value; broaden subhead/value props to practice OS (durable record, parent comms, you-own-your-data). |
+| **Commission copy** | **"No commission on your tutoring rate"** as today's pilot model — not "100% forever" / not implying we never take a cut later. |
+| **No anonymous parent access** | Drop all "no login" / login-free parent copy (K-12 no-anonymous-access principle). Parents use **secure parent sign-in**; drop word "polished." |
+| **How it works step 2** | **"Teach your lesson"** — no-behavior-change reassurance in supporting line, not step title. |
+| **Voice** | **"working tutors"** → **professional / independent tutors**; soften **homework** in marketing (don't conflate with "plan"). |
+| **Features page headline** | Keep **"Tutoring infrastructure for independent professionals."** |
+| **Marketplace fee claim** | Sourced, non-absolute: Wyzant 25%, Preply up to 33% — not "every platform." Keep **"Mynk is a tool — not a marketplace."** |
+| **Session log** | Plain language: time-ordered record of what happened in each session. |
+| **Institutions** | **Inclusive:** built first for independent tutors; drop exclusionary "not for agencies/marketplaces/institutions" clause (school departments in scope for Andrew). |
+
+**Gates (v2):** `prisma generate`, `tsc --noEmit`, `next build` (`/` + `/features`, no `/about`), `test:regression`.
+
 ---
 
 ## §8. Open Questions for Andrew

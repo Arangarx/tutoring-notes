@@ -6,12 +6,12 @@ import { Button } from "@/components/ui/button";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 
 export const metadata: Metadata = {
-  title: "About — Mynk",
+  title: "Features — Mynk",
   description:
-    "Mynk is tutoring infrastructure for independent tutors — session recording, AI-drafted notes, and polished parent updates, built without a platform fee.",
+    "Mynk is tutoring infrastructure for independent tutors — session recording, AI-drafted notes, and secure parent updates, with no commission on your tutoring rate during the pilot.",
 };
 
-export default function AboutPage() {
+export default function FeaturesPage() {
   return (
     <>
       <MarketingHeader />
@@ -19,7 +19,7 @@ export default function AboutPage() {
       <main id="main-content">
         {/* ── Page intro ─────────────────────────────────────────────── */}
         <section
-          aria-labelledby="about-heading"
+          aria-labelledby="features-heading"
           style={{
             padding: "72px 24px 64px",
             maxWidth: 720,
@@ -34,10 +34,10 @@ export default function AboutPage() {
               marginBottom: 16,
             }}
           >
-            About Mynk
+            Features
           </p>
           <h1
-            id="about-heading"
+            id="features-heading"
             className="heading text-balance"
             style={{
               fontSize: "clamp(1.8rem, 4vw, 2.8rem)",
@@ -70,8 +70,8 @@ export default function AboutPage() {
               margin: 0,
             }}
           >
-            We built Mynk because every platform for tutors wants a cut of your
-            revenue. We don&apos;t. Mynk is a tool — not a marketplace. You
+            Most tutoring marketplaces take a cut of every session — Wyzant
+            keeps 25%, Preply up to 33%. Mynk is a tool — not a marketplace. You
             bring the students; we handle the session layer.
           </p>
         </section>
@@ -127,7 +127,7 @@ export default function AboutPage() {
                 {
                   label: "AI-drafted notes",
                   detail:
-                    "Mynk reads the transcript and drafts homework, assessment, and plan sections. You review, edit, and send — not write from scratch.",
+                    "Mynk reads the transcript and drafts your session recap fields — topics, assessment, and plan. You review, edit, and send when you're ready.",
                 },
                 {
                   label: "Live whiteboard",
@@ -135,14 +135,14 @@ export default function AboutPage() {
                     "A shared digital canvas that syncs between tutor and student in real time. Replay it later to see exactly how a concept was taught.",
                 },
                 {
-                  label: "Parent share links",
+                  label: "Parent accounts",
                   detail:
-                    "Tokenized, revocable read-only links for families. No app to download. Works on any phone. Whiteboard replay and audio included.",
+                    "Families sign in to a secure parent account to read session summaries on any phone. Whiteboard replay and audio included when you share an update.",
                 },
                 {
                   label: "Session log",
                   detail:
-                    "A complete time-stamped record of every session — hours, duration, and notes. Built for tutors who bill by the hour.",
+                    "A time-ordered record of what happened in each session — dates, duration, and notes. Built for tutors who bill by the hour.",
                 },
                 {
                   label: "Privacy-first",
@@ -215,9 +215,9 @@ export default function AboutPage() {
               marginBottom: 16,
             }}
           >
-            Mynk is designed for tutors who run their own practice — not for
-            agencies, marketplaces, or institutions. It scales with you from one
-            student to twenty, without ever taking a share of what you earn.
+            Mynk is built first for independent tutors running their own
+            practice. It scales with you from one student to twenty, without
+            taking a commission on your tutoring rate during the pilot.
           </p>
           <p
             style={{
@@ -227,9 +227,9 @@ export default function AboutPage() {
               marginBottom: 40,
             }}
           >
-            Families get a clean, professional update after each session. No
-            app to install, no login required for parents. Just a link that
-            shows what their student actually did, written clearly.
+            Families get a clean, mobile-friendly session summary inside their
+            parent account — what their student worked on, written clearly, with
+            whiteboard replay when you include it.
           </p>
 
           <div
@@ -285,10 +285,10 @@ export default function AboutPage() {
                 margin: 0,
               }}
             >
-              Mynk is in early pilot with working tutors. Features are shipping
-              actively. Free during the pilot — no credit card, no commitment.
-              Session data is processed using Whisper (OpenAI) for transcription
-              and stored securely on your behalf.
+              Mynk is in early pilot with professional tutors. Features are
+              shipping actively. Free during the pilot — no credit card, no
+              commitment. Session data is processed using Whisper (OpenAI) for
+              transcription and stored securely on your behalf.
             </p>
             <p
               style={{ fontSize: 13, color: "var(--text-muted)", margin: 0, opacity: 0.8 }}

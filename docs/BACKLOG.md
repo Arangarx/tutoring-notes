@@ -544,6 +544,16 @@ Source: Andrew visual smoke of Component Phase B2 (`component-b2-dashboard-stude
 
 ---
 
+## V1 marketing — Phase D (public surfaces)
+
+Items from the 2026-06-02 brand review (Andrew + wife) on landing + Features pages. Execution branch: `feature/phase-d-landing-about`. Design rationale: [`docs/handoff/v1-component-redesign-design-2026-05-31.md`](handoff/v1-component-redesign-design-2026-05-31.md) § Phase D v2.
+
+- **About-us page (company story / origin / mission) — deferred from Phase D v2.** The real **About us** page (founder story, mission, trust) — distinct from the **Features** page now at `/features`. **Reserve route `/about`**; do not repurpose for product features.
+- **Parents-facing marketing page.** Parent-targeted public page: what families get, privacy posture, how parent and student sign-in work, and how updates appear in the parent account. Repeatedly requested in brand review; not built in Phase D v2.
+- **Async / desynced transcription + post-session durability (HIGH, reliability-tied).** Do not force the tutor to validate or transcribe notes the instant a session ends. Kick off transcription on the backend the moment the session ends so work is in-flight before the tutor opens the recap — perceived latency drops and transcription may finish before they click. Long-term: explicit **"We'll notify you when your notes are ready for review"** flow (estimate derived from audio length when we have empirical data). **Hard reliability requirement:** notes must **not** be lost if the tutor closes the browser after the session has ended — ties to recorder-lifecycle FSM/outbox pillars ([`docs/RECORDER-LIFECYCLE.md`](RECORDER-LIFECYCLE.md)) and the reliability north star. **Why marketing dropped time promises (Andrew, 2026-06-02):** we removed "90 seconds" and similar copy because we lack empirical latency data; this async redesign is how we eventually earn the right to make any speed claim.
+
+---
+
 ## Identity / access — V1 redesign
 
 Items tied to the identity/access/consent epic ([`docs/handoff/v1-redesign-STATUS.md`](handoff/v1-redesign-STATUS.md), IAC ledger in [`docs/handoff/identity-phase2-auth-session-design-2026-06-01.md`](handoff/identity-phase2-auth-session-design-2026-06-01.md)).

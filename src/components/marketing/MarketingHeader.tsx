@@ -1,12 +1,109 @@
 "use client";
 
 import Link from "next/link";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 
 import { MynkWordmark } from "@/components/auth/MynkWordmark";
 import { Button } from "@/components/ui/button";
 
-/** Marketing-page sticky nav — tutor + parent sign-in entries, create account CTA. */
+const SIGN_IN_LINKS = [
+  { href: "/login", label: "Tutor sign in" },
+  { href: "/account/login", label: "Parent sign in" },
+  { href: "/students/login", label: "Student sign in" },
+] as const;
+
+function SignInMenu() {
+  const menuId = useId();
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  const close = useCallback(() => setOpen(false), []);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onPointerDown = (event: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        close();
+      }
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close();
+      }
+    };
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open, close]);
+
+  return (
+    <div ref={rootRef} style={{ position: "relative" }}>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={menuId}
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        Sign in
+      </Button>
+
+      {open ? (
+        <ul
+          id={menuId}
+          role="menu"
+          aria-label="Sign in options"
+          style={{
+            position: "absolute",
+            right: 0,
+            top: "calc(100% + 6px)",
+            minWidth: 180,
+            margin: 0,
+            padding: 6,
+            listStyle: "none",
+            background: "var(--surface-1)",
+            border: "1px solid var(--border-default)",
+            borderRadius: 10,
+            boxShadow: "0 8px 24px var(--shadow-md)",
+            zIndex: 60,
+          }}
+        >
+          {SIGN_IN_LINKS.map(({ href, label }) => (
+            <li key={href} role="none">
+              <Link
+                href={href}
+                role="menuitem"
+                onClick={close}
+                style={{
+                  display: "block",
+                  padding: "8px 12px",
+                  borderRadius: 6,
+                  fontSize: 14,
+                  color: "var(--text)",
+                  textDecoration: "none",
+                }}
+              >
+                {label}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+/** Marketing-page sticky nav — single Sign in menu + create account CTA. */
 export function MarketingHeader() {
   const { status } = useSession();
   const signedIn = status === "authenticated";
@@ -45,7 +142,7 @@ export function MarketingHeader() {
           style={{ display: "flex", alignItems: "center", gap: 8 }}
         >
           <Link
-            href="/about"
+            href="/features"
             className="label-mono"
             style={{
               padding: "6px 10px",
@@ -55,7 +152,7 @@ export function MarketingHeader() {
               fontSize: 12,
             }}
           >
-            About
+            Features
           </Link>
 
           {signedIn ? (
@@ -64,53 +161,7 @@ export function MarketingHeader() {
             </Button>
           ) : (
             <>
-              {/* Parent sign-in — visually distinct from tutor sign-in */}
-              <Link
-                href="/account/login"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  padding: "6px 12px",
-                  borderRadius: 8,
-                  fontSize: 13,
-                  color: "var(--text-muted)",
-                  border: "1px solid var(--border-default)",
-                  background: "var(--surface-input)",
-                  transition: "background 0.15s, color 0.15s",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Sign in
-                <span
-                  style={{
-                    fontSize: 10,
-                    fontFamily: "var(--font-mono, monospace)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.06em",
-                    color: "var(--accent-text, var(--accent))",
-                    background: "var(--accent-soft)",
-                    padding: "2px 5px",
-                    borderRadius: 4,
-                  }}
-                >
-                  parents
-                </span>
-              </Link>
-
-              <Link
-                href="/login"
-                style={{
-                  padding: "6px 12px",
-                  borderRadius: 8,
-                  fontSize: 13,
-                  color: "var(--text-muted)",
-                  transition: "color 0.15s, background 0.15s",
-                }}
-              >
-                Tutors
-              </Link>
-
+              <SignInMenu />
               <Button asChild size="sm">
                 <Link href="/signup">Create account</Link>
               </Button>
