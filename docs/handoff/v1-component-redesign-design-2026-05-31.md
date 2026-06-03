@@ -1107,7 +1107,60 @@ Redesign `/join/[token]` — mobile-first layout, `100dvh`, camera tile overlay,
 
 **REQUIRED — separate parent sign-in entry (Andrew 2026-06-02):** The landing/hero MUST expose a distinct **"Sign in (parents)"** affordance pointing at `/account/login`, separate from the tutor `/login` entry. Root cause this fixes: the two auth realms (Operator/tutor `/login` vs AccountHolder/parent `/account/login`) have separate login URLs with no cross-link, so a parent who lands on the default tutor login gets a dead-end "email or password didn't match" with no nudge. Landing must make the parent path obvious. (Companion lightweight follow-up — cross-links *between* `/login` and `/account/login` themselves — tracked as a P2b/auth-IA papercut; the landing entry is the V1-required piece.)
 
-**Status:** Needs design pass before Composer dispatch (wireframes or reference mocks acceptable).
+**Status: BUILT — 2026-06-02 (first cut, Andrew review pending before merge).**
+
+**Concrete layout implemented:**
+
+```
+┌─ MarketingHeader (sticky, blur backdrop) ──────────────────────────┐
+│  [Mynk·]   About               [Sign in parents▸] [Tutors] [Create]│
+└────────────────────────────────────────────────────────────────────┘
+
+┌─ Hero (centered, max-width 760px) ─────────────────────────────────┐
+│  "Now in pilot"  ← label-mono coral eyebrow                        │
+│                                                                    │
+│  "Session notes that write themselves."  ← heading clamp 2–3.5rem │
+│                                                                    │
+│  Subhead (Inter, text-muted): 1 sentence, max 600px               │
+│                                                                    │
+│  [Create your account]  [Sign in — tutors]  ← CTA row             │
+│                                                                    │
+│  "Parent or family member?  Sign in to your parent account" ←      │
+│    separate line below CTAs, coral link → /account/login           │
+└────────────────────────────────────────────────────────────────────┘
+
+┌─ Value props (3-col flex, wraps to 1-col mobile) ──────────────────┐
+│  ┌─ Record once ────┐  ┌─ Clean parent updates ─┐  ┌─ Your data ──┐│
+│  │ coral eyebrow    │  │ coral eyebrow           │  │ coral eyebrow││
+│  │ heading          │  │ heading                 │  │ heading      ││
+│  │ muted body       │  │ muted body              │  │ muted body   ││
+│  └──────────────────┘  └─────────────────────────┘  └─────────────┘│
+└────────────────────────────────────────────────────────────────────┘
+
+┌─ How it works (surface-1 bg, 3-col grid) ──────────────────────────┐
+│  "How it works" eyebrow + heading                                   │
+│  01 Start a session · 02 Teach normally · 03 Send the recap         │
+└────────────────────────────────────────────────────────────────────┘
+
+┌─ Trust / pilot CTA (centered) ─────────────────────────────────────┐
+│  "Pilot access" eyebrow                                             │
+│  "Built for working tutors."                                        │
+│  Subhead + [Get started — it's free] [Learn more → /about]         │
+│  Legal micro-copy (terms + privacy links)                           │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**Parent sign-in affordance — dual placement:**
+1. `MarketingHeader`: inline nav — "Sign in" badge labeled `parents` (coral accent-soft badge) + separate "Tutors" link + "Create account" CTA. Visually distinct from the tutor entry.
+2. Hero section: soft italic line below the primary CTAs — "Parent or family member? Sign in to your parent account" with coral underline link → `/account/login`.
+
+This satisfies the Andrew 2026-06-02 requirement: two auth realms are clearly surfaced; a parent cannot end up on the wrong login screen.
+
+**First cut — Andrew review requested before merge to master.** Key questions:
+- Hero headline: "Session notes that write themselves." — does this land, or is the older copy ("Record your tutoring session. Send a polished parent update in 90 seconds.") preferred?
+- Value prop ordering: "Record once" → "Clean parent updates" → "Your data" — right priority order?
+- "Now in pilot" eyebrow — keep, or remove for a cleaner launch-ready look?
+- Parent sign-in placement: header badge vs below-hero paragraph — is both placements overkill, or is the redundancy appropriate?
 
 **Does NOT include:** Post-login dashboard (§5.1 / B2 reskin is the interim floor on `/admin` routes until Phase C URL flattening).
 
@@ -1117,17 +1170,54 @@ Redesign `/join/[token]` — mobile-first layout, `100dvh`, camera tile overlay,
 
 **V1 intent:** Net-new public `/about` — product story, who we are, how Mynk relates to tutoring (align with brand voice in `docs/MYNK-BRAND-PHASE-2-DECISIONS.md`). Linked from landing footer and/or global public nav when that nav is redesigned.
 
-**Status:** Needs design pass before Composer dispatch.
+**Status: BUILT — 2026-06-02 (first cut, Andrew review pending before merge).**
 
-**Dependencies:** Phase A (tokens/fonts). May share layout primitives with D1 landing pass.
+**Concrete layout implemented:**
+
+```
+┌─ MarketingHeader (shared with landing) ────────────────────────────┐
+
+┌─ Page intro (max-width 720px) ─────────────────────────────────────┐
+│  "About Mynk" eyebrow                                               │
+│  "Tutoring infrastructure for independent professionals."           │
+│  Two paragraphs: what Mynk solves + why we don't take a cut        │
+└────────────────────────────────────────────────────────────────────┘
+
+┌─ Product features (surface-1 bg, auto-fit grid) ───────────────────┐
+│  "The product" eyebrow + heading                                    │
+│  6-card grid: Session recording · AI-drafted notes · Live           │
+│  whiteboard · Parent share links · Session log · Privacy-first      │
+└────────────────────────────────────────────────────────────────────┘
+
+┌─ Who it's for (max-width 720px) ───────────────────────────────────┐
+│  "Who it's for" eyebrow + heading                                   │
+│  2 paragraphs: independent tutors + families                        │
+│  [Create your account — free]  [Back to home]                       │
+└────────────────────────────────────────────────────────────────────┘
+
+┌─ Pilot context (surface-1 bg) ─────────────────────────────────────┐
+│  [Mynk·]  "Currently in pilot"                                      │
+│  Whisper/OpenAI disclosure, free-during-pilot context               │
+│  Feedback · Privacy · Terms links                                   │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**Linked from:** `SiteFooter` (About link added), `MarketingHeader` (About nav link), landing "Learn more" CTA.
+
+**Brand voice:** Honest + direct (B with some D warmth). "We built Mynk because every platform for tutors wants a cut of your revenue. We don't." — sets the tone of tool vs marketplace.
+
+**Dependencies:** Phase A (tokens/fonts). Shares `MarketingHeader` + shadcn `Button` with D1 landing.
 
 **Acceptance criteria (placeholder — refine at design pass):**
-- [ ] `/` no longer ships as pre-redesign marketing stub
-- [ ] `/` exposes a distinct **"Sign in (parents)" → `/account/login`** entry, separate from the tutor `/login` link (Andrew 2026-06-02)
-- [ ] `/about` returns 200 with on-brand layout; linked from `/`
-- [ ] WCAG 2.2 AA on both surfaces (axe with `color-contrast` enabled)
-- [ ] No new CSP origins; fonts via `next/font` only
-- [ ] Invariants A1–A10 unaffected (marketing routes only)
+- [x] `/` no longer ships as pre-redesign marketing stub
+- [x] `/` exposes a distinct **"Sign in (parents)" → `/account/login`** entry, separate from the tutor `/login` link (Andrew 2026-06-02)
+- [x] `/about` returns 200 with on-brand layout; linked from `/`
+- [x] `npx tsc --noEmit` passes (0 errors)
+- [x] `npx next build` exits 0 (route table confirms `/` and `/about` as `○` static)
+- [x] 92/92 Jest regression tests pass (1 pre-existing Playwright-in-Jest config issue unrelated to D work)
+- [ ] WCAG 2.2 AA — axe with `color-contrast` enabled (pending Andrew merge review + manual smoke)
+- [x] No new CSP origins; fonts via `next/font` only
+- [x] Invariants A1–A10 unaffected (marketing routes only, no recorder/outbox/auth logic touched)
 
 ---
 

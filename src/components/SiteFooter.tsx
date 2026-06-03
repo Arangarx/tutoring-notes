@@ -24,6 +24,10 @@ export function SiteFooter() {
           justifyContent: "center",
         }}
       >
+        <Link href="/about" style={{ textDecoration: "underline" }}>
+          About
+        </Link>
+        <span aria-hidden>·</span>
         <Link href="/privacy" style={{ textDecoration: "underline" }}>
           Privacy
         </Link>
