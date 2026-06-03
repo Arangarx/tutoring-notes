@@ -4,15 +4,15 @@
 **Branch:** `v1-redesign` (long-running integration branch)  
 **Purpose:** Single source of truth for the multi-day V1 redesign; re-read at the top of any fresh chat so the thread survives.
 
-### Lightweight head (orchestrator — 2026-06-02)
+### Lightweight head (orchestrator — 2026-06-02, afternoon)
 
 | Field | Value |
 |---|---|
-| **Last action completed** | **IAC multi-tutor + round-4 UX build** on `identity-p2-multitutor` @ `e2c5c7c` (pushed, gates green); **preview-dev cutover** (Neon reset + full migration chain replayed, 6 identity migrations applied); **Phase D first cut** on `feature/phase-d-landing-about` @ `37d8178` (pushed, isolated worktree). |
-| **Next action(s)** | Andrew **smokes** `identity-p2-multitutor` preview (IAC-2..12 + round-4 UX); Andrew **brand-reviews** Phase D landing + `/about` first cut. After multitutor smoke PASS → `merge --no-ff` to `v1-redesign`. Phase-3 consent models next in executor queue. |
-| **Open Andrew-confirms** | Multitutor preview smoke; Phase D brand review; ratify round-4 UX copy if tweaks needed; test-students audit (Sarah-pending). |
+| **Last action completed** | **Live-transcription spike landed** on `spike/live-transcription` @ `7671a25` (gates green; B2–B5 baked; B1 hardware-pending). **Session-lifecycle redesign decisions** captured → [`session-lifecycle-redesign-brief-2026-06-02.md`](session-lifecycle-redesign-brief-2026-06-02.md). |
+| **Next action(s)** | Andrew **smokes:** multitutor preview, Phase D preview, spike **B1** on real hardware. Orchestrator queue (serial): (1) batched copy/UX on Phase D (commission + hit-record split), (2) in-session-audio LEGAL-SYNC, (3) session-lifecycle redesign design pass (Sonnet + Opus review), (4) verify LTX timestamp-anchored segment assembly. After multitutor smoke PASS → `merge --no-ff` to `v1-redesign`. |
+| **Open Andrew-confirms** | Multitutor preview smoke; Phase D brand review (+ queued copy decisions below); spike B1 hardware; `interim-capture-attestation` migrate+smoke+merge. |
 | **In-flight subagents** | **None.** |
-| **Uncommitted / unmerged** | `identity-p2-multitutor` @ `e2c5c7c` + `feature/phase-d-landing-about` @ `37d8178` — both **pushed**, **NOT merged** to `v1-redesign`. Spine docs commit pending this update. |
+| **Uncommitted / unmerged** | `identity-p2-multitutor`, `feature/phase-d-landing-about`, `design/live-incremental-transcription-2026-06-02`, `spike/live-transcription` — all **pushed**, **none merged**. |
 
 ### Smoke targets (Andrew — 2026-06-02, both READY)
 
@@ -20,6 +20,50 @@
 |---|---|---|
 | **Identity P2 multi-tutor + round-4 UX** | `identity-p2-multitutor` @ `e2c5c7c` | [Multitutor preview](https://tutoring-notes-git-identity-p2-m-9cb486-arangarx-5209s-projects.vercel.app) |
 | **Phase D landing + `/about` (first cut)** | `feature/phase-d-landing-about` @ `37d8178` | [Phase D preview](https://tutoring-notes-git-feature-phase-26c42f-arangarx-5209s-projects.vercel.app) |
+| **Live-transcription spike (B1 hardware-pending)** | `spike/live-transcription` @ `7671a25` | Feature flag `NEXT_PUBLIC_LIVE_TRANSCRIPTION_ENABLED` OFF; smoke → [`live-transcription-spike-STATUS.md`](live-transcription-spike-STATUS.md) |
+
+---
+
+## 2026-06-02 checkpoints (session lifecycle + LTX + copy queue)
+
+### Session-lifecycle redesign (FUTURE — design brief only)
+
+**Brief:** [`session-lifecycle-redesign-brief-2026-06-02.md`](session-lifecycle-redesign-brief-2026-06-02.md) — Andrew↔orchestrator co-design; **not built**.
+
+| Decision | Summary |
+|----------|---------|
+| **C — recording-as-consequence** | After consent-at-create + student present + media → auto-record; toolbar `userWantsRecording` / duplicate Start affordances consolidate |
+| **Timer integrity** | Presence-driven only; neither party controls clock |
+| **Session-active vs recording** | Diverge legitimately on A/V-fallback + chat-only (session live, recording paused) |
+| **P0 wall-clock timeline** | PROTECT-EXISTING — gaps at true offset; no concat; LTX segments by timestamp; hardware-verify only |
+
+**Sequencing:** Sonnet design pass + Opus review **after** LTX spike landed; pass must **first** document current pause/resume timeline-sync, then design around FSM ([`RECORDER-LIFECYCLE.md`](../RECORDER-LIFECYCLE.md)).
+
+### Live-transcription spike landing
+
+| Item | Value |
+|------|-------|
+| Branch / SHA | `spike/live-transcription` @ **`7671a25`** (off `master`) |
+| Gates | tsc 0; `next build` 0; `test:regression` 131/1358; `auth.test.ts` DB fail pre-existing on master |
+| BLOCKERs in | B2 IDB-before-network; B3 10s end-session drain; B4 ownership; B5 `ltx=` logs |
+| BLOCKER pending | **B1** primary recording byte-unaffected — **hardware only** |
+| Flag | `NEXT_PUBLIC_LIVE_TRANSCRIPTION_ENABLED` (default OFF) |
+| Migration | `20260602120000_ltx_incremental_transcript_segment` → `IncrementalTranscriptSegment`; **not** on preview/prod |
+| Ordering watch | Same `20260602120000` prefix as `20260602120000_identity_p2_multitutor` on `identity-p2-multitutor` — re-check if branches combine |
+
+**Constraint:** in-person LTX must **not** ship before capture-attestation on `master` (see below).
+
+### Brand / copy — QUEUED for Phase D pass
+
+Batched on **`feature/phase-d-landing-about`** (intent recorded here; do not edit Phase D files from multitutor branch):
+
+- **Commission:** *"Mynk doesn't take a cut of what you charge."* — present tense; no pilot hedge; no 100%/forever vow.
+- **How it works:** split WHITEBOARD (consent at session-create; recording while connected; pause anytime) vs IN-PERSON (manual Start). "Hit record" = in-person only.
+- **Record button** = load-bearing (keep). **`recordingDefaultEnabled`** = convenience default, NOT consent (keep or rework; don't delete). **Session-create consent modal** = compliance gate (keep).
+
+### In-person consent gap
+
+**`master`:** in-person note recorder → `getUserMedia` without capture-attestation (whiteboard has gate at session-create). **Fix:** `interim-capture-attestation` — Andrew migrate+smoke+merge. Part of consent-gates-capture + session-lifecycle backlog. Blocks in-person LTX until merged.
 
 ---
 
@@ -83,7 +127,9 @@ Andrew real-hardware smoke **PASSED** on `identity-p1-2fa` @ `d782430` before me
 | **`master`** | `a621a5b` | Production integration line; **does not** contain the V1 doc corpus, Component Phase A, or product legal facades. |
 | **`v1-redesign`** | **`6c4a268`** | Long-running V1 epic integration branch. **`identity-p1-2fa` MERGED `--no-ff` 2026-06-01** @ `b5ef4fe`. **`component-b2-dashboard-students` MERGED `--no-ff` 2026-06-01** @ `0424206`. **`identity-p2-schema` MERGED `--no-ff` 2026-06-01** @ `242c6b2` (AH-7). **`identity-p2-ownership-guard` MERGED `--no-ff` 2026-06-01** @ `1a06a65` (AH-7). **`identity-p2a-session-infra` MERGED `--no-ff` 2026-06-01** @ **`6c4a268`** (P2a build; gates green post-merge). **`docs/road-to-ga` MERGED `--no-ff` 2026-06-01** @ `eca63b5` (docs only — [`docs/ROAD-TO-GA.md`](../ROAD-TO-GA.md) launch-readiness hub, 3 gates). **In flight (NOT merged):** `identity-p2-multitutor` @ `e2c5c7c`, `feature/phase-d-landing-about` @ `37d8178`. **Epic corpus + Phase A + B1 + B2 + p2 schema/guard + P2a live ONLY here** until epic merges to `master`. |
 | **`identity-p2-multitutor`** | **`e2c5c7c`** | **BUILT 2026-06-02, pushed, NOT merged.** IAC multi-tutor + round-4 UX (5 commits atop `aa6194a`/`identity-p2b-ui`). Migrations `20260602110000_identity_p2_enum`, `20260602120000_identity_p2_multitutor`. Preview-dev cutover applied. [Preview READY](https://tutoring-notes-git-identity-p2-m-9cb486-arangarx-5209s-projects.vercel.app). |
-| **`feature/phase-d-landing-about`** | **`37d8178`** | **FIRST CUT 2026-06-02, pushed (isolated worktree), NOT merged.** Landing `/` + `/about`. [Preview READY](https://tutoring-notes-git-feature-phase-26c42f-arangarx-5209s-projects.vercel.app). Awaiting Andrew brand review. |
+| **`feature/phase-d-landing-about`** | **`37d8178`** | **FIRST CUT 2026-06-02, pushed (isolated worktree), NOT merged.** Landing `/` + `/about`. [Preview READY](https://tutoring-notes-git-feature-phase-26c42f-arangarx-5209s-projects.vercel.app). Awaiting Andrew brand review. **Copy queue:** commission + hit-record split (see § 2026-06-02 checkpoints). |
+| **`spike/live-transcription`** | **`7671a25`** | **SPIKE LANDED 2026-06-02, pushed, NOT merged.** Incremental LTX; flag OFF; migration `20260602120000_ltx_*` not on preview/prod. B1 hardware-pending. [`live-transcription-spike-STATUS.md`](live-transcription-spike-STATUS.md). |
+| **`design/live-incremental-transcription-2026-06-02`** | — | Design branch (pushed, NOT merged). |
 | **`identity-p2b-ui`** | `aa6194a` | **Superseded by `identity-p2-multitutor`** — round-3 fixes + IAC-12 docs base; merged into multitutor branch stack. |
 | **`identity-p2a-session-infra`** | `a37fb90` | **MERGED `--no-ff` into `v1-redesign` @ `6c4a268` (2026-06-01).** AccountHolder realm + learner PIN sessions + claim/connect back-end; migration `20260602000000_identity_p2a_session_infra`. Branch preserved for stale-sweep. |
 | **`docs/road-to-ga`** | `adcb60e` | **MERGED `--no-ff` into `v1-redesign` @ `eca63b5` (2026-06-01, docs only).** [`docs/ROAD-TO-GA.md`](../ROAD-TO-GA.md). |
@@ -161,7 +207,9 @@ Because all subagents share **one working tree**, the generated Prisma client (`
 | Identity Phase 2 ownership guard (`assertOwnsLearnerProfile`) | **DONE + MERGED** to `v1-redesign` @ `1a06a65` (2026-06-01, AH-7) | `assertOwnsLearnerProfile` in `src/lib/learner-profile-scope.ts` + **14/14** tests. **`lpr=`** logs on denial. Gates post-merge: ownership 14/14 + regression 92/92 + identity-2fa + impersonation green. |
 | **Identity Phase-2 AUTH + SESSION INFRASTRUCTURE design** | **DONE + RATIFIED** (2026-06-01) @ `f41a445` | Design-only: separate Operator vs AccountHolder realms + child PIN mechanism; AH-1..AH-7 + amendments (parent-first linking, per-child access mode, no-dup-code primitives, impersonation unchanged / cross-realm deferred, connect-link identity interstitial). 7 P2a BLOCKERs: S1, S2, S3, R1, C1, A1, O1. [`identity-phase2-auth-session-design-2026-06-01.md`](identity-phase2-auth-session-design-2026-06-01.md) |
 | **Identity P2 — multi-tutor + accessMode/family-id + round-4 UX** | **DONE — BUILT 2026-06-02** @ `e2c5c7c` on `identity-p2-multitutor` (pushed, **NOT merged**) | **5 commits** atop `aa6194a`/`identity-p2b-ui`: `553631d` (schema + migrations), `5cb4794` (learner login + accessMode + lockout), `3d17f50` (claim attach-to-existing + self-learner signup), `d1ee4b3` (round-4 UX/copy), `e2c5c7c` (tests). **Gates:** tsc 0; `next build` exit 0 (36 static pages); identity suite 115/115; `test:regression` 92/92; pin/learner/claim/account-holder 23/23. **IAC delivered:** IAC-2 (Student `@@unique([adminUserId, learnerProfileId])`; LearnerProfile.students → Student[]), IAC-3 (claim attach-to-existing pick-list; attach_existing links Student to existing profile), IAC-5 (`LearnerProfile.isSelfLearner`), IAC-6 (account_holder_session rejected at PIN login — 403 `access_mode_mismatch`), IAC-7 (`AccountHolder.familyId` unique; `LearnerCredential.accountHolderId`; per-family `@@unique([accountHolderId, username])`; login `username@familyid`), IAC-8 (self-learner signup + `connect_self` claim), IAC-10 (layered PIN lockout: soft per-username+IP 1–3 free then 30s/5min/15min + hard per-credential at 13 failures; parent unlock via `unlockChildPinAction`), IAC-11-E/G/I (password-strength copy; PIN `maxLength={6}` + `inputMode="numeric"`; child-session independence copy on `/students/login`), IAC-12 (conditional Parent/Guardian framing). **IAC-4** co-guardian forward-compat only. **IAC-9** consent lattice **DEFERRED** to Phase 3 (schema forward-compatible). **Supersedes** prior P2a-build-sequence / p2a-build-sequence pending entries. **Awaiting Andrew smoke** — [preview](https://tutoring-notes-git-identity-p2-m-9cb486-arangarx-5209s-projects.vercel.app). |
-| **Component Phase D (landing + `/about`)** | **FIRST CUT — BUILT 2026-06-02** @ `37d8178` on `feature/phase-d-landing-about` (pushed, isolated worktree, **NOT merged**) | Redesigned `/` (hero, value props, how-it-works, trust/pilot CTA, legal micro-copy, dual parent sign-in → `/account/login`) + net-new `/about`. Layout diagrams in [`v1-component-redesign-design-2026-05-31.md`](v1-component-redesign-design-2026-05-31.md) (subagent updated — do not re-edit). **Gates:** tsc 0; `next build` exit 0; `test:regression` 92/92. **Awaiting Andrew brand review** — [preview](https://tutoring-notes-git-feature-phase-26c42f-arangarx-5209s-projects.vercel.app). |
+| **Component Phase D (landing + `/about`)** | **FIRST CUT — BUILT 2026-06-02** @ `37d8178` on `feature/phase-d-landing-about` (pushed, isolated worktree, **NOT merged**) | Redesigned `/` (hero, value props, how-it-works, trust/pilot CTA, legal micro-copy, dual parent sign-in → `/account/login`) + net-new `/about`. Layout diagrams in [`v1-component-redesign-design-2026-05-31.md`](v1-component-redesign-design-2026-05-31.md) (subagent updated — do not re-edit). **Gates:** tsc 0; `next build` exit 0; `test:regression` 92/92. **Awaiting Andrew brand review** — [preview](https://tutoring-notes-git-feature-phase-26c42f-arangarx-5209s-projects.vercel.app). **Copy queue (2026-06-02):** commission line + hit-record split — see § 2026-06-02 checkpoints. |
+| **Live incremental transcription (spike)** | **LANDED 2026-06-02** @ `7671a25` on `spike/live-transcription` (pushed, **NOT merged**) | Tap path + LTX outbox + `IncrementalTranscriptSegment`; B2–B5 in; B1 hardware-pending. Flag `NEXT_PUBLIC_LIVE_TRANSCRIPTION_ENABLED` OFF. Design: `design/live-incremental-transcription-2026-06-02`. Detail: [`live-transcription-spike-STATUS.md`](live-transcription-spike-STATUS.md). **Blocks:** in-person LTX until `interim-capture-attestation` on master. |
+| **Session-lifecycle redesign (auto-record + timer)** | **BRIEF ONLY 2026-06-02** | [`session-lifecycle-redesign-brief-2026-06-02.md`](session-lifecycle-redesign-brief-2026-06-02.md) — Sonnet design pass + Opus review queued after LTX spike; document current timeline-sync first. |
 | **Identity Phase 2a (build — session infra + claim back-end)** | **DONE + MERGED** to `v1-redesign` @ **`6c4a268`** (2026-06-01) | **Delivered:** separate AccountHolder realm (`mynk_ah_session` + `AccountHolderSession` table, `getAccountHolderSession`); learner PIN device sessions (`getLearnerSession`, soft-lockout never-hard-lock per AH-4); claim/connect back-end (`/api/students/[id]/claim-invites`, `/api/claim/[token]/complete|setup`); AccountHolder auth routes (signup/login/logout/forgot/reset + `/verify-email`); shared auth primitives in common modules (no-dup-auth: `src/lib/crypto/session-tokens.ts`, `src/lib/account-holder-auth.ts`); middleware cookie-presence gates for `/account/*` + `/join/*` (Operator `/admin/*` gate untouched — I-1/I-2/A1). Migration `20260602000000_identity_p2a_session_infra`: `AccountHolderSession`; `LearnerDeviceSession.expiresAt`+`deviceInfo`; `AccountHolderEmailToken.payload`+`targetLearnerProfileId`; `AccountHolder.passwordHash`+`displayName`+`emailVerifiedAt`; `LearnerAccessMode` enum + `LearnerProfile.accessMode` default `parent_session_select`; **`StudentClaimInvite.token`→`tokenHash`** (empty column) + `revokedAt`+`claimedByAccountHolderId`. **Acceptance MET:** 7 BLOCKERs (S1/S2/S3/R1/C1/A1/O1) + I-1..I-6 + soft-lockout tiers green (225 identity-suite tests @ post-merge gates). **P2a stubs (Phase-3 wiring):** `assertEffectiveConsent` (void, tutor-acknowledged fallback), `assertIsSessionParticipant` (`notFound()` stub), `assertOwnsConsentRecord` (`notFound()` stub) — await `SessionConsentSnapshot`, `SessionParticipant`, `ConsentRecord`, `ConsentRestriction` (not on branch yet). No UI (P2b). |
 | Component Phase B2 (dashboard / student list / detail) | **DONE + MERGED** to `v1-redesign` @ `0424206` (smoked as-scoped **2026-06-01**) | **Reskin floor only** — admin nav + layout, dashboard, student-list + detail restyled to B1 shadcn + Mynka Blue; new primitives `AdminPageShell`, `AdminSectionCard`, `StudentAvatar`, `StudentsRoster`. Behavior/routes/ownership unchanged. **Merge resolution:** `AdminNav.tsx` kept B2 shadcn `Button` styling **and** 2FA impersonation sign-out (`exitImpersonation` form when `isImpersonating`; `layout.tsx` passes `isImpersonating` + B2 max-width container). **Deferred by design** (land in Phase C + B3–B6, not B2): full next-actions dashboard, two-column layout, shadcn form controls on note forms, nav redesign. **Andrew decisions (2026-06-01):** (1) B2 merged as reskin floor; (2) nav redesign waits for real surface redesign — **not** pulled forward; (3) landing/hero + `/about` are **V1-required** gap-close → component plan **Phase D** ([`v1-component-redesign-design-2026-05-31.md`](v1-component-redesign-design-2026-05-31.md)). **B2 smoke → backlog:** pre-existing UX/a11y items logged in [`docs/BACKLOG.md`](../BACKLOG.md) § "Component redesign — B2 smoke (2026-06-01)". Gates @ merge: `tsc`, `next build`, `test:regression` 92/92, identity+impersonation 139/139. |
 

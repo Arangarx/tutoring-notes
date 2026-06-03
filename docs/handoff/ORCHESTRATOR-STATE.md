@@ -12,6 +12,8 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 ## Last action completed
 
+**2026-06-02 (afternoon) — Live-transcription spike landed + session-lifecycle decisions captured (docs).** Spike on **`spike/live-transcription`** @ **`7671a25`** (off `master`, pushed, NOT merged): tsc 0, `next build` 0, `test:regression` 131 suites / 1358 tests; B2–B5 baked; B1 hardware-pending ([`live-transcription-spike-STATUS.md`](live-transcription-spike-STATUS.md)). **Session-lifecycle redesign brief** → [`session-lifecycle-redesign-brief-2026-06-02.md`](session-lifecycle-redesign-brief-2026-06-02.md) (auto-record reframe, presence timer, P0 wall-clock invariant, copy queue, in-person gate). Spine: [`v1-redesign-STATUS.md`](v1-redesign-STATUS.md) § 2026-06-02 checkpoints.
+
 **2026-06-02 — IAC multi-tutor + round-4 UX BUILT + preview-dev cutover + Phase D first cut.** Branch **`identity-p2-multitutor`** @ **`e2c5c7c`** (5 commits atop `aa6194a`, pushed, **NOT merged**). Gates green: tsc, `next build` (36 pages), identity 115/115, regression 92/92, pin/learner/claim/account-holder 23/23. IAC-2..8, IAC-10, IAC-11-E/G/I, IAC-12 delivered; IAC-9 deferred Phase 3. **Preview-dev cutover:** Neon reset + `prisma migrate deploy` — 6 identity migrations applied incl. non-additive `20260602120000`; Andrew real admin + 2FA intact. [Multitutor preview READY](https://tutoring-notes-git-identity-p2-m-9cb486-arangarx-5209s-projects.vercel.app). **Phase D:** `feature/phase-d-landing-about` @ `37d8178` (isolated worktree, pushed) — landing `/` + `/about` first cut awaiting brand review. [Phase D preview READY](https://tutoring-notes-git-feature-phase-26c42f-arangarx-5209s-projects.vercel.app). Detail: [`v1-redesign-STATUS.md`](v1-redesign-STATUS.md) § Build milestones (2026-06-02).
 
 **2026-06-01 — Identity Phase 2b (parent/child UI surfaces) BUILT, awaiting Andrew smoke.** Branch **`identity-p2b-ui`** @ **`cd7555b`** (base `ca49787`, pushed, **NOT merged**). Shipped: `/account/{login,signup,forgot-password,reset-password}` + `/verify-email` UI, `/account/dashboard`, `/account/children/[id]` (+ ChangePinForm), `/account/children/[id]/devices` (revoke one/all), `/students/login` (child PIN, soft-lockout countdown), `/claim/[token]` wizard (all states + **identity-confirmation interstitial** on existing-session path w/ "Not you?" escape) → `/claim/[token]/setup` (child credential; **consent panel = labeled Phase-3 placeholder, no ConsentRecord writes**), tutor "Send invite" behind `NEXT_PUBLIC_CLAIM_INVITES_ENABLED`. New APIs: device revoke one/all, credential PATCH (PIN change bulk-revokes sessions). Gates green: `tsc`, `next build` (35 routes), `test:regression` 92/92, identity 225/225 + 16 new P2b. **Superseded by multitutor build @ `e2c5c7c` (2026-06-02).**
@@ -32,19 +34,31 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 ## Next action(s)
 
-**V1 epic (`v1-redesign` @ `6c4a268`; in-flight branches pushed, not merged):**
+**Andrew smokes (parallel):**
 
-1. **Andrew:** **Smoke** [multitutor preview](https://tutoring-notes-git-identity-p2-m-9cb486-arangarx-5209s-projects.vercel.app) — IAC-2..12 + round-4 UX on preview-dev (real admin + 2FA intact after cutover).
-2. **Andrew:** **Brand-review** [Phase D preview](https://tutoring-notes-git-feature-phase-26c42f-arangarx-5209s-projects.vercel.app) — landing `/` + `/about` first cut.
-3. **After multitutor smoke PASS:** orchestrator `merge --no-ff` `identity-p2-multitutor` → `v1-redesign`.
-4. **Phase 3 consent models** — replace P2a stubs; IAC-9 consent lattice.
-5. **Preview-dev follow-up:** recreate `playwright@test.local` CI fixture before e2e against preview-dev.
-6. **Component:** B3 session-list UI. Nav redesign stays with B3–B6.
+1. [Multitutor preview](https://tutoring-notes-git-identity-p2-m-9cb486-arangarx-5209s-projects.vercel.app) — IAC-2..12 + round-4 UX.
+2. [Phase D preview](https://tutoring-notes-git-feature-phase-26c42f-arangarx-5209s-projects.vercel.app) — landing + `/about` (+ queued copy decisions in spine).
+3. **Live-transcription spike B1** — real hardware (primary recording byte-unaffected with tap); checklist [`live-transcription-spike-STATUS.md`](live-transcription-spike-STATUS.md).
+
+**Orchestrator queue (serial, shared-tree-respecting):**
+
+1. Batched copy/UX pass on `feature/phase-d-landing-about` (commission + hit-record split).
+2. In-session-audio privacy clarification ([`docs/LEGAL-SYNC.md`](../LEGAL-SYNC.md)).
+3. Session-lifecycle redesign **design pass** (Sonnet + Opus review) — [`session-lifecycle-redesign-brief-2026-06-02.md`](session-lifecycle-redesign-brief-2026-06-02.md); document current pause/resume timeline-sync first.
+4. Verify spike timestamp-anchored segment assembly (P0 wall-clock invariant).
+
+**V1 epic (`v1-redesign` @ `6c4a268`):**
+
+- **After multitutor smoke PASS:** `merge --no-ff` `identity-p2-multitutor` → `v1-redesign`.
+- **Phase 3 consent models** — replace P2a stubs; IAC-9 consent lattice.
+- **Preview-dev:** recreate `playwright@test.local` before e2e against preview-dev.
+- **Component:** B3 session-list UI. Nav redesign stays with B3–B6.
 
 **Master / pilot (parallel):**
 
-4. **Gate Sarah on usemynk:** Search Console "Deceptive pages" review (filed 2026-05-31) — re-test Connect Gmail at **48h**.
-5. **`fix/end-session-segment-copy`** — end-session phase copy (BACKLOG 3c cosmetic).
+- **`interim-capture-attestation`:** Andrew `migrate deploy` + smoke + merge to `master` (blocks in-person LTX).
+- **Gate Sarah on usemynk:** Search Console "Deceptive pages" review — re-test Connect Gmail at **48h**.
+- **`fix/end-session-segment-copy`** — end-session phase copy (BACKLOG 3c cosmetic).
 
 Update this file's head as each lands.
 
@@ -72,7 +86,7 @@ Update this file's head as each lands.
 
 **None.**
 
-**Branch in flight (not merged):** `identity-p2-multitutor` @ `e2c5c7c` (multitutor + round-4 UX); `feature/phase-d-landing-about` @ `37d8178` (Phase D first cut); `fix/end-session-segment-copy` — end-session End-button phase copy (cosmetic BACKLOG 3c).
+**Branch in flight (not merged):** `identity-p2-multitutor` @ `e2c5c7c`; `feature/phase-d-landing-about` @ `37d8178`; `spike/live-transcription` @ `7671a25`; `design/live-incremental-transcription-2026-06-02`; `fix/end-session-segment-copy` (cosmetic BACKLOG 3c).
 
 **Recently completed:**
 - **SEC-1 role split (ADMIN vs TUTOR)** — ✅ MERGED `7dadd7a` (2026-05-30, Sonnet). Andrew smoke PASS.
@@ -87,11 +101,11 @@ Update this file's head as each lands.
 
 ## Uncommitted / unmerged state
 
-**Working tree:** on `identity-p2-multitutor` @ **`e2c5c7c`** (spine + orchestrator-state docs commit pending push).
+**Working tree:** on `identity-p2-multitutor` (docs checkpoint commit pending push).
 
 **V1 epic — merged to `v1-redesign`:** `identity-p1-2fa` @ `b5ef4fe`, `component-b2-dashboard-students` @ `0424206`, `identity-p2-schema` @ `242c6b2`, `identity-p2-ownership-guard` @ `1a06a65`, **`identity-p2a-session-infra` @ `6c4a268`**, `docs/road-to-ga` @ `eca63b5` (2026-06-01).
 
-**V1 epic — in flight (pushed, NOT merged):** `identity-p2-multitutor` @ `e2c5c7c`, `feature/phase-d-landing-about` @ `37d8178` (2026-06-02).
+**V1 epic / spikes — in flight (pushed, NOT merged):** `identity-p2-multitutor` @ `e2c5c7c`, `feature/phase-d-landing-about` @ `37d8178`, `spike/live-transcription` @ `7671a25`, `design/live-incremental-transcription-2026-06-02` (2026-06-02).
 
 **`master` HEAD:** `a1f5d6e` (does not include V1 epic / 2FA).
 
@@ -137,6 +151,8 @@ a00557d docs(backlog): feedback page (admin view) has no nav back
 - **Whiteboard view-sync (RESOLVED):** Offset-contamination fix `123e60e`; on-device HUD `?wbdebug=1`.
 - **Regression net merged:** `fc7b12b`. `npm run test:wb-sync` gate green.
 - **Test discipline:** Independent oracle; jsdom cannot prove layout — real-render / hardware gate required.
+- **Session-lifecycle redesign (2026-06-02):** Auto-record after consent + presence + media; presence-only timer; P0 single wall-clock timeline (protect existing). Brief: [`session-lifecycle-redesign-brief-2026-06-02.md`](session-lifecycle-redesign-brief-2026-06-02.md).
+- **Live-transcription spike (2026-06-02):** `spike/live-transcription` @ `7671a25`; flag OFF; migration not on preview/prod; B1 hardware-pending.
 
 ## Reading list
 
@@ -150,6 +166,8 @@ Fresh orchestrator — read in order:
 6. [`docs/RECORDER-LIFECYCLE.md`](../RECORDER-LIFECYCLE.md)
 7. [`docs/handoff/sec-1-impersonation-design-2026-05-30.md`](sec-1-impersonation-design-2026-05-30.md)
 8. [`docs/handoff/w1-audio-durability-design-2026-05-27.md`](w1-audio-durability-design-2026-05-27.md)
+9. [`docs/handoff/session-lifecycle-redesign-brief-2026-06-02.md`](session-lifecycle-redesign-brief-2026-06-02.md) — auto-record + timer + P0 timeline (future build)
+10. [`docs/handoff/live-transcription-spike-STATUS.md`](live-transcription-spike-STATUS.md) — spike landing + B1 hardware smoke (when present on branch)
 
 ## History / audit trail
 
