@@ -8,7 +8,7 @@ import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 export const metadata: Metadata = {
   title: "Features — Mynk",
   description:
-    "Mynk is tutoring infrastructure for independent tutors — session recording, AI-drafted notes, and secure parent updates, with no commission on your tutoring rate during the pilot.",
+    "Mynk is tutoring infrastructure for independent tutors — session recording, AI-drafted notes, and secure parent updates. Mynk doesn't take a cut of what you charge.",
 };
 
 export default function FeaturesPage() {
@@ -122,7 +122,7 @@ export default function FeaturesPage() {
                 {
                   label: "Session recording",
                   detail:
-                    "Audio + whiteboard captured together, so you never lose the thread of a session. Works over video or in person.",
+                    "Online whiteboard sessions: once you confirm recording consent and go live, audio and whiteboard capture run automatically while you and your student are connected — pause anytime; recording ends with the session. In-person audio notes: tap Start recording when you're ready.",
                 },
                 {
                   label: "AI-drafted notes",
@@ -216,8 +216,8 @@ export default function FeaturesPage() {
             }}
           >
             Mynk is built first for independent tutors running their own
-            practice. It scales with you from one student to twenty, without
-            taking a commission on your tutoring rate during the pilot.
+            practice. It scales with you from one student to twenty. Mynk
+            doesn&apos;t take a cut of what you charge.
           </p>
           <p
             style={{

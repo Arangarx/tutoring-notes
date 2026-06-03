@@ -15,7 +15,7 @@
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "test": "jest",
-    "test:regression": "jest --testPathPatterns=regressions",
+    "test:regression": "jest src/__tests__/regressions",
     "test:e2e": "playwright test",
     "test:integration": "playwright test --project=integration",
     "relay:build": "docker build -t wb-relay-local ../whiteboard-sync",
