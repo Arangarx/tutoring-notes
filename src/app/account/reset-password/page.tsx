@@ -135,10 +135,15 @@ function ResetPasswordForm() {
           />
         ) : null}
         {error === "too_weak" ? (
-          <AuthFieldError
-            id={formErrorId}
-            message="That password is too weak — add another word or two. Uncommon words are stronger."
-          />
+          <div id={formErrorId} role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive space-y-1">
+            <p className="font-medium">{"That password is too weak."}</p>
+            <ul className="list-disc list-inside space-y-0.5 text-xs">
+              <li>{"Make it longer"}</li>
+              <li>{"Mix unrelated words, numbers, and symbols"}</li>
+              <li>{"Avoid common words and names"}</li>
+              <li>{"Or let a password manager generate one for you"}</li>
+            </ul>
+          </div>
         ) : null}
         {error === "expired" ? (
           <AuthFieldError

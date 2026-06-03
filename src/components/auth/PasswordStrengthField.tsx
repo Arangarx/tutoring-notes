@@ -30,14 +30,14 @@ export function PasswordStrengthField({
 
   const score = strengthScore ?? null;
 
-  let meterColor = "bg-destructive/60"; // red
+  let meterColor = "bg-destructive/60";
   let meterLabel = "Weak";
   if (score !== null && score >= 3) {
     meterColor = "bg-green-500";
     meterLabel = "Strong";
   } else if (score !== null && score >= MIN_PASSWORD_SCORE) {
     meterColor = "bg-yellow-400";
-    meterLabel = "Fair";
+    meterLabel = "Good";
   }
 
   const hasValue =
@@ -64,6 +64,13 @@ export function PasswordStrengthField({
           {show ? "Hide" : "Show"}
         </button>
       </div>
+
+      {/* IAC-11-E: show requirements up front under the field */}
+      {!hasValue && (
+        <p className="text-xs text-muted-foreground">
+          {`Minimum ${MIN_PASSWORD_LENGTH} characters — strength meter must reach "Good" or better.`}
+        </p>
+      )}
 
       {hasValue && score !== null && (
         <div aria-live="polite" className="space-y-1">

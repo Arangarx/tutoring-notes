@@ -33,6 +33,7 @@ function StudentLoginForm() {
   const [pinFocused, setPinFocused] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryAfter, setRetryAfter] = useState<number | null>(null);
+  const [hardLocked, setHardLocked] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -49,11 +50,17 @@ function StudentLoginForm() {
         body: JSON.stringify({ username, pin }),
       });
 
+      if (res.status === 423) {
+        // IAC-10: hard lock — requires parent/guardian unlock
+        setHardLocked(true);
+        setError(null);
+        return;
+      }
+
       if (res.status === 429) {
         const raw = res.headers.get("Retry-After");
         const secs = raw ? parseInt(raw, 10) : 30;
         setRetryAfter(secs);
-        // Countdown
         const tick = setInterval(() => {
           setRetryAfter((prev) => {
             if (prev === null || prev <= 1) {
@@ -69,7 +76,11 @@ function StudentLoginForm() {
       const data = (await res.json()) as { error?: string };
 
       if (!res.ok) {
-        setError("invalid_credentials");
+        if (data.error === "access_mode_mismatch") {
+          setError("access_mode_mismatch");
+        } else {
+          setError("invalid_credentials");
+        }
         return;
       }
 
@@ -88,7 +99,7 @@ function StudentLoginForm() {
     return s > 0 ? `${m}m ${s}s` : `${m}m`;
   }
 
-  const isLockedOut = retryAfter !== null && retryAfter > 0;
+  const isLockedOut = retryAfter !== null && retryAfter > 0 || hardLocked;
 
   return (
     <main className="flex min-h-[100dvh] flex-col items-center justify-center bg-background px-4 py-8">
@@ -99,9 +110,9 @@ function StudentLoginForm() {
 
         <Card className="border-border shadow-sm">
           <CardHeader className="pb-0 text-center">
-            <CardTitle className="heading text-2xl font-normal">Welcome back!</CardTitle>
+            <CardTitle className="heading text-2xl font-normal">Student sign in</CardTitle>
             <CardDescription className="text-base">
-              Sign in to start your session.
+              {"Sign in with your own username and PIN — this is separate from your parent/guardian's account."}
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6">
@@ -128,6 +139,7 @@ function StudentLoginForm() {
                   disabled={busy || isLockedOut}
                   className="h-12 text-base"
                   aria-required="true"
+                  placeholder="username@familyid"
                 />
               </div>
 
@@ -182,13 +194,30 @@ function StudentLoginForm() {
                   {"That username or PIN isn't right. Try again!"}
                 </p>
               )}
+              {error === "access_mode_mismatch" && (
+                <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
+                  {"This account doesn't use a PIN login. Ask a parent/guardian to sign in instead."}
+                </p>
+              )}
               {error === "network" && (
                 <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
                   {"Connection problem. Check your internet and try again."}
                 </p>
               )}
 
-              {isLockedOut && (
+              {hardLocked && (
+                <div
+                  className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-3 text-sm"
+                  role="alert"
+                >
+                  <p className="font-medium text-destructive">{"Account locked"}</p>
+                  <p className="text-destructive/80 text-xs mt-1">
+                    {"Too many failed attempts. Ask a parent/guardian to unlock your account from their account settings."}
+                  </p>
+                </div>
+              )}
+
+              {isLockedOut && !hardLocked && (
                 <div
                   className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm dark:border-amber-700 dark:bg-amber-900/20"
                   role="status"
@@ -197,6 +226,11 @@ function StudentLoginForm() {
                   <p className="text-amber-800 dark:text-amber-300">
                     {`Slow down — try again in ${formatCooldown(retryAfter!)}.`}
                   </p>
+                  {retryAfter && retryAfter > 60 ? (
+                    <p className="text-amber-700 dark:text-amber-400 text-xs mt-1">
+                      {"If you keep having trouble, ask a parent/guardian for help."}
+                    </p>
+                  ) : null}
                 </div>
               )}
 

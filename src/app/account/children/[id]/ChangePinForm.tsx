@@ -89,9 +89,10 @@ export function ChangePinForm({ learnerProfileId }: { learnerProfileId: string }
           autoComplete="new-password"
           required
           minLength={6}
+          maxLength={6}
           value={pin}
           onChange={(e) => setPin(e.target.value)}
-          placeholder="6+ digits"
+          placeholder="6 digits"
           className="min-h-11"
           aria-invalid={error === "pin_too_short" || error === "mismatch" ? true : undefined}
           aria-describedby={error ? formErrorId : undefined}
@@ -106,6 +107,8 @@ export function ChangePinForm({ learnerProfileId }: { learnerProfileId: string }
           inputMode="numeric"
           autoComplete="new-password"
           required
+          minLength={6}
+          maxLength={6}
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
           className="min-h-11"

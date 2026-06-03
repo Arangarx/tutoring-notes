@@ -69,7 +69,7 @@ function AccountLoginForm() {
   return (
     <AuthShell
       title="Sign in to your account"
-      description="Use your parent / account holder credentials."
+      description="Use your account credentials."
       footer={
         <p>
           New to Mynk?{" "}
