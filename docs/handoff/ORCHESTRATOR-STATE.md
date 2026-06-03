@@ -44,7 +44,7 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 1. Batched copy/UX pass on `feature/phase-d-landing-about` (commission + hit-record split).
 2. In-session-audio privacy clarification ([`docs/LEGAL-SYNC.md`](../LEGAL-SYNC.md)).
-3. Session-lifecycle redesign **design pass** (Sonnet + Opus review) — [`session-lifecycle-redesign-brief-2026-06-02.md`](session-lifecycle-redesign-brief-2026-06-02.md); document current pause/resume timeline-sync first.
+3. Session-lifecycle redesign **design pass** (Sonnet + Opus review) — [`session-lifecycle-redesign-brief-2026-06-02.md`](session-lifecycle-redesign-brief-2026-06-02.md); empirically verify pause/disconnect/draw-during-disconnect first (P0 wall-clock timeline **UNVERIFIED**).
 4. Verify spike timestamp-anchored segment assembly (P0 wall-clock invariant).
 
 **V1 epic (`v1-redesign` @ `6c4a268`):**
@@ -151,7 +151,7 @@ a00557d docs(backlog): feedback page (admin view) has no nav back
 - **Whiteboard view-sync (RESOLVED):** Offset-contamination fix `123e60e`; on-device HUD `?wbdebug=1`.
 - **Regression net merged:** `fc7b12b`. `npm run test:wb-sync` gate green.
 - **Test discipline:** Independent oracle; jsdom cannot prove layout — real-render / hardware gate required.
-- **Session-lifecycle redesign (2026-06-02):** Auto-record after consent + presence + media; presence-only timer; P0 single wall-clock timeline (protect existing). Brief: [`session-lifecycle-redesign-brief-2026-06-02.md`](session-lifecycle-redesign-brief-2026-06-02.md).
+- **Session-lifecycle redesign (2026-06-02):** Auto-record after consent + presence + media; presence-only timer; P0 single wall-clock timeline (**REQUIREMENT — UNVERIFIED**; draw-during-disconnect hardware gate). Brief: [`session-lifecycle-redesign-brief-2026-06-02.md`](session-lifecycle-redesign-brief-2026-06-02.md).
 - **Live-transcription spike (2026-06-02):** `spike/live-transcription` @ `7671a25`; flag OFF; migration not on preview/prod; B1 hardware-pending.
 
 ## Reading list

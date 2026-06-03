@@ -86,17 +86,28 @@ They **converge** on the happy path and **legitimately diverge** in the A/V-fall
 
 ### INVARIANT (P0) — single wall-clock timeline
 
-**PROTECT-EXISTING** — Andrew states this is currently an explicit property of the system.
+**REQUIREMENT — currently UNVERIFIED.** Whether today's system actually upholds this invariant is **unknown**. Per the reliability bar, treat it as **broken until proven on real hardware**. Andrew explicitly walked back an earlier "it works as far as I remember" — that is a soft memory signal, **not evidence**, and must not be recorded as fact.
 
-Every captured track (audio now, whiteboard events, video later) is anchored to a **single session wall-clock timeline**.
+Every captured track (audio now, whiteboard events, video later) must be anchored to a **single session wall-clock timeline**.
 
 When recording pauses while the session continues:
 
-1. The timeline accrues a **real-duration gap** (silence/empty) at the correct offset.  
-2. Resumed audio is placed at its **TRUE wall-clock position** — **NEVER** concatenated onto the last pre-pause sample.  
-3. The timeline is **never compressed**.
+1. The timeline must accrue a **real-duration gap** (silence/empty) at the correct offset.  
+2. Resumed audio must be placed at its **TRUE wall-clock position** — **NEVER** concatenated onto the last pre-pause sample.  
+3. The timeline must **never be compressed**.
 
 **Audio drifting out of sync with the whiteboard is a P0 reliability failure.**
+
+#### Untested scenario (named hardware test case)
+
+**"Tutor draws on the whiteboard while the student is disconnected and the session timer is stopped."**
+
+This scenario hides **two separable latent failure points** — either alone breaks audio↔whiteboard alignment:
+
+1. **Stroke capture + stamping** — Are the tutor's strokes during the disconnected interval even being captured? If so, stamped against what timeline (wall-clock? a paused clock? not captured at all)?
+2. **Audio resume placement** — When audio resumes, does it land at true wall-clock (gap preserved as silence) or get concatenated onto the pre-pause audio (which would shove everything after it out of alignment)?
+
+The disconnect-while-drawing case is precisely where these failures would surface. **This test must pass on real tutor+student hardware before the redesign ships.**
 
 #### Corollary — live transcription
 
@@ -105,6 +116,10 @@ Each transcript segment must carry **wall-clock start/end offset** and be assemb
 #### Verification
 
 **Real-hardware only.** jsdom is blind to timeline/sync math — see [AGENTS.md](../../AGENTS.md) § Hard-won lessons (layout / coordinates — jsdom blind spot).
+
+#### Hard acceptance gate
+
+**Preserving the wall-clock gap under pause** — verified by the draw-during-disconnect hardware test above — is a **HARD acceptance gate** for this redesign, in the same "prove it on hardware" class as the live-transcription spike's **B1** (primary recording byte-unaffected). No jsdom or unit-test-only sign-off substitutes for this gate.
 
 ---
 
@@ -124,8 +139,8 @@ Treat as a **dependency / related thread** for this redesign — not in scope to
 | Step | Owner | Notes |
 |------|-------|-------|
 | **0. Live-transcription spike** | Done | Landed on `spike/live-transcription` @ `7671a25` — see § Live-transcription spike landing below |
-| **1. Document current pause/resume timeline-sync** | Sonnet design pass | **FIRST** — how does today's FSM preserve the P0 invariant? |
-| **2. Design around preserving P0** | Sonnet + Opus review | High blast radius — recorder FSM is the sacred pillar ([`RECORDER-LIFECYCLE.md`](../RECORDER-LIFECYCLE.md)) |
+| **1. Empirically determine pause / disconnect / draw-during-disconnect behavior** | Sonnet design pass | **FIRST** — at code level **and** on real tutor+student hardware: what **actually** happens in pause / disconnect / draw-during-disconnect? If the code does not even attempt gap-preservation, surface that as a confirmed latent desync bug immediately — do **not** assume it works. |
+| **2. Design around preserving P0** | Sonnet + Opus review | High blast radius — recorder FSM is the sacred pillar ([`RECORDER-LIFECYCLE.md`](../RECORDER-LIFECYCLE.md)); design only after step 1 proves or disproves current behavior |
 | **3. Verify LTX segment assembly** | Executor + hardware | Timestamp-anchored assembly, not concat — orchestrator queue item |
 
 This redesign was **deliberately deferred** until the live-transcription spike stopped modifying the same FSM.
@@ -137,7 +152,7 @@ This redesign was **deliberately deferred** until the live-transcription spike s
 - [ ] **Presence-driven timer** — neither party controls clock; runs when both connected  
 - [ ] **Recording auto-follows** — after consent + student present + media available  
 - [ ] **Chat-fallback handled** — pause recording, keep session live; timer uninterrupted  
-- [ ] **P0 wall-clock invariant preserved** — gaps at correct offset; no concat compression; real-hardware verified  
+- [ ] **P0 wall-clock invariant proven** — gaps at correct offset; no concat compression; **draw-during-disconnect** hardware test PASS (hard gate, same class as LTX B1)  
 - [ ] **Record-affordance consolidation** — single mental model; no duplicate Start paths  
 
 ---
@@ -217,7 +232,7 @@ After Andrew smokes (multitutor preview, Phase D preview, spike B1 on real hardw
 
 1. Batched copy/UX pass on `feature/phase-d-landing-about` (commission + hit-record split)  
 2. In-session-audio privacy clarification ([`docs/LEGAL-SYNC.md`](../LEGAL-SYNC.md))  
-3. **This redesign** — Sonnet design pass + Opus review (document current timeline-sync first)  
+3. **This redesign** — Sonnet design pass + Opus review (empirically verify pause/disconnect/draw-during-disconnect first)  
 4. Verify spike does timestamp-anchored segment assembly (P0 invariant)  
 
 ---
