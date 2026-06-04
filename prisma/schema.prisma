@@ -36,10 +36,12 @@ enum AccountHolderEmailTokenPurpose {
 }
 
 /// Per-LearnerProfile access mode chosen by the parent.
-/// parent_session_select: child accesses via parent's authenticated session.
-/// child_pin_required: child must use own username + PIN.
+/// parent_session_select: legacy value kept for existing rows; superseded by account_holder_session.
+/// account_holder_session: child accesses via the owning AccountHolder session (parent selects learner).
+/// child_pin_required: child must use own username + PIN via username@familyid login.
 enum LearnerAccessMode {
   parent_session_select
+  account_holder_session
   child_pin_required
 }
 
@@ -76,15 +78,19 @@ model Student {
   whiteboardSessions WhiteboardSession[]
   costEvents  CostEvent[]
 
-  /// Identity Phase 2: nullable FK to LearnerProfile (NULL until the student
-  /// is claimed by a parent/self-learner via a StudentClaimInvite flow).
-  /// @unique enforces 1-to-1 Student↔LearnerProfile; SetNull so deleting
-  /// a LearnerProfile un-links the student without destroying tutor history.
-  learnerProfileId String?          @unique
+  /// Identity Phase 2 / IAC-2: nullable FK to LearnerProfile.
+  /// One LearnerProfile can be linked to multiple tutor-scoped Student rows (multi-tutor).
+  /// @@unique([adminUserId, learnerProfileId]) prevents a tutor from double-claiming the same
+  /// child profile while allowing multiple tutors to each link the same LearnerProfile.
+  /// SetNull so deleting a LearnerProfile un-links the student without destroying tutor history.
+  learnerProfileId String?
   learnerProfile   LearnerProfile?  @relation(fields: [learnerProfileId], references: [id], onDelete: SetNull)
   claimInvites     StudentClaimInvite[]
 
   @@index([adminUserId])
+  /// IAC-2: per-tutor uniqueness — a tutor cannot link the same learner profile twice;
+  /// a second tutor can link the same profile under their own adminUserId.
+  @@unique([adminUserId, learnerProfileId])
 }
 
 model SessionNote {
@@ -579,6 +585,11 @@ model AccountHolder {
   emailVerifiedAt DateTime?
   /// true when the account holder IS the learner (adult self-learner flow).
   isSelfLearner Boolean   @default(false)
+  /// IAC-7: globally unique family identifier used in child login handles (username@familyid).
+  /// Lazily set when the first child_pin_required LearnerProfile credential is created.
+  /// Editable later via family-settings (must remain globally unique).
+  /// Null for accounts with no child_pin_required learners (adult self-learners, account_holder_session families).
+  familyId      String?   @unique
   /// On honored COPPA deletion: email and name are redacted, row is retained
   /// so tutor business records (notes, recordings) remain coherent.
   tombstonedAt  DateTime?
@@ -587,8 +598,10 @@ model AccountHolder {
   learnerProfiles LearnerProfile[]
   emailTokens     AccountHolderEmailToken[]
   sessions        AccountHolderSession[]
+  learnerCredentials LearnerCredential[]
 
   @@index([email])
+  @@index([familyId])
 }
 
 /// One-time email tokens for AccountHolder flows (signup, password-reset, etc.).
@@ -624,15 +637,19 @@ model LearnerProfile {
   /// After tombstone: replaced with a redacted placeholder, e.g. "Deleted learner".
   displayName     String
   tombstonedAt    DateTime?
-  /// Parent-chosen access mode: parent selects learner vs child uses own PIN.
-  /// Default: parent_session_select (parent picks active learner).
-  accessMode      LearnerAccessMode @default(parent_session_select)
+  /// IAC-5/6: access mode for this learner profile.
+  /// account_holder_session: learner accessed via owning AccountHolder session (parent selects).
+  /// child_pin_required: learner authenticates independently via username@familyid + PIN.
+  accessMode      LearnerAccessMode @default(account_holder_session)
+  /// IAC-5/8: true when this LearnerProfile IS the AccountHolder themselves (adult self-learner).
+  /// Set at signup or via "connect yourself as a learner" in the claim interstitial.
+  isSelfLearner   Boolean   @default(false)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   credential      LearnerCredential?
   deviceSessions  LearnerDeviceSession[]
-  /// At most one Student per LearnerProfile (enforced by @unique on Student.learnerProfileId).
-  student         Student?
+  /// IAC-2: one LearnerProfile can be linked to multiple tutor-scoped Student rows (multi-tutor).
+  students        Student[]
 
   @@index([accountHolderId])
 }
@@ -642,11 +659,20 @@ model LearnerCredential {
   id               String    @id @default(uuid())
   learnerProfileId String    @unique
   learnerProfile   LearnerProfile @relation(fields: [learnerProfileId], references: [id], onDelete: Cascade)
-  username         String    @unique
+  /// IAC-7: denormalized from learnerProfile.accountHolderId for the per-family username unique index.
+  /// Must be set at create time to match learnerProfile.accountHolderId. Never changes after creation.
+  accountHolderId  String
+  accountHolder    AccountHolder @relation(fields: [accountHolderId], references: [id], onDelete: Cascade)
+  /// IAC-7: username is unique per-family (@@unique with accountHolderId).
+  /// Two families can both have "dragon"; same family cannot have duplicate usernames.
+  username         String
   /// bcrypt hash of the learner's PIN or password.
   secretHash       String
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+
+  /// IAC-7: per-family username uniqueness (global uniqueness removed).
+  @@unique([accountHolderId, username])
 }
 
 /// Long-lived device session token for a learner (issued after successful auth).
@@ -723,5 +749,29 @@ model AccountHolderSession {
   @@index([accountHolderId])
   @@index([tokenHash])
   @@index([expiresAt])
+}
+
+/// Durable rate-limit state for learner PIN login (IAC-10).
+/// Replaces module-global Map/Set in learner-pin-rate-limit.ts so state
+/// survives Vercel cold starts and is shared across serverless instances.
+///
+/// Two row kinds share this table:
+///   kind="soft"  scopeKey="soft:<username>:<ip>"         — per-username+IP soft cooldown
+///   kind="hard"  scopeKey="hard:<familyId>:<username>"   — per-credential hard lock (IP-independent)
+model LearnerLoginThrottle {
+  id            String    @id @default(cuid())
+  /// "soft:<normalizedUsername>:<ip>" or "hard:<familyId>:<username>"
+  scopeKey      String    @unique
+  /// "soft" | "hard"
+  kind          String
+  failureCount  Int       @default(0)
+  /// Soft cooldown expiry. Null = no active cooldown.
+  cooldownUntil DateTime?
+  /// Hard-lock timestamp. Non-null = locked; set idempotently once count ≥ 13.
+  hardLockedAt  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([kind, updatedAt])
 }
 

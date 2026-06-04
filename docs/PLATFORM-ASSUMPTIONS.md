@@ -98,7 +98,16 @@
   - Without separate `DIRECT_URL`: Prisma migrations fail (PgBouncer doesn't support some migration-time queries).
 - **Migration check**: replicate the pooled/direct split on any new Postgres provider. RDS Proxy is the AWS equivalent.
 
-### 2.3 Idle connection timeout
+### 2.3 In-memory state does NOT persist on Vercel serverless
+
+- **Assumption**: Module-global `Map`/`Set` variables reset on every cold start and are NOT shared between concurrent serverless instances.
+- **Where baked in**:
+  - `src/lib/rate-limit.ts` — general-purpose sliding-window limiter (module-global `Map`). Used for per-IP API buckets, AH login, 2FA verify in middleware. Cold-start reset makes these *more* generous, not less — acceptable for low-severity abuse prevention.
+  - **Exception (durable, 2026-06-03):** `src/lib/learner-pin-rate-limit.ts` — IAC-10 learner PIN soft cooldown + hard lock. These are now backed by the `LearnerLoginThrottle` Neon table, making them **durable across cold starts and shared across instances**. Hard lock at 13 IP-independent failures persists until explicit parent unlock. See `docs/BACKLOG.md` § Security for the remaining in-memory limiters that still need migration.
+- **What breaks if violated**: any rate limiter that truly must NOT reset on cold start (auth lockouts, brute-force guards on short secrets) MUST be Neon-backed. An in-memory limiter for these cases silently becomes ineffective on Vercel.
+- **Migration check**: if migrating to a platform with persistent instances (e.g. a long-lived container), the `LearnerLoginThrottle` table approach is still correct (DB is the source of truth). The `rate-limit.ts` in-memory limiters would benefit from Redis or equivalent on a persistent platform.
+
+### 2.4 Idle connection timeout
 
 - **Assumption**: Neon aggressively closes idle connections (~30-60s of inactivity). Scripts that hold a connection while doing long external work (e.g. Vercel Blob LIST) need defensive reconnect.
 - **Where baked in**:

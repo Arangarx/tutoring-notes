@@ -15,6 +15,14 @@
 
 ---
 
+## Testing + quality
+
+| Doc | What's in it | When to read |
+|---|---|---|
+| [docs/TESTING-COVERAGE.md](docs/TESTING-COVERAGE.md) | Feature × automated-coverage tier matrix (U/I/E/RB/M), teeth-gap summary, Playwright smoke-automation roadmap | Before planning test work, pre-merge gates, or converting manual smokes to e2e |
+
+---
+
 ## Reliability + architecture
 
 | Doc | What's in it | When to read |

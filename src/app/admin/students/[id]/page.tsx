@@ -21,6 +21,7 @@ import { AdminPageShell } from "@/components/admin/AdminPageShell";
 import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
 import { StudentAvatar } from "@/components/admin/StudentAvatar";
 import { Button } from "@/components/ui/button";
+import { ClaimInviteSection } from "./ClaimInviteSection";
 
 export const dynamic = "force-dynamic";
 
@@ -71,6 +72,9 @@ export default async function StudentDetailPage({
       },
     },
   });
+
+  const claimInvitesEnabled =
+    process.env.NEXT_PUBLIC_CLAIM_INVITES_ENABLED === "true";
 
   if (!student) notFound();
   if (!canAccessStudentRow(scope, student)) notFound();
@@ -189,6 +193,23 @@ export default async function StudentDetailPage({
       >
         <SendUpdateForm studentId={student.id} defaultToEmail={student.parentEmail} />
       </AdminSectionCard>
+
+      {claimInvitesEnabled ? (
+        <AdminSectionCard
+          title="Parent account"
+          description={
+            student.learnerProfileId
+              ? "This student's account is already connected to a parent."
+              : "Invite a parent to create a Mynk account and connect this student. They'll be able to manage their child's login and session access."
+          }
+        >
+          <ClaimInviteSection
+            studentId={student.id}
+            studentName={student.name}
+            alreadyClaimed={!!student.learnerProfileId}
+          />
+        </AdminSectionCard>
+      ) : null}
 
       <AdminSectionCard
         title="Session notes"

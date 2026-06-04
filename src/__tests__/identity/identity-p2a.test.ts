@@ -47,6 +47,7 @@ import {
   recordLearnerPinFailure,
   resetLearnerPinFailures,
   getLearnerPinFailureCount,
+  isCredentialHardLocked,
 } from "@/lib/learner-pin-rate-limit";
 import { generateRawToken, hashToken, hmacToken } from "@/lib/crypto/session-tokens";
 import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
@@ -538,91 +539,92 @@ describe("Tombstoned AccountHolder → session rejected", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Soft-lockout tiers (AH-4 LOCKED: NEVER hard-lock)
+// Lockout tiers (IAC-10: layered soft + hard lock — supersedes AH-4)
+// Soft tiers: 1–3 free, 4–6 → 30s, 7–9 → 5min, 10–12 → 15min
+// Hard lock: 13+ IP-independent failures → parent unlock required
 // ---------------------------------------------------------------------------
 
-describe("Soft-lockout tiers (AH-4)", () => {
-  // Use unique IPs per test to avoid cross-test state from per-IP bucket
+describe("Lockout tiers (IAC-10)", () => {
   let testIndex = 0;
   function uniqueTestKey() {
-    return { username: `lockout-u-${Date.now()}-${testIndex}`, ip: `10.99.${testIndex++}.1` };
+    const ts = Date.now();
+    const fid = `fam${ts}${testIndex}`;
+    const u = `u${ts}${testIndex}`;
+    const ip = `10.99.${testIndex++}.1`;
+    return { username: u, ip, credKey: `${fid}:${u}` };
   }
 
-  it("0–2 failures: allowed immediately (no cooldown)", () => {
-    const { username, ip } = uniqueTestKey();
-    // First 2 failures: no cooldown (counts 1 and 2 → cooldownSeconds = 0)
-    checkLearnerPinCooldown(username, ip); // pre-check: not in cooldown
-    recordLearnerPinFailure(username, ip); // count = 1, cooldown = 0
-    let cd = checkLearnerPinCooldown(username, ip);
+  it("1–3 failures: allowed immediately, no cooldown (fat-finger grace)", async () => {
+    const { ip, credKey } = uniqueTestKey();
+    for (let i = 0; i < 3; i++) {
+      await recordLearnerPinFailure(credKey);
+    }
+    const cd = await checkLearnerPinCooldown(credKey, ip);
     expect(cd.inCooldown).toBe(false);
-
-    recordLearnerPinFailure(username, ip); // count = 2, cooldown = 0
-    cd = checkLearnerPinCooldown(username, ip);
-    expect(cd.inCooldown).toBe(false);
+    expect(cd.retryAfterSeconds).toBe(0);
   });
 
-  it("3rd failure triggers 30s cooldown (3–4 tier)", () => {
-    const { username, ip } = uniqueTestKey();
-    recordLearnerPinFailure(username, ip); // count 1
-    recordLearnerPinFailure(username, ip); // count 2
-    const result = recordLearnerPinFailure(username, ip); // count 3 → 30s cooldown
+  it("4th failure triggers 30s soft cooldown (tier 2)", async () => {
+    const { ip, credKey } = uniqueTestKey();
+    for (let i = 0; i < 3; i++) await recordLearnerPinFailure(credKey);
+    const result = await recordLearnerPinFailure(credKey); // count 4 → 30s
     expect(result.newCooldownSeconds).toBe(30);
-    expect(result.failureCount).toBe(3);
+    expect(result.failureCount).toBe(4);
 
-    // Next attempt is in cooldown
-    const cd = checkLearnerPinCooldown(username, ip);
+    const cd = await checkLearnerPinCooldown(credKey, ip);
     expect(cd.inCooldown).toBe(true);
     expect(cd.retryAfterSeconds).toBeGreaterThan(0);
     expect(cd.retryAfterSeconds).toBeLessThanOrEqual(30);
   });
 
-  it("5th failure triggers 5min cooldown (5–7 tier)", () => {
-    const { username, ip } = uniqueTestKey();
-    for (let i = 0; i < 4; i++) recordLearnerPinFailure(username, ip);
-    resetLearnerPinFailures(username, ip); // reset between so we can reach count 5 without cooldown gate
-    // Force count to 5 by direct failures
-    for (let i = 0; i < 5; i++) {
-      // bypass existing cooldown between failures
-      const result = recordLearnerPinFailure(username, ip);
-      if (result.failureCount === 5) {
-        expect(result.newCooldownSeconds).toBe(300);
-        return;
-      }
-    }
-    // Fallback: manually check counts
-    const count = getLearnerPinFailureCount(username, ip);
-    expect(count).toBeGreaterThanOrEqual(3);
+  it("7th failure triggers 5min soft cooldown (tier 3)", async () => {
+    const { ip, credKey } = uniqueTestKey();
+    for (let i = 0; i < 7; i++) await recordLearnerPinFailure(credKey);
+    const count = await getLearnerPinFailureCount(credKey);
+    expect(count).toBe(7);
+    const cd = await checkLearnerPinCooldown(credKey, ip);
+    expect(cd.inCooldown).toBe(true);
+    expect(cd.retryAfterSeconds).toBeGreaterThan(0);
+    expect(cd.retryAfterSeconds).toBeLessThanOrEqual(300);
   });
 
-  it("11th failure triggers 1h cooldown and lockout_threshold_reached", () => {
-    const { username, ip } = uniqueTestKey();
+  it("10th failure triggers lockout_threshold_reached", async () => {
+    const { credKey } = uniqueTestKey();
     let hitThreshold = false;
-    for (let i = 0; i < 15; i++) {
-      const result = recordLearnerPinFailure(username, ip);
+    for (let i = 0; i < 12; i++) {
+      const result = await recordLearnerPinFailure(credKey);
       if (result.lockoutThresholdReached) {
         hitThreshold = true;
-        expect(result.failureCount).toBe(11);
-        expect(result.newCooldownSeconds).toBe(3600);
+        expect(result.failureCount).toBe(10);
         break;
       }
     }
     expect(hitThreshold).toBe(true);
   });
 
-  it("NEVER hard-locks: failure count resets on successful login", () => {
-    const { username, ip } = uniqueTestKey();
-    recordLearnerPinFailure(username, ip);
-    recordLearnerPinFailure(username, ip);
-    recordLearnerPinFailure(username, ip); // now in 30s cooldown
+  it("IAC-10 hard lock: 13th IP-independent failure triggers hard lock", async () => {
+    const { credKey } = uniqueTestKey();
+    let hardLocked = false;
+    for (let i = 0; i < 15; i++) {
+      const result = await recordLearnerPinFailure(credKey);
+      if (result.hardLockTriggered) {
+        hardLocked = true;
+        break;
+      }
+    }
+    expect(hardLocked).toBe(true);
+    expect(await isCredentialHardLocked(credKey)).toBe(true);
+  });
 
-    // Success clears the state
-    resetLearnerPinFailures(username, ip);
-
-    const count = getLearnerPinFailureCount(username, ip);
+  it("Success resets soft failure count; hard lock NOT cleared by success", async () => {
+    const { ip, credKey } = uniqueTestKey();
+    for (let i = 0; i < 4; i++) {
+      await recordLearnerPinFailure(credKey); // trigger soft cooldown
+    }
+    await resetLearnerPinFailures(credKey);
+    const count = await getLearnerPinFailureCount(credKey);
     expect(count).toBe(0);
-
-    // Next attempt is NOT in cooldown
-    const cd = checkLearnerPinCooldown(username, ip);
+    const cd = await checkLearnerPinCooldown(credKey, ip);
     expect(cd.inCooldown).toBe(false);
   });
 });

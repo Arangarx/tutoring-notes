@@ -15,6 +15,7 @@ import { hashToken, EMAIL_TOKEN_TTL_MS_24H } from "@/lib/crypto/session-tokens";
 import { generateRawToken } from "@/lib/crypto/session-tokens";
 import { stubSendAccountHolderEmail } from "@/lib/account-holder-email";
 import { getPublicBaseUrl } from "@/lib/public-url";
+import { validatePasswordStrength, MIN_PASSWORD_LENGTH } from "@/lib/password-strength";
 
 const OK_RESPONSE = {
   message: "If that email is registered, you'll receive an email. Check your inbox.",
@@ -28,10 +29,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
 
-  const { email, password, displayName, returnTo } = body as {
+  const { email, password, displayName, isSelfLearner, returnTo } = body as {
     email?: string;
     password?: string;
     displayName?: string;
+    isSelfLearner?: boolean;
     returnTo?: string;
   };
 
@@ -40,8 +42,12 @@ export async function POST(req: NextRequest) {
   if (!normalizedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
     return NextResponse.json({ error: "invalid_email" }, { status: 400 });
   }
-  if (!password || password.length < 8) {
+  if (!password || password.length < MIN_PASSWORD_LENGTH) {
     return NextResponse.json({ error: "password_too_short" }, { status: 400 });
+  }
+  const strengthCheck = validatePasswordStrength(password);
+  if (!strengthCheck.ok) {
+    return NextResponse.json({ error: "password_too_weak" }, { status: 400 });
   }
 
   const existing = await db.accountHolder.findUnique({ where: { email: normalizedEmail } });
@@ -61,14 +67,29 @@ export async function POST(req: NextRequest) {
 
   // New account
   const passwordHash = await hashAccountHolderPassword(password);
+  const selfLearner = isSelfLearner === true;
   const accountHolder = await db.accountHolder.create({
     data: {
       email: normalizedEmail,
       passwordHash,
       displayName: displayName?.trim() || null,
-      isSelfLearner: false,
+      isSelfLearner: selfLearner,
     },
   });
+
+  // IAC-8: if signing up as self-learner, create the self-LearnerProfile immediately
+  if (selfLearner) {
+    const selfName = displayName?.trim() || normalizedEmail.split("@")[0] || "Me";
+    await db.learnerProfile.create({
+      data: {
+        accountHolderId: accountHolder.id,
+        displayName: selfName,
+        isSelfLearner: true,
+        accessMode: "account_holder_session",
+      },
+    });
+    console.log(`[ahx] ahx=${accountHolder.id} action=self_learner_profile_created`);
+  }
 
   const rawToken = generateRawToken();
   const tokenHash = hashToken(rawToken);

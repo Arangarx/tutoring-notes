@@ -16,6 +16,8 @@ import { getAccountHolderSession } from "@/lib/account-holder-session";
 import { hashToken } from "@/lib/crypto/session-tokens";
 import { hashLearnerPin } from "@/lib/account-holder-auth";
 import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
+import { validateLearnerPin } from "@/lib/pin-strength";
+import { ensureFamilyId, formatLearnerLoginHandle } from "@/lib/family-id";
 
 export async function POST(
   req: NextRequest,
@@ -82,18 +84,34 @@ export async function POST(
       return NextResponse.json({ error: "invalid_username" }, { status: 400 });
     }
 
-    // PIN validation: min 6 numeric digits OR min 8 chars alphanumeric
-    const isNumericPin = /^\d+$/.test(pin);
-    if (isNumericPin && pin.length < 6) {
-      return NextResponse.json({ error: "pin_too_short" }, { status: 400 });
-    }
-    if (!isNumericPin && pin.length < 8) {
-      return NextResponse.json({ error: "pin_too_short" }, { status: 400 });
+    // PIN validation: 6 numeric digits, block obvious patterns
+    const pinCheck = validateLearnerPin(pin);
+    if (!pinCheck.ok) {
+      const errorCode =
+        pinCheck.error?.includes("6 digits") ? "pin_too_short" : "pin_too_weak";
+      return NextResponse.json(
+        { error: errorCode, message: pinCheck.error },
+        { status: 400 }
+      );
     }
 
-    // Check username uniqueness
+    // IAC-7: username uniqueness is per-family (accountHolderId), not global.
+    // Fetch accountHolderId from the LearnerProfile to resolve the composite unique.
+    const learnerProfile = await db.learnerProfile.findUnique({
+      where: { id: learnerProfileId },
+      select: { accountHolderId: true },
+    });
+    if (!learnerProfile) {
+      return NextResponse.json({ error: "profile_not_found" }, { status: 404 });
+    }
+
     const existingCred = await db.learnerCredential.findUnique({
-      where: { username: normalizedUsername },
+      where: {
+        accountHolderId_username: {
+          accountHolderId: learnerProfile.accountHolderId,
+          username: normalizedUsername,
+        },
+      },
     });
     if (existingCred) {
       return NextResponse.json({ error: "username_taken" }, { status: 409 });
@@ -101,17 +119,30 @@ export async function POST(
 
     const secretHash = await hashLearnerPin(pin);
 
-    await db.learnerCredential.create({
-      data: {
-        learnerProfileId,
-        username: normalizedUsername,
-        secretHash,
-      },
+    // IAC-7: must set accountHolderId (denormalized) for per-family unique index.
+    // IAC-6: set accessMode to child_pin_required when credential is created.
+    await db.$transaction(async (tx) => {
+      await tx.learnerProfile.update({
+        where: { id: learnerProfileId },
+        data: { accessMode: "child_pin_required" },
+      });
+      await tx.learnerCredential.create({
+        data: {
+          learnerProfileId,
+          accountHolderId: learnerProfile.accountHolderId,
+          username: normalizedUsername,
+          secretHash,
+        },
+      });
     });
+
+    // IAC-7: lazily assign familyId to AccountHolder if not already set.
+    const familyId = await ensureFamilyId(learnerProfile.accountHolderId);
+    const loginHandle = formatLearnerLoginHandle(normalizedUsername, familyId);
 
     console.log(`[lpr] lpr=${learnerProfileId} action=credential_created`);
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, familyId, loginHandle });
   }
 
   return NextResponse.json({ error: "unknown_action" }, { status: 400 });

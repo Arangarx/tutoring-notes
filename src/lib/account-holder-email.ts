@@ -21,15 +21,19 @@ export interface AccountHolderEmailPayload {
 
 /**
  * Stub email sender for AccountHolder realm (P2a).
- * Logs the link to server console instead of sending real email.
+ * Logs the full email body + action URL to server console instead of sending real email.
+ * Each body line is logged separately so the URL is unmissable in Vercel function logs
+ * even when the line is long (token URLs are 64+ chars).
  * Returns { sent: true } so call sites don't need to special-case the stub.
  */
 export async function stubSendAccountHolderEmail(
   payload: AccountHolderEmailPayload
 ): Promise<{ sent: boolean }> {
-  console.log(
-    `[ahx] EMAIL_STUB to=${payload.to} subject="${payload.subject}" link=${payload.actionUrl}`
-  );
+  console.log(`[ahx] EMAIL_STUB ▶ to=${payload.to} subject="${payload.subject}"`);
+  console.log(`[ahx] EMAIL_STUB ▶ action_url=${payload.actionUrl}`);
+  for (const line of payload.text.split("\n")) {
+    if (line.trim()) console.log(`[ahx] EMAIL_STUB   ${line}`);
+  }
   return { sent: true };
 }
 

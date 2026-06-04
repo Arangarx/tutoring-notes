@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getAdminByEmail, hasAdminUsers, updateAdminPassword } from "@/lib/auth-db";
 import { sendMail } from "@/lib/email";
 import { getPublicBaseUrl } from "@/lib/public-url";
+import { validatePasswordStrength } from "@/lib/password-strength";
 
 const TOKEN_BYTES = 32;
 const RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -60,8 +61,12 @@ export async function completePasswordReset(
   newPassword: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const trimmed = newPassword.trim();
-  if (trimmed.length < 8) {
-    return { ok: false, error: "Password must be at least 8 characters." };
+  const strengthCheck = validatePasswordStrength(trimmed);
+  if (!strengthCheck.ok) {
+    return {
+      ok: false,
+      error: strengthCheck.feedback || "Password must be at least 10 characters and not too simple.",
+    };
   }
 
   const tokenHash = hashResetToken(rawToken.trim());
