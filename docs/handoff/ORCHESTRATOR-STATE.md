@@ -18,7 +18,7 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 - **`e15fd86`** — **DB-backed durable learner PIN rate limiter.** New `LearnerLoginThrottle` Neon table (additive migration `20260603000000`, applies on next preview deploy); atomic `INSERT…ON CONFLICT…+1` increment; limiter converted async + 3 call sites; 6 cold-start durability tests (independent-query oracle). Replaces in-memory `Map` state that reset on every Vercel cold start (hard lock was effectively non-functional). **Other in-memory limiters inventoried + backlogged [SECURITY]:** `auth:<ip>` AH-login + `2fa:<ip>` = MEDIUM; `learner_ip`/`api`/`setup` = LOW. PIN = exactly 6 digits (fixed).
 - **Decisions this session (Andrew):** (a) **editable familyId (IAC-7) DEFERRED** — keep auto-gen; backlogged w/ cascade caveat (changing it breaks memorized child handles). (b) **accessMode "no specific error" = BY DESIGN, not a bug** — parent-managed/self children have no `LearnerCredential`, so `/students/login` fails earlier (generic) and never reaches the `access_mode_mismatch` guard; guard is correctly wired but **unreachable via any UI path** (dead-code) — login-page guidance gap backlogged. (c) **attach-existing confirmed working** (requires a 2nd-tutor claim link — testing-ergonomics gap noted; no parent-dashboard "add child"). (d) confirm-password: **standardize ON**; full unification deferred to component redesign.
 - **Known (track separately):** a **pre-existing** schema test failure (`student` vs `students` naming) exists on the branch — confirmed NOT introduced by this work.
-- **PIN lockout SMOKED on real hardware (Andrew 2026-06-03 PM) → soft-cooldown bug found + fixed.** Hard lock + parent-unlock validated (locks ~13, survives hard-refresh, unlock recovers). Root cause of the flaky *soft* tier: soft key was per-IP (`soft:<username>:<ip>`) but Vercel `x-forwarded-for` varies per proxy hop → a fresh `count=1` row each request, so the 30s brake never engaged (hard tier is IP-independent, which is exactly why it worked). **Fixed @ `c3df351`:** soft re-keyed to the credential handle `soft:<familyId>:<username>` (+ fixed a latent cleanup bug deleting grace-tier rows before tier 2); hard lock now surfaces on the *triggering* attempt; unlock toast persists (removed `revalidatePath` that unmounted the success state). **`163f246`:** Change-PIN autofocus + verified login submit/Enter already disabled during cooldown. Andrew's accepted bar: ~13 (13-vs-14 race-tolerant), every *real* try counts, message at the cap. **Awaiting real-hardware re-smoke** (soft-key IP-independence only provable on Vercel): 30s at attempt 4, 5min at 7, locked message on the ~13th, persistent unlock confirmation.
+- **PIN lockout SMOKED-PASS on real hardware (Andrew 2026-06-03 PM).** Hard lock + parent-unlock validated (locks ~13, survives hard-refresh, unlock recovers). Soft-cooldown bug fixed @ `c3df351` (credential-scoped key `soft:<familyId>:<username>`); **`163f246`** Change-PIN autofocus + cooldown-disabled submit. **Re-smoke PASS:** soft brake at attempt 4 → 30s, escalation at 7 → 5min; locked message on ~13th; unlock confirmation persists. Full 13-count trusted, not exhaustively clicked. Coverage map: [`docs/TESTING-COVERAGE.md`](../TESTING-COVERAGE.md).
 - **Live-transcription spike verified → P0 wall-clock invariant GAP** @ `c3c627f` on `spike/live-transcription`: naive `segmentIndex` concat (no timeline anchor); 6 intentionally RED spec tests (`ltx-timeline-assembly.test.ts`); ltx fix **design-gated** (freeze-vs-advance timeline — `getAudioMs()` freezes on pause) **+ hardware-gated**; see [`live-transcription-spike-STATUS.md`](live-transcription-spike-STATUS.md) + [`session-lifecycle-redesign-brief-2026-06-02.md`](session-lifecycle-redesign-brief-2026-06-02.md).
 
 **2026-06-02 (afternoon) — Live-transcription spike landed + session-lifecycle decisions captured (docs).** Spike on **`spike/live-transcription`** @ **`7671a25`** (off `master`, pushed, NOT merged): tsc 0, `next build` 0, `test:regression` 131 suites / 1358 tests; B2–B5 baked; B1 hardware-pending ([`live-transcription-spike-STATUS.md`](live-transcription-spike-STATUS.md)). **Session-lifecycle redesign brief** → [`session-lifecycle-redesign-brief-2026-06-02.md`](session-lifecycle-redesign-brief-2026-06-02.md) (auto-record reframe, presence timer, P0 wall-clock invariant, copy queue, in-person gate). Spine: [`v1-redesign-STATUS.md`](v1-redesign-STATUS.md) § 2026-06-02 checkpoints.
@@ -43,6 +43,12 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 ## Next action(s)
 
+**Pending smoke queue (Andrew):**
+
+1. Confirm-password on AccountHolder signup (`96c6a6b`) — multitutor preview.
+2. Phase D copy on `/` + `/features` (`56dcde7` on `feature/phase-d-landing-about`) — brand review.
+3. Multitutor round-1 spacing + `username@familyid` handle — eyeballed favorably; spot-check on preview.
+
 **Andrew smokes (parallel):**
 
 1. [Multitutor preview](https://tutoring-notes-git-identity-p2-m-9cb486-arangarx-5209s-projects.vercel.app) — IAC-2..12 + round-4 UX.
@@ -50,6 +56,8 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 3. **Live-transcription spike B1** — real hardware (primary recording byte-unaffected with tap); checklist [`live-transcription-spike-STATUS.md`](live-transcription-spike-STATUS.md).
 
 **Orchestrator queue (serial, shared-tree-respecting):**
+
+0. **AH-login + 2FA durable limiter** — **UNBLOCKED** (PIN limiter pattern + hardware smoke validated); replicate `LearnerLoginThrottle`-style Neon backing for `auth:<ip>` + `2fa:<ip>` per [`docs/BACKLOG.md`](../BACKLOG.md) § Security — in-memory rate limiters.
 
 1. Batched copy/UX pass on `feature/phase-d-landing-about` (commission + hit-record split).
 2. In-session-audio privacy clarification ([`docs/LEGAL-SYNC.md`](../LEGAL-SYNC.md)).
@@ -110,7 +118,7 @@ Update this file's head as each lands.
 
 ## Uncommitted / unmerged state
 
-**Working tree:** on `identity-p2-multitutor` (docs checkpoint commit pending push).
+**Working tree:** on `identity-p2-multitutor` — testing coverage map committed (`docs/TESTING-COVERAGE.md`).
 
 **V1 epic — merged to `v1-redesign`:** `identity-p1-2fa` @ `b5ef4fe`, `component-b2-dashboard-students` @ `0424206`, `identity-p2-schema` @ `242c6b2`, `identity-p2-ownership-guard` @ `1a06a65`, **`identity-p2a-session-infra` @ `6c4a268`**, `docs/road-to-ga` @ `eca63b5` (2026-06-01).
 
@@ -171,12 +179,13 @@ Fresh orchestrator — read in order:
 2. [`docs/handoff/ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md) (this file)
 3. [`docs/RELEASE-ROADMAP.md`](../RELEASE-ROADMAP.md)
 4. [`docs/BACKLOG.md`](../BACKLOG.md)
-5. [`docs/WHITEBOARD-STATUS.md`](../WHITEBOARD-STATUS.md)
-6. [`docs/RECORDER-LIFECYCLE.md`](../RECORDER-LIFECYCLE.md)
-7. [`docs/handoff/sec-1-impersonation-design-2026-05-30.md`](sec-1-impersonation-design-2026-05-30.md)
-8. [`docs/handoff/w1-audio-durability-design-2026-05-27.md`](w1-audio-durability-design-2026-05-27.md)
-9. [`docs/handoff/session-lifecycle-redesign-brief-2026-06-02.md`](session-lifecycle-redesign-brief-2026-06-02.md) — auto-record + timer + P0 timeline (future build)
-10. [`docs/handoff/live-transcription-spike-STATUS.md`](live-transcription-spike-STATUS.md) — spike landing + B1 hardware smoke (when present on branch)
+5. [`docs/TESTING-COVERAGE.md`](../TESTING-COVERAGE.md) — feature × tier matrix + Playwright automation roadmap
+6. [`docs/WHITEBOARD-STATUS.md`](../WHITEBOARD-STATUS.md)
+7. [`docs/RECORDER-LIFECYCLE.md`](../RECORDER-LIFECYCLE.md)
+8. [`docs/handoff/sec-1-impersonation-design-2026-05-30.md`](sec-1-impersonation-design-2026-05-30.md)
+9. [`docs/handoff/w1-audio-durability-design-2026-05-27.md`](w1-audio-durability-design-2026-05-27.md)
+10. [`docs/handoff/session-lifecycle-redesign-brief-2026-06-02.md`](session-lifecycle-redesign-brief-2026-06-02.md) — auto-record + timer + P0 timeline (future build)
+11. [`docs/handoff/live-transcription-spike-STATUS.md`](live-transcription-spike-STATUS.md) — spike landing + B1 hardware smoke (when present on branch)
 
 ## History / audit trail
 
