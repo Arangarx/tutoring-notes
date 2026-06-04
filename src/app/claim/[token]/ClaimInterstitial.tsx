@@ -116,7 +116,7 @@ export function ClaimInterstitial({
         {ownedProfiles.map((profile) => (
           <label
             key={profile.id}
-            className={`flex cursor-pointer items-start gap-4 rounded-md border p-3 transition-colors ${
+            className={`!flex cursor-pointer items-center gap-3 rounded-md border p-3 transition-colors ${
               selectedAction?.type === "attach_existing" && selectedAction.profileId === profile.id
                 ? "border-brand bg-brand/5"
                 : "border-border hover:bg-muted/40"
@@ -132,9 +132,9 @@ export function ClaimInterstitial({
               onChange={() =>
                 setSelectedAction({ type: "attach_existing", profileId: profile.id })
               }
-              className="mt-0.5 shrink-0 accent-brand"
+              className="size-4 shrink-0 accent-brand"
             />
-            <span className="flex-1 text-sm font-medium text-foreground">
+            <span className="min-w-0 flex-1 text-sm font-medium text-foreground">
               {profile.displayName}
               {profile.isSelfLearner && (
                 <span className="ml-2 text-xs text-muted-foreground font-normal">(you)</span>
@@ -145,7 +145,7 @@ export function ClaimInterstitial({
 
         {/* Add a new child */}
         <label
-          className={`flex cursor-pointer items-start gap-4 rounded-md border p-3 transition-colors ${
+          className={`!flex cursor-pointer items-center gap-3 rounded-md border p-3 transition-colors ${
             selectedAction?.type === "create_child"
               ? "border-brand bg-brand/5"
               : "border-border hover:bg-muted/40"
@@ -157,14 +157,14 @@ export function ClaimInterstitial({
             value="create_child"
             checked={selectedAction?.type === "create_child"}
             onChange={() => setSelectedAction({ type: "create_child" })}
-            className="mt-0.5 shrink-0 accent-brand"
+            className="size-4 shrink-0 accent-brand"
           />
-          <span className="flex-1 pt-px text-sm text-foreground">Add a new child</span>
+          <span className="min-w-0 flex-1 text-sm text-foreground">Add a new child</span>
         </label>
 
         {/* Connect yourself */}
         <label
-          className={`flex cursor-pointer items-start gap-4 rounded-md border p-3 transition-colors ${
+          className={`!flex cursor-pointer items-center gap-3 rounded-md border p-3 transition-colors ${
             selectedAction?.type === "connect_self"
               ? "border-brand bg-brand/5"
               : "border-border hover:bg-muted/40"
@@ -176,9 +176,9 @@ export function ClaimInterstitial({
             value="connect_self"
             checked={selectedAction?.type === "connect_self"}
             onChange={() => setSelectedAction({ type: "connect_self" })}
-            className="mt-0.5 shrink-0 accent-brand"
+            className="size-4 shrink-0 accent-brand"
           />
-          <span className="flex-1 pt-px text-sm text-foreground">
+          <span className="min-w-0 flex-1 text-sm text-foreground">
             {"I'll be taking the lessons myself"}
           </span>
         </label>
