@@ -87,6 +87,7 @@ export function ChangePinForm({ learnerProfileId }: { learnerProfileId: string }
           type="password"
           inputMode="numeric"
           autoComplete="new-password"
+          autoFocus
           required
           minLength={6}
           maxLength={6}
