@@ -45,7 +45,7 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 **Pending smoke queue (Andrew):**
 
-1. Confirm-password on AccountHolder signup (`96c6a6b`) — multitutor preview.
+1. ~~Confirm-password on AccountHolder signup (`96c6a6b`)~~ — **SMOKED-PASS (Andrew 2026-06-03)**.
 2. Phase D copy on `/` + `/features` (`56dcde7` on `feature/phase-d-landing-about`) — brand review.
 3. Multitutor round-1 spacing + `username@familyid` handle — eyeballed favorably; spot-check on preview.
 
