@@ -555,44 +555,44 @@ describe("Lockout tiers (IAC-10)", () => {
   }
 
   it("1–3 failures: allowed immediately, no cooldown (fat-finger grace)", async () => {
-    const { username, ip, credKey } = uniqueTestKey();
+    const { ip, credKey } = uniqueTestKey();
     for (let i = 0; i < 3; i++) {
-      await recordLearnerPinFailure(username, ip, credKey);
+      await recordLearnerPinFailure(credKey);
     }
-    const cd = await checkLearnerPinCooldown(username, ip);
+    const cd = await checkLearnerPinCooldown(credKey, ip);
     expect(cd.inCooldown).toBe(false);
     expect(cd.retryAfterSeconds).toBe(0);
   });
 
   it("4th failure triggers 30s soft cooldown (tier 2)", async () => {
-    const { username, ip, credKey } = uniqueTestKey();
-    for (let i = 0; i < 3; i++) await recordLearnerPinFailure(username, ip, credKey);
-    const result = await recordLearnerPinFailure(username, ip, credKey); // count 4 → 30s
+    const { ip, credKey } = uniqueTestKey();
+    for (let i = 0; i < 3; i++) await recordLearnerPinFailure(credKey);
+    const result = await recordLearnerPinFailure(credKey); // count 4 → 30s
     expect(result.newCooldownSeconds).toBe(30);
     expect(result.failureCount).toBe(4);
 
-    const cd = await checkLearnerPinCooldown(username, ip);
+    const cd = await checkLearnerPinCooldown(credKey, ip);
     expect(cd.inCooldown).toBe(true);
     expect(cd.retryAfterSeconds).toBeGreaterThan(0);
     expect(cd.retryAfterSeconds).toBeLessThanOrEqual(30);
   });
 
   it("7th failure triggers 5min soft cooldown (tier 3)", async () => {
-    const { username, ip, credKey } = uniqueTestKey();
-    for (let i = 0; i < 7; i++) await recordLearnerPinFailure(username, ip, credKey);
-    const count = await getLearnerPinFailureCount(username, ip);
+    const { ip, credKey } = uniqueTestKey();
+    for (let i = 0; i < 7; i++) await recordLearnerPinFailure(credKey);
+    const count = await getLearnerPinFailureCount(credKey);
     expect(count).toBe(7);
-    const cd = await checkLearnerPinCooldown(username, ip);
+    const cd = await checkLearnerPinCooldown(credKey, ip);
     expect(cd.inCooldown).toBe(true);
     expect(cd.retryAfterSeconds).toBeGreaterThan(0);
     expect(cd.retryAfterSeconds).toBeLessThanOrEqual(300);
   });
 
   it("10th failure triggers lockout_threshold_reached", async () => {
-    const { username, ip, credKey } = uniqueTestKey();
+    const { credKey } = uniqueTestKey();
     let hitThreshold = false;
     for (let i = 0; i < 12; i++) {
-      const result = await recordLearnerPinFailure(username, ip, credKey);
+      const result = await recordLearnerPinFailure(credKey);
       if (result.lockoutThresholdReached) {
         hitThreshold = true;
         expect(result.failureCount).toBe(10);
@@ -603,10 +603,10 @@ describe("Lockout tiers (IAC-10)", () => {
   });
 
   it("IAC-10 hard lock: 13th IP-independent failure triggers hard lock", async () => {
-    const { username, ip, credKey } = uniqueTestKey();
+    const { credKey } = uniqueTestKey();
     let hardLocked = false;
     for (let i = 0; i < 15; i++) {
-      const result = await recordLearnerPinFailure(username, ip, credKey);
+      const result = await recordLearnerPinFailure(credKey);
       if (result.hardLockTriggered) {
         hardLocked = true;
         break;
@@ -617,14 +617,14 @@ describe("Lockout tiers (IAC-10)", () => {
   });
 
   it("Success resets soft failure count; hard lock NOT cleared by success", async () => {
-    const { username, ip, credKey } = uniqueTestKey();
+    const { ip, credKey } = uniqueTestKey();
     for (let i = 0; i < 4; i++) {
-      await recordLearnerPinFailure(username, ip, credKey); // trigger soft cooldown
+      await recordLearnerPinFailure(credKey); // trigger soft cooldown
     }
-    await resetLearnerPinFailures(username, ip, credKey);
-    const count = await getLearnerPinFailureCount(username, ip);
+    await resetLearnerPinFailures(credKey);
+    const count = await getLearnerPinFailureCount(credKey);
     expect(count).toBe(0);
-    const cd = await checkLearnerPinCooldown(username, ip);
+    const cd = await checkLearnerPinCooldown(credKey, ip);
     expect(cd.inCooldown).toBe(false);
   });
 });

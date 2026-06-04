@@ -2,7 +2,7 @@
  * Learner PIN rate limiter — IAC-10 LOCKED (supersedes AH-4).
  *
  * Layered policy:
- *   Soft tiers (per username+IP, Neon-backed):
+ *   Soft tiers (per credential handle `familyId:username`, Neon-backed):
  *     1–3 failures:  no delay (fat-finger grace)
  *     4–6 failures:  30s cooldown
  *     7–9 failures:  5 min cooldown; nudge "ask a parent"
@@ -21,17 +21,23 @@
  *
  * Usage in login handler:
  *   0. await isCredentialHardLocked(credKey)     → if true, 423 immediately
- *   1. await checkLearnerPinCooldown(u, ip)     → if in cooldown, 429
+ *   1. await checkLearnerPinCooldown(credKey, ip) → if in cooldown, 429
  *   2. Attempt bcrypt comparison
- *   3a. On failure: await recordLearnerPinFailure(u, ip, credKey) → check result
- *   3b. On success: await resetLearnerPinFailures(u, ip, credKey)
+ *   3a. On failure: await recordLearnerPinFailure(credKey) → check result
+ *   3b. On success: await resetLearnerPinFailures(credKey)
  *
  * Parent unlock: await clearCredentialHardLock(credKey) — called from parent-side server action.
  *
  * DB keying (VERIFIED here):
- *   Soft: scopeKey = "soft:<normalizedUsername>:<ip>"      kind = "soft"
- *   Hard: scopeKey = "hard:<familyId>:<username>"          kind = "hard"
+ *   Soft: scopeKey = "soft:<familyId>:<username>"    kind = "soft"  (credential-scoped, IP-INDEPENDENT)
+ *   Hard: scopeKey = "hard:<familyId>:<username>"    kind = "hard"  (credential-scoped, IP-INDEPENDENT)
  *   IP:   learner_ip:<ip> (in-memory rateLimit, unchanged)
+ *
+ * NOTE on soft key: the soft key is credential-scoped (NOT per-IP) for stability. On Vercel,
+ *   x-forwarded-for can return different values across requests (proxy hops), making a per-IP
+ *   soft key effectively per-request — the counter never accumulates past 1. Using the stable
+ *   credential handle (same key as the hard tier) ensures the soft cooldown fires reliably at
+ *   the 4th attempt regardless of which edge node proxied the request.
  */
 
 import { db } from "@/lib/db";
@@ -74,17 +80,21 @@ export interface LearnerPinRecordResult {
 }
 
 // ---------------------------------------------------------------------------
-// Soft cooldown check (per username+IP)
+// Soft cooldown check (per credential handle, IP-independent)
 // ---------------------------------------------------------------------------
 
 /**
- * Check whether username+IP is currently in a soft cooldown period.
+ * Check whether this credential handle is currently in a soft cooldown period.
  * Does NOT increment the failure count — call this before the bcrypt attempt.
  *
- * Also enforces the per-IP 30 req/min guard (in-memory; separate lower-severity bucket).
+ * credKey: `familyId:username` — the stable credential handle.
+ * ip: used only for the per-IP 30 req/min in-memory overflow guard (separate lower-severity bucket).
+ *
+ * NOTE: the Neon soft key is credential-scoped (not IP-scoped) for stability on Vercel;
+ * see module doc for why IP-scoped keys are unreliable in serverless proxy environments.
  */
 export async function checkLearnerPinCooldown(
-  normalizedUsername: string,
+  credKey: string,
   ip: string
 ): Promise<LearnerPinCooldownResult> {
   // Per-IP overflow guard (in-memory; lower severity — see BACKLOG [SECURITY])
@@ -96,7 +106,7 @@ export async function checkLearnerPinCooldown(
     };
   }
 
-  const scopeKey = `soft:${normalizedUsername}:${ip}`;
+  const scopeKey = `soft:${credKey}`;
   const row = await db.learnerLoginThrottle.findUnique({
     where: { scopeKey },
     select: { cooldownUntil: true, failureCount: true },
@@ -113,8 +123,12 @@ export async function checkLearnerPinCooldown(
   }
 
   // Opportunistic cleanup: expired cooldown with low failure count (fat-finger noise).
+  // GUARD: only clean up rows that had a cooldown set (cooldownUntil was non-null) —
+  // never delete grace-tier rows (cooldownUntil = null, count ≤ 3), as those are
+  // mid-accumulation and deleting them resets the counter before tier 2 fires.
   // Runs async — failure is benign (row will be overwritten on next failure increment).
-  if (row.failureCount <= 3) {
+  const hadCooldownSet = row.cooldownUntil !== null;
+  if (hadCooldownSet && row.failureCount <= 3) {
     db.learnerLoginThrottle.delete({ where: { scopeKey } }).catch(() => {});
   }
 
@@ -155,8 +169,13 @@ export async function clearCredentialHardLock(credKey: string): Promise<void> {
 
 /**
  * Record a failed login attempt. Call this AFTER the bcrypt comparison fails.
- * Updates both the soft (username+IP) and hard (credential-level) counters via
+ * Updates both the soft (credential-scoped) and hard (credential-level) counters via
  * atomic INSERT … ON CONFLICT DO UPDATE … RETURNING to prevent lost-update races.
+ *
+ * credKey: `familyId:username` — used as the stable key for BOTH soft and hard counters.
+ *
+ * Soft key: `soft:<credKey>` (credential-scoped, IP-independent — see module doc).
+ * Hard key: `hard:<credKey>` (credential-scoped, IP-independent).
  *
  * Concurrency contract:
  *   Two concurrent failures on the same key both land an atomic increment.
@@ -165,18 +184,14 @@ export async function clearCredentialHardLock(credKey: string): Promise<void> {
  *   For hardLockedAt: the CASE expression preserves the first-set value
  *   (idempotent once non-null), so concurrent triggers at threshold both
  *   observe a locked account without double-setting or clearing.
- *
- * credKey: `familyId:username` — the IP-independent hard-lock key.
  */
 export async function recordLearnerPinFailure(
-  normalizedUsername: string,
-  ip: string,
   credKey: string
 ): Promise<LearnerPinRecordResult> {
-  // --- Soft counter (username+IP scoped) ---
+  // --- Soft counter (credential-scoped, IP-independent) ---
   // Single atomic SQL: increment failureCount and compute cooldownUntil in one round-trip.
   // The CASE in the UPDATE refers to the PRE-increment value so "+ 1" gives the new count.
-  const softScopeKey = `soft:${normalizedUsername}:${ip}`;
+  const softScopeKey = `soft:${credKey}`;
 
   type SoftRow = { failureCount: number | bigint; cooldownUntil: Date | null };
   const softRows = await db.$queryRaw<SoftRow[]>(Prisma.sql`
@@ -270,21 +285,19 @@ export async function recordLearnerPinFailure(
 /**
  * Reset failure counts on successful login. Call AFTER bcrypt succeeds.
  *
- * Clears soft counter (deletes the soft row).
+ * Clears soft counter (deletes the soft row keyed by credKey).
  * Resets hard failure counter to 0 but does NOT clear hardLockedAt —
  * that requires explicit parent unlock via clearCredentialHardLock().
+ *
+ * credKey: `familyId:username`
  *
  * (If the account were hard-locked, isCredentialHardLocked would have rejected
  *  the attempt before bcrypt; this path is only reachable for unlocked accounts.)
  */
-export async function resetLearnerPinFailures(
-  normalizedUsername: string,
-  ip: string,
-  credKey: string
-): Promise<void> {
-  // Delete soft row (clear cooldown + counter for this username+IP)
+export async function resetLearnerPinFailures(credKey: string): Promise<void> {
+  // Delete soft row (clear cooldown + counter for this credential)
   await db.learnerLoginThrottle.deleteMany({
-    where: { scopeKey: `soft:${normalizedUsername}:${ip}` },
+    where: { scopeKey: `soft:${credKey}` },
   });
 
   // Reset hard counter but preserve hardLockedAt (defensive: hard-locked accounts
@@ -299,13 +312,10 @@ export async function resetLearnerPinFailures(
 // Testing helpers
 // ---------------------------------------------------------------------------
 
-/** Get current soft failure count for testing. */
-export async function getLearnerPinFailureCount(
-  normalizedUsername: string,
-  ip: string
-): Promise<number> {
+/** Get current soft failure count for testing. credKey: `familyId:username` */
+export async function getLearnerPinFailureCount(credKey: string): Promise<number> {
   const row = await db.learnerLoginThrottle.findUnique({
-    where: { scopeKey: `soft:${normalizedUsername}:${ip}` },
+    where: { scopeKey: `soft:${credKey}` },
     select: { failureCount: true },
   });
   return row?.failureCount ?? 0;
@@ -342,17 +352,17 @@ export async function checkLearnerPinRateLimit(
 ): Promise<LearnerPinRateLimitResult> {
   const credKey = normalizedUsername;
   if (success) {
-    await resetLearnerPinFailures(normalizedUsername, ip, credKey);
+    await resetLearnerPinFailures(credKey);
     return { allowed: true, retryAfterSeconds: 0, failureCount: 0, lockoutThresholdReached: false };
   }
 
-  const cooldown = await checkLearnerPinCooldown(normalizedUsername, ip);
+  const cooldown = await checkLearnerPinCooldown(credKey, ip);
   if (cooldown.inCooldown) {
-    const count = await getLearnerPinFailureCount(normalizedUsername, ip);
+    const count = await getLearnerPinFailureCount(credKey);
     return { allowed: false, retryAfterSeconds: cooldown.retryAfterSeconds, failureCount: count, lockoutThresholdReached: false };
   }
 
-  const recorded = await recordLearnerPinFailure(normalizedUsername, ip, credKey);
+  const recorded = await recordLearnerPinFailure(credKey);
   const allowed = recorded.newCooldownSeconds === 0 && !recorded.hardLockTriggered;
   return {
     allowed,

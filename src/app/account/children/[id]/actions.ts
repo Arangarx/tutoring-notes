@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { getAccountHolderSession } from "@/lib/account-holder-session";
@@ -49,6 +48,10 @@ export async function unlockChildPinAction(
     `[lpr] lpr=${learnerProfileId} action=hard_lock_cleared_by_parent credKey=${credKey}`
   );
 
-  revalidatePath(`/account/children/${learnerProfileId}`);
+  // NOTE: no revalidatePath here by design. The page is force-dynamic so the next
+  // navigation will pick up the fresh unlocked state. Calling revalidatePath would
+  // trigger an immediate server re-render which unmounts <UnlockPinButton> (because
+  // isPinHardLocked becomes false), destroying the client-side success message before
+  // the parent can read it. The success state persists until navigation.
   return { ok: true };
 }

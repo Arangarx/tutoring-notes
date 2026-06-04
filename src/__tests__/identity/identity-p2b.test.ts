@@ -372,10 +372,10 @@ describe("P2B-LOCK: Learner soft-lockout (IAC-10)", () => {
 
     // IAC-10 tiers: 1–3 free; 4–6 → 30s; 7–9 → 5min; 10–12 → 15min; 13+ → hard lock
     for (let i = 0; i < 4; i++) {
-      await recordLearnerPinFailure(username, TEST_IP, credKey);
+      await recordLearnerPinFailure(credKey);
     }
 
-    const cooldown = await checkLearnerPinCooldown(username, TEST_IP);
+    const cooldown = await checkLearnerPinCooldown(credKey, TEST_IP);
     expect(cooldown.inCooldown).toBe(true);
     expect(cooldown.retryAfterSeconds).toBeGreaterThan(0);
     // Must be finite (30s for tier 2)
@@ -387,12 +387,12 @@ describe("P2B-LOCK: Learner soft-lockout (IAC-10)", () => {
     const credKey = makeCredKey(username);
 
     for (let i = 0; i < 4; i++) {
-      await recordLearnerPinFailure(username, TEST_IP, credKey);
+      await recordLearnerPinFailure(credKey);
     }
 
-    await resetLearnerPinFailures(username, TEST_IP, credKey);
+    await resetLearnerPinFailures(credKey);
 
-    const cooldown = await checkLearnerPinCooldown(username, TEST_IP);
+    const cooldown = await checkLearnerPinCooldown(credKey, TEST_IP);
     expect(cooldown.inCooldown).toBe(false);
   });
 
@@ -401,11 +401,11 @@ describe("P2B-LOCK: Learner soft-lockout (IAC-10)", () => {
     const credKey = makeCredKey(username);
 
     for (let i = 0; i < 3; i++) {
-      await recordLearnerPinFailure(username, TEST_IP, credKey);
+      await recordLearnerPinFailure(credKey);
     }
 
     // 3 failures: should NOT be in cooldown yet
-    const cooldown = await checkLearnerPinCooldown(username, TEST_IP);
+    const cooldown = await checkLearnerPinCooldown(credKey, TEST_IP);
     expect(cooldown.inCooldown).toBe(false);
     expect(cooldown.retryAfterSeconds).toBe(0);
   });
@@ -415,10 +415,10 @@ describe("P2B-LOCK: Learner soft-lockout (IAC-10)", () => {
     const credKey = makeCredKey(username);
 
     for (let i = 0; i < 4; i++) {
-      await recordLearnerPinFailure(username, TEST_IP, credKey);
+      await recordLearnerPinFailure(credKey);
     }
 
-    const cooldown = await checkLearnerPinCooldown(username, TEST_IP);
+    const cooldown = await checkLearnerPinCooldown(credKey, TEST_IP);
     expect(cooldown.inCooldown).toBe(true);
     // Tier 2: 30s
     expect(cooldown.retryAfterSeconds).toBeGreaterThanOrEqual(28);
