@@ -8,11 +8,11 @@
 
 | Field | Value |
 |---|---|
-| **Last action completed** | **Live-transcription spike landed** on `spike/live-transcription` @ `7671a25` (gates green; B2–B5 baked; B1 hardware-pending). **Session-lifecycle redesign decisions** captured → [`session-lifecycle-redesign-brief-2026-06-02.md`](session-lifecycle-redesign-brief-2026-06-02.md). |
-| **Next action(s)** | Andrew **smokes:** multitutor preview, Phase D preview, spike **B1** on real hardware. Orchestrator queue (serial): (1) batched copy/UX on Phase D (commission + hit-record split), (2) in-session-audio LEGAL-SYNC, (3) session-lifecycle redesign design pass (Sonnet + Opus review; lock freeze-vs-advance timeline), (4) implement LTX timestamp-anchored assembly **after** (3). After multitutor smoke PASS → `merge --no-ff` to `v1-redesign`. |
-| **Open Andrew-confirms** | Multitutor preview smoke; Phase D brand review (+ queued copy decisions below); spike B1 hardware; `interim-capture-attestation` migrate+smoke+merge. |
+| **Last action completed** | **Integration merge to `v1-redesign`:** `identity-p2-multitutor` + `feature/phase-d-landing-about` merged `--no-ff` (2026-06-03). Gates green post-merge (tsc, `next build`, regression 92/92). |
+| **Next action(s)** | Fresh **`v1-redesign` preview deploy** (applies identity migrations incl. `20260603000000_learner_pin_throttle`). Orchestrator queue (serial): (1) batched copy/UX on Phase D (commission + hit-record split), (2) in-session-audio LEGAL-SYNC, (3) session-lifecycle redesign design pass (Sonnet + Opus review; lock freeze-vs-advance timeline), (4) implement LTX timestamp-anchored assembly **after** (3). Andrew smokes spike **B1** on real hardware. |
+| **Open Andrew-confirms** | Spike B1 hardware; `interim-capture-attestation` migrate+smoke+merge; sign-in hover contrast (backlogged Phase B). |
 | **In-flight subagents** | **None.** |
-| **Uncommitted / unmerged** | `identity-p2-multitutor`, `feature/phase-d-landing-about`, `design/live-incremental-transcription-2026-06-02`, `spike/live-transcription` — all **pushed**, **none merged**. |
+| **Uncommitted / unmerged** | `design/live-incremental-transcription-2026-06-02`, `spike/live-transcription` — pushed, **not merged**. |
 
 ### Smoke targets (Andrew — 2026-06-02, both READY)
 

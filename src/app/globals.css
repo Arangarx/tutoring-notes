@@ -187,6 +187,26 @@ label {
   align-items: center;
 }
 
+.sign-in-menuitem {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 6;
+  font-size: 14px;
+  color: var(--text);
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+.sign-in-menuitem:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.sign-in-menuitem:focus-visible {
+  background: var(--surface-2);
+  color: var(--text);
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+
 .admin-nav-link {
   font-size: 13px;
   padding: 6px 10px;
