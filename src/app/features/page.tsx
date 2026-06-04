@@ -122,7 +122,7 @@ export default function FeaturesPage() {
                 {
                   label: "Session recording",
                   detail:
-                    "Online whiteboard sessions: once you confirm recording consent and go live, audio and whiteboard capture run automatically while you and your student are connected — pause anytime; recording ends with the session. In-person audio notes: tap Start recording when you're ready.",
+                    "Online whiteboard sessions: go live and audio and whiteboard capture run automatically while you and your student are connected — pause anytime; recording ends with the session. In-person audio notes: one tap to start when you're ready.",
                 },
                 {
                   label: "AI-drafted notes",
@@ -142,7 +142,7 @@ export default function FeaturesPage() {
                 {
                   label: "Session log",
                   detail:
-                    "A time-ordered record of what happened in each session — dates, duration, and notes. Built for tutors who bill by the hour.",
+                    "An organized per-session record — dates, duration, and notes, plus the transcript and whiteboard replay, all in one place. Built for tutors who bill by the hour.",
                 },
                 {
                   label: "Privacy-first",

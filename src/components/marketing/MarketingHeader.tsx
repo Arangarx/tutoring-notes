@@ -83,15 +83,8 @@ function SignInMenu() {
               <Link
                 href={href}
                 role="menuitem"
+                className="sign-in-menuitem"
                 onClick={close}
-                style={{
-                  display: "block",
-                  padding: "8px 12px",
-                  borderRadius: 6,
-                  fontSize: 14,
-                  color: "var(--text)",
-                  textDecoration: "none",
-                }}
               >
                 {label}
               </Link>
