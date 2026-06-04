@@ -646,6 +646,33 @@ if (session.studentId → learnerProfileId non-null):
 
 Note: `allowLiveSession = false` effectively means the parent has suspended access to this tutor. The tutor should see a clear indicator ("This student's account holder has suspended session access.") — not a confusing error.
 
+### 4.5 Claim-link interception / tutor disconnect (**IAC-13**, V1 security requirement)
+
+> **Status (2026-06-03):** Requirement captured on `identity-p2-multitutor`; **not built**. Investigation-backed; see also [`docs/BACKLOG.md`](../BACKLOG.md) § Identity / access — V1 redesign.
+
+**Threat model:** The claim invite URL (`/claim/[rawToken]`) is a **bearer token**. Anyone who obtains it before use (forwarded email, shoulder-surf, shared family device, compromised inbox) can complete the claim while authenticated as *their* `AccountHolder` and bind a tutor's `Student` stub to that account — granting access to a **minor's** tutoring artifacts (recordings, transcripts, session notes). This is a **COPPA/privacy** exposure, not a cosmetic UX issue.
+
+**V1 required mitigations:**
+
+| # | Mitigation | Intent |
+|---|---|---|
+| **(a)** | **Tutor visibility** | Tutor UI must show **which** `AccountHolder` (email / display identity) is connected to each claimed student, and ideally **when** the claim completed (`StudentClaimInvite.claimedAt` or equivalent). |
+| **(b)** | **Tutor-side disconnect** | Tutor must be able to **sever** the wrongful or stale `AccountHolder`↔`Student` association. Product must define session teardown: revoke `LearnerDeviceSession` rows for that `LearnerProfile`, revoke relevant `AccountHolderSession` use for that child, clear `Student.learnerProfileId` (or equivalent) with audit logging. |
+| **(c)** | **Defense-in-depth** | Retain **single-use** + **time-limited** claim tokens; consider shortening TTL below 7 days if residual bearer risk remains unacceptable. |
+
+**Current implementation (investigation 2026-06-03):**
+
+| Question | Answer |
+|---|---|
+| Tutor sees connected account email/identity? | **No** — `src/app/admin/students/[id]/page.tsx` / `ClaimInviteSection` only indicate claimed vs unclaimed (`student.learnerProfileId`); `claimedByAccountHolderId` is stored on `StudentClaimInvite` but not shown. |
+| Tutor can disconnect post-claim? | **No** — no unlink/disconnect route; tutor can mint invites and pending invites can be `revokedAt`, but there is no sever for an established `Student.learnerProfileId` link. |
+| Links single-use? | **Yes** — `StudentClaimInvite.claimedAt` set atomically in `POST /api/claim/[token]/complete`; reuse returns `student_already_claimed` / `claim_already_completed` (409). |
+| Links expire? | **Yes** — `expiresAt` at mint (`CLAIM_INVITE_TTL_MS` = 7 days); expired token rejected (410). Complete also requires `AccountHolder.emailVerifiedAt`. Sibling pending invites revoked on successful claim. |
+
+**Residual risk:** A 7-day bearer window and up to three concurrent pending invites still allow interception before the legitimate parent claims; without **(a)** the tutor cannot detect a wrong claimant; without **(b)** the tutor cannot recover after a wrongful claim.
+
+**Deferred (not V1):** Parent/guardian-initiated self-service unlink or account deletion — lower urgency when the connecting parent is normally the legitimate party; separate design pass (account-unlink / deletion territory).
+
 ---
 
 ## §5. Access Control Rules
