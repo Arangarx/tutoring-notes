@@ -751,6 +751,36 @@ model AccountHolderSession {
   @@index([expiresAt])
 }
 
+/// Durable rate-limit state for operator auth endpoints (MEDIUM-severity, IAC-11).
+/// Replaces in-memory `auth:<ip>` and `2fa:<ip>` Map counters in middleware so
+/// state survives Vercel cold starts and is shared across serverless instances.
+///
+/// Row kinds:
+///   kind="ah-login"   scopeKey="ah-login:<normalizedEmail>"   — AccountHolder login (10/min)
+///   kind="2fa-verify" scopeKey="2fa-verify:<adminUserId>"     — operator 2FA verify (20/min)
+///
+/// Each row tracks a single fixed window: requestCount increments atomically;
+/// windowResetAt marks when the window expires. On expiry the row is reset in-place.
+///
+/// Stable-key rationale: x-forwarded-for varies across Vercel proxy hops so an
+/// IP-scoped key never accumulates reliably (same lesson learned on LearnerLoginThrottle).
+/// Email (AH login) and adminUserId (2FA) are per-session-stable identity keys.
+model AuthThrottle {
+  id            String   @id @default(cuid())
+  /// "ah-login:<normalizedEmail>" or "2fa-verify:<adminUserId>"
+  scopeKey      String   @unique
+  /// "ah-login" | "2fa-verify"
+  kind          String
+  /// Requests counted in the current window.
+  requestCount  Int      @default(0)
+  /// Absolute timestamp when the current window expires.
+  windowResetAt DateTime
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([kind, updatedAt])
+}
+
 /// Durable rate-limit state for learner PIN login (IAC-10).
 /// Replaces module-global Map/Set in learner-pin-rate-limit.ts so state
 /// survives Vercel cold starts and is shared across serverless instances.

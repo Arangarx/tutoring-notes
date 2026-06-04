@@ -870,8 +870,8 @@ by the same `.cursor/rules/reliability-bar.mdc` standard.
 | Limiter | Key | Severity | Notes |
 |---|---|---|---|
 | `learner_ip:<ip>` 30 req/min | `rateLimit()` in `checkLearnerPinCooldown` | **LOW** | Per-IP overflow guard for learner PIN login. Cold-start reset is *more* generous (harder to DDoS). Lower priority; no auth state. |
-| `auth:<ip>` AH login | `rateLimit()` in `src/middleware.ts` | **MEDIUM** | AccountHolder (parent/tutor) login rate limit. In-memory reset means a cold start gives an attacker a fresh 30-req window. Recommend Neon-backed before broad rollout. |
-| `2fa:<ip>` TOTP verify | `rateLimit()` in `src/middleware.ts` | **MEDIUM** | 2FA verification rate limit. Same cold-start gap as AH login; TOTP codes are short-lived (30s) so window reset is partially mitigated but not eliminated. |
+| ~~`auth:<ip>` AH login~~ | ~~`rateLimit()` in `src/middleware.ts`~~ | ~~**MEDIUM**~~ | **✅ DONE (branch `security/durable-auth-2fa-limiters`, 2026-06-04):** Ported to Neon-backed `AuthThrottle` table. Primary key is now `ah-login:<normalizedEmail>` (stable, IP-independent). IP coarse check in middleware preserved as defense-in-depth (LOW). |
+| ~~`2fa:<ip>` TOTP verify~~ | ~~`rateLimit()` in `src/middleware.ts`~~ | ~~**MEDIUM**~~ | **✅ DONE (branch `security/durable-auth-2fa-limiters`, 2026-06-04):** Ported to Neon-backed `AuthThrottle` table. Primary key is now `2fa-verify:<adminUserId>` (stable, IP-independent). Check added in `verifyTotpCode` server action. |
 | `api:<ip>` / `api-wb-poll:<ip>` general API | `rateLimit()` in middleware via `api-rate-buckets.ts` | **LOW** | General API abuse prevention. Reset on cold start is acceptable for pilot scale; upgrade before high-volume traffic. |
 | `setup:<ip>` setup route | `rateLimit()` in `src/middleware.ts` | **LOW** | One-time claim/setup routes. Low risk. |
 

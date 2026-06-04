@@ -389,7 +389,15 @@ events also carry a `peer=<remotePeerId>` subkey), `imp`
 `src/app/account/children/[id]/actions.ts`; key lines:
 `[lpr] lpr=<learnerProfileId> action=login device=<sessionId>`,
 `[lpr] lpr=unknown action=hard_lock_triggered handle=<familyId>:<username>`,
-`[lpr] lpr=<learnerProfileId> action=hard_lock_cleared_by_parent credKey=<familyId>:<username>`), and
+`[lpr] lpr=<learnerProfileId> action=hard_lock_cleared_by_parent credKey=<familyId>:<username>`),
+`alr` (AccountHolder-login durable rate limiter — IAC-11; Neon-backed `AuthThrottle` table;
+key is `ah-login:<normalizedEmail>`; key lines:
+`[alr] alr=ah-login:<email> action=rate-limited count=<n> retryAfterSec=<s>`,
+`[alr] alr=ah-login:<email> action=approaching-limit count=<n>/10`),
+`tfr` (2FA-verify durable rate limiter — IAC-11; Neon-backed `AuthThrottle` table;
+key is `2fa-verify:<adminUserId>`; key lines:
+`[tfr] tfr=2fa-verify:<id> action=rate-limited count=<n> retryAfterSec=<s>`,
+`[tfr] tfr=2fa-verify:<id> action=approaching-limit count=<n>/20`), and
 the component-specific ones in `useAudioRecorder` (`aud=`).
 
 ### Whiteboard per-page viewport (`pvs`, Phase 5 task 8)
