@@ -114,10 +114,13 @@ describe("LearnerProfile model fields", () => {
     expect(field.type).toBe("String");
   });
 
-  it("student back-relation is optional (1-to-1)", () => {
-    const field = getField("LearnerProfile", "student");
-    expect(field.isList).toBe(false);
-    expect(field.isRequired).toBe(false);
+  it("students back-relation is a list (IAC-2: one learner → many tutor Student rows)", () => {
+    const model = getModel("LearnerProfile");
+    expect(model.fields.find((f) => f.name === "student")).toBeUndefined();
+    const field = getField("LearnerProfile", "students");
+    expect(field.isList).toBe(true);
+    expect(field.type).toBe("Student");
+    expect(field.relationName).toBeDefined();
   });
 });
 
