@@ -119,7 +119,8 @@ export const authOptions: NextAuthOptions = {
         // Fresh login: 2FA not yet verified this session (non-test accounts must pass the gate).
         // isTestAccount accounts are exempt — we mark them pre-verified so middleware skips them.
         // Playwright wb-regression harness: credentials login for playwright@test.local
-        // under NEXT_PUBLIC_WB_E2E_SCENE_HOOK=1 (local Docker Postgres only).
+        // under WB_E2E_HARNESS=1 (server-only flag, local Docker Postgres only;
+        // NOT gated on NEXT_PUBLIC_WB_E2E_SCENE_HOOK to prevent client-bundle bypass).
         const playwrightHarnessLogin =
           isPlaywrightHarnessActive() && isPlaywrightHarnessAdminEmail(u.email);
         if (u.isTestAccount || playwrightHarnessLogin) {

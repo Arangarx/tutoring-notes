@@ -925,6 +925,108 @@ describe("BUG-FIX item-1: verify success navigation + post-enroll cookie lifecyc
 });
 
 // ---------------------------------------------------------------------------
+// Playwright harness 2FA bypass — guard conditions
+// ---------------------------------------------------------------------------
+describe("isPlaywrightHarnessActive — server-only guard conditions", () => {
+  const HARNESS_EMAIL = "playwright@test.local";
+
+  afterEach(() => {
+    delete process.env.WB_E2E_HARNESS;
+    delete process.env.VERCEL;
+    delete process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK;
+    jest.resetModules();
+  });
+
+  it("active when WB_E2E_HARNESS=1 and VERCEL is unset", async () => {
+    process.env.WB_E2E_HARNESS = "1";
+    delete process.env.VERCEL;
+    const { isPlaywrightHarnessActive } = await import("@/lib/playwright-harness");
+    expect(isPlaywrightHarnessActive()).toBe(true);
+  });
+
+  it("inactive when only NEXT_PUBLIC_WB_E2E_SCENE_HOOK=1 (WB_E2E_HARNESS not set)", async () => {
+    process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK = "1";
+    delete process.env.WB_E2E_HARNESS;
+    delete process.env.VERCEL;
+    const { isPlaywrightHarnessActive } = await import("@/lib/playwright-harness");
+    expect(isPlaywrightHarnessActive()).toBe(false);
+  });
+
+  it("inactive when WB_E2E_HARNESS=1 but VERCEL=1 (defense-in-depth against prod leak)", async () => {
+    process.env.WB_E2E_HARNESS = "1";
+    process.env.VERCEL = "1";
+    const { isPlaywrightHarnessActive } = await import("@/lib/playwright-harness");
+    expect(isPlaywrightHarnessActive()).toBe(false);
+  });
+
+  it("inactive when neither flag is set", async () => {
+    delete process.env.WB_E2E_HARNESS;
+    delete process.env.VERCEL;
+    delete process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK;
+    const { isPlaywrightHarnessActive } = await import("@/lib/playwright-harness");
+    expect(isPlaywrightHarnessActive()).toBe(false);
+  });
+
+  it("JWT: harness login with WB_E2E_HARNESS=1 mints twoFactorVerified=true", async () => {
+    process.env.WB_E2E_HARNESS = "1";
+    delete process.env.VERCEL;
+    jest.doMock("@/lib/auth-db", () => ({
+      hasAdminUsers: jest.fn().mockResolvedValue(true),
+      getAdminByEmail: jest.fn().mockResolvedValue({
+        id: "hw-123", email: HARNESS_EMAIL, passwordHash: "hash",
+        isTestAccount: false, role: "ADMIN", displayName: "PW Admin",
+        createdAt: new Date(), updatedAt: new Date(),
+      }),
+      verifyPassword: jest.fn().mockResolvedValue(true),
+    }));
+    const { authOptions } = await import("@/auth-options");
+    const jwtCallback = authOptions.callbacks?.jwt as Function;
+    const user = { id: "hw-123", email: HARNESS_EMAIL, isTestAccount: false, role: "ADMIN" };
+    const result = await jwtCallback({ token: { sub: "hw-123" }, user, account: null });
+    expect(result.twoFactorVerified).toBe(true);
+  });
+
+  it("JWT: only NEXT_PUBLIC flag set (no WB_E2E_HARNESS) → harness bypass INERT → twoFactorVerified=false", async () => {
+    process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK = "1";
+    delete process.env.WB_E2E_HARNESS;
+    delete process.env.VERCEL;
+    jest.doMock("@/lib/auth-db", () => ({
+      hasAdminUsers: jest.fn().mockResolvedValue(true),
+      getAdminByEmail: jest.fn().mockResolvedValue({
+        id: "hw-123", email: HARNESS_EMAIL, passwordHash: "hash",
+        isTestAccount: false, role: "ADMIN", displayName: "PW Admin",
+        createdAt: new Date(), updatedAt: new Date(),
+      }),
+      verifyPassword: jest.fn().mockResolvedValue(true),
+    }));
+    const { authOptions } = await import("@/auth-options");
+    const jwtCallback = authOptions.callbacks?.jwt as Function;
+    const user = { id: "hw-123", email: HARNESS_EMAIL, isTestAccount: false, role: "ADMIN" };
+    const result = await jwtCallback({ token: { sub: "hw-123" }, user, account: null });
+    expect(result.twoFactorVerified).toBe(false);
+  });
+
+  it("JWT: WB_E2E_HARNESS=1 but VERCEL=1 → bypass INERT (prod guard) → twoFactorVerified=false", async () => {
+    process.env.WB_E2E_HARNESS = "1";
+    process.env.VERCEL = "1";
+    jest.doMock("@/lib/auth-db", () => ({
+      hasAdminUsers: jest.fn().mockResolvedValue(true),
+      getAdminByEmail: jest.fn().mockResolvedValue({
+        id: "hw-123", email: HARNESS_EMAIL, passwordHash: "hash",
+        isTestAccount: false, role: "ADMIN", displayName: "PW Admin",
+        createdAt: new Date(), updatedAt: new Date(),
+      }),
+      verifyPassword: jest.fn().mockResolvedValue(true),
+    }));
+    const { authOptions } = await import("@/auth-options");
+    const jwtCallback = authOptions.callbacks?.jwt as Function;
+    const user = { id: "hw-123", email: HARNESS_EMAIL, isTestAccount: false, role: "ADMIN" };
+    const result = await jwtCallback({ token: { sub: "hw-123" }, user, account: null });
+    expect(result.twoFactorVerified).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Item 2: autofocus on code entry inputs
 // ---------------------------------------------------------------------------
 describe("Item 2: autofocus code entry fields on 2FA screens", () => {
