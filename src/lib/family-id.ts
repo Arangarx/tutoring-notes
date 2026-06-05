@@ -2,16 +2,21 @@
  * Family ID helpers (IAC-7).
  *
  * A `familyId` is a short globally-unique identifier used in child login handles:
- * `username@familyid` (e.g. "dragon@mortensen1847").
+ * `username@familyid` (e.g. "dragon@mortensen", "dragon@mortensen2").
  *
  * Lazy creation: generated when the first child_pin_required credential is set up.
  * Parent can update it later via family settings (must remain globally unique).
  *
- * Format: 2–3 word slug from account holder display name/email + 4-digit random suffix.
- * e.g. "smith4219", "alex_j1847". Kept short and human-memorable.
+ * Minting (new families only): slugified surname → bare handle on first use;
+ * on global collision append smallest available integer ≥ 2 (`mortensen2`, …).
+ * DB `AccountHolder.familyId` @unique; insert-and-retry on P2002.
  */
 
 import { db } from "@/lib/db";
+
+const FAMILY_ID_MIN_LEN = 3;
+const FAMILY_ID_MAX_BASE_LEN = 20;
+const NUMERIC_SUFFIX_ATTEMPTS = 50;
 
 /** Full handle the child types at the student login page. */
 export function formatLearnerLoginHandle(username: string, familyId: string): string {
@@ -19,19 +24,55 @@ export function formatLearnerLoginHandle(username: string, familyId: string): st
 }
 
 /**
- * Generate a candidate family id from account holder display name or email prefix.
- * Normalizes to lowercase alphanumeric + underscores only.
+ * Last token of a display name (surname heuristic); email/local-part otherwise.
  */
-function generateCandidateFamilyId(seed: string): string {
-  // Take first word of the name/email prefix, normalize, append 4 random digits
-  const cleaned = seed
+export function extractSurnameSeed(displayName: string | null | undefined, email: string): string {
+  const trimmed = displayName?.trim();
+  if (trimmed) {
+    const parts = trimmed.split(/\s+/).filter(Boolean);
+    return parts.length > 1 ? (parts[parts.length - 1] ?? trimmed) : trimmed;
+  }
+  return email.split("@")[0] ?? "family";
+}
+
+/**
+ * Slugify surname → familyId base: lowercase, strip non-alphanumerics (spaces collapse).
+ */
+export function slugifyFamilyIdBase(raw: string): string {
+  const base = raw
     .toLowerCase()
-    .replace(/[^a-z0-9]/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_|_$/g, "")
-    .slice(0, 12);
+    .replace(/[^a-z0-9]+/g, "")
+    .slice(0, FAMILY_ID_MAX_BASE_LEN);
+  if (base.length >= FAMILY_ID_MIN_LEN) return base;
+  return "";
+}
+
+/**
+ * Yield candidate familyIds: bare base, then base2, base3, … then one random fallback.
+ */
+export function* familyIdCandidates(base: string): Generator<string> {
+  const normalized = base.length >= FAMILY_ID_MIN_LEN ? base : "family";
+  yield normalized;
+  for (let n = 2; n <= NUMERIC_SUFFIX_ATTEMPTS + 1; n++) {
+    const candidate = `${normalized}${n}`;
+    if (candidate.length <= 24) yield candidate;
+  }
   const suffix = String(Math.floor(1000 + Math.random() * 9000));
-  return cleaned ? `${cleaned}${suffix}` : `family${suffix}`;
+  yield `${normalized}${suffix}`.slice(0, 24);
+}
+
+/**
+ * Pick the first candidate not taken (unit-test oracle; production uses insert-and-catch).
+ */
+export function pickFamilyIdWithPredicate(
+  surnameSeed: string,
+  isTaken: (familyId: string) => boolean
+): string {
+  const base = slugifyFamilyIdBase(surnameSeed) || "family";
+  for (const candidate of familyIdCandidates(base)) {
+    if (!isTaken(candidate)) return candidate;
+  }
+  throw new Error("pickFamilyIdWithPredicate: no candidate available");
 }
 
 /**
@@ -49,14 +90,11 @@ export async function ensureFamilyId(accountHolderId: string): Promise<string> {
   if (!ah) throw new Error(`AccountHolder ${accountHolderId} not found`);
   if (ah.familyId) return ah.familyId;
 
-  // Generate from display name or email prefix
-  const seed = ah.displayName ?? ah.email.split("@")[0] ?? "family";
+  const seed = extractSurnameSeed(ah.displayName, ah.email);
+  const base = slugifyFamilyIdBase(seed) || "family";
 
-  // Retry loop to handle collisions (rare; stop after 5 attempts)
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const candidate = generateCandidateFamilyId(seed);
+  for (const candidate of familyIdCandidates(base)) {
     try {
-      // updateMany with familyId IS NULL so concurrent calls don't double-assign
       const result = await db.accountHolder.updateMany({
         where: { id: accountHolderId, familyId: null },
         data: { familyId: candidate },
@@ -65,16 +103,13 @@ export async function ensureFamilyId(accountHolderId: string): Promise<string> {
         console.log(`[ahx] ahx=${accountHolderId} action=family_id_assigned familyId=${candidate}`);
         return candidate;
       }
-      // count === 0: another request already set familyId; break and re-fetch
       break;
     } catch (e: unknown) {
-      // P2002 = unique constraint violation (collision); retry
       const err = e as { code?: string };
       if (err?.code !== "P2002") throw e;
     }
   }
 
-  // If we still don't have it (race: another request set it first), re-fetch
   const refetched = await db.accountHolder.findUnique({
     where: { id: accountHolderId },
     select: { familyId: true },
