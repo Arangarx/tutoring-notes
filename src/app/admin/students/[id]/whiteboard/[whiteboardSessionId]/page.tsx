@@ -111,8 +111,13 @@ export default async function WhiteboardReviewPage({
           snapshotBlobUrl: true,
           student: { select: { id: true, name: true } },
           audioRecordings: {
-            select: { id: true, mimeType: true, durationSeconds: true },
-            orderBy: { createdAt: "asc" },
+            select: {
+              id: true,
+              mimeType: true,
+              durationSeconds: true,
+              orderIndex: true,
+            },
+            orderBy: [{ orderIndex: "asc" }, { createdAt: "asc" }],
           },
         },
       }),
@@ -122,16 +127,23 @@ export default async function WhiteboardReviewPage({
 
   const eventsApiUrl = `/api/whiteboard/${whiteboardSessionId}/events`;
   const snapshotApiUrl = `/api/whiteboard/${whiteboardSessionId}/snapshot`;
-  // Audio is served via the existing admin audio proxy.
-  const firstAudio = detail.audioRecordings[0] ?? null;
-  const audioApiUrl = firstAudio
-    ? `/api/audio/admin/${firstAudio.id}`
-    : null;
+  const audioSegments = detail.audioRecordings.map((rec) => ({
+    url: `/api/audio/admin/${rec.id}`,
+    mimeType: rec.mimeType,
+    durationSeconds: rec.durationSeconds,
+  }));
 
   const sessionLabel = `Recording of ${detail.student.name} — ${formatDate(detail.startedAt)}`;
-  const durationLabel = detail.durationSeconds
-    ? formatDuration(detail.durationSeconds)
-    : null;
+  const recordingDurationSeconds = detail.audioRecordings.reduce(
+    (sum, rec) => sum + (rec.durationSeconds ?? 0),
+    0
+  );
+  const durationLabel =
+    recordingDurationSeconds > 0
+      ? formatDuration(recordingDurationSeconds)
+      : detail.durationSeconds
+        ? formatDuration(detail.durationSeconds)
+        : null;
 
   const isLive = !detail.endedAt;
   const aiEnabled = Boolean(env.OPENAI_API_KEY);
@@ -227,8 +239,7 @@ export default async function WhiteboardReviewPage({
       {/* Replay */}
       <WhiteboardReplay
         eventsBlobUrl={eventsApiUrl}
-        audioBlobUrl={audioApiUrl}
-        audioMimeType={firstAudio?.mimeType ?? null}
+        audioSegments={audioSegments}
         snapshotBlobUrl={detail.snapshotBlobUrl ? snapshotApiUrl : null}
         title={sessionLabel}
         whiteboardSessionId={whiteboardSessionId}
@@ -255,12 +266,6 @@ export default async function WhiteboardReviewPage({
       >
         wbsid={whiteboardSessionId.slice(0, 8)} · schema v
         {detail.eventsSchemaVersion}
-        {detail.audioRecordings.length > 1 && (
-          <>
-            {" · "}
-            {detail.audioRecordings.length} audio segments (first shown)
-          </>
-        )}
       </div>
     </div>
   );

@@ -62,6 +62,11 @@ import {
 } from "@/lib/whiteboard/scene-paint";
 import { useExcalidrawThemeFromSystem } from "@/hooks/useExcalidrawThemeFromSystem";
 import { attachWebmDurationFix } from "@/lib/audio/webm-duration-fix";
+import {
+  audioLocalMsToGlobalMs,
+  buildReplayAudioTimeline,
+  globalMsToSegmentLocal,
+} from "@/lib/whiteboard/replay-audio-timeline";
 import { attachReplayScrubAudioDefer } from "@/lib/whiteboard/replay-scrub-audio-defer";
 import { resolveWhiteboardAssetReadUrl } from "@/lib/whiteboard/resolve-asset-read-url";
 
@@ -109,12 +114,24 @@ type ReplayApi = {
   ) => void;
 };
 
+/** One ordered slice of session audio on the continuous replay timeline. */
+export type ReplayAudioSegment = {
+  url: string;
+  mimeType?: string | null;
+  durationSeconds?: number | null;
+};
+
 export type WhiteboardReplayProps = {
   /** Public-or-signed URL to the events.json on Vercel Blob. */
   eventsBlobUrl: string;
-  /** Optional URL to the session audio (mp4/webm). */
+  /**
+   * Ordered session audio segments (concatenated back-to-back in replay).
+   * When set, drives the full continuous timeline; prefer over `audioBlobUrl`.
+   */
+  audioSegments?: readonly ReplayAudioSegment[] | null;
+  /** @deprecated Use `audioSegments` — kept for single-segment callers/tests. */
   audioBlobUrl?: string | null;
-  /** Mime type for the audio (drives the Chrome WebM duration hack). */
+  /** @deprecated Use per-segment `mimeType` in `audioSegments`. */
   audioMimeType?: string | null;
   /** Optional URL to a final-snapshot PNG (preview before play). */
   snapshotBlobUrl?: string | null;
@@ -137,12 +154,39 @@ type LoadState =
 export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   const {
     eventsBlobUrl,
+    audioSegments,
     audioBlobUrl,
     audioMimeType,
     snapshotBlobUrl,
     title,
     whiteboardSessionId,
   } = props;
+
+  const effectiveSegments = useMemo((): ReplayAudioSegment[] => {
+    if (audioSegments && audioSegments.length > 0) {
+      return [...audioSegments];
+    }
+    if (audioBlobUrl) {
+      return [
+        {
+          url: audioBlobUrl,
+          mimeType: audioMimeType ?? null,
+          durationSeconds: null,
+        },
+      ];
+    }
+    return [];
+  }, [audioSegments, audioBlobUrl, audioMimeType]);
+
+  const hasAudio = effectiveSegments.length > 0;
+  const isMultiSegment = effectiveSegments.length > 1;
+  const audioTimeline = useMemo(
+    () =>
+      buildReplayAudioTimeline(
+        effectiveSegments.map((s) => s.durationSeconds)
+      ),
+    [effectiveSegments]
+  );
 
   // -----------------------------------------------------------------
   // Memoize resolveAssetUrl. Before May 15 evening, this was created
@@ -183,6 +227,9 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   const [replayExcaliRestoreReady, setReplayExcaliRestoreReady] =
     useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  /** Active segment index for multi-segment source-swap playback. */
+  const activeSegmentIndexRef = useRef(0);
+  const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
   /** Playhead allowed to trigger audio range requests (see replay-scrub-audio-defer). */
   const audioCommittedSecRef = useRef(0);
   /** Drops stale `loop.seek()` after a superseding scrub-drop. */
@@ -212,9 +259,11 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
 
   const excalidrawTheme = useExcalidrawThemeFromSystem();
 
+  const activeSegment =
+    effectiveSegments[activeSegmentIndex] ?? effectiveSegments[0] ?? null;
   const replayAudioMime = useMemo(
-    () => audioMimeType?.split(";")[0].trim().toLowerCase(),
-    [audioMimeType]
+    () => activeSegment?.mimeType?.split(";")[0].trim().toLowerCase(),
+    [activeSegment?.mimeType]
   );
 
   // -----------------------------------------------------------------
@@ -323,7 +372,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       return undefined;
     }
     const needsExcalCanvas =
-      loadState.log.events.length > 0 || !!audioBlobUrl;
+      loadState.log.events.length > 0 || hasAudio;
     if (!needsExcalCanvas) {
       setReplayExcaliRestoreReady(false);
       return undefined;
@@ -336,7 +385,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     return () => {
       cancelled = true;
     };
-  }, [audioBlobUrl, loadState]);
+  }, [hasAudio, loadState]);
 
   // -----------------------------------------------------------------
   // 3. Apply scene at currentTime — both at first paint AND when the
@@ -431,7 +480,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     initialPaintApiRef.current = api;
     replayCameraReadyRef.current = false;
 
-    const noSessionAudio = !audioBlobUrl;
+    const noSessionAudio = !hasAudio;
     const log = loadState.log;
     const finalClockMs = Math.max(log.durationMs, maxEventTimestampMs(log));
     const initialT = noSessionAudio ? finalClockMs : 0;
@@ -472,7 +521,85 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     return () => {
       fitter.dispose();
     };
-  }, [api, audioBlobUrl, loadState, applySceneAt]);
+  }, [api, hasAudio, loadState, applySceneAt]);
+
+  const applySceneAtRef = useRef(applySceneAt);
+  useEffect(() => {
+    applySceneAtRef.current = applySceneAt;
+  }, [applySceneAt]);
+
+  const loadSegmentAt = useCallback(
+    (segmentIndex: number, localMs: number, autoplay: boolean) => {
+      const el = audioRef.current;
+      const seg = effectiveSegments[segmentIndex];
+      if (!el || !seg) return;
+
+      const needsSrcSwap =
+        activeSegmentIndexRef.current !== segmentIndex ||
+        el.getAttribute("src") !== seg.url;
+
+      activeSegmentIndexRef.current = segmentIndex;
+      setActiveSegmentIndex(segmentIndex);
+      setAudioReady(false);
+
+      const seekSec = Math.max(0, localMs / 1000);
+      const applySeek = () => {
+        try {
+          el.currentTime = seekSec;
+        } catch {
+          // Best-effort; metadata may not be ready on all browsers.
+        }
+        if (autoplay) {
+          void el.play();
+        }
+      };
+
+      if (needsSrcSwap) {
+        el.src = seg.url;
+        const onMeta = () => {
+          el.removeEventListener("loadedmetadata", onMeta);
+          applySeek();
+        };
+        el.addEventListener("loadedmetadata", onMeta);
+        el.load();
+      } else {
+        applySeek();
+      }
+    },
+    [effectiveSegments]
+  );
+
+  const seekGlobalMs = useCallback(
+    (globalMs: number, autoplay: boolean) => {
+      const { segmentIndex, localMs } = globalMsToSegmentLocal(
+        globalMs,
+        audioTimeline
+      );
+      const globalSec = globalMs / 1000;
+      audioCommittedSecRef.current = isMultiSegment
+        ? globalSec
+        : localMs / 1000;
+      setAudioElapsedMs(globalMs);
+      applySceneAtRef.current(globalMs);
+      loadSegmentAt(segmentIndex, localMs, autoplay);
+    },
+    [audioTimeline, isMultiSegment, loadSegmentAt]
+  );
+
+  // Reset to segment 0 when the segment list changes (new session).
+  useEffect(() => {
+    activeSegmentIndexRef.current = 0;
+    setActiveSegmentIndex(0);
+    if (!hasAudio || !replayExcaliRestoreReady) return;
+    const el = audioRef.current;
+    if (!el) return;
+    const first = effectiveSegments[0];
+    if (!first) return;
+    if (el.getAttribute("src") !== first.url) {
+      el.src = first.url;
+      setAudioReady(false);
+    }
+  }, [effectiveSegments, hasAudio, replayExcaliRestoreReady]);
 
   // -----------------------------------------------------------------
   // 5. Audio-driven scene loop. We use rAF (not setInterval) so the
@@ -490,14 +617,10 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   // press), so scenes stopped updating mid-playback. The ref pattern
   // here makes the loop survive any future dep churn upstream.
   // -----------------------------------------------------------------
-  const applySceneAtRef = useRef(applySceneAt);
-  useEffect(() => {
-    applySceneAtRef.current = applySceneAt;
-  }, [applySceneAt]);
 
   useEffect(() => {
     if (loadState.kind !== "ready") return;
-    if (!audioBlobUrl) {
+    if (!hasAudio) {
       // Final scene is applied in the “first paint” effect once `api` exists;
       // nothing to drive a play head without session audio.
       return;
@@ -509,12 +632,22 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     const el = audioRef.current;
     if (!el) return;
 
+    const getGlobalTimeMs = () => {
+      const localMs = Math.floor(el.currentTime * 1000);
+      if (!isMultiSegment) return localMs;
+      return audioLocalMsToGlobalMs(
+        activeSegmentIndexRef.current,
+        localMs,
+        audioTimeline
+      );
+    };
+
     // Phase 1a: 20Hz throttled play loop with seek/pause bypass now lives
     // in the scene-paint engine. The driver throttles paints to ≈50ms so
     // the audio scrubber stays responsive on long recordings; user-initiated
     // changes (seek, pause) bypass the throttle. See `createThrottledPlayLoop`.
     const loop = createThrottledPlayLoop({
-      getTimeMs: () => Math.floor(el.currentTime * 1000),
+      getTimeMs: getGlobalTimeMs,
       apply: (ms) => {
         setAudioElapsedMs(ms);
         // Read via ref so applySceneAt identity churn does NOT force
@@ -526,34 +659,62 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
 
     const onPlay = () => loop.play();
     const onPause = () => {
-      audioCommittedSecRef.current = el.currentTime;
+      audioCommittedSecRef.current = isMultiSegment
+        ? getGlobalTimeMs() / 1000
+        : el.currentTime;
+      loop.pause();
+    };
+
+    const onEnded = () => {
+      if (!isMultiSegment) {
+        onPause();
+        return;
+      }
+      let next = activeSegmentIndexRef.current + 1;
+      while (
+        next < effectiveSegments.length &&
+        (audioTimeline.segmentDurationsMs[next] ?? 0) === 0
+      ) {
+        next += 1;
+      }
+      if (next < effectiveSegments.length) {
+        loadSegmentAt(next, 0, true);
+        loop.play();
+        return;
+      }
+      const endMs = audioTimeline.totalMs;
+      audioCommittedSecRef.current = endMs / 1000;
+      setAudioElapsedMs(endMs);
+      applySceneAtRef.current(endMs);
       loop.pause();
     };
 
     el.addEventListener("play", onPlay);
     el.addEventListener("pause", onPause);
-    el.addEventListener("ended", onPause);
+    el.addEventListener("ended", onEnded);
 
-    // Scrub drag: paint scene from in-memory log while deferring audio
-    // range fetches until pointer release (BACKLOG "Replay scrub drag").
-    const detachScrubDefer = attachReplayScrubAudioDefer(el, {
-      getCommittedSec: () => audioCommittedSecRef.current,
-      setCommittedSec: (sec) => {
-        audioCommittedSecRef.current = sec;
-      },
-      onVisualSeekMs: (ms) => {
-        setAudioElapsedMs(ms);
-        applySceneAtRef.current(ms);
-      },
-      onAudioCommitSec: (_sec, generation) => {
-        scrubCommitGenerationRef.current = generation;
-        const runSeek = () => {
-          if (generation !== scrubCommitGenerationRef.current) return;
-          loop.seek();
-        };
-        runSeek();
-      },
-    });
+    // Native scrubber defer only for single-segment (scrubber is global).
+    // Multi-segment uses the custom range control below the element.
+    const detachScrubDefer = isMultiSegment
+      ? () => undefined
+      : attachReplayScrubAudioDefer(el, {
+          getCommittedSec: () => audioCommittedSecRef.current,
+          setCommittedSec: (sec) => {
+            audioCommittedSecRef.current = sec;
+          },
+          onVisualSeekMs: (ms) => {
+            setAudioElapsedMs(ms);
+            applySceneAtRef.current(ms);
+          },
+          onAudioCommitSec: (_sec, generation) => {
+            scrubCommitGenerationRef.current = generation;
+            const runSeek = () => {
+              if (generation !== scrubCommitGenerationRef.current) return;
+              loop.seek();
+            };
+            runSeek();
+          },
+        });
 
     // WebM duration / scrubber fix.
     //
@@ -581,7 +742,11 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       detachDurationFix();
     };
   }, [
-    audioBlobUrl,
+    audioTimeline,
+    effectiveSegments,
+    hasAudio,
+    isMultiSegment,
+    loadSegmentAt,
     // NOTE: `applySceneAt` intentionally omitted — it is consumed
     // via `applySceneAtRef.current` (see comment above the loop
     // definition). Adding it back would re-introduce the "strokes
@@ -623,11 +788,11 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   }
 
   const log = loadState.log;
-  const hasAudio = !!audioBlobUrl;
-  /** Wall clock for “end of log” — never below the last event `t`. */
+  /** Wall clock for “end of log” — never below the last event `t` or audio span. */
   const finalReplayClockMs = Math.max(
     log.durationMs,
-    maxEventTimestampMs(log)
+    maxEventTimestampMs(log),
+    hasAudio ? audioTimeline.totalMs : 0
   );
 
   // Empty-events case: the session row exists and the events.json is
@@ -690,15 +855,50 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
         <div style={{ display: "grid", gap: 4 }}>
           <audio
             ref={audioRef}
-            controls
+            controls={!isMultiSegment}
             preload="metadata"
-            src={audioBlobUrl ?? undefined}
-            {...(replayAudioMime
-              ? { type: replayAudioMime }
-              : {})}
+            src={effectiveSegments[0]?.url}
+            {...(replayAudioMime ? { type: replayAudioMime } : {})}
             data-testid="wb-replay-audio"
             style={{ width: "100%" }}
           />
+          {isMultiSegment && (
+            <div
+              className="row"
+              style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}
+            >
+              <button
+                type="button"
+                className="btn"
+                data-testid="wb-replay-play-toggle"
+                onClick={() => {
+                  const el = audioRef.current;
+                  if (!el) return;
+                  if (el.paused) void el.play();
+                  else el.pause();
+                }}
+              >
+                Play / Pause
+              </button>
+              <input
+                type="range"
+                min={0}
+                max={Math.max(audioTimeline.totalMs, finalReplayClockMs, 1)}
+                value={Math.min(audioElapsedMs, audioTimeline.totalMs)}
+                data-testid="wb-replay-global-seek"
+                aria-label="Replay position"
+                style={{ flex: 1, minWidth: 160 }}
+                onChange={(ev) => {
+                  const ms = Number(ev.target.value);
+                  seekGlobalMs(ms, false);
+                }}
+                onPointerUp={(ev) => {
+                  const ms = Number((ev.target as HTMLInputElement).value);
+                  seekGlobalMs(ms, !audioRef.current?.paused);
+                }}
+              />
+            </div>
+          )}
           {!audioReady && (
             <span className="muted" style={{ fontSize: 11 }}>
               Audio loading… you can press Play once it&apos;s ready.
@@ -770,9 +970,9 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
           (see `attachWebmDurationFix` wired into the rAF useEffect
           above). Surfaced in the UI for debugging when a tutor reports
           a non-draggable scrubber or wrong duration. */}
-      {hasAudio && audioMimeType && (
+      {hasAudio && activeSegment?.mimeType && (
         <div className="muted" style={{ fontSize: 11 }}>
-          Audio mime: {audioMimeType}
+          Audio mime: {activeSegment.mimeType}
         </div>
       )}
     </div>
