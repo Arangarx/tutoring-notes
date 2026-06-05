@@ -83,12 +83,16 @@ function rateLimitResponse(
   retryAfterMs: number,
   pathname: string
 ): NextResponse {
+  const retryAfterSec = Math.ceil(retryAfterMs / 1000);
+  // All rate-limited paths are API endpoints — return JSON so callers handle
+  // the 429 inline. The round-1 standalone HTML page for page GETs is gone:
+  // page GETs are no longer rate-limited (they're not the brute-force vector).
   return addSecurityHeaders(
     NextResponse.json(
       { error: "Too many requests. Please try again later." },
       {
         status: 429,
-        headers: { "Retry-After": String(Math.ceil(retryAfterMs / 1000)) },
+        headers: { "Retry-After": String(retryAfterSec) },
       }
     ),
     pathname
@@ -103,11 +107,18 @@ export async function middleware(req: NextRequest) {
   const ip = getClientIp(req);
 
   // --- Rate limiting on sensitive endpoints ---
+  //
+  // Scope: credential-submit POST endpoints ONLY — not page GETs, not CSRF
+  // fetches, not session reads.  Rationale: the brute-force vector is the
+  // submit, not the page load.  Blocking GET /login or GET /api/auth/csrf
+  // prevents the login page from rendering the form at all, forcing a
+  // standalone error card (smoke failure, 2304f9e round-1).  The CSRF token
+  // endpoint (/api/auth/csrf) being blocked makes NextAuth's signIn() fail
+  // unexpectedly and redirect to its default /api/auth/error "Error" card
+  // instead of returning an error object the form can display inline.
   if (
-    pathname.startsWith("/api/auth/") ||
-    pathname === "/login" ||
-    pathname === "/forgot-password" ||
-    pathname === "/reset-password"
+    pathname === "/api/auth/callback/credentials" ||
+    pathname === "/api/auth/account-holder/login"
   ) {
     const rl = rateLimit(`auth:${ip}`, AUTH_RATE_LIMIT.max, AUTH_RATE_LIMIT.windowMs);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);

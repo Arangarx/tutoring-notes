@@ -6,6 +6,11 @@
  * Anti-enumeration: responds 401 for both "not found" and "wrong password".
  *
  * BLOCKER-P2-S1: issues a FRESH AccountHolderSession on every successful login.
+ *
+ * Rate limiting (IAC-11):
+ *   Primary: durable Neon-backed counter keyed on normalized email (10 req/60s).
+ *     Survives cold starts; accumulates correctly across serverless instances.
+ *   Secondary: IP-based in-memory check in middleware (preserved as defense-in-depth).
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -19,6 +24,7 @@ import {
   buildAhSessionCookie,
   AH_SESSION_TTL_MS,
 } from "@/lib/account-holder-session";
+import { checkAhLoginRateLimit } from "@/lib/auth-rate-limit";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -35,6 +41,19 @@ export async function POST(req: NextRequest) {
   const normalizedEmail = (email ?? "").trim().toLowerCase();
   if (!normalizedEmail || !password) {
     return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
+  }
+
+  // Durable identity-keyed rate limit (IAC-11): check BEFORE bcrypt to avoid
+  // burning CPU on rate-limited requests. Email is normalized before keying.
+  const rl = await checkAhLoginRateLimit(normalizedEmail);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "too_many_requests" },
+      {
+        status: 429,
+        headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) },
+      }
+    );
   }
 
   const row = await db.accountHolder.findUnique({

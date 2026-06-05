@@ -244,6 +244,7 @@ function ClaimLoginForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [retryAfterSec, setRetryAfterSec] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -258,6 +259,14 @@ function ClaimLoginForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
+
+      if (loginRes.status === 429) {
+        const ra = parseInt(loginRes.headers.get("Retry-After") ?? "60", 10);
+        setRetryAfterSec(isNaN(ra) ? 60 : ra);
+        setError("too_many_requests");
+        return;
+      }
+
       const loginData = (await loginRes.json()) as { next?: string; error?: string };
 
       if (!loginRes.ok) {
@@ -311,9 +320,21 @@ function ClaimLoginForm({
       </div>
 
       {error === "invalid_credentials" && (
+        <AuthFieldError id={`${fid}-err`}>
+          Email or password is incorrect.{" "}
+          <a
+            href={`/account/forgot-password?returnTo=${encodeURIComponent(`/claim/${rawToken}`)}`}
+            className="underline underline-offset-2 hover:text-destructive/80"
+          >
+            Reset your password
+          </a>{" "}
+          if you&apos;ve forgotten it.
+        </AuthFieldError>
+      )}
+      {error === "too_many_requests" && (
         <AuthFieldError
           id={`${fid}-err`}
-          message="Check your email and password and try again."
+          message={`Too many attempts — please wait${retryAfterSec ? ` ${retryAfterSec} second${retryAfterSec !== 1 ? "s" : ""}` : " a minute"} and try again.`}
         />
       )}
       {(error === "server" || error === "network") && (

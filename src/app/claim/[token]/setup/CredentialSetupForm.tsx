@@ -197,6 +197,7 @@ export function CredentialSetupForm({
           />
           <button
             type="button"
+            tabIndex={-1}
             onClick={() => setShowPin((v) => !v)}
             className="absolute right-3 flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:text-foreground focus:outline-none"
             aria-label={showPin ? "Hide PIN" : "Show PIN"}
@@ -240,6 +241,7 @@ export function CredentialSetupForm({
           />
           <button
             type="button"
+            tabIndex={-1}
             onClick={() => setShowConfirmPin((v) => !v)}
             className="absolute right-3 flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:text-foreground focus:outline-none"
             aria-label={showConfirmPin ? "Hide PIN" : "Show PIN"}

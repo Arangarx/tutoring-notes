@@ -81,6 +81,10 @@ export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
   pages: {
     signIn: "/login",
+    // Redirect all NextAuth error pages to /login?error=... so they render
+    // the inline error banner instead of NextAuth's standalone "Error" card
+    // at /api/auth/error.
+    error: "/login",
   },
   callbacks: {
     async signIn({ user, account }) {

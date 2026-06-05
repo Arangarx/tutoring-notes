@@ -26,6 +26,7 @@ import { requireStudentScope } from "@/lib/student-scope";
 import { assertIsAdmin } from "@/lib/impersonation";
 import { decode } from "next-auth/jwt";
 import { cookies } from "next/headers";
+import { check2faVerifyRateLimit } from "@/lib/auth-rate-limit";
 
 const APP_ISSUER = "Mynk";
 const TOTP_DIGITS = 6;
@@ -254,6 +255,17 @@ export async function verifyTotpCode(codeInput: string): Promise<VerifyTotpResul
     adminId = result.adminId;
   } catch (e) {
     return { ok: false, error: String(e) };
+  }
+
+  // Durable identity-keyed rate limit (IAC-11): keyed on adminUserId (stable,
+  // IP-independent). Check before TOTP/backup-code validation to avoid leaking
+  // timing differences and to stop brute-force before bcrypt/TOTP computation.
+  const rl = await check2faVerifyRateLimit(adminId);
+  if (!rl.allowed) {
+    return {
+      ok: false,
+      error: `Too many verification attempts. Try again in ${Math.ceil(rl.retryAfterMs / 1000)} seconds.`,
+    };
   }
 
   const row = await db.adminUser2FA.findUnique({

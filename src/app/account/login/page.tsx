@@ -9,6 +9,8 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useRetryAfterCountdown } from "@/hooks/useRetryAfterCountdown";
+import { parseRetryAfterSeconds } from "@/lib/auth-client";
 
 function AccountLoginForm() {
   const searchParams = useSearchParams();
@@ -18,6 +20,7 @@ function AccountLoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const { retryAfterSec, isRateLimited, startCountdown } = useRetryAfterCountdown();
   const [busy, setBusy] = useState(false);
   const formErrorId = useId();
 
@@ -32,6 +35,8 @@ function AccountLoginForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (isRateLimited) return;
+
     setBusy(true);
     setError(null);
 
@@ -42,6 +47,12 @@ function AccountLoginForm() {
         body: JSON.stringify({ email, password }),
       });
 
+      if (res.status === 429) {
+        startCountdown(parseRetryAfterSeconds(res));
+        setError("too_many_requests");
+        return;
+      }
+
       const data = (await res.json()) as { next?: string; error?: string };
 
       if (!res.ok) {
@@ -50,6 +61,7 @@ function AccountLoginForm() {
         } else {
           setError("credentials");
         }
+        setPassword(""); // clear field — prevents browser save-password heuristic on failure
         return;
       }
 
@@ -127,15 +139,27 @@ function AccountLoginForm() {
         </div>
 
         {error === "credentials" ? (
-          <AuthFieldError
-            id={formErrorId}
-            message="Email or password didn't match. Try again, or reset your password using the link above."
-          />
+          <AuthFieldError id={formErrorId}>
+            Email or password is incorrect.{" "}
+            <Link
+              href="/account/forgot-password"
+              className="underline underline-offset-2 hover:text-destructive/80"
+            >
+              Reset your password
+            </Link>{" "}
+            if you&apos;ve forgotten it.
+          </AuthFieldError>
         ) : null}
         {error === "email_not_verified" ? (
           <AuthFieldError
             id={formErrorId}
             message="Please verify your email first. Check your inbox for a confirmation link."
+          />
+        ) : null}
+        {error === "too_many_requests" ? (
+          <AuthFieldError
+            id={formErrorId}
+            message={`Too many attempts — please wait${retryAfterSec ? ` ${retryAfterSec} second${retryAfterSec !== 1 ? "s" : ""}` : " a minute"} and try again.`}
           />
         ) : null}
         {error === "network" ? (
@@ -147,7 +171,7 @@ function AccountLoginForm() {
 
         <Button
           type="submit"
-          disabled={busy}
+          disabled={busy || isRateLimited}
           aria-busy={busy}
           className="min-h-11 w-full text-base"
         >
