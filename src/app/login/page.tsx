@@ -11,6 +11,28 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+// Map URL ?error= param values (NextAuth error codes + app-defined codes) to
+// internal error keys for rendering.  This fires when NextAuth redirects to
+// /login?error=... instead of returning an error object inline (safety net).
+function mapUrlError(e: string | null): string | null {
+  if (!e) return null;
+  // NextAuth credentials failure — should normally be caught inline, but handle
+  // it here as a fallback in case of an unexpected redirect.
+  if (e === "CredentialsSignin") return "credentials";
+  // App-defined: Google OAuth signIn callback returned /login?error=not_authorized
+  if (e === "not_authorized" || e === "AccessDenied") return "access_denied";
+  // NextAuth OAuth-flow errors
+  if (
+    e === "OAuthSignin" ||
+    e === "OAuthCallback" ||
+    e === "OAuthCreateAccount" ||
+    e === "OAuthAccountNotLinked"
+  )
+    return "oauth_error";
+  // NextAuth configuration / catch-all errors
+  return "server_error";
+}
+
 function LoginForm() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/admin";
@@ -18,7 +40,10 @@ function LoginForm() {
   const registeredOk = searchParams.get("registered") === "1";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  // Seed error state from URL param (safety-net for NextAuth redirects).
+  const [error, setError] = useState<string | null>(() =>
+    mapUrlError(searchParams.get("error"))
+  );
   const [retryAfterSec, setRetryAfterSec] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
@@ -96,15 +121,16 @@ function LoginForm() {
             });
 
             if (res?.status === 429) {
-              const ra = typeof (res as { headers?: { "retry-after"?: string } }).headers?.["retry-after"] === "string"
-                ? parseInt((res as { headers?: { "retry-after"?: string } }).headers!["retry-after"]!, 10)
-                : 60;
-              setRetryAfterSec(isNaN(ra) ? 60 : ra);
+              // Retry-After is on the underlying HTTP response, which NextAuth's
+              // signIn() doesn't expose — default to the window duration (60 s).
+              setRetryAfterSec(60);
               setError("too_many_requests");
+              setPassword(""); // clear field so the browser doesn't offer to save
               return;
             }
             if (!res || res.error) {
               setError("credentials");
+              setPassword(""); // clear field — prevents browser save-password heuristic on failure
               return;
             }
             window.location.href = res.url ?? callbackUrl;
@@ -153,10 +179,16 @@ function LoginForm() {
         </div>
 
         {error === "credentials" ? (
-          <AuthFieldError
-            id={formErrorId}
-            message="Email or password didn't match. Try again, or reset your password using the link above."
-          />
+          <AuthFieldError id={formErrorId}>
+            Email or password is incorrect.{" "}
+            <Link
+              href="/forgot-password"
+              className="underline underline-offset-2 hover:text-destructive/80"
+            >
+              Reset your password
+            </Link>{" "}
+            if you&apos;ve forgotten it.
+          </AuthFieldError>
         ) : null}
         {error === "too_many_requests" ? (
           <AuthFieldError
@@ -168,6 +200,24 @@ function LoginForm() {
           <AuthFieldError
             id={formErrorId}
             message="Couldn't reach Mynk. Check your internet, then try again."
+          />
+        ) : null}
+        {error === "access_denied" ? (
+          <AuthFieldError
+            id={formErrorId}
+            message="This account doesn't have access to Mynk. Contact your administrator to get set up."
+          />
+        ) : null}
+        {error === "oauth_error" ? (
+          <AuthFieldError
+            id={formErrorId}
+            message="Sign-in failed. Try a different method, or contact your administrator."
+          />
+        ) : null}
+        {error === "server_error" ? (
+          <AuthFieldError
+            id={formErrorId}
+            message="Sign-in is temporarily unavailable. Please try again in a moment."
           />
         ) : null}
 

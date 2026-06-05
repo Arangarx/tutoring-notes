@@ -58,6 +58,7 @@ function AccountLoginForm() {
         } else {
           setError("credentials");
         }
+        setPassword(""); // clear field — prevents browser save-password heuristic on failure
         return;
       }
 
@@ -135,10 +136,16 @@ function AccountLoginForm() {
         </div>
 
         {error === "credentials" ? (
-          <AuthFieldError
-            id={formErrorId}
-            message="Email or password didn't match. Try again, or reset your password using the link above."
-          />
+          <AuthFieldError id={formErrorId}>
+            Email or password is incorrect.{" "}
+            <Link
+              href="/account/forgot-password"
+              className="underline underline-offset-2 hover:text-destructive/80"
+            >
+              Reset your password
+            </Link>{" "}
+            if you&apos;ve forgotten it.
+          </AuthFieldError>
         ) : null}
         {error === "email_not_verified" ? (
           <AuthFieldError

@@ -320,10 +320,16 @@ function ClaimLoginForm({
       </div>
 
       {error === "invalid_credentials" && (
-        <AuthFieldError
-          id={`${fid}-err`}
-          message="Check your email and password and try again."
-        />
+        <AuthFieldError id={`${fid}-err`}>
+          Email or password is incorrect.{" "}
+          <a
+            href={`/account/forgot-password?returnTo=${encodeURIComponent(`/claim/${rawToken}`)}`}
+            className="underline underline-offset-2 hover:text-destructive/80"
+          >
+            Reset your password
+          </a>{" "}
+          if you&apos;ve forgotten it.
+        </AuthFieldError>
       )}
       {error === "too_many_requests" && (
         <AuthFieldError
