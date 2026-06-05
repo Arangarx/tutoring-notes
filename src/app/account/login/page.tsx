@@ -18,6 +18,7 @@ function AccountLoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [retryAfterSec, setRetryAfterSec] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const formErrorId = useId();
 
@@ -41,6 +42,13 @@ function AccountLoginForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
+
+      if (res.status === 429) {
+        const ra = parseInt(res.headers.get("Retry-After") ?? "60", 10);
+        setRetryAfterSec(isNaN(ra) ? 60 : ra);
+        setError("too_many_requests");
+        return;
+      }
 
       const data = (await res.json()) as { next?: string; error?: string };
 
@@ -136,6 +144,12 @@ function AccountLoginForm() {
           <AuthFieldError
             id={formErrorId}
             message="Please verify your email first. Check your inbox for a confirmation link."
+          />
+        ) : null}
+        {error === "too_many_requests" ? (
+          <AuthFieldError
+            id={formErrorId}
+            message={`Too many attempts — please wait${retryAfterSec ? ` ${retryAfterSec} second${retryAfterSec !== 1 ? "s" : ""}` : " a minute"} and try again.`}
           />
         ) : null}
         {error === "network" ? (

@@ -53,7 +53,9 @@ export function PasswordStrengthField({
           id={id}
           name={name}
           type={show ? "text" : "password"}
-          className={`${inputProps.className ?? ""} min-h-11 pr-16`}
+          // pr-20 makes room for the toggle button; suppress browser-native
+          // reveal icons so the custom toggle is the single affordance.
+          className={`${inputProps.className ?? ""} min-h-11 pr-20 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden [&::-webkit-credentials-auto-fill-button]:hidden`}
         />
         <button
           type="button"

@@ -19,6 +19,7 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [retryAfterSec, setRetryAfterSec] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const [setupHint, setSetupHint] = useState(false);
@@ -94,6 +95,14 @@ function LoginForm() {
               redirect: false,
             });
 
+            if (res?.status === 429) {
+              const ra = typeof (res as { headers?: { "retry-after"?: string } }).headers?.["retry-after"] === "string"
+                ? parseInt((res as { headers?: { "retry-after"?: string } }).headers!["retry-after"]!, 10)
+                : 60;
+              setRetryAfterSec(isNaN(ra) ? 60 : ra);
+              setError("too_many_requests");
+              return;
+            }
             if (!res || res.error) {
               setError("credentials");
               return;
@@ -147,6 +156,12 @@ function LoginForm() {
           <AuthFieldError
             id={formErrorId}
             message="Email or password didn't match. Try again, or reset your password using the link above."
+          />
+        ) : null}
+        {error === "too_many_requests" ? (
+          <AuthFieldError
+            id={formErrorId}
+            message={`Too many attempts — please wait${retryAfterSec ? ` ${retryAfterSec} second${retryAfterSec !== 1 ? "s" : ""}` : " a minute"} and try again.`}
           />
         ) : null}
         {error === "network" ? (

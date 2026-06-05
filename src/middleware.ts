@@ -83,14 +83,30 @@ function rateLimitResponse(
   retryAfterMs: number,
   pathname: string
 ): NextResponse {
+  const retryAfterSec = Math.ceil(retryAfterMs / 1000);
+  // For API paths return JSON; for page paths return HTML so the browser
+  // shows a readable message instead of a blank page with raw JSON.
+  if (pathname.startsWith("/api/")) {
+    return addSecurityHeaders(
+      NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(retryAfterSec) },
+        }
+      ),
+      pathname
+    );
+  }
+  const body = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Too many requests</title><style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#fafafa}div{max-width:400px;padding:32px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;text-align:center}h1{font-size:1.25rem;color:#111827;margin:0 0 12px}p{font-size:0.875rem;color:#6b7280;margin:0 0 20px}a{color:#6366f1;font-size:0.875rem}</style></head><body><div><h1>Too many attempts</h1><p>Please wait ${retryAfterSec} second${retryAfterSec !== 1 ? "s" : ""} and try again.</p><a href="${pathname}">Go back</a></div></body></html>`;
   return addSecurityHeaders(
-    NextResponse.json(
-      { error: "Too many requests. Please try again later." },
-      {
-        status: 429,
-        headers: { "Retry-After": String(Math.ceil(retryAfterMs / 1000)) },
-      }
-    ),
+    new NextResponse(body, {
+      status: 429,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Retry-After": String(retryAfterSec),
+      },
+    }),
     pathname
   );
 }
