@@ -9,6 +9,8 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useRetryAfterCountdown } from "@/hooks/useRetryAfterCountdown";
+import { parseRetryAfterSeconds } from "@/lib/auth-client";
 
 function AccountLoginForm() {
   const searchParams = useSearchParams();
@@ -18,7 +20,7 @@ function AccountLoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [retryAfterSec, setRetryAfterSec] = useState<number | null>(null);
+  const { retryAfterSec, isRateLimited, startCountdown } = useRetryAfterCountdown();
   const [busy, setBusy] = useState(false);
   const formErrorId = useId();
 
@@ -33,6 +35,8 @@ function AccountLoginForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (isRateLimited) return;
+
     setBusy(true);
     setError(null);
 
@@ -44,8 +48,7 @@ function AccountLoginForm() {
       });
 
       if (res.status === 429) {
-        const ra = parseInt(res.headers.get("Retry-After") ?? "60", 10);
-        setRetryAfterSec(isNaN(ra) ? 60 : ra);
+        startCountdown(parseRetryAfterSeconds(res));
         setError("too_many_requests");
         return;
       }
@@ -168,7 +171,7 @@ function AccountLoginForm() {
 
         <Button
           type="submit"
-          disabled={busy}
+          disabled={busy || isRateLimited}
           aria-busy={busy}
           className="min-h-11 w-full text-base"
         >

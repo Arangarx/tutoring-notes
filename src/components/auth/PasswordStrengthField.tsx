@@ -59,6 +59,7 @@ export function PasswordStrengthField({
         />
         <button
           type="button"
+          tabIndex={-1}
           onClick={() => setShow((v) => !v)}
           className="absolute right-3 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
           aria-label={show ? "Hide password" : "Show password"}

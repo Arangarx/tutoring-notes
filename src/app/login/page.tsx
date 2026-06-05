@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useId, useState } from "react";
 
@@ -10,6 +9,8 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useRetryAfterCountdown } from "@/hooks/useRetryAfterCountdown";
+import { credentialsSignIn } from "@/lib/auth-client";
 
 // Map URL ?error= param values (NextAuth error codes + app-defined codes) to
 // internal error keys for rendering.  This fires when NextAuth redirects to
@@ -44,7 +45,7 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(() =>
     mapUrlError(searchParams.get("error"))
   );
-  const [retryAfterSec, setRetryAfterSec] = useState<number | null>(null);
+  const { retryAfterSec, isRateLimited, startCountdown } = useRetryAfterCountdown();
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const [setupHint, setSetupHint] = useState(false);
@@ -109,36 +110,30 @@ function LoginForm() {
         className="flex flex-col gap-4"
         onSubmit={async (e) => {
           e.preventDefault();
+          if (isRateLimited) return;
+
           setBusy(true);
           setError(null);
 
-          try {
-            const res = await signIn("credentials", {
-              email,
-              password,
-              callbackUrl,
-              redirect: false,
-            });
+          const result = await credentialsSignIn(email, password, callbackUrl);
 
-            if (res?.status === 429) {
-              // Retry-After is on the underlying HTTP response, which NextAuth's
-              // signIn() doesn't expose — default to the window duration (60 s).
-              setRetryAfterSec(60);
-              setError("too_many_requests");
-              setPassword(""); // clear field so the browser doesn't offer to save
-              return;
-            }
-            if (!res || res.error) {
-              setError("credentials");
-              setPassword(""); // clear field — prevents browser save-password heuristic on failure
-              return;
-            }
-            window.location.href = res.url ?? callbackUrl;
-          } catch {
-            setError("network");
-          } finally {
-            setBusy(false);
+          if (result.ok) {
+            window.location.href = result.url;
+            return;
           }
+
+          if (result.error === "rate_limited") {
+            startCountdown(result.retryAfterSec);
+            setError("too_many_requests");
+            setPassword("");
+          } else if (result.error === "credentials") {
+            setError("credentials");
+            setPassword("");
+          } else {
+            setError("network");
+          }
+
+          setBusy(false);
         }}
       >
         <div className="space-y-2">
@@ -224,7 +219,7 @@ function LoginForm() {
         <div className="flex flex-col gap-3 pt-1">
           <Button
             type="submit"
-            disabled={busy}
+            disabled={busy || isRateLimited}
             aria-busy={busy}
             className="min-h-11 w-full text-base"
           >
