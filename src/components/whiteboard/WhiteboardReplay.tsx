@@ -26,13 +26,21 @@
  *      so the first frame of replay doesn't pop in.
  *   4. Lazy-load Excalidraw (`ssr: false`) in `viewModeEnabled` mode
  *      so the canvas is read-only with pan + pinch-zoom enabled.
- *   5. Mount an audio element. While `playing`, drive a rAF loop
- *      that maps `audio.currentTime * 1000` → reconstructed scene →
- *      `restoreElements` (parity with IndexedDB resume) →
+ *   5a. AUDIO sessions: mount an audio element. While `playing`, drive a
+ *      rAF loop that maps `audio.currentTime * 1000` → reconstructed
+ *      scene → `restoreElements` (parity with IndexedDB resume) →
  *      Excalidraw `updateScene`.
+ *   5b. NO-AUDIO sessions (events present, no audio segments): a synthetic
+ *      wall-clock driven by requestAnimationFrame runs 0 → maxEventTimestampMs,
+ *      applying scenes at each tick. Same Play/Pause + scrubber UI as the
+ *      audio path so the experience is uniform.
  *   6. Replay uses **the same stroke/fill colours** persisted in the
  *      canonical log (`strokeColor`) so tutors see parity with live
  *      mode; `clientId` remains on elements for diagnostics only.
+ *
+ * Multi-segment vs single-segment: all audio sessions (1 or N segments)
+ * go through the SAME custom player UI — no native <audio controls>.
+ * Single-segment is N=1 of the same code path.
  *
  * What this component does NOT do:
  *
@@ -66,8 +74,11 @@ import {
   buildReplayAudioTimeline,
   globalMsToSegmentLocal,
 } from "@/lib/whiteboard/replay-audio-timeline";
-import { attachReplayScrubAudioDefer } from "@/lib/whiteboard/replay-scrub-audio-defer";
 import { resolveWhiteboardAssetReadUrl } from "@/lib/whiteboard/resolve-asset-read-url";
+// Note: attachReplayScrubAudioDefer intentionally NOT imported.
+// All audio scrubbing now goes through the custom <input type="range"> that
+// is rendered for both single-segment and multi-segment sessions.  The native
+// <audio controls> are hidden in every path (controls={false}).
 
 /**
  * Excalidraw is heavy (>1 MB gzipped) and grabs a number of browser
@@ -178,7 +189,6 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   }, [audioSegments, audioBlobUrl, audioMimeType]);
 
   const hasAudio = effectiveSegments.length > 0;
-  const isMultiSegment = effectiveSegments.length > 1;
   const audioTimeline = useMemo(
     () =>
       buildReplayAudioTimeline(
@@ -218,7 +228,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   const [api, setApi] = useState<ReplayApi | null>(null);
   const [audioReady, setAudioReady] = useState(false);
   const [audioElapsedMs, setAudioElapsedMs] = useState(0);
-  /** True while the audio element is in the playing state (drives button label). */
+  /** True while playback is active (audio element playing OR synth clock running). */
   const [playing, setPlaying] = useState(false);
   /**
    * `restoreElements` lives in `@excalidraw/excalidraw` ESM. We preload once we
@@ -233,26 +243,38 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
   /**
    * Cumulative global-clock ms at the START of the currently active segment.
-   * Updated on every `seekGlobalMs` call (seek sets it from globalMs - localMs)
-   * and on every `onEnded` advance (accumulated from actual audio.duration so
-   * this stays correct even when stored durationSeconds is null).
+   * Updated on every `seekGlobalMs` call and on every `onEnded` advance
+   * (accumulated from actual audio.duration so this stays correct even when
+   * stored durationSeconds is null).
    *
    * Using a ref (not state) so the rAF tick's `getGlobalTimeMs` always reads the
    * latest value without causing extra renders.
    */
   const globalSegmentOffsetMsRef = useRef(0);
-  /** Playhead allowed to trigger audio range requests (see replay-scrub-audio-defer). */
-  const audioCommittedSecRef = useRef(0);
-  /** Drops stale `loop.seek()` after a superseding scrub-drop. */
-  const scrubCommitGenerationRef = useRef(0);
+  /**
+   * True between `loadSegmentAt`'s `el.src =` assignment and the `loadedmetadata`
+   * handler calling `el.play()`.  During this window the browser may fire a
+   * spurious `pause` event (from `el.load()`).  `onPause` checks this flag and
+   * skips its `setPlaying(false)` call so the button label remains "Pause"
+   * throughout seamless segment transitions.
+   */
+  const segmentSwappingRef = useRef(false);
   /** Excalidraw may clear scene on `updateScene({ appState })`; re-send last paint. */
   const lastSceneElementsRef = useRef<readonly unknown[]>([]);
   /**
-   * Which `excalidrawAPI` instance has received the “initial” scene apply.
+   * Which `excalidrawAPI` instance has received the "initial" scene apply.
    * Reset when the event log URL changes so a new recording repaints even if
    * Excalidraw reuses the same API object reference.
    */
   const initialPaintApiRef = useRef<ReplayApi | null>(null);
+  /**
+   * The `hasAudio` value that was current when `initialPaintApiRef` was last set.
+   * If `hasAudio` changes (e.g. async props load) we must re-run the initial paint
+   * even for the same API instance — otherwise the no-audio final-frame paint
+   * persists after audio segments arrive, causing the "initial final-state flash"
+   * defect (user sees FINAL scene before t=0 on first Play press).
+   */
+  const initialPaintHasAudioRef = useRef(false);
   /** After the delayed viewport fit, scene updates preserve Excal scroll. */
   const replayCameraReadyRef = useRef(false);
   /** Bumps after initial fit so the theme-only effect can merge without clobbering early. */
@@ -267,6 +289,12 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
    * shared with the workspace.
    */
   const scenePainterRef = useRef<ScenePainter | null>(null);
+
+  // Synthetic clock refs (no-audio sessions only).
+  // The rAF id returned by requestAnimationFrame — 0 means not running.
+  const synthAnimFrameRef = useRef(0);
+  // Elapsed ms at the moment the synth clock was last started (Play button).
+  const synthStartElapsedMsRef = useRef(0);
 
   const excalidrawTheme = useExcalidrawThemeFromSystem();
 
@@ -285,6 +313,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     let cancelled = false;
     lastSceneElementsRef.current = [];
     initialPaintApiRef.current = null;
+    initialPaintHasAudioRef.current = false;
     registeredAssetUrlsRef.current.clear();
     replayCameraReadyRef.current = false;
     setReplayViewportSeq(0);
@@ -479,25 +508,40 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   // First paint after Excalidraw mount **for this API instance**.
   //
   // Excalidraw may invoke `excalidrawAPI` more than once (internal remounts).
-  // A single `didInitialPaintRef=true` wrongly skipped subsequent instances,
-  // leaving a blank canvas despite a loaded log.
+  // A bare `api` guard wrongly skipped subsequent instances, leaving a blank
+  // canvas despite a loaded log.
   //
-  // With **audio**, start at t=0 — the `<audio>` element drives the clock.
-  // With **no audio**, show the **final** frame: use `max(durationMs,
-  // latest event t)` so a stale/wrong top-level duration never clips strokes.
+  // Guard: skip if BOTH the api instance AND hasAudio match the last paint.
+  // If hasAudio changes (e.g. props loaded async after initial render), we
+  // must repaint even for the same API instance, or the no-audio final-frame
+  // paint persists — causing the "initial final-state flash" defect where
+  // the FINAL scene briefly shows before t=0 when the user presses Play.
+  //
+  // With audio: always start at t=0 (audio element drives the clock from 0).
+  // With no audio + events: start at t=0 (synthetic clock drives from 0).
+  // With no audio + no events: show final frame (log navigation only).
   useEffect(() => {
     if (loadState.kind !== "ready" || !api) return;
-    if (initialPaintApiRef.current === api) return;
+    if (
+      initialPaintApiRef.current === api &&
+      initialPaintHasAudioRef.current === hasAudio
+    ) {
+      return;
+    }
     initialPaintApiRef.current = api;
+    initialPaintHasAudioRef.current = hasAudio;
     replayCameraReadyRef.current = false;
 
-    const noSessionAudio = !hasAudio;
     const log = loadState.log;
     const finalClockMs = Math.max(log.durationMs, maxEventTimestampMs(log));
-    const initialT = noSessionAudio ? finalClockMs : 0;
+    // For sessions with audio OR events (either drives a clock), start at t=0.
+    // For empty no-audio sessions (no clock, just static log navigation), show
+    // the final frame — there's nothing to "play back" in that case.
+    const noSessionAudio = !hasAudio;
+    const hasEvents = log.events.length > 0;
+    const initialT = noSessionAudio && !hasEvents ? finalClockMs : 0;
     applySceneAt(initialT);
     setAudioElapsedMs(initialT);
-    audioCommittedSecRef.current = initialT / 1000;
 
     const container = excalCanvasContainerRef.current;
     if (!container) return;
@@ -566,9 +610,16 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       };
 
       if (needsSrcSwap) {
+        // Flag: suppress the spurious `pause` event that el.load() may fire.
+        // onPause skips setPlaying(false) while this flag is set so the
+        // button label stays "Pause" during seamless segment transitions.
+        segmentSwappingRef.current = true;
         el.src = seg.url;
         const onMeta = () => {
           el.removeEventListener("loadedmetadata", onMeta);
+          // Clear the flag before calling play() so the subsequent `play`
+          // event (and any future `pause` from user action) is processed normally.
+          segmentSwappingRef.current = false;
           applySeek();
         };
         el.addEventListener("loadedmetadata", onMeta);
@@ -586,20 +637,14 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
         globalMs,
         audioTimeline
       );
-      const globalSec = globalMs / 1000;
-      audioCommittedSecRef.current = isMultiSegment
-        ? globalSec
-        : localMs / 1000;
-      // Track the global offset for this segment so getGlobalTimeMs() works
-      // correctly even when stored durationSeconds are null (totalMs = 0).
-      if (isMultiSegment) {
-        globalSegmentOffsetMsRef.current = globalMs - localMs;
-      }
+      // Always track global offset so getGlobalTimeMs() works for both
+      // single-segment (offset stays 0 for seg 0) and multi-segment.
+      globalSegmentOffsetMsRef.current = globalMs - localMs;
       setAudioElapsedMs(globalMs);
       applySceneAtRef.current(globalMs);
       loadSegmentAt(segmentIndex, localMs, autoplay);
     },
-    [audioTimeline, isMultiSegment, loadSegmentAt]
+    [audioTimeline, loadSegmentAt]
   );
 
   // Reset to segment 0 when the segment list changes (new session).
@@ -607,7 +652,14 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     activeSegmentIndexRef.current = 0;
     setActiveSegmentIndex(0);
     globalSegmentOffsetMsRef.current = 0;
+    segmentSwappingRef.current = false;
     setPlaying(false);
+    // Cancel any synthetic clock that may be running for a previous session.
+    if (synthAnimFrameRef.current !== 0) {
+      cancelAnimationFrame(synthAnimFrameRef.current);
+      synthAnimFrameRef.current = 0;
+    }
+    synthStartElapsedMsRef.current = 0;
     if (!hasAudio || !replayExcaliRestoreReady) return;
     const el = audioRef.current;
     if (!el) return;
@@ -618,6 +670,30 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       setAudioReady(false);
     }
   }, [effectiveSegments, hasAudio, replayExcaliRestoreReady]);
+
+  // -----------------------------------------------------------------
+  // 4. WebM duration fix — separated from the main audio loop effect.
+  //
+  // Previously this lived inside the main rAF loop effect, which made
+  // `replayAudioMime` a dependency of that effect. When `activeSegmentIndex`
+  // state updated on a segment advance (via `setActiveSegmentIndex` inside
+  // `loadSegmentAt`), `replayAudioMime` changed if segments have different
+  // mime types, causing the entire main audio loop effect to teardown and
+  // recreate mid-playback — the root cause of the segment-boundary
+  // "Replay time" label flicker and scene jump.
+  //
+  // Moving it here keeps the mime-change response isolated to the lightweight
+  // WebM hack only.  The main loop effect no longer depends on mime.
+  // -----------------------------------------------------------------
+  useEffect(() => {
+    if (!hasAudio || !replayExcaliRestoreReady) return;
+    const el = audioRef.current;
+    if (!el) return;
+    const detach = attachWebmDurationFix(el, replayAudioMime, {
+      onMetadataLoaded: () => setAudioReady(true),
+    });
+    return detach;
+  }, [hasAudio, replayAudioMime, replayExcaliRestoreReady]);
 
   // -----------------------------------------------------------------
   // 5. Audio-driven scene loop. We use rAF (not setInterval) so the
@@ -634,15 +710,15 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   // fired and only attaches to the latest loop AFTER its next play
   // press), so scenes stopped updating mid-playback. The ref pattern
   // here makes the loop survive any future dep churn upstream.
+  //
+  // `replayAudioMime` intentionally NOT in deps — it was removed to
+  // prevent the main loop from restarting when the active segment's
+  // mime changes. The WebM duration fix now lives in its own effect.
   // -----------------------------------------------------------------
 
   useEffect(() => {
     if (loadState.kind !== "ready") return;
-    if (!hasAudio) {
-      // Final scene is applied in the “first paint” effect once `api` exists;
-      // nothing to drive a play head without session audio.
-      return;
-    }
+    if (!hasAudio) return;
     // `replayExcaliRestoreReady` gates when the audio JSX is rendered
     // (see render branch below). Bail before that flip; the effect
     // re-runs once it becomes true and the audio element is in the DOM.
@@ -652,12 +728,10 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
 
     const getGlobalTimeMs = () => {
       const localMs = Math.floor(el.currentTime * 1000);
-      if (!isMultiSegment) return localMs;
       // globalSegmentOffsetMsRef holds the accumulated global ms at the
       // start of the active segment. Updated by seekGlobalMs (on seek) and
-      // by onEnded (on segment advance from actual audio.duration). This
-      // avoids clamping to audioTimeline.totalMs which is 0 whenever
-      // stored durationSeconds is null — a common condition for live sessions.
+      // by onEnded (on segment advance from actual audio.duration). Works
+      // correctly for both single-segment (offset stays 0) and multi-segment.
       return globalSegmentOffsetMsRef.current + localMs;
     };
 
@@ -669,9 +743,6 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       getTimeMs: getGlobalTimeMs,
       apply: (ms) => {
         setAudioElapsedMs(ms);
-        // Read via ref so applySceneAt identity churn does NOT force
-        // a teardown of this loop — see the comment above the ref
-        // declaration for the regression history.
         applySceneAtRef.current(ms);
       },
     });
@@ -681,18 +752,22 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       loop.play();
     };
     const onPause = () => {
+      // Suppress `pause` events that fire from el.load() during a segment
+      // source-swap.  The browser may fire `pause` when load() aborts the
+      // current source; ignoring it keeps the button label as "Pause"
+      // throughout the loading window and lets the audio resume automatically.
+      if (segmentSwappingRef.current) return;
       setPlaying(false);
-      audioCommittedSecRef.current = isMultiSegment
-        ? getGlobalTimeMs() / 1000
-        : el.currentTime;
       loop.pause();
     };
 
     const onEnded = () => {
-      if (!isMultiSegment) {
-        onPause();
-        return;
-      }
+      // el.ended is true only when the audio naturally reached its end.
+      // Guard against spurious `ended` events that some browsers fire
+      // on el.load() or el.src= changes — in those cases the element
+      // has not actually finished playing.
+      if (!el.ended) return;
+
       // Accumulate the global offset from the actual audio element duration
       // so subsequent ticks of getGlobalTimeMs() continue from the right
       // position. Use audio.duration (real metadata) first; fall back to
@@ -703,19 +778,23 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
           : (audioTimeline.segmentDurationsMs[activeSegmentIndexRef.current] ?? 0);
       globalSegmentOffsetMsRef.current += actualDurationMs;
 
-      // Advance to the next segment. Do NOT skip zero-stored-duration
-      // segments — a stored duration of 0 means "unknown" (null in DB),
-      // not "empty". The previous code's while-skip caused all segments
-      // to be bypassed when durationSeconds is null, preventing segment 2+
-      // from ever playing.
+      // Advance to the next segment if one exists.
+      // Do NOT skip zero-stored-duration segments — a stored duration of 0
+      // means "unknown" (null in DB), not "empty". The previous code's
+      // while-skip caused all segments to be bypassed when durationSeconds
+      // is null, preventing segment 2+ from ever playing.
       const next = activeSegmentIndexRef.current + 1;
       if (next < effectiveSegments.length) {
         loadSegmentAt(next, 0, true);
         loop.play();
         return;
       }
+
+      // ── End of timeline: clean stop ──
+      // Do NOT call loadSegmentAt or advance further. Record the exact end
+      // position from the accumulated offset so the scrubber rests at the
+      // true end, not a segment boundary mid-point.
       const endMs = globalSegmentOffsetMsRef.current;
-      audioCommittedSecRef.current = endMs / 1000;
       setPlaying(false);
       setAudioElapsedMs(endMs);
       applySceneAtRef.current(endMs);
@@ -726,68 +805,47 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     el.addEventListener("pause", onPause);
     el.addEventListener("ended", onEnded);
 
-    // Native scrubber defer only for single-segment (scrubber is global).
-    // Multi-segment uses the custom range control below the element.
-    const detachScrubDefer = isMultiSegment
-      ? () => undefined
-      : attachReplayScrubAudioDefer(el, {
-          getCommittedSec: () => audioCommittedSecRef.current,
-          setCommittedSec: (sec) => {
-            audioCommittedSecRef.current = sec;
-          },
-          onVisualSeekMs: (ms) => {
-            setAudioElapsedMs(ms);
-            applySceneAtRef.current(ms);
-          },
-          onAudioCommitSec: (_sec, generation) => {
-            scrubCommitGenerationRef.current = generation;
-            const runSeek = () => {
-              if (generation !== scrubCommitGenerationRef.current) return;
-              loop.seek();
-            };
-            runSeek();
-          },
-        });
-
-    // WebM duration / scrubber fix.
-    //
-    // Sarah-pilot regression (Phase 1b hotfix): on first visit to the
-    // replay page the native `<audio controls>` scrubber was
-    // non-draggable. The cause is the long-known MediaRecorder WebM
-    // streaming bug — the blob has no duration header, so
-    // `<audio>.duration` is `Infinity` and the scrubber renders
-    // inert. The `<AudioPreview>` surface has worked around this for
-    // months but the replay player never had the fix applied.
-    //
-    // The helper is gated on the mime type (no-op for iOS MP4) and
-    // calls `setAudioReady(true)` on `loadedmetadata` so the "Audio
-    // loading…" message disappears at the right moment.
-    const detachDurationFix = attachWebmDurationFix(el, replayAudioMime, {
-      onMetadataLoaded: () => setAudioReady(true),
-    });
-
     return () => {
       loop.dispose();
       el.removeEventListener("play", onPlay);
       el.removeEventListener("pause", onPause);
       el.removeEventListener("ended", onEnded);
-      detachScrubDefer();
-      detachDurationFix();
     };
   }, [
     audioTimeline,
     effectiveSegments,
     hasAudio,
-    isMultiSegment,
     loadSegmentAt,
-    // NOTE: `applySceneAt` intentionally omitted — it is consumed
-    // via `applySceneAtRef.current` (see comment above the loop
-    // definition). Adding it back would re-introduce the "strokes
-    // only show at the end" regression of May 15.
+    // NOTE: `replayAudioMime` intentionally omitted — moved to its own effect
+    // to prevent the main loop from restarting on segment-mime changes, which
+    // was the root cause of the segment-boundary scene jump and label flicker.
+    // NOTE: `applySceneAt` intentionally omitted — consumed via applySceneAtRef.
     loadState,
-    replayAudioMime,
     replayExcaliRestoreReady,
   ]);
+
+  // -----------------------------------------------------------------
+  // 6. Synthetic wall-clock for no-audio sessions with events.
+  //
+  // When a session has whiteboard events but no audio segments, we run
+  // a requestAnimationFrame loop from t=0 → maxEventTimestampMs(log),
+  // applying scenes at each tick exactly as the audio-driven path does.
+  // The same Play/Pause button + scrubber UI renders for both paths.
+  //
+  // The synthetic clock is controlled by the Play/Pause button's onClick
+  // (see render section) which writes to synthAnimFrameRef directly.
+  // This effect only handles cleanup on unmount / session change.
+  // -----------------------------------------------------------------
+  useEffect(() => {
+    if (hasAudio || loadState.kind !== "ready") return;
+    // Cleanup synthetic clock when session or hasAudio changes.
+    return () => {
+      if (synthAnimFrameRef.current !== 0) {
+        cancelAnimationFrame(synthAnimFrameRef.current);
+        synthAnimFrameRef.current = 0;
+      }
+    };
+  }, [hasAudio, loadState]);
 
   /**
    * Theme is driven entirely by the `theme` prop on `<Excalidraw />`.
@@ -806,7 +864,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   }, [api, replayViewportSeq]);
 
   // -----------------------------------------------------------------
-  // 6. Render
+  // 7. Render
   // -----------------------------------------------------------------
 
   if (loadState.kind === "loading") {
@@ -821,12 +879,15 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   }
 
   const log = loadState.log;
-  /** Wall clock for “end of log” — never below the last event `t` or audio span. */
+  /** Wall clock for "end of log" — never below the last event `t` or audio span. */
   const finalReplayClockMs = Math.max(
     log.durationMs,
     maxEventTimestampMs(log),
     hasAudio ? audioTimeline.totalMs : 0
   );
+
+  /** Ceiling for the no-audio synthetic clock: last event's timestamp. */
+  const noAudioMaxMs = Math.max(maxEventTimestampMs(log), log.durationMs, 1);
 
   // Empty-events case: the session row exists and the events.json is
   // valid (schemaVersion + startedAt + events array), but no events
@@ -862,6 +923,91 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     );
   }
 
+  // ── Play controls renderers ──────────────────────────────────────
+  //
+  // Unified for ALL paths: audio sessions (1 or N segments) and no-audio
+  // events-only sessions. Both expose the same Play/Pause button + scrubber.
+  //
+  // Audio sessions use the hidden <audio> element as the clock.
+  // No-audio sessions use the synthetic rAF clock written directly into
+  // audioElapsedMs state (same state variable, same scrubber binding).
+
+  /**
+   * Starts the synthetic wall-clock from `startMs`, cancelling any running
+   * clock first.  Used by the no-audio Play button and scrubber onPointerUp.
+   * Defined inline in render to close over the current `noAudioMaxMs` and
+   * stable React setters; refs are accessed by reference so the tick closure
+   * always sees the latest values.
+   */
+  const startSynthFrom = (startMs: number) => {
+    if (synthAnimFrameRef.current !== 0) {
+      cancelAnimationFrame(synthAnimFrameRef.current);
+      synthAnimFrameRef.current = 0;
+    }
+    const clampedStart = Math.min(Math.max(0, startMs), noAudioMaxMs);
+    synthStartElapsedMsRef.current = clampedStart;
+    setPlaying(true);
+    let firstTs: number | null = null;
+    const tick = (now: DOMHighResTimeStamp) => {
+      if (firstTs === null) firstTs = now;
+      const elapsed = clampedStart + (now - firstTs);
+      const clamped = Math.min(elapsed, noAudioMaxMs);
+      setAudioElapsedMs(clamped);
+      applySceneAtRef.current(clamped);
+      if (clamped < noAudioMaxMs) {
+        synthAnimFrameRef.current = requestAnimationFrame(tick);
+      } else {
+        synthAnimFrameRef.current = 0;
+        setPlaying(false);
+      }
+    };
+    synthAnimFrameRef.current = requestAnimationFrame(tick);
+  };
+
+  const stopSynth = () => {
+    if (synthAnimFrameRef.current !== 0) {
+      cancelAnimationFrame(synthAnimFrameRef.current);
+      synthAnimFrameRef.current = 0;
+    }
+    synthStartElapsedMsRef.current = audioElapsedMs;
+    setPlaying(false);
+  };
+
+  /** Scrubber max value — covers both audio and no-audio paths. */
+  const scrubberMax = hasAudio
+    ? Math.max(audioTimeline.totalMs, finalReplayClockMs, 1)
+    : noAudioMaxMs;
+
+  /** Click handler for the Play/Pause button (audio path). */
+  const handleAudioPlayToggle = () => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (playing) {
+      // User explicitly pausing: clear swap flag so onPause processes normally.
+      segmentSwappingRef.current = false;
+      setPlaying(false); // Instant UI update; onPause echo is harmless.
+      el.pause();
+    } else {
+      setPlaying(true); // Instant UI update; onPlay echo is harmless.
+      void el.play();
+    }
+  };
+
+  /** Click handler for the Play/Pause button (no-audio synthetic clock path). */
+  const handleSynthPlayToggle = () => {
+    if (playing) {
+      stopSynth();
+    } else {
+      // Restart from 0 if reached the end.
+      const startFrom = audioElapsedMs >= noAudioMaxMs ? 0 : audioElapsedMs;
+      if (startFrom === 0) {
+        setAudioElapsedMs(0);
+        applySceneAtRef.current(0);
+      }
+      startSynthFrom(startFrom);
+    }
+  };
+
   return (
     <div style={{ display: "grid", gap: 12 }} data-testid="wb-replay">
       {title && (
@@ -874,65 +1020,85 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
         </h2>
       )}
 
-      {!hasAudio && log.events.length > 0 && (
-        <p className="muted" style={{ margin: 0, fontSize: 13, maxWidth: 720 }}>
-          No session audio is attached, so there is no play/seek control. The
-          board below shows the <strong>final</strong> whiteboard at the end of
-          the log (t={formatDurationMs(finalReplayClockMs)}). When we record
-          classroom audio, the bar above will provide play/pause and drive the
-          scene in sync.
-        </p>
-      )}
-
-      {hasAudio && (
+      {/* ── Playback controls ───────────────────────────────────────
+          Unified UI for audio sessions (1 or N segments) and no-audio
+          events-only sessions.  The <audio> element is always hidden
+          (controls={false}); the custom Play/Pause + range below drives
+          both paths.  Single-segment sessions go through the same code
+          as multi-segment — N=1 is just the degenerate case.
+      ── */}
+      {(hasAudio || log.events.length > 0) && (
         <div style={{ display: "grid", gap: 4 }}>
-          <audio
-            ref={audioRef}
-            controls={!isMultiSegment}
-            preload="metadata"
-            src={effectiveSegments[0]?.url}
-            {...(replayAudioMime ? { type: replayAudioMime } : {})}
-            data-testid="wb-replay-audio"
-            style={{ width: "100%" }}
-          />
-          {isMultiSegment && (
-            <div
-              className="row"
-              style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}
-            >
-              <button
-                type="button"
-                className="btn"
-                data-testid="wb-replay-play-toggle"
-                onClick={() => {
-                  const el = audioRef.current;
-                  if (!el) return;
-                  if (el.paused) void el.play();
-                  else el.pause();
-                }}
-              >
-                {playing ? "Pause" : "Play"}
-              </button>
-              <input
-                type="range"
-                min={0}
-                max={Math.max(audioTimeline.totalMs, finalReplayClockMs, 1)}
-                value={audioElapsedMs}
-                data-testid="wb-replay-global-seek"
-                aria-label="Replay position"
-                style={{ flex: 1, minWidth: 160 }}
-                onChange={(ev) => {
-                  const ms = Number(ev.target.value);
-                  seekGlobalMs(ms, false);
-                }}
-                onPointerUp={(ev) => {
-                  const ms = Number((ev.target as HTMLInputElement).value);
-                  seekGlobalMs(ms, !audioRef.current?.paused);
-                }}
-              />
-            </div>
+          {hasAudio && (
+            <audio
+              ref={audioRef}
+              controls={false}
+              preload="metadata"
+              src={effectiveSegments[0]?.url}
+              {...(replayAudioMime ? { type: replayAudioMime } : {})}
+              data-testid="wb-replay-audio"
+              style={{ display: "none" }}
+            />
           )}
-          {!audioReady && (
+          <div
+            className="row"
+            style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}
+          >
+            {/* Fixed-width button: min-width sized for the wider label ("Pause")
+                so the button never changes width between Play↔Pause, which
+                previously shifted the scrubber track and moved the dot. */}
+            <button
+              type="button"
+              className="btn"
+              data-testid="wb-replay-play-toggle"
+              style={{ minWidth: 72 }}
+              onClick={hasAudio ? handleAudioPlayToggle : handleSynthPlayToggle}
+            >
+              {playing ? "Pause" : "Play"}
+            </button>
+            <input
+              type="range"
+              min={0}
+              max={scrubberMax}
+              value={audioElapsedMs}
+              data-testid="wb-replay-global-seek"
+              aria-label="Replay position"
+              style={{ flex: 1, minWidth: 160 }}
+              onChange={(ev) => {
+                const ms = Number(ev.target.value);
+                if (hasAudio) {
+                  seekGlobalMs(ms, false);
+                } else {
+                  // No-audio: pause synth clock and update position visually.
+                  if (synthAnimFrameRef.current !== 0) {
+                    cancelAnimationFrame(synthAnimFrameRef.current);
+                    synthAnimFrameRef.current = 0;
+                  }
+                  synthStartElapsedMsRef.current = ms;
+                  setAudioElapsedMs(ms);
+                  applySceneAtRef.current(ms);
+                  if (playing) setPlaying(false);
+                }
+              }}
+              onPointerUp={(ev) => {
+                const ms = Number((ev.target as HTMLInputElement).value);
+                if (hasAudio) {
+                  seekGlobalMs(ms, !audioRef.current?.paused);
+                } else {
+                  // Finalize position; resume playback if clock was running.
+                  synthStartElapsedMsRef.current = ms;
+                  setAudioElapsedMs(ms);
+                  applySceneAtRef.current(ms);
+                  // Resume only if we were actually playing before the scrub.
+                  // `playing` in the closure reflects the state at render time;
+                  // since onChange above set playing=false on drag start, we
+                  // don't auto-resume here (keeps the UX simple: scrub pauses,
+                  // user presses Play to continue).
+                }
+              }}
+            />
+          </div>
+          {hasAudio && !audioReady && (
             <span className="muted" style={{ fontSize: 11 }}>
               Audio loading… you can press Play once it&apos;s ready.
             </span>
@@ -942,11 +1108,9 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
 
       <div className="muted" style={{ fontSize: 11, textAlign: "right" }}>
         Replay time · t={formatDurationMs(audioElapsedMs)}
-        {hasAudio && (
-          <span className="muted" style={{ marginLeft: 8 }}>
-            Session log span · {formatDurationMs(finalReplayClockMs)}
-          </span>
-        )}
+        <span className="muted" style={{ marginLeft: 8 }}>
+          Session log span · {formatDurationMs(finalReplayClockMs)}
+        </span>
       </div>
 
       <div
