@@ -1990,18 +1990,11 @@ export function WhiteboardWorkspaceClient({
     }
     let nextN = 2;
     while (usedNumbers.has(nextN)) nextN += 1;
-    // Smoke-1 #5: insert AFTER the active page rather than at the end,
-    // so adding a page from inside the PDF section drops it adjacent.
-    // Also: avoid id collisions with `Date.now()` fast-clicks by salting
-    // with a randomised suffix.
+    // New pages append at the end of the strip; navigation jumps to the new tab.
     const newId = `p${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const fromIdx = pageListRef.current.findIndex((p) => p.id === from);
-    const insertAt =
-      fromIdx >= 0 ? fromIdx + 1 : pageListRef.current.length;
     const nextList = [
-      ...pageListRef.current.slice(0, insertAt),
+      ...pageListRef.current,
       { id: newId, title: `Page ${nextN}` },
-      ...pageListRef.current.slice(insertAt),
     ];
     pageListRef.current = nextList;
     setPageList(nextList);
