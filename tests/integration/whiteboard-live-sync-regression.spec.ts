@@ -546,6 +546,78 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
+  test("invariant 11 — idle-tutor welcome push: student receives existing scene on join without tutor redrawing", async ({
+    browser,
+  }) => {
+    /**
+     * Requirement-not-code test for the join-welcome-reliability fix.
+     *
+     * Steps:
+     *   1. Tutor opens workspace, draws a stroke (with a known id).
+     *   2. Student opens the session AFTER the stroke exists on the tutor.
+     *   3. Assert: the student's canvas shows the stroke within 15 s
+     *      WITHOUT any further action from the tutor.
+     *
+     * This is the decisive gate for the fix: the welcome push must
+     * fire unconditionally when the student joins, even when the tutor
+     * is completely idle after their initial draw. jsdom CANNOT prove
+     * this — only a real relay + two Excalidraw instances can.
+     */
+    test.setTimeout(180_000);
+    const session = await seedWbLiveSyncSession();
+
+    // --- Step 1: open tutor only, draw a stroke ---
+    const tutorContext = await browser.newContext({
+      storageState: "tests/integration/.auth/tutor.json",
+      viewport: { width: 1280, height: 900 },
+    });
+    const tutorPage = await tutorContext.newPage();
+    await tutorPage.goto(
+      `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+      { waitUntil: "domcontentloaded" }
+    );
+    await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
+      timeout: 90_000,
+    });
+    await waitForWbE2eBridge(tutorPage, "tutor");
+
+    const priorStroke = `pw-idle-tutor-${Date.now()}`;
+    await drawTestStrokeOnRole(tutorPage, "tutor", priorStroke, 80, 80, 200, 200);
+
+    // Wait for the throttled broadcast to fire (THROTTLE_MS = 50 ms; give it 2 s).
+    await tutorPage.waitForTimeout(2000);
+
+    // --- Step 2: student joins AFTER stroke is on board ---
+    const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
+    const studentContext = await browser.newContext({
+      viewport: { width: 1280, height: 640 },
+    });
+    const studentPage = await studentContext.newPage();
+    await studentPage.goto(`/w/${session.joinToken}#k=${encryptionKey}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(studentPage.getByTestId("student-whiteboard-canvas-mount")).toBeVisible({
+      timeout: 90_000,
+    });
+    await waitForWbE2eBridge(studentPage, "student");
+
+    // --- Step 3: student must see the pre-existing stroke without tutor doing anything ---
+    // 15 s budget covers the welcome push + relay round-trip + Excalidraw apply cycle.
+    // The tutor draws NOTHING after this point.
+    await waitForSceneElementIdsContaining(
+      studentPage,
+      "student",
+      priorStroke,
+      15_000
+    );
+
+    const studentIds = await readSceneElementIds(studentPage, "student");
+    expect(studentIds).toContain(priorStroke);
+
+    await tutorContext.close();
+    await studentContext.close();
+  });
+
   test("invariant 9 — page isolation (strokes do not bleed across tabs)", async ({
     browser,
   }) => {

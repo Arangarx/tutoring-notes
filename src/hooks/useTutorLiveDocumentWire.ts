@@ -41,8 +41,18 @@ export function useTutorLiveDocumentWire(options: {
   const revRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Always-current ref so welcome-push callbacks are never stale-closed
+  // over the React-state `sync` / `enabled` values. The `new-user` event can
+  // fire in the brief render-cycle gap between "sync client created" and "React
+  // processes setSyncReady(true)", during which `sync` and `enabled` in the
+  // useCallback closure are still null/false. Reading syncRef.current instead
+  // bypasses that race entirely without changing steady-state semantics.
+  const syncRef = useRef<WhiteboardSyncClient | null>(null);
+  syncRef.current = sync;
+
   const emitDocument = useCallback(() => {
-    if (!enabled || !sync) return;
+    const liveSync = syncRef.current;
+    if (!liveSync) return;
     revRef.current += 1;
     const { pageList, activePageId, sections } = getPageListAndActive();
     const raw = getPagesSnapshot();
@@ -74,14 +84,14 @@ export function useTutorLiveDocumentWire(options: {
         : {}),
     };
     const follow = getFollow();
-    sync.broadcastDocument({
+    liveSync.broadcastDocument({
       rev: revRef.current,
       pages,
       page,
       follow,
     });
     onDocumentEmitted?.(follow);
-  }, [enabled, sync, getPagesSnapshot, getPageListAndActive, getFollow, onDocumentEmitted]);
+  }, [getPagesSnapshot, getPageListAndActive, getFollow, onDocumentEmitted]);
 
   const scheduleDocumentBroadcast = useCallback(() => {
     if (!enabled || !sync) return;
@@ -100,14 +110,19 @@ export function useTutorLiveDocumentWire(options: {
   }, [emitDocument, enabled, sync]);
 
   const flushDocumentBroadcastNow = useCallback(() => {
-    if (!enabled || !sync) return;
+    // Use syncRef.current (not the closed-over `sync`) so this function is
+    // never stale when called from the new-user / welcome-push path — the
+    // sync client can be live while the React closure still holds sync=null
+    // from a not-yet-processed setSyncReady(true) state update.
+    const liveSync = syncRef.current;
+    if (!liveSync) return;
     if (timerRef.current !== null) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
     emitDocument();
-    sync.flushPendingBroadcast();
-  }, [emitDocument, enabled, sync]);
+    liveSync.flushPendingBroadcast();
+  }, [emitDocument]);
 
   return { scheduleDocumentBroadcast, flushDocumentBroadcastNow, revRef };
 }

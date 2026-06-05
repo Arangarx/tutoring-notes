@@ -736,6 +736,40 @@ export function WhiteboardWorkspaceClient({
     everBothPresentRef.current = true;
   }
 
+  // UI-honesty: "Student connected — syncing board…" for a brief window
+  // after a student joins. The relay socket being up does NOT mean the
+  // student has received and applied the welcome push yet. After 5 s the
+  // pill graduates to the positive green "Student connected" label. This is
+  // a conservative bound — the actual welcome push completes in < 2 s on
+  // a healthy connection; the extra time covers slow devices and mobile.
+  const [boardSyncing, setBoardSyncing] = useState(false);
+  const boardSyncingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (bothPartiesInRoom) {
+      setBoardSyncing(true);
+      if (boardSyncingTimerRef.current !== null) {
+        clearTimeout(boardSyncingTimerRef.current);
+      }
+      boardSyncingTimerRef.current = setTimeout(() => {
+        boardSyncingTimerRef.current = null;
+        setBoardSyncing(false);
+      }, 5000);
+    } else {
+      // Student disconnected: reset so the next join shows the syncing state.
+      if (boardSyncingTimerRef.current !== null) {
+        clearTimeout(boardSyncingTimerRef.current);
+        boardSyncingTimerRef.current = null;
+      }
+      setBoardSyncing(false);
+    }
+    return () => {
+      if (boardSyncingTimerRef.current !== null) {
+        clearTimeout(boardSyncingTimerRef.current);
+        boardSyncingTimerRef.current = null;
+      }
+    };
+  }, [bothPartiesInRoom]);
+
   const allowRecordSoloUntilStudentJoin =
     typeof process !== "undefined" &&
     process.env.NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT === "1";
@@ -3189,6 +3223,7 @@ export function WhiteboardWorkspaceClient({
               const sync = deriveSyncPillState({
                 tutorSyncConnected,
                 bothPartiesInRoom,
+                boardSyncing,
               });
               if (!sync.show) return null;
               return (
