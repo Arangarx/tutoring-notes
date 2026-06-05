@@ -113,5 +113,19 @@ describe("replay-audio-timeline", () => {
         expect(globalMsToSegmentLocal(globalMs, timeline)).toEqual(p);
       }
     });
+
+    it("all-null durations (unknown): totalMs is 0, every seek maps to segment 0 localMs 0 — documenting clamp behavior used by seek-with-unknown-durations path", () => {
+      // When durationSeconds is null in the DB (common for sessions created before
+      // transcription), normalizeSegmentDurationMs returns 0 and totalMs=0.
+      // The component's globalSegmentOffsetMsRef approach handles playback correctly;
+      // seeking with null durations falls back to segment 0 at t=0 (best effort).
+      const timeline = buildReplayAudioTimeline([null, null]);
+      expect(timeline.totalMs).toBe(0);
+      expect(timeline.segmentDurationsMs).toEqual([0, 0]);
+      // With totalMs=0, any positive globalMs clamps to segment 0 at localMs 0.
+      const result = globalMsToSegmentLocal(30_000, timeline);
+      expect(result.segmentIndex).toBe(0);
+      expect(result.localMs).toBe(0);
+    });
   });
 });

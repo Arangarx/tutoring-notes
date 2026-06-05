@@ -63,7 +63,6 @@ import {
 import { useExcalidrawThemeFromSystem } from "@/hooks/useExcalidrawThemeFromSystem";
 import { attachWebmDurationFix } from "@/lib/audio/webm-duration-fix";
 import {
-  audioLocalMsToGlobalMs,
   buildReplayAudioTimeline,
   globalMsToSegmentLocal,
 } from "@/lib/whiteboard/replay-audio-timeline";
@@ -219,6 +218,8 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   const [api, setApi] = useState<ReplayApi | null>(null);
   const [audioReady, setAudioReady] = useState(false);
   const [audioElapsedMs, setAudioElapsedMs] = useState(0);
+  /** True while the audio element is in the playing state (drives button label). */
+  const [playing, setPlaying] = useState(false);
   /**
    * `restoreElements` lives in `@excalidraw/excalidraw` ESM. We preload once we
    * know the replay surface needs canvas + parse is done — before mounting
@@ -230,6 +231,16 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   /** Active segment index for multi-segment source-swap playback. */
   const activeSegmentIndexRef = useRef(0);
   const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
+  /**
+   * Cumulative global-clock ms at the START of the currently active segment.
+   * Updated on every `seekGlobalMs` call (seek sets it from globalMs - localMs)
+   * and on every `onEnded` advance (accumulated from actual audio.duration so
+   * this stays correct even when stored durationSeconds is null).
+   *
+   * Using a ref (not state) so the rAF tick's `getGlobalTimeMs` always reads the
+   * latest value without causing extra renders.
+   */
+  const globalSegmentOffsetMsRef = useRef(0);
   /** Playhead allowed to trigger audio range requests (see replay-scrub-audio-defer). */
   const audioCommittedSecRef = useRef(0);
   /** Drops stale `loop.seek()` after a superseding scrub-drop. */
@@ -579,6 +590,11 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       audioCommittedSecRef.current = isMultiSegment
         ? globalSec
         : localMs / 1000;
+      // Track the global offset for this segment so getGlobalTimeMs() works
+      // correctly even when stored durationSeconds are null (totalMs = 0).
+      if (isMultiSegment) {
+        globalSegmentOffsetMsRef.current = globalMs - localMs;
+      }
       setAudioElapsedMs(globalMs);
       applySceneAtRef.current(globalMs);
       loadSegmentAt(segmentIndex, localMs, autoplay);
@@ -590,6 +606,8 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   useEffect(() => {
     activeSegmentIndexRef.current = 0;
     setActiveSegmentIndex(0);
+    globalSegmentOffsetMsRef.current = 0;
+    setPlaying(false);
     if (!hasAudio || !replayExcaliRestoreReady) return;
     const el = audioRef.current;
     if (!el) return;
@@ -635,11 +653,12 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     const getGlobalTimeMs = () => {
       const localMs = Math.floor(el.currentTime * 1000);
       if (!isMultiSegment) return localMs;
-      return audioLocalMsToGlobalMs(
-        activeSegmentIndexRef.current,
-        localMs,
-        audioTimeline
-      );
+      // globalSegmentOffsetMsRef holds the accumulated global ms at the
+      // start of the active segment. Updated by seekGlobalMs (on seek) and
+      // by onEnded (on segment advance from actual audio.duration). This
+      // avoids clamping to audioTimeline.totalMs which is 0 whenever
+      // stored durationSeconds is null — a common condition for live sessions.
+      return globalSegmentOffsetMsRef.current + localMs;
     };
 
     // Phase 1a: 20Hz throttled play loop with seek/pause bypass now lives
@@ -657,8 +676,12 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       },
     });
 
-    const onPlay = () => loop.play();
+    const onPlay = () => {
+      setPlaying(true);
+      loop.play();
+    };
     const onPause = () => {
+      setPlaying(false);
       audioCommittedSecRef.current = isMultiSegment
         ? getGlobalTimeMs() / 1000
         : el.currentTime;
@@ -670,20 +693,30 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
         onPause();
         return;
       }
-      let next = activeSegmentIndexRef.current + 1;
-      while (
-        next < effectiveSegments.length &&
-        (audioTimeline.segmentDurationsMs[next] ?? 0) === 0
-      ) {
-        next += 1;
-      }
+      // Accumulate the global offset from the actual audio element duration
+      // so subsequent ticks of getGlobalTimeMs() continue from the right
+      // position. Use audio.duration (real metadata) first; fall back to
+      // the stored timeline value only if audio.duration is unavailable.
+      const actualDurationMs =
+        Number.isFinite(el.duration) && el.duration > 0
+          ? Math.round(el.duration * 1000)
+          : (audioTimeline.segmentDurationsMs[activeSegmentIndexRef.current] ?? 0);
+      globalSegmentOffsetMsRef.current += actualDurationMs;
+
+      // Advance to the next segment. Do NOT skip zero-stored-duration
+      // segments — a stored duration of 0 means "unknown" (null in DB),
+      // not "empty". The previous code's while-skip caused all segments
+      // to be bypassed when durationSeconds is null, preventing segment 2+
+      // from ever playing.
+      const next = activeSegmentIndexRef.current + 1;
       if (next < effectiveSegments.length) {
         loadSegmentAt(next, 0, true);
         loop.play();
         return;
       }
-      const endMs = audioTimeline.totalMs;
+      const endMs = globalSegmentOffsetMsRef.current;
       audioCommittedSecRef.current = endMs / 1000;
+      setPlaying(false);
       setAudioElapsedMs(endMs);
       applySceneAtRef.current(endMs);
       loop.pause();
@@ -737,7 +770,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       loop.dispose();
       el.removeEventListener("play", onPlay);
       el.removeEventListener("pause", onPause);
-      el.removeEventListener("ended", onPause);
+      el.removeEventListener("ended", onEnded);
       detachScrubDefer();
       detachDurationFix();
     };
@@ -878,13 +911,13 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
                   else el.pause();
                 }}
               >
-                Play / Pause
+                {playing ? "Pause" : "Play"}
               </button>
               <input
                 type="range"
                 min={0}
                 max={Math.max(audioTimeline.totalMs, finalReplayClockMs, 1)}
-                value={Math.min(audioElapsedMs, audioTimeline.totalMs)}
+                value={audioElapsedMs}
                 data-testid="wb-replay-global-seek"
                 aria-label="Replay position"
                 style={{ flex: 1, minWidth: 160 }}
