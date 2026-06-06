@@ -92,8 +92,13 @@ export default async function ShareWhiteboardPage({
           eventsSchemaVersion: true,
           snapshotBlobUrl: true,
           audioRecordings: {
-            select: { id: true, mimeType: true },
-            orderBy: { createdAt: "asc" },
+            select: {
+              id: true,
+              mimeType: true,
+              durationSeconds: true,
+              orderIndex: true,
+            },
+            orderBy: [{ orderIndex: "asc" }, { createdAt: "asc" }],
           },
         },
       }),
@@ -128,10 +133,11 @@ export default async function ShareWhiteboardPage({
   const snapshotApiUrl = session.snapshotBlobUrl
     ? `/api/whiteboard/${whiteboardSessionId}/public-snapshot?token=${token}`
     : null;
-  const firstAudio = session.audioRecordings[0] ?? null;
-  const audioApiUrl = firstAudio
-    ? `/api/audio/${firstAudio.id}?token=${token}`
-    : null;
+  const audioSegments = session.audioRecordings.map((rec) => ({
+    url: `/api/audio/${rec.id}?token=${token}`,
+    mimeType: rec.mimeType,
+    durationSeconds: rec.durationSeconds,
+  }));
 
   return (
     <div className="container" style={{ maxWidth: 1280 }}>
@@ -160,8 +166,7 @@ export default async function ShareWhiteboardPage({
       {/* Replay */}
       <WhiteboardReplay
         eventsBlobUrl={eventsApiUrl}
-        audioBlobUrl={audioApiUrl}
-        audioMimeType={firstAudio?.mimeType ?? null}
+        audioSegments={audioSegments}
         snapshotBlobUrl={snapshotApiUrl}
         title={sessionLabel}
       />
@@ -172,12 +177,6 @@ export default async function ShareWhiteboardPage({
         style={{ fontSize: 11, textAlign: "right", marginTop: 8 }}
       >
         schema v{session.eventsSchemaVersion}
-        {session.audioRecordings.length > 1 && (
-          <>
-            {" · "}
-            {session.audioRecordings.length} audio segments (first shown)
-          </>
-        )}
       </div>
     </div>
   );
