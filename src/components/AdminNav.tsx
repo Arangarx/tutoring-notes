@@ -12,8 +12,10 @@ import { cn } from "@/lib/utils";
 import type { AdminSessionMode } from "@/lib/admin-routing";
 
 type AdminNavProps = {
-  /** Global feedback inbox + waitlist — only for addresses in OPERATOR_EMAILS / ADMIN_EMAIL. */
+  /** Show operator-only nav links (feedback inbox, waitlist, cost dashboard). */
   showOperatorLinks?: boolean;
+  /** Show the /admin/cost link — operator + ADMIN role only. */
+  showCostDashboard?: boolean;
   sessionMode?: AdminSessionMode;
   /**
    * When true, the "Sign out" button routes through exitImpersonation() instead
@@ -31,6 +33,7 @@ type AdminNavProps = {
 
 export function AdminNav({
   showOperatorLinks = false,
+  showCostDashboard = false,
   sessionMode = "tutor-experience",
   isImpersonating = false,
   showDevTools = false,
@@ -47,6 +50,7 @@ export function AdminNav({
           { href: "/admin/feedback", label: "Feedback inbox" } as const,
         ]
       : []),
+    ...(showCostDashboard ? [{ href: "/admin/cost", label: "Cost" } as const] : []),
     { href: "/feedback", label: "Send feedback" },
     ...(showOperatorLinks ? [{ href: "/admin/waitlist", label: "Waitlist" } as const] : []),
     { href: "/admin/settings", label: "Settings" },

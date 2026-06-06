@@ -15,8 +15,9 @@ export default async function AdminLayout({
   const showOperatorLinks = isOperatorEmail(session?.user?.email);
   const isImpersonating = session?.user?.isImpersonating ?? false;
   const impersonatedEmail = session?.user?.email ?? "";
-  // Show dev-tools nav link only in non-production environments and only for operators.
   const showDevTools = isDevToolsEnabled() && showOperatorLinks && !isImpersonating;
+  const showCostDashboard =
+    showOperatorLinks && session?.user?.role === "ADMIN" && !isImpersonating;
   const sessionMode = getAdminSessionMode(
     session?.user
       ? {
@@ -33,6 +34,7 @@ export default async function AdminLayout({
       {isImpersonating ? <ImpersonationBanner email={impersonatedEmail} /> : null}
       <AdminNav
         showOperatorLinks={showOperatorLinks}
+        showCostDashboard={showCostDashboard}
         sessionMode={sessionMode}
         isImpersonating={isImpersonating}
         showDevTools={showDevTools}
