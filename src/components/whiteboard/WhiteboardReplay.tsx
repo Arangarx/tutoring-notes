@@ -242,6 +242,24 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   const activeSegmentIndexRef = useRef(0);
   const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
   /**
+   * True once the player has naturally reached the very end of the last
+   * segment.  Guards against:
+   *   (a) a second `onEnded` fired by the WebM duration-fix resetting
+   *       currentTime while the replay loop runs (S3 root cause),
+   *   (b) `el.play()` on an ended element restarting the last segment
+   *       (HTML-spec mandated seek-to-start on play() after ended).
+   * Reset to false on any user-initiated seek or on session change.
+   */
+  const isAtEndRef = useRef(false);
+  /**
+   * Resolved actual audio total in ms, learned from el.duration metadata
+   * and accumulated onEnded.  Initialized to audioTimeline.totalMs (from
+   * stored durationSeconds).  Updated to the ACTUAL accumulated sum once
+   * we know real durations from the browser.  Used to keep scrubberMax
+   * anchored to the true audio length (symptoms 1 + 2).
+   */
+  const [resolvedMaxMs, setResolvedMaxMs] = useState(audioTimeline.totalMs);
+  /**
    * Cumulative global-clock ms at the START of the currently active segment.
    * Updated on every `seekGlobalMs` call and on every `onEnded` advance
    * (accumulated from actual audio.duration so this stays correct even when
@@ -295,6 +313,13 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   const synthAnimFrameRef = useRef(0);
   // Elapsed ms at the moment the synth clock was last started (Play button).
   const synthStartElapsedMsRef = useRef(0);
+  /**
+   * Was the player playing when the user began a scrub drag?  Set in
+   * onPointerDown so onPointerUp can resume only if playback was active
+   * before the drag.  Storing as a ref (not state) avoids extra re-renders
+   * and the value is only read synchronously in event handlers.
+   */
+  const scrubWasPlayingRef = useRef(false);
 
   const excalidrawTheme = useExcalidrawThemeFromSystem();
 
@@ -633,6 +658,9 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
 
   const seekGlobalMs = useCallback(
     (globalMs: number, autoplay: boolean) => {
+      // Any user-initiated seek clears the "at end" flag so the Play button
+      // works correctly after reaching end-of-timeline.
+      isAtEndRef.current = false;
       const { segmentIndex, localMs } = globalMsToSegmentLocal(
         globalMs,
         audioTimeline
@@ -641,6 +669,10 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       // single-segment (offset stays 0 for seg 0) and multi-segment.
       globalSegmentOffsetMsRef.current = globalMs - localMs;
       setAudioElapsedMs(globalMs);
+      // Sync the button label immediately to match the intended play state.
+      // Without this, a cross-segment seek (which fires a suppressed `pause`
+      // event) leaves playing=true even though autoplay=false — symptom 4.
+      setPlaying(autoplay);
       applySceneAtRef.current(globalMs);
       loadSegmentAt(segmentIndex, localMs, autoplay);
     },
@@ -653,7 +685,9 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     setActiveSegmentIndex(0);
     globalSegmentOffsetMsRef.current = 0;
     segmentSwappingRef.current = false;
+    isAtEndRef.current = false;
     setPlaying(false);
+    setResolvedMaxMs(audioTimeline.totalMs);
     // Cancel any synthetic clock that may be running for a previous session.
     if (synthAnimFrameRef.current !== 0) {
       cancelAnimationFrame(synthAnimFrameRef.current);
@@ -669,7 +703,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       el.src = first.url;
       setAudioReady(false);
     }
-  }, [effectiveSegments, hasAudio, replayExcaliRestoreReady]);
+  }, [effectiveSegments, hasAudio, replayExcaliRestoreReady, audioTimeline.totalMs]);
 
   // -----------------------------------------------------------------
   // 4. WebM duration fix — separated from the main audio loop effect.
@@ -684,16 +718,58 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   //
   // Moving it here keeps the mime-change response isolated to the lightweight
   // WebM hack only.  The main loop effect no longer depends on mime.
+  //
+  // resolvedMaxMs: on every loadedmetadata, we learn el.duration for the
+  // current segment and accumulate a tighter upper bound for the scrubber.
+  // This fixes S2 ("ends partly in") when stored durationSeconds is
+  // null or rounded, making the scrubber rest at exactly 100% at true end.
   // -----------------------------------------------------------------
   useEffect(() => {
     if (!hasAudio || !replayExcaliRestoreReady) return;
     const el = audioRef.current;
     if (!el) return;
     const detach = attachWebmDurationFix(el, replayAudioMime, {
-      onMetadataLoaded: () => setAudioReady(true),
+      onMetadataLoaded: () => {
+        setAudioReady(true);
+        // Update resolved max with what we now know about this segment's
+        // duration.  globalSegmentOffsetMsRef.current holds the cumulative
+        // start ms of the segment currently being loaded.
+        if (Number.isFinite(el.duration) && el.duration > 0) {
+          const knownEnd = globalSegmentOffsetMsRef.current + Math.round(el.duration * 1000);
+          setResolvedMaxMs((prev) => Math.max(prev, knownEnd));
+        }
+      },
     });
     return detach;
   }, [hasAudio, replayAudioMime, replayExcaliRestoreReady]);
+
+  // -----------------------------------------------------------------
+  // 4b. Preload next-segment audio (S5: first boundary-cross hitch).
+  //
+  // When a session has N>1 segments, the first time the player crosses
+  // the seg0→seg1 boundary it has to fetch seg1 fresh over the network.
+  // The loadedmetadata-wait latency creates a perceptible hitch that
+  // goes away on the second play-through (browser HTTP cache warm).
+  //
+  // Eagerly create throw-away <audio preload="auto"> elements for seg1+
+  // so the browser fills the HTTP cache before we need them.  We don't
+  // play or inspect these elements — they exist solely to warm the cache.
+  // Cleanup: clear src= so the browser can evict the buffer.
+  // -----------------------------------------------------------------
+  useEffect(() => {
+    if (!hasAudio || effectiveSegments.length <= 1) return;
+    const preloads = effectiveSegments.slice(1).map((seg) => {
+      const a = new Audio();
+      a.preload = "auto";
+      a.src = seg.url;
+      return a;
+    });
+    return () => {
+      for (const a of preloads) {
+        a.src = "";
+      }
+    };
+  }, [effectiveSegments, hasAudio]);
 
   // -----------------------------------------------------------------
   // 5. Audio-driven scene loop. We use rAF (not setInterval) so the
@@ -768,6 +844,13 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       // has not actually finished playing.
       if (!el.ended) return;
 
+      // Guard against the HTML-spec behaviour where `play()` on an ended
+      // element seeks to the beginning and fires a second `ended` event,
+      // and against the WebM duration-fix setting currentTime=0 mid-play
+      // causing a fresh `ended` event.  Once we've handled end-of-timeline
+      // once, ignore any subsequent spurious `ended` events.
+      if (isAtEndRef.current) return;
+
       // Accumulate the global offset from the actual audio element duration
       // so subsequent ticks of getGlobalTimeMs() continue from the right
       // position. Use audio.duration (real metadata) first; fall back to
@@ -777,6 +860,10 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
           ? Math.round(el.duration * 1000)
           : (audioTimeline.segmentDurationsMs[activeSegmentIndexRef.current] ?? 0);
       globalSegmentOffsetMsRef.current += actualDurationMs;
+
+      // Update the resolved max so the scrubber can reflect the true
+      // accumulated duration (fixes S2: dot doesn't reach 100% at end).
+      setResolvedMaxMs((prev) => Math.max(prev, globalSegmentOffsetMsRef.current));
 
       // Advance to the next segment if one exists.
       // Do NOT skip zero-stored-duration segments — a stored duration of 0
@@ -791,6 +878,13 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       }
 
       // ── End of timeline: clean stop ──
+      // Mark as ended FIRST so any re-entrant `ended` event (WebM fix,
+      // browser play()-on-ended seek-to-start) is suppressed above.
+      isAtEndRef.current = true;
+      // Explicitly pause the audio element — even though el.ended is true,
+      // explicitly pausing ensures no future el.play() call (e.g. from
+      // the WebM fix's durationchange handler) can restart it silently.
+      el.pause();
       // Do NOT call loadSegmentAt or advance further. Record the exact end
       // position from the accumulated offset so the scrubber rests at the
       // true end, not a segment boundary mid-point.
@@ -973,9 +1067,29 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     setPlaying(false);
   };
 
-  /** Scrubber max value — covers both audio and no-audio paths. */
+  /**
+   * Scrubber max value — covers both audio and no-audio paths.
+   *
+   * For audio sessions, the ACTUAL audio duration is the authoritative
+   * upper bound.  Using stored durationSeconds or event log timestamps
+   * alone causes the dot to rest short of 100% (symptom 2):
+   *  - stored durationSeconds may be null (→ audioTimeline.totalMs=0) or
+   *    rounded (e.g. stored=66s, actual=65.123s → stored max=66000 but
+   *    audio ends at 65123ms → position=93% at true end, not 100%).
+   *  - maxEventTimestampMs / log.durationMs are event-log derived and
+   *    may differ from audio duration.
+   *
+   * Strategy: once we have ACTUAL duration from el.duration metadata
+   * (resolvedMaxMs > 0), use it as the audio upper bound instead of the
+   * stored durationSeconds.  This prevents an over-estimated stored
+   * duration from pushing scrubberMax above the true audio end.
+   *
+   * We still MAX with event log timestamps so the scrubber covers events
+   * that happen to extend beyond the audio (rare but valid).
+   */
+  const audioUpperBound = resolvedMaxMs > 0 ? resolvedMaxMs : audioTimeline.totalMs;
   const scrubberMax = hasAudio
-    ? Math.max(audioTimeline.totalMs, finalReplayClockMs, 1)
+    ? Math.max(audioUpperBound, maxEventTimestampMs(log), log.durationMs, 1)
     : noAudioMaxMs;
 
   /** Click handler for the Play/Pause button (audio path). */
@@ -987,6 +1101,13 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
       segmentSwappingRef.current = false;
       setPlaying(false); // Instant UI update; onPause echo is harmless.
       el.pause();
+    } else if (isAtEndRef.current) {
+      // End-of-timeline was reached.  el.ended=true; calling el.play() here
+      // would trigger the HTML-spec seek-to-beginning and replay the last
+      // segment — symptom 3.  Instead, restart the WHOLE session from t=0
+      // via seekGlobalMs (which also clears isAtEndRef and resets the
+      // accumulated global offset).
+      seekGlobalMs(0, true);
     } else {
       setPlaying(true); // Instant UI update; onPlay echo is harmless.
       void el.play();
@@ -1060,13 +1181,30 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
               type="range"
               min={0}
               max={scrubberMax}
-              value={audioElapsedMs}
+              value={Math.min(audioElapsedMs, scrubberMax)}
               data-testid="wb-replay-global-seek"
               aria-label="Replay position"
               style={{ flex: 1, minWidth: 160 }}
+              onPointerDown={() => {
+                if (hasAudio) {
+                  // Capture play state and immediately pause the audio element
+                  // so rapid currentTime changes during drag don't cause the
+                  // browser to seek-while-playing (symptom 6: buzzing/corrupted
+                  // audio).  We pause the DOM element directly without touching
+                  // the `playing` state — the button label stays correct via
+                  // `scrubWasPlayingRef` and is updated in onPointerUp.
+                  scrubWasPlayingRef.current = playing;
+                  const el = audioRef.current;
+                  if (el && !el.paused) {
+                    el.pause();
+                  }
+                }
+              }}
               onChange={(ev) => {
                 const ms = Number(ev.target.value);
                 if (hasAudio) {
+                  // During drag: update position + scene without touching
+                  // autoplay. Audio is already paused from onPointerDown.
                   seekGlobalMs(ms, false);
                 } else {
                   // No-audio: pause synth clock and update position visually.
@@ -1083,7 +1221,10 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
               onPointerUp={(ev) => {
                 const ms = Number((ev.target as HTMLInputElement).value);
                 if (hasAudio) {
-                  seekGlobalMs(ms, !audioRef.current?.paused);
+                  // Resume if the user was playing before the scrub drag.
+                  // seekGlobalMs handles the actual play/pause and segment
+                  // selection; scrubWasPlayingRef carries the pre-drag state.
+                  seekGlobalMs(ms, scrubWasPlayingRef.current);
                 } else {
                   // Finalize position; resume playback if clock was running.
                   synthStartElapsedMsRef.current = ms;

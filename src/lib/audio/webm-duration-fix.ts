@@ -140,10 +140,28 @@ export function attachWebmDurationFix(
   // `HAVE_METADATA = 1`: duration + dimensions known. Higher
   // ready-states (`HAVE_CURRENT_DATA = 2`, etc.) also satisfy this
   // — the event already fired regardless.
+  //
+  // GUARD: do NOT fire the WebM hack (currentTime = 1e101) while
+  // audio is actively playing.  The replay player re-mounts this
+  // fix when segment mimeType changes, which can happen mid-playback
+  // during a segment advance.  Setting currentTime while the element
+  // is playing would reset the playhead to 0 — causing the current
+  // segment to replay from the beginning and firing a second `ended`
+  // event, which Andrew observed as "replays segment 2 after
+  // reaching end-of-timeline" (S3).  If the audio is playing, mark
+  // it as loaded (so the error-suppression logic works) and skip
+  // the hack — the real `loadedmetadata` event already ran and the
+  // duration was either fixed then or is already finite.
   if (audio.readyState >= 1) {
-    onLoadedMetadata();
-    if (Number.isFinite(audio.duration) && audio.duration > 0) {
-      onDurationChange();
+    if (!audio.paused && !audio.ended) {
+      // Audio is actively playing — skip the currentTime thrash.
+      loadedOk = true;
+      options.onMetadataLoaded?.();
+    } else {
+      onLoadedMetadata();
+      if (Number.isFinite(audio.duration) && audio.duration > 0) {
+        onDurationChange();
+      }
     }
   }
 

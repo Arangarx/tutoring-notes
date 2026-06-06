@@ -362,4 +362,183 @@ describe("replay-audio-timeline", () => {
       expect(timeline.totalMs).toBe(90_000);
     });
   });
+
+  // ----------------------------------------------------------------
+  // Scrubber geometry invariants (oracle tests for S1 + S2)
+  //
+  // These verify the MATHEMATICAL invariants that the scrubber must
+  // satisfy.  jsdom cannot test the VISUAL rendering (CSS thumb
+  // centering, browser-specific appearance of <input type="range">),
+  // but it CAN verify that:
+  //   (a) at t=0 the ratio is exactly 0.0 (flush-left, math correct)
+  //   (b) at t=endMs the ratio is exactly 1.0 (flush-right, math
+  //       correct) — requires scrubberMax === actualAudioEnd
+  //   (c) if scrubberMax > actualAudioEnd (stored duration rounded up),
+  //       the dot is provably < 100% WITHOUT the fix, and exactly 100%
+  //       WITH the fix (resolvedMaxMs overrides audioTimeline.totalMs)
+  //
+  // jsdom blind spot: the CSS thumb-centering at the track edge is a
+  // VISUAL browser-rendering detail that no jsdom test can catch.
+  // Only a real browser (Playwright/WebKit or on-device debug HUD)
+  // can confirm the dot visually sits flush with the track boundary.
+  // ----------------------------------------------------------------
+
+  /**
+   * Pure helper that mirrors the component's scrubberMax computation
+   * (src: WhiteboardReplay.tsx, `const scrubberMax = ...`).
+   *
+   * audioUpperBound: resolvedMaxMs when > 0, else audioTimeline.totalMs.
+   * eventSpan: max(log.durationMs, maxEventTimestampMs(log)).
+   */
+  function oracleScrubberMax(
+    resolvedMaxMs: number,
+    storedTotalMs: number,
+    eventSpanMs: number
+  ): number {
+    const audioUpperBound = resolvedMaxMs > 0 ? resolvedMaxMs : storedTotalMs;
+    return Math.max(audioUpperBound, eventSpanMs, 1);
+  }
+
+  /** Range input ratio [0, 1] for a given value and max. */
+  function rangeRatio(audioElapsedMs: number, scrubberMax: number): number {
+    return Math.min(audioElapsedMs, scrubberMax) / scrubberMax;
+  }
+
+  describe("scrubber geometry — start/end position invariants (S1 + S2)", () => {
+    // ── START invariant ──────────────────────────────────────────────
+    // At t=0:
+    //   value=0, min=0, max>0  →  ratio=0  (flush left, mathematically)
+    // NOTE: The VISUAL "~1-2% in" appearance Andrew observed is the
+    // browser's native <input type="range"> thumb-centering at the left
+    // edge (the thumb's right half is inside the track, the left half
+    // is outside the input box, giving the visual impression of
+    // "slightly in").  This is a CSS/rendering issue invisible to jsdom.
+    // The MATH IS CORRECT — value/max = 0 = flush-left by definition.
+
+    it.each([
+      { label: "null durations — falls back to eventSpan", resolvedMaxMs: 0, storedMs: 0, eventSpanMs: 41_000 },
+      { label: "known stored duration (audio < events)", resolvedMaxMs: 0, storedMs: 65_000, eventSpanMs: 41_000 },
+      { label: "known stored duration (audio > events)", resolvedMaxMs: 0, storedMs: 65_000, eventSpanMs: 80_000 },
+      { label: "resolved from el.duration", resolvedMaxMs: 65_123, storedMs: 0, eventSpanMs: 41_000 },
+    ])("start: ratio=0 for $label", ({ resolvedMaxMs, storedMs, eventSpanMs }) => {
+      const scrubberMax = oracleScrubberMax(resolvedMaxMs, storedMs, eventSpanMs);
+      expect(scrubberMax).toBeGreaterThan(0);
+      // At t=0, ratio must be exactly 0 (dot flush left).
+      expect(rangeRatio(0, scrubberMax)).toBe(0);
+    });
+
+    // ── END invariant WITHOUT fix ────────────────────────────────────
+    // Shows the BUG: when storedTotalMs > actualEnd, the dot does not
+    // reach 100%.  This is what Andrew observed as "ends partly in."
+
+    it("BUG (unfixed): stored duration rounded up causes dot to stop short of 100%", () => {
+      // Scenario: stored durationSeconds=66s (rounded from actual 65.123s).
+      // Without resolvedMaxMs, audioUpperBound=66000, scrubberMax=66000.
+      // Actual audio end = 65123ms.
+      // Position = 65123 / 66000 = 98.7% — NOT 100%.
+      const storedMs = 66_000;
+      const actualEnd = 65_123;
+      const eventSpanMs = 41_000;
+      const scrubberMax = oracleScrubberMax(0, storedMs, eventSpanMs);
+      const ratio = rangeRatio(actualEnd, scrubberMax);
+      expect(ratio).toBeLessThan(1.0); // BUG: dot does not reach 100%
+      expect(ratio).toBeCloseTo(65_123 / 66_000, 5);
+    });
+
+    // ── END invariant WITH fix ───────────────────────────────────────
+    // After the fix: resolvedMaxMs is learned from el.duration (65123ms),
+    // overriding the stale stored duration (66000ms).
+
+    it("FIXED: resolvedMaxMs from el.duration overrides stored, dot reaches exactly 100%", () => {
+      // Same scenario as above, but now resolvedMaxMs=65123 from metadata.
+      const resolvedMaxMs = 65_123;
+      const storedMs = 66_000; // stale / over-estimated stored value
+      const actualEnd = 65_123;
+      const eventSpanMs = 41_000;
+      const scrubberMax = oracleScrubberMax(resolvedMaxMs, storedMs, eventSpanMs);
+      // audioUpperBound = resolvedMaxMs (ignores storedMs because resolvedMaxMs > 0)
+      expect(scrubberMax).toBe(65_123);
+      // Ratio at true audio end = 1.0 (100% → flush right)
+      expect(rangeRatio(actualEnd, scrubberMax)).toBe(1.0);
+    });
+
+    it("FIXED: null stored duration — scrubberMax resolves to actual audio length", () => {
+      // Scenario: durationSeconds=null → storedMs=0 → audioTimeline.totalMs=0.
+      // Before fix: scrubberMax = eventSpanMs (41000). Audio plays 65s.
+      //   At audio end (65000ms > 41000ms): browser clamps to max → 100% VISUAL.
+      //   But label says t=1:05 vs session span 0:41 — confusing but not "partly in."
+      // After fix: once metadata loads, resolvedMaxMs=65000. scrubberMax=65000.
+      //   audioElapsedMs at end = 65000 → 65000/65000 = 100% ✓
+      const resolvedMaxMs = 65_000;
+      const storedMs = 0;
+      const actualEnd = 65_000;
+      const eventSpanMs = 41_000;
+      const scrubberMax = oracleScrubberMax(resolvedMaxMs, storedMs, eventSpanMs);
+      expect(scrubberMax).toBe(65_000);
+      expect(rangeRatio(actualEnd, scrubberMax)).toBe(1.0);
+    });
+
+    // ── Duration-invariance (offsetting both sides) ──────────────────
+    // If scrubberMax = actualEnd, position = 100% regardless of the
+    // specific duration value.  This is the FUNDAMENTAL INVARIANT that
+    // the fix establishes: once resolvedMaxMs is known, scrubberMax is
+    // anchored to the actual audio end.
+
+    it.each([
+      { actualEndMs: 30_000,  eventSpanMs: 20_000 },
+      { actualEndMs: 65_123,  eventSpanMs: 41_000 },
+      { actualEndMs: 120_500, eventSpanMs: 80_000 },
+      { actualEndMs: 3_600_000, eventSpanMs: 3_600_000 }, // 1-hour session
+    ])(
+      "duration-invariant: with resolvedMaxMs=actualEnd, ratio=1.0 (actualEnd=$actualEndMs)",
+      ({ actualEndMs, eventSpanMs }) => {
+        // resolvedMaxMs = actualEnd (learned from el.duration on loadedmetadata)
+        const scrubberMax = oracleScrubberMax(actualEndMs, 0, eventSpanMs);
+        // When scrubberMax ≥ actualEnd, ratio = actualEnd / scrubberMax.
+        // For ratio = 1.0, we need scrubberMax = actualEnd exactly.
+        // This holds when actualEnd ≥ eventSpanMs (audio longer than events).
+        if (actualEndMs >= eventSpanMs) {
+          expect(scrubberMax).toBe(actualEndMs);
+          expect(rangeRatio(actualEndMs, scrubberMax)).toBe(1.0);
+        } else {
+          // Events extend beyond audio — scrubberMax = eventSpanMs > actualEnd.
+          // Dot does NOT reach 100% at audio end (correct: the timeline still
+          // has event-driven content after the audio ends).
+          expect(scrubberMax).toBe(eventSpanMs);
+          expect(rangeRatio(actualEndMs, scrubberMax)).toBeLessThan(1.0);
+        }
+      }
+    );
+
+    // ── Segment accumulation correctness (S3 support) ─────────────────
+    // The onEnded handler accumulates globalSegmentOffsetMsRef via
+    // actualDurationMs = Math.round(el.duration * 1000).  After the
+    // last segment, endMs = sum of all actualDurationMs.  The
+    // resolvedMaxMs state is updated to max(prev, endMs) so the
+    // scrubber ALWAYS settles to exactly 100% at true end even when
+    // individual segment durations were unknown at timeline-build time.
+
+    it("multi-segment: accumulated endMs drives scrubberMax to 100% at true end", () => {
+      // Two segments, unknown stored durations (null).
+      // Actual: seg0=30.456s, seg1=20.789s → totalActual=51245ms.
+      const seg0Actual = Math.round(30.456 * 1000);  // 30456
+      const seg1Actual = Math.round(20.789 * 1000);  // 20789
+      const endMs = seg0Actual + seg1Actual;          // 51245
+      const eventSpanMs = 40_000;
+
+      // Before playing: resolvedMaxMs=0 (unknown), scrubberMax=eventSpanMs
+      const initialMax = oracleScrubberMax(0, 0, eventSpanMs);
+      expect(initialMax).toBe(eventSpanMs);
+
+      // After seg0 ends: resolvedMaxMs updated to seg0Actual (from loadedmetadata)
+      const afterSeg0 = oracleScrubberMax(seg0Actual, 0, eventSpanMs);
+      expect(afterSeg0).toBe(Math.max(seg0Actual, eventSpanMs));
+
+      // After seg1 ends (onEnded accumulates): resolvedMaxMs = max(prev, endMs) = endMs
+      const afterSeg1 = oracleScrubberMax(endMs, 0, eventSpanMs);
+      expect(afterSeg1).toBe(endMs); // endMs > eventSpanMs
+      // Ratio at true end = 100%
+      expect(rangeRatio(endMs, afterSeg1)).toBe(1.0);
+    });
+  });
 });
