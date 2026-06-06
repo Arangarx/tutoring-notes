@@ -1078,6 +1078,23 @@ export function createWhiteboardSyncClient(
   let outboundChain: Promise<unknown> = Promise.resolve();
 
   // ---------------------------------------------------------------
+  // Welcome-push retry state (join reliability)
+  // ---------------------------------------------------------------
+  // Max two retries, 2 s apart, bounded per join event.
+  // Clears on disconnect so a late retry can't fire after the student
+  // has already left.
+  const WELCOME_RETRY_DELAY_MS = 2000;
+  const MAX_WELCOME_RETRIES = 2;
+  // Cooldown prevents double-sends when new-user + room-user-change
+  // arrive within milliseconds of each other for the same join.
+  const WELCOME_RESEND_COOLDOWN_MS = 500;
+  let welcomeRetryTimer: unknown = null;
+  let welcomeRetryCount = 0;
+  let lastWelcomeSentAt = 0;
+  // Track last reported peer count so room-user-change can detect increases.
+  let lastReportedOthers = 0;
+
+  // ---------------------------------------------------------------
   // Presence reconciliation (Phase 4b)
   // ---------------------------------------------------------------
   //
@@ -1353,6 +1370,93 @@ export function createWhiteboardSyncClient(
   })();
 
   // ---------------------------------------------------------------
+  // Welcome-push helpers
+  // ---------------------------------------------------------------
+
+  /**
+   * Send the tutor's current document snapshot to any newly-joined peer.
+   * Called on `new-user` and as a belt-and-suspenders retry on
+   * `room-user-change` increases.
+   *
+   * `reason` is a short tag for log lines so prod join issues are debuggable
+   * without guessing which code path fired. `currentOthers` is the caller's
+   * current other-peer count used to skip the emit when the room is empty.
+   */
+  async function doWelcomeEmit(
+    reason: string,
+    currentOthers: number
+  ): Promise<void> {
+    if (disposed) return;
+    if (role !== "tutor") return;
+    if (currentOthers < 1) return;
+
+    // Cooldown: new-user and room-user-change can arrive within a few ms of
+    // each other for the same join event. Suppress the second send.
+    const now = Date.now();
+    if (now - lastWelcomeSentAt < WELCOME_RESEND_COOLDOWN_MS) {
+      log.log(
+        `[wbsync] welcome-${reason} suppressed (cooldown ${now - lastWelcomeSentAt}ms < ${WELCOME_RESEND_COOLDOWN_MS}ms)`
+      );
+      return;
+    }
+    lastWelcomeSentAt = now;
+
+    log.log(
+      `[wbsync] welcome-${reason} sending currentOthers=${currentOthers}`
+    );
+
+    if (onNewRemotePeer) {
+      try {
+        await onNewRemotePeer();
+      } catch (err) {
+        log.warn(
+          `[wbsync] welcome-${reason} onNewRemotePeer threw:`,
+          (err as Error)?.message ?? String(err)
+        );
+      }
+    }
+    if (disposed) return;
+
+    const flushed = tryFlushPendingBroadcastNow();
+    if (!flushed && lastBroadcastPayload && aesKey) {
+      // Fallback: re-emit the last known payload. This covers the case where
+      // onNewRemotePeer no-op'd (e.g. sync not yet fully ready on tutor side)
+      // but we at least have a prior scene to send.
+      void encryptAndEmit(lastBroadcastPayload);
+    }
+    log.log(
+      `[wbsync] welcome-${reason} done flushed=${flushed} hasLastPayload=${lastBroadcastPayload !== null}`
+    );
+  }
+
+  function clearWelcomeRetryTimer(): void {
+    if (welcomeRetryTimer !== null) {
+      clearTimeoutFn(welcomeRetryTimer as unknown);
+      welcomeRetryTimer = null;
+    }
+  }
+
+  function scheduleWelcomeRetry(currentOthers: number): void {
+    if (welcomeRetryCount >= MAX_WELCOME_RETRIES) return;
+    if (welcomeRetryTimer !== null) return; // already scheduled
+    welcomeRetryTimer = setTimeoutFn(() => {
+      welcomeRetryTimer = null;
+      if (disposed) return;
+      welcomeRetryCount += 1;
+      log.log(
+        `[wbsync] welcome-retry attempt=${welcomeRetryCount}/${MAX_WELCOME_RETRIES} currentOthers=${currentOthers}`
+      );
+      void doWelcomeEmit(`retry-${welcomeRetryCount}`, currentOthers).then(() => {
+        // Schedule the next retry only after this one completes so they
+        // don't pile up (each retry is WELCOME_RETRY_DELAY_MS after the last).
+        if (!disposed && welcomeRetryCount < MAX_WELCOME_RETRIES && lastReportedOthers >= 1) {
+          scheduleWelcomeRetry(lastReportedOthers);
+        }
+      });
+    }, WELCOME_RETRY_DELAY_MS);
+  }
+
+  // ---------------------------------------------------------------
   // Socket lifecycle
   // ---------------------------------------------------------------
 
@@ -1391,6 +1495,10 @@ export function createWhiteboardSyncClient(
     if (disposed) return;
     connected = false;
     log.warn(`disconnected reason=${reason}`);
+    // Clear any pending welcome retry so it doesn't fire after the student
+    // (or tutor) has disconnected.
+    clearWelcomeRetryTimer();
+    welcomeRetryCount = 0;
     fan(disconnectSubs);
   });
 
@@ -1406,32 +1514,26 @@ export function createWhiteboardSyncClient(
 
   socket.on("new-user", (peerSocketId: string) => {
     if (disposed) return;
-    log.log(`new-user ${peerSocketId} — re-emitting current scene + presence`);
+    log.log(`[wbsync] new-user peerSocketId=${peerSocketId} — broadcasting presence + welcome`);
     // Re-announce our identity so the newcomer's presence map
     // populates immediately (their inbound presence frame from us
     // races their initial scene packet; without this they would
     // know there's "someone in the room" via room-user-change but
     // not who).
     broadcastPresence();
-    // Send our current scene so the new joiner doesn't see a blank
-    // canvas. Cheap; runs once per join.
-    void (async () => {
-      if (role === "tutor" && onNewRemotePeer) {
-        try {
-          await onNewRemotePeer();
-        } catch (err) {
-          log.warn(
-            "onNewRemotePeer failed:",
-            (err as Error)?.message ?? String(err)
-          );
-        }
+    // Reset retry bookkeeping for this fresh join event.
+    clearWelcomeRetryTimer();
+    welcomeRetryCount = 0;
+    // We know at least 1 other peer just joined; treat `currentOthers` as 1
+    // rather than reading lastReportedOthers (which may not be updated yet
+    // since room-user-change can lag by a tick).
+    void doWelcomeEmit("new-user", 1).then(() => {
+      if (!disposed) {
+        // Belt-and-suspenders: schedule bounded retries in case the first
+        // send was lost (network) or no-op'd (edge race in hook closure).
+        scheduleWelcomeRetry(Math.max(1, lastReportedOthers));
       }
-      if (disposed) return;
-      const flushed = tryFlushPendingBroadcastNow();
-      if (!flushed && lastBroadcastPayload && aesKey) {
-        void encryptAndEmit(lastBroadcastPayload);
-      }
-    })();
+    });
   });
 
   socket.on("room-user-change", (members: unknown) => {
@@ -1453,6 +1555,7 @@ export function createWhiteboardSyncClient(
     // tweak that fires the event mid-handshake).
     if (!Array.isArray(members)) {
       fan(peerCountSubs, 0);
+      lastReportedOthers = 0;
       schedulePruneIfShrunk(0);
       return;
     }
@@ -1460,11 +1563,23 @@ export function createWhiteboardSyncClient(
     const others = mySocketId
       ? members.filter((m) => m !== mySocketId).length
       : Math.max(0, members.length - 1);
+
+    const prevOthers = lastReportedOthers;
+    lastReportedOthers = others;
     fan(peerCountSubs, others);
     // Total member count (self included) drives the prune scheduler.
     // Self-only (length === 1) is a shrink to 0 remote peers — prune
     // every entry that hasn't re-announced within the grace window.
     schedulePruneIfShrunk(members.length);
+
+    // Belt-and-suspenders welcome push when a peer joins (count increase).
+    // This fires for both initial joins and reconnects. The WELCOME_RESEND_COOLDOWN_MS
+    // gate inside doWelcomeEmit suppresses the double-send that would otherwise
+    // occur when new-user and room-user-change arrive for the same join within
+    // milliseconds of each other.
+    if (role === "tutor" && others > prevOthers) {
+      void doWelcomeEmit("room-user-change", others);
+    }
   });
 
   socket.on(
@@ -1809,6 +1924,8 @@ export function createWhiteboardSyncClient(
         clearTimeout(broadcastTimer);
         broadcastTimer = null;
       }
+      clearWelcomeRetryTimer();
+      welcomeRetryCount = 0;
       clearPruneTimer();
       presenceMap.clear();
       pendingPrune.clear();

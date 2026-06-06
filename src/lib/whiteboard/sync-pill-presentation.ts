@@ -34,6 +34,7 @@
 
 export type SyncPillReason =
   | "student-connected"
+  | "student-connected-syncing"
   | "sync-connecting"
   | "awaiting-student";
 
@@ -64,20 +65,40 @@ export type SyncPillInputs = {
    * boolean so the rule stays trivially testable.
    */
   bothPartiesInRoom: boolean;
+  /**
+   * True for a brief window after `bothPartiesInRoom` first becomes true:
+   * the welcome push has been sent but the student may not have applied the
+   * tutor's scene yet. During this window we show an honest "syncing board…"
+   * label rather than claiming the board is already fully synced.
+   *
+   * Defaults to false (behaves like the pre-fix "Student connected" pill).
+   */
+  boardSyncing?: boolean;
 };
 
 /**
  * Derive the sync-pill state from sync-connection inputs.
  *
  * Precedence:
- *   1. `bothPartiesInRoom` → positive green "Student connected".
- *   2. `!tutorSyncConnected` → grey "Sync connecting…" (sync layer
+ *   1. `bothPartiesInRoom && boardSyncing` → amber "Student connected — syncing board…".
+ *      Honest weaker claim: relay socket is up but the welcome push may not have
+ *      been applied by the student yet. Clears after the boardSyncing window.
+ *   2. `bothPartiesInRoom` → positive green "Student connected".
+ *   3. `!tutorSyncConnected` → grey "Sync connecting…" (sync layer
  *      itself isn't up; the banner doesn't cover this).
- *   3. otherwise (awaiting student with the sync layer up) →
+ *   4. otherwise (awaiting student with the sync layer up) →
  *      `show=false`. Banner + recording-pill already say it.
  */
 export function deriveSyncPillState(inputs: SyncPillInputs): SyncPillState {
   if (inputs.bothPartiesInRoom) {
+    if (inputs.boardSyncing) {
+      return {
+        show: true,
+        label: "Student connected — syncing board\u2026",
+        color: "amber",
+        reason: "student-connected-syncing",
+      };
+    }
     return {
       show: true,
       label: "Student connected",
