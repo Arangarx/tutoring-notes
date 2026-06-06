@@ -72,6 +72,10 @@ model Student {
    * one out.
    */
   recordingDefaultEnabled Boolean @default(true)
+  /// When true: this student was created by the dev-tools fixture dashboard
+  /// and may be deleted by it. The delete path checks this flag in the WHERE
+  /// clause — physically incapable of deleting real students.
+  isTestFixture Boolean @default(false)
   notes       SessionNote[]
   shareLinks  ShareLink[]
   recordings  SessionRecording[]
@@ -404,6 +408,11 @@ model AdminUser {
   /// impersonation target only. Default false = all existing rows are
   /// real admins until explicitly updated (see scripts/seed-admin-google.sql).
   isTestAccount Boolean   @default(false)
+  /// When true: this account was created by the dev-tools fixture dashboard
+  /// and may be deleted by it. The delete path checks this flag in the WHERE
+  /// clause — rows where isTestFixture=false are physically undelectable via
+  /// the dev-tools path, even if their id is passed.
+  isTestFixture Boolean   @default(false)
   /// Role determines experience + capabilities (SEC-1 follow-up).
   /// ADMIN: dashboard + impersonation. TUTOR: workspace only, cannot impersonate.
   /// Default TUTOR — new accounts land in the safe/restricted role by default.
@@ -593,6 +602,10 @@ model AccountHolder {
   /// On honored COPPA deletion: email and name are redacted, row is retained
   /// so tutor business records (notes, recordings) remain coherent.
   tombstonedAt  DateTime?
+  /// When true: this account was created by the dev-tools fixture dashboard
+  /// and may be deleted by it. The delete path checks this flag in the WHERE
+  /// clause — physically incapable of deleting real (non-fixture) users.
+  isTestFixture Boolean   @default(false)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   learnerProfiles LearnerProfile[]
@@ -626,10 +639,10 @@ model AccountHolderEmailToken {
 
 /// A single learner identity under an AccountHolder.
 /// One AccountHolder can have multiple LearnerProfiles (e.g. two kids).
-/// Tombstone pattern: on COPPA deletion, displayName is replaced with a
-/// redacted placeholder ("Deleted learner") and tombstonedAt is set.
-/// Restrict on AccountHolder delete: must tombstone profiles first so
-/// business references remain consistent.
+  /// Tombstone pattern: on COPPA deletion, displayName is replaced with a
+  /// redacted placeholder ("Deleted learner") and tombstonedAt is set.
+  /// Restrict on AccountHolder delete: must tombstone profiles first so
+  /// business references remain consistent.
 model LearnerProfile {
   id              String    @id @default(uuid())
   accountHolderId String
@@ -637,6 +650,10 @@ model LearnerProfile {
   /// After tombstone: replaced with a redacted placeholder, e.g. "Deleted learner".
   displayName     String
   tombstonedAt    DateTime?
+  /// When true: this profile was created by the dev-tools fixture dashboard
+  /// and may be deleted by it. The delete path checks this flag in the WHERE
+  /// clause — physically incapable of deleting real learner profiles.
+  isTestFixture   Boolean   @default(false)
   /// IAC-5/6: access mode for this learner profile.
   /// account_holder_session: learner accessed via owning AccountHolder session (parent selects).
   /// child_pin_required: learner authenticates independently via username@familyid + PIN.

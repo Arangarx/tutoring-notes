@@ -21,12 +21,19 @@ type AdminNavProps = {
    * verified session rather than terminating it entirely.
    */
   isImpersonating?: boolean;
+  /**
+   * Show the "Dev tools" link — only in non-production environments and for
+   * operator-authenticated sessions. The page itself enforces the env gate
+   * (notFound() in production); this prop controls nav visibility.
+   */
+  showDevTools?: boolean;
 };
 
 export function AdminNav({
   showOperatorLinks = false,
   sessionMode = "tutor-experience",
   isImpersonating = false,
+  showDevTools = false,
 }: AdminNavProps) {
   const tutorLinks = [
     { href: "/admin/students", label: "Students" },
@@ -43,6 +50,7 @@ export function AdminNav({
     { href: "/feedback", label: "Send feedback" },
     ...(showOperatorLinks ? [{ href: "/admin/waitlist", label: "Waitlist" } as const] : []),
     { href: "/admin/settings", label: "Settings" },
+    ...(showDevTools ? [{ href: "/admin/dev-tools", label: "Dev tools" } as const] : []),
   ];
   const pathname = usePathname();
   const [open, setOpen] = useState(false);

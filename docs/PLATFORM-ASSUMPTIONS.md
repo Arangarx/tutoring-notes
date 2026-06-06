@@ -527,6 +527,16 @@
 - **`playwright@test.local` prod-safety**: this account is created only by `tests/visual/helpers.ts` → `seedTestAdmin()`, which calls `assertLocalDatabaseUrlForHarness()` and aborts unless `DATABASE_URL` points to a local Docker Postgres. The webServer forces a local DB URL; Neon (prod/preview) is never the target. There is no API endpoint or admin UI path that creates `playwright@test.local` in a production DB.
 - **Migration check**: any new test runner or CI environment that needs the wb-regression suite must set `WB_E2E_HARNESS=1` in its local webServer env. This flag must never be set in platform env vars (Vercel, AWS, etc.).
 
+### 10.9 Dev-tools fixture dashboard — VERCEL_ENV gate
+
+- **Assumption**: The `/admin/dev-tools` page and its server actions are enabled only when `VERCEL_ENV !== 'production'`. The gate is checked in two places for defense-in-depth:
+  1. `isDevToolsEnabled()` in `src/lib/dev-fixtures.ts` — called at the top of every fixture function (throws in prod).
+  2. `page.tsx` calls `notFound()` when `!isDevToolsEnabled()` — UI surface never renders.
+- **Vercel env semantics**: Vercel sets `VERCEL_ENV=production` for Production deployments and `VERCEL_ENV=preview` for Preview deployments. Local dev has `VERCEL_ENV` undefined, which also passes the gate. This means the dashboard is reachable locally and on Preview (Andrew smokes on preview) but INERT in production.
+- **Auth gate** (orthogonal): operator-authenticated (`assertIsAdmin()`) required regardless of environment. Account holders and students cannot reach this surface even in preview.
+- **Hard deletion guard**: the delete path includes `isTestFixture: true` in every `WHERE` clause. This guard lives in the business logic (`dev-fixtures.ts`), not just the UI — physically incapable of deleting a real user.
+- **Migration check**: confirm `VERCEL_ENV` is NOT overridden in any production Vercel env var. The dashboard must remain inert there.
+
 ## Migration checklist — copy + check yes/no before deploying to a new platform
 
 > When considering AWS, Cloudflare, self-hosted, or any other platform migration, walk this list. Every "no" or "unsure" is a regression risk.
@@ -590,11 +600,13 @@
 - [ ] `AH_TOTP_ENCRYPTION_KEY` reserved; required before Phase 6 AccountHolder 2FA ships (§10.7)
 - [ ] `WB_E2E_HARNESS` is NOT set in any Vercel env var (prod or preview); it is local-harness-only (§10.8)
 - [ ] Host allowlist in `ALLOWLISTED_HOST_PATTERNS` (`src/lib/public-url.ts`) updated for new Vercel team slug or production domain (§5.8)
+- [ ] `VERCEL_ENV` is NOT overridden in any production Vercel env var (dev-tools fixture gate relies on Vercel's auto-injected `VERCEL_ENV=production` to stay inert — §10.9)
 
 ---
 
 ## Change log
 
+- **2026-06-05** — Dev-tools fixture dashboard: added §10.9 VERCEL_ENV gate for `/admin/dev-tools`. Migration checklist updated.
 - **2026-06-05** — Auth-boundary hardening: added §10.8 WB_E2E_HARNESS (harness 2FA bypass re-gated on server-only flag + !VERCEL; migrated off NEXT_PUBLIC_ client-bundle gate). Added §5.8 host allowlist for auth email links (RC-A fix: `getRequestBaseUrlSafe` with injection guard). Migration checklist updated.
 - **2026-06-02** — Identity Phase 2a (session infra + claim flow): added §10.5 AH_SESSION_HMAC_SECRET, §10.6 LEARNER_SESSION_HMAC_SECRET, §10.7 AH_TOTP_ENCRYPTION_KEY. Migration checklist updated.
 - **2026-05-31** — Identity Phase 1 (2FA): added §10.4 TOTP_ENCRYPTION_KEY assumption. Key-rotation story documented. Migration checklist updated.
