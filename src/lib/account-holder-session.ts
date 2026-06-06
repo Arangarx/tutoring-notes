@@ -34,6 +34,35 @@ function getHmacSecret(): string | null {
 }
 
 /**
+ * Validate the AccountHolder session from a raw token string.
+ *
+ * This is the canonical session-validation entry point for server components
+ * (Q3-A fix): callers obtain the raw token via the cookies() Map API (last-value)
+ * and pass it directly here, bypassing the first-match linear-scan path.
+ *
+ * Side effect: same sliding renewal as getAccountHolderSession (AH-5).
+ */
+export async function validateAccountHolderSessionFromRawToken(
+  rawToken: string
+): Promise<AccountHolderSessionData | null> {
+  const secret = getHmacSecret();
+  if (!secret) {
+    console.error("[ahx] ahx=unknown action=session_invalid reason=missing_hmac_secret");
+    return null;
+  }
+
+  let tokenHash: string;
+  try {
+    tokenHash = hmacToken(rawToken, secret);
+  } catch {
+    console.error("[ahx] ahx=unknown action=session_invalid reason=hmac_error");
+    return null;
+  }
+
+  return validateSessionByHash(tokenHash);
+}
+
+/**
  * Validate the AccountHolder session from the request cookie.
  * Returns session data on success; null on any failure (expired, revoked, missing).
  *
@@ -63,6 +92,16 @@ export async function getAccountHolderSession(
     return null;
   }
 
+  return validateSessionByHash(tokenHash);
+}
+
+/**
+ * Internal: validate by pre-computed HMAC hash.
+ * Shared by getAccountHolderSession and validateAccountHolderSessionFromRawToken.
+ */
+async function validateSessionByHash(
+  tokenHash: string
+): Promise<AccountHolderSessionData | null> {
   const now = new Date();
 
   const row = await db.accountHolderSession.findUnique({
