@@ -34,7 +34,9 @@ Steps:
 ## 2. Session wrong-identity (P0) — desktop, two accounts
 
 **Preview:** https://tutoring-notes-git-fix-session-w-0c21aa-arangarx-5209s-projects.vercel.app
-**Branch/commit:** `fix/session-wrong-identity @ 9de290a`
+**Branch/commit:** `fix/session-wrong-identity @ 9de290a` — **MERGED to `v1-redesign` 2026-06-05.**
+
+> **⚠️ HOST REQUIREMENT (preview only):** tutor AND parent must operate on the **same preview hostname**. On Vercel preview the signup verify-email link uses the per-deployment `VERCEL_URL` host while the tutor's claim link is built from `window.location.origin` (branch-alias host) — different `*.vercel.app` hosts = the parent's `mynk_ah_session` cookie is absent on the claim page → gate instead of interstitial (RC-A). This is a **preview artifact, not a prod bug** (prod has one canonical domain). Andrew's Chrome-tutor / Edge-parent same-device split is fine **as long as both browsers land on the same host** — easiest is to note the host the parent lands on after clicking verify (the `VERCEL_URL` deployment host) and have the tutor mint the claim from that same host. Fix queued: align verify-email link to the request host. `SameSite=Lax` is a SEPARATE later item and does NOT fix this.
 
 Setup: be able to create two parent accounts (A and B) and have a tutor account to mint a claim link.
 
