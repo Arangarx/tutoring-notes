@@ -1,6 +1,8 @@
 # Cost / Usage Observability Design — 2026-06-06
 
-> **Status:** Design pass complete. Awaiting Andrew ratification of Q1–Q10 (recommended defaults provided).
+> **Status:** **RATIFIED (Andrew 2026-06-06)** — Q1–Q10 answered below; **Phase 1 build authorized**
+>
+> **V1 baseline principle (Andrew, standing):** V1 = clean industry-standard architecture, flow, UX, and security — **"whatever is cleanest."** **Storage is cheap relative to everything else — never skimp to save a byte per user** (chunk retention, keeping both chunks + consolidated blob, cost-event row volume, etc.).
 >
 > **Epic:** V1-GATING — full usage tracking + per-call cost tracking ships WITH v1. Admin dashboard integration.
 >
@@ -520,22 +522,30 @@ No new external dependencies added. Cost events write to Neon — same availabil
 
 ---
 
-## 8. Open questions (Q1–Q10)
+## 8. Open questions (Q1–Q10) — **RATIFIED (Andrew 2026-06-06)**
 
-Each has a **recommended default** — reply "ratify defaults" to authorize Phase 1, or override individually.
+| # | Question | Ratified answer | Rationale |
+|---|----------|-----------------|-----------|
+| **Q1** | Extract `rate-card.ts` as separate file, or keep constants in `cost-events.ts`? | **RATIFIED AT DEFAULT — Separate `rate-card.ts`** | Cleaner separation; the rate-card is a config artifact, not business logic. Makes the staleness check easy to co-locate. |
+| **Q2** | Add `rateCardVersion`, `bytesTransferred`, `gbMonths`, `computeGbHr`, `sessionId` columns via one migration, or only add what Phase 1 actually uses? | **RATIFIED AT DEFAULT — One migration adds all** | Additive cost is the same; avoids a second migration later. All columns nullable. |
+| **Q3** | Log BLOB_EGRESS at URL-generation time (optimistic) or actual download completion (exact)? | **RATIFIED AT DEFAULT — URL-generation time (optimistic)** | Vercel Blob serves directly from edge; there's no server hook on download completion. Optimistic logging slightly overcounts unplayed recordings — acceptable at this accuracy tier. |
+| **Q4** | Log VERCEL_COMPUTE inline at call sites (estimated, Phase 1) or wait for Vercel API (exact, Phase 2)? | **RATIFIED AT DEFAULT — Inline estimate in Phase 1** | Gets cost attribution immediately; the Vercel API approach is additive (Phase 2 can refine without touching call sites). |
+| **Q5** | Admin `/admin/cost` dashboard: ship with v1, or post-v1? | **RATIFIED AT DEFAULT — Ship with v1** (the requirement) | V1-GATING per Andrew 2026-06-06. The page itself is a simple DB-query + render with no external calls. |
+| **Q6** | Per-session cost drill-down (§4.3): in Phase 1 or Phase 2? | **RATIFIED AT DEFAULT — Phase 1** | One extra query on a page that already loads session data. Low effort, high value for pricing validation. |
+| **Q7** | Monthly blob storage cron: Phase 1 or Phase 2? | **RATIFIED AT DEFAULT — Phase 2** | Requires a Vercel Cron + Blob API integration. Not blocking v1 pricing-floor. Phase 2 is ~1 month post-launch. |
+| **Q8** | Should estimated cost be surfaced to **tutors** (not just admin)? | **ACCEPTED — do NOT surface tutor-facing cost in the UI until the pricing model is locked.** Andrew is leaning toward a **"session tokens"** model (NOT locked in); if adopted, tutors only need to see token consumption + whether they'll be billed for overage in arrears. **Internal/admin-facing cost tracking still ships in Phase 1** — only tutor-facing surfacing is deferred. | Admin-only for v1 was the recommended default; Andrew refined: defer tutor UI until pricing model locked, but admin cost tracking is not deferred. |
+| **Q9** | Rate-card staleness threshold: 90 days or 30 days? | **RATIFIED AT DEFAULT — 90 days** | OpenAI and Vercel pricing is relatively stable; 90 days matches quarterly planning cadence without being noisy. |
+| **Q10** | Should the blob cleanup CLI (`blb` log prefix) write a `BLOB_STORAGE` event showing reclaimed storage? | **RATIFIED AT DEFAULT — Yes** | The cleanup operation is already logged with `blb` prefix; adding a `BLOB_STORAGE` event (negative `gbMonths`) creates a complete storage cost timeline. |
 
-| # | Question | Recommended default | Rationale |
-|---|----------|--------------------|-----------| 
-| **Q1** | Extract `rate-card.ts` as separate file, or keep constants in `cost-events.ts`? | **Separate `rate-card.ts`** | Cleaner separation; the rate-card is a config artifact, not business logic. Makes the staleness check easy to co-locate. |
-| **Q2** | Add `rateCardVersion`, `bytesTransferred`, `gbMonths`, `computeGbHr`, `sessionId` columns via one migration, or only add what Phase 1 actually uses? | **One migration adds all** | Additive cost is the same; avoids a second migration later. All columns nullable. |
-| **Q3** | Log BLOB_EGRESS at URL-generation time (optimistic) or actual download completion (exact)? | **URL-generation time (optimistic)** | Vercel Blob serves directly from edge; there's no server hook on download completion. Optimistic logging slightly overcounts unplayed recordings — acceptable at this accuracy tier. |
-| **Q4** | Log VERCEL_COMPUTE inline at call sites (estimated, Phase 1) or wait for Vercel API (exact, Phase 2)? | **Inline estimate in Phase 1** | Gets cost attribution immediately; the Vercel API approach is additive (Phase 2 can refine without touching call sites). |
-| **Q5** | Admin `/admin/cost` dashboard: ship with v1, or post-v1? | **Ship with v1** (the requirement) | V1-GATING per Andrew 2026-06-06. The page itself is a simple DB-query + render with no external calls. |
-| **Q6** | Per-session cost drill-down (§4.3): in Phase 1 or Phase 2? | **Phase 1** | One extra query on a page that already loads session data. Low effort, high value for pricing validation. |
-| **Q7** | Monthly blob storage cron: Phase 1 or Phase 2? | **Phase 2** | Requires a Vercel Cron + Blob API integration. Not blocking v1 pricing-floor. Phase 2 is ~1 month post-launch. |
-| **Q8** | Should estimated cost be surfaced to **tutors** (not just admin)? | **No, admin-only for v1** | Tutor-facing cost creates expectations and potential confusion at pilot stage. Revisit when moving to multi-tutor scale. |
-| **Q9** | Rate-card staleness threshold: 90 days or 30 days? | **90 days** | OpenAI and Vercel pricing is relatively stable; 90 days matches quarterly planning cadence without being noisy. |
-| **Q10** | Should the blob cleanup CLI (`blb` log prefix) write a `BLOB_STORAGE` event showing reclaimed storage? | **Yes** | The cleanup operation is already logged with `blb` prefix; adding a `BLOB_STORAGE` event (negative `gbMonths`) creates a complete storage cost timeline. |
+---
+
+## Ratification record
+
+| Field | Value |
+|---|---|
+| **Ratified by** | Andrew — 2026-06-06 (orchestrator chat) |
+| **Disposition** | Q8 answered explicitly (tutor-facing cost UI deferred; admin cost tracking ships Phase 1); Q1–Q7, Q9–Q10 = ratified at default |
+| **Build authorized** | **Yes** — Phase 1 cost observability dispatch may proceed |
 
 ---
 

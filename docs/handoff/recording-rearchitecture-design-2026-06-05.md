@@ -2,7 +2,7 @@
 
 > **Design date:** 2026-06-05 (v1) — **Revised 2026-06-06 (v2)**  
 > **Branch:** `v1-redesign`  
-> **Status:** **RATIFY-READY v2** — fresh Q1–Q8 open questions supersede the v1 Q1–Q10; build NOT yet authorized (high blast radius) — awaiting Andrew's ratification of Q1–Q8 below  
+> **Status:** **RATIFIED v2 (Andrew 2026-06-06)** — Q1–Q8 answered below; **build authorized** (high blast radius — Phase 1 dispatch on isolated branch)  
 > **Authored by:** v1 Composer-authored from Opus scope blob; v2 revised inline by Composer subagent from Andrew dialogue + independent best-practice research  
 > **Deliverable type:** Design / ratify document — no production code, no migrations applied  
 > **Owner directive (Andrew, 2026-06-05):** STOP interim-patching the whiteboard recording/playback methodology; re-engineer it properly for scale and real use.  
@@ -11,6 +11,8 @@
 > 2. [`docs/PLATFORM-ASSUMPTIONS.md`](../PLATFORM-ASSUMPTIONS.md) — Vercel 300s ceiling, ffmpeg-static, iOS Safari constraints
 > 3. [`docs/handoff/session-lifecycle-redesign-brief-2026-06-02.md`](session-lifecycle-redesign-brief-2026-06-02.md) — pause-semantics open item (this doc resolves it via D3/D4)
 > 4. [`docs/handoff/w1-audio-durability-design-2026-05-27.md`](w1-audio-durability-design-2026-05-27.md) — draft store + outbox durability patterns
+
+> **V1 baseline principle (Andrew, standing):** V1 = clean industry-standard architecture, flow, UX, and security — **"whatever is cleanest."** **Storage is cheap relative to everything else — never skimp to save a byte per user** (chunk retention, keeping both chunks + consolidated blob, cost-event row volume, etc.).
 
 ---
 
@@ -25,7 +27,7 @@
 | **Transcription** | Post-click, blocking UI, manual button | Decoupled event-driven backend: chunk lands → transcribe async → store by recording-time offset; no UI dependency |
 | **Notes generation** | Manual "Transcribe & generate notes" button | **Auto-fires on session end**; post-session screen shows recording + notes in skeleton/loading state |
 | **Summarization architecture** | Single GPT call on full transcript (15s+ tail, 300s risk) | **Map-reduce native**: cheap per-chunk extraction (map) during session + light final reduce at end; honest latency floor ~2–4s masked by skeleton |
-| **Backward compatibility** | Additive D8 fallback for existing sessions | **No backward compat** — Sarah confirms cutover (1-line confirm); test data purged freely |
+| **Backward compatibility** | Additive D8 fallback for existing sessions | **No dual-read compat burden** — one-time forward-migration of Sarah's real prod data at Phase 1 cutover (see Q6); no ongoing old-schema read paths |
 | **Current-pipeline reality** | Not quantified | Cited from investigation `aad5dcdf`: post-click whisper-1 + single GPT call ~15s tail, **Vercel 300s ceiling = real reliability cliff for long sessions** |
 | **Transcription model** | `whisper-1` assumed | `gpt-4o-mini-transcribe` recommended: **$0.003/min (half the cost), ~35% better WER, streaming support** — validated against 2026 pricing |
 | **Container format** | WebM assumed | Research-validated: WebM/Opus + `-c copy -cues_to_front 1` for Phase 1 (audio-only, no re-encode, fits existing ffmpeg-static); MP4 path noted for future |
@@ -58,9 +60,9 @@ This design re-architects the pipeline as four internally-invisible stages on a 
 | ~15s notes tail (entire session transcribed + GPT call at once) | Notes appear in ~2–4s (chunk transcriptions pre-done; only final reduce remains) |
 | Multi-segment replay via client-side stitch path | Single canonical audio blob; stitch path becomes fallback-only, then deleted |
 | Three unreconciled clocks (live: `getAudioMs` perf.now; replay: Whisper `durationSeconds`; notes: wall-clock+Whisper) | One monotonic recording-time axis for everything |
-| Backward compat burden for existing sessions | No backward compat needed — Sarah confirms cutover |
+| Backward compat burden for existing sessions | No dual-read compat — forward-migrate Sarah's real data once at cutover (Q6) |
 
-**Build is NOT authorized until Andrew ratifies Q1–Q8 below.**
+**Build authorized — Andrew ratified Q1–Q8 on 2026-06-06.**
 
 ---
 
@@ -193,7 +195,7 @@ For our specific "tutor notes" use case, the map step extracts structured per-ch
 | **Vercel 300s function ceiling** | CURRENT CLIFF: full-session transcription + notes in one call times out on long sessions. FIX: distribute across async jobs; no single blocking call. Consolidation async (Workflows or Queue). |
 | **Transcription 25MB per-request limit** | OpenAI API unchanged: `gpt-4o-mini-transcribe` same 25MB limit as whisper-1. ffmpeg splitting pattern retained. |
 | **iOS Safari** | `MediaRecorder.pause()` / `resume()` behavior differs. Phase 2 (true pause, D5) is hardware-gated. Phase 1 capture is untouched. |
-| **No backward compatibility** | Andrew has confirmed: Sarah has nothing to preserve. Get her 1-line confirm before any destructive cutover of her production data. Test data purged freely. |
+| **No dual-read backward compatibility** | No ongoing old-schema read paths or stitch fallback for legacy sessions. **Forward-migrate** Sarah's real prod data once at Phase 1 cutover (4 whiteboard sessions + 19 recordings; 2026-06-05's 2 sessions are whiteboard-event-blobs only — no audio). Complete purge is OUT. Test/fixture data may still be purged freely. |
 | **Data-loss bar** | Chunks never deleted until canonical blob verified durable. Transcript rows never deleted. Notes generation failure must not destroy the session. |
 | **Mid-session live insights** | Explicitly DEFERRED. Architecture enables it (chunk transcripts + recording-time offsets are the foundation); not in v1 scope. |
 
@@ -404,7 +406,7 @@ finalizeOutboxAfterEnd (existing)
 
 4. **Playback update:**
    - Prefer canonical when ready; stitch fallback while `consolidationStatus != done` (for new sessions during pending window).
-   - No stitch fallback for old sessions (no backward compat per Andrew's directive — see Sarah confirm gate).
+   - No stitch fallback for old sessions (no dual-read compat — Sarah data forward-migrated at cutover per Q6).
 
 5. **Post-session screen:**
    - Recording player (native `<audio>` on canonical URL, or stitch during pending).
@@ -422,7 +424,7 @@ finalizeOutboxAfterEnd (existing)
 - Transcription failure on one chunk: notes pipeline retries chunk; completion gate prevents partial-transcript notes.
 - Consolidation failure: playback falls back to segment-stitch while retrying; tutor can still review the session.
 - 300s cliff: no single Vercel function call handles the entire transcription+notes sequence.
-- Sarah data cutover: 1-line confirm obtained before any destructive migration of her production session data.
+- Sarah data cutover: one-time forward-migration of her real prod data completed as part of Phase 1 cutover (see Q6).
 
 ---
 
@@ -445,9 +447,9 @@ finalizeOutboxAfterEnd (existing)
 **Scope:**
 
 - D9: delete stitch path once canonical is universal and all relevant sessions migrated.
-- Optional: Sarah's session backfill (if she wants old sessions preserved; else purge per no-backward-compat directive).
+- Sarah's session forward-migration at Phase 1 cutover (required — see Q6).
 
-**Risk:** Low (cleanup only). Do not delete fallback until Sarah's old sessions are addressed (purge or backfill).
+**Risk:** Low (cleanup only). Do not delete fallback until Sarah's sessions are forward-migrated.
 
 ---
 
@@ -592,7 +594,7 @@ Mandatory per [`reliability-bar.mdc`](../../../../agenticPipeline/.cursor/rules/
 |---|---|
 | **`handleEndSession` ordering** | stop → flush → drain → assemble → `endWhiteboardSession` → `finalizeOutboxAfterEnd` → enqueue consolidation + notes. Queue publish must be **after** outbox finalize, not inside end-session txn. |
 | **Notes completion gate** | Reduce must not fire until all chunks produced by THIS session are transcribed. Gate must handle: (a) late chunks from final outbox flush; (b) transcription API retries that haven't resolved; (c) timeout path. |
-| **Sarah data cutover** | Before merging Phase 1 to master: get Sarah's 1-line confirm to purge her existing session recordings. Do NOT do this without explicit confirmation. |
+| **Sarah data cutover** | Phase 1 cutover includes a one-time forward-migration of Sarah's real prod data into the new schema (4 whiteboard sessions + 19 recordings; 2026-06-05's 2 sessions are whiteboard-event-blobs only — no audio). Complete purge is OUT. |
 | **Outbox crash recovery** | Transcription trigger must only fire after chunk blob is confirmed uploaded (outbox status = uploaded). Do not trigger on IDB draft write. |
 | **Atomic end-session txn** | `createMany` for `SessionRecording` rows — Queue publishes are outside the txn (can't roll back a sent message). Guard: consumer is idempotent. |
 | **`audioStartedAtMs: Date.now()` bug** | Fix in Phase 2 when recording-time clock lands. Phase 1 uses `createdAt` ordering for segment order. |
@@ -770,22 +772,20 @@ Trigger Vercel Workflow (or enqueue consolidation)
 
 ---
 
-## Open questions — v2 (re-cut; Q1–Q8 fresh)
+## Open questions — v2 (Q1–Q8) — **RATIFIED (Andrew 2026-06-06)**
 
-> **v1 Q1–Q10 disposition:** Q1 (pause collapse), Q2 (disconnect = collapse), Q3 (async consolidation always), Q4 (keep segment rows), Q5 (keep rollover), Q7 (cns prefix), Q8 (Phase 1 before Phase 2), Q9 (iOS gate) are **RATIFIED** by the Andrew dialogue and not re-opened. Q6 (backfill existing sessions) is **SUPERSEDED** by Andrew's (f) no-backward-compat directive. Q10 (canonical format) is answered by the best-practice research (WebM/Opus for Phase 1, see Q2 below).
+> **v1 Q1–Q10 disposition:** Q1 (pause collapse), Q2 (disconnect = collapse), Q3 (async consolidation always), Q4 (keep segment rows), Q5 (keep rollover), Q7 (cns prefix), Q8 (Phase 1 before Phase 2), Q9 (iOS gate) are **RATIFIED** by the Andrew dialogue and not re-opened. Q6 (backfill existing sessions) is **SUPERSEDED** by Andrew's 2026-06-06 ratification — forward-migrate real data once; no dual-read compat burden. Q10 (canonical format) is answered by the best-practice research (WebM/Opus for Phase 1, see Q2 below).
 
-Reply **"ratify defaults"** to accept all recommended defaults, or specify per question.
-
-| # | Question | Options | **Recommended default** | Rationale |
+| # | Question | Options | **Ratified answer** | Rationale / notes |
 |---|---|---|---|---|
-| **Q1** | Transcription model: switch from `whisper-1` to `gpt-4o-mini-transcribe` in Phase 1? | `gpt-4o-mini-transcribe` ($0.003/min) / keep `whisper-1` ($0.006/min) / `gpt-4o-transcribe` ($0.006/min, higher accuracy) | **`gpt-4o-mini-transcribe`** | Half the cost, ~35% better WER on clean audio, streaming support (future value), near drop-in migration. Escalate to `gpt-4o-transcribe` if quality issues emerge. |
-| **Q2** | Canonical audio container for Phase 1: stay WebM/Opus or target MP4? | WebM/Opus (`-c copy -cues_to_front 1`, no re-encode) / MP4 (requires codec transcoding from Opus) | **WebM/Opus for Phase 1** | No re-encoding = no quality loss, fast, existing ffmpeg-static pattern. Chrome 130+/Safari can already record MP4 natively but Firefox still needs transcoding and audio-only WebM→MP4 requires re-encode. Revisit at Phase 4 (custom player) when browser compat requirements are clearer. |
-| **Q3** | Async mechanism: Vercel Workflows (multi-step durable) or Vercel Queue consumer + manual state machine for consolidation? | Vercel Workflows (`"use workflow"`) / Queue consumer + status machine | **Vercel Workflows if available on current Pro plan; Queue fallback otherwise** | Verify availability before building. Workflows is cleaner (automatic retry, step isolation, observability); Queue fallback is well-understood from current pattern. |
-| **Q4** | Map layer in Phase 1: implement per-chunk extraction during session, or ship single-reduce-at-end as v1 and add map layer in Phase 4? | Map layer in Phase 1 / Single-reduce fallback for Phase 1, map in Phase 4 | **Single-reduce fallback for Phase 1; map layer in Phase 4** | Single-reduce is simpler to build correctly; latency (~5–15s) is still dramatically better than today's post-click ~15s-with-timeout-risk. Map layer is a quality/latency enhancement, not a reliability fix — defer unless Andrew wants map-reduce in Phase 1. **OVERRIDE:** if Andrew says "I want map-reduce now," change to Phase 1 target. |
-| **Q5** | Notes completion gate timeout: 5 minutes since session seal before triggering partial-notes reduce? | 3 min / 5 min / 10 min | **5 minutes** | Long enough for transcription API retries; short enough that the tutor gets notes within ~6 min of session end on a failure. Partial flag is visible on the note. |
-| **Q6** | Sarah data cutover: when and how? | Before Phase 1 merges to master: send 1-line confirm, purge her test session data, run clean migration / After Phase 1 build validated on test data only | **Before Phase 1 merges to master: send Sarah a 1-line message, get confirm, then purge.** | Andrew's (f) directive. Do not blindly purge; get the 1-line "yes" first. Test data purged freely without confirm. |
-| **Q7** | Notes reduce model: `gpt-4o-mini` for reduce step, or `gpt-4o` from the start? | `gpt-4o-mini` (cheap, sufficient for most cases) / `gpt-4o` (higher quality) | **`gpt-4o-mini` for Phase 1; escalate to `gpt-4o` on observed quality issues** | Consistent with cost-first approach. Notes quality can be verified in pilot; escalation is a 1-line model change. |
-| **Q8** | Log prefix for per-chunk transcription: `txc`? And for notes pipeline: `tnt`? Register both in `AGENTS.md` § Conventions before Phase 1 merges. | `txc` / `tnt` (proposed) | **`txc` (transcription chunk), `tnt` (tutor notes)** — register both | Consistent with existing prefix style. Short, mnemonic, not already in use. |
+| **Q1** | Transcription model: switch from `whisper-1` to `gpt-4o-mini-transcribe` in Phase 1? | `gpt-4o-mini-transcribe` ($0.003/min) / keep `whisper-1` ($0.006/min) / `gpt-4o-transcribe` ($0.006/min, higher accuracy) | **ACCEPTED — `gpt-4o-mini-transcribe`.** Phase-1 build-time guard: verify transcription quality on **realistic tutoring audio** (background noise, children, mediocre mics) — not just clean-benchmark WER. **Keep `whisper-1` as fallback** if `gpt-4o-mini-transcribe` underperforms on messy real-world audio. | Half the cost, ~35% better WER on clean audio, streaming support (future value), near drop-in migration. Andrew: cheaper + more accurate = win/win, but "depends on definition of 'clean' audio." |
+| **Q2** | Canonical audio container for Phase 1: stay WebM/Opus or target MP4? | WebM/Opus (`-c copy -cues_to_front 1`, no re-encode) / MP4 (requires codec transcoding from Opus) | **RATIFIED AT DEFAULT — WebM/Opus for Phase 1** | No re-encoding = no quality loss, fast, existing ffmpeg-static pattern. Chrome 130+/Safari can already record MP4 natively but Firefox still needs transcoding and audio-only WebM→MP4 requires re-encode. Revisit at Phase 4 (custom player) when browser compat requirements are clearer. |
+| **Q3** | Async mechanism: Vercel Workflows (multi-step durable) or Vercel Queue consumer + manual state machine for consolidation? | Vercel Workflows (`"use workflow"`) / Queue consumer + status machine | **RATIFIED AT DEFAULT — Vercel Workflows if available on current Pro plan; Queue fallback otherwise** | Verify availability before building. Workflows is cleaner (automatic retry, step isolation, observability); Queue fallback is well-understood from current pattern. |
+| **Q4** | Map layer in Phase 1: implement per-chunk extraction during session, or ship single-reduce-at-end as v1 and add map layer in Phase 4? | Map layer in Phase 1 / Single-reduce fallback for Phase 1, map in Phase 4 | **RATIFIED AT DEFAULT — Single-reduce fallback for Phase 1; map layer in Phase 4** | Single-reduce is simpler to build correctly; latency (~5–15s) is still dramatically better than today's post-click ~15s-with-timeout-risk. Map layer is a quality/latency enhancement, not a reliability fix. |
+| **Q5** | Notes completion gate timeout: how long since session seal before triggering partial-notes reduce? | 3 min / 5 min / 10 min | **ACCEPTED — 5 minutes** | Long enough for transcription API retries; short enough that the tutor gets notes within ~6 min of session end on a failure. Partial flag is visible on the note. |
+| **Q6** | Sarah data cutover: when and how? | Forward-migrate real data / purge / defer | **ACCEPTED — forward-migrate Sarah's real prod data into the new schema at Phase 1 cutover.** Complete purge is OUT. Scope (Neon prod check): **4 real whiteboard sessions + 19 recordings**; yesterday's (2026-06-05) **2 sessions are whiteboard-event-blobs only (NO audio captured).** Build a **one-time forward-migration** as part of Phase 1 cutover. Supersedes prior "no backward compat / purge freely" decision — **no dual-read compat burden, but forward-migrate existing real data once.** | Andrew: "bring her data up to date if changes are needed." |
+| **Q7** | Notes reduce model: `gpt-4o-mini` for reduce step, or `gpt-4o` from the start? | `gpt-4o-mini` (cheap, sufficient for most cases) / `gpt-4o` (higher quality) | **ACCEPTED — start with `gpt-4o-mini` for the map-reduce reduce step.** Phase-1 build-time guard: quality-check reduced notes; **escalate to a larger model if reduction quality is insufficient.** | Consistent with cost-first approach. Andrew: OK as long as it does a good job on the reduction. |
+| **Q8** | Log prefix for per-chunk transcription: `txc`? And for notes pipeline: `tnt`? Register both in `AGENTS.md` § Conventions before Phase 1 merges. | `txc` / `tnt` (proposed) | **ACCEPTED AT DEFAULT — keep `txc` (transcription chunk), `tnt` (tutor notes)** — register both | Andrew: don't-care on naming. Rationale retained: agents + the admin dashboard will do most log reading, not humans directly. |
 
 ---
 
@@ -806,11 +806,10 @@ All migrations are additive. No column drops or renames. Existing `SessionRecord
 
 | Field | Value |
 |---|---|
-| **Awaiting** | Andrew — reply in orchestrator chat |
-| **Quick path** | `"ratify defaults"` → all Q1–Q8 recommended defaults |
-| **After ratify** | Orchestrator dispatches Phase 1 on isolated branch; no build until ratified |
-| **Build authorized** | **No** — design only until Andrew confirms |
-| **v1 Qs resolved** | Q1 (collapse), Q2 (disconnect), Q3 (async always), Q4 (keep rows), Q5 (rollover), Q7 (cns), Q8 (Phase 1 first), Q9 (iOS gate) = RATIFIED by dialogue. Q6 = SUPERSEDED (no backward compat). Q10 = answered by research (WebM/Opus, now Q2 above). |
+| **Ratified by** | Andrew — 2026-06-06 (orchestrator chat) |
+| **Disposition** | Q1, Q5, Q6, Q7 answered explicitly; Q2–Q4, Q8 = ratified at default ("for the other questions I didn't specifically answer, the recommendations are fine") |
+| **Build authorized** | **Yes** — Phase 1 dispatch on isolated branch |
+| **v1 Qs resolved** | Q1 (collapse), Q2 (disconnect), Q3 (async always), Q4 (keep rows), Q5 (rollover), Q7 (cns), Q8 (Phase 1 first), Q9 (iOS gate) = RATIFIED by dialogue. Q6 = SUPERSEDED → forward-migrate Sarah's real data once (2026-06-06). Q10 = answered by research (WebM/Opus, now Q2 above). |
 
 ---
 
@@ -819,7 +818,7 @@ All migrations are additive. No column drops or renames. Existing `SessionRecord
 - No production code changes.
 - No migrations applied.
 - No redesign of session-lifecycle auto-recording (separate thread; this doc only resolves recording pipeline shape and notes generation).
-- No deletion of stitch path until Phase 3 + Sarah cutover decision resolved.
+- No deletion of stitch path until Phase 3 + Sarah forward-migration complete (Q6).
 - No mid-session live insights to the tutor (explicitly DEFERRED to Phase 5+).
 - No cost-observability design (separate active thread — `cev` system; design pass TBD).
 - No production changes to `PLATFORM-ASSUMPTIONS.md` beyond design-stage registration (§11 + capability-contract rule added 2026-06-06; Phase 1 build commit must promote entries to production-assumption status).
