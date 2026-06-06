@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { streamBlobWithRangeSupport } from "@/lib/audio/proxy-stream";
+import { logBlobEgressEvent } from "@/lib/observability/cost-events";
 
 /**
  * Proxy private Vercel Blob audio to browsers on the share page.
@@ -19,6 +20,8 @@ import { streamBlobWithRangeSupport } from "@/lib/audio/proxy-stream";
  * Range support: forwards the inbound `Range` header to Vercel Blob
  * via `streamBlobWithRangeSupport` so parents can scrub the share
  * page audio. See helper docs for the full background.
+ *
+ * BLOB_EGRESS: logs optimistic egress cost when Content-Length is known (design §3.3.1).
  */
 export async function GET(
   req: Request,
@@ -58,7 +61,13 @@ export async function GET(
         },
       ],
     },
-    select: { blobUrl: true, mimeType: true },
+    select: {
+      blobUrl: true,
+      mimeType: true,
+      adminUserId: true,
+      studentId: true,
+      whiteboardSessionId: true,
+    },
   });
 
   if (!recording) {
@@ -66,5 +75,27 @@ export async function GET(
   }
 
   const { blobUrl, mimeType } = recording;
-  return streamBlobWithRangeSupport(req, blobUrl, mimeType || "audio/mpeg");
+  const response = await streamBlobWithRangeSupport(
+    req,
+    blobUrl,
+    mimeType || "audio/mpeg"
+  );
+
+  const contentLength = response.headers.get("content-length");
+  if (contentLength) {
+    const bytes = parseInt(contentLength, 10);
+    if (!Number.isNaN(bytes) && bytes > 0) {
+      void logBlobEgressEvent({
+        bytesTransferred: bytes,
+        sessionRecordingId: recordingId,
+        adminUserId: recording.adminUserId,
+        studentId: recording.studentId,
+        whiteboardSessionId: recording.whiteboardSessionId,
+        sessionId: recording.whiteboardSessionId,
+        metadata: { route: "share-audio-proxy" },
+      });
+    }
+  }
+
+  return response;
 }

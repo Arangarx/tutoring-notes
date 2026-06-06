@@ -25,6 +25,10 @@ enum CostEventKind {
   WHISPER_TRANSCRIPTION
   GPT_NOTES_GENERATION
   GPT_ASSESSMENT_EXTRACTION
+  BLOB_STORAGE
+  BLOB_EGRESS
+  VERCEL_COMPUTE
+  NEON_COMPUTE
 }
 
 /// Purpose values for one-time email tokens issued to AccountHolders.
@@ -680,6 +684,12 @@ model CostEvent {
 
   estimatedCostUsd Decimal? @db.Decimal(10, 6)
 
+  bytesTransferred Float?
+  gbMonths         Float?
+  computeGbHr      Float?
+  rateCardVersion  String?
+  sessionId        String?
+
   adminUserId         String?
   adminUser           AdminUser?         @relation(fields: [adminUserId], references: [id], onDelete: SetNull)
   studentId           String?
@@ -697,6 +707,8 @@ model CostEvent {
   @@index([adminUserId, createdAt])
   @@index([studentId, createdAt])
   @@index([createdAt])
+  @@index([whiteboardSessionId, createdAt])
+  @@index([sessionId, createdAt])
 }
 
 // =============================================================================

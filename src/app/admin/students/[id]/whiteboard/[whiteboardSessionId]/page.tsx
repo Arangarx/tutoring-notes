@@ -5,6 +5,8 @@ import { db, withDbRetry } from "@/lib/db";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import WhiteboardReplay from "@/components/whiteboard/WhiteboardReplay";
 import WhiteboardNotesPanel from "@/components/whiteboard/WhiteboardNotesPanel";
+import { SessionCostPanel } from "@/components/admin/SessionCostPanel";
+import { getSessionCostBreakdown } from "@/lib/observability/cost-queries";
 import { env } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
@@ -148,6 +150,10 @@ export default async function WhiteboardReviewPage({
   const isLive = !detail.endedAt;
   const aiEnabled = Boolean(env.OPENAI_API_KEY);
 
+  const sessionCost = !isLive
+    ? await getSessionCostBreakdown(whiteboardSessionId)
+    : null;
+
   return (
     <div className="container" style={{ maxWidth: 1280 }}>
       {/* Header */}
@@ -258,6 +264,21 @@ export default async function WhiteboardReviewPage({
           />
         </div>
       )}
+
+      {sessionCost ? (
+        <SessionCostPanel
+          whisperMinutes={sessionCost.whisperMinutes}
+          whisperUsd={sessionCost.whisperUsd}
+          gptInputTokens={sessionCost.gptInputTokens}
+          gptOutputTokens={sessionCost.gptOutputTokens}
+          gptUsd={sessionCost.gptUsd}
+          blobEgressBytes={sessionCost.blobEgressBytes}
+          blobEgressUsd={sessionCost.blobEgressUsd}
+          blobStorageUsd={sessionCost.blobStorageUsd}
+          computeUsd={sessionCost.computeUsd}
+          totalUsd={sessionCost.totalUsd}
+        />
+      ) : null}
 
       {/* Footer meta */}
       <div
