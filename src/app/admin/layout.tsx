@@ -4,6 +4,7 @@ import { authOptions } from "@/auth-options";
 import { isOperatorEmail } from "@/lib/operator";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { getAdminSessionMode } from "@/lib/admin-routing";
+import { isDevToolsEnabled } from "@/lib/dev-fixtures";
 
 export default async function AdminLayout({
   children,
@@ -14,6 +15,8 @@ export default async function AdminLayout({
   const showOperatorLinks = isOperatorEmail(session?.user?.email);
   const isImpersonating = session?.user?.isImpersonating ?? false;
   const impersonatedEmail = session?.user?.email ?? "";
+  // Show dev-tools nav link only in non-production environments and only for operators.
+  const showDevTools = isDevToolsEnabled() && showOperatorLinks && !isImpersonating;
   const sessionMode = getAdminSessionMode(
     session?.user
       ? {
@@ -32,6 +35,7 @@ export default async function AdminLayout({
         showOperatorLinks={showOperatorLinks}
         sessionMode={sessionMode}
         isImpersonating={isImpersonating}
+        showDevTools={showDevTools}
       />
       <div className="mx-auto w-full max-w-4xl px-4 py-8 md:py-10">{children}</div>
     </>
