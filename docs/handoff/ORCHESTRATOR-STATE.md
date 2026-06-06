@@ -39,7 +39,7 @@ Andrew: "do what you can till you can't proceed without feedback/smoke." Deliver
 - **Ratify** recording re-architecture defaults (Q1-Q10) → authorizes Phase 1.
 - **Re-smoke** dev-dashboard step 4 on the rebuilt preview (fix-forward `7f8518c`: PIN, claimable family, persistent creds) → merge `feat/admin-dev-dashboard`.
 - **Provide Sarah's account email** → needed to hardcode the never-touch allowlist for the **legacy test-account cleanup** (see backlog). Andrew wants the manually-created pre-fixture test accounts swept once fixtures land; clear-all only deletes `isTestFixture=true` rows so legacy debris is untouched. Plan: guard-railed dev-tools "legacy test data" view (lists all except allowlist: Sarah + `arangarx@gmail.com` + `arangarx@hotmail.com`), shows candidates, deletes only the confirmed set. Destructive → explicit greenlight on the exact list before any delete.
-- **Smoke** verify-email host-align preview (`fix/verify-email-host-align`) → merge (unblocks preview claim-flow smoking).
+- ~~Smoke verify-email host-align~~ → ✅ **MERGED `b2938bb`** (Andrew 1B smoke 6/6 PASS incl RC-A step 4 claim-flow + injection guard quiet). RC-A preview domain-split RESOLVED on `v1-redesign`. Backlog: `SameSite=Strict→Lax` still separate.
 - **Smoke** (optional) replay v3 S3/S4/S5/S6 — already merged on-trust, but a sanity pass is welcome.
 - Decide pivot ordering specifics + which surface first (B3 session-log vs B4 replay vs dashboard).
 
