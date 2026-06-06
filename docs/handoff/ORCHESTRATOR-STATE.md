@@ -12,7 +12,7 @@ We are on **Wave 1 reliability floor** post-whiteboard: the 2-week view-sync bug
 
 ## ⏩ HEAD — 2026-06-05 PM: merges done + STRATEGIC PIVOT (re-architecture + dev-dashboard) + autonomous window (newest; read first)
 
-Full PM runbook: [`SMOKE-RUNBOOK-2026-06-05-PM.md`](SMOKE-RUNBOOK-2026-06-05-PM.md). Andrew's test methodology (capture for future smokes): **tutor side in Chrome, parent/student side in Edge, SAME device** (browsers keep separate sessions on purpose); full device swap only for whiteboard 2-device tests.
+Full PM runbook: [`SMOKE-RUNBOOK-2026-06-05-PM.md`](SMOKE-RUNBOOK-2026-06-05-PM.md). Andrew's test methodology (capture for future smokes): **tutor side in Chrome, parent/student side in Edge, SAME device** (browsers keep separate sessions on purpose); full device swap only for whiteboard 2-device tests. **Andrew's accounts (don't conflate — corrected 2026-06-06):** `arangarx@gmail.com` = primary **ADMIN/operator** (use for any admin/dev-tools/impersonation smoke); `arangarx@hotmail.com` = a **TUTOR** account (use for tutor-side smoke).
 
 ### ✅ MERGED to `v1-redesign` this session (all pushed)
 - **Landing-B + login home nav** (`fix/landing-model-b-and-login-nav @ 4886712`) — ALL PASS.

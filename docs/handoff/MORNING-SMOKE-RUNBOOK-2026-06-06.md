@@ -30,7 +30,7 @@ On pass per branch → reply pass/fail; orchestrator merges `--no-ff` to `v1-red
 
 | # | Step | Expected result | Pass / Fail |
 |---|------|-----------------|-------------|
-| 1 | Sign in as admin (Andrew, `arangarx@hotmail.com`) → look for **Dev tools** in admin nav → click it | **Dev tools** link visible; page loads | |
+| 1 | Sign in as **admin** (`arangarx@gmail.com` — the operator/ADMIN account; NOT `arangarx@hotmail.com`, which is a tutor) → look for **Dev tools** in admin nav → click it | **Dev tools** link visible; page loads | |
 | 2 | Click **Create tutor fixture** | Email + known password + **Impersonate** button shown | |
 | 3 | Click **Impersonate** | Land in `/admin/students` as fixture tutor → click **Exit impersonation** → return to admin dashboard | |
 | 4 | Click **Create family** for that fixture tutor | Parent email/password + child PIN + claim link, all with copy buttons → copy claim link → open in new tab → walk claim flow | |
