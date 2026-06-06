@@ -51,9 +51,18 @@ function assertDevToolsEnabled(): void {
 // Known fixture credentials (deterministic, easy for Andrew to copy-paste)
 // ---------------------------------------------------------------------------
 
-export const FIXTURE_TUTOR_PASSWORD = "DevFixture!Tutor#1";
-export const FIXTURE_PARENT_PASSWORD = "DevFixture!Parent#1";
-export const FIXTURE_CHILD_PIN = "12345678";
+// Re-exported from dev-fixture-constants so client components can also import
+// these without pulling in server-only modules.
+export {
+  FIXTURE_TUTOR_PASSWORD,
+  FIXTURE_PARENT_PASSWORD,
+  FIXTURE_CHILD_PIN,
+} from "./dev-fixture-constants";
+import {
+  FIXTURE_TUTOR_PASSWORD,
+  FIXTURE_PARENT_PASSWORD,
+  FIXTURE_CHILD_PIN,
+} from "./dev-fixture-constants";
 
 // ---------------------------------------------------------------------------
 // Types returned to the dashboard UI
@@ -197,12 +206,16 @@ export async function createFamilyFixture(tutorAdminUserId: string): Promise<Fam
       },
     });
 
-    // Student (tutor-scoped, linked to learner profile)
+    // Student (tutor-scoped, intentionally NOT pre-linked to the LearnerProfile).
+    // Leaving learnerProfileId null keeps the student "unclaimed" so the real
+    // claim flow works end-to-end.  The LearnerProfile + credential above are
+    // pre-created with a known PIN; the parent can attach them via
+    // `attach_existing` during the claim, or create new credentials via the
+    // default `create_child` claim action.
     const student = await tx.student.create({
       data: {
         name: learnerProfile.displayName,
         adminUserId: tutorAdminUserId,
-        learnerProfileId: learnerProfile.id,
         isTestFixture: true,
       },
       select: { id: true, name: true },
@@ -385,6 +398,71 @@ export async function deleteAllFixtures(): Promise<{
     deletedStudents: stuResult.count,
     deletedAdminUsers: auResult.count,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Claim invite helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Delete any active pending claim invites for a fixture student, then create a
+ * fresh one. Returns the raw token + ready-to-use claim URL for re-display.
+ *
+ * Purpose: the raw claim token is not stored (only its hash is persisted), so
+ * this is the only way to get a usable claim link for an existing fixture after
+ * the initial creation banner is gone.
+ *
+ * SAFETY: studentId must resolve to a row with isTestFixture=true.
+ */
+export async function regenerateFixtureClaimInvite(
+  studentId: string
+): Promise<{ rawToken: string; claimLink: string }> {
+  assertDevToolsEnabled();
+
+  const student = await db.student.findFirst({
+    where: { id: studentId, isTestFixture: true },
+    select: { id: true, adminUserId: true },
+  });
+
+  if (!student) {
+    throw new Error(
+      `[dvt] regenerateFixtureClaimInvite: studentId=${studentId} is not a fixture or does not exist`
+    );
+  }
+  if (!student.adminUserId) {
+    throw new Error(
+      `[dvt] regenerateFixtureClaimInvite: studentId=${studentId} has no adminUserId — cannot create claim invite`
+    );
+  }
+
+  const rawToken = generateRawToken();
+  const tokenHash = hashToken(rawToken);
+  const expiresAt = new Date(Date.now() + CLAIM_INVITE_TTL_MS);
+
+  await db.$transaction(async (tx) => {
+    // Remove existing pending (unclaimed, unrevoked) invites for this student.
+    await tx.studentClaimInvite.deleteMany({
+      where: { studentId, claimedAt: null, revokedAt: null },
+    });
+    // Create a fresh invite.
+    await tx.studentClaimInvite.create({
+      data: {
+        studentId,
+        adminUserId: student.adminUserId!,
+        tokenHash,
+        expiresAt,
+      },
+    });
+  });
+
+  const base = getPublicBaseUrl();
+  const claimLink = `${base}/claim/${rawToken}`;
+
+  console.log(
+    `[dvt] dvt=${studentId} action=claim_invite_regenerated studentId=${studentId}`
+  );
+
+  return { rawToken, claimLink };
 }
 
 // ---------------------------------------------------------------------------

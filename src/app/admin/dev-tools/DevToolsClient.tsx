@@ -13,8 +13,14 @@ import {
   actionDeleteFixtureTutor,
   actionDeleteFixtureFamily,
   actionDeleteAllFixtures,
+  actionRegenerateClaimInvite,
 } from "./actions";
 import { startImpersonation } from "@/app/admin/actions/impersonate";
+import {
+  FIXTURE_TUTOR_PASSWORD,
+  FIXTURE_PARENT_PASSWORD,
+  FIXTURE_CHILD_PIN,
+} from "@/lib/dev-fixture-constants";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -115,6 +121,7 @@ export function DevToolsClient({ initialTutors, initialFamilies }: DevToolsClien
   );
   const [error, setError] = useState<string | null>(null);
   const [deleteAllResult, setDeleteAllResult] = useState<string | null>(null);
+  const [freshClaimLinks, setFreshClaimLinks] = useState<Record<string, string>>({});
   const [isPending, startTransition] = useTransition();
 
   function clearMessages() {
@@ -220,10 +227,20 @@ export function DevToolsClient({ initialTutors, initialFamilies }: DevToolsClien
       setFamilies([]);
       setNewTutor(null);
       setNewFamily(null);
+      setFreshClaimLinks({});
       const c = res.counts!;
       setDeleteAllResult(
         `Cleared: ${c.adminUsers} tutor(s), ${c.accountHolders} parent(s), ${c.learnerProfiles} learner(s), ${c.students} student(s)`
       );
+    });
+  }
+
+  // --- Regenerate claim invite ---
+  function handleRegenerateClaim(studentId: string) {
+    startTransition(async () => {
+      const res = await actionRegenerateClaimInvite(studentId);
+      if (!res.ok) { setError(res.error); return; }
+      setFreshClaimLinks((prev) => ({ ...prev, [studentId]: res.claimLink }));
     });
   }
 
@@ -348,35 +365,46 @@ export function DevToolsClient({ initialTutors, initialFamilies }: DevToolsClien
               {tutors.map((t) => (
                 <li
                   key={t.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm"
+                  className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm"
                 >
-                  <div className="min-w-0">
-                    <span className="font-mono font-medium">{t.email}</span>
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      id: {t.id.slice(0, 8)}…
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <form action={startImpersonation.bind(null, t.id)}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="font-mono font-medium">{t.email}</span>
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        id: {t.id.slice(0, 8)}…
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <form action={startImpersonation.bind(null, t.id)}>
+                        <Button
+                          type="submit"
+                          variant="outline"
+                          size="sm"
+                          disabled={isPending}
+                          className="min-h-8 text-xs"
+                        >
+                          Impersonate
+                        </Button>
+                      </form>
                       <Button
-                        type="submit"
-                        variant="outline"
+                        variant="destructive"
                         size="sm"
+                        onClick={() => handleDeleteTutor(t.id)}
                         disabled={isPending}
                         className="min-h-8 text-xs"
                       >
-                        Impersonate
+                        Delete
                       </Button>
-                    </form>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => handleDeleteTutor(t.id)}
-                      disabled={isPending}
-                      className="min-h-8 text-xs"
-                    >
-                      Delete
-                    </Button>
+                    </div>
+                  </div>
+                  {/* Persistent credentials */}
+                  <div className="mt-2 border-t border-border/40 pt-2">
+                    <CredTable
+                      rows={[
+                        ["Email", t.email],
+                        ["Password", FIXTURE_TUTOR_PASSWORD],
+                      ]}
+                    />
                   </div>
                 </li>
               ))}
@@ -411,18 +439,48 @@ export function DevToolsClient({ initialTutors, initialFamilies }: DevToolsClien
                       Delete
                     </Button>
                   </div>
-                  {f.learnerProfiles.length > 0 && (
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      Learners:{" "}
-                      {f.learnerProfiles
-                        .map((lp) =>
-                          lp.credential
-                            ? `${lp.credential.username}@${f.familyId}`
-                            : lp.displayName
-                        )
-                        .join(", ")}
-                    </div>
-                  )}
+
+                  {/* Persistent credentials */}
+                  <div className="mt-2 border-t border-border/40 pt-2">
+                    <CredTable
+                      rows={[
+                        ["Parent email", f.email],
+                        ["Parent password", FIXTURE_PARENT_PASSWORD],
+                        ["Child PIN", FIXTURE_CHILD_PIN],
+                        ...(f.learnerProfiles.flatMap((lp) =>
+                          lp.credential && f.familyId
+                            ? [["Child login", `${lp.credential.username}@${f.familyId}`] as [string, string]]
+                            : []
+                        )),
+                      ]}
+                    />
+
+                    {/* Claim links per student — regeneratable */}
+                    {f.learnerProfiles.flatMap((lp) => lp.students).map((student) => (
+                      <div key={student.id} className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          Claim link
+                          {student.claimInvites.length > 0
+                            ? ` (active, expires ${new Date(student.claimInvites[0]!.expiresAt).toLocaleDateString()})`
+                            : " (no active invite)"}
+                          :
+                        </span>
+                        {freshClaimLinks[student.id] ? (
+                          <CopyCell value={freshClaimLinks[student.id]!} />
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRegenerateClaim(student.id)}
+                            disabled={isPending}
+                            className="min-h-7 text-xs"
+                          >
+                            Get fresh link
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </li>
               ))}
             </ul>

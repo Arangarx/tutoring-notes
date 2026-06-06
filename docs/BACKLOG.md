@@ -878,3 +878,13 @@ by the same `.cursor/rules/reliability-bar.mdc` standard.
 **How to migrate each:** Create a `<prefix>RateLimit` Neon table or reuse a generic `IpRateLimit` table with a `scopeKey` column (same pattern as `LearnerLoginThrottle`). Use the atomic `INSERT … ON CONFLICT DO UPDATE SET count = count + 1 … RETURNING count` pattern. Make the check async and update any call sites.
 
 **Scope discipline:** Do NOT fix these in the same pass as the learner PIN limiter (already fixed above). Each needs its own branch + smoke + `--no-ff` merge.
+
+---
+
+## Dev-tools / admin operator UX
+
+Items captured from 2026-06-06 Andrew smoke of `/admin/dev-tools` fixture dashboard.
+
+- **Dev-tools: adopt existing manual test user as a managed fixture.** `arangarx+test1@gmail.com` (and any other hand-created test accounts) are not marked `isTestFixture=true` and therefore fall outside the "Clear all fixtures" sweep. Options: (a) a one-shot "adopt as fixture" action in dev-tools that sets `isTestFixture=true` on the existing `AdminUser`/`AccountHolder` by email, or (b) a migration script that bulk-marks known test emails. Either way, the fixture dashboard and clear-all should cover them going forward. (Andrew, 2026-06-06 smoke.)
+
+- **Dev-tools / admin UX (undecided — discuss):** consider moving the impersonation list off the main admin dashboard into dev-tools only, and redirecting to dev-tools after exiting impersonation. Andrew noted the main admin landing is now heavily test-oriented; unsure if that's the permanent shape or if impersonation lives better in dev-tools where all the other fixture/test machinery lives. Revisit once the pilot grows beyond solo use and the admin dashboard's permanent information hierarchy is clearer. (Andrew, 2026-06-06 smoke.)

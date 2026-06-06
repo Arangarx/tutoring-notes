@@ -20,6 +20,7 @@ import {
   deleteFixtureAdminUser,
   deleteFixtureAccountHolder,
   deleteAllFixtures,
+  regenerateFixtureClaimInvite,
 } from "@/lib/dev-fixtures";
 
 // ---------------------------------------------------------------------------
@@ -157,6 +158,31 @@ export async function actionDeleteFixtureFamily(accountHolderId: string): Promis
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error(`[dvt] action=delete_family_fixture accountHolderId=${accountHolderId} error=${msg}`);
+    return { ok: false, error: msg };
+  }
+}
+
+/**
+ * Regenerate a claim invite for a fixture student, returning a fresh claim link.
+ * The previous active pending invite is deleted; a new one is created.
+ * Allows re-display of the claim link after navigating away from the creation banner.
+ */
+export async function actionRegenerateClaimInvite(studentId: string): Promise<
+  { ok: true; claimLink: string } | { ok: false; error: string }
+> {
+  assertEnabled();
+  try {
+    await assertIsAdmin();
+  } catch {
+    return { ok: false, error: "Unauthorized — admin session required." };
+  }
+
+  try {
+    const result = await regenerateFixtureClaimInvite(studentId);
+    return { ok: true, claimLink: result.claimLink };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[dvt] action=regenerate_claim_invite studentId=${studentId} error=${msg}`);
     return { ok: false, error: msg };
   }
 }

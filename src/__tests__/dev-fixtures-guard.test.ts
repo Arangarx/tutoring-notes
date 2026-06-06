@@ -25,6 +25,30 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
+// FIXTURE_CHILD_PIN — must satisfy the real 6-digit PIN constraint
+// ---------------------------------------------------------------------------
+
+describe("FIXTURE_CHILD_PIN constant", () => {
+  it("is exactly 6 numeric digits (matches real learner PIN constraint /^\\d{6}$/)", async () => {
+    jest.doMock("@/lib/db", () => ({ db: {} }));
+    jest.doMock("@/lib/crypto/session-tokens", () => ({
+      generateRawToken: jest.fn(),
+      hashToken: jest.fn(),
+      CLAIM_INVITE_TTL_MS: 0,
+    }));
+    jest.doMock("@/lib/account-holder-auth", () => ({
+      hashAccountHolderPassword: jest.fn(),
+      hashLearnerPin: jest.fn(),
+    }));
+    jest.doMock("@/lib/public-url", () => ({ getPublicBaseUrl: jest.fn() }));
+
+    const { FIXTURE_CHILD_PIN } = await import("@/lib/dev-fixtures");
+
+    expect(/^\d{6}$/.test(FIXTURE_CHILD_PIN)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // isDevToolsEnabled
 // ---------------------------------------------------------------------------
 
