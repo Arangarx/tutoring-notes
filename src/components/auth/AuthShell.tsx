@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 
 import { MynkWordmark } from "@/components/auth/MynkWordmark";
 import {
@@ -35,7 +36,13 @@ export function AuthShell({
     >
       <div className="w-full max-w-[400px]">
         <div className="mb-6 flex justify-center">
-          <MynkWordmark />
+          <Link
+            href="/"
+            className="rounded-md focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            aria-label="Mynk home"
+          >
+            <MynkWordmark />
+          </Link>
         </div>
         <Card className="border-border shadow-sm">
           <CardHeader className="gap-2 pb-0">
