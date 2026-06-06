@@ -168,3 +168,14 @@ Also run once on production-like single-domain local dev to confirm no regressio
 | **Awaiting** | Andrew — reply in orchestrator chat |
 | **Quick path** | `"ratify defaults"` → Q1=A, Q2=A, Q3=A, Q4=A |
 | **After ratify** | Orchestrator dispatches Composer 2.5 fix branch; no further design pass unless Andrew picks non-default options with new tradeoffs |
+
+## RC-A follow-up — addressed by `fix/verify-email-host-align`
+
+Branch `fix/verify-email-host-align` (off `v1-redesign`) ships the targeted RC-A fix with an injection-guard:
+
+- **Approach**: `getRequestBaseUrlSafe(req: NextRequest)` in `src/lib/public-url.ts` reads the request host from `x-forwarded-host` / `host` headers, validates it against `ALLOWLISTED_HOST_PATTERNS` (project-scoped; team slug in Vercel preview pattern), and reflects it into the verify-email link. Unrecognised hosts fall back to `getPublicBaseUrl()` — never reflected. This is Q1=B from the design table, but with the host-header injection guard that the design doc noted was missing. The guard makes Q1=B safe while being simpler than the Q1=A intermediate-page approach (which is still in place for RC-B timing — both fixes coexist).
+- **Files changed**: `src/lib/public-url.ts` (new `isHostAllowlisted`, `getRequestBaseUrlSafe`), `src/app/api/auth/account-holder/signup/route.ts` (use `getRequestBaseUrlSafe` for verify URL), `src/__tests__/public-url-allowlist.test.ts` (31 tests including injection-guard cases).
+- **Platform assumption**: documented in `docs/PLATFORM-ASSUMPTIONS.md` §5.8.
+- **CSP/middleware**: no change required — the fix only changes which host appears in an outgoing email link, not any network origin the browser loads.
+- **Prod behavior**: unchanged — on production, the request host is `usemynk.com` (allowlisted), so `getRequestBaseUrlSafe` returns `https://usemynk.com`, identical to what `getPublicBaseUrl()` would have returned.
+- **Password-reset / forgot-password**: unchanged — those routes keep `getPublicBaseUrl()` because there is no session-cookie alignment requirement for password-reset links.
