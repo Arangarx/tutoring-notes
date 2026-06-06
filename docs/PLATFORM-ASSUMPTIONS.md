@@ -4,7 +4,9 @@
 >
 > **Maintenance rule**: any commit that introduces a new platform-level assumption (a hardcoded timeout cap, a per-tier limit dependency, a new external origin, a new runtime requirement) MUST update this doc in the same PR. The orchestrator owns this gate during executor handoffs.
 >
-> **Last audited**: 2026-05-17 (post-Vercel-Pro upgrade).
+> **Capability-contract rule (Andrew, 2026-06-06):** Tie-ins to Vercel-specific functionality are fine while we run on Vercel. Every such dependency MUST be documented here (or in a feature design doc cross-registered here) as: **Vercel X provides capability Y; generic/AWS equivalent = Z.** Include delivery semantics, size/timeout limits, and plan-availability caveats where uncertain — say "verify at build time" rather than assert. This is the standard extension of the maintenance rule above; see §1.6 for the template and §11 for design-stage recording re-architecture entries.
+>
+> **Last audited**: 2026-06-06 (capability-contract rule + recording re-arch design-stage deps). Prior full audit: 2026-05-17 (post-Vercel-Pro upgrade).
 
 ---
 
@@ -77,6 +79,19 @@
   - If `DATABASE_URL` is misconfigured (e.g. Preview pointing at prod — see Phase 2 task 13 incident), migrations apply to the WRONG database. Caught 2026-05-17 when cost-events migration landed on prod from a Preview build. Additive migrations are harmless; DROP/RENAME/NOT NULL would have broken prod.
   - Phase 2 task 13 (env-scoping audit + `scripts/safe-migrate.mjs` guard) is the structural hardening; not yet shipped.
 - **Migration check**: any new platform must support per-environment `DATABASE_URL` scoping AND run migrate-deploy with strict env separation. Add the `safe-migrate.mjs` guard if not already shipped.
+
+### 1.6 Capability-contract documentation standard
+
+- **Assumption**: Every Vercel-specific (or otherwise platform-specific) dependency is recorded as a **capability contract**, not merely a product name.
+- **Required fields** (use in this doc, feature STATUS docs, or design docs cross-registered here):
+  1. **Platform primitive** — e.g. Vercel Queues, Vercel Blob multipart.
+  2. **Capability provided** — the functional contract (e.g. "at-least-once push delivery to a serverless consumer with retry").
+  3. **Why we depend on it** — which pipeline step or code path.
+  4. **Generic / AWS equivalent** — e.g. SQS + Lambda, S3 multipart upload, Step Functions.
+  5. **Migration notes / gotchas** — delivery semantics, ordering, limits, plan gates; "verify at build time" when limits are uncertain.
+- **Where baked in**: this doc; feature design docs (e.g. [`docs/handoff/recording-rearchitecture-design-2026-06-05.md`](handoff/recording-rearchitecture-design-2026-06-05.md) § "Vercel-specific dependencies & migration map").
+- **What breaks if violated**: future migration (AWS, self-hosted, etc.) rediscovers hidden coupling at cutover time — missing queues, wrong timeout model, or blob upload semantics that don't match production durability guarantees.
+- **Migration check**: before any platform move, walk §11 design-stage entries + every §1–§10 production entry; each "no equivalent provisioned" is a blocker.
 
 ---
 
@@ -168,6 +183,16 @@
   - `src/app/api/upload/audio/route.ts`
 - **What breaks if violated**: rate-limit + bandwidth on our server for large audio uploads. Critical for Sarah's 60-90 min sessions.
 - **Migration check**: S3 pre-signed PUT URLs are the equivalent pattern.
+
+### 3.5 Multipart upload for canonical audio — **DESIGN-STAGE / NOT-YET-BUILT**
+
+> **Status:** Planned in recording re-architecture Phase 1 — **not in production code.** Full capability contract: [`docs/handoff/recording-rearchitecture-design-2026-06-05.md`](handoff/recording-rearchitecture-design-2026-06-05.md) § "Vercel-specific dependencies & migration map". Promote to production assumption when Phase 1 merges.
+
+- **Vercel primitive**: Vercel Blob SDK `put(..., { multipart: true })`.
+- **Capability provided**: Multipart/resumable upload for large canonical merged audio files after server-side ffmpeg concat.
+- **Why we depend on it**: Consolidation workflow (D6) uploads `sessions/{studentId}/{wbsid}/canonical.webm`; long sessions may produce files where single-request upload is less reliable.
+- **Generic / AWS equivalent**: **S3 multipart upload** (`CreateMultipartUpload` / `UploadPart` / `CompleteMultipartUpload`).
+- **Migration notes**: Verify at build time — min part size, max object size, immutability/versioning behavior. Design assumes write-once canonical + HEAD verify before DB status flip; segment blobs deleted only after canonical verified durable.
 
 ---
 
@@ -537,6 +562,46 @@
 - **Hard deletion guard**: the delete path includes `isTestFixture: true` in every `WHERE` clause. This guard lives in the business logic (`dev-fixtures.ts`), not just the UI — physically incapable of deleting a real user.
 - **Migration check**: confirm `VERCEL_ENV` is NOT overridden in any production Vercel env var. The dashboard must remain inert there.
 
+---
+
+## 11. Planned platform dependencies — recording re-architecture (**DESIGN-STAGE / NOT-YET-BUILT**)
+
+> **Status:** Ratify-ready design only — **no production code, no Vercel resource provisioning yet.** Canonical design: [`docs/handoff/recording-rearchitecture-design-2026-06-05.md`](handoff/recording-rearchitecture-design-2026-06-05.md). Full capability-contract table in that doc § "Vercel-specific dependencies & migration map". **Promote each entry to §1–§3 production assumptions in the Phase 1 build commit** when the dependency is actually wired.
+>
+> **Not in scope for this design:** Vercel Cron (pipeline is event-driven off upload + session end, not scheduled).
+
+### 11.1 Vercel Queues — topic `chunk-transcribe`
+
+- **Capability provided**: At-least-once durable message delivery; push mode invokes a serverless consumer per message with automatic retry on failure.
+- **Why we depend on it**: Phase 1 transcription pipeline (D2) — chunk blob uploaded → async transcribe → `TranscriptChunk` row; decouples upload from Whisper and removes monolithic post-click transcribe.
+- **Generic / AWS equivalent**: **Amazon SQS** (standard queue) + **Lambda** event source mapping; DLQ for poison messages.
+- **Migration notes**: Consumer idempotent on `(sessionId, chunkBlobUrl)`. No cross-message ordering guarantee. Verify at build time: max payload size, consumer timeout, retry/DLQ on current Vercel plan.
+
+### 11.2 Vercel Queues — topic `notes-reduce`
+
+- **Capability provided**: Same as §11.1 — async trigger with retry for session-end notes work.
+- **Why we depend on it**: Phase 1 notes pipeline (D7) — auto-fire on session end; completion gate waits for all chunk transcriptions (or 5min partial timeout) before reduce.
+- **Generic / AWS equivalent**: **SQS + Lambda** (separate queue from §11.1).
+- **Migration notes**: Idempotent on `sessionId`; must abort if `WhiteboardSession.endedAt` unset. Verify at build time: delayed/requeue semantics for "wait for chunks" polling pattern.
+
+### 11.3 Vercel Workflows — consolidation orchestration
+
+- **Capability provided**: Durable multi-step orchestration (`"use workflow"` / `"use step"`); each step is its own invocation with automatic retry — no single 300s ceiling across the full concat pipeline.
+- **Why we depend on it**: Phase 1 consolidation (D6) — fetch segments → download blobs → ffmpeg-concat → upload canonical → verify → DB flip.
+- **Generic / AWS equivalent**: **AWS Step Functions** orchestrating Lambda steps; **fallback** (if Workflows unavailable): SQS + Lambda + manual `consolidationStatus` state machine (same semantics, more code).
+- **Migration notes**: Verify at build time — Vercel Workflows plan availability, per-step timeout. Optional Vercel Sandbox for ffmpeg if a step exceeds function limits → AWS equivalent **ECS Fargate** or Lambda + ffmpeg layer with higher timeout/memory.
+
+### 11.4 Vercel serverless split — removing the 300s cliff (design intent)
+
+- **Capability provided**: Many short Node.js function invocations instead of one invocation owning full-session Whisper + GPT + concat.
+- **Why we depend on it**: Replaces today's production cliff (`transcribeAndGenerateAction` in one call — see §1.1).
+- **Generic / AWS equivalent**: Multiple Lambda functions with per-function timeouts; no change to the *capability* — only the orchestration primitive (Queues/Workflows vs SQS/Step Functions) differs.
+- **Migration notes**: Re-test with 60-min audio fixture on Preview after any platform move. Edge runtime remains incompatible with ffmpeg (§1.2).
+
+### 11.5 Cross-reference — Vercel Blob multipart
+
+- See §3.5 (canonical audio multipart upload — design-stage).
+
 ## Migration checklist — copy + check yes/no before deploying to a new platform
 
 > When considering AWS, Cloudflare, self-hosted, or any other platform migration, walk this list. Every "no" or "unsure" is a regression risk.
@@ -545,6 +610,7 @@
 
 - [ ] New platform supports **≥300s** wall-clock per server-action / per-function invocation. (§1.1)
 - [ ] **Node.js runtime** (not Edge-only) for all blob/audio/ffmpeg routes. (§1.2)
+- [ ] Capability-contract entries reviewed for every Vercel-specific dependency (§1.6). (§11 if recording re-arch shipped)
 - [ ] Build hook supports `ignoreCommand`-equivalent for docs-only commit skipping. (§1.4)
 - [ ] Build runs `prisma migrate deploy` with strict per-env `DATABASE_URL` scoping. (§1.5)
 - [ ] Build command can chain `npm run test:regression && npm run build` (or equivalent). (§6.1)
@@ -562,6 +628,13 @@
 - [ ] Per-env buckets OR dual-reference-check pattern preserved. (§3.1)
 - [ ] Tokenized + revocable share URLs supported (no public student content). (§3.2)
 - [ ] Direct client → storage upload supported (signed PUT URL pattern). (§3.4)
+- [ ] If recording re-arch Phase 1 shipped: multipart upload for canonical audio (§3.5) → S3 multipart equivalent.
+
+### Async messaging + durable workflows (if recording re-arch Phase 1 shipped)
+
+- [ ] Transcription trigger: SQS (or equivalent) + Lambda with at-least-once semantics and idempotent consumer. (§11.1)
+- [ ] Notes-reduce trigger: separate queue + Lambda; completion-gate / partial-timeout behavior preserved. (§11.2)
+- [ ] Consolidation: Step Functions or queue + state machine; per-step timeout ≥ longest ffmpeg step. (§11.3)
 
 ### External APIs
 
@@ -606,6 +679,7 @@
 
 ## Change log
 
+- **2026-06-06** — Capability-contract rule (Andrew directive): header maintenance rule extended; added §1.6 documentation standard; §3.5 Blob multipart (design-stage); §11 recording re-architecture planned Vercel deps (Queues, Workflows, 300s-cliff split). Migration checklist updated.
 - **2026-06-05** — Dev-tools fixture dashboard: added §10.9 VERCEL_ENV gate for `/admin/dev-tools`. Migration checklist updated.
 - **2026-06-05** — Auth-boundary hardening: added §10.8 WB_E2E_HARNESS (harness 2FA bypass re-gated on server-only flag + !VERCEL; migrated off NEXT_PUBLIC_ client-bundle gate). Added §5.8 host allowlist for auth email links (RC-A fix: `getRequestBaseUrlSafe` with injection guard). Migration checklist updated.
 - **2026-06-02** — Identity Phase 2a (session infra + claim flow): added §10.5 AH_SESSION_HMAC_SECRET, §10.6 LEARNER_SESSION_HMAC_SECRET, §10.7 AH_TOTP_ENCRYPTION_KEY. Migration checklist updated.
