@@ -24,8 +24,7 @@ On pass per branch → reply pass/fail; orchestrator merges `--no-ff` to `v1-red
 
 ### 1A. Admin dev-tools dashboard — `feat/admin-dev-dashboard @ 82a8122`
 
-**Predicted alias:** `tutoring-notes-git-feat-admin-dev-dashboard-arangarx-5209s-projects.vercel.app`  
-**Preview:** [feat/admin-dev-dashboard @ 82a8122](https://tutoring-notes-git-feat-admin-dev-dashboard-arangarx-5209s-projects.vercel.app)  
+**Preview (real branch alias, dpl `DbpE5Hi…` READY):** [feat/admin-dev-dashboard @ 82a8122](https://tutoring-notes-git-feat-admin-de-8d26e7-arangarx-5209s-projects.vercel.app)
 *(Confirm via dashboard if truncated.)*
 
 | # | Step | Expected result | Pass / Fail |
@@ -41,8 +40,7 @@ On pass per branch → reply pass/fail; orchestrator merges `--no-ff` to `v1-red
 
 ### 1B. Verify-email host-alignment — `fix/verify-email-host-align @ 56c0c99`
 
-**Predicted alias:** `tutoring-notes-git-fix-verify-email-host-al-arangarx-5209s-projects.vercel.app`  
-**Preview:** [fix/verify-email-host-align @ 56c0c99](https://tutoring-notes-git-fix-verify-email-host-al-arangarx-5209s-projects.vercel.app)  
+**Preview (real branch alias, dpl `BT7QWfs…` READY):** [fix/verify-email-host-align @ 56c0c99](https://tutoring-notes-git-fix-verify-em-f631b9-arangarx-5209s-projects.vercel.app)
 *(Confirm via dashboard if truncated.)*
 
 **RC-A fix:** verify-email link host must match the preview host you browse — claim flow should finally smoke on preview.
@@ -60,7 +58,7 @@ On pass per branch → reply pass/fail; orchestrator merges `--no-ff` to `v1-red
 
 ### 1C. Replay v3 — OPTIONAL sanity (already merged on-trust to `v1-redesign`)
 
-**Low priority.** Use the **`v1-redesign`** preview from [Vercel dashboard](https://vercel.com/arangarx-5209s-projects/tutoring-notes).
+**Low priority.** Use the **`v1-redesign`** preview: [v1-redesign branch alias](https://tutoring-notes-git-v1-redesign-arangarx-5209s-projects.vercel.app).
 
 Re-record a whiteboard session with a pause, then review:
 
