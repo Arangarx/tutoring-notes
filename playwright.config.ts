@@ -45,7 +45,7 @@ export default defineConfig({
   webServer: [
     {
       command:
-        `cmd /c "set DATABASE_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set DIRECT_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set WHITEBOARD_SYNC_URL=ws://localhost:3002&& set NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT=1&& set NEXT_PUBLIC_WB_E2E_SCENE_HOOK=1&& set NEXTAUTH_URL=http://localhost:3100&& node scripts/wb-regression-assert-local-db.cjs&& npx prisma db push --skip-generate&& npm run dev -- --port 3100"`,
+        `cmd /c "set DATABASE_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set DIRECT_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set WHITEBOARD_SYNC_URL=ws://localhost:3002&& set NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT=1&& set NEXT_PUBLIC_WB_E2E_SCENE_HOOK=1&& set WB_E2E_HARNESS=1&& set NEXTAUTH_URL=http://localhost:3100&& node scripts/wb-regression-assert-local-db.cjs&& npx prisma db push --skip-generate&& npm run dev -- --port 3100"`,
       url: "http://localhost:3100",
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,

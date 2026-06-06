@@ -4,6 +4,10 @@ import GoogleProvider from "next-auth/providers/google";
 import type { AdminRole } from "@prisma/client";
 import { env } from "@/lib/env";
 import { getAdminByEmail, hasAdminUsers, verifyPassword } from "@/lib/auth-db";
+import {
+  isPlaywrightHarnessActive,
+  isPlaywrightHarnessAdminEmail,
+} from "@/lib/playwright-harness";
 
 // Google OAuth provider is only included when both credentials are present.
 // CredentialsProvider remains available at all times for password logins and
@@ -105,12 +109,21 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user, account }) {
       if (user) {
         // CredentialsProvider: authorize() sets isTestAccount + role on the returned user.
-        const u = user as { isTestAccount?: boolean; role?: AdminRole };
+        const u = user as {
+          isTestAccount?: boolean;
+          role?: AdminRole;
+          email?: string;
+        };
         token.isTestAccount = u.isTestAccount ?? false;
         if (u.role !== undefined) token.role = u.role;
         // Fresh login: 2FA not yet verified this session (non-test accounts must pass the gate).
         // isTestAccount accounts are exempt — we mark them pre-verified so middleware skips them.
-        if (u.isTestAccount) {
+        // Playwright wb-regression harness: credentials login for playwright@test.local
+        // under WB_E2E_HARNESS=1 (server-only flag, local Docker Postgres only;
+        // NOT gated on NEXT_PUBLIC_WB_E2E_SCENE_HOOK to prevent client-bundle bypass).
+        const playwrightHarnessLogin =
+          isPlaywrightHarnessActive() && isPlaywrightHarnessAdminEmail(u.email);
+        if (u.isTestAccount || playwrightHarnessLogin) {
           token.twoFactorVerified = true;
         } else {
           token.twoFactorVerified = false;

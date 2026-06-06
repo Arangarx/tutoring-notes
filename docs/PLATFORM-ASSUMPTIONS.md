@@ -501,6 +501,18 @@
 - **Build safety**: optional in `env.ts`; build and P2a auth succeed without it.
 - **Migration check**: NOT required until Phase 6. Set before Phase 6 AccountHolder 2FA enrollment ships.
 
+### 10.8 WB_E2E_HARNESS — Playwright wb-regression harness 2FA bypass
+
+- **Assumption**: Post-Identity-Phase-1, the wb-regression Playwright harness logs in as `playwright@test.local` using a credentials-based flow. Because this account is not an `isTestAccount` DB row, it must receive a `twoFactorVerified=true` JWT at mint time to bypass the 2FA middleware gate. This bypass is guarded by a **server-only** env var `WB_E2E_HARNESS=1` (not `NEXT_PUBLIC_`-prefixed), which prevents the flag from being inlined into the client bundle.
+- **Where baked in**:
+  - `src/lib/playwright-harness.ts` — `isPlaywrightHarnessActive()` checks `WB_E2E_HARNESS === "1" && !VERCEL`.
+  - `src/auth-options.ts` — JWT callback calls `isPlaywrightHarnessActive()` to decide `twoFactorVerified`.
+  - `playwright.config.ts` webServer `cmd` — sets `WB_E2E_HARNESS=1` so the local harness server carries the flag.
+- **Client-side bridge** (separate concern): `NEXT_PUBLIC_WB_E2E_SCENE_HOOK=1` is still set by the webServer and used by the client-side wb-e2e bridge mount. It carries NO auth privilege; moving it to a server-only var is unnecessary.
+- **MUST NEVER be set in Vercel**: `WB_E2E_HARNESS` must not appear in any Vercel project env var (neither Production nor Preview). Vercel always injects `VERCEL=1` which is the defense-in-depth guard — even if the flag were accidentally set in Vercel, `!process.env.VERCEL` blocks the bypass. But the primary control is: **never instruct anyone to set `WB_E2E_HARNESS` in Vercel**.
+- **`playwright@test.local` prod-safety**: this account is created only by `tests/visual/helpers.ts` → `seedTestAdmin()`, which calls `assertLocalDatabaseUrlForHarness()` and aborts unless `DATABASE_URL` points to a local Docker Postgres. The webServer forces a local DB URL; Neon (prod/preview) is never the target. There is no API endpoint or admin UI path that creates `playwright@test.local` in a production DB.
+- **Migration check**: any new test runner or CI environment that needs the wb-regression suite must set `WB_E2E_HARNESS=1` in its local webServer env. This flag must never be set in platform env vars (Vercel, AWS, etc.).
+
 ## Migration checklist — copy + check yes/no before deploying to a new platform
 
 > When considering AWS, Cloudflare, self-hosted, or any other platform migration, walk this list. Every "no" or "unsure" is a regression risk.
@@ -562,11 +574,13 @@
 - [ ] `AH_SESSION_HMAC_SECRET` set on all envs before P2b AccountHolder auth goes live (§10.5)
 - [ ] `LEARNER_SESSION_HMAC_SECRET` set on all envs before P2b learner login goes live (§10.6)
 - [ ] `AH_TOTP_ENCRYPTION_KEY` reserved; required before Phase 6 AccountHolder 2FA ships (§10.7)
+- [ ] `WB_E2E_HARNESS` is NOT set in any Vercel env var (prod or preview); it is local-harness-only (§10.8)
 
 ---
 
 ## Change log
 
+- **2026-06-05** — Auth-boundary hardening: added §10.8 WB_E2E_HARNESS (harness 2FA bypass re-gated on server-only flag + !VERCEL; migrated off NEXT_PUBLIC_ client-bundle gate). Migration checklist updated.
 - **2026-06-02** — Identity Phase 2a (session infra + claim flow): added §10.5 AH_SESSION_HMAC_SECRET, §10.6 LEARNER_SESSION_HMAC_SECRET, §10.7 AH_TOTP_ENCRYPTION_KEY. Migration checklist updated.
 - **2026-05-31** — Identity Phase 1 (2FA): added §10.4 TOTP_ENCRYPTION_KEY assumption. Key-rotation story documented. Migration checklist updated.
 - **2026-05-17** — initial inventory. Audited post-Vercel-Pro upgrade. Captures: Vercel Pro 300s ceiling now real (§1.1), housekeeping smoke lessons (§2.3, §3.1, §3.3, §9.1), cost-events shipped (§10.2), per-page view state shipped (§7.5).

@@ -68,9 +68,9 @@ export function AdminNav({
       <header className="sticky top-0 z-50 border-b border-border bg-background/85 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-4xl items-center justify-between gap-4 px-4">
           <Link
-            href="/admin"
+            href="/?view=home"
             className="inline-flex min-h-11 min-w-11 items-center rounded-md focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-            aria-label="Mynk home"
+            aria-label="View home page"
           >
             <MynkWordmark size="sm" />
           </Link>

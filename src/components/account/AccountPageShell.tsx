@@ -34,7 +34,7 @@ export function AccountPageShell({
       {/* Top nav */}
       <nav className="border-b border-border bg-card/60 backdrop-blur-sm">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3 sm:px-6">
-          <Link href="/account/dashboard" aria-label="Mynk — go to dashboard">
+          <Link href="/?view=home" aria-label="View home page">
             <MynkWordmark size="sm" />
           </Link>
           <div className="flex items-center gap-4">

@@ -132,5 +132,10 @@ export async function loginAsTestAdmin(page: Page): Promise<void> {
   await page.getByLabel(/email/i).fill(TEST_ADMIN.email);
   await page.getByLabel(/password/i).fill(TEST_ADMIN.password);
   await page.getByRole("button", { name: /sign in|log in/i }).click();
-  await page.waitForURL(/\/admin/, { timeout: 15_000 });
+  await page.waitForURL(
+    (url) =>
+      url.pathname.startsWith("/admin") &&
+      !url.pathname.startsWith("/admin/settings/2fa"),
+    { timeout: 15_000 }
+  );
 }
