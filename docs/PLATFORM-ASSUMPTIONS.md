@@ -278,6 +278,20 @@
   - Bumping `AUTH_RATE_LIMIT.max` from 10→30 is Phase 2 task 10 (Andrew trip-points during normal use).
 - **Migration check**: distributed deployments need Redis-backed rate-limiting.
 
+### 5.8 Host allowlist for auth email links (RC-A fix, 2026-06-05)
+
+- **Assumption**: `getRequestBaseUrlSafe()` in `src/lib/public-url.ts` reflects the incoming request host into verify-email links ONLY if the host matches the `ALLOWLISTED_HOST_PATTERNS` array. Any unrecognised host falls back to `getPublicBaseUrl()` (env-derived; injection-safe).
+- **Why it exists**: Vercel preview deployments assign a per-deployment `VERCEL_URL` host AND a stable branch-alias host. Before RC-A fix, `getPublicBaseUrl()` returned the per-deployment URL; the user might be browsing on the branch-alias URL. Different hosts = different cookie jars = the `mynk_ah_session` cookie misses on the claim page. Reflecting the request host into the verify email link aligns the cookie domain with the user's browsing host.
+- **Allowlist contents** (project-scoped; see `src/lib/public-url.ts:ALLOWLISTED_HOST_PATTERNS`):
+  - `localhost` / `127.0.0.1` (any port) — local dev
+  - `tutoring-notes.vercel.app` — project legacy default Vercel domain
+  - `tutoring-notes-*-arangarx-5209s-projects.vercel.app` — per-deployment and branch-alias preview URLs for this project+team; team slug scopes it to the `arangarx-5209s-projects` Vercel team only
+  - `usemynk.com`, `www.usemynk.com` — production canonical hosts
+- **Injection guard**: a host NOT in the allowlist is NEVER reflected; `getPublicBaseUrl()` is used instead. Tests in `src/__tests__/public-url-allowlist.test.ts` enforce this contract.
+- **Where baked in**: `src/lib/public-url.ts:getRequestBaseUrlSafe`, `src/lib/public-url.ts:isHostAllowlisted`; used in `src/app/api/auth/account-holder/signup/route.ts` for the verify-email link.
+- **What breaks if violated**: loosening the allowlist (e.g. accepting `*.vercel.app` without team-slug scoping) opens a host-header injection vector — an attacker with a different `tutoring-notes-*` Vercel project could redirect a parent's verify-email link to an attacker-controlled domain, stealing the handoff token.
+- **Migration check**: if the Vercel team slug changes (account rename), update `ALLOWLISTED_HOST_PATTERNS` and the tests in `src/__tests__/public-url-allowlist.test.ts`. If the production domain changes from `usemynk.com`, add the new domain and retain the old during the transition window.
+
 ---
 
 ## 6. Build + deploy
@@ -575,12 +589,13 @@
 - [ ] `LEARNER_SESSION_HMAC_SECRET` set on all envs before P2b learner login goes live (§10.6)
 - [ ] `AH_TOTP_ENCRYPTION_KEY` reserved; required before Phase 6 AccountHolder 2FA ships (§10.7)
 - [ ] `WB_E2E_HARNESS` is NOT set in any Vercel env var (prod or preview); it is local-harness-only (§10.8)
+- [ ] Host allowlist in `ALLOWLISTED_HOST_PATTERNS` (`src/lib/public-url.ts`) updated for new Vercel team slug or production domain (§5.8)
 
 ---
 
 ## Change log
 
-- **2026-06-05** — Auth-boundary hardening: added §10.8 WB_E2E_HARNESS (harness 2FA bypass re-gated on server-only flag + !VERCEL; migrated off NEXT_PUBLIC_ client-bundle gate). Migration checklist updated.
+- **2026-06-05** — Auth-boundary hardening: added §10.8 WB_E2E_HARNESS (harness 2FA bypass re-gated on server-only flag + !VERCEL; migrated off NEXT_PUBLIC_ client-bundle gate). Added §5.8 host allowlist for auth email links (RC-A fix: `getRequestBaseUrlSafe` with injection guard). Migration checklist updated.
 - **2026-06-02** — Identity Phase 2a (session infra + claim flow): added §10.5 AH_SESSION_HMAC_SECRET, §10.6 LEARNER_SESSION_HMAC_SECRET, §10.7 AH_TOTP_ENCRYPTION_KEY. Migration checklist updated.
 - **2026-05-31** — Identity Phase 1 (2FA): added §10.4 TOTP_ENCRYPTION_KEY assumption. Key-rotation story documented. Migration checklist updated.
 - **2026-05-17** — initial inventory. Audited post-Vercel-Pro upgrade. Captures: Vercel Pro 300s ceiling now real (§1.1), housekeeping smoke lessons (§2.3, §3.1, §3.3, §9.1), cost-events shipped (§10.2), per-page view state shipped (§7.5).

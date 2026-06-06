@@ -14,7 +14,7 @@ import { hashAccountHolderPassword } from "@/lib/account-holder-auth";
 import { hashToken, EMAIL_TOKEN_TTL_MS_24H } from "@/lib/crypto/session-tokens";
 import { generateRawToken } from "@/lib/crypto/session-tokens";
 import { stubSendAccountHolderEmail } from "@/lib/account-holder-email";
-import { getPublicBaseUrl } from "@/lib/public-url";
+import { getPublicBaseUrl, getRequestBaseUrlSafe } from "@/lib/public-url";
 import { validatePasswordStrength, MIN_PASSWORD_LENGTH } from "@/lib/password-strength";
 
 const OK_RESPONSE = {
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  const base = getPublicBaseUrl();
+  const base = getRequestBaseUrlSafe(req);
   // Sanitize returnTo: must be a relative path starting with /
   const safeReturn =
     returnTo && /^\/[a-zA-Z0-9\-/_?=&%]+$/.test(returnTo) ? returnTo : null;
