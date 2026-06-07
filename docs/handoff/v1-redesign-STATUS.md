@@ -68,6 +68,35 @@ Batched on **`feature/phase-d-landing-about`** (intent recorded here; do not edi
 
 ---
 
+## 2026-06-07 checkpoints (Recording P1 slice 3 smoke → V1 redesign requirements)
+
+**Source:** Andrew live smoke of `feat/recording-p1-slice3-autonotes` (auto-notes pipeline works; two **UX gaps** for the in-flight V1 component pass — **not** slice-3 implementation scope). Captured on branch `docs/v1-redesign-notes-ux-reqs`. Detail also in [`docs/V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) §3.1 (Chunk 3 / B4).
+
+### REQ-S3-1 — Render auto-notes as formatted markdown (not raw source)
+
+| Field | Value |
+|---|---|
+| **Problem** | Slice 3 `TutorNotesSection` (`src/components/whiteboard/TutorNotesSection.tsx`) displays `TutorNote.content` as literal markdown source (`## Session Summary`, `- bullet`) via `whiteSpace: pre-wrap` — headings and bullets are not styled. |
+| **Requirement** | V1 redesign **must** render AI-generated session notes through the app's canonical formatted-notes display: parsed markdown (headings, lists, emphasis) inside the `.ai-prose` typography role (`src/styles/typography.css`). Consistent with pre-slice-3 notes presentation quality and with the B4 `RecapEditor` spec ([`v1-component-redesign-design-2026-05-31.md`](v1-component-redesign-design-2026-05-31.md) §5.5). |
+| **Dedup** | One shared markdown renderer + `.ai-prose` wrapper — **no** second raw-MD `<pre>` path. Candidate canonical: `FormattedNotesBody` / `RecapEditor` (see component library). |
+| **Pre-slice-3 reference** | Manual flow used structured fields via `NewNoteForm` (`src/app/admin/students/[id]/NewNoteForm.tsx`) inside `WhiteboardNotesPanel` (`src/components/whiteboard/WhiteboardNotesPanel.tsx`) — different shape, same presentation bar. |
+| **Pass** | Component Phase **B4** / library **Chunk 3** (session detail / replay). |
+
+### REQ-S3-2 — Restore post-session Save + destructive Cancel controls
+
+| Field | Value |
+|---|---|
+| **Problem** | Pre-slice-3 whiteboard review exposed **Save note** (`NewNoteForm`) and **Cancel** (`AiGeneratedNoteReviewGate` dismiss in `WhiteboardNotesPanel`). Slice 3 auto-notes review shows generated content + **Regenerate** only — Save/Cancel are gone. |
+| **Requirement** | V1 redesign post-session notes area on session review (`/sessions/[id]` / current `…/whiteboard/[whiteboardSessionId]`) **must** provide: **(a)** **"Save notes"** primary action; **(b)** **"Cancel and delete session data"** destructive action behind a confirmation dialog with copy: **"Are you sure you want to delete this session and all related data?"** |
+| **Pre-slice-3 reference** | `WhiteboardNotesPanel` + `AiGeneratedNoteReviewGate` (`dismissButtonLabel="Cancel"`) + `NewNoteForm` (`"Save note"`). |
+| **Pass** | Component Phase **B4** / library **Chunk 3**. Cross-ref discard-session backlog ([`docs/BACKLOG.md`](../BACKLOG.md) § End-session "Stop and delete"). |
+
+### OPEN — REQ-S3-2a: "Save notes" semantics (design pass must resolve)
+
+Auto-notes are now **server-generated** (`TutorNote` row, map-reduce pipeline) and can be **regenerated**. Pre-slice-3 **Save note** committed tutor-edited structured fields to `SessionNote`. **Ambiguity for B4 design:** does **Save notes** mean (a) commit tutor edits to an editable draft field, (b) accept/confirm the AI draft as the session's canonical note, (c) pin a version against later regeneration, or (d) something else? **Do not guess in the component pass** — lock semantics in the B4 design pass before wiring the button.
+
+---
+
 ## Decisions ledger (LOCKED)
 
 - **Brand:** Mynka Blue palette (light done in tokens.css; dark = legacy purple, to migrate) + Fraunces V4/V2 + Inter 400 + JetBrains Mono fonts (never implemented). Light `--accent-on`=#15203A (Option A).
@@ -324,6 +353,12 @@ Folded from 5-axis review in [`session-lifecycle-consent-design-2026-05-31.md`](
 ### Approved-to-build (from Q-3 ratification)
 
 - **Admin-only recording-deletion capability** — manual now, auto-able later; honors on-request deletion (disclosed contact path); retain-by-default on revocation.
+
+### V1 redesign — component pass requirements (from slice 3 smoke, 2026-06-07)
+
+- **REQ-S3-1** — formatted markdown render for auto-notes (not raw MD source). See § 2026-06-07 checkpoints.
+- **REQ-S3-2** — post-session **Save notes** + **Cancel and delete session data** (confirm dialog). See § 2026-06-07 checkpoints.
+- **REQ-S3-2a (OPEN)** — define **Save notes** semantics for server-generated/regeneratable `TutorNote` content before B4 implementation.
 
 ---
 
