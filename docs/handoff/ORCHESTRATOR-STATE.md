@@ -8,15 +8,15 @@ Multi-day epic on branch **`v1-redesign`** (active V1 integration branch; **not 
 
 ---
 
-## ⏩ HEAD — 2026-06-07 (milestone restructure; read first)
+## ⏩ HEAD — 2026-06-07 (slice 3 shipped; awaiting Andrew smoke + merge)
 
 | Field | Value |
 |---|---|
-| **Last action completed** | **Recording transport thread CLOSED:** durable DB-as-queue + Vercel Cron sweep merged @ [`234d05b`](https://github.com/Arangarx/tutoring-notes/commit/234d05b); transcription pipeline fixes merged @ [`93157d5`](https://github.com/Arangarx/tutoring-notes/commit/93157d5). **Q1 transcript quality = PASS** (real 2-voice math lesson; Andrew concurred). **Sweep validated on live infra** (Andrew Postman 2026-06-07: 2 failed chunks → done via authenticated `/api/cron/transcribe-sweep`). **`CRON_SECRET` set** on Preview+Prod. **Cost-obs Phase 1** merged + **`/admin/cost` SMOKE PASSED** (Andrew 2026-06-06). **Sarah pilot feedback** captured @ [`sarah-pilot-feedback-2026-06-06-orchestrator-report.md`](sarah-pilot-feedback-2026-06-06-orchestrator-report.md). |
-| **Next action(s)** | **Recording P1 Slice 3 — auto-notes + map-reduce** (THE payoff; **UNBLOCKED** — transport + Q1 gates satisfied). One careful change touching guarded Pillar-3 `handleEndSession`. Bootstrapper: [`recording-slice3-autonotes-bootstrapper.md`](recording-slice3-autonotes-bootstrapper.md). **Standing parallel:** cost-event durability hardening (ratified, not built); v1 component/UI pass; identity/access epic; Sarah forward-migration at cutover. |
-| **Open Andrew-confirms** | None blocking slice 3. **Deferred / non-blocking:** cost-durability hardening build timing; Sarah WB bugs (FROZEN until redesign); legacy test-account cleanup (greenlight-gated destructive). |
+| **Last action completed** | **Recording P1 Slice 3 — auto-notes + map-reduce SHIPPED** on branch `feat/recording-p1-slice3-autonotes` @ [`4f601a3`](https://github.com/Arangarx/tutoring-notes/commit/4f601a3) (2 commits: impl + BLOCKER fix from 5-axis review). Full map-reduce D8 path shipped. 229 recording tests + 92 regression tests green. tsc + eslint clean. 5-axis adversarial review completed — 1 BLOCKER found and fixed (stuck skeleton when TutorNote row not yet created). |
+| **Next action(s)** | **Andrew: smoke `feat/recording-p1-slice3-autonotes`** via Vercel Preview URL; run manual smoke checklist below; then `git merge --no-ff feat/recording-p1-slice3-autonotes` to `v1-redesign`. **After merge:** full ORCHESTRATOR-STATE.md restructure (dispatch Composer 2.5). **Standing parallel:** cost-event durability hardening (ratified, not built); v1 component/UI pass; identity/access epic; Sarah forward-migration at cutover. |
+| **Open Andrew-confirms** | **Smoke pass required** before merge. **Deferred / non-blocking:** cost-durability hardening build timing; Sarah WB bugs (FROZEN until redesign); legacy test-account cleanup (greenlight-gated destructive). |
 | **In-flight subagents** | **None.** |
-| **Uncommitted / unmerged** | **None** — working tree clean on `v1-redesign` @ `234d05b`. |
+| **Uncommitted / unmerged** | Branch `feat/recording-p1-slice3-autonotes` pushed, NOT YET merged to `v1-redesign`. Working tree clean. |
 
 **Process directive (Andrew 2026-06-07):** prefer **agent-runnable validation harnesses** over manual smoke wherever behavior is verifiable without Andrew's hardware (transcription E2E + sweep validations were the exemplars).
 
@@ -32,22 +32,24 @@ Multi-day epic on branch **`v1-redesign`** (active V1 integration branch; **not 
 
 ---
 
-## NEXT MAJOR — Recording P1 Slice 3 (auto-notes + map-reduce)
+## Recording P1 Slice 3 — SHIPPED (awaiting smoke + merge)
 
-**Status:** **UNBLOCKED** — gated dependencies (durable transport, Q1 transcript quality) both satisfied.
+**Status:** **SHIPPED** on `feat/recording-p1-slice3-autonotes` — awaiting Andrew smoke + `merge --no-ff` to `v1-redesign`.
 
-**Scope (one shippable unit; design D7 + D8):**
+**Branch head:** [`4f601a3`](https://github.com/Arangarx/tutoring-notes/commit/4f601a3)
 
-| # | Deliverable | Notes |
+**Path shipped:** Full map-reduce (D8) — not the reduce-at-end fallback.
+
+| # | Deliverable | Status |
 |---|---|---|
-| **(a)** | **End-session sweep** | Kick any non-`done` `TranscriptChunk` rows at session end so notes are ready fast. Lives in guarded **`handleEndSession`** (Pillar 3) — read [`docs/RECORDER-LIFECYCLE.md`](../RECORDER-LIFECYCLE.md) first. |
-| **(b)** | **Map phase** | Incremental AI extraction per chunk → `TranscriptChunkExtraction` rows (can run as chunks complete during session). |
-| **(c)** | **Reduce phase** | Final synthesis (`gpt-4o-mini`, escalate on quality signal) → `TutorNote` at session end. |
-| **(d)** | **Post-session UX** | Auto-show notes on review screen with skeleton/blurred loading (**5-min timeout** per ratified Q5). **Retire** manual "Transcribe and generate notes" button; keep "Regenerate" escape hatch. |
+| **(a)** | **End-session sweep** | ✅ `kickSessionChunksAction` fired F&F from workspace after `endWhiteboardSession`. |
+| **(b)** | **Map phase** | ✅ `extract-chunk.ts` runs per-chunk after `status=done`; idempotent on `chunkId`. |
+| **(c)** | **Reduce phase** | ✅ `notes-worker.ts` — completion gate, 5-min timeout, partial path, DB-as-queue + cron sweep. |
+| **(d)** | **Post-session UX** | ✅ Manual button retired; `TutorNotesSection` auto-polls, skeleton, partial badge, regenerate. |
 
-**Tier:** high blast radius on recorder lifecycle → dispatch **careful Composer 2.5 or Sonnet** (auth boundary + concurrency + 5-axis adversarial review **required** before merge).
+**5-axis review:** 1 BLOCKER found + fixed (stuck skeleton when TutorNote row not yet created). See commit `4f601a3`.
 
-**Design ref:** [`recording-rearchitecture-design-2026-06-05.md`](recording-rearchitecture-design-2026-06-05.md) (Q1–Q8 ratified Andrew 2026-06-06). Bootstrapper: [`recording-slice3-autonotes-bootstrapper.md`](recording-slice3-autonotes-bootstrapper.md).
+**Design ref:** [`recording-rearchitecture-design-2026-06-05.md`](recording-rearchitecture-design-2026-06-05.md). Bootstrapper: [`recording-slice3-autonotes-bootstrapper.md`](recording-slice3-autonotes-bootstrapper.md).
 
 ---
 
