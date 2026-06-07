@@ -555,6 +555,12 @@ Items from the 2026-06-02 brand review (Andrew + wife) on landing + Features pag
 
 ---
 
+## Cost observability — V1-gating (instrumentation slice)
+
+- **Cost-event durability hardening (V1-gating, cost-obs instrumentation slice).** Add `isTestFixture`, `tutorKey`, and `tutorLabel` snapshot columns on `CostEvent` (populated at `logCostEvent` write time); surface an explicit **Unattributed / deleted accounts** bucket in `/admin/cost` per-tutor view so rows reconcile to month totals; pricing-floor / cost-per-real-session view defaults to **real-only** (`isTestFixture = false`), operator total-burn includes test usage. Spec: [`docs/handoff/cost-observability-design-2026-06-06.md`](handoff/cost-observability-design-2026-06-06.md) §3.2.4.
+
+---
+
 ## Identity / access — V1 redesign
 
 Items tied to the identity/access/consent epic ([`docs/handoff/v1-redesign-STATUS.md`](handoff/v1-redesign-STATUS.md), IAC ledger in [`docs/handoff/identity-phase2-auth-session-design-2026-06-01.md`](handoff/identity-phase2-auth-session-design-2026-06-01.md)).

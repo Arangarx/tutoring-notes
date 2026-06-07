@@ -19,7 +19,7 @@
 5. [Reconciliation vs provider billing](#5-reconciliation-vs-provider-billing)
 6. [Phasing](#6-phasing)
 7. [5-axis reliability note](#7-5-axis-reliability-note)
-8. [Open questions (Q1–Q10)](#8-open-questions-q1q10)
+8. [Open questions (Q1–Q11)](#8-open-questions-q1q10)
 
 ---
 
@@ -269,6 +269,7 @@ ALTER TABLE "CostEvent"
   ADD COLUMN IF NOT EXISTS "rateCardVersion" TEXT,        -- e.g. "2026-06-06" — which rate-card was used
   ADD COLUMN IF NOT EXISTS "sessionId" TEXT;              -- denormalized logical session ID for grouping
 -- All columns are nullable; existing rows unaffected.
+-- Durability snapshot columns (isTestFixture, tutorKey, tutorLabel) — see §3.2.4.
 ```
 
 > **Note on `sessionId`:** The `whiteboardSessionId` FK serves whiteboard sessions; `sessionId` is a denormalized string to cover future standalone audio sessions (post re-architecture) and cross-session aggregation before the unified session model lands. It is NOT a FK to avoid coupling to schema-in-flux.
@@ -295,8 +296,62 @@ export interface LogCostEventInput {
   computeGbHr?: number;             // VERCEL_COMPUTE, NEON_COMPUTE
   rateCardVersion?: string;         // e.g. RATE_CARD_VERSION constant
   sessionId?: string | null;        // logical session grouping
+  // durability hardening (§3.2.4 — captured at write time)
+  isTestFixture?: boolean;          // default false; copied from tutor/student fixture flag
+  tutorKey?: string | null;         // denormalized adminUserId (survives FK SetNull)
+  tutorLabel?: string | null;       // snapshot of tutor display name/email at write time
 }
 ```
+
+### 3.2.4 Cost-event durability (write-once financial facts)
+
+Cost events are **financial facts**, not join rows. They must remain reliable after the test users, students, sessions, and whiteboard sessions they reference are deleted — especially when Andrew purges fixture accounts during development or before pricing validation.
+
+#### Current state (confirmed — not a TODO)
+
+Investigation (2026-06-06) confirmed the existing model already preserves aggregate totals across parent deletion:
+
+| Mechanism | Status |
+|-----------|--------|
+| **Four FKs, all `onDelete: SetNull`** | `adminUserId`→`AdminUser`, `studentId`→`Student`, `sessionRecordingId`→`SessionRecording`, `whiteboardSessionId`→`WhiteboardSession`. DB-level `ON DELETE SET NULL` — rows **survive** parent deletion with nulled FKs. |
+| **Audit-table intent** | `CostEvent` is append-only observability, not a billing ledger with cascade deletes. |
+| **No delete paths** | No `costEvent.delete` / `deleteMany` anywhere; `src/lib/dev-fixtures.ts` clear path does **not** delete cost rows. |
+| **Denormalized cost payload already on row** | `estimatedCostUsd`, `kind`, `model`, `inputTokens` / `outputTokens` / `audioSeconds`, `bytesTransferred` / `gbMonths` / `computeGbHr`, `rateCardVersion`, `sessionId` (non-FK string), `metadata`, `createdAt`. |
+
+**Consequence:** month totals, by-source breakdowns, and monthly bar charts already survive account/session deletion. The gaps are **attribution** and **fixture-vs-real slicing**, not row loss.
+
+#### Refinement 1 — denormalized snapshot columns (additive)
+
+Captured in `logCostEvent` at write time (same migration slice as §3.2.2 — `20260606000000_cost_event_v2` or a follow-on additive migration in the cost-obs instrumentation slice):
+
+```sql
+ALTER TABLE "CostEvent"
+  ADD COLUMN IF NOT EXISTS "isTestFixture" BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS "tutorKey" TEXT,
+  ADD COLUMN IF NOT EXISTS "tutorLabel" TEXT;
+-- All additive; existing rows default isTestFixture=false, tutorKey/tutorLabel null.
+```
+
+| Column | Type | Write-time source | Purpose |
+|--------|------|-------------------|---------|
+| `isTestFixture` | `Boolean @default(false)` | Originating tutor's and/or student's fixture flag at write time | Fixture-vs-real cost slicing survives deletion of test accounts. |
+| `tutorKey` | `String?` | Copy of `adminUserId` into a non-FK text column | Deleted tutors remain attributable after FK SetNull. |
+| `tutorLabel` | `String?` | Snapshot of tutor display name or email at write time | Human-readable per-tutor attribution post-deletion (storage is cheap — snapshot at write). |
+
+`logCostEvent` MUST populate all three on every new row when `adminUserId` is known. Nullable/defaulted → clean additive migration; no backfill required for historical rows (they appear as unattributed / unknown-fixture in dashboards until naturally replaced by new traffic).
+
+#### Refinement 2 — dashboard / query changes
+
+**`getCostByTutor` (`src/lib/observability/cost-queries.ts`) — today:** filters `adminUserId: { not: null }`, so cost from deleted tutors silently drops out of the per-tutor table while still appearing in month totals → **understatement**.
+
+**Required behavior:**
+
+1. **Unattributed / deleted-accounts bucket** — aggregate rows where `adminUserId IS NULL`, optionally sub-grouped by surviving `tutorKey` / `tutorLabel`. The per-tutor view MUST reconcile to the month total (sum of tutor rows + unattributed bucket = total).
+2. **Fixture-vs-real filter** — dashboard toggle or segmented views:
+   - **Pricing-floor / cost-per-real-session view** — **defaults to real-only** (`isTestFixture = false`). This is the view Andrew uses for defensible per-session pricing math (§1.3–§1.5).
+   - **"My total burn" / operator view** — includes everything (`isTestFixture` true and false). Test usage is real money spent on OpenAI/Vercel; operator burn must not hide it.
+
+Surface the filter on `/admin/cost` (§4.2) with clear labels so the two audiences (pricing validation vs operator burn) don't conflate.
 
 ### 3.3 New cost sources to instrument
 
@@ -391,8 +446,10 @@ Every `logCostEvent` call emits:
 - Blob storage + egress
 - Vercel compute (if instrumented)
 
-**By tutor (Phase 1, grouped by `adminUserId`):**
-- Tutor name | Sessions | Whisper-minutes | Total estimated cost
+**By tutor (Phase 1, grouped by `adminUserId` with durability hardening — §3.2.4):**
+- Tutor name (live join or `tutorLabel` snapshot) | Sessions | Whisper-minutes | Total estimated cost
+- Explicit **"Unattributed / deleted accounts"** row aggregating null-`adminUserId` events (sub-grouped by `tutorKey` when present) so this table reconciles to the month total
+- **Fixture filter:** pricing-floor / cost-per-real-session view defaults to **real-only** (`isTestFixture = false`); operator "total burn" includes test fixture cost
 
 **By student (Phase 2, if desired):**
 - Student name | Sessions | Avg session length | Avg cost
@@ -464,6 +521,7 @@ All cost figures carry an "estimated — based on API usage data and verified ra
 - [ ] All existing `cev` call sites updated to pass `rateCardVersion`
 - [ ] New `CostEventKind` values added to schema (additive migration `20260606000000_cost_event_v2`)
 - [ ] `logCostEvent` updated with new fields (`bytesTransferred`, `gbMonths`, `computeGbHr`, `rateCardVersion`, `sessionId`)
+- [ ] Cost-event durability hardening (§3.2.4): `isTestFixture`, `tutorKey`, `tutorLabel` snapshot columns + write-time population; `getCostByTutor` unattributed bucket + fixture-vs-real filter (pricing-floor defaults real-only)
 - [ ] `rate-card.ts` extracted (constants moved from `cost-events.ts`)
 - [ ] BLOB_EGRESS events logged at audio URL generation points
 - [ ] VERCEL_COMPUTE events logged inline at transcription + notes call sites (elapsed × provisioned-memory estimate)
@@ -522,7 +580,7 @@ No new external dependencies added. Cost events write to Neon — same availabil
 
 ---
 
-## 8. Open questions (Q1–Q10) — **RATIFIED (Andrew 2026-06-06)**
+## 8. Open questions (Q1–Q11) — **RATIFIED (Andrew 2026-06-06)**
 
 | # | Question | Ratified answer | Rationale |
 |---|----------|-----------------|-----------|
@@ -536,6 +594,7 @@ No new external dependencies added. Cost events write to Neon — same availabil
 | **Q8** | Should estimated cost be surfaced to **tutors** (not just admin)? | **ACCEPTED — do NOT surface tutor-facing cost in the UI until the pricing model is locked.** Andrew is leaning toward a **"session tokens"** model (NOT locked in); if adopted, tutors only need to see token consumption + whether they'll be billed for overage in arrears. **Internal/admin-facing cost tracking still ships in Phase 1** — only tutor-facing surfacing is deferred. | Admin-only for v1 was the recommended default; Andrew refined: defer tutor UI until pricing model locked, but admin cost tracking is not deferred. |
 | **Q9** | Rate-card staleness threshold: 90 days or 30 days? | **RATIFIED AT DEFAULT — 90 days** | OpenAI and Vercel pricing is relatively stable; 90 days matches quarterly planning cadence without being noisy. |
 | **Q10** | Should the blob cleanup CLI (`blb` log prefix) write a `BLOB_STORAGE` event showing reclaimed storage? | **RATIFIED AT DEFAULT — Yes** | The cleanup operation is already logged with `blb` prefix; adding a `BLOB_STORAGE` event (negative `gbMonths`) creates a complete storage cost timeline. |
+| **Q11** | Cost-event durability hardening — snapshot columns + orphaned/unattributed bucket in per-tutor view? | **RATIFIED FULL — Andrew 2026-06-06** | Test-account purges must not corrupt aggregate totals or pricing-floor fixture-vs-real slicing; full hardening (§3.2.4 Refinements 1 + 2) ships in the cost-obs instrumentation slice. |
 
 ---
 
@@ -544,8 +603,8 @@ No new external dependencies added. Cost events write to Neon — same availabil
 | Field | Value |
 |---|---|
 | **Ratified by** | Andrew — 2026-06-06 (orchestrator chat) |
-| **Disposition** | Q8 answered explicitly (tutor-facing cost UI deferred; admin cost tracking ships Phase 1); Q1–Q7, Q9–Q10 = ratified at default |
-| **Build authorized** | **Yes** — Phase 1 cost observability dispatch may proceed |
+| **Disposition** | Q8 answered explicitly (tutor-facing cost UI deferred; admin cost tracking ships Phase 1); Q1–Q7, Q9–Q10 = ratified at default; **Q11 (cost-event durability hardening) = ratified FULL 2026-06-06** |
+| **Build authorized** | **Yes** — Phase 1 cost observability dispatch may proceed (includes §3.2.4 durability hardening) |
 
 ---
 

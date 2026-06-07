@@ -19,22 +19,22 @@
 
 **Headline:** The during-session transcription pipeline is **built and functional** via a **direct-invocation stub** ([`chunk-transcribe-enqueue.ts`](../src/lib/recording/chunk-transcribe-enqueue.ts) runs the worker inline, fire-and-forget). Transcripts land in `TranscriptChunk` but are **not shown in any tutor UI yet** (slice 3 consumes them).
 
-**Your queue:** **2 decisions** + **1 prerequisite** (Neon migrations) before meaningful smoke. **Slice 3 deliberately not started** — gated on your picks.
+**Your queue:** **2 decisions** before slice 3. Step 0 (Neon migrations) is **done** — preview is smoke-ready now. **Slice 3 deliberately not started** — gated on your picks.
 
 ---
 
-## ⚠️ PREREQUISITE — Step 0 (before ANY smoke)
+## ✅ Step 0 — DONE (migrations already on preview)
 
-All Vercel previews share **one** preview Neon DB. Migrations do **not** auto-apply until master cutover. These two are **not on preview yet** (DDL is greenlight-gated):
+**Verified 2026-06-06 PM against Neon branch `preview-dev` (`br-crimson-mode-amape02v`):** all 29 migrations applied, including both new ones. No manual DDL was needed — the `v1-redesign` preview deploy auto-runs `prisma migrate deploy` against `preview-dev` during its Vercel build, so the additive migrations landed on their own. Production branch (`br-shiny-queen-ama6k5x9`) was **not** touched.
 
-| Migration folder | Creates / alters |
+| Migration folder | Status on `preview-dev` |
 |---|---|
-| [`prisma/migrations/20260606000000_cost_event_v2/`](../prisma/migrations/20260606000000_cost_event_v2/migration.sql) | `CostEvent` v2 cols + 4 new `CostEventKind` enum values |
-| [`prisma/migrations/20260606120000_recording_p1_schema/`](../prisma/migrations/20260606120000_recording_p1_schema/migration.sql) | `TranscriptChunk`, `TranscriptChunkExtraction`, `TutorNote` |
+| [`prisma/migrations/20260606000000_cost_event_v2/`](../prisma/migrations/20260606000000_cost_event_v2/migration.sql) | ✅ applied (`bytesTransferred`, `gbMonths`, `computeGbHr`, `rateCardVersion`, `sessionId` cols + 4 `CostEventKind` enum values confirmed) |
+| [`prisma/migrations/20260606120000_recording_p1_schema/`](../prisma/migrations/20260606120000_recording_p1_schema/migration.sql) | ✅ applied (`TranscriptChunk`, `TranscriptChunkExtraction`, `TutorNote` confirmed) |
 
-**Both** `/admin/cost` **and** the transcription-pipeline smoke **require these applied to the preview DB first.**
+**Both `/admin/cost` and the transcription-pipeline smoke are unblocked — go straight to the smoke script below.**
 
-Apply via Neon MCP / console (`prisma migrate deploy` against preview connection) — **say "go" for DDL** per MCP write-safety. Local dev DB already has them.
+> Workflow note: preview builds auto-apply additive migrations to `preview-dev`. The greenlight-gated DDL gate really only matters for the **production** branch (master cutover).
 
 ---
 
