@@ -4,7 +4,9 @@
  */
 
 import { Prisma } from "@prisma/client";
+import { getServerSession } from "next-auth";
 import { db } from "@/lib/db";
+import { authOptions } from "@/auth-options";
 
 const WHISPER_KINDS = ["WHISPER_TRANSCRIPTION"] as const;
 const GPT_KINDS = [
@@ -254,7 +256,24 @@ export async function getMonthlyCostBars(months: number = 6): Promise<MonthlyCos
 
 export async function getSessionCostBreakdown(
   whiteboardSessionId: string
-): Promise<SessionCostBreakdown> {
+): Promise<SessionCostBreakdown | null> {
+  // Fix A — server-side authorization (defense-in-depth; mirrors the page-level showCostPanel gate).
+  // Allow: ADMIN role (operator), actively impersonating (admin testing as tutor), isTestAccount=true (QA).
+  // Deny: real TUTOR-role accounts (e.g. Sarah) — cost data must not be visible to real tutors
+  //       even if the page-level gate is somehow bypassed.
+  const session = await getServerSession(authOptions);
+  const user = session?.user;
+  const authorized =
+    user?.role === "ADMIN" ||
+    user?.isImpersonating === true ||
+    user?.isTestAccount === true;
+  if (!authorized) {
+    console.log(
+      `[cev] getSessionCostBreakdown unauthorized wbsid=${whiteboardSessionId} role=${user?.role ?? "none"}`
+    );
+    return null;
+  }
+
   const events = await db.costEvent.findMany({
     where: { whiteboardSessionId },
     orderBy: { createdAt: "asc" },

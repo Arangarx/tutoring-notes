@@ -109,7 +109,11 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   `[lpr] lpr=unknown action=hard_lock_triggered handle=<familyId>:<username>`,
   `[lpr] lpr=<profileId> action=hard_lock_cleared_by_parent credKey=<familyId>:<username>`;
   hard lock state is durable in `LearnerLoginThrottle` Neon table — survives cold starts
-  and is shared across instances). See
+  and is shared across instances), `rol` (JWT role-refresh — auth-options jwt callback
+  periodic DB re-check; writes `[rol] sub=<id> role_corrected role=<old>-><new>` when
+  stale role is corrected, `[rol] sub=<id> refresh=account_deleted fail_closed` when
+  the DB row is missing, `[rol] sub=<id> refresh_error fail_open` on transient DB error).
+  See
   [docs/RECORDER-LIFECYCLE.md](docs/RECORDER-LIFECYCLE.md) for the
   registry.- **Migrations are additive.** Production runs on Neon; never drop or
   rename a column without a multi-step migration.
