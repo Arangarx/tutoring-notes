@@ -899,9 +899,12 @@ export async function sendUpdateEmail(
   const student = await db.student.findUniqueOrThrow({ where: { id: studentId } });
   const { signer, fromDisplayName } = await resolveTutorDisplayName();
 
-  const noteCount = await db.sessionNote.count({ where: { studentId } });
+  // Exclude DRAFT auto-notes: parents must never see unreviewed auto-generated content.
+  const noteCount = await db.sessionNote.count({
+    where: { studentId, status: { not: "DRAFT" } },
+  });
   const latestNote = await db.sessionNote.findFirst({
-    where: { studentId },
+    where: { studentId, status: { not: "DRAFT" } },
     orderBy: { date: "desc" },
   });
 
@@ -952,8 +955,9 @@ ${noteCount > 1 ? `This email shows only the most recent session. Open the link 
     data: { parentEmail: toEmail },
   });
 
+  // Only flip READY → SENT; DRAFT auto-notes must never be marked SENT.
   await db.sessionNote.updateMany({
-    where: { studentId, status: { in: ["READY", "DRAFT"] } },
+    where: { studentId, status: "READY" },
     data: { status: "SENT", sentAt: new Date() },
   });
 

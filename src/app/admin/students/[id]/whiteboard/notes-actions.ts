@@ -408,28 +408,6 @@ export async function deleteWhiteboardSessionAndDataAction(
 
     const noteId = sessionDetail.noteId;
 
-    // If a note is linked, verify it's a DRAFT (not already finalized)
-    if (noteId) {
-      const note = await withDbRetry(
-        () =>
-          db.sessionNote.findUnique({
-            where: { id: noteId },
-            select: { id: true, status: true },
-          }),
-        { label: "deleteSession.checkNoteStatus" }
-      );
-      if (note && (note.status === "READY" || note.status === "SENT")) {
-        console.warn(
-          `[nsi] wbsid=${whiteboardSessionId} action=delete_session_rejected reason=note_already_finalized noteId=${noteId} status=${note.status}`
-        );
-        return {
-          ok: false,
-          error:
-            "Cannot delete: this session's note has already been saved. Detach the note first if you wish to delete the session.",
-        };
-      }
-    }
-
     console.log(
       `[nsi] wbsid=${whiteboardSessionId} action=delete_session_start noteId=${noteId ?? "none"} studentId=${session.studentId}`
     );
@@ -438,8 +416,22 @@ export async function deleteWhiteboardSessionAndDataAction(
       () =>
         db.$transaction(async (tx) => {
           // 1. Delete DRAFT SessionNote (before deleting WB session, since SetNull cascade
-          //    would otherwise just null noteId rather than delete the note)
+          //    would otherwise just null noteId rather than delete the note).
+          //    Status check is INSIDE the transaction to prevent a TOCTOU race between a
+          //    concurrent saveDraftSessionNoteAction finalize and this delete.
           if (noteId) {
+            const note = await tx.sessionNote.findUnique({
+              where: { id: noteId },
+              select: { id: true, status: true },
+            });
+            if (note && (note.status === "READY" || note.status === "SENT")) {
+              console.warn(
+                `[nsi] wbsid=${whiteboardSessionId} action=delete_session_rejected reason=note_already_finalized noteId=${noteId} status=${note.status}`
+              );
+              throw new Error(
+                "Cannot delete: this session's note has already been saved. Detach the note first if you wish to delete the session."
+              );
+            }
             await tx.sessionNote.delete({ where: { id: noteId } });
           }
 

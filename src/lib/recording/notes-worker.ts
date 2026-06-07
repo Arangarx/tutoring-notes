@@ -481,13 +481,27 @@ export async function processNotesReduceJob(
     );
 
     // --- 9. Auto-create/update DRAFT SessionNote (bridge) — best-effort ----------
-    try {
-      await createOrUpdateDraftSessionNote(sessionId, session, structuredFields);
-    } catch (bridgeErr: unknown) {
-      console.error(
-        `[nsi] wbsid=${sessionId} action=draft_note_bridge_failed err=${bridgeErr instanceof Error ? bridgeErr.message : String(bridgeErr)}`
+    // Guard: if every field is blank AND a prior good note already exists (regen path),
+    // skip the update to avoid clobbering valid content with an all-empty parse result.
+    const allBlankFields =
+      !structuredFields.topics.trim() &&
+      !structuredFields.assessment.trim() &&
+      !structuredFields.nextSteps.trim() &&
+      !structuredFields.links.trim();
+
+    if (allBlankFields && session.noteId) {
+      console.warn(
+        `[nsi] wbsid=${sessionId} action=draft_note_update_skipped reason=all_blank_result noteId=${session.noteId}`
       );
-      // Non-fatal: TutorNote is already done; tutor can still save from review page
+    } else {
+      try {
+        await createOrUpdateDraftSessionNote(sessionId, session, structuredFields);
+      } catch (bridgeErr: unknown) {
+        console.error(
+          `[nsi] wbsid=${sessionId} action=draft_note_bridge_failed err=${bridgeErr instanceof Error ? bridgeErr.message : String(bridgeErr)}`
+        );
+        // Non-fatal: TutorNote is already done; tutor can still save from review page
+      }
     }
 
     return isPartial
