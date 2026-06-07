@@ -67,8 +67,12 @@ export default function TutorNotesSection({
   const startTimeRef = useRef<number>(Date.now());
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Active = notes are in-flight. Includes the "not yet created" case (race between
+  // fire-and-forget triggerNotesGenerationAction and immediate review page load):
+  // if there's audio but no TutorNote row yet, we poll until the row appears.
   const isActive =
-    note.found && (note.status === "pending" || note.status === "generating");
+    (note.found && (note.status === "pending" || note.status === "generating")) ||
+    (!note.found && hasAudio);
   const isDone = note.found && (note.status === "done" || note.status === "partial");
   const isFailed = note.found && note.status === "failed";
   const isNotStarted = !note.found;
@@ -86,10 +90,12 @@ export default function TutorNotesSection({
         const result = await getTutorNoteStatusAction(whiteboardSessionId);
         setNote(result);
 
-        if (
-          result.found &&
-          (result.status === "pending" || result.status === "generating")
-        ) {
+        // Continue polling while in-flight (pending/generating or row not created yet).
+        const stillActive =
+          !result.found ||
+          result.status === "pending" ||
+          result.status === "generating";
+        if (stillActive) {
           scheduleNextPoll();
         }
       } catch {
