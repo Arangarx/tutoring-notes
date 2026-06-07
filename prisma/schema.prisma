@@ -397,13 +397,20 @@ model TranscriptChunk {
   status                String
   transcribedAt         DateTime?
   error                 String?
+  /**
+   * Transcription attempt count — incremented on each failed worker run.
+   * Cron sweep skips rows at TRANSCRIBE_SWEEP_MAX_ATTEMPTS.
+   */
+  attempts              Int       @default(0)
   createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   session    WhiteboardSession          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   extraction TranscriptChunkExtraction?
 
   @@unique([sessionId, chunkBlobUrl])
   @@index([sessionId, recordingTimeOffsetMs])
+  @@index([status, updatedAt])
 }
 
 /**

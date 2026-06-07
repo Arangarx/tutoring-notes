@@ -4,9 +4,9 @@
 >
 > **Maintenance rule**: any commit that introduces a new platform-level assumption (a hardcoded timeout cap, a per-tier limit dependency, a new external origin, a new runtime requirement) MUST update this doc in the same PR. The orchestrator owns this gate during executor handoffs.
 >
-> **Capability-contract rule (Andrew, 2026-06-06):** Tie-ins to Vercel-specific functionality are fine while we run on Vercel. Every such dependency MUST be documented here (or in a feature design doc cross-registered here) as: **Vercel X provides capability Y; generic/AWS equivalent = Z.** Include delivery semantics, size/timeout limits, and plan-availability caveats where uncertain — say "verify at build time" rather than assert. This is the standard extension of the maintenance rule above; see §1.6 for the template and §11 for design-stage recording re-architecture entries.
+> **Capability-contract rule (Andrew, 2026-06-06):** Tie-ins to Vercel-specific functionality are fine while we run on Vercel. Every such dependency MUST be documented here (or in a feature design doc cross-registered here) as: **Vercel X provides capability Y; generic/AWS equivalent = Z.** Include delivery semantics, size/timeout limits, and plan-availability caveats where uncertain — say "verify at build time" rather than assert. This is the standard extension of the maintenance rule above; see §1.7 for the template and §11 for design-stage recording re-architecture entries.
 >
-> **Last audited**: 2026-06-06 (capability-contract rule + recording re-arch design-stage deps). Prior full audit: 2026-05-17 (post-Vercel-Pro upgrade).
+> **Last audited**: 2026-06-07 (Vercel Cron transcription sweep + DB-as-queue transport). Prior full audit: 2026-06-06 (capability-contract rule + recording re-arch design-stage deps).
 
 ---
 
@@ -80,7 +80,21 @@
   - Phase 2 task 13 (env-scoping audit + `scripts/safe-migrate.mjs` guard) is the structural hardening; not yet shipped.
 - **Migration check**: any new platform must support per-environment `DATABASE_URL` scoping AND run migrate-deploy with strict env separation. Add the `safe-migrate.mjs` guard if not already shipped.
 
-### 1.6 Capability-contract documentation standard
+### 1.6 Vercel Cron — transcription backstop sweep
+
+- **Capability provided**: Scheduled GA HTTP trigger (cron expression → GET to a serverless route on a fixed cadence).
+- **Why we depend on it**: Recording re-arch Phase 1 D2 durable async transport — `TranscriptChunk` rows with `status=pending` (or retryable `failed`) are the durable queue; the cron sweep at `/api/cron/transcribe-sweep` catches orphans when the immediate fire-and-forget worker attempt dies with the function instance. End-session sweep is a separate layer (slice 3).
+- **Generic / AWS equivalent**: **Amazon EventBridge Scheduler** (or EventBridge rules) → **API Gateway / Lambda** or any HTTP endpoint.
+- **Where baked in**:
+  - `vercel.json` — `crons` entry: `* * * * *` → `/api/cron/transcribe-sweep` (every minute on **Pro**; Hobby minimum is once/day — verify plan at deploy time).
+  - `src/app/api/cron/transcribe-sweep/route.ts` — auth via `CRON_SECRET` + `Authorization: Bearer` header (standard Vercel Cron pattern).
+  - `src/lib/recording/transcribe-sweep.ts` — bounded batch + time-budget sweep over stale `TranscriptChunk` rows.
+- **Env var**: `CRON_SECRET` — **required** for cron auth. Vercel sends `Authorization: Bearer <CRON_SECRET>` when this env var is set. **Setting it in Vercel project env is a greenlight-gated follow-up for the operator** (MCP write-safety); until set, cron invocations are rejected with 401.
+- **DB-as-queue pattern** (portable): durable work lives in Postgres (`TranscriptChunk.status` + `attempts` + `updatedAt`); any platform with a DB + a periodic scheduler can replicate the transport without Vercel Queues.
+- **What breaks if violated**: orphaned `pending` chunks never transcribe if both the immediate attempt and cron are absent; cron without `CRON_SECRET` is a no-op (401). Migrating off Vercel requires replicating the schedule + authenticated HTTP trigger.
+- **Migration check**: provision EventBridge (or equivalent) on the same cadence; protect the sweep endpoint with a shared secret; confirm batch/time-budget fits the new platform's per-invocation ceiling (§1.1).
+
+### 1.7 Capability-contract documentation standard
 
 - **Assumption**: Every Vercel-specific (or otherwise platform-specific) dependency is recorded as a **capability contract**, not merely a product name.
 - **Required fields** (use in this doc, feature STATUS docs, or design docs cross-registered here):
@@ -568,7 +582,7 @@
 
 > **Status:** Ratify-ready design only — **no production code, no Vercel resource provisioning yet.** Canonical design: [`docs/handoff/recording-rearchitecture-design-2026-06-05.md`](handoff/recording-rearchitecture-design-2026-06-05.md). Full capability-contract table in that doc § "Vercel-specific dependencies & migration map". **Promote each entry to §1–§3 production assumptions in the Phase 1 build commit** when the dependency is actually wired.
 >
-> **Not in scope for this design:** Vercel Cron (pipeline is event-driven off upload + session end, not scheduled).
+> **Superseded for transcription transport (2026-06-07):** Vercel Cron backstop sweep is **built** for D2 — see §1.6. End-session sweep remains event-driven (slice 3). Vercel Queues (§11.1) is **not provisioned**; Andrew ratified DB-as-queue + cron/sweep over Queues beta.
 
 ### 11.1 Vercel Queues — topic `chunk-transcribe`
 
@@ -610,7 +624,7 @@
 
 - [ ] New platform supports **≥300s** wall-clock per server-action / per-function invocation. (§1.1)
 - [ ] **Node.js runtime** (not Edge-only) for all blob/audio/ffmpeg routes. (§1.2)
-- [ ] Capability-contract entries reviewed for every Vercel-specific dependency (§1.6). (§11 if recording re-arch shipped)
+- [ ] Capability-contract entries reviewed for every Vercel-specific dependency (§1.7). (§1.6 + §11 if recording re-arch shipped)
 - [ ] Build hook supports `ignoreCommand`-equivalent for docs-only commit skipping. (§1.4)
 - [ ] Build runs `prisma migrate deploy` with strict per-env `DATABASE_URL` scoping. (§1.5)
 - [ ] Build command can chain `npm run test:regression && npm run build` (or equivalent). (§6.1)
