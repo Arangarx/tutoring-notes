@@ -1236,7 +1236,7 @@ Prefixes already registered: `ahx`, `lpr`, `clm`, `cns`, `tfa`, `msg`. All Phase
 | PIN lockout | AH-4: soft-lock only, **never hard lock**; rate-limit keyed username+IP | Insufficient vs distributed brute force; no parent unlock path |
 | Child login handle | Round-3 smoke stripped decorative `@`; login strips leading `@` | **Superseded** — `@` becomes **required** separator for `username@familyid` (round-4) |
 
-### Decision ledger (IAC-1..IAC-13)
+### Decision ledger (IAC-1..IAC-14)
 
 | ID | Topic | Decision (LOCKED) | Rationale |
 |---|---|---|---|
@@ -1253,6 +1253,7 @@ Prefixes already registered: `ahx`, `lpr`, `clm`, `cns`, `tfa`, `msg`. All Phase
 | **IAC-11** | Round-4 UX (E/G/I) | See [`p2b-smoke-fixes.md`](p2b-smoke-fixes.md) § Round 4 — password copy (E), PIN `maxLength` audit (G), child-session independence copy (I). | UX acceptance for next smoke; method-agnostic strength + accurate child-login framing. |
 | **IAC-12** | Parent/Guardian copy + conditional guardian framing (V1) | **NEW — copy principle (V1; folds into round-4 + IAC build):** **(1)** Where guardian-context copy says "Parent," use **"Parent/Guardian"** (not every caregiver is a parent). **(2)** **Do NOT surface parent/guardian framing until child learners are relevant to that account** — fresh accounts and adult self-learners (`isSelfLearner`) get **neutral** copy (e.g. `/account/login`: "Use your account credentials," not "Use your parent / account holder credentials"; dashboard avoids parent/guardian language). Guardian framing appears only once the account **has** (or is actively adding) a child `LearnerProfile` (≥1 non-self child learner, or in-flow add-child). Apply during round-4/IAC copy pass: signup, account login, dashboard, claim interstitial, settings. | People are sensitive to assumptions about children; don't imply the account holder has kids before they do. Source: Andrew's wife, 2026-06-02. |
 | **IAC-13** | Intercepted claim link — tutor visibility + disconnect | **V1 SECURITY (2026-06-03):** Claim URL is a bearer token; interception can bind a minor's `Student` to the wrong `AccountHolder` (COPPA/privacy). **Required:** **(a)** tutor sees connected account (email/identity + connected-at); **(b)** tutor can sever the tie and revoke learner/AH sessions for that child; **(c)** retain single-use + expiry (consider shorter TTL than 7d). **Today:** (a)(b) missing; (c) partial — `claimedAt` single-use, `expiresAt` 7d, email verify on complete. Parent self-unlink **deferred.** Full spec: [`session-identity-access-design-2026-05-31.md`](session-identity-access-design-2026-05-31.md) §4.5; [`docs/BACKLOG.md`](../BACKLOG.md) § Identity / access. | Closes wrongful-claim recovery gap; defense-in-depth beyond bearer-token hygiene alone. |
+| **IAC-14** | Cross-domain email uniqueness | **INVARIANT (Andrew 2026-06-07):** one email = exactly one account — same email MUST NOT exist in both Operator (`AdminUser`) and AccountHolder realms. No tutor+parent dual persona; dual-role persons use separate email / `+alias`. Enforcement + one-time collision cleanup ship with OAuth-signup fast-follow — [`docs/BACKLOG.md`](../BACKLOG.md) § Identity / access. | OAuth signup is the sharpest collision vector; realms already isolated at DB/handler layer (no takeover today). |
 
 ### Supersession map (quick reference)
 
