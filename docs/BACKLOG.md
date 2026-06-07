@@ -564,6 +564,7 @@ Items from the 2026-06-02 brand review (Andrew + wife) on landing + Features pag
 ## Cost observability — V1-gating (instrumentation slice)
 
 - **Cost-event durability hardening (V1-gating, cost-obs instrumentation slice).** Add `isTestFixture`, `tutorKey`, and `tutorLabel` snapshot columns on `CostEvent` (populated at `logCostEvent` write time); surface an explicit **Unattributed / deleted accounts** bucket in `/admin/cost` per-tutor view so rows reconcile to month totals; pricing-floor / cost-per-real-session view defaults to **real-only** (`isTestFixture = false`), operator total-burn includes test usage. Spec: [`docs/handoff/cost-observability-design-2026-06-06.md`](handoff/cost-observability-design-2026-06-06.md) §3.2.4.
+- **Recent cost events list on `/admin/cost` (non-blocking, 2026-06-07 slice 3 smoke).** `/admin/cost` shows aggregates only — operator could not easily verify per-session `CostEvent` rows during smoke. Add a **recent N cost events** table (most-recent first, filterable by session / `wbsid`) so per-session verification is possible without DB queries. Cross-ref **cost-event durability hardening** above. Effort: small; observability polish, not V1-gating.
 
 ---
 

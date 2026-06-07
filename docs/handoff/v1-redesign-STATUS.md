@@ -95,6 +95,15 @@ Batched on **`feature/phase-d-landing-about`** (intent recorded here; do not edi
 
 Auto-notes are now **server-generated** (`TutorNote` row, map-reduce pipeline) and can be **regenerated**. Pre-slice-3 **Save note** committed tutor-edited structured fields to `SessionNote`. **Ambiguity for B4 design:** does **Save notes** mean (a) commit tutor edits to an editable draft field, (b) accept/confirm the AI draft as the session's canonical note, (c) pin a version against later regeneration, or (d) something else? **Do not guess in the component pass** — lock semantics in the B4 design pass before wiring the button.
 
+### REQ-S3-3 — Always-visible signed-in identity indicator
+
+| Field | Value |
+|---|---|
+| **Problem** | During slice 3 smoke, the operator could not tell at a glance which account was active — normal tutor vs admin vs impersonating vs test account. **No on-page indication of current signed-in identity** anywhere in the app. |
+| **Requirement** | V1 redesigned **app shell / nav** must always show the current signed-in identity (e.g. account display name and/or email). Ideally includes a **clear badge** when impersonating or when signed in as a test account. Pairs with the **admin sidebar shell nav** decision already in the redesign ([`v1-component-redesign-design-2026-05-31.md`](v1-component-redesign-design-2026-05-31.md) §5 — two-column settings layout; nav redesign deferred to B3–B6). |
+| **Impersonation** | Related surface: `ImpersonationBanner` / **"viewing as X"** indicator — distinct from but complementary to the persistent identity chip in the shell. Both should be visible when impersonating. |
+| **Pass** | Component pass **shell / nav** (`AdminNav` redesign, B3–B6). **Not** slice-3 implementation scope. Detail: [`docs/V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) §3.1. |
+
 ---
 
 ## Decisions ledger (LOCKED)
@@ -359,6 +368,7 @@ Folded from 5-axis review in [`session-lifecycle-consent-design-2026-05-31.md`](
 - **REQ-S3-1** — formatted markdown render for auto-notes (not raw MD source). See § 2026-06-07 checkpoints.
 - **REQ-S3-2** — post-session **Save notes** + **Cancel and delete session data** (confirm dialog). See § 2026-06-07 checkpoints.
 - **REQ-S3-2a (OPEN)** — define **Save notes** semantics for server-generated/regeneratable `TutorNote` content before B4 implementation.
+- **REQ-S3-3** — always-visible signed-in identity in app shell/nav (+ impersonation / test-account badge). See § 2026-06-07 checkpoints.
 
 ---
 

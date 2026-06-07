@@ -74,7 +74,7 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 
 | Component | File | Purpose | Key Props | Surfaces | Dedup Status |
 |---|---|---|---|---|---|
-| `AdminNav` | `src/components/AdminNav.tsx` | Sticky top nav for all tutor/admin surfaces. Wordmark left, nav links, sign-out right. Mobile hamburger. | `showOperatorLinks`, `sessionMode`, `isImpersonating`, `showDevTools`, `showCostDashboard` | All `/admin/**` pages via `admin/layout.tsx` | **canonical** |
+| `AdminNav` | `src/components/AdminNav.tsx` | Sticky top nav for all tutor/admin surfaces. Wordmark left, nav links, sign-out right. Mobile hamburger. **REQ-S3-3:** redesign must add a persistent signed-in identity indicator (display name/email; badge when impersonating or test account) — pairs with `ImpersonationBanner`. | `showOperatorLinks`, `sessionMode`, `isImpersonating`, `showDevTools`, `showCostDashboard` | All `/admin/**` pages via `admin/layout.tsx` | **canonical** |
 | `AdminPageShell` | `src/components/admin/AdminPageShell.tsx` | Page chrome: `<h1>` title, optional eyebrow, optional description, optional actions slot | `title`, `description`, `eyebrow`, `actions`, `children`, `className` | Dashboard, students, settings (chunk 1) | **canonical** |
 | `AdminSectionCard` | `src/components/admin/AdminSectionCard.tsx` | Section grouping within a page. Wraps shadcn `Card`. Title + optional description + optional actions header + content slot. | `title`, `description`, `actions`, `children`, `id`, `data-testid` | Dashboard, students, settings (chunk 1) | **canonical** |
 
@@ -326,6 +326,12 @@ Captured from Andrew smoke of `feat/recording-p1-slice3-autonotes`. **Documentat
 
 **Save notes** semantics undefined for auto-generated + regeneratable `TutorNote` rows. B4 design pass must choose before wiring (edit commit vs accept draft vs pin version, etc.). See [`v1-redesign-STATUS.md`](handoff/v1-redesign-STATUS.md) § 2026-06-07.
 
+### REQ-S3-3 — Signed-in identity indicator (shell)
+
+- **Gap (slice 3 smoke):** no on-page indication of which account is active — hard to confirm normal tutor vs admin vs impersonating vs test account.
+- **Required:** app shell / `AdminNav` (and parallel `AccountPageShell` nav where applicable) always shows current signed-in identity; clear badge when impersonating (`ImpersonationBanner` complements but does not replace) or on test accounts.
+- **Pass:** shell / nav redesign (B3–B6), not recording slice 3.
+
 ---
 
 ## §4. "Owned by Other In-Flight Work — Do Not Edit"
@@ -367,3 +373,4 @@ The following files are locked to recording slice 3 or live-session infrastructu
 
 - **2026-06-07:** Initial doc. Component-pass chunk 1 (Settings/operator reskin). Authored by Sonnet subagent on branch `v1-component-spine`.
 - **2026-06-07:** Slice 3 smoke requirements **REQ-S3-1/2/2a** added (§3.1, Notes inventory, Chunk 3 row). Branch `docs/v1-redesign-notes-ux-reqs`.
+- **2026-06-07:** **REQ-S3-3** signed-in identity indicator (§3.1, `AdminNav` inventory). Branch `docs/v1-redesign-notes-ux-reqs`.
