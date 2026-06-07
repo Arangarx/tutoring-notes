@@ -116,6 +116,36 @@ Auto-notes are now **server-generated** (`TutorNote` row, map-reduce pipeline) a
 
 ---
 
+## 2026-06-07 checkpoints (Component Chunk 1 smoke + review protocol)
+
+### Component-pass review protocol (LOCKED — Andrew 2026-06-07)
+
+Governing process for the V1 component/visual redesign. Detail also in [`docs/V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) §3 (Review protocol).
+
+| Decision | Summary |
+|---|---|
+| **Tracked chunks** | Component pass ships in **tracked chunks** for clean, de-duplicated architecture — see chunk tracker in [`docs/V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) §3. |
+| **Foundation chunks — merge bar** | **Functional correctness only** (renders cleanly, no regressions). Foundation chunks are **NOT** visually smoked/approved by Andrew chunk-by-chunk — a foundation reskin has no meaningful standalone visual target. |
+| **Cohesive visual review** | **One** end-to-end visual review happens later, when enough chunks form a **complete page/flow** worth judging holistically. |
+| **No high-fi page mock** | Andrew explicitly chose this over "produce a high-fidelity page-design target first." There is **no** separate approved high-fi mock of actual pages. The cohesive review is judged against the approved **palette/font mock** ([`docs/brand-previews/palette-mocks-FINAL-mynka-blue.html`](../brand-previews/palette-mocks-FINAL-mynka-blue.html) / [`docs/MYNK-BRAND-PHASE-2-DECISIONS.md`](../MYNK-BRAND-PHASE-2-DECISIONS.md)) **plus accumulated UX feedback** (Chunk 1 list below). |
+| **Agent implication** | Do **NOT** hand Andrew a foundation chunk as "smoke + approve the look." Hand it as **"functional foundation — merge on no-regression"** and accumulate visual feedback for the cohesive review. |
+
+### Component Chunk 1 smoke feedback (inputs for cohesive visual review)
+
+**Source:** Andrew functional smoke of Component Chunk 1 (Settings + operator surfaces) on `v1-redesign` preview, 2026-06-07. **Not** chunk-by-chunk visual approval — per review protocol above. Full list: [`docs/V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) §2.10.
+
+| # | Feedback | Notes |
+|---|---|---|
+| 1 | **Settings nav pattern** | Evaluate a **left settings sub-nav** (GitHub/Stripe/Linear pattern) vs the current chevron-row list, for a settings area at this scale. Pairs with the sidebar shell coming in Chunk 2. |
+| 2 | **Sub-page density/hierarchy** | Settings sub-pages feel cluttered and hard to parse — everything on the same justification, no indentation/visual hierarchy. Reskin only swapped components; **layout/hierarchy/density were not redesigned** and need work in the cohesive pass. |
+| 3 | **Email OAuth notice placement** | The "handled through mortensenapps.com" text should sit **above** the Connect-Gmail button (or inside it) — users click the button before reading text beneath it. |
+| 4 | **Color usage** | Current reskin is very **monochrome** vs the mock's color variety; cohesive pass should bring in the mock's color usage. |
+| 5 | **Warning color shade** | Reads as **yellow rather than amber** — tune the shade (token fix works; it's not black). |
+| 6 | **Input validation-state coloring (OPEN)** | Andrew expected possible **input validation-state coloring / password-strength indicator** (red/yellow/green bar); never built. Record as open question — **do we want validation-state coloring on inputs?** — not a bug. Low priority. |
+| — | **Runbook correction** | There is **no** admin "outbox" page — that smoke runbook line was an error. Chunk tracker corrected in component library. |
+
+---
+
 ## Decisions ledger (LOCKED)
 
 - **Brand:** Mynka Blue palette (light done in tokens.css; dark = legacy purple, to migrate) + Fraunces V4/V2 + Inter 400 + JetBrains Mono fonts (never implemented). Light `--accent-on`=#15203A (Option A).
@@ -151,6 +181,7 @@ Auto-notes are now **server-generated** (`TutorNote` row, map-reduce pipeline) a
 - **Identity Phase-2 auth/session (RATIFIED 2026-06-01, Andrew):** **Two realms + child mechanism** *(AH-4 PIN policy superseded by IAC-10 — 2026-06-02)* — **(1) Operator** = tutor + admin + superadmin on **existing NextAuth** (admin = role, not third realm); **(2) AccountHolder** = parents/adult-self on **`mynk_ah_session` + `AccountHolderSession`**, outside NextAuth; **child** = PIN device sessions under AccountHolder. **Hard constraint:** shared auth **primitives** (hash, TOTP, backup codes, rate-limit, DB-session pattern) in common modules; **thin per-realm adapters only** — P2a acceptance. **AH-1..AH-7 ratified** (separate realm, DB-backed AH session, `AH_TOTP_ENCRYPTION_KEY`, PIN soft-lockout never hard-lock, in-place device renewal, 30-day rolling AH session, serial merge `identity-p2-schema` → `identity-p2-ownership-guard` → P2a). **Impersonation:** SEC-1 admin→tutor **unchanged** (Operator realm only); **cross-realm admin→parent/child DEFERRED**. **Provisioning guardrail clarified:** no self-serve into tutor/admin; **parent self-signup permitted**. Detail: [`identity-phase2-auth-session-design-2026-06-01.md`](identity-phase2-auth-session-design-2026-06-01.md) §0 + [RATIFIED + AMENDED](identity-phase2-auth-session-design-2026-06-01.md#ratified--amended-andrew-2026-06-01).
 - **Access control:** note/recording/transcript = {tutor, child, parent} only; replaces anyone-with-link sharing. Session has a participant SET (1 now, N later — design for, don't build N's multi-consent now).
 - **Billing:** `billedDurationMin` frozen-at-close + immutable (RELIABILITY-REDESIGN Surface 7); rate/amount deferred.
+- **Component-pass review protocol (LOCKED 2026-06-07, Andrew):** tracked chunks; **foundation chunks merge on functional correctness only** (no chunk-by-chunk visual approval); **one cohesive visual review** when a complete page/flow exists; judged against palette/font mock + accumulated UX feedback — **no** separate high-fi page mock. Agents: hand foundation chunks as "functional, merge on no-regression," not "approve the look." Full protocol: § 2026-06-07 checkpoints (Component Chunk 1 smoke + review protocol); [`docs/V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) §3 Review protocol.
 - **Q-1..Q-10** all ratified 2026-05-31 (see component doc [`docs/handoff/v1-component-redesign-design-2026-05-31.md`](v1-component-redesign-design-2026-05-31.md) §8).
 - **Identity/access schema (LOCKED, design landed 2026-05-31):** `AccountHolder` (with `isSelfLearner` for adult collapse), `LearnerProfile`, `LearnerCredential` + `LearnerDeviceSession` (username+PIN + device-bound sticky sessions), `ConsentRecord` (parent ceiling, versioned) ∩ `ConsentRestriction` (child narrowing) → `SessionConsentSnapshot` frozen at session start (`onDelete: Restrict`, no UPDATE endpoint), `StudentClaimInvite`, `SessionParticipant`.
 - **Identity/access assertions (LOCKED):** `assertOwnsLearnerProfile`, `assertIsSessionParticipant`, `assertEffectiveConsent`.
@@ -380,6 +411,10 @@ Folded from 5-axis review in [`session-lifecycle-consent-design-2026-05-31.md`](
 - **REQ-S3-2a (OPEN)** — define **Save notes** semantics for server-generated/regeneratable `TutorNote` content before B4 implementation.
 - **REQ-S3-3** — always-visible signed-in identity in app shell/nav (+ impersonation / test-account badge). See § 2026-06-07 checkpoints.
 - **REQ-S3-4** — canonical notes schema: no field drops; Plan mandatory; homework→Plan fold per Sarah pilot feedback only; reconcile slice-3 map-reduce to legacy fields in B4. See § 2026-06-07 checkpoints.
+
+### V1 redesign — Component Chunk 1 smoke feedback (2026-06-07)
+
+Inputs for the **cohesive visual review** (not chunk-by-chunk approval — see review protocol in § 2026-06-07 checkpoints). Full list: [`docs/V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) §2.10 — settings sub-nav pattern, sub-page hierarchy/density, OAuth notice placement, color variety vs mock, warning amber shade, open question on input validation-state coloring.
 
 ---
 

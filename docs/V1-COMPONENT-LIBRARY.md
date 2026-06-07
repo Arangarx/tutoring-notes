@@ -217,7 +217,7 @@ Andrew's approved mock (Surface 2 — dashboard) demonstrates the "variety of us
 | Data rows within a list/panel | **No** — row styling only | `border-b border-border` row with hover background, inside a card container |
 | Pending-action / AI signal | **Partial** — strip, not card | `accent-soft` tinted strip with `border-l-4 border-accent` (`.dash-pending-summaries` mock pattern) |
 | Primary action on landing/dashboard | **Yes** | `AdminSectionCard` or custom card for each distinct action unit |
-| Operator/debug pages (Outbox, Feedback, Waitlist) | **Minimal** | One `AdminPageShell` + one `AdminSectionCard` for the list; individual items = row styling |
+| Operator/debug pages (Feedback, Waitlist) | **Minimal** | One `AdminPageShell` + one `AdminSectionCard` for the list; individual items = row styling |
 
 **Current card usage audit (as of chunk 1):**
 - Landing/marketing page (Phase D): cards for feature grid — **appropriate** per mock
@@ -288,9 +288,33 @@ Error state: set `aria-invalid="true"` on the `Input`; display error text below 
 - Never use legacy aliases (`--bg`, `--panel`, `--text`) in new code
 - Coral accent (`bg-accent text-accent-on`) for primary CTAs only
 
+### 2.10 Component Chunk 1 smoke feedback (2026-06-07)
+
+**Source:** Andrew functional smoke of Component Chunk 1 (Settings + operator surfaces), 2026-06-07. **Not** chunk-by-chunk visual approval — inputs for the **cohesive visual review** per §3 Review protocol. Pointer in [`docs/handoff/v1-redesign-STATUS.md`](handoff/v1-redesign-STATUS.md) § 2026-06-07 checkpoints.
+
+| # | Feedback | Pass / priority |
+|---|---|---|
+| 1 | **Settings nav pattern** — evaluate a **left settings sub-nav** (GitHub/Stripe/Linear pattern) vs the current chevron-row list, for a settings area at this scale. Pairs with the sidebar shell coming in Chunk 2. | Cohesive pass + Chunk 2 shell |
+| 2 | **Sub-page density/hierarchy** — settings sub-pages feel cluttered and hard to parse; everything on the same justification, no indentation/visual hierarchy. Reskin only swapped components; **layout/hierarchy/density were not redesigned** and need work in the cohesive pass. | Cohesive pass |
+| 3 | **Email OAuth notice placement** — the "handled through mortensenapps.com" text should sit **above** the Connect-Gmail button (or inside it); users click the button before reading text beneath it. | Cohesive pass (legal binding — see v1-redesign-STATUS Auth-via-mortensenapps.com notice) |
+| 4 | **Color usage** — current reskin is very **monochrome** vs the mock's color variety; cohesive pass should bring in the mock's color usage. | Cohesive pass |
+| 5 | **Warning color shade** — reads as **yellow rather than amber**; tune the shade (token fix works; it's not black). | Cohesive pass / token tweak |
+| 6 | **Input validation-state coloring (OPEN)** — Andrew expected possible **input validation-state coloring / password-strength indicator** (red/yellow/green bar); never built. **Open question:** do we want validation-state coloring on inputs? **Not a bug.** | Low priority — decide in cohesive pass |
+| — | **Runbook correction** — there is **no** admin "outbox" page; that smoke runbook line was an error. Chunk 1 surfaces corrected in §3 tracker. | N/A |
+
 ---
 
 ## §3. Component-Pass Chunk Tracker
+
+### Review protocol (LOCKED — Andrew 2026-06-07)
+
+- **Tracked chunks** — component pass ships in chunks (this tracker) for clean, de-duplicated architecture.
+- **Foundation chunks** — merge on **functional correctness only** (renders cleanly, no regressions). **Not** visually smoked/approved chunk-by-chunk; a foundation reskin has no meaningful standalone visual target.
+- **Cohesive visual review** — **one** end-to-end review when enough chunks form a **complete page/flow** worth judging holistically.
+- **No high-fi page mock** — Andrew chose this over "high-fidelity page-design target first." Cohesive review is judged against the approved **palette/font mock** ([`docs/brand-previews/palette-mocks-FINAL-mynka-blue.html`](brand-previews/palette-mocks-FINAL-mynka-blue.html) / [`docs/MYNK-BRAND-PHASE-2-DECISIONS.md`](MYNK-BRAND-PHASE-2-DECISIONS.md)) **plus accumulated UX feedback** (§2.10 and future chunk smokes).
+- **Agent implication** — do **not** hand Andrew a foundation chunk as "smoke + approve the look"; hand it as **"functional foundation — merge on no-regression"** and accumulate visual feedback for the cohesive review.
+
+Full decision record: [`docs/handoff/v1-redesign-STATUS.md`](handoff/v1-redesign-STATUS.md) § 2026-06-07 checkpoints (Component Chunk 1 smoke + review protocol).
 
 | Chunk | Phase | Surface(s) | Status | Branch | Dedup-checked |
 |---|---|---|---|---|---|
@@ -298,7 +322,7 @@ Error state: set `aria-invalid="true"` on the `Input`; display error text below 
 | B1 — Auth surfaces | B1 | `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/setup` | SHIPPED (on `v1-redesign`) | `v1-redesign` @ `b798494` | ✅ |
 | B2 — Dashboard + Students | B2 | `/admin`, `/admin/students`, `/admin/students/[id]` | SHIPPED (on `v1-redesign` @ `0424206`) | `component-b2-dashboard-students` → merged | ✅ |
 | D — Landing + Features | D | `/` (landing), `/features` | FIRST CUT (on `feature/phase-d-landing-about`, not merged) | `feature/phase-d-landing-about` @ `37d8178` | ✅ |
-| **Chunk 1 — Settings + Operator** | B | `/admin/settings`, `/admin/settings/profile`, `/admin/settings/email`, `/admin/settings/2fa`, `/admin/outbox`, `/admin/feedback`, `/admin/waitlist` | **IN PROGRESS** | `v1-component-spine` | ✅ |
+| **Chunk 1 — Settings + Operator** | B | `/admin/settings`, `/admin/settings/profile`, `/admin/settings/email`, `/admin/settings/2fa`, `/admin/feedback`, `/admin/waitlist` | **FUNCTIONALLY SMOKED** (2026-06-07; visual feedback → §2.10) | `v1-component-spine` | ✅ |
 | Chunk 2 — Session list / billing log | B3 | `/sessions` (new route) | PENDING | — | — |
 | Chunk 3 — Session detail / replay | B4 | `/sessions/[id]` | PENDING — **REQ-S3-1/2/4** (§3.1) | — | — |
 | Chunk 4 — Live workspace + solo mode | B5 | `/sessions/[id]/workspace` | PENDING | — | — |
@@ -382,3 +406,4 @@ The following files are locked to recording slice 3 or live-session infrastructu
 - **2026-06-07:** Slice 3 smoke requirements **REQ-S3-1/2/2a** added (§3.1, Notes inventory, Chunk 3 row). Branch `docs/v1-redesign-notes-ux-reqs`.
 - **2026-06-07:** **REQ-S3-3** signed-in identity indicator (§3.1, `AdminNav` inventory). Branch `docs/v1-redesign-notes-ux-reqs`.
 - **2026-06-07:** **REQ-S3-4** canonical notes schema — no field drops, Plan mandatory, homework→Plan per Sarah pilot feedback (§3.1, Notes inventory). Branch `docs/v1-redesign-notes-ux-reqs`.
+- **2026-06-07:** Component-pass **review protocol** (§3) + **Chunk 1 smoke feedback** (§2.10); Chunk 1 tracker row updated (functional smoke; removed nonexistent `/admin/outbox`). Branch `docs/v1-redesign-notes-ux-reqs`.
