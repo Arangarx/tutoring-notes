@@ -51,13 +51,17 @@ jest.mock("@/lib/observability/cost-events", () => ({
 
 jest.mock("@/lib/transcribe-ffmpeg", () => ({
   splitAudioIntoWhisperParts: jest.fn(),
+  probeAudioBufferDurationSeconds: jest.fn(),
 }));
 
-import { splitAudioIntoWhisperParts } from "@/lib/transcribe-ffmpeg";
+import { probeAudioBufferDurationSeconds, splitAudioIntoWhisperParts } from "@/lib/transcribe-ffmpeg";
 import { transcribeChunk, TRANSCRIBE_PRIMARY_MODEL, TRANSCRIBE_FALLBACK_MODEL } from "@/lib/recording/transcribe-chunk";
 import { WHISPER_MAX_BYTES } from "@/lib/transcribe-constants";
 
 const mockSplit = splitAudioIntoWhisperParts as jest.MockedFunction<typeof splitAudioIntoWhisperParts>;
+const mockProbe = probeAudioBufferDurationSeconds as jest.MockedFunction<
+  typeof probeAudioBufferDurationSeconds
+>;
 
 const SMALL_BUFFER = Buffer.alloc(1024, 0xaa);
 const SESSION_ID = "test-session-123";
@@ -70,15 +74,17 @@ describe("transcribeChunk", () => {
     mockSplit.mockImplementation(async (buffer, filename, mimeType) => [
       { buffer, filename, mimeType: mimeType.split(";")[0].trim() },
     ]);
+    // Default: ffmpeg probe supplies duration (primary json path omits API duration).
+    mockProbe.mockResolvedValue(30.5);
   });
 
   // -------------------------------------------------------------------------
   // 1. Happy path — primary model
   // -------------------------------------------------------------------------
   test("happy path: returns transcript and durationMs from primary model", async () => {
+    mockProbe.mockResolvedValueOnce(30.5);
     mockTranscriptionsCreate.mockResolvedValue({
       text: "  Reviewed quadratic formula today.  ",
-      duration: 30.5,
     });
 
     const result = await transcribeChunk({
@@ -96,7 +102,10 @@ describe("transcribeChunk", () => {
     }
     expect(mockTranscriptionsCreate).toHaveBeenCalledTimes(1);
     expect(mockTranscriptionsCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ model: TRANSCRIBE_PRIMARY_MODEL })
+      expect.objectContaining({
+        model: TRANSCRIBE_PRIMARY_MODEL,
+        response_format: "json",
+      })
     );
   });
 
@@ -104,9 +113,10 @@ describe("transcribeChunk", () => {
   // 2. Fallback path — quality guard trips
   // -------------------------------------------------------------------------
   test("fallback: quality guard trips on primary result → whisper-1 used", async () => {
+    mockProbe.mockResolvedValueOnce(1.5);
     mockTranscriptionsCreate
       // Primary call returns a hallucination ("thanks for watching" pattern).
-      .mockResolvedValueOnce({ text: "Thanks for watching!", duration: 1.5 })
+      .mockResolvedValueOnce({ text: "Thanks for watching!" })
       // Fallback (whisper-1) returns real content.
       .mockResolvedValueOnce({ text: "Student struggled with factoring.", duration: 45 });
 
@@ -126,8 +136,14 @@ describe("transcribeChunk", () => {
     // Two calls: primary + fallback.
     expect(mockTranscriptionsCreate).toHaveBeenCalledTimes(2);
     const calls = mockTranscriptionsCreate.mock.calls;
-    expect(calls[0][0]).toMatchObject({ model: TRANSCRIBE_PRIMARY_MODEL });
-    expect(calls[1][0]).toMatchObject({ model: TRANSCRIBE_FALLBACK_MODEL });
+    expect(calls[0][0]).toMatchObject({
+      model: TRANSCRIBE_PRIMARY_MODEL,
+      response_format: "json",
+    });
+    expect(calls[1][0]).toMatchObject({
+      model: TRANSCRIBE_FALLBACK_MODEL,
+      response_format: "verbose_json",
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -138,9 +154,10 @@ describe("transcribeChunk", () => {
       { buffer: Buffer.alloc(8, 0x01), filename: "chunk-part1.webm", mimeType: "audio/webm" },
       { buffer: Buffer.alloc(8, 0x02), filename: "chunk-part2.webm", mimeType: "audio/webm" },
     ]);
+    mockProbe.mockResolvedValueOnce(15).mockResolvedValueOnce(20);
     mockTranscriptionsCreate
-      .mockResolvedValueOnce({ text: "Part one content.", duration: 15 })
-      .mockResolvedValueOnce({ text: "Part two content.", duration: 20 });
+      .mockResolvedValueOnce({ text: "Part one content." })
+      .mockResolvedValueOnce({ text: "Part two content." });
 
     const bigBuffer = Buffer.alloc(WHISPER_MAX_BYTES + 1, 0);
     const result = await transcribeChunk({
@@ -200,9 +217,10 @@ describe("transcribeChunk", () => {
   test(
     "retries on RateLimitError then succeeds",
     async () => {
+      mockProbe.mockResolvedValueOnce(10);
       mockTranscriptionsCreate
         .mockRejectedValueOnce(new RateLimitError(429, { message: "limit" }, "limit", rateLimitHeaders))
-        .mockResolvedValueOnce({ text: "Eventually works.", duration: 10 });
+        .mockResolvedValueOnce({ text: "Eventually works." });
 
       const result = await transcribeChunk({
         buffer: SMALL_BUFFER,
@@ -269,7 +287,8 @@ describe("transcribeChunk", () => {
   // -------------------------------------------------------------------------
   // 8. Null durationMs when API omits duration
   // -------------------------------------------------------------------------
-  test("returns null durationMs when API omits duration field", async () => {
+  test("returns null durationMs when API omits duration and ffmpeg probe fails", async () => {
+    mockProbe.mockResolvedValueOnce(null);
     mockTranscriptionsCreate.mockResolvedValue({ text: "Hello." });
 
     const result = await transcribeChunk({
@@ -283,5 +302,26 @@ describe("transcribeChunk", () => {
     if (!("error" in result)) {
       expect(result.durationMs).toBeNull();
     }
+  });
+
+  // -------------------------------------------------------------------------
+  // 9. response_format per model
+  // -------------------------------------------------------------------------
+  test("primary model uses json response_format; whisper-1 fallback keeps verbose_json", async () => {
+    mockProbe.mockResolvedValueOnce(2);
+    mockTranscriptionsCreate
+      .mockResolvedValueOnce({ text: "Thanks for watching!" })
+      .mockResolvedValueOnce({ text: "Real tutoring content.", duration: 12 });
+
+    await transcribeChunk({
+      buffer: SMALL_BUFFER,
+      filename: "chunk.webm",
+      mimeType: "audio/webm",
+      sessionId: SESSION_ID,
+    });
+
+    expect(mockTranscriptionsCreate).toHaveBeenCalledTimes(2);
+    expect(mockTranscriptionsCreate.mock.calls[0][0].response_format).toBe("json");
+    expect(mockTranscriptionsCreate.mock.calls[1][0].response_format).toBe("verbose_json");
   });
 });

@@ -3,7 +3,11 @@ import "server-only";
 import OpenAI, { APIError, RateLimitError, toFile } from "openai";
 import { env } from "@/lib/env";
 import { WHISPER_MAX_BYTES } from "@/lib/transcribe-constants";
-import { splitAudioIntoWhisperParts, type WhisperAudioPart } from "@/lib/transcribe-ffmpeg";
+import {
+  probeAudioBufferDurationSeconds,
+  splitAudioIntoWhisperParts,
+  type WhisperAudioPart,
+} from "@/lib/transcribe-ffmpeg";
 import { looksLikeSilenceHallucination } from "@/lib/whisper-guardrails";
 import { estimateCostUsd, logCostEvent } from "@/lib/observability/cost-events";
 
@@ -64,6 +68,11 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** gpt-4o-mini-transcribe supports json/text only; whisper-1 supports verbose_json. */
+function responseFormatForModel(model: string): "json" | "verbose_json" {
+  return model === TRANSCRIBE_FALLBACK_MODEL ? "verbose_json" : "json";
+}
+
 function isRetryableError(err: unknown): boolean {
   if (err instanceof RateLimitError) return true;
   if (err instanceof APIError && typeof err.status === "number") {
@@ -81,7 +90,9 @@ async function callTranscribeApi(
   part: WhisperAudioPart,
   model: string,
   sessionId: string,
-  partLabel: string
+  partLabel: string,
+  /** ffmpeg-probed duration when the API omits it (primary json path). */
+  probedDurationSeconds: number | null = null
 ): Promise<{ transcript: string; durationSeconds: number | null; responseModel: string }> {
   const client = new OpenAI({ apiKey: env.OPENAI_API_KEY! });
 
@@ -91,7 +102,7 @@ async function callTranscribeApi(
       const response = await client.audio.transcriptions.create({
         model,
         file,
-        response_format: "verbose_json",
+        response_format: responseFormatForModel(model),
       });
 
       const transcript =
@@ -116,19 +127,21 @@ async function callTranscribeApi(
           ? (response as { model: string }).model.trim()
           : model;
 
+      const durationForCost = durationRaw ?? probedDurationSeconds;
+
       // Log cost event — never throws (best-effort).
       const est =
-        durationRaw != null
+        durationForCost != null
           ? estimateCostUsd({
               kind: "WHISPER_TRANSCRIPTION",
               model: responseModel,
-              audioSeconds: durationRaw,
+              audioSeconds: durationForCost,
             })
           : undefined;
       await logCostEvent({
         kind: "WHISPER_TRANSCRIPTION",
         model: responseModel,
-        audioSeconds: durationRaw ?? undefined,
+        audioSeconds: durationForCost ?? undefined,
         estimatedCostUsd: est,
         whiteboardSessionId: sessionId,
         sessionId,
@@ -140,11 +153,13 @@ async function callTranscribeApi(
         },
       });
 
+      const durationSeconds = durationRaw ?? probedDurationSeconds;
+
       console.log(
-        `[txc] wbsid=${sessionId} action=api_ok model=${model} part=${partLabel} bytes=${part.buffer.byteLength} durationSec=${durationRaw ?? "n/a"}`
+        `[txc] wbsid=${sessionId} action=api_ok model=${model} part=${partLabel} bytes=${part.buffer.byteLength} durationSec=${durationSeconds ?? "n/a"}`
       );
 
-      return { transcript, durationSeconds: durationRaw, responseModel };
+      return { transcript, durationSeconds, responseModel };
     } catch (err: unknown) {
       const retryable = isRetryableError(err);
       const msg = err instanceof Error ? err.message : String(err);
@@ -225,9 +240,26 @@ export async function transcribeChunk(
     let durationSeconds: number | null;
     let modelUsed = TRANSCRIBE_PRIMARY_MODEL;
 
+    let probedDurationSeconds: number | null = null;
+    try {
+      probedDurationSeconds = await probeAudioBufferDurationSeconds(
+        part.buffer,
+        part.filename,
+        part.mimeType
+      );
+    } catch {
+      probedDurationSeconds = null;
+    }
+
     try {
       // Primary pass — gpt-4o-mini-transcribe
-      const primary = await callTranscribeApi(part, TRANSCRIBE_PRIMARY_MODEL, sessionId, partLabel);
+      const primary = await callTranscribeApi(
+        part,
+        TRANSCRIBE_PRIMARY_MODEL,
+        sessionId,
+        partLabel,
+        probedDurationSeconds
+      );
       transcript = primary.transcript;
       durationSeconds = primary.durationSeconds;
 
@@ -236,7 +268,13 @@ export async function transcribeChunk(
         console.log(
           `[txc] wbsid=${sessionId} action=quality_guard_trip part=${partLabel} primary_model=${TRANSCRIBE_PRIMARY_MODEL} fallback=${TRANSCRIBE_FALLBACK_MODEL}`
         );
-        const fallback = await callTranscribeApi(part, TRANSCRIBE_FALLBACK_MODEL, sessionId, `${partLabel}-fallback`);
+        const fallback = await callTranscribeApi(
+          part,
+          TRANSCRIBE_FALLBACK_MODEL,
+          sessionId,
+          `${partLabel}-fallback`,
+          probedDurationSeconds
+        );
         transcript = fallback.transcript;
         durationSeconds = fallback.durationSeconds;
         modelUsed = TRANSCRIBE_FALLBACK_MODEL;
