@@ -568,6 +568,26 @@ Items from the 2026-06-02 brand review (Andrew + wife) on landing + Features pag
 
 ---
 
+## Recording re-architecture — Phase 1 follow-ups
+
+Cross-ref: [`docs/handoff/recording-rearchitecture-design-2026-06-05.md`](handoff/recording-rearchitecture-design-2026-06-05.md). Slice 3 (auto-notes / notes-bridge) ships on `feat/recording-p1-slice3-autonotes`.
+
+### Slice-3 notes-bridge — deferred review findings (2026-06-07)
+
+**Source:** adversarial review of slice-3 Save-bridge ([`acd41cf`](https://github.com/Arangarx/tutoring-notes/commit/acd41cf)). **Already fixed** in [`770f370`](https://github.com/Arangarx/tutoring-notes/commit/770f370) on `feat/recording-p1-slice3-autonotes` — do not reopen: **B1** (BLOCKER), **S1**, **S2** (hardening).
+
+- **S3 [FOLLOW-UP — reliability, medium, migration-bearing]:** Notes reduce has no job-in-flight lock. The immediate `after()` fire and the cron sweep (`runNotesSweep` in `src/lib/recording/`) can both run `processNotesReduceJob` for the same session concurrently — both read `WhiteboardSession.noteId = null` before either writes it back, creating a **second orphaned DRAFT `SessionNote`**. The sweep only filters `status in (pending, generating)` with a 60s staleness threshold; that is not a true lock. **Fix options:** (a) unique constraint on `WhiteboardSession.noteId` (+ additive migration), or (b) `SELECT … FOR UPDATE` inside a transaction around create+link. **Slot into the upcoming migration wave** — migration-bearing; not a hotfix without a migration pass.
+
+- **N1 [minor]:** Dashboard note-count includes DRAFT auto-notes → inflated count visible to the tutor.
+
+- **N2 [minor]:** No downgrade path if a SENT note needs to revert to READY.
+
+- **N3 [minor]:** `mark-seen` endpoint accepts a DRAFT-status note (should reject or no-op).
+
+- **N4 [minor]:** `regenerateNotesAction` update path lacks a cross-student ownership check (create path has `assertOwnsStudent`; verify and tighten the update path).
+
+---
+
 ## Identity / access — V1 redesign
 
 Items tied to the identity/access/consent epic ([`docs/handoff/v1-redesign-STATUS.md`](handoff/v1-redesign-STATUS.md), IAC ledger in [`docs/handoff/identity-phase2-auth-session-design-2026-06-01.md`](handoff/identity-phase2-auth-session-design-2026-06-01.md)).
