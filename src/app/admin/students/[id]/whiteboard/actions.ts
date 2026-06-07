@@ -19,6 +19,7 @@ import {
 import { looksLikeSilenceHallucination } from "@/lib/whisper-guardrails";
 import { parseDateOnlyInput } from "@/lib/date-only";
 import { revalidateStudentSharePages } from "@/lib/revalidateStudentSharePages";
+import { enqueueChunkTranscribe } from "@/lib/recording/chunk-transcribe-enqueue";
 
 /**
  * Whiteboard session lifecycle server actions.
@@ -1212,6 +1213,69 @@ export async function registerWhiteboardSessionAudioSegmentAction(
       debugId: rid,
     };
   }
+}
+
+// -------------------------------------------------------------------
+// Recording re-arch Phase 1, Slice 2b — producer wedge
+// -------------------------------------------------------------------
+
+/**
+ * Server-side entry point for the slice 2b producer wedge.
+ *
+ * Called by the workspace client AFTER a segment blob is confirmed
+ * uploaded (outbox.enqueue succeeded). Validates session ownership
+ * and blob host, then hands off to the slice 2a `enqueueChunkTranscribe`
+ * helper — which either publishes to Vercel Queues (when provisioned)
+ * or invokes the worker directly via the queue-stub seam.
+ *
+ * Trust posture:
+ *   - `assertOwnsWhiteboardSession` re-checks that the logged-in
+ *     tutor owns this session before touching any transcription infra.
+ *   - `chunkBlobUrl` is validated against `ALLOWED_BLOB_HOST_RE`
+ *     (the same regex used by `endWhiteboardSession` and
+ *     `registerWhiteboardSessionAudioSegmentAction`) so a hand-rolled
+ *     payload cannot inject an attacker-controlled URL into the
+ *     transcription pipeline.
+ *
+ * This action THROWS on auth/validation failures (the client wraps
+ * the call in a fire-and-forget so the exception is swallowed on
+ * the upload-confirm path — it never disrupts recording or upload).
+ * The `enqueueChunkTranscribe` call itself never throws (it logs +
+ * swallows failures to preserve the non-blocking guarantee).
+ *
+ * Log prefix: [txc]  Mirrors the worker.
+ */
+export async function enqueueChunkTranscriptionAction(
+  whiteboardSessionId: string,
+  payload: { chunkBlobUrl: string; recordingTimeOffsetMs: number }
+): Promise<void> {
+  const { chunkBlobUrl, recordingTimeOffsetMs } = payload;
+
+  // 1. Ownership check — multi-tenant gate, must be first.
+  await assertOwnsWhiteboardSession(whiteboardSessionId);
+
+  // 2. Blob host validation — reuse the same regex used by endWhiteboardSession.
+  if (
+    typeof chunkBlobUrl !== "string" ||
+    !/^https?:\/\//i.test(chunkBlobUrl) ||
+    !ALLOWED_BLOB_HOST_RE.test(chunkBlobUrl)
+  ) {
+    console.warn(
+      `[txc] wbsid=${whiteboardSessionId} action=enqueue_action_rejected reason=invalid_blob_host chunkBlobUrl=${chunkBlobUrl}`
+    );
+    throw new Error("Invalid chunk blob URL: host not in the allowed Blob namespace.");
+  }
+
+  console.log(
+    `[txc] wbsid=${whiteboardSessionId} action=enqueue_action_start offsetMs=${recordingTimeOffsetMs} chunkBlobUrlSuffix=${chunkBlobUrl.slice(-24)}`
+  );
+
+  // 3. Enqueue — never throws (errors are logged and swallowed by enqueueChunkTranscribe).
+  await enqueueChunkTranscribe({
+    sessionId: whiteboardSessionId,
+    chunkBlobUrl,
+    recordingTimeOffsetMs,
+  });
 }
 
 /**

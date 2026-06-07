@@ -85,6 +85,7 @@ import { resolveParticipantLabel } from "@/lib/whiteboard/participant-label";
 import { getOrCreateLocalPeerId } from "@/lib/whiteboard/local-peer-id";
 import {
   endWhiteboardSession,
+  enqueueChunkTranscriptionAction,
   issueJoinToken,
   revokeJoinTokensForSession,
 } from "@/app/admin/students/[id]/whiteboard/actions";
@@ -822,6 +823,15 @@ export function WhiteboardWorkspaceClient({
   const [audioDraftRecoveryBusy, setAudioDraftRecoveryBusy] = useState(false);
 
   /**
+   * Wall-clock ms when the first audio segment was handed off to the outbox.
+   * Used to compute a Phase 1 approximate recording-time offset for the
+   * slice 2b transcription producer.
+   *
+   * // Phase 1 approx — D3/D4 monotonic clock supersedes
+   */
+  const firstSegmentWallClockMsRef = useRef<number | null>(null);
+
+  /**
    * Hand `useAudioRecorder` a callback that drops every finished
    * segment into the IndexedDB outbox. From Commit 4 on, the
    * workspace doesn't need to track in-flight Promises here — the
@@ -874,6 +884,35 @@ export function WhiteboardWorkspaceClient({
             clearErr
           );
         }
+
+        // Slice 2b — producer wedge: trigger the backend transcription
+        // pipeline now that the segment blob is confirmed uploaded.
+        //
+        // MUST be fire-and-forget: a transcription-enqueue failure must
+        // never block or disrupt the recording/upload UX.
+        //
+        // Offset approximation (Phase 1 approx — D3/D4 monotonic clock supersedes):
+        // We track the wall-clock ms of the first segment and derive
+        // subsequent offsets as delta from that anchor. This is approximate
+        // because wall-clock advances during pauses (D4 collapses them);
+        // the worker's derived-from-durationMs fallback is equivalent quality.
+        const nowMs = Date.now();
+        if (firstSegmentWallClockMsRef.current === null) {
+          firstSegmentWallClockMsRef.current = nowMs;
+        }
+        // Phase 1 approx — D3/D4 monotonic clock supersedes
+        const recordingTimeOffsetMs = nowMs - firstSegmentWallClockMsRef.current;
+        Promise.resolve(
+          enqueueChunkTranscriptionAction(whiteboardSessionId, {
+            chunkBlobUrl: audioSeg.blobUrl,
+            recordingTimeOffsetMs,
+          })
+        ).catch((txcErr: unknown) => {
+          console.warn(
+            `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} txc enqueue failed (non-blocking)`,
+            txcErr
+          );
+        });
       } catch (err) {
         // Never throw — useAudioRecorder.onRecorded swallows the
         // return value; surfacing this as a banner would race with
