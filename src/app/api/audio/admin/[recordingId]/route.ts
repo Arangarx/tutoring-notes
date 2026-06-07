@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getStudentScope } from "@/lib/student-scope";
 import { streamBlobWithRangeSupport } from "@/lib/audio/proxy-stream";
+import { logBlobEgressEvent } from "@/lib/observability/cost-events";
 
 /**
  * Proxy private Vercel Blob audio for authenticated admin/tutor users.
@@ -17,6 +18,8 @@ import { streamBlobWithRangeSupport } from "@/lib/audio/proxy-stream";
  * via `streamBlobWithRangeSupport`. Without this, the whiteboard
  * replay scrubber is non-draggable on first load — see the helper
  * docs for the full background (Sarah-pilot scrubber regression).
+ *
+ * BLOB_EGRESS: logs optimistic egress cost when Content-Length is known (design §3.3.1).
  */
 export async function GET(
   req: Request,
@@ -29,14 +32,18 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // DB admin: scope by their adminUserId.
-  // Env-only admin (legacy): scope by student ownership (students with adminUserId: null).
   const recording = await db.sessionRecording.findFirst({
     where:
       scope.kind === "admin"
         ? { id: recordingId, adminUserId: scope.adminId }
         : { id: recordingId, student: { adminUserId: null } },
-    select: { blobUrl: true, mimeType: true },
+    select: {
+      blobUrl: true,
+      mimeType: true,
+      adminUserId: true,
+      studentId: true,
+      whiteboardSessionId: true,
+    },
   });
 
   if (!recording) {
@@ -51,5 +58,23 @@ export async function GET(
       ? mimeBase
       : "audio/mpeg";
 
-  return streamBlobWithRangeSupport(req, blobUrl, contentType);
+  const response = await streamBlobWithRangeSupport(req, blobUrl, contentType);
+
+  const contentLength = response.headers.get("content-length");
+  if (contentLength) {
+    const bytes = parseInt(contentLength, 10);
+    if (!Number.isNaN(bytes) && bytes > 0) {
+      void logBlobEgressEvent({
+        bytesTransferred: bytes,
+        sessionRecordingId: recordingId,
+        adminUserId: recording.adminUserId,
+        studentId: recording.studentId,
+        whiteboardSessionId: recording.whiteboardSessionId,
+        sessionId: recording.whiteboardSessionId,
+        metadata: { route: "admin-audio-proxy" },
+      });
+    }
+  }
+
+  return response;
 }

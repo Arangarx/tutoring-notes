@@ -11,7 +11,13 @@ jest.mock("@/lib/db", () => ({
 }));
 
 import { db } from "@/lib/db";
-import { logCostEvent, estimateCostUsd } from "@/lib/observability/cost-events";
+import {
+  estimateCostUsd,
+  estimateVercelComputeGbHr,
+  logBlobEgressEvent,
+  logCostEvent,
+} from "@/lib/observability/cost-events";
+import { RATE_CARD_VERSION } from "@/lib/observability/rate-card";
 
 const mockCostEventCreate = db.costEvent.create as jest.MockedFunction<
   typeof db.costEvent.create
@@ -27,6 +33,15 @@ describe("estimateCostUsd", () => {
     expect(usd).toBeCloseTo(0.006, 6);
   });
 
+  test("gpt-4o-mini-transcribe uses lower per-minute rate", () => {
+    const usd = estimateCostUsd({
+      kind: "WHISPER_TRANSCRIPTION",
+      model: "gpt-4o-mini-transcribe",
+      audioSeconds: 60,
+    });
+    expect(usd).toBeCloseTo(0.003, 6);
+  });
+
   test("gpt-4o-mini combines input + output token rates", () => {
     const usd = estimateCostUsd({
       kind: "GPT_NOTES_GENERATION",
@@ -35,6 +50,43 @@ describe("estimateCostUsd", () => {
       outputTokens: 1_000_000,
     });
     expect(usd).toBeCloseTo(0.15 + 0.6, 6);
+  });
+
+  test("BLOB_EGRESS uses bytes × egress rate", () => {
+    const oneGbBytes = 1_000_000_000;
+    const usd = estimateCostUsd({
+      kind: "BLOB_EGRESS",
+      model: "vercel-blob",
+      bytesTransferred: oneGbBytes,
+    });
+    expect(usd).toBeCloseTo(0.05, 6);
+  });
+
+  test("BLOB_STORAGE uses gbMonths × storage rate", () => {
+    const usd = estimateCostUsd({
+      kind: "BLOB_STORAGE",
+      model: "vercel-blob",
+      gbMonths: 1,
+    });
+    expect(usd).toBeCloseTo(0.023, 6);
+  });
+
+  test("VERCEL_COMPUTE uses computeGbHr × memory rate", () => {
+    const usd = estimateCostUsd({
+      kind: "VERCEL_COMPUTE",
+      model: "vercel-serverless",
+      computeGbHr: 0.5,
+    });
+    expect(usd).toBeCloseTo(0.0106, 4);
+  });
+
+  test("NEON_COMPUTE uses computeGbHr × CU rate", () => {
+    const usd = estimateCostUsd({
+      kind: "NEON_COMPUTE",
+      model: "neon-launch",
+      computeGbHr: 1,
+    });
+    expect(usd).toBeCloseTo(0.106, 6);
   });
 
   test("GPT kind accepts snapshot model ids containing gpt-4o-mini", () => {
@@ -80,6 +132,12 @@ describe("estimateCostUsd", () => {
   });
 });
 
+describe("estimateVercelComputeGbHr", () => {
+  test("90s at 512MB (0.5 GB) yields expected GB-hr", () => {
+    expect(estimateVercelComputeGbHr(90_000, 0.5)).toBeCloseTo(0.0125, 4);
+  });
+});
+
 describe("logCostEvent", () => {
   beforeEach(() => {
     mockCostEventCreate.mockReset();
@@ -91,7 +149,7 @@ describe("logCostEvent", () => {
     jest.restoreAllMocks();
   });
 
-  test("happy path writes expected Prisma payload", async () => {
+  test("happy path writes expected Prisma payload with rateCardVersion default", async () => {
     mockCostEventCreate.mockResolvedValueOnce({ id: "cev-row-1" } as never);
 
     await logCostEvent({
@@ -113,6 +171,20 @@ describe("logCostEvent", () => {
     expect(Number(arg.data.estimatedCostUsd)).toBeCloseTo(0.000001, 8);
     expect(arg.data.adminUserId).toBe("admin-1");
     expect(arg.data.studentId).toBe("stu-1");
+    expect(arg.data.rateCardVersion).toBe(RATE_CARD_VERSION);
+  });
+
+  test("auto-computes estimatedCostUsd when omitted", async () => {
+    mockCostEventCreate.mockResolvedValueOnce({ id: "cev-row-2" } as never);
+
+    await logCostEvent({
+      kind: "WHISPER_TRANSCRIPTION",
+      model: "whisper-1",
+      audioSeconds: 60,
+    });
+
+    const arg = mockCostEventCreate.mock.calls[0][0];
+    expect(Number(arg.data.estimatedCostUsd)).toBeCloseTo(0.006, 6);
   });
 
   test("does not throw when Prisma rejects", async () => {
@@ -127,5 +199,33 @@ describe("logCostEvent", () => {
     ).resolves.toBeUndefined();
 
     expect(console.error).toHaveBeenCalled();
+  });
+});
+
+describe("logBlobEgressEvent", () => {
+  beforeEach(() => {
+    mockCostEventCreate.mockReset();
+    jest.spyOn(console, "log").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test("writes BLOB_EGRESS with bytes and provenance", async () => {
+    mockCostEventCreate.mockResolvedValueOnce({ id: "cev-egress-1" } as never);
+
+    await logBlobEgressEvent({
+      bytesTransferred: 28_000_000,
+      sessionRecordingId: "rec-1",
+      adminUserId: "admin-1",
+      whiteboardSessionId: "wbs-1",
+    });
+
+    const arg = mockCostEventCreate.mock.calls[0][0];
+    expect(arg.data.kind).toBe("BLOB_EGRESS");
+    expect(arg.data.bytesTransferred).toBe(28_000_000);
+    expect(arg.data.sessionRecordingId).toBe("rec-1");
+    expect(Number(arg.data.estimatedCostUsd)).toBeGreaterThan(0);
   });
 });
