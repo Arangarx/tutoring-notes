@@ -41,6 +41,7 @@
 
 | Doc | What's in it | When to read |
 |---|---|---|
+| [docs/V1-COMPONENT-LIBRARY.md](docs/V1-COMPONENT-LIBRARY.md) | **V1 component spine.** Full inventory + dedup status of every shared component; UX rubric (card-usage convention, spacing, typography, form patterns); component-pass chunk tracker; slice-3/live-session collision-zone lock list. | **Before any UI chunk pass.** Read this to know what's canonical, what's a duplicate, and what conventions the next chunk must follow. |
 | [docs/BRAND.md](docs/BRAND.md) | Engineering-ready brand reference — Mynka Blue palette (`#1E3D54`), coral accent (`#E27D60`), cream surfaces, Fraunces/Inter/JetBrains Mono typography, voice | Before any UI or branding work |
 | [docs/MYNK-BRAND-PHASE-2-DECISIONS.md](docs/MYNK-BRAND-PHASE-2-DECISIONS.md) | Locked palette + typography + voice decisions from the 2026-05-19 PM design session | Before making design decisions or creative direction choices |
 | [docs/UX-AND-A11Y-SPEC.md](docs/UX-AND-A11Y-SPEC.md) | Conformance bar, contrast audit, Pre-flight checklist, open IA decisions | Before implementing any UX components or accessibility work |

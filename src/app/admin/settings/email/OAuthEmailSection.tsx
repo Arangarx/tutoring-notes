@@ -1,7 +1,7 @@
 "use client";
 
 import { AuthMortensenNotice } from "@/components/auth/AuthMortensenNotice";
-
+import { Button } from "@/components/ui/button";
 import { disconnectGmail } from "./actions";
 
 export default function OAuthEmailSection({
@@ -19,76 +19,88 @@ export default function OAuthEmailSection({
   connectSuccess: string | undefined;
 }) {
   return (
-    <div style={{ marginBottom: 24 }}>
-      <h3 style={{ marginTop: 0 }}>Send with your account</h3>
-      <p className="muted" style={{ marginTop: 0 }}>
-        Sign in with Google to send from your Gmail. No SMTP setup — one click and you’re done.
-      </p>
-
+    <div className="space-y-3">
       {gmailConnected ? (
-        <div className="row" style={{ alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <span style={{ color: "var(--success)" }}>Connected as {gmailConnected.email}</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm text-success">Connected as {gmailConnected.email}</span>
           <form action={disconnectGmail}>
-            <button type="submit" className="btn">
+            <Button type="submit" variant="outline" size="sm">
               Disconnect Gmail
-            </button>
+            </Button>
           </form>
         </div>
       ) : googleOAuthAvailable && canUseGmailConnect ? (
-        <div>
-          {/* Full-page navigation so the server redirect to Google is followed; Link would client-navigate and can flash an error on 302 */}
+        <div className="space-y-3">
+          {/* Full-page navigation so the server redirect to Google is followed;
+              Link would client-navigate and can flash an error on 302 */}
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-          <a href="/api/auth/gmail/connect" className="btn primary">
+          <a href="/api/auth/gmail/connect" className="inline-flex min-h-9 items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-xs transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
             Connect Gmail
           </a>
+          {/* AuthMortensenNotice MUST appear here — legally binding placement per v1-redesign-STATUS.md */}
           <AuthMortensenNotice
             variant="connect"
-            className="muted"
-            style={{ marginTop: 12, fontSize: 14, lineHeight: 1.5 }}
+            className="text-sm text-muted-foreground leading-relaxed"
           />
         </div>
       ) : googleOAuthAvailable && !canUseGmailConnect ? (
-        <p className="muted" style={{ fontSize: 14 }}>
-          <strong>Connect Gmail</strong> is limited to invited accounts on this deployment. Use{" "}
-          <strong>SMTP</strong> below to send mail (e.g. Resend or your provider).
+        <p className="text-sm text-muted-foreground">
+          <strong className="text-foreground">Connect Gmail</strong> is limited to invited accounts
+          on this deployment. Use <strong className="text-foreground">SMTP</strong> below to send
+          mail (e.g. Resend or your provider).
         </p>
       ) : (
-        <p className="muted" style={{ fontSize: 14 }}>
-          “Connect Gmail” is available once the app deployer adds Google OAuth credentials (
-          <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code>) to the server environment.
-          Use SMTP below in the meantime.
+        <p className="text-sm text-muted-foreground">
+          &ldquo;Connect Gmail&rdquo; is available once the app deployer adds Google OAuth credentials (
+          <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">GOOGLE_CLIENT_ID</code>,{" "}
+          <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">GOOGLE_CLIENT_SECRET</code>
+          ) to the server environment. Use SMTP below in the meantime.
         </p>
       )}
 
       {connectSuccess === "gmail" && (
-        <p style={{ color: "var(--success)", marginTop: 12 }}>Gmail connected. You can send from that address now.</p>
+        <p className="text-sm text-success" role="status">
+          Gmail connected. You can send from that address now.
+        </p>
       )}
       {connectError === "google_oauth_not_configured" && (
-        <p style={{ color: "var(--warning)", marginTop: 12 }}>
-          Google OAuth is not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to the server environment, or use SMTP below.
+        <p className="text-sm text-warning" role="alert">
+          Google OAuth is not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to the
+          server environment, or use SMTP below.
         </p>
       )}
       {connectError === "gmail_denied" && (
-        <p style={{ color: "var(--sign-out-hover-text)", marginTop: 12 }}>You declined access. You can try again or use SMTP.</p>
+        <p className="text-sm text-destructive" role="alert">
+          You declined access. You can try again or use SMTP.
+        </p>
       )}
       {connectError === "no_refresh_token" && (
-        <p style={{ color: "var(--sign-out-hover-text)", marginTop: 12 }}>
-          Google didn’t return a refresh token. Try disconnecting and connecting again, or use SMTP.
+        <p className="text-sm text-destructive" role="alert">
+          Google didn&apos;t return a refresh token. Try disconnecting and connecting again, or use
+          SMTP.
         </p>
       )}
       {connectError === "db_not_ready" && (
-        <p style={{ color: "var(--warning)", marginTop: 12 }}>
-          Run <code>npx prisma generate</code> and <code>npx prisma db push</code>, then try again.
+        <p className="text-sm text-warning" role="alert">
+          Run{" "}
+          <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">npx prisma generate</code>{" "}
+          and{" "}
+          <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">npx prisma db push</code>
+          , then try again.
         </p>
       )}
       {connectError === "gmail_connect_not_allowlisted" && (
-        <p style={{ color: "var(--warning)", marginTop: 12 }}>
-          This account isn&apos;t allowed to use Connect Gmail here. Use SMTP below, or ask the person who runs
-          this app to add your email to <code>GMAIL_CONNECT_ALLOWLIST</code>.
+        <p className="text-sm text-warning" role="alert">
+          This account isn&apos;t allowed to use Connect Gmail here. Use SMTP below, or ask the person
+          who runs this app to add your email to{" "}
+          <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+            GMAIL_CONNECT_ALLOWLIST
+          </code>
+          .
         </p>
       )}
 
-      <p className="muted" style={{ marginTop: 12, fontSize: 14 }}>
+      <p className="text-sm text-muted-foreground">
         Outlook / Microsoft 365: coming soon. Use Gmail or SMTP for now.
       </p>
     </div>

@@ -7,6 +7,8 @@ import { authOptions } from "@/auth-options";
 import { isGmailConnectAllowedForEmail } from "@/lib/gmail-connect-allowed";
 import { getStudentScope } from "@/lib/student-scope";
 import { getGmailConnectionForTutor, isEmailConfiguredForTutor } from "@/lib/email";
+import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
 import EmailConfigForm from "./EmailConfigForm";
 import OAuthEmailSection from "./OAuthEmailSection";
 
@@ -18,16 +20,23 @@ export default async function EmailSettingsPage({
   const params = await searchParams;
   if (typeof (db as { emailConfig?: { findFirst: unknown } }).emailConfig?.findFirst !== "function") {
     return (
-      <div className="card">
-        <h1 style={{ marginTop: 0 }}>Email settings</h1>
-        <p style={{ color: "var(--warning)" }}>
-          Prisma client is out of date. Run <code>npx prisma generate</code>, then restart the dev
-          server (e.g. <code>npm run dev</code>).
+      <AdminPageShell
+        title="Email settings"
+        eyebrow={
+          <Link
+            href="/admin/settings"
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            ← Settings
+          </Link>
+        }
+      >
+        <p className="text-sm text-warning">
+          Prisma client is out of date. Run{" "}
+          <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">npx prisma generate</code>
+          , then restart the dev server.
         </p>
-        <p className="muted" style={{ marginTop: 12 }}>
-          <Link href="/admin/students">&larr; Back to Students</Link>
-        </p>
-      </div>
+      </AdminPageShell>
     );
   }
 
@@ -48,50 +57,64 @@ export default async function EmailSettingsPage({
   const googleOAuthAvailable = !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
 
   return (
-    <div className="card">
-      <h1 style={{ marginTop: 0 }}>Email settings</h1>
-      <p className="muted">
-        Choose how to send &ldquo;Send update&rdquo; emails. Easiest: connect your Gmail with one click. Or use
-        SMTP (Resend, SendGrid, etc.) if you prefer.
-      </p>
-
+    <AdminPageShell
+      title="Email settings"
+      description={
+        <>
+          Choose how to send &ldquo;Send update&rdquo; emails. Easiest: connect your Gmail with one
+          click. Or use SMTP (Resend, SendGrid, etc.) if you prefer.
+        </>
+      }
+      eyebrow={
+        <Link
+          href="/admin/settings"
+          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          ← Settings
+        </Link>
+      }
+    >
       {configured ? (
-        <p style={{ color: "var(--success)", marginBottom: 16 }}>
-          Email is configured. &ldquo;Send update&rdquo; will deliver to the recipient&rsquo;s inbox.
-        </p>
+        <div className="rounded-md border border-success/30 bg-success/10 px-4 py-3">
+          <p className="text-sm text-success">
+            Email is configured. &ldquo;Send update&rdquo; will deliver to the recipient&rsquo;s inbox.
+          </p>
+        </div>
       ) : (
-        <p style={{ color: "var(--warning)", marginBottom: 16 }}>
-          Email is not configured. Connect an account or set up SMTP below to actually send.
-        </p>
+        <div className="rounded-md border border-warning/30 bg-warning/10 px-4 py-3">
+          <p className="text-sm text-warning">
+            Email is not configured. Connect an account or set up SMTP below to actually send.
+          </p>
+        </div>
       )}
 
-      <OAuthEmailSection
-        gmailConnected={gmailConnection ? { email: gmailConnection.email } : null}
-        googleOAuthAvailable={googleOAuthAvailable}
-        canUseGmailConnect={canUseGmailConnect}
-        connectError={params.error}
-        connectSuccess={params.connected}
-      />
+      <div className="space-y-6">
+        <AdminSectionCard
+          title="Send with your account"
+          description="Sign in with Google to send from your Gmail. No SMTP setup — one click and you&rsquo;re done."
+        >
+          <OAuthEmailSection
+            gmailConnected={gmailConnection ? { email: gmailConnection.email } : null}
+            googleOAuthAvailable={googleOAuthAvailable}
+            canUseGmailConnect={canUseGmailConnect}
+            connectError={params.error}
+            connectSuccess={params.connected}
+          />
+        </AdminSectionCard>
 
-      <div style={{ marginTop: 32 }}>
-        <h3 style={{ marginTop: 0 }}>Or use SMTP</h3>
-        <p className="muted" style={{ marginTop: 0 }}>
-          For Resend, SendGrid, or your own server. Leave fields empty if you only use Connect Gmail. Leave password blank to keep the existing one.
-        </p>
-        <EmailConfigForm
-          defaultHost={config?.host ?? ""}
-          defaultPort={config?.port ?? undefined}
-          defaultSecure={config?.secure ?? false}
-          defaultUser={config?.user ?? ""}
-          defaultFromEmail={config?.fromEmail ?? ""}
-        />
+        <AdminSectionCard
+          title="SMTP"
+          description="For Resend, SendGrid, or your own server. Leave fields empty if you only use Connect Gmail. Leave password blank to keep the existing one."
+        >
+          <EmailConfigForm
+            defaultHost={config?.host ?? ""}
+            defaultPort={config?.port ?? undefined}
+            defaultSecure={config?.secure ?? false}
+            defaultUser={config?.user ?? ""}
+            defaultFromEmail={config?.fromEmail ?? ""}
+          />
+        </AdminSectionCard>
       </div>
-
-      <p className="muted" style={{ marginTop: 24, fontSize: 14 }}>
-        <Link href="/admin/settings">&larr; All settings</Link>
-        {" \u00b7 "}
-        <Link href="/admin/students">Students</Link>
-      </p>
-    </div>
+    </AdminPageShell>
   );
 }

@@ -1,20 +1,21 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
-import { useFormStatus } from "react-dom";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { changePassword, sendPasswordResetEmail } from "./actions";
 
-function SubmitButton() {
-  const { pending } = useFormStatus();
+function SubmitButton({ pending }: { pending: boolean }) {
   return (
-    <button className="btn primary" type="submit" disabled={pending}>
+    <Button type="submit" disabled={pending}>
       {pending ? "Saving…" : "Update password"}
-    </button>
+    </Button>
   );
 }
 
 export default function ChangePasswordForm() {
-  const [state, formAction] = useActionState(changePassword, null);
+  const [state, formAction, isPending] = useActionState(changePassword, null);
   const formRef = useRef<HTMLFormElement>(null);
   const [resetMsg, setResetMsg] = useState<string | null>(null);
   const [resetErr, setResetErr] = useState<string | null>(null);
@@ -25,16 +26,11 @@ export default function ChangePasswordForm() {
   }, [state?.ok]);
 
   return (
-    <div style={{ maxWidth: 440 }}>
-      <h2 style={{ marginTop: 0, marginBottom: 8, fontSize: "1.1rem" }}>Password</h2>
-
-      <form ref={formRef} action={formAction}>
-        <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
-          Change your password here if you know your current one (at least 8 characters).
-        </p>
-        <div style={{ marginTop: 16 }}>
-          <label htmlFor="current-password">Current password</label>
-          <input
+    <div className="max-w-sm space-y-6">
+      <form ref={formRef} action={formAction} className="space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="current-password">Current password</Label>
+          <Input
             id="current-password"
             name="currentPassword"
             type="password"
@@ -42,9 +38,9 @@ export default function ChangePasswordForm() {
             required
           />
         </div>
-        <div style={{ marginTop: 12 }}>
-          <label htmlFor="new-password">New password</label>
-          <input
+        <div className="space-y-1.5">
+          <Label htmlFor="new-password">New password</Label>
+          <Input
             id="new-password"
             name="newPassword"
             type="password"
@@ -53,9 +49,9 @@ export default function ChangePasswordForm() {
             required
           />
         </div>
-        <div style={{ marginTop: 12 }}>
-          <label htmlFor="confirm-password">Confirm new password</label>
-          <input
+        <div className="space-y-1.5">
+          <Label htmlFor="confirm-password">Confirm new password</Label>
+          <Input
             id="confirm-password"
             name="confirmPassword"
             type="password"
@@ -64,47 +60,59 @@ export default function ChangePasswordForm() {
             required
           />
         </div>
+
         {state?.error ? (
-          <p style={{ color: "var(--sign-out-hover-text)", marginTop: 12 }}>{state.error}</p>
+          <p className="text-sm text-destructive" role="alert">
+            {state.error}
+          </p>
         ) : null}
         {state?.ok ? (
-          <p style={{ color: "var(--success)", marginTop: 12 }}>
+          <p className="text-sm text-success" role="status">
             Password updated. Use your new password next time you sign in.
           </p>
         ) : null}
-        <div style={{ marginTop: 16 }}>
-          <SubmitButton />
-        </div>
+
+        <SubmitButton pending={isPending} />
       </form>
 
-      <div className="divider" style={{ margin: "24px 0" }} />
+      <div className="border-t border-border pt-6 space-y-3">
+        <div className="space-y-1">
+          <p className="text-sm font-semibold text-foreground">Reset via email</p>
+          <p className="text-sm text-muted-foreground">
+            We&rsquo;ll send a link to <strong className="text-foreground font-medium">your signed-in email</strong> so
+            you can set a new password without your current one. Requires email (SMTP or Gmail) to be
+            configured.
+          </p>
+        </div>
 
-      <h3 style={{ marginTop: 0, marginBottom: 8, fontSize: "1rem", fontWeight: 600 }}>
-        Reset via email
-      </h3>
-      <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
-        We’ll send a link to <strong>your signed-in email</strong> so you can set a new password without your current
-        one. Requires email (SMTP or Gmail) to be configured for the app.
-      </p>
-      {resetErr ? <p style={{ color: "var(--sign-out-hover-text)", marginTop: 12 }}>{resetErr}</p> : null}
-      {resetMsg ? <p style={{ color: "var(--success)", marginTop: 12 }}>{resetMsg}</p> : null}
-      <button
-        type="button"
-        className="btn"
-        style={{ marginTop: 12 }}
-        disabled={resetPending}
-        onClick={() => {
-          setResetErr(null);
-          setResetMsg(null);
-          startReset(async () => {
-            const r = await sendPasswordResetEmail();
-            if (r.ok && r.message) setResetMsg(r.message);
-            else setResetErr(r.error ?? "Could not send reset email.");
-          });
-        }}
-      >
-        {resetPending ? "Sending…" : "Email me a reset link"}
-      </button>
+        {resetErr ? (
+          <p className="text-sm text-destructive" role="alert">
+            {resetErr}
+          </p>
+        ) : null}
+        {resetMsg ? (
+          <p className="text-sm text-success" role="status">
+            {resetMsg}
+          </p>
+        ) : null}
+
+        <Button
+          type="button"
+          variant="outline"
+          disabled={resetPending}
+          onClick={() => {
+            setResetErr(null);
+            setResetMsg(null);
+            startReset(async () => {
+              const r = await sendPasswordResetEmail();
+              if (r.ok && r.message) setResetMsg(r.message);
+              else setResetErr(r.error ?? "Could not send reset email.");
+            });
+          }}
+        >
+          {resetPending ? "Sending…" : "Email me a reset link"}
+        </Button>
+      </div>
     </div>
   );
 }
