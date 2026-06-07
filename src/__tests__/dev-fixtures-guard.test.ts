@@ -89,7 +89,7 @@ describe("deleteFixtureAdminUser() — fixture-only guard", () => {
     jest.doMock("@/lib/crypto/session-tokens", () => ({
       generateRawToken: jest.fn().mockReturnValue("tok"),
       hashToken: jest.fn().mockReturnValue("hash"),
-      CLAIM_INVITE_TTL_MS: 7 * 24 * 60 * 60 * 1000,
+      CLAIM_INVITE_TTL_MS: 48 * 60 * 60 * 1000,
     }));
     jest.doMock("@/lib/account-holder-auth", () => ({
       hashAccountHolderPassword: jest.fn(),
@@ -121,7 +121,7 @@ describe("deleteFixtureAdminUser() — fixture-only guard", () => {
     jest.doMock("@/lib/crypto/session-tokens", () => ({
       generateRawToken: jest.fn().mockReturnValue("tok"),
       hashToken: jest.fn().mockReturnValue("hash"),
-      CLAIM_INVITE_TTL_MS: 7 * 24 * 60 * 60 * 1000,
+      CLAIM_INVITE_TTL_MS: 48 * 60 * 60 * 1000,
     }));
     jest.doMock("@/lib/account-holder-auth", () => ({
       hashAccountHolderPassword: jest.fn(),

@@ -54,7 +54,7 @@ import {
   resetLearnerPinFailures,
 } from "@/lib/learner-pin-rate-limit";
 import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
-import { generateRawToken, hashToken } from "@/lib/crypto/session-tokens";
+import { generateRawToken, hashToken, CLAIM_INVITE_TTL_MS } from "@/lib/crypto/session-tokens";
 import { NextRequest } from "next/server";
 
 // Import route handlers directly for unit-style integration tests
@@ -461,7 +461,7 @@ describe("P2B-CLM: Claim invite state", () => {
         studentId: student.id,
         adminUserId: admin.id,
         tokenHash: hashToken(rawToken),
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + CLAIM_INVITE_TTL_MS),
         revokedAt: new Date(), // revoked
       },
     });
@@ -481,7 +481,7 @@ describe("P2B-CLM: Claim invite state", () => {
         studentId: student.id,
         adminUserId: admin.id,
         tokenHash: hashToken(rawToken),
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + CLAIM_INVITE_TTL_MS),
       },
     });
 

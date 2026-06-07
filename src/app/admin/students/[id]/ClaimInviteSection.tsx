@@ -93,7 +93,7 @@ export function ClaimInviteSection({
           <p className="text-sm text-muted-foreground">
             {copied
               ? `Claim link for ${studentName} — copied to clipboard!`
-              : `Share this link with ${studentName}'s parent. It expires in 7 days.`}
+              : `Share this link with ${studentName}'s parent. It expires in 48 hours.`}
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <code className="flex-1 overflow-hidden text-ellipsis rounded border border-border bg-muted px-3 py-2 text-xs">

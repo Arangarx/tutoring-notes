@@ -868,6 +868,79 @@ export async function deleteNote(noteId: string, studentId: string) {
   revalidatePath(`/admin/students/${studentId}`);
 }
 
+/**
+ * IAC-13: Tutor-side disconnect — severs this Student's link to its LearnerProfile.
+ *
+ * Security invariants:
+ *   - assertOwnsStudent runs first; tutor cannot disconnect a student they don't own (IDOR guard).
+ *   - updateMany WHERE guard (id + learnerProfileId) prevents racing a concurrent re-claim.
+ *   - Only THIS Student.learnerProfileId is nulled — the LearnerProfile row is untouched,
+ *     so other tutors' Student rows linked to the same profile are provably unaffected (IAC-2).
+ *   - LearnerDeviceSession rows are NOT touched; device sessions are profile-level and shared
+ *     across tutors. Revoking them globally would be a denial-of-service against multi-tutor learners.
+ *   - Pending claim invites are revoked atomically to prevent a stale link from immediately
+ *     re-connecting the wrong party after disconnect.
+ *   - Audit trail: structured [dsc] log line on every successful disconnect.
+ *     NOTE: No StudentDisconnectLog DB table — schema migration is locked by another in-flight
+ *     feature. Log-only audit until the migration lock is released (design doc §3 Delta 1 deferred).
+ */
+export async function disconnectLearnerProfile(studentId: string): Promise<void> {
+  const scope = await requireStudentScope();
+  const adminUserId = scope.kind === "admin" ? scope.adminId : null;
+
+  // Ownership gate — throws notFound if this tutor does not own the student.
+  await assertOwnsStudent(studentId);
+
+  const now = new Date();
+
+  await db.$transaction(async (tx) => {
+    // Step 1 — capture pre-disconnect state (needed for WHERE guard + audit log)
+    const student = await tx.student.findUnique({
+      where: { id: studentId },
+      select: {
+        learnerProfileId: true,
+        learnerProfile: {
+          select: { accountHolderId: true },
+        },
+      },
+    });
+
+    if (!student?.learnerProfileId) return; // already disconnected — idempotent
+
+    const { learnerProfileId } = student;
+    const accountHolderId = student.learnerProfile?.accountHolderId ?? null;
+
+    // Step 2 — null Student.learnerProfileId with WHERE guard.
+    // The guard (id AND learnerProfileId = <known>) prevents this disconnect from
+    // silently nulling a DIFFERENT profile that was re-claimed between our read and write.
+    const updated = await tx.student.updateMany({
+      where: { id: studentId, learnerProfileId },
+      data: { learnerProfileId: null },
+    });
+    if (updated.count === 0) return; // concurrent disconnect or re-claim won — idempotent
+
+    // Step 3 — revoke all pending (unclaimed, unexpired) invites.
+    // Historical completed invite records (claimedAt non-null) are intentionally preserved
+    // as business records per the tombstone principle.
+    await tx.studentClaimInvite.updateMany({
+      where: {
+        studentId,
+        claimedAt: null,
+        revokedAt: null,
+        expiresAt: { gt: now },
+      },
+      data: { revokedAt: now },
+    });
+
+    // Step 4 — structured audit log (log-only; DB table deferred — see JSDoc above).
+    console.log(
+      `[dsc] action=tutor_disconnect_parent studentId=${studentId} adminUserId=${adminUserId ?? "env"} learnerProfileId=${learnerProfileId} accountHolderId=${accountHolderId ?? "unknown"}`
+    );
+  });
+
+  revalidatePath(`/admin/students/${studentId}`);
+}
+
 export type SendUpdateResult = {
   ok: boolean;
   sent: boolean;
