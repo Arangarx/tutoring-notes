@@ -34,6 +34,7 @@ import {
   getTranscriptChunksBySessionId,
 } from "@/lib/recording/transcript-store";
 import { transcribeChunk } from "@/lib/recording/transcribe-chunk";
+import { extractChunkMap } from "@/lib/recording/extract-chunk";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -177,7 +178,7 @@ export async function processChunkTranscribeJob(
   }
 
   // --- 6. Persist result (status=done) ----------------------------------------
-  await upsertTranscriptChunk({
+  const doneChunk = await upsertTranscriptChunk({
     sessionId,
     chunkBlobUrl,
     recordingTimeOffsetMs,
@@ -189,6 +190,16 @@ export async function processChunkTranscribeJob(
 
   console.log(
     `[txc] wbsid=${sessionId} action=worker_done offsetMs=${recordingTimeOffsetMs} durationMs=${result.durationMs ?? "n/a"} model=${result.modelUsed}`
+  );
+
+  // --- 7. Map phase: fire-and-forget extraction (best-effort, never blocks) ----
+  // Runs incrementally during session so the reduce step at session-end is fast.
+  void extractChunkMap(sessionId, doneChunk.id, result.transcript).catch(
+    (mapErr: unknown) => {
+      console.warn(
+        `[tnt] wbsid=${sessionId} action=map_unexpected_throw chunkId=${doneChunk.id} err=${mapErr instanceof Error ? mapErr.message : String(mapErr)}`
+      );
+    }
   );
 
   return "done";

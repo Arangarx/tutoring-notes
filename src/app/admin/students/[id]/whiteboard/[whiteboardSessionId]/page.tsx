@@ -4,20 +4,18 @@ import { notFound } from "next/navigation";
 import { db, withDbRetry } from "@/lib/db";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import WhiteboardReplay from "@/components/whiteboard/WhiteboardReplay";
-import WhiteboardNotesPanel from "@/components/whiteboard/WhiteboardNotesPanel";
+import TutorNotesSection from "@/components/whiteboard/TutorNotesSection";
 import { SessionCostPanel } from "@/components/admin/SessionCostPanel";
 import { getSessionCostBreakdown } from "@/lib/observability/cost-queries";
-import { env } from "@/lib/env";
+import { loadTutorNoteForReview } from "@/app/admin/students/[id]/whiteboard/notes-actions";
 
 export const dynamic = "force-dynamic";
 
 /**
- * generateNotesFromWhiteboardSessionAction (called from WhiteboardNotesPanel)
- * runs the same Whisper + LLM pipeline as the student detail page, so it
- * inherits the same multi-minute worst-case budget. See the budget
- * breakdown comment in /admin/students/[id]/page.tsx.
+ * This page uses auto-notes (TutorNoteSection) — no blocking server actions.
+ * The maxDuration is kept at a conservative budget for replay-related fetches.
  */
-export const maxDuration = 300;
+export const maxDuration = 60;
 
 export async function generateMetadata({
   params,
@@ -148,7 +146,22 @@ export default async function WhiteboardReviewPage({
         : null;
 
   const isLive = !detail.endedAt;
-  const aiEnabled = Boolean(env.OPENAI_API_KEY);
+
+  // Load TutorNote for auto-notes section (ownership already asserted above).
+  const tutorNote = !isLive
+    ? await loadTutorNoteForReview(whiteboardSessionId)
+    : null;
+
+  const initialNote = tutorNote
+    ? {
+        found: true as const,
+        status: tutorNote.status,
+        content: tutorNote.content ?? null,
+        isPartial: tutorNote.isPartial,
+        error: tutorNote.error ?? null,
+        generatedAt: tutorNote.generatedAt?.toISOString() ?? null,
+      }
+    : { found: false as const };
 
   const sessionCost = !isLive
     ? await getSessionCostBreakdown(whiteboardSessionId)
@@ -251,15 +264,12 @@ export default async function WhiteboardReviewPage({
         whiteboardSessionId={whiteboardSessionId}
       />
 
-      {/* AI wedge: generate notes from this whiteboard session */}
+      {/* Auto-generated session notes (slice 3 — no manual button required) */}
       {!isLive && (
         <div style={{ marginTop: 16 }}>
-          <WhiteboardNotesPanel
+          <TutorNotesSection
             whiteboardSessionId={whiteboardSessionId}
-            studentId={studentId}
-            sessionDate={detail.startedAt.toISOString().slice(0, 10)}
-            attachedNoteId={detail.noteId ?? null}
-            aiEnabled={aiEnabled}
+            initialNote={initialNote}
             hasAudio={detail.audioRecordings.length > 0}
           />
         </div>
