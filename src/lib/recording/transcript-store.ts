@@ -29,6 +29,7 @@ export type UpsertTranscriptChunkInput = {
   durationMs?: number | null;
   error?: string | null;
   transcribedAt?: Date | null;
+  attempts?: number;
 };
 
 export type UpsertChunkExtractionInput = ChunkExtractionPayload & {
@@ -95,6 +96,7 @@ export async function upsertTranscriptChunk(
           durationMs: rest.durationMs ?? undefined,
           error: rest.error ?? undefined,
           transcribedAt: rest.transcribedAt ?? undefined,
+          attempts: rest.attempts ?? 0,
         },
         update: {
           recordingTimeOffsetMs,
@@ -103,6 +105,7 @@ export async function upsertTranscriptChunk(
           ...(rest.durationMs !== undefined ? { durationMs: rest.durationMs } : {}),
           ...(rest.error !== undefined ? { error: rest.error } : {}),
           ...(rest.transcribedAt !== undefined ? { transcribedAt: rest.transcribedAt } : {}),
+          ...(rest.attempts !== undefined ? { attempts: rest.attempts } : {}),
         },
       }),
     { label: "upsertTranscriptChunk" }
@@ -119,6 +122,38 @@ export async function getTranscriptChunksBySessionId(
         orderBy: { recordingTimeOffsetMs: "asc" },
       }),
     { label: "getTranscriptChunksBySessionId" }
+  );
+}
+
+export type FindStaleTranscriptChunksInput = {
+  staleBefore: Date;
+  maxAttempts: number;
+  limit: number;
+};
+
+/**
+ * Rows eligible for the cron backstop sweep: stale pending, or retryable failed
+ * (attempts below max). Permanently-failed rows (attempts >= max) are excluded.
+ */
+export async function findStaleTranscriptChunksForSweep(
+  input: FindStaleTranscriptChunksInput
+): Promise<TranscriptChunk[]> {
+  const { staleBefore, maxAttempts, limit } = input;
+
+  return withDbRetry(
+    () =>
+      db.transcriptChunk.findMany({
+        where: {
+          updatedAt: { lt: staleBefore },
+          OR: [
+            { status: "pending" },
+            { status: "failed", attempts: { lt: maxAttempts } },
+          ],
+        },
+        orderBy: { updatedAt: "asc" },
+        take: limit,
+      }),
+    { label: "findStaleTranscriptChunksForSweep" }
   );
 }
 

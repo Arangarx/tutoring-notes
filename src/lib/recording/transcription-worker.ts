@@ -97,6 +97,8 @@ export async function processChunkTranscribeJob(
 
   // --- 1. Idempotency check ---------------------------------------------------
   const existing = await getTranscriptChunkByBlobUrl(sessionId, chunkBlobUrl);
+  const priorAttempts = existing?.attempts ?? 0;
+
   if (existing?.status === "done") {
     console.log(
       `[txc] wbsid=${sessionId} action=worker_skip reason=already_done chunkId=${existing.id}`
@@ -144,13 +146,14 @@ export async function processChunkTranscribeJob(
     console.error(
       `[txc] wbsid=${sessionId} action=blob_fetch_failed err=${errMsg}`
     );
-    // Mark as failed — retryable via queue redelivery.
+    // Mark as failed — retryable via cron sweep / re-delivery.
     await upsertTranscriptChunk({
       sessionId,
       chunkBlobUrl,
       recordingTimeOffsetMs,
       status: "failed",
       error: `Blob fetch failed: ${errMsg}`,
+      attempts: priorAttempts + 1,
     });
     return "failed";
   }
@@ -168,6 +171,7 @@ export async function processChunkTranscribeJob(
       recordingTimeOffsetMs,
       status: "failed",
       error: result.error,
+      attempts: priorAttempts + 1,
     });
     return "failed";
   }
