@@ -1,3 +1,5 @@
+> **SUPERSEDED (2026-06-07):** Smoke items complete. Current state → [`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md).
+
 # Morning runbook — 2026-06-07
 
 **Branch:** `fix/transcription-blob-auth` (off `v1-redesign`, validated, **NOT merged**)  

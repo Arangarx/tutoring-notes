@@ -1,3 +1,5 @@
+> **SUPERSEDED (2026-06-07):** Smoke items complete. Current state → [`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md).
+
 # Return runbook — 2026-06-06 PM
 
 **Branch:** `v1-redesign` @ [`68086c4`](https://github.com/Arangarx/tutoring-notes/commit/68086c4c8d89e6c34e5ee8b3b51fda9f511f501a)  

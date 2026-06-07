@@ -12,7 +12,7 @@
 | **Next action(s)** | Fresh **`v1-redesign` preview deploy** (applies identity migrations incl. `20260603000000_learner_pin_throttle`). Orchestrator queue (serial): (1) batched copy/UX on Phase D (commission + hit-record split), (2) in-session-audio LEGAL-SYNC, (3) session-lifecycle redesign design pass (Sonnet + Opus review; lock freeze-vs-advance timeline), (4) implement LTX timestamp-anchored assembly **after** (3). Andrew smokes spike **B1** on real hardware. |
 | **Open Andrew-confirms** | Spike B1 hardware; `interim-capture-attestation` migrate+smoke+merge; sign-in hover contrast (backlogged Phase B). |
 | **In-flight subagents** | **None.** |
-| **Uncommitted / unmerged** | `design/live-incremental-transcription-2026-06-02`, `spike/live-transcription` — pushed, **not merged**. |
+| **Uncommitted / unmerged** | `design/live-incremental-transcription-2026-06-02`, `spike/live-transcription` — pushed, **not merged**. **Recording P1:** slices 1, 2a, 2b, transcription fixes, and durable transport merged to `v1-redesign` @ `234d05b` (2026-06-07); slice 3 (auto-notes) next — see [`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md). |
 
 ### Smoke targets (Andrew — 2026-06-02, both READY)
 
