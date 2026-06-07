@@ -30,6 +30,7 @@
   --color-ring: var(--ring);
   --color-brand: var(--brand);
   --color-success: var(--success);
+  --color-warning: var(--warning);
 }
 
 :root,
