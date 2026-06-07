@@ -53,3 +53,31 @@ export async function getBlobMetadata(
   const metadata = await head(blobUrl);
   return { size: metadata.size, contentType: metadata.contentType };
 }
+
+/**
+ * Download bytes from a private Vercel Blob URL.
+ *
+ * Private-store URLs (`*.private.blob.vercel-storage.com`) return 403
+ * without a Bearer token. Server-side callers must use this helper (or
+ * equivalent Authorization header) — never a bare fetch(blobUrl).
+ */
+export async function fetchPrivateBlobBytes(
+  blobUrl: string,
+  options: { fetchImpl?: typeof fetch } = {}
+): Promise<{ buffer: Buffer; contentType: string }> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const blobToken = process.env.BLOB_READ_WRITE_TOKEN ?? "";
+  const headers: Record<string, string> = blobToken
+    ? { Authorization: `Bearer ${blobToken}` }
+    : {};
+
+  const res = await fetchImpl(blobUrl, { headers });
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} ${res.statusText}`);
+  }
+
+  const arrayBuf = await res.arrayBuffer();
+  const rawCt = res.headers.get("content-type") ?? "";
+  const contentType = rawCt.split(";")[0].trim() || "application/octet-stream";
+  return { buffer: Buffer.from(arrayBuf), contentType };
+}

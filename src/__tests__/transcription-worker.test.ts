@@ -20,6 +20,7 @@ const mockGetTranscriptChunkByBlobUrl = jest.fn();
 const mockUpsertTranscriptChunk = jest.fn();
 const mockGetTranscriptChunksBySessionId = jest.fn();
 const mockTranscribeChunk = jest.fn();
+const mockFetchPrivateBlobBytes = jest.fn();
 
 jest.mock("@/lib/recording/transcript-store", () => ({
   getTranscriptChunkByBlobUrl: (...args: unknown[]) => mockGetTranscriptChunkByBlobUrl(...args),
@@ -29,6 +30,10 @@ jest.mock("@/lib/recording/transcript-store", () => ({
 
 jest.mock("@/lib/recording/transcribe-chunk", () => ({
   transcribeChunk: (...args: unknown[]) => mockTranscribeChunk(...args),
+}));
+
+jest.mock("@/lib/blob", () => ({
+  fetchPrivateBlobBytes: (...args: unknown[]) => mockFetchPrivateBlobBytes(...args),
 }));
 
 // ---------------------------------------------------------------------------
@@ -46,14 +51,9 @@ const CHUNK_URL = "https://blob.vercel-storage.com/sessions/test/chunk-1.webm";
 const CHUNK_URL_2 = "https://blob.vercel-storage.com/sessions/test/chunk-2.webm";
 const FAKE_AUDIO = Buffer.alloc(512, 0xbb);
 
-const okFetchResponse = {
-  ok: true,
-  status: 200,
-  statusText: "OK",
-  arrayBuffer: () => Promise.resolve(FAKE_AUDIO.buffer as ArrayBuffer),
-  headers: {
-    get: (key: string) => (key === "content-type" ? "audio/webm;codecs=opus" : null),
-  },
+const okBlobFetch = {
+  buffer: FAKE_AUDIO,
+  contentType: "audio/webm;codecs=opus",
 };
 
 const okTranscribeResult = {
@@ -71,7 +71,7 @@ function setupHappyPath() {
   mockGetTranscriptChunksBySessionId.mockResolvedValue([]);
   mockUpsertTranscriptChunk.mockResolvedValue({ id: "chunk-row-1", status: "done" });
   mockTranscribeChunk.mockResolvedValue(okTranscribeResult);
-  global.fetch = jest.fn().mockResolvedValue(okFetchResponse);
+  mockFetchPrivateBlobBytes.mockResolvedValue(okBlobFetch);
 }
 
 // ---------------------------------------------------------------------------
@@ -138,8 +138,7 @@ describe("processChunkTranscribeJob", () => {
     expect(outcome).toBe("skipped");
     // No DB upsert, no blob fetch, no transcription on re-delivery.
     expect(mockUpsertTranscriptChunk).not.toHaveBeenCalled();
-    // fetch should not have been called (no blob download on skipped).
-    // global.fetch may be defined by the test environment; check it was not invoked.
+    expect(mockFetchPrivateBlobBytes).not.toHaveBeenCalled();
     expect(mockTranscribeChunk).not.toHaveBeenCalled();
   });
 
@@ -173,11 +172,7 @@ describe("processChunkTranscribeJob", () => {
     mockGetTranscriptChunkByBlobUrl.mockResolvedValue(null);
     mockGetTranscriptChunksBySessionId.mockResolvedValue([]);
     mockUpsertTranscriptChunk.mockResolvedValue({ id: "chunk-row", status: "failed" });
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: false,
-      status: 404,
-      statusText: "Not Found",
-    });
+    mockFetchPrivateBlobBytes.mockRejectedValue(new Error("HTTP 404 Not Found"));
 
     const outcome = await processChunkTranscribeJob({
       sessionId: SESSION_ID,
@@ -198,7 +193,7 @@ describe("processChunkTranscribeJob", () => {
     mockGetTranscriptChunkByBlobUrl.mockResolvedValue(null);
     mockGetTranscriptChunksBySessionId.mockResolvedValue([]);
     mockUpsertTranscriptChunk.mockResolvedValue({ id: "chunk-row", status: "failed" });
-    global.fetch = jest.fn().mockRejectedValue(new Error("ECONNREFUSED"));
+    mockFetchPrivateBlobBytes.mockRejectedValue(new Error("ECONNREFUSED"));
 
     const outcome = await processChunkTranscribeJob({
       sessionId: SESSION_ID,
@@ -217,7 +212,7 @@ describe("processChunkTranscribeJob", () => {
     mockGetTranscriptChunkByBlobUrl.mockResolvedValue(null);
     mockGetTranscriptChunksBySessionId.mockResolvedValue([]);
     mockUpsertTranscriptChunk.mockResolvedValue({ id: "chunk-row", status: "failed" });
-    global.fetch = jest.fn().mockResolvedValue(okFetchResponse);
+    mockFetchPrivateBlobBytes.mockResolvedValue(okBlobFetch);
     mockTranscribeChunk.mockResolvedValue({ error: "Transcription API timeout" });
 
     const outcome = await processChunkTranscribeJob({
@@ -241,11 +236,7 @@ describe("processChunkTranscribeJob", () => {
     mockGetTranscriptChunkByBlobUrl.mockResolvedValueOnce(null);
     mockGetTranscriptChunksBySessionId.mockResolvedValue([]);
     mockUpsertTranscriptChunk.mockResolvedValue({ id: "row", status: "failed" });
-    global.fetch = jest.fn().mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-      statusText: "Server Error",
-    });
+    mockFetchPrivateBlobBytes.mockRejectedValueOnce(new Error("HTTP 500 Server Error"));
 
     const outcome1 = await processChunkTranscribeJob({
       sessionId: SESSION_ID,
@@ -259,7 +250,7 @@ describe("processChunkTranscribeJob", () => {
     mockGetTranscriptChunkByBlobUrl.mockResolvedValue(null);
     mockGetTranscriptChunksBySessionId.mockResolvedValue([]);
     mockUpsertTranscriptChunk.mockResolvedValue({ id: "row2", status: "done" });
-    global.fetch = jest.fn().mockResolvedValue(okFetchResponse);
+    mockFetchPrivateBlobBytes.mockResolvedValue(okBlobFetch);
     mockTranscribeChunk.mockResolvedValue(okTranscribeResult);
 
     const outcome2 = await processChunkTranscribeJob({
@@ -282,7 +273,7 @@ describe("processChunkTranscribeJob", () => {
       { id: "prior-3", status: "failed", durationMs: null }, // excluded (not done)
     ]);
     mockUpsertTranscriptChunk.mockResolvedValue({ id: "new-row", status: "done" });
-    global.fetch = jest.fn().mockResolvedValue(okFetchResponse);
+    mockFetchPrivateBlobBytes.mockResolvedValue(okBlobFetch);
     mockTranscribeChunk.mockResolvedValue(okTranscribeResult);
 
     await processChunkTranscribeJob({
@@ -301,7 +292,7 @@ describe("processChunkTranscribeJob", () => {
     mockGetTranscriptChunkByBlobUrl.mockResolvedValue(null);
     mockGetTranscriptChunksBySessionId.mockResolvedValue([]);
     mockUpsertTranscriptChunk.mockResolvedValue({ id: "row", status: "done" });
-    global.fetch = jest.fn().mockResolvedValue(okFetchResponse);
+    mockFetchPrivateBlobBytes.mockResolvedValue(okBlobFetch);
     mockTranscribeChunk.mockResolvedValue(okTranscribeResult);
 
     await processChunkTranscribeJob({ sessionId: SESSION_ID, chunkBlobUrl: CHUNK_URL });
@@ -322,7 +313,7 @@ describe("processChunkTranscribeJob", () => {
       { id: "prior-1", status: "done", durationMs: 10000 },
     ]);
     mockUpsertTranscriptChunk.mockResolvedValue({ id: "row", status: "done" });
-    global.fetch = jest.fn().mockResolvedValue(okFetchResponse);
+    mockFetchPrivateBlobBytes.mockResolvedValue(okBlobFetch);
     mockTranscribeChunk.mockResolvedValue(okTranscribeResult);
 
     await processChunkTranscribeJob({
@@ -350,9 +341,9 @@ describe("processChunkTranscribeJob", () => {
       callOrder.push(`upsert:${args.status}`);
       return { id: "row", status: args.status };
     });
-    global.fetch = jest.fn().mockImplementation(async () => {
+    mockFetchPrivateBlobBytes.mockImplementation(async () => {
       callOrder.push("fetch");
-      return okFetchResponse;
+      return okBlobFetch;
     });
     mockTranscribeChunk.mockImplementation(async () => {
       callOrder.push("transcribe");
@@ -368,5 +359,21 @@ describe("processChunkTranscribeJob", () => {
     // Verify order: transcribing → fetch → transcribe → done.
     expect(callOrder[0]).toBe("upsert:transcribing");
     expect(callOrder[callOrder.length - 1]).toBe("upsert:done");
+  });
+
+  // -------------------------------------------------------------------------
+  // 9. Authenticated blob fetch — uses fetchPrivateBlobBytes helper
+  // -------------------------------------------------------------------------
+  test("blob download: delegates to fetchPrivateBlobBytes with chunk URL", async () => {
+    setupHappyPath();
+
+    await processChunkTranscribeJob({
+      sessionId: SESSION_ID,
+      chunkBlobUrl: CHUNK_URL,
+      recordingTimeOffsetMs: 0,
+    });
+
+    expect(mockFetchPrivateBlobBytes).toHaveBeenCalledTimes(1);
+    expect(mockFetchPrivateBlobBytes).toHaveBeenCalledWith(CHUNK_URL);
   });
 });
