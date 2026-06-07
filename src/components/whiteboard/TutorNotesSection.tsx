@@ -304,7 +304,7 @@ export default function TutorNotesSection({
 }
 
 // ---------------------------------------------------------------------------
-// Skeleton component
+// Skeleton component — pure shimmer, no spinner
 // ---------------------------------------------------------------------------
 
 function SkeletonNotes() {
@@ -314,43 +314,39 @@ function SkeletonNotes() {
       data-testid="tutor-notes-skeleton"
       style={{ display: "grid", gap: 10 }}
     >
+      {/* Section header skeleton (wider) */}
       <div
-        className="muted"
-        style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}
-      >
-        <span
-          style={{
-            width: 12,
-            height: 12,
-            borderRadius: "50%",
-            border: "2px solid currentColor",
-            borderTopColor: "transparent",
-            animation: "spin 0.8s linear infinite",
-            display: "inline-block",
-            flexShrink: 0,
-          }}
-          aria-hidden="true"
-        />
-        Generating session notes from the recording…
-      </div>
-      {/* Skeleton lines */}
-      {[100, 80, 92, 70, 85].map((w, i) => (
+        style={{
+          height: 12,
+          width: "55%",
+          borderRadius: 4,
+          background:
+            "linear-gradient(90deg, var(--surface-muted) 25%, var(--surface-hover) 50%, var(--surface-muted) 75%)",
+          backgroundSize: "200% 100%",
+          animation: "shimmer 1.5s infinite",
+        }}
+        aria-hidden="true"
+      />
+      {/* Body lines */}
+      {[100, 82, 94, 68, 88, 74, 60].map((w, i) => (
         <div
           key={i}
           style={{
-            height: 14,
+            height: 13,
             width: `${w}%`,
             borderRadius: 4,
             background:
               "linear-gradient(90deg, var(--surface-muted) 25%, var(--surface-hover) 50%, var(--surface-muted) 75%)",
             backgroundSize: "200% 100%",
-            animation: "shimmer 1.5s infinite",
+            animation: `shimmer 1.5s ${i * 0.07}s infinite`,
           }}
           aria-hidden="true"
         />
       ))}
+      <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+        Generating session notes — this usually takes under a minute.
+      </div>
       <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
       `}</style>
     </div>

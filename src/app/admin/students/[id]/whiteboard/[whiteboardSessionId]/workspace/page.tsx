@@ -33,6 +33,15 @@ import { WorkspacePreviousSessionPreview } from "./WorkspacePreviousSessionPrevi
 
 export const dynamic = "force-dynamic";
 
+/**
+ * 300s maxDuration — required so that `after()` callbacks registered by server
+ * actions called from this workspace (enqueueChunkTranscriptionAction,
+ * triggerNotesGenerationAction, kickSessionChunksAction) have enough headroom to
+ * complete transcription + notes generation on Vercel Preview without a cron sweep.
+ * See PLATFORM-ASSUMPTIONS.md §1.8 (after() dependency).
+ */
+export const maxDuration = 300;
+
 export async function generateMetadata(): Promise<Metadata> {
   return {
     title: "Whiteboard session",

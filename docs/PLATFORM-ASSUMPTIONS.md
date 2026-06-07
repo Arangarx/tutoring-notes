@@ -6,7 +6,7 @@
 >
 > **Capability-contract rule (Andrew, 2026-06-06):** Tie-ins to Vercel-specific functionality are fine while we run on Vercel. Every such dependency MUST be documented here (or in a feature design doc cross-registered here) as: **Vercel X provides capability Y; generic/AWS equivalent = Z.** Include delivery semantics, size/timeout limits, and plan-availability caveats where uncertain — say "verify at build time" rather than assert. This is the standard extension of the maintenance rule above; see §1.7 for the template and §11 for design-stage recording re-architecture entries.
 >
-> **Last audited**: 2026-06-07 (Vercel Cron transcription sweep + DB-as-queue transport). Prior full audit: 2026-06-06 (capability-contract rule + recording re-arch design-stage deps).
+> **Last audited**: 2026-06-07 (Slice 3 smoke fixes: `after()` §1.8, workspace maxDuration=300; Vercel Cron transcription sweep + DB-as-queue transport). Prior full audit: 2026-06-06 (capability-contract rule + recording re-arch design-stage deps).
 
 ---
 
@@ -93,6 +93,25 @@
 - **DB-as-queue pattern** (portable): durable work lives in Postgres (`TranscriptChunk.status` + `attempts` + `updatedAt`); any platform with a DB + a periodic scheduler can replicate the transport without Vercel Queues.
 - **What breaks if violated**: orphaned `pending` chunks never transcribe if both the immediate attempt and cron are absent; cron without `CRON_SECRET` is a no-op (401). Migrating off Vercel requires replicating the schedule + authenticated HTTP trigger.
 - **Migration check**: provision EventBridge (or equivalent) on the same cadence; protect the sweep endpoint with a shared secret; confirm batch/time-budget fits the new platform's per-invocation ceiling (§1.1).
+
+### 1.8 Next.js `after()` — deferred post-response work
+
+- **Capability provided**: `after(callback)` from `next/server` schedules an async callback that runs **after** the HTTP response is sent but **before** the serverless function terminates, keeping the function alive (up to `maxDuration`) until the callback resolves.
+- **Why we depend on it**: Recording re-arch Phase 1, Slice 3 — the transcription pipeline (`enqueueChunkTranscribe`) and notes pipeline (`enqueueNotesReduce`) previously used bare `void (async () => {...})()` fire-and-forget patterns. Vercel terminates the function when the response is sent, dropping those in-flight promises. On Production the Vercel Cron sweep recovers `pending` chunks; on Preview (no cron) notes never generate. `after()` eliminates this gap.
+  - `src/lib/recording/chunk-transcribe-enqueue.ts:fireAndForgetWorker` — chunk transcription worker
+  - `src/lib/recording/notes-enqueue.ts:fireAndForgetReduce` — notes reduce worker (with polling loop up to 4.5 min)
+  - Both require `maxDuration = 300` on the workspace route segment.
+- **Generic / AWS equivalent**: **Lambda extension** (lifecycle hook) or **SQS trigger** (fire a message and let Lambda consume it). The `after()` pattern is a short-cut; longer workloads should use queues. See §11.1–§11.2 for the future Queues/SQS migration path.
+- **Where baked in**:
+  - `src/lib/recording/chunk-transcribe-enqueue.ts` — `import { after } from "next/server"`
+  - `src/lib/recording/notes-enqueue.ts` — same
+  - `src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/page.tsx` — `export const maxDuration = 300`
+- **Important limits**:
+  - `after()` is stable in Next.js 15 (available as `import { after } from "next/server"`). Do NOT use the unstable `unstable_after` alias from Next.js 14.
+  - The deferred work still runs within the function's `maxDuration` ceiling (300s Pro tier). If notes reduce needs > 300s the notes will be partial and cron/regenerate picks up the remainder.
+  - `after()` is NOT available in Edge runtime (§1.3). All call sites must run on Node.js runtime (§1.2). ✓
+  - On Vercel Preview, cron does NOT run (§1.6), so `after()` is the ONLY backstop for transcription and notes on preview deployments.
+- **Migration check**: on AWS Lambda, replace `after()` with an SQS message publish (or Step Functions enqueue) so the function returns immediately and the consumer handles the work asynchronously with its own timeout. Update §11.1–§11.2 entries when that migration happens.
 
 ### 1.7 Capability-contract documentation standard
 
@@ -626,6 +645,7 @@
 - [ ] **Node.js runtime** (not Edge-only) for all blob/audio/ffmpeg routes. (§1.2)
 - [ ] Capability-contract entries reviewed for every Vercel-specific dependency (§1.7). (§1.6 + §11 if recording re-arch shipped)
 - [ ] Build hook supports `ignoreCommand`-equivalent for docs-only commit skipping. (§1.4)
+- [ ] `after()` deferred work replaced with queue-based async (SQS + Lambda) or equivalent. (§1.8)
 - [ ] Build runs `prisma migrate deploy` with strict per-env `DATABASE_URL` scoping. (§1.5)
 - [ ] Build command can chain `npm run test:regression && npm run build` (or equivalent). (§6.1)
 - [ ] `postinstall` hooks supported (Prisma generate + pdfjs worker copy). (§6.2, §6.3)
@@ -693,6 +713,7 @@
 
 ## Change log
 
+- **2026-06-07** — Slice 3 smoke fixes: added §1.8 Next.js `after()` deferred post-response work (chunk-transcribe-enqueue + notes-enqueue migration from bare `void` to `after()`; workspace page maxDuration=300). Migration checklist updated.
 - **2026-06-06** — Capability-contract rule (Andrew directive): header maintenance rule extended; added §1.6 documentation standard; §3.5 Blob multipart (design-stage); §11 recording re-architecture planned Vercel deps (Queues, Workflows, 300s-cliff split). Migration checklist updated.
 - **2026-06-05** — Dev-tools fixture dashboard: added §10.9 VERCEL_ENV gate for `/admin/dev-tools`. Migration checklist updated.
 - **2026-06-05** — Auth-boundary hardening: added §10.8 WB_E2E_HARNESS (harness 2FA bypass re-gated on server-only flag + !VERCEL; migrated off NEXT_PUBLIC_ client-bundle gate). Added §5.8 host allowlist for auth email links (RC-A fix: `getRequestBaseUrlSafe` with injection guard). Migration checklist updated.

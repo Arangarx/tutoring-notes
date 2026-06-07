@@ -132,8 +132,13 @@ export type FindStaleTranscriptChunksInput = {
 };
 
 /**
- * Rows eligible for the cron backstop sweep: stale pending, or retryable failed
- * (attempts below max). Permanently-failed rows (attempts >= max) are excluded.
+ * Rows eligible for the cron backstop sweep:
+ *   - stale `pending`   — enqueue never started (e.g. after() was skipped)
+ *   - stale `transcribing` — worker started but the serverless function was killed
+ *     before it could write `done` or `failed` (function timeout / cold-start kill).
+ *     Without this inclusion, stuck-transcribing rows are NEVER retried by cron.
+ *   - retryable `failed` — attempts below max
+ * Permanently-failed rows (attempts >= max) are excluded.
  */
 export async function findStaleTranscriptChunksForSweep(
   input: FindStaleTranscriptChunksInput
@@ -147,6 +152,7 @@ export async function findStaleTranscriptChunksForSweep(
           updatedAt: { lt: staleBefore },
           OR: [
             { status: "pending" },
+            { status: "transcribing" }, // orphaned by function kill — re-run is idempotent
             { status: "failed", attempts: { lt: maxAttempts } },
           ],
         },

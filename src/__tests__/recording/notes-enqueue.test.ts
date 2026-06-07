@@ -4,7 +4,8 @@
  * Tests the durable enqueue mechanism for the notes pipeline:
  * - Upserts pending TutorNote before firing (durability)
  * - Skips when already done/partial (idempotency)
- * - Fires immediate reduce job (fire-and-forget)
+ * - Fires immediate reduce job via after() callback
+ * - Polls until done when reduce returns "pending" (preview-safe path)
  */
 
 // ---------------------------------------------------------------------------
@@ -18,6 +19,15 @@ jest.mock("@/lib/recording/transcript-store", () => ({
 
 jest.mock("@/lib/recording/notes-worker", () => ({
   processNotesReduceJob: jest.fn(),
+}));
+
+// Mock after() from next/server to execute the callback immediately (inline).
+// This mirrors the real behaviour (runs after response) but in tests lets us
+// assert synchronously without waiting for real timers.
+jest.mock("next/server", () => ({
+  after: jest.fn((callback: () => Promise<void>) => {
+    void callback();
+  }),
 }));
 
 // ---------------------------------------------------------------------------
@@ -38,6 +48,13 @@ const mockProcessJob = processNotesReduceJob as jest.Mock;
 const SESSION_ID = "wbs-enqueue-01";
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Wait for after() callback microtask queue to drain. */
+const drain = () => new Promise<void>((resolve) => setTimeout(resolve, 20));
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -45,23 +62,41 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockGetNote.mockResolvedValue(null);
   mockUpsertPending.mockResolvedValue({ sessionId: SESSION_ID, status: "pending" });
-  mockProcessJob.mockResolvedValue({ outcome: "pending" });
+  // Default: return "done" so the polling loop exits on first call.
+  mockProcessJob.mockResolvedValue({ outcome: "done" });
 });
 
 describe("enqueueNotesReduce — durability", () => {
   it("upserts pending TutorNote before firing the immediate job", async () => {
     await enqueueNotesReduce(SESSION_ID);
-    // Give fire-and-forget a tick to run
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await drain();
 
     expect(mockUpsertPending).toHaveBeenCalledWith(SESSION_ID);
   });
 
-  it("fires the reduce worker (fire-and-forget)", async () => {
+  it("fires the reduce worker via after() callback", async () => {
     await enqueueNotesReduce(SESSION_ID);
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await drain();
 
     expect(mockProcessJob).toHaveBeenCalledWith(SESSION_ID);
+  });
+
+  it("polls until done when reduce returns pending (preview-safe path)", async () => {
+    // First two calls return pending, third returns done.
+    mockProcessJob
+      .mockResolvedValueOnce({ outcome: "pending" })
+      .mockResolvedValueOnce({ outcome: "pending" })
+      .mockResolvedValue({ outcome: "done" });
+
+    // Use fake timers so setTimeout(5000) doesn't actually wait 5s.
+    jest.useFakeTimers();
+    await enqueueNotesReduce(SESSION_ID);
+
+    // Advance time past the poll intervals (2 × 5000ms).
+    await jest.runAllTimersAsync();
+    jest.useRealTimers();
+
+    expect(mockProcessJob).toHaveBeenCalledTimes(3);
   });
 });
 
@@ -70,7 +105,7 @@ describe("enqueueNotesReduce — idempotency", () => {
     mockGetNote.mockResolvedValue({ status: "done", sessionId: SESSION_ID });
 
     await enqueueNotesReduce(SESSION_ID);
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await drain();
 
     expect(mockUpsertPending).not.toHaveBeenCalled();
     expect(mockProcessJob).not.toHaveBeenCalled();
@@ -80,7 +115,7 @@ describe("enqueueNotesReduce — idempotency", () => {
     mockGetNote.mockResolvedValue({ status: "partial", sessionId: SESSION_ID });
 
     await enqueueNotesReduce(SESSION_ID);
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await drain();
 
     expect(mockUpsertPending).not.toHaveBeenCalled();
     expect(mockProcessJob).not.toHaveBeenCalled();
@@ -90,7 +125,7 @@ describe("enqueueNotesReduce — idempotency", () => {
     mockGetNote.mockResolvedValue({ status: "failed", sessionId: SESSION_ID });
 
     await enqueueNotesReduce(SESSION_ID);
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await drain();
 
     expect(mockUpsertPending).toHaveBeenCalledWith(SESSION_ID);
     expect(mockProcessJob).toHaveBeenCalledWith(SESSION_ID);
@@ -100,7 +135,7 @@ describe("enqueueNotesReduce — idempotency", () => {
     mockGetNote.mockResolvedValue({ status: "pending", sessionId: SESSION_ID });
 
     await enqueueNotesReduce(SESSION_ID);
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await drain();
 
     // Even if pending, we still fire the immediate attempt
     expect(mockProcessJob).toHaveBeenCalledWith(SESSION_ID);
@@ -112,7 +147,7 @@ describe("enqueueNotesReduce — resilience", () => {
     mockUpsertPending.mockRejectedValue(new Error("DB timeout"));
 
     await enqueueNotesReduce(SESSION_ID);
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await drain();
 
     // Worker should still be fired despite the upsert error
     expect(mockProcessJob).toHaveBeenCalledWith(SESSION_ID);

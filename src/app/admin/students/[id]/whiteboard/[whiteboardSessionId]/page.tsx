@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/auth-options";
 import { db, withDbRetry } from "@/lib/db";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import WhiteboardReplay from "@/components/whiteboard/WhiteboardReplay";
@@ -163,7 +165,22 @@ export default async function WhiteboardReviewPage({
       }
     : { found: false as const };
 
-  const sessionCost = !isLive
+  // Cost panel visibility gate — must NOT be shown to real non-test tutors (Sarah).
+  // Show only when the viewer is:
+  //   (a) an ADMIN-role account (Andrew, the operator) — not impersonating
+  //   (b) an admin actively impersonating a test account (Andrew testing as Sarah)
+  //   (c) a test-marked account (isTestAccount=true — QA accounts)
+  // A real TUTOR-role account with isTestAccount=false must never see API costs.
+  // Note: we include role==="ADMIN" so Andrew can always see his own session costs
+  // without needing to impersonate — this is a judgment call, flagged in the
+  // smoke report.
+  const viewerSession = await getServerSession(authOptions);
+  const showCostPanel =
+    viewerSession?.user?.role === "ADMIN" ||
+    viewerSession?.user?.isImpersonating === true ||
+    viewerSession?.user?.isTestAccount === true;
+
+  const sessionCost = !isLive && showCostPanel
     ? await getSessionCostBreakdown(whiteboardSessionId)
     : null;
 
