@@ -322,6 +322,7 @@ to Wave 4/5).
 | PDF position lock / pan-clamp design spike | PDF captured backlog | Polish. |
 | Vercel Blob rate limit on 30-page PDF import | PDF captured | Reliability polish; uncommon path. |
 | In-app onboarding polish | BACKLOG | Wave 3+ UX refresh subsumes. |
+| Google OAuth sign-in + sign-up (parents + tutors) | BACKLOG § Identity/access | Post-V1 fast-follow after Wave 3 ships; credentials-only today; provider in `auth-options.ts` not on login/signup UI. |
 
 ---
 
