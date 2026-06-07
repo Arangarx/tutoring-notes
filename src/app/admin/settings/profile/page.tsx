@@ -2,6 +2,8 @@ import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth-options";
 import { getAdminByEmail } from "@/lib/auth-db";
+import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
 import ChangePasswordForm from "./ChangePasswordForm";
 import ProfileForm from "./ProfileForm";
 
@@ -10,40 +12,70 @@ export default async function ProfileSettingsPage() {
   const email = session?.user?.email;
   if (!email) {
     return (
-      <div className="card">
-        <p>Sign in to edit your profile.</p>
-        <Link href="/login">Login</Link>
-      </div>
+      <AdminPageShell title="Profile">
+        <p className="text-sm text-muted-foreground">
+          Sign in to edit your profile.{" "}
+          <Link href="/login" className="text-foreground underline-offset-4 hover:underline">
+            Login
+          </Link>
+        </p>
+      </AdminPageShell>
     );
   }
   const admin = await getAdminByEmail(email);
 
   return (
-    <div className="card">
-      <h1 style={{ marginTop: 0 }}>Profile</h1>
-      <p className="muted">
-        Signed in as <strong>{email}</strong>. Set how parents see you in update emails.
-      </p>
-      <ProfileForm defaultDisplayName={admin?.displayName ?? ""} />
+    <AdminPageShell
+      title="Profile"
+      description={
+        <>
+          Signed in as <strong className="text-foreground font-medium">{email}</strong>.
+          Set how parents see you in update emails.
+        </>
+      }
+      eyebrow={
+        <Link
+          href="/admin/settings"
+          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          ← Settings
+        </Link>
+      }
+    >
+      <div className="space-y-6">
+        <AdminSectionCard
+          title="Display name"
+          description="How your name appears in session update emails sent to families."
+        >
+          <ProfileForm defaultDisplayName={admin?.displayName ?? ""} />
+        </AdminSectionCard>
 
-      <div className="divider" style={{ margin: "28px 0" }} />
-
-      {admin ? (
-        <ChangePasswordForm />
-      ) : (
-        <p className="muted" style={{ fontSize: 14, maxWidth: 480 }}>
-          <strong>Password:</strong> This session uses server environment login only. Change{" "}
-          <code>ADMIN_PASSWORD</code> in your host settings, or complete <code>/setup</code> to create a
-          database account — then you can change your password here or use{" "}
-          <Link href="/forgot-password">Forgot your password?</Link> from the login page.
-        </p>
-      )}
-
-      <p className="muted" style={{ marginTop: 24, fontSize: 14 }}>
-        <Link href="/admin/settings">← All settings</Link>
-        {" · "}
-        <Link href="/admin/students">Students</Link>
-      </p>
-    </div>
+        {admin ? (
+          <AdminSectionCard
+            title="Password"
+            description="Change your sign-in password or request a reset link."
+          >
+            <ChangePasswordForm />
+          </AdminSectionCard>
+        ) : (
+          <AdminSectionCard title="Password">
+            <p className="text-sm text-muted-foreground max-w-lg">
+              This session uses server environment login only. Change{" "}
+              <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">ADMIN_PASSWORD</code>{" "}
+              in your host settings, or complete{" "}
+              <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">/setup</code> to create a
+              database account — then you can change your password here or use{" "}
+              <Link
+                href="/forgot-password"
+                className="text-foreground underline-offset-4 hover:underline"
+              >
+                Forgot your password?
+              </Link>{" "}
+              from the login page.
+            </p>
+          </AdminSectionCard>
+        )}
+      </div>
+    </AdminPageShell>
   );
 }

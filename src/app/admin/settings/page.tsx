@@ -1,37 +1,72 @@
 import Link from "next/link";
+import { AdminPageShell } from "@/components/admin/AdminPageShell";
 
 export const dynamic = "force-dynamic";
 
+const settingsLinks = [
+  {
+    href: "/admin/settings/profile",
+    label: "Profile",
+    description: "Your name, password, and account email.",
+  },
+  {
+    href: "/admin/settings/email",
+    label: "Email",
+    description:
+      'Connect Gmail or SMTP so "Send update" and password reset emails deliver.',
+  },
+  {
+    href: "/admin/settings/2fa",
+    label: "Two-Factor Authentication",
+    description: "Set up or rotate your TOTP authenticator for mandatory 2FA.",
+  },
+] as const;
+
 export default async function SettingsIndexPage() {
   return (
-    <div className="card">
-      <h1 style={{ marginTop: 0 }}>Settings</h1>
-      <p className="muted">Your profile and account settings.</p>
-
-      <div style={{ display: "grid", gap: 12, marginTop: 20, maxWidth: 480 }}>
-        <Link href="/admin/settings/profile" className="card" style={{ textDecoration: "none", display: "block" }}>
-          <div style={{ fontWeight: 700 }}>Profile</div>
-          <p className="muted" style={{ margin: "8px 0 0", fontSize: 14 }}>
-            Your name, password, and account email.
-          </p>
+    <AdminPageShell
+      title="Settings"
+      description="Your profile and account settings."
+      eyebrow={
+        <Link
+          href="/admin/students"
+          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          ← Students
         </Link>
-        <Link href="/admin/settings/email" className="card" style={{ textDecoration: "none", display: "block" }}>
-          <div style={{ fontWeight: 700 }}>Email</div>
-          <p className="muted" style={{ margin: "8px 0 0", fontSize: 14 }}>
-            Connect Gmail or SMTP so &ldquo;Send update&rdquo; and password reset emails deliver.
-          </p>
-        </Link>
-        <Link href="/admin/settings/2fa" className="card" style={{ textDecoration: "none", display: "block" }}>
-          <div style={{ fontWeight: 700 }}>Two-Factor Authentication</div>
-          <p className="muted" style={{ margin: "8px 0 0", fontSize: 14 }}>
-            Set up or rotate your TOTP authenticator for mandatory 2FA.
-          </p>
-        </Link>
-      </div>
-
-      <p className="muted" style={{ marginTop: 24, fontSize: 14 }}>
-        <Link href="/admin/students">&larr; Back to Students</Link>
-      </p>
-    </div>
+      }
+    >
+      <nav aria-label="Settings sections">
+        <ul className="divide-y divide-border rounded-lg border border-border bg-card" role="list">
+          {settingsLinks.map(({ href, label, description }) => (
+            <li key={href}>
+              <Link
+                href={href}
+                className="flex min-h-16 items-center justify-between gap-4 px-4 py-4 transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 first:rounded-t-lg last:rounded-b-lg"
+              >
+                <div className="min-w-0 space-y-0.5">
+                  <div className="text-sm font-semibold text-foreground">{label}</div>
+                  <p className="text-sm text-muted-foreground">{description}</p>
+                </div>
+                <svg
+                  className="size-4 shrink-0 text-muted-foreground"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M6 3l5 5-5 5"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    </AdminPageShell>
   );
 }

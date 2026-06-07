@@ -89,6 +89,10 @@ import {
   issueJoinToken,
   revokeJoinTokensForSession,
 } from "@/app/admin/students/[id]/whiteboard/actions";
+import {
+  kickSessionChunksAction,
+  triggerNotesGenerationAction,
+} from "@/app/admin/students/[id]/whiteboard/notes-actions";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import {
   assembleEndSessionSegments,
@@ -2636,6 +2640,20 @@ export function WhiteboardWorkspaceClient({
           (finalizeErr as Error)?.message ?? finalizeErr
         );
       }
+
+      // Slice 3 — post-end notes pipeline (fire-and-forget, never blocks navigation).
+      // (a) Kick any straggler non-done chunks so transcription completes before reduce.
+      void kickSessionChunksAction(whiteboardSessionId).catch((sweepErr: unknown) => {
+        console.warn(
+          `[txc] wbsid=${whiteboardSessionId} action=session_sweep_fire_error err=${(sweepErr as Error)?.message ?? sweepErr}`
+        );
+      });
+      // (c) Trigger notes generation — upserts pending TutorNote + fires reduce.
+      void triggerNotesGenerationAction(whiteboardSessionId).catch((notesErr: unknown) => {
+        console.warn(
+          `[tnt] wbsid=${whiteboardSessionId} action=trigger_fire_error err=${(notesErr as Error)?.message ?? notesErr}`
+        );
+      });
 
       // Revoke is idempotent with the transaction above; don't block navigation.
       await revokeJoinTokensForSession(whiteboardSessionId).catch(() => undefined);

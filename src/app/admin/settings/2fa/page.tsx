@@ -25,8 +25,11 @@
 
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { authOptions } from "@/auth-options";
 import { db } from "@/lib/db";
+import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
 import { TwoFactorSetupForm } from "./setup/TwoFactorSetupForm";
 import { TwoFactorManageView } from "./TwoFactorManageView";
 
@@ -77,12 +80,23 @@ export default async function TwoFactorManagePage() {
   // Not enrolled or unconfirmed → show setup form.
   if (!twoFaRow) {
     return (
-      <div className="card" style={{ maxWidth: 540 }}>
-        <h1 style={{ marginTop: 0 }}>Set up Two-Factor Authentication</h1>
-        <p className="muted" style={{ marginBottom: 20 }}>
-          Protect your account with a one-time code from an authenticator app.
-        </p>
-        <TwoFactorSetupForm />
+      <div className="mx-auto max-w-lg">
+        <AdminPageShell
+          title="Set up Two-Factor Authentication"
+          description="Protect your account with a one-time code from an authenticator app."
+          eyebrow={
+            <Link
+              href="/admin/settings"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              ← Settings
+            </Link>
+          }
+        >
+          <AdminSectionCard title="Authenticator setup">
+            <TwoFactorSetupForm />
+          </AdminSectionCard>
+        </AdminPageShell>
       </div>
     );
   }
@@ -91,14 +105,27 @@ export default async function TwoFactorManagePage() {
   const isAdmin = session.user.role === "ADMIN";
 
   return (
-    <div className="card" style={{ maxWidth: 540 }}>
-      <h1 style={{ marginTop: 0 }}>Two-Factor Authentication</h1>
-      <TwoFactorManageView
-        enrolledAt={twoFaRow.enrolledAt.toISOString()}
-        remainingBackupCodes={remainingBackupCodes}
-        isAdmin={isAdmin}
-        userId={session.user.id ?? ""}
-      />
+    <div className="mx-auto max-w-lg">
+      <AdminPageShell
+        title="Two-Factor Authentication"
+        eyebrow={
+          <Link
+            href="/admin/settings"
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            ← Settings
+          </Link>
+        }
+      >
+        <AdminSectionCard title="Authentication status">
+          <TwoFactorManageView
+            enrolledAt={twoFaRow.enrolledAt.toISOString()}
+            remainingBackupCodes={remainingBackupCodes}
+            isAdmin={isAdmin}
+            userId={session.user.id ?? ""}
+          />
+        </AdminSectionCard>
+      </AdminPageShell>
     </div>
   );
 }

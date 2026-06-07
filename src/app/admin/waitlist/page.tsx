@@ -1,5 +1,8 @@
-import Link from "next/link";
 import { requireOperator } from "@/lib/operator";
+import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -18,37 +21,42 @@ export default async function AdminWaitlistPage() {
   const entries = await getWaitlistEntries();
 
   return (
-    <div className="card">
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <h1 style={{ margin: 0 }}>Waitlist</h1>
-        <Link className="btn" href="/admin">Dashboard</Link>
-      </div>
-      <p className="muted" style={{ marginTop: 8 }}>
-        People who signed up for early access from the landing page.
-      </p>
-
-      <div className="divider" />
-
-      {entries.length === 0 ? (
-        <p className="muted">No signups yet.</p>
-      ) : (
-        <div style={{ display: "grid", gap: 8 }}>
-          {entries.map((e) => (
-            <div key={e.id} className="card">
-              <div className="row" style={{ justifyContent: "space-between" }}>
-                <div>
-                  <div style={{ fontWeight: 600 }}>{e.email}</div>
-                  {e.name && <div className="muted" style={{ fontSize: 13 }}>{e.name}</div>}
-                  {e.note && <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>{e.note}</div>}
+    <AdminPageShell
+      title="Waitlist"
+      description="People who signed up for early access from the landing page."
+      actions={
+        <Button asChild variant="outline" size="sm">
+          <Link href="/admin">Dashboard</Link>
+        </Button>
+      }
+    >
+      <AdminSectionCard title="Sign-ups" contentClassName="p-0">
+        {entries.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-muted-foreground">No signups yet.</p>
+        ) : (
+          <ul className="divide-y divide-border" role="list">
+            {entries.map((e) => (
+              <li key={e.id} className="flex items-start justify-between gap-3 px-4 py-3">
+                <div className="min-w-0 space-y-0.5">
+                  <p className="text-sm font-semibold text-foreground">{e.email}</p>
+                  {e.name ? (
+                    <p className="text-sm text-muted-foreground">{e.name}</p>
+                  ) : null}
+                  {e.note ? (
+                    <p className="text-sm text-muted-foreground">{e.note}</p>
+                  ) : null}
                 </div>
-                <div className="muted" style={{ fontSize: 12 }}>
-                  {new Date(e.createdAt).toLocaleDateString()}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+                <time
+                  dateTime={e.createdAt.toISOString()}
+                  className="shrink-0 text-xs font-mono text-muted-foreground"
+                >
+                  {e.createdAt.toLocaleDateString()}
+                </time>
+              </li>
+            ))}
+          </ul>
+        )}
+      </AdminSectionCard>
+    </AdminPageShell>
   );
 }
