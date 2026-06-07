@@ -22,6 +22,7 @@ import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
 import { StudentAvatar } from "@/components/admin/StudentAvatar";
 import { Button } from "@/components/ui/button";
 import { ClaimInviteSection } from "./ClaimInviteSection";
+import { ConnectedParentSection, type ConnectedParent } from "./ConnectedParentSection";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,9 @@ export default async function StudentDetailPage({
   const scope = await getStudentScope();
   if (scope.kind === "none") redirect("/login");
 
+  // IAC-13: scope-scoped adminUserId for filtering claim invites to this tutor's minted ones.
+  const scopedAdminUserId: string | null = scope.kind === "admin" ? scope.adminId : null;
+
   const student = await db.student.findUnique({
     where: { id },
     include: {
@@ -69,6 +73,30 @@ export default async function StudentDetailPage({
         orderBy: { startedAt: "desc" },
         take: 20,
         select: { id: true, startedAt: true },
+      },
+      // IAC-13 (a): connected AccountHolder identity for the tutor-facing "Parent account" section.
+      // Two-hop join: Student → LearnerProfile → AccountHolder.
+      learnerProfile: {
+        select: {
+          id: true,
+          displayName: true,
+          accountHolder: {
+            select: { id: true, email: true, displayName: true, emailVerifiedAt: true },
+          },
+        },
+      },
+      // IAC-13 (a): "connected since" timestamp from the most recent completed claim invite
+      // minted by THIS tutor (adminUserId filter prevents leaking another tutor's invite history).
+      // For env scope (no adminUserId), no adminUserId filter is applied — env accounts can't
+      // mint claim invites via the API anyway, so this returns nothing in practice.
+      claimInvites: {
+        where: {
+          ...(scopedAdminUserId !== null ? { adminUserId: scopedAdminUserId } : {}),
+          claimedAt: { not: null },
+        },
+        orderBy: { claimedAt: "desc" },
+        take: 1,
+        select: { claimedAt: true },
       },
     },
   });
@@ -199,15 +227,32 @@ export default async function StudentDetailPage({
           title="Parent account"
           description={
             student.learnerProfileId
-              ? "This student's account is already connected to a parent."
+              ? "A parent account is connected to this student."
               : "Invite a parent to create a Mynk account and connect this student. They'll be able to manage their child's login and session access."
           }
         >
-          <ClaimInviteSection
-            studentId={student.id}
-            studentName={student.name}
-            alreadyClaimed={!!student.learnerProfileId}
-          />
+          {student.learnerProfile?.accountHolder ? (
+            // IAC-13 (a)+(b): Show connected parent identity + disconnect control.
+            <ConnectedParentSection
+              studentId={student.id}
+              studentName={student.name}
+              connectedParent={
+                {
+                  email: student.learnerProfile.accountHolder.email,
+                  displayName: student.learnerProfile.accountHolder.displayName,
+                  emailVerifiedAt: student.learnerProfile.accountHolder.emailVerifiedAt,
+                  claimedAt: student.claimInvites[0]?.claimedAt ?? null,
+                } satisfies ConnectedParent
+              }
+            />
+          ) : (
+            // Unclaimed: show invite flow.
+            <ClaimInviteSection
+              studentId={student.id}
+              studentName={student.name}
+              alreadyClaimed={!!student.learnerProfileId}
+            />
+          )}
         </AdminSectionCard>
       ) : null}
 
