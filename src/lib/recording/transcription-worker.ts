@@ -27,6 +27,7 @@ import "server-only";
  * Log prefix: [txc]  Per-session ID on every line.
  */
 
+import { fetchPrivateBlobBytes } from "@/lib/blob";
 import {
   getTranscriptChunkByBlobUrl,
   upsertTranscriptChunk,
@@ -127,18 +128,13 @@ export async function processChunkTranscribeJob(
   let mimeType: string;
 
   try {
-    const fetchRes = await fetch(chunkBlobUrl);
-    if (!fetchRes.ok) {
-      throw new Error(`Blob fetch failed: HTTP ${fetchRes.status} ${fetchRes.statusText}`);
-    }
-    const arrayBuf = await fetchRes.arrayBuffer();
-    buffer = Buffer.from(arrayBuf);
+    const { buffer: blobBuffer, contentType } = await fetchPrivateBlobBytes(chunkBlobUrl);
+    buffer = blobBuffer;
 
     // Infer filename from URL path; mimeType from Content-Type header.
     const urlPath = new URL(chunkBlobUrl).pathname;
     filename = urlPath.split("/").at(-1) ?? "chunk.webm";
-    const ct = fetchRes.headers.get("content-type") ?? "";
-    mimeType = ct.split(";")[0].trim() || "audio/webm;codecs=opus";
+    mimeType = contentType || "audio/webm;codecs=opus";
 
     console.log(
       `[txc] wbsid=${sessionId} action=blob_fetched bytes=${buffer.byteLength} file=${filename}`

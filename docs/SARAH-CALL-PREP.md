@@ -48,6 +48,10 @@ Invite her to share anything else (*"if I do I'll let you know"* from Q1 continu
 
 ## Answers landed
 
+### 2026-06-06 (Discord — post live whiteboard session, ~10:28–10:43 PM)
+
+Full capture: [`docs/handoff/sarah-pilot-feedback-2026-06-06-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-06-06-orchestrator-report.md) — real session (Sarah tutor Mac + student PC); sync + drawing pad validated; desktop UX annoyances triaged vs v1 redesign / identity epic / recording re-arch.
+
 ### 2026-05-26 / 2026-05-27 (evening call + 12:03–12:17 AM follow-up thread)
 
 Full verbatim capture: [`docs/handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md).
