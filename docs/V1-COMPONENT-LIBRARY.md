@@ -74,7 +74,7 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 
 | Component | File | Purpose | Key Props | Surfaces | Dedup Status |
 |---|---|---|---|---|---|
-| `AdminNav` | `src/components/AdminNav.tsx` | Sticky top nav for all tutor/admin surfaces. Wordmark left, nav links, sign-out right. Mobile hamburger. | `showOperatorLinks`, `sessionMode`, `isImpersonating`, `showDevTools`, `showCostDashboard` | All `/admin/**` pages via `admin/layout.tsx` | **canonical** |
+| `AdminNav` | `src/components/AdminNav.tsx` | Sticky top nav for all tutor/admin surfaces. Wordmark left, nav links, sign-out right. Mobile hamburger. **REQ-S3-3:** redesign must add a persistent signed-in identity indicator (display name/email; badge when impersonating or test account) — pairs with `ImpersonationBanner`. | `showOperatorLinks`, `sessionMode`, `isImpersonating`, `showDevTools`, `showCostDashboard` | All `/admin/**` pages via `admin/layout.tsx` | **canonical** |
 | `AdminPageShell` | `src/components/admin/AdminPageShell.tsx` | Page chrome: `<h1>` title, optional eyebrow, optional description, optional actions slot | `title`, `description`, `eyebrow`, `actions`, `children`, `className` | Dashboard, students, settings (chunk 1) | **canonical** |
 | `AdminSectionCard` | `src/components/admin/AdminSectionCard.tsx` | Section grouping within a page. Wraps shadcn `Card`. Title + optional description + optional actions header + content slot. | `title`, `description`, `actions`, `children`, `id`, `data-testid` | Dashboard, students, settings (chunk 1) | **canonical** |
 
@@ -154,10 +154,15 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 | Component | File | Purpose | Dedup Status |
 |---|---|---|---|
 | `ParentShareNoteCard` | `src/components/notes/ParentShareNoteCard.tsx` | Note card on parent share view | **canonical** |
-| `AiGeneratedNoteReviewGate` | `src/components/notes/AiGeneratedNoteReviewGate.tsx` | Gate for AI-generated note review | **candidate — review at B4 pass** |
-| `TutorStudentNoteExpandedBody` | `src/components/notes/TutorStudentNoteExpandedBody.tsx` | Expanded note body | **canonical** |
+| `AiGeneratedNoteReviewGate` | `src/components/notes/AiGeneratedNoteReviewGate.tsx` | Gate for AI-generated note review (pre-slice-3 Cancel/dismiss) | **candidate — fold into B4 post-session controls** |
+| `TutorStudentNoteExpandedBody` | `src/components/notes/TutorStudentNoteExpandedBody.tsx` | Expanded note body (structured fields, `pre-wrap`) | **canonical** for student notes list — **not** for markdown `TutorNote.content` |
 | `NotesSearchBar` | `src/components/notes/NotesSearchBar.tsx` | Notes search | **canonical** |
 | `PageSizeSelect` | `src/components/notes/PageSizeSelect.tsx` | Pagination size selector | **candidate-for-consolidation** — consider shadcn Select |
+| **`FormattedNotesBody`** (planned) | `src/components/notes/FormattedNotesBody.tsx` *(not yet created)* | **Canonical** rendered-markdown display for AI session notes: parses MD → styled headings/lists inside `.ai-prose` (`src/styles/typography.css`). **REQ-S3-1** — slice 3 smoke found `TutorNotesSection` shows raw source; B4 must route all auto-notes through this (or alias `RecapEditor` read-only mode). **REQ-S3-4** — section headings must match the canonical schema (topics / assessment / plan / links + vetted additions), not slice-3's dropped-field markdown shape. **No duplicate raw-MD renderer.** | **canonical target — implement at Chunk 3** |
+| **`RecapEditor`** (planned) | per [`v1-component-redesign-design-2026-05-31.md`](handoff/v1-component-redesign-design-2026-05-31.md) §5.5 | B4 session-detail recap panel: `.ai-prose`, editable inline, Regenerate. May compose `FormattedNotesBody` + edit chrome. **REQ-S3-4** — editor field model must align with canonical schema; cross-ref **REQ-S3-2** Save/Cancel. | **canonical target — Chunk 3** |
+| `NewNoteForm` | `src/app/admin/students/[id]/NewNoteForm.tsx` | Structured note create/edit; **"Save note"** submit (pre-slice-3 manual WB flow). **REQ-S3-4** — baseline canonical field set (topics / assessment / plan / links; homework optionally folded into Plan per Sarah pilot feedback). | **canonical** for structured `SessionNote` fields — reference for Save affordance and schema baseline |
+| `WhiteboardNotesPanel` | `src/components/whiteboard/WhiteboardNotesPanel.tsx` | Pre-slice-3 manual generate → review → Save/Cancel flow | **superseded by auto-notes** — B4 replaces with post-session controls per **REQ-S3-2** (see also §4 lock list) |
+| `TutorNotesSection` | `src/components/whiteboard/TutorNotesSection.tsx` | Slice 3 auto-notes polling UI (raw MD bug; slice-3 markdown schema diverges from canonical fields per **REQ-S3-4**) | **owned by recording slice 3 — redesign absorbs into Chunk 3, do not patch ad hoc** (see also §4 lock list) |
 
 ---
 
@@ -212,7 +217,7 @@ Andrew's approved mock (Surface 2 — dashboard) demonstrates the "variety of us
 | Data rows within a list/panel | **No** — row styling only | `border-b border-border` row with hover background, inside a card container |
 | Pending-action / AI signal | **Partial** — strip, not card | `accent-soft` tinted strip with `border-l-4 border-accent` (`.dash-pending-summaries` mock pattern) |
 | Primary action on landing/dashboard | **Yes** | `AdminSectionCard` or custom card for each distinct action unit |
-| Operator/debug pages (Outbox, Feedback, Waitlist) | **Minimal** | One `AdminPageShell` + one `AdminSectionCard` for the list; individual items = row styling |
+| Operator/debug pages (Feedback, Waitlist) | **Minimal** | One `AdminPageShell` + one `AdminSectionCard` for the list; individual items = row styling |
 
 **Current card usage audit (as of chunk 1):**
 - Landing/marketing page (Phase D): cards for feature grid — **appropriate** per mock
@@ -283,9 +288,33 @@ Error state: set `aria-invalid="true"` on the `Input`; display error text below 
 - Never use legacy aliases (`--bg`, `--panel`, `--text`) in new code
 - Coral accent (`bg-accent text-accent-on`) for primary CTAs only
 
+### 2.10 Component Chunk 1 smoke feedback (2026-06-07)
+
+**Source:** Andrew functional smoke of Component Chunk 1 (Settings + operator surfaces), 2026-06-07. **Not** chunk-by-chunk visual approval — inputs for the **cohesive visual review** per §3 Review protocol. Pointer in [`docs/handoff/v1-redesign-STATUS.md`](handoff/v1-redesign-STATUS.md) § 2026-06-07 checkpoints.
+
+| # | Feedback | Pass / priority |
+|---|---|---|
+| 1 | **Settings nav pattern** — evaluate a **left settings sub-nav** (GitHub/Stripe/Linear pattern) vs the current chevron-row list, for a settings area at this scale. Pairs with the sidebar shell coming in Chunk 2. | Cohesive pass + Chunk 2 shell |
+| 2 | **Sub-page density/hierarchy** — settings sub-pages feel cluttered and hard to parse; everything on the same justification, no indentation/visual hierarchy. Reskin only swapped components; **layout/hierarchy/density were not redesigned** and need work in the cohesive pass. | Cohesive pass |
+| 3 | **Email OAuth notice placement** — the "handled through mortensenapps.com" text should sit **above** the Connect-Gmail button (or inside it); users click the button before reading text beneath it. | Cohesive pass (legal binding — see v1-redesign-STATUS Auth-via-mortensenapps.com notice) |
+| 4 | **Color usage** — current reskin is very **monochrome** vs the mock's color variety; cohesive pass should bring in the mock's color usage. | Cohesive pass |
+| 5 | **Warning color shade** — reads as **yellow rather than amber**; tune the shade (token fix works; it's not black). | Cohesive pass / token tweak |
+| 6 | **Input validation-state coloring (OPEN)** — Andrew expected possible **input validation-state coloring / password-strength indicator** (red/yellow/green bar); never built. **Open question:** do we want validation-state coloring on inputs? **Not a bug.** | Low priority — decide in cohesive pass |
+| — | **Runbook correction** — there is **no** admin "outbox" page; that smoke runbook line was an error. Chunk 1 surfaces corrected in §3 tracker. | N/A |
+
 ---
 
 ## §3. Component-Pass Chunk Tracker
+
+### Review protocol (LOCKED — Andrew 2026-06-07)
+
+- **Tracked chunks** — component pass ships in chunks (this tracker) for clean, de-duplicated architecture.
+- **Foundation chunks** — merge on **functional correctness only** (renders cleanly, no regressions). **Not** visually smoked/approved chunk-by-chunk; a foundation reskin has no meaningful standalone visual target.
+- **Cohesive visual review** — **one** end-to-end review when enough chunks form a **complete page/flow** worth judging holistically.
+- **No high-fi page mock** — Andrew chose this over "high-fidelity page-design target first." Cohesive review is judged against the approved **palette/font mock** ([`docs/brand-previews/palette-mocks-FINAL-mynka-blue.html`](brand-previews/palette-mocks-FINAL-mynka-blue.html) / [`docs/MYNK-BRAND-PHASE-2-DECISIONS.md`](MYNK-BRAND-PHASE-2-DECISIONS.md)) **plus accumulated UX feedback** (§2.10 and future chunk smokes).
+- **Agent implication** — do **not** hand Andrew a foundation chunk as "smoke + approve the look"; hand it as **"functional foundation — merge on no-regression"** and accumulate visual feedback for the cohesive review.
+
+Full decision record: [`docs/handoff/v1-redesign-STATUS.md`](handoff/v1-redesign-STATUS.md) § 2026-06-07 checkpoints (Component Chunk 1 smoke + review protocol).
 
 | Chunk | Phase | Surface(s) | Status | Branch | Dedup-checked |
 |---|---|---|---|---|---|
@@ -293,12 +322,46 @@ Error state: set `aria-invalid="true"` on the `Input`; display error text below 
 | B1 — Auth surfaces | B1 | `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/setup` | SHIPPED (on `v1-redesign`) | `v1-redesign` @ `b798494` | ✅ |
 | B2 — Dashboard + Students | B2 | `/admin`, `/admin/students`, `/admin/students/[id]` | SHIPPED (on `v1-redesign` @ `0424206`) | `component-b2-dashboard-students` → merged | ✅ |
 | D — Landing + Features | D | `/` (landing), `/features` | FIRST CUT (on `feature/phase-d-landing-about`, not merged) | `feature/phase-d-landing-about` @ `37d8178` | ✅ |
-| **Chunk 1 — Settings + Operator** | B | `/admin/settings`, `/admin/settings/profile`, `/admin/settings/email`, `/admin/settings/2fa`, `/admin/outbox`, `/admin/feedback`, `/admin/waitlist` | **IN PROGRESS** | `v1-component-spine` | ✅ |
+| **Chunk 1 — Settings + Operator** | B | `/admin/settings`, `/admin/settings/profile`, `/admin/settings/email`, `/admin/settings/2fa`, `/admin/feedback`, `/admin/waitlist` | **FUNCTIONALLY SMOKED** (2026-06-07; visual feedback → §2.10) | `v1-component-spine` | ✅ |
 | Chunk 2 — Session list / billing log | B3 | `/sessions` (new route) | PENDING | — | — |
-| Chunk 3 — Session detail / replay | B4 | `/sessions/[id]` | PENDING | — | — |
+| Chunk 3 — Session detail / replay | B4 | `/sessions/[id]` | PENDING — **REQ-S3-1/2/4** (§3.1) | — | — |
 | Chunk 4 — Live workspace + solo mode | B5 | `/sessions/[id]/workspace` | PENDING | — | — |
 | Chunk 5 — Student-side mobile | B6 | `/join/[token]` | PENDING | — | — |
 | C — URL restructure | C | All `/admin/**` → flatter routes | PENDING (Andrew-gated) | — | — |
+
+---
+
+## §3.1 Slice 3 smoke → B4 requirements (2026-06-07)
+
+Captured from Andrew smoke of `feat/recording-p1-slice3-autonotes`. **Documentation only** — implementation belongs to Chunk 3 / Phase B4, not the recording slice.
+
+### REQ-S3-1 — Formatted markdown display (dedupe)
+
+- **Current bug surface:** `src/components/whiteboard/TutorNotesSection.tsx` renders `note.content` with `whiteSpace: pre-wrap` — users see literal `##` / `-` markdown.
+- **Required:** one canonical path — `FormattedNotesBody` (or `RecapEditor` read-only) wrapping a markdown parser output in `.ai-prose`. No second ad-hoc raw-text renderer elsewhere on session review.
+- **Repo today:** `.ai-prose` exists in `src/styles/typography.css`; **no** `ReactMarkdown` / `remark` utility yet — Chunk 3 introduces the shared renderer.
+
+### REQ-S3-2 — Post-session note controls
+
+- **Required actions:** **Save notes** (primary); **Cancel and delete session data** (destructive, confirmation dialog copy exactly: *"Are you sure you want to delete this session and all related data?"*).
+- **Regression vs pre-slice-3:** `WhiteboardNotesPanel` paired `AiGeneratedNoteReviewGate` (Cancel) with `NewNoteForm` (Save note).
+
+### REQ-S3-2a — OPEN design question
+
+**Save notes** semantics undefined for auto-generated + regeneratable `TutorNote` rows. B4 design pass must choose before wiring (edit commit vs accept draft vs pin version, etc.). See [`v1-redesign-STATUS.md`](handoff/v1-redesign-STATUS.md) § 2026-06-07.
+
+### REQ-S3-3 — Signed-in identity indicator (shell)
+
+- **Gap (slice 3 smoke):** no on-page indication of which account is active — hard to confirm normal tutor vs admin vs impersonating vs test account.
+- **Required:** app shell / `AdminNav` (and parallel `AccountPageShell` nav where applicable) always shows current signed-in identity; clear badge when impersonating (`ImpersonationBanner` complements but does not replace) or on test accounts.
+- **Pass:** shell / nav redesign (B3–B6), not recording slice 3.
+
+### REQ-S3-4 — Canonical notes schema (no field drops; Plan mandatory)
+
+- **Problem:** slice 3 map-reduce (`notes-worker.ts` reduce, `extract-chunk.ts` map) emits markdown `TutorNote.content` with sections Session Summary / Topics Covered / Student Questions / Corrections & Misconceptions / Homework / Follow-up — **dropping** legacy form fields `assessment`, `plan`, and `links` from the pre-slice-3 shape (`NewNoteForm`, `src/lib/ai.ts`: topics / homework / assessment / plan / links).
+- **Required (Andrew, 2026-06-07):** no straight drops without justification; legacy fields are baseline; **`Plan` mandatory**; **`homework` may fold into `Plan` only** per Sarah pilot feedback ([`sarah-pilot-feedback-2026-05-26-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md) ~line 312 + § 2.6); new sections (Summary, Questions, Corrections) allowed as vetted **additions**, not replacements. **One converged schema** for manual + auto notes: topics / assessment / plan / links (+ optional additions; homework subsumed into Plan per Sarah). Reconcile slice-3 prompt + rendering in **B4 design pass** — not recording slice 3.
+- **Component targets:** `FormattedNotesBody`, `RecapEditor`, `NewNoteForm`, `TutorNotesSection` (see Notes inventory). Cross-ref **REQ-S3-1** (formatted render), **REQ-S3-2** (Save/Cancel).
+- **Sub-note (non-directive):** reduce `temperature: 0.3` may explain verbose-vs-terse run-to-run variance; consider pinning style in B4.
 
 ---
 
@@ -340,3 +403,7 @@ The following files are locked to recording slice 3 or live-session infrastructu
 ## Changelog
 
 - **2026-06-07:** Initial doc. Component-pass chunk 1 (Settings/operator reskin). Authored by Sonnet subagent on branch `v1-component-spine`.
+- **2026-06-07:** Slice 3 smoke requirements **REQ-S3-1/2/2a** added (§3.1, Notes inventory, Chunk 3 row). Branch `docs/v1-redesign-notes-ux-reqs`.
+- **2026-06-07:** **REQ-S3-3** signed-in identity indicator (§3.1, `AdminNav` inventory). Branch `docs/v1-redesign-notes-ux-reqs`.
+- **2026-06-07:** **REQ-S3-4** canonical notes schema — no field drops, Plan mandatory, homework→Plan per Sarah pilot feedback (§3.1, Notes inventory). Branch `docs/v1-redesign-notes-ux-reqs`.
+- **2026-06-07:** Component-pass **review protocol** (§3) + **Chunk 1 smoke feedback** (§2.10); Chunk 1 tracker row updated (functional smoke; removed nonexistent `/admin/outbox`). Branch `docs/v1-redesign-notes-ux-reqs`.

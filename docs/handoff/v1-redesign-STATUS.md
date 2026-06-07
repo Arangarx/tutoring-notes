@@ -68,6 +68,84 @@ Batched on **`feature/phase-d-landing-about`** (intent recorded here; do not edi
 
 ---
 
+## 2026-06-07 checkpoints (Recording P1 slice 3 smoke → V1 redesign requirements)
+
+**Source:** Andrew live smoke of `feat/recording-p1-slice3-autonotes` (auto-notes pipeline works; two **UX gaps** for the in-flight V1 component pass — **not** slice-3 implementation scope). Captured on branch `docs/v1-redesign-notes-ux-reqs`. Detail also in [`docs/V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) §3.1 (Chunk 3 / B4).
+
+### REQ-S3-1 — Render auto-notes as formatted markdown (not raw source)
+
+| Field | Value |
+|---|---|
+| **Problem** | Slice 3 `TutorNotesSection` (`src/components/whiteboard/TutorNotesSection.tsx`) displays `TutorNote.content` as literal markdown source (`## Session Summary`, `- bullet`) via `whiteSpace: pre-wrap` — headings and bullets are not styled. |
+| **Requirement** | V1 redesign **must** render AI-generated session notes through the app's canonical formatted-notes display: parsed markdown (headings, lists, emphasis) inside the `.ai-prose` typography role (`src/styles/typography.css`). Consistent with pre-slice-3 notes presentation quality and with the B4 `RecapEditor` spec ([`v1-component-redesign-design-2026-05-31.md`](v1-component-redesign-design-2026-05-31.md) §5.5). |
+| **Dedup** | One shared markdown renderer + `.ai-prose` wrapper — **no** second raw-MD `<pre>` path. Candidate canonical: `FormattedNotesBody` / `RecapEditor` (see component library). |
+| **Pre-slice-3 reference** | Manual flow used structured fields via `NewNoteForm` (`src/app/admin/students/[id]/NewNoteForm.tsx`) inside `WhiteboardNotesPanel` (`src/components/whiteboard/WhiteboardNotesPanel.tsx`) — different shape, same presentation bar. |
+| **Pass** | Component Phase **B4** / library **Chunk 3** (session detail / replay). |
+
+### REQ-S3-2 — Restore post-session Save + destructive Cancel controls
+
+| Field | Value |
+|---|---|
+| **Problem** | Pre-slice-3 whiteboard review exposed **Save note** (`NewNoteForm`) and **Cancel** (`AiGeneratedNoteReviewGate` dismiss in `WhiteboardNotesPanel`). Slice 3 auto-notes review shows generated content + **Regenerate** only — Save/Cancel are gone. |
+| **Requirement** | V1 redesign post-session notes area on session review (`/sessions/[id]` / current `…/whiteboard/[whiteboardSessionId]`) **must** provide: **(a)** **"Save notes"** primary action; **(b)** **"Cancel and delete session data"** destructive action behind a confirmation dialog with copy: **"Are you sure you want to delete this session and all related data?"** |
+| **Pre-slice-3 reference** | `WhiteboardNotesPanel` + `AiGeneratedNoteReviewGate` (`dismissButtonLabel="Cancel"`) + `NewNoteForm` (`"Save note"`). |
+| **Pass** | Component Phase **B4** / library **Chunk 3**. Cross-ref discard-session backlog ([`docs/BACKLOG.md`](../BACKLOG.md) § End-session "Stop and delete"). |
+
+### OPEN — REQ-S3-2a: "Save notes" semantics (design pass must resolve)
+
+Auto-notes are now **server-generated** (`TutorNote` row, map-reduce pipeline) and can be **regenerated**. Pre-slice-3 **Save note** committed tutor-edited structured fields to `SessionNote`. **Ambiguity for B4 design:** does **Save notes** mean (a) commit tutor edits to an editable draft field, (b) accept/confirm the AI draft as the session's canonical note, (c) pin a version against later regeneration, or (d) something else? **Do not guess in the component pass** — lock semantics in the B4 design pass before wiring the button.
+
+### REQ-S3-3 — Always-visible signed-in identity indicator
+
+| Field | Value |
+|---|---|
+| **Problem** | During slice 3 smoke, the operator could not tell at a glance which account was active — normal tutor vs admin vs impersonating vs test account. **No on-page indication of current signed-in identity** anywhere in the app. |
+| **Requirement** | V1 redesigned **app shell / nav** must always show the current signed-in identity (e.g. account display name and/or email). Ideally includes a **clear badge** when impersonating or when signed in as a test account. Pairs with the **admin sidebar shell nav** decision already in the redesign ([`v1-component-redesign-design-2026-05-31.md`](v1-component-redesign-design-2026-05-31.md) §5 — two-column settings layout; nav redesign deferred to B3–B6). |
+| **Impersonation** | Related surface: `ImpersonationBanner` / **"viewing as X"** indicator — distinct from but complementary to the persistent identity chip in the shell. Both should be visible when impersonating. |
+| **Pass** | Component pass **shell / nav** (`AdminNav` redesign, B3–B6). **Not** slice-3 implementation scope. Detail: [`docs/V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) §3.1. |
+
+### REQ-S3-4 — Canonical notes schema (no field drops; Plan mandatory)
+
+| Field | Value |
+|---|---|
+| **Problem** | Recording slice 3 introduced a **new** auto-notes schema via map-reduce: a single markdown `TutorNote.content` with sections **Session Summary / Topics Covered / Student Questions / Corrections & Misconceptions / Homework / Follow-up** (reduce prompt in `src/lib/recording/notes-worker.ts`; map extract in `src/lib/recording/extract-chunk.ts`). The pre-slice-3 notes form (`NewNoteForm.tsx`, legacy AI prompt `src/lib/ai.ts`) used five structured fields: **topics / homework / assessment / plan / links**. Slice 3 **dropped** `assessment`, `plan`, and `links` and added Summary/Questions/Corrections — diverging from the established form without operator sign-off. |
+| **Requirement (Andrew, 2026-06-07)** | **No straight drops.** The V1 redesign must **not** remove existing notes-form fields without justification or a clear improvement. Legacy fields are the baseline. **`Plan` is MANDATORY** — departments sometimes require a plan from the tutor (Sarah). **`homework` may fold into `Plan`** — allowed **only** on the strength of Sarah's documented pilot feedback (see Citation); not a unilateral drop. **Additions welcome only if truly useful** — new sections (Session Summary, Student Questions, Corrections & Misconceptions) are acceptable as genuinely-useful **additions** layered on top of canonical fields, not as replacements that lose existing fields. **Net canonical direction:** redesigned notes (manual + auto-generated) converge on **one** schema preserving **topics / assessment / plan / links** (homework optionally subsumed into Plan per Sarah), plus any vetted useful additions. Slice-3 reduce prompt + `TutorNote` rendering must be reconciled to that canonical schema in the **B4 design pass** — **not** implemented now. |
+| **Sarah homework→Plan citation** | [`docs/handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md`](sarah-pilot-feedback-2026-05-26-orchestrator-report.md) — verbatim capture (~line 312): *"She's not sure there should be a homework section. (She think's it could be taken out and that plan probably covers it)… Plan should be plan moving forward, what to do next, and it would also be homework if she gives any."* Synthesis and action item: § **2.6 AI prompt / framing change — "homework" → "plan"**. |
+| **Sub-note (non-directive)** | Slice-3 reduce runs at `temperature: 0.3` — possible source of verbose-vs-terse run-to-run variance; B4 design pass may consider whether style should be pinned for consistency. |
+| **Pass** | Component Phase **B4** / library **Chunk 3** — schema reconciliation in design pass before wiring. Cross-ref **REQ-S3-1** (formatted render), **REQ-S3-2** (Save/Cancel). Detail: [`docs/V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) §3.1. |
+
+---
+
+## 2026-06-07 checkpoints (Component Chunk 1 smoke + review protocol)
+
+### Component-pass review protocol (LOCKED — Andrew 2026-06-07)
+
+Governing process for the V1 component/visual redesign. Detail also in [`docs/V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) §3 (Review protocol).
+
+| Decision | Summary |
+|---|---|
+| **Tracked chunks** | Component pass ships in **tracked chunks** for clean, de-duplicated architecture — see chunk tracker in [`docs/V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) §3. |
+| **Foundation chunks — merge bar** | **Functional correctness only** (renders cleanly, no regressions). Foundation chunks are **NOT** visually smoked/approved by Andrew chunk-by-chunk — a foundation reskin has no meaningful standalone visual target. |
+| **Cohesive visual review** | **One** end-to-end visual review happens later, when enough chunks form a **complete page/flow** worth judging holistically. |
+| **No high-fi page mock** | Andrew explicitly chose this over "produce a high-fidelity page-design target first." There is **no** separate approved high-fi mock of actual pages. The cohesive review is judged against the approved **palette/font mock** ([`docs/brand-previews/palette-mocks-FINAL-mynka-blue.html`](../brand-previews/palette-mocks-FINAL-mynka-blue.html) / [`docs/MYNK-BRAND-PHASE-2-DECISIONS.md`](../MYNK-BRAND-PHASE-2-DECISIONS.md)) **plus accumulated UX feedback** (Chunk 1 list below). |
+| **Agent implication** | Do **NOT** hand Andrew a foundation chunk as "smoke + approve the look." Hand it as **"functional foundation — merge on no-regression"** and accumulate visual feedback for the cohesive review. |
+
+### Component Chunk 1 smoke feedback (inputs for cohesive visual review)
+
+**Source:** Andrew functional smoke of Component Chunk 1 (Settings + operator surfaces) on `v1-redesign` preview, 2026-06-07. **Not** chunk-by-chunk visual approval — per review protocol above. Full list: [`docs/V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) §2.10.
+
+| # | Feedback | Notes |
+|---|---|---|
+| 1 | **Settings nav pattern** | Evaluate a **left settings sub-nav** (GitHub/Stripe/Linear pattern) vs the current chevron-row list, for a settings area at this scale. Pairs with the sidebar shell coming in Chunk 2. |
+| 2 | **Sub-page density/hierarchy** | Settings sub-pages feel cluttered and hard to parse — everything on the same justification, no indentation/visual hierarchy. Reskin only swapped components; **layout/hierarchy/density were not redesigned** and need work in the cohesive pass. |
+| 3 | **Email OAuth notice placement** | The "handled through mortensenapps.com" text should sit **above** the Connect-Gmail button (or inside it) — users click the button before reading text beneath it. |
+| 4 | **Color usage** | Current reskin is very **monochrome** vs the mock's color variety; cohesive pass should bring in the mock's color usage. |
+| 5 | **Warning color shade** | Reads as **yellow rather than amber** — tune the shade (token fix works; it's not black). |
+| 6 | **Input validation-state coloring (OPEN)** | Andrew expected possible **input validation-state coloring / password-strength indicator** (red/yellow/green bar); never built. Record as open question — **do we want validation-state coloring on inputs?** — not a bug. Low priority. |
+| — | **Runbook correction** | There is **no** admin "outbox" page — that smoke runbook line was an error. Chunk tracker corrected in component library. |
+
+---
+
 ## Decisions ledger (LOCKED)
 
 - **Brand:** Mynka Blue palette (light done in tokens.css; dark = legacy purple, to migrate) + Fraunces V4/V2 + Inter 400 + JetBrains Mono fonts (never implemented). Light `--accent-on`=#15203A (Option A).
@@ -100,9 +178,11 @@ Batched on **`feature/phase-d-landing-about`** (intent recorded here; do not edi
 - **Provisioning (base):** untied Student stub (tutor-only) -> claim link -> parent email-verified signup -> claim -> authorize child + consent + child login -> only tied profiles can be live-session participants; no links into the wild. **Amended 2026-06-01 (parent-first):** claim invite is **one** path, not the only path — `AccountHolder` + `LearnerProfile` can exist with **zero tutor linkage**; linking is **bidirectional** (new account OR existing parent); V1 **builds** tutor-initiated claim + connect-by-existing-account (identity interstitial required); standalone parent signup UI = fast-follow. Per-child access mode: parent picks **`parent_session_select`** vs **`child_pin_required`** per `LearnerProfile` (defaults: &lt;13 / 13+ — see design doc).
 - **IAC refinements (LOCKED 2026-06-02, Andrew co-design):** Full ledger → [`identity-phase2-auth-session-design-2026-06-01.md`](identity-phase2-auth-session-design-2026-06-01.md) § IAC refinements — 2026-06-02. Summary: **(IAC-1)** tutor content isolation verified — artifacts NEVER anchor on `LearnerProfile`/`AccountHolder`; **(IAC-2)** `@@unique([adminUserId, learnerProfileId])` replaces global `Student.learnerProfileId @unique` (one child → N tutors); **(IAC-3)** claim = attach-to-existing-first interstitial; **(IAC-4)** parent-first "add a child" (UI may fast-follow); **(IAC-5)** AccountHolder = auth/billing/consent owner, LearnerProfile = session/content principal (adult self = `isSelfLearner` profile, no Student→AccountHolder shortcut); **(IAC-6)** enforce `accessMode` (`child_pin_required` + family-id = V1 floor; `parent_session_select` fast-follow); **(IAC-7)** `AccountHolder.familyId` + per-family username + required `username@familyid` (supersedes round-3 `@`-strip); **(IAC-8)** signup "I am a learner" + claim self-connect; **(IAC-9)** consent template seeds new tutor records, never auto-grants; **(IAC-10)** layered PIN lockout + IP-independent per-credential counter + parent unlock (**supersedes AH-4 never-hard-lock**); **(IAC-11)** round-4 UX E/G/I → [`p2b-smoke-fixes.md`](p2b-smoke-fixes.md) § Round 4; **(IAC-12)** "Parent/Guardian" where guardian-context applies + **conditional** guardian framing (neutral copy until account has/adds a child learner; V1 copy in round-4/IAC build).
 - **Co-guardian / delegated child access (FUTURE, not V1):** second guardian with own credentials, scoped to one child, owner-initiated — [`docs/BACKLOG.md`](../BACKLOG.md) § Identity / access — V1 redesign.
+- **Cross-domain email uniqueness (LOCKED 2026-06-07, Andrew):** **one email = one account** — enforce cross-domain uniqueness; same email may NOT exist in both `AdminUser` (Operator) and `AccountHolder` realms. **No tutor+parent dual persona** — dual-role persons use separate email / `+alias`; account-linking / multi-role identity (Option B) rejected for now. **Built with OAuth-signup fast-follow wave** (not separate near-term build). Detail: [`docs/BACKLOG.md`](../BACKLOG.md) § Identity / access — V1 redesign (Google OAuth item).
 - **Identity Phase-2 auth/session (RATIFIED 2026-06-01, Andrew):** **Two realms + child mechanism** *(AH-4 PIN policy superseded by IAC-10 — 2026-06-02)* — **(1) Operator** = tutor + admin + superadmin on **existing NextAuth** (admin = role, not third realm); **(2) AccountHolder** = parents/adult-self on **`mynk_ah_session` + `AccountHolderSession`**, outside NextAuth; **child** = PIN device sessions under AccountHolder. **Hard constraint:** shared auth **primitives** (hash, TOTP, backup codes, rate-limit, DB-session pattern) in common modules; **thin per-realm adapters only** — P2a acceptance. **AH-1..AH-7 ratified** (separate realm, DB-backed AH session, `AH_TOTP_ENCRYPTION_KEY`, PIN soft-lockout never hard-lock, in-place device renewal, 30-day rolling AH session, serial merge `identity-p2-schema` → `identity-p2-ownership-guard` → P2a). **Impersonation:** SEC-1 admin→tutor **unchanged** (Operator realm only); **cross-realm admin→parent/child DEFERRED**. **Provisioning guardrail clarified:** no self-serve into tutor/admin; **parent self-signup permitted**. Detail: [`identity-phase2-auth-session-design-2026-06-01.md`](identity-phase2-auth-session-design-2026-06-01.md) §0 + [RATIFIED + AMENDED](identity-phase2-auth-session-design-2026-06-01.md#ratified--amended-andrew-2026-06-01).
 - **Access control:** note/recording/transcript = {tutor, child, parent} only; replaces anyone-with-link sharing. Session has a participant SET (1 now, N later — design for, don't build N's multi-consent now).
 - **Billing:** `billedDurationMin` frozen-at-close + immutable (RELIABILITY-REDESIGN Surface 7); rate/amount deferred.
+- **Component-pass review protocol (LOCKED 2026-06-07, Andrew):** tracked chunks; **foundation chunks merge on functional correctness only** (no chunk-by-chunk visual approval); **one cohesive visual review** when a complete page/flow exists; judged against palette/font mock + accumulated UX feedback — **no** separate high-fi page mock. Agents: hand foundation chunks as "functional, merge on no-regression," not "approve the look." Full protocol: § 2026-06-07 checkpoints (Component Chunk 1 smoke + review protocol); [`docs/V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) §3 Review protocol.
 - **Q-1..Q-10** all ratified 2026-05-31 (see component doc [`docs/handoff/v1-component-redesign-design-2026-05-31.md`](v1-component-redesign-design-2026-05-31.md) §8).
 - **Identity/access schema (LOCKED, design landed 2026-05-31):** `AccountHolder` (with `isSelfLearner` for adult collapse), `LearnerProfile`, `LearnerCredential` + `LearnerDeviceSession` (username+PIN + device-bound sticky sessions), `ConsentRecord` (parent ceiling, versioned) ∩ `ConsentRestriction` (child narrowing) → `SessionConsentSnapshot` frozen at session start (`onDelete: Restrict`, no UPDATE endpoint), `StudentClaimInvite`, `SessionParticipant`.
 - **Identity/access assertions (LOCKED):** `assertOwnsLearnerProfile`, `assertIsSessionParticipant`, `assertEffectiveConsent`.
@@ -324,6 +404,18 @@ Folded from 5-axis review in [`session-lifecycle-consent-design-2026-05-31.md`](
 ### Approved-to-build (from Q-3 ratification)
 
 - **Admin-only recording-deletion capability** — manual now, auto-able later; honors on-request deletion (disclosed contact path); retain-by-default on revocation.
+
+### V1 redesign — component pass requirements (from slice 3 smoke, 2026-06-07)
+
+- **REQ-S3-1** — formatted markdown render for auto-notes (not raw MD source). See § 2026-06-07 checkpoints.
+- **REQ-S3-2** — post-session **Save notes** + **Cancel and delete session data** (confirm dialog). See § 2026-06-07 checkpoints.
+- **REQ-S3-2a (OPEN)** — define **Save notes** semantics for server-generated/regeneratable `TutorNote` content before B4 implementation.
+- **REQ-S3-3** — always-visible signed-in identity in app shell/nav (+ impersonation / test-account badge). See § 2026-06-07 checkpoints.
+- **REQ-S3-4** — canonical notes schema: no field drops; Plan mandatory; homework→Plan fold per Sarah pilot feedback only; reconcile slice-3 map-reduce to legacy fields in B4. See § 2026-06-07 checkpoints.
+
+### V1 redesign — Component Chunk 1 smoke feedback (2026-06-07)
+
+Inputs for the **cohesive visual review** (not chunk-by-chunk approval — see review protocol in § 2026-06-07 checkpoints). Full list: [`docs/V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) §2.10 — settings sub-nav pattern, sub-page hierarchy/density, OAuth notice placement, color variety vs mock, warning amber shade, open question on input validation-state coloring.
 
 ---
 
