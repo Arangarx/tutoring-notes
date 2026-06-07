@@ -15,6 +15,11 @@ jest.mock("@/lib/db", () => ({
   db: {
     whiteboardSession: {
       findUnique: jest.fn(),
+      update: jest.fn(),
+    },
+    sessionNote: {
+      create: jest.fn(),
+      update: jest.fn(),
     },
   },
   withDbRetry: jest.fn((fn: () => unknown) => fn()),
@@ -136,6 +141,19 @@ beforeEach(() => {
   mockGetNote.mockResolvedValue(null);
   mockUpsertNotePending.mockResolvedValue({ sessionId: SESSION_ID, status: "pending" });
   mockUpdateNote.mockResolvedValue({ sessionId: SESSION_ID });
+
+  // Default bridge mocks (used by createOrUpdateDraftSessionNote — best-effort)
+  mockGetSession.mockResolvedValue({
+    id: SESSION_ID,
+    endedAt: NOW,
+    startedAt: new Date(NOW.getTime() - 60000),
+    studentId: "stu-1",
+    adminUserId: "admin-1",
+    noteId: null,
+  });
+  (db.whiteboardSession.update as jest.Mock).mockResolvedValue({ id: SESSION_ID });
+  (db.sessionNote.create as jest.Mock).mockResolvedValue({ id: "note-1" });
+  (db.sessionNote.update as jest.Mock).mockResolvedValue({ id: "note-1" });
 });
 
 describe("processNotesReduceJob — idempotency", () => {
@@ -169,7 +187,14 @@ describe("processNotesReduceJob — session-sealed guard", () => {
   });
 
   it("aborts if session not yet sealed (endedAt = null)", async () => {
-    mockGetSession.mockResolvedValue(makeSession(null));
+    mockGetSession.mockResolvedValue({
+      id: SESSION_ID,
+      endedAt: null,
+      startedAt: NOW,
+      studentId: "stu-1",
+      adminUserId: "admin-1",
+      noteId: null,
+    });
 
     const result = await processNotesReduceJob(SESSION_ID);
 
@@ -183,7 +208,14 @@ describe("processNotesReduceJob — session-sealed guard", () => {
 
 describe("processNotesReduceJob — completion gate", () => {
   it("returns pending when chunks are still transcribing and within timeout", async () => {
-    mockGetSession.mockResolvedValue(makeSession(new Date())); // just sealed
+    mockGetSession.mockResolvedValue({
+      id: SESSION_ID,
+      endedAt: new Date(),
+      startedAt: new Date(Date.now() - 60000),
+      studentId: "stu-1",
+      adminUserId: "admin-1",
+      noteId: null,
+    });
 
     mockGetChunks.mockResolvedValue([
       makeChunk({ status: "done" }),
@@ -198,7 +230,14 @@ describe("processNotesReduceJob — completion gate", () => {
   });
 
   it("returns pending when chunks are pending and within timeout", async () => {
-    mockGetSession.mockResolvedValue(makeSession(new Date()));
+    mockGetSession.mockResolvedValue({
+      id: SESSION_ID,
+      endedAt: new Date(),
+      startedAt: new Date(Date.now() - 60000),
+      studentId: "stu-1",
+      adminUserId: "admin-1",
+      noteId: null,
+    });
 
     mockGetChunks.mockResolvedValue([
       makeChunk({ status: "pending" }),
@@ -221,7 +260,17 @@ describe("processNotesReduceJob — completion gate", () => {
       makeChunk({ id: "chunk-2", status: "pending" }),
     ]);
     mockGetExtractions.mockResolvedValue([makeExtraction("chunk-1")]);
-    mockOpenAISuccess("## Session Summary\nGreat session on Pythagoras.");
+    mockOpenAISuccess(JSON.stringify({
+      topics: "Pythagoras theorem",
+      assessment: "Good progress",
+      nextSteps: "Review next session",
+      links: "",
+    }));
+
+    // Bridge mocks
+    (db.whiteboardSession.findUnique as jest.Mock).mockResolvedValue({ ...makeSession(sixMinAgo), startedAt: new Date(sixMinAgo.getTime() - 60000), noteId: null });
+    (db.whiteboardSession.update as jest.Mock) = jest.fn().mockResolvedValue({});
+    (db.sessionNote.create as jest.Mock) = jest.fn().mockResolvedValue({ id: "note-p" });
 
     const result = await processNotesReduceJob(SESSION_ID);
 
@@ -240,12 +289,10 @@ describe("processNotesReduceJob — completion gate", () => {
 
 describe("processNotesReduceJob — successful reduce", () => {
   it("uses map extractions when available", async () => {
-    mockGetSession.mockResolvedValue(makeSession(NOW));
-
     const chunk = makeChunk({ id: "chunk-1", status: "done" });
     mockGetChunks.mockResolvedValue([chunk]);
     mockGetExtractions.mockResolvedValue([makeExtraction("chunk-1")]);
-    mockOpenAISuccess("## Session Summary\nGreat math session.");
+    mockOpenAISuccess(JSON.stringify({ topics: "Math", assessment: "Good", nextSteps: "Practice", links: "" }));
 
     const result = await processNotesReduceJob(SESSION_ID);
 
@@ -259,12 +306,10 @@ describe("processNotesReduceJob — successful reduce", () => {
   });
 
   it("falls back to raw transcripts when no extractions exist", async () => {
-    mockGetSession.mockResolvedValue(makeSession(NOW));
-
     const chunk = makeChunk({ id: "chunk-1", status: "done", transcript: "Student asked about area." });
     mockGetChunks.mockResolvedValue([chunk]);
     mockGetExtractions.mockResolvedValue([]); // no extractions
-    mockOpenAISuccess("## Session Summary\nArea discussion.");
+    mockOpenAISuccess(JSON.stringify({ topics: "Area", assessment: "", nextSteps: "", links: "" }));
 
     const result = await processNotesReduceJob(SESSION_ID);
 
@@ -274,11 +319,15 @@ describe("processNotesReduceJob — successful reduce", () => {
     expect(userMsg).toContain("Student asked about area.");
   });
 
-  it("writes TutorNote with status=done and content on success", async () => {
-    mockGetSession.mockResolvedValue(makeSession(NOW));
+  it("writes TutorNote with status=done and structured JSON content on success", async () => {
     mockGetChunks.mockResolvedValue([makeChunk()]);
     mockGetExtractions.mockResolvedValue([makeExtraction("chunk-1")]);
-    mockOpenAISuccess("## Session Summary\nPythagoras covered.");
+    mockOpenAISuccess(JSON.stringify({
+      topics: "Pythagoras theorem",
+      assessment: "Covered well",
+      nextSteps: "Practice 3 problems",
+      links: "",
+    }));
 
     await processNotesReduceJob(SESSION_ID);
 
@@ -286,14 +335,16 @@ describe("processNotesReduceJob — successful reduce", () => {
       (c: unknown[]) => (c[1] as { status?: string }).status === "done"
     );
     expect(donecall).toBeDefined();
-    expect((donecall?.[1] as { content?: string })?.content).toBe("## Session Summary\nPythagoras covered.");
+    const content = (donecall?.[1] as { content?: string })?.content;
+    expect(content).toBeDefined();
+    const parsed = JSON.parse(content!);
+    expect(parsed.topics).toBe("Pythagoras theorem");
   });
 
   it("handles sessions with no chunks (no audio)", async () => {
-    mockGetSession.mockResolvedValue(makeSession(NOW));
     mockGetChunks.mockResolvedValue([]); // no audio chunks
     mockGetExtractions.mockResolvedValue([]);
-    mockOpenAISuccess("No audio was available.");
+    mockOpenAISuccess(JSON.stringify({ topics: "", assessment: "", nextSteps: "", links: "" }));
 
     const result = await processNotesReduceJob(SESSION_ID);
 
@@ -304,7 +355,6 @@ describe("processNotesReduceJob — successful reduce", () => {
 
 describe("processNotesReduceJob — failure handling", () => {
   it("writes failed status and returns failed on OpenAI error", async () => {
-    mockGetSession.mockResolvedValue(makeSession(NOW));
     mockGetChunks.mockResolvedValue([makeChunk()]);
     mockGetExtractions.mockResolvedValue([]);
     mockChatCreate.mockRejectedValue(new Error("API rate limit"));
@@ -321,13 +371,11 @@ describe("processNotesReduceJob — failure handling", () => {
 
 describe("processNotesReduceJob — failed chunks do not block reduce", () => {
   it("marks isPartial=true when some chunks are failed but proceeds", async () => {
-    mockGetSession.mockResolvedValue(makeSession(NOW));
-
     const doneChunk = makeChunk({ id: "chunk-1", status: "done" });
     const failedChunk = makeChunk({ id: "chunk-2", status: "failed" });
     mockGetChunks.mockResolvedValue([doneChunk, failedChunk]);
     mockGetExtractions.mockResolvedValue([makeExtraction("chunk-1")]);
-    mockOpenAISuccess("## Session Summary\nPartial notes.");
+    mockOpenAISuccess(JSON.stringify({ topics: "Math", assessment: "Partial notes", nextSteps: "", links: "" }));
 
     const result = await processNotesReduceJob(SESSION_ID);
 

@@ -7,15 +7,20 @@
  *   - Triggering notes generation after session end (called from workspace client)
  *   - Kicking straggler transcript chunks at session end (end-session sweep)
  *   - Polling for TutorNote status (called from review page)
- *   - Regenerating notes (escape hatch for failures)
+ *   - Regenerating notes (escape hatch for failures) — confirm dialog required client-side
+ *   - Saving a DRAFT SessionNote as finalized (DRAFT → READY)
+ *   - Deleting a session and all related data (with ownership assertion)
  *
  * Trust posture:
  *   - ALL actions start with assertOwnsWhiteboardSession (multi-tenant gate).
  *   - Downstream workers that run in fire-and-forget contexts are invoked only
  *     AFTER ownership has been validated here.
  *   - logCostEvent uses whiteboardSessionId FK — validated against existing session row.
+ *
+ * Log prefixes: [tnt] (TutorNote pipeline), [nsi] (notes-session-integration).
  */
 
+import { revalidatePath } from "next/cache";
 import { db, withDbRetry } from "@/lib/db";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import { enqueueNotesReduce } from "@/lib/recording/notes-enqueue";
@@ -27,6 +32,7 @@ import {
 } from "@/lib/recording/transcript-store";
 import type { TutorNote } from "@prisma/client";
 import { TRANSCRIBE_SWEEP_MAX_ATTEMPTS } from "@/lib/recording/transcribe-sweep-config";
+import { REDUCE_PROMPT_VERSION } from "@/lib/recording/notes-worker";
 
 // ---------------------------------------------------------------------------
 // (a) End-session sweep — kick non-done chunks for this session
@@ -221,4 +227,250 @@ export async function loadTutorNoteForReview(
   whiteboardSessionId: string
 ): Promise<TutorNote | null> {
   return getTutorNoteBySessionId(whiteboardSessionId);
+}
+
+// ---------------------------------------------------------------------------
+// (f) Save DRAFT SessionNote — finalize to READY (tutor-facing)
+// ---------------------------------------------------------------------------
+
+export type SaveDraftNoteFields = {
+  topics: string;
+  assessment: string;
+  nextSteps: string;
+  links: string;
+};
+
+export type SaveDraftNoteResult =
+  | { ok: true; noteId: string }
+  | { ok: false; error: string };
+
+/**
+ * Finalize the DRAFT SessionNote for a whiteboard session (DRAFT → READY).
+ *
+ * The tutor can edit the fields on the review page before saving.
+ * If no DRAFT note exists yet (edge case: notes still generating when tutor
+ * clicks Save), this action creates a new READY note from the provided fields.
+ *
+ * Trust: assertOwnsWhiteboardSession.
+ * Log prefix: [nsi]
+ */
+export async function saveDraftSessionNoteAction(
+  whiteboardSessionId: string,
+  fields: SaveDraftNoteFields
+): Promise<SaveDraftNoteResult> {
+  try {
+    const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
+
+    const linksJson = fields.links
+      ? JSON.stringify(
+          fields.links
+            .split("\n")
+            .map((l) => l.trim())
+            .filter(Boolean)
+        )
+      : "[]";
+
+    let noteId: string;
+
+    const existingNoteId = await withDbRetry(
+      () =>
+        db.whiteboardSession.findUnique({
+          where: { id: whiteboardSessionId },
+          select: { noteId: true },
+        }),
+      { label: "saveDraftSessionNote.fetchNoteId" }
+    ).then((s) => s?.noteId ?? null);
+
+    if (existingNoteId) {
+      // Update the existing DRAFT note and mark as READY
+      await withDbRetry(
+        () =>
+          db.sessionNote.update({
+            where: { id: existingNoteId },
+            data: {
+              topics: fields.topics,
+              assessment: fields.assessment,
+              nextSteps: fields.nextSteps,
+              linksJson,
+              status: "READY",
+              aiGenerated: true,
+              aiPromptVersion: REDUCE_PROMPT_VERSION,
+            },
+          }),
+        { label: "saveDraftSessionNote.update" }
+      );
+      noteId = existingNoteId;
+      console.log(
+        `[nsi] wbsid=${whiteboardSessionId} action=save_draft_finalized noteId=${noteId}`
+      );
+    } else {
+      // Edge case: no note exists yet — create a READY note directly
+      const note = await withDbRetry(
+        () =>
+          db.sessionNote.create({
+            data: {
+              studentId: session.studentId,
+              date: new Date(),
+              topics: fields.topics,
+              homework: "",
+              assessment: fields.assessment,
+              nextSteps: fields.nextSteps,
+              linksJson,
+              status: "READY",
+              aiGenerated: true,
+              aiPromptVersion: REDUCE_PROMPT_VERSION,
+            },
+            select: { id: true },
+          }),
+        { label: "saveDraftSessionNote.create" }
+      );
+      noteId = note.id;
+      // Link the session → note
+      await withDbRetry(
+        () =>
+          db.whiteboardSession.update({
+            where: { id: whiteboardSessionId },
+            data: { noteId },
+          }),
+        { label: "saveDraftSessionNote.linkNote" }
+      );
+      console.log(
+        `[nsi] wbsid=${whiteboardSessionId} action=save_draft_created_ready noteId=${noteId}`
+      );
+    }
+
+    revalidatePath(`/admin/students/${session.studentId}/notes`);
+    revalidatePath(`/admin/students/${session.studentId}`);
+
+    return { ok: true, noteId };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[nsi] wbsid=${whiteboardSessionId} action=save_draft_failed err=${msg}`
+    );
+    return { ok: false, error: msg };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// (g) Delete session and all related data — with confirm dialog client-side
+// ---------------------------------------------------------------------------
+
+export type DeleteSessionResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+/**
+ * Delete a whiteboard session and ALL related data:
+ *   - DRAFT SessionNote (if exists and status=DRAFT; refuses if READY)
+ *   - SessionRecording rows for this session
+ *   - WhiteboardSession (cascades: TutorNote, TranscriptChunks, extractions, JoinTokens)
+ *
+ * IMPORTANT: Audio and events Blob files are NOT deleted here (that is the
+ * stale-branch sweep utility's responsibility). DB rows only.
+ *
+ * Refuses (with error) if the attached SessionNote has already been finalized
+ * (status=READY or SENT) — the tutor must manually detach the note first.
+ *
+ * Requires a confirm dialog client-side with the exact copy:
+ * "Are you sure you want to delete this session and all related data?"
+ *
+ * Trust: assertOwnsWhiteboardSession. All deletes verified against the session's
+ * studentId to prevent cross-student data leakage.
+ * Log prefix: [nsi]
+ */
+export async function deleteWhiteboardSessionAndDataAction(
+  whiteboardSessionId: string
+): Promise<DeleteSessionResult> {
+  try {
+    const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
+
+    const sessionDetail = await withDbRetry(
+      () =>
+        db.whiteboardSession.findUnique({
+          where: { id: whiteboardSessionId },
+          select: { noteId: true, studentId: true },
+        }),
+      { label: "deleteSession.fetchDetail" }
+    );
+
+    if (!sessionDetail) {
+      return { ok: false, error: "Session not found." };
+    }
+
+    // Verify ownership cross-check (belt + suspenders)
+    if (sessionDetail.studentId !== session.studentId) {
+      console.error(
+        `[nsi] wbsid=${whiteboardSessionId} action=delete_session_rejected reason=studentId_mismatch`
+      );
+      return { ok: false, error: "Not authorized to delete this session." };
+    }
+
+    const noteId = sessionDetail.noteId;
+
+    // If a note is linked, verify it's a DRAFT (not already finalized)
+    if (noteId) {
+      const note = await withDbRetry(
+        () =>
+          db.sessionNote.findUnique({
+            where: { id: noteId },
+            select: { id: true, status: true },
+          }),
+        { label: "deleteSession.checkNoteStatus" }
+      );
+      if (note && (note.status === "READY" || note.status === "SENT")) {
+        console.warn(
+          `[nsi] wbsid=${whiteboardSessionId} action=delete_session_rejected reason=note_already_finalized noteId=${noteId} status=${note.status}`
+        );
+        return {
+          ok: false,
+          error:
+            "Cannot delete: this session's note has already been saved. Detach the note first if you wish to delete the session.",
+        };
+      }
+    }
+
+    console.log(
+      `[nsi] wbsid=${whiteboardSessionId} action=delete_session_start noteId=${noteId ?? "none"} studentId=${session.studentId}`
+    );
+
+    await withDbRetry(
+      () =>
+        db.$transaction(async (tx) => {
+          // 1. Delete DRAFT SessionNote (before deleting WB session, since SetNull cascade
+          //    would otherwise just null noteId rather than delete the note)
+          if (noteId) {
+            await tx.sessionNote.delete({ where: { id: noteId } });
+          }
+
+          // 2. Delete SessionRecording rows for this session
+          //    (WhiteboardSession FK is SetNull not Cascade — must delete explicitly)
+          await tx.sessionRecording.deleteMany({
+            where: { whiteboardSessionId },
+          });
+
+          // 3. Delete WhiteboardSession (cascades: TutorNote, TranscriptChunks,
+          //    TranscriptChunkExtractions, WhiteboardJoinTokens)
+          await tx.whiteboardSession.delete({
+            where: { id: whiteboardSessionId },
+          });
+        }),
+      { label: "deleteSession.transaction" }
+    );
+
+    console.log(
+      `[nsi] wbsid=${whiteboardSessionId} action=delete_session_done studentId=${session.studentId}`
+    );
+
+    revalidatePath(`/admin/students/${session.studentId}`);
+    revalidatePath(`/admin/students/${session.studentId}/notes`);
+
+    return { ok: true };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[nsi] wbsid=${whiteboardSessionId} action=delete_session_failed err=${msg}`
+    );
+    return { ok: false, error: msg };
+  }
 }

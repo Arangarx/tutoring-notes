@@ -39,7 +39,7 @@ export default async function SharePage({
 
   const student = link.student;
   const notes = await db.sessionNote.findMany({
-    where: { studentId: student.id },
+    where: { studentId: student.id, status: { not: "DRAFT" } },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     include: parentShareNoteInclude,
   });
