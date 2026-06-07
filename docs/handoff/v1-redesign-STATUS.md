@@ -104,6 +104,16 @@ Auto-notes are now **server-generated** (`TutorNote` row, map-reduce pipeline) a
 | **Impersonation** | Related surface: `ImpersonationBanner` / **"viewing as X"** indicator — distinct from but complementary to the persistent identity chip in the shell. Both should be visible when impersonating. |
 | **Pass** | Component pass **shell / nav** (`AdminNav` redesign, B3–B6). **Not** slice-3 implementation scope. Detail: [`docs/V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) §3.1. |
 
+### REQ-S3-4 — Canonical notes schema (no field drops; Plan mandatory)
+
+| Field | Value |
+|---|---|
+| **Problem** | Recording slice 3 introduced a **new** auto-notes schema via map-reduce: a single markdown `TutorNote.content` with sections **Session Summary / Topics Covered / Student Questions / Corrections & Misconceptions / Homework / Follow-up** (reduce prompt in `src/lib/recording/notes-worker.ts`; map extract in `src/lib/recording/extract-chunk.ts`). The pre-slice-3 notes form (`NewNoteForm.tsx`, legacy AI prompt `src/lib/ai.ts`) used five structured fields: **topics / homework / assessment / plan / links**. Slice 3 **dropped** `assessment`, `plan`, and `links` and added Summary/Questions/Corrections — diverging from the established form without operator sign-off. |
+| **Requirement (Andrew, 2026-06-07)** | **No straight drops.** The V1 redesign must **not** remove existing notes-form fields without justification or a clear improvement. Legacy fields are the baseline. **`Plan` is MANDATORY** — departments sometimes require a plan from the tutor (Sarah). **`homework` may fold into `Plan`** — allowed **only** on the strength of Sarah's documented pilot feedback (see Citation); not a unilateral drop. **Additions welcome only if truly useful** — new sections (Session Summary, Student Questions, Corrections & Misconceptions) are acceptable as genuinely-useful **additions** layered on top of canonical fields, not as replacements that lose existing fields. **Net canonical direction:** redesigned notes (manual + auto-generated) converge on **one** schema preserving **topics / assessment / plan / links** (homework optionally subsumed into Plan per Sarah), plus any vetted useful additions. Slice-3 reduce prompt + `TutorNote` rendering must be reconciled to that canonical schema in the **B4 design pass** — **not** implemented now. |
+| **Sarah homework→Plan citation** | [`docs/handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md`](sarah-pilot-feedback-2026-05-26-orchestrator-report.md) — verbatim capture (~line 312): *"She's not sure there should be a homework section. (She think's it could be taken out and that plan probably covers it)… Plan should be plan moving forward, what to do next, and it would also be homework if she gives any."* Synthesis and action item: § **2.6 AI prompt / framing change — "homework" → "plan"**. |
+| **Sub-note (non-directive)** | Slice-3 reduce runs at `temperature: 0.3` — possible source of verbose-vs-terse run-to-run variance; B4 design pass may consider whether style should be pinned for consistency. |
+| **Pass** | Component Phase **B4** / library **Chunk 3** — schema reconciliation in design pass before wiring. Cross-ref **REQ-S3-1** (formatted render), **REQ-S3-2** (Save/Cancel). Detail: [`docs/V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) §3.1. |
+
 ---
 
 ## Decisions ledger (LOCKED)
@@ -369,6 +379,7 @@ Folded from 5-axis review in [`session-lifecycle-consent-design-2026-05-31.md`](
 - **REQ-S3-2** — post-session **Save notes** + **Cancel and delete session data** (confirm dialog). See § 2026-06-07 checkpoints.
 - **REQ-S3-2a (OPEN)** — define **Save notes** semantics for server-generated/regeneratable `TutorNote` content before B4 implementation.
 - **REQ-S3-3** — always-visible signed-in identity in app shell/nav (+ impersonation / test-account badge). See § 2026-06-07 checkpoints.
+- **REQ-S3-4** — canonical notes schema: no field drops; Plan mandatory; homework→Plan fold per Sarah pilot feedback only; reconcile slice-3 map-reduce to legacy fields in B4. See § 2026-06-07 checkpoints.
 
 ---
 

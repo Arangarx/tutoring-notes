@@ -158,11 +158,11 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 | `TutorStudentNoteExpandedBody` | `src/components/notes/TutorStudentNoteExpandedBody.tsx` | Expanded note body (structured fields, `pre-wrap`) | **canonical** for student notes list — **not** for markdown `TutorNote.content` |
 | `NotesSearchBar` | `src/components/notes/NotesSearchBar.tsx` | Notes search | **canonical** |
 | `PageSizeSelect` | `src/components/notes/PageSizeSelect.tsx` | Pagination size selector | **candidate-for-consolidation** — consider shadcn Select |
-| **`FormattedNotesBody`** (planned) | `src/components/notes/FormattedNotesBody.tsx` *(not yet created)* | **Canonical** rendered-markdown display for AI session notes: parses MD → styled headings/lists inside `.ai-prose` (`src/styles/typography.css`). **REQ-S3-1** — slice 3 smoke found `TutorNotesSection` shows raw source; B4 must route all auto-notes through this (or alias `RecapEditor` read-only mode). **No duplicate raw-MD renderer.** | **canonical target — implement at Chunk 3** |
-| **`RecapEditor`** (planned) | per [`v1-component-redesign-design-2026-05-31.md`](handoff/v1-component-redesign-design-2026-05-31.md) §5.5 | B4 session-detail recap panel: `.ai-prose`, editable inline, Regenerate. May compose `FormattedNotesBody` + edit chrome. | **canonical target — Chunk 3** |
-| `NewNoteForm` | `src/app/admin/students/[id]/NewNoteForm.tsx` | Structured note create/edit; **"Save note"** submit (pre-slice-3 manual WB flow) | **canonical** for structured `SessionNote` fields — reference for Save affordance, not for markdown `TutorNote` |
+| **`FormattedNotesBody`** (planned) | `src/components/notes/FormattedNotesBody.tsx` *(not yet created)* | **Canonical** rendered-markdown display for AI session notes: parses MD → styled headings/lists inside `.ai-prose` (`src/styles/typography.css`). **REQ-S3-1** — slice 3 smoke found `TutorNotesSection` shows raw source; B4 must route all auto-notes through this (or alias `RecapEditor` read-only mode). **REQ-S3-4** — section headings must match the canonical schema (topics / assessment / plan / links + vetted additions), not slice-3's dropped-field markdown shape. **No duplicate raw-MD renderer.** | **canonical target — implement at Chunk 3** |
+| **`RecapEditor`** (planned) | per [`v1-component-redesign-design-2026-05-31.md`](handoff/v1-component-redesign-design-2026-05-31.md) §5.5 | B4 session-detail recap panel: `.ai-prose`, editable inline, Regenerate. May compose `FormattedNotesBody` + edit chrome. **REQ-S3-4** — editor field model must align with canonical schema; cross-ref **REQ-S3-2** Save/Cancel. | **canonical target — Chunk 3** |
+| `NewNoteForm` | `src/app/admin/students/[id]/NewNoteForm.tsx` | Structured note create/edit; **"Save note"** submit (pre-slice-3 manual WB flow). **REQ-S3-4** — baseline canonical field set (topics / assessment / plan / links; homework optionally folded into Plan per Sarah pilot feedback). | **canonical** for structured `SessionNote` fields — reference for Save affordance and schema baseline |
 | `WhiteboardNotesPanel` | `src/components/whiteboard/WhiteboardNotesPanel.tsx` | Pre-slice-3 manual generate → review → Save/Cancel flow | **superseded by auto-notes** — B4 replaces with post-session controls per **REQ-S3-2** |
-| `TutorNotesSection` | `src/components/whiteboard/TutorNotesSection.tsx` | Slice 3 auto-notes polling UI (raw MD bug) | **owned by recording slice 3 — redesign absorbs into Chunk 3, do not patch ad hoc** |
+| `TutorNotesSection` | `src/components/whiteboard/TutorNotesSection.tsx` | Slice 3 auto-notes polling UI (raw MD bug; slice-3 markdown schema diverges from canonical fields per **REQ-S3-4**) | **owned by recording slice 3 — redesign absorbs into Chunk 3, do not patch ad hoc** |
 
 ---
 
@@ -300,7 +300,7 @@ Error state: set `aria-invalid="true"` on the `Input`; display error text below 
 | D — Landing + Features | D | `/` (landing), `/features` | FIRST CUT (on `feature/phase-d-landing-about`, not merged) | `feature/phase-d-landing-about` @ `37d8178` | ✅ |
 | **Chunk 1 — Settings + Operator** | B | `/admin/settings`, `/admin/settings/profile`, `/admin/settings/email`, `/admin/settings/2fa`, `/admin/outbox`, `/admin/feedback`, `/admin/waitlist` | **IN PROGRESS** | `v1-component-spine` | ✅ |
 | Chunk 2 — Session list / billing log | B3 | `/sessions` (new route) | PENDING | — | — |
-| Chunk 3 — Session detail / replay | B4 | `/sessions/[id]` | PENDING — **REQ-S3-1/2** (§3.1) | — | — |
+| Chunk 3 — Session detail / replay | B4 | `/sessions/[id]` | PENDING — **REQ-S3-1/2/4** (§3.1) | — | — |
 | Chunk 4 — Live workspace + solo mode | B5 | `/sessions/[id]/workspace` | PENDING | — | — |
 | Chunk 5 — Student-side mobile | B6 | `/join/[token]` | PENDING | — | — |
 | C — URL restructure | C | All `/admin/**` → flatter routes | PENDING (Andrew-gated) | — | — |
@@ -331,6 +331,13 @@ Captured from Andrew smoke of `feat/recording-p1-slice3-autonotes`. **Documentat
 - **Gap (slice 3 smoke):** no on-page indication of which account is active — hard to confirm normal tutor vs admin vs impersonating vs test account.
 - **Required:** app shell / `AdminNav` (and parallel `AccountPageShell` nav where applicable) always shows current signed-in identity; clear badge when impersonating (`ImpersonationBanner` complements but does not replace) or on test accounts.
 - **Pass:** shell / nav redesign (B3–B6), not recording slice 3.
+
+### REQ-S3-4 — Canonical notes schema (no field drops; Plan mandatory)
+
+- **Problem:** slice 3 map-reduce (`notes-worker.ts` reduce, `extract-chunk.ts` map) emits markdown `TutorNote.content` with sections Session Summary / Topics Covered / Student Questions / Corrections & Misconceptions / Homework / Follow-up — **dropping** legacy form fields `assessment`, `plan`, and `links` from the pre-slice-3 shape (`NewNoteForm`, `src/lib/ai.ts`: topics / homework / assessment / plan / links).
+- **Required (Andrew, 2026-06-07):** no straight drops without justification; legacy fields are baseline; **`Plan` mandatory**; **`homework` may fold into `Plan` only** per Sarah pilot feedback ([`sarah-pilot-feedback-2026-05-26-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md) ~line 312 + § 2.6); new sections (Summary, Questions, Corrections) allowed as vetted **additions**, not replacements. **One converged schema** for manual + auto notes: topics / assessment / plan / links (+ optional additions; homework subsumed into Plan per Sarah). Reconcile slice-3 prompt + rendering in **B4 design pass** — not recording slice 3.
+- **Component targets:** `FormattedNotesBody`, `RecapEditor`, `NewNoteForm`, `TutorNotesSection` (see Notes inventory). Cross-ref **REQ-S3-1** (formatted render), **REQ-S3-2** (Save/Cancel).
+- **Sub-note (non-directive):** reduce `temperature: 0.3` may explain verbose-vs-terse run-to-run variance; consider pinning style in B4.
 
 ---
 
@@ -374,3 +381,4 @@ The following files are locked to recording slice 3 or live-session infrastructu
 - **2026-06-07:** Initial doc. Component-pass chunk 1 (Settings/operator reskin). Authored by Sonnet subagent on branch `v1-component-spine`.
 - **2026-06-07:** Slice 3 smoke requirements **REQ-S3-1/2/2a** added (§3.1, Notes inventory, Chunk 3 row). Branch `docs/v1-redesign-notes-ux-reqs`.
 - **2026-06-07:** **REQ-S3-3** signed-in identity indicator (§3.1, `AdminNav` inventory). Branch `docs/v1-redesign-notes-ux-reqs`.
+- **2026-06-07:** **REQ-S3-4** canonical notes schema — no field drops, Plan mandatory, homework→Plan per Sarah pilot feedback (§3.1, Notes inventory). Branch `docs/v1-redesign-notes-ux-reqs`.
