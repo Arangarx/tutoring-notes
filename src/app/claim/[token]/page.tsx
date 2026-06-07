@@ -114,7 +114,7 @@ export default async function ClaimPage({
           </CardHeader>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">
-              {`Claim links are valid for 7 days. Ask${invite.tutorName ? ` ${invite.tutorName}` : " your tutor"} to send a fresh one.`}
+              {`Claim links are valid for 48 hours. Ask${invite.tutorName ? ` ${invite.tutorName}` : " your tutor"} to send a fresh one.`}
             </p>
           </CardContent>
         </Card>

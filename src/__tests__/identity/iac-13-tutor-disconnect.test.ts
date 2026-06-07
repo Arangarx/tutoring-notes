@@ -30,6 +30,7 @@ jest.mock("next/cache", () => ({
 
 import { db } from "@/lib/db";
 import { hashAccountHolderPassword } from "@/lib/account-holder-auth";
+import { CLAIM_INVITE_TTL_MS } from "@/lib/crypto/session-tokens";
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -87,7 +88,7 @@ async function createTestClaimInvite(opts: {
       studentId: opts.studentId,
       adminUserId: opts.adminUserId,
       tokenHash: `hash-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      expiresAt: opts.expiresAt ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      expiresAt: opts.expiresAt ?? new Date(Date.now() + CLAIM_INVITE_TTL_MS),
       claimedAt: opts.claimedAt ?? null,
       revokedAt: opts.revokedAt ?? null,
       claimedByAccountHolderId: opts.claimedAt ? "ah-placeholder" : null,

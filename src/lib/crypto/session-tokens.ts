@@ -61,5 +61,5 @@ export const EMAIL_TOKEN_TTL_MS_1H = 60 * 60 * 1000;
 /** 24 hours in milliseconds */
 export const EMAIL_TOKEN_TTL_MS_24H = 24 * 60 * 60 * 1000;
 
-/** 7 days in milliseconds */
-export const CLAIM_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+/** 48 hours in milliseconds */
+export const CLAIM_INVITE_TTL_MS = 48 * 60 * 60 * 1000;

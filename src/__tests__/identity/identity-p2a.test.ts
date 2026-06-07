@@ -49,7 +49,7 @@ import {
   getLearnerPinFailureCount,
   isCredentialHardLocked,
 } from "@/lib/learner-pin-rate-limit";
-import { generateRawToken, hashToken, hmacToken } from "@/lib/crypto/session-tokens";
+import { generateRawToken, hashToken, hmacToken, CLAIM_INVITE_TTL_MS } from "@/lib/crypto/session-tokens";
 import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
 import { assertIsSessionParticipant } from "@/lib/session-participant-scope";
 import { assertEffectiveConsent, ConsentError } from "@/lib/consent-scope";
@@ -210,7 +210,7 @@ describe("BLOCKER-P2-S3: Post-claim sibling invite revoke", () => {
     const ah = await createTestAccountHolder();
 
     const now = new Date();
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + CLAIM_INVITE_TTL_MS);
 
     // Create two pending invites
     const invite1 = await db.studentClaimInvite.create({
@@ -263,7 +263,7 @@ describe("BLOCKER-P2-R1: Atomic claim rollback", () => {
     const ahA = await createTestAccountHolder();
     const ahB = await createTestAccountHolder();
 
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + CLAIM_INVITE_TTL_MS);
 
     // Simulate ahA already claimed the student
     const profileA = await db.learnerProfile.create({
@@ -763,7 +763,7 @@ describe("Claim invite — hash-only token storage (§6.4)", () => {
 
     const rawToken = generateRawToken();
     const tokenHash = hashToken(rawToken);
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + CLAIM_INVITE_TTL_MS);
 
     const invite = await db.studentClaimInvite.create({
       data: { studentId: student.id, adminUserId: admin.id, tokenHash, expiresAt },
