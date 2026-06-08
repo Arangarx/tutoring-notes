@@ -7,6 +7,7 @@ import { signOut } from "next-auth/react";
 import { exitImpersonation } from "@/app/admin/actions/impersonate";
 
 import { MynkWordmark } from "@/components/auth/MynkWordmark";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { AdminSessionMode } from "@/lib/admin-routing";
@@ -93,6 +94,7 @@ export function AdminNav({
                 {l.label}
               </Link>
             ))}
+            <ThemeToggle />
             {isImpersonating ? (
               <form action={exitImpersonation}>
                 <Button
@@ -173,6 +175,9 @@ export function AdminNav({
                 {l.label}
               </Link>
             ))}
+            <div className="px-1 py-2">
+              <ThemeToggle />
+            </div>
             {isImpersonating ? (
               <form action={exitImpersonation}>
                 <Button

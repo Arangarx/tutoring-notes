@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* App theme toggle drives `dark:` — not OS prefers-color-scheme alone. */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
 @import "../styles/tokens.css";
 @import "../styles/shadcn-theme.css";
 @import "../styles/typography.css";
