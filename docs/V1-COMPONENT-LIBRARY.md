@@ -303,12 +303,38 @@ Error state: set `aria-invalid="true"` on the `Input`; display error text below 
 | 6 | **Input validation-state coloring (OPEN)** — Andrew expected possible **input validation-state coloring / password-strength indicator** (red/yellow/green bar); never built. **Open question:** do we want validation-state coloring on inputs? **Not a bug.** | Low priority — decide in cohesive pass |
 | — | **Runbook correction** — there is **no** admin "outbox" page; that smoke runbook line was an error. Chunk 1 surfaces corrected in §3 tracker. | N/A |
 
-### 2.11 Light/dark theme parity (Andrew 2026-06-07 — pre-master gate)
+### 2.11 Light/dark theme parity — HARD per-component acceptance gate (Andrew 2026-06-07)
 
-- **Both themes are first-class.** Light and dark are each fully designed with Mynka Blue v1 tokens — not "dark as an afterthought" or "light is legacy."
-- **Every redesigned component/page** in the component pass must be **verified in both themes** before the cohesive visual review signs off. Chunk merges stay functional-only; theme parity is part of the **cohesive** bar, not per-chunk optional polish.
-- **`ThemeToggle`** (§1 inventory) is a **component-library deliverable** — discoverable, persisted user control; replaces dev-only `?theme=` (`ThemeInit.tsx`). Wire into `AdminNav` / account settings per layout chunk.
-- **Whiteboard:** Mynk chrome + Excalidraw `theme` prop follow the app-selected theme (**TU-12** in [`whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md)).
+**Binding standard (Andrew 2026-06-07):** slot the theme toggle wherever it makes sense, but **every component is designed for light and dark as it is built** — there is **no separate pass** that touches everything again just to add light or dark.
+
+#### Acceptance gate (HARD — not optional polish)
+
+A redesigned or new **component or page is NOT done** until it is **designed AND verified in BOTH light and dark** in the same build slice. Theme parity is checked **per component** as each surface ships — not deferred to a cohesive visual review or a later theming sweep.
+
+| Rule | Requirement |
+|---|---|
+| **Done definition** | Both themes verified before the component/page is marked complete in this tracker or handed off as smoke-ready. |
+| **Theming mechanism** | **MUST** go through design tokens / CSS variables / `[data-theme]` on `<html>` (`src/styles/tokens.css`, `src/styles/shadcn-theme.css`). **NEVER** OS-only `prefers-color-scheme` or bare Tailwind `dark:` that keys off system preference instead of `[data-theme=dark]`. |
+| **No retrofit pass** | There will be **no** standalone "theming pass." Both themes are built in with each component. |
+| **Agent enforcement** | [`.cursor/rules/both-theme-components.mdc`](../.cursor/rules/both-theme-components.mdc) — scoped to component/page source. |
+
+#### Foundational theme plumbing — FIRST slice of the component pass (done once)
+
+Ship **before** later component chunks so every surface inherits correct theming. **Not** a standalone touch-everything sweep — one foundational slice, then per-component work inherits it:
+
+1. **Tailwind `@custom-variant`** — `dark:` follows app selection, e.g. `@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));` (fixes ~30 existing `dark:` usages that today key off OS, not toggle).
+2. **`useTheme` provider** — persisted user choice in localStorage; first visit defaults to system `prefers-color-scheme` until the user picks; sets `data-theme` on `<html>`.
+3. **FOUC-safe bootstrap** — promote `ThemeInit` from dev-only `?theme=` hook to production FOUC-safe init (read stored preference before paint).
+4. **Excalidraw hook** — extend/replace `useExcalidrawThemeFromSystem` so Excalidraw `theme` follows **app-selected** theme, not OS-only (**TU-12**; resolves BACKLOG:307).
+5. **`ThemeToggle` UI** — discoverable control wired into `AdminNav` / account settings (§1 inventory); replaces dev `?theme=` as the user mechanism.
+
+Token palettes for light + dark already exist via `[data-theme]` + `prefers-color-scheme` fallbacks in `tokens.css` / `shadcn-theme.css`. The gap is the **user-facing control plane** — this slice closes it once.
+
+#### Per-component build checklist
+
+- Use semantic tokens (`bg-card`, `text-foreground`, `--surface-*`) — never raw hex or OS-only color branches.
+- Smoke or screenshot **both** `[data-theme=light]` and `[data-theme=dark]` before marking the surface done.
+- **Whiteboard:** Mynk chrome + Excalidraw `theme` prop follow app selection (**TU-12** in [`whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md); design: [`whiteboard-chrome-design-2026-06-07.md`](handoff/whiteboard-chrome-design-2026-06-07.md)).
 - **Backlog of record:** [`BACKLOG.md`](BACKLOG.md) § V1 redesign — pre-master requirements.
 
 ---
@@ -328,7 +354,7 @@ Full decision record: [`docs/handoff/v1-redesign-STATUS.md`](handoff/v1-redesign
 | Chunk | Phase | Surface(s) | Status | Branch | Dedup-checked |
 |---|---|---|---|---|---|
 | A — Foundations | A | `tokens.css` dark mode, `fonts.ts`, `typography.css` | SHIPPED (on `v1-redesign`) | `v1-redesign` @ `5aa3c7d` | N/A |
-| **A′ — Theme toggle + parity gate** | A | `ThemeToggle`, persisted `data-theme`, both-theme verification rubric (§2.11) | **PENDING (pre-master)** | — | — |
+| **A′ — Theme plumbing + toggle (first slice)** | A | Tailwind `@custom-variant dark` → `[data-theme]`; `useTheme` + FOUC-safe bootstrap (promote `ThemeInit`); `ThemeToggle` in nav/settings; Excalidraw hook follows app theme; §2.11 HARD gate for all later chunks | **PENDING — first slice of component pass (pre-master)** | — | — |
 | B1 — Auth surfaces | B1 | `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/setup` | SHIPPED (on `v1-redesign`) | `v1-redesign` @ `b798494` | ✅ |
 | B2 — Dashboard + Students | B2 | `/admin`, `/admin/students`, `/admin/students/[id]` | SHIPPED (on `v1-redesign` @ `0424206`) | `component-b2-dashboard-students` → merged | ✅ |
 | D — Landing + Features | D | `/` (landing), `/features` | FIRST CUT (on `feature/phase-d-landing-about`, not merged) | `feature/phase-d-landing-about` @ `37d8178` | ✅ |
@@ -418,3 +444,4 @@ The following files are locked to recording slice 3 or live-session infrastructu
 - **2026-06-07:** **REQ-S3-4** canonical notes schema — no field drops, Plan mandatory, homework→Plan per Sarah pilot feedback (§3.1, Notes inventory). Branch `docs/v1-redesign-notes-ux-reqs`.
 - **2026-06-07:** Component-pass **review protocol** (§3) + **Chunk 1 smoke feedback** (§2.10); Chunk 1 tracker row updated (functional smoke; removed nonexistent `/admin/outbox`). Branch `docs/v1-redesign-notes-ux-reqs`.
 - **2026-06-07:** **§2.11 light/dark theme parity** + planned `ThemeToggle` deliverable (§1 inventory, §3 tracker row A′). Pre-master gate per Andrew.
+- **2026-06-07:** **§2.11 strengthened to HARD per-component acceptance gate** — no separate theming pass; foundational plumbing = first slice (A′); agent rule `.cursor/rules/both-theme-components.mdc`.

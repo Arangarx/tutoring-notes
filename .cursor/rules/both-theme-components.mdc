@@ -1,0 +1,21 @@
+---
+description: Every new/redesigned component and page must be built and verified in both light and dark via data-theme tokens — no OS-only dark: or later theming pass.
+globs: src/components/**,src/app/**/*.tsx,src/styles/**
+alwaysApply: false
+---
+
+# Both-theme component build standard
+
+**Binding (Andrew 2026-06-07):** design and verify **light + dark in the same build slice**. No separate theming pass.
+
+## Rules
+
+1. **Done = both themes verified** — a component or page is not complete until it looks correct with `[data-theme=light]` and `[data-theme=dark]` on `<html>`.
+2. **Theme via tokens only** — use design tokens / CSS variables / `[data-theme]` (`src/styles/tokens.css`, `src/styles/shadcn-theme.css`). Semantic classes (`bg-card`, `text-foreground`) over raw hex.
+3. **`data-theme="dark"` is source of truth** — never rely on OS-only `prefers-color-scheme` or Tailwind `dark:` that does not follow `[data-theme=dark]` (app uses `@custom-variant dark` keyed to `data-theme`).
+4. **Whiteboard** — Excalidraw `theme` must follow **app-selected** theme, not OS-only (`useExcalidrawThemeFromSystem` → app hook). **TU-12**.
+
+## References
+
+- [`docs/V1-COMPONENT-LIBRARY.md`](../../docs/V1-COMPONENT-LIBRARY.md) §2.11 (HARD acceptance gate + A′ plumbing slice)
+- [`docs/handoff/whiteboard-chrome-design-2026-06-07.md`](../../docs/handoff/whiteboard-chrome-design-2026-06-07.md)
