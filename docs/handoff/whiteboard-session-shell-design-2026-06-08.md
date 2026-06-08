@@ -173,7 +173,7 @@ The top bar content differs per mode:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Responsive (phone/tablet — for future tutor-mobile):** Stack video preview above checklist. Full-width. Large touch targets (48px min) for mic/cam toggles.
+**Responsive (phone — see §7.4):** Single full-width column. Camera preview is a prominent block at the top (16:9); below it stack device-check list → device dropdowns → recording-status block → full-width coral admit/start CTA. No side rail; no clipped text. Mic/cam toggles remain large tap targets (40px+) under the preview.
 
 ### 4.2 Setup checklist logic
 
@@ -404,7 +404,7 @@ After end-session, the tutor needs **notes front-and-center** — not a video sc
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Mobile (phone/tablet):** Single column. Notes on top, board preview below. "Review video while editing" as a full-width button below the notes area.
+**Mobile (phone — see §7.4):** Notes are **primary** — full width, majority of the viewport. The session-board / "Review video while editing" panel is **not** a persistent side column; it is a slide-in overlay toggled by a "Board & video" control in the notes header (or equivalent). When closed, notes and "Save & share with parent" remain unobstructed. Tutor opens board/video only on demand.
 
 ### 6.3 Notes panel behavior
 
@@ -452,6 +452,20 @@ The draft is held in the browser (localStorage/sessionStorage) until explicitly 
 
 ## 7. Responsive behavior — one board, three screen sizes
 
+### 7.0 Governing principle — **Primary-content dominance on narrow viewports**
+
+> **Named principle (2026-06-08 mobile pass):** On mobile (narrow / phone widths), **primary content is full-width, single-column, and dominant**. Secondary panels are **dismissible overlays, bottom-sheets, drawers, or floating pips** — **never** persistent space-stealing side columns.
+
+This principle applies across all three session-shell modes:
+
+| Mode | Primary content (dominant) | Secondary (overlay / dismissible only) |
+|---|---|---|
+| **Waiting room** | Camera preview + device-check stack + admit CTA | *(none — everything stacks in one column)* |
+| **Live board** | Excalidraw canvas (full-bleed behind chrome) | Properties palette → bottom sheet; video → floating pip; tools → compact icon bar |
+| **Review** | Session notes editor + share actions | Board thumbnail + video replay → slide-in overlay |
+
+Desktop (≥1024px) and tablet side-by-side layouts are unchanged. This principle governs **only** the `<480px` / phone breakpoint (mock: **Mobile** width toggle).
+
 ### 7.1 Screen size axis (Decision E)
 
 The real design axis is screen size, not tutor-vs-student. Tutor vs student is a different **control set** on the same responsive surface.
@@ -483,11 +497,91 @@ The real design axis is screen size, not tutor-vs-student. Tutor vs student is a
 The prior complaint: "the properties/color palette eats too much space and on mobile won't dismiss without re-tapping the tool button."
 
 **Fix:**
-1. Properties panel on phone = bottom sheet (not a side popover). Slides up; dismisses on downward drag OR tap-outside OR tap on canvas.
+1. Properties panel on phone = bottom sheet (not a side popover or persistent column). Slides up; dismisses on downward drag OR tap-outside OR tap on canvas OR × close.
 2. Bottom sheet has a drag handle. Tap anywhere on the canvas (above the sheet) dismisses it.
 3. The sheet is `max-height: 45dvh` — never more than half the screen.
-4. After tool selection, the sheet is **not auto-opened** — it only opens when the user explicitly taps a style control. First draw is always possible without the sheet open.
+4. After tool selection, the sheet is **not auto-opened** — it only opens when the user explicitly taps the "Colors & styles" control in the bottom toolbar. First draw is always possible without the sheet open.
 5. On tablet, properties is a bottom sheet (not a floating popover). On desktop, it is the side-anchored popover from the left strip.
+
+### 7.4 Per-mode mobile layout (mock-validated 2026-06-08)
+
+Visual reference: [`../brand-previews/whiteboard-session-shell-mock-2026-06-08.html`](../brand-previews/whiteboard-session-shell-mock-2026-06-08.html) — use the **Mobile** width toggle.
+
+#### 7.4.1 Waiting room (phone)
+
+```
+┌─────────────────────────────┐
+│  TOP BAR                    │
+├─────────────────────────────┤
+│  ┌─────────────────────────┐│
+│  │  CAMERA PREVIEW  16:9   ││  ← full width, top
+│  │  [Mic ON]  [Camera ON]  ││
+│  │  ● Emma R. ready        ││
+│  └─────────────────────────┘│
+│  Device check (stacked)     │
+│  Camera / Mic / Speaker ▾   │
+│  Recording status block     │
+│  [ Admit … & Start ]        │  ← full-width coral CTA
+└─────────────────────────────┘
+```
+
+No left rail. No two-column squeeze. All text wraps normally at full phone width.
+
+#### 7.4.2 Live board (phone)
+
+```
+┌─────────────────────────────┐
+│  TOP BAR (compact icons)    │
+├─────────────────────────────┤
+│                             │
+│     CANVAS (full-bleed)     │  ← dominant; ≥80% usable height
+│                             │
+│              ┌──────┐       │
+│              │ AV   │       │  ← floating draggable pip
+│              │ pip  │       │
+│              └──────┘       │
+├─────────────────────────────┤
+│  Pg1  Pg2  Pg3  +Page       │  ← compact page strip
+├─────────────────────────────┤
+│  ✏️  🧹  🎯  🎨  ···        │  ← bottom icon toolbar (not side strip)
+└─────────────────────────────┘
+
+  ╔═══════════════════════════╗  ← bottom sheet (on demand only)
+  ║  Stroke properties    [×] ║
+  ║  colors · width · style   ║
+  ╚═══════════════════════════╝
+```
+
+- Left tool strip hidden on phone; tools move to bottom bar.
+- Properties palette is **never** a layout column — only the dismissible bottom sheet (§7.3).
+- Video tile is a small floating pip with top-level mic/video toggles, not a flex column.
+- Mock frame: 390px portrait width.
+
+#### 7.4.3 Review mode (phone)
+
+```
+┌─────────────────────────────┐
+│  TOP BAR                    │
+├─────────────────────────────┤
+│  Session notes — Emma R.    │
+│  [Board & video]  Generating│  ← overlay toggle (secondary)
+├─────────────────────────────┤
+│                             │
+│  NOTES EDITOR (full width)  │  ← primary; fills viewport
+│                             │
+│  [Save & share with parent] │
+│  [Regenerate]               │
+└─────────────────────────────┘
+
+  (slide-in from right when "Board & video" tapped)
+  ┌─────────────────────────────┐
+  │  Session board          [×] │
+  │  [▶ Review video …]         │
+  │  [↩ Return to board]        │
+  └─────────────────────────────┘
+```
+
+Notes are never squeezed into a narrow rail. Board/video is opt-in via overlay.
 
 ---
 
@@ -694,3 +788,4 @@ This checklist is the gate the eventual chrome build must pass. P1.1 was rejecte
 
 - **2026-06-08:** Initial design doc. Three-mode session shell, waiting room, live board additions (AV tile, ghost bounds, session bar), review mode, responsive behavior, consent-aware recording model, P1.1 rejection punch-list resolutions, acceptance checklist, open questions. Authored by Sonnet subagent on branch `v1-redesign`.
 - **2026-06-08:** Color-fidelity pass — dark surface ladder + semantic tokens aligned to `tokens.css`; primary CTAs corrected to coral (`--accent` / `--accent-on`); build note added re shadcn `--primary` mapping.
+- **2026-06-08:** Mobile responsive pass — §7.0 **Primary-content dominance** principle; per-mode phone layouts (§7.4); mock updated with single-column waiting room, full-bleed canvas + properties bottom sheet + AV pip on live board, notes-primary + board slide-in overlay on review. Desktop layouts unchanged.
