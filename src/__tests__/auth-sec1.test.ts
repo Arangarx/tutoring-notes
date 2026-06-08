@@ -452,8 +452,99 @@ describe("Blocker #6 — assertIsAdmin rejects non-ADMIN accounts", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Role #1 + #2: role propagated through JWT callback
+// assertAdminOrNotFound — page-level guard: denial → notFound(), not error boundary
 // ---------------------------------------------------------------------------
+describe("assertAdminOrNotFound — page-level guard for admin pages", () => {
+  beforeEach(() => {
+    jest.resetModules();
+    process.env.NEXTAUTH_SECRET = "test-secret-32-chars-minimum-pad";
+    process.env.DATABASE_URL = "file:./test.db";
+    process.env.DIRECT_URL = "file:./test.db";
+  });
+
+  it("calls notFound() (not throwing ImpersonationForbiddenError) for TUTOR role", async () => {
+    // Simulate Next.js: notFound() throws a control-flow signal at runtime.
+    const notFoundSignal = new Error("NEXT_NOT_FOUND");
+    const notFoundMock = jest.fn().mockImplementation(() => {
+      throw notFoundSignal;
+    });
+    jest.doMock("next/navigation", () => ({ notFound: notFoundMock, redirect: jest.fn() }));
+
+    jest.doMock("@/lib/student-scope", () => ({
+      requireStudentScope: jest.fn().mockResolvedValue({
+        kind: "admin",
+        adminId: "sarah-tutor-id",
+        email: "sarah@example.com",
+      }),
+    }));
+
+    jest.doMock("@/lib/db", () => ({
+      db: {
+        adminUser: {
+          findUnique: jest.fn().mockResolvedValue(
+            makeAdminRow({ id: "sarah-tutor-id", email: "sarah@example.com", role: "TUTOR", isTestAccount: false })
+          ),
+        },
+      },
+    }));
+
+    const { assertAdminOrNotFound } = await import("@/lib/impersonation");
+
+    // The call must surface the notFound signal, NOT ImpersonationForbiddenError.
+    await expect(assertAdminOrNotFound()).rejects.toBe(notFoundSignal);
+    expect(notFoundMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT call notFound() and returns adminId+email for ADMIN role", async () => {
+    const notFoundMock = jest.fn();
+    jest.doMock("next/navigation", () => ({ notFound: notFoundMock, redirect: jest.fn() }));
+
+    jest.doMock("@/lib/student-scope", () => ({
+      requireStudentScope: jest.fn().mockResolvedValue({
+        kind: "admin",
+        adminId: "real-admin-id",
+        email: "admin@example.com",
+      }),
+    }));
+
+    jest.doMock("@/lib/db", () => ({
+      db: {
+        adminUser: {
+          findUnique: jest.fn().mockResolvedValue(
+            makeAdminRow({ id: "real-admin-id", email: "admin@example.com", role: "ADMIN", isTestAccount: false })
+          ),
+        },
+      },
+    }));
+
+    jest.doMock("@/lib/env", () => ({
+      env: { NEXTAUTH_SECRET: "test-secret-32-chars-minimum-pad" },
+    }));
+
+    const { assertAdminOrNotFound } = await import("@/lib/impersonation");
+
+    const result = await assertAdminOrNotFound();
+    expect(notFoundMock).not.toHaveBeenCalled();
+    expect(result.adminId).toBe("real-admin-id");
+    expect(result.email).toBe("admin@example.com");
+  });
+
+  it("re-throws unexpected (non-auth) errors without calling notFound()", async () => {
+    const notFoundMock = jest.fn();
+    jest.doMock("next/navigation", () => ({ notFound: notFoundMock, redirect: jest.fn() }));
+
+    const dbError = new Error("Database connection failed");
+    jest.doMock("@/lib/student-scope", () => ({
+      requireStudentScope: jest.fn().mockRejectedValue(dbError),
+    }));
+
+    const { assertAdminOrNotFound } = await import("@/lib/impersonation");
+
+    await expect(assertAdminOrNotFound()).rejects.toBe(dbError);
+    expect(notFoundMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("Role model — JWT callback propagates role from DB", () => {
   beforeEach(() => {
     jest.resetModules();

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { assertIsAdmin } from "@/lib/impersonation";
+import { assertAdminOrNotFound } from "@/lib/impersonation";
 import { AdminPageShell } from "@/components/admin/AdminPageShell";
 import {
   daysSinceRateCardVerified,
@@ -44,7 +44,7 @@ function SummaryCard({
 }
 
 export default async function AdminCostPage() {
-  await assertIsAdmin();
+  await assertAdminOrNotFound();
 
   const stale = isRateCardStale();
   const daysSince = daysSinceRateCardVerified();
