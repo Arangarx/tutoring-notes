@@ -1,8 +1,10 @@
 # Whiteboard chrome requirements — custom Mynk UI (design input)
 
-> **Purpose:** Design INPUT for the custom Mynk whiteboard chrome layer (toolbar + properties/controls), driving Excalidraw via `excalidrawAPI`. Sequenced into the **whiteboard wave**; **not** a V1-notes blocker.
+> **Purpose:** Design INPUT for the custom Mynk whiteboard chrome layer (toolbar + properties/controls), driving Excalidraw via `excalidrawAPI`.
 >
-> **Last consolidated:** 2026-06-07 (TU-11 keyboard surface routing added).
+> **Sequencing (ratified Andrew 2026-06-07/08):** Whiteboard chrome is a **pre-master gate** for the V1 reveal — build on `v1-redesign` before `v1-redesign → master`. Master cut = Sarah reveal (`tutoring-notes.vercel.app` / `usemynk.com` share the same production deployment on `master`; no UI-skin feature flag). The reveal must be one cohesive site, not polished chrome around still-janky Excalidraw native UI.
+>
+> **Last consolidated:** 2026-06-07 (TU-11 keyboard surface routing added); sequencing note updated 2026-06-07/08.
 
 ---
 
@@ -12,7 +14,7 @@ Replace Excalidraw's native whiteboard UI with **our own custom chrome** (toolba
 
 **Why:** Excalidraw `^0.18.1` `UIOptions` cannot reorder tools, compress/replace the properties palette, or fix mobile popup behavior. See [`docs/PLATFORM-ASSUMPTIONS.md`](../PLATFORM-ASSUMPTIONS.md) §7.5 and [`docs/WHITEBOARD-STATUS.md`](../WHITEBOARD-STATUS.md) § "Sarah UX asks + custom chrome decision" @ commit `927d536`.
 
-**Scope:** One shared chrome layer with **`tutor-desktop`** and **`student-mobile-first`** variants. Real-iPhone acceptance gate. Not a V1-notes blocker.
+**Scope:** One shared chrome layer with **`tutor-desktop`** and **`student-mobile-first`** variants. Real-iPhone acceptance gate. **Pre-master gate** — required before `v1-redesign → master` (cohesive V1 reveal).
 
 ---
 

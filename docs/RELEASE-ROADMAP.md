@@ -1,6 +1,6 @@
 # Release roadmap — solo tutor floor → university pitch readiness
 
-**Last updated:** 2026-05-27
+**Last updated:** 2026-06-07
 
 > Audience: orchestrators, executors, and Andrew sequencing work across
 > the tutoring-notes pilot through Aug 2026. This doc is a **thin
@@ -230,6 +230,20 @@ executors/branches recommended.
 
 **Wave 3 unblock:** Sarah completes full pilot action list; orchestrator
 confirms IA decisions in v1 design handoff.
+
+**V1 `v1-redesign → master` cut (ratified 2026-06-07/08):** Gated on the
+**entire** site redesign being cohesive end-to-end — **including whiteboard
+chrome redesign** — not just component-pass visual review. Previously framed
+whiteboard chrome as a post-master "whiteboard wave"; that sequencing is
+**superseded**. **Merge to master = reveal to Sarah:** production
+(`tutoring-notes.vercel.app` and `usemynk.com` share the same Vercel
+deployment alias on `master`; no UI-skin feature flag exists). Build on
+`v1-redesign`; cut `master` only when the whole site is one cohesive release.
+**Escape hatch (not building now):** per-email allowlist if a prod fix must
+ship before full reveal. **Accepted cost:** long-lived `v1-redesign` branch
+until cohesive cut. Canonical input:
+[`docs/handoff/whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md);
+live state: [`docs/handoff/ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md).
 
 ---
 
