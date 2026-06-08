@@ -52,6 +52,16 @@ Invite her to share anything else (*"if I do I'll let you know"* from Q1 continu
 
 Full capture: [`docs/handoff/sarah-pilot-feedback-2026-06-06-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-06-06-orchestrator-report.md) — real session (Sarah tutor Mac + student PC); sync + drawing pad validated; desktop UX annoyances triaged vs v1 redesign / identity epic / recording re-arch.
 
+### 2026-06-07 (engineering capture — Excalidraw 0.18.1 feasibility; do not re-litigate)
+
+These Sarah asks are **known** with a verified feasibility answer — not open questions for the next call:
+
+- **Toolbar reorder (Sarah U4, 2026-05-26)** — Cursor → Pencil → Eraser → Typing first. **Answered:** not achievable via `UIOptions` on pinned 0.18.1; requires Mynk custom toolbar driving `excalidrawAPI`. On whiteboard-wave roadmap.
+- **Shape dropdown consolidation (Sarah U5/U6, 2026-05-26)** — line+arrow together; rectangle/diamond/ellipse together. Same custom-chrome path; not a config tweak.
+- **Mobile palette dismiss (I7, 2026-05-26 iPhone smoke)** — color/pen palette should close on outside tap. **Answered:** not exposed in 0.18.1 public API; fix lands in **student-mobile-first** custom chrome. On whiteboard-wave roadmap.
+
+Detail: `docs/WHITEBOARD-STATUS.md` § Sarah UX asks + custom chrome; `docs/BACKLOG.md` whiteboard queue framing note (2026-06-07).
+
 ### 2026-05-26 / 2026-05-27 (evening call + 12:03–12:17 AM follow-up thread)
 
 Full verbatim capture: [`docs/handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md).

@@ -394,6 +394,7 @@
 ### 7.5 Excalidraw API surface
 
 - **Assumption**: Excalidraw `^0.18.1`. `excalidrawAPI.getAppState()` returns `{ scrollX, scrollY, zoom: { value }, ... }`. `updateScene({ appState: {...} })` accepts partial appState.
+- **Whiteboard UI customization (2026-06-07)**: Excalidraw's main toolbar, left properties palette, and mobile palette popup are **NOT customizable via the public API in 0.18.1** — `UIOptions` only hides canvas menu actions and the image tool (`tools: { image: false }`). Deep whiteboard-UX customization (toolbar reorder, shape dropdowns, compact properties panel, mobile palette click-away dismiss) requires hiding native UI + a **custom chrome layer** driving `excalidrawAPI` (`setActiveTool`, `updateScene({ appState })`, etc.). Load-bearing for the whiteboard-UX roadmap.
 - **Where baked in**: per-page view state code, scene-paint engine, replay viewport tier-c-lite (all shipped 2026-05-17 in merge `2cccc04`).
 - **What breaks if violated**: any Excalidraw version bump that changes `appState` shape breaks page-switch viewport restoration + replay viewport tracking. Pin major version; test on bump.
 
