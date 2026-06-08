@@ -420,9 +420,17 @@ Out of scope for Phase 0:
   "defer Tailwind"; that advice was made without reading the
   UX-refresh plan and is superseded.
 - **User-facing theme toggle.** The `data-theme` toggle in Phase 0b
-  is dev-only. Whether to expose a user-facing light/dark switch is
-  a Phase 2+ decision, after we've seen which mode the family picks
-  as default.
+  is dev-only (`ThemeInit.tsx` / `?theme=`). ~~Whether to expose a
+  user-facing light/dark switch is a Phase 2+ decision, after we've
+  seen which mode the family picks as default.~~ **Superseded
+  2026-06-07 (Andrew):** light/dark parity + discoverable persisted
+  user-facing toggle is a **V1 pre-master requirement** (`v1-redesign
+  → master` = Sarah reveal). Ship `ThemeToggle` + site-wide both-theme
+  verification before cut. Cross-ref: [`docs/BACKLOG.md`](BACKLOG.md)
+  § V1 redesign — pre-master requirements;
+  [`docs/V1-COMPONENT-LIBRARY.md`](V1-COMPONENT-LIBRARY.md) §2.11 +
+  `ThemeToggle`; **TU-12** in
+  [`docs/handoff/whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md).
 
 ---
 
