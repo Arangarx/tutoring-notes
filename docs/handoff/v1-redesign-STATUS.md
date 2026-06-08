@@ -4,15 +4,26 @@
 **Branch:** `v1-redesign` (long-running integration branch)  
 **Purpose:** Single source of truth for the multi-day V1 redesign; re-read at the top of any fresh chat so the thread survives.
 
-### Lightweight head (orchestrator — 2026-06-02, afternoon)
+### Lightweight head (orchestrator — 2026-06-08)
 
 | Field | Value |
 |---|---|
-| **Last action completed** | **Integration merge to `v1-redesign`:** `identity-p2-multitutor` + `feature/phase-d-landing-about` merged `--no-ff` (2026-06-03). Gates green post-merge (tsc, `next build`, regression 92/92). |
-| **Next action(s)** | Fresh **`v1-redesign` preview deploy** (applies identity migrations incl. `20260603000000_learner_pin_throttle`). Orchestrator queue (serial): (1) batched copy/UX on Phase D (commission + hit-record split), (2) in-session-audio LEGAL-SYNC, (3) session-lifecycle redesign design pass (Sonnet + Opus review; lock freeze-vs-advance timeline), (4) implement LTX timestamp-anchored assembly **after** (3). Andrew smokes spike **B1** on real hardware. |
-| **Open Andrew-confirms** | Spike B1 hardware; `interim-capture-attestation` migrate+smoke+merge; sign-in hover contrast (backlogged Phase B). |
+| **Last action completed** | **V1 two-tier master-cut gates ratified (Andrew 2026-06-08)** — waiting room + Pass-2 end-session promoted to Gate A master gates; approval-gating + parent privacy consent pinned as Gate B. Canonical list: [`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md) § Pre-master gates. Prior: A′ theme foundation merged; P1.1 whiteboard chrome next — see [`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md) HEAD. |
+| **Next action(s)** | **P1.1** tutor-desktop hybrid chrome + freedraw-latency (PR-01). **Gate A still open:** waiting room (A2), Pass-2 in-context end-session (A3), cohesive visual review (A1). **Gate B (post-master or urgent parallel):** approval-gating/waitlist (B1), parent privacy consent (B2), security cleanups (B3). |
+| **Open Andrew-confirms** | IAC-13 corrected-copy smoke; cohesive visual review (Gate A1); Sarah XPPen G640; green-light `v1-redesign → master` only when **all Gate A** pass. |
 | **In-flight subagents** | **None.** |
-| **Uncommitted / unmerged** | `design/live-incremental-transcription-2026-06-02`, `spike/live-transcription` — pushed, **not merged**. **Recording P1:** slices 1, 2a, 2b, transcription fixes, and durable transport merged to `v1-redesign` @ `234d05b` (2026-06-07); slice 3 (auto-notes) next — see [`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md). |
+| **Uncommitted / unmerged** | See [`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md) HEAD for current branch SHA + unmerged work. |
+
+### V1 master-cut gates (ratified 2026-06-08)
+
+**Canonical operational checklist:** [`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md) § Pre-master gates — two tiers. **Do not duplicate verbatim here.**
+
+| Tier | Items | Notes |
+|---|---|---|
+| **Gate A** (blocks `master`) | A1 visual + chrome + theme; A2 waiting room; A3 Pass-2 in-context end-session | One session shell, three modes (waiting room / live board / review). Pass-1 interim review page ≠ Pass-2. |
+| **Gate B** (before new pilots) | B1 approval-gating/waitlist; B2 parent privacy consent; B3 security cleanups | B1 urgent — site already live. B2: V1 toggles only for shipping features; **not** `recordingDefaultEnabled`. |
+
+Durable BACKLOG rows: [`docs/BACKLOG.md`](../BACKLOG.md) § V1 redesign — pre-master requirements.
 
 ### Smoke targets (Andrew — 2026-06-02, both READY)
 

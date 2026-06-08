@@ -231,19 +231,42 @@ executors/branches recommended.
 **Wave 3 unblock:** Sarah completes full pilot action list; orchestrator
 confirms IA decisions in v1 design handoff.
 
-**V1 `v1-redesign → master` cut (ratified 2026-06-07/08):** Gated on the
-**entire** site redesign being cohesive end-to-end — **including whiteboard
-chrome redesign** — not just component-pass visual review. Previously framed
-whiteboard chrome as a post-master "whiteboard wave"; that sequencing is
-**superseded**. **Merge to master = reveal to Sarah:** production
+**V1 `v1-redesign → master` cut (ratified 2026-06-08):** Two-tier gate
+checklist — **canonical operational list:**
+[`docs/handoff/ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) §
+Pre-master gates. **Merge to master = reveal to Sarah:** production
 (`tutoring-notes.vercel.app` and `usemynk.com` share the same Vercel
 deployment alias on `master`; no UI-skin feature flag exists). Build on
 `v1-redesign`; cut `master` only when the whole site is one cohesive release.
+
+**Gate A — blocks master cut** (Sarah's live site complete + coherent):
+
+1. Visual redesign + whiteboard chrome + theme parity (in flight).
+2. **Waiting room** — green-room A/V verify + admit flow; timer starts when
+   student leaves waiting room (designed, not built).
+3. **Pass-2 in-context end-session** — shared session shell; end-session
+   transitions same shell to review in place (Pass-1 interim = separate review
+   page today).
+
+**Design note:** waiting room, live board, and Pass-2 review = **one session
+shell, three modes** — design together
+([`session-lifecycle-consent-design-2026-05-31.md`](handoff/session-lifecycle-consent-design-2026-05-31.md)).
+
+**Gate B — urgent fast-follow** (before recruiting new pilots; some urgent
+because site is already live, just unadvertised):
+
+4. **Approval-gating / waitlist** — sign-up parks on waitlist; no cost until
+   Andrew approves (cost exposure exists today).
+5. **Parent privacy consent** — V1 required; real `ConsentRecord` architecture;
+   V1 toggles only for shipping features (`allowAudioRecording`,
+   `allowWhiteboardRecording`, `allowNoteSending`, `allowLiveSession`).
+6. **Security checks + final cleanups** — before new pilots.
+
 **Escape hatch (not building now):** per-email allowlist if a prod fix must
 ship before full reveal. **Accepted cost:** long-lived `v1-redesign` branch
-until cohesive cut. Canonical input:
-[`docs/handoff/whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md);
-live state: [`docs/handoff/ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md).
+until Gate A complete. Chrome requirements:
+[`docs/handoff/whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md).
+Durable rows: [`docs/BACKLOG.md`](BACKLOG.md) § V1 redesign — pre-master.
 
 ---
 
