@@ -303,19 +303,33 @@ Error state: set `aria-invalid="true"` on the `Input`; display error text below 
 | 6 | **Input validation-state coloring (OPEN)** — Andrew expected possible **input validation-state coloring / password-strength indicator** (red/yellow/green bar); never built. **Open question:** do we want validation-state coloring on inputs? **Not a bug.** | Low priority — decide in cohesive pass |
 | — | **Runbook correction** — there is **no** admin "outbox" page; that smoke runbook line was an error. Chunk 1 surfaces corrected in §3 tracker. | N/A |
 
-### 2.11 Light/dark theme parity — HARD per-component acceptance gate (Andrew 2026-06-07)
+### 2.11 Theme-agnostic components — HARD per-component acceptance gate (Andrew 2026-06-07)
 
-**Binding standard (Andrew 2026-06-07):** slot the theme toggle wherever it makes sense, but **every component is designed for light and dark as it is built** — there is **no separate pass** that touches everything again just to add light or dark.
+**Architectural principle (Andrew 2026-06-07):** components must be **theme-agnostic**. A component references **only** semantic design tokens / CSS variables (e.g. `var(--surface-base)`, `var(--text-default)`, Tailwind semantic classes like `bg-card`, `text-foreground`) and contains **no reference to "light" or "dark"** — no `dark:` Tailwind variants keyed to a named theme, no `prefers-color-scheme` checks in component code, no `if (theme === 'dark')` styling branches. All theme-specific values live **only** in the token-definition layer (`src/styles/tokens.css`, `src/styles/shadcn-theme.css`), swapped by `[data-theme="…"]` on `<html>`. Components therefore respond automatically to **any** theme — light, dark, or a future theme — with zero component changes. The architecture is **N-theme-capable**, not just light/dark.
+
+**Binding build standard:** slot the theme toggle wherever it makes sense, but **every component is designed and verified for both current themes as it is built** — there is **no separate pass** that touches everything again just to add theming.
+
+#### Boundary exceptions (narrow — not loopholes)
+
+1. **Token-definition layer** (`tokens.css`, `shadcn-theme.css`) — the **one** place theme names and per-theme values exist. By design.
+2. **JS boundary adapters** that pass a value to something that isn't CSS may read the active theme, but **must** get it from the central `useTheme` (never hardcode or branch inline in components):
+   - **Excalidraw `theme` prop** — Excalidraw only accepts `"light"|"dark"`; the adapter hook maps app-theme → its binary API.
+   - **`ThemeToggle` UI** — the control itself.
+   - **Raw color/asset handed into JS/canvas** rather than CSS.
+
+#### Migration target — `dark:` variants are debt
+
+~30 existing Tailwind `dark:` usages **violate** the theme-agnostic principle (they encode "dark" in component code). The `@custom-variant` bridge (makes `dark:` follow `[data-theme=dark]`) is an **interim** fix. The **pure end-state** is migrating those usages to token-driven classes so the literal word `dark` leaves component code entirely. Do this opportunistically as those components are touched in the component pass — **not** as a separate sweep.
 
 #### Acceptance gate (HARD — not optional polish)
 
-A redesigned or new **component or page is NOT done** until it is **designed AND verified in BOTH light and dark** in the same build slice. Theme parity is checked **per component** as each surface ships — not deferred to a cohesive visual review or a later theming sweep.
+A redesigned or new **component or page is NOT done** until it is **theme-agnostic per the principle above** and **designed AND verified in BOTH light and dark** in the same build slice. Theme parity is checked **per component** as each surface ships — not deferred to a cohesive visual review or a later theming sweep.
 
 | Rule | Requirement |
 |---|---|
-| **Done definition** | Both themes verified before the component/page is marked complete in this tracker or handed off as smoke-ready. |
-| **Theming mechanism** | **MUST** go through design tokens / CSS variables / `[data-theme]` on `<html>` (`src/styles/tokens.css`, `src/styles/shadcn-theme.css`). **NEVER** OS-only `prefers-color-scheme` or bare Tailwind `dark:` that keys off system preference instead of `[data-theme=dark]`. |
-| **No retrofit pass** | There will be **no** standalone "theming pass." Both themes are built in with each component. |
+| **Done definition** | Theme-agnostic (tokens only, no `light`/`dark` in component code) **and** both themes verified before the component/page is marked complete in this tracker or handed off as smoke-ready. |
+| **Theming mechanism** | **MUST** go through design tokens / CSS variables / `[data-theme]` on `<html>` (`src/styles/tokens.css`, `src/styles/shadcn-theme.css`). **NEVER** OS-only `prefers-color-scheme` or bare Tailwind `dark:` that keys off system preference instead of `[data-theme=dark]` — and **prefer eliminating `dark:` entirely** in favor of tokens (see migration target above). |
+| **No retrofit pass** | There will be **no** standalone "theming pass." Theme-agnostic + both-theme verification are built in with each component. |
 | **Agent enforcement** | [`.cursor/rules/both-theme-components.mdc`](../.cursor/rules/both-theme-components.mdc) — scoped to component/page source. |
 
 #### Foundational theme plumbing — FIRST slice of the component pass (done once)
@@ -332,7 +346,7 @@ Token palettes for light + dark already exist via `[data-theme]` + `prefers-colo
 
 #### Per-component build checklist
 
-- Use semantic tokens (`bg-card`, `text-foreground`, `--surface-*`) — never raw hex or OS-only color branches.
+- Use semantic tokens (`bg-card`, `text-foreground`, `--surface-*`) — never raw hex, OS-only color branches, or `light`/`dark` references in component code (no `dark:` variants; migrate existing `dark:` to tokens when touching a file).
 - Smoke or screenshot **both** `[data-theme=light]` and `[data-theme=dark]` before marking the surface done.
 - **Whiteboard:** Mynk chrome + Excalidraw `theme` prop follow app selection (**TU-12** in [`whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md); design: [`whiteboard-chrome-design-2026-06-07.md`](handoff/whiteboard-chrome-design-2026-06-07.md)).
 - **Backlog of record:** [`BACKLOG.md`](BACKLOG.md) § V1 redesign — pre-master requirements.
@@ -445,3 +459,4 @@ The following files are locked to recording slice 3 or live-session infrastructu
 - **2026-06-07:** Component-pass **review protocol** (§3) + **Chunk 1 smoke feedback** (§2.10); Chunk 1 tracker row updated (functional smoke; removed nonexistent `/admin/outbox`). Branch `docs/v1-redesign-notes-ux-reqs`.
 - **2026-06-07:** **§2.11 light/dark theme parity** + planned `ThemeToggle` deliverable (§1 inventory, §3 tracker row A′). Pre-master gate per Andrew.
 - **2026-06-07:** **§2.11 strengthened to HARD per-component acceptance gate** — no separate theming pass; foundational plumbing = first slice (A′); agent rule `.cursor/rules/both-theme-components.mdc`.
+- **2026-06-07:** **§2.11 sharpened to theme-agnostic architectural principle** — tokens only in components (no `light`/`dark`); N-theme-capable; boundary-adapter carve-outs; `dark:`→token migration target as end-state debt.
