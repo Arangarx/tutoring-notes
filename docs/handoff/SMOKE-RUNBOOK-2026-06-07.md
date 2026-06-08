@@ -30,24 +30,24 @@
   **Notes: I notice that my last note created on a previous smoke is in draft status but the one before that is ready...that's weird that we have them in two different states.**  
   Still no proper skeleton with blurs while notes are loading, fine if this is explicitly going to be covered later.  
 
-
 - [x] **2. Save creates one READY note** — From the review page, fill/edit notes → **Save** → confirm a single READY note is created and is **immediately visible to the parent** (open the share link).
   **Notes:**
 
 - [x] **3. Re-save updates in place** — **Save again** (edit then re-save) → confirm it updates **in place** (no duplicate note).
   **Notes: No "updated" pill yet. Dunno if that's intentional.**
 
-- [x] **4. Cancel & delete session (review page)** — On the session **review** page use **Cancel and delete session data** → confirm you're returned to student detail **regardless of outcome** (never stranded on an error / "Deleting…" screen); the session's note is removed for the parent. _(Per-note deletion from the student **notes list** is a separate surface and works as intended — the note disappears and you stay on the list page. Confirmed not a bug, Andrew 2026-06-07.)_
+- [x] **4. Cancel & delete session (review page)** — On the session **review** page use **Cancel and delete session data** → confirm you're returned to student detail **regardless of outcome** (never stranded on an error / "Deleting…" screen); the session's note is removed for the parent. *(Per-note deletion from the student **notes list** is a separate surface and works as intended — the note disappears and you stay on the list page. Confirmed not a bug, Andrew 2026-06-07.)*
   **Notes: I pass this only because it works as you should, not as this step said it should.  When I deleted a note it stayed on the notes list.  I will separately test what this probably should refer to and that's the cancel and delete operation on session review.  Cancel and delete navigated away. Don't really know if it would have on a hang I only know i nav'd away.**
 
 - [x] **5. Correct tutor name on share** — Open the **parent share page** → confirm it shows the **correct tutor's name** for that student (not an arbitrary admin).
   **Notes:**
 
 **Overall Target A verdict** (check one):
+
 - [x] PASS
 - [ ] FAIL
 
-_(Andrew 2026-06-07: PASS — delete-list "bug" was a misread (works as intended); remaining notes are deferred UX/cleanup items captured in `ORCHESTRATOR-STATE.md`. Slice-3 merge gated only on `test:wb-sync` green locally.)_
+*(Andrew 2026-06-07: PASS — delete-list "bug" was a misread (works as intended); remaining notes are deferred UX/cleanup items captured in `ORCHESTRATOR-STATE.md`. Slice-3 merge gated only on `test:wb-sync` green locally.)*
 
 **On full PASS:** orchestrator merges this branch `--no-ff` → `v1-redesign` **LAST** (carries the migration).
 
@@ -60,15 +60,22 @@ _(Andrew 2026-06-07: PASS — delete-list "bug" was a misread (works as intended
 
 **Fix A + B:** Role re-fetched from DB on JWT refresh so a TUTOR no longer carries stale `role=ADMIN`; cost panel gated server-side.
 
-- [ ] **1. TUTOR sees no admin surfaces** — Log in as a TUTOR account (e.g. `arangarx@hotmail.com` if it's TUTOR) → confirm **no** admin-only surfaces appear and `role` reflects TUTOR.
+- [x] **1. TUTOR sees no admin surfaces** — Log in as a TUTOR account (e.g. `arangarx@hotmail.com` if it's TUTOR) → confirm **no** admin-only surfaces appear and `role` reflects TUTOR.
+  **Notes: So, I wondered before but audio on replay is wildly out of sync with strokes right now. I'm fine if this is fixed in the redo of the whiteboard page, but this can NOT make it to live.**  
+  **/admin redirected properly**  
+  **/admin/cost -> errored properly, but shouldn't this kind of thing 404?  Oh wait, you said it should be an error instead. Why should this be an error instead of a 404?**  
+  **/admin/feedback -> 404**  
+  **/admin/waitlist -> 404**  
+  /admin/dev-tools -> errored similar to admin/cost, not 404  
+
+
+- [x] **2. Cost panel gating** — Confirm the **session cost panel** is hidden for a non-admin / non-impersonating / non-test user, and visible for admin / impersonating / test.
   **Notes:**
 
-- [ ] **2. Cost panel gating** — Confirm the **session cost panel** is hidden for a non-admin / non-impersonating / non-test user, and visible for admin / impersonating / test.
-  **Notes:**
-
-- [ ] **3. ADMIN unchanged** — Confirm a genuine ADMIN still sees admin surfaces (no over-correction).
+- [x] **3. ADMIN unchanged** — Confirm a genuine ADMIN still sees admin surfaces (no over-correction).
   **Notes:**
 
 **Overall Target B verdict** (check one):
-- [ ] PASS
+
+- [x] PASS
 - [ ] FAIL
