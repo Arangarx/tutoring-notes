@@ -171,6 +171,8 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 
 **Still open:**
 
+> **Pre-hide audit (2026-06-08):** [`whiteboard-excalidraw-function-audit-2026-06-08.md`](whiteboard-excalidraw-function-audit-2026-06-08.md) — full Excalidraw 0.18.1 function matrix, 18 silently-lost items, 34 keyboard-only survivors, 12 candidate new requirements (NR-01–NR-12) for orchestrator ratification.
+
 2. **Pulldown grouping:** besides line/arrow and rect/diamond/ellipse, which tools share pulldowns? Where do PDF/Math/Desmos/Image land? *(Partial: inserts on top bar in hybrid layout — see design doc §3.)*
 3. **Properties compression:** which properties always visible vs behind "More styles"? *(Partial: color, width, opacity inline — see design doc §3.)*
 4. **Student vs tutor tool parity:** v1 pencil+eraser only — revisit after Sarah tests student add-page.

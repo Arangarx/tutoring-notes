@@ -260,6 +260,7 @@ From requirements doc — **not** closed by this design pass:
 
 | Doc | Role |
 |-----|------|
+| [`whiteboard-excalidraw-function-audit-2026-06-08.md`](whiteboard-excalidraw-function-audit-2026-06-08.md) | **Pre-hide audit** — full Excalidraw 0.18.1 function inventory, silently-lost list, keyboard-only survivors, candidate new requirements |
 | [`whiteboard-chrome-requirements.md`](whiteboard-chrome-requirements.md) | 64 requirements (incl. TM-09, TU-12) |
 | [`WHITEBOARD-STATUS.md`](../WHITEBOARD-STATUS.md) | Build status + Sarah UX table |
 | [`whiteboard-sync-redesign-2026-05-27.md`](whiteboard-sync-redesign-2026-05-27.md) | Sync invariants P1–P8, I1–I4 |
