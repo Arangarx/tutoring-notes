@@ -2,7 +2,7 @@
 
 > **Start here.** This is the single entry point for any new chat, agent, or human picking up work in this repo. Every canonical doc, spoke doc, and smoke runbook is mapped below by topic. For the curated reading-list with in-depth framing, see `AGENTS.md § Key docs`.
 >
-> Last updated: 2026-06-07 (docs cleanup / archival policy).
+> Last updated: 2026-06-07 (docs archive pass — cold storage under `docs/archive/`).
 
 ---
 
@@ -13,6 +13,8 @@ On every docs-cleanup pass: **archive** anything verified to be captured elsewhe
 Bar to archive a doc or section: **(a)** its still-valid content is provably captured in a canonical consolidated doc, **or** **(b)** it's been explicitly superseded. If removing it would lose valid unique information, **keep it**. Goal: reduce docs sprawl without losing signal.
 
 **Canonical pattern:** consolidate scattered feedback into one source, verify capture, **then** archive the redundant copies. See [docs/BACKLOG.md](docs/BACKLOG.md) § Docs cleanup pass (next).
+
+**Archive (cold storage):** superseded or captured-elsewhere docs live in [`docs/archive/`](docs/archive/) — not authoritative; see [`docs/archive/ARCHIVE-LEDGER.md`](docs/archive/ARCHIVE-LEDGER.md) for the audit trail. Agents ignore this tree by default (`.cursorindexingignore`).
 
 ---
 
@@ -150,29 +152,15 @@ See [docs/handoff/README.md](docs/handoff/README.md) for the full lifecycle, nam
 
 ---
 
-## Stale archive (superseded — reference only)
+## External plan files (superseded — not in repo)
 
-These docs have SUPERSEDED headers at their top. Preserved for archival reference; do not act on them directly.
+These live outside the repo under `~/.cursor/plans/`. Canonical sequencing is [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) + live STATUS/BACKLOG docs. Repo-local superseded docs are in [`docs/archive/`](docs/archive/) (see ledger).
 
 | Doc | Superseded by | Reason |
 |---|---|---|
-| [docs/AGENT-BOOTSTRAP.md](docs/AGENT-BOOTSTRAP.md) | `AGENTS.md` + `docs/INDEX.md` | Old-style bootstrap pre-dating the AGENTS.md + handoff pattern; references stale branch names and plan file paths |
-| [docs/RESUME-AUDIO-BUILD.md](docs/RESUME-AUDIO-BUILD.md) | [docs/RECORDER-LIFECYCLE.md](docs/RECORDER-LIFECYCLE.md) | Audio build shipped; the file itself said to delete it after shipping |
-| [docs/UX-REFRESH-PLAN.md](docs/UX-REFRESH-PLAN.md) | [docs/UX-AND-A11Y-SPEC.md](docs/UX-AND-A11Y-SPEC.md), [docs/MYNK-BRAND-PHASE-2-DECISIONS.md](docs/MYNK-BRAND-PHASE-2-DECISIONS.md), [docs/BRAND.md](docs/BRAND.md) | v1 redesign from scratch superseded the phased-refresh plan; doc already had an internal SUPERSEDED notice |
-| [docs/handoff/live-av-device-management-bootstrapper.md](docs/handoff/live-av-device-management-bootstrapper.md) | [docs/PHASE-LIVE-AV-DEVICE-MGMT-STATUS.md](docs/PHASE-LIVE-AV-DEVICE-MGMT-STATUS.md) | Work shipped (`ac92137`) |
-| [docs/handoff/long-form-transcribe-tier-1-parallelize-bootstrapper.md](docs/handoff/long-form-transcribe-tier-1-parallelize-bootstrapper.md) | [docs/PHASE-6-TIER-1-STATUS.md](docs/PHASE-6-TIER-1-STATUS.md) | Work shipped (`5ccf1c7`) |
-| [docs/handoff/pdf-page-picker-and-per-page-boards-bootstrapper.md](docs/handoff/pdf-page-picker-and-per-page-boards-bootstrapper.md) | [docs/PHASE-PDF-STATUS.md](docs/PHASE-PDF-STATUS.md) | Work shipped (`9ff5b11`) |
-| [docs/handoff/phase-4a-bootstrapper.md](docs/handoff/phase-4a-bootstrapper.md) | [docs/PHASE-4A-STATUS.md](docs/PHASE-4A-STATUS.md) | Work shipped (`59d13ad`) |
-| [docs/handoff/phase-4b-bootstrapper.md](docs/handoff/phase-4b-bootstrapper.md) | [docs/PHASE-4B-STATUS.md](docs/PHASE-4B-STATUS.md) | Work shipped (Phase 4b in 4c train) |
-| [docs/handoff/phase-4c-bootstrapper.md](docs/handoff/phase-4c-bootstrapper.md) | [docs/PHASE-4C-STATUS.md](docs/PHASE-4C-STATUS.md) | Work shipped (`d7fd583`) |
-| [docs/handoff/phase-4d-bootstrapper.md](docs/handoff/phase-4d-bootstrapper.md) | [docs/PHASE-4D-STATUS.md](docs/PHASE-4D-STATUS.md) | Work shipped (`41bf006`) |
-| [docs/handoff/spike-long-form-transcribe-smoke-bootstrapper.md](docs/handoff/spike-long-form-transcribe-smoke-bootstrapper.md) | [docs/handoff/long-form-transcribe-tier-1-orchestrator-report.md](docs/handoff/long-form-transcribe-tier-1-orchestrator-report.md) | Spike completed; orchestrator report is the outcome artifact |
-| `../../../../../.cursor/plans/tutoring_notes_pilot_ready_master_plan_9aaca460.plan.md` | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) | RELEASE-ROADMAP.md is the canonical sequencing source; master plan todos mostly completed |
-| `../../../../../.cursor/plans/tutoring_notes_release_plan_781d48c1.plan.md` | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) | Earlier release plan superseded by RELEASE-ROADMAP.md |
-| `../../../../../.cursor/plans/whiteboard_-_match_wyzant_for_sarah_plus_our_wedge_cc1eb419.plan.md` | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) + [docs/WHITEBOARD-STATUS.md](docs/WHITEBOARD-STATUS.md) | Whiteboard strategy plan mostly completed; current roadmap + status are the live references |
-| [docs/GTM-READINESS.md](docs/GTM-READINESS.md) | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md), [docs/DEPLOY.md](docs/DEPLOY.md), [docs/COMMERCIAL-LAUNCH-CHECKLIST.md](docs/COMMERCIAL-LAUNCH-CHECKLIST.md) | Pre-Neon GTM checklist; verdict framing migrated; §1 hosting facts stale |
-| [docs/handoff/per-page-view-state-bootstrapper.md](docs/handoff/per-page-view-state-bootstrapper.md) | [docs/WHITEBOARD-STATUS.md](docs/WHITEBOARD-STATUS.md) + [docs/BACKLOG.md](docs/BACKLOG.md) | Tutor-side per-page view state shipped; student-side validation tracked in BACKLOG |
-| [docs/WHITEBOARD-ROADMAP-NEXT.md](docs/WHITEBOARD-ROADMAP-NEXT.md) | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) + [docs/WHITEBOARD-STATUS.md](docs/WHITEBOARD-STATUS.md) + [docs/BACKLOG.md](docs/BACKLOG.md) | Earlier consolidated whiteboard roadmap merging IMPROVEMENT-PLAN + BACKLOG + STATUS; superseded by canonical roadmap + status + backlog |
-| [.cursor/plans/WHITEBOARD-IMPROVEMENT-PLAN.md](.cursor/plans/WHITEBOARD-IMPROVEMENT-PLAN.md) | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) + [docs/WHITEBOARD-STATUS.md](docs/WHITEBOARD-STATUS.md) + [docs/BACKLOG.md](docs/BACKLOG.md) | W-item checklist superseded by BACKLOG + STATUS + RELEASE-ROADMAP |
-| [.cursor/plans/whiteboard_backlog_execution.plan.md](.cursor/plans/whiteboard_backlog_execution.plan.md) | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) + [docs/WHITEBOARD-STATUS.md](docs/WHITEBOARD-STATUS.md) + [docs/BACKLOG.md](docs/BACKLOG.md) | Cursor Build YAML waves stale (PDF shipped, roadmap consolidated) |
+| `../../../../../.cursor/plans/tutoring_notes_pilot_ready_master_plan_9aaca460.plan.md` | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) | Master plan todos mostly completed |
+| `../../../../../.cursor/plans/tutoring_notes_release_plan_781d48c1.plan.md` | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) | Earlier release plan |
+| `../../../../../.cursor/plans/whiteboard_-_match_wyzant_for_sarah_plus_our_wedge_cc1eb419.plan.md` | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) + [docs/WHITEBOARD-STATUS.md](docs/WHITEBOARD-STATUS.md) | Whiteboard strategy plan mostly completed |
+| [.cursor/plans/WHITEBOARD-IMPROVEMENT-PLAN.md](.cursor/plans/WHITEBOARD-IMPROVEMENT-PLAN.md) | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) + [docs/WHITEBOARD-STATUS.md](docs/WHITEBOARD-STATUS.md) + [docs/BACKLOG.md](docs/BACKLOG.md) | W-item checklist superseded |
+| [.cursor/plans/whiteboard_backlog_execution.plan.md](.cursor/plans/whiteboard_backlog_execution.plan.md) | [docs/RELEASE-ROADMAP.md](docs/RELEASE-ROADMAP.md) + [docs/WHITEBOARD-STATUS.md](docs/WHITEBOARD-STATUS.md) + [docs/BACKLOG.md](docs/BACKLOG.md) | Cursor Build YAML waves stale |
 | [.cursor/plans/whiteboard_improvement_execution.plan.md](.cursor/plans/whiteboard_improvement_execution.plan.md) | [docs/WHITEBOARD-STATUS.md](docs/WHITEBOARD-STATUS.md) + [docs/BACKLOG.md](docs/BACKLOG.md) | All YAML todos completed 2026-05 |
