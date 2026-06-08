@@ -41,7 +41,7 @@
 import { copyTextToClipboard } from "@/lib/copy-text-to-clipboard";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWindowScrollToTopOnMount } from "@/hooks/useWindowScrollToTopOnMount";
-import { useExcalidrawThemeFromSystem } from "@/hooks/useExcalidrawThemeFromSystem";
+import { useTheme } from "@/components/ThemeProvider";
 import { useSyncTombstonedElementIds } from "@/hooks/useSyncTombstonedElementIds";
 import { useRouter } from "next/navigation";
 import {
@@ -127,7 +127,6 @@ import {
   type BinaryFileFromExcalidraw,
 } from "@/lib/whiteboard/ensure-native-image-asset-urls-for-sync";
 import { hydrateRemoteImageFilesForScene } from "@/lib/whiteboard/hydrate-remote-files";
-import { preserveImageAssetUrlsOnSceneWrite } from "@/lib/whiteboard/preserve-image-asset-urls";
 import { resolveWhiteboardAssetReadUrl } from "@/lib/whiteboard/resolve-asset-read-url";
 import type {
   WhiteboardWireBroadcastExtras,
@@ -281,7 +280,8 @@ export function WhiteboardWorkspaceClient({
   initialUserWantsRecording,
 }: Props) {
   const router = useRouter();
-  const excalidrawTheme = useExcalidrawThemeFromSystem();
+  // TU-12: Excalidraw theme follows app-selected theme (not OS-only)
+  const { resolvedTheme: excalidrawTheme } = useTheme();
   const { onLocalElementSnapshot, shouldDropRemoteElement } =
     useSyncTombstonedElementIds();
 
@@ -495,6 +495,19 @@ export function WhiteboardWorkspaceClient({
   const pageDataRef = useRef<Record<string, ReadonlyArray<ExcalidrawLikeElement>>>(
     Object.create(null)
   );
+
+  /**
+   * Image asset URL cache — maps pageId → elementId → {assetUrl, altText?}.
+   *
+   * PR-01 / Option A: `handleExcalidrawChange` stores raw Excalidraw elements
+   * in `pageDataRef` (no clone per pointer-move) to eliminate the O(N)
+   * `preserveImageAssetUrlsOnSceneWrite` clone on every paint. This cache
+   * carries the last-known `assetUrl` for each image element so the
+   * preservation can be applied lazily at wire/checkpoint build time.
+   */
+  const imageUrlCacheRef = useRef<
+    Record<string, Record<string, { assetUrl: string; altText?: string }>>
+  >({});
 
   const [peerImageMaterialNotice, setPeerImageMaterialNotice] = useState<
     "none" | "load" | "missing"
@@ -1561,36 +1574,68 @@ export function WhiteboardWorkspaceClient({
     };
   }, [syncUrl]);
 
+  /**
+   * PR-01 Option A: apply the image URL cache to snapshot elements.
+   * Called only at wire/checkpoint build time, never per pointer-move.
+   * Invariant P5: assetUrl preserved before any peer-visible snapshot/v3 send.
+   */
+  const applyImageUrlCacheToElements = useCallback(
+    (
+      elements: ReadonlyArray<ExcalidrawLikeElement>,
+      pageCache: Record<string, { assetUrl: string; altText?: string }> | undefined
+    ): ExcalidrawLikeElement[] => {
+      if (!pageCache || Object.keys(pageCache).length === 0) {
+        return elements.map((e) => ({ ...e }) as ExcalidrawLikeElement);
+      }
+      return elements.map((el) => {
+        if (el.type !== "image") return { ...el } as ExcalidrawLikeElement;
+        const cached = pageCache[el.id];
+        if (!cached) return { ...el } as ExcalidrawLikeElement;
+        const url = el.customData?.assetUrl;
+        if (typeof url === "string" && url.length >= 8) {
+          return { ...el } as ExcalidrawLikeElement;
+        }
+        return {
+          ...el,
+          customData: {
+            ...(el.customData ?? {}),
+            assetUrl: cached.assetUrl,
+            ...(cached.altText && !el.customData?.altText
+              ? { altText: cached.altText }
+              : {}),
+          },
+        } as ExcalidrawLikeElement;
+      });
+    },
+    []
+  );
+
   const getTutorDocumentPagesSnapshot = useCallback(() => {
     const api = excalidrawAPIRef.current;
     const cur = activePageIdRef.current;
     const out: Record<string, ReadonlyArray<ExcalidrawLikeElement>> = {};
     for (const p of pageListRef.current) {
+      // PR-01 Option A: apply image URL cache at snapshot/wire build time (not per-move)
+      const pageCache = imageUrlCacheRef.current[p.id];
       if (p.id === cur && api) {
-        // `pageDataRef` is updated from onChange; when it is defined, trust it
-        // so we don’t read `getSceneElements()` one frame after a tab switch
-        // and accidentally ship the previous tab’s pixels into the new tab.
+        // `pageDataRef` is updated from onChange; trust it over getSceneElements()
+        // to avoid shipping the previous tab on a fast page flip.
         const cached = pageDataRef.current[p.id] as
           | ExcalidrawLikeElement[]
           | undefined;
         if (cached !== undefined) {
-          out[p.id] = preserveImageAssetUrlsOnSceneWrite(
-            cached,
-            pageDataRef.current[p.id] as ExcalidrawLikeElement[] | undefined
-          );
+          out[p.id] = applyImageUrlCacheToElements(cached, pageCache);
         } else {
           const live = api.getSceneElements() as ExcalidrawLikeElement[];
-          out[p.id] = preserveImageAssetUrlsOnSceneWrite(
-            live,
-            pageDataRef.current[p.id] as ExcalidrawLikeElement[] | undefined
-          );
+          out[p.id] = applyImageUrlCacheToElements(live, pageCache);
         }
       } else {
-        out[p.id] = pageDataRef.current[p.id] ?? [];
+        const stored = (pageDataRef.current[p.id] ?? []) as ExcalidrawLikeElement[];
+        out[p.id] = applyImageUrlCacheToElements(stored, pageCache);
       }
     }
     return out;
-  }, []);
+  }, [applyImageUrlCacheToElements]);
 
   /** IndexedDB checkpoint + sessionStorage: full multi-page snapshot. */
   const buildBoardDocumentForCheckpoint =
@@ -2959,6 +3004,21 @@ export function WhiteboardWorkspaceClient({
   // Excalidraw onChange wiring
   // ---------------------------------------------------------------
 
+  // PR-01 Option E: pointer-up flush — ensures last stroke segment is never dropped
+  // when the throttled frame and document broadcast are deferred. Guards respected.
+  useEffect(() => {
+    const handlePointerUp = () => {
+      if (applyingRemoteToCanvasRef.current) return;
+      if (pageSwitchProgrammaticRef.current > 0) return;
+      flushThrottledFrameNow();
+      if (sync && syncUrl) {
+        flushDocumentBroadcastNow();
+      }
+    };
+    window.addEventListener("pointerup", handlePointerUp);
+    return () => window.removeEventListener("pointerup", handlePointerUp);
+  }, [flushThrottledFrameNow, flushDocumentBroadcastNow, sync, syncUrl]);
+
   const handleExcalidrawChange = useCallback(
     (
       elements: ReadonlyArray<unknown>,
@@ -2969,13 +3029,26 @@ export function WhiteboardWorkspaceClient({
       if (pageSwitchProgrammaticRef.current > 0) return;
       const els = elements as ReadonlyArray<ExcalidrawLikeElement>;
       const pageId = activePageIdRef.current;
-      const prevBucket = pageDataRef.current[pageId] as
-        | ExcalidrawLikeElement[]
-        | undefined;
-      pageDataRef.current[pageId] = preserveImageAssetUrlsOnSceneWrite(
-        els,
-        prevBucket
-      );
+      // PR-01 Option A: store raw elements ref — no per-move clone.
+      // preserveImageAssetUrlsOnSceneWrite now runs only at wire/checkpoint build time.
+      pageDataRef.current[pageId] = els as ExcalidrawLikeElement[];
+      // Update image URL cache (lightweight: only scans image-type elements).
+      // This preserves assetUrl across the deferred window (invariant P5).
+      for (const el of els) {
+        const e = el as ExcalidrawLikeElement;
+        if (
+          e.type === "image" &&
+          typeof e.customData?.assetUrl === "string" &&
+          e.customData.assetUrl.length >= 8
+        ) {
+          (imageUrlCacheRef.current[pageId] ??= {})[e.id] = {
+            assetUrl: e.customData.assetUrl,
+            ...(typeof e.customData?.altText === "string"
+              ? { altText: e.customData.altText }
+              : {}),
+          };
+        }
+      }
       onLocalElementSnapshot(elements);
       // Smoke-4 (May 17, 2026): real local activity counts as
       // proof-of-session for the audio-flow gate (see
