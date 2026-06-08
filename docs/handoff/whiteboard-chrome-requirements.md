@@ -2,7 +2,7 @@
 
 > **Purpose:** Design INPUT for the custom Mynk whiteboard chrome layer (toolbar + properties/controls), driving Excalidraw via `excalidrawAPI`. Sequenced into the **whiteboard wave**; **not** a V1-notes blocker.
 >
-> **Last consolidated:** 2026-06-07 (exhaustive `docs/` sweep pass).
+> **Last consolidated:** 2026-06-07 (TU-11 keyboard surface routing added).
 
 ---
 
@@ -51,7 +51,7 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 | **TB-08** | **Wyzant-style PDF page subset picker** — import selected pages, not forced whole-document (two-step: file → page picker). | (ii) | whiteboard-smoke-log § Sarah 2026-04-24; pdf-page-picker bootstrapper |
 | **TB-09** | **Phone-photo / image insert** first-class in toolbar flows (not only disk drag/drop or hidden Excalidraw menu). | (ii) | whiteboard-smoke-log § Sarah 2026-04-24; BACKLOG native image |
 | **TB-10** | **Graph / Desmos insert** affordance in Mynk toolbar (Sarah top-10 action: "importing or inserting a graph"). | (ii) | orchestrator Q1; BACKLOG Apr 24 Q1; WHITEBOARD-STATUS Sarah Q&A |
-| **TB-11** | Keep **visible Undo/Redo** controls in Mynk chrome (chunky ↶/↷ shipped Apr 2024); coordinate with keyboard path (TU-03). | (ii) | BACKLOG undo row; whiteboard-smoke-log |
+| **TB-11** | Keep **visible Undo/Redo** controls in Mynk chrome (chunky ↶/↷ shipped Apr 2024); coordinate with keyboard path (TU-03, TU-11). | (ii) | BACKLOG undo row; whiteboard-smoke-log |
 
 ### Pulldown / consolidation
 
@@ -91,7 +91,7 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 | **TM-03** | **Real iPhone Safari** acceptance for student-mobile chrome — jsdom cannot validate layout/popup behavior. | process gate | PLATFORM-ASSUMPTIONS §8; PHASE-2-IOS-SMOKE-MATRIX S11 |
 | **TM-04** | **Tablet / XPPen** pressure-sensitive drawing must keep working through custom chrome (Sarah priority **#2**). | (i) + verify | Sarah-Chat L71; 2026-06-06 W2 |
 | **TM-05** | **Tutor-on-phone/tablet** variant when tutor joins from non-desktop. | (ii) | BACKLOG tutor-side mobile row |
-| **TM-06** | **iOS touch undo/redo** on visible ↶/↷ buttons — verify after custom chrome (shipped desktop; touch unverified). | (ii) + verify | BACKLOG undo row; iOS matrix §7 |
+| **TM-06** | **iOS touch undo/redo** on visible ↶/↷ buttons — verify after custom chrome (shipped desktop; touch unverified). | (ii) + verify | BACKLOG undo row; iOS matrix §7; TU-11 |
 | **TM-07** | **Touch drawing ergonomics** on iOS — palm rejection, continuous stroke broadcast (S11 matrix). | (ii) + verify | PHASE-2-IOS-SMOKE-MATRIX §7, S11 |
 | **TM-08** | **Eraser cursor** aligned with stroke delete path (icon/cursor vs actual erase position). | app-bug | BACKLOG eraser cursor row; whiteboard-sync-redesign |
 
@@ -129,7 +129,7 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 |----|-------------|-----|--------|
 | **TU-01** | **Tutor-desktop chrome** is the primary design target (desktop tutor + mobile student). | (ii) | orchestrator mobile-parity §3 |
 | **TU-02** | **Professional visual polish** — Mynka Blue / v1 component system; not monochrome reskin. | (ii) | HARD bar; 2026-06-06 U1; V1-COMPONENT-LIBRARY §2.10 |
-| **TU-03** | **Keyboard undo** Ctrl/Cmd+Z reliable on desktop (on-screen undo works; keyboard regressed 2026-06-06). | (ii) + app-bug | 2026-06-06 B1; BACKLOG; ORCHESTRATOR-STATE |
+| **TU-03** | **Keyboard undo** Ctrl/Cmd+Z reliable on desktop (on-screen undo works; keyboard regressed 2026-06-06). | (ii) + app-bug | 2026-06-06 B1; BACKLOG; ORCHESTRATOR-STATE; TU-11 |
 | **TU-04** | Custom insert actions (PDF, Math, Desmos) integrated into Mynk toolbar — not orphaned. | (ii) | WHITEBOARD-STATUS § custom chrome |
 | **TU-05** | **Writing tablet** (XPPen Star G640) — priority **#2**; pen input must not break when native toolbar hidden. | (i) + verify | Sarah-Chat L71; orchestrator F1 |
 | **TU-06** | **Waiting room** (when built): session chrome coexists with pre-session gate; timer starts after leave. | layout | Sarah-Chat L6–7; v1 §8 waiting room |
@@ -137,6 +137,7 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 | **TU-08** | **Mic meter + device picker** in workspace chrome (not headless-only). | (ii) | whiteboard-smoke-log § W-audio pending |
 | **TU-09** | **Session bar ~40px** + **bottom controls strip** (mic, cam, pages, share) per v1 wireframe — separate from tool chrome but one visual system. | (ii) | v1-component-redesign §5 Workspace |
 | **TU-10** | **Eraser/delete** remains discoverable — Sarah likes delete (positive validation). | (ii) | Sarah-Chat L8; orchestrator U2 |
+| **TU-11** | **Keyboard-shortcut surface routing.** Canvas shortcuts (P, R, E, Delete, Ctrl/Cmd+Z, etc.) fire ONLY when the Excalidraw canvas has focus. Mynk chrome inputs (search/URL fields, insert modals, page strip, follow toggle, AV controls) must NOT steal or leak canvas shortcuts. Focus returns to canvas after Mynk modals/palettes close. No browser-chrome hijack (e.g. Ctrl+Z must never trigger browser back-navigation). Define tutor-desktop vs student-mobile parity for shortcut routing when native Excalidraw toolbar is hidden. Native pen/stylus preservation unchanged (TM-04 / TU-05). | (ii) + verify | TU-03; TB-11; TM-06; open Q8 |
 
 ---
 
@@ -164,7 +165,7 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 5. **Tutor-mobile variant:** defer to v1.1 or ship minimal desktop chrome at smaller breakpoints?
 6. **Laser pointer:** fix in Excalidraw layer vs custom overlay tool?
 7. **Zen mode vs CSS hide:** best way to suppress native UI on 0.18.1?
-8. **Keyboard shortcuts:** expose Excalidraw defaults (P, R, etc.) when native toolbar hidden?
+8. **Keyboard shortcuts:** expose Excalidraw defaults (P, R, etc.) when native toolbar hidden? → see **TU-11** (surface routing + tutor-desktop vs student-mobile parity).
 9. **Visual system:** every chrome control maps to v1 tokens — no one-off oversized buttons.
 10. **PDF default fit:** tutor viewport vs student viewport on insert (BACKLOG open design row).
 11. **Ghost peer viewport overlays** when follow is OFF — ship in chrome wave or defer?
@@ -273,5 +274,5 @@ Broad case-insensitive ripgrep across **`docs/`** and **`docs/handoff/`** for wh
 | Touch / mobile-tablet | 8 |
 | Screen real estate / responsive | 12 |
 | Student-WB-specific | 6 |
-| Tutor-WB-specific | 10 |
-| **Total** | **61** |
+| Tutor-WB-specific | 11 |
+| **Total** | **62** |
