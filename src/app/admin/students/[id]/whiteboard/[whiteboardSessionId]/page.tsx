@@ -14,10 +14,13 @@ import { loadTutorNoteForReview } from "@/app/admin/students/[id]/whiteboard/not
 export const dynamic = "force-dynamic";
 
 /**
- * This page uses auto-notes (TutorNoteSection) — no blocking server actions.
- * The maxDuration is kept at a conservative budget for replay-related fetches.
+ * 300s budget (Vercel Pro ceiling) — consistent with workspace page.
+ * Required because deleteWhiteboardSessionAndDataAction runs a cascade
+ * transaction that can touch many TranscriptChunk / recording rows, and
+ * must complete within the route's maxDuration window.
+ * Documented in docs/PLATFORM-ASSUMPTIONS.md §1.1.
  */
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function generateMetadata({
   params,

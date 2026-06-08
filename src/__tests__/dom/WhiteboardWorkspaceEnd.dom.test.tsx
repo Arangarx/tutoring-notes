@@ -110,6 +110,13 @@ jest.mock("@/app/admin/students/[id]/whiteboard/actions", () => ({
   revokeJoinTokensForSession: jest.fn(() => Promise.resolve()),
 }));
 
+// notes-actions imports next/cache (revalidatePath) which requires TextEncoder
+// (not available in jsdom). Mock the whole module at the boundary.
+jest.mock("@/app/admin/students/[id]/whiteboard/notes-actions", () => ({
+  kickSessionChunksAction: jest.fn(() => Promise.resolve({ kicked: 0 })),
+  triggerNotesGenerationAction: jest.fn(() => Promise.resolve()),
+}));
+
 const mockBuildFinalEventsJson = jest.fn(
   () =>
     `{"schemaVersion":1,"startedAt":"2026-05-09T00:00:00.000Z","durationMs":100,"events":[]}`

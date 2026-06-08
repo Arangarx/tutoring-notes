@@ -368,6 +368,13 @@ jest.mock("@/app/admin/students/[id]/whiteboard/actions", () => ({
   revokeJoinTokensForSession: jest.fn().mockResolvedValue(undefined),
 }));
 
+// notes-actions imports next/cache (revalidatePath) which requires TextEncoder
+// (not available in jsdom). Mock the whole module at the boundary.
+jest.mock("@/app/admin/students/[id]/whiteboard/notes-actions", () => ({
+  kickSessionChunksAction: jest.fn(() => Promise.resolve({ kicked: 0 })),
+  triggerNotesGenerationAction: jest.fn(() => Promise.resolve()),
+}));
+
 // ----- Test helpers ----------------------------------------------
 
 function makeFakeAudioStream(id: string): MediaStream {

@@ -81,11 +81,10 @@ const SESSION_ID = "wbs-test-01";
 const NOW = new Date("2026-06-07T12:00:00Z");
 
 function makeSession(endedAt: Date | null = NOW) {
+  // Worker only selects {id, endedAt} from WhiteboardSession (bridge removed).
   return {
     id: SESSION_ID,
     endedAt,
-    studentId: "stu-1",
-    adminUserId: "admin-1",
   };
 }
 
@@ -142,18 +141,11 @@ beforeEach(() => {
   mockUpsertNotePending.mockResolvedValue({ sessionId: SESSION_ID, status: "pending" });
   mockUpdateNote.mockResolvedValue({ sessionId: SESSION_ID });
 
-  // Default bridge mocks (used by createOrUpdateDraftSessionNote — best-effort)
+  // Worker now only selects {id, endedAt} from WhiteboardSession (bridge removed).
   mockGetSession.mockResolvedValue({
     id: SESSION_ID,
     endedAt: NOW,
-    startedAt: new Date(NOW.getTime() - 60000),
-    studentId: "stu-1",
-    adminUserId: "admin-1",
-    noteId: null,
   });
-  (db.whiteboardSession.update as jest.Mock).mockResolvedValue({ id: SESSION_ID });
-  (db.sessionNote.create as jest.Mock).mockResolvedValue({ id: "note-1" });
-  (db.sessionNote.update as jest.Mock).mockResolvedValue({ id: "note-1" });
 });
 
 describe("processNotesReduceJob — idempotency", () => {
@@ -190,10 +182,6 @@ describe("processNotesReduceJob — session-sealed guard", () => {
     mockGetSession.mockResolvedValue({
       id: SESSION_ID,
       endedAt: null,
-      startedAt: NOW,
-      studentId: "stu-1",
-      adminUserId: "admin-1",
-      noteId: null,
     });
 
     const result = await processNotesReduceJob(SESSION_ID);
@@ -211,10 +199,6 @@ describe("processNotesReduceJob — completion gate", () => {
     mockGetSession.mockResolvedValue({
       id: SESSION_ID,
       endedAt: new Date(),
-      startedAt: new Date(Date.now() - 60000),
-      studentId: "stu-1",
-      adminUserId: "admin-1",
-      noteId: null,
     });
 
     mockGetChunks.mockResolvedValue([
@@ -233,10 +217,6 @@ describe("processNotesReduceJob — completion gate", () => {
     mockGetSession.mockResolvedValue({
       id: SESSION_ID,
       endedAt: new Date(),
-      startedAt: new Date(Date.now() - 60000),
-      studentId: "stu-1",
-      adminUserId: "admin-1",
-      noteId: null,
     });
 
     mockGetChunks.mockResolvedValue([
@@ -267,10 +247,8 @@ describe("processNotesReduceJob — completion gate", () => {
       links: "",
     }));
 
-    // Bridge mocks
-    (db.whiteboardSession.findUnique as jest.Mock).mockResolvedValue({ ...makeSession(sixMinAgo), startedAt: new Date(sixMinAgo.getTime() - 60000), noteId: null });
-    (db.whiteboardSession.update as jest.Mock) = jest.fn().mockResolvedValue({});
-    (db.sessionNote.create as jest.Mock) = jest.fn().mockResolvedValue({ id: "note-p" });
+    // Worker only selects {id, endedAt} from session (bridge removed).
+    (db.whiteboardSession.findUnique as jest.Mock).mockResolvedValue({ id: SESSION_ID, endedAt: sixMinAgo });
 
     const result = await processNotesReduceJob(SESSION_ID);
 

@@ -32,7 +32,7 @@ import {
 } from "@/lib/recording/transcript-store";
 import type { TutorNote } from "@prisma/client";
 import { TRANSCRIBE_SWEEP_MAX_ATTEMPTS } from "@/lib/recording/transcribe-sweep-config";
-import { REDUCE_PROMPT_VERSION } from "@/lib/recording/notes-worker";
+import { REDUCE_PROMPT_VERSION } from "@/lib/recording/notes-reduce-config";
 
 // ---------------------------------------------------------------------------
 // (a) End-session sweep — kick non-done chunks for this session
@@ -230,34 +230,37 @@ export async function loadTutorNoteForReview(
 }
 
 // ---------------------------------------------------------------------------
-// (f) Save DRAFT SessionNote — finalize to READY (tutor-facing)
+// (f) Save session notes — create or update the live SessionNote (READY)
 // ---------------------------------------------------------------------------
 
-export type SaveDraftNoteFields = {
+export type SaveSessionNoteFields = {
   topics: string;
   assessment: string;
   nextSteps: string;
   links: string;
 };
 
-export type SaveDraftNoteResult =
+export type SaveSessionNoteResult =
   | { ok: true; noteId: string }
   | { ok: false; error: string };
 
 /**
- * Finalize the DRAFT SessionNote for a whiteboard session (DRAFT → READY).
+ * Create or update the live SessionNote for a whiteboard session.
  *
- * The tutor can edit the fields on the review page before saving.
- * If no DRAFT note exists yet (edge case: notes still generating when tutor
- * clicks Save), this action creates a new READY note from the provided fields.
+ * Locked design (B4): Save = create/update ONE SessionNote (status READY),
+ * idempotent via WhiteboardSession.noteId. Immediately parent-visible.
+ * Re-save updates the same note — no duplicates.
+ *
+ * The tutor edits structured fields (topics/assessment/Plan/links) seeded
+ * from the TutorNote on the review page before clicking Save.
  *
  * Trust: assertOwnsWhiteboardSession.
  * Log prefix: [nsi]
  */
-export async function saveDraftSessionNoteAction(
+export async function saveSessionNotesAction(
   whiteboardSessionId: string,
-  fields: SaveDraftNoteFields
-): Promise<SaveDraftNoteResult> {
+  fields: SaveSessionNoteFields
+): Promise<SaveSessionNoteResult> {
   try {
     const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
 
@@ -301,7 +304,7 @@ export async function saveDraftSessionNoteAction(
       );
       noteId = existingNoteId;
       console.log(
-        `[nsi] wbsid=${whiteboardSessionId} action=save_draft_finalized noteId=${noteId}`
+        `[nsi] wbsid=${whiteboardSessionId} action=save_note_updated noteId=${noteId}`
       );
     } else {
       // Edge case: no note exists yet — create a READY note directly
@@ -335,7 +338,7 @@ export async function saveDraftSessionNoteAction(
         { label: "saveDraftSessionNote.linkNote" }
       );
       console.log(
-        `[nsi] wbsid=${whiteboardSessionId} action=save_draft_created_ready noteId=${noteId}`
+        `[nsi] wbsid=${whiteboardSessionId} action=save_note_created noteId=${noteId}`
       );
     }
 
@@ -346,7 +349,7 @@ export async function saveDraftSessionNoteAction(
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(
-      `[nsi] wbsid=${whiteboardSessionId} action=save_draft_failed err=${msg}`
+      `[nsi] wbsid=${whiteboardSessionId} action=save_note_failed err=${msg}`
     );
     return { ok: false, error: msg };
   }
@@ -362,18 +365,17 @@ export type DeleteSessionResult =
 
 /**
  * Delete a whiteboard session and ALL related data:
- *   - DRAFT SessionNote (if exists and status=DRAFT; refuses if READY)
+ *   - SessionNote (if linked — deleted regardless of status; tutor explicitly chose to delete)
  *   - SessionRecording rows for this session
  *   - WhiteboardSession (cascades: TutorNote, TranscriptChunks, extractions, JoinTokens)
  *
  * IMPORTANT: Audio and events Blob files are NOT deleted here (that is the
  * stale-branch sweep utility's responsibility). DB rows only.
  *
- * Refuses (with error) if the attached SessionNote has already been finalized
- * (status=READY or SENT) — the tutor must manually detach the note first.
+ * On failure the action returns {ok:false} but the CALLER is responsible for
+ * redirecting to the student detail regardless (cron sweeps orphaned rows).
  *
- * Requires a confirm dialog client-side with the exact copy:
- * "Are you sure you want to delete this session and all related data?"
+ * Requires a confirm dialog client-side.
  *
  * Trust: assertOwnsWhiteboardSession. All deletes verified against the session's
  * studentId to prevent cross-student data leakage.
@@ -415,23 +417,10 @@ export async function deleteWhiteboardSessionAndDataAction(
     await withDbRetry(
       () =>
         db.$transaction(async (tx) => {
-          // 1. Delete DRAFT SessionNote (before deleting WB session, since SetNull cascade
-          //    would otherwise just null noteId rather than delete the note).
-          //    Status check is INSIDE the transaction to prevent a TOCTOU race between a
-          //    concurrent saveDraftSessionNoteAction finalize and this delete.
+          // 1. Delete SessionNote (any status) before deleting the WB session.
+          //    The SetNull cascade would null noteId but leave the SessionNote row
+          //    orphaned — we want full cleanup.
           if (noteId) {
-            const note = await tx.sessionNote.findUnique({
-              where: { id: noteId },
-              select: { id: true, status: true },
-            });
-            if (note && (note.status === "READY" || note.status === "SENT")) {
-              console.warn(
-                `[nsi] wbsid=${whiteboardSessionId} action=delete_session_rejected reason=note_already_finalized noteId=${noteId} status=${note.status}`
-              );
-              throw new Error(
-                "Cannot delete: this session's note has already been saved. Detach the note first if you wish to delete the session."
-              );
-            }
             await tx.sessionNote.delete({ where: { id: noteId } });
           }
 

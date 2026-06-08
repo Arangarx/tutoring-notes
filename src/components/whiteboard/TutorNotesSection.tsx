@@ -32,7 +32,7 @@ import { useRouter } from "next/navigation";
 import {
   getTutorNoteStatusAction,
   regenerateNotesAction,
-  saveDraftSessionNoteAction,
+  saveSessionNotesAction,
   deleteWhiteboardSessionAndDataAction,
   type TutorNoteStatusResult,
 } from "@/app/admin/students/[id]/whiteboard/notes-actions";
@@ -128,7 +128,6 @@ export default function TutorNotesSection({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const startTimeRef = useRef<number>(Date.now());
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -228,14 +227,14 @@ export default function TutorNotesSection({
     setSaving(true);
     setSaveError(null);
     try {
-      const result = await saveDraftSessionNoteAction(
+      const result = await saveSessionNotesAction(
         whiteboardSessionId,
         fields
       );
       if (!result.ok) {
         setSaveError(result.error ?? "Could not save the note. Please try again.");
       } else {
-        // Navigate to the student notes list to see the finalized note
+        // Navigate to the student notes list to see the live note
         router.push(`/admin/students/${studentId}/notes`);
       }
     } catch (err: unknown) {
@@ -257,21 +256,22 @@ export default function TutorNotesSection({
     }
 
     setDeleting(true);
-    setDeleteError(null);
     try {
       const result = await deleteWhiteboardSessionAndDataAction(whiteboardSessionId);
       if (!result.ok) {
-        setDeleteError(result.error ?? "Could not delete the session. Please try again.");
-        setDeleting(false);
-      } else {
-        router.push(`/admin/students/${studentId}`);
+        // Log for observability; cron sweep will reconcile orphaned rows.
+        console.error(
+          `[nsi] wbsid=${whiteboardSessionId} delete_failed err=${result.error} — navigating to student detail`
+        );
       }
     } catch (err: unknown) {
-      setDeleteError(
-        err instanceof Error ? err.message : "Could not delete the session. Please try again."
+      console.error(
+        `[nsi] wbsid=${whiteboardSessionId} delete_exception err=${err instanceof Error ? err.message : String(err)} — navigating to student detail`
       );
-      setDeleting(false);
     }
+    // Always navigate to the student detail regardless of delete outcome.
+    // The cron sweep reconciles any orphaned session data.
+    router.push(`/admin/students/${studentId}`);
   }, [whiteboardSessionId, router, studentId]);
 
   // -------------------------------------------------------------------------
@@ -415,23 +415,6 @@ export default function TutorNotesSection({
               }}
             >
               {saveError}
-            </div>
-          )}
-
-          {deleteError && (
-            <div
-              role="alert"
-              style={{
-                background: "var(--error-soft)",
-                border: "1px solid var(--error-border)",
-                borderRadius: 6,
-                padding: "8px 10px",
-                fontSize: 13,
-                color: "var(--sign-out)",
-                marginTop: 4,
-              }}
-            >
-              {deleteError}
             </div>
           )}
 

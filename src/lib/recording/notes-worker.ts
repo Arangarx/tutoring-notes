@@ -1,9 +1,9 @@
 import "server-only";
 
 /**
- * Recording re-arch Phase 1, Slice 3 — D7 reduce phase (REQ-S3-4: structured output bridge).
+ * Recording re-arch Phase 1, Slice 3 — D7 reduce phase (REQ-S3-4: locked design).
  *
- * Notes reduce worker: completion gate → map/reduce → TutorNote write → DRAFT SessionNote.
+ * Notes reduce worker: completion gate → map/reduce → TutorNote write.
  *
  * Architecture: DB-as-queue with immediate fire-and-forget + cron retry.
  * This function runs once per session-end event (immediate attempt) and is
@@ -20,16 +20,13 @@ import "server-only";
  *      worker/cron context, not a user-triggered server action; ownership was
  *      already asserted at enqueue time (triggerNotesGenerationAction).
  *      The worker validates session sealed + all chunk FKs are for this session.
- *  (f) STRUCTURED OUTPUT — reduce emits JSON {topics, assessment, nextSteps, links}
- *      matching SessionNote field shape. Stored in TutorNote.content as JSON string.
- *  (g) DRAFT SessionNote bridge — on completion, auto-creates (or updates if regen)
- *      a DRAFT SessionNote linked via WhiteboardSession.noteId. Best-effort: a
- *      SessionNote creation failure does NOT fail the job (TutorNote stays done).
- *  (h) REGENERATE-SAFE — content is never overwritten mid-run; new content replaces
- *      old only on successful API response. If session.noteId already exists (regen
- *      scenario), the existing DRAFT SessionNote is updated atomically.
+ *  (f) STRUCTURED OUTPUT — reduce emits JSON {topics, assessment, nextSteps, links}.
+ *      Stored in TutorNote.content as JSON string. TutorNote is the AI working draft
+ *      (never parent-visible). The tutor-facing Save action creates the live SessionNote.
+ *  (g) REGENERATE-SAFE — content is never overwritten mid-run; new content replaces
+ *      old only on successful API response.
  *
- * Log prefixes: [tnt] (TutorNote pipeline), [nsi] (notes-session-integration bridge).
+ * Log prefix: [tnt] (TutorNote pipeline).
  * Per-session ID on every line.
  */
 
@@ -48,6 +45,7 @@ import {
   parseChunkExtraction,
   type ChunkExtractionPayload,
 } from "@/lib/recording/transcript-types";
+import { REDUCE_PROMPT_VERSION } from "@/lib/recording/notes-reduce-config";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -58,8 +56,7 @@ const REDUCE_MODEL = "gpt-4o-mini";
 /** 5 minutes in ms — matches ratified Q5 answer. */
 const NOTES_COMPLETION_TIMEOUT_MS = 5 * 60 * 1000;
 
-/** Prompt version for auto-generated structured notes (increment when prompt logic changes). */
-export const REDUCE_PROMPT_VERSION = "2026-06-07-v1-structured";
+// REDUCE_PROMPT_VERSION is imported from notes-reduce-config (lightweight, no heavy deps).
 
 /**
  * Reduce phase system prompt — emits JSON matching SessionNote field shape.
@@ -172,94 +169,6 @@ function parseReduceResponse(text: string): StructuredNoteFields | null {
   }
 }
 
-/**
- * Auto-create or update a DRAFT SessionNote for the session.
- *
- * - First run (noteId = null): CREATE DRAFT SessionNote + link via WhiteboardSession.noteId.
- * - Regen run (noteId set, status=DRAFT): UPDATE existing DRAFT SessionNote fields.
- * - If noteId set and status=READY (already saved by tutor): UPDATE fields only
- *   (tutor will see updated content on next load; preserve READY status).
- *
- * Best-effort: caller catches errors and logs; never throws.
- *
- * Log prefix: [nsi]
- */
-async function createOrUpdateDraftSessionNote(
-  sessionId: string,
-  session: {
-    studentId: string;
-    adminUserId: string;
-    startedAt: Date;
-    noteId: string | null;
-  },
-  fields: StructuredNoteFields
-): Promise<void> {
-  const linksJson = fields.links
-    ? JSON.stringify(
-        fields.links
-          .split("\n")
-          .map((l) => l.trim())
-          .filter(Boolean)
-      )
-    : "[]";
-
-  if (session.noteId) {
-    // Regen path: update existing SessionNote (keep status as-is)
-    await withDbRetry(
-      () =>
-        db.sessionNote.update({
-          where: { id: session.noteId! },
-          data: {
-            topics: fields.topics,
-            assessment: fields.assessment,
-            nextSteps: fields.nextSteps,
-            linksJson,
-            aiGenerated: true,
-            aiPromptVersion: REDUCE_PROMPT_VERSION,
-          },
-        }),
-      { label: "createOrUpdateDraftSessionNote.update" }
-    );
-    console.log(
-      `[nsi] wbsid=${sessionId} action=draft_note_updated noteId=${session.noteId}`
-    );
-  } else {
-    // First-time path: create DRAFT + link
-    const note = await withDbRetry(
-      () =>
-        db.sessionNote.create({
-          data: {
-            studentId: session.studentId,
-            date: session.startedAt,
-            topics: fields.topics,
-            homework: "",
-            assessment: fields.assessment,
-            nextSteps: fields.nextSteps,
-            linksJson,
-            status: "DRAFT",
-            aiGenerated: true,
-            aiPromptVersion: REDUCE_PROMPT_VERSION,
-          },
-          select: { id: true },
-        }),
-      { label: "createOrUpdateDraftSessionNote.create" }
-    );
-
-    // Link whiteboard session → session note
-    await withDbRetry(
-      () =>
-        db.whiteboardSession.update({
-          where: { id: sessionId },
-          data: { noteId: note.id },
-        }),
-      { label: "createOrUpdateDraftSessionNote.linkNote" }
-    );
-
-    console.log(
-      `[nsi] wbsid=${sessionId} action=draft_note_created noteId=${note.id} studentId=${session.studentId}`
-    );
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Main worker
@@ -295,10 +204,6 @@ export async function processNotesReduceJob(
         select: {
           id: true,
           endedAt: true,
-          startedAt: true,
-          studentId: true,
-          adminUserId: true,
-          noteId: true,
         },
       }),
     { label: "processNotesReduceJob.session" }
@@ -479,30 +384,6 @@ export async function processNotesReduceJob(
     console.log(
       `[tnt] wbsid=${sessionId} action=reduce_done status=${finalStatus} chunks=${doneChunks} latencyMs=${latencyMs} isPartial=${isPartial} topics=${structuredFields.topics.length} assessment=${structuredFields.assessment.length} nextSteps=${structuredFields.nextSteps.length}`
     );
-
-    // --- 9. Auto-create/update DRAFT SessionNote (bridge) — best-effort ----------
-    // Guard: if every field is blank AND a prior good note already exists (regen path),
-    // skip the update to avoid clobbering valid content with an all-empty parse result.
-    const allBlankFields =
-      !structuredFields.topics.trim() &&
-      !structuredFields.assessment.trim() &&
-      !structuredFields.nextSteps.trim() &&
-      !structuredFields.links.trim();
-
-    if (allBlankFields && session.noteId) {
-      console.warn(
-        `[nsi] wbsid=${sessionId} action=draft_note_update_skipped reason=all_blank_result noteId=${session.noteId}`
-      );
-    } else {
-      try {
-        await createOrUpdateDraftSessionNote(sessionId, session, structuredFields);
-      } catch (bridgeErr: unknown) {
-        console.error(
-          `[nsi] wbsid=${sessionId} action=draft_note_bridge_failed err=${bridgeErr instanceof Error ? bridgeErr.message : String(bridgeErr)}`
-        );
-        // Non-fatal: TutorNote is already done; tutor can still save from review page
-      }
-    }
 
     return isPartial
       ? { outcome: "partial", isPartial: true }

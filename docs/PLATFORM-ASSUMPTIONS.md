@@ -34,7 +34,7 @@
 - **Assumption**: Vercel **Pro** tier (300-second hard ceiling on serverless function execution).
 - **Where baked in**:
   - `src/app/admin/students/[id]/page.tsx:41` — `export const maxDuration = 300;`
-  - `src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/page.tsx:18` — `export const maxDuration = 300;`
+  - `src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/page.tsx` — `export const maxDuration = 300;` (raised from 60 → 300 in slice-3 rework; required so deleteWhiteboardSessionAndDataAction cascade completes within budget)
   - `src/lib/transcribe.ts` — Whisper-per-part loop parallelized with concurrency cap 6 (`WHISPER_INNER_CONCURRENCY`) post-Tier-1 (shipped 2026-05-17). Assumes 300s wall-clock budget at the action boundary.
   - `src/app/admin/students/[id]/actions.ts` — `transcribeAndGenerateAction` outer per-segment loop, parallelized with cap 3 (`TRANSCRIPT_OUTER_CONCURRENCY`) post-Tier-1.
   - `src/app/admin/students/[id]/whiteboard/actions.ts` — whiteboard transcribe path, same outer-cap-3 pattern (`WB_TRANSCRIPT_OUTER_CONCURRENCY`).
