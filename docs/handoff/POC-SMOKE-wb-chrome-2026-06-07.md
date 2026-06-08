@@ -11,18 +11,18 @@
 
 ## Desktop checks (your Mac)
 
-- [ ] **No native Excalidraw chrome anywhere** — no left tool rail, no hamburger/menu, no properties panel, no bottom footer (zoom/undo/help). Just canvas + the Mynk overlay toolbar.
-- [ ] **Tools switch + draw:** cursor (select), pencil (freedraw), eraser, rectangle, text — each one activates from the Mynk toolbar and actually works on the canvas.
+- [x] **No native Excalidraw chrome anywhere** — no left tool rail, no hamburger/menu, no properties panel, no bottom footer (zoom/undo/help). Just canvas + the Mynk overlay toolbar.
+- [x] **Tools switch + draw:** cursor (select), pencil (freedraw), eraser, rectangle, text — each one activates from the Mynk toolbar and actually works on the canvas.
 - [ ] **Active-tool highlight** tracks the selected tool (status line bottom-left shows `activeTool`).
 - [ ] **Stroke width** control changes the thickness of the *next* stroke.
 - [ ] **Color** swatches change the *next* stroke's color.
-- [ ] **Undo / Redo buttons** work.
-- [ ] **Ctrl/Cmd+Z** works with the overlay present (the known 2026-06-06 regression — this is the one to watch).
+- [x] **Undo / Redo buttons** work.
+- [x] **Ctrl/Cmd+Z** works with the overlay present (the known 2026-06-06 regression — this is the one to watch).
 - [ ] **Overlay doesn't block the canvas** — you can draw under/around the toolbar; no dead zones.
 
 ## Tablet / pen check (borrowed tablet)
 
-- [ ] **Pen draws** through the hidden native chrome (generic-stylus proof; NOT a substitute for Sarah's XPPen G640).
+- [x] **Pen draws** through the hidden native chrome (generic-stylus proof; NOT a substitute for Sarah's XPPen G640).
 - [ ] **Touch** draw/pan behaves sanely.
 - [ ] Notes:
 
@@ -35,9 +35,11 @@
 
 ## Overall verdict (pick one)
 
-- [ ] **GREEN** — direction works; greenlight Phase 1 (tutor-desktop chrome).
+- [x] **GREEN** — direction works; greenlight Phase 1 (tutor-desktop chrome).
 - [ ] **YELLOW** — works with caveats; note them and we decide.
 - [ ] **RED** — approach is blocked; we rethink before any Phase 1 build.
+
+**Result (2026-06-08): GREEN** — Andrew real-device smoke; screenshot-confirmed full native-chrome hide; Ctrl+Z/Y keyboard OK; generic-stylus OK (XPPen G640 residual). **Phase 1 is unblocked.**
 
 Notes / caveats:
 
