@@ -40,6 +40,7 @@ Spike verdict: **YELLOW = proceed** — core imperative APIs work; hide mechanis
 - Mirror active-tool highlight from **`getAppState().activeTool`** on every `onChange`.
 - **Undo:** keep existing **synthetic-key** undo path; hide native footer undo (SR-09). Coordinate with TU-03 / TU-11.
 - Visual system: v1 tokens only (TU-02, open Q9) — no one-off oversized buttons.
+- **Theme parity (TU-12):** Mynk chrome (toolbar, pulldowns, properties popover, page strip, bottom bars) styled for **both light and dark** via v1 tokens. Excalidraw `theme` prop follows the **app-selected** theme (extend/replace `useExcalidrawThemeFromSystem` — user toggle + localStorage, default system on first visit), not `prefers-color-scheme` alone. Applies to **`tutor-desktop`** (Phase 1) and **`student-mobile-first`** (Phase 2).
 
 ### 2.2 Imperative API cheat sheet (0.18.1)
 
@@ -198,6 +199,7 @@ POC scope is intentionally **narrow** — no relay, no multi-page sync, no AV. P
 | Sync | `npm run test:wb-sync` green; 22 invariants unbroken (§2.3) |
 | Keyboard | TU-11 surface routing defined for tutor-desktop |
 | Visual | Professional polish bar (HARD quality bar; TU-02) |
+| Theme | **TU-12:** tutor-desktop chrome readable in **light and dark**; Excalidraw `theme` matches app-selected theme (toggle-driven, not system-only) |
 
 ### Phase 2 — Student-mobile chrome
 
@@ -208,6 +210,7 @@ POC scope is intentionally **narrow** — no relay, no multi-page sync, no AV. P
 | Layout | ≥80% canvas, bottom bar, ≤40px page strip, `100dvh` |
 | Tools | Pencil + eraser + overflow; native hidden |
 | Follow | Default-on follow toggle |
+| Theme | **TU-12:** student-mobile chrome + Excalidraw `theme` match app-selected light/dark (parity with tutor path) |
 | iOS | Real iPhone Safari acceptance (TM-03) — matrix S11 rows ticked |
 | Sync | `test:wb-sync` green on student paths |
 
@@ -257,7 +260,7 @@ From requirements doc — **not** closed by this design pass:
 
 | Doc | Role |
 |-----|------|
-| [`whiteboard-chrome-requirements.md`](whiteboard-chrome-requirements.md) | 63 requirements (incl. TM-09) |
+| [`whiteboard-chrome-requirements.md`](whiteboard-chrome-requirements.md) | 64 requirements (incl. TM-09, TU-12) |
 | [`WHITEBOARD-STATUS.md`](../WHITEBOARD-STATUS.md) | Build status + Sarah UX table |
 | [`whiteboard-sync-redesign-2026-05-27.md`](whiteboard-sync-redesign-2026-05-27.md) | Sync invariants P1–P8, I1–I4 |
 | [`whiteboard-regression-net-design-2026-05-30.md`](whiteboard-regression-net-design-2026-05-30.md) | Real-browser regression net |

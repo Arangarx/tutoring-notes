@@ -4,7 +4,7 @@
 >
 > **Sequencing (ratified Andrew 2026-06-07/08):** Whiteboard chrome is a **pre-master gate** for the V1 reveal — build on `v1-redesign` before `v1-redesign → master`. Master cut = Sarah reveal (`tutoring-notes.vercel.app` / `usemynk.com` share the same production deployment on `master`; no UI-skin feature flag). The reveal must be one cohesive site, not polished chrome around still-janky Excalidraw native UI.
 >
-> **Last consolidated:** 2026-06-07 (TU-11 keyboard surface routing added); sequencing note updated 2026-06-07/08. **Design doc (ratified forks + phasing):** [`whiteboard-chrome-design-2026-06-07.md`](whiteboard-chrome-design-2026-06-07.md).
+> **Last consolidated:** 2026-06-07 (TU-12 theme parity added); prior TU-11 keyboard surface routing. Sequencing note updated 2026-06-07/08. **Design doc (ratified forks + phasing):** [`whiteboard-chrome-design-2026-06-07.md`](whiteboard-chrome-design-2026-06-07.md).
 
 ---
 
@@ -141,6 +141,7 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 | **TU-09** | **Session bar ~40px** + **bottom controls strip** (mic, cam, pages, share) per v1 wireframe — separate from tool chrome but one visual system. | (ii) | v1-component-redesign §5 Workspace |
 | **TU-10** | **Eraser/delete** remains discoverable — Sarah likes delete (positive validation). | (ii) | Sarah-Chat L8; orchestrator U2 |
 | **TU-11** | **Keyboard-shortcut surface routing.** Canvas shortcuts (P, R, E, Delete, Ctrl/Cmd+Z, etc.) fire ONLY when the Excalidraw canvas has focus. Mynk chrome inputs (search/URL fields, insert modals, page strip, follow toggle, AV controls) must NOT steal or leak canvas shortcuts. Focus returns to canvas after Mynk modals/palettes close. No browser-chrome hijack (e.g. Ctrl+Z must never trigger browser back-navigation). Define tutor-desktop vs student-mobile parity for shortcut routing when native Excalidraw toolbar is hidden. Native pen/stylus preservation unchanged (TM-04 / TU-05). | (ii) + verify | TU-03; TB-11; TM-06; open Q8 |
+| **TU-12** | **Theme parity: Mynk chrome + Excalidraw theme follow app light/dark selection.** Toolbar, pulldowns, properties popover, page strip, and bottom bars styled for **both** light and dark via v1 tokens (`tutor-desktop` + `student-mobile-first`). Excalidraw `theme` prop must follow the **app-selected** theme (persisted user toggle; first visit defaults to system) — extend/replace `useExcalidrawThemeFromSystem` (system-only today). Not the dev-only `?theme=` param. | (ii) | BACKLOG § V1 redesign — pre-master; `V1-COMPONENT-LIBRARY.md` §2.11; whiteboard-chrome-design §2.1 + Phase 1/2 acceptance |
 
 ---
 
@@ -258,6 +259,7 @@ Broad case-insensitive ripgrep across **`docs/`** and **`docs/handoff/`** for wh
 | TU-08 | Mic meter + picker in workspace chrome | whiteboard-smoke-log W-audio |
 | TU-09 | Session bar + bottom controls visual system | v1 §5 (expanded) |
 | TU-10 | Eraser/delete discoverable | Sarah-Chat L8 |
+| TU-12 | Theme parity — Mynk chrome + Excalidraw follow app toggle | BACKLOG § V1 redesign; V1-COMPONENT-LIBRARY §2.11 |
 
 ---
 
@@ -283,5 +285,5 @@ Broad case-insensitive ripgrep across **`docs/`** and **`docs/handoff/`** for wh
 | Touch / mobile-tablet | 9 |
 | Screen real estate / responsive | 12 |
 | Student-WB-specific | 6 |
-| Tutor-WB-specific | 11 |
-| **Total** | **63** |
+| Tutor-WB-specific | 12 |
+| **Total** | **64** |

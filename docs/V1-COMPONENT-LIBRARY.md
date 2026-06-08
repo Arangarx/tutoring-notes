@@ -144,7 +144,8 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 |---|---|---|---|
 | `ImpersonationBanner` | `src/components/ImpersonationBanner.tsx` | Operator impersonation indicator bar | **canonical** |
 | `SubmitButton` | `src/components/SubmitButton.tsx` | Simple form submit button (pre-B1 era, some pages still use) | **candidate-for-consolidation** — new code should use `<Button>` from `ui/button.tsx`; migrate opportunistically |
-| `ThemeInit` | `src/components/ThemeInit.tsx` | Hydrates theme from localStorage to avoid FOUC | **canonical** |
+| `ThemeInit` | `src/components/ThemeInit.tsx` | **Dev-only** theme bootstrap (`?theme=light\|dark` + `tutoring-notes-dev-theme` localStorage). System `prefers-color-scheme` is CSS-only (`tokens.css`). **Not** the user-facing toggle — see `ThemeToggle` below. | **canonical (dev-only path)** |
+| **`ThemeToggle`** (planned) | `src/components/ThemeToggle.tsx` *(not yet created)* | **Component-library deliverable (pre-master).** Discoverable light/dark control (topbar or settings); persists user choice to localStorage; first visit defaults to system preference; sets `data-theme` on `<html>`. Replaces dev `?theme=` as the user mechanism. | **canonical target — ship before `v1-redesign → master`** |
 | `Providers` | `src/components/Providers.tsx` | Root client providers (session, theme, etc.) | **canonical** |
 | `LocalDateTimeText` | `src/components/LocalDateTimeText.tsx` | Client-rendered local datetime from UTC | **canonical** |
 | `ModalPortal` | `src/components/ModalPortal.tsx` | Portal for modals | **canonical** |
@@ -302,6 +303,14 @@ Error state: set `aria-invalid="true"` on the `Input`; display error text below 
 | 6 | **Input validation-state coloring (OPEN)** — Andrew expected possible **input validation-state coloring / password-strength indicator** (red/yellow/green bar); never built. **Open question:** do we want validation-state coloring on inputs? **Not a bug.** | Low priority — decide in cohesive pass |
 | — | **Runbook correction** — there is **no** admin "outbox" page; that smoke runbook line was an error. Chunk 1 surfaces corrected in §3 tracker. | N/A |
 
+### 2.11 Light/dark theme parity (Andrew 2026-06-07 — pre-master gate)
+
+- **Both themes are first-class.** Light and dark are each fully designed with Mynka Blue v1 tokens — not "dark as an afterthought" or "light is legacy."
+- **Every redesigned component/page** in the component pass must be **verified in both themes** before the cohesive visual review signs off. Chunk merges stay functional-only; theme parity is part of the **cohesive** bar, not per-chunk optional polish.
+- **`ThemeToggle`** (§1 inventory) is a **component-library deliverable** — discoverable, persisted user control; replaces dev-only `?theme=` (`ThemeInit.tsx`). Wire into `AdminNav` / account settings per layout chunk.
+- **Whiteboard:** Mynk chrome + Excalidraw `theme` prop follow the app-selected theme (**TU-12** in [`whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md)).
+- **Backlog of record:** [`BACKLOG.md`](BACKLOG.md) § V1 redesign — pre-master requirements.
+
 ---
 
 ## §3. Component-Pass Chunk Tracker
@@ -319,6 +328,7 @@ Full decision record: [`docs/handoff/v1-redesign-STATUS.md`](handoff/v1-redesign
 | Chunk | Phase | Surface(s) | Status | Branch | Dedup-checked |
 |---|---|---|---|---|---|
 | A — Foundations | A | `tokens.css` dark mode, `fonts.ts`, `typography.css` | SHIPPED (on `v1-redesign`) | `v1-redesign` @ `5aa3c7d` | N/A |
+| **A′ — Theme toggle + parity gate** | A | `ThemeToggle`, persisted `data-theme`, both-theme verification rubric (§2.11) | **PENDING (pre-master)** | — | — |
 | B1 — Auth surfaces | B1 | `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/setup` | SHIPPED (on `v1-redesign`) | `v1-redesign` @ `b798494` | ✅ |
 | B2 — Dashboard + Students | B2 | `/admin`, `/admin/students`, `/admin/students/[id]` | SHIPPED (on `v1-redesign` @ `0424206`) | `component-b2-dashboard-students` → merged | ✅ |
 | D — Landing + Features | D | `/` (landing), `/features` | FIRST CUT (on `feature/phase-d-landing-about`, not merged) | `feature/phase-d-landing-about` @ `37d8178` | ✅ |
@@ -407,3 +417,4 @@ The following files are locked to recording slice 3 or live-session infrastructu
 - **2026-06-07:** **REQ-S3-3** signed-in identity indicator (§3.1, `AdminNav` inventory). Branch `docs/v1-redesign-notes-ux-reqs`.
 - **2026-06-07:** **REQ-S3-4** canonical notes schema — no field drops, Plan mandatory, homework→Plan per Sarah pilot feedback (§3.1, Notes inventory). Branch `docs/v1-redesign-notes-ux-reqs`.
 - **2026-06-07:** Component-pass **review protocol** (§3) + **Chunk 1 smoke feedback** (§2.10); Chunk 1 tracker row updated (functional smoke; removed nonexistent `/admin/outbox`). Branch `docs/v1-redesign-notes-ux-reqs`.
+- **2026-06-07:** **§2.11 light/dark theme parity** + planned `ThemeToggle` deliverable (§1 inventory, §3 tracker row A′). Pre-master gate per Andrew.
