@@ -73,18 +73,28 @@ The session type is selected (or inferred) before entering the board. In-person 
 
 All components use design tokens only. No raw hex in component code.
 
+> **Build note:** Mock transcribes `tokens.css` values; the BUILD must consume the real token CSS, not copies — primary actions map to shadcn `--primary` (= accent/coral).
+
 | Token | Light value | Dark value | Use |
 |---|---|---|---|
 | `--surface-base` / `bg-background` | `#f5f4ec` | `#051a24` | Page-level background, canvas bg |
 | `--surface-1` / `bg-card` | `#fcfbf4` | `#0e2a38` | Bars, panels, popovers |
-| `--surface-2` / `bg-muted` | `#ecebe1` | `~#021018` | Sunken areas, input bg |
+| `--surface-2` / `bg-muted` | `#ecebe1` | `#142f3e` | Sunken areas, input bg |
+| `--surface-3` | `#e3e2d8` | `#1c3548` | Elevated inset panels, toggle tracks (light) |
+| `--surface-inset` | — | `#021018` | Deepest wells — video placeholder, toggle-off track (dark) |
 | `--border-default` / `border-border` | `#c5cfd0` | `#1c3548` | Panel borders |
+| `--border-subtle` | `#e3e8e9` | `#0e2a38` | Hairline dividers |
 | `--text-strong` / `text-foreground` | `#15203a` | `#f0ede4` | Primary text |
 | `--text-muted` / `text-muted-foreground` | `#5a6877` | `#a5b5c0` | Secondary/label text |
-| `--accent` | `#e27d60` | `#e27d60` | Coral — CTAs, live dot, session-active signals |
+| `--text-disabled` | `#94a3b8` | `rgba(165, 181, 192, 0.45)` | Disabled labels |
+| `--accent` / `--primary` | `#e27d60` | `#e27d60` | Coral — **primary CTAs** (Start session, End session, Save notes), live dot |
+| `--accent-on` / `--primary-foreground` | `#15203a` | `#051a24` | Text on coral fill |
+| `--accent-strong` | `#c96a50` | `#d06b4e` | Coral hover / pressed |
 | `--accent-soft` | `#f8e0d6` | `#2e1d18` | Coral wash — badge bg, active indicator bg |
 | `--accent-text` | `#8a3c25` | `#e8a08a` | Coral text — on accent-soft bg |
-| `bg-foreground text-background` | navy-bg + cream-text | cream-bg + navy-text | Active tool, primary buttons |
+| `bg-foreground text-background` | navy-bg + cream-text | cream-bg + navy-text | **Active tool** in strip (inverse), not primary CTAs |
+| `--destructive` / `--error` | `#dc2626` | `#fca5a5` | Destructive text, mic/video OFF states |
+| `--success` | `#16a34a` | `#4ade80` | Checkmarks, ready indicators |
 
 ### 2.2 Typography
 
@@ -253,8 +263,8 @@ The live board chrome is fully specified in [`whiteboard-chrome-p1.2-visual-desi
 │           text-accent-text                                                   │
 │           + pulsing coral dot                                                │
 │                                                                              │
-│ "End session" button: bg-foreground text-background rounded-sm              │
-│   (inverse colors — authority, not destructive — matches mock .rec-end-btn) │
+│ "End session" button: bg-primary text-primary-foreground rounded-sm           │
+│   (coral fill — authority CTA, not destructive — matches mock .tb-btn.primary) │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -346,7 +356,7 @@ When the tutor clicks "End session":
    │  will be generated automatically.        │
    │                                          │
    │  [Cancel]      [End session]             │
-   │                bg-foreground text-bg     │
+   │                bg-primary text-primary-fg │
    └─────────────────────────────────────────┘
    ```
 
@@ -683,3 +693,4 @@ This checklist is the gate the eventual chrome build must pass. P1.1 was rejecte
 ## Changelog
 
 - **2026-06-08:** Initial design doc. Three-mode session shell, waiting room, live board additions (AV tile, ghost bounds, session bar), review mode, responsive behavior, consent-aware recording model, P1.1 rejection punch-list resolutions, acceptance checklist, open questions. Authored by Sonnet subagent on branch `v1-redesign`.
+- **2026-06-08:** Color-fidelity pass — dark surface ladder + semantic tokens aligned to `tokens.css`; primary CTAs corrected to coral (`--accent` / `--accent-on`); build note added re shadcn `--primary` mapping.

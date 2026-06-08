@@ -33,6 +33,7 @@
   --accent-soft: #f8e0d6;
   --accent-text: #8a3c25;
   --accent-strong: #c96a50;
+  --accent-on: #15203a;
   --success: #16a34a;
   --destructive: #dc2626;
   --destructive-soft: rgba(220,38,38,0.10);
@@ -45,31 +46,49 @@
   --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Fraunces", Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  --meta-header-bg: rgba(235, 233, 224, 0.94);
+  --meta-header-border: rgba(0, 0, 0, 0.08);
+  --meta-chrome-fg: var(--text-muted);
+  --meta-chrome-fg-hover: var(--text);
+  --meta-chrome-border: rgba(0, 0, 0, 0.15);
+  --meta-chrome-border-hover: rgba(0, 0, 0, 0.35);
+  --meta-chrome-active-bg: rgba(0, 0, 0, 0.06);
+  --meta-chrome-active-border: rgba(0, 0, 0, 0.35);
 }
 
 [data-theme="dark"] {
   --surface-base: #051a24;
+  --surface-inset: #021018;
   --surface-1: #0e2a38;
-  --surface-2: #021018;
-  --surface-3: #011018;
+  --surface-2: #142f3e;
+  --surface-3: #1c3548;
   --border: #1c3548;
-  --border-subtle: #162e40;
+  --border-subtle: #0e2a38;
   --border-strong: #6a8fa0;
   --text: #f0ede4;
   --text-muted: #a5b5c0;
-  --text-disabled: #4a6070;
+  --text-disabled: rgba(165, 181, 192, 0.45);
   --text-inverse: #051a24;
   --brand: #7ea4b1;
   --accent: #e27d60;
   --accent-soft: #2e1d18;
   --accent-text: #e8a08a;
-  --accent-strong: #c96a50;
-  --success: #22c55e;
-  --destructive: #f87171;
-  --destructive-soft: rgba(248,113,113,0.10);
+  --accent-strong: #d06b4e;
+  --accent-on: #051a24;
+  --success: #4ade80;
+  --destructive: #fca5a5;
+  --destructive-soft: rgba(239, 68, 68, 0.12);
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.30);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.40);
   --shadow-lg: 0 8px 24px rgba(0,0,0,0.55);
+  --meta-header-bg: rgba(2, 8, 13, 0.94);
+  --meta-header-border: rgba(255, 255, 255, 0.08);
+  --meta-chrome-fg: rgba(240, 237, 228, 0.7);
+  --meta-chrome-fg-hover: #f0ede4;
+  --meta-chrome-border: rgba(255, 255, 255, 0.15);
+  --meta-chrome-border-hover: rgba(255, 255, 255, 0.4);
+  --meta-chrome-active-bg: rgba(255, 255, 255, 0.12);
+  --meta-chrome-active-border: rgba(255, 255, 255, 0.35);
 }
 
 /* ================================================================
@@ -88,16 +107,16 @@ html, body {
    ================================================================ */
 .meta-header {
   position: sticky; top: 0; z-index: 200;
-  background: rgba(21,32,58,0.96);
+  background: var(--meta-header-bg);
   backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  border-bottom: 1px solid var(--meta-header-border);
   padding: 10px 20px;
   display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
 }
 .meta-title {
   font-family: var(--font-display);
   font-variation-settings: "opsz" 144, "SOFT" 60, "wght" 700;
-  color: #fcfbf4; font-size: 15px; letter-spacing: -0.02em;
+  color: var(--text); font-size: 15px; letter-spacing: -0.02em;
   margin-right: auto;
 }
 .meta-title .dot { color: var(--accent); }
@@ -106,33 +125,33 @@ html, body {
 .tab-btn {
   font-family: var(--font-mono); font-size: 11px; font-weight: 500;
   padding: 5px 12px; border-radius: 6px; cursor: pointer;
-  border: 1px solid rgba(255,255,255,0.15);
-  color: rgba(240,237,228,0.7); background: transparent;
+  border: 1px solid var(--meta-chrome-border);
+  color: var(--meta-chrome-fg); background: transparent;
   transition: all 0.15s;
 }
-.tab-btn:hover { border-color: rgba(255,255,255,0.4); color: #f0ede4; }
+.tab-btn:hover { border-color: var(--meta-chrome-border-hover); color: var(--meta-chrome-fg-hover); }
 .tab-btn.active {
   background: var(--accent); border-color: var(--accent-strong);
-  color: #15203a; font-weight: 600;
+  color: var(--accent-on); font-weight: 600;
 }
 .theme-toggle-meta {
   font-size: 11px; font-family: var(--font-mono); font-weight: 500;
   padding: 5px 12px; border-radius: 6px; cursor: pointer;
-  border: 1px solid rgba(255,255,255,0.15);
-  color: rgba(240,237,228,0.7); background: transparent;
+  border: 1px solid var(--meta-chrome-border);
+  color: var(--meta-chrome-fg); background: transparent;
   transition: all 0.15s;
 }
-.theme-toggle-meta:hover { border-color: rgba(255,255,255,0.4); color: #f0ede4; }
+.theme-toggle-meta:hover { border-color: var(--meta-chrome-border-hover); color: var(--meta-chrome-fg-hover); }
 
 .responsive-toggle {
   font-size: 11px; font-family: var(--font-mono); font-weight: 500;
   padding: 5px 10px; border-radius: 6px; cursor: pointer;
-  border: 1px solid rgba(255,255,255,0.15);
-  color: rgba(240,237,228,0.7); background: transparent;
+  border: 1px solid var(--meta-chrome-border);
+  color: var(--meta-chrome-fg); background: transparent;
   transition: all 0.15s;
 }
-.responsive-toggle:hover { border-color: rgba(255,255,255,0.4); color: #f0ede4; }
-.responsive-toggle.active { background: rgba(255,255,255,0.12); color: #f0ede4; border-color: rgba(255,255,255,0.35); }
+.responsive-toggle:hover { border-color: var(--meta-chrome-border-hover); color: var(--meta-chrome-fg-hover); }
+.responsive-toggle.active { background: var(--meta-chrome-active-bg); color: var(--meta-chrome-fg-hover); border-color: var(--meta-chrome-active-border); }
 
 /* ================================================================
    SESSION SHELL WRAPPER
@@ -189,10 +208,10 @@ html, body {
 .tb-btn svg { flex-shrink: 0; }
 .tb-btn.icon-only { width: 32px; padding: 0; justify-content: center; }
 .tb-btn.primary {
-  background: var(--text); color: var(--text-inverse);
+  background: var(--accent); color: var(--accent-on);
   font-weight: 600; padding: 0 12px;
 }
-.tb-btn.primary:hover { background: var(--brand); }
+.tb-btn.primary:hover { background: var(--accent-strong); color: var(--accent-on); }
 .tb-btn.destructive-ghost { color: var(--destructive); }
 .tb-btn.destructive-ghost:hover { background: var(--destructive-soft); color: var(--destructive); }
 
@@ -254,7 +273,7 @@ html, body {
   border-radius: var(--radius-lg); overflow: hidden;
 }
 .video-feed-area {
-  background: #0a0e14; aspect-ratio: 4/3;
+  background: var(--surface-inset, #021018); aspect-ratio: 4/3;
   display: flex; align-items: center; justify-content: center;
   position: relative;
 }
@@ -332,11 +351,11 @@ html, body {
   position: relative; flex-shrink: 0; transition: background 0.2s;
   border: none; outline: none;
 }
-.toggle-switch.off { background: var(--surface-3); border: 1px solid var(--border); }
+.toggle-switch.off { background: var(--surface-inset, var(--surface-3)); border: 1px solid var(--border); }
 .toggle-switch.on { background: var(--accent); border: 1px solid var(--accent-strong); }
 .toggle-knob {
   position: absolute; top: 2px; width: 18px; height: 18px;
-  border-radius: 50%; background: #fff; transition: left 0.2s;
+  border-radius: 50%; background: var(--text-inverse); transition: left 0.2s;
   box-shadow: var(--shadow-sm);
 }
 .toggle-switch.off .toggle-knob { left: 2px; }
@@ -370,11 +389,11 @@ html, body {
   width: 100%; height: 44px; border-radius: var(--radius-md);
   border: none; cursor: pointer;
   font-family: var(--font-body); font-size: 15px; font-weight: 600;
-  background: var(--text); color: var(--text-inverse);
+  background: var(--accent); color: var(--accent-on);
   display: flex; align-items: center; justify-content: center; gap: 8px;
   transition: background 0.15s; margin-top: 4px;
 }
-.start-btn:hover { background: var(--brand); }
+.start-btn:hover { background: var(--accent-strong); color: var(--accent-on); }
 .start-btn:disabled { background: var(--surface-3); color: var(--text-disabled); cursor: not-allowed; }
 
 /* ================================================================
@@ -533,7 +552,7 @@ html, body {
 }
 .drag-dots { color: var(--border); font-size: 12px; letter-spacing: 4px; }
 .av-video-feed {
-  background: #060d14; aspect-ratio: 4/3;
+  background: var(--surface-inset, #021018); aspect-ratio: 4/3;
   display: flex; align-items: center; justify-content: center;
   position: relative;
 }
@@ -656,9 +675,9 @@ html, body {
 }
 .notes-action-btn:hover { background: rgba(90,104,119,0.10); }
 .notes-action-btn.primary {
-  background: var(--text); color: var(--text-inverse); border-color: var(--text);
+  background: var(--accent); color: var(--accent-on); border-color: var(--accent);
 }
-.notes-action-btn.primary:hover { background: var(--brand); border-color: var(--brand); }
+.notes-action-btn.primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); color: var(--accent-on); }
 
 /* Board preview panel */
 .board-preview-area {
