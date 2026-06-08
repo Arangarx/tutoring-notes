@@ -2,9 +2,7 @@
 
 > **Purpose:** Design INPUT for the custom Mynk whiteboard chrome layer (toolbar + properties/controls), driving Excalidraw via `excalidrawAPI`. Sequenced into the **whiteboard wave**; **not** a V1-notes blocker.
 >
-> **Sources mined:** [`docs/Sarah-Chat-05-26-2026.txt`](../Sarah-Chat-05-26-2026.txt) (raw tutor chat), reconciled against [`docs/handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md`](sarah-pilot-feedback-2026-05-26-orchestrator-report.md), [`docs/handoff/sarah-pilot-feedback-2026-06-06-orchestrator-report.md`](sarah-pilot-feedback-2026-06-06-orchestrator-report.md), [`docs/BACKLOG.md`](../BACKLOG.md) (whiteboard queue), [`docs/WHITEBOARD-STATUS.md`](../WHITEBOARD-STATUS.md), [`docs/handoff/v1-component-redesign-design-2026-05-31.md`](v1-component-redesign-design-2026-05-31.md) (§5 Workspace + §5.7 Surface 7), [`docs/RELIABILITY-REDESIGN-2026-05-27.md`](../RELIABILITY-REDESIGN-2026-05-27.md) (Surface 5), [`docs/PLATFORM-ASSUMPTIONS.md`](../PLATFORM-ASSUMPTIONS.md) §7.5.
->
-> **Last consolidated:** 2026-06-07.
+> **Last consolidated:** 2026-06-07 (exhaustive `docs/` sweep pass).
 
 ---
 
@@ -43,151 +41,220 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 
 | ID | Requirement | Tag | Source |
 |----|-------------|-----|--------|
-| **TB-01** | Primary toolbar order: **Cursor → Pencil → Eraser → Typing**, then shape tools. Sarah priority **#3**. | (ii) | Sarah-Chat L10–14; orchestrator U4; BACKLOG toolbar-reorder row |
+| **TB-01** | Primary toolbar order: **Cursor → Pencil → Eraser → Typing**, then shape tools. Sarah priority **#3**. | (ii) | Sarah-Chat L10–14; orchestrator U4; BACKLOG |
 | **TB-02** | Consolidate **line + arrow** into one dropdown/pulldown. | (ii) | Sarah-Chat L15; orchestrator U5 |
 | **TB-03** | Consolidate **rectangle + diamond + ellipse** into one dropdown/pulldown. | (ii) | Sarah-Chat L16; orchestrator U6 |
 | **TB-04** | Tools generally ordered by **most-used first** (Sarah's workflow, not Excalidraw default). | (ii) | Sarah-Chat L72; priorities L69–73 |
-| **TB-05** | **Tutor desktop:** slim collapsible toolbar strip (left or top per v1 spec); not a full native Excalidraw rail consuming canvas width. | (ii) | v1-component-redesign §5 Workspace; RELIABILITY-REDESIGN Surface 5 |
+| **TB-05** | **Tutor desktop:** slim collapsible toolbar strip (left or top per v1 spec); not a full native Excalidraw rail consuming canvas width. | (ii) | v1-component-redesign §5; RELIABILITY-REDESIGN Surface 5 |
 | **TB-06** | **Student mobile:** native Excalidraw toolbar **hidden by default**. Student needs follow-tutor toggle + **pencil + eraser**; everything else in **`···` overflow**. | (ii) | v1-component-redesign §5.7; RELIABILITY-REDESIGN Surface 5 |
-| **TB-07** | Preserve **zoom-in for precise labeling** — Sarah explicitly values this; chrome must not steal zoom affordances or viewport. | (ii) layout | Sarah-Chat L46; orchestrator U11 (positive validation) |
+| **TB-07** | Preserve **zoom-in for precise labeling** — Sarah explicitly values this; chrome must not steal zoom affordances or viewport. | (ii) layout | Sarah-Chat L46; orchestrator U11 |
+| **TB-08** | **Wyzant-style PDF page subset picker** — import selected pages, not forced whole-document (two-step: file → page picker). | (ii) | whiteboard-smoke-log § Sarah 2026-04-24; pdf-page-picker bootstrapper |
+| **TB-09** | **Phone-photo / image insert** first-class in toolbar flows (not only disk drag/drop or hidden Excalidraw menu). | (ii) | whiteboard-smoke-log § Sarah 2026-04-24; BACKLOG native image |
+| **TB-10** | **Graph / Desmos insert** affordance in Mynk toolbar (Sarah top-10 action: "importing or inserting a graph"). | (ii) | orchestrator Q1; BACKLOG Apr 24 Q1; WHITEBOARD-STATUS Sarah Q&A |
+| **TB-11** | Keep **visible Undo/Redo** controls in Mynk chrome (chunky ↶/↷ shipped Apr 2024); coordinate with keyboard path (TU-03). | (ii) | BACKLOG undo row; whiteboard-smoke-log |
 
 ### Pulldown / consolidation
 
 | ID | Requirement | Tag | Source |
 |----|-------------|-----|--------|
 | **PU-01** | Shape tools grouped into **two pulldowns** (lines/arrows; rect/diamond/ellipse) instead of separate toolbar slots. | (ii) | Sarah-Chat L15–16; v1-component-redesign §5 |
-| **PU-02** | Infrequent tools (image insert paths, extra shapes, etc.) live in overflow **`···`**, not permanent toolbar slots. | (ii) | v1-component-redesign §5.7; student-mobile spec |
-| **PU-03** | **Desktop tutor:** pen/style UI is a **compact bar by default**; full tool menu only on explicit expand — not automatic quarter-screen takeover. | (ii) | 2026-06-06 U5; BACKLOG `pilot-2026-06-06` pen-panel row; Sarah-Chat L73 (priority #4) |
+| **PU-02** | Infrequent tools (image insert paths, extra shapes, etc.) live in overflow **`···`**, not permanent toolbar slots. | (ii) | v1-component-redesign §5.7 |
+| **PU-03** | **Desktop tutor:** pen/style UI is a **compact bar by default**; full tool menu only on explicit expand — not automatic quarter-screen takeover. | (ii) | 2026-06-06 U5; BACKLOG `pilot-2026-06-06`; Sarah-Chat L73 |
+| **PU-04** | **PDF insert** uses consolidated modal chrome (iOS warning, page cap copy, subset picker) — not scattered native menus. | (ii) | pdf-page-picker bootstrapper; Sarah Apr 24 |
 
 ### Properties palette (compress / replace)
 
 | ID | Requirement | Tag | Source |
 |----|-------------|-----|--------|
-| **PP-01** | Replace or heavily compress Excalidraw's **left properties palette** — it dominates desktop (~quarter screen when pen active per 2026-06-06 session). | (ii) | 2026-06-06 U5; BACKLOG framing note 2026-06-07 |
-| **PP-02** | **Close styles/properties panel without re-tapping the same control** — dismiss on outside click/tap (Sarah priority **#4**, Andrew-promoted). | (ii) | Sarah-Chat L44–45, L73; orchestrator I7 + priorities |
-| **PP-03** | Mobile **color / pen palette** dismisses on **click-away** (outside tap), not only by re-tapping the palette button. | (ii) | Sarah-Chat L44–45; orchestrator I7; BACKLOG I7 row |
-| **PP-04** | Properties UI shows **basics inline** (stroke width, color, opacity); advanced options behind one expand affordance. | (ii) | 2026-06-06 U5; v1 workspace collapsible-toolbar intent |
+| **PP-01** | Replace or heavily compress Excalidraw's **left properties palette** — dominates desktop (~quarter screen when pen active per 2026-06-06). | (ii) | 2026-06-06 U5; BACKLOG framing note |
+| **PP-02** | **Close styles/properties panel without re-tapping the same control** — dismiss on outside click/tap (Sarah priority **#4**). | (ii) | Sarah-Chat L44–45, L73; orchestrator I7 |
+| **PP-03** | Mobile **color / pen palette** dismisses on **click-away** (outside tap). | (ii) | Sarah-Chat L44–45; BACKLOG I7; whiteboard-sync-redesign § I7 |
+| **PP-04** | Properties UI shows **basics inline** (stroke width, color, opacity); advanced options behind one expand affordance. | (ii) | 2026-06-06 U5; v1 workspace intent |
+| **PP-05** | **Single restore story** — suppress or replace Excalidraw's confusing **"Load draft into board"** recovery modal during live collab (prefer Discard / server truth). | (ii) + (iii) | BACKLOG Excalidraw recovery row; whiteboard-smoke-log § refresh |
 
 ### Drawing defaults
 
 | ID | Requirement | Tag | Source |
 |----|-------------|-----|--------|
-| **DD-01** | Default **sloppiness / roughness = architect** (clean hand-drawn, not sketchy). | (i) | Sarah-Chat L17; orchestrator U7; v1-component-redesign §5 |
-| **DD-02** | Default **edges = sharp** (not round). | (i) | Sarah-Chat L17; orchestrator U8; v1-component-redesign §5 |
-| **DD-03** | **Thinner default pen stroke** — current strokes too thick, *"took up a lot of room"* on desktop tutor. | (i) + (ii) presets UI | 2026-06-06 U6; BACKLOG `pilot-2026-06-06` |
-| **DD-04** | Stroke-width presets must include a **materially thinner** option for math annotation without requiring zoom. | (i) + (ii) | 2026-06-06 U6 acceptance |
+| **DD-01** | Default **sloppiness / roughness = architect** (clean hand-drawn, not sketchy). | (i) | Sarah-Chat L17; orchestrator U7 |
+| **DD-02** | Default **edges = sharp** (not round). | (i) | Sarah-Chat L17; orchestrator U8 |
+| **DD-03** | **Thinner default pen stroke** — current strokes too thick on desktop tutor. | (i) + (ii) | 2026-06-06 U6; BACKLOG |
+| **DD-04** | Stroke-width presets include a **materially thinner** option for math annotation without requiring zoom. | (i) + (ii) | 2026-06-06 U6 acceptance |
+| **DD-05** | Default **PDF zoom-to-fit** on insert (per-page board pages); student inherits via follow — design whether fit targets tutor vs student viewport (open). | (i) + layout | BACKLOG PDF-fit row; pdf bootstrapper |
 
 ### Touch / mobile-tablet behavior
 
 | ID | Requirement | Tag | Source |
 |----|-------------|-----|--------|
-| **TM-01** | All floating palettes/popovers on touch devices: **outside-tap dismiss** (see PP-02, PP-03). | (ii) | Sarah-Chat L44–45; I7 |
-| **TM-02** | Fix **pointer-transform hit offset** (eraser + PDF touch targets drift up-left on mobile) — distinct from viewport sync. | app-bug + (ii) if native handles wrong | BACKLOG post-sync smoke (d); not in raw chat |
-| **TM-03** | **Real iPhone Safari** acceptance for student-mobile chrome — jsdom cannot validate layout/popup behavior. | process gate | PLATFORM-ASSUMPTIONS §8; AGENTS.md layout blind-spot rule |
-| **TM-04** | **Tablet / XPPen** pressure-sensitive drawing must keep working through custom chrome (Sarah priority **#2**). | (i) input path | Sarah-Chat L71; orchestrator F1; 2026-06-06 W2 validation |
-| **TM-05** | **Tutor-on-phone/tablet** variant when tutor joins from non-desktop — usable tool chrome, not student layout copy-paste. | (ii) | BACKLOG tutor-side mobile row; orchestrator backlog note |
+| **TM-01** | All floating palettes/popovers on touch devices: **outside-tap dismiss** (PP-02, PP-03). | (ii) | Sarah-Chat; I7 |
+| **TM-02** | Fix **pointer-transform hit offset** (eraser + PDF touch targets drift up-left on mobile). | app-bug + (ii) | BACKLOG post-sync smoke (d) |
+| **TM-03** | **Real iPhone Safari** acceptance for student-mobile chrome — jsdom cannot validate layout/popup behavior. | process gate | PLATFORM-ASSUMPTIONS §8; PHASE-2-IOS-SMOKE-MATRIX S11 |
+| **TM-04** | **Tablet / XPPen** pressure-sensitive drawing must keep working through custom chrome (Sarah priority **#2**). | (i) + verify | Sarah-Chat L71; 2026-06-06 W2 |
+| **TM-05** | **Tutor-on-phone/tablet** variant when tutor joins from non-desktop. | (ii) | BACKLOG tutor-side mobile row |
+| **TM-06** | **iOS touch undo/redo** on visible ↶/↷ buttons — verify after custom chrome (shipped desktop; touch unverified). | (ii) + verify | BACKLOG undo row; iOS matrix §7 |
+| **TM-07** | **Touch drawing ergonomics** on iOS — palm rejection, continuous stroke broadcast (S11 matrix). | (ii) + verify | PHASE-2-IOS-SMOKE-MATRIX §7, S11 |
+| **TM-08** | **Eraser cursor** aligned with stroke delete path (icon/cursor vs actual erase position). | app-bug | BACKLOG eraser cursor row; whiteboard-sync-redesign |
 
 ### Screen real estate / responsive
 
 | ID | Requirement | Tag | Source |
 |----|-------------|-----|--------|
-| **SR-01** | **Student iPhone:** whiteboard **≥80%** of viewport (Wyzant benchmark ~85–90%). Today ~30–35% per smoke I5. | (ii) layout shell | Sarah-Chat L21; orchestrator I5; RELIABILITY-REDESIGN Surface 5 |
-| **SR-02** | **Tutor desktop:** whiteboard area **significantly larger** — current canvas too small vs Wyzant reference. | (ii) | 2026-06-06 U2; v1 workspace maximal-canvas constraint |
-| **SR-03** | **Declutter** — page feels crowded; concise layout matching Wyzant *intent* (big canvas, light chrome), not literal clone. | (ii) | 2026-06-06 U3; orchestrator Wyzant image §2 |
-| **SR-04** | **Video tile** overlays whiteboard corner (bottom-right), not stacked above canvas — *"video closer to the whiteboard on the phone."* | (ii) layout | Sarah-Chat L22; orchestrator I6; v1 §5.7 |
-| **SR-05** | Remove **Board pages explainer card** on student mobile (~25% viewport in I5 screenshot); replace with compact strip. | (ii) | RELIABILITY-REDESIGN Surface 5; v1 §5.7 |
+| **SR-01** | **Student iPhone:** whiteboard **≥80%** of viewport (Wyzant ~85–90%). Today ~30–35% per I5. | (ii) | Sarah-Chat L21; RELIABILITY-REDESIGN Surface 5 |
+| **SR-02** | **Tutor desktop:** whiteboard area **significantly larger** — canvas too small vs Wyzant reference. | (ii) | 2026-06-06 U2; v1 maximal-canvas |
+| **SR-03** | **Declutter** — crowded page; Wyzant *intent* (big canvas, light chrome). | (ii) | 2026-06-06 U3; orchestrator Wyzant image |
+| **SR-04** | **Video tile** overlays whiteboard corner (bottom-right), not stacked above canvas. | (ii) | Sarah-Chat L22; v1 §5.7 |
+| **SR-05** | Remove **Board pages explainer card** on student mobile (~25% viewport); compact strip instead. | (ii) | RELIABILITY-REDESIGN; v1 §5.7 |
 | **SR-06** | **Page strip** ≤40px — pill tabs `[1] [2] [3]`. | (ii) | v1 §5.7 |
-| **SR-07** | Use **`100dvh`** (not `100vh`) for iOS Safari URL-bar collapse. | (ii) layout | v1 §5.7; RELIABILITY-REDESIGN |
-| **SR-08** | **Wyzant-shaped** chrome: toolbar minimal across top/side; no dominant left+right sidebars eating canvas. | (ii) | orchestrator §2 Wyzant image; locked decision §3 |
-| **SR-09** | Avoid duplicate chrome (e.g. separate app Undo/Redo **plus** full native Excalidraw toolbar) — consolidate into Mynk chrome. | (ii) | I5 screenshot analysis (orchestrator I5) |
+| **SR-07** | Use **`100dvh`** (not `100vh`) for iOS Safari URL-bar collapse. | (ii) | v1 §5.7; iOS matrix §7 |
+| **SR-08** | **Wyzant-shaped** chrome: minimal toolbar; no dominant left+right sidebars eating canvas. | (ii) | orchestrator §2; locked §3 |
+| **SR-09** | Avoid duplicate chrome (app Undo/Redo **plus** full native Excalidraw toolbar) — consolidate into Mynk chrome. | (ii) | orchestrator I5 screenshot |
+| **SR-10** | **Page strip:** PDF workbook **section headers** (collapsible groups per imported file). | (ii) | whiteboard-smoke-log Apr 24; pdf-page-picker bootstrapper |
+| **SR-11** | **Page insert order** — new pages inserting *after* active page feels counterintuitive; revisit strip UX. | (ii) product | BACKLOG smoke 2026-05-30 (c) |
+| **SR-12** | **iOS dynamic viewport:** custom chrome must not clip when Safari URL bar collapses (pair with `100dvh`). | (ii) | PHASE-2-IOS-SMOKE-MATRIX §7 known-quirks |
 
 ### Student-WB-specific (fundamentally different, mobile-first)
 
 | ID | Requirement | Tag | Source |
 |----|-------------|-----|--------|
-| **ST-01** | **Follow-tutor** toggle in bottom control bar; **checked by default** (sync pan/zoom). | (ii) placement + sync behavior | Sarah-Chat L41; orchestrator B1/B2; v1 §5.7 |
+| **ST-01** | **Follow-tutor** toggle in bottom control bar; **checked by default** (sync pan/zoom). | (ii) | Sarah-Chat L41; v1 §5.7 |
 | **ST-02** | Student bottom bar ~48px: **follow toggle, mic, leave** — above compact page strip. | (ii) | v1 §5.7 |
-| **ST-03** | **Student add-page:** **No** for v1 (ratified 2026-05-31); architecture must allow enabling later. | product | Sarah-Chat L23; v1 §8 Q student-add-page |
-| **ST-04** | Student does **not** need full shape/text toolset by default — tutor drives structure; student annotates. | (ii) | v1 §5.7; RELIABILITY-REDESIGN |
-| **ST-05** | **Laser pointer** must be **visible** to student and **aligned** with cursor (currently offset + invisible — B8/B9). | (ii) or app-bug | Sarah-Chat L39–40; orchestrator B8/B9 |
+| **ST-03** | **Student add-page:** **No** for v1 (ratified); architecture must allow enabling later. | product | Sarah-Chat L23; v1 §8 |
+| **ST-04** | Student does **not** need full shape/text toolset by default — tutor drives structure. | (ii) | v1 §5.7; RELIABILITY-REDESIGN |
+| **ST-05** | **Laser pointer** visible to student and **aligned** with cursor (offset + invisible today). | (ii) or app-bug | Sarah-Chat L39–40; orchestrator B8/B9 |
+| **ST-06** | Student page strip mirrors tutor **section grouping** (read-only; no add-page in v1). | (ii) | pdf-page-picker bootstrapper § student mirror |
 
 ### Tutor-WB-specific
 
 | ID | Requirement | Tag | Source |
 |----|-------------|-----|--------|
-| **TU-01** | **Tutor-desktop chrome** is the primary design target (pilot norm: desktop tutor + mobile student). | (ii) | orchestrator mobile-parity decision §3 |
-| **TU-02** | **Professional visual polish** — controls sized/spaced like a commercial product; Mynka Blue / v1 component system. | (ii) | HARD quality bar (above); 2026-06-06 U1 |
-| **TU-03** | **Keyboard undo** Ctrl/Cmd+Z must work reliably on desktop (on-screen undo works; keyboard regressed 2026-06-06). Coordinate custom `UndoRedoButtons` with hidden native shortcuts. | (ii) + app-bug | 2026-06-06 B1; BACKLOG |
-| **TU-04** | Custom insert actions (PDF, Math, Desmos) integrate into Mynk toolbar — not orphaned from native Excalidraw menu. | (ii) | existing pattern; WHITEBOARD-STATUS § custom chrome |
-| **TU-05** | **Writing tablet** (XPPen Star G640) — priority **#2**; pen input path must not break when native toolbar hidden. | (i) + verify | Sarah-Chat L71; orchestrator F1 |
-| **TU-06** | **Waiting room** (when built) affects session chrome timing, not tool chrome — but toolbar/session bar must coexist with pre-session gate. | layout | Sarah-Chat L6–7; v1 §8 waiting room ratified |
+| **TU-01** | **Tutor-desktop chrome** is the primary design target (desktop tutor + mobile student). | (ii) | orchestrator mobile-parity §3 |
+| **TU-02** | **Professional visual polish** — Mynka Blue / v1 component system; not monochrome reskin. | (ii) | HARD bar; 2026-06-06 U1; V1-COMPONENT-LIBRARY §2.10 |
+| **TU-03** | **Keyboard undo** Ctrl/Cmd+Z reliable on desktop (on-screen undo works; keyboard regressed 2026-06-06). | (ii) + app-bug | 2026-06-06 B1; BACKLOG; ORCHESTRATOR-STATE |
+| **TU-04** | Custom insert actions (PDF, Math, Desmos) integrated into Mynk toolbar — not orphaned. | (ii) | WHITEBOARD-STATUS § custom chrome |
+| **TU-05** | **Writing tablet** (XPPen Star G640) — priority **#2**; pen input must not break when native toolbar hidden. | (i) + verify | Sarah-Chat L71; orchestrator F1 |
+| **TU-06** | **Waiting room** (when built): session chrome coexists with pre-session gate; timer starts after leave. | layout | Sarah-Chat L6–7; v1 §8 waiting room |
+| **TU-07** | Join/share control labeled **"Share link"** (not "Copy student link"). | (ii) copy | 2026-06-06 U4; v1 workspace spec |
+| **TU-08** | **Mic meter + device picker** in workspace chrome (not headless-only). | (ii) | whiteboard-smoke-log § W-audio pending |
+| **TU-09** | **Session bar ~40px** + **bottom controls strip** (mic, cam, pages, share) per v1 wireframe — separate from tool chrome but one visual system. | (ii) | v1-component-redesign §5 Workspace |
+| **TU-10** | **Eraser/delete** remains discoverable — Sarah likes delete (positive validation). | (ii) | Sarah-Chat L8; orchestrator U2 |
 
 ---
 
 ## Out of scope for this doc (tracked elsewhere)
 
-These appeared in the raw chat or pilot captures but are **not** custom-chrome design inputs:
-
 | Topic | Track in |
 |-------|----------|
-| Sync-to-tutor / viewport centering bugs (B1–B4) | Wave 1 reliability; `WHITEBOARD-STATUS` sync redesign |
-| Session timer minutes-only, waiting room timer start | Session lifecycle / v1 shell |
-| Live A/V, camera permissions, device release | `LIVE-AV.md`, Phase 4 |
-| Native image insert, cold refresh, Excalidraw recovery modal | `BACKLOG.md` whiteboard queue |
+| Sync-to-tutor / viewport centering bugs (B1–B4) | Wave 1 reliability; sync redesign |
+| Ghost viewport rectangles when follow OFF (Andrew smoke 2026-05-27) | BACKLOG future polish — design optional |
+| Session timer minutes-only, waiting room timer logic | Session lifecycle |
+| Live A/V, camera permissions, device release | `LIVE-AV.md` |
+| Native image insert bug (broken placeholders) | `BACKLOG.md` — implementation, not chrome layout |
 | End-session discard / stop-and-delete | `BACKLOG.md` `pilot-2026-06-06` F1 |
-| Share-link naming / clipboard | v1 workspace labels + B2 backlog |
+| Student "Loading scene…" intermittent join | `BACKLOG.md`; ORCHESTRATOR-STATE |
 | Student accounts + consent | Identity epic |
 
 ---
 
 ## Open design questions (for the chrome design pass)
 
-1. **Toolbar placement — tutor desktop:** left collapsible strip (v1 wireframe) vs minimal top bar (Wyzant reference)? Or hybrid (tools top, properties left flyout)?
-2. **Pulldown grouping:** besides line/arrow and rect/diamond/ellipse, which tools share a pulldown vs overflow? Where do PDF/Math/Desmos land?
-3. **Properties compression:** which properties are always visible (color, width, opacity) vs behind "More styles"?
-4. **Student vs tutor tool parity:** v1 assumes student gets pencil+eraser only — confirm after Sarah uses student-add-page (still uncertain in raw chat L23).
-5. **Tutor-mobile variant:** defer to v1.1 or ship minimal parity with desktop chrome at smaller breakpoints?
-6. **Laser pointer:** fix within Excalidraw layer vs custom overlay tool in Mynk chrome?
-7. **Zen mode vs CSS hide:** `zenModeEnabled` + custom chrome vs `display:none` on native UI — which preserves `excalidrawAPI` behavior best on 0.18.1?
-8. **Keyboard shortcuts:** expose Excalidraw defaults (P, R, etc.) when native toolbar hidden — document and test conflict with browser/app shortcuts.
-9. **Visual system:** map every chrome control to v1 tokens (`docs/V1-COMPONENT-LIBRARY.md`) — no one-off oversized buttons.
-10. **Acceptance mocks:** produce clickable prototype on real iPhone + tutor Mac before implementation merge.
+1. **Toolbar placement — tutor desktop:** left collapsible strip vs minimal top bar (Wyzant reference)? Hybrid?
+2. **Pulldown grouping:** besides line/arrow and rect/diamond/ellipse, which tools share pulldowns? Where do PDF/Math/Desmos/Image land?
+3. **Properties compression:** which properties always visible vs behind "More styles"?
+4. **Student vs tutor tool parity:** v1 pencil+eraser only — revisit after Sarah tests student add-page.
+5. **Tutor-mobile variant:** defer to v1.1 or ship minimal desktop chrome at smaller breakpoints?
+6. **Laser pointer:** fix in Excalidraw layer vs custom overlay tool?
+7. **Zen mode vs CSS hide:** best way to suppress native UI on 0.18.1?
+8. **Keyboard shortcuts:** expose Excalidraw defaults (P, R, etc.) when native toolbar hidden?
+9. **Visual system:** every chrome control maps to v1 tokens — no one-off oversized buttons.
+10. **PDF default fit:** tutor viewport vs student viewport on insert (BACKLOG open design row).
+11. **Ghost peer viewport overlays** when follow is OFF — ship in chrome wave or defer?
+12. **Acceptance mocks:** clickable prototype on real iPhone + tutor Mac before implementation merge.
 
 ---
 
-## Source reconciliation notes
+## Sources swept (exhaustive `docs/` pass, 2026-06-07)
 
-### Raw chat (`Sarah-Chat-05-26-2026.txt`) — whiteboard lines
+Broad case-insensitive ripgrep across **`docs/`** and **`docs/handoff/`** for whiteboard/chrome terms (`whiteboard`, `excalidraw`, `canvas`, `toolbar`, `palette`, `pen`, `stroke`, `eraser`, `zoom`, `touch`, `tablet`, `mobile`, `page strip`, `undo`, `redo`, `dropdown`, `Wyzant`, `Sarah`, etc.). Files below **contained Sarah and/or whiteboard control feedback** and were read for this roll-up.
 
-| Lines | Ask | Captured elsewhere? |
-|-------|-----|---------------------|
-| 9–14 | Toolbar reorder + dropdowns | Yes — orchestrator U3–U6, BACKLOG |
-| 17 | Architect + sharp defaults | Yes — U7/U8 |
-| 21 | Board off phone | Yes — I5 |
-| 22 | Video closer to WB | Yes — I6 |
-| 23 | Student add page uncertain | Yes — F4, v1 Q ratified |
-| 39–40 | Laser pointer | Yes — B8/B9 |
-| 41 | Sync default on | Yes — B1/B2 (behavior) |
-| 44–45 | Palette click-away | Yes — I7 |
-| 46 | Likes zoom for labeling | Yes — U11 (preserve, not new backlog row) |
-| 69–73 | Priorities: sync, tablet, tools, close styles | Yes — §2.7 |
+### Primary Sarah voice (requirements origin)
 
-**Genuinely new from raw chat only:** **none** — the 2026-05-26 orchestrator report embeds the full raw chat and structured parse. This doc's additive value is **2026-06-06 desktop session** items (pen panel size, thinner stroke, canvas too small, clutter) plus the **LOCKED custom-chrome decision**, feasibility tags, and student/tutor variant split.
+| Doc | Date / note | Chrome feedback? |
+|-----|-------------|------------------|
+| [`docs/Sarah-Chat-05-26-2026.txt`](../Sarah-Chat-05-26-2026.txt) | 2026-05-26 raw smoke | **Yes** — toolbar order, dropdowns, defaults, palette dismiss, viewport, priorities |
+| [`docs/handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md`](sarah-pilot-feedback-2026-05-26-orchestrator-report.md) | 2026-05-26 | **Yes** — structured parse of raw chat + Wyzant image |
+| [`docs/handoff/sarah-pilot-feedback-2026-06-06-orchestrator-report.md`](sarah-pilot-feedback-2026-06-06-orchestrator-report.md) | 2026-06-06 | **Yes** — pen panel size, thinner stroke, canvas size, clutter, Ctrl+Z |
+| [`docs/whiteboard-smoke-log.md`](../whiteboard-smoke-log.md) | Sarah **2026-04-24** | **Yes** — PDF page picker, phone photos, separate pages, reload essential |
+| [`docs/SARAH-CALL-PREP.md`](../SARAH-CALL-PREP.md) | Updated 2026-06-07 | **Yes** — feasibility answers for toolbar/palette (engineering capture) |
 
-### Added from 2026-06-06 session (not in May raw chat)
+### Engineering captures + backlog (folded requirements)
 
-- Pen options quarter-screen (U5) → PP-01, PU-03
-- Thinner pen stroke (U6) → DD-03, DD-04
-- Whiteboard too small (U2) → SR-02
-- Clutter / Wyzant layout (U3) → SR-03, SR-08
-- Ctrl+Z keyboard bug (B1) → TU-03
-- Computer-user-friendly general (U1) → TU-02 HARD bar
+| Doc | Date / note | Chrome feedback? |
+|-----|-------------|------------------|
+| [`docs/BACKLOG.md`](../BACKLOG.md) | Ongoing; pilot rows through 2026-06-07 | **Yes** — whiteboard queue, `pilot-2026-06-06`, Apr 24 undo, eraser, page insert order, recovery modal |
+| [`docs/WHITEBOARD-STATUS.md`](../WHITEBOARD-STATUS.md) | 2026-06-07 custom-chrome § | **Yes** — LOCKED decision, Sarah UX table, Sarah pre-build Q&A |
+| [`docs/PLATFORM-ASSUMPTIONS.md`](../PLATFORM-ASSUMPTIONS.md) §7.5 | 2026-06-07 | **Yes** — API feasibility constraint |
+| [`docs/RELIABILITY-REDESIGN-2026-05-27.md`](../RELIABILITY-REDESIGN-2026-05-27.md) | Surface 5 | **Yes** — mobile layout architecture, palette I7 |
+| [`docs/handoff/v1-component-redesign-design-2026-05-31.md`](v1-component-redesign-design-2026-05-31.md) | §5 + §5.7 | **Yes** — workspace + student mobile wireframes |
+| [`docs/handoff/whiteboard-sync-redesign-2026-05-27.md`](whiteboard-sync-redesign-2026-05-27.md) | 2026-06-07 correction | **Yes** — customization feasibility, I7 palette, eraser cursor class |
+| [`docs/handoff/pdf-page-picker-and-per-page-boards-bootstrapper.md`](pdf-page-picker-and-per-page-boards-bootstrapper.md) | 2026-05-17 | **Yes** — Sarah Apr 24 PDF/page-strip UX spec |
+| [`docs/handoff/reliability-redesign-2026-05-27-orchestrator-report.md`](reliability-redesign-2026-05-27-orchestrator-report.md) | 2026-05-27 | **Yes** — mobile redesign dispatch, Wyzant benchmark |
+| [`docs/PHASE-2-IOS-SMOKE-MATRIX.md`](../PHASE-2-IOS-SMOKE-MATRIX.md) | S11 whiteboard | **Yes** — touch/undo/toolbar clip known-quirks |
+| [`docs/V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) | Chunk B5/B6 tracker | **Partial** — polish bar, whiteboard collision zone (live session files) |
+| [`docs/handoff/ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md) | 2026-06-07 head | **Partial** — v1 UI pass, frozen WB bugs (Ctrl+Z, join loading) |
+| [`docs/handoff/MORNING-RUNBOOK-2026-06-07.md`](MORNING-RUNBOOK-2026-06-07.md) | 2026-06-07 | **Partial** — pointer to 2026-06-06 Sarah capture |
+
+### Swept — no additional Sarah chrome requirements
+
+| Doc | Why checked |
+|-----|-------------|
+| `docs/handoff/whiteboard-regression-net-design-2026-05-30.md` | Viewport oracle / CI gate — no new Sarah UX |
+| `docs/handoff/RETURN-RUNBOOK-2026-06-06-PM.md` | Recording smoke methodology |
+| `docs/handoff/MORNING-SMOKE-RUNBOOK-2026-06-06.md` | Identity smoke; redesign pointers only |
+| `docs/handoff/recording-rearchitecture-design-2026-06-05.md` | Toolbar pause recording — transport, not chrome layout |
+| `docs/UX-AND-A11Y-SPEC.md` | Whiteboard keyboard exception §6.3 — no new Sarah asks |
+| `docs/WHITEBOARD-ROADMAP-NEXT.md` | Superseded archive |
+| `docs/handoff/SMOKE-RUNBOOK-2026-06-07.md` | **On `master` only** (not yet on `v1-redesign` at sweep time) — Andrew settings-smoke notes; no new Sarah WB chrome |
+
+### Net-new from sweep vs original hand-listed cross-refs
+
+**Docs surfaced by sweep that were NOT in the original cross-ref list:**
+
+1. **`docs/whiteboard-smoke-log.md`** — Sarah **2026-04-24** PDF page picker, phone photos, separate pages
+2. **`docs/SARAH-CALL-PREP.md`** — 2026-06-07 feasibility lock for toolbar/palette
+3. **`docs/handoff/whiteboard-sync-redesign-2026-05-27.md`** — 2026-06-07 custom-chrome API correction
+4. **`docs/handoff/pdf-page-picker-and-per-page-boards-bootstrapper.md`** — page-strip section UX
+5. **`docs/handoff/reliability-redesign-2026-05-27-orchestrator-report.md`** — mobile dispatch context
+6. **`docs/PHASE-2-IOS-SMOKE-MATRIX.md`** — iOS toolbar clip, touch undo
+7. **`docs/handoff/ORCHESTRATOR-STATE.md`** + **`MORNING-RUNBOOK-2026-06-07.md`** — triage pointers only
+
+**Net-new requirements contributed by those docs (not in first consolidation pass):**
+
+| ID | Requirement | Source doc |
+|----|-------------|------------|
+| TB-08 | Wyzant-style PDF page subset picker | whiteboard-smoke-log Apr 24 |
+| TB-09 | Phone-photo image insert in toolbar | whiteboard-smoke-log Apr 24 |
+| TB-10 | Desmos/graph toolbar affordance | orchestrator Q1 + smoke-log |
+| TB-11 | Visible Undo/Redo in Mynk chrome | BACKLOG Apr 24 undo row |
+| PU-04 | PDF insert modal chrome | pdf-page-picker bootstrapper |
+| PP-05 | Single restore story vs Excalidraw recovery modal | BACKLOG + smoke-log |
+| DD-05 | PDF zoom-to-fit default (tutor vs student TBD) | BACKLOG PDF-fit row |
+| TM-06 | iOS touch undo/redo verify | BACKLOG + iOS matrix |
+| TM-07 | iOS touch drawing / palm rejection | iOS matrix §7 |
+| TM-08 | Eraser cursor alignment | BACKLOG + sync-redesign |
+| SR-10 | Page strip PDF section headers | smoke-log + pdf bootstrapper |
+| SR-11 | Page insert order UX | BACKLOG smoke 2026-05-30 |
+| SR-12 | iOS toolbar clip / dvh | iOS matrix §7 |
+| ST-06 | Student page strip mirrors section grouping | pdf bootstrapper |
+| TU-07 | "Share link" label | 2026-06-06 (in first pass indirectly; now explicit) |
+| TU-08 | Mic meter + picker in workspace chrome | whiteboard-smoke-log W-audio |
+| TU-09 | Session bar + bottom controls visual system | v1 §5 (expanded) |
+| TU-10 | Eraser/delete discoverable | Sarah-Chat L8 |
 
 ---
 
 ## Cross-links
 
-- Implementation status + feasibility table: [`docs/WHITEBOARD-STATUS.md`](../WHITEBOARD-STATUS.md) § Sarah UX asks + custom chrome decision
+- Implementation status: [`docs/WHITEBOARD-STATUS.md`](../WHITEBOARD-STATUS.md) § Sarah UX asks + custom chrome decision
 - Backlog rows: [`docs/BACKLOG.md`](../BACKLOG.md) § Whiteboard — implementation / design queue
 - Excalidraw API constraint: [`docs/PLATFORM-ASSUMPTIONS.md`](../PLATFORM-ASSUMPTIONS.md) §7.5
 - Student mobile layout shell: [`docs/handoff/v1-component-redesign-design-2026-05-31.md`](v1-component-redesign-design-2026-05-31.md) §5.7
@@ -199,12 +266,12 @@ These appeared in the raw chat or pilot captures but are **not** custom-chrome d
 
 | Category | Distinct requirements |
 |----------|----------------------:|
-| Toolbar / tool-set & ordering | 7 |
-| Pulldown / consolidation | 3 |
-| Properties palette | 4 |
-| Drawing defaults | 4 |
-| Touch / mobile-tablet | 5 |
-| Screen real estate / responsive | 9 |
-| Student-WB-specific | 5 |
-| Tutor-WB-specific | 6 |
-| **Total** | **43** |
+| Toolbar / tool-set & ordering | 11 |
+| Pulldown / consolidation | 4 |
+| Properties palette | 5 |
+| Drawing defaults | 5 |
+| Touch / mobile-tablet | 8 |
+| Screen real estate / responsive | 12 |
+| Student-WB-specific | 6 |
+| Tutor-WB-specific | 10 |
+| **Total** | **61** |
