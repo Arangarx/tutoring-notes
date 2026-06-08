@@ -4,7 +4,7 @@
 >
 > **Sequencing (ratified Andrew 2026-06-07/08):** Whiteboard chrome is a **pre-master gate** for the V1 reveal — build on `v1-redesign` before `v1-redesign → master`. Master cut = Sarah reveal (`tutoring-notes.vercel.app` / `usemynk.com` share the same production deployment on `master`; no UI-skin feature flag). The reveal must be one cohesive site, not polished chrome around still-janky Excalidraw native UI.
 >
-> **Last consolidated:** 2026-06-08 (audit dispositions ratified; TU-13/TU-14/TM-10 added; PP-04/ST-05 expanded; **PR-01** freedraw-latency gate folded into P1.1). Prior: 2026-06-07 TU-12 theme parity, TU-11 keyboard surface routing. **Design doc (ratified forks + phasing):** [`whiteboard-chrome-design-2026-06-07.md`](whiteboard-chrome-design-2026-06-07.md). **Audit:** [`whiteboard-excalidraw-function-audit-2026-06-08.md`](whiteboard-excalidraw-function-audit-2026-06-08.md).
+> **Last consolidated:** 2026-06-08 (audit dispositions ratified; TU-13/TU-14/TM-10 added; PP-04/ST-05 expanded; **PR-01** freedraw-latency gate folded into P1.1; **TM-11** mobile palette-dismissal hard requirement). Prior: 2026-06-07 TU-12 theme parity, TU-11 keyboard surface routing. **Design doc (ratified forks + phasing):** [`whiteboard-chrome-design-2026-06-07.md`](whiteboard-chrome-design-2026-06-07.md). **Audit:** [`whiteboard-excalidraw-function-audit-2026-06-08.md`](whiteboard-excalidraw-function-audit-2026-06-08.md).
 
 ---
 
@@ -103,6 +103,7 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 | **TM-08** | **Eraser cursor** aligned with stroke delete path (icon/cursor vs actual erase position). | app-bug | BACKLOG eraser cursor row; whiteboard-sync-redesign |
 | **TM-09** | **Tutor-mobile deferral + expectations notice (v1.1).** (a) Pre-subscribe/pricing copy: tutor phone/tablet support upcoming; **desktop tutoring only** now. (b) Host-time device gate: block tutor **starting** a whiteboard session from non-desktop with *"Desktop tutoring only for now; phone/tablet tutoring is coming."* Architecture must not preclude tutor-mobile later. **Defers TM-05** full variant to v1.1. | (ii) + product | Design pass 2026-06-07 Fork 2; [`whiteboard-chrome-design-2026-06-07.md`](whiteboard-chrome-design-2026-06-07.md) §5 |
 | **TM-10** | **Full touch/tablet/phone parity for ALL chrome controls.** Every whiteboard function exposed in chrome — z-order, delete-selected, More styles, laser, theme toggle, etc. — must have a **touch-reachable equivalent** (long-press menu, selection toolbar, adequate tap targets). No desktop-only or right-click-only interaction for any function students need. Standing principle (Andrew 2026-06-08). | (ii) + verify | Audit ratification 2026-06-08; pairs with TU-14 |
+| **TM-11** | **V1 HARD — mobile/touch properties palette dismissible by easy gesture.** On phone/tablet touch, the stroke/color/style/opacity properties panel (bottom sheet when a drawing tool is active) **MUST** dismiss without re-tapping the originating tool or toggle. **Allowed (primary paths):** tap anywhere off the panel (canvas or backdrop), swipe-down on the sheet drag handle. **Allowed (supplement only):** explicit × close — not the sole or primary dismissal path. **Disallowed:** re-tapping the originating tool/toggle button as the **only** way to close (native Excalidraw behavior). **Rationale (load-bearing):** independent complaint from **three** people — Sarah (pilot tutor), Andrew's wife, and Andrew — on first use; known Excalidraw pain point we are explicitly fixing, not a nice-to-have. Design detail: [`whiteboard-session-shell-design-2026-06-08.md`](whiteboard-session-shell-design-2026-06-08.md) §7.3–7.4. Pairs with PP-02, PP-03, TM-01. | (ii) | Andrew ratified 2026-06-08; Sarah-Chat L44–45 |
 
 ### Screen real estate / responsive
 
@@ -285,6 +286,7 @@ Broad case-insensitive ripgrep across **`docs/`** and **`docs/handoff/`** for wh
 | TU-13 | Whiteboard-local theme toggle on chrome | Audit NR-04 ratified 2026-06-08 |
 | TU-14 | Every-function-has-a-button + PDF deepest-z z-order | Audit ratification 2026-06-08 |
 | TM-10 | Full touch parity for all chrome controls | Audit ratification 2026-06-08 |
+| TM-11 | Mobile/touch properties palette easy-gesture dismissal (V1 HARD) | Andrew ratified 2026-06-08 |
 
 ---
 
@@ -307,12 +309,12 @@ Broad case-insensitive ripgrep across **`docs/`** and **`docs/handoff/`** for wh
 | Pulldown / consolidation | 4 |
 | Properties palette | 5 |
 | Drawing defaults | 5 |
-| Touch / mobile-tablet | 10 |
+| Touch / mobile-tablet | 11 |
 | Screen real estate / responsive | 12 |
 | Student-WB-specific | 6 |
 | Tutor-WB-specific | 14 |
 | Performance / draw latency | 1 |
-| **Total** | **68** |
+| **Total** | **69** |
 
 ---
 

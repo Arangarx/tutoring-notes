@@ -492,9 +492,9 @@ The real design axis is screen size, not tutor-vs-student. Tutor vs student is a
 | A/V mic toggle | ✓ Top-level | ✓ Top-level (on bottom bar) |
 | A/V video toggle | ✓ Top-level | ✓ Top-level (on bottom bar) |
 
-### 7.3 Mobile palette-dismissal fix (Decision E — PP-02/PP-03)
+### 7.3 Mobile palette-dismissal fix (Decision E — PP-02/PP-03, **TM-11**)
 
-The prior complaint: "the properties/color palette eats too much space and on mobile won't dismiss without re-tapping the tool button."
+The prior complaint: "the properties/color palette eats too much space and on mobile won't dismiss without re-tapping the tool button." **Hard requirement:** [`whiteboard-chrome-requirements.md`](whiteboard-chrome-requirements.md) **TM-11** (V1 — tap-off/backdrop, swipe-down on handle, and × as supplement only; re-tap tool as sole dismiss is disallowed).
 
 **Fix:**
 1. Properties panel on phone = bottom sheet (not a side popover or persistent column). Slides up; dismisses on downward drag OR tap-outside OR tap on canvas OR × close.
