@@ -2,7 +2,17 @@
 
 > **Start here.** This is the single entry point for any new chat, agent, or human picking up work in this repo. Every canonical doc, spoke doc, and smoke runbook is mapped below by topic. For the curated reading-list with in-depth framing, see `AGENTS.md § Key docs`.
 >
-> Last updated: 2026-05-27 (morning cleanup follow-up).
+> Last updated: 2026-06-07 (docs cleanup / archival policy).
+
+---
+
+## Docs cleanup / archival policy
+
+On every docs-cleanup pass: **archive** anything verified to be captured elsewhere or later superseded/overridden — but **never** archive information that would be lost if it's still valid and unique.
+
+Bar to archive a doc or section: **(a)** its still-valid content is provably captured in a canonical consolidated doc, **or** **(b)** it's been explicitly superseded. If removing it would lose valid unique information, **keep it**. Goal: reduce docs sprawl without losing signal.
+
+**Canonical pattern:** consolidate scattered feedback into one source, verify capture, **then** archive the redundant copies. See [docs/BACKLOG.md](docs/BACKLOG.md) § Docs cleanup pass (next).
 
 ---
 

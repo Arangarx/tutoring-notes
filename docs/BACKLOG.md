@@ -928,3 +928,15 @@ Items captured from 2026-06-06 Andrew smoke of `/admin/dev-tools` fixture dashbo
 - **Dev-tools: adopt existing manual test user as a managed fixture.** `arangarx+test1@gmail.com` (and any other hand-created test accounts) are not marked `isTestFixture=true` and therefore fall outside the "Clear all fixtures" sweep. Options: (a) a one-shot "adopt as fixture" action in dev-tools that sets `isTestFixture=true` on the existing `AdminUser`/`AccountHolder` by email, or (b) a migration script that bulk-marks known test emails. Either way, the fixture dashboard and clear-all should cover them going forward. (Andrew, 2026-06-06 smoke.)
 
 - **Dev-tools / admin UX (undecided — discuss):** consider moving the impersonation list off the main admin dashboard into dev-tools only, and redirecting to dev-tools after exiting impersonation. Andrew noted the main admin landing is now heavily test-oriented; unsure if that's the permanent shape or if impersonation lives better in dev-tools where all the other fixture/test machinery lives. Revisit once the pilot grows beyond solo use and the admin dashboard's permanent information hierarchy is clearer. (Andrew, 2026-06-06 smoke.)
+
+---
+
+## Docs cleanup pass (next)
+
+**Policy:** [docs/INDEX.md](docs/INDEX.md) § Docs cleanup / archival policy. On each pass: verify still-valid content is captured in a canonical roll-up **before** archiving redundant copies. Never archive unique valid information.
+
+**Ready example — whiteboard chrome feedback:** consolidated in [docs/handoff/whiteboard-chrome-requirements.md](docs/handoff/whiteboard-chrome-requirements.md) (commit `c6cf6ed`) with a **Sources swept** list. Whiteboard sections in those source docs are **archival candidates** once a cleanup pass verifies each item is truly in the roll-up — **do not archive yet.** Candidates include:
+
+- `docs/whiteboard-smoke-log.md` (whiteboard chrome sections)
+- `docs/handoff/sarah-pilot-feedback-2026-05-26-orchestrator-report.md`, `docs/handoff/sarah-pilot-feedback-2026-06-06-orchestrator-report.md` (whiteboard chrome rows)
+- Redesign docs with overlapping chrome content — e.g. `docs/handoff/v1-component-redesign-design-2026-05-31.md`, `docs/handoff/whiteboard-sync-redesign-2026-05-27.md`, `docs/RELIABILITY-REDESIGN-2026-05-27.md` (see full **Sources swept** table in the roll-up)
