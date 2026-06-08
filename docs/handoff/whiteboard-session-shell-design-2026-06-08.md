@@ -464,7 +464,7 @@ This principle applies across all three session-shell modes:
 | **Live board** | Excalidraw canvas (full-bleed behind chrome) | Properties palette → bottom sheet; video → floating pip; tools → compact icon bar |
 | **Review** | Session notes editor + share actions | Board thumbnail + video replay → slide-in overlay |
 
-Desktop (≥1024px) and tablet side-by-side layouts are unchanged. This principle governs **only** the `<480px` / phone breakpoint (mock: **Mobile** width toggle).
+Desktop (≥1024px) and tablet landscape layouts are unchanged. This principle governs **only** the `<480px` / phone breakpoint (mock: **Phone** device frame, 390×844).
 
 ### 7.1 Screen size axis (Decision E)
 
@@ -505,7 +505,7 @@ The prior complaint: "the properties/color palette eats too much space and on mo
 
 ### 7.4 Per-mode mobile layout (mock-validated 2026-06-08)
 
-Visual reference: [`../brand-previews/whiteboard-session-shell-mock-2026-06-08.html`](../brand-previews/whiteboard-session-shell-mock-2026-06-08.html) — use the **Mobile** width toggle.
+Visual reference: [`../brand-previews/whiteboard-session-shell-mock-2026-06-08.html`](../brand-previews/whiteboard-session-shell-mock-2026-06-08.html) — use the **Phone** viewport (390×844 true-proportion frame). **Compare** shows phone + tablet side by side.
 
 #### 7.4.1 Waiting room (phone)
 
@@ -582,6 +582,22 @@ No left rail. No two-column squeeze. All text wraps normally at full phone width
 ```
 
 Notes are never squeezed into a narrow rail. Board/video is opt-in via overlay.
+
+### 7.5 Per-mode tablet layout (mock-validated 2026-06-08)
+
+Visual reference: same mock — **Tablet** viewport (iPad Air 834×1194 portrait, 1194×834 landscape) or **Compare** (phone + tablet simultaneously). Each frame renders at true CSS viewport dimensions then scales to fit the page.
+
+**Design rationale:** At 834px portrait, pure phone reflow wastes horizontal space; pure desktop two-pane live board is too tight with a 48px strip + popover. Tablet therefore uses a **hybrid**: portrait borrows phone canvas/toolbar patterns where touch matters; landscape uses full desktop chrome because width matches a small laptop.
+
+| Mode | Tablet portrait (834×1194) | Tablet landscape (1194×834) |
+|---|---|---|
+| **Waiting room** | **Compact two-column** — camera preview (~55%) + setup panel (260–300px) side by side; same information density as desktop, tighter gutters | **Desktop two-column** — same as ≥1024px; extra width goes to preview |
+| **Live board** | **Canvas-dominant hybrid** — left strip hidden; bottom icon toolbar; properties via bottom sheet (§7.3 / TM-11); AV pip ~148px; top bar keeps Share label + mic meter (richer than phone) | **Full desktop layout** — collapsible left strip, side-anchored properties popover, full top-bar tool row |
+| **Review** | **Side-by-side split** — notes editor flex-1 + fixed ~300px board/video column (no slide-in overlay; both panes always visible) | **Desktop split** — notes + 340px board column |
+
+Portrait review intentionally **does not** use the phone overlay pattern: at 834px there is enough width for persistent board preview while editing notes — the overlay is a phone constraint, not a tablet one.
+
+Landscape at 1194px exceeds the 1024px desktop breakpoint; the mock applies no tablet-specific overrides (desktop rules only).
 
 ---
 
@@ -789,3 +805,4 @@ This checklist is the gate the eventual chrome build must pass. P1.1 was rejecte
 - **2026-06-08:** Initial design doc. Three-mode session shell, waiting room, live board additions (AV tile, ghost bounds, session bar), review mode, responsive behavior, consent-aware recording model, P1.1 rejection punch-list resolutions, acceptance checklist, open questions. Authored by Sonnet subagent on branch `v1-redesign`.
 - **2026-06-08:** Color-fidelity pass — dark surface ladder + semantic tokens aligned to `tokens.css`; primary CTAs corrected to coral (`--accent` / `--accent-on`); build note added re shadcn `--primary` mapping.
 - **2026-06-08:** Mobile responsive pass — §7.0 **Primary-content dominance** principle; per-mode phone layouts (§7.4); mock updated with single-column waiting room, full-bleed canvas + properties bottom sheet + AV pip on live board, notes-primary + board slide-in overlay on review. Desktop layouts unchanged.
+- **2026-06-08:** Device-frame mock pass — true-proportion **Phone** (390×844), **Tablet** (iPad Air portrait/landscape), and **Compare** viewports with CSS `transform: scale()` fit; §7.5 tablet per-mode treatment (portrait hybrid, landscape desktop).

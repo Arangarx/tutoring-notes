@@ -100,6 +100,8 @@ html, body {
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   min-height: 100dvh;
+  height: 100dvh;
+  display: flex; flex-direction: column; overflow: hidden;
 }
 
 /* ================================================================
@@ -156,18 +158,82 @@ html, body {
 /* ================================================================
    SESSION SHELL WRAPPER
    ================================================================ */
+.viewport-root { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+.stage-desktop {
+  flex: 1; display: flex; flex-direction: column; min-height: 0;
+}
+.stage-desktop .session-shell {
+  flex: 1; height: calc(100dvh - 49px);
+}
+
+.stage-devices {
+  flex: 1; display: none; flex-direction: column; align-items: center;
+  padding: 12px 16px 24px; overflow: auto; min-height: 0;
+}
+.stage-devices.active { display: flex; }
+
+.tablet-orient-bar {
+  display: none; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;
+  font-family: var(--font-mono); font-size: 11px; color: var(--meta-chrome-fg);
+}
+.tablet-orient-bar.visible { display: flex; }
+.orient-btn {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+  padding: 4px 10px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--meta-chrome-border);
+  color: var(--meta-chrome-fg); background: transparent;
+}
+.orient-btn:hover { border-color: var(--meta-chrome-border-hover); color: var(--meta-chrome-fg-hover); }
+.orient-btn.active {
+  background: var(--meta-chrome-active-bg); color: var(--meta-chrome-fg-hover);
+  border-color: var(--meta-chrome-active-border);
+}
+
+.devices-row {
+  display: flex; flex-wrap: wrap; gap: 28px 36px;
+  justify-content: center; align-items: flex-start; width: 100%; max-width: 1680px;
+}
+.devices-row.compare .device-frame-wrap { flex: 1 1 320px; max-width: calc(50% - 18px); }
+
+.device-frame-wrap {
+  display: none; flex-direction: column; align-items: center; gap: 8px;
+  width: 100%;
+}
+.device-frame-wrap.visible { display: flex; }
+
+.device-chrome-label {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+  color: var(--meta-chrome-fg); letter-spacing: 0.03em;
+}
+
+.device-scale-outer { width: 100%; display: flex; justify-content: center; }
+.device-scale-inner { position: relative; overflow: visible; }
+
+.device-viewport {
+  position: relative; overflow: hidden; background: var(--surface-base);
+  border: 2px solid var(--border-strong);
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(0,0,0,0.06);
+  transform-origin: top center;
+}
+.device-viewport[data-device="phone"] { border-radius: 28px; }
+.device-viewport[data-device="tablet"] { border-radius: 18px; }
+
+.device-screen {
+  width: 100%; height: 100%; overflow: hidden; position: relative;
+}
+
+.device-viewport .session-shell {
+  width: 100% !important; height: 100% !important;
+  max-width: none !important; margin: 0 !important;
+  border: none !important; min-height: 0 !important;
+  position: relative;
+}
+
 .session-shell {
   display: flex; flex-direction: column;
-  height: calc(100dvh - 49px);
   background: var(--surface-base);
   overflow: hidden;
-  transition: max-width 0.3s ease;
-}
-.session-shell.narrow {
-  max-width: 390px; margin: 0 auto;
-  border-left: 1px solid var(--border);
-  border-right: 1px solid var(--border);
-  min-height: calc(100dvh - 49px);
   position: relative;
 }
 
@@ -776,7 +842,7 @@ html, body {
   align-items: center; justify-content: space-around; padding: 0 4px;
   flex-shrink: 0; width: 100%;
 }
-.session-shell:not(.narrow) .bottom-toolbar { display: none; }
+.session-shell:not(.narrow):not(.tablet-portrait) .bottom-toolbar { display: none; }
 .bottom-toolbar .tool-btn { width: 44px; height: 44px; }
 
 /* Properties bottom sheet (mobile) — scoped to mock frame */
@@ -784,7 +850,8 @@ html, body {
   display: none; position: absolute; top: 44px; left: 0; right: 0; bottom: 0; z-index: 90;
   background: rgba(0,0,0,0.35);
 }
-.session-shell.narrow .props-sheet-backdrop.open { display: block; }
+.session-shell.narrow .props-sheet-backdrop.open,
+.session-shell.tablet-portrait .props-sheet-backdrop.open { display: block; }
 
 .props-bottom-sheet {
   display: none; position: absolute; left: 0; right: 0; bottom: 0; z-index: 95;
@@ -795,8 +862,10 @@ html, body {
   transform: translateY(100%);
   transition: transform 0.25s ease;
 }
-.session-shell.narrow .props-bottom-sheet { display: flex; flex-direction: column; gap: 10px; }
-.session-shell.narrow .props-bottom-sheet.open { transform: translateY(0); }
+.session-shell.narrow .props-bottom-sheet,
+.session-shell.tablet-portrait .props-bottom-sheet { display: flex; flex-direction: column; gap: 10px; }
+.session-shell.narrow .props-bottom-sheet.open,
+.session-shell.tablet-portrait .props-bottom-sheet.open { transform: translateY(0); }
 
 .sheet-handle-row {
   display: flex; align-items: center; justify-content: space-between;
@@ -865,6 +934,51 @@ html, body {
 }
 .session-shell.narrow .review-overlay-backdrop.open { display: block; }
 
+/* ================================================================
+   TABLET PORTRAIT (834px) — hybrid between phone reflow & desktop
+   ================================================================ */
+
+/* Waiting: compact two-column (video + setup) — fits 834 naturally */
+.session-shell.tablet-portrait .waiting-inner {
+  display: grid; grid-template-columns: 1fr minmax(260px, 300px);
+  gap: 16px; padding: 20px; max-width: none; align-items: start;
+}
+.session-shell.tablet-portrait .video-feed-area { aspect-ratio: 4/3; }
+
+/* Live: canvas-dominant + bottom toolbar + properties bottom sheet (§7.3) */
+.session-shell.tablet-portrait .left-strip { display: none; }
+.session-shell.tablet-portrait .live-board { flex: 1; flex-direction: column; min-height: 0; }
+.session-shell.tablet-portrait .canvas-area { flex: 1; width: 100%; min-height: 0; }
+.session-shell.tablet-portrait .props-popover { display: none; }
+.session-shell.tablet-portrait .bottom-toolbar {
+  display: flex; height: 52px; min-height: 52px;
+  background: var(--surface-1); border-top: 1px solid var(--border);
+  align-items: center; justify-content: space-around; padding: 0 8px;
+  flex-shrink: 0; width: 100%;
+}
+.session-shell.tablet-portrait .av-tile {
+  width: 148px; bottom: 16px; right: 16px; box-shadow: var(--shadow-lg);
+}
+.session-shell.tablet-portrait .page-strip { height: 38px; padding: 0 12px; }
+/* Richer top bar than phone — Share label + mic meter stay visible */
+.session-shell.tablet-portrait #topBar-live-controls .tb-btn:not(.icon-only) { display: flex; }
+.session-shell.tablet-portrait #topBar-live-controls .sep { display: block; }
+.session-shell.tablet-portrait .wordmark { font-size: 15px; }
+
+/* Review: side-by-side split — notes primary, board column fixed */
+.session-shell.tablet-portrait .review-mode { flex-direction: row; position: relative; }
+.session-shell.tablet-portrait .review-notes-panel {
+  flex: 1; min-width: 0; border-right: 1px solid var(--border);
+}
+.session-shell.tablet-portrait .review-board-panel {
+  position: static; transform: none; width: 300px; min-width: 260px;
+  height: auto; flex-shrink: 0; border-top: none;
+  box-shadow: none;
+}
+.session-shell.tablet-portrait .review-board-panel.open { transform: none; }
+.session-shell.tablet-portrait .review-board-toggle { display: none; }
+.session-shell.tablet-portrait .review-overlay-backdrop { display: none !important; }
+
 /* The live board column layout */
 .live-board-column {
   display: flex; flex-direction: column; flex: 1; overflow: hidden; min-height: 0;
@@ -900,15 +1014,20 @@ html, body {
     <button class="tab-btn" onclick="switchMode('live')">Live board</button>
     <button class="tab-btn" onclick="switchMode('review')">Review</button>
     <span style="width:1px;height:16px;background:rgba(255,255,255,0.12);margin:0 4px;"></span>
-    <span style="font-size:11px;color:rgba(240,237,228,0.4);font-family:var(--font-mono);">Width:</span>
-    <button class="responsive-toggle active" onclick="setWidth('full')">Desktop</button>
-    <button class="responsive-toggle" onclick="setWidth('narrow')">Mobile</button>
+    <span style="font-size:11px;color:rgba(240,237,228,0.4);font-family:var(--font-mono);">Viewport:</span>
+    <button class="responsive-toggle active" data-viewport="desktop" onclick="setViewport('desktop', this)">Desktop</button>
+    <button class="responsive-toggle" data-viewport="phone" onclick="setViewport('phone', this)">Phone</button>
+    <button class="responsive-toggle" data-viewport="tablet" onclick="setViewport('tablet', this)">Tablet</button>
+    <button class="responsive-toggle" data-viewport="compare" onclick="setViewport('compare', this)">Compare</button>
     <span style="width:1px;height:16px;background:rgba(255,255,255,0.12);margin:0 4px;"></span>
     <button class="theme-toggle-meta" onclick="toggleTheme()" id="themeBtn">☾ Dark</button>
   </div>
 </header>
 
-<!-- SESSION SHELL (the actual app design) -->
+<div class="viewport-root" id="viewportRoot">
+
+<!-- Desktop: full-width shell -->
+<div class="stage-desktop" id="stageDesktop">
 <div class="session-shell" id="sessionShell">
 
   <!-- SHARED TOP BAR -->
@@ -918,7 +1037,7 @@ html, body {
     <div class="sep"></div>
 
     <!-- Waiting room top bar content -->
-    <div id="topBar-waiting" class="top-bar-group" style="display:flex;">
+    <div id="topBar-waiting" class="top-bar-group" data-topbar="waiting" style="display:flex;">
       <span style="font-size:13px;color:var(--text-muted);">Emma R. — </span>
       <span style="font-size:13px;color:var(--text);font-weight:500;margin-left:4px;">Waiting room</span>
       <span style="width:8px;height:8px;border-radius:50%;background:var(--text-disabled);margin-left:8px;"></span>
@@ -926,13 +1045,13 @@ html, body {
     </div>
 
     <!-- Live board top bar content -->
-    <div id="topBar-live" class="top-bar-group" style="display:none;">
+    <div id="topBar-live" class="top-bar-group" data-topbar="live" style="display:none;">
       <div class="live-badge"><div class="live-dot"></div>LIVE</div>
       <div class="timer" style="margin-left:8px;">14m</div>
     </div>
 
     <!-- Review top bar content -->
-    <div id="topBar-review" class="top-bar-group" style="display:none;">
+    <div id="topBar-review" class="top-bar-group" data-topbar="review" style="display:none;">
       <span style="font-size:13px;color:var(--text);font-weight:500;">Session complete</span>
       <div class="sep"></div>
       <span style="font-family:var(--font-mono);font-size:12px;color:var(--text-muted);">Emma R. · 14m</span>
@@ -941,7 +1060,7 @@ html, body {
     <div class="top-bar-spacer"></div>
 
     <!-- Live board: A/V + tools -->
-    <div id="topBar-live-controls" class="top-bar-group" style="display:none;">
+    <div id="topBar-live-controls" class="top-bar-group" data-topbar="live-controls" style="display:none;">
       <!-- Share -->
       <button class="tb-btn" title="Copy student link">
         <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
@@ -998,12 +1117,12 @@ html, body {
 
     <!-- End / Cancel / Close button -->
     <div style="margin-left:8px;">
-      <button class="tb-btn primary" id="endBtn" onclick="handleEndBtn()">Cancel</button>
+      <button class="tb-btn primary end-session-btn" id="endBtn" onclick="handleEndBtn()">Cancel</button>
     </div>
   </header>
 
   <!-- ==================== WAITING ROOM ==================== -->
-  <div class="mode-page active" id="page-waiting">
+  <div class="mode-page active" id="page-waiting" data-mode="waiting">
     <div class="waiting-room">
       <div class="waiting-inner">
 
@@ -1116,7 +1235,7 @@ html, body {
   </div>
 
   <!-- ==================== LIVE BOARD ==================== -->
-  <div class="mode-page" id="page-live">
+  <div class="mode-page" id="page-live" data-mode="live">
     <div class="live-board-column" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
       <div class="live-board" style="flex:1;">
 
@@ -1167,13 +1286,13 @@ html, body {
           <div class="strip-spacer"></div>
 
           <!-- Collapse -->
-          <button class="tool-btn collapse-btn" title="Collapse toolbar" onclick="toggleStrip()">
+          <button class="tool-btn collapse-btn" title="Collapse toolbar" onclick="toggleStrip(event)">
             <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" id="collapseIcon"><polyline points="15 18 9 12 15 6"/></svg>
           </button>
         </div>
 
         <!-- Canvas -->
-        <div class="canvas-area" onclick="if(isNarrow && propsSheetOpen) closePropsSheet()">
+        <div class="canvas-area" onclick="onCanvasTap(event)">
           <div class="canvas-grid"></div>
 
           <!-- Ghost viewport (student view) -->
@@ -1297,7 +1416,7 @@ html, body {
         <button class="tool-btn" title="Laser" onclick="setActiveTool(this)" style="color:var(--accent-text);">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
         </button>
-        <button class="tool-btn" id="propsSheetOpenBtn" title="Colors &amp; styles" onclick="openPropsSheet()">
+        <button class="tool-btn props-sheet-open-btn" title="Colors &amp; styles" onclick="openPropsSheet(event)">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v8m-4-4h8"/></svg>
         </button>
         <button class="tool-btn" title="More">
@@ -1315,22 +1434,22 @@ html, body {
     </div>
   </div>
 
-  <!-- Mobile properties bottom sheet (narrow live board) -->
-  <div class="props-sheet-backdrop" id="propsSheetBackdrop" onclick="closePropsSheet()"></div>
-  <div class="props-bottom-sheet" id="propsBottomSheet" role="dialog" aria-label="Stroke properties">
+  <!-- Mobile / tablet-portrait properties bottom sheet -->
+  <div class="props-sheet-backdrop" onclick="closePropsSheet(event)"></div>
+  <div class="props-bottom-sheet" role="dialog" aria-label="Stroke properties">
     <div class="sheet-handle-row" style="position:relative;">
-      <div class="sheet-drag-handle" id="propsSheetHandle"></div>
-      <button class="sheet-close-btn" type="button" onclick="closePropsSheet()" aria-label="Dismiss properties">×</button>
+      <div class="sheet-drag-handle props-sheet-handle"></div>
+      <button class="sheet-close-btn" type="button" onclick="closePropsSheet(event)" aria-label="Dismiss properties">×</button>
     </div>
     <div class="sheet-title">Stroke properties</div>
-    <div id="propsSheetContent"></div>
+    <div class="props-sheet-content"></div>
   </div>
 
   <!-- Review board overlay backdrop (narrow) -->
-  <div class="review-overlay-backdrop" id="reviewOverlayBackdrop" onclick="closeReviewBoard()"></div>
+  <div class="review-overlay-backdrop" onclick="closeReviewBoard(event)"></div>
 
   <!-- ==================== REVIEW MODE ==================== -->
-  <div class="mode-page" id="page-review">
+  <div class="mode-page" id="page-review" data-mode="review">
     <div class="review-mode">
 
       <!-- Notes panel -->
@@ -1340,7 +1459,7 @@ html, body {
             <div class="review-section-title">Session notes — Emma R.</div>
             <div class="review-section-sub">Mon Jun 8, 2026 · Algebra · Quadratic functions</div>
           </div>
-          <button type="button" class="review-board-toggle" id="reviewBoardToggle" onclick="toggleReviewBoard()">
+          <button type="button" class="review-board-toggle" onclick="toggleReviewBoard(event)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></svg>
             Board &amp; video
           </button>
@@ -1388,10 +1507,10 @@ Key breakthrough: Emma now understands that the discriminant (b²-4ac) determine
       </div>
 
       <!-- Board panel (desktop: side column; mobile: slide-in overlay) -->
-      <div class="review-board-panel" id="reviewBoardPanel">
+      <div class="review-board-panel">
         <div class="review-section-header" style="border-bottom:1px solid var(--border-subtle);">
           <div class="review-section-title" style="font-size:12px;">Session board</div>
-          <button type="button" class="sheet-close-btn" style="position:static;" onclick="closeReviewBoard()" aria-label="Close board panel">×</button>
+          <button type="button" class="sheet-close-btn review-board-close" style="position:static;" onclick="closeReviewBoard(event)" aria-label="Close board panel">×</button>
         </div>
         <div class="board-preview-area">
           <div class="board-preview-grid"></div>
@@ -1426,42 +1545,101 @@ Key breakthrough: Emma now understands that the discriminant (b²-4ac) determine
   </div>
 
 </div>
+</div><!-- /stage-desktop -->
+
+<!-- Device frames: true viewport dimensions, CSS-scaled to fit -->
+<div class="stage-devices" id="stageDevices">
+  <div class="tablet-orient-bar" id="tabletOrientBar">
+    <span>Tablet orientation:</span>
+    <button type="button" class="orient-btn active" data-orient="portrait" onclick="setTabletOrient('portrait', this)">Portrait</button>
+    <button type="button" class="orient-btn" data-orient="landscape" onclick="setTabletOrient('landscape', this)">Landscape</button>
+  </div>
+  <div class="devices-row" id="devicesRow">
+    <div class="device-frame-wrap" id="phoneFrameWrap" data-device="phone">
+      <div class="device-chrome-label">Phone · 390×844</div>
+      <div class="device-scale-outer">
+        <div class="device-scale-inner" id="phoneScaleInner">
+          <div class="device-viewport" id="phoneViewport" data-device="phone" data-w="390" data-h="844">
+            <div class="device-screen" id="phoneMount"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="device-frame-wrap" id="tabletFrameWrap" data-device="tablet">
+      <div class="device-chrome-label" id="tabletChromeLabel">iPad Air · 834×1194</div>
+      <div class="device-scale-outer">
+        <div class="device-scale-inner" id="tabletScaleInner">
+          <div class="device-viewport" id="tabletViewport" data-device="tablet" data-w="834" data-h="1194">
+            <div class="device-screen" id="tabletMount"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /viewport-root -->
 
 <!-- ================================================================
-     JAVASCRIPT — mode switching + interactions
+     JAVASCRIPT — mode switching + device frames
      ================================================================ -->
 <script>
+const PHONE_W = 390, PHONE_H = 844;
+const TABLET_PORTRAIT_W = 834, TABLET_PORTRAIT_H = 1194;
+const TABLET_LANDSCAPE_W = 1194, TABLET_LANDSCAPE_H = 834;
+
 let currentMode = 'waiting';
 let isDark = true;
-let isNarrow = false;
-let stripCollapsed = false;
+let currentViewport = 'desktop';
+let tabletOrient = 'portrait';
+let shellClone = null;
+const stripCollapsedByShell = new WeakMap();
+
+function getAllShells() {
+  return Array.from(document.querySelectorAll('.session-shell'));
+}
+
+function shellUsesSheetProps(shell) {
+  return shell.classList.contains('narrow') || shell.classList.contains('tablet-portrait');
+}
+
+function shellUsesReviewOverlay(shell) {
+  return shell.classList.contains('narrow');
+}
+
+function qInShell(shell, sel) {
+  return shell.querySelector(sel);
+}
 
 function switchMode(mode) {
   currentMode = mode;
 
-  // Pages
-  document.querySelectorAll('.mode-page').forEach(p => p.classList.remove('active'));
-  document.getElementById('page-' + mode).classList.add('active');
+  getAllShells().forEach(shell => {
+    shell.querySelectorAll('.mode-page').forEach(p => {
+      p.classList.toggle('active', p.dataset.mode === mode);
+    });
 
-  // Tab buttons
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => {
-    if (b.textContent.toLowerCase().includes(mode === 'waiting' ? 'waiting' : mode === 'live' ? 'live' : 'review')) {
-      b.classList.add('active');
+    shell.querySelectorAll('[data-topbar]').forEach(el => {
+      const key = el.dataset.topbar;
+      if (key === 'live-controls') el.style.display = (mode === 'live') ? 'flex' : 'none';
+      else el.style.display = (key === mode) ? 'flex' : 'none';
+    });
+
+    const endBtn = shell.querySelector('.end-session-btn');
+    if (endBtn) {
+      if (mode === 'waiting') { endBtn.textContent = 'Cancel'; endBtn.className = 'tb-btn destructive-ghost end-session-btn'; }
+      else if (mode === 'live') { endBtn.textContent = 'End session'; endBtn.className = 'tb-btn primary end-session-btn'; }
+      else { endBtn.textContent = 'Close'; endBtn.className = 'tb-btn end-session-btn'; }
     }
   });
 
-  // Top bar content
-  document.getElementById('topBar-waiting').style.display = (mode === 'waiting') ? 'flex' : 'none';
-  document.getElementById('topBar-live').style.display = (mode === 'live') ? 'flex' : 'none';
-  document.getElementById('topBar-review').style.display = (mode === 'review') ? 'flex' : 'none';
-  document.getElementById('topBar-live-controls').style.display = (mode === 'live') ? 'flex' : 'none';
-
-  // End button text
-  const endBtn = document.getElementById('endBtn');
-  if (mode === 'waiting') { endBtn.textContent = 'Cancel'; endBtn.className = 'tb-btn destructive-ghost'; }
-  else if (mode === 'live') { endBtn.textContent = 'End session'; endBtn.className = 'tb-btn primary'; }
-  else { endBtn.textContent = 'Close'; endBtn.className = 'tb-btn'; }
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    const t = b.textContent.toLowerCase();
+    if (t.includes(mode === 'waiting' ? 'waiting' : mode === 'live' ? 'live' : 'review')) {
+      b.classList.add('active');
+    }
+  });
 }
 
 function handleEndBtn() {
@@ -1470,21 +1648,21 @@ function handleEndBtn() {
 }
 
 function setActiveTool(btn) {
-  document.querySelectorAll('#leftStrip .tool-btn, .bottom-toolbar .tool-btn').forEach(b => b.classList.remove('active'));
+  const shell = btn.closest('.session-shell');
+  if (!shell) return;
+  shell.querySelectorAll('#leftStrip .tool-btn, .bottom-toolbar .tool-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
 }
 
-function toggleStrip() {
-  stripCollapsed = !stripCollapsed;
-  const strip = document.getElementById('leftStrip');
-  const icon = document.getElementById('collapseIcon');
-  if (stripCollapsed) {
-    strip.classList.add('collapsed');
-    icon.setAttribute('points', '9 18 15 12 9 6');
-  } else {
-    strip.classList.remove('collapsed');
-    icon.setAttribute('points', '15 18 9 12 15 6');
-  }
+function toggleStrip(ev) {
+  const shell = (ev && ev.currentTarget || ev?.target)?.closest?.('.session-shell') || document.getElementById('sessionShell');
+  if (!shell) return;
+  const collapsed = !stripCollapsedByShell.get(shell);
+  stripCollapsedByShell.set(shell, collapsed);
+  const strip = qInShell(shell, '#leftStrip');
+  const icon = qInShell(shell, '#collapseIcon');
+  if (strip) strip.classList.toggle('collapsed', collapsed);
+  if (icon) icon.setAttribute('points', collapsed ? '9 18 15 12 9 6' : '15 18 9 12 15 6');
 }
 
 function toggleTheme() {
@@ -1493,29 +1671,155 @@ function toggleTheme() {
   document.getElementById('themeBtn').textContent = isDark ? '☀ Light' : '☾ Dark';
 }
 
-function setWidth(w) {
-  isNarrow = (w === 'narrow');
-  const shell = document.getElementById('sessionShell');
-  document.querySelectorAll('.responsive-toggle').forEach(b => b.classList.remove('active'));
-  event.target.classList.add('active');
-  if (isNarrow) {
-    shell.classList.add('narrow');
+function applyShellLayout(shell, layout) {
+  shell.classList.remove('narrow', 'tablet-portrait', 'tablet-landscape');
+  if (layout === 'phone') shell.classList.add('narrow');
+  else if (layout === 'tablet-portrait') shell.classList.add('tablet-portrait');
+  else if (layout === 'tablet-landscape') shell.classList.add('tablet-landscape');
+}
+
+function ensureShellClone() {
+  if (shellClone) return shellClone;
+  const primary = document.getElementById('sessionShell');
+  shellClone = primary.cloneNode(true);
+  shellClone.removeAttribute('id');
+  shellClone.classList.add('session-shell-clone');
+  shellClone.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+  initPropsSheetForShell(shellClone);
+  switchMode(currentMode);
+  return shellClone;
+}
+
+function mountShell(shell, mountEl, layout) {
+  applyShellLayout(shell, layout);
+  mountEl.appendChild(shell);
+}
+
+function setTabletDimensions() {
+  const vp = document.getElementById('tabletViewport');
+  const label = document.getElementById('tabletChromeLabel');
+  if (tabletOrient === 'landscape') {
+    vp.dataset.w = TABLET_LANDSCAPE_W;
+    vp.dataset.h = TABLET_LANDSCAPE_H;
+    if (label) label.textContent = 'iPad Air · 1194×834';
   } else {
-    shell.classList.remove('narrow');
-    closePropsSheet();
-    closeReviewBoard();
+    vp.dataset.w = TABLET_PORTRAIT_W;
+    vp.dataset.h = TABLET_PORTRAIT_H;
+    if (label) label.textContent = 'iPad Air · 834×1194';
   }
 }
 
-// Clone desktop popover into mobile bottom sheet (before interaction wiring)
-(function initPropsSheet() {
-  const popover = document.getElementById('propsPopover');
-  const sheetContent = document.getElementById('propsSheetContent');
-  if (popover && sheetContent) {
+function setTabletOrient(orient, btn) {
+  tabletOrient = orient;
+  document.querySelectorAll('.orient-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  setTabletDimensions();
+  const tabletShell = document.getElementById('tabletMount')?.firstElementChild;
+  if (tabletShell) {
+    applyShellLayout(tabletShell, orient === 'portrait' ? 'tablet-portrait' : 'tablet-landscape');
+    closePropsSheetForShell(tabletShell);
+    closeReviewBoardForShell(tabletShell);
+  }
+  const cloneInTablet = document.getElementById('tabletMount')?.querySelector('.session-shell-clone');
+  if (cloneInTablet) {
+    applyShellLayout(cloneInTablet, orient === 'portrait' ? 'tablet-portrait' : 'tablet-landscape');
+  }
+  updateDeviceScales();
+}
+
+function updateDeviceScales() {
+  document.querySelectorAll('.device-frame-wrap.visible .device-viewport').forEach(vp => {
+    const w = parseInt(vp.dataset.w, 10);
+    const h = parseInt(vp.dataset.h, 10);
+    vp.style.width = w + 'px';
+    vp.style.height = h + 'px';
+    const outer = vp.closest('.device-scale-outer');
+    const inner = vp.parentElement;
+    const availableW = outer ? outer.clientWidth : window.innerWidth - 48;
+    const metaH = document.querySelector('.meta-header')?.offsetHeight || 49;
+    const orientH = document.getElementById('tabletOrientBar')?.classList.contains('visible')
+      ? (document.getElementById('tabletOrientBar').offsetHeight + 12) : 0;
+    const labelH = 28;
+    const maxH = window.innerHeight - metaH - orientH - labelH - 40;
+    const scale = Math.min(availableW / w, maxH / h, 1);
+    vp.style.transform = 'scale(' + scale + ')';
+    if (inner) {
+      inner.style.width = Math.ceil(w * scale) + 'px';
+      inner.style.height = Math.ceil(h * scale) + 'px';
+    }
+  });
+}
+
+function setViewport(view, btn) {
+  currentViewport = view;
+  document.querySelectorAll('.responsive-toggle').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+
+  const stageDesktop = document.getElementById('stageDesktop');
+  const stageDevices = document.getElementById('stageDevices');
+  const phoneWrap = document.getElementById('phoneFrameWrap');
+  const tabletWrap = document.getElementById('tabletFrameWrap');
+  const devicesRow = document.getElementById('devicesRow');
+  const orientBar = document.getElementById('tabletOrientBar');
+  const primary = document.getElementById('sessionShell');
+  const phoneMount = document.getElementById('phoneMount');
+  const tabletMount = document.getElementById('tabletMount');
+
+  getAllShells().forEach(s => {
+    closePropsSheetForShell(s);
+    closeReviewBoardForShell(s);
+  });
+
+  if (view === 'desktop') {
+    stageDesktop.style.display = '';
+    stageDevices.classList.remove('active');
+    phoneWrap.classList.remove('visible');
+    tabletWrap.classList.remove('visible');
+    devicesRow.classList.remove('compare');
+    orientBar.classList.remove('visible');
+    if (primary.parentElement !== stageDesktop) {
+      stageDesktop.appendChild(primary);
+    }
+    applyShellLayout(primary, 'desktop');
+    if (shellClone && shellClone.parentElement) shellClone.remove();
+    return;
+  }
+
+  stageDesktop.style.display = 'none';
+  stageDevices.classList.add('active');
+
+  const showPhone = view === 'phone' || view === 'compare';
+  const showTablet = view === 'tablet' || view === 'compare';
+  phoneWrap.classList.toggle('visible', showPhone);
+  tabletWrap.classList.toggle('visible', showTablet);
+  devicesRow.classList.toggle('compare', view === 'compare');
+  orientBar.classList.toggle('visible', showTablet);
+
+  if (view === 'compare') {
+    mountShell(primary, phoneMount, 'phone');
+    const clone = ensureShellClone();
+    mountShell(clone, tabletMount, tabletOrient === 'portrait' ? 'tablet-portrait' : 'tablet-landscape');
+    switchMode(currentMode);
+  } else if (view === 'phone') {
+    mountShell(primary, phoneMount, 'phone');
+    if (shellClone && shellClone.parentElement) shellClone.remove();
+  } else if (view === 'tablet') {
+    setTabletDimensions();
+    mountShell(primary, tabletMount, tabletOrient === 'portrait' ? 'tablet-portrait' : 'tablet-landscape');
+    if (shellClone && shellClone.parentElement) shellClone.remove();
+  }
+
+  updateDeviceScales();
+}
+
+function initPropsSheetForShell(shell) {
+  const popover = qInShell(shell, '#propsPopover');
+  const sheetContent = qInShell(shell, '.props-sheet-content');
+  if (popover && sheetContent && !sheetContent.innerHTML.trim()) {
     sheetContent.innerHTML = popover.innerHTML;
     sheetContent.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
   }
-})();
+}
 
 // More-styles toggle (desktop popover + mobile sheet)
 document.addEventListener('click', function(e) {
@@ -1532,7 +1836,6 @@ document.addEventListener('click', function(e) {
   btn.textContent = isOpen ? 'More styles ▾' : 'More styles ▲';
 });
 
-// Chip interaction — event delegation covers desktop popover + mobile sheet
 document.addEventListener('click', function(e) {
   const chip = e.target.closest('.chip');
   if (!chip) return;
@@ -1542,70 +1845,81 @@ document.addEventListener('click', function(e) {
   chip.classList.add('selected');
 });
 
-// Stroke preset — delegation
 document.addEventListener('click', function(e) {
   const preset = e.target.closest('.stroke-preset');
   if (!preset) return;
-  document.querySelectorAll('.stroke-preset').forEach(p => p.classList.remove('active'));
+  const shell = preset.closest('.session-shell');
+  (shell || document).querySelectorAll('.stroke-preset').forEach(p => p.classList.remove('active'));
   preset.classList.add('active');
 });
 
-// --- Mobile properties bottom sheet ---
-let propsSheetOpen = false;
-
-function openPropsSheet() {
-  if (!isNarrow) return;
-  propsSheetOpen = true;
-  document.getElementById('propsSheetBackdrop').classList.add('open');
-  document.getElementById('propsBottomSheet').classList.add('open');
-  document.getElementById('propsSheetOpenBtn').classList.add('active');
+function openPropsSheet(ev) {
+  const shell = ev?.currentTarget?.closest('.session-shell');
+  if (!shell || !shellUsesSheetProps(shell)) return;
+  qInShell(shell, '.props-sheet-backdrop')?.classList.add('open');
+  qInShell(shell, '.props-bottom-sheet')?.classList.add('open');
+  qInShell(shell, '.props-sheet-open-btn')?.classList.add('active');
 }
 
-function closePropsSheet() {
-  propsSheetOpen = false;
-  document.getElementById('propsSheetBackdrop').classList.remove('open');
-  document.getElementById('propsBottomSheet').classList.remove('open');
-  document.getElementById('propsSheetOpenBtn').classList.remove('active');
+function closePropsSheet(ev) {
+  const shell = ev?.currentTarget?.closest('.session-shell') || (ev && getAllShells().find(s => qInShell(s, '.props-bottom-sheet.open')));
+  if (shell) closePropsSheetForShell(shell);
+  else getAllShells().forEach(closePropsSheetForShell);
 }
 
-// Swipe-down to dismiss properties sheet
-(function initSheetSwipe() {
-  const handle = document.getElementById('propsSheetHandle');
-  const sheet = document.getElementById('propsBottomSheet');
+function closePropsSheetForShell(shell) {
+  qInShell(shell, '.props-sheet-backdrop')?.classList.remove('open');
+  qInShell(shell, '.props-bottom-sheet')?.classList.remove('open');
+  qInShell(shell, '.props-sheet-open-btn')?.classList.remove('active');
+}
+
+function onCanvasTap(ev) {
+  const shell = ev.currentTarget.closest('.session-shell');
+  if (!shell || !shellUsesSheetProps(shell)) return;
+  if (qInShell(shell, '.props-bottom-sheet.open')) closePropsSheetForShell(shell);
+}
+
+function toggleReviewBoard(ev) {
+  const shell = ev?.currentTarget?.closest('.session-shell');
+  if (!shell) return;
+  const panel = qInShell(shell, '.review-board-panel');
+  if (panel?.classList.contains('open')) closeReviewBoardForShell(shell);
+  else openReviewBoardForShell(shell);
+}
+
+function openReviewBoardForShell(shell) {
+  if (!shellUsesReviewOverlay(shell)) return;
+  qInShell(shell, '.review-board-panel')?.classList.add('open');
+  qInShell(shell, '.review-overlay-backdrop')?.classList.add('open');
+}
+
+function closeReviewBoard(ev) {
+  const shell = ev?.currentTarget?.closest('.session-shell');
+  if (shell) closeReviewBoardForShell(shell);
+  else getAllShells().forEach(closeReviewBoardForShell);
+}
+
+function closeReviewBoardForShell(shell) {
+  qInShell(shell, '.review-board-panel')?.classList.remove('open');
+  qInShell(shell, '.review-overlay-backdrop')?.classList.remove('open');
+}
+
+// Swipe-down to dismiss properties sheet (per shell)
+document.querySelectorAll('.props-sheet-handle').forEach(handle => {
   let startY = 0;
-  handle.addEventListener('touchstart', function(e) { startY = e.touches[0].clientY; }, { passive: true });
-  handle.addEventListener('touchmove', function(e) {
-    if (!propsSheetOpen) return;
-    const dy = e.touches[0].clientY - startY;
-    if (dy > 40) closePropsSheet();
+  const sheet = handle.closest('.props-bottom-sheet');
+  handle.addEventListener('touchstart', e => { startY = e.touches[0].clientY; }, { passive: true });
+  handle.addEventListener('touchmove', e => {
+    if (!sheet?.classList.contains('open')) return;
+    if (e.touches[0].clientY - startY > 40) closePropsSheetForShell(handle.closest('.session-shell'));
   }, { passive: true });
-  sheet.addEventListener('touchstart', function(e) {
-    if (e.target === handle || handle.contains(e.target)) startY = e.touches[0].clientY;
-  }, { passive: true });
-})();
+});
 
-// --- Review board slide-in overlay (mobile) ---
-let reviewBoardOpen = false;
+window.addEventListener('resize', updateDeviceScales);
 
-function toggleReviewBoard() {
-  if (reviewBoardOpen) closeReviewBoard();
-  else openReviewBoard();
-}
-
-function openReviewBoard() {
-  if (!isNarrow) return;
-  reviewBoardOpen = true;
-  document.getElementById('reviewBoardPanel').classList.add('open');
-  document.getElementById('reviewOverlayBackdrop').classList.add('open');
-}
-
-function closeReviewBoard() {
-  reviewBoardOpen = false;
-  document.getElementById('reviewBoardPanel').classList.remove('open');
-  document.getElementById('reviewOverlayBackdrop').classList.remove('open');
-}
-
-// Init dark theme
+// Init
+document.querySelectorAll('.session-shell').forEach(initPropsSheetForShell);
+initPropsSheetForShell(document.getElementById('sessionShell'));
 document.documentElement.setAttribute('data-theme', 'dark');
 document.getElementById('themeBtn').textContent = '☀ Light';
 </script>
