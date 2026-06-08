@@ -133,33 +133,37 @@
 
 > This replaces the raw-markdown notes view from §1. The review page now shows **editable structured fields** (topics / assessment / Plan / links — homework folded into Plan per Sarah) with **Save to notes**, **Cancel and delete session data**, and a guarded **Regenerate**. Auto-notes land as a **DRAFT** `SessionNote` and only become institutional memory on Save.
 
-- [ ] End a session → review page shows **editable fields** (topics/assessment/Plan/links), NOT a markdown blob
+- [x] End a session → review page shows **editable fields** (topics/assessment/Plan/links), NOT a markdown blob
   ```
-  → Result:
+  → Result: Shows the editable fields again.  Since there was already a form for this, make sure we don't end up with duplicate forms.  Either the transcription or note accuracy might need a little work.  I explicitly said "my assessment is, you're bad at math" and you can see that it put "understands basic addition, needs reinforcement on addition accuracy"  I don't know what I said that justifies that first part.  The plan/Next steps is basically right.  Topics covered is technically right, but we did go specifically over 1+1
+
+  There wasn't really a "loading" skeleton with blurs, all the info just appeared. So if the blurs should be there I haven't seen them yet.
+
+  Okay...these notes are actually really bad. I did another test for one of the other steps and the notes are just....bad
   ```
-- [ ] **Save to notes** → the session appears in the student's **notes list** (`/admin/students/[id]/notes`) as a finalized note
+- [x] **Save to notes** → the session appears in the student's **notes list** (`/admin/students/[id]/notes`) as a finalized note
   ```
-  → Result:
+  → Result: Pass, but I just noticed the share page says "Notes shared by Sarah Peterson" is her name hard coded on that page???
   ```
-- [ ] Before Save, the auto-draft is **NOT visible on the parent share page** (open a share link → draft absent until saved)
+- [x] Before Save, the auto-draft is **NOT visible on the parent share page** (open a share link → draft absent until saved)
   ```
-  → Result:
+  → Result:pass
   ```
-- [ ] **Regenerate** is **confirm-gated** and **non-destructive** (declining keeps the current notes; a failed regen does not blank them)
+- [x] **Regenerate** is **confirm-gated** and **non-destructive** (declining keeps the current notes; a failed regen does not blank them)
   ```
-  → Result:
+  → Result:Pass, but I don't like javascript alert() calls, the confirm gate should be part of the site. Was the prompt already changed? I think I got the exact same generation.
   ```
-- [ ] **Cancel and delete session data** → confirm dialog reads *"Are you sure you want to delete this session and all related data?"* → session + its data are removed
+- [x] **Cancel and delete session data** → confirm dialog reads *"Are you sure you want to delete this session and all related data?"* → session + its data are removed
   ```
-  → Result:
+  → Result:Pass, but again, javascript alerts are super ugly and imo unprofessional. There is a bug, the page stays on the end session screen and never stops saying "Deleting..." Oh, apparently it was a weird timeout, actually got an "An unexpected response..." error message.  Should we even bother the tutor with a failed delete of the session data like this?  Shouldn't we redirect them back to the student detail regardless and let our cleanup crons handle unsaved orphan data?
   ```
-- [ ] Delete is **denied on an already-saved (finalized) note** (you can't nuke a session whose note is READY/SENT)
+- [x] Delete is **denied on an already-saved (finalized) note** (you can't nuke a session whose note is READY/SENT)
   ```
-  → Result:
+  → Result: I think your understanding is out of date or the site has conflicting systems in place.  There is no more concept of "sending" notes.  The parent has access as soon as the tutor saves it, at least in the current design.
   ```
-- [ ] **B1 (privacy):** sending a **parent update email** for a session with an **unsaved draft** does NOT email or count the draft (only saved/READY notes go out)
+- [x] **B1 (privacy):** sending a **parent update email** for a session with an **unsaved draft** does NOT email or count the draft (only saved/READY notes go out)
   ```
-  → Result:
+  → Result: The whole concept of a draft was supposed to be removed. As soon as a tutor saves the notes the parent can see it.  The only system that was supposed to be in place was notes being marked as "new".
   ```
 
 **Local gate (required before merge):** run `npm run test:wb-sync` locally (Docker relay) — `TutorNotesSection.tsx` is whiteboard-surface.
