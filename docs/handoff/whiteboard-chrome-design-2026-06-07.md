@@ -2,11 +2,11 @@
 
 > **Purpose:** Durable design artifact for the custom Mynk whiteboard chrome layer — toolbar, properties, session controls — driving Excalidraw via `excalidrawAPI`. Executors build Phase 1+ from this doc.
 >
-> **Requirements input (67 reqs):** [`whiteboard-chrome-requirements.md`](whiteboard-chrome-requirements.md)
+> **Requirements input (68 reqs):** [`whiteboard-chrome-requirements.md`](whiteboard-chrome-requirements.md)
 >
 > **Branch / sequencing:** Build on **`v1-redesign`**. Whiteboard chrome is a **pre-master gate** for the V1 reveal (`v1-redesign → master`). Master stays frozen; urgent Sarah fixes cherry-pick to `master` in isolation (no UI feature flag).
 >
-> **Last ratified:** 2026-06-07 (Opus orchestrator + Andrew). **Audit dispositions ratified 2026-06-08** — P1.2 toolbar design unblocked. Feasibility spike on `@excalidraw/excalidraw` **0.18.1** (YELLOW = go; Phase 0 POC green 2026-06-08).
+> **Last ratified:** 2026-06-07 (Opus orchestrator + Andrew). **Audit dispositions ratified 2026-06-08** — P1.2 toolbar design unblocked. **Freedraw-latency fix folded into P1.1 as Phase-1 acceptance gate (Sonnet-tier)** — Andrew 2026-06-08. Feasibility spike on `@excalidraw/excalidraw` **0.18.1** (YELLOW = go; Phase 0 POC green 2026-06-08).
 
 ---
 
@@ -201,9 +201,29 @@ POC scope is intentionally **narrow** — no relay, no multi-page sync, no AV. P
 
 **Gate:** Phase 1 dispatch **blocked** until Andrew smokes POC preview green.
 
-### Phase 1 — Tutor-desktop chrome
+### Phase 1 — Tutor-desktop chrome (P1.1)
 
 **Goal:** Hybrid layout (§3) on `WhiteboardWorkspaceClient` tutor path; drawing defaults; consolidated pulldowns; dismissible properties popover.
+
+**Executor tier (Andrew 2026-06-08):** **Sonnet** — P1.1 now carries **fragile sync hot-path** work (freedraw-latency fix folded in as Phase-1 acceptance gate below). Default Composer dispatch is insufficient for auth/sync-boundary + concurrency reasoning on this surface.
+
+#### P1.1 acceptance gate: freedraw-latency fix (folded in)
+
+**Decision (Andrew 2026-06-08):** The freedraw draw-latency fix is **folded into the P1.1 whiteboard-chrome build as a Phase-1 acceptance gate** — **not** a standalone fix and **not** a deferred follow-up.
+
+**Symptom:** ~250ms freedraw lag on `v1-redesign` (stroke trails cursor); Phase 0 chrome POC was instant.
+
+**Root cause (one-liner):** Pre-existing sync hot-path work the POC skipped — **not** chrome. **Primary:** `preserveImageAssetUrlsOnSceneWrite` (`src/lib/whiteboard/preserve-image-asset-urls.ts`) deep-clones the **entire** scene on **every** pointer-move inside Excalidraw's `onChange` (`handleExcalidrawChange` in `WhiteboardWorkspaceClient.tsx` ~L2975) — O(N) per point, blocks paint; runs **solo** (always). **Secondary:** v3 document emit every 50ms (`useTutorLiveDocumentWire.ts` `emitDocument`) re-clones + `JSON.stringify`s the whole multi-page doc; recorder `flushPendingDiff` every 100ms canonicalizes + diffs whole scene (`useWhiteboardRecorder.ts`, `excalidraw-adapter.ts`); recorder `pushEvent` `setState` storm forces full workspace re-render while recording. Minor: `onLocalElementSnapshot` O(N) per move.
+
+**Recommended fix — Option A (low-risk, mandatory):** Stop cloning per pointer-move — assign `pageDataRef[pageId] = elements` (ref, no clone) on `onChange`; run `preserveImageAssetUrlsOnSceneWrite` **only** when building wire/checkpoint payloads (`getTutorDocumentPagesSnapshot`, `buildBoardDocumentForCheckpoint`). Excalidraw still owns the live canvas; deferral affects buckets/wire only, not paint.
+
+**Mandatory companion — Option E:** Add a `pointerup`/idle flush (`flushThrottledFrameNow()` + `flushDocumentBroadcastNow()`) so widening/deferring throttled work can **never** drop the last stroke segment. Must respect `applyingRemoteToCanvasRef` / `pageSwitchProgrammaticRef` guards.
+
+**Optional follow-on (lower priority — only if needed after A+E):** Slim v3 emit (avoid triple-clone); decouple recorder UI `setState` from `pushEvent` (1Hz footer); incremental freedraw diff.
+
+**Invariants the fix must respect:** All **22 whiteboard sync invariants** (§2.3) — especially P5 image `assetUrl` preservation must still run before any peer-visible snapshot/v3 send; recorder event-log replay fidelity; monotonic rev; throttle-not-debounce continuous-gesture cadence.
+
+**Test gates:** `npm run test:wb-sync` green **and** `use-tutor-live-document-wire` cadence tests green.
 
 | Criterion | Pass |
 |-----------|------|
@@ -212,7 +232,8 @@ POC scope is intentionally **narrow** — no relay, no multi-page sync, no AV. P
 | Properties | Basics inline, More expand, outside-click dismiss (PP-02, PP-04) |
 | Drawing defaults | Fresh session canvas opens with **`currentItemRoughness: 0`** (architect / sloppiness off), **sharp edges** (`currentItemRoundness` = sharp — implementer confirms exact value shape at build time), **`currentItemStrokeWidth` = thinnest preset** (DD-01–03); popover presets include heavier + materially thinner options (DD-04) |
 | Session | Share link, AV controls, inserts in chrome (TU-04, TU-07, TU-08) |
-| Sync | `npm run test:wb-sync` green; 22 invariants unbroken (§2.3) |
+| **Draw latency** | **PR-01:** Freedraw instant (POC parity); hot-path fix landed per Option A + Option E above; no regression vs Phase 0 POC |
+| Sync | `npm run test:wb-sync` green; 22 invariants unbroken (§2.3); wire cadence tests green |
 | Keyboard | TU-11 surface routing defined for tutor-desktop |
 | Visual | Professional polish bar (HARD quality bar; TU-02) |
 | Theme | **TU-12 + TU-13:** tutor-desktop chrome readable in **light and dark**; Excalidraw `theme` + board bg follow app-selected theme; whiteboard-local theme toggle on chrome |
@@ -281,7 +302,7 @@ From requirements doc — **not** closed by this design pass:
 | Doc | Role |
 |-----|------|
 | [`whiteboard-excalidraw-function-audit-2026-06-08.md`](whiteboard-excalidraw-function-audit-2026-06-08.md) | **Pre-hide audit** — full Excalidraw 0.18.1 function inventory, silently-lost list, keyboard-only survivors, candidate new requirements |
-| [`whiteboard-chrome-requirements.md`](whiteboard-chrome-requirements.md) | 67 requirements (incl. TM-09, TM-10, TU-12–TU-14) |
+| [`whiteboard-chrome-requirements.md`](whiteboard-chrome-requirements.md) | 68 requirements (incl. TM-09, TM-10, TU-12–TU-14, PR-01) |
 | [`WHITEBOARD-STATUS.md`](../WHITEBOARD-STATUS.md) | Build status + Sarah UX table |
 | [`whiteboard-sync-redesign-2026-05-27.md`](whiteboard-sync-redesign-2026-05-27.md) | Sync invariants P1–P8, I1–I4 |
 | [`whiteboard-regression-net-design-2026-05-30.md`](whiteboard-regression-net-design-2026-05-30.md) | Real-browser regression net |

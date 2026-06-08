@@ -4,7 +4,7 @@
 >
 > **Sequencing (ratified Andrew 2026-06-07/08):** Whiteboard chrome is a **pre-master gate** for the V1 reveal — build on `v1-redesign` before `v1-redesign → master`. Master cut = Sarah reveal (`tutoring-notes.vercel.app` / `usemynk.com` share the same production deployment on `master`; no UI-skin feature flag). The reveal must be one cohesive site, not polished chrome around still-janky Excalidraw native UI.
 >
-> **Last consolidated:** 2026-06-08 (audit dispositions ratified; TU-13/TU-14/TM-10 added; PP-04/ST-05 expanded). Prior: 2026-06-07 TU-12 theme parity, TU-11 keyboard surface routing. **Design doc (ratified forks + phasing):** [`whiteboard-chrome-design-2026-06-07.md`](whiteboard-chrome-design-2026-06-07.md). **Audit:** [`whiteboard-excalidraw-function-audit-2026-06-08.md`](whiteboard-excalidraw-function-audit-2026-06-08.md).
+> **Last consolidated:** 2026-06-08 (audit dispositions ratified; TU-13/TU-14/TM-10 added; PP-04/ST-05 expanded; **PR-01** freedraw-latency gate folded into P1.1). Prior: 2026-06-07 TU-12 theme parity, TU-11 keyboard surface routing. **Design doc (ratified forks + phasing):** [`whiteboard-chrome-design-2026-06-07.md`](whiteboard-chrome-design-2026-06-07.md). **Audit:** [`whiteboard-excalidraw-function-audit-2026-06-08.md`](whiteboard-excalidraw-function-audit-2026-06-08.md).
 
 ---
 
@@ -150,6 +150,12 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 | **TU-12** | **Theme parity: Mynk chrome + Excalidraw theme follow app light/dark selection.** Toolbar, pulldowns, properties popover, page strip, and bottom bars styled for **both** light and dark via v1 tokens (`tutor-desktop` + `student-mobile-first`). Site theme defaults to **OS/system** until user explicitly picks light or dark (A′). Excalidraw `theme` prop follows the **app-selected** theme. **Board background follows theme** — no native Excalidraw canvas-bg control (M-10 dropped; NR-04 resolved). Not the dev-only `?theme=` param. | (ii) | BACKLOG § V1 redesign; audit M-09/M-10 ratified 2026-06-08 |
 | **TU-13** | **Whiteboard-local theme toggle** — a small theme toggle **on the whiteboard chrome itself** as an escape hatch (in addition to the global nav toggle). Lets tutor/student flip board theme without leaving the session surface. | (ii) | Audit NR-04 ratified 2026-06-08 |
 | **TU-14** | **Every function has a visible button affordance.** No whiteboard function reachable **only** via right-click or **only** via hotkey. Right-click and keyboard shortcuts are **accelerators**, not sole paths. Includes z-order (send-to-back / bring-to-front via buried/More buttons **and** context-menu/long-press), delete-selected, and all style controls. **HARD z-order default (NR-11):** PDF pages deepest-z; all drawn elements render above PDFs. Buried-in-overflow/More is acceptable; button-less is not. Standing principle (Andrew 2026-06-08). | (ii) | Audit P-16–P-19/NR-11 ratification 2026-06-08; pairs with TM-10 |
+
+### Performance / draw latency (sync hot path)
+
+| ID | Requirement | Tag | Source |
+|----|-------------|-----|--------|
+| **PR-01** | **Freedraw must not regress draw latency** — pencil stroke must track the cursor instantly (Phase 0 POC parity). P1.1 chrome build **must land the sync hot-path fix** (Option A: stop per-pointer-move scene clone; defer `preserveImageAssetUrlsOnSceneWrite` to wire/checkpoint payloads only; Option E: `pointerup`/idle flush so last stroke segment is never dropped). Must respect all 22 sync invariants (esp. P5 `assetUrl` preservation before peer-visible snapshots). Gates: `npm run test:wb-sync` + `use-tutor-live-document-wire` cadence tests. **P1.1 executor tier: Sonnet** (Andrew 2026-06-08). | app-bug + (ii) | Andrew 2026-06-08; [`whiteboard-chrome-design-2026-06-07.md`](whiteboard-chrome-design-2026-06-07.md) §6 P1.1 acceptance gate; `BACKLOG.md` freedraw-latency row |
 
 ---
 
@@ -305,4 +311,5 @@ Broad case-insensitive ripgrep across **`docs/`** and **`docs/handoff/`** for wh
 | Screen real estate / responsive | 12 |
 | Student-WB-specific | 6 |
 | Tutor-WB-specific | 14 |
-| **Total** | **67** |
+| Performance / draw latency | 1 |
+| **Total** | **68** |
