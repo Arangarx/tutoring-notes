@@ -115,13 +115,15 @@ Custom chrome sits **on top of** the shipped sync stack. The architecture map id
 
 ### 3.3 Drawing defaults (Phase 1)
 
-Ship with tutor-desktop chrome (DD-01–04):
+Ship with tutor-desktop chrome (DD-01–04). Concrete `appState` on session start (`initialData.appState` + `updateScene`):
 
-- Roughness = **architect** (not sketchy)
-- Edges = **sharp**
-- Default stroke **thinner** + a materially thinner preset (DD-03, DD-04)
+| Field | Value | Requirement |
+|-------|-------|-------------|
+| `currentItemRoughness` | **0** | Architect — sloppiness OFF (DD-01) |
+| `currentItemRoundness` | **sharp** (confirm exact value shape at build time — spike flagged for runtime) | Sharp edges, no rounding (DD-02) |
+| `currentItemStrokeWidth` | **thinnest preset** | Default pen = THINNEST (DD-03); properties popover presets include heavier + materially thinner options (DD-04) |
 
-Set via `initialData.appState` + `updateScene` on session start; expose in properties popover.
+Expose stroke width / roughness / roundness in properties popover.
 
 ---
 
@@ -191,7 +193,7 @@ POC scope is intentionally **narrow** — no relay, no multi-page sync, no AV. P
 | Layout | Top bar + collapsible left strip + popover per wireframe |
 | Tools | Sarah order + two shape pulldowns (TB-01–03, PU-01) |
 | Properties | Basics inline, More expand, outside-click dismiss (PP-02, PP-04) |
-| Defaults | Architect roughness, sharp edges, thinner stroke (DD-01–04) |
+| Drawing defaults | Fresh session canvas opens with **`currentItemRoughness: 0`** (architect / sloppiness off), **sharp edges** (`currentItemRoundness` = sharp — implementer confirms exact value shape at build time), **`currentItemStrokeWidth` = thinnest preset** (DD-01–03); popover presets include heavier + materially thinner options (DD-04) |
 | Session | Share link, AV controls, inserts in chrome (TU-04, TU-07, TU-08) |
 | Sync | `npm run test:wb-sync` green; 22 invariants unbroken (§2.3) |
 | Keyboard | TU-11 surface routing defined for tutor-desktop |

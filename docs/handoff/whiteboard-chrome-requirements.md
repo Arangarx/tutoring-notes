@@ -78,10 +78,10 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 
 | ID | Requirement | Tag | Source |
 |----|-------------|-----|--------|
-| **DD-01** | Default **sloppiness / roughness = architect** (clean hand-drawn, not sketchy). | (i) | Sarah-Chat L17; orchestrator U7 |
-| **DD-02** | Default **edges = sharp** (not round). | (i) | Sarah-Chat L17; orchestrator U8 |
-| **DD-03** | **Thinner default pen stroke** — current strokes too thick on desktop tutor. | (i) + (ii) | 2026-06-06 U6; BACKLOG |
-| **DD-04** | Stroke-width presets include a **materially thinner** option for math annotation without requiring zoom. | (i) + (ii) | 2026-06-06 U6 acceptance |
+| **DD-01** | Default **sloppiness / roughness = architect** (= `currentItemRoughness: 0`, sloppiness OFF) — clean hand-drawn, not sketchy. | (i) | Sarah-Chat L17; orchestrator U7 |
+| **DD-02** | Default **edges = sharp** (= sharp edges / no rounding; `currentItemRoundness` = sharp). | (i) | Sarah-Chat L17; orchestrator U8 |
+| **DD-03** | Default pen stroke = **THINNEST preset** (= `currentItemStrokeWidth` thinnest preset) — current strokes too thick on desktop tutor. | (i) + (ii) | 2026-06-06 U6; BACKLOG |
+| **DD-04** | Default is thinnest (DD-03); stroke-width **presets** include standard heavier options plus a **materially thinner** option for math annotation without requiring zoom. | (i) + (ii) | 2026-06-06 U6 acceptance |
 | **DD-05** | Default **PDF zoom-to-fit** on insert (per-page board pages); student inherits via follow — design whether fit targets tutor vs student viewport (open). | (i) + layout | BACKLOG PDF-fit row; pdf bootstrapper |
 
 ### Touch / mobile-tablet behavior
