@@ -313,3 +313,92 @@ Broad case-insensitive ripgrep across **`docs/`** and **`docs/handoff/`** for wh
 | Tutor-WB-specific | 14 |
 | Performance / draw latency | 1 |
 | **Total** | **68** |
+
+---
+
+## Ratified 2026-06-08 (Andrew) — Session shell + recording model decisions
+
+> **Context:** These decisions were ratified during the design-pass session for the whiteboard "session shell" redesign. They supersede, clarify, or extend prior requirements. The session shell design doc capturing these in full is [`whiteboard-session-shell-design-2026-06-08.md`](whiteboard-session-shell-design-2026-06-08.md).
+
+### A. Session shell = ONE shell, THREE modes
+
+The whiteboard session UI is a **single shell** with three operating modes:
+
+1. **Waiting room** (green room) — pre-session A/V verification and admit flow.
+2. **Live board** — active tutoring session with full whiteboard chrome.
+3. **Review** — post-session notes review and optional video replay.
+
+End-session auto-transitions the same shell from **live → review in place** — no navigation away to a separate page. All three modes must be designed together as a coherent system. This supersedes any prior notion of a separate post-session page.
+
+### B. Waiting room (green room) — Teams/Meet-style
+
+The waiting room is where A/V permissions are granted, sound+video are verified, and devices are picked — **before** entering the board. Key properties:
+
+- Teams/Google Meet admit flow pattern.
+- Session timer starts **only when the student leaves the waiting room** — not on session create.
+- The live board is therefore **clean** — no permission prompts, no big audio panel at entry.
+- A/V options on the live board are **drill-down only** (devices chosen in waiting room).
+
+### C. Recording model — structurally gated, NO tutor attestation
+
+| Prior behavior | Ratified replacement |
+|---|---|
+| Tutor recording-consent attestation modal | **REMOVED** — parent approval upstream makes it redundant |
+| In-session "Start recording" button | **REMOVED** — no such button on the live board |
+| Trust-based recording enablement | **STRUCTURAL GATING** — recording capability is architecturally impossible without the correct gate satisfied |
+
+**Gate definitions:**
+
+- **Remote session:** recording is impossible unless the student is actually connected through the approved flow. The student's presence is the gate.
+- **Solo session (NEW — tutor + child physically together, single device, no remote student join):** tutor must explicitly enable "solo recording mode" in the waiting room before entering the board. There is no way to record a physically-present child without enabling this mode.
+
+**Symmetric consent:** Consent gates capture SYMMETRICALLY — including the tutor's own stream. In a solo session the child may be in frame on the tutor's camera. If the parent has not approved VIDEO recording, the tutor's video stream cannot be recorded either. Consent governs "what may be captured on this physical device, whoever is in front of it" — not just "what we capture from the student side."
+
+**Known edge case (low-likelihood, design acknowledgment):** A student could theoretically connect remotely to unlock recording capability, then sit beside the tutor physically. Design must not make this easy or encouraged. Do not rely on tutor goodwill. The solo-mode gate + structural impossibility in the remote flow are the primary defenses.
+
+### D. Consent-aware now, enforcement shipped later
+
+Design the board and recording to **honor consent flags now** — do not auto-capture audio if `allowAudioRecording` is off; do not capture video if `allowVideoRecording` is off. This prevents baking in "always record" behavior that would require unwinding later. The parent-facing consent management UI is a separate gate. Wire enforcement when the consent toggles ship. The recording code must read and respect these flags from session start.
+
+### E. ONE responsive board, not a separate student design
+
+**Prior position (RETRACTED):** "fundamentally different student board."
+
+**Ratified:** One responsive board. The real axis is **screen size** (phone / tablet / PC). Tutor vs student is a different **control set** on the same board surface, not a separate design. Full touch parity — students draw on phone/tablet. The mobile palette-space + dismissal problem MUST be solved; see PP-02/PP-03/TM-01.
+
+### F. A/V controls placement
+
+- **Mic-mute** and **video-on/off** are **top-level always-visible toggles**, riding on or next to the draggable video tile (like every modern A/V app — Zoom, Meet, Teams).
+- **Device-switching** is drill-down only (devices were already chosen in the waiting room).
+- The video tile is **draggable**.
+- The properties panel is **draggable AND closable**.
+
+### G. Drawing defaults — sharp/clean by default
+
+- Default: **thinnest pen, sharp/angular** (sloppiness OFF, sharp edges, thin stroke).
+- **All Excalidraw styles remain available** — none dropped. But the sharpest/cleanest options are the DEFAULT.
+- Style options are **tiered**: top-level inline → one-tap in properties popover → buried in More styles drawer.
+- **Laser pointer is V1 and top-level reachable** (Sarah specifically loved it).
+- **PDFs are deepest Z** — all drawn strokes render above PDFs at all times. Hard architectural default.
+
+### H. Every function has a button AND a hotkey
+
+No whiteboard function is reachable **only** via right-click or **only** via hotkey. Right-click context menus and keyboard shortcuts are accelerators / enhancements — never the **sole** access path. Full keyboard hotkey coverage; Ctrl-Z/Ctrl-Y must remain working. Do NOT assume: (a) the user has a right mouse button, (b) the user has a function key mapped as right-click, (c) the user is on a keyboard at all. Buried-in-overflow is acceptable; button-less is not. Reinforces **TU-14**.
+
+### I. Theme — OS-default, token-driven, no hardcoding
+
+Site honors OS color scheme by default until the user explicitly chooses light/dark (A′ theme plumbing is already merged). Excalidraw inherits the site mode. A small theme toggle on the whiteboard chrome itself is required (TU-13). All chrome components are theme-agnostic and token-driven per `.cursor/rules/both-theme-components.mdc` — **no hardcoded light/dark branching in component code**.
+
+### J. Freedraw latency — hard acceptance criterion
+
+The live board must draw with no perceptible lag (Phase 0 POC was instant). The P1.1 chrome build carries the freedraw-latency hot-path fix (PR-01) as an acceptance gate. The root cause is `preserveImageAssetUrlsOnSceneWrite` deep-cloning the scene on every pointer-move. Fix: defer this to wire/checkpoint payloads only; add `pointerup`/idle flush (Option A + Option E in design doc). This is a **HARD** acceptance criterion — the chrome does not ship if freedraw lags.
+
+### K. Ghosted peer viewport bounds — NEW QoL feature
+
+Since the tutor view is large and the student may be looking at a different area of the board, render a **ghosted rectangle on the canvas** showing what the other side is currently looking at (their viewport bounds). The viewport-sync plumbing already exists (`pvs` log prefix). This is a new board element in the design.
+
+**Build-tier recommendation:** `whiteboard-session-shell-design-2026-06-08.md` § Ghost Bounds. Short answer: **Gate-A fast-follow** (not V1 core) — the plumbing exists, the rendering is purely cosmetic, but it is also additive work that should not delay the P1.1 chrome ship. Include in the design; defer implementation to the first polish sprint post-chrome.
+
+---
+
+> **Design artifact:** [`whiteboard-session-shell-design-2026-06-08.md`](whiteboard-session-shell-design-2026-06-08.md) — full session shell design (waiting room + live board + review + HTML mock) authored from these ratified decisions.
