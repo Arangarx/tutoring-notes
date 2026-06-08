@@ -112,7 +112,12 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   and is shared across instances),
   `nsi` (notes-session-integration bridge — DRAFT `SessionNote` auto-creation/update
   at reduce completion, Save/finalize DRAFT→READY, delete-session-and-data; every
-  transition writes `[nsi] wbsid=<sessionId> action=<action> ...`). See
+  transition writes `[nsi] wbsid=<sessionId> action=<action> ...`),
+  `rol` (JWT role-refresh — auth-options jwt callback
+  periodic DB re-check; writes `[rol] sub=<id> role_corrected role=<old>-><new>` when
+  stale role is corrected, `[rol] sub=<id> refresh=account_deleted fail_closed` when
+  the DB row is missing, `[rol] sub=<id> refresh_error fail_open` on transient DB error).
+  See
   [docs/RECORDER-LIFECYCLE.md](docs/RECORDER-LIFECYCLE.md) for the
   registry.- **Migrations are additive.** Production runs on Neon; never drop or
   rename a column without a multi-step migration.

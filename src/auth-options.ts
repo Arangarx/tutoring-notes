@@ -3,11 +3,15 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import type { AdminRole } from "@prisma/client";
 import { env } from "@/lib/env";
-import { getAdminByEmail, hasAdminUsers, verifyPassword } from "@/lib/auth-db";
+import { getAdminByEmail, getAdminById, hasAdminUsers, verifyPassword } from "@/lib/auth-db";
 import {
   isPlaywrightHarnessActive,
   isPlaywrightHarnessAdminEmail,
 } from "@/lib/playwright-harness";
+
+// Re-check role + isTestAccount from DB at most once per this interval per active session.
+// Tradeoff: a role change in the DB propagates to active tokens within 5 min.
+const ROLE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 // Google OAuth provider is only included when both credentials are present.
 // CredentialsProvider remains available at all times for password logins and
@@ -150,6 +154,60 @@ export const authOptions: NextAuthOptions = {
       // twoFactorVerified: once set to true by mintTwoFactorVerifiedSession(),
       // it persists across refreshes here (no code clears it — the flag is only
       // cleared by a full sign-out which issues a new session).
+
+      // Fix B — role re-fetch on refresh (rol log prefix; registered in AGENTS.md § Conventions).
+      //
+      // On token refreshes (user absent, account absent) we re-read role + isTestAccount
+      // from the DB so that a DB change (e.g. role promotion/demotion) propagates within
+      // ROLE_REFRESH_INTERVAL_MS without requiring an explicit re-login.
+      //
+      // Skip conditions (do NOT re-fetch when):
+      //   - Initial sign-in: `user` or `account` is present — already handled above.
+      //   - Impersonation token: `token.isImpersonating === true` — the token intentionally
+      //     carries the impersonation TARGET's role; the exit path (mintAdminSession) re-mints
+      //     correctly. Re-fetching by sub would wrongly overwrite the target's role with the
+      //     real admin's DB role.
+      //   - Legacy env-only admin: sub === "admin" — no DB row exists; skip to avoid 404.
+      //
+      // Throttle: re-fetch at most once per ROLE_REFRESH_INTERVAL_MS (stored in `_roleCheckedAt`
+      // token claim). Tradeoff: role changes propagate within 5 min, not instantly. Acceptable
+      // for this low-traffic app; tighten the interval if near-instant propagation is required.
+      //
+      // Fail-closed on deleted accounts (DB returns null): clear token.sub so middleware
+      // treats the session as unauthenticated and redirects to /login.
+      // Fail-open on transient DB errors: preserve the existing token to avoid mass
+      // session invalidation during DB outages.
+      if (!user && !account && token.sub && token.sub !== "admin" && !token.isImpersonating) {
+        const now = Date.now();
+        const lastCheck = (token._roleCheckedAt as number | undefined) ?? 0;
+        if (now - lastCheck >= ROLE_REFRESH_INTERVAL_MS) {
+          try {
+            const dbAdmin = await getAdminById(token.sub);
+            if (!dbAdmin) {
+              console.log(`[rol] sub=${token.sub} refresh=account_deleted fail_closed`);
+              // Fail closed: clear identity so middleware treats this as unauthenticated.
+              token.sub = undefined;
+            } else {
+              const roleChanged = dbAdmin.role !== (token.role as string | undefined);
+              const testChanged = dbAdmin.isTestAccount !== (token.isTestAccount as boolean | undefined);
+              if (roleChanged || testChanged) {
+                console.log(
+                  `[rol] sub=${token.sub} role_corrected` +
+                    (roleChanged ? ` role=${String(token.role)}->${dbAdmin.role}` : "") +
+                    (testChanged ? ` isTestAccount=${String(token.isTestAccount)}->${String(dbAdmin.isTestAccount)}` : "")
+                );
+              }
+              token.role = dbAdmin.role;
+              token.isTestAccount = dbAdmin.isTestAccount;
+              token._roleCheckedAt = now;
+            }
+          } catch (err) {
+            // Transient DB error: fail open (keep existing token) to avoid mass sign-out.
+            console.error(`[rol] sub=${token.sub} refresh_error fail_open`, err);
+          }
+        }
+      }
+
       return token;
     },
 

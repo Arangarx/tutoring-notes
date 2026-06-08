@@ -8,7 +8,7 @@
  */
 
 import { notFound } from "next/navigation";
-import { assertIsAdmin } from "@/lib/impersonation";
+import { assertAdminOrNotFound } from "@/lib/impersonation";
 import {
   isDevToolsEnabled,
   listFixtureTutors,
@@ -26,7 +26,7 @@ export default async function DevToolsPage() {
   }
 
   // Guardrail 2: auth gate — operator session only.
-  await assertIsAdmin();
+  await assertAdminOrNotFound();
 
   const [tutors, families] = await Promise.all([listFixtureTutors(), listFixtureFamilies()]);
 

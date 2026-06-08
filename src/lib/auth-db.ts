@@ -12,6 +12,14 @@ export async function getAdminByEmail(email: string) {
   return db.adminUser.findUnique({ where: { email: email.trim().toLowerCase() } });
 }
 
+/** Fetch minimal role fields by id — used by the JWT refresh path in auth-options. */
+export async function getAdminById(id: string) {
+  return db.adminUser.findUnique({
+    where: { id },
+    select: { id: true, role: true, isTestAccount: true },
+  });
+}
+
 export async function verifyPassword(plain: string, hash: string | null): Promise<boolean> {
   if (!hash) return false;
   return bcrypt.compare(plain, hash);

@@ -19,7 +19,7 @@
  * alias so existing callers compile without changes.
  */
 
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { encode } from "next-auth/jwt";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
@@ -93,6 +93,30 @@ export async function assertIsAdmin(): Promise<{ adminId: string; email: string 
  * Will be removed when callers are updated.
  */
 export const assertIsRealAdmin = assertIsAdmin;
+
+/**
+ * Page-level guard for admin-only pages.
+ *
+ * Resolves normally for ADMIN sessions; calls notFound() (404 boundary) when
+ * the session is authenticated but lacks the ADMIN role (e.g. TUTOR); re-throws
+ * any unexpected error.
+ *
+ * Use ONLY at the top of admin-only page components. Do NOT use in server
+ * actions — mutations must throw so callers receive an error, not a 404 signal.
+ *
+ * Security contract: WHO is authorized is unchanged vs assertIsAdmin().
+ * This only changes HOW the denial is surfaced on page loads.
+ */
+export async function assertAdminOrNotFound(): Promise<{ adminId: string; email: string }> {
+  try {
+    return await assertIsAdmin();
+  } catch (err) {
+    if (err instanceof ImpersonationForbiddenError) {
+      notFound();
+    }
+    throw err;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Session cookie helpers
