@@ -112,7 +112,7 @@ Supersedes the 2026-06-06 PM/AM smoke queues and open DECISION bullets for trans
 
 **Deferred from transport slice (intentional):** end-session sweep → **slice 3** (guarded `handleEndSession`).
 
-**Superseded runbooks:** [`MORNING-RUNBOOK-2026-06-07.md`](MORNING-RUNBOOK-2026-06-07.md), [`RETURN-RUNBOOK-2026-06-06-PM.md`](RETURN-RUNBOOK-2026-06-06-PM.md) — smoke items complete; this file is canonical.
+**Superseded runbooks:** `MORNING-RUNBOOK-2026-06-07.md` + `RETURN-RUNBOOK-2026-06-06-PM.md` — smoke items complete; **archived to `docs/archive/handoff/` (cold storage) 2026-06-07**. Live smoke runbook: [`SMOKE-RUNBOOK-2026-06-07.md`](SMOKE-RUNBOOK-2026-06-07.md).
 
 ---
 
