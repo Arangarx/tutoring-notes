@@ -4,7 +4,7 @@
 >
 > **Sequencing (ratified Andrew 2026-06-07/08):** Whiteboard chrome is a **pre-master gate** for the V1 reveal — build on `v1-redesign` before `v1-redesign → master`. Master cut = Sarah reveal (`tutoring-notes.vercel.app` / `usemynk.com` share the same production deployment on `master`; no UI-skin feature flag). The reveal must be one cohesive site, not polished chrome around still-janky Excalidraw native UI.
 >
-> **Last consolidated:** 2026-06-08 (audit dispositions ratified; TU-13/TU-14/TM-10 added; PP-04/ST-05 expanded; **PR-01** freedraw-latency gate folded into P1.1; **TM-11** mobile palette-dismissal hard requirement). Prior: 2026-06-07 TU-12 theme parity, TU-11 keyboard surface routing. **Design doc (ratified forks + phasing):** [`whiteboard-chrome-design-2026-06-07.md`](whiteboard-chrome-design-2026-06-07.md). **Audit:** [`whiteboard-excalidraw-function-audit-2026-06-08.md`](whiteboard-excalidraw-function-audit-2026-06-08.md).
+> **Last consolidated:** 2026-06-08 (audit dispositions ratified; TU-13/TU-14/TM-10 added; PP-04/ST-05 expanded; **PR-01** freedraw-latency gate folded into P1.1; **TM-11** mobile palette-dismissal hard requirement; **VP-01/VP-02/PP-06** from Sarah + Andrew's wife live feedback). Prior: 2026-06-07 TU-12 theme parity, TU-11 keyboard surface routing. **Design doc (ratified forks + phasing):** [`whiteboard-chrome-design-2026-06-07.md`](whiteboard-chrome-design-2026-06-07.md). **Audit:** [`whiteboard-excalidraw-function-audit-2026-06-08.md`](whiteboard-excalidraw-function-audit-2026-06-08.md). **Session shell mock:** [`whiteboard-session-shell-design-2026-06-08.md`](whiteboard-session-shell-design-2026-06-08.md).
 
 ---
 
@@ -78,6 +78,14 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 | **PP-03** | Mobile **color / pen palette** dismisses on **click-away** (outside tap). | (ii) | Sarah-Chat L44–45; BACKLOG I7; whiteboard-sync-redesign § I7 |
 | **PP-04** | Properties UI shows **basics inline** (stroke width, color, opacity, roughness/roundness defaults); **ALL remaining native style properties kept** — fill style, stroke style, freedraw stroke profile, arrow type, arrowheads, text align (incl. vertical), font family/size, etc. — organized **primary-inline vs "More styles" overflow** (NR-02 ratified). Clean/sharp is the **default** (roughness 0, sharp edges, thinnest stroke — DD-01–03); every option remains available. | (ii) | 2026-06-06 U5; audit NR-02/P-03–P-14 ratified 2026-06-08 |
 | **PP-05** | **Single restore story** — suppress or replace Excalidraw's confusing **"Load draft into board"** recovery modal during live collab (prefer Discard / server truth). | (ii) + (iii) | BACKLOG Excalidraw recovery row; whiteboard-smoke-log § refresh |
+| **PP-06** | **Compact collapsed properties bar** — replace the always-expanded properties/options palette with a **small footprint bar** showing only the **currently selected** values (color swatch, stroke width, roughness/style). **Desktop:** expands to the full option set on **hover**; collapses when pointer leaves. **Phone/tablet:** expands on **tap** into the properties bottom sheet; dismiss per **TM-11** (tap-away / backdrop / swipe-down — not re-tap tool as sole path). Addresses Sarah's long-standing "palette takes up too much space" complaint (Andrew's wife echoed on first use). Mock: [`whiteboard-session-shell-mock-2026-06-08.html`](../brand-previews/whiteboard-session-shell-mock-2026-06-08.html). Design: [`whiteboard-session-shell-design-2026-06-08.md`](whiteboard-session-shell-design-2026-06-08.md) §5.5, §7.3. Pairs with PU-03, PP-01, TM-11. | (ii) | Sarah-Chat L73; 2026-06-06 U5; Andrew + wife live feedback 2026-06-08 |
+
+### Viewport / ghost bounds / canvas view prefs
+
+| ID | Requirement | Tag | Source |
+|----|-------------|-----|--------|
+| **VP-01** | **Role-appropriate ghost viewport label.** The ghosted peer-viewport bounds rectangle **must always label whose view it represents by ROLE**, not generically. The **tutor** sees a ghost labeled **"Student view"**; the **student** sees a ghost labeled **"Tutor view"**. Label is derived from viewer role + peer role — never a static string shared by both sides. Cross-ref ghost-bounds design: [`whiteboard-session-shell-design-2026-06-08.md`](whiteboard-session-shell-design-2026-06-08.md) §5.3. Pairs with Decision K (§ Ratified 2026-06-08). | (ii) | Andrew live feedback 2026-06-08 (Sarah relay) |
+| **VP-02** | **Canvas grid — per-user view preference, default OFF.** Excalidraw natively supports a canvas grid via `gridModeEnabled` in `appState` (see audit C-07; also `initialData.appState` / `updateScene({ appState })`). Expose a **user-toggleable** grid in Mynk chrome (e.g. top-bar View/`···` menu). **Default OFF** — Sarah wants it available; Andrew's wife loves the grid but it must not be on by default. **Local view preference only** (like theme toggle) — does **not** sync between tutor and student. | (i) + (ii) | Andrew + wife live feedback 2026-06-08; audit [`whiteboard-excalidraw-function-audit-2026-06-08.md`](whiteboard-excalidraw-function-audit-2026-06-08.md) C-07 |
 
 ### Drawing defaults
 
@@ -287,6 +295,9 @@ Broad case-insensitive ripgrep across **`docs/`** and **`docs/handoff/`** for wh
 | TU-14 | Every-function-has-a-button + PDF deepest-z z-order | Audit ratification 2026-06-08 |
 | TM-10 | Full touch parity for all chrome controls | Audit ratification 2026-06-08 |
 | TM-11 | Mobile/touch properties palette easy-gesture dismissal (V1 HARD) | Andrew ratified 2026-06-08 |
+| PP-06 | Compact collapsed properties bar (hover desktop / tap+TM-11 touch) | Sarah + Andrew's wife live feedback 2026-06-08 |
+| VP-01 | Role-appropriate ghost viewport label | Andrew live feedback 2026-06-08 |
+| VP-02 | Canvas grid per-user view pref, default OFF | Andrew + wife live feedback 2026-06-08 |
 
 ---
 
@@ -307,14 +318,15 @@ Broad case-insensitive ripgrep across **`docs/`** and **`docs/handoff/`** for wh
 |----------|----------------------:|
 | Toolbar / tool-set & ordering | 11 |
 | Pulldown / consolidation | 4 |
-| Properties palette | 5 |
+| Properties palette | 6 |
+| Viewport / ghost bounds / canvas view prefs | 2 |
 | Drawing defaults | 5 |
 | Touch / mobile-tablet | 11 |
 | Screen real estate / responsive | 12 |
 | Student-WB-specific | 6 |
 | Tutor-WB-specific | 14 |
 | Performance / draw latency | 1 |
-| **Total** | **69** |
+| **Total** | **72** |
 
 ---
 
@@ -398,6 +410,8 @@ The live board must draw with no perceptible lag (Phase 0 POC was instant). The 
 ### K. Ghosted peer viewport bounds — NEW QoL feature
 
 Since the tutor view is large and the student may be looking at a different area of the board, render a **ghosted rectangle on the canvas** showing what the other side is currently looking at (their viewport bounds). The viewport-sync plumbing already exists (`pvs` log prefix). This is a new board element in the design.
+
+**Role-appropriate label (VP-01):** The ghost rectangle label is **always role-specific** — tutor sees **"Student view"**; student sees **"Tutor view"**. See [`whiteboard-session-shell-design-2026-06-08.md`](whiteboard-session-shell-design-2026-06-08.md) §5.3.
 
 **Build-tier recommendation:** `whiteboard-session-shell-design-2026-06-08.md` § Ghost Bounds. Short answer: **Gate-A fast-follow** (not V1 core) — the plumbing exists, the rendering is purely cosmetic, but it is also additive work that should not delay the P1.1 chrome ship. Include in the design; defer implementation to the first polish sprint post-chrome.
 

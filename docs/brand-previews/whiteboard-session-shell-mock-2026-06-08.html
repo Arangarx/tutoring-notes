@@ -517,13 +517,16 @@ html, body {
   display: flex; align-items: center; justify-content: center;
   flex-direction: column; gap: 12px;
 }
+/* Canvas grid — VP-02: per-user view preference, default OFF (gridModeEnabled in Excalidraw appState) */
 .canvas-grid {
+  display: none;
   position: absolute; inset: 0;
   background-image:
     linear-gradient(var(--border-subtle) 1px, transparent 1px),
     linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px);
   background-size: 32px 32px; opacity: 0.5;
 }
+.canvas-area.grid-on .canvas-grid { display: block; }
 .canvas-label {
   font-family: var(--font-mono); font-size: 12px; color: var(--text-disabled);
   position: relative; z-index: 1;
@@ -542,6 +545,20 @@ html, body {
   font-family: var(--font-mono); font-size: 10px;
   color: var(--text-muted); letter-spacing: 0.04em;
 }
+/* VP-01: label is data-driven by viewer role — tutor sees peer label "Student view"; student sees "Tutor view" */
+.ghost-caption {
+  position: absolute; bottom: -18px; left: 0;
+  font-family: var(--font-mono); font-size: 9px;
+  color: var(--text-disabled); letter-spacing: 0.02em; white-space: nowrap;
+}
+.ghost-perspective-toggle {
+  position: absolute; top: -20px; right: 0;
+  font-family: var(--font-mono); font-size: 8px;
+  color: var(--accent-text); background: var(--accent-soft);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 1px 5px; cursor: pointer; pointer-events: auto;
+}
+.ghost-perspective-toggle:hover { border-color: var(--accent); }
 
 /* Sketch strokes on canvas */
 .canvas-strokes {
@@ -549,14 +566,86 @@ html, body {
   overflow: hidden;
 }
 
-/* Properties popover */
-.props-popover {
+/* PP-06 prototype: compact properties bar — summary visible; full panel on hover (desktop) */
+.props-compact-bar {
   position: absolute; left: 56px; top: 50%; transform: translateY(-50%);
-  width: 240px; z-index: 20;
+  z-index: 20;
+}
+.props-compact-summary {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-sm);
+  cursor: default; white-space: nowrap;
+}
+.summary-swatch {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 1px solid var(--border); flex-shrink: 0;
+}
+.summary-stroke {
+  width: 20px; height: 12px; display: flex; align-items: center; justify-content: center;
+}
+.summary-stroke-line {
+  width: 16px; background: var(--text); border-radius: 1px; height: 1px;
+}
+.summary-chip {
+  height: 20px; padding: 0 6px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); font-size: 10px;
+  font-family: var(--font-mono); color: var(--text-muted);
+  display: flex; align-items: center;
+}
+.props-compact-panel {
+  display: none; position: absolute; left: 0; top: 0;
+  width: 240px;
   background: var(--surface-1); border: 1px solid var(--border);
   border-radius: var(--radius-md); box-shadow: var(--shadow-md); padding: 12px;
-  display: flex; flex-direction: column; gap: 10px;
+  flex-direction: column; gap: 10px;
 }
+.props-compact-bar:hover .props-compact-summary { display: none; }
+.props-compact-bar:hover .props-compact-panel { display: flex; }
+
+/* Mobile/tablet: compact summary strip — tap opens bottom sheet (TM-11 dismiss) */
+.props-compact-mobile {
+  display: none; flex-shrink: 0;
+  padding: 6px 12px; background: var(--surface-1);
+  border-top: 1px solid var(--border);
+  align-items: center; justify-content: space-between; gap: 8px;
+}
+.props-compact-mobile-btn {
+  display: flex; align-items: center; gap: 8px; flex: 1;
+  padding: 6px 10px; border-radius: var(--radius-md);
+  border: 1px solid var(--border); background: var(--surface-base);
+  cursor: pointer; font-family: var(--font-body); font-size: 12px;
+  color: var(--text-muted); transition: border-color 0.12s;
+}
+.props-compact-mobile-btn:hover { border-color: var(--accent); color: var(--text); }
+.props-compact-mobile-hint {
+  font-family: var(--font-mono); font-size: 9px; color: var(--text-disabled);
+  text-transform: uppercase; letter-spacing: 0.06em; flex-shrink: 0;
+}
+.session-shell.narrow .props-compact-mobile,
+.session-shell.tablet-portrait .props-compact-mobile { display: flex; }
+.session-shell.narrow .props-compact-bar,
+.session-shell.tablet-portrait .props-compact-bar { display: none; }
+
+/* View overflow menu (grid toggle — VP-02) */
+.view-menu-wrap { position: relative; }
+.view-menu-dropdown {
+  display: none; position: absolute; top: calc(100% + 4px); right: 0;
+  min-width: 180px; z-index: 100;
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-md);
+  padding: 6px 0;
+}
+.view-menu-dropdown.open { display: block; }
+.view-menu-item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 8px 12px; border: none; background: transparent;
+  font-family: var(--font-body); font-size: 12px; color: var(--text);
+  cursor: pointer; text-align: left;
+}
+.view-menu-item:hover { background: rgba(90,104,119,0.10); }
+.view-menu-item input[type="checkbox"] { accent-color: var(--accent); }
 .props-section-title {
   font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--text-muted); font-family: var(--font-mono); margin-bottom: 4px;
@@ -814,7 +903,6 @@ html, body {
 .session-shell.narrow .canvas-area {
   flex: 1; width: 100%; min-height: 0;
 }
-.session-shell.narrow .props-popover { display: none; }
 .session-shell.narrow .ghost-viewport {
   top: 12%; left: 8%; width: 72%; height: 50%;
 }
@@ -949,7 +1037,6 @@ html, body {
 .session-shell.tablet-portrait .left-strip { display: none; }
 .session-shell.tablet-portrait .live-board { flex: 1; flex-direction: column; min-height: 0; }
 .session-shell.tablet-portrait .canvas-area { flex: 1; width: 100%; min-height: 0; }
-.session-shell.tablet-portrait .props-popover { display: none; }
 .session-shell.tablet-portrait .bottom-toolbar {
   display: flex; height: 52px; min-height: 52px;
   background: var(--surface-1); border-top: 1px solid var(--border);
@@ -1021,6 +1108,9 @@ html, body {
     <button class="responsive-toggle" data-viewport="compare" onclick="setViewport('compare', this)">Compare</button>
     <span style="width:1px;height:16px;background:rgba(255,255,255,0.12);margin:0 4px;"></span>
     <button class="theme-toggle-meta" onclick="toggleTheme()" id="themeBtn">☾ Dark</button>
+    <span style="width:1px;height:16px;background:rgba(255,255,255,0.12);margin:0 4px;"></span>
+    <span style="font-size:11px;color:rgba(240,237,228,0.4);font-family:var(--font-mono);">Ghost label:</span>
+    <button class="responsive-toggle" id="ghostPerspectiveBtn" onclick="toggleGhostPerspective(this)">Viewer: Tutor</button>
   </div>
 </header>
 
@@ -1109,6 +1199,18 @@ html, body {
         <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
       </button>
       <div class="sep"></div>
+      <!-- View menu (grid toggle — VP-02) -->
+      <div class="view-menu-wrap">
+        <button class="tb-btn icon-only view-menu-btn" title="View options" onclick="toggleViewMenu(event)">
+          <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+        </button>
+        <div class="view-menu-dropdown" id="viewMenuDropdown">
+          <label class="view-menu-item">
+            <input type="checkbox" id="gridToggleCheckbox" onchange="toggleCanvasGrid(this)">
+            Show canvas grid
+          </label>
+        </div>
+      </div>
       <!-- Theme toggle -->
       <button class="tb-btn icon-only" title="Toggle whiteboard theme" id="wbThemeBtn">
         <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -1295,9 +1397,11 @@ html, body {
         <div class="canvas-area" onclick="onCanvasTap(event)">
           <div class="canvas-grid"></div>
 
-          <!-- Ghost viewport (student view) -->
-          <div class="ghost-viewport">
-            <span class="ghost-label">Student view</span>
+          <!-- Ghost viewport — VP-01: label driven by viewer role (tutor → "Student view"; student → "Tutor view") -->
+          <div class="ghost-viewport" data-viewer-role="tutor">
+            <span class="ghost-label" data-ghost-peer-label>Student view</span>
+            <button type="button" class="ghost-perspective-toggle" onclick="toggleGhostPerspective(this)" title="Mock: preview student perspective label">⇄ role</button>
+            <span class="ghost-caption">Peer viewport · student sees “Tutor view”</span>
           </div>
 
           <!-- Placeholder strokes -->
@@ -1318,56 +1422,63 @@ html, body {
 
           <div class="canvas-label">Excalidraw canvas (placeholder)</div>
 
-          <!-- Properties popover -->
-          <div class="props-popover" id="propsPopover">
-            <div>
-              <div class="props-section-title">Stroke color</div>
-              <div class="color-swatches">
-                <div class="swatch selected" style="background:#15203a;" title="Navy"></div>
-                <div class="swatch" style="background:#fff;border-color:var(--border);" title="White"></div>
-                <div class="swatch" style="background:#5a6877;" title="Grey"></div>
-                <div class="swatch" style="background:#e27d60;" title="Coral"></div>
-                <div class="swatch" style="background:#2563eb;" title="Blue"></div>
-                <div class="swatch" style="background:#16a34a;" title="Green"></div>
-                <div class="swatch" style="background:#dc2626;" title="Red"></div>
-                <div class="swatch custom" style="background:linear-gradient(135deg,#f00,#0f0,#00f);border:1px solid var(--border);" title="Custom color">+</div>
-              </div>
+          <!-- PP-06: compact properties bar — hover expands on desktop -->
+          <div class="props-compact-bar" id="propsCompactBar">
+            <div class="props-compact-summary" aria-label="Current stroke settings — hover to expand">
+              <span class="summary-swatch" style="background:#15203a;"></span>
+              <span class="summary-stroke"><span class="summary-stroke-line" style="height:1px;"></span></span>
+              <span class="summary-chip">Architect</span>
             </div>
-            <div>
-              <div class="props-section-title">Stroke width</div>
-              <div class="stroke-presets">
-                <div class="stroke-preset active" title="Hairline"><div class="stroke-line" style="height:0.5px;"></div></div>
-                <div class="stroke-preset" title="Thin (default)"><div class="stroke-line" style="height:1px;"></div></div>
-                <div class="stroke-preset" title="Medium"><div class="stroke-line" style="height:2px;"></div></div>
-                <div class="stroke-preset" title="Thick"><div class="stroke-line" style="height:4px;"></div></div>
-              </div>
-            </div>
-            <div>
-              <div class="props-section-title">Roughness</div>
-              <div class="chip-group">
-                <button class="chip selected">Architect</button>
-                <button class="chip">Artist</button>
-                <button class="chip">Cartoon</button>
-              </div>
-            </div>
-            <div class="props-divider"></div>
-            <button class="more-btn">More styles ▾</button>
-            <div class="more-area" style="display:none;" id="moreStyles">
+            <div class="props-compact-panel" id="propsPanel">
               <div>
-                <div class="props-section-title">Fill</div>
-                <div class="chip-group">
-                  <button class="chip selected">None</button>
-                  <button class="chip">Hatch</button>
-                  <button class="chip">Cross</button>
-                  <button class="chip">Solid</button>
+                <div class="props-section-title">Stroke color</div>
+                <div class="color-swatches">
+                  <div class="swatch selected" style="background:#15203a;" title="Navy"></div>
+                  <div class="swatch" style="background:#fff;border-color:var(--border);" title="White"></div>
+                  <div class="swatch" style="background:#5a6877;" title="Grey"></div>
+                  <div class="swatch" style="background:#e27d60;" title="Coral"></div>
+                  <div class="swatch" style="background:#2563eb;" title="Blue"></div>
+                  <div class="swatch" style="background:#16a34a;" title="Green"></div>
+                  <div class="swatch" style="background:#dc2626;" title="Red"></div>
+                  <div class="swatch custom" style="background:linear-gradient(135deg,#f00,#0f0,#00f);border:1px solid var(--border);" title="Custom color">+</div>
                 </div>
               </div>
               <div>
-                <div class="props-section-title">Stroke style</div>
+                <div class="props-section-title">Stroke width</div>
+                <div class="stroke-presets">
+                  <div class="stroke-preset active" title="Hairline"><div class="stroke-line" style="height:0.5px;"></div></div>
+                  <div class="stroke-preset" title="Thin (default)"><div class="stroke-line" style="height:1px;"></div></div>
+                  <div class="stroke-preset" title="Medium"><div class="stroke-line" style="height:2px;"></div></div>
+                  <div class="stroke-preset" title="Thick"><div class="stroke-line" style="height:4px;"></div></div>
+                </div>
+              </div>
+              <div>
+                <div class="props-section-title">Roughness</div>
                 <div class="chip-group">
-                  <button class="chip selected">Solid</button>
-                  <button class="chip">Dashed</button>
-                  <button class="chip">Dotted</button>
+                  <button class="chip selected">Architect</button>
+                  <button class="chip">Artist</button>
+                  <button class="chip">Cartoon</button>
+                </div>
+              </div>
+              <div class="props-divider"></div>
+              <button class="more-btn">More styles ▾</button>
+              <div class="more-area" style="display:none;" id="moreStyles">
+                <div>
+                  <div class="props-section-title">Fill</div>
+                  <div class="chip-group">
+                    <button class="chip selected">None</button>
+                    <button class="chip">Hatch</button>
+                    <button class="chip">Cross</button>
+                    <button class="chip">Solid</button>
+                  </div>
+                </div>
+                <div>
+                  <div class="props-section-title">Stroke style</div>
+                  <div class="chip-group">
+                    <button class="chip selected">Solid</button>
+                    <button class="chip">Dashed</button>
+                    <button class="chip">Dotted</button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1400,6 +1511,17 @@ html, body {
 
         </div>
 
+      </div>
+
+      <!-- PP-06 mobile: compact current-selection bar — tap opens bottom sheet (TM-11 dismiss) -->
+      <div class="props-compact-mobile">
+        <button type="button" class="props-compact-mobile-btn" onclick="openPropsSheet(event)" aria-label="Stroke properties — tap to expand">
+          <span class="summary-swatch" style="background:#15203a;"></span>
+          <span class="summary-stroke"><span class="summary-stroke-line" style="height:1px;"></span></span>
+          <span class="summary-chip">Architect</span>
+          <span style="margin-left:auto;font-size:11px;color:var(--text-muted);">Colors &amp; styles</span>
+        </button>
+        <span class="props-compact-mobile-hint">Tap to expand</span>
       </div>
 
       <!-- Mobile bottom toolbar (narrow only — below canvas, not beside it) -->
@@ -1687,6 +1809,7 @@ function ensureShellClone() {
   shellClone.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
   initPropsSheetForShell(shellClone);
   switchMode(currentMode);
+  applyGhostPerspective();
   return shellClone;
 }
 
@@ -1813,15 +1936,69 @@ function setViewport(view, btn) {
 }
 
 function initPropsSheetForShell(shell) {
-  const popover = qInShell(shell, '#propsPopover');
+  const panel = qInShell(shell, '#propsPanel') || qInShell(shell, '.props-compact-panel');
   const sheetContent = qInShell(shell, '.props-sheet-content');
-  if (popover && sheetContent && !sheetContent.innerHTML.trim()) {
-    sheetContent.innerHTML = popover.innerHTML;
+  if (panel && sheetContent && !sheetContent.innerHTML.trim()) {
+    sheetContent.innerHTML = panel.innerHTML;
     sheetContent.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
   }
 }
 
+// VP-02: canvas grid toggle — default OFF; maps to Excalidraw gridModeEnabled (local view pref, no sync)
+function toggleCanvasGrid(checkbox) {
+  const on = checkbox.checked;
+  getAllShells().forEach(shell => {
+    qInShell(shell, '.canvas-area')?.classList.toggle('grid-on', on);
+  });
+  document.querySelectorAll('.view-menu-dropdown input[type="checkbox"]').forEach(cb => {
+    cb.checked = on;
+  });
+}
+
+function toggleViewMenu(ev) {
+  ev.stopPropagation();
+  const menu = ev.currentTarget.closest('.view-menu-wrap')?.querySelector('.view-menu-dropdown');
+  document.querySelectorAll('.view-menu-dropdown.open').forEach(m => {
+    if (m !== menu) m.classList.remove('open');
+  });
+  menu?.classList.toggle('open');
+}
+
+// VP-01: role-appropriate ghost label — tutor sees "Student view"; student sees "Tutor view"
+const GHOST_PEER_LABELS = { tutor: 'Student view', student: 'Tutor view' };
+let ghostViewerRole = 'tutor';
+
+function toggleGhostPerspective(btn) {
+  if (btn) btn.stopPropagation?.();
+  ghostViewerRole = ghostViewerRole === 'tutor' ? 'student' : 'tutor';
+  applyGhostPerspective();
+}
+
+function applyGhostPerspective() {
+  getAllShells().forEach(shell => {
+    shell.querySelectorAll('.ghost-viewport').forEach(el => {
+      el.dataset.viewerRole = ghostViewerRole;
+    });
+    shell.querySelectorAll('[data-ghost-peer-label]').forEach(el => {
+      el.textContent = GHOST_PEER_LABELS[ghostViewerRole];
+    });
+    shell.querySelectorAll('.ghost-caption').forEach(el => {
+      el.textContent = ghostViewerRole === 'tutor'
+        ? 'Peer viewport · student sees “Tutor view”'
+        : 'Peer viewport · tutor sees “Student view”';
+    });
+  });
+  const metaBtn = document.getElementById('ghostPerspectiveBtn');
+  if (metaBtn) metaBtn.textContent = ghostViewerRole === 'tutor' ? 'Viewer: Tutor' : 'Viewer: Student';
+}
+
 // More-styles toggle (desktop popover + mobile sheet)
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.view-menu-wrap')) {
+    document.querySelectorAll('.view-menu-dropdown.open').forEach(m => m.classList.remove('open'));
+  }
+});
+
 document.addEventListener('click', function(e) {
   const btn = e.target.closest('.more-btn');
   if (!btn) return;
@@ -1859,6 +2036,7 @@ function openPropsSheet(ev) {
   qInShell(shell, '.props-sheet-backdrop')?.classList.add('open');
   qInShell(shell, '.props-bottom-sheet')?.classList.add('open');
   qInShell(shell, '.props-sheet-open-btn')?.classList.add('active');
+  qInShell(shell, '.props-compact-mobile-btn')?.classList.add('active');
 }
 
 function closePropsSheet(ev) {
@@ -1871,6 +2049,7 @@ function closePropsSheetForShell(shell) {
   qInShell(shell, '.props-sheet-backdrop')?.classList.remove('open');
   qInShell(shell, '.props-bottom-sheet')?.classList.remove('open');
   qInShell(shell, '.props-sheet-open-btn')?.classList.remove('active');
+  qInShell(shell, '.props-compact-mobile-btn')?.classList.remove('active');
 }
 
 function onCanvasTap(ev) {
@@ -1920,6 +2099,7 @@ window.addEventListener('resize', updateDeviceScales);
 // Init
 document.querySelectorAll('.session-shell').forEach(initPropsSheetForShell);
 initPropsSheetForShell(document.getElementById('sessionShell'));
+applyGhostPerspective();
 document.documentElement.setAttribute('data-theme', 'dark');
 document.getElementById('themeBtn').textContent = '☀ Light';
 </script>

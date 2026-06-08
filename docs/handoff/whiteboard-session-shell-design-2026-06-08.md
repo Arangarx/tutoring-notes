@@ -324,14 +324,19 @@ Canvas view:
 │   ║    (dashed border, low opacity)                        ║  │
 │   ║    border: var(--accent) 30% opacity dashed            ║  │
 │   ║    fill: var(--accent-soft) 8% opacity                 ║  │
-│   ║    label: "Student view" — mono 10px text-muted        ║  │
+│   ║    label: role-appropriate peer label (VP-01)            ║  │
+│   ║      tutor viewer  → "Student view"                     ║  │
+│   ║      student viewer → "Tutor view"                     ║  │
+│   ║    mono 10px text-muted                                ║  │
 │   ║                                                         ║  │
 │   ╚═ ═ ═ ═ ═ ═ ═ ═ ═ ═ ═ ═ ═ ═ ═ ═ ═ ═ ═ ═ ═ ═ ═ ═ ═ ═╝  │
 │                                                               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Implementation approach:** Rendered as a custom Excalidraw overlay element (not a canvas draw call) updated via the existing `pvs`-prefixed viewport-sync channel. The rectangle is read-only for the tutor — it is not selectable or editable.
+**Role-appropriate label (VP-01, Andrew 2026-06-08):** The ghost label is **never a static string** — it is derived from the **viewer's role** and always names the **peer's** viewport: tutor sees **"Student view"**; student sees **"Tutor view"**. Mock includes a `⇄ role` toggle and meta-header control to preview the student perspective label.
+
+**Implementation approach:** Rendered as a custom Excalidraw overlay element (not a canvas draw call) updated via the existing `pvs`-prefixed viewport-sync channel. The rectangle is read-only — not selectable or editable. Each participant sees the peer's bounds with the role-appropriate label on their own canvas only.
 
 **Visibility control:** A small toggle in the top bar or AV tile: "👁 Student view" — defaults ON for remote sessions, hidden for in-person single-device sessions.
 
@@ -343,7 +348,57 @@ Canvas view:
 - Risk: LOW — purely cosmetic, isolated to the tutor's view, no student-side changes
 - **Decision:** Include in the design (so the executor knows the shape); defer build until after P1.1 chrome ships and smokes green. First fast-follow priority.
 
-### 5.4 End-session flow (live → review transition)
+### 5.4 Canvas grid toggle (VP-02)
+
+Excalidraw exposes canvas grid via `gridModeEnabled` in `appState` (`initialData.appState` or `updateScene({ appState })` — see audit C-07 in [`whiteboard-excalidraw-function-audit-2026-06-08.md`](whiteboard-excalidraw-function-audit-2026-06-08.md)). Native UI hides this behind Ctrl+'`; Mynk chrome surfaces it as a **per-user view preference**.
+
+| Property | Value |
+|---|---|
+| Default | **OFF** (`gridModeEnabled: false`) |
+| Sync | **None** — local view pref only (like theme toggle); tutor and student may differ |
+| Affordance | Top-bar **View** `···` menu → "Show canvas grid" checkbox |
+| Source | Andrew's wife loves grid; Sarah wants it available but off by default |
+
+**Mock:** Live board top bar → vertical `···` View menu → checkbox toggles `.canvas-area.grid-on` (grid hidden by default).
+
+### 5.5 Compact properties bar (PP-06)
+
+Replaces the always-expanded properties popover with a **collapsed current-selection bar** — addresses Sarah's "palette takes up too much space" complaint (Andrew's wife echoed on first use).
+
+**Desktop (≥1024px):**
+
+```
+┌──────────────────────────────┐
+│  ●  ─  Architect             │  ← compact summary (color · width · style)
+└──────────────────────────────┘
+         ↓ hover
+┌──────────────────────────────┐
+│  Stroke color  [swatches…]   │
+│  Stroke width  [presets…]    │
+│  Roughness     [chips…]      │
+│  More styles ▾               │
+└──────────────────────────────┘
+         ↓ pointer leaves → collapses
+```
+
+- Real CSS `:hover` expansion in mock — Andrew can demo without JS.
+- Full option set unchanged (PP-04 tiering); only the **default footprint** shrinks.
+
+**Phone / tablet portrait (<1024px, touch layouts):**
+
+```
+├─────────────────────────────┤
+│  ●  ─  Architect  Colors ▸  │  ← compact strip; tap expands
+├─────────────────────────────┤
+│  ✏️  🧹  🎯  🎨  ···        │  ← bottom toolbar unchanged
+```
+
+- Tap compact strip (or legacy 🎨 control) → existing properties **bottom sheet**.
+- Dismiss per **TM-11**: tap canvas/backdrop, swipe-down on handle, or × (supplement only).
+
+**Requirement:** [`whiteboard-chrome-requirements.md`](whiteboard-chrome-requirements.md) **PP-06**. Pairs with PU-03, PP-01, TM-11.
+
+### 5.6 End-session flow (live → review transition)
 
 When the tutor clicks "End session":
 
@@ -492,16 +547,16 @@ The real design axis is screen size, not tutor-vs-student. Tutor vs student is a
 | A/V mic toggle | ✓ Top-level | ✓ Top-level (on bottom bar) |
 | A/V video toggle | ✓ Top-level | ✓ Top-level (on bottom bar) |
 
-### 7.3 Mobile palette-dismissal fix (Decision E — PP-02/PP-03, **TM-11**)
+### 7.3 Mobile palette-dismissal fix (Decision E — PP-02/PP-03, **TM-11**, **PP-06**)
 
-The prior complaint: "the properties/color palette eats too much space and on mobile won't dismiss without re-tapping the tool button." **Hard requirement:** [`whiteboard-chrome-requirements.md`](whiteboard-chrome-requirements.md) **TM-11** (V1 — tap-off/backdrop, swipe-down on handle, and × as supplement only; re-tap tool as sole dismiss is disallowed).
+The prior complaint: "the properties/color palette eats too much space and on mobile won't dismiss without re-tapping the tool button." **Hard requirement:** [`whiteboard-chrome-requirements.md`](whiteboard-chrome-requirements.md) **TM-11** (V1 — tap-off/backdrop, swipe-down on handle, and × as supplement only; re-tap tool as sole dismiss is disallowed). **Compact bar:** **PP-06** — collapsed current-selection strip on phone/tablet; tap expands to bottom sheet.
 
 **Fix:**
 1. Properties panel on phone = bottom sheet (not a side popover or persistent column). Slides up; dismisses on downward drag OR tap-outside OR tap on canvas OR × close.
 2. Bottom sheet has a drag handle. Tap anywhere on the canvas (above the sheet) dismisses it.
 3. The sheet is `max-height: 45dvh` — never more than half the screen.
-4. After tool selection, the sheet is **not auto-opened** — it only opens when the user explicitly taps the "Colors & styles" control in the bottom toolbar. First draw is always possible without the sheet open.
-5. On tablet, properties is a bottom sheet (not a floating popover). On desktop, it is the side-anchored popover from the left strip.
+4. After tool selection, the sheet is **not auto-opened** — it only opens when the user explicitly taps the compact properties strip or "Colors & styles" control. First draw is always possible without the sheet open.
+5. On tablet portrait, properties is a bottom sheet (not a floating popover). On desktop, **PP-06** compact bar expands on hover (§5.5) — not a persistent quarter-screen popover.
 
 ### 7.4 Per-mode mobile layout (mock-validated 2026-06-08)
 
@@ -737,7 +792,9 @@ This checklist is the gate the eventual chrome build must pass. P1.1 was rejecte
 
 - [ ] **Three modes implemented:** waiting room, live board, review — all accessible and navigable
 - [ ] **Toolbar order:** Cursor → Pencil → Eraser → Text → Laser → Lines▾ → Shapes▾ → ···
-- [ ] **Properties popover:** opens on tool activate, dismisses on outside-click, contains inline basics + More styles (all native styles present)
+- [ ] **Compact properties bar (PP-06):** collapsed current-selection summary; desktop expands on hover; phone/tablet tap → bottom sheet with TM-11 dismiss
+- [ ] **Canvas grid toggle (VP-02):** default OFF; per-user local pref in View menu
+- [ ] **Ghost label (VP-01):** role-appropriate peer label on ghost bounds
 - [ ] **Drawing defaults on session start:** roughness=0, edges=sharp, stroke=thinnest
 - [ ] **Laser in top-level slot** (not overflow, not deferred)
 - [ ] **Drag-to-dismiss palette on mobile** (properties bottom sheet dismisses on tap-outside and swipe-down)
@@ -782,6 +839,7 @@ This checklist is the gate the eventual chrome build must pass. P1.1 was rejecte
 | Q4 | **In-person (single device) recording + parent consent self-certification:** If parent consent is NOT on file, can the tutor still enable in-person single-device recording for a non-recorded session? Or is it only available if consent is on file? | Decision C | Recommend: In-person (single device) toggle always available; recording portion within it is gated by consent. Tutor can run an unrecorded in-person single-device session. |
 | Q5 | **Review mode video:** When is video available? Is there always a recording? (Could be no-consent sessions with no video.) | Decision C, D | Design should show "No recording for this session" gracefully when `allowVideoRecording=false` and `allowAudioRecording=false`. |
 | Q6 | **"Return to board" from review mode:** Can the tutor actually draw again after ending the session? (Is the board read-only in review?) | Decision A | Recommend: board is read-only in review mode for the current architecture; add annotations = separate explicit action (or always writeable). Clarify before build. |
+| Q7 | **Asymmetric viewport handling:** How should the participant with the **smaller viewport** (sees less of the canvas) experience the shared board + ghost bounds? **Candidate (a):** smaller-view person sees the larger person's bounds as ghost + a one-tap **"follow tutor"** that snaps their viewport to match. **Candidate (b):** the larger-view person's ghost shows the smaller person's box so they can bring content into where the student is looking. | Decision K, VP-01; follow-tutor ST-01 | **Needs Andrew decision** — do not resolve in design pass. |
 
 ---
 
@@ -806,3 +864,4 @@ This checklist is the gate the eventual chrome build must pass. P1.1 was rejecte
 - **2026-06-08:** Color-fidelity pass — dark surface ladder + semantic tokens aligned to `tokens.css`; primary CTAs corrected to coral (`--accent` / `--accent-on`); build note added re shadcn `--primary` mapping.
 - **2026-06-08:** Mobile responsive pass — §7.0 **Primary-content dominance** principle; per-mode phone layouts (§7.4); mock updated with single-column waiting room, full-bleed canvas + properties bottom sheet + AV pip on live board, notes-primary + board slide-in overlay on review. Desktop layouts unchanged.
 - **2026-06-08:** Device-frame mock pass — true-proportion **Phone** (390×844), **Tablet** (iPad Air portrait/landscape), and **Compare** viewports with CSS `transform: scale()` fit; §7.5 tablet per-mode treatment (portrait hybrid, landscape desktop).
+- **2026-06-08:** Live-feedback pass — **VP-01** role-appropriate ghost labels; **VP-02** canvas grid toggle (default OFF); **PP-06** compact properties bar (hover desktop / tap+TM-11 touch); open Q7 asymmetric viewport handling.
