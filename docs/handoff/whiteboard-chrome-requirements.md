@@ -350,11 +350,11 @@ The waiting room is where A/V permissions are granted, sound+video are verified,
 **Gate definitions:**
 
 - **Remote session:** recording is impossible unless the student is actually connected through the approved flow. The student's presence is the gate.
-- **Solo session (NEW — tutor + child physically together, single device, no remote student join):** tutor must explicitly enable "solo recording mode" in the waiting room before entering the board. There is no way to record a physically-present child without enabling this mode.
+- **In-person tutoring — single-device recording** *(internal: solo session — NEW — tutor + child physically together, single device, no remote student join):* tutor must explicitly enable **"In-person (single device)"** recording in the waiting room before entering the board. There is no way to record a physically-present child without enabling this mode.
 
-**Symmetric consent:** Consent gates capture SYMMETRICALLY — including the tutor's own stream. In a solo session the child may be in frame on the tutor's camera. If the parent has not approved VIDEO recording, the tutor's video stream cannot be recorded either. Consent governs "what may be captured on this physical device, whoever is in front of it" — not just "what we capture from the student side."
+**Symmetric consent:** Consent gates capture SYMMETRICALLY — including the tutor's own stream. In an in-person single-device session the child may be in frame on the tutor's camera. If the parent has not approved VIDEO recording, the tutor's video stream cannot be recorded either. Consent governs "what may be captured on this physical device, whoever is in front of it" — not just "what we capture from the student side."
 
-**Known edge case (low-likelihood, design acknowledgment):** A student could theoretically connect remotely to unlock recording capability, then sit beside the tutor physically. Design must not make this easy or encouraged. Do not rely on tutor goodwill. The solo-mode gate + structural impossibility in the remote flow are the primary defenses.
+**Known edge case (low-likelihood, design acknowledgment):** A student could theoretically connect remotely to unlock recording capability, then sit beside the tutor physically. Design must not make this easy or encouraged. Do not rely on tutor goodwill. The in-person single-device gate *(internal: solo-mode gate)* + structural impossibility in the remote flow are the primary defenses.
 
 ### D. Consent-aware now, enforcement shipped later
 

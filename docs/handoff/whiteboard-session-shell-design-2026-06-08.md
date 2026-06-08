@@ -61,9 +61,9 @@ The tutor sees a smooth crossfade from the board to the review panel. The URL do
 | Type | Who is physically present | Remote join? | Recording gate |
 |---|---|---|---|
 | **Remote session** | Tutor at desktop | Student connects remotely | Student connection is the gate |
-| **Solo session** | Tutor + child, same physical space, single device | No remote student | Tutor must enable solo recording mode in waiting room |
+| **In-person tutoring — single-device recording** *(internal: solo session)* | Tutor + child, same physical space, single device | No remote student | Tutor must enable in-person single-device recording in waiting room |
 
-The session type is selected (or inferred) before entering the board. Solo mode has additional consent-surface requirements (§4.3).
+The session type is selected (or inferred) before entering the board. In-person single-device recording has additional consent-surface requirements (§4.3).
 
 ---
 
@@ -174,7 +174,7 @@ The top bar content differs per mode:
 | Student connected | Signaling presence event | Waiting room polls; shows "Waiting for student…" or "Student ready" |
 | Sound test | Tutor plays a test tone and confirms | Optional; defaults to unchecked; "Skip" available |
 
-**"Start session" button:** Enabled only when Camera + Microphone both green. Student connected is advisory for remote sessions; for solo sessions it is replaced by "Solo mode active" indicator.
+**"Start session" button:** Enabled only when Camera + Microphone both green. Student connected is advisory for remote sessions; for in-person single-device sessions it is replaced by "In-person (single device) active" indicator.
 
 ### 4.3 Recording mode (consent-aware, structurally gated)
 
@@ -192,10 +192,10 @@ When the student connects, recording capability unlocks automatically.
 No manual "start recording" needed — it begins with the session.
 ```
 
-**Solo session (tutor + child physically co-present):**
+**In-person tutoring — single-device recording (tutor + child physically co-present):**
 ```
-── Solo session recording ──
-[  Toggle  ]  Enable solo recording mode
+── In-person tutoring — single-device recording ──
+[  Toggle  ]  In-person (single device)
 
 When enabled:
   ✓ You are starting a session without a remote student.
@@ -209,11 +209,11 @@ When enabled:
    You can still conduct the session; upload a recording consent form first.
 ```
 
-If the tutor toggles "Solo recording mode" on without consent on file, the toggle is accepted but the consent items show red — and recording is silently disabled (the board opens, solo mode is acknowledged, but no recording starts). The tutor sees a persistent inline notice: "Recording disabled — parent consent not on file."
+If the tutor toggles in-person (single device) recording on without consent on file, the toggle is accepted but the consent items show red — and recording is silently disabled (the board opens, in-person single-device recording is acknowledged, but no recording starts). The tutor sees a persistent inline notice: "Recording disabled — parent consent not on file."
 
 **Consent-aware enforcement (Decision D):**
 - `allowAudioRecording = false` → audio recording never starts, regardless of session type
-- `allowVideoRecording = false` → tutor's video feed is excluded from recording (even in solo mode — the tutor's camera may capture the child)
+- `allowVideoRecording = false` → tutor's video feed is excluded from recording (even when in-person single-device recording is enabled — the tutor's camera may capture the child)
 - These flags are read from the student's consent record at session-start and re-read on session resume
 
 ### 4.4 Admit flow (remote session)
@@ -232,7 +232,7 @@ Tutor clicks "Admit" →               Student's board loads
                                      Timer starts NOW (on tutor side)
 ```
 
-For solo sessions, there is no admit flow. The tutor clicks "Start session" directly. The timer starts on that click.
+For in-person single-device sessions, there is no admit flow. The tutor clicks "Start session" directly. The timer starts on that click.
 
 ---
 
@@ -276,7 +276,7 @@ The video tile is **not just a video feed** — it is the **primary A/V control 
 │  │  video feed  (aspect 4:3 or 16:9)  │  │
 │  │  bg-black rounded-sm               │  │
 │  │  (student remote feed or self-view  │  │
-│  │   based on solo/remote mode)        │  │
+│  │   based on in-person/remote mode)   │  │
 │  └─────────────────────────────────────┘  │
 │                                            │
 │  [🎙 ON]  [📷 ON]  ← TOP-LEVEL toggles    │
@@ -323,7 +323,7 @@ Canvas view:
 
 **Implementation approach:** Rendered as a custom Excalidraw overlay element (not a canvas draw call) updated via the existing `pvs`-prefixed viewport-sync channel. The rectangle is read-only for the tutor — it is not selectable or editable.
 
-**Visibility control:** A small toggle in the top bar or AV tile: "👁 Student view" — defaults ON for remote sessions, hidden for solo sessions.
+**Visibility control:** A small toggle in the top bar or AV tile: "👁 Student view" — defaults ON for remote sessions, hidden for in-person single-device sessions.
 
 **Build-tier recommendation: Gate-A fast-follow (not V1 core).** Rationale:
 - The plumbing (`pvs` viewport sync, peer viewport data) already exists
@@ -488,20 +488,20 @@ The prior complaint: "the properties/color palette eats too much space and on mo
 **In waiting room (Decision C + D):**
 - Structural gating shown visually (§4.3)
 - No "Start recording" affordance anywhere on the live board
-- Solo mode toggle requires explicit action — not default
+- In-person (single device) recording toggle requires explicit action — not default
 
 **On live board:**
 - Recording status indicator in the top bar (adjacent to LIVE badge):
   - Remote: `● REC` if recording active (audio + video per consent)
-  - Solo enabled: `● REC solo` 
+  - In-person enabled: `● REC in-person`
   - Consent-limited: `● REC audio only` (video consent absent)
   - Not recording: no REC indicator (just LIVE badge)
 - No "Stop recording" button — recording is structural, not manually controlled
 
-**Solo session consent summary (persistent on live board, dismissible after reading):**
+**In-person session consent summary (persistent on live board, dismissible after reading):**
 ```
 ┌────────────────────────────────────────────────────────────┐
-│  Solo session  ·  Recording active                         │
+│  In-person (single device)  ·  Recording active            │
 │  Audio: capturing  ·  Video: capturing                     │
 │  Parent consent on file  ✓                                 │
 │                                             [Dismiss]      │
@@ -510,7 +510,7 @@ The prior complaint: "the properties/color palette eats too much space and on mo
 
 ### 8.2 Symmetric consent enforcement (Decision C — tutor stream)
 
-In solo mode: if `allowVideoRecording = false`, the tutor's video feed is **excluded from recording**. The tutor can still see themselves in the AV tile (local preview), but the feed is not written to the recording. A badge on the video tile: "Video not recorded" in `text-muted-foreground text-xs`.
+When in-person single-device recording is enabled: if `allowVideoRecording = false`, the tutor's video feed is **excluded from recording**. The tutor can still see themselves in the AV tile (local preview), but the feed is not written to the recording. A badge on the video tile: "Video not recorded" in `text-muted-foreground text-xs`.
 
 ### 8.3 The loophole (acknowledged, not relied-upon)
 
@@ -631,7 +631,7 @@ This checklist is the gate the eventual chrome build must pass. P1.1 was rejecte
 - [ ] **No tutor attestation modal** — removed entirely
 - [ ] **No "Start recording" button** on live board
 - [ ] **Waiting room shows recording gate** — structural gate status visible
-- [ ] **Solo mode toggle** in waiting room for solo sessions
+- [ ] **In-person (single device) recording toggle** in waiting room for in-person sessions *(internal: solo)*
 - [ ] **Consent flags honored** — `allowAudioRecording=false` prevents audio recording; `allowVideoRecording=false` prevents video recording including tutor stream
 - [ ] **REC indicator on live board** — shows recording status (or absent if not recording)
 - [ ] **Timer: minutes only** — no seconds displayed
@@ -656,10 +656,10 @@ This checklist is the gate the eventual chrome build must pass. P1.1 was rejecte
 
 | # | Question | Relevant decisions | Recommendation |
 |---|---|---|---|
-| Q1 | **Session type selection UX:** How does the tutor declare "this is a solo session" vs "this is a remote session"? Is it a setting on the session before the waiting room, or a choice IN the waiting room? | Decision C (solo mode) | Recommend: on the pre-session booking/setup page, with the waiting room reflecting the choice. The waiting room should not force a choice mid-flow. |
+| Q1 | **Session type selection UX:** How does the tutor declare "this is an in-person single-device session" vs "this is a remote session"? Is it a setting on the session before the waiting room, or a choice IN the waiting room? | Decision C (in-person single-device recording; internal: solo mode) | Recommend: on the pre-session booking/setup page, with the waiting room reflecting the choice. The waiting room should not force a choice mid-flow. |
 | Q2 | **Student waiting room UX:** What does the student see while waiting to be admitted? We've specified the tutor side but not the student waiting room screen. | Decision B | Decision needed before Phase 2 build. Suggest: simple "Your teacher will let you in shortly" screen with their own A/V preview. |
 | Q3 | **Ghost bounds toggle:** Default ON or OFF? | Decision K | Recommend ON by default (useful; non-intrusive at low opacity). Toggle to disable if it distracts. |
-| Q4 | **Solo mode + parent consent self-certification:** If parent consent is NOT on file, can the tutor still enable solo mode for a non-recorded session? Or is solo mode only available if consent is on file? | Decision C | Recommend: Solo mode toggle always available; recording portion within it is gated by consent. Tutor can run an unrecorded solo session. |
+| Q4 | **In-person (single device) recording + parent consent self-certification:** If parent consent is NOT on file, can the tutor still enable in-person single-device recording for a non-recorded session? Or is it only available if consent is on file? | Decision C | Recommend: In-person (single device) toggle always available; recording portion within it is gated by consent. Tutor can run an unrecorded in-person single-device session. |
 | Q5 | **Review mode video:** When is video available? Is there always a recording? (Could be no-consent sessions with no video.) | Decision C, D | Design should show "No recording for this session" gracefully when `allowVideoRecording=false` and `allowAudioRecording=false`. |
 | Q6 | **"Return to board" from review mode:** Can the tutor actually draw again after ending the session? (Is the board read-only in review?) | Decision A | Recommend: board is read-only in review mode for the current architecture; add annotations = separate explicit action (or always writeable). Clarify before build. |
 
