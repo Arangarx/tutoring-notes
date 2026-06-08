@@ -23,6 +23,23 @@ Multi-day epic on branch **`v1-redesign`** (active V1 integration branch; **not 
 
 **Process directive (Andrew 2026-06-07):** prefer **agent-runnable validation harnesses** over manual smoke wherever behavior is verifiable without Andrew's hardware (transcription E2E + sweep validations were the exemplars).
 
+### ⚠ Slice-3 save-bridge smoke (2026-06-07) — REWORK REQUIRED, do NOT merge
+
+Andrew smoked the bridge (runbook §4). **slice-3 is NOT merge-ready.** Root issue: the bridge **guessed** on REQ-S3-2a "Save semantics" which the spec explicitly deferred to the B4 design pass ("Do not guess"). It built a `DRAFT→READY→SENT` model that **conflicts with Andrew's intent** (no DRAFT, Save = immediately parent-visible, "new/unseen" via the **existing `NoteView`** mechanism, no SENT). Investigation: [`8f7e28d3`](8f7e28d3-40cf-42c3-8b77-ae6d77ad529e).
+
+**B4 Save-model decision: IN DISCUSSION with Andrew (2026-06-07)** — proposed: TutorNote = working draft (never a parent-visible SessionNote); Save creates a normal parent-visible note (status READY, no DRAFT/SENT); "new/unseen" via existing `NoteView`. Lock before dispatching rework.
+
+**Defects found (fold into rework):**
+1. `test:wb-sync` FAIL (6 tests/2 suites) — bridge made `notes-actions.ts:35` import `REDUCE_PROMPT_VERSION` from `notes-worker.ts`, dragging `next/cache` into `WhiteboardWorkspaceClient`'s import graph → `TextEncoder is not defined` in workspace DOM tests. Fix: move the constant to a lightweight config module.
+2. Delete-session timeout — review page `maxDuration=60` + sync cascade delete. **Decision (Andrew): redirect to student detail regardless of failure + cron sweeps orphans + fix the timeout.**
+3. Share-page tutor name — `src/app/s/[token]/page.tsx:76` `db.adminUser.findFirst()` with NO `where` → shows an ARBITRARY admin's name ("Sarah Peterson") to every parent. **Cross-tenant correctness/privacy bug.** Scope to the student's actual tutor.
+
+**Scope decisions (Andrew 2026-06-07):** legacy `DRAFT/READY/SENT` enum + `sendUpdateEmail` + "Mark ready/draft" controls → **separate** BACKLOG cleanup (do not balloon slice-3). 
+
+**DEFERRED — MUST NOT MISS (Andrew flagged explicitly):**
+- **Native `confirm()`/`alert()` → in-site modals** (Save/Cancel/Regenerate). Deferred to the **component pass**, but Andrew said do not lose it.
+- **Notes quality poor + Regenerate returned identical output** → prompt/quality thread (REQ-S3-4 / `REDUCE_PROMPT_VERSION` iteration). Separate from the architecture rework.
+
 ---
 
 ## Current focus
