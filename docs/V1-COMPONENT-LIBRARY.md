@@ -167,6 +167,222 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 
 ---
 
+## §1A. Ratified Primitive Spec
+
+> **Purpose:** This section defines the design-token patterns for the fundamental UI primitives — the building blocks every surface draws on. Derived from the six-surface final mock (`docs/brand-previews/palette-mocks-FINAL-mynka-blue.html`) and the prose design spec (`docs/handoff/v1-component-redesign-design-2026-05-31.md`). All specs are theme-agnostic (tokens only, no `dark:` or hardcoded values). Every surface B2–B6 builds from these primitives toward the mock-faithful target (see §5 migration checklist).
+
+---
+
+### 1A.1 Primary CTA button (coral)
+
+**Mock source:** `.btn-primary { background: var(--accent); color: var(--accent-on); border-radius: 999px; }`
+
+**Token class:** `bg-accent text-accent-on hover:bg-accent-strong rounded-full font-medium transition-colors`
+
+| Size | Classes | Use when |
+|---|---|---|
+| Large (`btn-lg`) | `px-5 py-2.5 text-base min-h-11` | Hero CTAs, full-page action moments |
+| Default | `px-4 py-2 text-sm min-h-11` | Most surfaces: dashboard, session start |
+| Small (`btn-sm`) | `px-3 py-1.5 text-xs min-h-9` | Nav bar, inline compact contexts |
+
+**Usage:** "Start session", "Share with parent", "Start free trial", "Ready to record →", "Save changes" (primary form submit). The coral CTA is the highest-signal action on the page — one per view where possible.
+
+**NOT used for:** Active tool selection (uses inverse colors, see 1A.9), destructive actions (use `destructive` variant), secondary ghost actions.
+
+---
+
+### 1A.2 Ghost / outline button
+
+**Mock source:** `.btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border-strong); border-radius: 999px; }`
+
+**Token class:** `border border-border-strong bg-transparent text-foreground hover:bg-muted/60 rounded-full font-medium transition-colors`
+
+**Usage:** "See a sample recap", "Continue last whiteboard", "Cancel", "← Back", secondary pairings alongside a coral CTA. The ghost/coral pairing is the canonical two-CTA pattern (mock Surface 1 hero, Surface 3 pre-session actions).
+
+---
+
+### 1A.3 Accent strip (AI / pending-action signal)
+
+**Mock source:** `.dash-pending-summaries, .pre-context, .mkt-visual-summary { background: var(--accent-soft); border-left: 3px solid var(--accent); border-radius: 0 var(--radius-md) var(--radius-md) 0; }`
+
+**Token class:** `bg-accent-soft border-l-[3px] border-accent rounded-r-[10px] p-3 pl-4`
+
+The accent strip is the consistent visual signal for two cases — AI-generated content and pending-action prompts. Both get the same treatment so users learn the pattern.
+
+| Label inside strip | Token class |
+|---|---|
+| Eyebrow label ("AI summary", "3 recaps waiting") | `text-[10px] font-mono font-semibold uppercase tracking-widest text-accent-text mb-1` |
+| Body text (AI prose) | `.ai-prose text-foreground text-sm` (Fraunces serif for AI) |
+| Body text (action prompt) | `text-sm text-foreground font-normal` (Inter for pending-action) |
+| CTA link inside | `text-sm font-medium text-accent-text underline-offset-2 hover:underline` |
+
+**Usage — where this pattern appears:**
+- Dashboard: pending recaps strip ("3 recaps waiting — Maya, Devon, Emma. [Review all →]")
+- Pre-session: last-session context memory strip
+- Session detail: editable/AI-generated recap sections (`cursor-text`, hover ring `ring-2 ring-accent inset`)
+- Marketing: "AI summary so far" mini panel in hero visual
+- Whiteboard session: any in-session AI/context hint panels
+
+---
+
+### 1A.4 Brand-bg card ("Up next" / primary next-action)
+
+**Mock source:** `.dash-upnext { background: var(--brand); color: var(--surface); border-radius: var(--radius-md); padding: var(--space-4) var(--space-5); }`
+
+**Token class:** `bg-brand text-brand-on rounded-[10px] p-4 pl-5`
+
+This is the one surface where the brand navy fills a card background — use sparingly (one per view). In the mock it holds the "Up next" session card. In V1 (no scheduling) it holds the primary "Start a session" CTA.
+
+| Sub-element | Token class |
+|---|---|
+| Label ("Up next · 4 PM") | `text-[10px] font-mono font-medium uppercase tracking-widest opacity-70 mb-2` |
+| Name heading | `font-display text-[22px] font-bold tracking-tight leading-[1.1] mb-2` (Fraunces heading) |
+| Sub-detail | `text-[13px] font-mono opacity-80 mb-4` |
+| CTA inside | `bg-accent text-accent-on rounded-full px-4 py-2 text-[13px] font-medium inline-flex items-center gap-2` |
+
+Note: `text-brand-on` = `var(--surface)` (cream on light / near-navy text on dark). Map this alias in `shadcn-theme.css` if not yet present.
+
+---
+
+### 1A.5 Stat tile (data-unit card)
+
+**Mock source:** `.dash-stat { padding: var(--space-4) var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-raised); }`
+
+**Token class:** `bg-card border border-border rounded-[10px] px-5 py-4`
+
+| Sub-element | Token class |
+|---|---|
+| Label ("This week", "Active students") | `text-[11px] font-mono font-medium uppercase tracking-widest text-muted-foreground mb-2` |
+| Value number | `font-display text-[28px] font-bold tracking-tight leading-none text-foreground` (Fraunces heading) |
+| Delta positive ("+3 vs last week") | `text-[11px] font-mono text-accent-text mt-2` |
+| Delta neutral | `text-[11px] font-mono text-muted-foreground mt-2` |
+
+Stats grid: `grid grid-cols-4 gap-3 mb-6` (responsive: `sm:grid-cols-2`).
+
+---
+
+### 1A.6 Session status pill / badge
+
+**Mock source:** `.dash-session-status { font-mono uppercase; padding: 3px 7px; border-radius: 999px; }` — active = `accent-soft bg + accent-text`; done = `border border-border text-muted`.
+
+| State | Token class |
+|---|---|
+| Active/ready ("Recap ready", "Live") | `bg-accent-soft text-accent-text rounded-full px-2 py-0.5 text-[10px] font-mono uppercase tracking-widest whitespace-nowrap` |
+| Done/sent | `border border-border text-muted-foreground rounded-full px-2 py-0.5 text-[10px] font-mono uppercase tracking-widest whitespace-nowrap` |
+
+---
+
+### 1A.7 Session row (list item)
+
+**Mock source:** `.dash-session { display: grid; grid-template-columns: 32px 1fr auto auto; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border); }`
+
+**Token class:** `grid grid-cols-[32px_1fr_auto_auto] items-center gap-3 px-4 py-3 border-b border-border hover:bg-muted/40 cursor-pointer last:border-b-0 transition-colors`
+
+| Column | Token class |
+|---|---|
+| Avatar circle | `w-8 h-8 rounded-full bg-muted text-muted-foreground flex items-center justify-center text-xs font-semibold border border-border` (use `--avatar-N` for `StudentAvatar`) |
+| Name | `text-sm font-medium text-foreground` |
+| Subject / sub-detail | `text-xs text-muted-foreground mt-0.5` |
+| Status pill | see 1A.6 |
+| Timestamp | `text-[11px] font-mono text-muted-foreground whitespace-nowrap` |
+
+Panel wrapping rows: `bg-card border border-border rounded-[10px] overflow-hidden` (the parent `.dash-panel` in mock).
+
+---
+
+### 1A.8 Left sidebar nav (tutor dashboard shell)
+
+**Mock source:** `.dash-sidebar { background: var(--surface-raised); border-right: 1px solid var(--border); padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-5); width: 220px; }`
+
+This is the **mock-faithful tutor shell** — Surface 2 uses a permanent 220px left sidebar, NOT a top-nav-only layout. The B2 redesign must switch to this shell.
+
+**Outer container:** `w-[220px] flex flex-col gap-5 bg-card border-r border-border p-5 min-h-screen`
+
+| Sub-element | Token class |
+|---|---|
+| Wordmark | `.wordmark text-[22px] mb-3` |
+| Section label ("Today", "Library", "Account") | `text-[10px] font-mono font-semibold uppercase tracking-widest text-muted-foreground mb-2 ml-2` |
+| Nav group | `flex flex-col gap-0.5 mb-3` |
+| **Nav link (default)** | `flex items-center gap-2 px-2.5 py-1.5 rounded-sm text-[13px] font-medium text-foreground hover:bg-muted/60 transition-colors min-h-[32px]` |
+| **Nav link (active)** | `bg-accent-soft text-accent-text` (add to base) |
+| Nav icon | `text-[12px] font-mono w-4 text-center opacity-60` (active: `opacity-100`) |
+
+**User identity chip (bottom — satisfies REQ-S3-3):**
+
+```
+mt-auto border border-border rounded-[10px] p-3 flex items-center gap-3 bg-background
+```
+
+| Chip sub-element | Token class |
+|---|---|
+| Avatar circle | `w-8 h-8 rounded-full bg-brand text-[color:var(--surface)] flex items-center justify-center text-[13px] font-semibold` |
+| Name | `text-[13px] font-medium text-foreground` |
+| Role / email | `text-[11px] font-mono text-muted-foreground mt-0.5` |
+| Impersonation badge | `ml-auto text-[10px] font-mono uppercase tracking-wider bg-destructive/10 text-destructive rounded px-1.5 py-0.5` |
+
+**Mobile (≤768px):** sidebar collapses to hidden; top nav `AdminNav` (or a hamburger variant) takes over. Grid: `grid-cols-1` below breakpoint.
+
+---
+
+### 1A.9 Toolbar / icon-control button (whiteboard)
+
+**Mock source:** `.rec-tool { width: 26px; height: 26px; font: 11px var(--font-mono); color: var(--text-muted); border-radius: 4px; }` / `.rec-tool.is-active { background: var(--text); color: var(--surface); }`
+
+The active-tool state uses **inverse colors** (dark/navy bg + cream text) — NOT coral. This is a firm boundary.
+
+| State | Token class |
+|---|---|
+| Default | `w-9 h-9 flex items-center justify-center rounded-md bg-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer transition-colors` |
+| **Active** | **`bg-foreground text-background`** |
+| Touch size (TM-10) | `w-12 h-12` (48px) |
+| Focused | `ring-2 ring-ring ring-offset-1` |
+| Disabled | `opacity-50 cursor-not-allowed` |
+
+**Strip container:** `bg-card border-r border-border flex flex-col items-center py-2 gap-0.5`
+
+**Floating mini toolbar:** `bg-background border border-border rounded-md p-1 flex gap-0.5`
+
+**Full visual design spec:** [`docs/handoff/whiteboard-chrome-p1.2-visual-design-2026-06-08.md`](handoff/whiteboard-chrome-p1.2-visual-design-2026-06-08.md)
+
+---
+
+### 1A.10 Chip toggle (multi-select preset button)
+
+Used in Properties popover (More styles tier): roughness, edge type, fill mode, stroke style, font size, arrowheads, etc.
+
+| State | Token class |
+|---|---|
+| Default | `border border-border bg-transparent text-foreground text-xs h-7 px-2 rounded-md font-medium` |
+| Selected | `bg-foreground text-background border-foreground` |
+| Hover | `hover:bg-muted/60` |
+
+Chip groups: `flex gap-1` inline.
+
+---
+
+### 1A.11 Popover / context menu container
+
+| Type | Token class |
+|---|---|
+| Properties popover | `w-60 p-3 bg-popover border border-border shadow-md rounded-[10px]` |
+| Overflow panel | `min-w-[180px] p-1 bg-popover border border-border shadow-md rounded-[10px]` |
+| Context menu | `min-w-[160px] p-1 bg-popover border border-border shadow-md rounded-[10px]` |
+| Popover menu item | `w-full flex items-center justify-between gap-3 px-3 py-1.5 text-sm rounded-sm text-foreground hover:bg-muted/60 font-normal cursor-pointer` |
+| Destructive menu item | `text-destructive hover:bg-destructive/10` (add to base) |
+| Keyboard shortcut hint | `text-xs font-mono text-muted-foreground ml-auto` |
+| Section separator | `h-px my-1 bg-border` |
+
+---
+
+### 1A.12 Persistent signed-in identity chip (REQ-S3-3)
+
+The user identity chip in the sidebar (1A.8) IS this primitive — it satisfies REQ-S3-3. On surfaces without a sidebar (auth, marketing, student join), identity is shown in `AdminNav` / `AccountPageShell` header via avatar + name display or email. The chip always shows:
+1. Current user's display name / email
+2. Current role (Tutor / Admin / AccountHolder / Student)
+3. Impersonation badge when `isImpersonating: true` (distinct from `ImpersonationBanner` which is a page-level alert)
+
+---
+
 ## §2. UX Rubric — Consistency Contract
 
 **Future chunks MUST follow these conventions. Deviating requires updating this doc and stating why.**
@@ -353,6 +569,127 @@ Token palettes for light + dark already exist via `[data-theme]` + `prefers-colo
 
 ---
 
+## §2.12 Token Vocabulary Gap Resolution
+
+> **Status:** Design intent decisions for tokens not yet in `tokens.css`. The next token-extension pass should add these. Derived from mock `:root`.
+
+### Spacing scale
+
+The mock defines an explicit spacing scale matching Tailwind's default 4px base. Tailwind utilities already map correctly — use them directly and they will match the mock's intended rhythm. No new CSS custom properties are needed for spacing.
+
+| Mock token | Value | Tailwind utility |
+|---|---|---|
+| `--space-1` | 4px | `p-1`, `gap-1`, `m-1` |
+| `--space-2` | 8px | `p-2`, `gap-2`, `m-2` |
+| `--space-3` | 12px | `p-3`, `gap-3`, `m-3` |
+| `--space-4` | 16px | `p-4`, `gap-4`, `m-4` |
+| `--space-5` | 20px | `p-5`, `gap-5`, `m-5` |
+| `--space-6` | 24px | `p-6`, `gap-6`, `m-6` |
+| `--space-8` | 32px | `p-8`, `gap-8`, `m-8` |
+| `--space-12` | 48px | `p-12`, `gap-12`, `m-12` |
+| `--space-16` | 64px | `p-16` |
+| `--space-20` | 80px | `p-20` |
+
+### Radius scale unification
+
+The mock uses four named radii. Current `tokens.css` is inconsistent (mixes 14px, 16px, 6px values). **Canonical target from mock:**
+
+| Semantic name | Mock value | Tailwind equivalent | Usage |
+|---|---|---|---|
+| `--radius-sm` / chip | 6px | `rounded-md` (Tailwind md = 6px) | Chips, mini toolbar, small interactive, session rows |
+| `--radius-md` / panel | **10px** | `rounded-[10px]` | Cards, panels, popovers, stat tiles, top bar — PRIMARY panel radius |
+| `--radius-lg` / container | 16px | `rounded-2xl` | Marketing/device frames in mock — rarely used in app chrome |
+| `--radius-xl` / device | 24px | `rounded-3xl` | Outer device mock frames only |
+| Pill | 999px | `rounded-full` | All buttons, badges, live badge, page tabs |
+| Avatar | 50% | `rounded-full` | |
+
+**Gap:** `--radius-md: 10px` has no exact Tailwind default (Tailwind's `rounded-md` = 6px, `rounded-lg` = 8px). Use `rounded-[10px]` until a token is added to `tailwind.config.ts`:
+
+```js
+// tailwind.config.ts — add to theme.extend.borderRadius
+borderRadius: {
+  panel: '10px',   // --radius-md: cards, panels, popovers
+  chip: '6px',     // --radius-sm: chips, mini toolbar
+}
+```
+
+Once added, use `rounded-panel` and `rounded-chip` in component code.
+
+**Note:** Unify existing `tokens.css` radius values to this scale in the next token-pass. Remove any `14px` or `0.625rem` values that don't map to the four-step scale.
+
+---
+
+## §2.13 Cohesion Resolutions (§2.10 items — ratified design decisions)
+
+Ratified design decisions addressing Andrew's Chunk-1 cohesion feedback (§2.10). Reference tokens, not implementation — executors build to these specs.
+
+### Resolution of §2.10 #4 — Monochrome vs mock color variety (CORE)
+
+> **Scope refinement (2026-06-08):** The current reskin is correctly described as monochrome. This is NOT a minor cohesion tweak — it requires building the mock-faithful compositions surface by surface. The token foundation is correct; the composition (where/how accent color appears) has not been built.
+
+**Required accent application across surfaces — derived from mock:**
+
+| Surface | Where `--accent` / `accent-soft` / `accent-text` appears | Mock ref |
+|---|---|---|
+| **All surfaces** | Primary CTA buttons (`bg-accent text-accent-on`) | All |
+| **Dashboard sidebar** | Active nav item: `bg-accent-soft text-accent-text` | S2 `.dash-side-link.is-active` |
+| **Dashboard stats** | Positive delta label: `text-accent-text` | S2 `.dash-stat-delta.is-up` |
+| **Dashboard** | "Recap ready" / "Live" session status pill: `bg-accent-soft text-accent-text` | S2 `.dash-session-status` |
+| **Dashboard** | Pending recaps strip: `bg-accent-soft border-l-[3px] border-accent` | S2 `.dash-pending-summaries` |
+| **Dashboard** | "Up next" / "Start session" card nested CTA: `bg-accent text-accent-on` | S2 `.dash-upnext-cta` |
+| **All active sessions** | Live dot: `bg-accent` + glow-halo `shadow-[0_0_0_3px_var(--accent-soft)]` | S1, S4 `.live-dot` |
+| **Recording top bar** | Live badge: `bg-accent-soft text-accent-text rounded-full` | S4 `.rec-live` |
+| **Pre-session** | Context/memory strip: `bg-accent-soft border-l-[3px] border-accent` | S3 `.pre-context` |
+| **Pre-session** | Mic level bars (active): `bg-accent` | S3 `.mic-bar.lvl-N` |
+| **Pre-session** | Eyebrow ("Pre-session"): `text-accent-text` | S3 `.pre-eyebrow` |
+| **Session detail** | Active tab underline: `border-b-2 border-accent` | S5 `.session-tab.is-active` |
+| **Session detail** | Editable AI recap sections: `bg-accent-soft border-l-[3px] border-accent` | S5 `.editable` |
+| **Session detail** | Transcript speaker (tutor): `text-accent-text` | S5 `.transcript-line .speaker` |
+| **Session detail** | "Regenerate" / "Regenerate recap" link: `text-accent-text font-medium` | S5 footer |
+| **Parent share** | Section heading underline: `border-b-2 border-accent` inline-block | S6 `parent-section h2` |
+| **Parent share** | Moment timestamp pill: `text-accent-text font-mono font-semibold` | S6 `.parent-moment-ts` |
+| **Marketing** | Feature card icon cells: `bg-accent-soft text-accent-text rounded-[10px]` | S1 `.mkt-feature-icon` |
+| **Marketing** | Hero eyebrow: `text-accent-text` | S1 `.mkt-hero-eyebrow` |
+| **Marketing** | Trust checkmarks: `text-accent font-bold` | S1 `.checkmark` |
+
+**The fix is compositional, not a token change.** Each B2–B6 chunk must implement these patterns for its surfaces. The §5 migration checklist flags each surface accordingly.
+
+### Resolution of §2.10 #2 — Layout/hierarchy/density not redesigned
+
+The reskin applied tokens to pre-existing layouts. Mock-faithful layouts for key surfaces:
+
+| Surface | Current (reskin floor) | Target (mock-faithful) |
+|---|---|---|
+| Dashboard | Top-nav + AdminPageShell, flat page | Left sidebar (220px, 1A.8) + stats row (4-col) + two-column main (sessions list 2fr + right col 1fr) + pending strip + Start Session card (`bg-brand`) |
+| Session detail | Single-column stacked | Two-column (recap 1.2fr + side 1fr), tab strip (Recap / Transcript / Whiteboard / Audio), AI sections with `accent-soft` tint |
+| Active workspace | AdminNav wrap + whiteboard | Session bar 44px (mock `rec-topbar`) + dominant canvas + status bar + optional transcript side panel; NO AdminPageShell wrapping |
+| Pre-session | Basic centered card | Centered full-viewport, mic-check + whiteboard preview in `grid-cols-2`, `accent-soft` last-session strip, coral CTA |
+| Settings | Cards on index + sub-pages | Left sub-nav (180px, GitHub/Stripe/Linear pattern) + content area; NO card-on-every-nav-item |
+
+### Resolution of §2.10 #1 — Settings sub-nav pattern
+
+**Decision:** Implement **left settings sub-nav** (180px sidebar) for the settings section — matching GitHub / Stripe / Linear density and IA clarity. The sidebar uses the same component pattern as 1A.8 (sidebar nav) but narrower. The main area keeps `AdminSectionCard` for content grouping.
+
+**Implement in:** Cohesive visual pass (after Chunk 1 functional merge).
+
+### Resolution of §2.10 #3 — Email OAuth notice placement
+
+**Decision:** `AuthMortensenNotice` moves **above** the Connect-Gmail button (or into the button label area as a sub-caption). Never below the primary action — users click before reading. **Legal binding placement** per `v1-redesign-STATUS.md`.
+
+**Implement in:** Next auth-surface touch (cohesive pass or targeted B1 follow-up).
+
+### Resolution of §2.10 #5 — Warning color shade
+
+**Decision:** Tune `--warning` in `tokens.css` light mode from current yellow-green to amber. Target: `#d97706` (amber-600, Tailwind default). Dark mode `--warning: #fde047` is correct per dark spec — no change needed.
+
+**Implement in:** Single token change in cohesive pass (1 line, `tokens.css`).
+
+### Resolution of §2.10 #6 — Input validation-state coloring
+
+**Decision:** Deferred. `aria-invalid` + `text-destructive` error text is sufficient for v1. `PasswordStrengthField` zxcvbn bar covers the most important validation affordance. Per-field red/yellow/green border coloring is not a v1 blocker. Revisit if pilot feedback requests it.
+
+---
+
 ## §3. Component-Pass Chunk Tracker
 
 ### Review protocol (LOCKED — Andrew 2026-06-07)
@@ -450,6 +787,51 @@ The following files are locked to recording slice 3 or live-session infrastructu
 
 ---
 
+## §5. Legacy-Surface Migration Checklist
+
+> **Purpose:** Maps every current surface to its mock-faithful composition target. Flags which surfaces are "reskin floor today" vs "mock-faithful target." The composition build-out roadmap — not just primitive-swaps.
+
+**Status legend:**
+- **[RESKIN FLOOR]** — tokens applied to pre-existing layout; composition NOT mock-faithful
+- **[MOCK-FAITHFUL]** — what needs to be built (or verify it is built)
+- **[NOT YET BUILT]** — surface does not yet exist
+- **[FIRST CUT / NOT MERGED]** — partially built, not yet in master
+
+| # | Surface | Route | Current state | Composition target | Chunk | Priority |
+|---|---|---|---|---|---|---|
+| 1 | **Dashboard** | `/admin` | **[RESKIN FLOOR]** Top-nav + AdminPageShell. Monochrome. No sidebar, stats row, two-column, pending strip, brand-bg card. | **Left sidebar (1A.8)** + stats row 4-col + two-column main (sessions 2fr + right col 1fr) + `accent-soft` pending-recap strip + `bg-brand` Start Session card (replaces mock's scheduling card). All accent application per §2.13 #4. | B2 | **HIGH** |
+| 2 | **Student list** | `/admin/students` | **[RESKIN FLOOR]** Top-nav + AdminPageShell + `StudentsRoster`. Monochrome. | Same sidebar shell as dashboard. Student list with search. Per-student `accent-soft` status badge. Coral "Add student" / "Start session" CTA. | B2 | HIGH |
+| 3 | **Student detail** | `/admin/students/[id]` | **[RESKIN FLOOR]** AdminPageShell. | Student header: `bg-brand` avatar circle, student name `.heading`, metadata `.label-mono`. Session list for student. `accent-soft` "Recap ready" badges. Coral "Start session" CTA. | B2 | MEDIUM |
+| 4 | **Session list / billing** | `/sessions` | **[NOT YET BUILT]** | Date range picker + student filter + session table + subtotal row + export button. Session rows use 1A.7 pattern. | B3 | MEDIUM |
+| 5 | **Session detail / replay** | `/sessions/[id]` | **[RESKIN FLOOR]** `WhiteboardNotesPanel` + raw markdown display. Single column. | Two-column layout (recap card 1.2fr + side panel 1fr). Tab strip with `border-b-2 border-accent` active underline. AI recap card: `accent-soft` editable sections. Transcript speaker `text-accent-text`. Whiteboard snapshot 2×2 grid. "Regenerate" `text-accent-text` footer link. Full `.ai-prose` for AI content. | B4 | **HIGH** |
+| 6 | **Parent share** | `/share/[token]` | **[RESKIN FLOOR]** `ParentShareNoteCard` + basic layout. First parent impression — critical. | Section headings: `border-b-2 border-accent inline-block`. `parent-moment` cards: timestamp `text-accent-text font-mono`. AI content: `.ai-prose` Fraunces serif. Sign-off avatar: `bg-brand text-brand-on`. "Play" ghost buttons. Centered max-w-[680px] layout. | B4 | **HIGH** |
+| 7 | **Live workspace** | `/sessions/[id]/workspace` | **[RESKIN FLOOR]** Existing workspace with `AdminNav` chrome. | Session bar (44px, `bg-card border-b`): live badge `bg-accent-soft text-accent-text` + coral dot + timer `font-mono font-semibold` + end-session inverse button. Canvas dominant. P1.2 chrome per visual design doc. Status bar bottom. Optional transcript side panel. NO `AdminPageShell` wrapping. | B5 + P1.1 | **HIGH** |
+| 8 | **Pre-session preview** | Workspace before Start | **[RESKIN FLOOR]** Basic centered card. | Centered full-viewport. Eyebrow `text-accent-text` label-mono. 2-column mic-check + whiteboard preview cards. `accent-soft` last-session context strip. Coral "Start session" btn-lg + ghost "Continue last whiteboard". | B5 | **HIGH** |
+| 9 | **Student join** | `/join/[token]` | **[RESKIN FLOOR]** Current workspace layout. | Phone-first, `100dvh`. Canvas ≥80% viewport. Compact page strip (pill tabs). Follow-tutor toggle: `bg-accent-soft text-accent-text` when ON. AV tile: `position: fixed` bottom-right overlay. Minimal floating tool buttons. | B6 | HIGH |
+| 10 | **Auth surfaces** | `/login`, `/signup`, `/forgot`, `/reset` | **[PARTIALLY MOCK-FAITHFUL]** B1 shipped wordmark + centered card. | Verify: `bg-background` (cream/navy) page bg. Wordmark `text-[28px]`. OAuth notice ABOVE Connect-Gmail button (§2.13 #3 resolution). Coral CTA pair with ghost. | B1 follow-up / cohesive | LOW |
+| 11 | **Marketing landing** | `/` | **[FIRST CUT / NOT MERGED]** Phase D, `feature/phase-d-landing-about` @ `37d8178`. | Phase D v2 decisions (see v1-component-redesign-design-2026-05-31.md §5 D v2). MarketingHeader with single Sign-in menu. Hero: "Session notes that write themselves." `accent-text` eyebrow. Coral CTA pair. Value props 3-col. "How it works" 3-step. Trust CTA. SiteFooter. | D (Phase D v2 review) | MEDIUM |
+| 12 | **Settings index + sub-pages** | `/admin/settings/**` | **[RESKIN FLOOR / CHUNK 1]** Chunk 1 functional. §2.10 items apply. | Left settings sub-nav (180px sidebar per §2.13 #1). Content area with `AdminSectionCard`. OAuth notice above button (§2.13 #3). Amber warning token (§2.13 #5). | Cohesive pass | MEDIUM |
+| 13 | **Whiteboard chrome** | Workspace overlay | **[NOT YET BUILT]** P1.1 pending. | P1.2 visual design: [`docs/handoff/whiteboard-chrome-p1.2-visual-design-2026-06-08.md`](handoff/whiteboard-chrome-p1.2-visual-design-2026-06-08.md). Surface 4 visual language. Active tool = inverse colors (NOT coral). | P1.1 | **HIGH** |
+| 14 | **`SubmitButton` sites** | Various forms | **[DEBT]** Pre-B1 component. | Migrate to `<Button>` from shadcn/ui opportunistically when touching a page. No forced sweep. | Ongoing | LOW |
+| 15 | **`dark:` hardcodes** (~30 usages) | Various components | **[DEBT]** Key off OS not `[data-theme]`. | Migrate to token-driven classes per §2.11 end-state. Eliminate `dark:` from component code when touching a file. | Ongoing | LOW |
+| 16 | **Session replay chrome** | `WhiteboardReplay` | **[RESKIN FLOOR / LOCKED]** Slice 3 ownership — do not touch. | After slice 3 merges: apply B4 session-detail chrome (Surface 4 visual language for replay toolbar). | B4 post-slice-3 | MEDIUM |
+
+### Build order (guidance)
+
+| Order | Work | Why |
+|---|---|---|
+| 1st | **A′ Theme plumbing** | All subsequent chunks inherit dark mode correctly |
+| 2nd | **B2 Dashboard + shell** | Establishes sidebar shell all B3–B6 share |
+| 3rd | **P1.1 Whiteboard chrome** | Parallel to B chunks; separate team/agent. Sarah's live surface. |
+| 4th | **B4 Session detail + Parent share** | Sarah's primary review; parent's first impression |
+| 5th | **B5 Workspace** | Sarah's live surface; depends on P1.1 for chrome |
+| Parallel | **B3 Session list**, **D Landing** | After B2; D is its own branch |
+| After B2 | **B6 Student join (mobile)** | Phone-first; requires real-device test |
+| After B2–B6 | **Cohesive visual pass** | Settings sub-nav, density, warning token, OAuth placement |
+| Gated (Andrew) | **C URL restructure** | After B+A stable |
+
+---
+
 ## Changelog
 
 - **2026-06-07:** Initial doc. Component-pass chunk 1 (Settings/operator reskin). Authored by Sonnet subagent on branch `v1-component-spine`.
@@ -460,3 +842,4 @@ The following files are locked to recording slice 3 or live-session infrastructu
 - **2026-06-07:** **§2.11 light/dark theme parity** + planned `ThemeToggle` deliverable (§1 inventory, §3 tracker row A′). Pre-master gate per Andrew.
 - **2026-06-07:** **§2.11 strengthened to HARD per-component acceptance gate** — no separate theming pass; foundational plumbing = first slice (A′); agent rule `.cursor/rules/both-theme-components.mdc`.
 - **2026-06-07:** **§2.11 sharpened to theme-agnostic architectural principle** — tokens only in components (no `light`/`dark`); N-theme-capable; boundary-adapter carve-outs; `dark:`→token migration target as end-state debt.
+- **2026-06-08:** **PAPER design pass additions** (Opus orchestrator, SCOPE REFINEMENT applied): added **§1A Ratified Primitive Spec** (11 primitives derived from mock six surfaces: coral CTA, ghost button, accent strip, brand-bg card, stat tile, session badge, session row, left sidebar nav + identity chip, toolbar icon-control, chip toggle, popover container); **§2.12 Token vocabulary gap resolution** (spacing scale = Tailwind default, radius unification: `--radius-panel: 10px`); **§2.13 Cohesion resolutions** (§2.10 #1–#6 ratified: settings left sub-nav, layout/density/density composition targets per surface, OAuth notice above CTA, amber warning token, validation-state coloring deferred); **§5 Legacy-surface migration checklist** (all surfaces flagged RESKIN FLOOR vs MOCK-FAITHFUL TARGET, build-order guidance). Branch `v1-redesign`.
