@@ -4,7 +4,7 @@
 >
 > **Sequencing (ratified Andrew 2026-06-07/08):** Whiteboard chrome is a **pre-master gate** for the V1 reveal — build on `v1-redesign` before `v1-redesign → master`. Master cut = Sarah reveal (`tutoring-notes.vercel.app` / `usemynk.com` share the same production deployment on `master`; no UI-skin feature flag). The reveal must be one cohesive site, not polished chrome around still-janky Excalidraw native UI.
 >
-> **Last consolidated:** 2026-06-07 (TU-11 keyboard surface routing added); sequencing note updated 2026-06-07/08.
+> **Last consolidated:** 2026-06-07 (TU-11 keyboard surface routing added); sequencing note updated 2026-06-07/08. **Design doc (ratified forks + phasing):** [`whiteboard-chrome-design-2026-06-07.md`](whiteboard-chrome-design-2026-06-07.md).
 
 ---
 
@@ -96,6 +96,7 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 | **TM-06** | **iOS touch undo/redo** on visible ↶/↷ buttons — verify after custom chrome (shipped desktop; touch unverified). | (ii) + verify | BACKLOG undo row; iOS matrix §7; TU-11 |
 | **TM-07** | **Touch drawing ergonomics** on iOS — palm rejection, continuous stroke broadcast (S11 matrix). | (ii) + verify | PHASE-2-IOS-SMOKE-MATRIX §7, S11 |
 | **TM-08** | **Eraser cursor** aligned with stroke delete path (icon/cursor vs actual erase position). | app-bug | BACKLOG eraser cursor row; whiteboard-sync-redesign |
+| **TM-09** | **Tutor-mobile deferral + expectations notice (v1.1).** (a) Pre-subscribe/pricing copy: tutor phone/tablet support upcoming; **desktop tutoring only** now. (b) Host-time device gate: block tutor **starting** a whiteboard session from non-desktop with *"Desktop tutoring only for now; phone/tablet tutoring is coming."* Architecture must not preclude tutor-mobile later. **Defers TM-05** full variant to v1.1. | (ii) + product | Design pass 2026-06-07 Fork 2; [`whiteboard-chrome-design-2026-06-07.md`](whiteboard-chrome-design-2026-06-07.md) §5 |
 
 ### Screen real estate / responsive
 
@@ -160,18 +161,23 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 
 ## Open design questions (for the chrome design pass)
 
-1. **Toolbar placement — tutor desktop:** left collapsible strip vs minimal top bar (Wyzant reference)? Hybrid?
-2. **Pulldown grouping:** besides line/arrow and rect/diamond/ellipse, which tools share pulldowns? Where do PDF/Math/Desmos/Image land?
-3. **Properties compression:** which properties always visible vs behind "More styles"?
+**Resolved (design pass 2026-06-07 — detail in [`whiteboard-chrome-design-2026-06-07.md`](whiteboard-chrome-design-2026-06-07.md)):**
+
+1. ~~**Toolbar placement — tutor desktop:**~~ **RESOLVED → HYBRID** — slim top bar (~44px) session/insert/zoom + collapsible left tool strip + contextual properties popover.
+5. ~~**Tutor-mobile variant:**~~ **RESOLVED → DEFER v1.1 + expectations notice** — see **TM-09** (pre-subscribe copy + host-time desktop-only gate).
+7. ~~**Zen mode vs CSS hide:**~~ **RESOLVED → `zenModeEnabled` + scoped CSS** (zen alone insufficient). Do not pass `style` to `<Excalidraw>`.
+12. ~~**Prototype / acceptance gate:**~~ **RESOLVED → fail-fast Phase 0 runtime POC** on Vercel preview before Phase 1 full build (sync-free throwaway); real-iPhone gate remains Phase 2.
+
+**Still open:**
+
+2. **Pulldown grouping:** besides line/arrow and rect/diamond/ellipse, which tools share pulldowns? Where do PDF/Math/Desmos/Image land? *(Partial: inserts on top bar in hybrid layout — see design doc §3.)*
+3. **Properties compression:** which properties always visible vs behind "More styles"? *(Partial: color, width, opacity inline — see design doc §3.)*
 4. **Student vs tutor tool parity:** v1 pencil+eraser only — revisit after Sarah tests student add-page.
-5. **Tutor-mobile variant:** defer to v1.1 or ship minimal desktop chrome at smaller breakpoints?
-6. **Laser pointer:** fix in Excalidraw layer vs custom overlay tool?
-7. **Zen mode vs CSS hide:** best way to suppress native UI on 0.18.1?
+6. **Laser pointer:** fix in Excalidraw layer vs custom overlay tool? → Phase 3.
 8. **Keyboard shortcuts:** expose Excalidraw defaults (P, R, etc.) when native toolbar hidden? → see **TU-11** (surface routing + tutor-desktop vs student-mobile parity).
 9. **Visual system:** every chrome control maps to v1 tokens — no one-off oversized buttons.
 10. **PDF default fit:** tutor viewport vs student viewport on insert (BACKLOG open design row).
 11. **Ghost peer viewport overlays** when follow is OFF — ship in chrome wave or defer?
-12. **Acceptance mocks:** clickable prototype on real iPhone + tutor Mac before implementation merge.
 
 ---
 
@@ -257,6 +263,7 @@ Broad case-insensitive ripgrep across **`docs/`** and **`docs/handoff/`** for wh
 
 ## Cross-links
 
+- **Design (ratified 2026-06-07):** [`whiteboard-chrome-design-2026-06-07.md`](whiteboard-chrome-design-2026-06-07.md) — hybrid layout, forks, phasing, POC gate
 - Implementation status: [`docs/WHITEBOARD-STATUS.md`](../WHITEBOARD-STATUS.md) § Sarah UX asks + custom chrome decision
 - Backlog rows: [`docs/BACKLOG.md`](../BACKLOG.md) § Whiteboard — implementation / design queue
 - Excalidraw API constraint: [`docs/PLATFORM-ASSUMPTIONS.md`](../PLATFORM-ASSUMPTIONS.md) §7.5
@@ -273,8 +280,8 @@ Broad case-insensitive ripgrep across **`docs/`** and **`docs/handoff/`** for wh
 | Pulldown / consolidation | 4 |
 | Properties palette | 5 |
 | Drawing defaults | 5 |
-| Touch / mobile-tablet | 8 |
+| Touch / mobile-tablet | 9 |
 | Screen real estate / responsive | 12 |
 | Student-WB-specific | 6 |
 | Tutor-WB-specific | 11 |
-| **Total** | **62** |
+| **Total** | **63** |

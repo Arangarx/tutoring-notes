@@ -2,7 +2,7 @@
 
 > **Start here.** This is the single entry point for any new chat, agent, or human picking up work in this repo. Every canonical doc, spoke doc, and smoke runbook is mapped below by topic. For the curated reading-list with in-depth framing, see `AGENTS.md § Key docs`.
 >
-> Last updated: 2026-06-07 (docs archive pass — cold storage under `docs/archive/`).
+> Last updated: 2026-06-07 (whiteboard chrome design pass + INDEX entry).
 
 ---
 
@@ -41,7 +41,8 @@ Bar to archive a doc or section: **(a)** its still-valid content is provably cap
 |---|---|---|
 | [docs/RECORDER-LIFECYCLE.md](docs/RECORDER-LIFECYCLE.md) | **Must-read gate.** Three-pillar FSM + outbox + atomic end-session; end-session flow diagram; Phase 1c surfaces (snapshot PNG, preview-before-Start); per-session ID registry (`rid`, `wbsid`, `obx`, `snp`, `pvw`, `avx`, …) | Before touching `lifecycle-machine.ts`, `upload-outbox.ts`, `endWhiteboardSession`, or workspace `handleEndSession` |
 | [docs/WHITEBOARD-STATUS.md](docs/WHITEBOARD-STATUS.md) | Current whiteboard build status, guardrails, adversarial review, demo gate, sync-host deploy notes | Before any whiteboard feature work or smoke pass |
-| [docs/handoff/whiteboard-chrome-requirements.md](docs/handoff/whiteboard-chrome-requirements.md) | **Custom Mynk whiteboard chrome** — LOCKED decision, Sarah UX requirements (toolbar, properties, defaults, mobile), feasibility tags; design INPUT for whiteboard wave (not V1-notes blocker) | Before the custom-chrome design pass or any Excalidraw UI replacement work |
+| [docs/handoff/whiteboard-chrome-requirements.md](docs/handoff/whiteboard-chrome-requirements.md) | **Custom Mynk whiteboard chrome** — LOCKED decision, 63 Sarah UX requirements (toolbar, properties, defaults, mobile incl. TM-09), feasibility tags | Before any Excalidraw UI replacement work |
+| [docs/handoff/whiteboard-chrome-design-2026-06-07.md](docs/handoff/whiteboard-chrome-design-2026-06-07.md) | **Whiteboard chrome design (ratified 2026-06-07)** — hybrid tutor layout, architecture, fork resolutions, Phase 0–3 phasing + POC gate, sync invariants | Before building Phase 1 tutor-desktop chrome or reviewing POC results |
 | [docs/LIVE-AV.md](docs/LIVE-AV.md) | Live A/V architecture cheat sheet — peer-mesh, signaling, `useLiveAV`, `mic-recorder-audio`, participants-reconcile effect | Before touching `peer-mesh.ts`, `useLiveAV.ts`, `mic-recorder-audio.ts`, or anything claiming to "simplify" peer connection or audio recording |
 | [docs/PHASE-1B-STATUS.md](docs/PHASE-1B-STATUS.md) | Outbox + atomic end-session branch handoff (Pillars 2 + 3) — **SHIPPED** 2026-05-10–13 | Historical reference for Pillars 2 + 3 design decisions |
 | [docs/PHASE-4A-STATUS.md](docs/PHASE-4A-STATUS.md) | Live-A/V peer-mesh + signaling foundation — **SHIPPED** (Phase 4a; first of 4 sub-chats; full stack shipped through 4d + device-mgmt) | Historical reference for Pillar 6 decisions; see `docs/LIVE-AV.md` for the current cheat sheet |
