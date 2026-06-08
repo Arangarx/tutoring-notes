@@ -27,7 +27,17 @@ Multi-day epic on branch **`v1-redesign`** (active V1 integration branch; **not 
 
 Andrew smoked the bridge (runbook §4). **slice-3 is NOT merge-ready.** Root issue: the bridge **guessed** on REQ-S3-2a "Save semantics" which the spec explicitly deferred to the B4 design pass ("Do not guess"). It built a `DRAFT→READY→SENT` model that **conflicts with Andrew's intent** (no DRAFT, Save = immediately parent-visible, "new/unseen" via the **existing `NoteView`** mechanism, no SENT). Investigation: [`8f7e28d3`](8f7e28d3-40cf-42c3-8b77-ae6d77ad529e).
 
-**B4 Save-model decision: IN DISCUSSION with Andrew (2026-06-07)** — proposed: TutorNote = working draft (never a parent-visible SessionNote); Save creates a normal parent-visible note (status READY, no DRAFT/SENT); "new/unseen" via existing `NoteView`. Lock before dispatching rework.
+**B4 Save-model decision: LOCKED (Andrew 2026-06-07).** Principle: **everything is immediately live, both directions.**
+- `TutorNote` = AI working draft (never parent-visible, regeneratable). `SessionNote` = the live note.
+- **Save** = create/update ONE live `SessionNote` per session (idempotent via `WhiteboardSession.noteId`), status `READY` (never DRAFT). Instantly parent-visible.
+- After save: review page edits the **live** note (each save instantly live). **Regenerate** re-seeds editable fields from a fresh AI pass; not live until Save again.
+- **Delete** a saved note = allowed + instantly removed for parent (DROP the bridge's "refuse delete on finalized" guard).
+- **Parent markers (V1):** "New" (never seen) + "Updated" (changed since seen) via existing `NoteView`.
+- **"Send" = notification only** (manual now, scheduled later — "you have new notes" → share page). NOT a note state. `DRAFT/READY/SENT` enum is **legacy** (from when sending was stateful) → retire in the separate cleanup; decouple sending from status there.
+
+**Execution split (Andrew 2026-06-07):**
+- **Pass 1 (notes correctness — merge-blocker, dispatching now):** remove auto-DRAFT-`SessionNote` creation; reduce writes structured fields into `TutorNote`; Save creates/updates one READY `SessionNote`; drop delete-guard + delete-resilience (redirect-regardless + cron + fix 60s timeout); fix `test:wb-sync` import coupling (move `REDUCE_PROMPT_VERSION` out of `notes-worker.ts`); fix `s/[token]/page.tsx` `findFirst` wrong-tutor-name leak. Notes stay on current review page. → re-smoke → merge.
+- **Pass 2 (session-end UX — V1 follow-on, Opus-designed):** shared **session shell** (thin top nav + sidebar tabs); live mode = today's workspace UNCHANGED; **review mode** = lightweight notes editor (replay lazy-loaded on "Review video while editing", controls stripped); end-session auto-transitions shell into review mode (same shell, no nav-away); same review component for first-review vs after-the-fact edit (different buttons); unsaved-session **recovery** surface (V1 req). **Caution captured:** keep live engine + replay/notes engine as SEPARATE implementations under a shared shell — do NOT literally merge them (the `WhiteboardWorkspaceClient` reliability boundary; the `test:wb-sync` break is this coupling class). Overlaps the component-pass workspace-chrome redesign — coordinate.
 
 **Defects found (fold into rework):**
 1. `test:wb-sync` FAIL (6 tests/2 suites) — bridge made `notes-actions.ts:35` import `REDUCE_PROMPT_VERSION` from `notes-worker.ts`, dragging `next/cache` into `WhiteboardWorkspaceClient`'s import graph → `TextEncoder is not defined` in workspace DOM tests. Fix: move the constant to a lightweight config module.
