@@ -21,11 +21,12 @@ export type ConnectedParent = {
  */
 export function ConnectedParentSection({
   studentId,
-  studentName,
+  learnerName,
   connectedParent,
 }: {
   studentId: string;
-  studentName: string;
+  /** Parent-facing learner name (LearnerProfile.displayName), not the tutor's Student.name. */
+  learnerName: string;
   connectedParent: ConnectedParent;
 }) {
   const [confirming, setConfirming] = useState(false);
@@ -66,9 +67,10 @@ export function ConnectedParentSection({
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 space-y-3">
           <p className="text-sm font-medium text-destructive">Disconnect parent account?</p>
           <p className="text-xs text-muted-foreground">
-            This removes the parent&apos;s access to <strong>{studentName}</strong> only. It does
-            not affect their other tutors or log the learner out elsewhere. You can re-send a
-            claim invite afterward.
+            This disconnects <strong>{displayIdentity}</strong> from learner{" "}
+            <strong>{learnerName}</strong> on your account only. The parent keeps access through
+            their other tutors and the learner stays signed in elsewhere. You can send a new claim
+            invite afterward.
           </p>
           <div className="flex gap-2">
             <Button

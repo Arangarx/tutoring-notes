@@ -235,7 +235,7 @@ export default async function StudentDetailPage({
             // IAC-13 (a)+(b): Show connected parent identity + disconnect control.
             <ConnectedParentSection
               studentId={student.id}
-              studentName={student.name}
+              learnerName={student.learnerProfile.displayName}
               connectedParent={
                 {
                   email: student.learnerProfile.accountHolder.email,
