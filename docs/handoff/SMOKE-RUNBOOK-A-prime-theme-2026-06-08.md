@@ -15,18 +15,18 @@ This is a **foundation** chunk. The bar is **functional correctness / no-regress
 
 ## Control plane
 
-- [ ] Theme toggle present in admin nav (desktop) **and** mobile drawer — Light / Dark / System.
-- [ ] Switching **Light ↔ Dark** via the toggle reskins the page immediately and completely.
-- [ ] Choice **persists across a hard reload** (refresh keeps your pick).
-- [ ] **No FOUC** — hard refresh / new tab shows the correct theme with no flash of the wrong theme before paint.
-- [ ] **System** mode follows the browser's reported scheme (see the gotcha below before testing this one).
+- [x] Theme toggle present in admin nav (desktop) **and** mobile drawer — Light / Dark / System.
+- [x] Switching **Light ↔ Dark** via the toggle reskins the page immediately and completely.
+- [x] Choice **persists across a hard reload** (refresh keeps your pick).
+- [x] **No FOUC** — hard refresh / new tab shows the correct theme with no flash of the wrong theme before paint.
+- [x] **System** mode follows the browser's reported scheme (see the gotcha below before testing this one).
 
 ## Both-theme spot check (a few key surfaces, Light AND Dark via the explicit toggle)
 
-- [ ] `/admin` dashboard
-- [ ] `/admin/students` + a student detail page
-- [ ] `/admin/settings`
-- [ ] An auth page (`/login`)
+- [x] `/admin` dashboard
+- [x] `/admin/students` + a student detail page
+- [x] `/admin/settings`
+- [x] An auth page (`/login`)
 
 ## Known gotcha — "System mode isn't following my OS" (NOT a bug)
 
@@ -37,25 +37,27 @@ If System mode doesn't seem to match your OS, it's almost always one of these �
 3. **Chrome-on-Windows may not propagate an OS change live** while open (may need a relaunch). macOS Chrome updates live. A′ can only react to what the browser reports.
 
 **Console check** for the value A′ reads:
+
 ```js
 window.matchMedia('(prefers-color-scheme: dark)').matches   // true = browser reports dark
 document.documentElement.getAttribute('data-theme')          // System → null; explicit → "light"/"dark"
 localStorage.getItem('mynk-theme')                           // persisted mode, expect "system"
 localStorage.getItem('tutoring-notes-dev-theme')             // stale dev override that would pin theme
 ```
+
 **The explicit Light/Dark toggle is independent of all of the above** and is the deterministic path for smoking both themes.
 
 ## Explicitly NOT in scope (do NOT fail A′ on these)
 
 - [ ] **Excalidraw still follows OS theme only** — wiring it to the app theme (TU-12) is a later whiteboard slice, intentionally not in `ea878ec`.
-- [ ] **`dark:`-variant components don't flip in System mode.** Tailwind `dark:` is keyed to `[data-theme=dark]`, which System mode leaves absent — so any component still using `dark:` (incl. core `button`/`input`) stays light-styled in System+OS-dark. This is the known `dark:`→token migration debt (design-pass §5), not an A′ machinery failure. The **explicit Dark toggle** sets `data-theme=dark` and flips these correctly.
+- [ ] `**dark:`-variant components don't flip in System mode.** Tailwind `dark:` is keyed to `[data-theme=dark]`, which System mode leaves absent — so any component still using `dark:` (incl. core `button`/`input`) stays light-styled in System+OS-dark. This is the known `dark:`→token migration debt (design-pass §5), not an A′ machinery failure. The **explicit Dark toggle** sets `data-theme=dark` and flips these correctly.
 - [ ] Full visual polish / color variety / density toward the mock — that's the cohesion/composition build.
 
 ---
 
 ## Overall verdict (pick one)
 
-- [ ] **GREEN** — theme machinery works, no regressions → merge A′ into `v1-redesign`.
+- [x] **GREEN** — theme machinery works, no regressions → merge A′ into `v1-redesign`.
 - [ ] **YELLOW** — works with caveats (note them).
 - [ ] **RED** — machinery is broken (note it).
 
@@ -66,4 +68,4 @@ Notes / caveats:
 ## Open decision (carried from smoke)
 
 - [ ] **Fold `dark:`→token cleanup of core primitives (`button`/`input`) into A′ before merge**, so System mode is visually whole, OR
-- [ ] **Merge A′ as-is** and make those primitives the first surface in the migration chunk.
+- [x] **Merge A′ as-is** and make those primitives the first surface in the migration chunk.
