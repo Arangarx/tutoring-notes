@@ -27,6 +27,15 @@ jest.mock("@/lib/recording/transcription-worker", () => ({
   processChunkTranscribeJob: (...args: unknown[]) => mockProcessChunkTranscribeJob(...args),
 }));
 
+// Mock after() to fire callback as a void promise (fire-and-forget, async).
+// This preserves the real semantics: enqueueChunkTranscribe resolves immediately,
+// and the callback runs in the next microtask.
+jest.mock("next/server", () => ({
+  after: jest.fn((callback: () => Promise<void>) => {
+    void callback();
+  }),
+}));
+
 // ---------------------------------------------------------------------------
 // Imports
 // ---------------------------------------------------------------------------
@@ -67,6 +76,8 @@ describe("enqueueChunkTranscribe", () => {
     });
 
     await enqueueChunkTranscribe(JOB);
+    // Drain after() callback (fires async via void callback())
+    await new Promise((r) => setTimeout(r, 10));
 
     expect(mockUpsertTranscriptChunk).toHaveBeenCalledWith({
       sessionId: JOB.sessionId,

@@ -109,7 +109,10 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   `[lpr] lpr=unknown action=hard_lock_triggered handle=<familyId>:<username>`,
   `[lpr] lpr=<profileId> action=hard_lock_cleared_by_parent credKey=<familyId>:<username>`;
   hard lock state is durable in `LearnerLoginThrottle` Neon table — survives cold starts
-  and is shared across instances). See
+  and is shared across instances),
+  `nsi` (notes-session-integration bridge — DRAFT `SessionNote` auto-creation/update
+  at reduce completion, Save/finalize DRAFT→READY, delete-session-and-data; every
+  transition writes `[nsi] wbsid=<sessionId> action=<action> ...`). See
   [docs/RECORDER-LIFECYCLE.md](docs/RECORDER-LIFECYCLE.md) for the
   registry.- **Migrations are additive.** Production runs on Neon; never drop or
   rename a column without a multi-step migration.

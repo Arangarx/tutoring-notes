@@ -61,7 +61,7 @@ export default async function ShareAllPage({ params, searchParams }: PageProps) 
 
   const [notes, totalCount] = await Promise.all([
     db.sessionNote.findMany({
-      where: { studentId: student.id, ...searchFilter },
+      where: { studentId: student.id, status: { not: "DRAFT" }, ...searchFilter },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       skip,
       take: pageSize,
@@ -81,7 +81,7 @@ export default async function ShareAllPage({ params, searchParams }: PageProps) 
         whiteboardSessions: parentShareWhiteboardSessionsArgs,
       },
     }),
-    db.sessionNote.count({ where: { studentId: student.id, ...searchFilter } }),
+    db.sessionNote.count({ where: { studentId: student.id, status: { not: "DRAFT" }, ...searchFilter } }),
   ]);
 
   const whiteboardIdsByNote = await loadWhiteboardReplayIdsByNoteIds(

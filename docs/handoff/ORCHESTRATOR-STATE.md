@@ -8,17 +8,57 @@ Multi-day epic on branch **`v1-redesign`** (active V1 integration branch; **not 
 
 ---
 
-## ⏩ HEAD — 2026-06-07 (milestone restructure; read first)
+## ⏩ HEAD — 2026-06-07 (slice-3 Pass-1 rework SHIPPED → awaiting re-smoke; whiteboard reqs + docs-policy on v1-redesign)
 
 | Field | Value |
 |---|---|
-| **Last action completed** | **Recording transport thread CLOSED:** durable DB-as-queue + Vercel Cron sweep merged @ [`234d05b`](https://github.com/Arangarx/tutoring-notes/commit/234d05b); transcription pipeline fixes merged @ [`93157d5`](https://github.com/Arangarx/tutoring-notes/commit/93157d5). **Q1 transcript quality = PASS** (real 2-voice math lesson; Andrew concurred). **Sweep validated on live infra** (Andrew Postman 2026-06-07: 2 failed chunks → done via authenticated `/api/cron/transcribe-sweep`). **`CRON_SECRET` set** on Preview+Prod. **Cost-obs Phase 1** merged + **`/admin/cost` SMOKE PASSED** (Andrew 2026-06-06). **Sarah pilot feedback** captured @ [`sarah-pilot-feedback-2026-06-06-orchestrator-report.md`](sarah-pilot-feedback-2026-06-06-orchestrator-report.md). |
-| **Next action(s)** | **Recording P1 Slice 3 — auto-notes + map-reduce** (THE payoff; **UNBLOCKED** — transport + Q1 gates satisfied). One careful change touching guarded Pillar-3 `handleEndSession`. Bootstrapper: [`recording-slice3-autonotes-bootstrapper.md`](recording-slice3-autonotes-bootstrapper.md). **Standing parallel:** cost-event durability hardening (ratified, not built); v1 component/UI pass; identity/access epic; Sarah forward-migration at cutover. |
-| **Open Andrew-confirms** | None blocking slice 3. **Deferred / non-blocking:** cost-durability hardening build timing; Sarah WB bugs (FROZEN until redesign); legacy test-account cleanup (greenlight-gated destructive). |
-| **In-flight subagents** | **None.** |
-| **Uncommitted / unmerged** | **None** — working tree clean on `v1-redesign` @ `234d05b`. |
+| **Last action completed** | **Slice-3 Pass-1 notes rework SHIPPED** on `feat/recording-p1-slice3-autonotes` @ [`0fa2363`](https://github.com/Arangarx/tutoring-notes/commit/0fa2363) — implements the LOCKED B4 save-model (reduce→`TutorNote` only, no auto-`SessionNote`; Save = one live READY `SessionNote` idempotent; delete-guard dropped + redirect-regardless resilience + `maxDuration` 60→300; `test:wb-sync` import-coupling fixed → **12/12 GREEN**; share-page `findFirst` wrong-tutor-name leak fixed). All 3 smoke defects resolved. **Also this session (on `v1-redesign`):** whiteboard chrome requirements consolidated → [`126b7ce`](https://github.com/Arangarx/tutoring-notes/commit/126b7ce) (43 reqs, LOCKED custom-chrome decision, feasibility tags); docs cleanup/archival policy captured → [`1a8edbf`](https://github.com/Arangarx/tutoring-notes/commit/1a8edbf) (INDEX policy + BACKLOG next-pass entry w/ whiteboard archival candidates). **Earlier:** `docs/v1-redesign-notes-ux-reqs` merged → `v1-redesign` @ [`c728102`](https://github.com/Arangarx/tutoring-notes/commit/c728102); slice-3 B1 privacy fix + S1/S2 [`770f370`](https://github.com/Arangarx/tutoring-notes/commit/770f370); `v1-component-spine` + `iac-13` (TTL 7d→48h) merged → `v1-redesign`. |
+| **Next action(s)** | **Andrew:** (1) `npm run test:wb-sync` locally (confirm the 12/12 green reproduces on your hardware). (2) **Re-smoke** slice-3 Pass-1 per `SMOKE-RUNBOOK-2026-06-07.md` **§4** (5-step: end→no auto-note; Save→live READY parent-visible; Save again→in-place; delete saved note→returns to student detail; share page→correct tutor). (3) Confirm PASS → orchestrator merges slice-3 `--no-ff` → `v1-redesign` (LAST; carries the migration). **Orchestrator (ready now, migration-free):** merge `harden/auth-role-refresh` → `v1-redesign` (pending Andrew go). Heavy ORCHESTRATOR-STATE restructure at the `v1-redesign → master` milestone. |
+| **Open Andrew-confirms** | (1) **Slice-3 Target A = PASS, no blockers (Andrew 2026-06-07)** — merge gated ONLY on `test:wb-sync` green locally → then orchestrator merges slice-3 `--no-ff` → `v1-redesign` (LAST, carries migration). (2) **Target B (auth-role-refresh) not yet smoked** — then merge `harden/auth-role-refresh` (role-bleed Fix A+B). (3) **IAC-13 disconnect-copy = HARD pre-master gate** (Andrew: student-record-name vs learner-name terminology is backwards/confusing; parent — not tutor — should name the child). |
+| **In-flight subagents** | None active. |
+| **Cross-domain email collision — RESOLVED (Andrew 2026-06-07)** | **Decision: one email = one account (Option A); no tutor+parent dual persona.** Enforcement + one-time collision cleanup folded into the **Google-OAuth-signup fast-follow wave** (post-V1). Captured `6986370`: `BACKLOG.md`, `v1-redesign-STATUS.md`, new **IAC-14** invariant. (`arangarx@hotmail.com` dual-account = the exploit that surfaced it.) |
+| **Component pass** | `v1-component-spine` **MERGED** to `v1-redesign` (merge `aac690c`) on functional-correctness per Andrew's policy. One cohesive **visual review still pending** for a complete page/flow vs palette mocks (foundation chunks don't get per-chunk visual sign-off). |
+| **Deferred reliability (slice-3 review)** | **S3:** concurrent `after()`+cron `processNotesReduceJob` can orphan a 2nd DRAFT (no job-in-flight lock; both read `noteId=null`). Fix = unique constraint on `WhiteboardSession.noteId` + migration, or `SELECT FOR UPDATE`. **N1** dashboard count inflation, **N2** SENT→READY downgrade, **N3** mark-seen accepts DRAFT, **N4** regen update lacks cross-student check. → capture in `BACKLOG.md`. |
+| **Uncommitted / unmerged** | **`v1-redesign` @ [`1a8edbf`](https://github.com/Arangarx/tutoring-notes/commit/1a8edbf)** (component + IAC-13 + notes-UX/cross-domain/backlog docs + whiteboard reqs `126b7ce` + docs-policy in). **Unmerged branches → v1-redesign:** `feat/recording-p1-slice3-autonotes` @ [`0fa2363`](https://github.com/Arangarx/tutoring-notes/commit/0fa2363) (slice-3 + Pass-1 rework — gated on re-smoke + `test:wb-sync`; carries migration → merge LAST); `harden/auth-role-refresh` @ `f5e44f8` (role-bleed Fix A+B — needs Andrew go); `feature/sarah-forward-migration-q6` @ `a396ab5` (parked). Main tree on slice-3 with uncommitted SMOKE-RUNBOOK §4 edit. |
 
 **Process directive (Andrew 2026-06-07):** prefer **agent-runnable validation harnesses** over manual smoke wherever behavior is verifiable without Andrew's hardware (transcription E2E + sweep validations were the exemplars).
+
+**Process directive — runbook legend (Andrew 2026-06-07):** every smoke runbook MUST open with an explicit legend: `[x]` = step **PASSED** (executed + behaved as expected); skipped/failed steps stay unchecked with the reason on the **Notes:** line; a fully-checked target = green merge gate. **Each target also ends with a clickable per-target verdict** (`- [ ] PASS` / `- [ ] FAIL` markdown checkboxes — NOT `☐` glyphs, which aren't checkable). Removes the "done vs pass" ambiguity. Any future runbook (or runbook-generating dispatch) includes this legend + verdict format verbatim.
+
+### ✅ Slice-3 save-bridge — Pass-1 rework SHIPPED (2026-06-07) → awaiting re-smoke
+
+**Pass 1 complete** @ [`0fa2363`](https://github.com/Arangarx/tutoring-notes/commit/0fa2363): all 3 smoke defects fixed, `test:wb-sync` 12/12 GREEN, LOCKED B4 save-model implemented (details below). **Re-smoke pending** (runbook §4) before `--no-ff` merge to `v1-redesign`. Original failure context retained below for the audit trail.
+
+Andrew smoked the *original* bridge (runbook §4). It was **NOT merge-ready**. Root issue: the bridge **guessed** on REQ-S3-2a "Save semantics" which the spec explicitly deferred to the B4 design pass ("Do not guess"). It built a `DRAFT→READY→SENT` model that **conflicted with Andrew's intent** (no DRAFT, Save = immediately parent-visible, "new/unseen" via the **existing `NoteView`** mechanism, no SENT). Investigation: [`8f7e28d3`](8f7e28d3-40cf-42c3-8b77-ae6d77ad529e).
+
+**B4 Save-model decision: LOCKED (Andrew 2026-06-07).** Principle: **everything is immediately live, both directions.**
+- `TutorNote` = AI working draft (never parent-visible, regeneratable). `SessionNote` = the live note.
+- **Save** = create/update ONE live `SessionNote` per session (idempotent via `WhiteboardSession.noteId`), status `READY` (never DRAFT). Instantly parent-visible.
+- After save: review page edits the **live** note (each save instantly live). **Regenerate** re-seeds editable fields from a fresh AI pass; not live until Save again.
+- **Delete** a saved note = allowed + instantly removed for parent (DROP the bridge's "refuse delete on finalized" guard).
+- **Parent markers (V1):** "New" (never seen) + "Updated" (changed since seen) via existing `NoteView`.
+- **"Send" = notification only** (manual now, scheduled later — "you have new notes" → share page). NOT a note state. `DRAFT/READY/SENT` enum is **legacy** (from when sending was stateful) → retire in the separate cleanup; decouple sending from status there.
+
+**Execution split (Andrew 2026-06-07):**
+- **Pass 1 (notes correctness — merge-blocker, dispatching now):** remove auto-DRAFT-`SessionNote` creation; reduce writes structured fields into `TutorNote`; Save creates/updates one READY `SessionNote`; drop delete-guard + delete-resilience (redirect-regardless + cron + fix 60s timeout); fix `test:wb-sync` import coupling (move `REDUCE_PROMPT_VERSION` out of `notes-worker.ts`); fix `s/[token]/page.tsx` `findFirst` wrong-tutor-name leak. Notes stay on current review page. → re-smoke → merge.
+- **Pass 2 (session-end UX — V1 follow-on, Opus-designed):** shared **session shell** (thin top nav + sidebar tabs); live mode = today's workspace UNCHANGED; **review mode** = lightweight notes editor (replay lazy-loaded on "Review video while editing", controls stripped); end-session auto-transitions shell into review mode (same shell, no nav-away); same review component for first-review vs after-the-fact edit (different buttons); unsaved-session **recovery** surface (V1 req). **Caution captured:** keep live engine + replay/notes engine as SEPARATE implementations under a shared shell — do NOT literally merge them (the `WhiteboardWorkspaceClient` reliability boundary; the `test:wb-sync` break is this coupling class). Overlaps the component-pass workspace-chrome redesign — coordinate.
+
+**Defects found — ALL RESOLVED in Pass 1 (`0fa2363`):**
+1. ✅ `test:wb-sync` FAIL (6 tests/2 suites) — bridge made `notes-actions.ts` import `REDUCE_PROMPT_VERSION` from `notes-worker.ts`, dragging `next/cache` into `WhiteboardWorkspaceClient`'s import graph → `TextEncoder is not defined`. **Fixed:** constant moved to dep-free `notes-reduce-config.ts`; DOM suites mock `notes-actions` at the boundary → 12/12 green.
+2. ✅ Delete-session timeout — review page `maxDuration=60` + sync cascade delete. **Fixed:** `handleDelete` redirects to student detail regardless of outcome (cron sweeps orphans); `maxDuration` 60→300.
+3. ✅ Share-page tutor name — `src/app/s/[token]/page.tsx` `db.adminUser.findFirst()` with NO `where` → arbitrary admin's name to every parent. **Fixed:** `findUnique({ where: { id: student.adminUserId } })`; null `adminUserId` → no name (safe).
+
+**Target A re-smoke result (Andrew 2026-06-07): PASS — no blockers.** Steps 1-5 all checked. Slice-3 merge gated ONLY on `test:wb-sync` green locally. Follow-ups from the typed notes:
+1. **Delete-list "bug" = NOT A BUG (Andrew clarified):** per-note delete works as intended — the note disappears and the tutor stays on the list page. Original "stayed on the list" was a misread. Investigation confirmed the slice-3 auto-notes path never creates DRAFTs (only manual `createNote`/`Mark draft` do).
+2. **Stale DRAFT SessionNote residue:** tutor saw one note in DRAFT + an older one READY ("two different states, weird"). Pass-1 removed all DRAFT creation → the DRAFT is **pre-rework residue**, not new behavior (investigation confirms). One-time data cleanup + legacy-enum retirement folded into the separate cleanup below.
+3. **No loading skeleton/blur** while notes generate → UX/component pass (Andrew: fine if explicitly later).
+4. **No "Updated" parent pill yet** on re-save → Pass-2 `NoteView` New/Updated markers (intentional, deferred).
+
+**Scope decisions (Andrew 2026-06-07):** legacy `DRAFT/READY/SENT` enum + `sendUpdateEmail` + "Mark ready/draft" controls → **separate** BACKLOG cleanup (do not balloon slice-3). 
+
+**DEFERRED — MUST NOT MISS (Andrew flagged explicitly):**
+- **Native `confirm()`/`alert()` → in-site modals** (Save/Cancel/Regenerate). Deferred to the **component pass**, but Andrew said do not lose it.
+- **Notes quality poor + Regenerate returned identical output** → prompt/quality thread (REQ-S3-4 / `REDUCE_PROMPT_VERSION` iteration). Separate from the architecture rework.
 
 ---
 
@@ -32,22 +72,24 @@ Multi-day epic on branch **`v1-redesign`** (active V1 integration branch; **not 
 
 ---
 
-## NEXT MAJOR — Recording P1 Slice 3 (auto-notes + map-reduce)
+## Recording P1 Slice 3 — SHIPPED (awaiting smoke + merge)
 
-**Status:** **UNBLOCKED** — gated dependencies (durable transport, Q1 transcript quality) both satisfied.
+**Status:** **SHIPPED** on `feat/recording-p1-slice3-autonotes` — awaiting Andrew smoke + `merge --no-ff` to `v1-redesign`.
 
-**Scope (one shippable unit; design D7 + D8):**
+**Branch head:** [`4f601a3`](https://github.com/Arangarx/tutoring-notes/commit/4f601a3)
 
-| # | Deliverable | Notes |
+**Path shipped:** Full map-reduce (D8) — not the reduce-at-end fallback.
+
+| # | Deliverable | Status |
 |---|---|---|
-| **(a)** | **End-session sweep** | Kick any non-`done` `TranscriptChunk` rows at session end so notes are ready fast. Lives in guarded **`handleEndSession`** (Pillar 3) — read [`docs/RECORDER-LIFECYCLE.md`](../RECORDER-LIFECYCLE.md) first. |
-| **(b)** | **Map phase** | Incremental AI extraction per chunk → `TranscriptChunkExtraction` rows (can run as chunks complete during session). |
-| **(c)** | **Reduce phase** | Final synthesis (`gpt-4o-mini`, escalate on quality signal) → `TutorNote` at session end. |
-| **(d)** | **Post-session UX** | Auto-show notes on review screen with skeleton/blurred loading (**5-min timeout** per ratified Q5). **Retire** manual "Transcribe and generate notes" button; keep "Regenerate" escape hatch. |
+| **(a)** | **End-session sweep** | ✅ `kickSessionChunksAction` fired F&F from workspace after `endWhiteboardSession`. |
+| **(b)** | **Map phase** | ✅ `extract-chunk.ts` runs per-chunk after `status=done`; idempotent on `chunkId`. |
+| **(c)** | **Reduce phase** | ✅ `notes-worker.ts` — completion gate, 5-min timeout, partial path, DB-as-queue + cron sweep. |
+| **(d)** | **Post-session UX** | ✅ Manual button retired; `TutorNotesSection` auto-polls, skeleton, partial badge, regenerate. |
 
-**Tier:** high blast radius on recorder lifecycle → dispatch **careful Composer 2.5 or Sonnet** (auth boundary + concurrency + 5-axis adversarial review **required** before merge).
+**5-axis review:** 1 BLOCKER found + fixed (stuck skeleton when TutorNote row not yet created). See commit `4f601a3`.
 
-**Design ref:** [`recording-rearchitecture-design-2026-06-05.md`](recording-rearchitecture-design-2026-06-05.md) (Q1–Q8 ratified Andrew 2026-06-06). Bootstrapper: [`recording-slice3-autonotes-bootstrapper.md`](recording-slice3-autonotes-bootstrapper.md).
+**Design ref:** [`recording-rearchitecture-design-2026-06-05.md`](recording-rearchitecture-design-2026-06-05.md). Bootstrapper: [`recording-slice3-autonotes-bootstrapper.md`](recording-slice3-autonotes-bootstrapper.md).
 
 ---
 
@@ -78,7 +120,7 @@ Supersedes the 2026-06-06 PM/AM smoke queues and open DECISION bullets for trans
 
 **Deferred from transport slice (intentional):** end-session sweep → **slice 3** (guarded `handleEndSession`).
 
-**Superseded runbooks:** [`MORNING-RUNBOOK-2026-06-07.md`](MORNING-RUNBOOK-2026-06-07.md), [`RETURN-RUNBOOK-2026-06-06-PM.md`](RETURN-RUNBOOK-2026-06-06-PM.md) — smoke items complete; this file is canonical.
+**Superseded runbooks:** `MORNING-RUNBOOK-2026-06-07.md` + `RETURN-RUNBOOK-2026-06-06-PM.md` — smoke items complete; **archived to `docs/archive/handoff/` (cold storage) 2026-06-07**. Live smoke runbook: [`SMOKE-RUNBOOK-2026-06-07.md`](SMOKE-RUNBOOK-2026-06-07.md).
 
 ---
 

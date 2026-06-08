@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/auth-options";
 import { db, withDbRetry } from "@/lib/db";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import WhiteboardReplay from "@/components/whiteboard/WhiteboardReplay";
@@ -12,10 +14,13 @@ import { loadTutorNoteForReview } from "@/app/admin/students/[id]/whiteboard/not
 export const dynamic = "force-dynamic";
 
 /**
- * This page uses auto-notes (TutorNoteSection) — no blocking server actions.
- * The maxDuration is kept at a conservative budget for replay-related fetches.
+ * 300s budget (Vercel Pro ceiling) — consistent with workspace page.
+ * Required because deleteWhiteboardSessionAndDataAction runs a cascade
+ * transaction that can touch many TranscriptChunk / recording rows, and
+ * must complete within the route's maxDuration window.
+ * Documented in docs/PLATFORM-ASSUMPTIONS.md §1.1.
  */
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function generateMetadata({
   params,
@@ -163,7 +168,36 @@ export default async function WhiteboardReviewPage({
       }
     : { found: false as const };
 
-  const sessionCost = !isLive
+  // Fetch the linked SessionNote status (if any) to gate the "View attached note"
+  // link — only show for READY/SENT notes (not DRAFT which is the review-page subject).
+  const linkedNoteStatus =
+    detail.noteId
+      ? await withDbRetry(
+          () =>
+            db.sessionNote.findUnique({
+              where: { id: detail.noteId! },
+              select: { status: true },
+            }),
+          { label: "wbReview.page.noteStatus" }
+        ).then((n) => n?.status ?? null)
+      : null;
+
+  // Cost panel visibility gate — must NOT be shown to real non-test tutors (Sarah).
+  // Show only when the viewer is:
+  //   (a) an ADMIN-role account (Andrew, the operator) — not impersonating
+  //   (b) an admin actively impersonating a test account (Andrew testing as Sarah)
+  //   (c) a test-marked account (isTestAccount=true — QA accounts)
+  // A real TUTOR-role account with isTestAccount=false must never see API costs.
+  // Note: we include role==="ADMIN" so Andrew can always see his own session costs
+  // without needing to impersonate — this is a judgment call, flagged in the
+  // smoke report.
+  const viewerSession = await getServerSession(authOptions);
+  const showCostPanel =
+    viewerSession?.user?.role === "ADMIN" ||
+    viewerSession?.user?.isImpersonating === true ||
+    viewerSession?.user?.isTestAccount === true;
+
+  const sessionCost = !isLive && showCostPanel
     ? await getSessionCostBreakdown(whiteboardSessionId)
     : null;
 
@@ -218,7 +252,7 @@ export default async function WhiteboardReviewPage({
           </p>
         </div>
         <div className="row" style={{ gap: 8 }}>
-          {detail.noteId && (
+          {detail.noteId && linkedNoteStatus && linkedNoteStatus !== "DRAFT" && (
             <Link
               href={`/admin/students/${studentId}/notes`}
               className="btn"
@@ -269,6 +303,7 @@ export default async function WhiteboardReviewPage({
         <div style={{ marginTop: 16 }}>
           <TutorNotesSection
             whiteboardSessionId={whiteboardSessionId}
+            studentId={studentId}
             initialNote={initialNote}
             hasAudio={detail.audioRecordings.length > 0}
           />

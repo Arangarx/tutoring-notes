@@ -5,15 +5,22 @@ import "server-only";
  *
  * Durable DB-as-queue transport (Andrew ratified cron/sweep over Vercel Queues beta,
  * 2026-06-07):
- *   (1) This helper — upsert a durable `pending` TranscriptChunk row, then fire-and-
- *       forget an immediate worker attempt (low latency).
- *   (2) Vercel Cron backstop sweep — `/api/cron/transcribe-sweep` catches orphans.
- *   (3) End-session sweep — deferred to slice 3 (handleEndSession).
+ *   (1) This helper — upsert a durable `pending` TranscriptChunk row, then schedule
+ *       an immediate worker attempt via `after()` so Vercel does not kill the work
+ *       when the serverless response is sent (low-latency path; preview-safe).
+ *   (2) Vercel Cron backstop sweep — `/api/cron/transcribe-sweep` catches orphans
+ *       on Production (cron does not run on Preview deployments).
+ *   (3) End-session sweep — kickSessionChunksAction in handleEndSession.
+ *
+ * `after()` (Next.js 15 §1.8 in PLATFORM-ASSUMPTIONS.md) keeps the serverless
+ * function alive until the transcription callback completes, eliminating the
+ * "fire-and-forget dropped on Preview" failure mode seen with bare `void`.
  *
  * The push-mode consumer at `src/app/api/queues/chunk-transcribe/route.ts` remains
  * available if a managed queue is provisioned later; not wired today.
  */
 
+import { after } from "next/server";
 import {
   getTranscriptChunkByBlobUrl,
   upsertTranscriptChunk,
@@ -23,15 +30,18 @@ import { processChunkTranscribeJob, type ChunkTranscribeInput } from "@/lib/reco
 export type { ChunkTranscribeInput };
 
 function fireAndForgetWorker(job: ChunkTranscribeInput): void {
-  void (async () => {
+  // Use `after()` so Vercel keeps the function alive until the worker completes.
+  // Without this, bare `void` promises are dropped when the serverless response
+  // is sent — leaving TranscriptChunk rows stuck at `transcribing` on Preview.
+  after(async () => {
     try {
       await processChunkTranscribeJob(job);
     } catch (err: unknown) {
       console.error(
-        `[txc] wbsid=${job.sessionId} action=enqueue_immediate_error err=${err instanceof Error ? err.message : String(err)}`
+        `[txc] wbsid=${job.sessionId} action=after_worker_error err=${err instanceof Error ? err.message : String(err)}`
       );
     }
-  })();
+  });
 }
 
 /**

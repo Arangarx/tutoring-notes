@@ -31,7 +31,7 @@ export default async function SharePage({
   const link = await db.shareLink.findUnique({
     where: { token },
     include: {
-      student: { select: { id: true, name: true } },
+      student: { select: { id: true, name: true, adminUserId: true } },
     },
   });
 
@@ -39,7 +39,7 @@ export default async function SharePage({
 
   const student = link.student;
   const notes = await db.sessionNote.findMany({
-    where: { studentId: student.id },
+    where: { studentId: student.id, status: { not: "DRAFT" } },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     include: parentShareNoteInclude,
   });
@@ -73,7 +73,14 @@ export default async function SharePage({
 
   const isReturningVisitor = seenNoteIds.size > 0;
 
-  const tutor = await db.adminUser.findFirst({ select: { displayName: true, email: true } });
+  // Resolve the tutor who owns this student — scoped by adminUserId, not findFirst()
+  // (findFirst with no where clause would show an arbitrary admin's name to every parent).
+  const tutor = student.adminUserId
+    ? await db.adminUser.findUnique({
+        where: { id: student.adminUserId },
+        select: { displayName: true, email: true },
+      })
+    : null;
   const tutorName = tutor?.displayName?.trim() || tutor?.email?.split("@")[0] || null;
 
   // Split notes into unseen and seen for layout purposes.

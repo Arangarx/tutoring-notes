@@ -1,7 +1,7 @@
 import "server-only";
 
 /**
- * Recording re-arch Phase 1, Slice 3 — D7 reduce phase.
+ * Recording re-arch Phase 1, Slice 3 — D7 reduce phase (REQ-S3-4: locked design).
  *
  * Notes reduce worker: completion gate → map/reduce → TutorNote write.
  *
@@ -20,8 +20,14 @@ import "server-only";
  *      worker/cron context, not a user-triggered server action; ownership was
  *      already asserted at enqueue time (triggerNotesGenerationAction).
  *      The worker validates session sealed + all chunk FKs are for this session.
+ *  (f) STRUCTURED OUTPUT — reduce emits JSON {topics, assessment, nextSteps, links}.
+ *      Stored in TutorNote.content as JSON string. TutorNote is the AI working draft
+ *      (never parent-visible). The tutor-facing Save action creates the live SessionNote.
+ *  (g) REGENERATE-SAFE — content is never overwritten mid-run; new content replaces
+ *      old only on successful API response.
  *
- * Log prefix: [tnt]  Per-session ID on every line.
+ * Log prefix: [tnt] (TutorNote pipeline).
+ * Per-session ID on every line.
  */
 
 import OpenAI from "openai";
@@ -39,6 +45,7 @@ import {
   parseChunkExtraction,
   type ChunkExtractionPayload,
 } from "@/lib/recording/transcript-types";
+import { REDUCE_PROMPT_VERSION } from "@/lib/recording/notes-reduce-config";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -49,27 +56,31 @@ const REDUCE_MODEL = "gpt-4o-mini";
 /** 5 minutes in ms — matches ratified Q5 answer. */
 const NOTES_COMPLETION_TIMEOUT_MS = 5 * 60 * 1000;
 
-const REDUCE_SYSTEM_PROMPT = `You are an expert tutor assistant. Given structured notes from a tutoring session (organized by chunk), write a cohesive session summary for the tutor's records.
+// REDUCE_PROMPT_VERSION is imported from notes-reduce-config (lightweight, no heavy deps).
 
-The tutor uses these notes to track student progress and plan future sessions.
+/**
+ * Reduce phase system prompt — emits JSON matching SessionNote field shape.
+ *
+ * Field semantics mirror src/lib/ai.ts generateSessionNote (v7):
+ *  - topics: subjects covered, comma list, past tense
+ *  - assessment: where the student stands (strengths, struggles, mastery)
+ *  - nextSteps: what to do next, including any homework (Plan — covers both plan + homework)
+ *  - links: URLs mentioned, one per line, "" if none
+ *
+ * homework is intentionally omitted from the AI output and will be stored as ""
+ * on the SessionNote row (per REQ-S3-4: homework folds into nextSteps/Plan).
+ */
+const REDUCE_SYSTEM_PROMPT = `You are an expert tutoring assistant. Given structured session data (per-segment extractions of topics, student questions, corrections, and follow-ups), synthesize a concise session note as JSON.
 
-Format your response as:
-## Session Summary
-[2-3 sentence overview of what was covered]
+STRICT RULES:
+(1) Be terse — short phrases or comma lists, not full sentences.
+(2) Only include information present in the source data — do not fabricate.
+(3) assessment synthesizes corrections + questions into a student-standing picture (strengths, struggles, mastery level).
+(4) nextSteps covers ALL follow-ups AND any assigned homework — this is the complete "Plan" including homework.
+(5) If a field has no information, return empty string "".
 
-## Topics Covered
-[bullet list]
-
-## Student Questions
-[bullet list of questions the student asked, with brief context]
-
-## Corrections & Misconceptions
-[bullet list of errors corrected]
-
-## Homework / Follow-up
-[bullet list of assigned work or next steps]
-
-Be concise and factual. If a section has no items, omit it.`;
+Respond with JSON ONLY — no markdown fences, no commentary:
+{"topics":"...","assessment":"...","nextSteps":"...","links":"..."}`;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -81,6 +92,18 @@ export type NotesJobResult =
   | { outcome: "pending" } // Retry needed — chunks not yet done, within timeout
   | { outcome: "failed"; error: string }
   | { outcome: "skipped"; reason: string }; // Already done or session not ready
+
+/**
+ * Structured note fields matching SessionNote DB columns.
+ * homework is intentionally omitted: it folds into nextSteps per REQ-S3-4.
+ */
+export type StructuredNoteFields = {
+  topics: string;
+  assessment: string;
+  /** UI label "Plan". Includes follow-ups + homework per REQ-S3-4. */
+  nextSteps: string;
+  links: string;
+};
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -100,7 +123,7 @@ Corrections: ${e.corrections.join("; ") || "none"}
 Follow-ups: ${e.followUps.join("; ") || "none"}`
       )
       .join("\n\n");
-    return `Generate cohesive session notes from these per-segment extractions:\n\n${chunks}`;
+    return `Synthesize a structured session note from these per-segment extractions:\n\n${chunks}`;
   }
 
   // Fallback: use raw transcripts
@@ -110,11 +133,42 @@ Follow-ups: ${e.followUps.join("; ") || "none"}`
         rawTranscripts.length > 1 ? `[Segment ${i + 1}]\n${t}` : t
       )
       .join("\n\n");
-    return `Generate cohesive session notes from this tutoring session transcript:\n\n${joined}`;
+    return `Synthesize a structured session note from this tutoring session transcript:\n\n${joined}`;
   }
 
-  return "Generate a brief session note. No audio transcript was available.";
+  return "Synthesize a structured session note. No audio transcript was available.";
 }
+
+/**
+ * Parse the JSON reduce response, tolerating minor formatting issues.
+ * Returns null on parse failure.
+ */
+function parseReduceResponse(text: string): StructuredNoteFields | null {
+  const trimmed = text.trim();
+  // Strip markdown code fences if present
+  const jsonText = trimmed
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  try {
+    const parsed = JSON.parse(jsonText) as Record<string, unknown>;
+    return {
+      topics: typeof parsed.topics === "string" ? parsed.topics : "",
+      assessment: typeof parsed.assessment === "string" ? parsed.assessment : "",
+      nextSteps:
+        typeof parsed.nextSteps === "string"
+          ? parsed.nextSteps
+          : typeof parsed.plan === "string"
+            ? parsed.plan
+            : "",
+      links: typeof parsed.links === "string" ? parsed.links : "",
+    };
+  } catch {
+    return null;
+  }
+}
+
 
 // ---------------------------------------------------------------------------
 // Main worker
@@ -147,7 +201,10 @@ export async function processNotesReduceJob(
     () =>
       db.whiteboardSession.findUnique({
         where: { id: sessionId },
-        select: { id: true, endedAt: true, studentId: true, adminUserId: true },
+        select: {
+          id: true,
+          endedAt: true,
+        },
       }),
     { label: "processNotesReduceJob.session" }
   );
@@ -253,18 +310,39 @@ export async function processNotesReduceJob(
 
     const response = await client.chat.completions.create({
       model: REDUCE_MODEL,
+      response_format: { type: "json_object" },
       messages: [
         { role: "system", content: REDUCE_SYSTEM_PROMPT },
         { role: "user", content: prompt },
       ],
-      max_tokens: 1500,
+      max_tokens: 800,
       temperature: 0.3,
     });
 
-    const content = response.choices[0]?.message?.content?.trim() ?? "";
+    const rawText = response.choices[0]?.message?.content?.trim() ?? "";
     const inputTokens = response.usage?.prompt_tokens;
     const outputTokens = response.usage?.completion_tokens;
     const latencyMs = Date.now() - reduceStartMs;
+
+    // Parse structured JSON response
+    const structuredFields = parseReduceResponse(rawText);
+    if (!structuredFields) {
+      console.warn(
+        `[tnt] wbsid=${sessionId} action=reduce_parse_failed rawText=${rawText.slice(0, 200)}`
+      );
+      // Fall back to storing raw text as legacy content so the tutor isn't left with nothing
+      await updateTutorNote(sessionId, {
+        status: "failed",
+        error: "Notes generated but could not be parsed. Try regenerating.",
+      });
+      return {
+        outcome: "failed",
+        error: "Notes generated but could not be parsed. Try regenerating.",
+      };
+    }
+
+    // Serialize structured fields as JSON for TutorNote.content storage
+    const content = JSON.stringify(structuredFields);
 
     // Log cost event (best-effort).
     const est = estimateCostUsd({
@@ -286,6 +364,7 @@ export async function processNotesReduceJob(
         phase: "reduce",
         chunks: doneChunks,
         isPartial,
+        structured: true,
       },
     }).catch((costErr: unknown) => {
       console.warn(
@@ -293,7 +372,7 @@ export async function processNotesReduceJob(
       );
     });
 
-    // --- 8. Write TutorNote row ---------------------------------------------------
+    // --- 8. Write TutorNote row (structured JSON content) -------------------------
     const finalStatus = isPartial ? "partial" : "done";
     await updateTutorNote(sessionId, {
       status: finalStatus,
@@ -303,7 +382,7 @@ export async function processNotesReduceJob(
     });
 
     console.log(
-      `[tnt] wbsid=${sessionId} action=reduce_done status=${finalStatus} chunks=${doneChunks} latencyMs=${latencyMs} isPartial=${isPartial}`
+      `[tnt] wbsid=${sessionId} action=reduce_done status=${finalStatus} chunks=${doneChunks} latencyMs=${latencyMs} isPartial=${isPartial} topics=${structuredFields.topics.length} assessment=${structuredFields.assessment.length} nextSteps=${structuredFields.nextSteps.length}`
     );
 
     return isPartial
@@ -313,6 +392,7 @@ export async function processNotesReduceJob(
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[tnt] wbsid=${sessionId} action=reduce_failed err=${msg}`);
 
+    // REGENERATE-SAFE: on failure, do NOT touch content — preserve prior good note
     await updateTutorNote(sessionId, {
       status: "failed",
       error: msg.slice(0, 500),
