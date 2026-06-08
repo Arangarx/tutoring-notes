@@ -2,11 +2,11 @@
 
 > **Purpose:** Durable design artifact for the custom Mynk whiteboard chrome layer — toolbar, properties, session controls — driving Excalidraw via `excalidrawAPI`. Executors build Phase 1+ from this doc.
 >
-> **Requirements input (62 + TM-09):** [`whiteboard-chrome-requirements.md`](whiteboard-chrome-requirements.md)
+> **Requirements input (67 reqs):** [`whiteboard-chrome-requirements.md`](whiteboard-chrome-requirements.md)
 >
 > **Branch / sequencing:** Build on **`v1-redesign`**. Whiteboard chrome is a **pre-master gate** for the V1 reveal (`v1-redesign → master`). Master stays frozen; urgent Sarah fixes cherry-pick to `master` in isolation (no UI feature flag).
 >
-> **Last ratified:** 2026-06-07 (Opus orchestrator + Andrew). Feasibility spike on `@excalidraw/excalidraw` **0.18.1** (YELLOW = go).
+> **Last ratified:** 2026-06-07 (Opus orchestrator + Andrew). **Audit dispositions ratified 2026-06-08** — P1.2 toolbar design unblocked. Feasibility spike on `@excalidraw/excalidraw` **0.18.1** (YELLOW = go; Phase 0 POC green 2026-06-08).
 
 ---
 
@@ -30,6 +30,14 @@ Spike verdict: **YELLOW = proceed** — core imperative APIs work; hide mechanis
 
 ## 2. Chrome architecture
 
+### 2.0 Standing principles (Andrew, ratified 2026-06-08)
+
+These govern every chrome control decision — including P1.2 toolbar, properties popover, overflow, and context menus.
+
+**A. Every function has a visible button affordance (TU-14).** No whiteboard function is reachable **only** via right-click or **only** via hotkey. Right-click menus and keyboard shortcuts are **accelerators**, never the sole path. Rationale: single-button mice, function-key "right-click", and accessibility/AT users — we cannot assume right-click or specific hotkeys exist. Buried-in-overflow / More is acceptable; button-less is not. Applies to z-order, delete-selected, style controls, and every student-facing function.
+
+**B. Full touch/tablet/phone parity for ALL controls (TM-10).** Students draw on touch devices. Every control — z-order, delete, the right-click/long-press set, More styles, laser, theme toggle — must have a touch-reachable equivalent (long-press menu, selection toolbar, adequate tap targets). Not mouse-only or right-click-only. First-class constraint, not a desktop-afterthought.
+
 ### 2.1 Component model
 
 - **One shared chrome component**, two variants: **`tutor-desktop`** (primary) and **`student-mobile-first`** (Phase 2).
@@ -40,7 +48,9 @@ Spike verdict: **YELLOW = proceed** — core imperative APIs work; hide mechanis
 - Mirror active-tool highlight from **`getAppState().activeTool`** on every `onChange`.
 - **Undo:** keep existing **synthetic-key** undo path; hide native footer undo (SR-09). Coordinate with TU-03 / TU-11.
 - Visual system: v1 tokens only (TU-02, open Q9) — no one-off oversized buttons.
-- **Theme parity (TU-12):** Mynk chrome (toolbar, pulldowns, properties popover, page strip, bottom bars) styled for **both light and dark** via v1 tokens. Excalidraw `theme` prop follows the **app-selected** theme (extend/replace `useExcalidrawThemeFromSystem` — user toggle + localStorage, default system on first visit), not `prefers-color-scheme` alone. Applies to **`tutor-desktop`** (Phase 1) and **`student-mobile-first`** (Phase 2).
+- **Theme parity (TU-12):** Mynk chrome (toolbar, pulldowns, properties popover, page strip, bottom bars) styled for **both light and dark** via v1 tokens. Site theme defaults to **OS/system** until user explicitly picks light or dark (A′). Excalidraw `theme` prop follows the **app-selected** theme. **Board background follows theme** — no native Excalidraw canvas-bg control (M-10 dropped). **Whiteboard-local theme toggle (TU-13):** small theme control on the whiteboard chrome itself as an escape hatch in addition to the global nav toggle. Applies to **`tutor-desktop`** (Phase 1) and **`student-mobile-first`** (Phase 2).
+- **Z-order default (TU-14 / NR-11):** PDF page images are **deepest-z**; all drawn strokes/annotations render **above** PDFs. Send-to-back / bring-to-front via buried/More toolbar buttons **and** right-click/long-press menu (TU-14, TM-10).
+- **Pen mode (NR-03):** Leave Excalidraw native pen/tablet handling **untouched** — expose **no** Mynk pen-mode control. Watch palm-rejection only.
 
 ### 2.2 Imperative API cheat sheet (0.18.1)
 
@@ -81,7 +91,7 @@ Custom chrome sits **on top of** the shipped sync stack. The architecture map id
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ TOP BAR ~44px                                                               │
-│ [Share link] [Mic▮▮▯ + picker] [Cam] │ ↶ ↷ │ [PDF][Img][Math][Desmos] │ − + Fit │
+│ [Share link] [Mic▮▮▯ + picker] [Cam] │ ↶ ↷ │ [PDF][Img][Math][Desmos] │ − + Fit │ [☀/☾] │
 ├────┬────────────────────────────────────────────────────────────────────────┤
 │ L  │                                                                        │
 │ E  │                                                                        │
@@ -94,10 +104,12 @@ Custom chrome sits **on top of** the shipped sync stack. The architecture map id
 │sel │                                                                        │
 │ ✎  │   ┌─ Properties popover (on tool select) ─┐                           │
 │ ⌫  │   │ Color │ Width │ Opacity │ [More ▾]    │  dismiss: outside-click    │
-│ T  │   └────────────────────────────────────────┘                           │
+│ T  │   │ More = ALL remaining native styles    │  (PP-04; nothing dropped)  │
+│ 🔴 │   └────────────────────────────────────────┘                           │
 │ ─  │                                                                        │
 │ ↗▼ │  lines/arrows pulldown                                                  │
 │ ▭▼ │  rect/diamond/ellipse pulldown                                          │
+│ ···│  overflow: z-order, delete-selected, hand (TU-14, TM-10)               │
 │[◀] │  collapse toggle                                                         │
 └────┴────────────────────────────────────────────────────────────────────────┘
 │ PAGE STRIP (existing; section headers SR-10; insert-order UX Phase 3)       │
@@ -108,9 +120,9 @@ Custom chrome sits **on top of** the shipped sync stack. The architecture map id
 
 | Zone | Contents | Requirement refs |
 |------|----------|------------------|
-| **Top bar (~44px)** | Share link (TU-07), AV mic-meter + device picker (TU-08), cam, undo/redo (TB-11, TU-03), insert actions PDF/image/math/Desmos (TB-08–10, TU-04), zoom / fit (TB-07) | TU-09 session bar intent — top bar absorbs session + zoom; bottom AV strip de-emphasized on desktop |
-| **Left strip (collapsible)** | Tool order: cursor → pencil → eraser → text (TB-01); line+arrow pulldown (TB-02, PU-01); rect+diamond+ellipse pulldown (TB-03); collapse chevron (TB-05, SR-02, SR-08) | Sarah priority #3 |
-| **Properties popover** | Basics inline: stroke color, width, opacity (PP-04); **More** for advanced; dismiss on outside-click (PP-02, TM-01) | Replaces native quarter-screen palette (PP-01, PU-03) |
+| **Top bar (~44px)** | Share link (TU-07), AV mic-meter + device picker (TU-08), cam, undo/redo (TB-11, TU-03), insert actions PDF/image/math/Desmos (TB-08–10, TU-04), zoom / fit (TB-07), **whiteboard-local theme toggle** (TU-13) | TU-09 session bar intent — top bar absorbs session + zoom; bottom AV strip de-emphasized on desktop |
+| **Left strip (collapsible)** | Tool order: cursor → pencil → eraser → text → **laser (V1 top-level)** (TB-01, ST-05); line+arrow pulldown (TB-02, PU-01); rect+diamond+ellipse pulldown (TB-03); **··· overflow** for z-order, delete-selected, hand (TU-14); collapse chevron (TB-05, SR-02, SR-08) | Sarah priority #3; laser not deferred |
+| **Properties popover** | Basics inline: stroke color, width, opacity, default roughness/roundness (PP-04); **More styles** holds **ALL** remaining native style props (fill, stroke style, arrow type, arrowheads, text align, font, freedraw profile, etc.) — nothing dropped; dismiss on outside-click (PP-02, TM-01, TM-10) | Replaces native quarter-screen palette (PP-01, PU-03) |
 | **Video tile** | Floating bottom-right overlay (SR-04) | Does not stack above canvas |
 | **Page strip** | Unchanged in Phase 1; polish in Phase 3 (SR-10, SR-11) | |
 
@@ -124,7 +136,11 @@ Ship with tutor-desktop chrome (DD-01–04). Concrete `appState` on session star
 | `currentItemRoundness` | **sharp** (confirm exact value shape at build time — spike flagged for runtime) | Sharp edges, no rounding (DD-02) |
 | `currentItemStrokeWidth` | **thinnest preset** | Default pen = THINNEST (DD-03); properties popover presets include heavier + materially thinner options (DD-04) |
 
-Expose stroke width / roughness / roundness in properties popover.
+Expose stroke width / roughness / roundness in properties popover (inline or More tier per PP-04). Clean/sharp defaults pinned (DD-01–03); all native style options remain available tiered.
+
+**Z-order (TU-14):** PDF pages deepest-z; annotations always above. Z-order controls in overflow + context-menu/long-press — never keyboard-only.
+
+**Delete (TU-10, TU-14):** Eraser primary; selected-element delete via keyboard + right-click/long-press + buried visible button.
 
 ---
 
@@ -199,7 +215,11 @@ POC scope is intentionally **narrow** — no relay, no multi-page sync, no AV. P
 | Sync | `npm run test:wb-sync` green; 22 invariants unbroken (§2.3) |
 | Keyboard | TU-11 surface routing defined for tutor-desktop |
 | Visual | Professional polish bar (HARD quality bar; TU-02) |
-| Theme | **TU-12:** tutor-desktop chrome readable in **light and dark**; Excalidraw `theme` matches app-selected theme (toggle-driven, not system-only) |
+| Theme | **TU-12 + TU-13:** tutor-desktop chrome readable in **light and dark**; Excalidraw `theme` + board bg follow app-selected theme; whiteboard-local theme toggle on chrome |
+| Laser | **ST-05:** V1 top-level toolbar slot; verify alignment/visibility to student (fix if regressed) |
+| Affordances | **TU-14 + TM-10:** every function has visible button; full touch/long-press parity for z-order, delete, More styles |
+| Styles | **PP-04:** all native style props kept — inline vs More styles tier; nothing dropped |
+| Z-order | **TU-14:** PDF deepest-z HARD default; send-to-back/bring-to-front via buttons + menu |
 
 ### Phase 2 — Student-mobile chrome
 
@@ -218,7 +238,7 @@ POC scope is intentionally **narrow** — no relay, no multi-page sync, no AV. P
 
 | Item | Requirement refs |
 |------|------------------|
-| Laser pointer alignment | ST-05 |
+| Laser pointer alignment re-verify | ST-05 (if V1 gate regresses) |
 | Eraser cursor vs delete path | TM-08 |
 | PDF page-picker integration in chrome | TB-08, PU-04 |
 | Page insert order UX | SR-11 |
@@ -234,10 +254,10 @@ From requirements doc — **not** closed by this design pass:
 
 | # | Question | Notes |
 |---|----------|-------|
-| 2 | Pulldown grouping beyond shapes — where PDF/Math/Desmos/Image land | **Partially resolved:** inserts on **top bar** in hybrid layout; infrequent paths to overflow on student |
-| 3 | Which properties always visible vs behind "More" | **Partially resolved:** color, width, opacity inline; advanced behind More — exact field list at implementation |
+| 2 | Pulldown grouping beyond shapes — where PDF/Math/Desmos/Image land | **Resolved 2026-06-08:** inserts on **top bar**; all styles tiered inline vs More (**PP-04**) |
+| 3 | Which properties always visible vs behind "More" | **Resolved 2026-06-08:** color, width, opacity (+ default roughness/roundness) inline; **ALL** other native style props in More — nothing dropped |
 | 4 | Student vs tutor tool parity after Sarah tests student add-page | v1 pencil+eraser only; revisit v1.1+ |
-| 6 | Laser pointer: Excalidraw layer vs custom overlay | Phase 3 |
+| 6 | Laser pointer: Excalidraw layer vs custom overlay | **Resolved 2026-06-08:** V1 **top-level** toolbar slot; **verify** alignment/visibility (ST-05) |
 | 8 | Keyboard shortcuts when native toolbar hidden | TU-11 — define parity at Phase 1 tutor, Phase 2 student |
 | 9 | Visual system token mapping for every control | Follow V1-COMPONENT-LIBRARY; no one-offs |
 | 10 | PDF default fit: tutor vs student viewport | DD-05 — product open |
@@ -261,7 +281,7 @@ From requirements doc — **not** closed by this design pass:
 | Doc | Role |
 |-----|------|
 | [`whiteboard-excalidraw-function-audit-2026-06-08.md`](whiteboard-excalidraw-function-audit-2026-06-08.md) | **Pre-hide audit** — full Excalidraw 0.18.1 function inventory, silently-lost list, keyboard-only survivors, candidate new requirements |
-| [`whiteboard-chrome-requirements.md`](whiteboard-chrome-requirements.md) | 64 requirements (incl. TM-09, TU-12) |
+| [`whiteboard-chrome-requirements.md`](whiteboard-chrome-requirements.md) | 67 requirements (incl. TM-09, TM-10, TU-12–TU-14) |
 | [`WHITEBOARD-STATUS.md`](../WHITEBOARD-STATUS.md) | Build status + Sarah UX table |
 | [`whiteboard-sync-redesign-2026-05-27.md`](whiteboard-sync-redesign-2026-05-27.md) | Sync invariants P1–P8, I1–I4 |
 | [`whiteboard-regression-net-design-2026-05-30.md`](whiteboard-regression-net-design-2026-05-30.md) | Real-browser regression net |

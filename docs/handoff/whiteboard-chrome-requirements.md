@@ -4,7 +4,7 @@
 >
 > **Sequencing (ratified Andrew 2026-06-07/08):** Whiteboard chrome is a **pre-master gate** for the V1 reveal — build on `v1-redesign` before `v1-redesign → master`. Master cut = Sarah reveal (`tutoring-notes.vercel.app` / `usemynk.com` share the same production deployment on `master`; no UI-skin feature flag). The reveal must be one cohesive site, not polished chrome around still-janky Excalidraw native UI.
 >
-> **Last consolidated:** 2026-06-07 (TU-12 theme parity added); prior TU-11 keyboard surface routing. Sequencing note updated 2026-06-07/08. **Design doc (ratified forks + phasing):** [`whiteboard-chrome-design-2026-06-07.md`](whiteboard-chrome-design-2026-06-07.md).
+> **Last consolidated:** 2026-06-08 (audit dispositions ratified; TU-13/TU-14/TM-10 added; PP-04/ST-05 expanded). Prior: 2026-06-07 TU-12 theme parity, TU-11 keyboard surface routing. **Design doc (ratified forks + phasing):** [`whiteboard-chrome-design-2026-06-07.md`](whiteboard-chrome-design-2026-06-07.md). **Audit:** [`whiteboard-excalidraw-function-audit-2026-06-08.md`](whiteboard-excalidraw-function-audit-2026-06-08.md).
 
 ---
 
@@ -15,6 +15,11 @@ Replace Excalidraw's native whiteboard UI with **our own custom chrome** (toolba
 **Why:** Excalidraw `^0.18.1` `UIOptions` cannot reorder tools, compress/replace the properties palette, or fix mobile popup behavior. See [`docs/PLATFORM-ASSUMPTIONS.md`](../PLATFORM-ASSUMPTIONS.md) §7.5 and [`docs/WHITEBOARD-STATUS.md`](../WHITEBOARD-STATUS.md) § "Sarah UX asks + custom chrome decision" @ commit `927d536`.
 
 **Scope:** One shared chrome layer with **`tutor-desktop`** and **`student-mobile-first`** variants. Real-iPhone acceptance gate. **Pre-master gate** — required before `v1-redesign → master` (cohesive V1 reveal).
+
+**Standing principles (Andrew, ratified 2026-06-08):**
+
+1. **Every function has a visible button affordance (TU-14).** No whiteboard function is reachable **only** via right-click or **only** via hotkey. Right-click menus and keyboard shortcuts are **accelerators**, never the sole path. Rationale: single-button mice, function-key "right-click", and accessibility/AT users — we cannot assume right-click or specific hotkeys exist. Buried-in-overflow is acceptable; button-less is not.
+2. **Full touch/tablet/phone parity for ALL controls (TM-10).** Students draw on touch devices; every control — including z-order, delete, the right-click set, and "More styles" — must have a touch-reachable equivalent (long-press / selection toolbar / tap targets), not mouse-only/right-click-only. First-class constraint, not a desktop-afterthought.
 
 ---
 
@@ -71,7 +76,7 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 | **PP-01** | Replace or heavily compress Excalidraw's **left properties palette** — dominates desktop (~quarter screen when pen active per 2026-06-06). | (ii) | 2026-06-06 U5; BACKLOG framing note |
 | **PP-02** | **Close styles/properties panel without re-tapping the same control** — dismiss on outside click/tap (Sarah priority **#4**). | (ii) | Sarah-Chat L44–45, L73; orchestrator I7 |
 | **PP-03** | Mobile **color / pen palette** dismisses on **click-away** (outside tap). | (ii) | Sarah-Chat L44–45; BACKLOG I7; whiteboard-sync-redesign § I7 |
-| **PP-04** | Properties UI shows **basics inline** (stroke width, color, opacity); advanced options behind one expand affordance. | (ii) | 2026-06-06 U5; v1 workspace intent |
+| **PP-04** | Properties UI shows **basics inline** (stroke width, color, opacity, roughness/roundness defaults); **ALL remaining native style properties kept** — fill style, stroke style, freedraw stroke profile, arrow type, arrowheads, text align (incl. vertical), font family/size, etc. — organized **primary-inline vs "More styles" overflow** (NR-02 ratified). Clean/sharp is the **default** (roughness 0, sharp edges, thinnest stroke — DD-01–03); every option remains available. | (ii) | 2026-06-06 U5; audit NR-02/P-03–P-14 ratified 2026-06-08 |
 | **PP-05** | **Single restore story** — suppress or replace Excalidraw's confusing **"Load draft into board"** recovery modal during live collab (prefer Discard / server truth). | (ii) + (iii) | BACKLOG Excalidraw recovery row; whiteboard-smoke-log § refresh |
 
 ### Drawing defaults
@@ -91,12 +96,13 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 | **TM-01** | All floating palettes/popovers on touch devices: **outside-tap dismiss** (PP-02, PP-03). | (ii) | Sarah-Chat; I7 |
 | **TM-02** | Fix **pointer-transform hit offset** (eraser + PDF touch targets drift up-left on mobile). | app-bug + (ii) | BACKLOG post-sync smoke (d) |
 | **TM-03** | **Real iPhone Safari** acceptance for student-mobile chrome — jsdom cannot validate layout/popup behavior. | process gate | PLATFORM-ASSUMPTIONS §8; PHASE-2-IOS-SMOKE-MATRIX S11 |
-| **TM-04** | **Tablet / XPPen** pressure-sensitive drawing must keep working through custom chrome (Sarah priority **#2**). | (i) + verify | Sarah-Chat L71; 2026-06-06 W2 |
+| **TM-04** | **Tablet / XPPen** pressure-sensitive drawing must keep working through custom chrome (Sarah priority **#2**). **Leave Excalidraw native pen/tablet handling untouched** — expose **no** Mynk pen-mode control (NR-03 resolved). Watch-item: revisit only if palm-rejection trouble reported. | (i) + verify | Sarah-Chat L71; 2026-06-06 W2; audit T-12 ratified 2026-06-08 |
 | **TM-05** | **Tutor-on-phone/tablet** variant when tutor joins from non-desktop. | (ii) | BACKLOG tutor-side mobile row |
 | **TM-06** | **iOS touch undo/redo** on visible ↶/↷ buttons — verify after custom chrome (shipped desktop; touch unverified). | (ii) + verify | BACKLOG undo row; iOS matrix §7; TU-11 |
 | **TM-07** | **Touch drawing ergonomics** on iOS — palm rejection, continuous stroke broadcast (S11 matrix). | (ii) + verify | PHASE-2-IOS-SMOKE-MATRIX §7, S11 |
 | **TM-08** | **Eraser cursor** aligned with stroke delete path (icon/cursor vs actual erase position). | app-bug | BACKLOG eraser cursor row; whiteboard-sync-redesign |
 | **TM-09** | **Tutor-mobile deferral + expectations notice (v1.1).** (a) Pre-subscribe/pricing copy: tutor phone/tablet support upcoming; **desktop tutoring only** now. (b) Host-time device gate: block tutor **starting** a whiteboard session from non-desktop with *"Desktop tutoring only for now; phone/tablet tutoring is coming."* Architecture must not preclude tutor-mobile later. **Defers TM-05** full variant to v1.1. | (ii) + product | Design pass 2026-06-07 Fork 2; [`whiteboard-chrome-design-2026-06-07.md`](whiteboard-chrome-design-2026-06-07.md) §5 |
+| **TM-10** | **Full touch/tablet/phone parity for ALL chrome controls.** Every whiteboard function exposed in chrome — z-order, delete-selected, More styles, laser, theme toggle, etc. — must have a **touch-reachable equivalent** (long-press menu, selection toolbar, adequate tap targets). No desktop-only or right-click-only interaction for any function students need. Standing principle (Andrew 2026-06-08). | (ii) + verify | Audit ratification 2026-06-08; pairs with TU-14 |
 
 ### Screen real estate / responsive
 
@@ -123,7 +129,7 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 | **ST-02** | Student bottom bar ~48px: **follow toggle, mic, leave** — above compact page strip. | (ii) | v1 §5.7 |
 | **ST-03** | **Student add-page:** **No** for v1 (ratified); architecture must allow enabling later. | product | Sarah-Chat L23; v1 §8 |
 | **ST-04** | Student does **not** need full shape/text toolset by default — tutor drives structure. | (ii) | v1 §5.7; RELIABILITY-REDESIGN |
-| **ST-05** | **Laser pointer** visible to student and **aligned** with cursor (offset + invisible today). | (ii) or app-bug | Sarah-Chat L39–40; orchestrator B8/B9 |
+| **ST-05** | **Laser pointer** — **V1 top-level** reachable toolbar slot (not deferred). **Verify** alignment and visibility to student in V1; fix if regressed (viewport-alignment fix cleared most misalignment per Andrew 2026-06-08). Remains a V1 acceptance gate. | (ii) + verify | Sarah-Chat L39–40; audit T-16/NR-06 ratified 2026-06-08 |
 | **ST-06** | Student page strip mirrors tutor **section grouping** (read-only; no add-page in v1). | (ii) | pdf-page-picker bootstrapper § student mirror |
 
 ### Tutor-WB-specific
@@ -134,14 +140,16 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 | **TU-02** | **Professional visual polish** — Mynka Blue / v1 component system; not monochrome reskin. | (ii) | HARD bar; 2026-06-06 U1; V1-COMPONENT-LIBRARY §2.10 |
 | **TU-03** | **Keyboard undo** Ctrl/Cmd+Z reliable on desktop (on-screen undo works; keyboard regressed 2026-06-06). | (ii) + app-bug | 2026-06-06 B1; BACKLOG; ORCHESTRATOR-STATE; TU-11 |
 | **TU-04** | Custom insert actions (PDF, Math, Desmos) integrated into Mynk toolbar — not orphaned. | (ii) | WHITEBOARD-STATUS § custom chrome |
-| **TU-05** | **Writing tablet** (XPPen Star G640) — priority **#2**; pen input must not break when native toolbar hidden. | (i) + verify | Sarah-Chat L71; orchestrator F1 |
+| **TU-05** | **Writing tablet** (XPPen Star G640) — priority **#2**; pen input must not break when native toolbar hidden. **No Mynk pen-mode toggle** — native Excalidraw stylus path untouched (NR-03). | (i) + verify | Sarah-Chat L71; orchestrator F1; audit T-12 ratified 2026-06-08 |
 | **TU-06** | **Waiting room** (when built): session chrome coexists with pre-session gate; timer starts after leave. | layout | Sarah-Chat L6–7; v1 §8 waiting room |
 | **TU-07** | Join/share control labeled **"Share link"** (not "Copy student link"). | (ii) copy | 2026-06-06 U4; v1 workspace spec |
 | **TU-08** | **Mic meter + device picker** in workspace chrome (not headless-only). | (ii) | whiteboard-smoke-log § W-audio pending |
 | **TU-09** | **Session bar ~40px** + **bottom controls strip** (mic, cam, pages, share) per v1 wireframe — separate from tool chrome but one visual system. | (ii) | v1-component-redesign §5 Workspace |
-| **TU-10** | **Eraser/delete** remains discoverable — Sarah likes delete (positive validation). | (ii) | Sarah-Chat L8; orchestrator U2 |
+| **TU-10** | **Eraser/delete** remains discoverable — Sarah likes delete (positive validation). Eraser stays **primary toolbar** control; **selected-element delete** via keyboard Delete **and** right-click/long-press **and** a buried visible button (TU-14 — not button-less). | (ii) | Sarah-Chat L8; audit P-24/NR-05 ratified 2026-06-08 |
 | **TU-11** | **Keyboard-shortcut surface routing.** Canvas shortcuts (P, R, E, Delete, Ctrl/Cmd+Z, etc.) fire ONLY when the Excalidraw canvas has focus. Mynk chrome inputs (search/URL fields, insert modals, page strip, follow toggle, AV controls) must NOT steal or leak canvas shortcuts. Focus returns to canvas after Mynk modals/palettes close. No browser-chrome hijack (e.g. Ctrl+Z must never trigger browser back-navigation). Define tutor-desktop vs student-mobile parity for shortcut routing when native Excalidraw toolbar is hidden. Native pen/stylus preservation unchanged (TM-04 / TU-05). | (ii) + verify | TU-03; TB-11; TM-06; open Q8 |
-| **TU-12** | **Theme parity: Mynk chrome + Excalidraw theme follow app light/dark selection.** Toolbar, pulldowns, properties popover, page strip, and bottom bars styled for **both** light and dark via v1 tokens (`tutor-desktop` + `student-mobile-first`). Excalidraw `theme` prop must follow the **app-selected** theme (persisted user toggle; first visit defaults to system) — extend/replace `useExcalidrawThemeFromSystem` (system-only today). Not the dev-only `?theme=` param. | (ii) | BACKLOG § V1 redesign — pre-master; `V1-COMPONENT-LIBRARY.md` §2.11; whiteboard-chrome-design §2.1 + Phase 1/2 acceptance |
+| **TU-12** | **Theme parity: Mynk chrome + Excalidraw theme follow app light/dark selection.** Toolbar, pulldowns, properties popover, page strip, and bottom bars styled for **both** light and dark via v1 tokens (`tutor-desktop` + `student-mobile-first`). Site theme defaults to **OS/system** until user explicitly picks light or dark (A′). Excalidraw `theme` prop follows the **app-selected** theme. **Board background follows theme** — no native Excalidraw canvas-bg control (M-10 dropped; NR-04 resolved). Not the dev-only `?theme=` param. | (ii) | BACKLOG § V1 redesign; audit M-09/M-10 ratified 2026-06-08 |
+| **TU-13** | **Whiteboard-local theme toggle** — a small theme toggle **on the whiteboard chrome itself** as an escape hatch (in addition to the global nav toggle). Lets tutor/student flip board theme without leaving the session surface. | (ii) | Audit NR-04 ratified 2026-06-08 |
+| **TU-14** | **Every function has a visible button affordance.** No whiteboard function reachable **only** via right-click or **only** via hotkey. Right-click and keyboard shortcuts are **accelerators**, not sole paths. Includes z-order (send-to-back / bring-to-front via buried/More buttons **and** context-menu/long-press), delete-selected, and all style controls. **HARD z-order default (NR-11):** PDF pages deepest-z; all drawn elements render above PDFs. Buried-in-overflow/More is acceptable; button-less is not. Standing principle (Andrew 2026-06-08). | (ii) | Audit P-16–P-19/NR-11 ratification 2026-06-08; pairs with TM-10 |
 
 ---
 
@@ -169,15 +177,21 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 7. ~~**Zen mode vs CSS hide:**~~ **RESOLVED → `zenModeEnabled` + scoped CSS** (zen alone insufficient). Do not pass `style` to `<Excalidraw>`.
 12. ~~**Prototype / acceptance gate:**~~ **RESOLVED → fail-fast Phase 0 runtime POC** on Vercel preview before Phase 1 full build (sync-free throwaway); real-iPhone gate remains Phase 2.
 
+**Resolved (audit ratification 2026-06-08 — detail in [`whiteboard-excalidraw-function-audit-2026-06-08.md`](whiteboard-excalidraw-function-audit-2026-06-08.md)):**
+
+2. ~~**Pulldown grouping / More styles:**~~ **RESOLVED → all-styles-tiered** — keep **ALL** native style props; primary-inline vs **More styles** overflow (**PP-04**); inserts on top bar per hybrid layout.
+3. ~~**Properties compression:**~~ **RESOLVED → PP-04** — color, width, opacity (+ default roughness/roundness) inline; **every other** native style prop in More styles tier.
+6. ~~**Laser pointer:**~~ **RESOLVED → V1 top-level toolbar slot** — **ST-05** reframe: verify alignment/visibility to student; fix if regressed (not deferred to Phase 3).
+13. ~~**Pen mode:**~~ **RESOLVED → leave native, no Mynk control** (NR-03) — watch palm-rejection only.
+14. ~~**Canvas background / theme on board:**~~ **RESOLVED → TU-12 + TU-13** — board bg follows app theme; whiteboard-local theme toggle on chrome.
+15. ~~**Z-order / delete affordances:**~~ **RESOLVED → TU-14 + TM-10** — PDF deepest-z HARD default; visible buttons + context-menu/long-press for z-order and delete-selected.
+
 **Still open:**
 
-> **Pre-hide audit (2026-06-08):** [`whiteboard-excalidraw-function-audit-2026-06-08.md`](whiteboard-excalidraw-function-audit-2026-06-08.md) — full Excalidraw 0.18.1 function matrix, 18 silently-lost items, 34 keyboard-only survivors, 12 candidate new requirements (NR-01–NR-12) for orchestrator ratification.
+> **Pre-hide audit (2026-06-08):** [`whiteboard-excalidraw-function-audit-2026-06-08.md`](whiteboard-excalidraw-function-audit-2026-06-08.md) — ratified 2026-06-08; 5 remaining silently-lost items; NR-01, NR-07–NR-09, NR-12 still open.
 
-2. **Pulldown grouping:** besides line/arrow and rect/diamond/ellipse, which tools share pulldowns? Where do PDF/Math/Desmos/Image land? *(Partial: inserts on top bar in hybrid layout — see design doc §3.)*
-3. **Properties compression:** which properties always visible vs behind "More styles"? *(Partial: color, width, opacity inline — see design doc §3.)*
 4. **Student vs tutor tool parity:** v1 pencil+eraser only — revisit after Sarah tests student add-page.
-6. **Laser pointer:** fix in Excalidraw layer vs custom overlay tool? → Phase 3.
-8. **Keyboard shortcuts:** expose Excalidraw defaults (P, R, etc.) when native toolbar hidden? → see **TU-11** (surface routing + tutor-desktop vs student-mobile parity).
+8. **Keyboard shortcuts:** expose Excalidraw defaults (P, R, etc.) when native toolbar hidden? → see **TU-11** (surface routing + tutor-desktop vs student-mobile parity); shortcuts are accelerators per **TU-14**.
 9. **Visual system:** every chrome control maps to v1 tokens — no one-off oversized buttons.
 10. **PDF default fit:** tutor viewport vs student viewport on insert (BACKLOG open design row).
 11. **Ghost peer viewport overlays** when follow is OFF — ship in chrome wave or defer?
@@ -262,6 +276,9 @@ Broad case-insensitive ripgrep across **`docs/`** and **`docs/handoff/`** for wh
 | TU-09 | Session bar + bottom controls visual system | v1 §5 (expanded) |
 | TU-10 | Eraser/delete discoverable | Sarah-Chat L8 |
 | TU-12 | Theme parity — Mynk chrome + Excalidraw follow app toggle | BACKLOG § V1 redesign; V1-COMPONENT-LIBRARY §2.11 |
+| TU-13 | Whiteboard-local theme toggle on chrome | Audit NR-04 ratified 2026-06-08 |
+| TU-14 | Every-function-has-a-button + PDF deepest-z z-order | Audit ratification 2026-06-08 |
+| TM-10 | Full touch parity for all chrome controls | Audit ratification 2026-06-08 |
 
 ---
 
@@ -284,8 +301,8 @@ Broad case-insensitive ripgrep across **`docs/`** and **`docs/handoff/`** for wh
 | Pulldown / consolidation | 4 |
 | Properties palette | 5 |
 | Drawing defaults | 5 |
-| Touch / mobile-tablet | 9 |
+| Touch / mobile-tablet | 10 |
 | Screen real estate / responsive | 12 |
 | Student-WB-specific | 6 |
-| Tutor-WB-specific | 12 |
-| **Total** | **64** |
+| Tutor-WB-specific | 14 |
+| **Total** | **67** |
