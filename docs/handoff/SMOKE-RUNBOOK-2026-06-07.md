@@ -37,7 +37,7 @@
 - [x] **3. Re-save updates in place** — **Save again** (edit then re-save) → confirm it updates **in place** (no duplicate note).
   **Notes: No "updated" pill yet. Dunno if that's intentional.**
 
-- [x] **4. Cancel & delete session (review page)** — On the session **review** page use **Cancel and delete session data** → confirm you're returned to student detail **regardless of outcome** (never stranded on an error / "Deleting…" screen); the session's note is removed for the parent. _(NOTE: per-note deletion from the student **notes list** is a SEPARATE surface — under investigation per Andrew's smoke note below.)_
+- [x] **4. Cancel & delete session (review page)** — On the session **review** page use **Cancel and delete session data** → confirm you're returned to student detail **regardless of outcome** (never stranded on an error / "Deleting…" screen); the session's note is removed for the parent. _(Per-note deletion from the student **notes list** is a separate surface and works as intended — the note disappears and you stay on the list page. Confirmed not a bug, Andrew 2026-06-07.)_
   **Notes: I pass this only because it works as you should, not as this step said it should.  When I deleted a note it stayed on the notes list.  I will separately test what this probably should refer to and that's the cancel and delete operation on session review.  Cancel and delete navigated away. Don't really know if it would have on a hang I only know i nav'd away.**
 
 - [x] **5. Correct tutor name on share** — Open the **parent share page** → confirm it shows the **correct tutor's name** for that student (not an arbitrary admin).
@@ -47,7 +47,7 @@
 - [x] PASS
 - [ ] FAIL
 
-_(Andrew 2026-06-07: PASS with notes — follow-ups captured in `ORCHESTRATOR-STATE.md`; merge held pending the delete-list investigation.)_
+_(Andrew 2026-06-07: PASS — delete-list "bug" was a misread (works as intended); remaining notes are deferred UX/cleanup items captured in `ORCHESTRATOR-STATE.md`. Slice-3 merge gated only on `test:wb-sync` green locally.)_
 
 **On full PASS:** orchestrator merges this branch `--no-ff` → `v1-redesign` **LAST** (carries the migration).
 
