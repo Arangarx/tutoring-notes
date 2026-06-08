@@ -1,6 +1,8 @@
 # Smoke runbook — 2026-06-07
 
-**Purpose:** Smoke two merge-ready branches before orchestrator merge. Check boxes with `[x]`; jot results on the **Notes:** line under each step.
+**Purpose:** Smoke two merge-ready branches before orchestrator merge.
+
+> **Legend (read first):** `[x]` = **step PASSED** (executed and behaved as expected). If a step was **skipped** or **failed**, leave it unchecked and say so on the **Notes:** line. A fully-checked target = green merge gate.
 
 ## Branches under smoke
 

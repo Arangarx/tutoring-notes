@@ -23,6 +23,8 @@ Multi-day epic on branch **`v1-redesign`** (active V1 integration branch; **not 
 
 **Process directive (Andrew 2026-06-07):** prefer **agent-runnable validation harnesses** over manual smoke wherever behavior is verifiable without Andrew's hardware (transcription E2E + sweep validations were the exemplars).
 
+**Process directive — runbook legend (Andrew 2026-06-07):** every smoke runbook MUST open with an explicit legend: `[x]` = step **PASSED** (executed + behaved as expected); skipped/failed steps stay unchecked with the reason on the **Notes:** line; a fully-checked target = green merge gate. Removes the "done vs pass" ambiguity. Any future runbook (or runbook-generating dispatch) includes this legend verbatim.
+
 ### ✅ Slice-3 save-bridge — Pass-1 rework SHIPPED (2026-06-07) → awaiting re-smoke
 
 **Pass 1 complete** @ [`0fa2363`](https://github.com/Arangarx/tutoring-notes/commit/0fa2363): all 3 smoke defects fixed, `test:wb-sync` 12/12 GREEN, LOCKED B4 save-model implemented (details below). **Re-smoke pending** (runbook §4) before `--no-ff` merge to `v1-redesign`. Original failure context retained below for the audit trail.
