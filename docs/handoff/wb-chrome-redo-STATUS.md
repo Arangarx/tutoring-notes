@@ -2,7 +2,7 @@
 
 Branch: `feat/wb-chrome-redo`  
 Baseline: `a150d4f` (PR-01 freedraw latency fix — known-good board separation)  
-Latest commit: `85ebedc` (2026-06-09 — interactivity fix)
+Latest commit: `914fbc0` (2026-06-09 — P0 undo cross-board history isolation fix)
 
 ## What this branch does
 
@@ -28,21 +28,24 @@ This branch:
 | Apply A4 engine additions | ✅ Done | reachableParticipants, debounced lifecycleParticipants, split-brain gate |
 | Wire chrome to baseline engine | ✅ Done | New render section, existing engine functions wired to new buttons |
 | **P0 interactivity fix** | ✅ Done | `85ebedc` — overflow clip root cause + click-toggle props + board delete |
-| npx next build exit 0 | ✅ Done | 46s build, exit 0 |
-| npx jest | ✅ Done | 1980 pass / 5 fail (same 4 pre-existing suites; see True Baseline below) |
-| Playwright interaction tests | ✅ Written | `tests/integration/wb-chrome-interactions.spec.ts` — 7 interaction tests |
+| **P0 undo cross-board history fix** | ✅ Done | `914fbc0` — `captureUpdate:"NEVER"` + `history.clear()` on board switch |
+| npx next build exit 0 | ✅ Done | 40s build, exit 0 (confirmed `914fbc0`) |
+| npx jest | ✅ Done | 1981 pass / 4 fail (same 4 pre-existing suites; `914fbc0`) |
+| Playwright interaction tests | ✅ Written | `tests/integration/wb-chrome-interactions.spec.ts` — 8 tests (incl. P0 undo gate) |
 | npm run test:wb-sync | ⏳ Pending | Docker relay required |
 | Real-browser smoke | ⏳ Pending | Andrew needs to start dev server + run Playwright (see gate below) |
 | Merge to master | ⏳ Pending | After smoke + Playwright interaction tests GREEN |
 
 ## Gate status
 
-- `npx next build`: ✅ exit 0
-- `npx jest`: ✅ 1980 pass (true baseline — see note below)
+- `npx next build`: ✅ exit 0 (40s, `914fbc0`)
+- `npx jest`: ✅ 1981 pass / 4 fail (same 4 pre-existing suites, `914fbc0`)
 - `npm run test:wb-sync`: ⏳ pending (requires Docker relay)
 - **Interactive controls P0 fix**: ✅ code shipped (`85ebedc`)
-- **Playwright interaction tests**: ✅ written — run with `npm run test:wb-playwright -- tests/integration/wb-chrome-interactions.spec.ts`
+- **Undo cross-board P0 fix**: ✅ code shipped (`914fbc0`) — `captureUpdate:"NEVER"` + `history.clear()` on board switch
+- **Playwright interaction tests**: ✅ written (8 tests) — run with `npm run test:wb-playwright -- tests/integration/wb-chrome-interactions.spec.ts`
 - Board separation: ⏳ pending real-browser verification
+- Undo isolation (P0): ⏳ pending real-browser Playwright (test written in `wb-chrome-interactions.spec.ts`)
 - Interactive controls real-browser: ⏳ pending (run Playwright tests above)
 
 ### True jest baseline (2026-06-09, commit `85ebedc`)
@@ -103,6 +106,26 @@ The "button highlights when I mouse OFF, un-highlights when I mouse over"
 symptom is explained: the dropdown was invisible but still in the DOM outside
 the clip rect. Chrome's hit-test showed the button as the top element EXCEPT
 where the invisible clipped area overlapped — causing erratic hover behavior.
+
+## P0 root cause #2 — undo cross-board history contamination (confirmed 2026-06-09, commit `914fbc0`)
+
+Excalidraw uses a **single global undo/redo history stack** for the entire instance.
+`selectTutorPage` and `addTutorPage` called `updateScene(...)` without `captureUpdate:"NEVER"`,
+so the board-switch element replacement was recorded as an undoable operation.
+
+Pressing undo on Board 2:
+- Replayed the board-switch delta in reverse → injected Board 1 elements into Board 2 scene.
+- Or replayed earlier Board 1 draw operations (if not cleared) → same contamination.
+
+**Fix (both parts required):**
+1. `captureUpdate: "NEVER"` on all board-switch `updateScene` calls — the swap never enters history.
+2. `api.history.clear()` after each board switch — purges accumulated Board N-1 history.
+
+APIs verified against `@excalidraw/excalidraw@0.18.1`:
+- `updateScene captureUpdate` param: `App.d.ts` line 385
+- `history.clear`: `types.d.ts` line 609 (`InstanceType<typeof App>["resetHistory"]`)
+
+**Files changed:** `WhiteboardWorkspaceClient.tsx` (surgical additions to `selectTutorPage` and `addTutorPage`), `wb-chrome-interactions.spec.ts` (new undo isolation Playwright test — 8th test).
 
 ## Smoke checklist (Andrew to run)
 
