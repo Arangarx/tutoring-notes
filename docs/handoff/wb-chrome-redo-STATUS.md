@@ -2,7 +2,7 @@
 
 Branch: `feat/wb-chrome-redo`  
 Baseline: `a150d4f` (PR-01 freedraw latency fix — known-good board separation)  
-Latest commit: `914fbc0` (2026-06-09 — P0 undo cross-board history isolation fix)
+Latest commit: `ed87f3d` (2026-06-09 — P0/P1/P2 punch list — z-index, mojibake, hover, slider, board tabs, roundness)
 
 ## What this branch does
 
@@ -29,24 +29,27 @@ This branch:
 | Wire chrome to baseline engine | ✅ Done | New render section, existing engine functions wired to new buttons |
 | **P0 interactivity fix** | ✅ Done | `85ebedc` — overflow clip root cause + click-toggle props + board delete |
 | **P0 undo cross-board history fix** | ✅ Done | `914fbc0` — `captureUpdate:"NEVER"` + `history.clear()` on board switch |
-| npx next build exit 0 | ✅ Done | 40s build, exit 0 (confirmed `914fbc0`) |
-| npx jest | ✅ Done | 1981 pass / 4 fail (same 4 pre-existing suites; `914fbc0`) |
-| Playwright interaction tests | ✅ Written | `tests/integration/wb-chrome-interactions.spec.ts` — 8 tests (incl. P0 undo gate) |
+| **P0/P1/P2 punch list (Andrew's smoke)** | ✅ Done | `ed87f3d` — z-index, mojibake, hover, dark stroke, cam toggle, roundness, board tabs, slider, z-order buttons |
+| npx next build exit 0 | ✅ Done | exit 0 (confirmed `ed87f3d`) |
+| npx jest | ✅ Done | 1981 pass / 4 fail (same 4 pre-existing suites; `ed87f3d`) |
+| Playwright interaction tests | ✅ Written | `tests/integration/wb-chrome-interactions.spec.ts` — 11 tests (incl. z-index gate, active-tool hover, dark-mode swatch) |
 | npm run test:wb-sync | ⏳ Pending | Docker relay required |
 | Real-browser smoke | ⏳ Pending | Andrew needs to start dev server + run Playwright (see gate below) |
 | Merge to master | ⏳ Pending | After smoke + Playwright interaction tests GREEN |
 
 ## Gate status
 
-- `npx next build`: ✅ exit 0 (40s, `914fbc0`)
-- `npx jest`: ✅ 1981 pass / 4 fail (same 4 pre-existing suites, `914fbc0`)
+- `npx next build`: ✅ exit 0 (`ed87f3d`)
+- `npx jest`: ✅ 1981 pass / 4 fail (same 4 pre-existing suites, `ed87f3d`)
 - `npm run test:wb-sync`: ⏳ pending (requires Docker relay)
 - **Interactive controls P0 fix**: ✅ code shipped (`85ebedc`)
 - **Undo cross-board P0 fix**: ✅ code shipped (`914fbc0`) — `captureUpdate:"NEVER"` + `history.clear()` on board switch
-- **Playwright interaction tests**: ✅ written (8 tests) — run with `npm run test:wb-playwright -- tests/integration/wb-chrome-interactions.spec.ts`
+- **Punch-list P0/P1/P2 fix**: ✅ code shipped (`ed87f3d`)
+- **Playwright interaction tests**: ✅ written (11 tests) — run with `npm run test:wb-playwright -- tests/integration/wb-chrome-interactions.spec.ts`
 - Board separation: ⏳ pending real-browser verification
 - Undo isolation (P0): ⏳ pending real-browser Playwright (test written in `wb-chrome-interactions.spec.ts`)
 - Interactive controls real-browser: ⏳ pending (run Playwright tests above)
+- PDF tab indicator (item 11): ⏳ deferred — `PageStripRow` has no `isPdf` field; need to add field to the type + propagate from the session data model before this can be implemented
 
 ### True jest baseline (2026-06-09, commit `85ebedc`)
 1985 total, **1980 pass**, **5 fail** across 4 suites:
@@ -76,9 +79,9 @@ The STATUS doc previously said "1985 pass, 4 pre-existing failures (identity-p2a
 | `src/lib/av/peer-mesh.ts` | A4: ICE restart, stale-peer eviction |
 | `src/app/w/[joinToken]/StudentWhiteboardClient.tsx` | A4: dual status pills |
 | `src/lib/whiteboard/undo-redo.ts` | Added z-order + delete triggers |
-| `src/styles/token-values.ts` | EXCALIDRAW_STROKE_HEX + palette |
+| `src/styles/token-values.ts` | EXCALIDRAW_STROKE_HEX + EXCALIDRAW_STROKE_DARK_HEX + palette |
 | Insert buttons (3) | Added `chrome` prop for icon-only mode |
-| `tests/integration/wb-chrome-interactions.spec.ts` | **New** — 7 Playwright interaction tests |
+| `tests/integration/wb-chrome-interactions.spec.ts` | **New** — 11 Playwright interaction tests |
 
 ## P0 root cause (confirmed 2026-06-09, commit `85ebedc`)
 
@@ -133,7 +136,7 @@ APIs verified against `@excalidraw/excalidraw@0.18.1`:
 ```
 npm run test:wb-playwright -- tests/integration/wb-chrome-interactions.spec.ts
 ```
-All 7 tests must be GREEN.
+All 11 tests must be GREEN (includes z-index gate, active-tool hover gate, dark-mode swatch gate).
 
 ### Manual smoke
 1. `npm run dev` → open tutor whiteboard workspace
@@ -143,16 +146,22 @@ All 7 tests must be GREEN.
 5. ••• overflow menu → z-order + delete + hand work (opens to right of strip)
 6. Share ▾ → dropdown opens BELOW topbar; "Copy student join link" works
 7. Mic ▾ → device picker opens BELOW topbar
-8. Camera button → requests cam on first click (no double-toggle)
+8. Camera button → requests cam on first click (no double-toggle). If permission denied, button is disabled and dimmed.
 9. Theme toggle → switches between light/dark themes; dropdown opens below topbar
 10. Undo/Redo buttons work
 11. Props compact bar: click to open → panel stays open when cursor moves onto it
 12. Props panel: click outside → panel closes
-13. PDF/Math/Desmos icon buttons open their respective flows
-14. Board tab strip footer → switching pages works (board separation intact)
-15. **Board delete**: add board, hover to reveal ×, click → confirm → board deleted; board 1 strokes intact
-16. Cannot delete last remaining board (× button absent when only 1 board)
-17. End session button → finalizes session
+13. Props panel — Edge sharpness: Sharp / Round chips wire to Excalidraw currentItemRoundness
+14. Props panel — Opacity slider: thumb reaches far-left at 0% and far-right at 100%
+15. In dark mode: default stroke color is white (not near-black); white swatch selected by default
+16. Left-rail ••• menu: z-order items read "Send to back", "Bring to front" (no mojibake)
+17. PDF/Math/Desmos icon buttons open their respective flows
+18. Board tab strip footer → switching pages works (board separation intact)
+19. **Solo board**: single-board name centered in tab (no left-offset from ghost delete-slot)
+20. **Multi-board**: active tab underline/highlight covers full tab width including delete affordance
+21. **Board delete**: add board, hover to reveal ×, click → confirm → board deleted; board 1 strokes intact
+22. Cannot delete last remaining board (× button absent when only 1 board)
+23. End session button → finalizes session
 18. Open student join link in second tab → student sees whiteboard
 
 ## A4 split-brain (requires 2-client test)
