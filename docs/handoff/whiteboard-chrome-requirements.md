@@ -4,7 +4,7 @@
 >
 > **Sequencing (ratified Andrew 2026-06-07/08):** Whiteboard chrome is a **pre-master gate** for the V1 reveal — build on `v1-redesign` before `v1-redesign → master`. Master cut = Sarah reveal (`tutoring-notes.vercel.app` / `usemynk.com` share the same production deployment on `master`; no UI-skin feature flag). The reveal must be one cohesive site, not polished chrome around still-janky Excalidraw native UI.
 >
-> **Last consolidated:** 2026-06-08 (audit dispositions ratified; TU-13/TU-14/TM-10 added; PP-04/ST-05 expanded; **PR-01** freedraw-latency gate folded into P1.1; **TM-11** mobile palette-dismissal hard requirement; **VP-01/VP-02/PP-06** from Sarah + Andrew's wife live feedback). Prior: 2026-06-07 TU-12 theme parity, TU-11 keyboard surface routing. **Design doc (ratified forks + phasing):** [`whiteboard-chrome-design-2026-06-07.md`](whiteboard-chrome-design-2026-06-07.md). **Audit:** [`whiteboard-excalidraw-function-audit-2026-06-08.md`](whiteboard-excalidraw-function-audit-2026-06-08.md). **Session shell mock:** [`whiteboard-session-shell-design-2026-06-08.md`](whiteboard-session-shell-design-2026-06-08.md).
+> **Last consolidated:** 2026-06-08 (Sarah live pilot feedback batch: **IC-01**, **ST-07**, **PU-05**, **TU-15/16**, **SR-04** refresh, **SR-13/14**; prior same-day: audit dispositions; TU-13/TU-14/TM-10; PP-04/ST-05; **PR-01**; **TM-11**; **VP-01/VP-02/PP-06**). Prior: 2026-06-07 TU-12 theme parity, TU-11 keyboard surface routing. **Design doc (ratified forks + phasing):** [`whiteboard-chrome-design-2026-06-07.md`](whiteboard-chrome-design-2026-06-07.md). **Audit:** [`whiteboard-excalidraw-function-audit-2026-06-08.md`](whiteboard-excalidraw-function-audit-2026-06-08.md). **Session shell mock:** [`whiteboard-session-shell-design-2026-06-08.md`](whiteboard-session-shell-design-2026-06-08.md).
 
 ---
 
@@ -59,6 +59,7 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 | **TB-09** | **Phone-photo / image insert** first-class in toolbar flows (not only disk drag/drop or hidden Excalidraw menu). | (ii) | whiteboard-smoke-log § Sarah 2026-04-24; BACKLOG native image |
 | **TB-10** | **Graph / Desmos insert** affordance in Mynk toolbar (Sarah top-10 action: "importing or inserting a graph"). | (ii) | orchestrator Q1; BACKLOG Apr 24 Q1; WHITEBOARD-STATUS Sarah Q&A |
 | **TB-11** | Keep **visible Undo/Redo** controls in Mynk chrome (chunky ↶/↷ shipped Apr 2024); coordinate with keyboard path (TU-03, TU-11). | (ii) | BACKLOG undo row; whiteboard-smoke-log |
+| **IC-01** | **Eraser icon** — use a **classic block/pencil-eraser** glyph (Lucide `Eraser` or equivalent). The prior icon read as weird/backspace-like. | (ii) | Sarah live feedback 2026-06-08; mock [`whiteboard-session-shell-mock-2026-06-08.html`](../brand-previews/whiteboard-session-shell-mock-2026-06-08.html) |
 
 ### Pulldown / consolidation
 
@@ -68,6 +69,7 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 | **PU-02** | Infrequent tools (image insert paths, extra shapes, etc.) live in overflow **`···`**, not permanent toolbar slots. | (ii) | v1-component-redesign §5.7 |
 | **PU-03** | **Desktop tutor:** pen/style UI is a **compact bar by default**; full tool menu only on explicit expand — not automatic quarter-screen takeover. | (ii) | 2026-06-06 U5; BACKLOG `pilot-2026-06-06`; Sarah-Chat L73 |
 | **PU-04** | **PDF insert** uses consolidated modal chrome (iOS warning, page cap copy, subset picker) — not scattered native menus. | (ii) | pdf-page-picker bootstrapper; Sarah Apr 24 |
+| **PU-05** | **Alternate-shapes selector** — one pulldown holding line, arrow, rectangle, diamond, ellipse, etc. **Default shown icon and first menu option = straight diagonal line** (Sarah's most-used shape). Line is **not** promoted to its own top-level toolbar slot. Control shows the **current selection** like other compact controls (PP-06 pattern). Pairs with TB-02/TB-03 consolidation intent. | (ii) | Sarah live feedback 2026-06-08; mock |
 
 ### Properties palette (compress / replace)
 
@@ -120,7 +122,7 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 | **SR-01** | **Student iPhone:** whiteboard **≥80%** of viewport (Wyzant ~85–90%). Today ~30–35% per I5. | (ii) | Sarah-Chat L21; RELIABILITY-REDESIGN Surface 5 |
 | **SR-02** | **Tutor desktop:** whiteboard area **significantly larger** — canvas too small vs Wyzant reference. | (ii) | 2026-06-06 U2; v1 maximal-canvas |
 | **SR-03** | **Declutter** — crowded page; Wyzant *intent* (big canvas, light chrome). | (ii) | 2026-06-06 U3; orchestrator Wyzant image |
-| **SR-04** | **Video tile** overlays whiteboard corner (bottom-right), not stacked above canvas. | (ii) | Sarah-Chat L22; v1 §5.7 |
+| **SR-04** | **Video tile cluster** — **default position top-right** (Sarah preference). **Draggable + resizable** overlay on the canvas. **Both tutor and student tiles** must be present (not a single-participant pip). Default footprint ~3× prior single-tile size; exact size non-critical because resize is available. Mic/video top-level toggles ride on the cluster (Decision F). **Tile docking** (esp. mobile snap-to-edge) is **deferred post-V1** — see `BACKLOG.md`. | (ii) | Sarah live feedback 2026-06-08; supersedes bottom-right default; v1 §5.7; mock §5.2 |
 | **SR-05** | Remove **Board pages explainer card** on student mobile (~25% viewport); compact strip instead. | (ii) | RELIABILITY-REDESIGN; v1 §5.7 |
 | **SR-06** | **Page strip** ≤40px — pill tabs `[1] [2] [3]`. | (ii) | v1 §5.7 |
 | **SR-07** | Use **`100dvh`** (not `100vh`) for iOS Safari URL-bar collapse. | (ii) | v1 §5.7; iOS matrix §7 |
@@ -129,6 +131,10 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 | **SR-10** | **Page strip:** PDF workbook **section headers** (collapsible groups per imported file). | (ii) | whiteboard-smoke-log Apr 24; pdf-page-picker bootstrapper |
 | **SR-11** | **Page insert order** — new pages inserting *after* active page feels counterintuitive; revisit strip UX. | (ii) product | BACKLOG smoke 2026-05-30 (c) |
 | **SR-12** | **iOS dynamic viewport:** custom chrome must not clip when Safari URL bar collapses (pair with `100dvh`). | (ii) | PHASE-2-IOS-SMOKE-MATRIX §7 known-quirks |
+| **SR-13** | **Desktop review mode — smaller notes panel.** On **desktop only** (≥1024px), shrink the notes column so the tutor has more room for board preview / other content while editing notes. **Mobile review unchanged** — notes stay full-width primary; board/video remains overlay. | (ii) layout | Sarah live feedback 2026-06-08; mock review split |
+| **SR-14** | **User-facing "boards" + browser-style tab strip.** Rename the user-facing multi-canvas concept from **"page"** to **"board"** (internal code, DB fields, and log prefixes such as `pvs` may remain "page"). Bottom strip = **Chrome/Google-Sheets-style tabs** with a **"+"** affordance to add a board (tab at bottom, not a separate modal). Replaces pill-style "Pg N" strip. | (ii) | Sarah live feedback 2026-06-08; mock; terminology note below |
+
+**Terminology (SR-14):** **User-facing copy and chrome labels use "board" / "Board N".** Implementation may keep `page`, `pageId`, `page-strip` identifiers internally until a dedicated rename pass — do not block V1 on code renames.
 
 ### Student-WB-specific (fundamentally different, mobile-first)
 
@@ -138,7 +144,8 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 | **ST-02** | Student bottom bar ~48px: **follow toggle, mic, leave** — above compact page strip. | (ii) | v1 §5.7 |
 | **ST-03** | **Student add-page:** **No** for v1 (ratified); architecture must allow enabling later. | product | Sarah-Chat L23; v1 §8 |
 | **ST-04** | Student does **not** need full shape/text toolset by default — tutor drives structure. | (ii) | v1 §5.7; RELIABILITY-REDESIGN |
-| **ST-05** | **Laser pointer** — **V1 top-level** reachable toolbar slot (not deferred). **Verify** alignment and visibility to student in V1; fix if regressed (viewport-alignment fix cleared most misalignment per Andrew 2026-06-08). Remains a V1 acceptance gate. | (ii) + verify | Sarah-Chat L39–40; audit T-16/NR-06 ratified 2026-06-08 |
+| **ST-05** | **Pointer wand** (formerly "laser pointer") — **V1 top-level** reachable toolbar slot (not deferred). **Verify** alignment and visibility to student in V1; fix if regressed (viewport-alignment fix cleared most misalignment per Andrew 2026-06-08). Remains a V1 acceptance gate. Icon: **ST-07**. | (ii) + verify | Sarah-Chat L39–40; audit T-16/NR-06 ratified 2026-06-08 |
+| **ST-07** | **Pointer wand icon** — replace laser/crosshair glyph with a **wand** symbol (Sarah suggestion). Function unchanged (peer-visible pointer highlight). Pairs with **ST-05**. | (ii) | Sarah live feedback 2026-06-08; mock |
 | **ST-06** | Student page strip mirrors tutor **section grouping** (read-only; no add-page in v1). | (ii) | pdf-page-picker bootstrapper § student mirror |
 
 ### Tutor-WB-specific
@@ -159,6 +166,8 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 | **TU-12** | **Theme parity: Mynk chrome + Excalidraw theme follow app light/dark selection.** Toolbar, pulldowns, properties popover, page strip, and bottom bars styled for **both** light and dark via v1 tokens (`tutor-desktop` + `student-mobile-first`). Site theme defaults to **OS/system** until user explicitly picks light or dark (A′). Excalidraw `theme` prop follows the **app-selected** theme. **Board background follows theme** — no native Excalidraw canvas-bg control (M-10 dropped; NR-04 resolved). Not the dev-only `?theme=` param. | (ii) | BACKLOG § V1 redesign; audit M-09/M-10 ratified 2026-06-08 |
 | **TU-13** | **Whiteboard-local theme toggle** — a small theme toggle **on the whiteboard chrome itself** as an escape hatch (in addition to the global nav toggle). Lets tutor/student flip board theme without leaving the session surface. | (ii) | Audit NR-04 ratified 2026-06-08 |
 | **TU-14** | **Every function has a visible button affordance.** No whiteboard function reachable **only** via right-click or **only** via hotkey. Right-click and keyboard shortcuts are **accelerators**, not sole paths. Includes z-order (send-to-back / bring-to-front via buried/More buttons **and** context-menu/long-press), delete-selected, and all style controls. **HARD z-order default (NR-11):** PDF pages deepest-z; all drawn elements render above PDFs. Buried-in-overflow/More is acceptable; button-less is not. Standing principle (Andrew 2026-06-08). | (ii) | Audit P-16–P-19/NR-11 ratification 2026-06-08; pairs with TM-10 |
+| **TU-15** | **Share link — "Copied" feedback.** Clicking Share copies the session join link and shows a transient **"Copied"** state (signals it is a link action). Reserve UI room for a future **share-options dropdown** (copy link / other options); V1 mock stubs the chevron affordance. Pairs with **TU-07** label intent. | (ii) | Sarah live feedback 2026-06-08; mock |
+| **TU-16** | **Encourage audio recording ON — parent-friendly framing.** Waiting-room and recording-status copy should **encourage keeping audio recording enabled** and frame it as reassuring to parents (session notes, staying in the loop) — not alarming or surveillance-like. Ties to parent-consent UX and structural recording gate (Decision C). No tutor "start recording" button. | (ii) copy | Sarah live feedback 2026-06-08; mock waiting-room §4.3 |
 
 ### Performance / draw latency (sync hot path)
 
@@ -316,17 +325,17 @@ Broad case-insensitive ripgrep across **`docs/`** and **`docs/handoff/`** for wh
 
 | Category | Distinct requirements |
 |----------|----------------------:|
-| Toolbar / tool-set & ordering | 11 |
-| Pulldown / consolidation | 4 |
+| Toolbar / tool-set & ordering | 12 |
+| Pulldown / consolidation | 5 |
 | Properties palette | 6 |
 | Viewport / ghost bounds / canvas view prefs | 2 |
 | Drawing defaults | 5 |
 | Touch / mobile-tablet | 11 |
-| Screen real estate / responsive | 12 |
-| Student-WB-specific | 6 |
-| Tutor-WB-specific | 14 |
+| Screen real estate / responsive | 14 |
+| Student-WB-specific | 7 |
+| Tutor-WB-specific | 16 |
 | Performance / draw latency | 1 |
-| **Total** | **72** |
+| **Total** | **79** |
 
 ---
 

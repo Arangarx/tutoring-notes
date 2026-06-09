@@ -224,6 +224,7 @@ executors/branches recommended.
 | DESIGN-TOKENS Phase 0 (Tailwind + shadcn foundation) | UX Refresh / DESIGN-TOKENS-PLAN | M | Unblocks token migration |
 | DESIGN-TOKENS Phase 1 (token migration on prod routes) | UX Refresh / DESIGN-TOKENS-PLAN | M | Replaces inline hex; ESLint hex ban per spec |
 | Resume v1 IA design session (Sarah's full list trigger) | `docs/handoff/v1-design-session-2026-05-19-pm-orchestrator-report.md` | M | Lock scheduling Y/N + 5 remaining IA decisions |
+| **Scheduling + external calendar integration** | Sarah live feedback 2026-06-08; [`docs/BACKLOG.md`](BACKLOG.md) § Scheduling proposal | L | **PROPOSED for V1/release — pending Andrew scope decision** (competes with Gate A list). Sync with tutor's existing calendar (e.g. Google); in-app upcoming sessions + start/join links; soft duration; **not committed** until sequencing locked |
 | Phase 1 public-surface design specs (`docs/UX-DESIGNS-PHASE-1.md`) | v1 design bootstrapper | L | After IA locked; 8 surfaces |
 | Phase 2 tutor-surface design specs (`docs/UX-DESIGNS-PHASE-2.md`) | v1 design bootstrapper | L | After IA locked; count depends on scheduling decision |
 | Public surface visual refresh (login, signup, forgot-password, reset-password, privacy, terms, parent-share, feedback, setup) | UX Refresh / v1 specs | L | Implement Phase 1 specs |

@@ -696,7 +696,36 @@ html, body {
   padding: 8px; display: flex; flex-direction: column; gap: 8px;
 }
 
-/* AV tile */
+/* AV tile cluster — SR-04: top-right default, draggable, resizable, both participants */
+.av-tile-cluster {
+  position: absolute; top: 16px; right: 16px;
+  width: 240px; z-index: 15;
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-md); overflow: hidden;
+  resize: both; min-width: 160px; min-height: 120px; max-width: 420px; max-height: 360px;
+}
+.av-tile-cluster .av-tile-unit {
+  border-bottom: 1px solid var(--border-subtle);
+}
+.av-tile-cluster .av-tile-unit:last-of-type { border-bottom: none; }
+.av-tile-unit-label {
+  position: absolute; top: 4px; left: 6px; z-index: 2;
+  font-family: var(--font-mono); font-size: 8px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.75); background: rgba(0,0,0,0.45);
+  padding: 1px 5px; border-radius: 3px;
+}
+.av-resize-hint {
+  position: absolute; bottom: 2px; right: 2px; width: 12px; height: 12px;
+  cursor: nwse-resize; opacity: 0.45; pointer-events: none;
+}
+.av-resize-hint::before, .av-resize-hint::after {
+  content: ''; position: absolute; right: 2px; bottom: 2px;
+  border-color: var(--text-muted); border-style: solid;
+}
+.av-resize-hint::before { width: 8px; height: 8px; border-width: 0 1px 1px 0; }
+.av-resize-hint::after { width: 4px; height: 4px; right: 5px; bottom: 5px; border-width: 0 1px 1px 0; }
+/* Legacy single-tile alias (unused in live mock) */
 .av-tile {
   position: absolute; bottom: 16px; right: 16px;
   width: 160px; z-index: 15;
@@ -740,24 +769,51 @@ html, body {
 .av-btn.off { background: var(--destructive-soft); color: var(--destructive); }
 .av-btn.small { width: 26px; height: 26px; }
 
-/* Page strip */
-.page-strip {
-  height: 32px; flex-shrink: 0;
-  background: var(--surface-1); border-top: 1px solid var(--border);
-  display: flex; align-items: center; gap: 4px; padding: 0 12px; overflow-x: auto;
+/* Board tab strip — SR-14: browser/Sheets-style tabs at bottom */
+.board-tab-strip {
+  height: 34px; flex-shrink: 0;
+  background: var(--surface-2); border-top: 1px solid var(--border);
+  display: flex; align-items: flex-end; gap: 0; padding: 0 8px 0 4px; overflow-x: auto;
 }
-.page-pill {
-  height: 22px; padding: 0 10px; border-radius: 999px;
+.board-tab {
+  height: 28px; padding: 0 12px; margin-right: 1px;
   font-family: var(--font-mono); font-size: 11px; cursor: pointer;
-  border: 1px solid var(--border); background: transparent; color: var(--text-muted);
+  border: 1px solid var(--border); border-bottom: none;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: var(--surface-3); color: var(--text-muted);
   display: flex; align-items: center; gap: 5px; white-space: nowrap;
-  transition: all 0.12s;
+  transition: all 0.12s; flex-shrink: 0;
 }
-.page-pill:hover { border-color: var(--text-muted); color: var(--text); }
-.page-pill.active { background: var(--text); color: var(--text-inverse); border-color: var(--text); }
-.page-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
-.page-add { color: var(--text-muted); border-style: dashed; }
-.page-add:hover { border-color: var(--accent); color: var(--accent); border-style: solid; }
+.board-tab:hover { color: var(--text); background: var(--surface-1); }
+.board-tab.active {
+  background: var(--surface-1); color: var(--text);
+  border-color: var(--border); margin-bottom: -1px; padding-bottom: 1px;
+  box-shadow: 0 -1px 0 var(--surface-1);
+}
+.board-tab-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+.board-tab-add {
+  width: 28px; height: 28px; padding: 0; justify-content: center;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  color: var(--text-muted); background: transparent; border: 1px dashed var(--border);
+  border-bottom: none; margin-left: 2px;
+}
+.board-tab-add:hover { border-color: var(--accent); color: var(--accent); border-style: solid; }
+
+/* Share — TU-15: Copied feedback + dropdown stub */
+.share-btn-wrap { position: relative; display: inline-flex; }
+.share-btn-wrap .tb-btn.copied {
+  background: var(--accent-soft); color: var(--accent-text); border-color: var(--accent);
+}
+.share-chevron {
+  margin-left: -4px; opacity: 0.55; font-size: 10px; pointer-events: none;
+}
+
+/* Shapes pulldown — PU-05: shows current selection (line default) */
+.shapes-pulldown-btn {
+  position: relative; display: flex; align-items: center; justify-content: center;
+  gap: 0;
+}
+.shapes-pulldown-btn .shape-current-icon { display: flex; }
 
 /* ================================================================
    REVIEW MODE
@@ -766,12 +822,13 @@ html, body {
   flex: 1; display: flex; overflow: hidden;
 }
 .review-notes-panel {
-  flex: 1; min-width: 0; display: flex; flex-direction: column;
+  flex: 0 0 38%; max-width: 420px; min-width: 280px;
+  display: flex; flex-direction: column;
   border-right: 1px solid var(--border);
   background: var(--surface-1); overflow: hidden;
 }
 .review-board-panel {
-  width: 340px; min-width: 280px; flex-shrink: 0;
+  flex: 1; min-width: 320px;
   background: var(--surface-base); display: flex; flex-direction: column;
 }
 @media (max-width: 700px) {
@@ -909,10 +966,12 @@ html, body {
 .session-shell.narrow .ghost-label { font-size: 9px; }
 
 /* AV pip — floating, not a layout column */
-.session-shell.narrow .av-tile {
-  width: 108px; bottom: 12px; right: 12px;
+.session-shell.narrow .av-tile-cluster {
+  width: 120px; top: auto; bottom: 12px; right: 12px;
+  resize: none; max-width: 140px; max-height: 200px;
   box-shadow: var(--shadow-lg);
 }
+.session-shell.narrow .av-tile-cluster .av-tile-unit-label { font-size: 7px; }
 .session-shell.narrow .av-drag-handle { height: 10px; }
 .session-shell.narrow .av-controls-row { padding: 4px 6px; gap: 2px; }
 .session-shell.narrow .av-btn { width: 28px; height: 28px; }
@@ -977,8 +1036,8 @@ html, body {
   padding-bottom: 4px;
 }
 
-.session-shell.narrow .page-strip {
-  height: 36px; padding: 0 8px;
+.session-shell.narrow .board-tab-strip {
+  height: 36px; padding: 0 6px 0 2px;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -1043,10 +1102,11 @@ html, body {
   align-items: center; justify-content: space-around; padding: 0 8px;
   flex-shrink: 0; width: 100%;
 }
-.session-shell.tablet-portrait .av-tile {
-  width: 148px; bottom: 16px; right: 16px; box-shadow: var(--shadow-lg);
+.session-shell.tablet-portrait .av-tile-cluster {
+  width: 180px; top: auto; bottom: 16px; right: 16px;
+  resize: none; max-width: 220px; box-shadow: var(--shadow-lg);
 }
-.session-shell.tablet-portrait .page-strip { height: 38px; padding: 0 12px; }
+.session-shell.tablet-portrait .board-tab-strip { height: 38px; padding: 0 10px 0 4px; }
 /* Richer top bar than phone — Share label + mic meter stay visible */
 .session-shell.tablet-portrait #topBar-live-controls .tb-btn:not(.icon-only) { display: flex; }
 .session-shell.tablet-portrait #topBar-live-controls .sep { display: block; }
@@ -1151,11 +1211,16 @@ html, body {
 
     <!-- Live board: A/V + tools -->
     <div id="topBar-live-controls" class="top-bar-group" data-topbar="live-controls" style="display:none;">
-      <!-- Share -->
-      <button class="tb-btn" title="Copy student link">
-        <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-        Share
-      </button>
+      <!-- Share — TU-15: copy link + Copied state; chevron stubs share-options dropdown -->
+      <div class="share-btn-wrap">
+        <button class="tb-btn share-link-btn" id="shareLinkBtn" title="Copy session link" onclick="copyShareLink(event)">
+          <svg class="icon share-link-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          <span class="share-link-label">Share</span>
+        </button>
+        <button class="tb-btn icon-only share-options-stub" title="Share options (copy link, more…)" style="width:22px;margin-left:-2px;" aria-label="Share options">
+          <span class="share-chevron">▾</span>
+        </button>
+      </div>
       <div class="sep"></div>
       <!-- Mic meter -->
       <button class="tb-btn" title="Microphone — click to mute">
@@ -1305,8 +1370,9 @@ html, body {
 
           <div class="setup-section">
             <div class="setup-section-title">Recording</div>
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">
-              Recording unlocks when your student connects through the approved link.
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;line-height:1.45;">
+              Session audio helps parents stay in the loop and gives you better session notes — no extra steps for you.
+              Recording starts automatically when your student joins (parent consent already on file).
             </div>
             <div class="consent-row">
               <span class="icon-ok">●</span>
@@ -1320,8 +1386,8 @@ html, body {
               <span class="icon-ok">●</span>
               <span class="consent-label">Parent video consent on file</span>
             </div>
-            <div style="margin-top:10px;padding:8px 10px;background:rgba(22,163,74,0.08);border:1px solid rgba(22,163,74,0.2);border-radius:6px;font-size:11px;color:var(--success);font-family:var(--font-mono);">
-              Recording will begin when session starts
+            <div style="margin-top:10px;padding:8px 10px;background:rgba(22,163,74,0.08);border:1px solid rgba(22,163,74,0.2);border-radius:6px;font-size:11px;color:var(--success);font-family:var(--font-mono);line-height:1.4;">
+              Audio recording will begin when the session starts — reassuring for parents, helpful for your notes.
             </div>
           </div>
 
@@ -1351,30 +1417,26 @@ html, body {
           <button class="tool-btn active" title="Pencil / Freedraw (P)" onclick="setActiveTool(this)">
             <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
           </button>
-          <!-- Eraser -->
+          <!-- Eraser — IC-01: classic block eraser glyph -->
           <button class="tool-btn" title="Eraser (E)" onclick="setActiveTool(this)">
-            <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20H7L3 16l10-10 7 7-3.5 3.5"/><path d="M6.5 17.5 14 10"/></svg>
+            <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c1.07-1.07 1.88-1.98 2.85-3.15.78-1.06 1.25-2.05 1.58-3.1.32-1 .6-2.3 1.01-4.8.38-2.3 1.07-3.8 2.14-5.4 1.1-1.6 2.48-2.9 4.12-4 2.08-1.4 3.35-1.83 5.53-2 .94-.1 1.87-.08 2.82 0 .79.06 1.55.2 2.3.44"/><path d="m7 21 5-5"/></svg>
           </button>
           <!-- Text -->
           <button class="tool-btn" title="Text (T)" onclick="setActiveTool(this)">
             <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
           </button>
-          <!-- Laser -->
-          <button class="tool-btn" title="Laser pointer (K)" onclick="setActiveTool(this)" style="color:var(--accent-text);">
-            <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>
+          <!-- Wand (was laser) — ST-07 -->
+          <button class="tool-btn" title="Pointer wand (K)" onclick="setActiveTool(this)" style="color:var(--accent-text);">
+            <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="m3 21 9-9"/><path d="M12.2 6.2 11 5"/></svg>
           </button>
 
           <div class="strip-sep"></div>
 
-          <!-- Lines pulldown -->
-          <button class="tool-btn" title="Lines &amp; Arrows" onclick="setActiveTool(this)" style="position:relative;">
-            <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-            <span class="pulldown-chevron">▾</span>
-          </button>
-
-          <!-- Shapes pulldown -->
-          <button class="tool-btn" title="Shapes (Rect / Diamond / Ellipse)" onclick="setActiveTool(this)" style="position:relative;">
-            <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>
+          <!-- Alternate shapes pulldown — PU-05: line default + first option; shows current selection -->
+          <button class="tool-btn shapes-pulldown-btn" title="Shapes — line, arrow, rectangle, diamond, ellipse" onclick="setActiveTool(this)">
+            <span class="shape-current-icon">
+              <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="19" x2="19" y2="5"/></svg>
+            </span>
             <span class="pulldown-chevron">▾</span>
           </button>
 
@@ -1484,29 +1546,38 @@ html, body {
             </div>
           </div>
 
-          <!-- AV tile -->
-          <div class="av-tile">
+          <!-- AV tile cluster — SR-04: top-right, both participants, draggable + resizable -->
+          <div class="av-tile-cluster" title="Drag to move · drag corner to resize">
             <div class="av-drag-handle"><span class="drag-dots">···</span></div>
-            <div class="av-video-feed">
-              <div class="av-avatar">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <div class="av-tile-unit">
+              <div class="av-video-feed" style="aspect-ratio:16/10;">
+                <span class="av-tile-unit-label">Tutor</span>
+                <div class="av-avatar">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </div>
               </div>
-              <div class="av-rec-badge"><div class="rec-dot"></div> REC</div>
+            </div>
+            <div class="av-tile-unit">
+              <div class="av-video-feed" style="aspect-ratio:16/10;">
+                <span class="av-tile-unit-label">Student</span>
+                <div class="av-avatar">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </div>
+                <div class="av-rec-badge"><div class="rec-dot"></div> REC</div>
+              </div>
             </div>
             <div class="av-controls-row">
-              <!-- Mic ON -->
               <button class="av-btn on" title="Mute microphone">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
               </button>
-              <!-- Cam ON -->
               <button class="av-btn on" title="Turn off camera">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
               </button>
-              <!-- Drill-down -->
               <button class="av-btn small" title="Device settings">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
               </button>
             </div>
+            <div class="av-resize-hint" aria-hidden="true"></div>
           </div>
 
         </div>
@@ -1533,10 +1604,10 @@ html, body {
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
         </button>
         <button class="tool-btn" title="Eraser" onclick="setActiveTool(this)">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20H7L3 16l10-10 7 7-3.5 3.5"/><path d="M6.5 17.5 14 10"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c1.07-1.07 1.88-1.98 2.85-3.15.78-1.06 1.25-2.05 1.58-3.1.32-1 .6-2.3 1.01-4.8.38-2.3 1.07-3.8 2.14-5.4 1.1-1.6 2.48-2.9 4.12-4 2.08-1.4 3.35-1.83 5.53-2 .94-.1 1.87-.08 2.82 0 .79.06 1.55.2 2.3.44"/><path d="m7 21 5-5"/></svg>
         </button>
-        <button class="tool-btn" title="Laser" onclick="setActiveTool(this)" style="color:var(--accent-text);">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+        <button class="tool-btn" title="Pointer wand" onclick="setActiveTool(this)" style="color:var(--accent-text);">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="m3 21 9-9"/><path d="M12.2 6.2 11 5"/></svg>
         </button>
         <button class="tool-btn props-sheet-open-btn" title="Colors &amp; styles" onclick="openPropsSheet(event)">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v8m-4-4h8"/></svg>
@@ -1546,12 +1617,12 @@ html, body {
         </button>
       </div>
 
-      <!-- Page strip -->
-      <div class="page-strip">
-        <div class="page-pill active"><div class="page-dot"></div>Pg 1</div>
-        <div class="page-pill">Pg 2</div>
-        <div class="page-pill">Pg 3</div>
-        <div class="page-pill page-add">+ Page</div>
+      <!-- Board tab strip — SR-14: user-facing "boards"; internal code may stay "page" -->
+      <div class="board-tab-strip">
+        <div class="board-tab active"><div class="board-tab-dot"></div>Board 1</div>
+        <div class="board-tab">Board 2</div>
+        <div class="board-tab">Board 3</div>
+        <div class="board-tab board-tab-add" title="Add board">+</div>
       </div>
     </div>
   </div>
@@ -1767,6 +1838,41 @@ function switchMode(mode) {
 function handleEndBtn() {
   if (currentMode === 'live') { switchMode('review'); }
   else if (currentMode === 'review') { alert('Close session'); }
+}
+
+let shareCopiedTimer = null;
+const SHARE_LINK_ICON = '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>';
+const SHARE_COPIED_ICON = '<polyline points="20 6 9 17 4 12"/>';
+function applyShareCopiedState(btn) {
+  if (!btn) return;
+  const label = btn.querySelector('.share-link-label');
+  const icon = btn.querySelector('.share-link-icon');
+  btn.classList.add('copied');
+  if (label) label.textContent = 'Copied';
+  if (icon) icon.innerHTML = SHARE_COPIED_ICON;
+}
+function resetShareCopiedState(btn) {
+  if (!btn) return;
+  const label = btn.querySelector('.share-link-label');
+  const icon = btn.querySelector('.share-link-icon');
+  btn.classList.remove('copied');
+  if (label) label.textContent = 'Share';
+  if (icon) icon.innerHTML = SHARE_LINK_ICON;
+}
+function copyShareLink(ev) {
+  const demoUrl = 'https://usemynk.com/w/demo-session-link';
+  const showCopiedAll = () => {
+    getAllShells().forEach(s => applyShareCopiedState(s.querySelector('.share-link-btn')));
+    clearTimeout(shareCopiedTimer);
+    shareCopiedTimer = setTimeout(() => {
+      getAllShells().forEach(s => resetShareCopiedState(s.querySelector('.share-link-btn')));
+    }, 2000);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(demoUrl).then(showCopiedAll).catch(showCopiedAll);
+  } else {
+    showCopiedAll();
+  }
 }
 
 function setActiveTool(btn) {

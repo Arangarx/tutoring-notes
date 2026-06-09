@@ -193,14 +193,16 @@ The recording section in the checklist shows differently based on session type:
 **Remote session (student connecting remotely):**
 ```
 ── Recording ──
+Session audio helps parents stay in the loop and improves your notes —
+recording starts automatically when your student joins (parent consent on file).
+No manual "start recording" needed.
+
 Recording is enabled when:
   [✓] Student connects through the approved link   ← structural gate
   [✓] Parent audio consent on file                 ← consent flag
   [✓] Parent video consent on file                 ← consent flag (if video recording)
-
-When the student connects, recording capability unlocks automatically.
-No manual "start recording" needed — it begins with the session.
 ```
+(TU-16 — parent-friendly, non-alarming framing.)
 
 **In-person tutoring — single-device recording (tutor + child physically co-present):**
 ```
@@ -272,31 +274,25 @@ The live board chrome is fully specified in [`whiteboard-chrome-p1.2-visual-desi
 
 **LIVE badge:** `bg-accent-soft text-accent-text rounded-full px-2 py-0.5 text-xs font-mono uppercase` + 7px coral dot `animate-pulse`.
 
-### 5.2 Video tile with top-level A/V toggles (Decision F)
+### 5.2 Video tile cluster with top-level A/V toggles (Decision F + SR-04)
 
-The video tile is **not just a video feed** — it is the **primary A/V control surface** on the live board.
+The video cluster is **not just a feed** — it is the **primary A/V control surface** on the live board. **Sarah 2026-06-08:** default **top-right** (not bottom-right); **both tutor and student tiles** visible; **draggable + resizable**; default ~3× prior single-tile footprint.
 
 ```
 ┌──────────────────────────────────────────┐
-│  AV TILE  position:fixed bottom-4 right-4│
-│  bg-card border border-border rounded-md  │
-│  w-[160px]  (draggable — drag handle top) │
+│  AV CLUSTER  position:fixed top-4 right-4 │
+│  bg-card border rounded-md  w-[240px]     │
+│  resize: both (corner affordance)         │
+│  drag handle top · labels Tutor / Student   │
 │                                            │
 │  ┌─────────────────────────────────────┐  │
-│  │  video feed  (aspect 4:3 or 16:9)  │  │
-│  │  bg-black rounded-sm               │  │
-│  │  (student remote feed or self-view  │  │
-│  │   based on in-person/remote mode)   │  │
+│  │  TUTOR feed                         │  │
+│  └─────────────────────────────────────┘  │
+│  ┌─────────────────────────────────────┐  │
+│  │  STUDENT feed                       │  │
 │  └─────────────────────────────────────┘  │
 │                                            │
-│  [🎙 ON]  [📷 ON]  ← TOP-LEVEL toggles    │
-│  ToolbarButton 36px  state:               │
-│    ON  = bg-foreground text-background    │
-│    OFF = bg-destructive/10 text-destructive│
-│                                            │
-│  [⋮] drill-down: device-switching        │
-│  (devices chosen in waiting room;         │
-│   drill-down = change-mid-session escape) │
+│  [🎙 ON]  [📷 ON]  [⋮ devices]           │
 └──────────────────────────────────────────┘
 ```
 
@@ -306,7 +302,9 @@ The video tile is **not just a video feed** — it is the **primary A/V control 
 - Video ON: camera icon filled
 - Video OFF: camera icon with slash + "No video" fallback avatar in feed
 
-**Drag handle:** Top edge of tile, `cursor: grab`. Tile snaps to nearest corner on release (not free-float — avoids covering toolbar).
+**Drag + resize:** Drag handle on top edge (`cursor: grab`). Corner resize handle for footprint adjustment. **Tile docking** (snap-to-edge, esp. mobile) is **deferred post-V1** — see `BACKLOG.md`.
+
+**Phone/tablet:** Cluster shrinks to a compact floating pip (bottom-right on narrow viewports) — position override per §7.4.2; still shows both feeds when space allows.
 
 ### 5.3 Ghost peer viewport bounds (Decision K)
 
@@ -437,7 +435,7 @@ After end-session, the tutor needs **notes front-and-center** — not a video sc
 │  TOP BAR: [Mynk·] │ Session complete · [Student Name] · 14m │ [Close] │
 ├───────────────────────────┬─────────────────────────────────────┤
 │  NOTES PANEL (primary)    │  BOARD PREVIEW (secondary)          │
-│  ~60% width               │  ~40% width                         │
+│  ~38% width (desktop)     │  ~62% flex — SR-13: smaller notes   │
 │                           │  Excalidraw in read-only mode       │
 │  ── Session notes ──      │  (non-interactive by default)       │
 │                           │                                      │
@@ -537,7 +535,7 @@ The real design axis is screen size, not tutor-vs-student. Tutor vs student is a
 |---|---|---|
 | Full left tool strip | ✓ (collapsible) | ✗ (tools in bottom bar or overlay) |
 | Insert actions (PDF/Math/Desmos) | ✓ Top bar | ✗ (tutor-only) |
-| Laser pointer | ✓ Top-level | ✗ (tutor controls laser; student sees it) |
+| Pointer wand (ST-07) | ✓ Top-level | ✗ (tutor controls wand; student sees highlight) |
 | Shape pulldowns | ✓ | In overflow ··· |
 | More styles popover | ✓ Full | ✓ Bottom sheet |
 | Follow-tutor toggle | ✗ (tutor IS the leader) | ✓ Default ON (ST-01) |
@@ -596,7 +594,7 @@ No left rail. No two-column squeeze. All text wraps normally at full phone width
 │              │ pip  │       │
 │              └──────┘       │
 ├─────────────────────────────┤
-│  Pg1  Pg2  Pg3  +Page       │  ← compact page strip
+│  Board1  Board2  Board3  +  │  ← board tab strip (SR-14)
 ├─────────────────────────────┤
 │  ✏️  🧹  🎯  🎨  ···        │  ← bottom icon toolbar (not side strip)
 └─────────────────────────────┘
@@ -704,12 +702,13 @@ The P1.1 build was rejected for, among other things, unprofessional eraser and l
 
 | Function | Old (rejected) | New (required) |
 |---|---|---|
-| Eraser | Custom/ugly eraser icon | `Eraser` from lucide-react (the standard clean eraser) |
-| Laser pointer | Custom/off-brand laser | `Target` or `Crosshair` from lucide-react — clean circle target; or `Zap` for a more energy feel |
+| Eraser | Backspace-like / ugly eraser | `Eraser` from lucide-react — classic block eraser (**IC-01**) |
+| Pointer wand (was laser) | Crosshair / laser glyph | `Wand2` from lucide-react (**ST-07**; Sarah 2026-06-08) |
 | Cursor/select | Any non-standard | `MousePointer` or `MousePointer2` from lucide-react |
 | Pencil/freedraw | Any non-standard | `Pencil` from lucide-react |
 | Text | Any non-standard | `Type` from lucide-react |
-| Shape pulldown | Any non-standard | Last-used shape icon + `ChevronDown` from lucide-react |
+| Alternate shapes pulldown | Rect default | **Diagonal line default** + last-used icon + `ChevronDown` (**PU-05**) |
+| Share link | Any | `Link` icon + **"Copied"** transient state + dropdown chevron stub (**TU-15**) |
 | Undo/Redo | ↶↷ text | `Undo2` / `Redo2` from lucide-react |
 | Mic ON | Any | `Mic` from lucide-react |
 | Mic OFF | Any | `MicOff` from lucide-react |
@@ -717,7 +716,6 @@ The P1.1 build was rejected for, among other things, unprofessional eraser and l
 | Video OFF | Any | `VideoOff` from lucide-react |
 | More/overflow | `···` text is fine | `MoreHorizontal` or `MoreVertical` from lucide-react |
 | Theme toggle | Sun/moon text | `Sun` / `Moon` from lucide-react |
-| Share link | Any | `Link` or `Share2` from lucide-react |
 | End session | Text only | Text label "End session" (no icon — authority word, not destructive icon) |
 
 ### 9.2 Icon spec
@@ -791,7 +789,10 @@ This checklist is the gate the eventual chrome build must pass. P1.1 was rejecte
 ### 11.2 Functional completeness
 
 - [ ] **Three modes implemented:** waiting room, live board, review — all accessible and navigable
-- [ ] **Toolbar order:** Cursor → Pencil → Eraser → Text → Laser → Lines▾ → Shapes▾ → ···
+- [ ] **Toolbar order:** Cursor → Pencil → Eraser → Text → Wand → Shapes▾ (line default) → ···
+- [ ] **Share "Copied" feedback (TU-15)** — transient state on copy; dropdown stub present
+- [ ] **Board tab strip (SR-14)** — "Board N" labels + `+` tab; user-facing "board" terminology
+- [ ] **Desktop review split (SR-13)** — notes column narrower; mobile review unchanged
 - [ ] **Compact properties bar (PP-06):** collapsed current-selection summary; desktop expands on hover; phone/tablet tap → bottom sheet with TM-11 dismiss
 - [ ] **Canvas grid toggle (VP-02):** default OFF; per-user local pref in View menu
 - [ ] **Ghost label (VP-01):** role-appropriate peer label on ghost bounds
@@ -800,7 +801,7 @@ This checklist is the gate the eventual chrome build must pass. P1.1 was rejecte
 - [ ] **Drag-to-dismiss palette on mobile** (properties bottom sheet dismisses on tap-outside and swipe-down)
 - [ ] **Every function has a visible button** — no keyboard-only or right-click-only sole paths
 - [ ] **Collapse toggle always at strip bottom** — never moves
-- [ ] **AV tile draggable** with mic/video as top-level toggles
+- [ ] **AV tile cluster (SR-04)** — top-right default; tutor + student feeds; draggable + resizable; mic/video toggles
 - [ ] **Ghost viewport bounds** visible when student is connected (or noted as Gate-A fast-follow with the toggle stub in place)
 
 ### 11.3 Consent and recording model
@@ -840,6 +841,7 @@ This checklist is the gate the eventual chrome build must pass. P1.1 was rejecte
 | Q5 | **Review mode video:** When is video available? Is there always a recording? (Could be no-consent sessions with no video.) | Decision C, D | Design should show "No recording for this session" gracefully when `allowVideoRecording=false` and `allowAudioRecording=false`. |
 | Q6 | **"Return to board" from review mode:** Can the tutor actually draw again after ending the session? (Is the board read-only in review?) | Decision A | Recommend: board is read-only in review mode for the current architecture; add annotations = separate explicit action (or always writeable). Clarify before build. |
 | Q7 | **Asymmetric viewport handling:** How should the participant with the **smaller viewport** (sees less of the canvas) experience the shared board + ghost bounds? **Candidate (a):** smaller-view person sees the larger person's bounds as ghost + a one-tap **"follow tutor"** that snaps their viewport to match. **Candidate (b):** the larger-view person's ghost shows the smaller person's box so they can bring content into where the student is looking. | Decision K, VP-01; follow-tutor ST-01 | **Needs Andrew decision** — do not resolve in design pass. |
+| Q8 | **Scheduling + external calendar** — Sarah considers this a release feature. Full proposal in `BACKLOG.md` § Scheduling; **pending Andrew scope decision** (competes with current V1 gate list). | Product | **Not committed V1** until Andrew decides sequencing. |
 
 ---
 
@@ -865,3 +867,4 @@ This checklist is the gate the eventual chrome build must pass. P1.1 was rejecte
 - **2026-06-08:** Mobile responsive pass — §7.0 **Primary-content dominance** principle; per-mode phone layouts (§7.4); mock updated with single-column waiting room, full-bleed canvas + properties bottom sheet + AV pip on live board, notes-primary + board slide-in overlay on review. Desktop layouts unchanged.
 - **2026-06-08:** Device-frame mock pass — true-proportion **Phone** (390×844), **Tablet** (iPad Air portrait/landscape), and **Compare** viewports with CSS `transform: scale()` fit; §7.5 tablet per-mode treatment (portrait hybrid, landscape desktop).
 - **2026-06-08:** Live-feedback pass — **VP-01** role-appropriate ghost labels; **VP-02** canvas grid toggle (default OFF); **PP-06** compact properties bar (hover desktop / tap+TM-11 touch); open Q7 asymmetric viewport handling.
+- **2026-06-08:** Sarah pilot batch — **IC-01** eraser glyph; **ST-07** wand icon; **PU-05** shapes pulldown (line default); **TU-15** Share→Copied; **SR-13** desktop review notes narrower; **SR-14** board tab strip; **SR-04** AV cluster top-right + both participants + resize; **TU-16** parent-friendly recording copy; open Q8 scheduling.

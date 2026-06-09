@@ -65,6 +65,31 @@ Action items not yet built; design where noted. (Live status: `docs/WHITEBOARD-S
 | **Parent privacy consent** | Gate B2 (V1 required) | **Real consent architecture** (not P2a stubs): versioned `ConsentRecord`, server-enforced capture gating, per-session `SessionConsentSnapshot`, parent-ceiling + learner-narrowing per identity design. **V1 toggle scope only** (`allowAudioRecording`, `allowWhiteboardRecording`, `allowNoteSending`, `allowLiveSession` kill-switch) — **consent surface tracks the feature surface**; do **not** build toggles for `allowMessaging` or `allowVideoRecording` until those features ship. Replaces `/claim/[token]/setup` "Parental consent preferences — Coming soon — Phase 3" placeholder. Sarah runs real children's data — legally load-bearing. **Not** the same as `Student.recordingDefaultEnabled` (tutor UX convenience default). Refs: [`identity-phase2-auth-session-design-2026-06-01.md`](handoff/identity-phase2-auth-session-design-2026-06-01.md) §7; [`session-lifecycle-consent-design-2026-05-31.md`](handoff/session-lifecycle-consent-design-2026-05-31.md) §4. |
 | **Security checks + final cleanups** | Gate B3 | Tier B audit, incident/secret runbooks, remaining hardening — before recruiting pilots. Cross-ref: `RELEASE-ROADMAP.md` Wave 4 Security Tier B. |
 
+### v1.1 nice-to-have — Sarah live feedback 2026-06-08 (deferred, not V1 mock)
+
+| Item | Type | Notes |
+|------|------|--------|
+| **Video tile docking** | UX + build (**post-V1**) | Sarah asked about **docking** the A/V tile (especially on mobile — snap to screen edge / docked pip). Andrew: **follow-up feature, NOT release.** V1 ships draggable + resizable cluster per **SR-04**; docking is a separate polish pass. Cross-ref: [`whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md) **SR-04**. |
+| **Triangle / n-gon shapes** | UX + design (**v1.1 nice-to-have**) | Wyzant offered resize-only triangles (right / equilateral / isosceles). **Excalidraw 0.18.1 has no native triangle/polygon** — stock shapes are rect, diamond, ellipse, arrow, line, freedraw, text (see [`whiteboard-excalidraw-function-audit-2026-06-08.md`](handoff/whiteboard-excalidraw-function-audit-2026-06-08.md)). Likely needs a **generic n-gon** approach or custom element layer — requires its own design pass. **Straight line remains the highest-priority secondary shape** (handled in V1 via **PU-05** default). |
+
+### Scheduling + external calendar integration — **PROPOSED for V1/release — pending Andrew scope decision**
+
+> **Status (2026-06-08):** Sarah now considers scheduling a **release feature**. This is a **fully-specced proposal** for Andrew to accept, defer, or scope-trim — **NOT committed V1** until a sequencing decision. Competes with the current V1 gate list (Gate A waiting room, chrome, Pass-2 review, Gate B consent/waitlist).
+
+**Problem:** Tutors already live in an external calendar (Google Calendar, etc.). A from-scratch in-app scheduler duplicates their workflow. Sarah wants sessions **visible, remindable, and joinable** without re-entering everything manually.
+
+**Proposal — integrate, don't replace:**
+
+1. **External calendar sync (read + write where permitted)** — Connect the tutor's **existing** calendar app (e.g. Google Calendar OAuth). **Sync** scheduled events into Mynk; do **not** build a standalone calendaring product as the primary surface.
+2. **In-app schedule layer** — Mynk keeps its own **session schedule tracking**: upcoming sessions list, reminders, and per-session metadata (student, subject, soft duration). Each row exposes a **start-session** deep link for the tutor.
+3. **Student / parent surface** — Upcoming session visible on the student (or parent) side with a **join** action from that row (approved link flow; respects consent gates).
+4. **Soft session length** — Tutor specifies how much calendar time a session **occupies** (e.g. 60 minutes on the calendar) as a **soft duration** — **not** a hard cap on the live board or recording. Timer and end-session remain tutor-controlled; calendar block is planning metadata only.
+5. **Design + sequencing** — Needs a dedicated **design pass** (tutor dashboard widget, session-create/edit, OAuth consent copy, reminder channels, timezone handling). Sequencing decision: Gate A blocker vs Gate B fast-follow vs post-reveal Wave — **Andrew decides**.
+
+**Out of scope for this proposal (explicit):** Replacing Google/Outlook calendaring; student self-scheduling without tutor; hard auto-end when calendar block elapses.
+
+**Cross-ref:** [`RELEASE-ROADMAP.md`](RELEASE-ROADMAP.md) Wave 3 IA row (scheduling Y/N); [`whiteboard-session-shell-design-2026-06-08.md`](handoff/whiteboard-session-shell-design-2026-06-08.md) open Q8.
+
 ## Pilot — Sarah (iPhone Safari, ~Apr 2026)
 
 Reported via Discord after testing **Record → Transcribe** on phone. Treat as **highest priority** until reproduced or ruled out.
