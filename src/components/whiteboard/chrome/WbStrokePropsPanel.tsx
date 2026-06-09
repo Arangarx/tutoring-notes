@@ -14,6 +14,8 @@ export type WbStrokePropsPanelProps = {
   strokeWidth: number;
   opacity: number;
   roughness: number;
+  /** Excalidraw currentItemRoundness — "sharp" | "round" */
+  roundness: "sharp" | "round";
   moreStylesOpen: boolean;
   onStrokeChange: (updates: {
     color?: string;
@@ -23,6 +25,7 @@ export type WbStrokePropsPanelProps = {
   }) => void;
   onMoreStylesToggle: () => void;
   onRoughnessChange: (roughness: number) => void;
+  onRoundnessChange: (roundness: "sharp" | "round") => void;
 };
 
 const ROUGHNESS_OPTIONS = [
@@ -31,19 +34,23 @@ const ROUGHNESS_OPTIONS = [
   { value: 2, label: "Cartoon" },
 ] as const;
 
+const ROUNDNESS_OPTIONS: { value: "sharp" | "round"; label: string }[] = [
+  { value: "sharp", label: "Sharp" },
+  { value: "round", label: "Round" },
+];
+
 export function WbStrokePropsPanel({
   strokeColor,
   strokeWidth,
   opacity,
   roughness,
+  roundness,
   moreStylesOpen,
   onStrokeChange,
   onMoreStylesToggle,
   onRoughnessChange,
+  onRoundnessChange,
 }: WbStrokePropsPanelProps) {
-  const roughnessLabel =
-    ROUGHNESS_OPTIONS.find((r) => r.value === roughness)?.label ?? "Architect";
-
   return (
     <div className="mynk-wb-props-panel-inner">
       <div className="mynk-wb-props-section">
@@ -94,15 +101,17 @@ export function WbStrokePropsPanel({
           <div className="mynk-wb-props-section-title">Opacity</div>
           <span className="mynk-wb-props-opacity-val">{opacity}%</span>
         </div>
-        <input
-          type="range"
-          className="mynk-wb-slider"
-          min={0}
-          max={100}
-          value={opacity}
-          aria-label="Stroke opacity"
-          onChange={(e) => onStrokeChange({ opacity: Number(e.target.value) })}
-        />
+        <div className="mynk-wb-slider-wrap">
+          <input
+            type="range"
+            className="mynk-wb-slider"
+            min={0}
+            max={100}
+            value={opacity}
+            aria-label="Stroke opacity"
+            onChange={(e) => onStrokeChange({ opacity: Number(e.target.value) })}
+          />
+        </div>
       </div>
 
       <div className="mynk-wb-props-section">
@@ -113,7 +122,25 @@ export function WbStrokePropsPanel({
               key={r.value}
               type="button"
               className={`mynk-wb-chip${roughness === r.value ? " mynk-wb-chip--active" : ""}`}
+              aria-pressed={roughness === r.value}
               onClick={() => onRoughnessChange(r.value)}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mynk-wb-props-section">
+        <div className="mynk-wb-props-section-title">Edge sharpness</div>
+        <div className="mynk-wb-props-chips">
+          {ROUNDNESS_OPTIONS.map((r) => (
+            <button
+              key={r.value}
+              type="button"
+              className={`mynk-wb-chip${roundness === r.value ? " mynk-wb-chip--active" : ""}`}
+              aria-pressed={roundness === r.value}
+              onClick={() => onRoundnessChange(r.value)}
             >
               {r.label}
             </button>
@@ -134,7 +161,7 @@ export function WbStrokePropsPanel({
 
       {moreStylesOpen && (
         <div className="mynk-wb-more-styles-area">
-          <div className="mynk-wb-props-section-title">Z-order</div>
+          <div className="mynk-wb-props-section-title" style={{ marginBottom: 6 }}>Z-order</div>
           <div className="mynk-wb-props-chips" style={{ marginBottom: 8 }}>
             {[
               { label: "Send to back", fn: triggerSendToBack },
@@ -142,25 +169,20 @@ export function WbStrokePropsPanel({
               { label: "Bring forward", fn: triggerBringForward },
               { label: "Bring to front", fn: triggerBringToFront },
             ].map(({ label, fn }) => (
-              <button key={label} type="button" className="mynk-wb-chip" onClick={() => fn()}>
+              <button key={label} type="button" className="mynk-wb-zorder-btn" onClick={() => fn()}>
                 {label}
               </button>
             ))}
           </div>
           <button
             type="button"
-            className="mynk-wb-chip mynk-wb-menu-item--destructive"
-            style={{ width: "100%" }}
+            className="mynk-wb-delete-btn"
             onClick={() => triggerDeleteSelected()}
           >
             Delete selected
           </button>
         </div>
       )}
-
-      <p className="mynk-wb-info-note" style={{ marginTop: 8 }}>
-        Current: {roughnessLabel}
-      </p>
     </div>
   );
 }

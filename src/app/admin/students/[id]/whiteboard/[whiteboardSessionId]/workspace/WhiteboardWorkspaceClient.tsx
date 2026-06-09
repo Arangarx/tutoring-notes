@@ -144,7 +144,7 @@ import {
   triggerBringToFront,
   triggerDeleteSelected,
 } from "@/lib/whiteboard/undo-redo";
-import { EXCALIDRAW_STROKE_HEX } from "@/styles/token-values";
+import { EXCALIDRAW_STROKE_HEX, EXCALIDRAW_STROKE_DARK_HEX } from "@/styles/token-values";
 import "./whiteboard-chrome.css";
 import { ExcalidrawDynamic } from "@/components/whiteboard/ExcalidrawDynamic";
 import { WhiteboardDebugHud } from "@/components/whiteboard/WhiteboardDebugHud";
@@ -575,11 +575,15 @@ export function WhiteboardWorkspaceClient({
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const [gridEnabled, setGridEnabled] = useState(false);
   const [roughness, setRoughness] = useState(0);
+  const [roundness, setRoundness] = useState<"sharp" | "round">("sharp");
   const layoutMode = useWbLayoutMode();
   const touchLayout = isTouchLayout(layoutMode);
-  // Stroke props — tracked from Excalidraw onChange (appState)
-  const [strokeColor, setStrokeColor] = useState<string>(EXCALIDRAW_STROKE_HEX);
-  const strokeColorRef = useRef<string>(EXCALIDRAW_STROKE_HEX);
+  // Stroke props — tracked from Excalidraw onChange (appState).
+  // Initial stroke color is theme-aware: dark mode defaults to white so
+  // strokes are immediately visible on the dark canvas background.
+  const initialWbStrokeColor = excalidrawTheme === "dark" ? EXCALIDRAW_STROKE_DARK_HEX : EXCALIDRAW_STROKE_HEX;
+  const [strokeColor, setStrokeColor] = useState<string>(initialWbStrokeColor);
+  const strokeColorRef = useRef<string>(initialWbStrokeColor);
   const [strokeWidth, setStrokeWidth] = useState<number>(0.5);
   const strokeWidthRef = useRef<number>(0.5);
   const [opacity, setOpacity] = useState<number>(100);
@@ -3466,6 +3470,13 @@ export function WhiteboardWorkspaceClient({
     api.updateScene?.({ appState });
   }, []);
 
+  const updateRoundness = useCallback((value: "sharp" | "round") => {
+    const api = excalidrawAPIRef.current as WbChromeApiExt | null;
+    if (!api) return;
+    api.updateScene?.({ appState: { currentItemRoundness: value } });
+    setRoundness(value);
+  }, []);
+
   const toggleGrid = useCallback((enabled: boolean) => {
     setGridEnabled(enabled);
     const api = excalidrawAPIRef.current as WbChromeApiExt | null;
@@ -3583,10 +3594,12 @@ export function WhiteboardWorkspaceClient({
           strokeWidth={strokeWidth}
           opacity={opacity}
           roughness={roughness}
+          roundness={roundness}
           moreStylesOpen={moreStylesOpen}
           onStrokeChange={updateStrokeStyle}
           onMoreStylesToggle={() => setMoreStylesOpen((p) => !p)}
           onRoughnessChange={(r) => updateStrokeStyle({ roughness: r })}
+          onRoundnessChange={updateRoundness}
         />
       </div>
     </div>
@@ -3613,7 +3626,7 @@ export function WhiteboardWorkspaceClient({
             onPointerDown={(e) => e.stopPropagation()}
           >
             <button type="button" className="mynk-wb-menu-item" onClick={() => triggerSendToBack()}>
-              <span>â¬‡ Send to back</span>
+              <span>Send to back</span>
               <span className="mynk-wb-menu-item__kbd">Ctrl+Shift+[</span>
             </button>
             <button type="button" className="mynk-wb-menu-item" onClick={() => triggerSendBackward()}>
@@ -3625,7 +3638,7 @@ export function WhiteboardWorkspaceClient({
               <span className="mynk-wb-menu-item__kbd">Ctrl+]</span>
             </button>
             <button type="button" className="mynk-wb-menu-item" onClick={() => triggerBringToFront()}>
-              <span>â¬† Bring to front</span>
+              <span>Bring to front</span>
               <span className="mynk-wb-menu-item__kbd">Ctrl+Shift+]</span>
             </button>
             <div className="mynk-wb-popover-sep" />
@@ -3638,7 +3651,7 @@ export function WhiteboardWorkspaceClient({
               }}
               aria-label="Delete selected elements"
             >
-              <span>ðŸ—‘ Delete selected</span>
+              <span>Delete selected</span>
               <span className="mynk-wb-menu-item__kbd">Delete</span>
             </button>
             <div className="mynk-wb-popover-sep" />
@@ -3650,7 +3663,7 @@ export function WhiteboardWorkspaceClient({
                 setMorePopoverOpen(false);
               }}
             >
-              <span>âœ‹ Hand / pan</span>
+              <span>Hand / pan</span>
               <span className="mynk-wb-menu-item__kbd">H</span>
             </button>
             <div className="mynk-wb-popover-sep" />
@@ -3882,9 +3895,23 @@ export function WhiteboardWorkspaceClient({
           <button
             type="button"
             className="mynk-wb-tb-btn mynk-wb-tb-btn--icon"
-            title={liveAv.isCamMuted ? "Turn camera on" : "Turn camera off"}
+            title={
+              liveAv.hasCamPermission === "denied"
+                ? "Camera permission denied"
+                : liveAv.isCamMuted
+                  ? "Turn camera on"
+                  : "Turn camera off"
+            }
+            aria-label={
+              liveAv.hasCamPermission === "denied"
+                ? "Camera permission denied"
+                : liveAv.isCamMuted
+                  ? "Turn camera on"
+                  : "Turn camera off"
+            }
             onClick={() => void handleTopBarCam()}
-            disabled={endingBusy}
+            disabled={endingBusy || liveAv.hasCamPermission === "denied"}
+            style={liveAv.hasCamPermission === "denied" ? { opacity: 0.4 } : undefined}
           >
             <WbIconCamera size={14} />
           </button>
@@ -4170,7 +4197,7 @@ export function WhiteboardWorkspaceClient({
                 currentItemRoughness: 0,
                 currentItemRoundness: "sharp",
                 currentItemStrokeWidth: 0.5,
-                currentItemStrokeColor: EXCALIDRAW_STROKE_HEX,
+                currentItemStrokeColor: initialWbStrokeColor,
                 gridModeEnabled: false,
               },
             }}
@@ -4201,6 +4228,7 @@ export function WhiteboardWorkspaceClient({
             onToggleMic={liveAv.toggleMic}
             onToggleCam={liveAv.toggleCam}
             disabled={endingBusy}
+            camDisabled={liveAv.hasCamPermission === "denied"}
             participants={liveAv.participants}
             localTile={{
               peerId: localPeerId,
@@ -4257,10 +4285,12 @@ export function WhiteboardWorkspaceClient({
                   strokeWidth={strokeWidth}
                   opacity={opacity}
                   roughness={roughness}
+                  roundness={roundness}
                   moreStylesOpen={moreStylesOpen}
                   onStrokeChange={updateStrokeStyle}
                   onMoreStylesToggle={() => setMoreStylesOpen((p) => !p)}
                   onRoughnessChange={(r) => updateStrokeStyle({ roughness: r })}
+                  onRoundnessChange={updateRoundness}
                 />
               </div>
             </>

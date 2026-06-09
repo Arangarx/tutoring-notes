@@ -10,7 +10,10 @@ export const EXCALIDRAW_BG_DARK = "var(--excalidraw-bg-dark)";
 /** Resolved hex for server/tests that need a literal (dark board default). */
 export const EXCALIDRAW_BG_LIGHT_HEX = "#ffffff";
 export const EXCALIDRAW_BG_DARK_HEX = "#121212";
+/** Default stroke in light mode (near-black, visible on white canvas). */
 export const EXCALIDRAW_STROKE_HEX = "#1e293b";
+/** Default stroke in dark mode (white, visible on dark Excalidraw canvas). */
+export const EXCALIDRAW_STROKE_DARK_HEX = "#ffffff";
 
 /** Edge OG ImageResponse cannot resolve CSS variables. */
 export const FAVICON_BRAND_BG = "#7c5cff";

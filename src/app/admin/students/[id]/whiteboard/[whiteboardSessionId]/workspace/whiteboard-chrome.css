@@ -58,7 +58,9 @@
      below this bar; overflow:hidden clips them at the 44px boundary. */
   overflow: visible;
   position: relative;
-  z-index: 10;
+  /* z-index scale: banner z-20, AV cluster z-25, topbar/strip z-30 (stacking contexts).
+     Raised from z-10 so all dropdown panels render above the banner and video tile. */
+  z-index: 30;
 }
 
 .mynk-wb-topbar__zone {
@@ -99,7 +101,8 @@
      The tool count is small enough that y-scroll is not needed. */
   overflow: visible;
   position: relative;
-  z-index: 10;
+  /* Raised from z-10 to match topbar stacking context level (z-30). */
+  z-index: 30;
 }
 
 .mynk-wb-strip::-webkit-scrollbar {
@@ -168,8 +171,11 @@
   color: var(--foreground);
 }
 
-/* Active tool: inverse colors (mock .rec-tool.is-active) */
-.mynk-wb-tool-btn--active {
+/* Active tool: inverse colors (mock .rec-tool.is-active).
+   Specificity (0,2,0) beats plain :hover (0,1,1), but we also add the
+   :hover variant explicitly so there is zero ambiguity. */
+.mynk-wb-tool-btn--active,
+.mynk-wb-tool-btn--active:hover {
   background: var(--foreground);
   color: var(--background);
 }
@@ -864,8 +870,20 @@
   padding-right: 6px;
 }
 
-.mynk-wb-board-tab-wrap--active .mynk-wb-board-tab {
+/* Active-tab underline covers the FULL wrap (tab label + delete area).
+   Move the accent line from the tab button to the wrap element. */
+.mynk-wb-board-tab-wrap--active {
   border-bottom: 2px solid var(--accent);
+}
+.mynk-wb-board-tab-wrap--active .mynk-wb-board-tab {
+  border-bottom: none;
+}
+
+/* When there is no delete affordance (only 1 board), restore symmetric
+   padding so the board name stays centred. Without this, padding-right: 6px
+   (from the generic wrap selector below) leaves the name left-biased. */
+.mynk-wb-board-tab-wrap--no-delete .mynk-wb-board-tab {
+  padding: 0 14px;
 }
 
 /* Delete ×, Confirm, Cancel buttons */
@@ -1271,9 +1289,65 @@
 }
 
 /* ΓöÇΓöÇ Opacity slider ΓöÇΓöÇ */
+/*
+ * Slider endpoint fix: wrapping in a negative-margin container extends the
+ * effective thumb travel so at 0% the thumb is flush-left and at 100% flush-right.
+ * At value=min the LEFT edge of the 16px thumb is at x=0 (track start);
+ * at value=max the RIGHT edge is at x=container-width (track end).
+ */
+.mynk-wb-slider-wrap {
+  overflow: hidden;
+  margin: 0 -8px;
+}
+
 .mynk-wb-slider {
-  width: 100%;
-  accent-color: var(--accent);
+  display: block;
+  width: calc(100% + 16px);
+  margin: 0 -8px;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: hsl(var(--muted));
+  outline: none;
+  cursor: pointer;
+}
+
+.mynk-wb-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  margin-top: -6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: box-shadow 0.1s;
+}
+
+.mynk-wb-slider::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 0 4px hsl(var(--accent) / 0.2);
+}
+
+.mynk-wb-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+}
+
+.mynk-wb-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.mynk-wb-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: hsl(var(--muted));
 }
 
 /* ΓöÇΓöÇ More panel menu item ΓöÇΓöÇ */
@@ -1322,4 +1396,44 @@
   color: var(--muted-foreground);
   padding: 6px 10px;
   line-height: 1.4;
+}
+
+/* ─── Z-order + delete action buttons (More styles area) ─── */
+/* Use card background for contrast against the muted area background. */
+.mynk-wb-zorder-btn {
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 11px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+  white-space: nowrap;
+}
+
+.mynk-wb-zorder-btn:hover {
+  background: hsl(var(--muted) / 0.4);
+  border-color: var(--ring);
+}
+
+.mynk-wb-delete-btn {
+  border: 1px solid hsl(var(--destructive) / 0.4);
+  background: var(--card);
+  color: var(--destructive);
+  font-size: 11px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.1s;
+  white-space: nowrap;
+}
+
+.mynk-wb-delete-btn:hover {
+  background: hsl(var(--destructive) / 0.1);
 }

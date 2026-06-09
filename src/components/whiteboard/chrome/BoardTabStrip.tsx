@@ -37,7 +37,7 @@ export function BoardTabStrip({
         return (
           <div
             key={page.id}
-            className={`mynk-wb-board-tab-wrap${active ? " mynk-wb-board-tab-wrap--active" : ""}`}
+            className={`mynk-wb-board-tab-wrap${active ? " mynk-wb-board-tab-wrap--active" : ""}${!canDelete ? " mynk-wb-board-tab-wrap--no-delete" : ""}`}
           >
             <button
               type="button"

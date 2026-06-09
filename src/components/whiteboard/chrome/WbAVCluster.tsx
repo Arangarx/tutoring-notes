@@ -11,6 +11,8 @@ export type WbAVClusterProps = AVTilesPanelProps & {
   onToggleMic: () => void;
   onToggleCam: () => void;
   disabled?: boolean;
+  /** True when camera permission is denied or no camera device is available. */
+  camDisabled?: boolean;
   layoutMode: "desktop" | "narrow" | "tablet-portrait";
 };
 
@@ -25,6 +27,7 @@ export function WbAVCluster({
   onToggleMic,
   onToggleCam,
   disabled,
+  camDisabled,
   layoutMode,
   ...tilesProps
 }: WbAVClusterProps) {
@@ -172,9 +175,9 @@ export function WbAVCluster({
         <button
           type="button"
           className={`mynk-wb-av-btn${!isCamMuted ? " mynk-wb-av-btn--on" : " mynk-wb-av-btn--off"}`}
-          title={isCamMuted ? "Turn camera on" : "Turn camera off"}
-          aria-label={isCamMuted ? "Turn camera on" : "Turn camera off"}
-          disabled={disabled}
+          title={camDisabled ? "Camera unavailable" : isCamMuted ? "Turn camera on" : "Turn camera off"}
+          aria-label={camDisabled ? "Camera unavailable" : isCamMuted ? "Turn camera on" : "Turn camera off"}
+          disabled={disabled || camDisabled}
           onClick={onToggleCam}
         >
           <WbIconCamera size={13} />
