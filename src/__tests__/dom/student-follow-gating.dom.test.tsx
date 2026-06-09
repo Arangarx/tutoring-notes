@@ -3,7 +3,7 @@
  */
 
 /**
- * Student join defaults + sync checkbox wiring (follow gating owner spec §4).
+ * Student join defaults + sync checkbox wiring (follow gating owner spec ┬º4).
  */
 
 import React from "react";
@@ -77,6 +77,7 @@ jest.mock("@/lib/whiteboard/sync-client", () => ({
 jest.mock("@/hooks/useLiveAV", () => ({
   useLiveAV: () => ({
     participants: [],
+    reachableParticipants: [],
     localAudioStream: null,
     localVideoStream: null,
     hasMicPermission: "prompt",

@@ -69,7 +69,7 @@ function joinUnavailableCopy(
       };
     default:
       return {
-        title: "This link isn’t usable anymore",
+        title: "This link isnΓÇÖt usable anymore",
         body: `The session may have ended, or the link was copied incorrectly. Ask ${tutorName} for a fresh link.`,
       };
   }
@@ -82,7 +82,7 @@ type Props = {
   joinToken: string;
   syncUrl: string;
   tutorName: string;
-  /** Server snapshot for the pill — mirrors tutor workspace hydration. */
+  /** Server snapshot for the pill ΓÇö mirrors tutor workspace hydration. */
   initialActiveMs: number;
   initialLastActiveAtIso: string | null;
 };
@@ -148,7 +148,7 @@ export function StudentWhiteboardClient({
   );
   /**
    * Shown only on this student's own tile. Must NOT be sent on the
-   * sync `presence` wire — that label is visible to the tutor and
+   * sync `presence` wire ΓÇö that label is visible to the tutor and
    * other peers (e.g. recording moderation).
    */
   const localTileLabel = "You";
@@ -156,7 +156,7 @@ export function StudentWhiteboardClient({
   const syncPresenceLabel = useMemo(() => {
     const compact = localPeerId.replace(/-/g, "");
     const short = compact.slice(0, 6) || "join";
-    return `Student · ${short}`;
+    return `Student ┬╖ ${short}`;
   }, [localPeerId]);
   const [excalidrawAPI, setExcalidrawAPI] = useState<ExcalidrawApiLike | null>(
     null
@@ -232,7 +232,7 @@ export function StudentWhiteboardClient({
   // Phase 4c: live A/V hook. INERT until `requestMic()` / `requestCam()`
   // are called from the AVPermissionsPrompt below. Identical contract
   // to the tutor side; no recorder instantiation and no FSM on the
-  // student side — the student is a receive-only consumer of remote
+  // student side ΓÇö the student is a receive-only consumer of remote
   // tracks.
   const liveAv = useLiveAV({
     syncClient,
@@ -240,7 +240,7 @@ export function StudentWhiteboardClient({
     sessionId: whiteboardSessionId,
   });
 
-  // Phase 4c: sync-reconnect → mesh.restart for every current peer.
+  // Phase 4c: sync-reconnect ΓåÆ mesh.restart for every current peer.
   // Identical pattern to the workspace client; see that file for the
   // rationale around suppressing the first-mount onConnect.
   const sawDisconnectSinceLastConnectRef = useRef(false);
@@ -278,9 +278,16 @@ export function StudentWhiteboardClient({
     };
   }, [syncClient, liveAv, whiteboardSessionId]);
 
-  /** Peer roster can lag relay broadcasts; tutor strokes still prove overlap. */
+  // callConnected: at least one remote peer is WebRTC-reachable
+  // (peerConnectionState=connected AND iceConnectionState Γêê {connected,completed}).
+  // Used for the call-quality indicator and the timer gate.
+  const callConnected = liveAv.reachableParticipants.length >= 1;
+
+  // Timer gate: require BOTH sync presence AND WebRTC reachability.
+  // Previously keyed on sync-presence alone ΓÇö the split-brain fix: if
+  // the relay socket is up but WebRTC is dead, the timer must pause.
   const bothPresentForTimer =
-    connected && (otherPeerCount >= 1 || relayShowsCollaborator);
+    connected && callConnected;
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -548,9 +555,10 @@ export function StudentWhiteboardClient({
           </p>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+          {/* Sync-socket presence pill */}
           <div
             aria-live="polite"
-            aria-label={connected ? "Connected" : "Connecting"}
+            aria-label={connected ? "Connected to room" : "Connecting to room"}
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -574,8 +582,41 @@ export function StudentWhiteboardClient({
                 background: connected ? "var(--success)" : "var(--warning)",
               }}
             />
-            {connected ? "Connected" : "Joining…"}
+            {connected ? "Connected" : "JoiningΓÇª"}
           </div>
+          {/* Call-quality pill: only shown when peers are present.
+              Distinguishes "sync connected" from "WebRTC call connected"
+              so the student knows if audio/video is actually flowing. */}
+          {connected && liveAv.participants.length > 0 && (
+            <div
+              aria-live="polite"
+              aria-label={callConnected ? "Call connected" : "Call reconnecting"}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "4px 10px",
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: 600,
+                background: callConnected
+                  ? "var(--success-soft)"
+                  : "var(--warning-soft)",
+                color: callConnected ? "var(--success)" : "var(--warning)",
+              }}
+            >
+              <span
+                aria-hidden="true"
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  background: callConnected ? "var(--success)" : "var(--warning)",
+                }}
+              />
+              {callConnected ? "Call connected" : "Call reconnectingΓÇª"}
+            </div>
+          )}
           <div
             aria-label="Session time"
             style={{
@@ -629,7 +670,7 @@ export function StudentWhiteboardClient({
               cursor: "pointer",
             }}
           >
-            Match tutor’s view now
+            Match tutorΓÇÖs view now
           </button>
         </div>
       </div>
@@ -707,9 +748,9 @@ export function StudentWhiteboardClient({
           className="muted"
           style={{ margin: "6px 0 8px", fontSize: 12, lineHeight: 1.45, maxWidth: 720 }}
         >
-          These tabs mirror your tutor’s board. The highlighted page is the one
-          you’re working on; your lines stay on that page and won’t overwrite the
-          tutor’s other tabs.
+          These tabs mirror your tutorΓÇÖs board. The highlighted page is the one
+          youΓÇÖre working on; your lines stay on that page and wonΓÇÖt overwrite the
+          tutorΓÇÖs other tabs.
         </p>
         <div data-testid="student-board-pages-strip">
           <PageStrip
@@ -743,7 +784,7 @@ export function StudentWhiteboardClient({
           <p style={{ margin: 0, fontSize: 13, maxWidth: 720 }}>
             The board is still empty after several seconds. That usually means
             the live link didn&apos;t resync (for example, after a refresh). Try
-            reload — or ask your tutor to draw or switch a page, which
+            reload ΓÇö or ask your tutor to draw or switch a page, which
             re-sends the full board.
           </p>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

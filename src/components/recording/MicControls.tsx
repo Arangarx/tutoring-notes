@@ -21,7 +21,7 @@ import {
  * 60Hz re-render of its parent.
  */
 
-/** Decide bar colour by level — green/yellow/red zones for visible feedback. */
+/** Decide bar colour by level ΓÇö green/yellow/red zones for visible feedback. */
 export function meterColor(level: number): string {
   if (level >= 0.85) return "var(--color-error)";
   if (level >= 0.5) return "var(--meter-loud)";
@@ -37,16 +37,18 @@ export type MicControlsProps = {
   onDeviceChange: (deviceId: string) => void;
   gainLinear: number;
   onGainChange: (gain: number) => void;
-  /** True when mic is hot (graph running) — controls are enabled, meter is live. */
+  /** True when mic is hot (graph running) ΓÇö controls are enabled, meter is live. */
   isLive: boolean;
-  /** True during in-flight segment upload — picker disabled to protect payload integrity. */
+  /** True during in-flight segment upload ΓÇö picker disabled to protect payload integrity. */
   lockDevice: boolean;
   /** Optional message shown when mic isn't yet acquired. */
   hint?: string;
+  /** When true, omit the full-width level meter (host shows inline meter elsewhere). */
+  hideLevelMeter?: boolean;
   /** Play a short sound (and vibrate on mobile) when approaching max recording length. */
   chimeEnabled: boolean;
   onChimeEnabledChange: (enabled: boolean) => void;
-  /** 0.05–1 — alert loudness when chime is on. */
+  /** 0.05ΓÇô1 ΓÇö alert loudness when chime is on. */
   chimeVolume: number;
   onChimeVolumeChange: (volume: number) => void;
 };
@@ -65,6 +67,7 @@ export default function MicControls({
   onChimeEnabledChange,
   chimeVolume,
   onChimeVolumeChange,
+  hideLevelMeter,
 }: MicControlsProps) {
   const pickerDisabled = lockDevice || (!isLive && devices.length === 0);
   const sliderDisabled = !isLive;
@@ -109,7 +112,7 @@ export default function MicControls({
           }
           style={{
             flex: 1,
-            // `min-width: 0` lets a flex item shrink below its content size —
+            // `min-width: 0` lets a flex item shrink below its content size ΓÇö
             // without this, a long device name (e.g. "Microphone (Brio 101)
             // (046d:094d)") forces the select wider than its slot and overflows
             // the panel. The `max-width: 100%` is belt-and-suspenders for older
@@ -164,7 +167,7 @@ export default function MicControls({
           disabled={sliderDisabled}
           aria-label="Browser boost"
           /* CSS variable consumed by .mic-gain-slider rule below to fill the
-             track from 0 → gainPct% with the accent colour. */
+             track from 0 ΓåÆ gainPct% with the accent colour. */
           style={{ ["--gain-pct" as string]: `${gainPct}%` } as React.CSSProperties}
         />
         <span
@@ -176,54 +179,56 @@ export default function MicControls({
             color: "var(--muted)",
           }}
         >
-          {gainLinear.toFixed(2)}×
+          {gainLinear.toFixed(2)}├ù
         </span>
       </div>
 
-      {/* Level meter */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <span
-          style={{
-            minWidth: 92,
-            fontSize: 13,
-            color: "var(--muted)",
-            fontWeight: 500,
-          }}
-        >
-          Level:
-        </span>
-        <div
-          data-testid="mic-level-meter"
-          aria-label="Microphone input level"
-          role="meter"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          style={{
-            flex: 1,
-            height: 10,
-            background: "var(--surface-2)",
-            border: "1px solid var(--border)",
-            borderRadius: 5,
-            overflow: "hidden",
-            position: "relative",
-          }}
-        >
-          {/* Updated imperatively via meterBarRef in the rAF loop — never via
-              React state — so the meter doesn't re-render the slider 60×/sec
-              and break drag. */}
-          <div
-            ref={meterBarRef}
+      {/* Level meter ΓÇö omitted when host renders inline meter (whiteboard top bar). */}
+      {!hideLevelMeter && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span
             style={{
-              width: "0%",
-              height: "100%",
-              background: meterColor(0),
-              transition: "width 80ms linear, background 200ms linear",
+              minWidth: 92,
+              fontSize: 13,
+              color: "var(--muted)",
+              fontWeight: 500,
             }}
-          />
+          >
+            Level:
+          </span>
+          <div
+            data-testid="mic-level-meter"
+            aria-label="Microphone input level"
+            role="meter"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            style={{
+              flex: 1,
+              height: 10,
+              background: "var(--surface-2)",
+              border: "1px solid var(--border)",
+              borderRadius: 5,
+              overflow: "hidden",
+              position: "relative",
+            }}
+          >
+            {/* Updated imperatively via meterBarRef in the rAF loop ΓÇö never via
+                React state ΓÇö so the meter doesn't re-render the slider 60├ù/sec
+                and break drag. */}
+            <div
+              ref={meterBarRef}
+              style={{
+                width: "0%",
+                height: "100%",
+                background: meterColor(0),
+                transition: "width 80ms linear, background 200ms linear",
+              }}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Approaching max time — sound + volume (this recorder only; persisted locally). */}
+      {/* Approaching max time ΓÇö sound + volume (this recorder only; persisted locally). */}
       <div
         style={{
           display: "flex",
@@ -281,13 +286,13 @@ export default function MicControls({
       )}
 
       <p style={{ margin: 0, fontSize: 11, color: "var(--muted)", lineHeight: 1.4 }}>
-        Speak normally — aim for the bar to land in the green when talking. The browser cannot change
-        your <strong>Windows / system mic level</strong>; if the bar stays grey even at 3.00× boost,
-        open <em>Settings → System → Sound → Input</em> and raise the level there (or pick a different
+        Speak normally ΓÇö aim for the bar to land in the green when talking. The browser cannot change
+        your <strong>Windows / system mic level</strong>; if the bar stays grey even at 3.00├ù boost,
+        open <em>Settings ΓåÆ System ΓåÆ Sound ΓåÆ Input</em> and raise the level there (or pick a different
         mic in the dropdown above).
       </p>
 
-      {/* Custom slider styling — without `appearance: none` the native control
+      {/* Custom slider styling ΓÇö without `appearance: none` the native control
           renders as a giant browser-default bar in Chrome on Windows dark mode.
           We render a thin track filled to `--gain-pct` with the accent colour
           and a small circular thumb that visually centres at the value. */}

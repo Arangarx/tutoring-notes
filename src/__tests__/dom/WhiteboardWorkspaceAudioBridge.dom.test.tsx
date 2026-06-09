@@ -90,10 +90,10 @@ describe("WhiteboardWorkspaceAudioBridge", () => {
     mockDrainAndAwait.mockClear();
   });
 
-  test("mounts RecordingControlPanel — mic picker, meter, segment timer", () => {
+  test("headless by default — no visible RecordingControlPanel on live board", () => {
     const audio = mockWorkspaceAudio();
 
-    render(
+    const { container } = render(
       <WhiteboardWorkspaceAudioBridge
         audio={audio}
         whiteboardSessionId="wbs-test-1"
@@ -102,11 +102,25 @@ describe("WhiteboardWorkspaceAudioBridge", () => {
       />
     );
 
+    expect(container.firstChild).toBeNull();
+    expect(screen.queryByTestId("mic-device-select")).not.toBeInTheDocument();
+  });
+
+  test("showPanel renders RecordingControlPanel for legacy surfaces", () => {
+    const audio = mockWorkspaceAudio();
+
+    render(
+      <WhiteboardWorkspaceAudioBridge
+        audio={audio}
+        whiteboardSessionId="wbs-test-panel"
+        userWantsRecording
+        recordingActive
+        showPanel
+      />
+    );
+
     expect(screen.getByTestId("mic-device-select")).toBeInTheDocument();
     expect(screen.getByTestId("mic-level-meter")).toBeInTheDocument();
-    expect(
-      screen.getByLabelText(/Segment 2, duration 00:42/i)
-    ).toBeInTheDocument();
   });
 
   test("subscribes to outbox.observe(whiteboardSessionId) on mount", () => {

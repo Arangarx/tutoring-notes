@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * WebRTC peer-mesh — Phase 4a.
+ * WebRTC peer-mesh ΓÇö Phase 4a.
  *
  * Owns a `Map<remotePeerId, RTCPeerConnection>` and the
  * perfect-negotiation state per pair. Pure-JS module: no DOM, no
@@ -10,11 +10,11 @@
  * so Phase 4b (the `useLiveAV` hook) can own all browser
  * media-capture concerns without touching this module.
  *
- * Pillar 1 invariant — peer-mesh is keyed on `peerId: string`, not
+ * Pillar 1 invariant ΓÇö peer-mesh is keyed on `peerId: string`, not
  * "us vs them" booleans. Tutor + N students works the same as
  * 1:1 from day one.
  *
- * Pillar 6 invariant — signaling rides the encrypted sync-client
+ * Pillar 6 invariant ΓÇö signaling rides the encrypted sync-client
  * envelope via the `signaling.ts` muxer; peer-mesh never touches
  * sync-client directly.
  *
@@ -26,9 +26,9 @@
  *
  * `avx` is the live-A/V session-level prefix. The per-peer subkey
  * `peer=<remotePeerId>` scopes every line so prod debugging of a
- * mesh with ≥3 peers can grep one peer's events out of the mix.
+ * mesh with ΓëÑ3 peers can grep one peer's events out of the mix.
  *
- * Tests: `src/__tests__/av/peer-mesh.test.ts` — Jest with a typed
+ * Tests: `src/__tests__/av/peer-mesh.test.ts` ΓÇö Jest with a typed
  * `RTCPeerConnection` test double. No native bindings.
  */
 
@@ -54,7 +54,7 @@ export type PeerConnectionFactory = (
 ) => RTCPeerConnection;
 
 /**
- * Default ICE configuration — public STUN only. Per Pillar 6 +
+ * Default ICE configuration ΓÇö public STUN only. Per Pillar 6 +
  * Phase 4a scope: no TURN until field reports show NAT-traversal
  * failures in real Sarah sessions. Google's free STUN servers are
  * the same set Excalidraw and most reference WebRTC apps use.
@@ -69,7 +69,7 @@ export type PeerMeshOptions = {
   /**
    * Stable peer id for THIS client. Used for perfect-negotiation
    * polite/impolite role assignment (lex comparison against
-   * remotePeerId), NOT for envelope addressing — signaling.ts
+   * remotePeerId), NOT for envelope addressing ΓÇö signaling.ts
    * handles that.
    */
   localPeerId: string;
@@ -79,11 +79,11 @@ export type PeerMeshOptions = {
    */
   iceServers?: ReadonlyArray<RTCIceServer>;
   /**
-   * Called whenever a peer's `RTCPeerConnection` is created — on
+   * Called whenever a peer's `RTCPeerConnection` is created ΓÇö on
    * explicit `addPeer(peerId)` OR on first inbound offer for an
    * unknown peer (implicit-add, May 15 hotfix #3). Return the local
    * tracks that should be `addTrack`-ed to the PC. Default returns
-   * `[]` — peer-mesh unit tests never attach real tracks.
+   * `[]` ΓÇö peer-mesh unit tests never attach real tracks.
    */
   getLocalTracks?: (remotePeerId: string) => MediaStreamTrack[];
   /**
@@ -92,7 +92,7 @@ export type PeerMeshOptions = {
   sessionId?: string;
   log?: PeerMeshLogger;
   /**
-   * Test-only — inject a fake `RTCPeerConnection` constructor.
+   * Test-only ΓÇö inject a fake `RTCPeerConnection` constructor.
    * Production leaves this undefined.
    */
   _pcFactory?: PeerConnectionFactory;
@@ -126,7 +126,7 @@ export type PeerMesh = {
    * signal to the remote side, and remove the entry. Idempotent.
    */
   removePeer: (peerId: string) => void;
-  /** Current peer set (snapshot — does not auto-update). */
+  /** Current peer set (snapshot ΓÇö does not auto-update). */
   peers: () => ReadonlySet<string>;
   /**
    * Manually trigger an ICE restart for `peerId`. Used by the
@@ -137,14 +137,14 @@ export type PeerMesh = {
   restart: (peerId: string) => void;
   /**
    * Attach a NEW local track to every existing peer connection.
-   * Idempotent on the track id — adding the same track twice is a
+   * Idempotent on the track id ΓÇö adding the same track twice is a
    * no-op on the second call (we check `pc.getSenders()` for an
    * existing sender bound to the same track).
    *
    * Each `pc.addTrack(track)` fires `onnegotiationneeded` on that
    * PC, which the existing perfect-negotiation handler in
-   * `createPeerEntry` picks up and turns into a fresh offer →
-   * answer → ICE refresh. The peer connection itself is NOT torn
+   * `createPeerEntry` picks up and turns into a fresh offer ΓåÆ
+   * answer ΓåÆ ICE refresh. The peer connection itself is NOT torn
    * down; remote tracks stay flowing, only the SDP is updated to
    * include the new media line.
    *
@@ -153,7 +153,7 @@ export type PeerMesh = {
    * remote peer's media. Before this method existed, the
    * mesh-build effect's `[localAudioStream, localVideoStream]`
    * dependency forced a full teardown on every stream identity
-   * change — which manifested in pilot as "clicking Allow camera
+   * change ΓÇö which manifested in pilot as "clicking Allow camera
    * mid-session drops son's audio + video for 5+ seconds while the
    * mesh rebuilds".
    *
@@ -163,7 +163,7 @@ export type PeerMesh = {
   /**
    * Swap the locally captured track of a given kind on every existing
    * peer connection via {@link RTCRtpSender.replaceTrack}. No SDP
-   * renegotiation — the RTP sender keeps the same m-line.
+   * renegotiation ΓÇö the RTP sender keeps the same m-line.
    *
    * Idempotent / defensive: no-op when disposed, when there are no
    * peers, when `newTrack` is ended, or when no sender for `kind`
@@ -190,7 +190,7 @@ export type PeerMesh = {
   /** True iff `dispose()` has been called. */
   isDisposed: () => boolean;
   /**
-   * Tear down — close every PC, unsubscribe from signaling, fire
+   * Tear down ΓÇö close every PC, unsubscribe from signaling, fire
    * no further callbacks. Idempotent.
    */
   dispose: () => void;
@@ -286,6 +286,17 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
   const connStateSubs = new Set<PeerConnectionStateHandler>();
   const iceStateSubs = new Set<IceConnectionStateHandler>();
   let disposed = false;
+
+  /**
+   * Per-peer debounced restart timers for ICE `disconnected`. When ICE
+   * transitions to `disconnected`, the polite side schedules a restart
+   * after ICE_DISCONNECT_RESTART_DELAY_MS. If ICE recovers before the
+   * timer fires (state ΓåÆ connected/completed), the timer is cancelled.
+   * This covers the split-brain failure mode where the media path dies
+   * while the signaling channel survives.
+   */
+  const disconnectRestartTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const ICE_DISCONNECT_RESTART_DELAY_MS = 3_000;
 
   // ---------------------------------------------------------------
   // Internal helpers
@@ -384,10 +395,53 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
       const state = pc.iceConnectionState;
       log.log(`peer=${remotePeerId} event=ice-state to=${state}`);
       fan(iceStateSubs, remotePeerId, state);
-      // Auto-restart on failure for the polite side. The impolite
-      // peer waits — if both sides tried to restart simultaneously
+
+      // Cancel debounced disconnect-restart timer on ICE recovery.
+      if (state === "connected" || state === "completed") {
+        const timer = disconnectRestartTimers.get(remotePeerId);
+        if (timer !== undefined) {
+          clearTimeout(timer);
+          disconnectRestartTimers.delete(remotePeerId);
+          log.log(
+            `peer=${remotePeerId} event=disconnect-restart-cancel reason=ice-recovered state=${state}`
+          );
+        }
+      }
+
+      // ICE disconnected on the polite side: schedule a debounced restart.
+      // The polite/impolite discipline prevents glare if both sides react
+      // simultaneously. Debounced to avoid thrashing on transient blips.
+      if (state === "disconnected" && entry.polite && !disconnectRestartTimers.has(remotePeerId)) {
+        log.log(
+          `peer=${remotePeerId} event=disconnect-restart-schedule delayMs=${ICE_DISCONNECT_RESTART_DELAY_MS}`
+        );
+        disconnectRestartTimers.set(
+          remotePeerId,
+          setTimeout(() => {
+            disconnectRestartTimers.delete(remotePeerId);
+            if (entry.closed) return;
+            // Guard: only restart if ICE is still disconnected; if it
+            // recovered on its own, do nothing.
+            if (entry.pc.iceConnectionState !== "disconnected") return;
+            log.log(
+              `peer=${remotePeerId} event=disconnect-restart-fire reason=ice-still-disconnected`
+            );
+            restartInternal(entry);
+          }, ICE_DISCONNECT_RESTART_DELAY_MS)
+        );
+      }
+
+      // Auto-restart on ICE failure for the polite side. The impolite
+      // peer waits ΓÇö if both sides tried to restart simultaneously
       // we'd be back in glare. Polite-only initiation avoids that.
+      // Also cancel any pending disconnect-restart timer since failed
+      // is a harder condition.
       if (state === "failed" && entry.polite) {
+        const timer = disconnectRestartTimers.get(remotePeerId);
+        if (timer !== undefined) {
+          clearTimeout(timer);
+          disconnectRestartTimers.delete(remotePeerId);
+        }
         log.log(
           `peer=${remotePeerId} event=auto-restart reason=ice-failed`
         );
@@ -427,14 +481,14 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
   }
 
   // ---------------------------------------------------------------
-  // Signal handler — perfect negotiation per peer
+  // Signal handler ΓÇö perfect negotiation per peer
   // ---------------------------------------------------------------
 
   const handleSignal: SignalHandler = (fromPeerId, payload) => {
     if (disposed) return;
     let entry = lifeOf(fromPeerId);
     if (!entry) {
-      // **May 15 hotfix #3 — implicit-add on inbound offer.**
+      // **May 15 hotfix #3 ΓÇö implicit-add on inbound offer.**
       //
       // The original Phase 4a design required the host (`useLiveAV`)
       // to call `addPeer(fromPeerId)` BEFORE the first signal landed,
@@ -446,14 +500,14 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
       // subscribers and dropped; B subscribes later; B's own offer
       // never round-trips with A's because A's PC is already in
       // have-local-offer and the missing ICE candidates never
-      // converge) reliably stranded the peer on "Connecting…" until
+      // converge) reliably stranded the peer on "ConnectingΓÇª" until
       // someone hit refresh.
       //
       // Implicit-add closes the race from the receiver side: if an
       // offer arrives for a peer we don't yet have an entry for, we
       // create the entry on the spot. Perfect-negotiation handles
       // the glare that may follow (the host's own `addPeer` call is
-      // idempotent — line 686 `event=add-skip reason=already-present`).
+      // idempotent ΓÇö line 686 `event=add-skip reason=already-present`).
       // The buffered-replay fix in `sync-client.ts` closes the OTHER
       // half of the race: signals that arrived before ANY subscriber
       // (mesh OR signaling) are replayed when the first subscriber
@@ -471,7 +525,7 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
         );
         return;
       }
-      // Reject self-targeted offers as a defense-in-depth — signaling
+      // Reject self-targeted offers as a defense-in-depth ΓÇö signaling
       // already filters but a future relay/test bypass could deliver
       // a self-echoed offer that would create a self-peer entry.
       if (fromPeerId === localPeerId) {
@@ -517,7 +571,7 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
             await pc.setLocalDescription({ type: "rollback" });
           } catch (err) {
             // Some browsers throw if there's no pending offer to
-            // roll back. Log and continue — setRemoteDescription
+            // roll back. Log and continue ΓÇö setRemoteDescription
             // below will assert the correct state.
             log.warn(
               `peer=${remotePeerId} event=rollback-fail reason=${(err as Error)?.message ?? String(err)}`
@@ -568,7 +622,7 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
       }
       if (payload.type === "leave") {
         log.log(`peer=${remotePeerId} event=remote-leave`);
-        // Don't send a `leave` back — the remote already left. Just
+        // Don't send a `leave` back ΓÇö the remote already left. Just
         // close locally.
         closePeerEntryLocal(entry);
         return;
@@ -694,6 +748,13 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
     if (entry.closed) return;
     entry.closed = true;
     peers.delete(entry.remotePeerId);
+    // Cancel any pending ICE-disconnect restart timer so it doesn't
+    // fire on a closed entry.
+    const dTimer = disconnectRestartTimers.get(entry.remotePeerId);
+    if (dTimer !== undefined) {
+      clearTimeout(dTimer);
+      disconnectRestartTimers.delete(entry.remotePeerId);
+    }
     try {
       // Detach event handlers FIRST so no late callback fires once
       // we close the PC.
@@ -898,6 +959,11 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
     dispose: () => {
       if (disposed) return;
       disposed = true;
+      // Cancel all pending ICE-disconnect restart timers before closing
+      // peer entries (closePeerEntryLocal also cancels per-peer, but
+      // clearing the whole map here is the belt-and-suspenders path).
+      for (const timer of disconnectRestartTimers.values()) clearTimeout(timer);
+      disconnectRestartTimers.clear();
       try {
         unsubscribeFromSignaling();
       } catch (err) {

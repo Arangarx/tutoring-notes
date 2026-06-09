@@ -3,7 +3,7 @@
  */
 
 /**
- * Student ↔ live-A/V mount contract (Phase 4c).
+ * Student Γåö live-A/V mount contract (Phase 4c).
  *
  * The student side is intentionally narrower than the tutor side
  * (no FSM, no recorder). We assert:
@@ -15,8 +15,8 @@
  *   2. `AVPermissionsPrompt` + `AVTilesPanel` + `AVControls` render
  *      on the student surface.
  *
- *   3. Sync-reconnect → `liveAv.reconnectPeer(peerId)` for every
- *      current peer once the sync-client emits a disconnect →
+ *   3. Sync-reconnect ΓåÆ `liveAv.reconnectPeer(peerId)` for every
+ *      current peer once the sync-client emits a disconnect ΓåÆ
  *      reconnect transition.
  *
  *   4. First-mount `onConnect` does NOT fire reconnectPeer (the
@@ -24,7 +24,7 @@
  *      negotiation).
  *
  * What we explicitly DON'T assert: no recorder instantiation, no
- * FSM `inputStreams` population — the student client has neither.
+ * FSM `inputStreams` population ΓÇö the student client has neither.
  * If a regression accidentally introduces either, the workspace
  * mount test will catch the recorder side; the FSM side has no
  * student-side analogue and is intentionally untested here (no
@@ -188,6 +188,11 @@ jest.mock("@/hooks/useLiveAV", () => ({
     receivedLocalPeerId = opts.localPeerId;
     return {
       ...liveAvState,
+      // reachableParticipants: same as participants in tests (no WebRTC state distinction)
+      reachableParticipants: liveAvState.participants.filter(
+        (p) => p.peerConnectionState === "connected" &&
+          (p.iceConnectionState === "connected" || p.iceConnectionState === "completed")
+      ),
       toggleMic: toggleMicSpy,
       toggleCam: toggleCamSpy,
       requestMic: requestMicSpy,
@@ -305,7 +310,7 @@ beforeEach(() => {
   };
 });
 
-describe("StudentWhiteboardClient ↔ live A/V mount", () => {
+describe("StudentWhiteboardClient Γåö live A/V mount", () => {
   test("mints localPeerId once and threads it into BOTH sync-client and useLiveAV", async () => {
     await renderStudent();
     expect(createdSyncClients).toHaveLength(1);
@@ -343,7 +348,7 @@ describe("StudentWhiteboardClient ↔ live A/V mount", () => {
     expect(peerIds).toContain(receivedLocalPeerId);
   });
 
-  test("sync-reconnect → reconnectPeer for every current peer", async () => {
+  test("sync-reconnect ΓåÆ reconnectPeer for every current peer", async () => {
     liveAvState = {
       ...liveAvState,
       participants: [

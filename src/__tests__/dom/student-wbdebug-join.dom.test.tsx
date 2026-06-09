@@ -4,7 +4,7 @@
 
 /**
  * Regression: ?wbdebug=1 must not break the student join / sync-client path.
- * Root cause was HudLines reading `st?.zoom.value` — throws when appState
+ * Root cause was HudLines reading `st?.zoom.value` ΓÇö throws when appState
  * exists but zoom is not yet populated (Excalidraw pre-ready).
  */
 
@@ -49,6 +49,7 @@ jest.mock("next/navigation", () => ({
 jest.mock("@/hooks/useLiveAV", () => ({
   useLiveAV: () => ({
     participants: [],
+    reachableParticipants: [],
     localAudioStream: null,
     localVideoStream: null,
     hasMicPermission: "prompt",

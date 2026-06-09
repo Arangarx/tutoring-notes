@@ -30,7 +30,7 @@ import {
  *      currently uploading a freshly-stopped MediaRecorder buffer").
  *   3. Exposes a stable `getState()` to the End-session flow and
  *      keeps `waitForPendingUploads()` for backward compatibility
- *      with tests / future surfaces — but the End button itself
+ *      with tests / future surfaces ΓÇö but the End button itself
  *      uses `outbox.drainAndAwait` directly (Commit 7) so this
  *      handle is mostly a debug + transitional anchor.
  *
@@ -43,28 +43,28 @@ export type WhiteboardWorkspaceAudioBridgeState = {
   /**
    * Coarse state used by the End button copy + finalization gate.
    *
-   *   - `idle`         — nothing in flight; the End button can call
+   *   - `idle`         ΓÇö nothing in flight; the End button can call
    *                      drainAndAwait immediately (no-op) + finalize.
-   *   - `recording`    — MediaRecorder is hot.
-   *   - `uploading`    — `useAudioRecorder` is uploading the most
+   *   - `recording`    ΓÇö MediaRecorder is hot.
+   *   - `uploading`    ΓÇö `useAudioRecorder` is uploading the most
    *                      recent segment (between MediaRecorder.stop
    *                      and outbox.enqueue).
-   *   - `registering`  — outbox has rows uploaded + awaiting the
+   *   - `registering`  ΓÇö outbox has rows uploaded + awaiting the
    *                      atomic end-session action.
-   *   - `failed`       — at least one row hit the permanent-fail cap
+   *   - `failed`       ΓÇö at least one row hit the permanent-fail cap
    *                      OR `useAudioRecorder` surfaced an error.
    */
   kind: "idle" | "recording" | "uploading" | "registering" | "failed";
   /** Total in-flight + queued segments visible to the End button. */
   inFlightCount: number;
-  /** Per-stream breakdown — Phase 4 surfaces use this. */
+  /** Per-stream breakdown ΓÇö Phase 4 surfaces use this. */
   inFlightByStream: ReadonlyMap<string, number>;
   /** Last error surfaced by the hook OR the outbox worker. */
   lastError: string | null;
 };
 
 type Props = {
-  /** Shared `useAudioRecorder` instance — same hook feeds this bridge and the visible panel. */
+  /** Shared `useAudioRecorder` instance ΓÇö same hook feeds this bridge and the visible panel. */
   audio: UseAudioRecorderReturn;
   /**
    * Whiteboard session id this bridge belongs to. Phase 1b: passed
@@ -74,8 +74,13 @@ type Props = {
   whiteboardSessionId: string;
   userWantsRecording: boolean;
   recordingActive: boolean;
-  /** Disables standalone Start (etc.) — e.g. until the workspace toolbar arms recording. */
+  /** Disables standalone Start (etc.) ΓÇö e.g. until the workspace toolbar arms recording. */
   panelDisabled?: boolean;
+  /**
+   * When false (default on live board), orchestration-only ΓÇö no visible
+   * RecordingControlPanel. Mic device/level live in top-bar popover.
+   */
+  showPanel?: boolean;
   /**
    * Tutor workspace: forwards mic picker to `useLiveAV.setMicDevice` for
    * WebRTC `replaceTrack` + recorder graph swap.
@@ -114,6 +119,7 @@ export const WhiteboardWorkspaceAudioBridge = forwardRef<
     recordingActive,
     panelDisabled,
     onMicDeviceChange,
+    showPanel = false,
   },
   ref
 ) {
@@ -122,7 +128,7 @@ export const WhiteboardWorkspaceAudioBridge = forwardRef<
 
   // Live outbox observer state. We keep it in component state (not a
   // bare ref) so a parent that reads getState() inside a useEffect
-  // dependency sees the freshest snapshot — and so React DevTools
+  // dependency sees the freshest snapshot ΓÇö and so React DevTools
   // can render the value for debug. The state object itself is
   // returned by the outbox as an immutable snapshot, so storing it
   // directly is safe.
@@ -151,7 +157,7 @@ export const WhiteboardWorkspaceAudioBridge = forwardRef<
     return unsubscribe;
   }, [whiteboardSessionId]);
 
-  // Same start/pause/resume orchestration as Phase 0c — no change
+  // Same start/pause/resume orchestration as Phase 0c ΓÇö no change
   // here; the outbox is downstream of the hook's onRecorded callback.
   useEffect(() => {
     const a = audioRef.current;
@@ -177,7 +183,7 @@ export const WhiteboardWorkspaceAudioBridge = forwardRef<
   }, [userWantsRecording, recordingActive, audio.state]);
 
   // Stable handle. `useImperativeHandle`'s dep array intentionally
-  // omits outboxState — the closure reads through audioRef + the
+  // omits outboxState ΓÇö the closure reads through audioRef + the
   // outbox singleton each call, so we don't need to rebind on every
   // state tick (and rebinding would tear down + reattach the parent's
   // ref callback for no benefit).
@@ -206,6 +212,10 @@ export const WhiteboardWorkspaceAudioBridge = forwardRef<
     [whiteboardSessionId, outboxState]
   );
 
+  if (!showPanel) {
+    return null;
+  }
+
   return (
     <RecordingControlPanel
       recorder={audio}
@@ -221,15 +231,15 @@ export const WhiteboardWorkspaceAudioBridge = forwardRef<
  * matrix without React.
  *
  * Precedence (highest first):
- *   1. Hook recording → bridge state "recording".
- *   2. Hook uploading → "uploading" (uploads happen BEFORE the outbox
- *      enqueue, so the outbox knows nothing about this segment yet —
+ *   1. Hook recording ΓåÆ bridge state "recording".
+ *   2. Hook uploading ΓåÆ "uploading" (uploads happen BEFORE the outbox
+ *      enqueue, so the outbox knows nothing about this segment yet ΓÇö
  *      hand the End button a coherent count by adding 1 to the
  *      outbox's in-flight count).
- *   3. Outbox state "failed" → "failed".
- *   4. Outbox state "uploading" → "uploading" (post-enqueue retries).
- *   5. Outbox state "registering" → "registering" (waiting for End).
- *   6. Else → "idle".
+ *   3. Outbox state "failed" ΓåÆ "failed".
+ *   4. Outbox state "uploading" ΓåÆ "uploading" (post-enqueue retries).
+ *   5. Outbox state "registering" ΓåÆ "registering" (waiting for End).
+ *   6. Else ΓåÆ "idle".
  */
 export function composeBridgeState(
   audio: UseAudioRecorderReturn,

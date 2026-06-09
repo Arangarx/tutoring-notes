@@ -9,7 +9,7 @@
  *   1. "New blank graph"  -> inserts https://www.desmos.com/calculator
  *      The tutor and student see the same blank calculator and can
  *      type equations interactively. Replay shows a blank calculator
- *      (state is intra-iframe; not captured — see status doc).
+ *      (state is intra-iframe; not captured ΓÇö see status doc).
  *
  *   2. "From URL"         -> tutor pastes a saved-graph URL, e.g.
  *      https://www.desmos.com/calculator/abc123. The graph state is
@@ -29,12 +29,14 @@ import {
   validateDesmosUrl,
   type ExcalidrawApiLike,
 } from "@/lib/whiteboard/insert-asset";
+import { WbIconDesmos } from "@/components/whiteboard/chrome/wb-icons";
 
 type Props = {
   excalidrawAPI: ExcalidrawApiLike | null;
   whiteboardSessionId: string;
   studentId: string;
   disabled?: boolean;
+  chrome?: boolean;
 };
 
 type DialogState =
@@ -48,6 +50,7 @@ export function DesmosInsertButton({
   whiteboardSessionId,
   studentId,
   disabled,
+  chrome,
 }: Props) {
   const [state, setState] = useState<DialogState>({ kind: "closed" });
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -115,13 +118,14 @@ export function DesmosInsertButton({
     <>
       <button
         type="button"
-        className="btn"
+        className={chrome ? "mynk-wb-tb-btn mynk-wb-tb-btn--icon" : "btn"}
         onClick={() => open("blank")}
         disabled={disabled || !excalidrawAPI}
         data-testid="wb-insert-desmos"
-        title="Insert a Desmos graph"
+        title="Insert Desmos graph"
+        aria-label="Insert Desmos graph"
       >
-        Insert Desmos
+        {chrome ? <WbIconDesmos /> : "Insert Desmos"}
       </button>
 
       {state.kind === "open" && (
@@ -148,7 +152,7 @@ export function DesmosInsertButton({
             style={{
               width: "min(520px, 92vw)",
               padding: 20,
-              // Solid dark surface — translucent .card --panel + dark page text
+              // Solid dark surface ΓÇö translucent .card --panel + dark page text
               // would render white-on-white over the modal backdrop.
               background: "var(--surface-drawer)",
               border: "1px solid var(--border)",
@@ -168,7 +172,7 @@ export function DesmosInsertButton({
                 aria-label="Close"
                 style={{ padding: "2px 10px" }}
               >
-                ×
+                ├ù
               </button>
             </div>
 

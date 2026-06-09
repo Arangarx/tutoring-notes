@@ -1,5 +1,5 @@
 /**
- * Unit tests for `src/lib/av/peer-mesh.ts` — Phase 4a.
+ * Unit tests for `src/lib/av/peer-mesh.ts` ΓÇö Phase 4a.
  *
  * Pure Jest, no DOM, no `wrtc`/native binding. The fake
  * `RTCPeerConnection` (`FakePc`) below implements just enough of the
@@ -17,9 +17,9 @@
  *
  * Tests cover the bootstrapper's required matrix:
  *
- *   - Outgoing offer happy path (negotiationneeded → offer → answer → ICE → connected).
+ *   - Outgoing offer happy path (negotiationneeded ΓåÆ offer ΓåÆ answer ΓåÆ ICE ΓåÆ connected).
  *   - Polite vs impolite role determined by lexicographic local/remote id.
- *   - Glare resolution: simultaneous offers from both sides — polite
+ *   - Glare resolution: simultaneous offers from both sides ΓÇö polite
  *     rolls back its own offer, impolite ignores the inbound offer.
  *   - ICE trickle ordering: candidates received BEFORE the remote
  *     description are queued and applied immediately after.
@@ -46,7 +46,7 @@ import type {
 import type { WhiteboardWireSignalPayload } from "@/lib/whiteboard/sync-client";
 
 // -----------------------------------------------------------------
-// Fake RTCPeerConnection — just enough surface for peer-mesh.ts
+// Fake RTCPeerConnection ΓÇö just enough surface for peer-mesh.ts
 // -----------------------------------------------------------------
 
 type FakePcSend = { targetPeerId?: string; type: string; [k: string]: unknown };
@@ -54,7 +54,7 @@ type FakePcSend = { targetPeerId?: string; type: string; [k: string]: unknown };
 /**
  * Minimal RTCPeerConnection double. Tests drive it via the `_trigger*`
  * helpers; peer-mesh code reads the event-handler properties and the
- * three state fields. SDP strings are opaque tokens — the fake never
+ * three state fields. SDP strings are opaque tokens ΓÇö the fake never
  * parses them.
  */
 class FakePc {
@@ -84,7 +84,7 @@ class FakePc {
   iceApplied: (RTCIceCandidateInit | null | undefined)[] = [];
   /** Options passed to createOffer (iceRestart visible here). */
   createOfferCalls: RTCOfferOptions[] = [];
-  /** Tracks added via addTrack — peer-mesh attaches local-track outputs here. */
+  /** Tracks added via addTrack ΓÇö peer-mesh attaches local-track outputs here. */
   addedTracks: MediaStreamTrack[] = [];
   closed = false;
 
@@ -146,7 +146,7 @@ class FakePc {
     return sender;
   }
 
-  /** Senders backing `getSenders()` — populated by `addTrack`. */
+  /** Senders backing `getSenders()` ΓÇö populated by `addTrack`. */
   _senders: RTCRtpSender[] = [];
 
   getSenders(): RTCRtpSender[] {
@@ -208,7 +208,7 @@ function makePcFactory(): {
 }
 
 // -----------------------------------------------------------------
-// Fake signaling — exposes the inbound-handler hook + send history
+// Fake signaling ΓÇö exposes the inbound-handler hook + send history
 // -----------------------------------------------------------------
 
 type SignalSend =
@@ -263,7 +263,7 @@ function makeFakeSignaling(): FakeSignaling {
 
 // -----------------------------------------------------------------
 // Microtask-flush helpers (peer-mesh state machine is async via void
-// IIFEs — we drive it forward by awaiting the microtask queue).
+// IIFEs ΓÇö we drive it forward by awaiting the microtask queue).
 // -----------------------------------------------------------------
 
 async function flush(n = 12): Promise<void> {
@@ -294,7 +294,7 @@ function makeFakeTrack(kind: "audio" | "video" = "audio"): MediaStreamTrack {
 // Constructor invariants
 // =================================================================
 
-describe("createPeerMesh — constructor invariants", () => {
+describe("createPeerMesh ΓÇö constructor invariants", () => {
   test("throws on empty localPeerId", () => {
     expect(() =>
       createPeerMesh({
@@ -324,7 +324,7 @@ describe("createPeerMesh — constructor invariants", () => {
 // Polite vs impolite role
 // =================================================================
 
-describe("createPeerMesh — polite/impolite role from lex comparison", () => {
+describe("createPeerMesh ΓÇö polite/impolite role from lex comparison", () => {
   test("'B' is polite vs remote 'A' (B > A lexicographically)", async () => {
     const sig = makeFakeSignaling();
     const { factory, instances } = makePcFactory();
@@ -366,11 +366,11 @@ describe("createPeerMesh — polite/impolite role from lex comparison", () => {
     m.addPeer("B");
     const pc = instances[0]!;
 
-    // We send an offer first…
+    // We send an offer firstΓÇª
     pc.triggerNegotiationNeeded();
     await flush();
     expect(sig.sends.filter((s) => s.kind === "offer")).toHaveLength(1);
-    // …then remote B's offer arrives. Impolite peer IGNORES the
+    // ΓÇªthen remote B's offer arrives. Impolite peer IGNORES the
     // inbound offer (no rollback, no setRemoteDescription, no
     // outgoing answer).
     const sendsBeforeGlare = sig.sends.length;
@@ -389,7 +389,7 @@ describe("createPeerMesh — polite/impolite role from lex comparison", () => {
 // addPeer + removePeer lifecycle
 // =================================================================
 
-describe("createPeerMesh — addPeer/removePeer lifecycle", () => {
+describe("createPeerMesh ΓÇö addPeer/removePeer lifecycle", () => {
   test("addPeer creates a PC and attaches local tracks before negotiation handler is wired", () => {
     const sig = makeFakeSignaling();
     const { factory, instances } = makePcFactory();
@@ -510,8 +510,8 @@ describe("createPeerMesh — addPeer/removePeer lifecycle", () => {
 // Outgoing offer happy path
 // =================================================================
 
-describe("createPeerMesh — outgoing offer happy path", () => {
-  test("addPeer + negotiationneeded → offer → answer → connected; ICE candidates trickled", async () => {
+describe("createPeerMesh ΓÇö outgoing offer happy path", () => {
+  test("addPeer + negotiationneeded ΓåÆ offer ΓåÆ answer ΓåÆ connected; ICE candidates trickled", async () => {
     const sig = makeFakeSignaling();
     const { factory, instances } = makePcFactory();
     const m = createPeerMesh({
@@ -561,12 +561,12 @@ describe("createPeerMesh — outgoing offer happy path", () => {
     const lastIce = [...sig.sends].reverse().find((s) => s.kind === "ice");
     expect(lastIce).toEqual({ kind: "ice", targetPeerId: "B", candidate: null });
 
-    // 4. Remote answers — peer-mesh applies the SDP.
+    // 4. Remote answers ΓÇö peer-mesh applies the SDP.
     sig.inject("B", { type: "answer", sdp: "answer-sdp" });
     await flush();
     expect(pc.history.map((h) => h.type)).toContain("setRemoteDescription:answer");
 
-    // 5. Remote track arrives — subscriber fires.
+    // 5. Remote track arrives ΓÇö subscriber fires.
     const remoteTrack = makeFakeTrack("audio");
     pc.triggerTrack(remoteTrack, []);
     expect(trackCb).toHaveBeenCalledWith("B", remoteTrack, []);
@@ -584,11 +584,11 @@ describe("createPeerMesh — outgoing offer happy path", () => {
 });
 
 // =================================================================
-// Inbound offer happy path (impolite — no prior local offer)
+// Inbound offer happy path (impolite ΓÇö no prior local offer)
 // =================================================================
 
-describe("createPeerMesh — inbound offer happy path", () => {
-  test("inbound offer with no local offer in flight → setRemoteDescription → answer", async () => {
+describe("createPeerMesh ΓÇö inbound offer happy path", () => {
+  test("inbound offer with no local offer in flight ΓåÆ setRemoteDescription ΓåÆ answer", async () => {
     const sig = makeFakeSignaling();
     const { factory, instances } = makePcFactory();
     const m = createPeerMesh({
@@ -617,7 +617,7 @@ describe("createPeerMesh — inbound offer happy path", () => {
 // ICE trickle queuing (candidates arrive BEFORE remote description)
 // =================================================================
 
-describe("createPeerMesh — ICE trickle queuing", () => {
+describe("createPeerMesh ΓÇö ICE trickle queuing", () => {
   test("candidates arriving before setRemoteDescription are queued and drained after", async () => {
     const sig = makeFakeSignaling();
     const { factory, instances } = makePcFactory();
@@ -638,10 +638,10 @@ describe("createPeerMesh — ICE trickle queuing", () => {
     sig.inject("B", { type: "ice", candidate: c3 });
     await flush();
 
-    // None applied yet — no remote description.
+    // None applied yet ΓÇö no remote description.
     expect(pc.iceApplied).toEqual([]);
 
-    // Offer arrives — drain queue AFTER setRemoteDescription.
+    // Offer arrives ΓÇö drain queue AFTER setRemoteDescription.
     sig.inject("B", { type: "offer", sdp: "remote-offer" });
     await flush();
 
@@ -702,7 +702,7 @@ describe("createPeerMesh — ICE trickle queuing", () => {
     // Defense-in-depth pair to the receiver-side normalization: if a
     // browser fires `pc.onicecandidate` with `{ candidate: "" }`
     // instead of `null`, peer-mesh must NOT forward an empty-string
-    // candidate over the wire — older clients (or strict browsers on
+    // candidate over the wire ΓÇö older clients (or strict browsers on
     // the other side) would reject it. The wire should carry `null`.
     const sig = makeFakeSignaling();
     const { factory, instances } = makePcFactory();
@@ -731,7 +731,7 @@ describe("createPeerMesh — ICE trickle queuing", () => {
     // Some browsers emit `{ candidate: "" }` instead of `null` as the
     // end-of-candidates sentinel. Passing the empty string straight
     // to Chrome's `addIceCandidate` throws "Error processing ICE
-    // candidate" — peer-mesh must normalize it back to null so the
+    // candidate" ΓÇö peer-mesh must normalize it back to null so the
     // call becomes a no-op.
     const sig = makeFakeSignaling();
     const { factory, instances } = makePcFactory();
@@ -765,7 +765,7 @@ describe("createPeerMesh — ICE trickle queuing", () => {
 // Glare resolution (simultaneous offers from both sides)
 // =================================================================
 
-describe("createPeerMesh — glare resolution", () => {
+describe("createPeerMesh ΓÇö glare resolution", () => {
   test("polite side rolls back, impolite side ignores; both eventually converge", async () => {
     // Mesh-of-two: localA (impolite vs B) and localB (polite vs A).
     // We feed each one's outbound signals into the other one's
@@ -789,7 +789,7 @@ describe("createPeerMesh — glare resolution", () => {
     const pcA = fa.instances[0]!;
     const pcB = fb.instances[0]!;
 
-    // Both sides fire onnegotiationneeded simultaneously — classic glare.
+    // Both sides fire onnegotiationneeded simultaneously ΓÇö classic glare.
     pcA.triggerNegotiationNeeded();
     pcB.triggerNegotiationNeeded();
     await flush();
@@ -817,7 +817,7 @@ describe("createPeerMesh — glare resolution", () => {
     expect(bTypes).toContain("createAnswer");
     expect(sigB.sends.filter((s) => s.kind === "answer")).toHaveLength(1);
 
-    // B's answer eventually reaches A → setRemoteDescription:answer.
+    // B's answer eventually reaches A ΓåÆ setRemoteDescription:answer.
     sigA.inject("B", { type: "answer", sdp: "B-answer" });
     await flush();
     expect(pcA.history.map((h) => h.type)).toContain("setRemoteDescription:answer");
@@ -831,7 +831,7 @@ describe("createPeerMesh — glare resolution", () => {
 // ICE restart on connection failure
 // =================================================================
 
-describe("createPeerMesh — restart on iceConnectionState 'failed'", () => {
+describe("createPeerMesh ΓÇö restart on iceConnectionState 'failed'", () => {
   test("polite side auto-restarts with iceRestart: true offer", async () => {
     const sig = makeFakeSignaling();
     const { factory, instances } = makePcFactory();
@@ -865,7 +865,7 @@ describe("createPeerMesh — restart on iceConnectionState 'failed'", () => {
     m.dispose();
   });
 
-  test("impolite side does NOT auto-restart on failed — waits for the polite peer", async () => {
+  test("impolite side does NOT auto-restart on failed ΓÇö waits for the polite peer", async () => {
     const sig = makeFakeSignaling();
     const { factory, instances } = makePcFactory();
     // Local "A" is impolite vs remote "B".
@@ -896,7 +896,7 @@ describe("createPeerMesh — restart on iceConnectionState 'failed'", () => {
   test("manual restart(peerId) fires an iceRestart offer regardless of polite role", async () => {
     const sig = makeFakeSignaling();
     const { factory, instances } = makePcFactory();
-    // Local "A" is impolite vs "B" — but manual restart still works.
+    // Local "A" is impolite vs "B" ΓÇö but manual restart still works.
     const m = createPeerMesh({
       signaling: sig,
       localPeerId: "A",
@@ -940,7 +940,7 @@ describe("createPeerMesh — restart on iceConnectionState 'failed'", () => {
 // 3-peer mesh fan-out (tutor + 2 students canary)
 // =================================================================
 
-describe("createPeerMesh — 3-peer mesh fan-out", () => {
+describe("createPeerMesh ΓÇö 3-peer mesh fan-out", () => {
   test("addPeer('B') then addPeer('C') creates independent PCs, signals are scoped per peer", async () => {
     const sig = makeFakeSignaling();
     const { factory, instances } = makePcFactory();
@@ -957,7 +957,7 @@ describe("createPeerMesh — 3-peer mesh fan-out", () => {
     expect(pcB).not.toBe(pcC);
     expect(m.peers()).toEqual(new Set(["B", "C"]));
 
-    // Drive B's negotiation only — C must be untouched.
+    // Drive B's negotiation only ΓÇö C must be untouched.
     pcB!.triggerNegotiationNeeded();
     await flush();
     expect(sig.sends.filter((s) => s.targetPeerId === "B" && s.kind === "offer"))
@@ -1035,13 +1035,13 @@ describe("createPeerMesh — 3-peer mesh fan-out", () => {
 // Signal-from-unknown-peer drops cleanly
 // =================================================================
 
-describe("createPeerMesh — signal from unknown peer", () => {
+describe("createPeerMesh ΓÇö signal from unknown peer", () => {
   test("inbound OFFER from unknown peer triggers implicit-add + answer (May 15 hotfix #3)", async () => {
     // Pilot race this guards against:
     //   1. Wife joins a session; her useLiveAV builds the mesh and
     //      subscribes to onRoomPeersChange.
     //   2. The presence replay fires `addPeer(Andrew)` on wife's side
-    //      → her negotiationneeded fires → she sends an offer.
+    //      ΓåÆ her negotiationneeded fires ΓåÆ she sends an offer.
     //   3. Andrew's mesh was already up, but the buffered-replay in
     //      sync-client delivers wife's offer to Andrew's signaling
     //      BEFORE Andrew's host has called `addPeer(wife)` (presence
@@ -1050,7 +1050,7 @@ describe("createPeerMesh — signal from unknown peer", () => {
     //      `event=signal-no-entry`. The PCs never connected.
     //
     // With implicit-add, the offer creates the PC, fires
-    // setRemoteDescription, and sends an answer — the connection
+    // setRemoteDescription, and sends an answer ΓÇö the connection
     // proceeds even though the host's addPeer hasn't landed yet.
     const sig = makeFakeSignaling();
     const { factory, instances } = makePcFactory();
@@ -1085,7 +1085,7 @@ describe("createPeerMesh — signal from unknown peer", () => {
     m.dispose();
   });
 
-  test("inbound ANSWER from unknown peer warns and drops (NOT implicit-added — no PC ever sent an offer)", async () => {
+  test("inbound ANSWER from unknown peer warns and drops (NOT implicit-added ΓÇö no PC ever sent an offer)", async () => {
     const sig = makeFakeSignaling();
     const { factory, instances } = makePcFactory();
     const { log, lines } = quietLog();
@@ -1106,7 +1106,7 @@ describe("createPeerMesh — signal from unknown peer", () => {
     m.dispose();
   });
 
-  test("inbound ICE from unknown peer warns and drops (NOT implicit-added — no remote description yet)", async () => {
+  test("inbound ICE from unknown peer warns and drops (NOT implicit-added ΓÇö no remote description yet)", async () => {
     const sig = makeFakeSignaling();
     const { factory, instances } = makePcFactory();
     const { log, lines } = quietLog();
@@ -1129,7 +1129,7 @@ describe("createPeerMesh — signal from unknown peer", () => {
     m.dispose();
   });
 
-  test("inbound LEAVE from unknown peer warns and drops (no-op — nothing to clean up)", async () => {
+  test("inbound LEAVE from unknown peer warns and drops (no-op ΓÇö nothing to clean up)", async () => {
     const sig = makeFakeSignaling();
     const { factory, instances } = makePcFactory();
     const { log, lines } = quietLog();
@@ -1189,7 +1189,7 @@ describe("createPeerMesh — signal from unknown peer", () => {
 
     expect(pc.closed).toBe(true);
     expect(m.peers().has("B")).toBe(false);
-    // Note: we did NOT emit a leave back to B — they already left.
+    // Note: we did NOT emit a leave back to B ΓÇö they already left.
     expect(sig.sends.filter((s) => s.kind === "leave")).toEqual([]);
     m.dispose();
   });
@@ -1199,7 +1199,7 @@ describe("createPeerMesh — signal from unknown peer", () => {
 // Dispose tears everything down
 // =================================================================
 
-describe("createPeerMesh — dispose", () => {
+describe("createPeerMesh ΓÇö dispose", () => {
   test("dispose closes every PC and silences callbacks", async () => {
     const sig = makeFakeSignaling();
     const { factory, instances } = makePcFactory();
@@ -1240,10 +1240,10 @@ describe("createPeerMesh — dispose", () => {
 });
 
 // =================================================================
-// Logging shape — `avx=<sid> peer=<peerId>` per AGENTS.md contract
+// Logging shape ΓÇö `avx=<sid> peer=<peerId>` per AGENTS.md contract
 // =================================================================
 
-describe("createPeerMesh — log shape", () => {
+describe("createPeerMesh ΓÇö log shape", () => {
   test("default log carries `avx=<sid>` and `peer=<id>` subkeys", async () => {
     const sig = makeFakeSignaling();
     const { factory, instances } = makePcFactory();
@@ -1292,12 +1292,12 @@ describe("createPeerMesh — log shape", () => {
 });
 
 // =================================================================
-// addLocalTrackToAllPeers — late-arriving track fan-out
+// addLocalTrackToAllPeers ΓÇö late-arriving track fan-out
 //
 // Regression: prior to May 15 evening, `useLiveAV`'s mesh-build
 // effect included `localAudioStream` + `localVideoStream` in its
 // dependency array. Acquiring the cam AFTER the mic (the natural
-// flow when the tutor clicks "Allow microphone" → mesh builds →
+// flow when the tutor clicks "Allow microphone" ΓåÆ mesh builds ΓåÆ
 // "Allow camera" later) forced a full mesh teardown + rebuild,
 // dropping every remote peer's media for the duration. This
 // method is the in-place alternative: each existing PC gets the
@@ -1306,7 +1306,7 @@ describe("createPeerMesh — log shape", () => {
 // (no media gap on already-flowing tracks).
 // =================================================================
 
-describe("createPeerMesh — addLocalTrackToAllPeers", () => {
+describe("createPeerMesh ΓÇö addLocalTrackToAllPeers", () => {
   test("adds the track to every existing peer connection in one call", () => {
     const sig = makeFakeSignaling();
     const { factory, instances } = makePcFactory();
@@ -1314,7 +1314,7 @@ describe("createPeerMesh — addLocalTrackToAllPeers", () => {
       signaling: sig,
       localPeerId: "A",
       _pcFactory: factory,
-      // No initial tracks — simulates "cam not granted at mesh build".
+      // No initial tracks ΓÇö simulates "cam not granted at mesh build".
       getLocalTracks: () => [],
     });
     m.addPeer("B");
@@ -1332,7 +1332,7 @@ describe("createPeerMesh — addLocalTrackToAllPeers", () => {
     m.dispose();
   });
 
-  test("idempotent on the same track id — a second call is a no-op", () => {
+  test("idempotent on the same track id ΓÇö a second call is a no-op", () => {
     const sig = makeFakeSignaling();
     const { factory, instances } = makePcFactory();
     const m = createPeerMesh({
@@ -1370,7 +1370,7 @@ describe("createPeerMesh — addLocalTrackToAllPeers", () => {
     expect(pc.addedTracks).toEqual([]);
   });
 
-  test("no-op when track.readyState is 'ended' — never attach a dead track", () => {
+  test("no-op when track.readyState is 'ended' ΓÇö never attach a dead track", () => {
     const sig = makeFakeSignaling();
     const { factory, instances } = makePcFactory();
     const m = createPeerMesh({
@@ -1427,7 +1427,7 @@ describe("createPeerMesh — addLocalTrackToAllPeers", () => {
 // replaceLocalTrackOnAllPeers
 // =================================================================
 
-describe("createPeerMesh — replaceLocalTrackOnAllPeers", () => {
+describe("createPeerMesh ΓÇö replaceLocalTrackOnAllPeers", () => {
   test("calls replaceTrack on each peer's sender for the matching kind", async () => {
     const sig = makeFakeSignaling();
     const { factory, instances } = makePcFactory();
@@ -1484,5 +1484,156 @@ describe("createPeerMesh — replaceLocalTrackOnAllPeers", () => {
     const pc = instances[0]! as FakePc;
     expect(pc.history.some((h) => h.type === "replaceTrack")).toBe(false);
     m.dispose();
+  });
+});
+
+// =================================================================
+// ICE disconnected ΓåÆ debounced restart (split-brain fix, A4)
+// =================================================================
+
+describe("ICE disconnected ΓåÆ debounced polite restart", () => {
+  test("polite side schedules a restart 3s after ICE disconnected", async () => {
+    jest.useFakeTimers();
+    try {
+      const sig = makeFakeSignaling();
+      const { factory, instances } = makePcFactory();
+      // localPeerId="B" > remotePeerId="A" ΓåÆ B is polite
+      const m = createPeerMesh({
+        signaling: sig,
+        localPeerId: "B",
+        _pcFactory: factory,
+        getLocalTracks: () => [],
+        sessionId: "test-sid",
+      });
+      m.addPeer("A");
+      const pc = instances[0]! as FakePc;
+
+      // Bring PC to a working state first so we're past initial setup.
+      pc.setIceConnectionState("connected");
+      await flush();
+
+      // Clear prior offers (from negotiation setup).
+      const offersBefore = sig.sends.filter((s) => s.kind === "offer").length;
+
+      // ICE drops to disconnected.
+      pc.setIceConnectionState("disconnected");
+      await flush();
+
+      // Before the timer fires, no restart offer yet.
+      expect(sig.sends.filter((s) => s.kind === "offer").length).toBe(offersBefore);
+
+      // Advance 3 s ΓÇö restart should fire.
+      jest.advanceTimersByTime(3_000);
+      await flush();
+
+      const offersAfter = sig.sends.filter((s) => s.kind === "offer").length;
+      expect(offersAfter).toBeGreaterThan(offersBefore);
+      m.dispose();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("impolite side does NOT schedule a disconnect restart", async () => {
+    jest.useFakeTimers();
+    try {
+      const sig = makeFakeSignaling();
+      const { factory, instances } = makePcFactory();
+      // localPeerId="A" < remotePeerId="B" ΓåÆ A is impolite
+      const m = createPeerMesh({
+        signaling: sig,
+        localPeerId: "A",
+        _pcFactory: factory,
+        getLocalTracks: () => [],
+      });
+      m.addPeer("B");
+      const pc = instances[0]! as FakePc;
+
+      const offersBefore = sig.sends.filter((s) => s.kind === "offer").length;
+
+      pc.setIceConnectionState("disconnected");
+      await flush();
+      jest.advanceTimersByTime(4_000);
+      await flush();
+
+      // Impolite side must NOT send a restart offer on disconnected.
+      const offersAfter = sig.sends.filter((s) => s.kind === "offer").length;
+      expect(offersAfter).toBe(offersBefore);
+      m.dispose();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("timer is cancelled if ICE recovers before 3s", async () => {
+    jest.useFakeTimers();
+    try {
+      const sig = makeFakeSignaling();
+      const { factory, instances } = makePcFactory();
+      // localPeerId="B" > remotePeerId="A" ΓåÆ B is polite
+      const m = createPeerMesh({
+        signaling: sig,
+        localPeerId: "B",
+        _pcFactory: factory,
+        getLocalTracks: () => [],
+      });
+      m.addPeer("A");
+      const pc = instances[0]! as FakePc;
+
+      pc.setIceConnectionState("connected");
+      await flush();
+      const offersBefore = sig.sends.filter((s) => s.kind === "offer").length;
+
+      // ICE goes disconnected.
+      pc.setIceConnectionState("disconnected");
+      await flush();
+
+      // ICE recovers before the 3s timer fires.
+      jest.advanceTimersByTime(1_000);
+      pc.setIceConnectionState("connected");
+      await flush();
+
+      // Advance past the 3s mark ΓÇö timer should have been cancelled.
+      jest.advanceTimersByTime(5_000);
+      await flush();
+
+      // No new restart offer should have been sent.
+      const offersAfter = sig.sends.filter((s) => s.kind === "offer").length;
+      expect(offersAfter).toBe(offersBefore);
+      m.dispose();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("ICE failed on polite side still triggers immediate restart", async () => {
+    jest.useFakeTimers();
+    try {
+      const sig = makeFakeSignaling();
+      const { factory, instances } = makePcFactory();
+      // localPeerId="B" > remotePeerId="A" ΓåÆ B is polite
+      const m = createPeerMesh({
+        signaling: sig,
+        localPeerId: "B",
+        _pcFactory: factory,
+        getLocalTracks: () => [],
+      });
+      m.addPeer("A");
+      const pc = instances[0]! as FakePc;
+
+      pc.setIceConnectionState("connected");
+      await flush();
+      const offersBefore = sig.sends.filter((s) => s.kind === "offer").length;
+
+      // ICE fails ΓÇö existing auto-restart behavior, synchronous.
+      pc.setIceConnectionState("failed");
+      await flush();
+
+      const offersAfter = sig.sends.filter((s) => s.kind === "offer").length;
+      expect(offersAfter).toBeGreaterThan(offersBefore);
+      m.dispose();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

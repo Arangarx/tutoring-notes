@@ -3,21 +3,21 @@
  */
 
 /**
- * End-session DOM contract for the workspace client (Phase 1b — Pillars 2 + 3).
+ * End-session DOM contract for the workspace client (Phase 1b ΓÇö Pillars 2 + 3).
  *
  * Pre-Phase-1b this suite drove the End-session button through the
  * audio bridge's `getState()` shim. That shim is gone in Commit 4;
  * Commit 7 rewires the flow to call the outbox helpers directly:
  *
- *   1. `setUserWantsRecording(false)` — recorder stops + enqueues
+ *   1. `setUserWantsRecording(false)` ΓÇö recorder stops + enqueues
  *      trailing segments into the outbox.
- *   2. `drainOutboxOrTimeout(wbsid)` — wait for uploads to finish
+ *   2. `drainOutboxOrTimeout(wbsid)` ΓÇö wait for uploads to finish
  *      (15s budget; failed/timeout surfaces a tutor-facing error).
- *   3. `assembleEndSessionSegments(wbsid)` — read uploaded rows.
+ *   3. `assembleEndSessionSegments(wbsid)` ΓÇö read uploaded rows.
  *   4. `uploadWhiteboardEvents(...)`
- *   5. `endWhiteboardSession(wbsid, eventsUrl, { segments })` — one
+ *   5. `endWhiteboardSession(wbsid, eventsUrl, { segments })` ΓÇö one
  *      atomic transaction.
- *   6. `finalizeOutboxAfterEnd(wbsid)` — drop the persisted rows.
+ *   6. `finalizeOutboxAfterEnd(wbsid)` ΓÇö drop the persisted rows.
  *
  * This suite mocks every helper at its module boundary so we can
  * exercise (a) the happy path with N tracked segments, (b) the
@@ -28,6 +28,15 @@
 import React from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+
+jest.mock("@/components/ThemeProvider", () => ({
+  ThemeProvider: ({ children }: { children: React.ReactNode }) => children,
+  useTheme: () => ({
+    mode: "system" as const,
+    resolvedTheme: "light" as const,
+    setMode: jest.fn(),
+  }),
+}));
 
 jest.mock("@/components/whiteboard/PdfImageUploadButton", () => ({
   PdfImageUploadButton: () => null,
@@ -224,7 +233,7 @@ jest.mock("@/lib/recording/upload-outbox-instance", () => ({
 
 // Audio bridge: still a forwardRef component so the workspace's
 // ref binding doesn't error, but the End-session flow no longer
-// calls getState — we just need it to mount cleanly.
+// calls getState ΓÇö we just need it to mount cleanly.
 jest.mock(
   "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceAudioBridge",
   () => {
@@ -277,6 +286,31 @@ const audioCtl = {
   flushPendingUploads: jest.fn(() => Promise.resolve()),
 };
 
+// useLiveAV is not the focus of this test suite (end-session flow).
+// Provide a minimal stub so the workspace component mounts without crashing.
+jest.mock("@/hooks/useLiveAV", () => ({
+  useLiveAV: () => ({
+    participants: [],
+    reachableParticipants: [],
+    localAudioStream: null,
+    localVideoStream: null,
+    hasMicPermission: "prompt" as const,
+    hasCamPermission: "prompt" as const,
+    isMicMuted: false,
+    isCamMuted: true,
+    error: null,
+    videoError: null,
+    toggleMic: jest.fn(),
+    toggleCam: jest.fn(),
+    requestMic: jest.fn().mockResolvedValue(undefined),
+    requestCam: jest.fn().mockResolvedValue(undefined),
+    isAcquiring: false,
+    isActive: false,
+    reconnectPeer: jest.fn(),
+    retryAcquire: jest.fn().mockResolvedValue(undefined),
+  }),
+}));
+
 jest.mock("@/hooks/useAudioRecorder", () => {
   return {
     useAudioRecorder: () => ({
@@ -321,7 +355,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     // The workspace's "subscribe to outbox while finalizing" useEffect
     // guards on `globalThis.indexedDB` so an accidental SSR import
     // doesn't open IDB on the server. JSDOM doesn't ship IDB, so we
-    // hand it a stub — the outbox-instance module is fully mocked in
+    // hand it a stub ΓÇö the outbox-instance module is fully mocked in
     // this file, so the stub is never read.
     if (typeof globalThis.indexedDB === "undefined") {
       Object.defineProperty(globalThis, "indexedDB", {
@@ -338,7 +372,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     mockUpload.mockClear();
     mockSnapshotUpload.mockClear();
     mockGenerateSnapshot.mockReset();
-    // Default: snapshot generation skips (empty scene → null). Tests
+    // Default: snapshot generation skips (empty scene ΓåÆ null). Tests
     // that exercise the happy path override this per-test.
     mockGenerateSnapshot.mockResolvedValue(null);
     mockBuildFinalEventsJson.mockClear();
@@ -589,7 +623,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
   test("regression: stops recorder + awaits flushPendingUploads BEFORE draining (Phase 1b smoke fix)", async () => {
     // The Phase 1b smoke regression: when the user clicks End while the
     // mic is hot, `setUserWantsRecording(false)` was the only stop
-    // trigger. The bridge effect ran AFTER React's commit pass — by
+    // trigger. The bridge effect ran AFTER React's commit pass ΓÇö by
     // which time `drainOutboxOrTimeout` had already returned ok against
     // an empty outbox, the atomic action was called with segments: [],
     // and the trailing segment was then enqueued + finalized into thin
@@ -605,9 +639,9 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     // time we drain.
     //
     // This test pins the call ORDER (stopAndUpload + flushPendingUploads
-    // → drainOutboxOrTimeout → assembleEndSessionSegments → end action),
+    // ΓåÆ drainOutboxOrTimeout ΓåÆ assembleEndSessionSegments ΓåÆ end action),
     // not just the call set, because the bug was purely an ordering
-    // bug — every call was made, just in the wrong order.
+    // bug ΓÇö every call was made, just in the wrong order.
 
     const callLog: string[] = [];
     audioCtl.state = "recording";
@@ -684,7 +718,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     ]);
 
     // Specifically the segment from the in-flight recorder lands in
-    // the atomic action payload — i.e. the trailing segment is no
+    // the atomic action payload ΓÇö i.e. the trailing segment is no
     // longer dropped.
     expect(mockEnd).toHaveBeenCalledWith(
       "ws-end-ordering",
@@ -707,7 +741,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
   test("regression: does NOT call stopAndUpload when recorder is already idle (mic never armed)", async () => {
     // Negative case: if the tutor never armed the mic, the recorder is
     // in "ready" state. handleEndSession must NOT spuriously call
-    // stopAndUpload (which would generate an empty-blob error path) —
+    // stopAndUpload (which would generate an empty-blob error path) ΓÇö
     // it should still call flushPendingUploads (which resolves to a
     // no-op because the set is empty), then drain normally.
     audioCtl.state = "ready";
@@ -739,7 +773,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
   });
 
   test("snapshot wiring: generated blob is uploaded and snapshotBlobUrl is forwarded to endWhiteboardSession", async () => {
-    // Phase 1c contract — when the snapshot pipeline succeeds, the
+    // Phase 1c contract ΓÇö when the snapshot pipeline succeeds, the
     // blob URL must reach the atomic end-session action so the
     // SessionRecording row can render thumbnails on the parent share
     // and the admin review page's "open as image" link.
@@ -788,7 +822,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
   });
 
   test("snapshot wiring: snapshot upload failure does NOT block end-session", async () => {
-    // The reliability rule (snapshot is best-effort) — a snapshot
+    // The reliability rule (snapshot is best-effort) ΓÇö a snapshot
     // upload error must still let the session finalize. The atomic
     // end action is called with no snapshotBlobUrl.
     mockGenerateSnapshot.mockResolvedValueOnce({
@@ -829,7 +863,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
   });
 
   test("snapshot wiring: snapshot generation throwing does NOT block end-session", async () => {
-    // Defense-in-depth — the snapshot module is supposed to never
+    // Defense-in-depth ΓÇö the snapshot module is supposed to never
     // throw, but if a future regression breaks that contract the
     // workspace's outer try/catch must absorb it.
     mockGenerateSnapshot.mockRejectedValueOnce(
