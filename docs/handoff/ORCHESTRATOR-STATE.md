@@ -28,7 +28,9 @@ Multi-day epic on branch **`v1-redesign`** (active V1 integration branch; **not 
 
 > **Canonical operational list** — `BACKLOG.md`, `RELEASE-ROADMAP.md`, and `v1-redesign-STATUS.md` cross-reference here; do not duplicate verbatim elsewhere.
 
-**Master cut** = `v1-redesign → master` = Sarah's live site (`tutoring-notes.vercel.app` / `usemynk.com`). Held until the **full** V1 redesign is complete and coherent across the whole site.
+**Vocabulary (ratified Andrew 2026-06-08):** **V1** = master cut (Gate A). **Release** = opening to recruit/advertise **new** pilots (Gate B era complete). Tiering: **V1 / master cut → post-V1 / pre-release → release**.
+
+**Master cut** = `v1-redesign → master` = Sarah's live site (`tutoring-notes.vercel.app` / `usemynk.com`). Held until the **full** V1 redesign is complete and coherent across the whole site (Gate A only).
 
 **Design note (one place):** waiting room, clean live board (A/V verification in the green room; board A/V options = drill-down only), and Pass-2 review mode are **one session shell with three modes** — waiting room / live board / review. Design together, not in isolation. Refs: [`session-lifecycle-consent-design-2026-05-31.md`](session-lifecycle-consent-design-2026-05-31.md); [`v1-component-redesign-design-2026-05-31.md`](v1-component-redesign-design-2026-05-31.md) Q-8; chrome req **TU-06**.
 
@@ -40,13 +42,14 @@ Multi-day epic on branch **`v1-redesign`** (active V1 integration branch; **not 
 | A2 | **Waiting room** — Google-Meet/Teams-style green room: grant A/V permissions + verify sound/video **before** entering the board; admit flow; session timer starts when student **leaves** the waiting room | **Designed, NOT built** — [`session-lifecycle-consent-design-2026-05-31.md`](session-lifecycle-consent-design-2026-05-31.md); TU-06 |
 | A3 | **Pass-2 in-context end-session** — one shared session shell; End session auto-transitions the **same shell** into review mode in place (no nav-away); notes primary/in-context; replay demoted to lazy "Review video while editing" drill-down. **Today's** redirect off `/workspace` to `/admin/students/[id]/whiteboard/[whiteboardSessionId]` (replay-first, notes-below) = intentional **Pass-1 INTERIM** | **Tracked master gate** (was "V1 follow-on" only) — see slice-3 Pass-2 notes below |
 
-#### Gate B — urgent fast-follow (before recruiting new pilots; some urgent because site is already live)
+#### Gate B — post-V1 / pre-release (before **release** = recruiting new pilots; some urgent because site is already live)
 
 | # | Gate | Urgency |
 |---|---|---|
 | B1 | **Approval-gating / waitlist** — sign-up allowed but **parked** on waitlist; until Andrew approves, user cannot incur cost (OpenAI/transcription/storage). Site is **already live** in production (unadvertised) — cost exposure exists **today** | **URGENT** — land quickly; does not strictly block master cut |
-| B2 | **Parent privacy consent** — real consent architecture: versioned `ConsentRecord`, server-enforced capture gating, per-session `SessionConsentSnapshot`, parent-ceiling + learner-narrowing. **V1 toggle scope only:** `allowAudioRecording`, `allowWhiteboardRecording`, `allowNoteSending`, `allowLiveSession` kill-switch. **Do NOT** build toggles for not-yet-shipping features (`allowMessaging`, `allowVideoRecording`) until those features ship — **consent surface tracks the feature surface**. Replaces P2a stubs + `/claim/[token]/setup` "Coming soon — Phase 3" placeholder | **V1 required** (Sarah runs real children's data) |
-| B3 | **Security checks + final cleanups** — Tier B audit, incident/secret runbooks, remaining hardening before pilot recruitment | Before new pilots — loosely tracked elsewhere |
+| B2 | **Parent privacy consent** — real consent architecture: versioned `ConsentRecord`, server-enforced capture gating, per-session `SessionConsentSnapshot`, parent-ceiling + learner-narrowing. **V1 toggle scope only:** `allowAudioRecording`, `allowWhiteboardRecording`, `allowNoteSending`, `allowLiveSession` kill-switch. **Do NOT** build toggles for not-yet-shipping features (`allowMessaging`, `allowVideoRecording`) until those features ship — **consent surface tracks the feature surface**. Replaces P2a stubs + `/claim/[token]/setup` "Coming soon — Phase 3" placeholder | **Pre-release required** (Sarah runs real children's data) |
+| B3 | **Security checks + final cleanups** — Tier B audit, incident/secret runbooks, remaining hardening before pilot recruitment | Before release — loosely tracked elsewhere |
+| B4 | **Scheduling + external calendar integration** — post-V1, pre-release; **not** a master-cut gate. Full spec: [`BACKLOG.md`](../BACKLOG.md) § Scheduling proposal. Needs design pass + sequencing within pre-release window | Before release — [`BACKLOG.md`](../BACKLOG.md) |
 
 **Scope trap (do not conflate):** `Student.recordingDefaultEnabled` = tutor UX convenience default for the Start toggle. **Parent privacy consent** = net-new permission lattice — orthogonal. See `BACKLOG.md` if a line equates them.
 

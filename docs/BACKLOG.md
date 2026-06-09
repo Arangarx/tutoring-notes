@@ -72,9 +72,9 @@ Action items not yet built; design where noted. (Live status: `docs/WHITEBOARD-S
 | **Video tile docking** | UX + build (**post-V1**) | Sarah asked about **docking** the A/V tile (especially on mobile — snap to screen edge / docked pip). Andrew: **follow-up feature, NOT release.** V1 ships draggable + resizable cluster per **SR-04**; docking is a separate polish pass. Cross-ref: [`whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md) **SR-04**. |
 | **Triangle / n-gon shapes** | UX + design (**v1.1 nice-to-have**) | Wyzant offered resize-only triangles (right / equilateral / isosceles). **Excalidraw 0.18.1 has no native triangle/polygon** — stock shapes are rect, diamond, ellipse, arrow, line, freedraw, text (see [`whiteboard-excalidraw-function-audit-2026-06-08.md`](handoff/whiteboard-excalidraw-function-audit-2026-06-08.md)). Likely needs a **generic n-gon** approach or custom element layer — requires its own design pass. **Straight line remains the highest-priority secondary shape** (handled in V1 via **PU-05** default). |
 
-### Scheduling + external calendar integration — **PROPOSED for V1/release — pending Andrew scope decision**
+### Scheduling + external calendar integration — **DECISION (Andrew 2026-06-08): post-V1, pre-release**
 
-> **Status (2026-06-08):** Sarah now considers scheduling a **release feature**. This is a **fully-specced proposal** for Andrew to accept, defer, or scope-trim — **NOT committed V1** until a sequencing decision. Competes with the current V1 gate list (Gate A waiting room, chrome, Pass-2 review, Gate B consent/waitlist).
+> **Status (2026-06-08):** **DECISION (Andrew 2026-06-08): post-V1, pre-release.** Not a master-cut gate; required before recruiting new pilots. Needs its own design pass + sequencing within the pre-release window. Sarah considers this a **release feature** (opening to recruit/advertise new pilots). **Canonical tier vocabulary:** **V1** = master cut (Gate A); **release** = recruiting new pilots (Gate B era). See [`RELEASE-ROADMAP.md`](RELEASE-ROADMAP.md) § V1 sequencing tiers; [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) § Pre-master gates.
 
 **Problem:** Tutors already live in an external calendar (Google Calendar, etc.). A from-scratch in-app scheduler duplicates their workflow. Sarah wants sessions **visible, remindable, and joinable** without re-entering everything manually.
 
@@ -84,7 +84,7 @@ Action items not yet built; design where noted. (Live status: `docs/WHITEBOARD-S
 2. **In-app schedule layer** — Mynk keeps its own **session schedule tracking**: upcoming sessions list, reminders, and per-session metadata (student, subject, soft duration). Each row exposes a **start-session** deep link for the tutor.
 3. **Student / parent surface** — Upcoming session visible on the student (or parent) side with a **join** action from that row (approved link flow; respects consent gates).
 4. **Soft session length** — Tutor specifies how much calendar time a session **occupies** (e.g. 60 minutes on the calendar) as a **soft duration** — **not** a hard cap on the live board or recording. Timer and end-session remain tutor-controlled; calendar block is planning metadata only.
-5. **Design + sequencing** — Needs a dedicated **design pass** (tutor dashboard widget, session-create/edit, OAuth consent copy, reminder channels, timezone handling). Sequencing decision: Gate A blocker vs Gate B fast-follow vs post-reveal Wave — **Andrew decides**.
+5. **Design + sequencing** — Needs a dedicated **design pass** (tutor dashboard widget, session-create/edit, OAuth consent copy, reminder channels, timezone handling). **Sequencing locked:** post-V1 / pre-release (Gate B era alongside approval-gating, parent consent, security cleanups) — not a master-cut blocker.
 
 **Out of scope for this proposal (explicit):** Replacing Google/Outlook calendaring; student self-scheduling without tutor; hard auto-end when calendar block elapses.
 

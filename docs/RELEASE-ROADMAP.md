@@ -1,6 +1,6 @@
 # Release roadmap — solo tutor floor → university pitch readiness
 
-**Last updated:** 2026-06-07
+**Last updated:** 2026-06-08
 
 > Audience: orchestrators, executors, and Andrew sequencing work across
 > the tutoring-notes pilot through Aug 2026. This doc is a **thin
@@ -223,24 +223,31 @@ executors/branches recommended.
 | Mynk P0 in-app wiring (`usemynk.com`, package metadata) | Brand + Mynk-Pre-Trademark backlog | M | Production-route brand surface |
 | DESIGN-TOKENS Phase 0 (Tailwind + shadcn foundation) | UX Refresh / DESIGN-TOKENS-PLAN | M | Unblocks token migration |
 | DESIGN-TOKENS Phase 1 (token migration on prod routes) | UX Refresh / DESIGN-TOKENS-PLAN | M | Replaces inline hex; ESLint hex ban per spec |
-| Resume v1 IA design session (Sarah's full list trigger) | `docs/handoff/v1-design-session-2026-05-19-pm-orchestrator-report.md` | M | Lock scheduling Y/N + 5 remaining IA decisions |
-| **Scheduling + external calendar integration** | Sarah live feedback 2026-06-08; [`docs/BACKLOG.md`](BACKLOG.md) § Scheduling proposal | L | **PROPOSED for V1/release — pending Andrew scope decision** (competes with Gate A list). Sync with tutor's existing calendar (e.g. Google); in-app upcoming sessions + start/join links; soft duration; **not committed** until sequencing locked |
+| Resume v1 IA design session (Sarah's full list trigger) | `docs/handoff/v1-design-session-2026-05-19-pm-orchestrator-report.md` | M | 5 remaining IA decisions (scheduling Y/N **locked** — post-V1/pre-release; see § V1 sequencing tiers) |
+| **Scheduling + external calendar integration** | Sarah live feedback 2026-06-08; [`docs/BACKLOG.md`](BACKLOG.md) § Scheduling proposal | L | **DECISION (Andrew 2026-06-08): post-V1, pre-release** — not a master-cut gate; required before recruiting new pilots. Full spec in BACKLOG. Sync with tutor's existing calendar (e.g. Google); in-app upcoming sessions + start/join links; soft duration; needs design pass + sequencing within pre-release window |
 | Phase 1 public-surface design specs (`docs/UX-DESIGNS-PHASE-1.md`) | v1 design bootstrapper | L | After IA locked; 8 surfaces |
-| Phase 2 tutor-surface design specs (`docs/UX-DESIGNS-PHASE-2.md`) | v1 design bootstrapper | L | After IA locked; count depends on scheduling decision |
+| Phase 2 tutor-surface design specs (`docs/UX-DESIGNS-PHASE-2.md`) | v1 design bootstrapper | L | After IA locked |
 | Public surface visual refresh (login, signup, forgot-password, reset-password, privacy, terms, parent-share, feedback, setup) | UX Refresh / v1 specs | L | Implement Phase 1 specs |
 
 **Wave 3 unblock:** Sarah completes full pilot action list; orchestrator
 confirms IA decisions in v1 design handoff.
 
-**V1 `v1-redesign → master` cut (ratified 2026-06-08):** Two-tier gate
-checklist — **canonical operational list:**
+**V1 sequencing tiers (ratified 2026-06-08):** Use this vocabulary consistently in orchestrator chats, STATUS docs, and backlog rows:
+
+| Tier | Also called | Meaning |
+|---|---|---|
+| **V1** | master cut | `v1-redesign → master` = Sarah's complete redesigned live site. Gate A items only. |
+| **Post-V1 / pre-release** | Gate B era | After master cut, before opening to recruit/advertise **new** pilots. Approval-gating, parent consent, security cleanups, **scheduling + external calendar** (see BACKLOG). |
+| **Release** | recruiting new pilots | Opening the doors to recruit/advertise beyond Sarah/trusted pilots. Requires Gate B complete. |
+
+**V1 `v1-redesign → master` cut:** Two-tier gate checklist — **canonical operational list:**
 [`docs/handoff/ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) §
 Pre-master gates. **Merge to master = reveal to Sarah:** production
 (`tutoring-notes.vercel.app` and `usemynk.com` share the same Vercel
 deployment alias on `master`; no UI-skin feature flag exists). Build on
 `v1-redesign`; cut `master` only when the whole site is one cohesive release.
 
-**Gate A — blocks master cut** (Sarah's live site complete + coherent):
+**Gate A — blocks master cut (V1)** (Sarah's live site complete + coherent):
 
 1. Visual redesign + whiteboard chrome + theme parity (in flight).
 2. **Waiting room** — green-room A/V verify + admit flow; timer starts when
@@ -253,15 +260,18 @@ deployment alias on `master`; no UI-skin feature flag exists). Build on
 shell, three modes** — design together
 ([`session-lifecycle-consent-design-2026-05-31.md`](handoff/session-lifecycle-consent-design-2026-05-31.md)).
 
-**Gate B — urgent fast-follow** (before recruiting new pilots; some urgent
-because site is already live, just unadvertised):
+**Gate B — post-V1 / pre-release** (before **release** = recruiting new pilots;
+some urgent because site is already live, just unadvertised):
 
 4. **Approval-gating / waitlist** — sign-up parks on waitlist; no cost until
    Andrew approves (cost exposure exists today).
-5. **Parent privacy consent** — V1 required; real `ConsentRecord` architecture;
+5. **Parent privacy consent** — real `ConsentRecord` architecture;
    V1 toggles only for shipping features (`allowAudioRecording`,
    `allowWhiteboardRecording`, `allowNoteSending`, `allowLiveSession`).
 6. **Security checks + final cleanups** — before new pilots.
+7. **Scheduling + external calendar integration** — post-V1, pre-release; not a
+   master-cut gate. Full spec: [`docs/BACKLOG.md`](BACKLOG.md) § Scheduling
+   proposal. Needs design pass + sequencing within this window.
 
 **Escape hatch (not building now):** per-email allowlist if a prod fix must
 ship before full reveal. **Accepted cost:** long-lived `v1-redesign` branch
