@@ -54,7 +54,11 @@
   align-items: center;
   gap: 2px;
   padding: 0 6px;
-  overflow: hidden;
+  /* overflow: visible — dropdowns (Share, Mic, Theme, View) must extend
+     below this bar; overflow:hidden clips them at the 44px boundary. */
+  overflow: visible;
+  position: relative;
+  z-index: 10;
 }
 
 .mynk-wb-topbar__zone {
@@ -90,9 +94,12 @@
   align-items: center;
   padding: 8px 0;
   gap: 2px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: none;
+  /* overflow: visible — shapes flyout, more-popover, and props panel
+     all open to the RIGHT of the strip; overflow-x:hidden clips them.
+     The tool count is small enough that y-scroll is not needed. */
+  overflow: visible;
+  position: relative;
+  z-index: 10;
 }
 
 .mynk-wb-strip::-webkit-scrollbar {
@@ -613,8 +620,14 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-  cursor: default;
+  cursor: pointer;
   white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.mynk-wb-props-compact__summary:hover {
+  background: hsl(var(--muted) / 0.6);
+  border-color: var(--ring);
 }
 
 .mynk-wb-props-compact__panel {
@@ -628,16 +641,21 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  /* z-index above the strip and its siblings */
+  z-index: 40;
 }
 
-.mynk-wb-props-compact:hover .mynk-wb-props-compact__panel,
-.mynk-wb-props-compact:focus-within .mynk-wb-props-compact__panel {
+/* Click-toggle: open state driven by --open class (React state), NOT :hover.
+   The old :hover approach caused the panel to vanish when the cursor moved
+   off the summary button toward the panel. */
+.mynk-wb-props-compact--open .mynk-wb-props-compact__panel {
   display: block;
 }
 
-.mynk-wb-props-compact:hover .mynk-wb-props-compact__summary,
-.mynk-wb-props-compact:focus-within .mynk-wb-props-compact__summary {
-  visibility: hidden;
+.mynk-wb-props-compact--open .mynk-wb-props-compact__summary {
+  background: var(--foreground);
+  color: var(--background);
+  border-color: var(--foreground);
 }
 
 .mynk-wb-summary-swatch {
@@ -831,6 +849,60 @@
   color: var(--foreground);
   font-weight: 600;
   border-bottom: 2px solid var(--accent);
+}
+
+/* Board tab wrapper — groups the tab button + delete button as a flex row */
+.mynk-wb-board-tab-wrap {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+}
+
+.mynk-wb-board-tab-wrap .mynk-wb-board-tab {
+  border-right: none;
+  padding-right: 6px;
+}
+
+.mynk-wb-board-tab-wrap--active .mynk-wb-board-tab {
+  border-bottom: 2px solid var(--accent);
+}
+
+/* Delete ×, Confirm, Cancel buttons */
+.mynk-wb-board-tab-del {
+  display: flex;
+  align-items: center;
+  padding: 0 6px 0 2px;
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s;
+}
+
+.mynk-wb-board-tab-wrap:hover .mynk-wb-board-tab-del,
+.mynk-wb-board-tab-del--confirm,
+.mynk-wb-board-tab-del--cancel {
+  opacity: 1;
+}
+
+.mynk-wb-board-tab-del:hover:not(:disabled) {
+  color: var(--destructive);
+}
+
+.mynk-wb-board-tab-del--confirm {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--destructive);
+  padding: 0 4px;
+}
+
+.mynk-wb-board-tab-del--cancel {
+  font-size: 10px;
+  color: var(--muted-foreground);
+  padding: 0 4px;
 }
 
 .mynk-wb-board-tab__dot {

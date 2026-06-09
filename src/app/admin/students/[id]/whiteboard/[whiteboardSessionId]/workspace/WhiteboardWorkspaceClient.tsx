@@ -570,6 +570,7 @@ export function WhiteboardWorkspaceClient({
   const [selectedShapeTool, setSelectedShapeTool] =
     useState<WbShapeToolType>("line");
   const [propsSheetOpen, setPropsSheetOpen] = useState(false);
+  const [propsCompactOpen, setPropsCompactOpen] = useState(false);
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const [gridEnabled, setGridEnabled] = useState(false);
@@ -3520,11 +3521,21 @@ export function WhiteboardWorkspaceClient({
 
   const renderSidebarPropsCompact = () => (
     <div
-      className="mynk-wb-props-sidebar mynk-wb-props-compact"
+      className={`mynk-wb-props-sidebar mynk-wb-props-compact${propsCompactOpen ? " mynk-wb-props-compact--open" : ""}`}
       data-testid="wb-props-popover"
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <div className="mynk-wb-props-compact__summary" aria-label="Current stroke settings">
+      <button
+        type="button"
+        className="mynk-wb-props-compact__summary"
+        aria-label="Stroke properties — click to expand"
+        aria-expanded={propsCompactOpen}
+        data-testid="wb-props-compact-trigger"
+        onClick={(e) => {
+          e.stopPropagation();
+          setPropsCompactOpen((p) => !p);
+        }}
+      >
         <span
           className="mynk-wb-summary-swatch"
           style={{ backgroundColor: strokeColor }}
@@ -3538,8 +3549,15 @@ export function WhiteboardWorkspaceClient({
           />
         </span>
         <span className="mynk-wb-summary-chip">{roughnessLabel}</span>
-      </div>
-      <div className="mynk-wb-props-compact__panel">
+      </button>
+      <div
+        className="mynk-wb-props-compact__panel"
+        role="dialog"
+        aria-label="Stroke properties"
+        data-testid="wb-props-panel"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+      >
         <WbStrokePropsPanel
           strokeColor={strokeColor}
           strokeWidth={strokeWidth}
@@ -3730,6 +3748,7 @@ export function WhiteboardWorkspaceClient({
         setViewMenuOpen(false);
         setShareMenuOpen(false);
         setMorePopoverOpen(false);
+        setPropsCompactOpen(false);
         if (touchLayout) dismissTouchProps();
       }}
     >
@@ -4282,6 +4301,7 @@ export function WhiteboardWorkspaceClient({
           maxPages={20}
           onSelectPage={(id) => void selectTutorPage(id)}
           onAddPage={addTutorPage}
+          onDeletePage={removeTutorPage}
         />
       </footer>
       </div>
