@@ -7,6 +7,17 @@ Not in priority order within sections — that comes when items move to a sprint
 
 **Status as of 2026-05-20:** Recent ships marked ✅ below with commit refs where applicable. **Latest merges (master):** `4118f3e` (Tier A security: security.txt + signup anti-enumeration), `249327a` (#6 reliability: note save vs transcribe race — merge-into-empty populate, 26 new tests), `939b1e3` (AI prompt v6→v7: reaction-aware Assessment extraction). **Open reliability BLOCKER-PRODs:** #1+#2 (audio data durability — IndexedDB persistence), #7 (hot-swap mic / unplug silent), #13/#14 (rid coverage on remaining mutating actions). **Blocked:** Phase 11 executor work until umbrella legal paragraphs publish to www.mortensenapps.com. **Brand Phase 2 decisions landed 2026-05-19 PM:** all four pillars decided — palette = **Mynka Blue** (`#1E3D54`), typography = Fraunces V4 wordmark + V2 heading + Inter 400 body. See `docs/MYNK-BRAND-PHASE-2-DECISIONS.md` (canonical), `docs/BRAND.md` (engineering ref), `docs/brand-previews/palette-mocks-FINAL-mynka-blue.html` (live mockup). Unblocks `docs/DESIGN-TOKENS-PLAN.md` Phase 0+1 (in-app palette migration).
 
+## wb-chrome-redo follow-ups (post-merge, 2026-06-09)
+
+| Item | Priority | Notes |
+|------|----------|-------|
+| **Playwright wb-chrome-rendered-screenshot spec** | Medium | `tests/integration/wb-chrome-rendered-screenshot.spec.ts` added but not run in CI yet. Run in a real browser (Playwright) to capture a rendered screenshot and verify interactive controls open. |
+| **Board separation integration test** | HIGH | Automated test confirming board switching works correctly in the chrome layout. Should run via `npm run test:wb-sync` or a separate Playwright spec. |
+| **A4 Slice-C: inbound-RTP audio watchdog** | Medium | Silent-track detection beyond negotiated WebRTC presence. Hook point in `peer-mesh.ts`. See `docs/handoff/live-av-split-brain-diagnosis-2026-06-08.md`. |
+| **A4 Slice-C: TURN credential path** | Medium | TURN server integration for NAT traversal reliability. |
+| **Playwright split-brain injection test** | Medium | Inject a simulated WebRTC drop in a test to verify the split-brain banner and recording pause behavior. |
+| **Share ▾ options expansion** | Low | Current Share ▾ dropdown has only "Copy student join link". Consider adding QR code or email options. |
+
 ## Whiteboard — implementation / design queue
 
 **Roadmap (ordered waves, pilot vs maintenance vs Phase 2 gate):** see **`docs/WHITEBOARD-ROADMAP-NEXT.md`**. Execution YAML for Cursor Build: **`.cursor/plans/whiteboard_backlog_execution.plan.md`**.

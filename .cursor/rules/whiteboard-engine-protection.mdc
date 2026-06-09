@@ -1,0 +1,40 @@
+# Whiteboard engine protection
+
+**Binding (2026-06-09, wb-chrome-redo hard-won lesson):**
+
+`src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceClient.tsx`
+is the core whiteboard engine. **Two successive chrome feature attempts (P1.1, P2) regressed
+board separation and killed interactive controls** by rewriting this file.
+
+## The rule
+
+When touching `WhiteboardWorkspaceClient.tsx`:
+
+**ALLOWED — additive extensions:**
+- Adding new state variables, refs, and callbacks
+- Adding new imports
+- Adding new JSX render sections or replacing the render section layout
+- Wiring NEW buttons/controls to EXISTING engine functions
+- Adding new effects that call existing engine logic
+- Adding new engine capability the new UI genuinely needs
+
+**HARD STOP — behavioral changes:**
+- Modifying or removing page/board switching logic (`selectTutorPage`, `addTutorPage`, `removeTutorPage`)
+- Changing `pageDataRef` write or read semantics
+- Rewriting the live-sync wiring (`handleExcalidrawChange`, `applyRemoteToCanvas`, broadcast/throttle effects)
+- Modifying the recording lifecycle hook wiring (`evaluateLifecycle`, `derivePresentation`, FSM inputs)
+- Refactoring or removing end-session flow logic
+
+**If you find yourself needing to change existing engine behavior**, STOP and escalate to
+the orchestrator. The constraint is behavioral — extend, don't rewrite.
+
+## Known-good baseline
+
+Commit `a150d4f` (PR-01 freedraw latency fix) is the board-separation-verified baseline.
+Any chrome work should start from or verify against this commit.
+
+## References
+
+- `docs/RECORDER-LIFECYCLE.md` — Pillars 1/2/3 (FSM, outbox, atomic end-session)
+- `docs/LIVE-AV.md` — peer-mesh, signaling, A/V recording outbox integration
+- `docs/handoff/wb-chrome-redo-STATUS.md` — chrome redo post-mortem and smoke checklist
