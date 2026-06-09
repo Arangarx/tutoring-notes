@@ -2240,11 +2240,17 @@ export function WhiteboardWorkspaceClient({
         // stale (activePageIdRef = new, scene = old) state.
         activePageIdRef.current = nextId;
         const vsNext = pageListRef.current.find((p) => p.id === nextId)?.viewState;
+        // captureUpdate: "NEVER" — board-switch element replacement must never
+        // be recorded in Excalidraw's undo/redo stack. Without this, undo on
+        // Board N would replay the switch in reverse and inject Board (N-1)
+        // elements into the current scene.
         const aDual = api as ExcalidrawApiLike & {
           updateScene: (s: {
             appState?: unknown;
             elements?: unknown;
+            captureUpdate?: string;
           }) => void;
+          history?: { clear: () => void };
         };
         // Single updateScene so we never paint new tab elements under the old
         // tab's camera (avoids a one-frame misalignment Sarah saw after reload).
@@ -2265,6 +2271,7 @@ export function WhiteboardWorkspaceClient({
                 scrollY: vsNext.panY,
                 zoom: { value: vsNext.zoom },
               },
+              captureUpdate: "NEVER",
             });
             console.info(
               `[pvs] pvs=${nextId} action=restore source=page-switch panX=${vsNext.panX} panY=${vsNext.panY} zoom=${vsNext.zoom}`
@@ -2285,11 +2292,16 @@ export function WhiteboardWorkspaceClient({
             });
           }
         } else {
-          api.updateScene({ elements: next as ReadonlyArray<unknown> });
+          aDual.updateScene({ elements: next as ReadonlyArray<unknown>, captureUpdate: "NEVER" });
           console.info(
             `[pvs] pvs=${nextId} action=restore source=page-switch viewState=absent`
           );
         }
+        // Scope undo/redo history to the current board. Excalidraw's history
+        // stack is global to the single instance — without clearing it on every
+        // board switch, undo on Board 2 can replay Board 1 operations and inject
+        // Board 1 elements into the Board 2 scene (P0 cross-board contamination).
+        aDual.history?.clear();
         committed = true;
       } finally {
         // Hold the guard across two animation frames + a microtask tail
@@ -2368,9 +2380,17 @@ export function WhiteboardWorkspaceClient({
     pageDataRef.current[newId] = [];
     if (api) {
       pageSwitchProgrammaticRef.current += 1;
+      const apiH = api as typeof api & {
+        updateScene: (s: { elements?: ReadonlyArray<unknown>; captureUpdate?: string }) => void;
+        history?: { clear: () => void };
+      };
       try {
         activePageIdRef.current = newId;
-        api.updateScene({ elements: [] });
+        // captureUpdate: "NEVER" — same reason as selectTutorPage: the new-board
+        // element wipe must not create a history entry, and history must be
+        // cleared so undo cannot reach across boards.
+        apiH.updateScene({ elements: [], captureUpdate: "NEVER" });
+        apiH.history?.clear();
       } finally {
         const releaseGuard = () => {
           pageSwitchProgrammaticRef.current = Math.max(
