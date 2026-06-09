@@ -15,8 +15,8 @@
  *   2. `AVPermissionsPrompt` + `AVTilesPanel` + `AVControls` render
  *      on the student surface.
  *
- *   3. Sync-reconnect ΓåÆ `liveAv.reconnectPeer(peerId)` for every
- *      current peer once the sync-client emits a disconnect ΓåÆ
+ *   3. Sync-reconnect → `liveAv.reconnectPeer(peerId)` for every
+ *      current peer once the sync-client emits a disconnect →
  *      reconnect transition.
  *
  *   4. First-mount `onConnect` does NOT fire reconnectPeer (the
@@ -24,7 +24,7 @@
  *      negotiation).
  *
  * What we explicitly DON'T assert: no recorder instantiation, no
- * FSM `inputStreams` population ΓÇö the student client has neither.
+ * FSM `inputStreams` population — the student client has neither.
  * If a regression accidentally introduces either, the workspace
  * mount test will catch the recorder side; the FSM side has no
  * student-side analogue and is intentionally untested here (no
@@ -348,7 +348,7 @@ describe("StudentWhiteboardClient Γåö live A/V mount", () => {
     expect(peerIds).toContain(receivedLocalPeerId);
   });
 
-  test("sync-reconnect ΓåÆ reconnectPeer for every current peer", async () => {
+  test("sync-reconnect → reconnectPeer for every current peer", async () => {
     liveAvState = {
       ...liveAvState,
       participants: [

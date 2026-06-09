@@ -129,7 +129,7 @@ export function WbStrokePropsPanel({
         onClick={onMoreStylesToggle}
         aria-expanded={moreStylesOpen}
       >
-        {moreStylesOpen ? "Γû┤ Less styles" : "Γû╛ More styles"}
+        {moreStylesOpen ? "▴ Less styles" : "▾ More styles"}
       </button>
 
       {moreStylesOpen && (

@@ -13,7 +13,7 @@
  *
  *   1. `localPeerId` is minted once and threaded into BOTH
  *      `createWhiteboardSyncClient({peerId})` and
- *      `useLiveAV({localPeerId})` ΓÇö same id everywhere, no drift.
+ *      `useLiveAV({localPeerId})` — same id everywhere, no drift.
  *
  *   2. Live-board chrome: no inline `AVPermissionsPrompt`; `AVTilesPanel`
  *      + `AVControls` via `WbAVCluster`; top-bar mic settings popover host.
@@ -29,7 +29,7 @@
  *      called for EVERY current peer.
  *
  * The workspace has heavy upstream deps (Excalidraw, recorder, FSM,
- * upload outbox, server actions, theme hook, image hydratorsΓÇª); the
+ * upload outbox, server actions, theme hook, image hydrators…); the
  * existing `WhiteboardWorkspaceEnd.dom.test.tsx` already establishes
  * the mock-at-module-boundary pattern. We reuse the same shape so
  * the suite remains predictable + jsdom-renderable.
@@ -268,7 +268,7 @@ jest.mock("@/lib/recording/lifecycle-machine", () => {
 
 // ----- Remote-stream-recorder mock: kept around so the per-peer
 // recorder primitive itself stays unit-tested via its own suite, but
-// no longer exercised by the workspace (May 15 redesign ΓÇö see the
+// no longer exercised by the workspace (May 15 redesign — see the
 // addRemoteAudio mixdown wiring asserted below). The mock stays so a
 // future re-introduction of useRemoteMicRecorders doesn't accidentally
 // hit the real implementation during this DOM test.
@@ -360,7 +360,7 @@ jest.mock("@/hooks/useAudioRecorder", () => {
       audioLevel: 0,
       elapsedMs: 0,
       refresh: jest.fn(),
-      // Mixdown contract ΓÇö workspace gates the participants-reconcile
+      // Mixdown contract — workspace gates the participants-reconcile
       // effect on localMicStream becoming non-null AND uses
       // addRemoteAudio to attach each remote participant's stream
       // to the recording mixdown.
@@ -567,7 +567,7 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
     expect(attachedStreams).toContain(streamB);
   });
 
-  test("FSM inputStreams reflects participant peerConnectionState (connectedΓåÆok, connectingΓåÆdegraded, failedΓåÆfailed)", async () => {
+  test("FSM inputStreams reflects participant peerConnectionState (connected→ok, connecting→degraded, failed→failed)", async () => {
     liveAvState = {
       ...liveAvState,
       localAudioStream: makeFakeAudioStream("local"),
@@ -591,7 +591,7 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
     );
   });
 
-  test("sync-reconnect ΓåÆ mesh.restart for every current peer", async () => {
+  test("sync-reconnect → mesh.restart for every current peer", async () => {
     liveAvState = {
       ...liveAvState,
       participants: [
@@ -602,7 +602,7 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
 
     await renderWorkspace();
     const client = createdSyncClients[0];
-    // Initial onConnect (workspace-mount ΓåÆ relay connects): the
+    // Initial onConnect (workspace-mount → relay connects): the
     // workspace seeds `wasSyncConnectedRef` from `isConnected()`
     // BEFORE the first onConnect fires, so a first-connect
     // doesn't fire a spurious mesh.restart. Simulate disconnect
@@ -638,7 +638,7 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
   });
 
   // ---------------------------------------------------------------
-  // Fix 1 ΓÇö Debounce gate: ICE blip must NOT pause recording
+  // Fix 1 — Debounce gate: ICE blip must NOT pause recording
   //
   // Independent oracle: the `participants` set passed to evaluateLifecycle.
   // A non-empty set means the FSM sees a live peer; empty means it enters
@@ -672,7 +672,7 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
 
       // --- Simulate ICE blip: peer-A becomes temporarily unreachable ---
       // Update liveAvState, then use peerCount=2 to force a re-render
-      // (peerCount=1 ΓåÆ 2 changes state, avoiding the React same-value no-op).
+      // (peerCount=1 → 2 changes state, avoiding the React same-value no-op).
       liveAvState = {
         ...liveAvState,
         participants: [makeParticipant("peer-A", { peerConnectionState: "disconnected" })],
@@ -682,7 +682,7 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
       act(() => { jest.advanceTimersByTime(0); });
 
       // Advance just under the debounce window (4s < 8s).
-      // The removal timer has NOT fired yet ΓÇö peer-A must still be present.
+      // The removal timer has NOT fired yet — peer-A must still be present.
       act(() => { jest.advanceTimersByTime(4000); });
 
       // Independent oracle: lifecycleParticipants must STILL contain peer-A.
@@ -694,7 +694,7 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
       // and act() flushes the resulting React re-render.
       act(() => { jest.advanceTimersByTime(5000); });
 
-      // After the debounce window, peer-A is removed ΓÇö a sustained drop
+      // After the debounce window, peer-A is removed — a sustained drop
       // DOES eventually pause recording (the desired behaviour).
       expect(lastLifecycleCall()?.participants.has("peer-A")).toBe(false);
     } finally {
@@ -724,9 +724,9 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
         participants: [makeParticipant("peer-A", { peerConnectionState: "disconnected" })],
       };
       act(() => { client.__triggerPeerCount(2); });
-      act(() => { jest.advanceTimersByTime(0); }); // flush ΓÇö schedules 8s removal timer
+      act(() => { jest.advanceTimersByTime(0); }); // flush — schedules 8s removal timer
 
-      // 3s in ΓÇö well within the 8s debounce window.
+      // 3s in — well within the 8s debounce window.
       act(() => { jest.advanceTimersByTime(3000); });
       // peer-A still present (timer hasn't fired).
       expect(lastLifecycleCall()?.participants.has("peer-A")).toBe(true);
@@ -738,12 +738,12 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
         participants: [makeParticipant("peer-A", { peerConnectionState: "connected" })],
       };
       act(() => { client.__triggerPeerCount(3); });
-      act(() => { jest.advanceTimersByTime(0); }); // flush ΓÇö cancels removal timer, re-adds peer-A
+      act(() => { jest.advanceTimersByTime(0); }); // flush — cancels removal timer, re-adds peer-A
 
       // Advance well past where the removal timer WOULD have fired.
       act(() => { jest.advanceTimersByTime(10000); });
 
-      // peer-A must still be present ΓÇö the timer was cancelled on recovery.
+      // peer-A must still be present — the timer was cancelled on recovery.
       expect(lastLifecycleCall()?.participants.has("peer-A")).toBe(true);
     } finally {
       jest.useRealTimers();
@@ -751,11 +751,11 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
   });
 
   // ---------------------------------------------------------------
-  // Fix 2 ΓÇö No false "disconnected/paused" during initial connect
+  // Fix 2 — No false "disconnected/paused" during initial connect
   //
   // After Fix 2, everBothPresentRef latches on FIRST WebRTC reachability
   // (not sync-join). This prevents the false "Student disconnected" banner
-  // that appeared for 1ΓÇô3s between sync-join and ICE connected.
+  // that appeared for 1–3s between sync-join and ICE connected.
   //
   // Oracle: `everHadParticipants` in evaluateLifecycle inputs.
   // ---------------------------------------------------------------
@@ -771,7 +771,7 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
     const client = createdSyncClients[0];
 
     // Sync socket connects + student joins sync relay (peerCount=1).
-    // No WebRTC yet ΓÇö liveAvState.participants stays empty.
+    // No WebRTC yet — liveAvState.participants stays empty.
     act(() => { client.__triggerConnect(); });
     act(() => { client.__triggerPeerCount(1); });
     await act(async () => { await Promise.resolve(); }); // flush effects
@@ -784,7 +784,7 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
 
     // --- Now WebRTC establishes: peer-A becomes reachable ---
     // Update liveAvState and force a re-render via peerCount=2
-    // (peerCount 1ΓåÆ2 changes state, so the workspace re-renders and
+    // (peerCount 1→2 changes state, so the workspace re-renders and
     // useLiveAV mock returns the updated reachableParticipants).
     liveAvState = {
       ...liveAvState,
@@ -803,7 +803,7 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
 
   test("after WebRTC established then dropped, everHadParticipants stays true (correct paused-disconnected state)", async () => {
     // Prove the complementary case: once the latch fires (call established),
-    // it remains true even after the peer drops ΓÇö the workspace correctly
+    // it remains true even after the peer drops — the workspace correctly
     // enters the paused(all_participants_disconnected) state, not the
     // armed/waiting-for-first-join state.
     jest.useFakeTimers();
@@ -829,15 +829,15 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
         participants: [makeParticipant("peer-A", { peerConnectionState: "failed" })],
       };
       act(() => { client.__triggerPeerCount(2); });
-      act(() => { jest.advanceTimersByTime(0); }); // flush ΓÇö schedules 8s removal timer
+      act(() => { jest.advanceTimersByTime(0); }); // flush — schedules 8s removal timer
 
       // Advance past debounce: removal timer fires, peer-A removed.
       act(() => { jest.advanceTimersByTime(10000); });
 
-      // Oracle: everHadParticipants is STILL true ΓÇö the latch is sticky.
+      // Oracle: everHadParticipants is STILL true — the latch is sticky.
       const callAfterDrop = lastLifecycleCall();
       expect(callAfterDrop?.everHadParticipants).toBe(true);
-      // And participants is now empty (debounce expired ΓÇö correct drop detected).
+      // And participants is now empty (debounce expired — correct drop detected).
       expect(callAfterDrop?.participants.size).toBe(0);
     } finally {
       jest.useRealTimers();

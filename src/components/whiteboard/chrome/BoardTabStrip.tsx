@@ -12,7 +12,7 @@ export type BoardTabStripProps = {
   testId?: string;
 };
 
-/** SR-14 ΓÇö Chrome/Google-Sheets-style board tabs; user-facing "Board N". */
+/** SR-14 — Chrome/Google-Sheets-style board tabs; user-facing "Board N". */
 export function BoardTabStrip({
   pageList,
   activePageId,

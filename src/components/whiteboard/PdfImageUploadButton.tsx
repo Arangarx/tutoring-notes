@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Whiteboard "Insert PDF" toolbar button ΓÇö workbook pages become separate board
+ * Whiteboard "Insert PDF" toolbar button — workbook pages become separate board
  * tabs grouped under the source filename (with Wyzant-style page subset picker).
  */
 
@@ -171,14 +171,14 @@ export function PdfImageUploadButton({
         `[whiteboard] wbsid=${whiteboardSessionId} pdf-pick selected=${selectedCount} mode=${modeTag}`
       );
 
-      setState({ kind: "loading", message: "Reading PDFΓÇª" });
+      setState({ kind: "loading", message: "Reading PDF…" });
       const result = await renderPdfFileToPngs(file, {
         cancellation: cancellationRef.current,
         pageIndices,
         onProgress: (p: PdfRenderProgress) => {
           if (cancellationRef.current.aborted) return;
           if (p.phase === "loading") {
-            setState({ kind: "loading", message: "Reading PDFΓÇª" });
+            setState({ kind: "loading", message: "Reading PDF…" });
           } else if (p.phase === "rendering") {
             setState({
               kind: "rendering",
@@ -234,7 +234,7 @@ export function PdfImageUploadButton({
       if (!excalidrawAPI) {
         setState({
           kind: "error",
-          message: "Whiteboard isn't ready yet ΓÇö wait a second and try again.",
+          message: "Whiteboard isn't ready yet — wait a second and try again.",
         });
         return;
       }
@@ -246,7 +246,7 @@ export function PdfImageUploadButton({
         setState({
           kind: "error",
           message:
-            "This chooser is for PDF worksheets only. Use ExcalidrawΓÇÖs image tool in the left toolbar to add a PNG, JPEG, or SVG ΓÇö it uses the same sync path once uploaded.",
+            "This chooser is for PDF worksheets only. Use Excalidraw’s image tool in the left toolbar to add a PNG, JPEG, or SVG — it uses the same sync path once uploaded.",
         });
         return;
       }
@@ -310,7 +310,7 @@ export function PdfImageUploadButton({
               const downOnBackdrop =
                 backdropPointerDownTargetRef.current === e.currentTarget;
               backdropPointerDownTargetRef.current = null;
-              // Both press AND release must land on the backdrop ΓÇö
+              // Both press AND release must land on the backdrop —
               // selection drags starting inside the card no longer
               // dismiss the dialog. (smoke-1 #1)
               if (downOnBackdrop && e.target === e.currentTarget) {
@@ -338,8 +338,8 @@ export function PdfImageUploadButton({
                 PDFs render as one image per board page (up to{" "}
                 <strong>{PDF_MAX_PAGES} pages</strong> per import). Pick which
                 pages to include below; each page becomes its own tab, grouped
-                under this file. For single images, use ExcalidrawΓÇÖs built-in
-                image tool ΓÇö live sync matches after upload.
+                under this file. For single images, use Excalidraw’s built-in
+                image tool — live sync matches after upload.
               </p>
               <p className="muted" style={{ fontSize: 13, margin: 0 }}>
                 Maximum file size: <strong>{fmtBytes(PDF_MAX_BYTES)}</strong>.
@@ -358,7 +358,7 @@ export function PdfImageUploadButton({
                   }}
                 >
                   <strong>iPhone/iPad note:</strong> Safari on iOS limits memory
-                  per tab. Long colour PDFs may exhaust memory mid-render ΓÇö pick
+                  per tab. Long colour PDFs may exhaust memory mid-render — pick
                   a subset of pages when you can.
                 </div>
               )}
@@ -377,14 +377,14 @@ export function PdfImageUploadButton({
                     onClick={() => fileInputRef.current?.click()}
                     data-testid="wb-insert-pick-file"
                   >
-                    Choose fileΓÇª
+                    Choose file…
                   </button>
                 </div>
               )}
 
               {state.kind === "inspecting" && (
                 <p className="muted" style={{ margin: 0 }}>
-                  Inspecting PDFΓÇª
+                  Inspecting PDF…
                 </p>
               )}
 
@@ -535,7 +535,7 @@ function PdfPickerPanel(props: {
   return (
     <div style={{ display: "grid", gap: 10 }}>
       <div style={{ fontSize: 15, fontWeight: 600 }}>
-        {pdfDisplayName} ┬╖ {totalPages} pages
+        {pdfDisplayName} · {totalPages} pages
       </div>
 
       <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -550,7 +550,7 @@ function PdfPickerPanel(props: {
           All pages
           {allDisabled && (
             <span className="muted" style={{ marginLeft: 6 }}>
-              (PDF has more than {PDF_MAX_PAGES} pages ΓÇö pick a range)
+              (PDF has more than {PDF_MAX_PAGES} pages — pick a range)
             </span>
           )}
         </span>
@@ -663,13 +663,13 @@ function ProgressStrip({ state }: { state: DialogState }) {
     label = state.message;
     percent = 5;
   } else if (state.kind === "rendering") {
-    label = `Rendering page ${state.pageIndex} of ${state.totalPages}ΓÇª`;
+    label = `Rendering page ${state.pageIndex} of ${state.totalPages}…`;
     percent =
       state.totalPages > 0
         ? Math.min(95, Math.round((state.pageIndex / state.totalPages) * 95))
         : 5;
   } else if (state.kind === "uploading") {
-    label = `Uploading page ${state.uploaded} of ${state.total}ΓÇª`;
+    label = `Uploading page ${state.uploaded} of ${state.total}…`;
     percent =
       state.total > 0
         ? Math.round((state.uploaded / state.total) * 100)

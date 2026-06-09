@@ -18,7 +18,7 @@ const DEFAULT_SIZE = { width: 240, height: 280 };
 const MIN_SIZE = { width: 160, height: 180 };
 const MAX_SIZE = { width: 400, height: 480 };
 
-/** SR-04 ΓÇö draggable + resizable video tile cluster, top-right default. */
+/** SR-04 — draggable + resizable video tile cluster, top-right default. */
 export function WbAVCluster({
   isMicMuted,
   isCamMuted,
@@ -151,7 +151,7 @@ export function WbAVCluster({
           title="Drag to move"
         >
           <span className="mynk-wb-av-cluster__drag-dots" aria-hidden>
-            ┬╖┬╖┬╖
+            ···
           </span>
         </div>
       )}

@@ -5,21 +5,21 @@
  *
  * Composes (in dependency order):
  *
- *   1. URL-fragment encryption key â€” generated on first mount, parked
+ *   1. URL-fragment encryption key — generated on first mount, parked
  *      in `window.location.hash` so refresh keeps the same key. The
  *      server NEVER sees this. Same model the student page uses.
  *
- *   2. Live-sync client â€” `createWhiteboardSyncClient` against
+ *   2. Live-sync client — `createWhiteboardSyncClient` against
  *      `WHITEBOARD_SYNC_URL`. Disabled gracefully if the env var is
  *      unset (recording still works in tutor-solo mode).
  *
- *   3. `useWhiteboardRecorder` â€” produces the canonical event log,
+ *   3. `useWhiteboardRecorder` — produces the canonical event log,
  *      checkpoints to IndexedDB, surfaces resume prompts.
  *
- *   4. Lazy-loaded Excalidraw â€” `next/dynamic` with `ssr: false`
+ *   4. Lazy-loaded Excalidraw — `next/dynamic` with `ssr: false`
  *      so the >1MB Excalidraw bundle never lands on initial HTML.
  *
- *   5. End-session flow â€” flush final events.json, upload to Blob,
+ *   5. End-session flow — flush final events.json, upload to Blob,
  *      call `endWhiteboardSession` (sets endedAt + revokes tokens),
  *      then redirect to the read-only review surface.
  *
@@ -28,7 +28,7 @@
  *   - PDF/image upload toolbar (separate todo `phase1-pdf-upload`).
  *   - Math equation popover (`phase1-math-equations`).
  *   - Desmos embed (`phase1-graphing`).
- *   - Audio capture â€” one shared `useAudioRecorder` feeds
+ *   - Audio capture — one shared `useAudioRecorder` feeds
  *     `WhiteboardWorkspaceAudioBridge`, which renders `RecordingControlPanel`
  *     (same mic UI as the recorder tab) and registers Blob segments with this
  *     session alongside the toolbar Start/Pause presence gate.
@@ -207,14 +207,14 @@ type Props = {
    * Sarah's pilot ask (Apr 2026): the workspace toggle should ship in
    * the right initial position for each student so she's not unticking
    * Start every time for students who declined recording. The tutor
-   * can still flip mid-session â€” this is the initial state only.
+   * can still flip mid-session — this is the initial state only.
    */
   initialUserWantsRecording: boolean;
 };
 
 // Phase 4d Commit 6: stable empty Set so the FSM's
 // `participantsWithFlowingAudio` input stays referentially equal
-// when there are no participants â€” avoids unnecessary re-evaluations.
+// when there are no participants — avoids unnecessary re-evaluations.
 const EMPTY_FLOW_SET: ReadonlySet<string> = new Set<string>();
 
 function upsertPageStripViewState(
@@ -232,7 +232,7 @@ function upsertPageStripViewState(
 // long tail of WebRTC negotiation while staying short enough that
 // the tutor will likely still be in their greeting / setup chatter
 // when the recording finally flips on. Decreasing this is a UX
-// trade-off (more dead air at the top of replays) â€” see
+// trade-off (more dead air at the top of replays) — see
 // `docs/PHASE-PDF-SMOKE-1.md` smoke-4 section.
 const AUDIO_FLOW_GATE_TIMEOUT_MS = 10_000;
 // Debounce window for the "both parties reachable" loss transition.
@@ -268,7 +268,7 @@ function CanvasPlaceholder({ label }: { label: string }) {
 
 /**
  * Audio-clock surrogate. The plan calls for `MediaRecorder.getElapsedAudioMs()`
- * (blocker #2) â€” the audio recorder doesn't expose that yet (tracked
+ * (blocker #2) — the audio recorder doesn't expose that yet (tracked
  * in `docs/BACKLOG.md` "Reliability gaps"). Until it lands, we drive
  * `getAudioMs` off `performance.now()` deltas, accumulating across
  * pauses. ms precision; doesn't account for iOS background-tab clock
@@ -293,7 +293,7 @@ function useAudioMsClock(active: boolean): () => number {
   }, []);
 }
 
-/** Session timer â€” minutes only per design spec (Sarah rounds to 5/15 min). */
+/** Session timer — minutes only per design spec (Sarah rounds to 5/15 min). */
 function formatTimerMinutesOnly(ms: number): string {
   const totalMin = Math.floor(Math.max(0, ms) / 60000);
   if (totalMin >= 60) {
@@ -354,7 +354,7 @@ export function WhiteboardWorkspaceClient({
   // joined but never reached ICE-connected, etc.).
   //
   // Every line is gated on a Set so the same phase only logs once
-  // per workspace mount â€” prevents the play-loop or AV reconciler
+  // per workspace mount — prevents the play-loop or AV reconciler
   // from flooding the console mid-session. Keep the format
   // consistent with the rest of the workspace logs:
   // `[wb-mount] wbsid=<id> phase=<name> t=<ms>ms`.
@@ -425,7 +425,7 @@ export function WhiteboardWorkspaceClient({
   // present. Future polish: thread `adminUser.displayName` here.
   const localPeerLabel: string | undefined = "Tutor";
 
-  // Captured from Excalidraw's `excalidrawAPI` callback â€” the toolbar
+  // Captured from Excalidraw's `excalidrawAPI` callback — the toolbar
   // buttons (Insert PDF/image, etc.) call into this for scene mutation.
   // Stored in state (not just a ref) so children re-render when it
   // becomes available.
@@ -453,7 +453,7 @@ export function WhiteboardWorkspaceClient({
   );
   /**
    * Phase 5 task 8 (replay viewport tier-c-lite). Captured below the
-   * recorder hook call â€” let viewport-flush + page-switch handlers
+   * recorder hook call — let viewport-flush + page-switch handlers
    * (defined earlier in this component) reach `recorder.recordViewport`
    * without re-ordering the entire file. Refs are React's escape hatch
    * for exactly this "callback owns a stale closure" shape.
@@ -464,11 +464,11 @@ export function WhiteboardWorkspaceClient({
   /** `flushViewportPersistNow` is declared before `useTutorLiveDocumentWire`. */
   const scheduleDocumentBroadcastRef = useRef<() => void>(() => undefined);
   /**
-   * Monotonic switch token â€” smoke-2 root cause.
+   * Monotonic switch token — smoke-2 root cause.
    *
    * `selectTutorPage` awaits `hydrateRemoteImageFilesForScene` BEFORE
    * actually swapping the scene. Pre-fix that await window was a race:
-   *   1. Switch P1 â†’ P2 starts; `activePageIdRef` was bumped to P2;
+   *   1. Switch P1 → P2 starts; `activePageIdRef` was bumped to P2;
    *      hydrate fetches assets; scene STILL shows P1.
    *   2. User clicks P3 before hydrate finishes.
    *   3. Second `selectTutorPage` reads `activePageIdRef = P2` as `from`,
@@ -482,13 +482,13 @@ export function WhiteboardWorkspaceClient({
    *     if newer call won, it abandons without bumping
    *     `activePageIdRef` or touching the scene.
    *   - `activePageIdRef.current = nextId` now happens AFTER hydrate,
-   *     immediately before `updateScene` â€” atomic swap, no window.
+   *     immediately before `updateScene` — atomic swap, no window.
    *   - `addTutorPage` also bumps the token so an in-flight select
    *     abandons (otherwise the late select would clobber Add Page's
    *     new-page navigation).
    */
   const tutorSwitchTokenRef = useRef(0);
-  /** Per-tab sessionStorage draft â€” see `session-scene-draft.ts`. */
+  /** Per-tab sessionStorage draft — see `session-scene-draft.ts`. */
   const sceneDraftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasHydratedSessionDraftRef = useRef(false);
 
@@ -503,11 +503,11 @@ export function WhiteboardWorkspaceClient({
   const loadedRemoteFileIdsForTutorRef = useRef(new Set<string>());
   const giveUpTutorFileIdsRef = useRef(new Set<string>());
   const warnDedupeTutorRef = useRef(new Set<string>());
-  /** Native Excalidraw image inserts: cache fileId â†’ blob URL after upload for sync + student hydrate. */
+  /** Native Excalidraw image inserts: cache fileId → blob URL after upload for sync + student hydrate. */
   const tutorNativeImageFileIdToAssetUrlRef = useRef(new Map<string, string>());
   const tutorNativeImageUploadInFlightRef = useRef(new Set<string>());
   /**
-   * Populated every render after `useWhiteboardRecorder` returns â€” used by
+   * Populated every render after `useWhiteboardRecorder` returns — used by
    * `onNewRemotePeer` on the sync client so a student reload/new tab gets a
    * non-stale, visible-tab scene (see sync-client `new-user` handler).
    */
@@ -524,7 +524,7 @@ export function WhiteboardWorkspaceClient({
   >({});
   /**
    * Same rows as `pageList`, updated synchronously before any wire
-   * `getWireBroadcastExtras` call. React state lags by one frame â€” using it in
+   * `getWireBroadcastExtras` call. React state lags by one frame — using it in
    * extras after "Add page" used to send `activePageId` for the new tab but a
    * one-tab `pageList`, and a trailing p1 flush could re-follow the student
    * to page 1 after they had already switched to the new tab.
@@ -544,7 +544,7 @@ export function WhiteboardWorkspaceClient({
   );
 
   /**
-   * Image asset URL cache â€” maps pageId â†’ elementId â†’ {assetUrl, altText?}.
+   * Image asset URL cache — maps pageId → elementId → {assetUrl, altText?}.
    *
    * PR-01 / Option A: `handleExcalidrawChange` stores raw Excalidraw elements
    * in `pageDataRef` (no clone per pointer-move) to eliminate the O(N)
@@ -576,7 +576,7 @@ export function WhiteboardWorkspaceClient({
   const [roughness, setRoughness] = useState(0);
   const layoutMode = useWbLayoutMode();
   const touchLayout = isTouchLayout(layoutMode);
-  // Stroke props â€” tracked from Excalidraw onChange (appState)
+  // Stroke props — tracked from Excalidraw onChange (appState)
   const [strokeColor, setStrokeColor] = useState<string>(EXCALIDRAW_STROKE_HEX);
   const strokeColorRef = useRef<string>(EXCALIDRAW_STROKE_HEX);
   const [strokeWidth, setStrokeWidth] = useState<number>(0.5);
@@ -623,13 +623,13 @@ export function WhiteboardWorkspaceClient({
       // sending the merged peer scene into the WRONG `pageDataRef` slot
       // AND into the live scene of a now-different page (see
       // `docs/PHASE-PDF-STATUS.md` for the full trace). The bilateral
-      // leakage the pilot saw â€” "p.1 and pdf p.1 already bled" â€” was
+      // leakage the pilot saw — "p.1 and pdf p.1 already bled" — was
       // exactly this race firing on every page switch where a student
       // broadcast was in flight.
       //
       // The new contract:
       //   1. Read all "live" state AFTER the hydrate await (no captures).
-      //   2. Use `pageDataRef[targetId]` as the merge local â€” never the
+      //   2. Use `pageDataRef[targetId]` as the merge local — never the
       //      live scene, because the live scene may belong to a different
       //      page right now.
       //   3. Only touch the live scene when we're STILL on `targetId` AND
@@ -701,7 +701,7 @@ export function WhiteboardWorkspaceClient({
           applyingRemoteToCanvasRef.current = false;
         }
         // Smoke-4 (May 17, 2026): on-target remote activity is
-        // also proof-of-session â€” releases the audio-flow gate
+        // also proof-of-session — releases the audio-flow gate
         // even if both mics are silent / muted.
         markWbActivity();
         console.info(
@@ -753,20 +753,20 @@ export function WhiteboardWorkspaceClient({
   // ---------------------------------------------------------------
   //
   // The workspace "Start recording" / "Pause recording" buttons gate BOTH
-  // `WhiteboardWorkspaceAudioBridge` (real mic â†’ Blob â†’ SessionRecording rows)
+  // `WhiteboardWorkspaceAudioBridge` (real mic → Blob → SessionRecording rows)
   // and `useWhiteboardRecorder` via the same `recordingActive` presence gate.
   //
   // What's wired:
-  //   - `recordingActive` â†’ useWhiteboardRecorder + audio pause/resume âœ”
-  //   - `getAudioMs`      â†’ performance.now()-based surrogate (clock tracks
+  //   - `recordingActive` → useWhiteboardRecorder + audio pause/resume ✔
+  //   - `getAudioMs`      → performance.now()-based surrogate (clock tracks
   //                         the same pauses as strokes; optional refinement:
   //                         read live elapsed from the audio hook).
-  //   - Mic picker / meter / timer â†’ `RecordingControlPanel` in the bridge âœ”
+  //   - Mic picker / meter / timer → `RecordingControlPanel` in the bridge ✔
 
   // `userWantsRecording` is the tutor's explicit intent (Start / Pause
   // button). The actual `recordingActive` we hand to the recorder hook
   // is the AND of intent + presence so the recorder pauses itself
-  // when the student drops â€” see `deriveRecordingPresence` below.
+  // when the student drops — see `deriveRecordingPresence` below.
   // Sarah's pilot ask (Apr 2026): "I don't think the recording needs
   // to keep going if the student isn't connected."
   //
@@ -810,11 +810,11 @@ export function WhiteboardWorkspaceClient({
 
   // Split "both parties in room" into two layers:
   //
-  //   bothPartiesInRoomSync  â€” sync-socket presence only (peerCount â‰¥ 1).
+  //   bothPartiesInRoomSync  — sync-socket presence only (peerCount ≥ 1).
   //                            Drives: board-syncing UX, split-brain
   //                            detection, gate-timeout trigger.
   //
-  //   bothPartiesInRoom      â€” WebRTC reachable (peerConnectionState=connected
+  //   bothPartiesInRoom      — WebRTC reachable (peerConnectionState=connected
   //                            AND iceConnectionState âˆˆ {connected,completed}).
   //                            Drives: billing pings and session timer. Debounced
   //                            on loss to avoid timer flicker on brief ICE blips.
@@ -837,20 +837,20 @@ export function WhiteboardWorkspaceClient({
   // this session, future "auto-pauses" are reconnect waits, not first-join
   // waits. Latched on WebRTC reachability (NOT sync-join) so the initial
   // connecting window (sync socket up, ICE not yet established) does NOT
-  // trigger the "Student disconnected â€” recording paused" state.
+  // trigger the "Student disconnected — recording paused" state.
   //
   // The latch itself lives here; the write happens below (after liveAv is
   // declared) because it reads liveAv.reachableParticipants. Placing the
   // ref declaration here keeps the render-order constraints visible.
   const everBothPresentRef = useRef(false);
 
-  // UI-honesty: "Student connected â€” syncing boardâ€¦" for a brief window
+  // UI-honesty: "Student connected — syncing board…" for a brief window
   // after a student joins. The relay socket being up does NOT mean the
   // student has received and applied the welcome push yet. After 5 s the
   // pill graduates to the positive green "Student connected" label. This is
-  // a conservative bound â€” the actual welcome push completes in < 2 s on
+  // a conservative bound — the actual welcome push completes in < 2 s on
   // a healthy connection; the extra time covers slow devices and mobile.
-  // Uses sync presence (not WebRTC) â€” board sync is relay-level, not WebRTC.
+  // Uses sync presence (not WebRTC) — board sync is relay-level, not WebRTC.
   const [boardSyncing, setBoardSyncing] = useState(false);
   const boardSyncingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -889,30 +889,30 @@ export function WhiteboardWorkspaceClient({
   // FSM is structurally ready for group sessions and the Phase-1b
   // outbox. Inputs:
   //
-  //  - `participants`        â€” synthesised peer-id Set sized by the
+  //  - `participants`        — synthesised peer-id Set sized by the
   //                            sync-client peerCount. Until Phase 4
   //                            wires real per-peer ids, the ids are
   //                            stable per-render placeholders; the
   //                            FSM only consumes `.size`.
-  //  - `everHadParticipants` â€” driven by the existing
+  //  - `everHadParticipants` — driven by the existing
   //                            `everBothPresentRef` latch.
-  //  - `soloEnabled`         â€” surfaces the
+  //  - `soloEnabled`         — surfaces the
   //                            NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT
   //                            grace window the workspace already
   //                            honored. The FSM does the AND with
   //                            `!everHadParticipants` itself.
-  //  - `inputStreams`        â€” for Phase 1a the only stream the
+  //  - `inputStreams`        — for Phase 1a the only stream the
   //                            workspace knows about is the tutor
   //                            mic, and only while the tutor wants
   //                            recording. Marked `ok` because the
   //                            audio bridge owns liveness today;
   //                            Phase 1b/4 will wire real health.
-  //  - `networkOk`           â€” kept `true` (default) so we don't
+  //  - `networkOk`           — kept `true` (default) so we don't
   //                            introduce new pause behaviour in
   //                            Phase 1a. Phase 1b/4 will plumb
   //                            `navigator.onLine` + sync-transport
   //                            health through here.
-  //  - `endIntent`           â€” undefined (Phase 1b wires the End
+  //  - `endIntent`           — undefined (Phase 1b wires the End
   //                            flow through the FSM).
   // ---------------------------------------------------------------
   // Audio recording hook (must come before liveAv so we can pass
@@ -931,21 +931,21 @@ export function WhiteboardWorkspaceClient({
    * Used to compute a Phase 1 approximate recording-time offset for the
    * slice 2b transcription producer.
    *
-   * // Phase 1 approx â€” D3/D4 monotonic clock supersedes
+   * // Phase 1 approx — D3/D4 monotonic clock supersedes
    */
   const firstSegmentWallClockMsRef = useRef<number | null>(null);
 
   /**
    * Hand `useAudioRecorder` a callback that drops every finished
    * segment into the IndexedDB outbox. From Commit 4 on, the
-   * workspace doesn't need to track in-flight Promises here â€” the
+   * workspace doesn't need to track in-flight Promises here — the
    * outbox owns the segment lifecycle and the audio bridge observes
    * outbox state directly to drive End-session UI copy.
    *
    * The hook already uploaded the Blob to Vercel Blob by the time it
    * calls us (see `useAudioRecorder.onstop`), so we pass `blobRemoteUrl`
    * through on enqueue. The local Blob still gets stored in IDB as
-   * the recovery anchor â€” if the tab refreshes after the outbox row
+   * the recovery anchor — if the tab refreshes after the outbox row
    * lands but before End-session, the worker can re-upload from the
    * persisted Blob rather than losing the segment.
    */
@@ -967,7 +967,7 @@ export function WhiteboardWorkspaceClient({
         const outbox = getOrCreateUploadOutbox();
         await outbox.enqueue({
           sessionId: whiteboardSessionId,
-          // Phase 1b hardcodes the tutor mic stream here â€” Phase 4
+          // Phase 1b hardcodes the tutor mic stream here — Phase 4
           // will pass `studentMicStreamId(peerId)` for student
           // capture by mapping over peer connections, not by
           // adding a new code path.
@@ -989,13 +989,13 @@ export function WhiteboardWorkspaceClient({
           );
         }
 
-        // Slice 2b â€” producer wedge: trigger the backend transcription
+        // Slice 2b — producer wedge: trigger the backend transcription
         // pipeline now that the segment blob is confirmed uploaded.
         //
         // MUST be fire-and-forget: a transcription-enqueue failure must
         // never block or disrupt the recording/upload UX.
         //
-        // Offset approximation (Phase 1 approx â€” D3/D4 monotonic clock supersedes):
+        // Offset approximation (Phase 1 approx — D3/D4 monotonic clock supersedes):
         // We track the wall-clock ms of the first segment and derive
         // subsequent offsets as delta from that anchor. This is approximate
         // because wall-clock advances during pauses (D4 collapses them);
@@ -1004,7 +1004,7 @@ export function WhiteboardWorkspaceClient({
         if (firstSegmentWallClockMsRef.current === null) {
           firstSegmentWallClockMsRef.current = nowMs;
         }
-        // Phase 1 approx â€” D3/D4 monotonic clock supersedes
+        // Phase 1 approx — D3/D4 monotonic clock supersedes
         const recordingTimeOffsetMs = nowMs - firstSegmentWallClockMsRef.current;
         Promise.resolve(
           enqueueChunkTranscriptionAction(whiteboardSessionId, {
@@ -1018,7 +1018,7 @@ export function WhiteboardWorkspaceClient({
           );
         });
       } catch (err) {
-        // Never throw â€” useAudioRecorder.onRecorded swallows the
+        // Never throw — useAudioRecorder.onRecorded swallows the
         // return value; surfacing this as a banner would race with
         // the outbox's own "failed" state. Log + carry on.
         console.error(
@@ -1154,8 +1154,8 @@ export function WhiteboardWorkspaceClient({
 
   // Fix 2 (A4 adversarial item): latch everBothPresentRef on first WebRTC
   // reachability rather than sync-join. This prevents the false
-  // "Student disconnected â€” recording paused" banner that appeared for
-  // 1â€“3s every session start (between sync-join and ICE connected).
+  // "Student disconnected — recording paused" banner that appeared for
+  // 1–3s every session start (between sync-join and ICE connected).
   if (liveAv.reachableParticipants.length >= 1 && !everBothPresentRef.current) {
     everBothPresentRef.current = true;
   }
@@ -1164,13 +1164,13 @@ export function WhiteboardWorkspaceClient({
   // FSM input. This is the core split-brain fix: the FSM now sees
   // participants.size=0 when sync says "connected" but WebRTC is dead,
   // causing it to transition to paused(all_participants_disconnected)
-  // â†’ recording pauses rather than silently capturing tutor-only audio.
+  // → recording pauses rather than silently capturing tutor-only audio.
   //
   // Fix 1 (A4 adversarial item): the original useMemo emptied immediately
   // on any ICE `disconnected` event, pausing recording on transient blips.
   // Replaced with a useState+useEffect that mirrors adding peers immediately
   // (recovery is prompt) but debounces peer *removal* by
-  // REACHABLE_LOSS_DEBOUNCE_MS (~8s â€” long enough to survive normal ICE
+  // REACHABLE_LOSS_DEBOUNCE_MS (~8s — long enough to survive normal ICE
   // keepalive hysteresis; short enough that a true drop loses only bounded
   // audio, not a whole silent session). A sustained drop beyond the window
   // DOES pause recording and is the correct behaviour.
@@ -1251,7 +1251,7 @@ export function WhiteboardWorkspaceClient({
   // eslint-disable-next-line react-hooks/exhaustive-deps -- reachablePeerIdsKey is a stable useMemo of liveAv.reachableParticipants; whiteboardSessionId is session-lifetime stable
   }, [reachablePeerIdsKey]);
 
-  // bothPartiesInRoom â€” WebRTC-reachable gate (split-brain fix).
+  // bothPartiesInRoom — WebRTC-reachable gate (split-brain fix).
   useEffect(() => {
     const nowReachable = tutorSyncConnected && liveAv.reachableParticipants.length >= 1;
     if (nowReachable) {
@@ -1277,10 +1277,10 @@ export function WhiteboardWorkspaceClient({
   }, [tutorSyncConnected, liveAv.reachableParticipants.length]);
 
   // -----------------------------------------------------------------
-  // Diagnostic: AV mount phases â€” surfaces the gap between
+  // Diagnostic: AV mount phases — surfaces the gap between
   // "AVPermissionsPrompt rendered" and "first peer ICE-connected"
   // so we can root-cause the "had to hard refresh to allow camera /
-  // got stuck in Connectingâ€¦" pilot symptoms.
+  // got stuck in Connecting…" pilot symptoms.
   // -----------------------------------------------------------------
   useEffect(() => {
     if (liveAv.localAudioStream) {
@@ -1340,7 +1340,7 @@ export function WhiteboardWorkspaceClient({
     [whiteboardSessionId]
   );
 
-  // Phase 4c: sync-reconnect â†’ mesh.restart(peerId) for each current
+  // Phase 4c: sync-reconnect → mesh.restart(peerId) for each current
   // peer (the 4b deferral). Sync-client reconnects automatically on
   // socket-level disconnects; peer-mesh's auto-restart only fires on
   // ICE-failed (longer timeout). Restarting on sync re-connect
@@ -1348,9 +1348,9 @@ export function WhiteboardWorkspaceClient({
   //
   // We track "saw a disconnect since the last connect" rather than
   // raw connected state because the FIRST `onConnect` after mount
-  // is the natural socket handshake â€” peer-mesh is being set up for
+  // is the natural socket handshake — peer-mesh is being set up for
   // the first time and there's no prior in-flight negotiation to
-  // recover. Only the disconnectâ†’reconnect transition needs
+  // recover. Only the disconnect→reconnect transition needs
   // mesh.restart.
   const sawDisconnectSinceLastConnectRef = useRef(false);
   useEffect(() => {
@@ -1426,18 +1426,18 @@ export function WhiteboardWorkspaceClient({
   // Phase 4d Commit 6: audio-flow gate. Detects per-peer whether the
   // remote audio track is actually carrying frames (not just
   // negotiated). Threaded into the FSM so the MediaRecorder doesn't
-  // start until the student's audio is live â€” fixes the pilot bug
+  // start until the student's audio is live — fixes the pilot bug
   // where the first 200-2000ms of student speech was lost to silence.
   //
   // We map the real WebRTC peer ids back into the synthetic `peer-N`
   // namespace `lifecycleParticipants` already uses (legacy contract
-  // from Phase 1a â€” only `.size` matters to the FSM in the
+  // from Phase 1a — only `.size` matters to the FSM in the
   // pre-gate path). Mapping is by index in `liveAv.participants`:
   // synthetic `peer-i` is flowing iff `liveAv.participants[i]` is in
   // the audio-flow set. For 1:1 sessions (the pilot's only shape)
   // this is exact; for groups it's a permissive heuristic (any
   // flowing peer unblocks recording), which is the intended FSM
-  // semantics â€” see `evaluateLifecycle()` step 4b.
+  // semantics — see `evaluateLifecycle()` step 4b.
   const audioFlowingPeerIds = useAudioFlowConfirmation(liveAv.participants);
   // Use real peerId strings to match lifecycleParticipants (which now
   // also uses real peerId strings). The FSM only checks intersection
@@ -1453,7 +1453,7 @@ export function WhiteboardWorkspaceClient({
     return flowing;
   }, [liveAv.participants, audioFlowingPeerIds]);
 
-  // Sticky latch â€” once we've seen audio flow this session, we stay
+  // Sticky latch — once we've seen audio flow this session, we stay
   // committed to the "recording" path. Same pattern as
   // `everBothPresentRef`. Prevents a mid-session audio-flow blip
   // (network hiccup, peer's mic glitches) from causing
@@ -1465,11 +1465,11 @@ export function WhiteboardWorkspaceClient({
 
   // Smoke-4 (May 17, 2026): the audio-flow gate as-shipped relied
   // exclusively on REMOTE peer flow. If both parties mute mics at
-  // session start (Andrew's exact scenario: phone joined â†’ "we
-  // muted to stop the feedback" â†’ audio-flow latch never flipped â†’
-  // FSM held in armed/awaiting_audio_flow â†’ no recording, no audio,
+  // session start (Andrew's exact scenario: phone joined → "we
+  // muted to stop the feedback" → audio-flow latch never flipped →
+  // FSM held in armed/awaiting_audio_flow → no recording, no audio,
   // no event log, empty replay). That's a billing/audit hole and
-  // a real abuse vector â€” a tutor could mute both ends, deliver
+  // a real abuse vector — a tutor could mute both ends, deliver
   // the session, and have no recording to bill against. We layer
   // THREE additional release conditions on top of the existing
   // peer-flow latch; ANY of them releases the gate, all sticky:
@@ -1482,7 +1482,7 @@ export function WhiteboardWorkspaceClient({
   //      PDF insert; or on-target peer stroke via
   //      `applyRemoteToCanvas`'s recordScene return). A real
   //      session has WB activity within seconds.
-  //   3. A 10 s hard timeout after both parties are in the room â€”
+  //   3. A 10 s hard timeout after both parties are in the room —
   //      bounded worst case of dead-air-no-recording.
   //
   // Together these make "silent-loss of the entire recording"
@@ -1490,7 +1490,7 @@ export function WhiteboardWorkspaceClient({
   // 10 s timeout is the floor; if all other signals fail we still
   // capture the session after at most a 10 s gap.
 
-  // Sub-latch 1 â€” tutor's own mic flow. Reuses the same
+  // Sub-latch 1 — tutor's own mic flow. Reuses the same
   // `track.muted === false && readyState === "live"` heuristic
   // as `useAudioFlowConfirmation`, applied to the local stream.
   const [everHadTutorAudioFlow, setEverHadTutorAudioFlow] = useState(false);
@@ -1541,7 +1541,7 @@ export function WhiteboardWorkspaceClient({
     };
   }, [liveAv.localAudioStream, everHadTutorAudioFlow]);
 
-  // Sub-latch 2 â€” any whiteboard activity. The `everHadWbActivityRef`
+  // Sub-latch 2 — any whiteboard activity. The `everHadWbActivityRef`
   // ref + `markWbActivity` callback are declared higher up in the
   // component (above `applyRemoteToCanvas`) because both that
   // function and `handleExcalidrawChange` capture `markWbActivity`
@@ -1550,7 +1550,7 @@ export function WhiteboardWorkspaceClient({
   // forced by `bumpWbActivityRerender` so the FSM evaluation below
   // re-reads `everHadWbActivityRef.current`.
 
-  // Sub-latch 3 â€” 10 s hard timeout once both parties are present.
+  // Sub-latch 3 — 10 s hard timeout once both parties are present.
   // Restarts on disconnect, fires once, sticky thereafter.
   // Uses sync presence (bothPartiesInRoomSync) so the fallback fires
   // even when WebRTC hasn't converged yet (e.g. TURN not deployed,
@@ -1568,9 +1568,9 @@ export function WhiteboardWorkspaceClient({
 
   // Combined gate-release boolean. We pass this in place of the raw
   // peer-flow latch so the existing FSM signature is preserved.
-  // Renaming `everHadAudioFlow` â†’ `everHadSessionActivity` is a
+  // Renaming `everHadAudioFlow` → `everHadSessionActivity` is a
   // follow-up; the FSM tests + Phase-4d Commit-6 documentation
-  // still refer to the old name. The OR is sticky â€” any sub-latch
+  // still refer to the old name. The OR is sticky — any sub-latch
   // flipping permanently releases the gate.
   const sessionGateReleased =
     everHadAudioFlowRef.current ||
@@ -1599,7 +1599,7 @@ export function WhiteboardWorkspaceClient({
   });
   const recordingActive = presence.recordingActive;
 
-  // Split-brain detection: sync says the student is present (peerCount â‰¥ 1)
+  // Split-brain detection: sync says the student is present (peerCount ≥ 1)
   // but WebRTC reachability is 0 (media path dead). After the first real
   // session connection this is a reliability issue requiring a banner.
   // Only shown when the tutor is actively recording (otherwise the FSM
@@ -1634,7 +1634,7 @@ export function WhiteboardWorkspaceClient({
   //     "first audio recording by createdAt"). With per-peer recorders,
   //     whichever stream's first segment uploaded first won the race
   //     and became the replay audio, so sessions inconsistently played
-  //     back EITHER the tutor's voice OR the student's voice â€” never
+  //     back EITHER the tutor's voice OR the student's voice — never
   //     both. A mixdown sidesteps the multi-stream-sync problem in the
   //     replay UI entirely.
   //   - Web Audio sums implicitly: every node connected to the same
@@ -1643,7 +1643,7 @@ export function WhiteboardWorkspaceClient({
   //     attach each remote participant's audioStream as an additional
   //     input.
   //   - Per-peer moderation ("Don't record this student") becomes a
-  //     post-v1 backlog item â€” see BACKLOG.md "tutor-side per-peer
+  //     post-v1 backlog item — see BACKLOG.md "tutor-side per-peer
   //     audio moderation" entry. v1 falls back to the tutor verbally
   //     asking the student to mute. The UI moderation toggle still
   //     renders so it remains discoverable when we wire it back up.
@@ -1651,7 +1651,7 @@ export function WhiteboardWorkspaceClient({
   // The reconcile effect below maintains a per-stream unsubscribe
   // map keyed on `MediaStream` identity. It runs whenever the
   // participants list changes OR when the audio graph transitions
-  // from null â†’ ready (workspaceAudio.localMicStream changes).
+  // from null → ready (workspaceAudio.localMicStream changes).
   const remoteAudioSubsRef = useRef(new Map<MediaStream, () => void>());
   const workspaceAudioAddRemoteAudio = workspaceAudio.addRemoteAudio;
   const workspaceAudioLocalMicStream = workspaceAudio.localMicStream;
@@ -1659,8 +1659,8 @@ export function WhiteboardWorkspaceClient({
     const subs = remoteAudioSubsRef.current;
     if (!workspaceAudioLocalMicStream) {
       // Graph not ready (mic not acquired yet) or graph just got
-      // disposed. Drop any stale subs â€” they reference an audio
-      // context that's gone â€” and wait. The effect will re-run when
+      // disposed. Drop any stale subs — they reference an audio
+      // context that's gone — and wait. The effect will re-run when
       // the graph rebuilds (workspaceAudio.localMicStream flips
       // non-null again).
       for (const u of subs.values()) {
@@ -1712,11 +1712,11 @@ export function WhiteboardWorkspaceClient({
   // wired into the graph, this effect flips each stream's GainNode
   // to 0 (muted) or 1 (live) based on `mutedPeerIdsInRecording`.
   // Replay sees a clean silence during the muted window (not a gap)
-  // because the source stays connected â€” important for the single-
+  // because the source stays connected — important for the single-
   // blob / single-row replay pipeline.
   //
   // Wire-level mute (asking the remote peer to stop transmitting)
-  // stays out of scope â€” the student's voice is still audible in
+  // stays out of scope — the student's voice is still audible in
   // the tutor's live A/V playback (the `<audio>` element on the
   // AVTile is independent of the recording graph). Only the
   // recording mixdown is affected.
@@ -1743,7 +1743,7 @@ export function WhiteboardWorkspaceClient({
     whiteboardSessionId,
   ]);
 
-  // Drop every sub on unmount as a belt-and-suspenders teardown â€”
+  // Drop every sub on unmount as a belt-and-suspenders teardown —
   // disposing the audio graph already detaches them implicitly, but
   // calling our own unsubs first keeps the bookkeeping clean if
   // useAudioRecorder's dispose order ever changes.
@@ -1764,7 +1764,7 @@ export function WhiteboardWorkspaceClient({
   /**
    * Register (sessionId, studentId) with the outbox so the production
    * uploader can scope per-student Blob pathnames the same way
-   * `uploadAudioDirect` does in the legacy path. Idempotent â€” re-mounts
+   * `uploadAudioDirect` does in the legacy path. Idempotent — re-mounts
    * call it again and it overwrites the same key.
    */
   useEffect(() => {
@@ -1800,7 +1800,7 @@ export function WhiteboardWorkspaceClient({
     return {
       follow,
       page: {
-        // Ref â€” not React state â€” so rapid tab switches donâ€™t lag one frame
+        // Ref — not React state — so rapid tab switches don’t lag one frame
         // behind the canvas (state updates async; ref updates in selectTutorPage).
         activePageId: activePageIdRef.current,
         pageList: pageListRef.current.map((p) => ({
@@ -1813,7 +1813,7 @@ export function WhiteboardWorkspaceClient({
           ? { sections: { ...sectionsRegistryRef.current } }
           : {}),
       },
-      // Same ref as throttled flush â€” immediate broadcast (e.g. native image) stays consistent.
+      // Same ref as throttled flush — immediate broadcast (e.g. native image) stays consistent.
       scenePageId: activePageIdRef.current,
     };
   }, [syncUrl]);
@@ -1908,7 +1908,7 @@ export function WhiteboardWorkspaceClient({
       };
     }, [getTutorDocumentPagesSnapshot]);
 
-  /** W6: persist immediately on tab hide / refresh â€” do not rely only on the 800ms debounced `onChange` draft save. */
+  /** W6: persist immediately on tab hide / refresh — do not rely only on the 800ms debounced `onChange` draft save. */
   const flushSessionBoardDocumentNow = useCallback(() => {
     try {
       const doc = buildBoardDocumentForCheckpoint();
@@ -2093,7 +2093,7 @@ export function WhiteboardWorkspaceClient({
       ];
       // Drive the REAL production cadence: a tutor scene change schedules a
       // throttled/debounced document broadcast exactly as `handleExcalidrawChange`
-      // does on every onChange. NO manual `flushDocumentBroadcastNow()` â€” that
+      // does on every onChange. NO manual `flushDocumentBroadcastNow()` — that
       // force-flush is the page-swap equivalent that masked the live-sync bug.
       scheduleDocumentBroadcast();
     });
@@ -2110,13 +2110,13 @@ export function WhiteboardWorkspaceClient({
     applyRemoteToCanvas,
     getScenePageIdForBroadcast: () => activePageIdRef.current,
     getWireBroadcastExtras: syncUrl ? getWireBroadcastExtras : undefined,
-    /** v3 full-document path owns tutor â†’ student live bytes; v2 from recorder is off. */
+    /** v3 full-document path owns tutor → student live bytes; v2 from recorder is off. */
     includeLiveSyncBroadcast: !sync,
     getBoardDocumentForCheckpoint: buildBoardDocumentForCheckpoint,
   });
   const { flushThrottledFrameNow, onCanvasChange: recorderOnCanvasChange } =
     recorder;
-  // Phase 5 task 8 â€” keep the recorderRecordViewportRef pointed at the
+  // Phase 5 task 8 — keep the recorderRecordViewportRef pointed at the
   // current recorder instance so earlier-in-file callbacks
   // (flushViewportPersistNow, selectTutorPage) can append viewport
   // events without circular hook-ordering.
@@ -2126,9 +2126,9 @@ export function WhiteboardWorkspaceClient({
     flushDocumentBroadcastNow();
   };
 
-  // Phase 5 task 8 â€” anchor replay's camera at tâ‰ˆ0 by emitting one
+  // Phase 5 task 8 — anchor replay's camera at t≈0 by emitting one
   // viewport event when recording becomes active. Without this, replay's
-  // first frames have no viewport event â‰¤ currentTime and fall back to
+  // first frames have no viewport event ≤ currentTime and fall back to
   // camera-fit, which would jump on the first tutor pan/zoom afterwards.
   useEffect(() => {
     if (!recordingActive) return;
@@ -2194,7 +2194,7 @@ export function WhiteboardWorkspaceClient({
         setPageList(capturedList);
       }
       // Freeze the leaving scene. Safe because activePageIdRef has NOT
-      // moved yet â€” any prior in-flight switch is still hydrating and
+      // moved yet — any prior in-flight switch is still hydrating and
       // hasn't bumped activePageIdRef either (see atomic swap below).
       pageDataRef.current[from] = api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>;
       const next =
@@ -2204,7 +2204,7 @@ export function WhiteboardWorkspaceClient({
 
       // Hold the programmatic-switch guard across the entire hydrate.
       // onChange events during this window are dropped (any user input
-      // mid-switch is intentionally lost â€” they just clicked away).
+      // mid-switch is intentionally lost — they just clicked away).
       pageSwitchProgrammaticRef.current += 1;
       let committed = false;
       try {
@@ -2251,10 +2251,10 @@ export function WhiteboardWorkspaceClient({
           isApplyingViewportProgrammaticRef.current = true;
           try {
             // Spread prevState here (page switch, canvas fully laid out) so
-            // Excalidraw keeps its live width/height for pointerâ†’scene mapping.
+            // Excalidraw keeps its live width/height for pointer→scene mapping.
             // Without it strokes land above/below the cursor because coordinate
             // transform uses stale dimensions. Contrast with applyBoardDocumentV1
-            // (initial mount, canvas may still be 0Ã—0) where we must NOT spread.
+            // (initial mount, canvas may still be 0×0) where we must NOT spread.
             const prevState = api.getAppState() as Record<string, unknown>;
             aDual.updateScene({
               elements: next as ReadonlyArray<unknown>,
@@ -2343,7 +2343,7 @@ export function WhiteboardWorkspaceClient({
       const capList = upsertPageStripViewState(pageListRef.current, from, vs);
       pageListRef.current = capList;
       setPageList(capList);
-      // Freeze the leaving scene unconditionally â€” see selectTutorPage
+      // Freeze the leaving scene unconditionally — see selectTutorPage
       // comment for the same guard rationale.
       pageDataRef.current[from] = api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>;
     }
@@ -2441,12 +2441,12 @@ export function WhiteboardWorkspaceClient({
   const pdfBoardIntegrate = useMemo<InsertPdfBoardPagesIntegrate>(
     () => ({
       getActivePageId: () => activePageIdRef.current,
-      // Atomic batch commit â€” see InsertPdfBoardPagesIntegrate JSDoc.
+      // Atomic batch commit — see InsertPdfBoardPagesIntegrate JSDoc.
       // Before this redesign (smoke-1), each PDF page mutated pageListRef
       // and pageDataRef incrementally, and intermediate `setPageList`
       // re-renders + Excalidraw onChange races could leak the leaving
       // page's elements into the new PDF pages. The single commit closes
-      // the window: freeze anchor scene â†’ append rows â†’ register files â†’
+      // the window: freeze anchor scene → append rows → register files →
       // navigate, all before the next React tick or v3 broadcast fires.
       commitPdfBatch: ({
         sectionId,
@@ -2469,7 +2469,7 @@ export function WhiteboardWorkspaceClient({
           [sectionId]: { label: sectionLabel },
         };
         setSectionsRegistry({ ...sectionsRegistryRef.current });
-        // 3. Write per-page elements BEFORE appending to pageList â€” so
+        // 3. Write per-page elements BEFORE appending to pageList — so
         // any intermediate `getTutorDocumentPagesSnapshot` read sees
         // populated data rather than `[]`.
         for (const row of rows) {
@@ -2477,7 +2477,7 @@ export function WhiteboardWorkspaceClient({
             row.elements as ReadonlyArray<ExcalidrawLikeElement>;
         }
         // 4. Append all new page rows to the list in one shot. Carry
-        // through any per-row `viewState` (Phase 5 task 8 â€” PDF auto-
+        // through any per-row `viewState` (Phase 5 task 8 — PDF auto-
         // fit) so `selectTutorPage(firstPageId)` below restores the
         // camera centered on the PDF instead of inheriting the anchor
         // page's pan/zoom.
@@ -2521,12 +2521,12 @@ export function WhiteboardWorkspaceClient({
   );
 
   // ---------------------------------------------------------------
-  // Live timer â€” Wyzant-style "both connected" billable clock
+  // Live timer — Wyzant-style "both connected" billable clock
   // ---------------------------------------------------------------
   //
   // Sarah's expectation (Apr 2026): the timer should PAUSE whenever
   // the student isn't in the room. Wall-clock from a single anchor
-  // doesn't satisfy that â€” a student dropping off mid-session would
+  // doesn't satisfy that — a student dropping off mid-session would
   // keep the clock running.
   //
   // Implementation:
@@ -2548,7 +2548,7 @@ export function WhiteboardWorkspaceClient({
   // Legacy `bothConnectedAt` is still stamped (by the student page on
   // first open + by the active-ping route on first positive ping)
   // so the read-only review surface keeps showing "first overlap
-  // at HH:MM" â€” but the displayed live timer no longer reads from it.
+  // at HH:MM" — but the displayed live timer no longer reads from it.
   void bothConnectedAtIso; // kept on the prop boundary for SSR; not used here
 
   // Server-truth state, refreshed by the polling effect below.
@@ -2559,7 +2559,7 @@ export function WhiteboardWorkspaceClient({
 
   // `bothPartiesInRoom` (peer count + tutor socket) drives active-ping /
   // billable anchors. Recording presence may additionally allow solo rehearsal
-  // via `NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT` â€” see `deriveRecordingPresence`.
+  // via `NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT` — see `deriveRecordingPresence`.
 
   // POST a single ping. Returns the server's new state on success.
   const pingActive = useCallback(
@@ -2585,7 +2585,7 @@ export function WhiteboardWorkspaceClient({
           data.lastActiveAt ? new Date(data.lastActiveAt).getTime() : null
         );
       } catch {
-        // Network hiccup â€” the next heartbeat will retry. We never
+        // Network hiccup — the next heartbeat will retry. We never
         // surface ping failures to the UI; they're an internal
         // accounting concern, not a tutor-facing error.
       }
@@ -2596,7 +2596,7 @@ export function WhiteboardWorkspaceClient({
   // Fire a ping immediately whenever overlap flips, and run a
   // ~10s heartbeat while it stays true.
   useEffect(() => {
-    if (!syncUrl) return; // tutor-solo mode â€” no billable timer
+    if (!syncUrl) return; // tutor-solo mode — no billable timer
     void pingActive(bothPartiesInRoom);
     if (!bothPartiesInRoom) return;
     const HEARTBEAT_MS = 10_000;
@@ -2672,7 +2672,7 @@ export function WhiteboardWorkspaceClient({
           );
         }
       } catch {
-        // ignore â€” next tick will retry
+        // ignore — next tick will retry
       }
     };
     const id = setInterval(refresh, ANCHOR_REFRESH_MS);
@@ -2707,7 +2707,7 @@ export function WhiteboardWorkspaceClient({
   const handleCopyStudentLink = useCallback(async () => {
     if (!encryptionKey) {
       setCopyState("error");
-      setCopyError("Encryption key isn't ready yet â€” wait a moment and try again.");
+      setCopyError("Encryption key isn't ready yet — wait a moment and try again.");
       return;
     }
     if (!syncUrl) {
@@ -2753,7 +2753,7 @@ export function WhiteboardWorkspaceClient({
   /**
    * Live outbox observer state while End-session is in the upload/drain
    * phase. Copy uses `inFlightStreamCount` only when `state ===
-   * "uploading"` (meaningful N); otherwise "Finalizingâ€¦" so we never
+   * "uploading"` (meaningful N); otherwise "Finalizing…" so we never
    * show a bare "0 segments" after uploads finish-before-enqueue.
    *
    * Scoped to `endingState === "finalizing"` so we don't pay the IDB
@@ -2779,14 +2779,14 @@ export function WhiteboardWorkspaceClient({
     setFinalizingSegmentCount(0);
     setFinalizingOutboxState("idle");
     try {
-      // Step 1 â€” stop the recorder. Two things have to happen here
+      // Step 1 — stop the recorder. Two things have to happen here
       // synchronously, BEFORE we start awaiting anything:
       //
       //  a) Flip the FSM so any re-render (and our own visible state)
       //     stops treating recording as active.
       //  b) Trigger MediaRecorder.stop() directly. We DO NOT rely on the
       //     audio bridge's "stop on userWantsRecording=false" useEffect
-      //     because that effect runs after React's render-commit pass â€”
+      //     because that effect runs after React's render-commit pass —
       //     which means by the time the bridge calls stopAndUpload, we
       //     would already have started awaiting drainOutboxOrTimeout
       //     below. That's the Phase 1b smoke regression we hit on
@@ -2807,7 +2807,7 @@ export function WhiteboardWorkspaceClient({
         audioApi.stopAndUpload("final");
       }
 
-      // Step 2 â€” wait for the recorder's upload + onRecorded chain.
+      // Step 2 — wait for the recorder's upload + onRecorded chain.
       // Resolves once every MediaRecorder.onstop fired by this hook has
       // finished, including the `await onRecorded(...)` inside, which
       // is where `onWorkspaceAudioRecorded` does `outbox.enqueue(...)`.
@@ -2818,12 +2818,12 @@ export function WhiteboardWorkspaceClient({
       // the atomic end-session payload.
       await audioApi.flushPendingUploads();
 
-      // Step 3 â€” wait for the outbox to land every pending segment.
+      // Step 3 — wait for the outbox to land every pending segment.
       // The plan calls for 15s; we surface the in-flight count so
       // the End button's copy keeps updating during the wait.
       // Failed (permanent-fail) outbox state aborts immediately with
       // a copy-rich error rather than burning the full budget on
-      // doomed retries â€” the tutor's session data is still in IDB
+      // doomed retries — the tutor's session data is still in IDB
       // and re-clicking End will retry once the network heals.
       const drainResult = await drainOutboxOrTimeout(whiteboardSessionId);
       if (drainResult.timedOut) {
@@ -2835,19 +2835,19 @@ export function WhiteboardWorkspaceClient({
         setEndingState("error");
         setEndingError(
           drainResult.lastError
-            ? `Couldn't finalize â€” ${remaining} audio segment${remaining === 1 ? "" : "s"} still saving. Last error: ${drainResult.lastError}. Try again once your connection is healthy â€” your data isn't lost.`
-            : `Couldn't finalize â€” ${remaining} audio segment${remaining === 1 ? "" : "s"} still saving. Try again in a moment, your data isn't lost.`
+            ? `Couldn't finalize — ${remaining} audio segment${remaining === 1 ? "" : "s"} still saving. Last error: ${drainResult.lastError}. Try again once your connection is healthy — your data isn't lost.`
+            : `Couldn't finalize — ${remaining} audio segment${remaining === 1 ? "" : "s"} still saving. Try again in a moment, your data isn't lost.`
         );
         return;
       }
 
-      // Step 4 â€” read the (now-stable) uploaded outbox into the
+      // Step 4 — read the (now-stable) uploaded outbox into the
       // atomic end-session payload. listUploadedSegments returns a
       // deterministic order so a retried end call produces the same
       // server-side orderIndex sequence.
       const segments = await assembleEndSessionSegments(whiteboardSessionId);
 
-      // Step 5 â€” upload the final events.json. We do this AFTER the
+      // Step 5 — upload the final events.json. We do this AFTER the
       // outbox drain (rather than in parallel) so the End button's
       // "Saving last N" copy is honest about what we're waiting on,
       // and so a flaky events upload doesn't double-bill the tutor's
@@ -2863,9 +2863,9 @@ export function WhiteboardWorkspaceClient({
         throw new Error(upload.error);
       }
 
-      // Step 5b â€” best-effort snapshot PNG. Phase 1c (Pillar 4
+      // Step 5b — best-effort snapshot PNG. Phase 1c (Pillar 4
       // follow-on, Task 5). Generation + upload are wrapped so a
-      // snapshot failure NEVER blocks the atomic end-session â€” the
+      // snapshot failure NEVER blocks the atomic end-session — the
       // tutor's events + audio are already durable at this point and
       // the parent share's "open as image" link gracefully hides
       // when `snapshotBlobUrl` is null. See snapshot-png.ts header
@@ -2904,18 +2904,18 @@ export function WhiteboardWorkspaceClient({
         );
       }
 
-      // Step 6 â€” one atomic server transaction: stamp endedAt, swap
+      // Step 6 — one atomic server transaction: stamp endedAt, swap
       // eventsBlobUrl, register every outbox segment, revoke join
       // tokens. Plan Pillar 3. Phase 1c: now also persists
       // `snapshotBlobUrl` when the snapshot pipeline above produced
-      // one â€” the action treats it as optional so a null value is
+      // one — the action treats it as optional so a null value is
       // a no-op on the column.
       await endWhiteboardSession(whiteboardSessionId, upload.blobUrl, {
         segments,
         snapshotBlobUrl,
       });
 
-      // Step 7 â€” drop the persisted outbox rows. Server has them; we
+      // Step 7 — drop the persisted outbox rows. Server has them; we
       // don't want the next mount of this workspace to find them
       // again and ask "are these new?".
       try {
@@ -2930,14 +2930,14 @@ export function WhiteboardWorkspaceClient({
         );
       }
 
-      // Slice 3 â€” post-end notes pipeline (fire-and-forget, never blocks navigation).
+      // Slice 3 — post-end notes pipeline (fire-and-forget, never blocks navigation).
       // (a) Kick any straggler non-done chunks so transcription completes before reduce.
       void kickSessionChunksAction(whiteboardSessionId).catch((sweepErr: unknown) => {
         console.warn(
           `[txc] wbsid=${whiteboardSessionId} action=session_sweep_fire_error err=${(sweepErr as Error)?.message ?? sweepErr}`
         );
       });
-      // (c) Trigger notes generation â€” upserts pending TutorNote + fires reduce.
+      // (c) Trigger notes generation — upserts pending TutorNote + fires reduce.
       void triggerNotesGenerationAction(whiteboardSessionId).catch((notesErr: unknown) => {
         console.warn(
           `[tnt] wbsid=${whiteboardSessionId} action=trigger_fire_error err=${(notesErr as Error)?.message ?? notesErr}`
@@ -2947,7 +2947,7 @@ export function WhiteboardWorkspaceClient({
       // Revoke is idempotent with the transaction above; don't block navigation.
       await revokeJoinTokensForSession(whiteboardSessionId).catch(() => undefined);
 
-      // Drop the persisted encryption key for this session â€” once a
+      // Drop the persisted encryption key for this session — once a
       // session is ended, a future re-open of its URL should land on
       // the read-only review surface, not a "ready to reconnect"
       // workspace state. Leaving the key in localStorage would let a
@@ -2960,14 +2960,14 @@ export function WhiteboardWorkspaceClient({
       //
       // Phase 1c originally tried to stay on `/workspace` so the new
       // preview-before-Start surface (Pillar 4 Task 6) would take
-      // over the same tab â€” but that delayed the most common
+      // over the same tab — but that delayed the most common
       // immediate-post-session actions (AI-generate notes from the
       // session audio is THE wedge feature, plus replay, snapshot,
-      // share-link copy â€” all on the review page) by an extra click.
+      // share-link copy — all on the review page) by an extra click.
       // The preview surface still serves its actual purpose for the
       // re-entry case (pinned tab, browser bookmark, manual URL),
       // because `workspace/page.tsx` no longer redirects ended
-      // sessions away from `/workspace` â€” it just renders the
+      // sessions away from `/workspace` — it just renders the
       // preview component when `detail.endedAt` is set.
       const reviewHref = `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}`;
       router.replace(reviewHref);
@@ -2993,9 +2993,9 @@ export function WhiteboardWorkspaceClient({
       setEndingState("error");
       const msg = (err as Error)?.message ?? "Could not end the session.";
       setEndingError(
-        `Could not end session: ${msg}. Your work is still in progress â€” retry "End session".`
+        `Could not end session: ${msg}. Your work is still in progress — retry "End session".`
       );
-      // Don't auto-retry â€” the tutor decides whether to retry End or
+      // Don't auto-retry — the tutor decides whether to retry End or
       // keep the session open and try again.
     }
   }, [recorder, router, studentId, whiteboardSessionId]);
@@ -3061,8 +3061,8 @@ export function WhiteboardWorkspaceClient({
       setActivePageId(doc.activePageId);
 
       // Replace per-tab buckets wholesale. Merging into pageDataRef leaves
-      // orphan keys when a second hydrate (browser draft â†’ IndexedDB "Load
-      // draft") narrows or changes ids â€” that matched strokes from one tab
+      // orphan keys when a second hydrate (browser draft → IndexedDB "Load
+      // draft") narrows or changes ids — that matched strokes from one tab
       // appearing under another tab's viewport.
       const nextBucket: Record<string, ReadonlyArray<ExcalidrawLikeElement>> =
         Object.create(null);
@@ -3154,8 +3154,8 @@ export function WhiteboardWorkspaceClient({
         return;
       }
       const { restoreElements } = await import("@excalidraw/excalidraw");
-      // Resume path: canonical WBElements â†’ Excalidraw-shaped roughs
-      // (`adaptWBElementsToExcalidraw`) â†’ engine restore + sanitize. Same
+      // Resume path: canonical WBElements → Excalidraw-shaped roughs
+      // (`adaptWBElementsToExcalidraw`) → engine restore + sanitize. Same
       // pipeline the replay player runs on every paint, so resume can
       // never silently drift on Excalidraw-required-defaults handling.
       const { rough } = adaptWBElementsToExcalidraw(result.elements);
@@ -3172,8 +3172,8 @@ export function WhiteboardWorkspaceClient({
         }
       }
       // IndexedDB / event log carry `customData.assetUrl` for PDF + uploads,
-      // but Excalidraw has no BinaryFiles after a full navigation â€” same as
-      // multiâ€“board-page eviction; fetch from Blob before we paint.
+      // but Excalidraw has no BinaryFiles after a full navigation — same as
+      // multi–board-page eviction; fetch from Blob before we paint.
       await hydrateTutorImageAssetsForElements(
         api,
         toPaint as ReadonlyArray<ExcalidrawLikeElement>
@@ -3234,7 +3234,7 @@ export function WhiteboardWorkspaceClient({
   ]);
 
   // ---------------------------------------------------------------
-  // IndexedDB checkpoint "Resume" â€” the hook recovers the log, but the
+  // IndexedDB checkpoint "Resume" — the hook recovers the log, but the
   // live canvas only updates if we push elements into Excalidraw here.
   // ---------------------------------------------------------------
 
@@ -3248,7 +3248,7 @@ export function WhiteboardWorkspaceClient({
   // Excalidraw onChange wiring
   // ---------------------------------------------------------------
 
-  // PR-01 Option E: pointer-up flush â€” ensures last stroke segment is never dropped
+  // PR-01 Option E: pointer-up flush — ensures last stroke segment is never dropped
   // when the throttled frame and document broadcast are deferred. Guards respected.
   useEffect(() => {
     const handlePointerUp = () => {
@@ -3273,7 +3273,7 @@ export function WhiteboardWorkspaceClient({
       if (pageSwitchProgrammaticRef.current > 0) return;
       const els = elements as ReadonlyArray<ExcalidrawLikeElement>;
       const pageId = activePageIdRef.current;
-      // PR-01 Option A: store raw elements ref â€” no per-move clone.
+      // PR-01 Option A: store raw elements ref — no per-move clone.
       // preserveImageAssetUrlsOnSceneWrite now runs only at wire/checkpoint build time.
       pageDataRef.current[pageId] = els as ExcalidrawLikeElement[];
       // Update image URL cache (lightweight: only scans image-type elements).
@@ -3299,7 +3299,7 @@ export function WhiteboardWorkspaceClient({
       // `sessionGateReleased`). We hit this branch only AFTER the
       // `applyingRemoteToCanvasRef` and `pageSwitchProgrammaticRef`
       // early-returns, so programmatic scene swaps don't fire it
-      // (which is correct â€” a page switch isn't user activity).
+      // (which is correct — a page switch isn't user activity).
       markWbActivity();
       if (sceneDraftTimerRef.current !== null) {
         clearTimeout(sceneDraftTimerRef.current);
@@ -3312,7 +3312,7 @@ export function WhiteboardWorkspaceClient({
         }
         sceneDraftTimerRef.current = null;
       }, 800);
-      // Cast through ExcalidrawLikeElement â€” the adapter only reads the
+      // Cast through ExcalidrawLikeElement — the adapter only reads the
       // structural fields we declared. We keep the parameter typed as
       // unknown[] so a future Excalidraw upgrade with a stricter type
       // doesn't break the call site.
@@ -3333,7 +3333,7 @@ export function WhiteboardWorkspaceClient({
         // smoke-1 #6: capture the page the onChange fired on. If the
         // tutor switches pages while this async upload is in flight,
         // we must NOT write the (page A) patched elements into
-        // (page B)'s pageDataRef â€” that's how Page 1 â†” Page 9 leaked.
+        // (page B)'s pageDataRef — that's how Page 1 â†” Page 9 leaked.
         const onChangePageId = activePageIdRef.current;
         void (async () => {
           try {
@@ -3464,7 +3464,7 @@ export function WhiteboardWorkspaceClient({
   const handleTopBarCam = useCallback(async () => {
     if (!liveAv.localVideoStream) {
       // requestCam() already sets isCamMuted=false on success.
-      // Do NOT call toggleCam() after â€” that would immediately re-mute.
+      // Do NOT call toggleCam() after — that would immediately re-mute.
       await liveAv.requestCam();
       return;
     }
@@ -3515,7 +3515,7 @@ export function WhiteboardWorkspaceClient({
     activeToolType !== "laser";
 
   // ---------------------------------------------------------------
-  // Render helpers â€” chrome
+  // Render helpers — chrome
   // ---------------------------------------------------------------
 
   const renderSidebarPropsCompact = () => (
@@ -3559,7 +3559,7 @@ export function WhiteboardWorkspaceClient({
       <div className="mynk-wb-more-menu">
         <WbToolBtn
           icon={<WbIconMore size={iconSize} />}
-          label="More â€” z-order, delete, hand"
+          label="More — z-order, delete, hand"
           active={morePopoverOpen}
           onClick={() => {
             setMorePopoverOpen((p) => !p);
@@ -3579,11 +3579,11 @@ export function WhiteboardWorkspaceClient({
               <span className="mynk-wb-menu-item__kbd">Ctrl+Shift+[</span>
             </button>
             <button type="button" className="mynk-wb-menu-item" onClick={() => triggerSendBackward()}>
-              <span>â†“ Send backward</span>
+              <span>↓ Send backward</span>
               <span className="mynk-wb-menu-item__kbd">Ctrl+[</span>
             </button>
             <button type="button" className="mynk-wb-menu-item" onClick={() => triggerBringForward()}>
-              <span>â†‘ Bring forward</span>
+              <span>↑ Bring forward</span>
               <span className="mynk-wb-menu-item__kbd">Ctrl+]</span>
             </button>
             <button type="button" className="mynk-wb-menu-item" onClick={() => triggerBringToFront()}>
@@ -3706,14 +3706,14 @@ export function WhiteboardWorkspaceClient({
   };
 
   // ---------------------------------------------------------------
-  // Render â€” Mynk whiteboard chrome
+  // Render — Mynk whiteboard chrome
   // ---------------------------------------------------------------
 
   const endingBusy = endingState === "ending" || endingState === "finalizing";
   const debugOverlayVisible = useWbChromeDebugOverlayVisible();
   const syncPill = deriveSyncPillState({
     tutorSyncConnected,
-    // Use sync presence for the board-syncing pill â€” board sync is
+    // Use sync presence for the board-syncing pill — board sync is
     // relay-level, not WebRTC. The pill shows "Student connected"
     // based on sync roster, not WebRTC reachability.
     bothPartiesInRoom: bothPartiesInRoomSync,
@@ -3753,7 +3753,7 @@ export function WhiteboardWorkspaceClient({
         onClick={(e) => e.stopPropagation()}
       >
         <span className="mynk-wb-wordmark" aria-label="Mynk">
-          Mynk<span className="mynk-wb-wordmark__dot">Â·</span>
+          Mynk<span className="mynk-wb-wordmark__dot">·</span>
         </span>
         <span className="mynk-wb-topbar__sep" aria-hidden />
 
@@ -3790,7 +3790,7 @@ export function WhiteboardWorkspaceClient({
               data-testid="wb-copy-student-link"
             >
               <WbIconShare />
-              <span>{copyState === "copying" ? "â€¦" : copyState === "copied" ? "Copied" : "Share"}</span>
+              <span>{copyState === "copying" ? "…" : copyState === "copied" ? "Copied" : "Share"}</span>
             </button>
             <button
               type="button"
@@ -3805,7 +3805,7 @@ export function WhiteboardWorkspaceClient({
               }}
               data-testid="wb-share-options"
             >
-              <span className="mynk-wb-share-chevron">â–¾</span>
+              <span className="mynk-wb-share-chevron">▾</span>
             </button>
             {shareMenuOpen && (
               <div
@@ -3951,10 +3951,10 @@ export function WhiteboardWorkspaceClient({
           {endingState === "finalizing"
             ? finalizingOutboxState === "uploading" &&
               finalizingSegmentCount > 0
-              ? `Saving ${finalizingSegmentCount} segment${finalizingSegmentCount === 1 ? "" : "s"}â€¦`
-              : "Finalizingâ€¦"
+              ? `Saving ${finalizingSegmentCount} segment${finalizingSegmentCount === 1 ? "" : "s"}…`
+              : "Finalizing…"
             : endingState === "ending"
-              ? "Finalizingâ€¦"
+              ? "Finalizing…"
               : "End session"}
         </button>
       </header>
@@ -4039,8 +4039,8 @@ export function WhiteboardWorkspaceClient({
             {splitBrainActive && !presence.bannerMessage && (
               <Banner tone="warning" testId="wb-split-brain-banner">
                 {recordingActive
-                  ? "Student's video connection lost â€” recording paused until the call reconnects."
-                  : "Student's video connection lost â€” waiting for WebRTC to reconnect."}
+                  ? "Student's video connection lost — recording paused until the call reconnects."
+                  : "Student's video connection lost — waiting for WebRTC to reconnect."}
               </Banner>
             )}
             {copyState === "error" && copyError && (
@@ -4110,7 +4110,7 @@ export function WhiteboardWorkspaceClient({
             )}
           </div>
 
-          {/* Excalidraw canvas â€” zenModeEnabled hides native chrome */}
+          {/* Excalidraw canvas — zenModeEnabled hides native chrome */}
           <ExcalidrawDynamic
             style={{ width: "100%", height: "100%" }}
             zenModeEnabled
@@ -4154,7 +4154,7 @@ export function WhiteboardWorkspaceClient({
             Student view
           </div>
 
-          {/* SR-04 â€” AV cluster */}
+          {/* SR-04 — AV cluster */}
           <WbAVCluster
             layoutMode={layoutMode}
             isMicMuted={liveAv.isMicMuted}
@@ -4210,7 +4210,7 @@ export function WhiteboardWorkspaceClient({
                     aria-label="Dismiss properties"
                     onClick={dismissTouchProps}
                   >
-                    Ã—
+                    ×
                   </button>
                 </div>
                 <WbStrokePropsPanel
@@ -4229,8 +4229,8 @@ export function WhiteboardWorkspaceClient({
 
           {debugOverlayVisible && (
             <div className="mynk-wb-debug-footer" aria-hidden>
-              wbsid={whiteboardSessionId.slice(0, 8)} Â· events={recorder.eventCount} Â·
-              rec={formatDuration(recorder.durationMs)} Â· {recorder.checkpointStatus}
+              wbsid={whiteboardSessionId.slice(0, 8)} · events={recorder.eventCount} ·
+              rec={formatDuration(recorder.durationMs)} · {recorder.checkpointStatus}
               {recorder.lastCheckpointAt
                 ? ` (${new Date(recorder.lastCheckpointAt).toLocaleTimeString()})`
                 : ""}
@@ -4249,7 +4249,7 @@ export function WhiteboardWorkspaceClient({
               e.stopPropagation();
               setPropsSheetOpen(true);
             }}
-            aria-label="Stroke properties â€” tap to expand"
+            aria-label="Stroke properties — tap to expand"
           >
             <span className="mynk-wb-summary-swatch" style={{ backgroundColor: strokeColor }} />
             <span className="mynk-wb-summary-chip">{roughnessLabel}</span>
@@ -4270,7 +4270,7 @@ export function WhiteboardWorkspaceClient({
         {renderToolStripButtons(true)}
       </nav>
 
-      {/* SR-14 â€” board tab strip */}
+      {/* SR-14 — board tab strip */}
       <footer
         className="mynk-wb-pagestrip bg-card border-t border-border"
         aria-label="Boards"
@@ -4290,7 +4290,7 @@ export function WhiteboardWorkspaceClient({
 }
 
 // -------------------------------------------------------------------
-// Tiny presentational helpers â€” kept inline to avoid a sprawling
+// Tiny presentational helpers — kept inline to avoid a sprawling
 // components/ tree just for this page.
 // -------------------------------------------------------------------
 
@@ -4325,7 +4325,7 @@ function WbToolBtn({
       style={accent ? { color: "var(--accent-text)" } : undefined}
     >
       {icon}
-      {pulldown && <span className="mynk-wb-pulldown-chevron">â–¾</span>}
+      {pulldown && <span className="mynk-wb-pulldown-chevron">▾</span>}
     </button>
   );
 }
@@ -4369,7 +4369,7 @@ function Banner({
           aria-label="Dismiss"
           onClick={onDismiss}
         >
-          Ã—
+          ×
         </button>
       )}
     </div>

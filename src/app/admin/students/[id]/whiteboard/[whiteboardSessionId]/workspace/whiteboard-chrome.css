@@ -1,5 +1,5 @@
 /**
- * Mynk whiteboard chrome ΓÇö native Excalidraw UI hide rules + full-viewport layout.
+ * Mynk whiteboard chrome — native Excalidraw UI hide rules + full-viewport layout.
  *
  * `zenModeEnabled` on <ExcalidrawDynamic> hides most native chrome, but NOT the
  * left tool rail or hamburger. These selectors finish the job.
@@ -137,7 +137,7 @@
   opacity: 0.5;
 }
 
-/* ΓöÇΓöÇ Tool button (1A.9 spec: 36├ù36px) ΓöÇΓöÇ */
+/* ΓöÇΓöÇ Tool button (1A.9 spec: 36×36px) ΓöÇΓöÇ */
 .mynk-wb-tool-btn {
   width: 36px;
   height: 36px;
@@ -341,7 +341,7 @@
   z-index: 45;
 }
 
-/* Top-bar mic ΓÇö inline meter + settings popover */
+/* Top-bar mic — inline meter + settings popover */
 .mynk-wb-mic-wrap {
   position: relative;
   display: flex;
@@ -405,7 +405,7 @@
   border-radius: 10px;
 }
 
-/* View menu ΓÇö VP-02 */
+/* View menu — VP-02 */
 .mynk-wb-view-menu {
   position: relative;
 }
@@ -433,7 +433,7 @@
   padding: 6px 4px;
 }
 
-/* Theme menu ΓÇö TU-13 system / light / dark */
+/* Theme menu — TU-13 system / light / dark */
 .mynk-wb-theme-menu {
   position: relative;
 }
@@ -475,7 +475,7 @@
   color: var(--foreground);
 }
 
-/* ΓöÇΓöÇ AV cluster ΓÇö SR-04 top-right, draggable + resizable ΓöÇΓöÇ */
+/* ΓöÇΓöÇ AV cluster — SR-04 top-right, draggable + resizable ΓöÇΓöÇ */
 .mynk-wb-av-cluster {
   position: absolute;
   z-index: 25;
@@ -577,7 +577,7 @@
   opacity: 0.5;
 }
 
-/* ΓöÇΓöÇ PP-06 compact properties ΓÇö lives in left sidebar rail ΓöÇΓöÇ */
+/* ΓöÇΓöÇ PP-06 compact properties — lives in left sidebar rail ΓöÇΓöÇ */
 .mynk-wb-props-compact {
   position: relative;
   z-index: 22;
@@ -726,12 +726,12 @@
   justify-content: center;
 }
 
-/* Shapes pulldown ΓÇö PU-05 */
+/* Shapes pulldown — PU-05 */
 .mynk-wb-shapes-menu {
   position: relative;
 }
 
-/* More overflow ΓÇö anchored to left-rail Γï« button */
+/* More overflow — anchored to left-rail Γï« button */
 .mynk-wb-more-menu {
   position: relative;
   width: 100%;
@@ -787,7 +787,7 @@
   pointer-events: none;
 }
 
-/* ΓöÇΓöÇ Board tab strip ΓÇö SR-14 ΓöÇΓöÇ */
+/* ΓöÇΓöÇ Board tab strip — SR-14 ΓöÇΓöÇ */
 .mynk-wb-board-tabs {
   display: flex;
   align-items: stretch;
@@ -854,7 +854,7 @@
   border-color: var(--accent);
 }
 
-/* Ghost viewport label ΓÇö VP-01 (bounds rendering deferred) */
+/* Ghost viewport label — VP-01 (bounds rendering deferred) */
 .mynk-wb-ghost-label {
   position: absolute;
   top: 12%;
@@ -904,7 +904,7 @@
   margin-bottom: 4px;
 }
 
-/* Props bottom sheet ΓÇö TM-11 */
+/* Props bottom sheet — TM-11 */
 .mynk-wb-props-backdrop {
   display: none;
   position: absolute;
@@ -1066,7 +1066,7 @@
   display: none;
 }
 
-/* ΓöÇΓöÇ Properties popover (legacy anchor ΓÇö kept for more menu) ΓöÇΓöÇ */
+/* ΓöÇΓöÇ Properties popover (legacy anchor — kept for more menu) ΓöÇΓöÇ */
 .mynk-wb-props-popover {
   position: absolute;
   left: 52px;
@@ -1148,7 +1148,7 @@
   box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
 }
 
-/* ΓöÇΓöÇ Stroke width preset (28├ù28px) ΓöÇΓöÇ */
+/* ΓöÇΓöÇ Stroke width preset (28×28px) ΓöÇΓöÇ */
 .mynk-wb-width-btn {
   width: 28px;
   height: 28px;

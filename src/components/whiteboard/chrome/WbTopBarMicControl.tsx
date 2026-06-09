@@ -14,7 +14,7 @@ type Props = {
   disabled?: boolean;
 };
 
-/** Three-bar inline meter ΓÇö matches session shell mock top-bar mic button. */
+/** Three-bar inline meter — matches session shell mock top-bar mic button. */
 function WbInlineMicMeter({ level }: { level: number }) {
   const bars = [
     { min: 0.05, h: "b1" },
@@ -100,7 +100,7 @@ export function WbTopBarMicControl({
 
   return (
     <div className="mynk-wb-mic-wrap" ref={wrapRef} data-testid="wb-topbar-mic">
-      {/* Hidden meter target ΓÇö recorder rAF writes here when popover is closed */}
+      {/* Hidden meter target — recorder rAF writes here when popover is closed */}
       <div className="mynk-wb-mic-meter-hidden" aria-hidden>
         <div ref={audio.meterBarRef} style={{ width: "0%", height: "100%" }} />
       </div>
@@ -108,7 +108,7 @@ export function WbTopBarMicControl({
       <button
         type="button"
         className={`mynk-wb-tb-btn${isMicMuted ? " mynk-wb-tb-btn--mic-muted" : ""}`}
-        title={isMicMuted ? "Unmute microphone" : "Microphone ΓÇö click to mute"}
+        title={isMicMuted ? "Unmute microphone" : "Microphone — click to mute"}
         onClick={() => void handleMainClick()}
         disabled={disabled}
         data-testid="wb-topbar-mic-toggle"
@@ -129,7 +129,7 @@ export function WbTopBarMicControl({
         }}
         data-testid="wb-topbar-mic-settings"
       >
-        <span className="mynk-wb-share-chevron">Γû╛</span>
+        <span className="mynk-wb-share-chevron">▾</span>
       </button>
 
       {popoverOpen && (

@@ -9,7 +9,7 @@
  *   1. "New blank graph"  -> inserts https://www.desmos.com/calculator
  *      The tutor and student see the same blank calculator and can
  *      type equations interactively. Replay shows a blank calculator
- *      (state is intra-iframe; not captured ΓÇö see status doc).
+ *      (state is intra-iframe; not captured — see status doc).
  *
  *   2. "From URL"         -> tutor pastes a saved-graph URL, e.g.
  *      https://www.desmos.com/calculator/abc123. The graph state is
@@ -152,7 +152,7 @@ export function DesmosInsertButton({
             style={{
               width: "min(520px, 92vw)",
               padding: 20,
-              // Solid dark surface ΓÇö translucent .card --panel + dark page text
+              // Solid dark surface — translucent .card --panel + dark page text
               // would render white-on-white over the modal backdrop.
               background: "var(--surface-drawer)",
               border: "1px solid var(--border)",
@@ -172,7 +172,7 @@ export function DesmosInsertButton({
                 aria-label="Close"
                 style={{ padding: "2px 10px" }}
               >
-                ├ù
+                ×
               </button>
             </div>
 

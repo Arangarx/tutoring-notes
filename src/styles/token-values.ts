@@ -17,7 +17,7 @@ export const FAVICON_BRAND_BG = "#7c5cff";
 
 /**
  * Stroke color presets for the Mynk whiteboard toolbar.
- * Excalidraw's currentItemStrokeColor requires resolved hex ΓÇö CSS vars cannot
+ * Excalidraw's currentItemStrokeColor requires resolved hex — CSS vars cannot
  * be used here. Labels are for aria-label; display uses the actual color.
  */
 export const WB_STROKE_PRESETS: ReadonlyArray<{ hex: string; label: string }> = [

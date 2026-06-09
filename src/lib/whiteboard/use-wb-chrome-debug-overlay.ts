@@ -12,7 +12,7 @@ function readDebugQueryFlag(): boolean {
   }
 }
 
-/** Session debug overlay (footer HUD) ΓÇö local dev or explicit ?debug=1 / ?wbdebug=1 only. */
+/** Session debug overlay (footer HUD) — local dev or explicit ?debug=1 / ?wbdebug=1 only. */
 export function useWbChromeDebugOverlayVisible(): boolean {
   const [visible, setVisible] = useState(false);
 

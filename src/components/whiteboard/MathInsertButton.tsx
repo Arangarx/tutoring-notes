@@ -5,7 +5,7 @@
  *
  * Flow:
  *
- *   1. Tutor clicks "Insert math" ΓÇö a modal opens with a MathLive
+ *   1. Tutor clicks "Insert math" — a modal opens with a MathLive
  *      `<math-field>` (WYSIWYG LaTeX editor).
  *   2. The tutor types/pastes their equation. The dialog also shows
  *      the raw LaTeX in a small read-only field for copy-out.
@@ -75,7 +75,7 @@ async function renderLatexToSvgViaRoute(
       reason: `Could not reach the math renderer: ${(err as Error).message}`,
     };
   }
-  // 401 / 404 / 5xx ΓÇö bubble a friendly message; the route returns
+  // 401 / 404 / 5xx — bubble a friendly message; the route returns
   // 200 with `{ ok: false, reason }` for "expected" rejections like
   // empty / oversized input, so any non-200 here is a real failure.
   if (!res.ok) {
@@ -116,7 +116,7 @@ type Props = {
   whiteboardSessionId: string;
   studentId: string;
   disabled?: boolean;
-  /** Compact top-bar treatment ΓÇö Γêæ glyph per session shell mock. */
+  /** Compact top-bar treatment — ∑ glyph per session shell mock. */
   chrome?: boolean;
 };
 
@@ -156,7 +156,7 @@ export function MathInsertButton({
         //   - mathlive 0.109 ships with the static initializer
         //     `_MathfieldElement._fontsDirectory = "./fonts/"`, so the
         //     fonts would be requested at the page-relative path the
-        //     workspace happens to render from ΓÇö which on Vercel ends
+        //     workspace happens to render from — which on Vercel ends
         //     up at `/_next/static/chunks/fonts/KaTeX_*.woff2` (404s,
         //     Next never copies the woff2 files there).
         //   - Smoke-3 attempted a guard `if (!Mf.fontsDirectory)` to
@@ -166,7 +166,7 @@ export function MathInsertButton({
         //   - Smoke-4 found that the jsDelivr CDN was unreachable from
         //     Andrew's network (DNS instability that also hit
         //     `github.com` and `wb-mortensen.fly.dev`). Self-hosting
-        //     removes the third-party dep entirely ΓÇö the fonts ship
+        //     removes the third-party dep entirely — the fonts ship
         //     in `public/mathlive-fonts/` and are served by the same
         //     origin as the app, so they cannot fail independently.
         // CSP `font-src 'self' data: blob: https:` already permits
@@ -181,7 +181,7 @@ export function MathInsertButton({
         }
         // mathlive 0.109 registers the element synchronously on
         // import, but on slower devices the registration callback
-        // can land in a microtask ΓÇö wait for `customElements.get`
+        // can land in a microtask — wait for `customElements.get`
         // to confirm before marking ready.
         if (!window.customElements?.get("math-field")) {
           await new Promise<void>((resolve) => {
@@ -210,7 +210,7 @@ export function MathInsertButton({
     };
   }, [state.kind, mathLiveReady]);
 
-  // Mount the <math-field> after MathLive registers ΓÇö we create the
+  // Mount the <math-field> after MathLive registers — we create the
   // element imperatively because React's JSX type checker doesn't
   // know about it without a global declaration, and the value-binding
   // story is cleaner via the imperative API anyway.
@@ -241,7 +241,7 @@ export function MathInsertButton({
     });
     return () => {
       field.removeEventListener("input", onInput);
-      // Don't tear down the field on every keystroke ΓÇö only when the
+      // Don't tear down the field on every keystroke — only when the
       // dialog itself unmounts. The cleanup that fires on dialog
       // close clears the host below.
     };
@@ -310,7 +310,7 @@ export function MathInsertButton({
         title="Insert math equation"
         aria-label="Insert math equation"
       >
-        {chrome ? "Γêæ" : "Insert math"}
+        {chrome ? "∑" : "Insert math"}
       </button>
 
       {state.kind !== "closed" && (
@@ -338,7 +338,7 @@ export function MathInsertButton({
               maxWidth: 620,
               width: "calc(100% - 32px)",
               padding: 24,
-              // Solid dark surface ΓÇö the math field below keeps a white
+              // Solid dark surface — the math field below keeps a white
               // background of its own so equations stay dark-on-white.
               background: "var(--surface-drawer)",
               border: "1px solid var(--border)",
@@ -358,7 +358,7 @@ export function MathInsertButton({
 
             {!mathLiveReady && state.kind !== "error" && (
               <div className="muted" style={{ fontSize: 13 }}>
-                Loading math editorΓÇª
+                Loading math editor…
               </div>
             )}
 
@@ -441,7 +441,7 @@ export function MathInsertButton({
                 disabled={state.kind === "rendering" || !latex.trim()}
                 data-testid="wb-math-insert-btn"
               >
-                {state.kind === "rendering" ? "RenderingΓÇª" : "Insert"}
+                {state.kind === "rendering" ? "Rendering…" : "Insert"}
               </button>
             </div>
           </div>

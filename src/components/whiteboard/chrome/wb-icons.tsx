@@ -1,6 +1,6 @@
 "use client";
 
-/** Professional SVG icons for Mynk whiteboard chrome ΓÇö matches session shell mock. */
+/** Professional SVG icons for Mynk whiteboard chrome — matches session shell mock. */
 
 type IconProps = { size?: number; className?: string };
 
@@ -21,7 +21,7 @@ export function WbIconPencil({ size = 16, className }: IconProps) {
   );
 }
 
-/** IC-01 ΓÇö Lucide `eraser` paths verbatim (slanted block + baseline) */
+/** IC-01 — Lucide `eraser` paths verbatim (slanted block + baseline) */
 export function WbIconEraser({ size = 16, className }: IconProps) {
   return (
     <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -41,7 +41,7 @@ export function WbIconText({ size = 16, className }: IconProps) {
   );
 }
 
-/** ST-07 ΓÇö pointer wand (was laser crosshair) */
+/** ST-07 — pointer wand (was laser crosshair) */
 export function WbIconWand({ size = 16, className }: IconProps) {
   return (
     <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

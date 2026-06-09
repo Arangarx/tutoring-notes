@@ -4,7 +4,7 @@
 
 /**
  * Regression: ?wbdebug=1 must not break the student join / sync-client path.
- * Root cause was HudLines reading `st?.zoom.value` ΓÇö throws when appState
+ * Root cause was HudLines reading `st?.zoom.value` — throws when appState
  * exists but zoom is not yet populated (Excalidraw pre-ready).
  */
 

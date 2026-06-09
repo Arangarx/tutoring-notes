@@ -12,7 +12,7 @@
  *
  * Why not use the imperative API:
  *
- *   `ExcalidrawImperativeAPI.history` only exposes `clear()` ΓÇö
+ *   `ExcalidrawImperativeAPI.history` only exposes `clear()` —
  *   there's no public `undo()` / `redo()` method (verified against
  *   `@excalidraw/excalidraw@0.18.1` types). Excalidraw's keyboard
  *   handler is the only public surface that triggers undo/redo, so
@@ -21,7 +21,7 @@
  * Why dispatch on the Excalidraw container (not window):
  *
  *   Excalidraw attaches its keyboard listener to its own canvas
- *   wrapper (`<div class="excalidraw">ΓÇª`). Dispatching on `window`
+ *   wrapper (`<div class="excalidraw">…`). Dispatching on `window`
  *   would still bubble into Next.js' own listeners (e.g., it would
  *   trigger a router undo if one ever existed) and would NOT bubble
  *   DOWN into the Excalidraw subtree. We resolve the container at
@@ -42,7 +42,7 @@ const EXCALIDRAW_CONTAINER_SELECTOR = ".excalidraw, .excalidraw-container";
 
 function findExcalidrawTarget(doc: Document): HTMLElement | null {
   // Most reliable: the canvas wrapper element. We don't want the
-  // outer page or a sidebar ΓÇö those wouldn't route to Excalidraw's
+  // outer page or a sidebar — those wouldn't route to Excalidraw's
   // keyboard handler.
   const el = doc.querySelector<HTMLElement>(EXCALIDRAW_CONTAINER_SELECTOR);
   return el ?? null;

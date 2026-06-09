@@ -13,7 +13,7 @@ function detectLayoutMode(): WbLayoutMode {
   return "desktop";
 }
 
-/** Responsive layout for live board chrome ΓÇö mirrors session shell mock ┬º7.x */
+/** Responsive layout for live board chrome — mirrors session shell mock ┬º7.x */
 export function useWbLayoutMode(): WbLayoutMode {
   const [mode, setMode] = useState<WbLayoutMode>("desktop");
 

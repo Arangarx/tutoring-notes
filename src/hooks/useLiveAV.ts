@@ -1,18 +1,18 @@
 "use client";
 
 /**
- * Live-A/V session hook ΓÇö Phase 4b (post-realignment).
+ * Live-A/V session hook — Phase 4b (post-realignment).
  *
  * Orchestrates the three pure-JS modules from Phase 4a (sync-client
  * presence channel + signaling muxer + peer-mesh) into a React
- * lifecycle. Final 4b contract ΓÇö supersedes the auto-acquire shape
+ * lifecycle. Final 4b contract — supersedes the auto-acquire shape
  * from commits 7fb9d65 / 7ff7a04. See `docs/PHASE-4B-STATUS.md`.
  *
  * Acquisition contract:
  *   - The hook is INERT on mount. It does NOT call `getUserMedia`.
  *   - Mic is acquired via `requestMic(): Promise<void>`; camera via
  *     `requestCam(): Promise<void>`. The two requests are
- *     independent ΓÇö Phase 4d's graceful-degradation paths
+ *     independent — Phase 4d's graceful-degradation paths
  *     (mic-granted-cam-denied, etc.) depend on this.
  *   - `hasMicPermission` / `hasCamPermission` are populated via
  *     `navigator.permissions.query()` on mount where supported, so
@@ -37,7 +37,7 @@
  * Cam-after-mic mid-session: peer-mesh's `getLocalTracks` callback
  * is invoked at `addPeer` time, so toggling camera BEFORE peers
  * connect transparently lights up video. Toggling AFTER existing
- * peers connected only flips local `.enabled` flags ΓÇö adding new
+ * peers connected only flips local `.enabled` flags — adding new
  * tracks to existing PCs would require renegotiation, which 4b
  * intentionally does not implement (orchestrator decision; 4c's
  * permissions UI is expected to grant both up front).
@@ -86,19 +86,19 @@ export type AvParticipant = {
   role: "tutor" | "student";
   label?: string;
   /**
-   * Live remote audio stream ΓÇö null until at least one audio track
+   * Live remote audio stream — null until at least one audio track
    * lands on the underlying RTCPeerConnection. Wire into
    * `<audio autoplay srcObject={p.audioStream} />` or pipe through
    * `MediaRecorder` for capture.
    */
   audioStream: MediaStream | null;
   /**
-   * Live remote video stream ΓÇö null until at least one video track
+   * Live remote video stream — null until at least one video track
    * lands on the underlying RTCPeerConnection (which only happens
    * when the remote peer enabled their camera). Wire into
    * `<video autoplay playsInline srcObject={p.videoStream} muted />`.
    * (Always set `muted` on the local-side `<video>` so audio comes
-   * exclusively from the `audioStream` companion ΓÇö avoids double
+   * exclusively from the `audioStream` companion — avoids double
    * playback at different latencies.)
    */
   videoStream: MediaStream | null;
@@ -167,7 +167,7 @@ export type UseLiveAVOptions = {
   syncClient: WhiteboardSyncClient | null;
   /**
    * Stable peer id for THIS client. MUST match the value the
-   * sync-client uses for its own envelope `peerId` ΓÇö peer-mesh's
+   * sync-client uses for its own envelope `peerId` — peer-mesh's
    * polite/impolite role assignment and signaling's targetPeerId
    * demux both depend on it. The workspace generates this once per
    * session (alongside the whiteboard session id).
@@ -249,9 +249,9 @@ export type UseLiveAVReturn = {
   /**
    * Subset of `participants` where WebRTC is confirmed healthy:
    * `peerConnectionState === "connected"` AND
-   * `iceConnectionState Γêê {connected, completed}`.
+   * `iceConnectionState ∈ {connected, completed}`.
    *
-   * Use this ΓÇö not raw `participants` ΓÇö for: the recording gate
+   * Use this — not raw `participants` — for: the recording gate
    * (FSM `participants` input), the session timer gate, and any
    * "call connected" UI indicator. Routing sync-only presence through
    * these gates is the split-brain bug: the media path can die while
@@ -267,7 +267,7 @@ export type UseLiveAVReturn = {
   localVideoStream: MediaStream | null;
   /**
    * True iff the local mic is muted (`track.enabled === false` on
-   * every local audio track). Mute is local-only ΓÇö wire-level mute
+   * every local audio track). Mute is local-only — wire-level mute
    * is post-v1.
    */
   isMicMuted: boolean;
@@ -296,7 +296,7 @@ export type UseLiveAVReturn = {
   hasMicPermission: AvPermissionState;
   /**
    * Permissions API state for the camera. Safari throws on
-   * `navigator.permissions.query({ name: "camera" })` ΓÇö that case
+   * `navigator.permissions.query({ name: "camera" })` — that case
    * surfaces as `"unknown"`.
    */
   hasCamPermission: AvPermissionState;
@@ -305,7 +305,7 @@ export type UseLiveAVReturn = {
    * success, populates `localAudioStream` and (if the mesh + sync
    * client are also ready) builds the mesh. On error, populates
    * `error` and updates `hasMicPermission` to `"denied"` for
-   * `NotAllowedError`. Idempotent ΓÇö calling while a request is in
+   * `NotAllowedError`. Idempotent — calling while a request is in
    * flight returns the in-flight promise; calling once a stream is
    * acquired resolves immediately.
    */
@@ -417,7 +417,7 @@ function classifyMediaError(
   if (name === "NotReadableError" || name === "TrackStartError") {
     return {
       type: "device-in-use",
-      message: `${device} is in use by another app (Discord, Teams, ΓÇª). Close that app, then retry.`,
+      message: `${device} is in use by another app (Discord, Teams, …). Close that app, then retry.`,
       raw,
     };
   }
@@ -497,7 +497,7 @@ function videoinputsHaveDuplicateIds(list: MediaDeviceInfo[]): boolean {
 }
 
 /**
- * Rough facing hint ΓÇö OEM labels vary; Motorola often omits trustworthy `groupId`.
+ * Rough facing hint — OEM labels vary; Motorola often omits trustworthy `groupId`.
  */
 function facingModeGuessFromCameraLabel(
   label: string
@@ -698,7 +698,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   // lifetime of the hook. The mesh-build effect gates on this rather
   // than on stream identity so adding a SECOND stream (e.g. tutor
   // grants mic first, cam second) does NOT trigger a mesh teardown +
-  // rebuild ΓÇö which would otherwise drop every remote peer's media
+  // rebuild — which would otherwise drop every remote peer's media
   // for ~5s while the new mesh re-negotiates. Late-arriving tracks
   // are routed through `mesh.addLocalTrackToAllPeers` in a separate
   // effect; perfect-negotiation handles the SDP refresh in-place.
@@ -709,7 +709,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   const [videoError, setVideoError] = useState<AvAcquireError | null>(null);
   const [isMicMuted, setIsMicMuted] = useState<boolean>(false);
   // Cam defaults to muted because no track exists until requestCam
-  // succeeds ΓÇö UI placeholder logic ("Camera off") reads this.
+  // succeeds — UI placeholder logic ("Camera off") reads this.
   const [isCamMuted, setIsCamMuted] = useState<boolean>(true);
   const [hasMicPermission, setHasMicPermission] =
     useState<AvPermissionState>("unknown");
@@ -742,10 +742,10 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   // setters from in-flight acquisition promises.
   const unmountedRef = useRef<boolean>(false);
   // Tracks whether the current localAudioStream comes from
-  // externalAudioStream (so we don't stop its tracks ΓÇö those belong to
+  // externalAudioStream (so we don't stop its tracks — those belong to
   // the recorder hook).
   const audioFromExternalRef = useRef<boolean>(false);
-  /** Latest enumerated cameras + picker slot ΓÇö read inside async enumeration. */
+  /** Latest enumerated cameras + picker slot — read inside async enumeration. */
   const videoDevicesRef = useRef<MediaDeviceInfo[]>([]);
   const selectedVideoDeviceIdRef = useRef<string | null>(null);
   const pickedVideoCameraSlotRef = useRef(0);
@@ -957,7 +957,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           setLocalVideoStream(stream);
           setHasEverHadLocalMedia(true);
           setHasCamPermission("granted");
-          // requestCam implies user intent "cam on" ΓÇö unmute on
+          // requestCam implies user intent "cam on" — unmute on
           // success regardless of the placeholder isCamMuted=true
           // initial state. Tracks land enabled (the default).
           setIsCamMuted(false);
@@ -1145,7 +1145,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       unmountedRef.current = true;
       // Stop and release any acquired local streams on unmount so
       // the OS frees the device. For externalAudioStream we DON'T
-      // stop the tracks ΓÇö they belong to the recorder.
+      // stop the tracks — they belong to the recorder.
       const aud = localAudioStreamRef.current;
       if (aud && !audioFromExternalRef.current) {
         for (const t of aud.getTracks()) {
@@ -1178,12 +1178,12 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   // When the workspace recording mic is acquired by useAudioRecorder,
   // it passes a DEDICATED publishStream here (one of two Web Audio
   // destinations downstream of the source+gain pipeline). We use it
-  // directly ΓÇö no cloning, no second getUserMedia. The recording's
+  // directly — no cloning, no second getUserMedia. The recording's
   // recordingStream is a SEPARATE Web Audio destination, so muting
   // this stream's track via toggleMic does NOT affect recording.
   //
   // Cloning was tried and caused Chrome to send no audio data on the
-  // WebRTC track even though the Web Audio source captured fine ΓÇö a
+  // WebRTC track even though the Web Audio source captured fine — a
   // known issue with two MediaStreamTrack consumers of the same
   // hardware mic. Web Audio fan-out avoids that entirely.
   // ---------------------------------------------------------------
@@ -1202,7 +1202,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     }
 
     // Release any previous self-acquired stream before adopting the
-    // external one. (External streams are NOT stopped ΓÇö they belong
+    // external one. (External streams are NOT stopped — they belong
     // to the recorder hook.)
     const prev = localAudioStreamRef.current;
     if (prev && !audioFromExternalRef.current) {
@@ -1216,7 +1216,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     }
 
     // Apply current mute state to the stream's tracks. Note this is
-    // fine ΓÇö the recordingStream is a separate Web Audio destination,
+    // fine — the recordingStream is a separate Web Audio destination,
     // so disabling these tracks does NOT silence the MediaRecorder.
     if (isMicMutedRef.current) {
       for (const t of externalAudioStream.getAudioTracks()) t.enabled = false;
@@ -1242,12 +1242,12 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
   useEffect(() => {
     // Build the mesh once the local peer has acquired its FIRST
-    // stream (mic OR cam ΓÇö either is enough). After that point, the
+    // stream (mic OR cam — either is enough). After that point, the
     // mesh stays up; later stream additions are reconciled by the
     // `addLocalTrackToAllPeers` effect below WITHOUT a teardown.
     //
     // Deliberately NOT depending on `localAudioStream` /
-    // `localVideoStream` identity here ΓÇö that was the pre-May-15
+    // `localVideoStream` identity here — that was the pre-May-15
     // bug that dropped son's audio + video when the tutor clicked
     // "Allow camera" mid-session.
     if (!syncClient || !hasEverHadLocalMedia) {
@@ -1255,7 +1255,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       return;
     }
     if (typeof localPeerId !== "string" || localPeerId.length === 0) {
-      log.error("missing localPeerId ΓÇö refusing to build mesh");
+      log.error("missing localPeerId — refusing to build mesh");
       return;
     }
 
@@ -1316,7 +1316,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         out.push(p);
         // A peer is reachable when WebRTC is fully connected at both
         // the PC layer and the ICE layer. Sync-presence alone is not
-        // sufficient ΓÇö this is the split-brain guard.
+        // sufficient — this is the split-brain guard.
         if (
           entry.peerConnectionState === "connected" &&
           (entry.iceConnectionState === "connected" ||
@@ -1418,14 +1418,14 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       if (disposed) return;
       if (track.kind !== "audio" && track.kind !== "video") {
         log.warn(
-          `onRemoteTrack unknown kind=${track.kind} peer=${peerId} ΓÇö dropping`
+          `onRemoteTrack unknown kind=${track.kind} peer=${peerId} — dropping`
         );
         return;
       }
       const entry = internal.get(peerId);
       if (!entry) {
         log.warn(
-          `onRemoteTrack for unknown peer ${peerId} ΓÇö dropping track (no entry; presence not yet observed?)`
+          `onRemoteTrack for unknown peer ${peerId} — dropping track (no entry; presence not yet observed?)`
         );
         return;
       }
@@ -1530,7 +1530,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       if (state === "disconnected" || state === "failed") {
         scheduleEviction(peerId, `pc-${state}`);
       } else {
-        // Peer recovered ΓÇö cancel any pending eviction.
+        // Peer recovered — cancel any pending eviction.
         cancelEviction(peerId);
       }
 
@@ -1605,7 +1605,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   // re-added. We then call `mesh.replaceLocalTrackOnAllPeers` for
   // each attached track so RTP senders that already held that track
   // (same id as prior add/getLocalTracks path) still get an explicit
-  // `replaceTrack` ΓÇö mirrors the mic-switch path and avoids the
+  // `replaceTrack` — mirrors the mic-switch path and avoids the
   // Chrome/WebRTC quirk where remote audio stays silent until a
   // replace happens.
   //
@@ -1910,7 +1910,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   );
 
   // ---------------------------------------------------------------
-  // Effect: camera unplugged ΓÇö enumerator no longer lists live deviceId
+  // Effect: camera unplugged — enumerator no longer lists live deviceId
   // ---------------------------------------------------------------
   useEffect(() => {
     const id = selectedVideoDeviceId;
@@ -1932,7 +1932,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       if (swapMicFromRecorder) {
         if (!externalAudioStream) {
           log.warn(
-            "setMicDevice: swapMicDevice set without externalAudioStream ΓÇö ignoring"
+            "setMicDevice: swapMicDevice set without externalAudioStream — ignoring"
           );
           return;
         }
@@ -1959,7 +1959,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       }
       if (externalAudioStream) {
         log.warn(
-          "setMicDevice: external audio present ΓÇö pass swapMicDevice from workspace"
+          "setMicDevice: external audio present — pass swapMicDevice from workspace"
         );
         return;
       }
@@ -2042,7 +2042,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   const reconnectPeer = useCallback((peerId: string) => {
     const mesh = meshRef.current;
     if (!mesh) {
-      log.warn(`reconnectPeer ignored ΓÇö no mesh peer=${peerId}`);
+      log.warn(`reconnectPeer ignored — no mesh peer=${peerId}`);
       return;
     }
     try {
