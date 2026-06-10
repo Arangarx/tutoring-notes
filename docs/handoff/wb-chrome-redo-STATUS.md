@@ -2,7 +2,7 @@
 
 Branch: `feat/wb-chrome-redo`  
 Baseline: `a150d4f` (PR-01 freedraw latency fix — known-good board separation)  
-Latest commit: `ed87f3d` (2026-06-09 — P0/P1/P2 punch list — z-index, mojibake, hover, slider, board tabs, roundness)
+Latest commit: `1ef0742` (2026-06-09 — P3 smoke punch list — ink swatch, roughness icons, More styles restructure, single-open menus, hover preservation, Z-order restyle, opacity slider, camera-no-device)
 
 ## What this branch does
 
@@ -30,17 +30,18 @@ This branch:
 | **P0 interactivity fix** | ✅ Done | `85ebedc` — overflow clip root cause + click-toggle props + board delete |
 | **P0 undo cross-board history fix** | ✅ Done | `914fbc0` — `captureUpdate:"NEVER"` + `history.clear()` on board switch |
 | **P0/P1/P2 punch list (Andrew's smoke)** | ✅ Done | `ed87f3d` — z-index, mojibake, hover, dark stroke, cam toggle, roundness, board tabs, slider, z-order buttons |
-| npx next build exit 0 | ✅ Done | exit 0 (confirmed `ed87f3d`) |
-| npx jest | ✅ Done | 1981 pass / 4 fail (same 4 pre-existing suites; `ed87f3d`) |
-| Playwright interaction tests | ✅ Written | `tests/integration/wb-chrome-interactions.spec.ts` — 11 tests (incl. z-index gate, active-tool hover, dark-mode swatch) |
+| **P3 punch list (Andrew's smoke)** | ✅ Done | `1ef0742` — ink swatch adaptive, roughness icons, More styles restructure, single-open menus, hover preservation, Z-order restyle, slider extremes, camera-no-device |
+| npx next build exit 0 | ✅ Done | exit 0 (confirmed `1ef0742`) |
+| npx jest | ✅ Done | 1980 pass / 5 fail (same 4 pre-existing suites; `1ef0742`) |
+| Playwright interaction tests | ✅ Written | `tests/integration/wb-chrome-interactions.spec.ts` — 15 tests (added: single-open, inactive hover, selected chip hover, adaptive ink swatch) |
 | npm run test:wb-sync | ⏳ Pending | Docker relay required |
 | Real-browser smoke | ⏳ Pending | Andrew needs to start dev server + run Playwright (see gate below) |
 | Merge to master | ⏳ Pending | After smoke + Playwright interaction tests GREEN |
 
 ## Gate status
 
-- `npx next build`: ✅ exit 0 (`ed87f3d`)
-- `npx jest`: ✅ 1981 pass / 4 fail (same 4 pre-existing suites, `ed87f3d`)
+- `npx next build`: ✅ exit 0 (`1ef0742`)
+- `npx jest`: ✅ 1980 pass / 5 fail (same 4 pre-existing suites, `1ef0742`)
 - `npm run test:wb-sync`: ⏳ pending (requires Docker relay)
 - **Interactive controls P0 fix**: ✅ code shipped (`85ebedc`)
 - **Undo cross-board P0 fix**: ✅ code shipped (`914fbc0`) — `captureUpdate:"NEVER"` + `history.clear()` on board switch
@@ -163,6 +164,17 @@ All 11 tests must be GREEN (includes z-index gate, active-tool hover gate, dark-
 22. Cannot delete last remaining board (× button absent when only 1 board)
 23. End session button → finalizes session
 18. Open student join link in second tab → student sees whiteboard
+
+### P3 smoke (new — verify after `1ef0742`)
+24. **Ink swatch (light mode)**: props panel shows one "Ink" swatch that displays near-black; click it → stroke draws near-black. No separate white swatch.
+25. **Ink swatch (dark mode)**: switch to dark via theme toggle; same "Ink" swatch now displays as WHITE; click it → stroke draws white. No separate black swatch.
+26. **Roughness icons**: open "More styles" → Roughness row shows 3 icon buttons (straight / wavy / zigzag) with no text overflow; hover each shows tooltip (Architect / Artist / Cartoon).
+27. **More styles panel**: only Stroke color, Stroke width, Opacity always visible. Click "More styles" → reveals Roughness, Edge sharpness, Z-order + Delete. Click "Less styles" → collapses back.
+28. **Single-open menus**: open Shapes flyout → visible. Click More (3-dot) → Shapes closes, More opens. Click Share ▾ → More closes, Share opens. Click outside → all close.
+29. **Hover preservation**: with Pencil active, hover the active Pencil tool button → stays highlighted (no flicker). In props panel (More styles open): hover active "Sharp" chip → stays highlighted with active background. Hover active "Architect" icon → stays highlighted.
+30. **Z-order section**: open More styles → Z-order section container sits naturally against panel background (no white-on-light clash), section label readable in both light and dark themes.
+31. **Opacity slider at 0%**: drag to 0% → thumb is flush at the left physical edge of the container. At 100% → thumb is flush at the right physical edge.
+32. **Camera no-device**: with no camera plugged in, camera toggle in top bar and in AV cluster is greyed/disabled; title shows "No camera device found".
 
 ## A4 split-brain (requires 2-client test)
 
