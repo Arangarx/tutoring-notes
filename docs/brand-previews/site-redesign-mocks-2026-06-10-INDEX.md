@@ -17,6 +17,7 @@ Style references: `palette-mocks-FINAL-mynka-blue.html`, `whiteboard-session-she
 | 3 | [site-redesign-mock-parent-share-2026-06-10.html](site-redesign-mock-parent-share-2026-06-10.html) | `/s/[token]` | Parent-facing: full-bleed note cards on phone, accent NEW treatment, thumb-sized recording/whiteboard chips, collapsed older notes. |
 | 4 | [site-redesign-mock-login-2026-06-10.html](site-redesign-mock-login-2026-06-10.html) | `/login` (+ claim/setup pattern) | Centered auth card on desktop; edge-to-edge form on mobile with 48px touch targets. Reusable for claim flow. |
 | 5 | [site-redesign-mock-settings-2026-06-10.html](site-redesign-mock-settings-2026-06-10.html) | `/admin/settings` | iOS-style settings list; full-width rows on mobile, contained card on desktop. |
+| 6 | [whiteboard-mobile-mock-2026-06-10.html](whiteboard-mobile-mock-2026-06-10.html) | Live whiteboard (mobile/tablet) | Resolution-driven live-board chrome: tier-1 bottom toolbar, AV pip, board tabs, props/overflow/shapes sheets; tutor vs student control-set callouts. |
 
 ## Design direction (summary)
 
