@@ -4,7 +4,7 @@
 >
 > **Sequencing (ratified Andrew 2026-06-07/08):** Whiteboard chrome is a **pre-master gate** for the V1 reveal — build on `v1-redesign` before `v1-redesign → master`. Master cut = Sarah reveal (`tutoring-notes.vercel.app` / `usemynk.com` share the same production deployment on `master`; no UI-skin feature flag). The reveal must be one cohesive site, not polished chrome around still-janky Excalidraw native UI.
 >
-> **Last consolidated:** 2026-06-08 (Sarah live pilot feedback batch: **IC-01**, **ST-07**, **PU-05**, **TU-15/16**, **SR-04** refresh, **SR-13/14**; prior same-day: audit dispositions; TU-13/TU-14/TM-10; PP-04/ST-05; **PR-01**; **TM-11**; **VP-01/VP-02/PP-06**). Prior: 2026-06-07 TU-12 theme parity, TU-11 keyboard surface routing. **Design doc (ratified forks + phasing):** [`whiteboard-chrome-design-2026-06-07.md`](whiteboard-chrome-design-2026-06-07.md). **Audit:** [`whiteboard-excalidraw-function-audit-2026-06-08.md`](whiteboard-excalidraw-function-audit-2026-06-08.md). **Session shell mock:** [`whiteboard-session-shell-design-2026-06-08.md`](whiteboard-session-shell-design-2026-06-08.md).
+> **Last consolidated:** 2026-06-10 (mobile whiteboard review — Andrew + student perspective [wife]: **TM-12/13/14**, **TB-12**, **SR-15/16**, **ST-04/05** student-laser refresh; mock [`whiteboard-mobile-mock-2026-06-10.html`](../brand-previews/whiteboard-mobile-mock-2026-06-10.html) @ `0f4b94d`). Prior: 2026-06-08 Sarah live pilot batch (**IC-01**, **ST-07**, **PU-05**, **TU-15/16**, **SR-04** refresh, **SR-13/14**; audit dispositions; TU-13/TU-14/TM-10; PP-04/ST-05; **PR-01**; **TM-11**; **VP-01/VP-02/PP-06**). **Design doc (ratified forks + phasing):** [`whiteboard-chrome-design-2026-06-07.md`](whiteboard-chrome-design-2026-06-07.md). **Audit:** [`whiteboard-excalidraw-function-audit-2026-06-08.md`](whiteboard-excalidraw-function-audit-2026-06-08.md). **Session shell mock:** [`whiteboard-session-shell-design-2026-06-08.md`](whiteboard-session-shell-design-2026-06-08.md).
 
 ---
 
@@ -60,6 +60,7 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 | **TB-10** | **Graph / Desmos insert** affordance in Mynk toolbar (Sarah top-10 action: "importing or inserting a graph"). | (ii) | orchestrator Q1; BACKLOG Apr 24 Q1; WHITEBOARD-STATUS Sarah Q&A |
 | **TB-11** | Keep **visible Undo/Redo** controls in Mynk chrome (chunky ↶/↷ shipped Apr 2024); coordinate with keyboard path (TU-03, TU-11). | (ii) | BACKLOG undo row; whiteboard-smoke-log |
 | **IC-01** | **Eraser icon** — use a **classic block/pencil-eraser** glyph (Lucide `Eraser` or equivalent). The prior icon read as weird/backspace-like. | (ii) | Sarah live feedback 2026-06-08; mock [`whiteboard-session-shell-mock-2026-06-08.html`](../brand-previews/whiteboard-session-shell-mock-2026-06-08.html) |
+| **TB-12** | **Phone/tablet tier-1 tool calibration (discoverability).** First mobile cut pulled back too far — both reviewers (Andrew + student perspective) agreed tier-1 must be richer. **Agreed tier-1 (Andrew 2026-06-10):** **Phone student** — Pencil · Eraser · Wand · Styles · ⋮ (Select + Shapes in overflow). **Phone tutor** — adds Select · Shapes▾ to tier-1 (still lean vs desktop). **Tablet** — slim left rail (Select / Pencil / Eraser / Text / Wand) + bottom bar (Shapes▾ / Undo / Styles / ⋮). Phone use case = *mostly student, mostly watching + sometimes drawing*. Mock: [`whiteboard-mobile-mock-2026-06-10.html`](../brand-previews/whiteboard-mobile-mock-2026-06-10.html). Pairs with **TB-06**, **ST-04**. | (ii) | Mobile review 2026-06-10; [`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md) |
 
 ### Pulldown / consolidation
 
@@ -114,6 +115,9 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 | **TM-09** | **Tutor-mobile deferral + expectations notice (v1.1).** (a) Pre-subscribe/pricing copy: tutor phone/tablet support upcoming; **desktop tutoring only** now. (b) Host-time device gate: block tutor **starting** a whiteboard session from non-desktop with *"Desktop tutoring only for now; phone/tablet tutoring is coming."* Architecture must not preclude tutor-mobile later. **Defers TM-05** full variant to v1.1. | (ii) + product | Design pass 2026-06-07 Fork 2; [`whiteboard-chrome-design-2026-06-07.md`](whiteboard-chrome-design-2026-06-07.md) §5 |
 | **TM-10** | **Full touch/tablet/phone parity for ALL chrome controls.** Every whiteboard function exposed in chrome — z-order, delete-selected, More styles, laser, theme toggle, etc. — must have a **touch-reachable equivalent** (long-press menu, selection toolbar, adequate tap targets). No desktop-only or right-click-only interaction for any function students need. Standing principle (Andrew 2026-06-08). | (ii) + verify | Audit ratification 2026-06-08; pairs with TU-14 |
 | **TM-11** | **V1 HARD — mobile/touch properties palette dismissible by easy gesture.** On phone/tablet touch, the stroke/color/style/opacity properties panel (bottom sheet when a drawing tool is active) **MUST** dismiss without re-tapping the originating tool or toggle. **Allowed (primary paths):** tap anywhere off the panel (canvas or backdrop), swipe-down on the sheet drag handle. **Allowed (supplement only):** explicit × close — not the sole or primary dismissal path. **Disallowed:** re-tapping the originating tool/toggle button as the **only** way to close (native Excalidraw behavior). **Rationale (load-bearing):** independent complaint from **three** people — Sarah (pilot tutor), Andrew's wife, and Andrew — on first use; known Excalidraw pain point we are explicitly fixing, not a nice-to-have. Design detail: [`whiteboard-session-shell-design-2026-06-08.md`](whiteboard-session-shell-design-2026-06-08.md) §7.3–7.4. Pairs with PP-02, PP-03, TM-01. | (ii) | Andrew ratified 2026-06-08; Sarah-Chat L44–45 |
+| **TM-12** | **Explicit toolbar/panel show-hide button (mobile).** Persistent, **always-visible** affordance to **open AND close** the tool panel — not gesture-only slide-ins. Student default = lean/uncluttered chrome, but the toolbar must be **obviously reachable** via this button. **Root issue:** mobile reviewer could not find the toolbar. Pairs with **TB-12**. Mock: [`whiteboard-mobile-mock-2026-06-10.html`](../brand-previews/whiteboard-mobile-mock-2026-06-10.html). | (ii) | Mobile review 2026-06-10 (student perspective + Andrew) |
+| **TM-13** | **Bottom sheets open via button — not bottom-edge swipe-up.** Swipe-up from the screen bottom collides with iOS/Android system gestures (app minimize, back navigation). **Opening** any tool/properties/overflow sheet must be **button-driven**. **Swipe-down-to-dismiss** on an already-open sheet remains allowed (pairs with **TM-11**). | (ii) | Mobile review 2026-06-10 |
+| **TM-14** | **Portrait-primary phone layout.** Phone whiteboard chrome is designed **portrait-first**; landscape is supported but there is **no rotate nudge** / forced-orientation prompt. **Resolved (Andrew 2026-06-10).** | (ii) layout | Andrew decision 2026-06-10; mobile review |
 
 ### Screen real estate / responsive
 
@@ -133,6 +137,8 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 | **SR-12** | **iOS dynamic viewport:** custom chrome must not clip when Safari URL bar collapses (pair with `100dvh`). | (ii) | PHASE-2-IOS-SMOKE-MATRIX §7 known-quirks |
 | **SR-13** | **Desktop review mode — smaller notes panel.** On **desktop only** (≥1024px), shrink the notes column so the tutor has more room for board preview / other content while editing notes. **Mobile review unchanged** — notes stay full-width primary; board/video remains overlay. | (ii) layout | Sarah live feedback 2026-06-08; mock review split |
 | **SR-14** | **User-facing "boards" + browser-style tab strip.** Rename the user-facing multi-canvas concept from **"page"** to **"board"** (internal code, DB fields, and log prefixes such as `pvs` may remain "page"). Bottom strip = **Chrome/Google-Sheets-style tabs** with a **"+"** affordance to add a board (tab at bottom, not a separate modal). Replaces pill-style "Pg N" strip. | (ii) | Sarah live feedback 2026-06-08; mock; terminology note below |
+| **SR-15** | **Empty canvas must read as a whiteboard / drawing surface.** Even when chrome is minimal or the board has no strokes yet, the canvas area must have clear **board-paper fill / drawing-surface affordance** so users do not mistake it for unused chrome space and ask to put controls there. Pairs with **TU-12** theme-driven board background. | (ii) | Mobile review 2026-06-10 (student perspective) |
+| **SR-16** | **Video pip — role-different defaults, shared controls.** **Tutor-priority** primary tile; **camera on by default** for both roles. **Student self-view hidden by default** (K-12 distraction — kids fixate on seeing themselves). **Tutor self-view visible by default** (Sarah needs to see what she is showing on camera). Same control set on both sides: swap which tile is primary + show/hide self-view — **defaults differ by role**. Extends **SR-04** cluster. Mock: [`whiteboard-mobile-mock-2026-06-10.html`](../brand-previews/whiteboard-mobile-mock-2026-06-10.html). | (ii) | Mobile review 2026-06-10; Gate A2 waiting-room owns cam-on-by-default timing — see [`BACKLOG.md`](../BACKLOG.md) |
 
 **Terminology (SR-14):** **User-facing copy and chrome labels use "board" / "Board N".** Implementation may keep `page`, `pageId`, `page-strip` identifiers internally until a dedicated rename pass — do not block V1 on code renames.
 
@@ -143,8 +149,8 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 | **ST-01** | **Follow-tutor** toggle in bottom control bar; **checked by default** (sync pan/zoom). | (ii) | Sarah-Chat L41; v1 §5.7 |
 | **ST-02** | Student bottom bar ~48px: **follow toggle, mic, leave** — above compact page strip. | (ii) | v1 §5.7 |
 | **ST-03** | **Student add-page:** **No** for v1 (ratified); architecture must allow enabling later. | product | Sarah-Chat L23; v1 §8 |
-| **ST-04** | Student does **not** need full shape/text toolset by default — tutor drives structure. | (ii) | v1 §5.7; RELIABILITY-REDESIGN |
-| **ST-05** | **Pointer wand** (formerly "laser pointer") — **V1 top-level** reachable toolbar slot (not deferred). **Verify** alignment and visibility to student in V1; fix if regressed (viewport-alignment fix cleared most misalignment per Andrew 2026-06-08). Remains a V1 acceptance gate. Icon: **ST-07**. | (ii) + verify | Sarah-Chat L39–40; audit T-16/NR-06 ratified 2026-06-08 |
+| **ST-04** | Student does **not** need full shape/text toolset by default — tutor drives structure. **Tier-1 student tools** per **TB-12** (Pencil · Eraser · Wand · Styles · ⋮); Select + Shapes live in overflow, not permanent slots. | (ii) | v1 §5.7; RELIABILITY-REDESIGN; mobile review 2026-06-10 |
+| **ST-05** | **Pointer wand** (formerly "laser pointer") — **V1 tier-1** for **both tutor and student** (peer-visible highlight; not highlight-only on student). **Resolved (Andrew 2026-06-10):** students get the wand in tier-1 (**TB-12**). **Distinct color per role** so tutor vs student pointers are distinguishable — mock uses tutor=coral, student=cyan; **exact palette TBD** (judgment call). **Verify** alignment and **bidirectional visibility** on student device in V1; fix if regressed — see [`BACKLOG.md`](../BACKLOG.md) tutor-laser-not-visible bug. Icon: **ST-07**. | (ii) + verify | Sarah-Chat L39–40; audit T-16/NR-06 ratified 2026-06-08; mobile review 2026-06-10 |
 | **ST-07** | **Pointer wand icon** — replace laser/crosshair glyph with a **wand** symbol (Sarah suggestion). Function unchanged (peer-visible pointer highlight). Pairs with **ST-05**. | (ii) | Sarah live feedback 2026-06-08; mock |
 | **ST-06** | Student page strip mirrors tutor **section grouping** (read-only; no add-page in v1). | (ii) | pdf-page-picker bootstrapper § student mirror |
 
@@ -214,7 +220,7 @@ Pinned API finding: on `@excalidraw/excalidraw` 0.18.1, `UIOptions.tools` only t
 
 > **Pre-hide audit (2026-06-08):** [`whiteboard-excalidraw-function-audit-2026-06-08.md`](whiteboard-excalidraw-function-audit-2026-06-08.md) — ratified 2026-06-08; 5 remaining silently-lost items; NR-01, NR-07–NR-09, NR-12 still open.
 
-4. **Student vs tutor tool parity:** v1 pencil+eraser only — revisit after Sarah tests student add-page.
+4. **Student vs tutor tool parity:** **Partially resolved 2026-06-10** — phone tier-1 calibration in **TB-12** (student: Pencil/Eraser/Wand/Styles/⋮; phone tutor adds Select/Shapes▾). Full desktop parity still deferred; student add-page remains v1 no.
 8. **Keyboard shortcuts:** expose Excalidraw defaults (P, R, etc.) when native toolbar hidden? → see **TU-11** (surface routing + tutor-desktop vs student-mobile parity); shortcuts are accelerators per **TU-14**.
 9. **Visual system:** every chrome control maps to v1 tokens — no one-off oversized buttons.
 10. **PDF default fit:** tutor viewport vs student viewport on insert (BACKLOG open design row).
@@ -317,7 +323,9 @@ Broad case-insensitive ripgrep across **`docs/`** and **`docs/handoff/`** for wh
 - Backlog rows: [`docs/BACKLOG.md`](../BACKLOG.md) § Whiteboard — implementation / design queue
 - Excalidraw API constraint: [`docs/PLATFORM-ASSUMPTIONS.md`](../PLATFORM-ASSUMPTIONS.md) §7.5
 - Student mobile layout shell: [`docs/handoff/v1-component-redesign-design-2026-05-31.md`](v1-component-redesign-design-2026-05-31.md) §5.7
+- **Mobile chrome mock (2026-06-10):** [`docs/brand-previews/whiteboard-mobile-mock-2026-06-10.html`](../brand-previews/whiteboard-mobile-mock-2026-06-10.html) @ `0f4b94d`
 - Mobile viewport architecture: [`docs/RELIABILITY-REDESIGN-2026-05-27.md`](../RELIABILITY-REDESIGN-2026-05-27.md) Surface 5
+- Orchestrator state: [`docs/handoff/ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md)
 
 ---
 
@@ -325,17 +333,17 @@ Broad case-insensitive ripgrep across **`docs/`** and **`docs/handoff/`** for wh
 
 | Category | Distinct requirements |
 |----------|----------------------:|
-| Toolbar / tool-set & ordering | 12 |
+| Toolbar / tool-set & ordering | 13 |
 | Pulldown / consolidation | 5 |
 | Properties palette | 6 |
 | Viewport / ghost bounds / canvas view prefs | 2 |
 | Drawing defaults | 5 |
-| Touch / mobile-tablet | 11 |
-| Screen real estate / responsive | 14 |
+| Touch / mobile-tablet | 14 |
+| Screen real estate / responsive | 16 |
 | Student-WB-specific | 7 |
 | Tutor-WB-specific | 16 |
 | Performance / draw latency | 1 |
-| **Total** | **79** |
+| **Total** | **84** |
 
 ---
 
