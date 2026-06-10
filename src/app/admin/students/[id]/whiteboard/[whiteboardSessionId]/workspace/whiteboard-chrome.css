@@ -879,11 +879,7 @@
   line-height: 1;
   pointer-events: auto;
   cursor: pointer;
-  border-left: 1px solid color-mix(in srgb, var(--border) 55%, var(--foreground) 45%);
-  border-top: 1px solid color-mix(in srgb, var(--border) 55%, var(--foreground) 45%);
-  border-radius: 5px 0 0 0;
-  background: color-mix(in srgb, var(--surface-2) 72%, var(--foreground) 28%);
-  opacity: 0.95;
+  opacity: 0.88;
 }
 
 .mynk-wb-pulldown-chevron::before {
@@ -895,9 +891,6 @@
 .mynk-wb-tool-btn--active .mynk-wb-pulldown-chevron {
   color: var(--background);
   opacity: 1;
-  border-left-color: color-mix(in srgb, var(--background) 45%, transparent);
-  border-top-color: color-mix(in srgb, var(--background) 45%, transparent);
-  background: color-mix(in srgb, var(--background) 22%, var(--foreground) 78%);
 }
 
 [data-layout="narrow"] .mynk-wb-pulldown-chevron,
