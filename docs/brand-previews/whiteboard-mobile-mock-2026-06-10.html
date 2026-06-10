@@ -124,16 +124,17 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
 .wb-callout::before{content:"";position:absolute;width:8px;height:8px;background:var(--callout-bg);border-left:1px solid var(--callout-border);border-bottom:1px solid var(--callout-border);transform:rotate(-45deg)}
 .wb-callout--end{top:48px;right:8px}
 .wb-callout--end::before{right:12px;top:-5px;border-left:none;border-bottom:none;border-top:1px solid var(--callout-border);border-right:1px solid var(--callout-border)}
-.wb-callout--panel-toggle{bottom:64px;left:8px;max-width:min(240px,58vw)}
+.wb-callout--panel-toggle{bottom:calc(52px + 40px + 8px + 40px + 12px);left:8px;max-width:min(240px,58vw)}
+.wb-shell[data-toolbar-hidden] .wb-callout--panel-toggle{bottom:calc(8px + 40px + 12px)}
 .wb-callout--panel-toggle::before{left:18px;bottom:-5px}
 .wb-callout--overflow{bottom:120px;right:8px}
 .wb-callout--overflow::before{right:14px;bottom:-5px}
-.wb-callout--student{bottom:58px;left:8px;max-width:min(240px,58vw)}
+.wb-callout--student{bottom:10px;left:8px;max-width:min(240px,58vw)}
 .wb-callout--student::before{left:14px;bottom:-5px}
-.wb-callout--av{top:88px;right:8px;max-width:min(220px,50vw)}
+.wb-callout--av{top:96px;right:8px;max-width:min(220px,50vw)}
 .wb-callout--av::before{right:14px;top:-5px;border-left:none;border-bottom:none;border-top:1px solid var(--callout-border);border-right:1px solid var(--callout-border)}
-.wb-callout--laser{bottom:140px;left:50%;transform:translateX(-50%);max-width:min(260px,70vw);text-align:center}
-.wb-callout--laser::before{left:50%;margin-left:-4px;bottom:-5px}
+.wb-callout--laser{top:40%;bottom:auto;left:8px;transform:none;max-width:min(220px,52vw);text-align:left}
+.wb-callout--laser::before{left:20px;margin-left:0;bottom:-5px}
 .wb-callout strong{color:var(--text);font-weight:600}
 
 /* Panel toggle — persistent show/hide tools button */
