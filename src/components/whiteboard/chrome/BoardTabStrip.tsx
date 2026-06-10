@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import type { PageStripRow } from "@/components/whiteboard/PageStrip";
+import { isPdfBoardSection } from "@/lib/whiteboard/page-strip-pdf";
+import { WbIconPdf } from "@/components/whiteboard/chrome/wb-icons";
 
 export type BoardTabStripProps = {
   pageList: PageStripRow[];
@@ -32,6 +34,7 @@ export function BoardTabStrip({
     <div className="mynk-wb-board-tabs" data-testid={testId} role="tablist" aria-label="Boards">
       {pageList.map((page, index) => {
         const boardLabel = `Board ${index + 1}`;
+        const isPdf = page.isPdf ?? isPdfBoardSection(page.section);
         const active = page.id === activePageId;
         const confirming = confirmDeleteId === page.id;
         return (
@@ -52,6 +55,11 @@ export function BoardTabStrip({
               }}
             >
               {active && <span className="mynk-wb-board-tab__dot" aria-hidden />}
+              {isPdf && (
+                <span className="mynk-wb-board-tab__pdf-icon" aria-hidden>
+                  <WbIconPdf size={12} />
+                </span>
+              )}
               {boardLabel}
             </button>
             {canDelete && (

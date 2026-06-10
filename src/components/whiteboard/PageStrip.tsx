@@ -8,6 +8,8 @@ export type PageStripRow = {
   id: string;
   title: string;
   section?: string;
+  /** True when this board tab was created by PDF import (pdf-* section). */
+  isPdf?: boolean;
   /** Tutor-authoritative; ignored by strip UI. */
   viewState?: PageViewState;
 };

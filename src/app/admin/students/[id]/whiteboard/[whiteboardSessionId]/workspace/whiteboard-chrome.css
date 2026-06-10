@@ -1043,6 +1043,14 @@
   flex-shrink: 0;
 }
 
+.mynk-wb-board-tab__pdf-icon {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: currentColor;
+  opacity: 0.75;
+}
+
 .mynk-wb-board-tab--add {
   padding: 0 12px;
   font-size: 18px;

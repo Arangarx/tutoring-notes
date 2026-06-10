@@ -192,6 +192,7 @@ import {
   restoreAndSanitizeForPaint,
 } from "@/lib/whiteboard/scene-paint";
 import type { PageViewState, WhiteboardBoardDocumentV1 } from "@/lib/whiteboard/board-document-snapshot";
+import { enrichPageStripRow } from "@/lib/whiteboard/page-strip-pdf";
 import {
   clearSessionSceneDraft,
   loadTutorSessionRecoveryDraft,
@@ -2529,12 +2530,15 @@ export function WhiteboardWorkspaceClient({
         // page's pan/zoom.
         const nextList = [
           ...pageListRef.current,
-          ...rows.map((r) => ({
-            id: r.pageId,
-            title: r.title,
-            section: sectionId,
-            ...(r.viewState ? { viewState: r.viewState } : {}),
-          })),
+          ...rows.map((r) =>
+            enrichPageStripRow({
+              id: r.pageId,
+              title: r.title,
+              section: sectionId,
+              isPdf: true,
+              ...(r.viewState ? { viewState: r.viewState } : {}),
+            })
+          ),
         ];
         pageListRef.current = nextList;
         setPageList(nextList);
@@ -3089,12 +3093,14 @@ export function WhiteboardWorkspaceClient({
       const api = excalidrawAPIRef.current;
       if (!api) return;
       const { restoreElements } = await import("@excalidraw/excalidraw");
-      const list = doc.pageList.map((p) => ({
-        id: p.id,
-        title: p.title,
-        ...(p.section ? { section: p.section } : {}),
-        ...(p.viewState ? { viewState: { ...p.viewState } } : {}),
-      }));
+      const list = doc.pageList.map((p) =>
+        enrichPageStripRow({
+          id: p.id,
+          title: p.title,
+          ...(p.section ? { section: p.section } : {}),
+          ...(p.viewState ? { viewState: { ...p.viewState } } : {}),
+        })
+      );
       pageListRef.current = list;
       setPageList(list);
       const secs =
