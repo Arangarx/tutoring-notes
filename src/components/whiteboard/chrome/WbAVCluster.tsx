@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { AVTilesPanel, type AVTilesPanelProps } from "@/components/av/AVTilesPanel";
 import { WbIconCamera, WbIconMic } from "@/components/whiteboard/chrome/wb-icons";
@@ -19,6 +19,30 @@ export type WbAVClusterProps = AVTilesPanelProps & {
 const DEFAULT_SIZE = { width: 240, height: 280 };
 const MIN_SIZE = { width: 160, height: 180 };
 const MAX_SIZE = { width: 400, height: 480 };
+
+/** Chrome overhead: drag handle + tiles padding + controls row (matches whiteboard-chrome.css). */
+const CLUSTER_CHROME_HEIGHT = 14 + 8 + 45;
+const TILE_GAP = 4;
+/** Video body height for one tile at the default cluster size (280 − chrome). */
+const PER_TILE_BODY_HEIGHT = DEFAULT_SIZE.height - CLUSTER_CHROME_HEIGHT;
+/** Auto-grow cap beyond manual-resize MAX_SIZE — still below typical viewport. */
+const AUTO_GROW_MAX_HEIGHT = 560;
+const CLUSTER_TOP_INSET = 16;
+const CLUSTER_BOTTOM_MARGIN = 16;
+
+function computeAutoClusterHeight(tileCount: number): number {
+  if (tileCount <= 0) return DEFAULT_SIZE.height;
+  const tilesBody =
+    tileCount * PER_TILE_BODY_HEIGHT + Math.max(0, tileCount - 1) * TILE_GAP;
+  return CLUSTER_CHROME_HEIGHT + tilesBody;
+}
+
+function computeViewportCap(posY: number | null): number {
+  if (typeof window === "undefined") return AUTO_GROW_MAX_HEIGHT;
+  const top = posY ?? CLUSTER_TOP_INSET;
+  const available = window.innerHeight - top - CLUSTER_BOTTOM_MARGIN;
+  return Math.min(AUTO_GROW_MAX_HEIGHT, Math.max(MIN_SIZE.height, available));
+}
 
 /** SR-04 — draggable + resizable video tile cluster, top-right default. */
 export function WbAVCluster({
@@ -45,6 +69,22 @@ export function WbAVCluster({
   const isMobileLayout = layoutMode !== "desktop";
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [size, setSize] = useState(DEFAULT_SIZE);
+  const [userResized, setUserResized] = useState(false);
+  const [viewportCap, setViewportCap] = useState(AUTO_GROW_MAX_HEIGHT);
+
+  const tileCount =
+    (tilesProps.localTile ? 1 : 0) + tilesProps.participants.length;
+  const autoClusterHeight = computeAutoClusterHeight(Math.max(tileCount, 1));
+  const useAutoGrow =
+    !isMobileLayout && !userResized && tileCount > 0 && autoClusterHeight <= viewportCap;
+
+  useLayoutEffect(() => {
+    if (isMobileLayout) return;
+    const measure = () => setViewportCap(computeViewportCap(pos?.y ?? null));
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [isMobileLayout, pos?.y]);
 
   useEffect(() => {
     if (isMobileLayout) {
@@ -53,6 +93,7 @@ export function WbAVCluster({
     } else {
       setSize(DEFAULT_SIZE);
     }
+    setUserResized(false);
   }, [isMobileLayout, layoutMode]);
 
   const onDragPointerDown = useCallback(
@@ -112,6 +153,7 @@ export function WbAVCluster({
     if (!resizeRef.current) return;
     const dw = e.clientX - resizeRef.current.startX;
     const dh = e.clientY - resizeRef.current.startY;
+    if (dw !== 0 || dh !== 0) setUserResized(true);
     setSize({
       width: Math.min(MAX_SIZE.width, Math.max(MIN_SIZE.width, resizeRef.current.origW + dw)),
       height: Math.min(MAX_SIZE.height, Math.max(MIN_SIZE.height, resizeRef.current.origH + dh)),
@@ -127,14 +169,21 @@ export function WbAVCluster({
     }
   }, []);
 
+  const displayHeight = useAutoGrow
+    ? autoClusterHeight
+    : !userResized && autoClusterHeight > viewportCap
+      ? viewportCap
+      : size.height;
+
   const style: React.CSSProperties = isMobileLayout
     ? { width: size.width, maxWidth: size.width }
     : {
         width: size.width,
-        height: size.height,
+        height: displayHeight,
+        ["--wb-av-tile-target-h" as string]: `${PER_TILE_BODY_HEIGHT}px`,
         ...(pos
           ? { top: pos.y, left: pos.x, right: "auto" }
-          : { top: 16, right: 16, left: "auto" }),
+          : { top: CLUSTER_TOP_INSET, right: 16, left: "auto" }),
       };
 
   return (
@@ -142,6 +191,7 @@ export function WbAVCluster({
       ref={clusterRef}
       className={`mynk-wb-av-cluster${isMobileLayout ? " mynk-wb-av-cluster--mobile" : ""}`}
       style={style}
+      data-auto-grow={useAutoGrow ? "true" : undefined}
       data-testid={tilesProps.testId ?? "wb-av-cluster"}
     >
       {!isMobileLayout && (
