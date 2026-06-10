@@ -30,6 +30,7 @@ const AUTO_GROW_MAX_HEIGHT = 560;
 const CLUSTER_TOP_INSET = 16;
 const CLUSTER_BOTTOM_MARGIN = 16;
 
+/** 67 + N×213 + (N−1)×4 — symmetric grow/shrink; no highwater state. */
 function computeAutoClusterHeight(tileCount: number): number {
   if (tileCount <= 0) return DEFAULT_SIZE.height;
   const tilesBody =
@@ -169,6 +170,8 @@ export function WbAVCluster({
     }
   }, []);
 
+  // Auto mode: height tracks tileCount each render (shrinks when tiles leave).
+  // userResized freezes size.height on leave — manual drag wins over auto-shrink.
   const displayHeight = useAutoGrow
     ? autoClusterHeight
     : !userResized && autoClusterHeight > viewportCap

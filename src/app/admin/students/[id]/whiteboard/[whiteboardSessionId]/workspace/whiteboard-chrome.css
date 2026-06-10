@@ -586,7 +586,7 @@
   max-width: 100%;
 }
 
-/* Auto-grow — each tile keeps the single-tile target height; cluster grows to fit. */
+/* Auto-grow — fixed tile height; cluster grows/shrinks with tile count (no stretch). */
 .mynk-wb-av-cluster[data-auto-grow="true"]
   .mynk-wb-av-cluster__tiles-panel
   > [data-testid^="av-tile-"] {
