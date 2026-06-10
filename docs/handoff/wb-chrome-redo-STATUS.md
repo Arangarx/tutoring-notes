@@ -1,8 +1,8 @@
-# wb-chrome-redo STATUS
+﻿# wb-chrome-redo STATUS
 
 Branch: `feat/wb-chrome-redo`  
 Baseline: `a150d4f` (PR-01 freedraw latency fix — known-good board separation)  
-Latest commit: `8afe6f1` (2026-06-09 — C1/C2/C3 content-insert fixes + per-board undo backlog)
+Latest commit: `73518fc` (2026-06-09 — P4 smoke fixes: ink draw, edge icons, hover sweep, sidebar roughness icon, slider flush)
 
 ## What this branch does
 
@@ -31,18 +31,19 @@ This branch:
 | **P0 undo cross-board history fix** | ✅ Done | `914fbc0` — `captureUpdate:"NEVER"` + `history.clear()` on board switch |
 | **P0/P1/P2 punch list (Andrew's smoke)** | ✅ Done | `ed87f3d` — z-index, mojibake, hover, dark stroke, cam toggle, roundness, board tabs, slider, z-order buttons |
 | **P3 punch list (Andrew's smoke)** | ✅ Done | `1ef0742` — ink swatch adaptive, roughness icons, More styles restructure, single-open menus, hover preservation, Z-order restyle, slider extremes, camera-no-device |
-| **C1/C2/C3 content-insert bugs + backlog** | ✅ Done | TBD — math insert position, math editor dead on second open, Desmos frowny-face CSP fix |
-| npx next build exit 0 | ✅ Done | exit 0 (confirmed `8afe6f1`) |
-| npx jest | ✅ Done | 1982 pass / 4 fail (same 4 pre-existing suites; TBD) |
-| Playwright interaction tests | ✅ Written | `tests/integration/wb-chrome-interactions.spec.ts` — 15 tests (added: single-open, inactive hover, selected chip hover, adaptive ink swatch) |
+| **C1/C2/C3 content-insert bugs + backlog** | ✅ Done | `8afe6f1` — math insert position, math editor dead on second open, Desmos frowny-face CSP fix |
+|| **P4 punch list (Andrew's smoke)** | ✅ Done | `73518fc` — ink draw path, edge sharpness icons, hover CSS sweep, sidebar roughness icon, slider flush |
+| npx next build exit 0 | ✅ Done | exit 0 (confirmed `73518fc`) |
+| npx jest | ✅ Done | 1981 pass / 5 fail (iac-13 pre-existing flakiness; same 4 known failing suites; `73518fc`) |
+| Playwright interaction tests | ✅ Written | `tests/integration/wb-chrome-interactions.spec.ts` — 17 tests (P4: ink-draw dark gate, slider flush gate) |
 | npm run test:wb-sync | ⏳ Pending | Docker relay required |
 | Real-browser smoke | ⏳ Pending | Andrew needs to start dev server + run Playwright (see gate below) |
 | Merge to master | ⏳ Pending | After smoke + Playwright interaction tests GREEN |
 
 ## Gate status
 
-- `npx next build`: ✅ exit 0 (TBD)
-- `npx jest`: ✅ 1982 pass / 4 fail (same 4 pre-existing suites, `8afe6f1`)
+- `npx next build`: ✅ exit 0 (`73518fc`)
+- `npx jest`: ✅ 1981 pass / 5 fail (iac-13 pre-existing flakiness in full-suite; same 4 known failing suites; `73518fc`)
 - `npm run test:wb-sync`: ⏳ pending (requires Docker relay)
 - **Interactive controls P0 fix**: ✅ code shipped (`85ebedc`)
 - **Undo cross-board P0 fix**: ✅ code shipped (`914fbc0`) — `captureUpdate:"NEVER"` + `history.clear()` on board switch
@@ -51,7 +52,12 @@ This branch:
 - **C2 math editor dead on second open**: ✅ code shipped (`8afe6f1`) — deps changed to `dialogIsOpen` boolean
 - **C3 Desmos frowny-face**: ✅ code shipped (`8afe6f1`) — `frame-src` added to middleware CSP builder
 - **Per-board undo backlog**: ✅ logged (`8afe6f1`) — post-v1 / not-a-gate
-- **Playwright interaction tests**: ✅ written (15 tests) — run with `npm run test:wb-playwright -- tests/integration/wb-chrome-interactions.spec.ts`
+- **P4 ink draw path**: ✅ code shipped (`73518fc`) — useEffect syncs strokeColor to theme-resolved hex on API ready / theme change
+- **P4 edge sharpness icons**: ✅ code shipped (`73518fc`) — SharpnessIcon SVG + icon-only chips, word tooltips
+- **P4 sidebar roughness icon**: ✅ code shipped (`73518fc`) — RoughnessIcon exported, replaces text in compact summary + mobile sheet trigger
+- **P4 hover CSS sweep**: ✅ code shipped (`73518fc`) — zero hsl(var()) patterns remain; 35+ tokens corrected to color-mix / direct var
+- **P4 slider flush**: ✅ code shipped (`73518fc`) — custom WbSlider div with left=calc(v/100*(100%-16px)) guarantees flush at 0 and 100
+- **Playwright interaction tests**: ✅ written (17 tests) — run with `npm run test:wb-playwright -- tests/integration/wb-chrome-interactions.spec.ts`
 - Board separation: ⏳ pending real-browser verification
 - Undo isolation (P0): ⏳ pending real-browser Playwright (test written in `wb-chrome-interactions.spec.ts`)
 - Interactive controls real-browser: ⏳ pending (run Playwright tests above)
@@ -271,7 +277,7 @@ This branch:
 | **P3 punch list (Andrew's smoke)** | ✅ Done | `1ef0742` — ink swatch adaptive, roughness icons, More styles restructure, single-open menus, hover preservation, Z-order restyle, slider extremes, camera-no-device |
 | npx next build exit 0 | ✅ Done | exit 0 (confirmed `1ef0742`) |
 | npx jest | ✅ Done | 1980 pass / 5 fail (same 4 pre-existing suites; `1ef0742`) |
-| Playwright interaction tests | ✅ Written | `tests/integration/wb-chrome-interactions.spec.ts` — 15 tests (added: single-open, inactive hover, selected chip hover, adaptive ink swatch) |
+| Playwright interaction tests | ✅ Written | `tests/integration/wb-chrome-interactions.spec.ts` — 17 tests (P4: ink-draw dark gate, slider flush gate) |
 | npm run test:wb-sync | ⏳ Pending | Docker relay required |
 | Real-browser smoke | ⏳ Pending | Andrew needs to start dev server + run Playwright (see gate below) |
 | Merge to master | ⏳ Pending | After smoke + Playwright interaction tests GREEN |
