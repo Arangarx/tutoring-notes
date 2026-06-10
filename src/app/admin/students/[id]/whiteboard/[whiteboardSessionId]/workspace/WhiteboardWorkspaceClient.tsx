@@ -564,15 +564,20 @@ export function WhiteboardWorkspaceClient({
   const [activeToolType, setActiveToolType] = useState<string>("selection");
   const activeToolTypeRef = useRef<string>("selection");
   const [stripCollapsed, setStripCollapsed] = useState(false);
-  const [morePopoverOpen, setMorePopoverOpen] = useState(false);
   const [moreStylesOpen, setMoreStylesOpen] = useState(false);
-  const [shapesDropdownOpen, setShapesDropdownOpen] = useState(false);
   const [selectedShapeTool, setSelectedShapeTool] =
     useState<WbShapeToolType>("line");
   const [propsSheetOpen, setPropsSheetOpen] = useState(false);
-  const [propsCompactOpen, setPropsCompactOpen] = useState(false);
-  const [viewMenuOpen, setViewMenuOpen] = useState(false);
-  const [shareMenuOpen, setShareMenuOpen] = useState(false);
+  // Single-open menu state — only one chrome popover/dropdown is open at a time.
+  // Opening any menu closes all others; outside-click/Esc handled per-menu.
+  const [openMenu, setOpenMenu] = useState<"share" | "view" | "shapes" | "more" | "props" | null>(null);
+  const shareMenuOpen = openMenu === "share";
+  const viewMenuOpen = openMenu === "view";
+  const shapesDropdownOpen = openMenu === "shapes";
+  const morePopoverOpen = openMenu === "more";
+  const propsCompactOpen = openMenu === "props";
+  const toggleMenu = (menu: "share" | "view" | "shapes" | "more" | "props") =>
+    setOpenMenu((p) => (p === menu ? null : menu));
   const [gridEnabled, setGridEnabled] = useState(false);
   const [roughness, setRoughness] = useState(0);
   const [roundness, setRoundness] = useState<"sharp" | "round">("sharp");
@@ -3438,8 +3443,7 @@ export function WhiteboardWorkspaceClient({
     if (WB_SHAPE_TOOLS.some((s) => s.type === type)) {
       setSelectedShapeTool(type as WbShapeToolType);
     }
-    setShapesDropdownOpen(false);
-    setMorePopoverOpen(false);
+    setOpenMenu(null);
   }, []);
 
   const updateStrokeStyle = useCallback((
@@ -3564,7 +3568,7 @@ export function WhiteboardWorkspaceClient({
         data-testid="wb-props-compact-trigger"
         onClick={(e) => {
           e.stopPropagation();
-          setPropsCompactOpen((p) => !p);
+          toggleMenu("props");
         }}
       >
         <span
@@ -3596,6 +3600,7 @@ export function WhiteboardWorkspaceClient({
           roughness={roughness}
           roundness={roundness}
           moreStylesOpen={moreStylesOpen}
+          inkHex={excalidrawTheme === "dark" ? EXCALIDRAW_STROKE_DARK_HEX : EXCALIDRAW_STROKE_HEX}
           onStrokeChange={updateStrokeStyle}
           onMoreStylesToggle={() => setMoreStylesOpen((p) => !p)}
           onRoughnessChange={(r) => updateStrokeStyle({ roughness: r })}
@@ -3613,8 +3618,7 @@ export function WhiteboardWorkspaceClient({
           label="More — z-order, delete, hand"
           active={morePopoverOpen}
           onClick={() => {
-            setMorePopoverOpen((p) => !p);
-            setShapesDropdownOpen(false);
+            toggleMenu("more");
           }}
         />
         {morePopoverOpen && (
@@ -3647,7 +3651,7 @@ export function WhiteboardWorkspaceClient({
               className="mynk-wb-menu-item mynk-wb-menu-item--destructive"
               onClick={() => {
                 triggerDeleteSelected();
-                setMorePopoverOpen(false);
+                setOpenMenu(null);
               }}
               aria-label="Delete selected elements"
             >
@@ -3660,7 +3664,7 @@ export function WhiteboardWorkspaceClient({
               className="mynk-wb-menu-item"
               onClick={() => {
                 selectTool("hand");
-                setMorePopoverOpen(false);
+                setOpenMenu(null);
               }}
             >
               <span>Hand / pan</span>
@@ -3722,8 +3726,7 @@ export function WhiteboardWorkspaceClient({
             label="Shapes"
             active={WB_SHAPE_TOOLS.some((s) => s.type === activeToolType)}
             onClick={() => {
-              setShapesDropdownOpen((p) => !p);
-              setMorePopoverOpen(false);
+              toggleMenu("shapes");
             }}
             pulldown
           />
@@ -3777,11 +3780,7 @@ export function WhiteboardWorkspaceClient({
       data-testid="mynk-wb-chrome"
       data-layout={layoutMode}
       onClick={() => {
-        setShapesDropdownOpen(false);
-        setViewMenuOpen(false);
-        setShareMenuOpen(false);
-        setMorePopoverOpen(false);
-        setPropsCompactOpen(false);
+        setOpenMenu(null);
         if (touchLayout) dismissTouchProps();
       }}
     >
@@ -3853,7 +3852,7 @@ export function WhiteboardWorkspaceClient({
               disabled={!syncUrl}
               onClick={(e) => {
                 e.stopPropagation();
-                setShareMenuOpen((p) => !p);
+                toggleMenu("share");
               }}
               data-testid="wb-share-options"
             >
@@ -3873,7 +3872,7 @@ export function WhiteboardWorkspaceClient({
                   disabled={copyState === "copying"}
                   onClick={() => {
                     void handleCopyStudentLink();
-                    setShareMenuOpen(false);
+                    setOpenMenu(null);
                   }}
                 >
                   <span>Copy student join link</span>
@@ -3898,20 +3897,24 @@ export function WhiteboardWorkspaceClient({
             title={
               liveAv.hasCamPermission === "denied"
                 ? "Camera permission denied"
-                : liveAv.isCamMuted
-                  ? "Turn camera on"
-                  : "Turn camera off"
+                : (liveAv.videoDevices?.length ?? 1) === 0
+                  ? "No camera device found"
+                  : liveAv.isCamMuted
+                    ? "Turn camera on"
+                    : "Turn camera off"
             }
             aria-label={
               liveAv.hasCamPermission === "denied"
                 ? "Camera permission denied"
-                : liveAv.isCamMuted
-                  ? "Turn camera on"
-                  : "Turn camera off"
+                : (liveAv.videoDevices?.length ?? 1) === 0
+                  ? "No camera device found"
+                  : liveAv.isCamMuted
+                    ? "Turn camera on"
+                    : "Turn camera off"
             }
             onClick={() => void handleTopBarCam()}
-            disabled={endingBusy || liveAv.hasCamPermission === "denied"}
-            style={liveAv.hasCamPermission === "denied" ? { opacity: 0.4 } : undefined}
+            disabled={endingBusy || liveAv.hasCamPermission === "denied" || (liveAv.videoDevices?.length ?? 1) === 0}
+            style={liveAv.hasCamPermission === "denied" || (liveAv.videoDevices?.length ?? 1) === 0 ? { opacity: 0.4 } : undefined}
           >
             <WbIconCamera size={14} />
           </button>
@@ -3978,7 +3981,7 @@ export function WhiteboardWorkspaceClient({
               aria-label="View options"
               onClick={(e) => {
                 e.stopPropagation();
-                setViewMenuOpen((p) => !p);
+                toggleMenu("view");
               }}
             >
               <WbIconMore size={14} />
@@ -4062,8 +4065,7 @@ export function WhiteboardWorkspaceClient({
           className="mynk-wb-canvas"
           data-testid="tutor-whiteboard-canvas-mount"
           onClick={() => {
-            setShapesDropdownOpen(false);
-            setMorePopoverOpen(false);
+            setOpenMenu(null);
           }}
         >
           {/* Banners overlay */}
@@ -4228,7 +4230,7 @@ export function WhiteboardWorkspaceClient({
             onToggleMic={liveAv.toggleMic}
             onToggleCam={liveAv.toggleCam}
             disabled={endingBusy}
-            camDisabled={liveAv.hasCamPermission === "denied"}
+            camDisabled={liveAv.hasCamPermission === "denied" || (liveAv.videoDevices?.length ?? 1) === 0}
             participants={liveAv.participants}
             localTile={{
               peerId: localPeerId,
@@ -4287,6 +4289,7 @@ export function WhiteboardWorkspaceClient({
                   roughness={roughness}
                   roundness={roundness}
                   moreStylesOpen={moreStylesOpen}
+                  inkHex={excalidrawTheme === "dark" ? EXCALIDRAW_STROKE_DARK_HEX : EXCALIDRAW_STROKE_HEX}
                   onStrokeChange={updateStrokeStyle}
                   onMoreStylesToggle={() => setMoreStylesOpen((p) => !p)}
                   onRoughnessChange={(r) => updateStrokeStyle({ roughness: r })}

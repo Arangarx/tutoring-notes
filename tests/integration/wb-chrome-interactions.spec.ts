@@ -391,18 +391,19 @@ test.describe("wb chrome — interactive controls", () => {
   });
 
   /**
-   * Dark-mode stroke color gate: switching to dark mode and drawing should use
-   * a light/white stroke — the initial color after switching to dark must not
-   * be near-black (#1e293b). This gate asserts the swatch selection state:
-   * in dark mode the white swatch should be the active (selected) one, or the
-   * default initialWbStrokeColor for dark should be #ffffff.
+   * Dark-mode ink swatch gate: the single adaptive ink swatch must display the
+   * theme-resolved hex (white in dark mode) and must be the active swatch when
+   * the default stroke color is white.
    *
-   * NOTE: This test verifies the props-panel swatch selection state when dark
-   * mode is active at page load. It does NOT execute Playwright-driven canvas
-   * drawing (which requires a running relay + real Excalidraw canvas) — that
-   * portion must be verified manually per the whiteboard-engine-protection rule.
+   * The ink swatch is now one logical slot ("Ink") that adapts to theme —
+   * no separate "White" / "Near-black" pair. In dark mode it displays and
+   * draws #ffffff; in light mode it displays and draws #1e293b.
+   *
+   * NOTE: swatch display color is a backgroundColor CSS attribute; verifying
+   * that it matches the rendered stroke on canvas requires a real browser with
+   * relay+Excalidraw — assert swatch presence and active state only here.
    */
-  test("Dark-mode initial stroke: white swatch is active when dark theme is applied", async ({ browser }) => {
+  test("Dark-mode initial stroke: ink swatch is present and active when dark theme is applied", async ({ browser }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({
       storageState: "tests/integration/.auth/tutor.json",
@@ -431,10 +432,131 @@ test.describe("wb chrome — interactive controls", () => {
     const panel = page.getByTestId("wb-props-panel");
     await expect(panel).toBeVisible({ timeout: 3_000 });
 
-    // The white swatch (#ffffff) should be present and ideally active.
-    // We assert it exists (at minimum) and that no paint-invisible color is default.
-    const whiteSwatch = panel.locator('.mynk-wb-swatch[aria-label="White"]');
-    await expect(whiteSwatch).toBeVisible();
+    // The adaptive ink swatch (aria-label="Ink") must be present.
+    // In dark mode its backgroundColor must be white (#ffffff).
+    const inkSwatch = panel.locator('.mynk-wb-swatch[aria-label="Ink"]');
+    await expect(inkSwatch).toBeVisible();
+
+    // Verify no separate "White" or "Near-black" swatch exists (the old dual-swatch anti-pattern).
+    await expect(panel.locator('.mynk-wb-swatch[aria-label="White"]')).not.toBeVisible();
+    await expect(panel.locator('.mynk-wb-swatch[aria-label="Near-black"]')).not.toBeVisible();
+
+    // The ink swatch must display as white (rgb(255,255,255)) in dark mode.
+    const bgColor = await inkSwatch.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(bgColor).toBe("rgb(255, 255, 255)");
+
+    await context.close();
+  });
+
+  /**
+   * Single-open menu gate: opening one menu closes any previously open menu.
+   *
+   * Asserts: open Shapes flyout → visible. Then open More popover → Shapes
+   * flyout is no longer visible and More popover is visible.
+   *
+   * NOTE: requires full dev stack (Playwright + dev server + DB).
+   * Not executed in jest; run with npm run test:wb-playwright.
+   */
+  test("Single-open: opening More popover closes Shapes flyout", async ({ browser }) => {
+    const session = await seedWbLiveSyncSession();
+    const context = await browser.newContext({
+      storageState: "tests/integration/.auth/tutor.json",
+      viewport: { width: 1280, height: 900 },
+    });
+    const page = await context.newPage();
+    await loadTutorBoard(page, session);
+
+    // Open Shapes flyout
+    const shapesTrigger = page.getByRole("button", { name: /Shapes/i });
+    await shapesTrigger.click();
+    const shapesDropdown = page.locator(".mynk-wb-shapes-dropdown");
+    await expect(shapesDropdown).toBeVisible({ timeout: 3_000 });
+
+    // Open More popover — should close Shapes flyout (single-open)
+    const moreBtn = page.getByRole("button", { name: /More — z-order/i });
+    await moreBtn.click();
+
+    const morePopover = page.getByTestId("wb-more-popover");
+    await expect(morePopover).toBeVisible({ timeout: 3_000 });
+    await expect(shapesDropdown).not.toBeVisible({ timeout: 2_000 });
+
+    await context.close();
+  });
+
+  /**
+   * Hover indicator gate: hovering an inactive tool button shows a visible
+   * background change (the button acquires a non-transparent background).
+   *
+   * NOTE: requires full dev stack. Not executed in jest.
+   */
+  test("Inactive tool button shows hover state on mouseover", async ({ browser }) => {
+    const session = await seedWbLiveSyncSession();
+    const context = await browser.newContext({
+      storageState: "tests/integration/.auth/tutor.json",
+      viewport: { width: 1280, height: 900 },
+    });
+    const page = await context.newPage();
+    await loadTutorBoard(page, session);
+
+    // Make Pencil the active tool; Eraser is inactive
+    await page.getByRole("button", { name: "Pencil (P)" }).click();
+    const eraserBtn = page.getByRole("button", { name: "Eraser (E)" });
+    await expect(eraserBtn).not.toHaveClass(/mynk-wb-tool-btn--active/);
+
+    // Hover the inactive Eraser button
+    await eraserBtn.hover();
+
+    // Computed background must be non-transparent (hover rule applies)
+    const bg = await eraserBtn.evaluate((el) => getComputedStyle(el).backgroundColor);
+    // hsl(var(--muted) / 0.6) resolves to a non-rgba(0,0,0,0) value
+    expect(bg).not.toBe("rgba(0, 0, 0, 0)");
+    expect(bg).not.toBe("transparent");
+
+    await context.close();
+  });
+
+  /**
+   * Selected chip hover gate: a chip with --active class must KEEP its active
+   * background and text color when the pointer hovers over it.
+   *
+   * NOTE: requires full dev stack. Not executed in jest.
+   */
+  test("Selected chip keeps --active style on hover", async ({ browser }) => {
+    const session = await seedWbLiveSyncSession();
+    const context = await browser.newContext({
+      storageState: "tests/integration/.auth/tutor.json",
+      viewport: { width: 1280, height: 900 },
+    });
+    const page = await context.newPage();
+    await loadTutorBoard(page, session);
+
+    // Activate pencil to show props chrome
+    await page.getByRole("button", { name: "Pencil (P)" }).click();
+    const trigger = page.getByTestId("wb-props-compact-trigger");
+    await trigger.click();
+    const panel = page.getByTestId("wb-props-panel");
+    await expect(panel).toBeVisible({ timeout: 3_000 });
+
+    // Open More styles to reveal Edge sharpness chips
+    const moreBtn = panel.getByRole("button", { name: /More styles/i });
+    await moreBtn.click();
+
+    // The "Sharp" chip should be active by default (DD-02)
+    const sharpChip = panel.getByRole("button", { name: "Sharp" });
+    await expect(sharpChip).toHaveClass(/mynk-wb-chip--active/);
+
+    // Capture active background before hover
+    const bgBefore = await sharpChip.evaluate((el) => getComputedStyle(el).backgroundColor);
+
+    // Hover the active chip
+    await sharpChip.hover();
+
+    // Class must be retained
+    await expect(sharpChip).toHaveClass(/mynk-wb-chip--active/);
+
+    // Background must remain the same (active foreground color, not muted hover)
+    const bgAfter = await sharpChip.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(bgAfter).toBe(bgBefore);
 
     await context.close();
   });

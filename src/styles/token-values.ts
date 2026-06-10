@@ -19,13 +19,23 @@ export const EXCALIDRAW_STROKE_DARK_HEX = "#ffffff";
 export const FAVICON_BRAND_BG = "#7c5cff";
 
 /**
+ * Sentinel value for the theme-adaptive "ink" swatch. Resolved at render time
+ * to EXCALIDRAW_STROKE_HEX (light) or EXCALIDRAW_STROKE_DARK_HEX (dark) so
+ * the displayed swatch color always matches what it actually draws.
+ */
+export const WB_INK_ADAPTIVE_SENTINEL = "INK_ADAPTIVE" as const;
+
+/**
  * Stroke color presets for the Mynk whiteboard toolbar.
  * Excalidraw's currentItemStrokeColor requires resolved hex — CSS vars cannot
  * be used here. Labels are for aria-label; display uses the actual color.
+ *
+ * The WB_INK_ADAPTIVE_SENTINEL entry is a single theme-adaptive "ink" slot:
+ * black (#1e293b) in light mode, white (#ffffff) in dark mode. Only ONE ink
+ * entry exists — no separate black+white pair.
  */
 export const WB_STROKE_PRESETS: ReadonlyArray<{ hex: string; label: string }> = [
-  { hex: "#1e293b", label: "Near-black" },
-  { hex: "#ffffff", label: "White" },
+  { hex: WB_INK_ADAPTIVE_SENTINEL, label: "Ink" },
   { hex: "#6b7280", label: "Gray" },
   { hex: "#9ca3af", label: "Light gray" },
   { hex: "#ef4444", label: "Red" },

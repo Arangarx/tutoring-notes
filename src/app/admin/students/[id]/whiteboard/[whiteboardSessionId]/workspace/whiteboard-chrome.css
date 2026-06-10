@@ -738,10 +738,13 @@
   flex-wrap: wrap;
 }
 
+/* "More styles" expanded area — subtle separator without muted clash.
+   Previous background: var(--muted) caused white-on-light label in dark mode. */
 .mynk-wb-more-styles-area {
   margin-top: 8px;
   padding: 8px;
-  background: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
   border-radius: 6px;
 }
 
@@ -792,11 +795,16 @@
   text-align: left;
 }
 
-.mynk-wb-shapes-item:hover {
+.mynk-wb-shapes-item:hover:not(.mynk-wb-shapes-item--active) {
   background: hsl(var(--muted) / 0.6);
 }
 
 .mynk-wb-shapes-item--active {
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.mynk-wb-shapes-item--active:hover {
   background: var(--foreground);
   color: var(--background);
 }
@@ -1231,11 +1239,29 @@
   border: 1px solid var(--border);
   cursor: pointer;
   flex-shrink: 0;
-  transition: box-shadow 0.1s;
+  transition: box-shadow 0.1s, transform 0.1s;
+}
+
+.mynk-wb-swatch:hover:not(.mynk-wb-swatch--active) {
+  transform: scale(1.15);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 
 .mynk-wb-swatch--active {
   box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+}
+
+/* Roughness icon chips — square to hold the SVG glyph */
+.mynk-wb-roughness-chips {
+  gap: 6px;
+}
+
+.mynk-wb-roughness-chip {
+  width: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ΓöÇΓöÇ Stroke width preset (28×28px) ΓöÇΓöÇ */
@@ -1254,11 +1280,16 @@
   transition: background 0.1s;
 }
 
-.mynk-wb-width-btn:hover {
+.mynk-wb-width-btn:hover:not(.mynk-wb-width-btn--active) {
   background: hsl(var(--muted) / 0.6);
 }
 
 .mynk-wb-width-btn--active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.mynk-wb-width-btn--active:hover {
   background: var(--accent-soft);
   border-color: var(--accent);
 }
@@ -1278,7 +1309,7 @@
   white-space: nowrap;
 }
 
-.mynk-wb-chip:hover {
+.mynk-wb-chip:hover:not(.mynk-wb-chip--active) {
   background: hsl(var(--muted) / 0.6);
 }
 
@@ -1288,22 +1319,34 @@
   border-color: var(--foreground);
 }
 
+/* Active chip must keep its highlight on hover — no specificity slip */
+.mynk-wb-chip--active:hover {
+  background: var(--foreground);
+  color: var(--background);
+  border-color: var(--foreground);
+}
+
 /* ΓöÇΓöÇ Opacity slider ΓöÇΓöÇ */
 /*
- * Slider endpoint fix: wrapping in a negative-margin container extends the
- * effective thumb travel so at 0% the thumb is flush-left and at 100% flush-right.
- * At value=min the LEFT edge of the 16px thumb is at x=0 (track start);
- * at value=max the RIGHT edge is at x=container-width (track end).
+ * Thumb-at-extremes fix: the thumb (16px = 8px radius) must be flush at both
+ * ends. When the slider width equals the container width, the BROWSER centers
+ * the thumb at x=0 (min) and x=slider_width (max), so at min the left 8px of
+ * the thumb overflows left, and vice versa.
+ *
+ * Correct fix: narrow the slider by 2×thumb_radius (16px) and add equal
+ * margin so the element is centered. At min, thumb center = 0 of the SLIDER =
+ * 8px from container left — thumb left edge is flush with container left.
+ * At max, thumb center = slider_width = container_width - 8px — thumb right
+ * edge is flush with container right. No overflow:hidden needed.
  */
 .mynk-wb-slider-wrap {
-  overflow: hidden;
-  margin: 0 -8px;
+  /* No overflow clipping — the thumb extends to the container edge naturally */
 }
 
 .mynk-wb-slider {
   display: block;
-  width: calc(100% + 16px);
-  margin: 0 -8px;
+  width: calc(100% - 16px);
+  margin: 0 8px;
   -webkit-appearance: none;
   appearance: none;
   height: 4px;
