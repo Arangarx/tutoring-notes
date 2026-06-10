@@ -159,7 +159,11 @@ export function WbAVCluster({
         </div>
       )}
       <div className="mynk-wb-av-cluster__tiles">
-        <AVTilesPanel {...tilesProps} testId="av-tiles-panel" />
+        <AVTilesPanel
+          {...tilesProps}
+          testId="av-tiles-panel"
+          className="mynk-wb-av-cluster__tiles-panel"
+        />
       </div>
       <div className="mynk-wb-av-cluster__controls" data-testid="av-controls">
         <button
