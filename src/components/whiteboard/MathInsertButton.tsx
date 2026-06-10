@@ -137,6 +137,8 @@ export function MathInsertButton({
   const [state, setState] = useState<DialogState>({ kind: "closed" });
   const [latex, setLatex] = useState<string>("");
   const [mathLiveReady, setMathLiveReady] = useState(false);
+  /** Bumps once per open transition so each dialog open gets a fresh <math-field>. */
+  const [openCount, setOpenCount] = useState(0);
   const fieldHostRef = useRef<HTMLDivElement | null>(null);
   const fieldRef = useRef<HTMLElement | null>(null);
 
@@ -222,12 +224,12 @@ export function MathInsertButton({
   // know about it without a global declaration, and the value-binding
   // story is cleaner via the imperative API anyway.
   //
-  // Deps use `dialogIsOpen` (boolean) rather than `state.kind` (string)
-  // so the field is only torn down / recreated when the dialog opens or
-  // closes — not on internal transitions like open→rendering→success.
-  // Each needless recreation cycles MathLive's singleton virtual keyboard
-  // through disconnect/reconnect, corrupting its state and preventing the
-  // `input` event from firing on the next open (C2 bug fix).
+  // `openCount` increments only on closed→open (button click), not on
+  // internal transitions (open→rendering→success), so the field stays
+  // mounted while the dialog is visible. On each new open, a fresh
+  // <math-field> runs full connectedCallback init and can reclaim
+  // MathLive's singleton virtual keyboard (dead on second open without
+  // this remount + defensive keyboard hide on teardown).
   useEffect(() => {
     if (!mathLiveReady) return;
     if (!dialogIsOpen) return;
@@ -237,7 +239,6 @@ export function MathInsertButton({
     field.setAttribute("style", "min-height: 60px; font-size: 22px; width: 100%;");
     field.setAttribute("aria-label", "Equation editor");
     if (latex) field.setAttribute("value", latex);
-    host.innerHTML = "";
     host.appendChild(field);
     fieldRef.current = field;
     const onInput = () => {
@@ -255,14 +256,20 @@ export function MathInsertButton({
     });
     return () => {
       field.removeEventListener("input", onInput);
-      // Don't tear down the field on every keystroke — only when the
-      // dialog itself unmounts. The cleanup that fires on dialog
-      // close clears the host below.
+      try {
+        (
+          window as unknown as { mathVirtualKeyboard?: { hide?: () => void } }
+        ).mathVirtualKeyboard?.hide?.();
+      } catch {
+        // ignore
+      }
+      if (host.contains(field)) host.removeChild(field);
+      if (fieldRef.current === field) fieldRef.current = null;
     };
     // We intentionally exclude `latex` from the deps: re-mounting on
     // every keystroke would steal focus + lose cursor position.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mathLiveReady, dialogIsOpen]);
+  }, [mathLiveReady, dialogIsOpen, openCount]);
 
   const close = useCallback(() => {
     setState({ kind: "closed" });
@@ -318,7 +325,10 @@ export function MathInsertButton({
       <button
         type="button"
         className={chrome ? "mynk-wb-tb-btn" : "btn"}
-        onClick={() => setState({ kind: "open" })}
+        onClick={() => {
+          setOpenCount((c) => c + 1);
+          setState({ kind: "open" });
+        }}
         disabled={disabled || !excalidrawAPI}
         data-testid="wb-insert-math-btn"
         title="Insert math equation"

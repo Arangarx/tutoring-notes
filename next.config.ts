@@ -18,18 +18,22 @@ import type { NextConfig } from "next";
  *     accept this risk; the higher-value boundary for cross-origin
  *     safety is `frame-src` and the CORS/blob upload route allowlist.
  *
- *   style-src 'self' 'unsafe-inline'
+ *   style-src 'self' 'unsafe-inline' https://www.desmos.com
  *     Excalidraw + MathJax both inject inline styles. Same trade-off.
+ *     Explicit Desmos origin for null-origin sandboxed embed iframes.
  *
  *   img-src 'self' data: blob: https:
  *     `data:` for embedded SVGs (math equations, image previews);
  *     `blob:` for uploaded image previews; `https:` so PDF/image
  *     assets uploaded to Vercel Blob render. Tightening this further
  *     would require enumerating each blob host, which churns.
+ *     Desmos icon assets are covered by the `https:` wildcard here;
+ *     middleware CSP lists `https://www.desmos.com` explicitly.
  *
- *   font-src 'self' data: blob: https:
+ *   font-src 'self' data: blob: https: https://www.desmos.com
  *     `data:` for MathJax + Excalidraw base64 fonts; `blob:` for
  *     @font-face / object URLs; `https:` for dependency webfonts from CDNs.
+ *     Explicit Desmos origin required for null-origin sandbox embeds.
  *     Must match `src/lib/security/csp.ts` (middleware also sets CSP;
  *     policies combine — keep in sync).
  *
@@ -69,9 +73,9 @@ import type { NextConfig } from "next";
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-  "style-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline' https://www.desmos.com",
   "img-src 'self' data: blob: https:",
-  "font-src 'self' data: blob: https:",
+  "font-src 'self' data: blob: https: https://www.desmos.com",
   "connect-src 'self' https: wss:",
   "frame-src 'self' https://www.desmos.com https://desmos.com",
   "worker-src 'self' blob:",
