@@ -176,6 +176,11 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+/** Scene coords at the current viewport center — for callers that must snapshot before async work. */
+export function getInsertCenter(api: ExcalidrawApiLike): { x: number; y: number } {
+  return viewportCenter(api);
+}
+
 function viewportCenter(api: ExcalidrawApiLike): { x: number; y: number } {
   const s = api.getAppState() as {
     scrollX: number;
@@ -529,6 +534,8 @@ export async function insertMathSvgOnCanvas(args: InsertAssetCommonArgs & {
   widthPx: number;
   heightPx: number;
   latex: string;
+  /** When provided, used for placement instead of a fresh viewportCenter() call. */
+  insertCenter?: { x: number; y: number };
 }): Promise<InsertImageResult> {
   const {
     excalidrawAPI,
@@ -538,7 +545,10 @@ export async function insertMathSvgOnCanvas(args: InsertAssetCommonArgs & {
     widthPx,
     heightPx,
     latex,
+    insertCenter,
   } = args;
+
+  const center = insertCenter ?? viewportCenter(excalidrawAPI);
 
   const upload = await uploadWhiteboardAsset({
     whiteboardSessionId,
@@ -567,7 +577,6 @@ export async function insertMathSvgOnCanvas(args: InsertAssetCommonArgs & {
     },
   ]);
 
-  const center = viewportCenter(excalidrawAPI);
   const x = center.x - widthPx / 2;
   const y = center.y - heightPx / 2;
   const baseElement = buildImageElement({

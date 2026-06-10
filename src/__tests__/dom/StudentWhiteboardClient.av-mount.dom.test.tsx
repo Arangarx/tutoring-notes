@@ -3,7 +3,7 @@
  */
 
 /**
- * Student ↔ live-A/V mount contract (Phase 4c).
+ * Student Γåö live-A/V mount contract (Phase 4c).
  *
  * The student side is intentionally narrower than the tutor side
  * (no FSM, no recorder). We assert:
@@ -188,6 +188,11 @@ jest.mock("@/hooks/useLiveAV", () => ({
     receivedLocalPeerId = opts.localPeerId;
     return {
       ...liveAvState,
+      // reachableParticipants: same as participants in tests (no WebRTC state distinction)
+      reachableParticipants: liveAvState.participants.filter(
+        (p) => p.peerConnectionState === "connected" &&
+          (p.iceConnectionState === "connected" || p.iceConnectionState === "completed")
+      ),
       toggleMic: toggleMicSpy,
       toggleCam: toggleCamSpy,
       requestMic: requestMicSpy,
@@ -305,7 +310,7 @@ beforeEach(() => {
   };
 });
 
-describe("StudentWhiteboardClient ↔ live A/V mount", () => {
+describe("StudentWhiteboardClient Γåö live A/V mount", () => {
   test("mints localPeerId once and threads it into BOTH sync-client and useLiveAV", async () => {
     await renderStudent();
     expect(createdSyncClients).toHaveLength(1);

@@ -1,0 +1,123 @@
+"use client";
+
+import { useState } from "react";
+import type { PageStripRow } from "@/components/whiteboard/PageStrip";
+
+export type BoardTabStripProps = {
+  pageList: PageStripRow[];
+  activePageId: string;
+  disabled?: boolean;
+  maxPages?: number;
+  onSelectPage?: (id: string) => void | Promise<void>;
+  onAddPage?: () => void;
+  onDeletePage?: (id: string) => void;
+  testId?: string;
+};
+
+/** SR-14 — Chrome/Google-Sheets-style board tabs; user-facing "Board N". */
+export function BoardTabStrip({
+  pageList,
+  activePageId,
+  disabled,
+  maxPages = 20,
+  onSelectPage,
+  onAddPage,
+  onDeletePage,
+  testId = "wb-tutor-page-strip",
+}: BoardTabStripProps) {
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const canDelete = pageList.length > 1 && !!onDeletePage;
+
+  return (
+    <div className="mynk-wb-board-tabs" data-testid={testId} role="tablist" aria-label="Boards">
+      {pageList.map((page, index) => {
+        const boardLabel = `Board ${index + 1}`;
+        const active = page.id === activePageId;
+        const confirming = confirmDeleteId === page.id;
+        return (
+          <div
+            key={page.id}
+            className={`mynk-wb-board-tab-wrap${active ? " mynk-wb-board-tab-wrap--active" : ""}${!canDelete ? " mynk-wb-board-tab-wrap--no-delete" : ""}`}
+          >
+            <button
+              type="button"
+              role="tab"
+              className={`mynk-wb-board-tab${active ? " mynk-wb-board-tab--active" : ""}`}
+              aria-selected={active}
+              aria-label={boardLabel}
+              disabled={disabled || active}
+              onClick={() => {
+                if (!active && onSelectPage) void onSelectPage(page.id);
+                setConfirmDeleteId(null);
+              }}
+            >
+              {active && <span className="mynk-wb-board-tab__dot" aria-hidden />}
+              {boardLabel}
+            </button>
+            {canDelete && (
+              confirming ? (
+                <>
+                  <button
+                    type="button"
+                    className="mynk-wb-board-tab-del mynk-wb-board-tab-del--confirm"
+                    title={`Confirm delete ${boardLabel}`}
+                    aria-label={`Confirm delete ${boardLabel}`}
+                    data-testid={`wb-board-delete-confirm-${index}`}
+                    disabled={disabled}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeletePage(page.id);
+                      setConfirmDeleteId(null);
+                    }}
+                  >
+                    Delete
+                  </button>
+                  <button
+                    type="button"
+                    className="mynk-wb-board-tab-del mynk-wb-board-tab-del--cancel"
+                    title="Cancel"
+                    aria-label="Cancel delete"
+                    data-testid={`wb-board-delete-cancel-${index}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setConfirmDeleteId(null);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="mynk-wb-board-tab-del"
+                  title={`Delete ${boardLabel}`}
+                  aria-label={`Delete ${boardLabel}`}
+                  data-testid={`wb-board-delete-${index}`}
+                  disabled={disabled}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setConfirmDeleteId(page.id);
+                  }}
+                >
+                  &times;
+                </button>
+              )
+            )}
+          </div>
+        );
+      })}
+      {onAddPage && (
+        <button
+          type="button"
+          className="mynk-wb-board-tab mynk-wb-board-tab--add"
+          title="Add board"
+          aria-label="Add board"
+          disabled={disabled || pageList.length >= maxPages}
+          onClick={onAddPage}
+        >
+          +
+        </button>
+      )}
+    </div>
+  );
+}

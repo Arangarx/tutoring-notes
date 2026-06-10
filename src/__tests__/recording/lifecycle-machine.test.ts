@@ -618,3 +618,73 @@ describe("stream id helpers", () => {
     expect(studentMicStreamId("alpha")).not.toBe(studentMicStreamId("beta"));
   });
 });
+
+describe("split-brain recording-gate fix (V1 master gate A4)", () => {
+  // These tests verify the core invariant of the split-brain fix:
+  // when the HOST passes an EMPTY `participants` set (derived from
+  // WebRTC-reachable peers), the FSM must pause even if `everHadAudioFlow`
+  // is true (sticky latch from previous recording).
+
+  test("paused when reachable set empty, sync had a peer, everHadAudioFlow=true", () => {
+    const out = evaluateLifecycle(
+      baseInputs({
+        tutorWantsRecording: true,
+        participants: new Set<string>(),
+        everHadParticipants: true,
+        everHadAudioFlow: true,
+      })
+    );
+    expect(out.state).toBe("paused");
+    expect(out.pausedReason).toBe("all_participants_disconnected");
+    expect(out.recordingActive).toBe(false);
+    expect(out.shouldCaptureWB).toBe(false);
+    expect(out.shouldCapture(TUTOR_MIC_STREAM_ID)).toBe(false);
+  });
+
+  test("paused when reachable set empty, everHadAudioFlow=true, no participantsWithFlowingAudio provided", () => {
+    const out = evaluateLifecycle(
+      baseInputs({
+        tutorWantsRecording: true,
+        participants: new Set<string>(),
+        everHadParticipants: true,
+        everHadAudioFlow: true,
+        participantsWithFlowingAudio: undefined,
+      })
+    );
+    expect(out.state).toBe("paused");
+    expect(out.pausedReason).toBe("all_participants_disconnected");
+  });
+
+  test("recording resumes when reachable set becomes non-empty again (recovery)", () => {
+    const out = evaluateLifecycle(
+      baseInputs({
+        tutorWantsRecording: true,
+        participants: new Set(["peerA"]),
+        everHadParticipants: true,
+        everHadAudioFlow: true,
+      })
+    );
+    expect(out.state).toBe("recording");
+    expect(out.recordingActive).toBe(true);
+    expect(out.shouldCapture(TUTOR_MIC_STREAM_ID)).toBe(true);
+  });
+
+  test("paused presentation has correct banner for split-brain (student disconnected copy)", () => {
+    const out = evaluateLifecycle(
+      baseInputs({
+        tutorWantsRecording: true,
+        participants: new Set<string>(),
+        everHadParticipants: true,
+      })
+    );
+    const ui = derivePresentation(out, {
+      tutorWantsRecording: true,
+      participants: new Set<string>(),
+      everHadParticipants: true,
+      syncEnabled: true,
+    });
+    expect(ui.bannerMessage).toMatch(/disconnected|paused/i);
+    expect(ui.bannerMessage).toMatch(/resume automatically/i);
+    expect(ui.pillLabel).toMatch(/Auto-paused/i);
+  });
+});

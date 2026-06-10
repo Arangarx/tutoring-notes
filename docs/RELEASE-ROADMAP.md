@@ -252,9 +252,19 @@ deployment alias on `master`; no UI-skin feature flag exists). Build on
 1. Visual redesign + whiteboard chrome + theme parity (in flight).
 2. **Waiting room** — green-room A/V verify + admit flow; timer starts when
    student leaves waiting room (designed, not built).
-3. **Pass-2 in-context end-session** — shared session shell; end-session
+3. **Pass-2 in-context end-session (Gate A3)** — shared session shell; end-session
    transitions same shell to review in place (Pass-1 interim = separate review
-   page today).
+   page today). **Deferred from `feat/wb-chrome-redo` — v1-required.** P2 git
+   search (2026-06-09): no production notes-only implementation on
+   `feat/wb-chrome-p2`; reconstruct from
+   [`whiteboard-session-shell-design-2026-06-08.md`](handoff/whiteboard-session-shell-design-2026-06-08.md).
+4. **PDF page-tab indicator (Gate A3a)** — PDF board tabs show PDF icon;
+   blocked on `isPdf` field on `PageStripRow` + data propagation. **V1-required;
+   deferred from `feat/wb-chrome-redo`.**
+5. **SR-04a video-tile sizing (Gate A3b)** — live-A/V video fills panel /
+   multi-tile auto-expand. **V1-required; deferred from `feat/wb-chrome-redo`.**
+   Parent req SR-04 in
+   [`whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md).
 
 **Design note:** waiting room, live board, and Pass-2 review = **one session
 shell, three modes** — design together
@@ -263,13 +273,13 @@ shell, three modes** — design together
 **Gate B — post-V1 / pre-release** (before **release** = recruiting new pilots;
 some urgent because site is already live, just unadvertised):
 
-4. **Approval-gating / waitlist** — sign-up parks on waitlist; no cost until
+6. **Approval-gating / waitlist** — sign-up parks on waitlist; no cost until
    Andrew approves (cost exposure exists today).
-5. **Parent privacy consent** — real `ConsentRecord` architecture;
+7. **Parent privacy consent** — real `ConsentRecord` architecture;
    V1 toggles only for shipping features (`allowAudioRecording`,
    `allowWhiteboardRecording`, `allowNoteSending`, `allowLiveSession`).
-6. **Security checks + final cleanups** — before new pilots.
-7. **Scheduling + external calendar integration** — post-V1, pre-release; not a
+8. **Security checks + final cleanups** — before new pilots.
+9. **Scheduling + external calendar integration** — post-V1, pre-release; not a
    master-cut gate. Full spec: [`docs/BACKLOG.md`](BACKLOG.md) § Scheduling
    proposal. Needs design pass + sequencing within this window.
 

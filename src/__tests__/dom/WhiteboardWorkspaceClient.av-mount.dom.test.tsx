@@ -3,7 +3,7 @@
  */
 
 /**
- * Workspace ↔ live-A/V mount contract (Phase 4c).
+ * Workspace Γåö live-A/V mount contract (Phase 4c).
  *
  * Asserts the integration glue between `WhiteboardWorkspaceClient`
  * and the Phase 4b hook + recorder, NOT the hook / recorder
@@ -15,8 +15,8 @@
  *      `createWhiteboardSyncClient({peerId})` and
  *      `useLiveAV({localPeerId})` — same id everywhere, no drift.
  *
- *   2. `AVPermissionsPrompt` + `AVTilesPanel` + `AVControls` are
- *      mounted in the workspace render.
+ *   2. Live-board chrome: no inline `AVPermissionsPrompt`; `AVTilesPanel`
+ *      + `AVControls` via `WbAVCluster`; top-bar mic settings popover host.
  *
  *   3. 3-peer canary: tutor + 2 students. AVTilesPanel renders
  *      one tile per remote participant; `useRemoteMicRecorders`'s
@@ -39,6 +39,15 @@ import React from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 
 // ----- Heavy / unrelated modules: minimal stubs ------------------
+
+jest.mock("@/components/ThemeProvider", () => ({
+  ThemeProvider: ({ children }: { children: React.ReactNode }) => children,
+  useTheme: () => ({
+    mode: "system" as const,
+    resolvedTheme: "light" as const,
+    setMode: jest.fn(),
+  }),
+}));
 
 jest.mock("@/components/whiteboard/PdfImageUploadButton", () => ({
   PdfImageUploadButton: () => null,
@@ -99,6 +108,7 @@ type FakeSyncClient = {
   // Test-only helpers
   __triggerConnect: () => void;
   __triggerDisconnect: () => void;
+  __triggerPeerCount: (count: number) => void;
   __getPeerId: () => string | undefined;
 };
 
@@ -108,6 +118,7 @@ const mockCreateWhiteboardSyncClient = jest.fn(
   (opts: { peerId?: string }): FakeSyncClient => {
     const connectCbs: Array<() => void> = [];
     const disconnectCbs: Array<() => void> = [];
+    const peerCountCbs: Array<(count: number) => void> = [];
     let connected = false;
     const client: FakeSyncClient = {
       isConnected: () => connected,
@@ -127,7 +138,13 @@ const mockCreateWhiteboardSyncClient = jest.fn(
           if (i >= 0) disconnectCbs.splice(i, 1);
         };
       }),
-      onPeerCountChange: jest.fn(() => () => {}),
+      onPeerCountChange: jest.fn((cb: (count: number) => void) => {
+        peerCountCbs.push(cb);
+        return () => {
+          const i = peerCountCbs.indexOf(cb);
+          if (i >= 0) peerCountCbs.splice(i, 1);
+        };
+      }),
       onRoomPeersChange: jest.fn(() => () => {}),
       broadcastScene: jest.fn(),
       broadcastDocument: jest.fn(),
@@ -139,6 +156,9 @@ const mockCreateWhiteboardSyncClient = jest.fn(
       __triggerDisconnect: () => {
         connected = false;
         for (const cb of [...disconnectCbs]) cb();
+      },
+      __triggerPeerCount: (count: number) => {
+        for (const cb of [...peerCountCbs]) cb(count);
       },
       __getPeerId: () => opts.peerId,
     };
@@ -198,6 +218,12 @@ jest.mock("@/hooks/useLiveAV", () => ({
     receivedLocalPeerId = opts.localPeerId;
     return {
       ...liveAvState,
+      // Compute reachableParticipants from the mock participants state
+      reachableParticipants: liveAvState.participants.filter(
+        (p) =>
+          p.peerConnectionState === "connected" &&
+          (p.iceConnectionState === "connected" || p.iceConnectionState === "completed")
+      ),
       toggleMic: toggleMicSpy,
       toggleCam: toggleCamSpy,
       requestMic: requestMicSpy,
@@ -210,11 +236,13 @@ jest.mock("@/hooks/useLiveAV", () => ({
   },
 }));
 
-// ----- evaluateLifecycle spy: captures the inputStreams we pass in -
+// ----- evaluateLifecycle spy: captures inputs we pass in ----------
 
 const evaluateLifecycleCalls: Array<{
   inputStreams: ReadonlyMap<string, string>;
   tutorWantsRecording: boolean;
+  participants: ReadonlySet<string>;
+  everHadParticipants: boolean;
 }> = [];
 jest.mock("@/lib/recording/lifecycle-machine", () => {
   const actual = jest.requireActual("@/lib/recording/lifecycle-machine");
@@ -223,11 +251,15 @@ jest.mock("@/lib/recording/lifecycle-machine", () => {
     evaluateLifecycle: (inputs: {
       inputStreams?: ReadonlyMap<string, string>;
       tutorWantsRecording: boolean;
+      participants?: ReadonlySet<string>;
+      everHadParticipants?: boolean;
     }) => {
       evaluateLifecycleCalls.push({
         inputStreams:
           inputs.inputStreams ?? new Map<string, string>(),
         tutorWantsRecording: inputs.tutorWantsRecording,
+        participants: inputs.participants ?? new Set<string>(),
+        everHadParticipants: inputs.everHadParticipants ?? false,
       });
       return actual.evaluateLifecycle(inputs);
     },
@@ -470,7 +502,12 @@ beforeEach(() => {
   };
 });
 
-describe("WhiteboardWorkspaceClient ↔ live A/V mount", () => {
+// Helper: get the latest evaluateLifecycle call (most recent render).
+function lastLifecycleCall() {
+  return evaluateLifecycleCalls[evaluateLifecycleCalls.length - 1];
+}
+
+describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
   test("mints localPeerId once and threads it into BOTH sync-client and useLiveAV", async () => {
     await renderWorkspace();
     expect(createdSyncClients).toHaveLength(1);
@@ -479,9 +516,11 @@ describe("WhiteboardWorkspaceClient ↔ live A/V mount", () => {
     expect(receivedLocalPeerId).toBe(syncPeerId);
   });
 
-  test("renders AVPermissionsPrompt + AVTilesPanel + AVControls", async () => {
+  test("renders live-board chrome without inline AVPermissionsPrompt", async () => {
     await renderWorkspace();
-    expect(screen.getByTestId("av-permissions-prompt")).toBeTruthy();
+    expect(screen.queryByTestId("av-permissions-prompt")).toBeNull();
+    expect(screen.getByTestId("mynk-wb-chrome")).toBeTruthy();
+    expect(screen.getByTestId("wb-topbar-mic")).toBeTruthy();
     expect(screen.getByTestId("av-tiles-panel")).toBeTruthy();
     expect(screen.getByTestId("av-controls")).toBeTruthy();
   });
@@ -596,5 +635,212 @@ describe("WhiteboardWorkspaceClient ↔ live A/V mount", () => {
       client.__triggerConnect();
     });
     expect(reconnectPeerSpy).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------
+  // Fix 1 — Debounce gate: ICE blip must NOT pause recording
+  //
+  // Independent oracle: the `participants` set passed to evaluateLifecycle.
+  // A non-empty set means the FSM sees a live peer; empty means it enters
+  // the paused(all_participants_disconnected) state that pauses recording.
+  //
+  // Re-renders are triggered by changing peerCount (different integer
+  // values), which causes React state to update without any side effects
+  // on the things under test.
+  // ---------------------------------------------------------------
+
+  test("sub-debounce ICE disconnected blip does NOT empty lifecycleParticipants (recording stays armed)", async () => {
+    jest.useFakeTimers();
+    try {
+      // Start with peer-A reachable.
+      liveAvState = {
+        ...liveAvState,
+        participants: [makeParticipant("peer-A", { peerConnectionState: "connected" })],
+      };
+
+      await renderWorkspace();
+      const client = createdSyncClients[0];
+
+      // Establish sync connection.
+      act(() => { client.__triggerConnect(); });
+      act(() => { client.__triggerPeerCount(1); });
+      // Flush the lifecycleParticipants debounce effect (adds peer-A immediately).
+      act(() => { jest.advanceTimersByTime(0); });
+
+      // Verify peer-A is in lifecycleParticipants before the blip.
+      expect(lastLifecycleCall()?.participants.has("peer-A")).toBe(true);
+
+      // --- Simulate ICE blip: peer-A becomes temporarily unreachable ---
+      // Update liveAvState, then use peerCount=2 to force a re-render
+      // (peerCount=1 → 2 changes state, avoiding the React same-value no-op).
+      liveAvState = {
+        ...liveAvState,
+        participants: [makeParticipant("peer-A", { peerConnectionState: "disconnected" })],
+      };
+      act(() => { client.__triggerPeerCount(2); });
+      // Debounce effect fires and schedules removal timer for peer-A.
+      act(() => { jest.advanceTimersByTime(0); });
+
+      // Advance just under the debounce window (4s < 8s).
+      // The removal timer has NOT fired yet — peer-A must still be present.
+      act(() => { jest.advanceTimersByTime(4000); });
+
+      // Independent oracle: lifecycleParticipants must STILL contain peer-A.
+      // The debounce window is suppressing the removal.
+      expect(lastLifecycleCall()?.participants.has("peer-A")).toBe(true);
+
+      // Advance PAST the debounce window (4 + 5 = 9s > 8s REACHABLE_LOSS_DEBOUNCE_MS).
+      // The removal timer fires, setLifecycleParticipants removes peer-A,
+      // and act() flushes the resulting React re-render.
+      act(() => { jest.advanceTimersByTime(5000); });
+
+      // After the debounce window, peer-A is removed — a sustained drop
+      // DOES eventually pause recording (the desired behaviour).
+      expect(lastLifecycleCall()?.participants.has("peer-A")).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("sub-debounce blip followed by recovery: peer recovers before window and lifecycleParticipants never empties", async () => {
+    jest.useFakeTimers();
+    try {
+      liveAvState = {
+        ...liveAvState,
+        participants: [makeParticipant("peer-A", { peerConnectionState: "connected" })],
+      };
+
+      await renderWorkspace();
+      const client = createdSyncClients[0];
+      act(() => { client.__triggerConnect(); });
+      act(() => { client.__triggerPeerCount(1); });
+      act(() => { jest.advanceTimersByTime(0); }); // flush add effect
+
+      expect(lastLifecycleCall()?.participants.has("peer-A")).toBe(true);
+
+      // Blip: peer-A becomes unreachable. Force re-render via peerCount=2.
+      liveAvState = {
+        ...liveAvState,
+        participants: [makeParticipant("peer-A", { peerConnectionState: "disconnected" })],
+      };
+      act(() => { client.__triggerPeerCount(2); });
+      act(() => { jest.advanceTimersByTime(0); }); // flush — schedules 8s removal timer
+
+      // 3s in — well within the 8s debounce window.
+      act(() => { jest.advanceTimersByTime(3000); });
+      // peer-A still present (timer hasn't fired).
+      expect(lastLifecycleCall()?.participants.has("peer-A")).toBe(true);
+
+      // Recovery: peer-A back to reachable before the window expires.
+      // Force re-render via peerCount=3.
+      liveAvState = {
+        ...liveAvState,
+        participants: [makeParticipant("peer-A", { peerConnectionState: "connected" })],
+      };
+      act(() => { client.__triggerPeerCount(3); });
+      act(() => { jest.advanceTimersByTime(0); }); // flush — cancels removal timer, re-adds peer-A
+
+      // Advance well past where the removal timer WOULD have fired.
+      act(() => { jest.advanceTimersByTime(10000); });
+
+      // peer-A must still be present — the timer was cancelled on recovery.
+      expect(lastLifecycleCall()?.participants.has("peer-A")).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  // ---------------------------------------------------------------
+  // Fix 2 — No false "disconnected/paused" during initial connect
+  //
+  // After Fix 2, everBothPresentRef latches on FIRST WebRTC reachability
+  // (not sync-join). This prevents the false "Student disconnected" banner
+  // that appeared for 1–3s between sync-join and ICE connected.
+  //
+  // Oracle: `everHadParticipants` in evaluateLifecycle inputs.
+  // ---------------------------------------------------------------
+
+  test("initial sync-join before WebRTC connected does NOT set everHadParticipants=true (no false paused banner)", async () => {
+    // Start with no reachable participants (WebRTC not established).
+    liveAvState = {
+      ...liveAvState,
+      participants: [],
+    };
+
+    await renderWorkspace();
+    const client = createdSyncClients[0];
+
+    // Sync socket connects + student joins sync relay (peerCount=1).
+    // No WebRTC yet — liveAvState.participants stays empty.
+    act(() => { client.__triggerConnect(); });
+    act(() => { client.__triggerPeerCount(1); });
+    await act(async () => { await Promise.resolve(); }); // flush effects
+
+    // Oracle: everHadParticipants must be FALSE because no peer is WebRTC-reachable.
+    // The latch must NOT fire on sync-join alone.
+    const callAfterSyncJoin = lastLifecycleCall();
+    expect(callAfterSyncJoin?.everHadParticipants).toBe(false);
+    expect(callAfterSyncJoin?.participants.size).toBe(0);
+
+    // --- Now WebRTC establishes: peer-A becomes reachable ---
+    // Update liveAvState and force a re-render via peerCount=2
+    // (peerCount 1→2 changes state, so the workspace re-renders and
+    // useLiveAV mock returns the updated reachableParticipants).
+    liveAvState = {
+      ...liveAvState,
+      participants: [makeParticipant("peer-A", { peerConnectionState: "connected" })],
+    };
+    act(() => { client.__triggerPeerCount(2); });
+    await act(async () => { await Promise.resolve(); }); // flush lifecycleParticipants effect
+
+    // Oracle: after WebRTC connects, everHadParticipants must latch TRUE.
+    await waitFor(() => {
+      const call = lastLifecycleCall();
+      expect(call?.everHadParticipants).toBe(true);
+      expect(call?.participants.has("peer-A")).toBe(true);
+    });
+  });
+
+  test("after WebRTC established then dropped, everHadParticipants stays true (correct paused-disconnected state)", async () => {
+    // Prove the complementary case: once the latch fires (call established),
+    // it remains true even after the peer drops — the workspace correctly
+    // enters the paused(all_participants_disconnected) state, not the
+    // armed/waiting-for-first-join state.
+    jest.useFakeTimers();
+    try {
+      // Start with peer-A reachable.
+      liveAvState = {
+        ...liveAvState,
+        participants: [makeParticipant("peer-A", { peerConnectionState: "connected" })],
+      };
+
+      await renderWorkspace();
+      const client = createdSyncClients[0];
+      act(() => { client.__triggerConnect(); });
+      act(() => { client.__triggerPeerCount(1); });
+      act(() => { jest.advanceTimersByTime(0); }); // flush add effect
+
+      // Latch must be set (peer-A was reachable).
+      expect(lastLifecycleCall()?.everHadParticipants).toBe(true);
+
+      // Drop: peer-A becomes unreachable. Force re-render via peerCount=2.
+      liveAvState = {
+        ...liveAvState,
+        participants: [makeParticipant("peer-A", { peerConnectionState: "failed" })],
+      };
+      act(() => { client.__triggerPeerCount(2); });
+      act(() => { jest.advanceTimersByTime(0); }); // flush — schedules 8s removal timer
+
+      // Advance past debounce: removal timer fires, peer-A removed.
+      act(() => { jest.advanceTimersByTime(10000); });
+
+      // Oracle: everHadParticipants is STILL true — the latch is sticky.
+      const callAfterDrop = lastLifecycleCall();
+      expect(callAfterDrop?.everHadParticipants).toBe(true);
+      // And participants is now empty (debounce expired — correct drop detected).
+      expect(callAfterDrop?.participants.size).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

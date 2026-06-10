@@ -402,9 +402,12 @@ export async function waitForTutorStudentConnected(
   tutorPage: Page,
   timeoutMs = 90_000
 ): Promise<void> {
-  await expect(tutorPage.getByText(/student connected/i)).toBeVisible({
-    timeout: timeoutMs,
-  });
+  // P2 chrome hides the sync pill visually (sr-only) but keeps the label for
+  // harness + screen readers ΓÇö match text, not visibility.
+  await expect(tutorPage.getByTestId("wb-sync-pill")).toHaveText(
+    /student connected/i,
+    { timeout: timeoutMs }
+  );
 }
 
 export async function ensureStudentFollowsTutor(page: Page): Promise<void> {
@@ -522,7 +525,14 @@ export async function clickBoardPageTab(
   const strip = page.getByTestId(
     side === "tutor" ? "wb-tutor-page-strip" : "student-board-pages-strip"
   );
-  await strip.getByRole("button", { name: pageTitle, exact: true }).click();
+  // Use evaluate(el.click()) rather than Playwright's coordinate-based .click()
+  // because the Next.js dev-tools "N" button sits at bottom-left in dev mode
+  // and physically overlaps the "Board 1" tab. Coordinate-based clicks (even
+  // with force:true) hit the overlay; el.click() dispatches directly on the
+  // target element, bypassing the overlay. The React onClick handler on the
+  // page tab fires correctly and the full page-switch + sync pipeline is exercised.
+  const tab = strip.getByRole("tab", { name: pageTitle, exact: true });
+  await tab.evaluate((el) => (el as HTMLButtonElement).click());
 }
 
 /** Insert PNG via production `insertImageOnCanvas` + Blob upload (E2E bridge). */

@@ -43,6 +43,8 @@ export type MicControlsProps = {
   lockDevice: boolean;
   /** Optional message shown when mic isn't yet acquired. */
   hint?: string;
+  /** When true, omit the full-width level meter (host shows inline meter elsewhere). */
+  hideLevelMeter?: boolean;
   /** Play a short sound (and vibrate on mobile) when approaching max recording length. */
   chimeEnabled: boolean;
   onChimeEnabledChange: (enabled: boolean) => void;
@@ -65,6 +67,7 @@ export default function MicControls({
   onChimeEnabledChange,
   chimeVolume,
   onChimeVolumeChange,
+  hideLevelMeter,
 }: MicControlsProps) {
   const pickerDisabled = lockDevice || (!isLive && devices.length === 0);
   const sliderDisabled = !isLive;
@@ -180,48 +183,50 @@ export default function MicControls({
         </span>
       </div>
 
-      {/* Level meter */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <span
-          style={{
-            minWidth: 92,
-            fontSize: 13,
-            color: "var(--muted)",
-            fontWeight: 500,
-          }}
-        >
-          Level:
-        </span>
-        <div
-          data-testid="mic-level-meter"
-          aria-label="Microphone input level"
-          role="meter"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          style={{
-            flex: 1,
-            height: 10,
-            background: "var(--surface-2)",
-            border: "1px solid var(--border)",
-            borderRadius: 5,
-            overflow: "hidden",
-            position: "relative",
-          }}
-        >
-          {/* Updated imperatively via meterBarRef in the rAF loop — never via
-              React state — so the meter doesn't re-render the slider 60×/sec
-              and break drag. */}
-          <div
-            ref={meterBarRef}
+      {/* Level meter — omitted when host renders inline meter (whiteboard top bar). */}
+      {!hideLevelMeter && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span
             style={{
-              width: "0%",
-              height: "100%",
-              background: meterColor(0),
-              transition: "width 80ms linear, background 200ms linear",
+              minWidth: 92,
+              fontSize: 13,
+              color: "var(--muted)",
+              fontWeight: 500,
             }}
-          />
+          >
+            Level:
+          </span>
+          <div
+            data-testid="mic-level-meter"
+            aria-label="Microphone input level"
+            role="meter"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            style={{
+              flex: 1,
+              height: 10,
+              background: "var(--surface-2)",
+              border: "1px solid var(--border)",
+              borderRadius: 5,
+              overflow: "hidden",
+              position: "relative",
+            }}
+          >
+            {/* Updated imperatively via meterBarRef in the rAF loop — never via
+                React state — so the meter doesn't re-render the slider 60×/sec
+                and break drag. */}
+            <div
+              ref={meterBarRef}
+              style={{
+                width: "0%",
+                height: "100%",
+                background: meterColor(0),
+                transition: "width 80ms linear, background 200ms linear",
+              }}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Approaching max time — sound + volume (this recorder only; persisted locally). */}
       <div

@@ -79,3 +79,29 @@ export const triggerUndo: UndoRedoTrigger = (doc = document) =>
 /** Trigger Excalidraw's redo via Ctrl/Cmd+Shift+Z (works on both platforms). */
 export const triggerRedo: UndoRedoTrigger = (doc = document) =>
   dispatchShortcut(doc, { key: "z", code: "KeyZ", shiftKey: true });
+
+/** Trigger send-to-back via Ctrl/Cmd+Shift+[. */
+export const triggerSendToBack: UndoRedoTrigger = (doc = document) =>
+  dispatchShortcut(doc, { key: "[", code: "BracketLeft", shiftKey: true });
+
+/** Trigger send-backward via Ctrl/Cmd+[. */
+export const triggerSendBackward: UndoRedoTrigger = (doc = document) =>
+  dispatchShortcut(doc, { key: "[", code: "BracketLeft", shiftKey: false });
+
+/** Trigger bring-forward via Ctrl/Cmd+]. */
+export const triggerBringForward: UndoRedoTrigger = (doc = document) =>
+  dispatchShortcut(doc, { key: "]", code: "BracketRight", shiftKey: false });
+
+/** Trigger bring-to-front via Ctrl/Cmd+Shift+]. */
+export const triggerBringToFront: UndoRedoTrigger = (doc = document) =>
+  dispatchShortcut(doc, { key: "]", code: "BracketRight", shiftKey: true });
+
+/** Trigger delete selected via Delete key. */
+export const triggerDeleteSelected = (doc = document): { ok: true } | { ok: false; reason: string } => {
+  const target = findExcalidrawTarget(doc);
+  if (!target) return { ok: false, reason: "excalidraw-container-not-found" };
+  target.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Delete", code: "Delete", bubbles: true, cancelable: true })
+  );
+  return { ok: true };
+};

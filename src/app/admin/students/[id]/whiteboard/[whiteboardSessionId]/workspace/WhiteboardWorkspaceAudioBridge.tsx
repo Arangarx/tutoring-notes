@@ -77,6 +77,11 @@ type Props = {
   /** Disables standalone Start (etc.) — e.g. until the workspace toolbar arms recording. */
   panelDisabled?: boolean;
   /**
+   * When false (default on live board), orchestration-only — no visible
+   * RecordingControlPanel. Mic device/level live in top-bar popover.
+   */
+  showPanel?: boolean;
+  /**
    * Tutor workspace: forwards mic picker to `useLiveAV.setMicDevice` for
    * WebRTC `replaceTrack` + recorder graph swap.
    */
@@ -114,6 +119,7 @@ export const WhiteboardWorkspaceAudioBridge = forwardRef<
     recordingActive,
     panelDisabled,
     onMicDeviceChange,
+    showPanel = false,
   },
   ref
 ) {
@@ -205,6 +211,10 @@ export const WhiteboardWorkspaceAudioBridge = forwardRef<
     }),
     [whiteboardSessionId, outboxState]
   );
+
+  if (!showPanel) {
+    return null;
+  }
 
   return (
     <RecordingControlPanel

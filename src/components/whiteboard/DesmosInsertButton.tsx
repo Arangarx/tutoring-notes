@@ -29,12 +29,14 @@ import {
   validateDesmosUrl,
   type ExcalidrawApiLike,
 } from "@/lib/whiteboard/insert-asset";
+import { WbIconDesmos } from "@/components/whiteboard/chrome/wb-icons";
 
 type Props = {
   excalidrawAPI: ExcalidrawApiLike | null;
   whiteboardSessionId: string;
   studentId: string;
   disabled?: boolean;
+  chrome?: boolean;
 };
 
 type DialogState =
@@ -48,6 +50,7 @@ export function DesmosInsertButton({
   whiteboardSessionId,
   studentId,
   disabled,
+  chrome,
 }: Props) {
   const [state, setState] = useState<DialogState>({ kind: "closed" });
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -115,13 +118,14 @@ export function DesmosInsertButton({
     <>
       <button
         type="button"
-        className="btn"
+        className={chrome ? "mynk-wb-tb-btn mynk-wb-tb-btn--icon" : "btn"}
         onClick={() => open("blank")}
         disabled={disabled || !excalidrawAPI}
         data-testid="wb-insert-desmos"
-        title="Insert a Desmos graph"
+        title="Insert Desmos graph"
+        aria-label="Insert Desmos graph"
       >
-        Insert Desmos
+        {chrome ? <WbIconDesmos /> : "Insert Desmos"}
       </button>
 
       {state.kind === "open" && (

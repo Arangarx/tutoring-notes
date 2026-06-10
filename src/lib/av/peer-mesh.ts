@@ -287,6 +287,17 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
   const iceStateSubs = new Set<IceConnectionStateHandler>();
   let disposed = false;
 
+  /**
+   * Per-peer debounced restart timers for ICE `disconnected`. When ICE
+   * transitions to `disconnected`, the polite side schedules a restart
+   * after ICE_DISCONNECT_RESTART_DELAY_MS. If ICE recovers before the
+   * timer fires (state → connected/completed), the timer is cancelled.
+   * This covers the split-brain failure mode where the media path dies
+   * while the signaling channel survives.
+   */
+  const disconnectRestartTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const ICE_DISCONNECT_RESTART_DELAY_MS = 3_000;
+
   // ---------------------------------------------------------------
   // Internal helpers
   // ---------------------------------------------------------------
@@ -384,10 +395,53 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
       const state = pc.iceConnectionState;
       log.log(`peer=${remotePeerId} event=ice-state to=${state}`);
       fan(iceStateSubs, remotePeerId, state);
-      // Auto-restart on failure for the polite side. The impolite
+
+      // Cancel debounced disconnect-restart timer on ICE recovery.
+      if (state === "connected" || state === "completed") {
+        const timer = disconnectRestartTimers.get(remotePeerId);
+        if (timer !== undefined) {
+          clearTimeout(timer);
+          disconnectRestartTimers.delete(remotePeerId);
+          log.log(
+            `peer=${remotePeerId} event=disconnect-restart-cancel reason=ice-recovered state=${state}`
+          );
+        }
+      }
+
+      // ICE disconnected on the polite side: schedule a debounced restart.
+      // The polite/impolite discipline prevents glare if both sides react
+      // simultaneously. Debounced to avoid thrashing on transient blips.
+      if (state === "disconnected" && entry.polite && !disconnectRestartTimers.has(remotePeerId)) {
+        log.log(
+          `peer=${remotePeerId} event=disconnect-restart-schedule delayMs=${ICE_DISCONNECT_RESTART_DELAY_MS}`
+        );
+        disconnectRestartTimers.set(
+          remotePeerId,
+          setTimeout(() => {
+            disconnectRestartTimers.delete(remotePeerId);
+            if (entry.closed) return;
+            // Guard: only restart if ICE is still disconnected; if it
+            // recovered on its own, do nothing.
+            if (entry.pc.iceConnectionState !== "disconnected") return;
+            log.log(
+              `peer=${remotePeerId} event=disconnect-restart-fire reason=ice-still-disconnected`
+            );
+            restartInternal(entry);
+          }, ICE_DISCONNECT_RESTART_DELAY_MS)
+        );
+      }
+
+      // Auto-restart on ICE failure for the polite side. The impolite
       // peer waits — if both sides tried to restart simultaneously
       // we'd be back in glare. Polite-only initiation avoids that.
+      // Also cancel any pending disconnect-restart timer since failed
+      // is a harder condition.
       if (state === "failed" && entry.polite) {
+        const timer = disconnectRestartTimers.get(remotePeerId);
+        if (timer !== undefined) {
+          clearTimeout(timer);
+          disconnectRestartTimers.delete(remotePeerId);
+        }
         log.log(
           `peer=${remotePeerId} event=auto-restart reason=ice-failed`
         );
@@ -694,6 +748,13 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
     if (entry.closed) return;
     entry.closed = true;
     peers.delete(entry.remotePeerId);
+    // Cancel any pending ICE-disconnect restart timer so it doesn't
+    // fire on a closed entry.
+    const dTimer = disconnectRestartTimers.get(entry.remotePeerId);
+    if (dTimer !== undefined) {
+      clearTimeout(dTimer);
+      disconnectRestartTimers.delete(entry.remotePeerId);
+    }
     try {
       // Detach event handlers FIRST so no late callback fires once
       // we close the PC.
@@ -898,6 +959,11 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
     dispose: () => {
       if (disposed) return;
       disposed = true;
+      // Cancel all pending ICE-disconnect restart timers before closing
+      // peer entries (closePeerEntryLocal also cancels per-peer, but
+      // clearing the whole map here is the belt-and-suspenders path).
+      for (const timer of disconnectRestartTimers.values()) clearTimeout(timer);
+      disconnectRestartTimers.clear();
       try {
         unsubscribeFromSignaling();
       } catch (err) {

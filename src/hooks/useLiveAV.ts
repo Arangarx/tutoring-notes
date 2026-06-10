@@ -246,6 +246,21 @@ export type UseLiveAVReturn = {
    * arrived, or mic hasn't been acquired.
    */
   participants: ReadonlyArray<AvParticipant>;
+  /**
+   * Subset of `participants` where WebRTC is confirmed healthy:
+   * `peerConnectionState === "connected"` AND
+   * `iceConnectionState ∈ {connected, completed}`.
+   *
+   * Use this — not raw `participants` — for: the recording gate
+   * (FSM `participants` input), the session timer gate, and any
+   * "call connected" UI indicator. Routing sync-only presence through
+   * these gates is the split-brain bug: the media path can die while
+   * the sync socket survives, causing recording to continue with
+   * tutor-only audio and the timer to bill a dead call.
+   *
+   * Sorted (peerId ascending) for stable downstream memoisation.
+   */
+  reachableParticipants: ReadonlyArray<AvParticipant>;
   /** Local mic stream. Null until `requestMic()` succeeds. */
   localAudioStream: MediaStream | null;
   /** Local camera stream. Null until `requestCam()` succeeds. */
@@ -489,7 +504,7 @@ function facingModeGuessFromCameraLabel(
 ): "user" | "environment" | null {
   const l = label.toLowerCase();
   if (
-    /\b(back|rear|environment|rück|trasera|world|telephoto|wide)\b/.test(l) ||
+    /\b(back|rear|environment|r├╝ck|trasera|world|telephoto|wide)\b/.test(l) ||
     /\b\d+x\b/i.test(l)
   ) {
     return "environment";
@@ -701,6 +716,9 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   const [hasCamPermission, setHasCamPermission] =
     useState<AvPermissionState>("unknown");
   const [participants, setParticipants] = useState<
+    ReadonlyArray<AvParticipant>
+  >([]);
+  const [reachableParticipants, setReachableParticipants] = useState<
     ReadonlyArray<AvParticipant>
   >([]);
   const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
@@ -1284,8 +1302,9 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     function rebuild() {
       if (disposed) return;
       const out: AvParticipant[] = [];
+      const reachable: AvParticipant[] = [];
       for (const [peerId, entry] of internal.entries()) {
-        out.push({
+        const p: AvParticipant = {
           peerId,
           role: entry.role,
           ...(entry.label !== undefined ? { label: entry.label } : {}),
@@ -1293,12 +1312,27 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           videoStream: entry.hasVideoTrack ? entry.videoStream : null,
           peerConnectionState: entry.peerConnectionState,
           iceConnectionState: entry.iceConnectionState,
-        });
+        };
+        out.push(p);
+        // A peer is reachable when WebRTC is fully connected at both
+        // the PC layer and the ICE layer. Sync-presence alone is not
+        // sufficient — this is the split-brain guard.
+        if (
+          entry.peerConnectionState === "connected" &&
+          (entry.iceConnectionState === "connected" ||
+            entry.iceConnectionState === "completed")
+        ) {
+          reachable.push(p);
+        }
       }
       out.sort((a, b) =>
         a.peerId < b.peerId ? -1 : a.peerId > b.peerId ? 1 : 0
       );
+      reachable.sort((a, b) =>
+        a.peerId < b.peerId ? -1 : a.peerId > b.peerId ? 1 : 0
+      );
       setParticipants(out);
+      setReachableParticipants(reachable);
     }
 
     function ensureEntry(
@@ -1431,12 +1465,75 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       rebuild();
     });
 
+    // Stale-peer eviction: if a peer's peerConnectionState stays
+    // disconnected or failed for PEER_EVICTION_TIMEOUT_MS, remove it
+    // from the internal map so the FSM sees an empty participants set
+    // and pauses recording. This catches the split-brain case where
+    // the sync socket is alive but the WebRTC media path died.
+    const PEER_EVICTION_TIMEOUT_MS = 10_000;
+    const evictionTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+    function scheduleEviction(peerId: string, reason: string): void {
+      if (evictionTimers.has(peerId)) return;
+      log.warn(
+        `peer=${peerId} event=eviction-scheduled reason=${reason} delayMs=${PEER_EVICTION_TIMEOUT_MS}`
+      );
+      evictionTimers.set(
+        peerId,
+        setTimeout(() => {
+          evictionTimers.delete(peerId);
+          if (disposed) return;
+          const e = internal.get(peerId);
+          if (!e) return;
+          // Only evict if still unhealthy. A recovery while the timer
+          // was in flight means we should NOT evict.
+          const pcState = e.peerConnectionState;
+          if (pcState === "connected" || pcState === "connecting" || pcState === "new") {
+            log.log(`peer=${peerId} event=eviction-cancelled-on-fire reason=recovered state=${pcState}`);
+            return;
+          }
+          log.warn(
+            `[useLiveAV] avx=${sid} peer=${peerId} event=evict-stale reason=${reason}-timeout pcState=${pcState}`
+          );
+          try {
+            mesh.removePeer(peerId);
+          } catch {
+            // removePeer is idempotent; ignore errors
+          }
+          for (const t of e.audioStream.getTracks()) {
+            try { t.stop(); } catch { /* ignore */ }
+          }
+          for (const t of e.videoStream.getTracks()) {
+            try { t.stop(); } catch { /* ignore */ }
+          }
+          internal.delete(peerId);
+          rebuild();
+        }, PEER_EVICTION_TIMEOUT_MS)
+      );
+    }
+
+    function cancelEviction(peerId: string): void {
+      const t = evictionTimers.get(peerId);
+      if (t !== undefined) {
+        clearTimeout(t);
+        evictionTimers.delete(peerId);
+      }
+    }
+
     const unsubPc = mesh.onPeerConnectionStateChange((peerId, state) => {
       if (disposed) return;
       const entry = internal.get(peerId);
       if (!entry) return;
       entry.peerConnectionState = state;
       log.log(`pcState peer=${peerId} state=${state}`);
+
+      if (state === "disconnected" || state === "failed") {
+        scheduleEviction(peerId, `pc-${state}`);
+      } else {
+        // Peer recovered — cancel any pending eviction.
+        cancelEviction(peerId);
+      }
+
       rebuild();
     });
 
@@ -1451,6 +1548,9 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
     return () => {
       disposed = true;
+      // Cancel all stale-peer eviction timers before tearing down.
+      for (const timer of evictionTimers.values()) clearTimeout(timer);
+      evictionTimers.clear();
       unsubPeers();
       unsubTrack();
       unsubPc();
@@ -1488,6 +1588,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       }
       internal.clear();
       setParticipants([]);
+      setReachableParticipants([]);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncClient, hasEverHadLocalMedia, localPeerId, sessionId]);
@@ -1992,6 +2093,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
   return {
     participants,
+    reachableParticipants,
     localAudioStream,
     localVideoStream,
     isMicMuted,

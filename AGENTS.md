@@ -166,6 +166,14 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
 
 Cross-cutting rules from production debugging. Add dated evidence under **Real-world observations** (Model usage protocol) when new ones land.
 
+### Whiteboard chrome — extend don't rewrite (2026-06-09, wb-chrome-redo)
+
+- **Two successive chrome attempts (P1.1, P2) regressed board separation and killed interactive controls** because executors rewrote `WhiteboardWorkspaceClient.tsx` rather than extending it. The engine's page/board switching, `pageDataRef` guards, live-sync wiring, and recording lifecycle are tightly coupled and fragile to restructuring.
+- **Rule:** chrome work on the whiteboard workspace is ADDITIVE ONLY. New state, new handlers, new JSX layout, new imports — all fine. Modifying or removing existing engine logic (page switch, scene data flow, recording FSM wiring) — hard stop, escalate to orchestrator.
+- **Pattern for chrome integration:** (1) start from known-good baseline (`a150d4f`), (2) extract new chrome components via `git show <commit>:<path>`, (3) apply engine additions (A4 reliability, new callbacks) as surgical additions AFTER existing logic, (4) replace the render section JSX with the new chrome layout, (5) verify board separation in a real browser before declaring done.
+- **Calibration:** "do not touch the engine" does NOT mean zero changes to the engine file. Adding state, handlers, callbacks, and wiring NEW buttons to EXISTING functions is expected and necessary. The guard is against BEHAVIORAL changes (rewriting, refactoring, or removing existing logic).
+- **Windows extraction:** `Out-File -Encoding utf8` adds UTF-8 BOM which corrupts non-ASCII test assertions when jest processes the file. Always extract files using `[System.IO.File]::WriteAllLines(path, content, New-Object System.Text.UTF8Encoding $false)` for test files with unicode literals.
+
 ### Secret handling — third-party egress (2026-05-31, 2FA QR)
 
 - A "secret encrypted at rest" guarantee is incomplete if the plaintext secret is later transmitted to a third party. The Phase-1 2FA acceptance verified no plaintext secret in DB/logs but **missed** that the enrollment QR was rendered via an external API (`api.qrserver.com`) with the secret in the URL — caught only in smoke via a CSP block, not by tests or the acceptance checklist.

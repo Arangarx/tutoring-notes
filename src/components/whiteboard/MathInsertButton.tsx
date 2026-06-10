@@ -31,6 +31,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ModalPortal } from "@/components/ModalPortal";
 import {
+  getInsertCenter,
   insertMathSvgOnCanvas,
   type ExcalidrawApiLike,
 } from "@/lib/whiteboard/insert-asset";
@@ -116,6 +117,8 @@ type Props = {
   whiteboardSessionId: string;
   studentId: string;
   disabled?: boolean;
+  /** Compact top-bar treatment — ∑ glyph per session shell mock. */
+  chrome?: boolean;
 };
 
 type DialogState =
@@ -130,17 +133,38 @@ export function MathInsertButton({
   whiteboardSessionId,
   studentId,
   disabled,
+  chrome,
 }: Props) {
   const [state, setState] = useState<DialogState>({ kind: "closed" });
   const [latex, setLatex] = useState<string>("");
   const [mathLiveReady, setMathLiveReady] = useState(false);
+  /** Bumps once per open transition so each dialog open gets a fresh <math-field>. */
+  const [openCount, setOpenCount] = useState(0);
+  /** True once the portal host div is attached — gates field mount on every open. */
+  const [hostReady, setHostReady] = useState(false);
   const fieldHostRef = useRef<HTMLDivElement | null>(null);
   const fieldRef = useRef<HTMLElement | null>(null);
+
+  const fieldHostCallbackRef = useCallback((node: HTMLDivElement | null) => {
+    fieldHostRef.current = node;
+    setHostReady(node !== null);
+  }, []);
+
+  // True whenever the dialog is visible (open / rendering / error / success).
+  // Used as a deps primitive so the field-mount effect only fires when the
+  // dialog actually opens or closes — NOT on every internal state transition
+  // (open → rendering → success), which would needlessly tear-down and
+  // recreate the MathLive custom element and corrupt its singleton keyboard.
+  const dialogIsOpen = state.kind !== "closed";
+
+  useEffect(() => {
+    if (!dialogIsOpen) setHostReady(false);
+  }, [dialogIsOpen]);
 
   // Lazy-load MathLive when the dialog first opens. Subsequent opens
   // reuse the registered custom element.
   useEffect(() => {
-    if (state.kind === "closed") return;
+    if (!dialogIsOpen) return;
     if (mathLiveReady) return;
     let cancelled = false;
     void (async () => {
@@ -205,23 +229,35 @@ export function MathInsertButton({
     return () => {
       cancelled = true;
     };
-  }, [state.kind, mathLiveReady]);
+  }, [dialogIsOpen, mathLiveReady]);
 
   // Mount the <math-field> after MathLive registers — we create the
   // element imperatively because React's JSX type checker doesn't
   // know about it without a global declaration, and the value-binding
   // story is cleaner via the imperative API anyway.
+  //
+  // `openCount` increments only on closed→open (button click), not on
+  // internal transitions (open→rendering→success), so the field stays
+  // mounted while the dialog is visible. On each new open, a fresh
+  // <math-field> runs full connectedCallback init and can reclaim
+  // MathLive's singleton virtual keyboard (dead on second open without
+  // this remount + defensive keyboard hide on teardown).
   useEffect(() => {
     if (!mathLiveReady) return;
-    if (state.kind === "closed") return;
+    if (!dialogIsOpen) return;
+    if (!hostReady) return;
     const host = fieldHostRef.current;
     if (!host) return;
     const field = document.createElement("math-field");
     field.setAttribute("style", "min-height: 60px; font-size: 22px; width: 100%;");
     field.setAttribute("aria-label", "Equation editor");
     if (latex) field.setAttribute("value", latex);
-    host.innerHTML = "";
     host.appendChild(field);
+    try {
+      window.customElements?.upgrade?.(field);
+    } catch {
+      // ignore — upgrade is belt-and-suspenders after append
+    }
     fieldRef.current = field;
     const onInput = () => {
       const v = (field as unknown as { value?: string }).value ?? "";
@@ -238,14 +274,20 @@ export function MathInsertButton({
     });
     return () => {
       field.removeEventListener("input", onInput);
-      // Don't tear down the field on every keystroke — only when the
-      // dialog itself unmounts. The cleanup that fires on dialog
-      // close clears the host below.
+      try {
+        (
+          window as unknown as { mathVirtualKeyboard?: { hide?: () => void } }
+        ).mathVirtualKeyboard?.hide?.();
+      } catch {
+        // ignore
+      }
+      if (host.contains(field)) host.removeChild(field);
+      if (fieldRef.current === field) fieldRef.current = null;
     };
     // We intentionally exclude `latex` from the deps: re-mounting on
     // every keystroke would steal focus + lose cursor position.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mathLiveReady, state.kind]);
+  }, [mathLiveReady, dialogIsOpen, openCount, hostReady]);
 
   const close = useCallback(() => {
     setState({ kind: "closed" });
@@ -264,6 +306,9 @@ export function MathInsertButton({
       setState({ kind: "error", message: "Equation is empty." });
       return;
     }
+    // Snapshot viewport center before any async work — live-sync updateScene
+    // during render/upload can clobber scrollX/scrollY (PDF boards especially).
+    const insertCenter = getInsertCenter(excalidrawAPI);
     setState({ kind: "rendering" });
     const render = await renderLatexToSvgViaRoute(
       whiteboardSessionId,
@@ -282,6 +327,7 @@ export function MathInsertButton({
       widthPx: render.widthPx,
       heightPx: render.heightPx,
       latex: trimmed,
+      insertCenter,
     });
     if (!inserted.ok) {
       setState({ kind: "error", message: inserted.reason });
@@ -300,13 +346,17 @@ export function MathInsertButton({
     <>
       <button
         type="button"
-        className="btn"
-        onClick={() => setState({ kind: "open" })}
+        className={chrome ? "mynk-wb-tb-btn" : "btn"}
+        onClick={() => {
+          setOpenCount((c) => c + 1);
+          setState({ kind: "open" });
+        }}
         disabled={disabled || !excalidrawAPI}
         data-testid="wb-insert-math-btn"
-        title="Insert a math equation"
+        title="Insert math equation"
+        aria-label="Insert math equation"
       >
-        Insert math
+        {chrome ? "∑" : "Insert math"}
       </button>
 
       {state.kind !== "closed" && (
@@ -359,7 +409,7 @@ export function MathInsertButton({
             )}
 
             <div
-              ref={fieldHostRef}
+              ref={fieldHostCallbackRef}
               style={{
                 border: "1px solid var(--border-default)",
                 borderRadius: 8,

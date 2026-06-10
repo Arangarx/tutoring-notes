@@ -39,7 +39,7 @@ import {
  *
  * Two real Excalidraw instances over `WHITEBOARD_SYNC_URL` (local Docker relay
  * via Playwright webServer). Assertions use `window.__TN_WB_E2E__` and
- * independent oracles from `viewport-align.ts` — not production HUD formulas.
+ * independent oracles from `viewport-align.ts` ΓÇö not production HUD formulas.
  *
  * Gate: `npm run test:wb-sync`
  */
@@ -51,9 +51,12 @@ test.describe("whiteboard live-sync regression", () => {
   ) {
     const ensureFollow = options?.ensureFollow !== false;
 
+    // Tutor viewport is taller to satisfy invariant-4's precondition:
+    // Mynk chrome (44px topbar + board tabs + banners) consumes flex height;
+    // 1200px ΓåÆ enough Excalidraw canvas vs student viewport (~458px).
     const tutorContext = await browser.newContext({
       storageState: "tests/integration/.auth/tutor.json",
-      viewport: { width: 1280, height: 900 },
+      viewport: { width: 1280, height: 1200 },
     });
     const studentContext = await browser.newContext({
       viewport: { width: 1280, height: 640 },
@@ -96,7 +99,7 @@ test.describe("whiteboard live-sync regression", () => {
     };
   }
 
-  test("invariant 1 — tutor stroke renders on student live (no page switch)", async ({
+  test("invariant 1 ΓÇö tutor stroke renders on student live (no page switch)", async ({
     browser,
   }) => {
     test.setTimeout(180_000);
@@ -140,7 +143,7 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 1b — tutor stroke continuation grows live on student", async ({
+  test("invariant 1b ΓÇö tutor stroke continuation grows live on student", async ({
     browser,
   }) => {
     test.setTimeout(180_000);
@@ -169,7 +172,7 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 2 — student stroke renders on tutor live", async ({ browser }) => {
+  test("invariant 2 ΓÇö student stroke renders on tutor live", async ({ browser }) => {
     test.setTimeout(180_000);
     const session = await seedWbLiveSyncSession();
     const peers = await openTutorAndStudent(browser, session);
@@ -190,7 +193,7 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 3 — live object MOVE propagation", async ({ browser }) => {
+  test("invariant 3 ΓÇö live object MOVE propagation", async ({ browser }) => {
     test.setTimeout(180_000);
     const session = await seedWbLiveSyncSession();
     const peers = await openTutorAndStudent(browser, session);
@@ -256,7 +259,7 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 4 — viewport center-align when student canvas is shorter", async ({
+  test("invariant 4 ΓÇö viewport center-align when student canvas is shorter", async ({
     browser,
   }) => {
     test.setTimeout(180_000);
@@ -297,7 +300,7 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 5 — pan follow (student scroll matches follow oracle)", async ({
+  test("invariant 5 ΓÇö pan follow (student scroll matches follow oracle)", async ({
     browser,
   }) => {
     test.setTimeout(180_000);
@@ -326,7 +329,7 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 6 — zoom does not move viewport scene center", async ({
+  test("invariant 6 ΓÇö zoom does not move viewport scene center", async ({
     browser,
   }) => {
     test.setTimeout(180_000);
@@ -382,7 +385,7 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 7 — student sees real image element (not placeholder)", async ({
+  test("invariant 7 ΓÇö student sees real image element (not placeholder)", async ({
     browser,
   }) => {
     test.setTimeout(180_000);
@@ -447,13 +450,13 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 8 — PDF page opens centered+fit on student viewport", async ({
+  test("invariant 8 ΓÇö PDF page opens centered+fit on student viewport", async ({
     browser,
   }) => {
-    // QUARANTINED: pdfjs-dist does not load in headless Playwright — gate/env prerequisite, not prod PDF centering.
+    // QUARANTINED: pdfjs-dist does not load in headless Playwright ΓÇö gate/env prerequisite, not prod PDF centering.
     test.skip(
       true,
-      "QUARANTINED: pdfjs-dist does not load in headless Playwright (Object.defineProperty called on non-object) — this is a gate/env prerequisite, NOT a production PDF-centering regression. PDF centering is verified by manual smoke. Re-enable once pdfjs headless loading is fixed (worker copy / postinstall)."
+      "QUARANTINED: pdfjs-dist does not load in headless Playwright (Object.defineProperty called on non-object) ΓÇö this is a gate/env prerequisite, NOT a production PDF-centering regression. PDF centering is verified by manual smoke. Re-enable once pdfjs headless loading is fixed (worker copy / postinstall)."
     );
 
     test.setTimeout(300_000);
@@ -546,7 +549,7 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 11 — idle-tutor welcome push: student receives existing scene on join without tutor redrawing", async ({
+  test("invariant 11 ΓÇö idle-tutor welcome push: student receives existing scene on join without tutor redrawing", async ({
     browser,
   }) => {
     /**
@@ -561,7 +564,7 @@ test.describe("whiteboard live-sync regression", () => {
      * This is the decisive gate for the fix: the welcome push must
      * fire unconditionally when the student joins, even when the tutor
      * is completely idle after their initial draw. jsdom CANNOT prove
-     * this — only a real relay + two Excalidraw instances can.
+     * this ΓÇö only a real relay + two Excalidraw instances can.
      */
     test.setTimeout(180_000);
     const session = await seedWbLiveSyncSession();
@@ -618,7 +621,7 @@ test.describe("whiteboard live-sync regression", () => {
     await studentContext.close();
   });
 
-  test("invariant 9 — page isolation (strokes do not bleed across tabs)", async ({
+  test("invariant 9 ΓÇö page isolation (strokes do not bleed across tabs)", async ({
     browser,
   }) => {
     test.setTimeout(180_000);
@@ -637,7 +640,19 @@ test.describe("whiteboard live-sync regression", () => {
       );
       await waitForElementOnPeer(peers.studentPage, "student", page1Stroke);
 
-      await peers.tutorPage.getByRole("button", { name: "+ Add page" }).click();
+      // Scope to the page-strip footer so Playwright doesn't accidentally
+      // intercept against an overlay inside the canvas body.
+      await peers.tutorPage
+        .getByTestId("wb-tutor-page-strip")
+        .getByRole("button", { name: "Add board" })
+        .click();
+      // Wait for the "Board 2" tab to appear before drawing; this confirms
+      // the page switch has committed and activePageIdRef is up-to-date.
+      await expect(
+        peers.tutorPage
+          .getByTestId("wb-tutor-page-strip")
+          .getByRole("tab", { name: "Board 2", exact: true })
+      ).toBeVisible({ timeout: 10_000 });
       const page2Stroke = `pw-p2-only-${Date.now()}`;
       await drawTestStrokeOnRole(
         peers.tutorPage,
@@ -654,7 +669,7 @@ test.describe("whiteboard live-sync regression", () => {
       expect(studentOnP2).toContain(page2Stroke);
       expect(studentOnP2).not.toContain(page1Stroke);
 
-      await clickBoardPageTab(peers.tutorPage, "tutor", "Page 1");
+      await clickBoardPageTab(peers.tutorPage, "tutor", "Board 1");
       await waitForElementOnPeer(peers.studentPage, "student", page1Stroke, 45_000);
       const studentOnP1 = await readSceneElementIds(peers.studentPage, "student");
       expect(studentOnP1).toContain(page1Stroke);
@@ -664,13 +679,13 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 10 — follow gating (sync ON/OFF/snap/default)", async ({
+  test("invariant 10 ΓÇö follow gating (sync ON/OFF/snap/default)", async ({
     browser,
   }) => {
     test.setTimeout(180_000);
     const session = await seedWbLiveSyncSession();
 
-    // 10c — default ON on fresh student load (before ensureStudentFollowsTutor).
+    // 10c ΓÇö default ON on fresh student load (before ensureStudentFollowsTutor).
     const peersDefault = await openTutorAndStudent(browser, session, {
       ensureFollow: false,
     });
@@ -691,7 +706,7 @@ test.describe("whiteboard live-sync regression", () => {
       });
       await expect(checkbox).toBeChecked();
 
-      // 10a — sync OFF blocks follow.
+      // 10a ΓÇö sync OFF blocks follow.
       await setStudentFollowTutor(peers.studentPage, false);
       const studentBefore = await readViewportSnapshot(peers.studentPage, "student");
       await setViewportOnRole(peers.tutorPage, "tutor", 400, 250, 1.3);
@@ -721,7 +736,7 @@ test.describe("whiteboard live-sync regression", () => {
         { timeout: 4_000 }
       );
 
-      // 10b — re-enable sync; fresh tutor pan must align student (same pan as inv 5).
+      // 10b ΓÇö re-enable sync; fresh tutor pan must align student (same pan as inv 5).
       await setStudentFollowTutor(peers.studentPage, true);
       await setViewportOnRole(peers.tutorPage, "tutor", 220, 140, 1.15);
       const tutorVp = await readViewportSnapshot(peers.tutorPage, "tutor");

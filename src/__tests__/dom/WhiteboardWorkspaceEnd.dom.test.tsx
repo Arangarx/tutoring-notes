@@ -29,6 +29,15 @@ import React from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+jest.mock("@/components/ThemeProvider", () => ({
+  ThemeProvider: ({ children }: { children: React.ReactNode }) => children,
+  useTheme: () => ({
+    mode: "system" as const,
+    resolvedTheme: "light" as const,
+    setMode: jest.fn(),
+  }),
+}));
+
 jest.mock("@/components/whiteboard/PdfImageUploadButton", () => ({
   PdfImageUploadButton: () => null,
 }));
@@ -276,6 +285,31 @@ const audioCtl = {
   stopAndUpload: jest.fn(),
   flushPendingUploads: jest.fn(() => Promise.resolve()),
 };
+
+// useLiveAV is not the focus of this test suite (end-session flow).
+// Provide a minimal stub so the workspace component mounts without crashing.
+jest.mock("@/hooks/useLiveAV", () => ({
+  useLiveAV: () => ({
+    participants: [],
+    reachableParticipants: [],
+    localAudioStream: null,
+    localVideoStream: null,
+    hasMicPermission: "prompt" as const,
+    hasCamPermission: "prompt" as const,
+    isMicMuted: false,
+    isCamMuted: true,
+    error: null,
+    videoError: null,
+    toggleMic: jest.fn(),
+    toggleCam: jest.fn(),
+    requestMic: jest.fn().mockResolvedValue(undefined),
+    requestCam: jest.fn().mockResolvedValue(undefined),
+    isAcquiring: false,
+    isActive: false,
+    reconnectPeer: jest.fn(),
+    retryAcquire: jest.fn().mockResolvedValue(undefined),
+  }),
+}));
 
 jest.mock("@/hooks/useAudioRecorder", () => {
   return {

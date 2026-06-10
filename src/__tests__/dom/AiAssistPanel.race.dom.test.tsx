@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @jest-environment jsdom
  */
 
@@ -6,7 +6,7 @@
  * Flow-level regression tests for the note-save vs transcribe race
  * (adversarial review #6 in `docs/BACKLOG.md`).
  *
- * These tests exercise the AiAssistPanel + NewNoteForm seam â€” specifically:
+ * These tests exercise the AiAssistPanel + NewNoteForm seam — specifically:
  *   - `checkOverwriteAndPrepare()` prompts on dirty form, clears on confirm.
  *   - Once an AI action is in-flight, typing into the form is preserved
  *     when the action eventually returns and populate() fires.
@@ -99,7 +99,7 @@ jest.mock("@/app/admin/students/[id]/AudioInputTabs", () => ({
 
 import NoteEntrySection from "@/app/admin/students/[id]/NoteEntrySection";
 
-// Realistic AI payloads â€” match TranscribeAndGenerateResult.ok=true shape.
+// Realistic AI payloads — match TranscribeAndGenerateResult.ok=true shape.
 const TEXT_AI_OK: GenerateNoteResult = {
   ok: true,
   topics: "AI topics",
@@ -158,7 +158,7 @@ function renderPanel(opts?: { blobEnabled?: boolean }) {
 
 /**
  * Create a manually-resolvable promise so a test can put a server action
- * "in flight" and resolve it on demand â€” letting the test type into the
+ * "in flight" and resolve it on demand — letting the test type into the
  * form between dispatch and response.
  */
 function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
@@ -178,7 +178,7 @@ beforeEach(() => {
   window.confirm = jest.fn().mockReturnValue(true);
 });
 
-describe("AiAssistPanel â€” checkOverwriteAndPrepare (clear-on-confirm)", () => {
+describe("AiAssistPanel — checkOverwriteAndPrepare (clear-on-confirm)", () => {
   it("does NOT prompt when the form is empty; fires action and populates", async () => {
     const user = userEvent.setup();
     generateNoteFromTextActionMock.mockResolvedValue(TEXT_AI_OK);
@@ -193,7 +193,7 @@ describe("AiAssistPanel â€” checkOverwriteAndPrepare (clear-on-confirm)", (
     expect(getField("topics").value).toBe("AI topics");
   });
 
-  it("declines confirm â†’ no action fires, tutor's typed content stays untouched", async () => {
+  it("declines confirm → no action fires, tutor's typed content stays untouched", async () => {
     const user = userEvent.setup();
     window.confirm = jest.fn().mockReturnValue(false);
     generateNoteFromTextActionMock.mockResolvedValue(TEXT_AI_OK);
@@ -208,7 +208,7 @@ describe("AiAssistPanel â€” checkOverwriteAndPrepare (clear-on-confirm)", (
     expect(getField("topics").value).toBe("tutor topics");
   });
 
-  it("confirms overwrite â†’ form is CLEARED before the action fires", async () => {
+  it("confirms overwrite → form is CLEARED before the action fires", async () => {
     const user = userEvent.setup();
     const dfd = deferred<GenerateNoteResult>();
     generateNoteFromTextActionMock.mockReturnValue(dfd.promise);
@@ -235,8 +235,8 @@ describe("AiAssistPanel â€” checkOverwriteAndPrepare (clear-on-confirm)", (
   });
 });
 
-describe("AiAssistPanel â€” in-flight race (the actual #6 bug)", () => {
-  it("empty form â†’ click Generate â†’ type during wait â†’ populate preserves the typing", async () => {
+describe("AiAssistPanel — in-flight race (the actual #6 bug)", () => {
+  it("empty form → click Generate → type during wait → populate preserves the typing", async () => {
     const user = userEvent.setup();
     const dfd = deferred<GenerateNoteResult>();
     generateNoteFromTextActionMock.mockReturnValue(dfd.promise);
@@ -266,7 +266,7 @@ describe("AiAssistPanel â€” in-flight race (the actual #6 bug)", () => {
     expect(getField("links").value).toBe("https://ai.example.com");
   });
 
-  it("pre-typed â†’ confirm overwrite â†’ type during wait â†’ populate preserves the NEW typing", async () => {
+  it("pre-typed → confirm overwrite → type during wait → populate preserves the NEW typing", async () => {
     const user = userEvent.setup();
     const dfd = deferred<GenerateNoteResult>();
     generateNoteFromTextActionMock.mockReturnValue(dfd.promise);
@@ -296,7 +296,7 @@ describe("AiAssistPanel â€” in-flight race (the actual #6 bug)", () => {
     expect(getField("plan").value).toBe("AI plan");
   });
 
-  it("audio path: empty form â†’ click Transcribe â†’ type during wait â†’ populate preserves typing", async () => {
+  it("audio path: empty form → click Transcribe → type during wait → populate preserves typing", async () => {
     const user = userEvent.setup();
     const dfd = deferred<TranscribeAndGenerateResult>();
     transcribeAndGenerateActionMock.mockReturnValue(dfd.promise);

@@ -49,6 +49,7 @@ jest.mock("next/navigation", () => ({
 jest.mock("@/hooks/useLiveAV", () => ({
   useLiveAV: () => ({
     participants: [],
+    reachableParticipants: [],
     localAudioStream: null,
     localVideoStream: null,
     hasMicPermission: "prompt",

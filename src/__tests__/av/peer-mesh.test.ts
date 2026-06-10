@@ -1486,3 +1486,154 @@ describe("createPeerMesh — replaceLocalTrackOnAllPeers", () => {
     m.dispose();
   });
 });
+
+// =================================================================
+// ICE disconnected → debounced restart (split-brain fix, A4)
+// =================================================================
+
+describe("ICE disconnected → debounced polite restart", () => {
+  test("polite side schedules a restart 3s after ICE disconnected", async () => {
+    jest.useFakeTimers();
+    try {
+      const sig = makeFakeSignaling();
+      const { factory, instances } = makePcFactory();
+      // localPeerId="B" > remotePeerId="A" → B is polite
+      const m = createPeerMesh({
+        signaling: sig,
+        localPeerId: "B",
+        _pcFactory: factory,
+        getLocalTracks: () => [],
+        sessionId: "test-sid",
+      });
+      m.addPeer("A");
+      const pc = instances[0]! as FakePc;
+
+      // Bring PC to a working state first so we're past initial setup.
+      pc.setIceConnectionState("connected");
+      await flush();
+
+      // Clear prior offers (from negotiation setup).
+      const offersBefore = sig.sends.filter((s) => s.kind === "offer").length;
+
+      // ICE drops to disconnected.
+      pc.setIceConnectionState("disconnected");
+      await flush();
+
+      // Before the timer fires, no restart offer yet.
+      expect(sig.sends.filter((s) => s.kind === "offer").length).toBe(offersBefore);
+
+      // Advance 3 s — restart should fire.
+      jest.advanceTimersByTime(3_000);
+      await flush();
+
+      const offersAfter = sig.sends.filter((s) => s.kind === "offer").length;
+      expect(offersAfter).toBeGreaterThan(offersBefore);
+      m.dispose();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("impolite side does NOT schedule a disconnect restart", async () => {
+    jest.useFakeTimers();
+    try {
+      const sig = makeFakeSignaling();
+      const { factory, instances } = makePcFactory();
+      // localPeerId="A" < remotePeerId="B" → A is impolite
+      const m = createPeerMesh({
+        signaling: sig,
+        localPeerId: "A",
+        _pcFactory: factory,
+        getLocalTracks: () => [],
+      });
+      m.addPeer("B");
+      const pc = instances[0]! as FakePc;
+
+      const offersBefore = sig.sends.filter((s) => s.kind === "offer").length;
+
+      pc.setIceConnectionState("disconnected");
+      await flush();
+      jest.advanceTimersByTime(4_000);
+      await flush();
+
+      // Impolite side must NOT send a restart offer on disconnected.
+      const offersAfter = sig.sends.filter((s) => s.kind === "offer").length;
+      expect(offersAfter).toBe(offersBefore);
+      m.dispose();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("timer is cancelled if ICE recovers before 3s", async () => {
+    jest.useFakeTimers();
+    try {
+      const sig = makeFakeSignaling();
+      const { factory, instances } = makePcFactory();
+      // localPeerId="B" > remotePeerId="A" → B is polite
+      const m = createPeerMesh({
+        signaling: sig,
+        localPeerId: "B",
+        _pcFactory: factory,
+        getLocalTracks: () => [],
+      });
+      m.addPeer("A");
+      const pc = instances[0]! as FakePc;
+
+      pc.setIceConnectionState("connected");
+      await flush();
+      const offersBefore = sig.sends.filter((s) => s.kind === "offer").length;
+
+      // ICE goes disconnected.
+      pc.setIceConnectionState("disconnected");
+      await flush();
+
+      // ICE recovers before the 3s timer fires.
+      jest.advanceTimersByTime(1_000);
+      pc.setIceConnectionState("connected");
+      await flush();
+
+      // Advance past the 3s mark — timer should have been cancelled.
+      jest.advanceTimersByTime(5_000);
+      await flush();
+
+      // No new restart offer should have been sent.
+      const offersAfter = sig.sends.filter((s) => s.kind === "offer").length;
+      expect(offersAfter).toBe(offersBefore);
+      m.dispose();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("ICE failed on polite side still triggers immediate restart", async () => {
+    jest.useFakeTimers();
+    try {
+      const sig = makeFakeSignaling();
+      const { factory, instances } = makePcFactory();
+      // localPeerId="B" > remotePeerId="A" → B is polite
+      const m = createPeerMesh({
+        signaling: sig,
+        localPeerId: "B",
+        _pcFactory: factory,
+        getLocalTracks: () => [],
+      });
+      m.addPeer("A");
+      const pc = instances[0]! as FakePc;
+
+      pc.setIceConnectionState("connected");
+      await flush();
+      const offersBefore = sig.sends.filter((s) => s.kind === "offer").length;
+
+      // ICE fails — existing auto-restart behavior, synchronous.
+      pc.setIceConnectionState("failed");
+      await flush();
+
+      const offersAfter = sig.sends.filter((s) => s.kind === "offer").length;
+      expect(offersAfter).toBeGreaterThan(offersBefore);
+      m.dispose();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});

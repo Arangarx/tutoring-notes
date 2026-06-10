@@ -41,7 +41,7 @@
 import { copyTextToClipboard } from "@/lib/copy-text-to-clipboard";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWindowScrollToTopOnMount } from "@/hooks/useWindowScrollToTopOnMount";
-import { useExcalidrawThemeFromSystem } from "@/hooks/useExcalidrawThemeFromSystem";
+import { useTheme } from "@/components/ThemeProvider";
 import { useSyncTombstonedElementIds } from "@/hooks/useSyncTombstonedElementIds";
 import { useRouter } from "next/navigation";
 import {
@@ -66,10 +66,8 @@ import {
 import { useAudioFlowConfirmation } from "@/hooks/useAudioFlowConfirmation";
 import { useLiveAV } from "@/hooks/useLiveAV";
 import { studentMicStreamId } from "@/lib/recording/remote-stream-recorder";
-import { AVPermissionsPrompt } from "@/components/av/AVPermissionsPrompt";
-import { AVTilesPanel } from "@/components/av/AVTilesPanel";
-import { AVControls } from "@/components/av/AVControls";
-import VideoControls from "@/components/av/VideoControls";
+import { WbTopBarMicControl } from "@/components/whiteboard/chrome/WbTopBarMicControl";
+import { WbThemeToggle } from "@/components/whiteboard/chrome/WbThemeToggle";
 import {
   useWhiteboardRecorder,
   type ResumeResult,
@@ -80,8 +78,8 @@ import {
   uploadWhiteboardSnapshot,
 } from "@/lib/whiteboard/upload";
 import { generateSessionSnapshotPng } from "@/lib/whiteboard/snapshot-png";
-import { deriveSyncPillState } from "@/lib/whiteboard/sync-pill-presentation";
 import { resolveParticipantLabel } from "@/lib/whiteboard/participant-label";
+import { deriveSyncPillState } from "@/lib/whiteboard/sync-pill-presentation";
 import { getOrCreateLocalPeerId } from "@/lib/whiteboard/local-peer-id";
 import {
   endWhiteboardSession,
@@ -112,10 +110,52 @@ import {
 } from "@/lib/recording/recording-draft-recovery";
 import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter";
 import { PdfImageUploadButton } from "@/components/whiteboard/PdfImageUploadButton";
-import { PageStrip, type PageStripRow } from "@/components/whiteboard/PageStrip";
+import { type PageStripRow } from "@/components/whiteboard/PageStrip";
 import { MathInsertButton } from "@/components/whiteboard/MathInsertButton";
 import { DesmosInsertButton } from "@/components/whiteboard/DesmosInsertButton";
-import { UndoRedoButtons } from "@/components/whiteboard/UndoRedoButtons";
+import { BoardTabStrip } from "@/components/whiteboard/chrome/BoardTabStrip";
+import { WbAVCluster } from "@/components/whiteboard/chrome/WbAVCluster";
+import {
+  WbStrokePropsPanel,
+  RoughnessIcon,
+  SharpnessIcon,
+} from "@/components/whiteboard/chrome/WbStrokePropsPanel";
+import {
+  isTouchLayout,
+  useWbLayoutMode,
+} from "@/components/whiteboard/chrome/useWbLayoutMode";
+import {
+  shapeIconFor,
+  WbIconCamera,
+  WbIconCollapse,
+  WbIconEraser,
+  WbIconMore,
+  WbIconPencil,
+  WbIconRedo,
+  WbIconSelect,
+  WbIconShare,
+  WbIconText,
+  WbIconUndo,
+  WbIconWand,
+  WB_SHAPE_TOOLS,
+  type WbShapeToolType,
+} from "@/components/whiteboard/chrome/wb-icons";
+import { triggerRedo, triggerUndo } from "@/lib/whiteboard/undo-redo";
+import {
+  triggerSendToBack,
+  triggerSendBackward,
+  triggerBringForward,
+  triggerBringToFront,
+  triggerDeleteSelected,
+} from "@/lib/whiteboard/undo-redo";
+import {
+  EXCALIDRAW_STROKE_HEX,
+  EXCALIDRAW_STROKE_DARK_HEX,
+  inkDisplayHex,
+  WB_STROKE_WIDTHS,
+} from "@/styles/token-values";
+import { StrokeWidthIcon } from "@/components/whiteboard/chrome/wb-icons";
+import "./whiteboard-chrome.css";
 import { ExcalidrawDynamic } from "@/components/whiteboard/ExcalidrawDynamic";
 import { WhiteboardDebugHud } from "@/components/whiteboard/WhiteboardDebugHud";
 import {
@@ -127,7 +167,6 @@ import {
   type BinaryFileFromExcalidraw,
 } from "@/lib/whiteboard/ensure-native-image-asset-urls-for-sync";
 import { hydrateRemoteImageFilesForScene } from "@/lib/whiteboard/hydrate-remote-files";
-import { preserveImageAssetUrlsOnSceneWrite } from "@/lib/whiteboard/preserve-image-asset-urls";
 import { resolveWhiteboardAssetReadUrl } from "@/lib/whiteboard/resolve-asset-read-url";
 import type {
   WhiteboardWireBroadcastExtras,
@@ -144,6 +183,7 @@ import {
   createWbFollowDebugTelemetry,
   inferBroadcastTrigger,
 } from "@/lib/whiteboard/wb-follow-debug-telemetry";
+import { useWbChromeDebugOverlayVisible } from "@/lib/whiteboard/use-wb-chrome-debug-overlay";
 import type { RemoteSceneIngestLogHint } from "@/hooks/useWhiteboardRecorder";
 import {
   adaptWBElementsToExcalidraw,
@@ -205,6 +245,11 @@ function upsertPageStripViewState(
 // trade-off (more dead air at the top of replays) — see
 // `docs/PHASE-PDF-SMOKE-1.md` smoke-4 section.
 const AUDIO_FLOW_GATE_TIMEOUT_MS = 10_000;
+// Debounce window for the "both parties reachable" loss transition.
+// When reachableParticipants drops to 0 (WebRTC dies), we wait this
+// long before reporting the loss to the billing timer. Avoids a
+// momentary 1-2s ICE reconnect blip briefly pausing the timer.
+const REACHABLE_LOSS_DEBOUNCE_MS = 8_000;
 
 function CanvasPlaceholder({ label }: { label: string }) {
   return (
@@ -258,6 +303,17 @@ function useAudioMsClock(active: boolean): () => number {
   }, []);
 }
 
+/** Session timer — minutes only per design spec (Sarah rounds to 5/15 min). */
+function formatTimerMinutesOnly(ms: number): string {
+  const totalMin = Math.floor(Math.max(0, ms) / 60000);
+  if (totalMin >= 60) {
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    return `${h}h ${m}m`;
+  }
+  return `${totalMin}m`;
+}
+
 function formatDuration(ms: number): string {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
   const h = Math.floor(totalSec / 3600);
@@ -281,7 +337,8 @@ export function WhiteboardWorkspaceClient({
   initialUserWantsRecording,
 }: Props) {
   const router = useRouter();
-  const excalidrawTheme = useExcalidrawThemeFromSystem();
+  // TU-12: Excalidraw theme follows app-selected theme (not OS-only)
+  const { resolvedTheme: excalidrawTheme } = useTheme();
   const { onLocalElementSnapshot, shouldDropRemoteElement } =
     useSyncTombstonedElementIds();
 
@@ -496,9 +553,60 @@ export function WhiteboardWorkspaceClient({
     Object.create(null)
   );
 
+  /**
+   * Image asset URL cache — maps pageId → elementId → {assetUrl, altText?}.
+   *
+   * PR-01 / Option A: `handleExcalidrawChange` stores raw Excalidraw elements
+   * in `pageDataRef` (no clone per pointer-move) to eliminate the O(N)
+   * `preserveImageAssetUrlsOnSceneWrite` clone on every paint. This cache
+   * carries the last-known `assetUrl` for each image element so the
+   * preservation can be applied lazily at wire/checkpoint build time.
+   */
+  const imageUrlCacheRef = useRef<
+    Record<string, Record<string, { assetUrl: string; altText?: string }>>
+  >({});
+
   const [peerImageMaterialNotice, setPeerImageMaterialNotice] = useState<
     "none" | "load" | "missing"
   >("none");
+
+  // â”€â”€â”€ Mynk chrome UI state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const [activeToolType, setActiveToolType] = useState<string>("selection");
+  const activeToolTypeRef = useRef<string>("selection");
+  const [stripCollapsed, setStripCollapsed] = useState(false);
+  const [moreStylesOpen, setMoreStylesOpen] = useState(false);
+  const [selectedShapeTool, setSelectedShapeTool] =
+    useState<WbShapeToolType>("line");
+  const [propsSheetOpen, setPropsSheetOpen] = useState(false);
+  // Single-open menu state — only one chrome popover/dropdown is open at a time.
+  // Opening any menu closes all others; outside-click/Esc handled per-menu.
+  const [openMenu, setOpenMenu] = useState<"share" | "view" | "shapes" | "more" | "props" | "theme" | null>(null);
+  const shareMenuOpen = openMenu === "share";
+  const viewMenuOpen = openMenu === "view";
+  const shapesDropdownOpen = openMenu === "shapes";
+  const morePopoverOpen = openMenu === "more";
+  const propsCompactOpen = openMenu === "props";
+  const themeMenuOpen = openMenu === "theme";
+  const toggleMenu = (menu: "share" | "view" | "shapes" | "more" | "props" | "theme") =>
+    setOpenMenu((p) => (p === menu ? null : menu));
+  const [gridEnabled, setGridEnabled] = useState(false);
+  const [roughness, setRoughness] = useState(0);
+  const [roundness, setRoundness] = useState<"sharp" | "round">("sharp");
+  const layoutMode = useWbLayoutMode();
+  const touchLayout = isTouchLayout(layoutMode);
+  // Stroke props — tracked from Excalidraw onChange (appState).
+  // Always initialize to EXCALIDRAW_STROKE_HEX (#1e293b) in both themes.
+  // Excalidraw's dark-mode canvas filter (invert+hue-rotate) automatically
+  // renders this near-black hex as white on the dark canvas — no white
+  // override needed. Storing #ffffff in dark mode would invert to black.
+  const initialWbStrokeColor = EXCALIDRAW_STROKE_HEX;
+  const [strokeColor, setStrokeColor] = useState<string>(initialWbStrokeColor);
+  const strokeColorRef = useRef<string>(initialWbStrokeColor);
+
+  const [strokeWidth, setStrokeWidth] = useState<number>(0.5);
+  const strokeWidthRef = useRef<number>(0.5);
+  const [opacity, setOpacity] = useState<number>(100);
+  const opacityRef = useRef<number>(100);
 
   // Smoke-4 (May 17, 2026): WB-activity latch for the audio-flow gate.
   // Declared up here (before `applyRemoteToCanvas`) so the temporal
@@ -724,22 +832,41 @@ export function WhiteboardWorkspaceClient({
     };
   }, [sync]);
 
-  // We compute `bothPartiesInRoom` from sync-client peer count + tutor socket
-  // state. That feeds billing pings, pills, and the session timer — not the same
-  // as the **recording gate** when `NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT` lets
-  // tutors rehearse with sync configured but nobody in the room yet (smoke /
-  // practice only; resets once anyone has joined this session).
+  // Split "both parties in room" into two layers:
+  //
+  //   bothPartiesInRoomSync  — sync-socket presence only (peerCount ≥ 1).
+  //                            Drives: board-syncing UX, split-brain
+  //                            detection, gate-timeout trigger.
+  //
+  //   bothPartiesInRoom      — WebRTC reachable (peerConnectionState=connected
+  //                            AND iceConnectionState âˆˆ {connected,completed}).
+  //                            Drives: billing pings and session timer. Debounced
+  //                            on loss to avoid timer flicker on brief ICE blips.
+  //                            lifecycleParticipants (FSM/recording gate) has its
+  //                            own parallel debounce effect declared below liveAv.
+  //
+  // The split-brain scenario: bothPartiesInRoomSync=true but bothPartiesInRoom=false.
+  // In that case the UI shows a warning banner and recording pauses.
+  const bothPartiesInRoomSync = tutorSyncConnected && peerCount >= 1;
 
-  const bothPartiesInRoom = tutorSyncConnected && peerCount >= 1;
+  const [bothPartiesInRoom, setBothPartiesInRoom] = useState(false);
+  // Timer ref for debouncing the loss of WebRTC reachability.
+  // The useEffect that drives setBothPartiesInRoom lives below liveAv
+  // (after `const liveAv = useLiveAV(...)`) because it reads
+  // liveAv.reachableParticipants. React rules allow the state + ref to
+  // be declared here; only the effect must follow the dep's declaration.
+  const reachableLossTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Sticky latch: once both parties have ever met this session, we
-  // know future "auto-pauses" are reconnect waits, not first-join
-  // waits. Lets the banner say "we'll resume automatically" instead
-  // of "we'll start when they join" after the first meet.
+  // Sticky latch: once both parties have truly established a WebRTC call
+  // this session, future "auto-pauses" are reconnect waits, not first-join
+  // waits. Latched on WebRTC reachability (NOT sync-join) so the initial
+  // connecting window (sync socket up, ICE not yet established) does NOT
+  // trigger the "Student disconnected — recording paused" state.
+  //
+  // The latch itself lives here; the write happens below (after liveAv is
+  // declared) because it reads liveAv.reachableParticipants. Placing the
+  // ref declaration here keeps the render-order constraints visible.
   const everBothPresentRef = useRef(false);
-  if (bothPartiesInRoom && !everBothPresentRef.current) {
-    everBothPresentRef.current = true;
-  }
 
   // UI-honesty: "Student connected — syncing board…" for a brief window
   // after a student joins. The relay socket being up does NOT mean the
@@ -747,10 +874,11 @@ export function WhiteboardWorkspaceClient({
   // pill graduates to the positive green "Student connected" label. This is
   // a conservative bound — the actual welcome push completes in < 2 s on
   // a healthy connection; the extra time covers slow devices and mobile.
+  // Uses sync presence (not WebRTC) — board sync is relay-level, not WebRTC.
   const [boardSyncing, setBoardSyncing] = useState(false);
   const boardSyncingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (bothPartiesInRoom) {
+    if (bothPartiesInRoomSync) {
       setBoardSyncing(true);
       if (boardSyncingTimerRef.current !== null) {
         clearTimeout(boardSyncingTimerRef.current);
@@ -760,7 +888,7 @@ export function WhiteboardWorkspaceClient({
         setBoardSyncing(false);
       }, 5000);
     } else {
-      // Student disconnected: reset so the next join shows the syncing state.
+      // Student disconnected (sync): reset so the next join shows the syncing state.
       if (boardSyncingTimerRef.current !== null) {
         clearTimeout(boardSyncingTimerRef.current);
         boardSyncingTimerRef.current = null;
@@ -773,7 +901,7 @@ export function WhiteboardWorkspaceClient({
         boardSyncingTimerRef.current = null;
       }
     };
-  }, [bothPartiesInRoom]);
+  }, [bothPartiesInRoomSync]);
 
   const allowRecordSoloUntilStudentJoin =
     typeof process !== "undefined" &&
@@ -810,17 +938,13 @@ export function WhiteboardWorkspaceClient({
   //                            health through here.
   //  - `endIntent`           — undefined (Phase 1b wires the End
   //                            flow through the FSM).
-  const lifecycleParticipants = useMemo<ReadonlySet<string>>(() => {
-    if (peerCount <= 0) return new Set();
-    const ids = new Set<string>();
-    for (let i = 0; i < peerCount; i += 1) ids.add(`peer-${i}`);
-    return ids;
-  }, [peerCount]);
-
   // ---------------------------------------------------------------
   // Audio recording hook (must come before liveAv so we can pass
   // localMicStream to useLiveAV to avoid double getUserMedia)
   // ---------------------------------------------------------------
+  // NOTE: lifecycleParticipants (FSM input from reachableParticipants)
+  // lives below the `const liveAv = useLiveAV(...)` declaration because
+  // it reads liveAv.reachableParticipants in its dependency array.
 
   const [audioDraftRecovery, setAudioDraftRecovery] =
     useState<DraftSegmentRow | null>(null);
@@ -1052,6 +1176,130 @@ export function WhiteboardWorkspaceClient({
     swapMicDevice: workspaceAudio.swapMicDevice,
   });
 
+  // Fix 2 (A4 adversarial item): latch everBothPresentRef on first WebRTC
+  // reachability rather than sync-join. This prevents the false
+  // "Student disconnected — recording paused" banner that appeared for
+  // 1–3s every session start (between sync-join and ICE connected).
+  if (liveAv.reachableParticipants.length >= 1 && !everBothPresentRef.current) {
+    everBothPresentRef.current = true;
+  }
+
+  // Use WebRTC-reachable participants (not raw sync peerCount) as the
+  // FSM input. This is the core split-brain fix: the FSM now sees
+  // participants.size=0 when sync says "connected" but WebRTC is dead,
+  // causing it to transition to paused(all_participants_disconnected)
+  // → recording pauses rather than silently capturing tutor-only audio.
+  //
+  // Fix 1 (A4 adversarial item): the original useMemo emptied immediately
+  // on any ICE `disconnected` event, pausing recording on transient blips.
+  // Replaced with a useState+useEffect that mirrors adding peers immediately
+  // (recovery is prompt) but debounces peer *removal* by
+  // REACHABLE_LOSS_DEBOUNCE_MS (~8s — long enough to survive normal ICE
+  // keepalive hysteresis; short enough that a true drop loses only bounded
+  // audio, not a whole silent session). A sustained drop beyond the window
+  // DOES pause recording and is the correct behaviour.
+  const [lifecycleParticipants, setLifecycleParticipants] = useState<ReadonlySet<string>>(
+    () => new Set<string>()
+  );
+  const lifecycleParticipantsRef = useRef<Set<string>>(new Set<string>());
+  const lcpRemovalTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const lcpDisposedRef = useRef(false);
+
+  useEffect(() => {
+    lcpDisposedRef.current = false;
+    const timers = lcpRemovalTimersRef.current;
+    return () => {
+      lcpDisposedRef.current = true;
+      for (const t of timers.values()) clearTimeout(t);
+      timers.clear();
+    };
+  }, []);
+
+  const reachablePeerIdsKey = useMemo(
+    () =>
+      liveAv.reachableParticipants
+        .map((p) => p.peerId)
+        .sort()
+        .join("|"),
+    [liveAv.reachableParticipants]
+  );
+
+  useEffect(() => {
+    if (lcpDisposedRef.current) return;
+    const timers = lcpRemovalTimersRef.current;
+    const nowReachableIds = new Set(liveAv.reachableParticipants.map((p) => p.peerId));
+    for (const [id, timer] of [...timers]) {
+      if (nowReachableIds.has(id)) {
+        clearTimeout(timer);
+        timers.delete(id);
+      }
+    }
+    const current = lifecycleParticipantsRef.current;
+    const next = new Set(current);
+    let addedAny = false;
+    for (const id of nowReachableIds) {
+      if (!next.has(id)) {
+        next.add(id);
+        addedAny = true;
+        console.log(
+          `[WhiteboardWorkspaceClient] avx=${whiteboardSessionId} wbsid=${whiteboardSessionId}` +
+            ` event=lifecycle-participant-added peer=${id}`
+        );
+      }
+    }
+    if (addedAny) {
+      lifecycleParticipantsRef.current = next;
+      setLifecycleParticipants(next);
+    }
+    for (const id of next) {
+      if (!nowReachableIds.has(id) && !timers.has(id)) {
+        timers.set(
+          id,
+          setTimeout(() => {
+            if (lcpDisposedRef.current) return;
+            timers.delete(id);
+            lifecycleParticipantsRef.current.delete(id);
+            setLifecycleParticipants(new Set(lifecycleParticipantsRef.current));
+            console.log(
+              `[WhiteboardWorkspaceClient] avx=${whiteboardSessionId} wbsid=${whiteboardSessionId}` +
+                ` event=lifecycle-participant-drop-debounced peer=${id} windowMs=${REACHABLE_LOSS_DEBOUNCE_MS}`
+            );
+          }, REACHABLE_LOSS_DEBOUNCE_MS)
+        );
+        console.log(
+          `[WhiteboardWorkspaceClient] avx=${whiteboardSessionId} wbsid=${whiteboardSessionId}` +
+            ` event=lifecycle-participant-removal-scheduled peer=${id} delayMs=${REACHABLE_LOSS_DEBOUNCE_MS}`
+        );
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- reachablePeerIdsKey is a stable useMemo of liveAv.reachableParticipants; whiteboardSessionId is session-lifetime stable
+  }, [reachablePeerIdsKey]);
+
+  // bothPartiesInRoom — WebRTC-reachable gate (split-brain fix).
+  useEffect(() => {
+    const nowReachable = tutorSyncConnected && liveAv.reachableParticipants.length >= 1;
+    if (nowReachable) {
+      if (reachableLossTimerRef.current !== null) {
+        clearTimeout(reachableLossTimerRef.current);
+        reachableLossTimerRef.current = null;
+      }
+      setBothPartiesInRoom(true);
+    } else {
+      if (reachableLossTimerRef.current === null) {
+        reachableLossTimerRef.current = setTimeout(() => {
+          reachableLossTimerRef.current = null;
+          setBothPartiesInRoom(false);
+        }, REACHABLE_LOSS_DEBOUNCE_MS);
+      }
+    }
+    return () => {
+      if (reachableLossTimerRef.current !== null) {
+        clearTimeout(reachableLossTimerRef.current);
+        reachableLossTimerRef.current = null;
+      }
+    };
+  }, [tutorSyncConnected, liveAv.reachableParticipants.length]);
+
   // -----------------------------------------------------------------
   // Diagnostic: AV mount phases — surfaces the gap between
   // "AVPermissionsPrompt rendered" and "first peer ICE-connected"
@@ -1215,13 +1463,15 @@ export function WhiteboardWorkspaceClient({
   // flowing peer unblocks recording), which is the intended FSM
   // semantics — see `evaluateLifecycle()` step 4b.
   const audioFlowingPeerIds = useAudioFlowConfirmation(liveAv.participants);
+  // Use real peerId strings to match lifecycleParticipants (which now
+  // also uses real peerId strings). The FSM only checks intersection
+  // size, so the namespace just needs to be consistent.
   const participantsWithFlowingAudio = useMemo<ReadonlySet<string>>(() => {
     if (liveAv.participants.length === 0) return EMPTY_FLOW_SET;
     const flowing = new Set<string>();
-    for (let i = 0; i < liveAv.participants.length; i += 1) {
-      const p = liveAv.participants[i]!;
+    for (const p of liveAv.participants) {
       if (audioFlowingPeerIds.has(p.peerId)) {
-        flowing.add(`peer-${i}`);
+        flowing.add(p.peerId);
       }
     }
     return flowing;
@@ -1326,16 +1576,19 @@ export function WhiteboardWorkspaceClient({
 
   // Sub-latch 3 — 10 s hard timeout once both parties are present.
   // Restarts on disconnect, fires once, sticky thereafter.
+  // Uses sync presence (bothPartiesInRoomSync) so the fallback fires
+  // even when WebRTC hasn't converged yet (e.g. TURN not deployed,
+  // NAT traversal failed). This bounds the worst-case dead-air window.
   const [gateTimeoutFired, setGateTimeoutFired] = useState(false);
   useEffect(() => {
     if (gateTimeoutFired) return;
-    if (!bothPartiesInRoom) return;
+    if (!bothPartiesInRoomSync) return;
     const t = setTimeout(
       () => setGateTimeoutFired(true),
       AUDIO_FLOW_GATE_TIMEOUT_MS
     );
     return () => clearTimeout(t);
-  }, [bothPartiesInRoom, gateTimeoutFired]);
+  }, [bothPartiesInRoomSync, gateTimeoutFired]);
 
   // Combined gate-release boolean. We pass this in place of the raw
   // peer-flow latch so the existing FSM signature is preserved.
@@ -1369,6 +1622,34 @@ export function WhiteboardWorkspaceClient({
     syncEnabled: !!syncUrl,
   });
   const recordingActive = presence.recordingActive;
+
+  // Split-brain detection: sync says the student is present (peerCount ≥ 1)
+  // but WebRTC reachability is 0 (media path dead). After the first real
+  // session connection this is a reliability issue requiring a banner.
+  // Only shown when the tutor is actively recording (otherwise the FSM
+  // already shows the appropriate armed/paused banner).
+  const splitBrainActive =
+    bothPartiesInRoomSync &&
+    liveAv.reachableParticipants.length === 0 &&
+    everBothPresentRef.current;
+
+  // Mandatory log: emit avx=/wbsid= log when recording pauses due to
+  // split-brain (sync present + WebRTC dead). This gives prod debugging
+  // the transition point. Only fires on the specific paused reason.
+  const prevRecordingActiveRef = useRef(false);
+  useEffect(() => {
+    const prevActive = prevRecordingActiveRef.current;
+    prevRecordingActiveRef.current = recordingActive;
+    if (!prevActive || recordingActive) return;
+    if (lifecycle.pausedReason !== "all_participants_disconnected") return;
+    if (!splitBrainActive) return;
+    console.log(
+      `[WhiteboardWorkspaceClient] avx=${whiteboardSessionId} wbsid=${whiteboardSessionId}` +
+      ` event=recording-paused-split-brain sync_peers=${peerCount}` +
+      ` reachable_peers=0 reason=webrtc_link_dead`
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- whiteboardSessionId is stable for session lifetime
+  }, [recordingActive, splitBrainActive, lifecycle.pausedReason, peerCount]);
 
   // Phase 4c (May 15 redesign): record EVERYONE into a single audio
   // mixdown rather than one MediaRecorder per peer. Why:
@@ -1561,36 +1842,68 @@ export function WhiteboardWorkspaceClient({
     };
   }, [syncUrl]);
 
+  /**
+   * PR-01 Option A: apply the image URL cache to snapshot elements.
+   * Called only at wire/checkpoint build time, never per pointer-move.
+   * Invariant P5: assetUrl preserved before any peer-visible snapshot/v3 send.
+   */
+  const applyImageUrlCacheToElements = useCallback(
+    (
+      elements: ReadonlyArray<ExcalidrawLikeElement>,
+      pageCache: Record<string, { assetUrl: string; altText?: string }> | undefined
+    ): ExcalidrawLikeElement[] => {
+      if (!pageCache || Object.keys(pageCache).length === 0) {
+        return elements.map((e) => ({ ...e }) as ExcalidrawLikeElement);
+      }
+      return elements.map((el) => {
+        if (el.type !== "image") return { ...el } as ExcalidrawLikeElement;
+        const cached = pageCache[el.id];
+        if (!cached) return { ...el } as ExcalidrawLikeElement;
+        const url = el.customData?.assetUrl;
+        if (typeof url === "string" && url.length >= 8) {
+          return { ...el } as ExcalidrawLikeElement;
+        }
+        return {
+          ...el,
+          customData: {
+            ...(el.customData ?? {}),
+            assetUrl: cached.assetUrl,
+            ...(cached.altText && !el.customData?.altText
+              ? { altText: cached.altText }
+              : {}),
+          },
+        } as ExcalidrawLikeElement;
+      });
+    },
+    []
+  );
+
   const getTutorDocumentPagesSnapshot = useCallback(() => {
     const api = excalidrawAPIRef.current;
     const cur = activePageIdRef.current;
     const out: Record<string, ReadonlyArray<ExcalidrawLikeElement>> = {};
     for (const p of pageListRef.current) {
+      // PR-01 Option A: apply image URL cache at snapshot/wire build time (not per-move)
+      const pageCache = imageUrlCacheRef.current[p.id];
       if (p.id === cur && api) {
-        // `pageDataRef` is updated from onChange; when it is defined, trust it
-        // so we don’t read `getSceneElements()` one frame after a tab switch
-        // and accidentally ship the previous tab’s pixels into the new tab.
+        // `pageDataRef` is updated from onChange; trust it over getSceneElements()
+        // to avoid shipping the previous tab on a fast page flip.
         const cached = pageDataRef.current[p.id] as
           | ExcalidrawLikeElement[]
           | undefined;
         if (cached !== undefined) {
-          out[p.id] = preserveImageAssetUrlsOnSceneWrite(
-            cached,
-            pageDataRef.current[p.id] as ExcalidrawLikeElement[] | undefined
-          );
+          out[p.id] = applyImageUrlCacheToElements(cached, pageCache);
         } else {
           const live = api.getSceneElements() as ExcalidrawLikeElement[];
-          out[p.id] = preserveImageAssetUrlsOnSceneWrite(
-            live,
-            pageDataRef.current[p.id] as ExcalidrawLikeElement[] | undefined
-          );
+          out[p.id] = applyImageUrlCacheToElements(live, pageCache);
         }
       } else {
-        out[p.id] = pageDataRef.current[p.id] ?? [];
+        const stored = (pageDataRef.current[p.id] ?? []) as ExcalidrawLikeElement[];
+        out[p.id] = applyImageUrlCacheToElements(stored, pageCache);
       }
     }
     return out;
-  }, []);
+  }, [applyImageUrlCacheToElements]);
 
   /** IndexedDB checkpoint + sessionStorage: full multi-page snapshot. */
   const buildBoardDocumentForCheckpoint =
@@ -1950,11 +2263,17 @@ export function WhiteboardWorkspaceClient({
         // stale (activePageIdRef = new, scene = old) state.
         activePageIdRef.current = nextId;
         const vsNext = pageListRef.current.find((p) => p.id === nextId)?.viewState;
+        // captureUpdate: "NEVER" — board-switch element replacement must never
+        // be recorded in Excalidraw's undo/redo stack. Without this, undo on
+        // Board N would replay the switch in reverse and inject Board (N-1)
+        // elements into the current scene.
         const aDual = api as ExcalidrawApiLike & {
           updateScene: (s: {
             appState?: unknown;
             elements?: unknown;
+            captureUpdate?: string;
           }) => void;
+          history?: { clear: () => void };
         };
         // Single updateScene so we never paint new tab elements under the old
         // tab's camera (avoids a one-frame misalignment Sarah saw after reload).
@@ -1975,6 +2294,7 @@ export function WhiteboardWorkspaceClient({
                 scrollY: vsNext.panY,
                 zoom: { value: vsNext.zoom },
               },
+              captureUpdate: "NEVER",
             });
             console.info(
               `[pvs] pvs=${nextId} action=restore source=page-switch panX=${vsNext.panX} panY=${vsNext.panY} zoom=${vsNext.zoom}`
@@ -1995,11 +2315,16 @@ export function WhiteboardWorkspaceClient({
             });
           }
         } else {
-          api.updateScene({ elements: next as ReadonlyArray<unknown> });
+          aDual.updateScene({ elements: next as ReadonlyArray<unknown>, captureUpdate: "NEVER" });
           console.info(
             `[pvs] pvs=${nextId} action=restore source=page-switch viewState=absent`
           );
         }
+        // Scope undo/redo history to the current board. Excalidraw's history
+        // stack is global to the single instance — without clearing it on every
+        // board switch, undo on Board 2 can replay Board 1 operations and inject
+        // Board 1 elements into the Board 2 scene (P0 cross-board contamination).
+        aDual.history?.clear();
         committed = true;
       } finally {
         // Hold the guard across two animation frames + a microtask tail
@@ -2078,9 +2403,17 @@ export function WhiteboardWorkspaceClient({
     pageDataRef.current[newId] = [];
     if (api) {
       pageSwitchProgrammaticRef.current += 1;
+      const apiH = api as typeof api & {
+        updateScene: (s: { elements?: ReadonlyArray<unknown>; captureUpdate?: string }) => void;
+        history?: { clear: () => void };
+      };
       try {
         activePageIdRef.current = newId;
-        api.updateScene({ elements: [] });
+        // captureUpdate: "NEVER" — same reason as selectTutorPage: the new-board
+        // element wipe must not create a history entry, and history must be
+        // cleared so undo cannot reach across boards.
+        apiH.updateScene({ elements: [], captureUpdate: "NEVER" });
+        apiH.history?.clear();
       } finally {
         const releaseGuard = () => {
           pageSwitchProgrammaticRef.current = Math.max(
@@ -2959,6 +3292,21 @@ export function WhiteboardWorkspaceClient({
   // Excalidraw onChange wiring
   // ---------------------------------------------------------------
 
+  // PR-01 Option E: pointer-up flush — ensures last stroke segment is never dropped
+  // when the throttled frame and document broadcast are deferred. Guards respected.
+  useEffect(() => {
+    const handlePointerUp = () => {
+      if (applyingRemoteToCanvasRef.current) return;
+      if (pageSwitchProgrammaticRef.current > 0) return;
+      flushThrottledFrameNow();
+      if (sync && syncUrl) {
+        flushDocumentBroadcastNow();
+      }
+    };
+    window.addEventListener("pointerup", handlePointerUp);
+    return () => window.removeEventListener("pointerup", handlePointerUp);
+  }, [flushThrottledFrameNow, flushDocumentBroadcastNow, sync, syncUrl]);
+
   const handleExcalidrawChange = useCallback(
     (
       elements: ReadonlyArray<unknown>,
@@ -2969,13 +3317,26 @@ export function WhiteboardWorkspaceClient({
       if (pageSwitchProgrammaticRef.current > 0) return;
       const els = elements as ReadonlyArray<ExcalidrawLikeElement>;
       const pageId = activePageIdRef.current;
-      const prevBucket = pageDataRef.current[pageId] as
-        | ExcalidrawLikeElement[]
-        | undefined;
-      pageDataRef.current[pageId] = preserveImageAssetUrlsOnSceneWrite(
-        els,
-        prevBucket
-      );
+      // PR-01 Option A: store raw elements ref — no per-move clone.
+      // preserveImageAssetUrlsOnSceneWrite now runs only at wire/checkpoint build time.
+      pageDataRef.current[pageId] = els as ExcalidrawLikeElement[];
+      // Update image URL cache (lightweight: only scans image-type elements).
+      // This preserves assetUrl across the deferred window (invariant P5).
+      for (const el of els) {
+        const e = el as ExcalidrawLikeElement;
+        if (
+          e.type === "image" &&
+          typeof e.customData?.assetUrl === "string" &&
+          e.customData.assetUrl.length >= 8
+        ) {
+          (imageUrlCacheRef.current[pageId] ??= {})[e.id] = {
+            assetUrl: e.customData.assetUrl,
+            ...(typeof e.customData?.altText === "string"
+              ? { altText: e.customData.altText }
+              : {}),
+          };
+        }
+      }
       onLocalElementSnapshot(elements);
       // Smoke-4 (May 17, 2026): real local activity counts as
       // proof-of-session for the audio-flow gate (see
@@ -3016,7 +3377,7 @@ export function WhiteboardWorkspaceClient({
         // smoke-1 #6: capture the page the onChange fired on. If the
         // tutor switches pages while this async upload is in flight,
         // we must NOT write the (page A) patched elements into
-        // (page B)'s pageDataRef — that's how Page 1 ↔ Page 9 leaked.
+        // (page B)'s pageDataRef — that's how Page 1 â†” Page 9 leaked.
         const onChangePageId = activePageIdRef.current;
         void (async () => {
           try {
@@ -3080,396 +3441,821 @@ export function WhiteboardWorkspaceClient({
     ]
   );
 
+  // â”€â”€â”€ Chrome: selectTool + updateStrokeStyle callbacks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  type WbChromeApiExt = ExcalidrawApiLike & {
+    setActiveTool?: (tool: { type: string; locked?: boolean }) => void;
+    updateScene?: (data: { elements?: ReadonlyArray<unknown>; appState?: Record<string, unknown> }) => void;
+  };
+
+  const selectTool = useCallback((type: string) => {
+    const api = excalidrawAPIRef.current as WbChromeApiExt | null;
+    if (!api) return;
+    api.setActiveTool?.({ type, locked: type !== "selection" });
+    activeToolTypeRef.current = type;
+    setActiveToolType(type);
+    if (WB_SHAPE_TOOLS.some((s) => s.type === type)) {
+      setSelectedShapeTool(type as WbShapeToolType);
+    }
+    setOpenMenu(null);
+  }, []);
+
+  const updateStrokeStyle = useCallback((
+    updates: { color?: string; width?: number; opacity?: number; roughness?: number }
+  ) => {
+    const api = excalidrawAPIRef.current as WbChromeApiExt | null;
+    if (!api) return;
+    const appState: Record<string, unknown> = {};
+    if (updates.color !== undefined) {
+      appState.currentItemStrokeColor = updates.color;
+      strokeColorRef.current = updates.color;
+      setStrokeColor(updates.color);
+    }
+    if (updates.width !== undefined) {
+      appState.currentItemStrokeWidth = updates.width;
+      strokeWidthRef.current = updates.width;
+      setStrokeWidth(updates.width);
+    }
+    if (updates.opacity !== undefined) {
+      appState.currentItemOpacity = updates.opacity;
+      opacityRef.current = updates.opacity;
+      setOpacity(updates.opacity);
+    }
+    if (updates.roughness !== undefined) {
+      appState.currentItemRoughness = updates.roughness;
+      setRoughness(updates.roughness);
+    }
+    api.updateScene?.({ appState });
+  }, []);
+
+  const updateRoundness = useCallback((value: "sharp" | "round") => {
+    const api = excalidrawAPIRef.current as WbChromeApiExt | null;
+    if (!api) return;
+    api.updateScene?.({ appState: { currentItemRoundness: value } });
+    setRoundness(value);
+  }, []);
+
+  const toggleGrid = useCallback((enabled: boolean) => {
+    setGridEnabled(enabled);
+    const api = excalidrawAPIRef.current as WbChromeApiExt | null;
+    api?.updateScene?.({ appState: { gridModeEnabled: enabled } });
+  }, []);
+
+  const dismissTouchProps = useCallback(() => {
+    setPropsSheetOpen(false);
+  }, []);
+
+  const handleAcquireMic = useCallback(async () => {
+    if (!workspaceAudio.localMicStream && !liveAv.localAudioStream) {
+      await liveAv.requestMic();
+    }
+  }, [workspaceAudio.localMicStream, liveAv]);
+
+  const handleTopBarCam = useCallback(async () => {
+    if (!liveAv.localVideoStream) {
+      // requestCam() already sets isCamMuted=false on success.
+      // Do NOT call toggleCam() after — that would immediately re-mute.
+      await liveAv.requestCam();
+      return;
+    }
+    liveAv.toggleCam();
+  }, [liveAv]);
+
+  // Camera-on-by-default: auto-enable the camera when the browser
+  // Permissions API confirms it was already granted (e.g. on a
+  // subsequent session in the same browser). Runs at most once per
+  // mount. Does NOT nag if permission is denied or unknown.
+  const hasAutoRequestedCamRef = useRef(false);
+  useEffect(() => {
+    if (liveAv.hasCamPermission !== "granted") return;
+    if (liveAv.localVideoStream) return;
+    if (hasAutoRequestedCamRef.current) return;
+    hasAutoRequestedCamRef.current = true;
+    void liveAv.requestCam();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveAv.hasCamPermission]);
+
+  const propsSheetSwipeRef = useRef<{ startY: number } | null>(null);
+
+  const onPropsSheetHandlePointerDown = useCallback((e: React.PointerEvent) => {
+    if (!propsSheetOpen) return;
+    propsSheetSwipeRef.current = { startY: e.clientY };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }, [propsSheetOpen]);
+
+  const onPropsSheetHandlePointerMove = useCallback((e: React.PointerEvent) => {
+    const swipe = propsSheetSwipeRef.current;
+    if (!swipe) return;
+    if (e.clientY - swipe.startY > 60) {
+      propsSheetSwipeRef.current = null;
+      dismissTouchProps();
+    }
+  }, [dismissTouchProps]);
+
+  const onPropsSheetHandlePointerUp = useCallback(() => {
+    propsSheetSwipeRef.current = null;
+  }, []);
+
+  const roughnessLabel =
+    roughness === 0 ? "Architect" : roughness === 1 ? "Artist" : "Cartoon";
+  const roundnessLabel = roundness === "sharp" ? "Sharp" : "Round";
+
+  const showPropsChrome =
+    activeToolType !== "selection" &&
+    activeToolType !== "hand" &&
+    activeToolType !== "laser";
+
   // ---------------------------------------------------------------
-  // Render
+  // Render helpers — chrome
+  // ---------------------------------------------------------------
+
+  const renderSidebarPropsCompact = () => (
+    <div
+      className={`mynk-wb-props-sidebar mynk-wb-props-compact${propsCompactOpen ? " mynk-wb-props-compact--open" : ""}`}
+      data-testid="wb-props-popover"
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      <button
+        type="button"
+        className="mynk-wb-props-compact__summary"
+        aria-label="Stroke properties — click to expand"
+        aria-expanded={propsCompactOpen}
+        data-testid="wb-props-compact-trigger"
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleMenu("props");
+        }}
+      >
+        <span
+          className="mynk-wb-summary-swatch"
+          style={{
+            backgroundColor: inkDisplayHex(strokeColor, excalidrawTheme),
+          }}
+        />
+        <span className="mynk-wb-summary-stroke" aria-hidden>
+          <StrokeWidthIcon
+            lineH={
+              WB_STROKE_WIDTHS.find((w) => w.value === strokeWidth)?.lineH ?? 2
+            }
+          />
+        </span>
+        <span
+          className="mynk-wb-summary-chip"
+          title={roughnessLabel}
+          aria-label={roughnessLabel}
+          style={{ padding: "2px 4px", background: "transparent" }}
+        >
+          <RoughnessIcon level={roughness as 0 | 1 | 2} />
+        </span>
+        <span
+          className="mynk-wb-summary-chip"
+          title={roundnessLabel}
+          aria-label={roundnessLabel}
+          style={{ padding: "2px 4px", background: "transparent" }}
+        >
+          <SharpnessIcon type={roundness} />
+        </span>
+      </button>
+      <div
+        className="mynk-wb-props-compact__panel"
+        role="dialog"
+        aria-label="Stroke properties"
+        data-testid="wb-props-panel"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <WbStrokePropsPanel
+          strokeColor={strokeColor}
+          strokeWidth={strokeWidth}
+          opacity={opacity}
+          roughness={roughness}
+          roundness={roundness}
+          moreStylesOpen={moreStylesOpen}
+          inkHex={excalidrawTheme === "dark" ? EXCALIDRAW_STROKE_DARK_HEX : EXCALIDRAW_STROKE_HEX}
+          onStrokeChange={updateStrokeStyle}
+          onMoreStylesToggle={() => setMoreStylesOpen((p) => !p)}
+          onRoughnessChange={(r) => updateStrokeStyle({ roughness: r })}
+          onRoundnessChange={updateRoundness}
+        />
+      </div>
+    </div>
+  );
+
+  const renderMoreOverflowMenu = (iconSize = 16) => (
+    <>
+      <div className="mynk-wb-more-menu">
+        <WbToolBtn
+          icon={<WbIconMore size={iconSize} />}
+          label="More — z-order, delete, hand"
+          active={morePopoverOpen}
+          onClick={() => {
+            toggleMenu("more");
+          }}
+        />
+        {morePopoverOpen && (
+          <div
+            className="mynk-wb-more-popover"
+            role="dialog"
+            aria-label="More drawing options"
+            data-testid="wb-more-popover"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <button type="button" className="mynk-wb-menu-item" onClick={() => triggerSendToBack()}>
+              <span>Send to back</span>
+              <span className="mynk-wb-menu-item__kbd">Ctrl+Shift+[</span>
+            </button>
+            <button type="button" className="mynk-wb-menu-item" onClick={() => triggerSendBackward()}>
+              <span>↓ Send backward</span>
+              <span className="mynk-wb-menu-item__kbd">Ctrl+[</span>
+            </button>
+            <button type="button" className="mynk-wb-menu-item" onClick={() => triggerBringForward()}>
+              <span>↑ Bring forward</span>
+              <span className="mynk-wb-menu-item__kbd">Ctrl+]</span>
+            </button>
+            <button type="button" className="mynk-wb-menu-item" onClick={() => triggerBringToFront()}>
+              <span>Bring to front</span>
+              <span className="mynk-wb-menu-item__kbd">Ctrl+Shift+]</span>
+            </button>
+            <div className="mynk-wb-popover-sep" />
+            <button
+              type="button"
+              className="mynk-wb-menu-item mynk-wb-menu-item--destructive"
+              onClick={() => {
+                triggerDeleteSelected();
+                setOpenMenu(null);
+              }}
+              aria-label="Delete selected elements"
+            >
+              <span>Delete selected</span>
+              <span className="mynk-wb-menu-item__kbd">Delete</span>
+            </button>
+            <div className="mynk-wb-popover-sep" />
+            <button
+              type="button"
+              className="mynk-wb-menu-item"
+              onClick={() => {
+                selectTool("hand");
+                setOpenMenu(null);
+              }}
+            >
+              <span>Hand / pan</span>
+              <span className="mynk-wb-menu-item__kbd">H</span>
+            </button>
+            <div className="mynk-wb-popover-sep" />
+            <p className="mynk-wb-info-note">
+              PDF pages are always below your drawing.
+            </p>
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  const renderToolStripButtons = (large = false) => {
+    const iconSize = large ? 18 : 16;
+    return (
+      <>
+        <WbToolBtn
+          icon={<WbIconSelect size={iconSize} />}
+          label="Select (V)"
+          active={activeToolType === "selection"}
+          onClick={() => selectTool("selection")}
+        />
+        <WbToolBtn
+          icon={<WbIconPencil size={iconSize} />}
+          label="Pencil (P)"
+          active={activeToolType === "freedraw"}
+          onClick={() => selectTool("freedraw")}
+        />
+        <WbToolBtn
+          icon={<WbIconEraser size={iconSize} />}
+          label="Eraser (E)"
+          active={activeToolType === "eraser"}
+          onClick={() => selectTool("eraser")}
+        />
+        <WbToolBtn
+          icon={<WbIconText size={iconSize} />}
+          label="Text (T)"
+          active={activeToolType === "text"}
+          onClick={() => selectTool("text")}
+        />
+        <WbToolBtn
+          icon={<WbIconWand size={iconSize} />}
+          label="Pointer wand (K)"
+          active={activeToolType === "laser"}
+          onClick={() => selectTool("laser")}
+          accent
+        />
+        <div className="mynk-wb-shapes-menu">
+          <WbToolBtn
+            icon={shapeIconFor(
+              WB_SHAPE_TOOLS.some((s) => s.type === activeToolType)
+                ? activeToolType
+                : selectedShapeTool,
+              iconSize
+            )}
+            label="Shapes"
+            active={WB_SHAPE_TOOLS.some((s) => s.type === activeToolType)}
+            onClick={() => {
+              const shapeActive = WB_SHAPE_TOOLS.some((s) => s.type === activeToolType);
+              // Narrow/tablet: when a shape is already active, primary tap opens the picker.
+              if (touchLayout && shapeActive) {
+                toggleMenu("shapes");
+                return;
+              }
+              selectTool(selectedShapeTool);
+            }}
+            pulldown={!touchLayout}
+            onPulldown={touchLayout ? undefined : () => toggleMenu("shapes")}
+          />
+          {shapesDropdownOpen && (
+            <div className="mynk-wb-shapes-dropdown" role="menu">
+              {WB_SHAPE_TOOLS.map(({ type, label, Icon }) => (
+                <button
+                  key={type}
+                  type="button"
+                  role="menuitem"
+                  className={`mynk-wb-shapes-item${
+                    (activeToolType === type || selectedShapeTool === type) &&
+                    WB_SHAPE_TOOLS.some((s) => s.type === activeToolType)
+                      ? " mynk-wb-shapes-item--active"
+                      : selectedShapeTool === type
+                        ? " mynk-wb-shapes-item--active"
+                        : ""
+                  }`}
+                  onClick={() => selectTool(type)}
+                >
+                  <Icon size={14} />
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {renderMoreOverflowMenu(iconSize)}
+      </>
+    );
+  };
+
+  // ---------------------------------------------------------------
+  // Render — Mynk whiteboard chrome
   // ---------------------------------------------------------------
 
   const endingBusy = endingState === "ending" || endingState === "finalizing";
+  const debugOverlayVisible = useWbChromeDebugOverlayVisible();
+  const syncPill = deriveSyncPillState({
+    tutorSyncConnected,
+    // Use sync presence for the board-syncing pill — board sync is
+    // relay-level, not WebRTC. The pill shows "Student connected"
+    // based on sync roster, not WebRTC reachability.
+    bothPartiesInRoom: bothPartiesInRoomSync,
+    boardSyncing,
+  });
 
   return (
-    <div style={{ display: "grid", gap: 12 }}>
+    <div
+      className="mynk-wb-chrome"
+      data-testid="mynk-wb-chrome"
+      data-layout={layoutMode}
+      onClick={() => {
+        setOpenMenu(null);
+        if (touchLayout) dismissTouchProps();
+      }}
+    >
+      {/* Non-visual mounts */}
       <WhiteboardWorkspaceAudioBridge
         ref={audioBridgeRef}
         audio={workspaceAudio}
         whiteboardSessionId={whiteboardSessionId}
         userWantsRecording={userWantsRecording}
         recordingActive={recordingActive}
-        panelDisabled={
-          endingBusy || !userWantsRecording || audioDraftRecovery !== null
-        }
+        panelDisabled={endingBusy || !userWantsRecording || audioDraftRecovery !== null}
         onMicDeviceChange={(deviceId) => void liveAv.setMicDevice(deviceId)}
+        showPanel={false}
       />
-      {/* Phase 4c — live A/V surface */}
-      <AVPermissionsPrompt
-        hasMicPermission={liveAv.hasMicPermission}
-        hasCamPermission={liveAv.hasCamPermission}
-        hasMicStream={liveAv.localAudioStream !== null}
-        hasCamStream={liveAv.localVideoStream !== null}
-        error={liveAv.error}
-        videoError={liveAv.videoError}
-        requestMic={liveAv.requestMic}
-        requestCam={liveAv.requestCam}
-      />
-      <div
-        className="row"
-        data-testid="wb-tutor-av-row"
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          alignItems: "flex-start",
-          gap: 12,
-        }}
+
+      {/* â”€â”€ Top bar â”€â”€ */}
+      <header
+        className="mynk-wb-topbar bg-card border-b border-border"
+        role="toolbar"
+        aria-label="Session controls"
+        onClick={(e) => e.stopPropagation()}
       >
-        <AVTilesPanel
-          participants={liveAv.participants}
-          localTile={{
-            peerId: localPeerId,
-            role: "tutor",
-            label: localPeerLabel,
-            audioStream: liveAv.localAudioStream,
-            videoStream: liveAv.localVideoStream,
-            isMicMuted: liveAv.isMicMuted,
-            isCamMuted: liveAv.isCamMuted,
-          }}
-          onReconnect={liveAv.reconnectPeer}
-          resolveLabel={(participant) =>
-            resolveParticipantLabel(participant, {
-              studentName,
-              totalRemotePeers: liveAv.participants.length,
-            })
-          }
-        />
-        <AVControls
-          isMicMuted={liveAv.isMicMuted}
-          isCamMuted={liveAv.isCamMuted}
-          toggleMic={liveAv.toggleMic}
-          toggleCam={liveAv.toggleCam}
-          disabled={endingBusy}
-          // Phase 4d Commit 7: per-peer "Don't record this student"
-          // moderation restored on top of the mixdown via per-stream
-          // GainNode in `mic-recorder-audio.ts`. The reconcile effect
-          // below flips each muted peer's gain to 0; replay sees a
-          // clean silence (not a gap) because the source stays
-          // connected. Wire-level mute (asking the remote peer to
-          // stop transmitting) remains post-v1 — only recording-
-          // mute is in play here.
-          moderation={{
-            participants: liveAv.participants,
-            mutedPeerIds: mutedPeerIdsInRecording,
-            onTogglePeer: handleToggleParticipantMod,
-          }}
-        />
-        {liveAv.isActive && (
-          <VideoControls
-            devices={liveAv.videoDevices}
-            selectedPickerSlot={liveAv.pickedVideoCameraSlot}
-            onPickCameraSlot={(i) => void liveAv.setVideoCameraBySlot(i)}
-            isLive={liveAv.localVideoStream !== null}
+        <span className="mynk-wb-wordmark" aria-label="Mynk">
+          Mynk<span className="mynk-wb-wordmark__dot">·</span>
+        </span>
+        <span className="mynk-wb-topbar__sep" aria-hidden />
+
+        <div className="mynk-wb-topbar__zone">
+          <div className="mynk-wb-live-badge" data-testid="wb-recording-pill">
+            <span className="mynk-wb-live-badge__dot" aria-hidden />
+            LIVE
+          </div>
+          <span className="mynk-wb-timer" data-testid="wb-timer">
+            {formatTimerMinutesOnly(liveTimerMs)}
+          </span>
+          {syncPill.show && (
+            <span
+              className="mynk-wb-sr-only"
+              data-testid="wb-sync-pill"
+              aria-live="polite"
+            >
+              {syncPill.label}
+            </span>
+          )}
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0 }} />
+
+        <div className="mynk-wb-topbar__zone" onClick={(e) => e.stopPropagation()}>
+          {/* Share + Copied */}
+          <div className="mynk-wb-share-wrap">
+            <button
+              type="button"
+              className={`mynk-wb-tb-btn${copyState === "copied" ? " mynk-wb-tb-btn--copied" : ""}`}
+              title="Copy session link"
+              onClick={handleCopyStudentLink}
+              disabled={!syncUrl || copyState === "copying"}
+              data-testid="wb-copy-student-link"
+            >
+              <WbIconShare />
+              <span>{copyState === "copying" ? "…" : copyState === "copied" ? "Copied" : "Share"}</span>
+            </button>
+            <button
+              type="button"
+              className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-share-caret"
+              title="Share options"
+              aria-label="Share options"
+              aria-expanded={shareMenuOpen}
+              disabled={!syncUrl}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleMenu("share");
+              }}
+              data-testid="wb-share-options"
+            >
+              <span className="mynk-wb-share-chevron">▾</span>
+            </button>
+            {shareMenuOpen && (
+              <div
+                className="mynk-wb-share-dropdown"
+                role="menu"
+                aria-label="Share options"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="mynk-wb-menu-item"
+                  disabled={copyState === "copying"}
+                  onClick={() => {
+                    void handleCopyStudentLink();
+                    setOpenMenu(null);
+                  }}
+                >
+                  <span>Copy student join link</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          <span className="mynk-wb-topbar__sep" aria-hidden />
+
+          <WbTopBarMicControl
+            audio={workspaceAudio}
+            isMicMuted={liveAv.isMicMuted}
+            onToggleMute={liveAv.toggleMic}
+            onAcquireMic={handleAcquireMic}
+            onMicDeviceChange={(deviceId) => void liveAv.setMicDevice(deviceId)}
             disabled={endingBusy}
           />
-        )}
-      </div>
-      {/* Board pages — own row so it isn’t buried in the recording/toolbar cluster */}
-      <div
-        className="card"
-        data-testid="wb-tutor-page-strip"
-        style={{
-          padding: "12px 14px",
-          background: "var(--info-soft)",
-          border: "1px solid var(--info-border)",
-        }}
-      >
-        <div
-          style={{
-            fontSize: 14,
-            fontWeight: 700,
-            letterSpacing: "0.01em",
-            color: "var(--text, inherit)",
-          }}
-        >
-          Board pages
-        </div>
-        <p
-          className="muted"
-          style={{ margin: "6px 0 10px", fontSize: 12, lineHeight: 1.45, maxWidth: 720 }}
-        >
-          Switch pages like separate worksheets. PDF worksheets add new pages
-          grouped under the file name; images insert on the page you have open.
-          When live sync is on, the student sees which page you are on.
-        </p>
-        <PageStrip
-          variant="tutor"
-          sessionId={whiteboardSessionId}
-          pageList={pageList}
-          sections={sectionsRegistry}
-          activePageId={activePageId}
-          disabled={endingBusy}
-          maxPages={20}
-          onSelectPage={(id) => void selectTutorPage(id)}
-          onAddPage={addTutorPage}
-          onRemovePage={removeTutorPage}
-        />
-      </div>
-
-      {/* Toolbar */}
-      <div
-        className="card"
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 12,
-          alignItems: "center",
-        }}
-      >
-        <div className="row" style={{ gap: 8, alignItems: "center" }}>
-          {!userWantsRecording ? (
-            <button
-              type="button"
-              className="btn primary"
-              onClick={() => setUserWantsRecording(true)}
-              disabled={endingBusy}
-              data-testid="wb-start-recording"
-            >
-              Start recording
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setUserWantsRecording(false)}
-              data-testid="wb-pause-recording"
-            >
-              Pause recording
-            </button>
-          )}
           <button
             type="button"
-            className="btn danger"
-            onClick={handleEndSession}
-            disabled={endingBusy}
-            data-testid="wb-end-session"
+            className={`mynk-wb-tb-btn mynk-wb-tb-btn--icon${
+              liveAv.hasCamPermission !== "denied" &&
+              (liveAv.videoDevices?.length ?? 1) > 0
+                ? liveAv.isCamMuted
+                  ? " mynk-wb-tb-btn--cam-off"
+                  : " mynk-wb-tb-btn--cam-on"
+                : ""
+            }`}
+            title={
+              liveAv.hasCamPermission === "denied"
+                ? "Camera permission denied"
+                : (liveAv.videoDevices?.length ?? 1) === 0
+                  ? "No camera device found"
+                  : liveAv.isCamMuted
+                    ? "Turn camera on"
+                    : "Turn camera off"
+            }
+            aria-label={
+              liveAv.hasCamPermission === "denied"
+                ? "Camera permission denied"
+                : (liveAv.videoDevices?.length ?? 1) === 0
+                  ? "No camera device found"
+                  : liveAv.isCamMuted
+                    ? "Turn camera on"
+                    : "Turn camera off"
+            }
+            onClick={() => void handleTopBarCam()}
+            disabled={endingBusy || liveAv.hasCamPermission === "denied" || (liveAv.videoDevices?.length ?? 1) === 0}
+            style={liveAv.hasCamPermission === "denied" || (liveAv.videoDevices?.length ?? 1) === 0 ? { opacity: 0.4 } : undefined}
           >
-            {endingState === "finalizing"
-              ? finalizingOutboxState === "uploading" &&
-                finalizingSegmentCount > 0
-                ? `Saving ${finalizingSegmentCount} segment${finalizingSegmentCount === 1 ? "" : "s"}…`
-                : "Finalizing…"
-              : endingState === "ending"
-                ? "Finalizing…"
-                : "End session"}
+            <WbIconCamera size={14} />
           </button>
-        </div>
-        <div style={{ flex: 1 }} />
-        <div className="row" style={{ gap: 8, alignItems: "center" }}>
-          <StatusPill
-            color={presence.pillColor}
-            label={presence.pillLabel}
-            testId="wb-recording-pill"
+
+          <span className="mynk-wb-topbar__sep" aria-hidden />
+
+          <button
+            type="button"
+            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon"
+            title="Undo (Ctrl+Z)"
+            aria-label="Undo"
+            disabled={endingBusy}
+            data-testid="wb-undo"
+            onClick={() => triggerUndo()}
+          >
+            <WbIconUndo />
+          </button>
+          <button
+            type="button"
+            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon"
+            title="Redo (Ctrl+Shift+Z)"
+            aria-label="Redo"
+            disabled={endingBusy}
+            data-testid="wb-redo"
+            onClick={() => triggerRedo()}
+          >
+            <WbIconRedo />
+          </button>
+
+          <span className="mynk-wb-topbar__sep mynk-wb-topbar__inserts" aria-hidden />
+
+          <div className="mynk-wb-topbar__zone mynk-wb-topbar__inserts">
+            <PdfImageUploadButton
+              excalidrawAPI={excalidrawAPI}
+              whiteboardSessionId={whiteboardSessionId}
+              studentId={studentId}
+              disabled={endingBusy}
+              integrate={pdfBoardIntegrate}
+              chrome
+            />
+            <MathInsertButton
+              excalidrawAPI={excalidrawAPI}
+              whiteboardSessionId={whiteboardSessionId}
+              studentId={studentId}
+              disabled={endingBusy}
+              chrome
+            />
+            <DesmosInsertButton
+              excalidrawAPI={excalidrawAPI}
+              whiteboardSessionId={whiteboardSessionId}
+              studentId={studentId}
+              disabled={endingBusy}
+              chrome
+            />
+          </div>
+
+          <span className="mynk-wb-topbar__sep" aria-hidden />
+
+          <div className="mynk-wb-view-menu">
+            <button
+              type="button"
+              className="mynk-wb-tb-btn mynk-wb-tb-btn--icon"
+              title="View options"
+              aria-label="View options"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleMenu("view");
+              }}
+            >
+              <WbIconMore size={14} />
+            </button>
+            {viewMenuOpen && (
+              <div
+                className="mynk-wb-view-dropdown"
+                role="menu"
+                aria-label="View options"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <label className="mynk-wb-view-item">
+                  <input
+                    type="checkbox"
+                    checked={gridEnabled}
+                    onChange={(e) => toggleGrid(e.target.checked)}
+                  />
+                  Show canvas grid
+                </label>
+              </div>
+            )}
+          </div>
+
+          <WbThemeToggle
+            open={themeMenuOpen}
+            onOpenChange={(v) => setOpenMenu(v ? "theme" : null)}
           />
-          {syncUrl &&
-            (() => {
-              // Phase 4d dedupe: the sync-pill collapses in the
-              // "awaiting student" state. The autopause banner +
-              // recording-pill already convey "waiting for student"
-              // in the same toolbar — a third indicator just adds
-              // noise. We keep the sync-pill for the two states
-              // it uniquely owns: "Student connected" (positive
-              // green affirmation) and "Sync connecting…" (sync
-              // layer itself unreachable, distinct from
-              // awaiting-student).
-              const sync = deriveSyncPillState({
-                tutorSyncConnected,
-                bothPartiesInRoom,
-                boardSyncing,
-              });
-              if (!sync.show) return null;
-              return (
-                <StatusPill
-                  color={sync.color}
-                  label={sync.label}
-                  testId="wb-sync-pill"
-                />
-              );
-            })()}
-          <StatusPill
-            color="blue"
-            label={`Session: ${formatDuration(liveTimerMs)}`}
-            testId="wb-timer"
-          />
         </div>
-        <UndoRedoButtons disabled={endingBusy} />
-        <PdfImageUploadButton
-          excalidrawAPI={excalidrawAPI}
-          whiteboardSessionId={whiteboardSessionId}
-          studentId={studentId}
-          disabled={endingBusy}
-          integrate={pdfBoardIntegrate}
-        />
-        <MathInsertButton
-          excalidrawAPI={excalidrawAPI}
-          whiteboardSessionId={whiteboardSessionId}
-          studentId={studentId}
-          disabled={endingBusy}
-        />
-        <DesmosInsertButton
-          excalidrawAPI={excalidrawAPI}
-          whiteboardSessionId={whiteboardSessionId}
-          studentId={studentId}
-          disabled={endingBusy}
-        />
+
+        <span className="mynk-wb-topbar__sep" aria-hidden />
+
         <button
           type="button"
-          className="btn"
-          onClick={handleCopyStudentLink}
-          disabled={!syncUrl || copyState === "copying"}
-          data-testid="wb-copy-student-link"
+          className="mynk-wb-tb-btn mynk-wb-tb-btn--primary"
+          onClick={handleEndSession}
+          disabled={endingBusy}
+          data-testid="wb-end-session"
         >
-          {copyState === "copying"
-            ? "Generating…"
-            : copyState === "copied"
-              ? "Link copied!"
-              : "Copy student link"}
+          {endingState === "finalizing"
+            ? finalizingOutboxState === "uploading" &&
+              finalizingSegmentCount > 0
+              ? `Saving ${finalizingSegmentCount} segment${finalizingSegmentCount === 1 ? "" : "s"}…`
+              : "Finalizing…"
+            : endingState === "ending"
+              ? "Finalizing…"
+              : "End session"}
         </button>
-      </div>
+      </header>
 
-      {/* Banners */}
-      {audioDraftRecovery && (
-        <Banner tone="warning" testId="wb-audio-draft-recovery-banner">
-          <span>
-            {audioRecoveryBannerHeadline(
-              estimatedDurationSecFromDraft(audioDraftRecovery)
-            )}
-          </span>
-          <span style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-            <button
-              type="button"
-              className="btn"
-              disabled={audioDraftRecoveryBusy}
-              data-testid="wb-audio-draft-keep"
-              onClick={() => void handleAudioDraftKeep()}
-            >
-              Keep
-            </button>
-            <button
-              type="button"
-              className="btn"
-              disabled={audioDraftRecoveryBusy}
-              data-testid="wb-audio-draft-discard"
-              onClick={() => void handleAudioDraftDiscard()}
-            >
-              Discard
-            </button>
-          </span>
-        </Banner>
-      )}
-      {presence.bannerMessage && (
-        <Banner tone="warning" testId="wb-recording-autopause-banner">
-          {presence.bannerMessage}
-        </Banner>
-      )}
-      {copyState === "error" && copyError && (
-        <Banner tone="error" onDismiss={() => setCopyState("idle")}>
-          Could not copy student link: {copyError}
-        </Banner>
-      )}
-      {peerImageMaterialNotice !== "none" && (
-        <Banner
-          tone="warning"
-          testId="wb-peer-material-notice"
-          onDismiss={() => setPeerImageMaterialNotice("none")}
+      <div className="mynk-wb-live-column">
+      {/* â”€â”€ Body: left strip + canvas â”€â”€ */}
+      <div className="mynk-wb-body">
+        {/* Left tool strip */}
+        <nav
+          className={`mynk-wb-strip bg-card border-r border-border${stripCollapsed ? " mynk-wb-strip--collapsed" : ""}`}
+          aria-label={stripCollapsed ? "Drawing tools (collapsed)" : "Drawing tools"}
+          data-testid={stripCollapsed ? "wb-tool-strip-collapsed" : "wb-tool-strip"}
+          onClick={(e) => e.stopPropagation()}
         >
-          {peerImageMaterialNotice === "load" ? (
-            <>
-              Couldn&apos;t load a shared image (network or link). If the
-              board looks wrong, check your connection or re-insert the
-              worksheet with PDF/image. For pasted images, the student may need
-              to re-draw or you can re-add the file from your machine.
-            </>
-          ) : (
-            <>
-              The live scene includes an image with no file link (often a
-              device paste). Re-inserting from PDF/image is the most reliable
-              way to put the same material on both sides.
-            </>
-          )}
-        </Banner>
-      )}
-      {endingState === "error" && endingError && (
-        <Banner
-          tone="error"
-          onDismiss={() => {
-            setEndingState("idle");
-            setEndingError(null);
-          }}
-        >
-          {endingError}
-        </Banner>
-      )}
-      {recorder.checkpointStatus === "error" && recorder.checkpointError && (
-        <Banner tone="warning">
-          Checkpoint save failed: {recorder.checkpointError}. The session is
-          still recording in memory; we&apos;ll keep retrying.
-        </Banner>
-      )}
-      {recorder.resumePrompt && (
-        <Banner tone="info">
-          <strong>Browser recovery (IndexedDB):</strong> a whiteboard
-          event draft from{" "}
-          {new Date(recorder.resumePrompt.startedAt).toLocaleString()} (~
-          {formatDuration(recorder.resumePrompt.durationMs)} of logged
-          time). This is <em>not</em> the &quot;stale session&quot; room
-          dialog (that one only controls reconnecting to the live relay).{" "}
-          <button
-            type="button"
-            className="btn"
-            style={{ marginLeft: 8 }}
-            disabled={!excalidrawAPI}
-            onClick={() => void handleAcceptCheckpointResume()}
-          >
-            Load draft into board
-          </button>
-          <button
-            type="button"
-            className="btn"
-            style={{ marginLeft: 4 }}
-            onClick={() => void recorder.declineResume()}
-          >
-            Discard
-          </button>
-        </Banner>
-      )}
+          <div className="mynk-wb-strip__tools">
+            {renderToolStripButtons()}
+            {showPropsChrome && !touchLayout && renderSidebarPropsCompact()}
+          </div>
+          <div className="mynk-wb-strip__spacer" />
+          <div className="mynk-wb-strip__sep" aria-hidden />
+          <WbToolBtn
+            icon={
+              <span
+                className="mynk-wb-strip__collapse-icon"
+                style={{ display: "inline-flex", transform: stripCollapsed ? "rotate(180deg)" : undefined }}
+              >
+                <WbIconCollapse size={14} />
+              </span>
+            }
+            label={stripCollapsed ? "Expand tools" : "Collapse tools"}
+            active={false}
+            collapseControl
+            onClick={() => setStripCollapsed((c) => !c)}
+          />
+        </nav>
 
-      {/* Canvas: explicit card + height chain + fill so Excalidraw isn't 0px tall */}
-      <div
-        className="card"
-        data-testid="tutor-whiteboard-canvas-mount"
-        style={{
-          marginTop: 4,
-          padding: 0,
-          minHeight: 480,
-          height: "max(480px, calc(100vh - 300px))",
-          width: "100%",
-          position: "relative",
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-        }}
-      >
+        {/* Canvas area */}
         <div
-          style={{
-            flex: 1,
-            minHeight: 400,
-            width: "100%",
-            position: "relative",
+          className="mynk-wb-canvas"
+          data-testid="tutor-whiteboard-canvas-mount"
+          onClick={() => {
+            setOpenMenu(null);
+          }}
+          onContextMenuCapture={(event) => {
+            // Right-click during multi-point line/arrow drawing finalizes the
+            // stroke (same as Esc). StudentWhiteboardClient is bare Excalidraw —
+            // mirror there later if needed.
+            const api = excalidrawAPIRef.current;
+            if (!api) return;
+            const st = api.getAppState() as { multiElement?: unknown };
+            if (st.multiElement == null) return;
+            event.preventDefault();
+            event.stopPropagation();
+            const target =
+              (event.currentTarget as HTMLElement).querySelector(".excalidraw") ??
+              event.currentTarget;
+            target.dispatchEvent(
+              new KeyboardEvent("keydown", {
+                key: "Escape",
+                code: "Escape",
+                bubbles: true,
+              })
+            );
+            console.debug(
+              `[whiteboard] wbsid=${whiteboardSessionId} action=finalize-multipoint-line`
+            );
           }}
         >
+          {/* Banners overlay */}
+          <div className="mynk-wb-banners">
+            {audioDraftRecovery && (
+              <Banner tone="warning" testId="wb-audio-draft-recovery-banner">
+                <span>
+                  {audioRecoveryBannerHeadline(
+                    estimatedDurationSecFromDraft(audioDraftRecovery)
+                  )}
+                </span>
+                <span style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={audioDraftRecoveryBusy}
+                    data-testid="wb-audio-draft-keep"
+                    onClick={() => void handleAudioDraftKeep()}
+                  >
+                    Keep
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={audioDraftRecoveryBusy}
+                    data-testid="wb-audio-draft-discard"
+                    onClick={() => void handleAudioDraftDiscard()}
+                  >
+                    Discard
+                  </button>
+                </span>
+              </Banner>
+            )}
+            {presence.bannerMessage && (
+              <Banner tone="warning" testId="wb-recording-autopause-banner">
+                {presence.bannerMessage}
+              </Banner>
+            )}
+            {splitBrainActive && !presence.bannerMessage && (
+              <Banner tone="warning" testId="wb-split-brain-banner">
+                {recordingActive
+                  ? "Student's video connection lost — recording paused until the call reconnects."
+                  : "Student's video connection lost — waiting for WebRTC to reconnect."}
+              </Banner>
+            )}
+            {copyState === "error" && copyError && (
+              <Banner tone="error" onDismiss={() => setCopyState("idle")}>
+                Could not copy student link: {copyError}
+              </Banner>
+            )}
+            {peerImageMaterialNotice !== "none" && (
+              <Banner
+                tone="warning"
+                testId="wb-peer-material-notice"
+                onDismiss={() => setPeerImageMaterialNotice("none")}
+              >
+                {peerImageMaterialNotice === "load" ? (
+                  <>
+                    Couldn&apos;t load a shared image. Re-insert the worksheet
+                    with PDF/image if the board looks wrong.
+                  </>
+                ) : (
+                  <>
+                    A pasted image has no file link. Re-inserting from PDF/image
+                    is more reliable for shared viewing.
+                  </>
+                )}
+              </Banner>
+            )}
+            {endingState === "error" && endingError && (
+              <Banner
+                tone="error"
+                onDismiss={() => {
+                  setEndingState("idle");
+                  setEndingError(null);
+                }}
+              >
+                {endingError}
+              </Banner>
+            )}
+            {recorder.checkpointStatus === "error" && recorder.checkpointError && (
+              <Banner tone="warning">
+                Checkpoint save failed: {recorder.checkpointError}. Still recording in memory; retrying.
+              </Banner>
+            )}
+            {recorder.resumePrompt && (
+              <Banner tone="info">
+                <strong>Browser recovery (IndexedDB):</strong> a whiteboard
+                event draft from{" "}
+                {new Date(recorder.resumePrompt.startedAt).toLocaleString()} (~
+                {formatDuration(recorder.resumePrompt.durationMs)} of logged time).{" "}
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ marginLeft: 8 }}
+                  disabled={!excalidrawAPI}
+                  onClick={() => void handleAcceptCheckpointResume()}
+                >
+                  Load draft into board
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ marginLeft: 4 }}
+                  onClick={() => void recorder.declineResume()}
+                >
+                  Discard
+                </button>
+              </Banner>
+            )}
+          </div>
+
+          {/* Excalidraw canvas — zenModeEnabled hides native chrome */}
           <ExcalidrawDynamic
             style={{ width: "100%", height: "100%" }}
+            zenModeEnabled
             onChange={handleExcalidrawChange}
             excalidrawAPI={(api: unknown) => {
-              // Cast through unknown so the structural ExcalidrawApiLike
-              // shape (defined in insert-asset.ts) doesn't depend on the
-              // upstream branded readonly types — see that file for why.
               const like = api as ExcalidrawApiLike;
               excalidrawAPIRef.current = like;
               setExcalidrawAPI(like);
@@ -3479,12 +4265,18 @@ export function WhiteboardWorkspaceClient({
             UIOptions={{
               canvasActions: { saveToActiveFile: false, loadScene: false },
             }}
-            // Allow Desmos hosts in the embed-allowlist. The CSP
-            // `frame-src` directive in `next.config.ts` is the real
-            // safety boundary — this just stops Excalidraw from showing
-            // its "untrusted source" warning panel for Desmos.
             validateEmbeddable={validateExcalidrawEmbeddable}
+            initialData={{
+              appState: {
+                currentItemRoughness: 0,
+                currentItemRoundness: "sharp",
+                currentItemStrokeWidth: 0.5,
+                currentItemStrokeColor: initialWbStrokeColor,
+                gridModeEnabled: false,
+              },
+            }}
           />
+
           <WhiteboardDebugHud
             role="tutor"
             syncOn={Boolean(syncUrl)}
@@ -3492,18 +4284,171 @@ export function WhiteboardWorkspaceClient({
             excalidrawAPI={excalidrawAPI}
             telemetry={followDebugTelemetry}
           />
+
+          {/* Ghost label */}
+          <div
+            className="mynk-wb-ghost-label"
+            data-testid="wb-ghost-viewport-label"
+            aria-hidden
+          >
+            Student view
+          </div>
+
+          {/* SR-04 — AV cluster */}
+          <WbAVCluster
+            layoutMode={layoutMode}
+            isMicMuted={liveAv.isMicMuted}
+            isCamMuted={liveAv.isCamMuted}
+            onToggleMic={liveAv.toggleMic}
+            onToggleCam={liveAv.toggleCam}
+            disabled={endingBusy}
+            camDisabled={liveAv.hasCamPermission === "denied" || (liveAv.videoDevices?.length ?? 1) === 0}
+            participants={liveAv.participants}
+            localTile={{
+              peerId: localPeerId,
+              role: "tutor",
+              label: localPeerLabel,
+              audioStream: liveAv.localAudioStream,
+              videoStream: liveAv.localVideoStream,
+              isMicMuted: liveAv.isMicMuted,
+              isCamMuted: liveAv.isCamMuted,
+            }}
+            onReconnect={liveAv.reconnectPeer}
+            testId="wb-tutor-av-row"
+            resolveLabel={(participant) =>
+              resolveParticipantLabel(participant, {
+                studentName,
+                totalRemotePeers: liveAv.participants.length,
+              })
+            }
+          />
+
+          {/* Touch props bottom sheet */}
+          {touchLayout && (
+            <>
+              <div
+                className={`mynk-wb-props-backdrop${propsSheetOpen ? " mynk-wb-props-backdrop--open" : ""}`}
+                onClick={dismissTouchProps}
+                aria-hidden={!propsSheetOpen}
+              />
+              <div
+                className={`mynk-wb-props-sheet mynk-wb-props-sheet--touch${propsSheetOpen ? " mynk-wb-props-sheet--open" : ""}`}
+                role="dialog"
+                aria-label="Stroke properties"
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <div
+                  className="mynk-wb-props-sheet__handle-row"
+                  onPointerDown={onPropsSheetHandlePointerDown}
+                  onPointerMove={onPropsSheetHandlePointerMove}
+                  onPointerUp={onPropsSheetHandlePointerUp}
+                  onPointerCancel={onPropsSheetHandlePointerUp}
+                >
+                  <div className="mynk-wb-props-sheet__handle" />
+                  <button
+                    type="button"
+                    className="mynk-wb-props-sheet__close"
+                    aria-label="Dismiss properties"
+                    onClick={dismissTouchProps}
+                  >
+                    ×
+                  </button>
+                </div>
+                <WbStrokePropsPanel
+                  strokeColor={strokeColor}
+                  strokeWidth={strokeWidth}
+                  opacity={opacity}
+                  roughness={roughness}
+                  roundness={roundness}
+                  moreStylesOpen={moreStylesOpen}
+                  inkHex={excalidrawTheme === "dark" ? EXCALIDRAW_STROKE_DARK_HEX : EXCALIDRAW_STROKE_HEX}
+                  onStrokeChange={updateStrokeStyle}
+                  onMoreStylesToggle={() => setMoreStylesOpen((p) => !p)}
+                  onRoughnessChange={(r) => updateStrokeStyle({ roughness: r })}
+                  onRoundnessChange={updateRoundness}
+                />
+              </div>
+            </>
+          )}
+
+          {debugOverlayVisible && (
+            <div className="mynk-wb-debug-footer" aria-hidden>
+              wbsid={whiteboardSessionId.slice(0, 8)} · events={recorder.eventCount} ·
+              rec={formatDuration(recorder.durationMs)} · {recorder.checkpointStatus}
+              {recorder.lastCheckpointAt
+                ? ` (${new Date(recorder.lastCheckpointAt).toLocaleTimeString()})`
+                : ""}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Footer status — small text muted, helps debugging mid-session */}
-      <div className="muted" style={{ fontSize: 11, textAlign: "right" }}>
-        wbsid={whiteboardSessionId.slice(0, 8)} · events={recorder.eventCount} ·
-        recorded={formatDuration(recorder.durationMs)} ·
-        checkpoint={recorder.checkpointStatus}
-        {recorder.lastCheckpointAt
-          ? ` (last ${new Date(recorder.lastCheckpointAt).toLocaleTimeString()})`
-          : ""}
-        {" · "}student: {studentName}
+      {/* Mobile props compact bar */}
+      {touchLayout && showPropsChrome && (
+        <div className="mynk-wb-props-mobile-bar">
+          <button
+            type="button"
+            className="mynk-wb-props-mobile-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              setPropsSheetOpen(true);
+            }}
+            aria-label="Stroke properties — tap to expand"
+          >
+            <span
+              className="mynk-wb-summary-swatch"
+              style={{
+                backgroundColor: inkDisplayHex(strokeColor, excalidrawTheme),
+              }}
+            />
+            <span
+              className="mynk-wb-summary-chip"
+              title={roughnessLabel}
+              aria-label={roughnessLabel}
+              style={{ padding: "2px 4px", background: "transparent" }}
+            >
+              <RoughnessIcon level={roughness as 0 | 1 | 2} />
+            </span>
+            <span
+              className="mynk-wb-summary-chip"
+              title={roundnessLabel}
+              aria-label={roundnessLabel}
+              style={{ padding: "2px 4px", background: "transparent" }}
+            >
+              <SharpnessIcon type={roundness} />
+            </span>
+            <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-muted)" }}>
+              Colors &amp; styles
+            </span>
+          </button>
+        </div>
+      )}
+
+      {/* Mobile bottom toolbar */}
+      <nav
+        className="mynk-wb-bottom-toolbar"
+        aria-label="Drawing tools (mobile)"
+        data-testid="wb-bottom-toolbar"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {renderToolStripButtons(true)}
+      </nav>
+
+      {/* SR-14 — board tab strip */}
+      <footer
+        className="mynk-wb-pagestrip bg-card border-t border-border"
+        aria-label="Boards"
+      >
+        <BoardTabStrip
+          pageList={pageList}
+          activePageId={activePageId}
+          disabled={endingBusy}
+          maxPages={20}
+          onSelectPage={(id) => void selectTutorPage(id)}
+          onAddPage={addTutorPage}
+          onDeletePage={removeTutorPage}
+        />
+      </footer>
       </div>
     </div>
   );
@@ -3514,50 +4459,48 @@ export function WhiteboardWorkspaceClient({
 // components/ tree just for this page.
 // -------------------------------------------------------------------
 
-function StatusPill({
-  color,
+function WbToolBtn({
+  icon,
   label,
-  testId,
+  active,
+  onClick,
+  disabled,
+  pulldown,
+  onPulldown,
+  accent,
+  collapseControl,
 }: {
-  color: "red" | "green" | "amber" | "grey" | "blue";
+  icon: React.ReactNode;
   label: string;
-  testId?: string;
+  active: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+  pulldown?: boolean;
+  /** If provided, the pulldown chevron gets its own click handler (split-button). */
+  onPulldown?: () => void;
+  accent?: boolean;
+  collapseControl?: boolean;
 }) {
-  const palette: Record<typeof color, { bg: string; fg: string; dot: string }> =
-    {
-      red: { bg: "var(--error-soft)", fg: "var(--error)", dot: "var(--error)" },
-      green: { bg: "var(--success-soft)", fg: "var(--success)", dot: "var(--success)" },
-      amber: { bg: "var(--warning-soft)", fg: "var(--warning)", dot: "var(--warning)" },
-      grey: { bg: "var(--badge-neutral-bg)", fg: "var(--badge-neutral-fg)", dot: "var(--badge-neutral-dot)" },
-      blue: { bg: "var(--info-soft)", fg: "var(--info)", dot: "var(--info)" },
-    };
-  const p = palette[color];
   return (
-    <span
-      data-testid={testId}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        padding: "4px 10px",
-        borderRadius: 999,
-        fontSize: 12,
-        fontWeight: 600,
-        background: p.bg,
-        color: p.fg,
-      }}
+    <button
+      type="button"
+      className={`mynk-wb-tool-btn${active ? " mynk-wb-tool-btn--active" : ""}${accent ? " mynk-wb-tool-btn--accent" : ""}${collapseControl ? " mynk-wb-strip__collapse-btn" : ""}`}
+      title={label}
+      aria-label={label}
+      aria-pressed={active}
+      onClick={onClick}
+      disabled={disabled}
+      style={accent ? { color: "var(--accent-text)" } : undefined}
     >
-      <span
-        aria-hidden="true"
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: "50%",
-          background: p.dot,
-        }}
-      />
-      {label}
-    </span>
+      {icon}
+      {pulldown && (
+        <span
+          className="mynk-wb-pulldown-chevron"
+          onClick={onPulldown ? (e) => { e.stopPropagation(); onPulldown(); } : undefined}
+          aria-label={onPulldown ? "Open shape picker" : undefined}
+        >▾</span>
+      )}
+    </button>
   );
 }
 

@@ -1,0 +1,1627 @@
+/**
+ * Mynk whiteboard chrome — native Excalidraw UI hide rules + full-viewport layout.
+ *
+ * `zenModeEnabled` on <ExcalidrawDynamic> hides most native chrome, but NOT the
+ * left tool rail or hamburger. These selectors finish the job.
+ *
+ * Selectors verified against @excalidraw/excalidraw@0.18.1 dist/prod/index.css.
+ * All rules scoped to `.mynk-wb-chrome` to avoid leaking to other surfaces.
+ *
+ * Layout: position:fixed inset:0 overlay that covers admin nav during live sessions.
+ * Requires z-index:50 or higher to sit above AdminNav.
+ */
+
+/* ΓöÇΓöÇ Excalidraw native chrome hide ΓöÇΓöÇ */
+.mynk-wb-chrome .App-toolbar-container,
+.mynk-wb-chrome .App-toolbar,
+.mynk-wb-chrome .shapes-section,
+.mynk-wb-chrome .App-menu__left .dropdown-menu-button,
+.mynk-wb-chrome .App-menu_top .App-menu__left .dropdown-menu-button,
+.mynk-wb-chrome .main-menu-trigger,
+.mynk-wb-chrome .default-sidebar-trigger,
+.mynk-wb-chrome .sidebar-trigger,
+.mynk-wb-chrome .layer-ui__wrapper__top-right,
+.mynk-wb-chrome .layer-ui__wrapper__footer,
+.mynk-wb-chrome .layer-ui__wrapper__footer-left,
+.mynk-wb-chrome .layer-ui__wrapper__footer-right,
+.mynk-wb-chrome .footer-center,
+.mynk-wb-chrome .App-menu_top,
+.mynk-wb-chrome .App-menu_bottom,
+.mynk-wb-chrome .App-mobile-menu,
+.mynk-wb-chrome .welcome-screen-decor,
+.mynk-wb-chrome .welcome-screen-center,
+.mynk-wb-chrome .welcome-screen-menu,
+.mynk-wb-chrome .help-icon {
+  display: none !important;
+}
+
+/* ΓöÇΓöÇ Chrome container: full-viewport fixed overlay ΓöÇΓöÇ */
+.mynk-wb-chrome {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: var(--background);
+  overflow: hidden;
+}
+
+/* ΓöÇΓöÇ Top bar (44px) ΓöÇΓöÇ */
+.mynk-wb-topbar {
+  height: 44px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6px;
+  /* overflow: visible — dropdowns (Share, Mic, Theme, View) must extend
+     below this bar; overflow:hidden clips them at the 44px boundary. */
+  overflow: visible;
+  position: relative;
+  /* z-index scale: banner z-20, AV cluster z-25, topbar/strip z-30 (stacking contexts).
+     Raised from z-10 so all dropdown panels render above the banner and video tile. */
+  z-index: 30;
+}
+
+.mynk-wb-topbar__zone {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.mynk-wb-topbar__sep {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 4px;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+/* ΓöÇΓöÇ Body: left strip + canvas ΓöÇΓöÇ */
+.mynk-wb-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ΓöÇΓöÇ Left tool strip (48px) ΓöÇΓöÇ */
+.mynk-wb-strip {
+  width: 48px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0;
+  gap: 2px;
+  /* overflow: visible — shapes flyout, more-popover, and props panel
+     all open to the RIGHT of the strip; overflow-x:hidden clips them.
+     The tool count is small enough that y-scroll is not needed. */
+  overflow: visible;
+  position: relative;
+  /* Raised from z-10 to match topbar stacking context level (z-30). */
+  z-index: 30;
+}
+
+.mynk-wb-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.mynk-wb-strip--collapsed {
+  width: 24px;
+  padding: 4px 0;
+  align-items: center;
+}
+
+.mynk-wb-strip--collapsed .mynk-wb-strip__tools,
+.mynk-wb-strip--collapsed .mynk-wb-strip__sep {
+  display: none;
+}
+
+.mynk-wb-strip__tools {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  gap: 2px;
+}
+
+.mynk-wb-strip__spacer {
+  flex: 1;
+  min-height: 4px;
+}
+
+.mynk-wb-strip__collapse-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.mynk-wb-strip__sep {
+  width: 32px;
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+/* ΓöÇΓöÇ Tool button (1A.9 spec: 36×36px) ΓöÇΓöÇ */
+.mynk-wb-tool-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  transition: background 0.1s, color 0.1s;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.mynk-wb-tool-btn:not(.mynk-wb-tool-btn--active):hover {
+  background: color-mix(in srgb, var(--surface-3) 75%, var(--foreground) 25%);
+  color: var(--foreground);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 50%, var(--foreground) 50%);
+}
+
+.mynk-wb-tool-btn:not(.mynk-wb-tool-btn--active):hover svg {
+  filter: brightness(1.12);
+}
+
+/* Active tool: inverse colors (mock .rec-tool.is-active).
+   Specificity (0,2,0) beats plain :hover (0,1,1), but we also add the
+   :hover variant explicitly so there is zero ambiguity. */
+.mynk-wb-tool-btn--active,
+.mynk-wb-tool-btn--active:hover {
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.mynk-wb-tool-btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.mynk-wb-tool-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ΓöÇΓöÇ Canvas area ΓöÇΓöÇ */
+.mynk-wb-canvas {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Ensure Excalidraw fills canvas host */
+.mynk-wb-canvas .excalidraw,
+.mynk-wb-canvas .excalidraw-container {
+  width: 100%;
+  height: 100%;
+}
+
+/* ΓöÇΓöÇ Banners overlay (absolute, top of canvas) ΓöÇΓöÇ */
+.mynk-wb-banners {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.mynk-wb-banners > * {
+  pointer-events: auto;
+}
+
+/* ΓöÇΓöÇ Wordmark + LIVE badge (session shell mock) ΓöÇΓöÇ */
+.mynk-wb-wordmark {
+  font-family: var(--font-display, var(--font-sans));
+  font-variation-settings: "opsz" 144, "SOFT" 60, "wght" 700;
+  color: var(--brand, var(--primary));
+  font-size: 16px;
+  letter-spacing: -0.025em;
+  line-height: 1;
+  padding: 0 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.mynk-wb-wordmark__dot {
+  color: var(--accent);
+}
+
+.mynk-wb-live-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border-radius: 999px;
+  padding: 3px 8px 3px 6px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.mynk-wb-live-badge__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: mynk-wb-pulse 1.8s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes mynk-wb-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}
+
+.mynk-wb-timer {
+  font-family: var(--font-mono, monospace);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--foreground);
+  letter-spacing: 0.02em;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+/* ΓöÇΓöÇ Top bar buttons (tb-btn pattern) ΓöÇΓöÇ */
+.mynk-wb-tb-btn {
+  height: 32px;
+  border-radius: 6px;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  transition: background 0.12s, color 0.12s;
+  flex-shrink: 0;
+}
+
+.mynk-wb-tb-btn:hover:not(:disabled):not(.mynk-wb-tb-btn--primary):not(.mynk-wb-tb-btn--copied) {
+  background: color-mix(in srgb, var(--surface-3) 75%, var(--foreground) 25%);
+  color: var(--foreground);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 50%, var(--foreground) 50%);
+}
+
+.mynk-wb-tb-btn:hover:not(:disabled):not(.mynk-wb-tb-btn--primary):not(.mynk-wb-tb-btn--copied) svg {
+  filter: brightness(1.12);
+}
+
+.mynk-wb-tb-btn--icon {
+  width: 32px;
+  padding: 0;
+  justify-content: center;
+}
+
+.mynk-wb-tb-btn--primary {
+  background: var(--accent);
+  color: var(--accent-on);
+  font-weight: 600;
+  padding: 0 12px;
+}
+
+.mynk-wb-tb-btn--primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+  color: var(--accent-on);
+}
+
+.mynk-wb-tb-btn--copied {
+  color: var(--success);
+}
+
+.mynk-wb-share-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.mynk-wb-share-caret {
+  width: 22px !important;
+  margin-left: -2px;
+}
+
+.mynk-wb-share-chevron {
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+.mynk-wb-share-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 200px;
+  padding: 4px;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 45;
+}
+
+/* Top-bar mic — inline meter + settings popover */
+.mynk-wb-mic-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.mynk-wb-mic-meter-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.mynk-wb-mic-caret {
+  width: 22px !important;
+  margin-left: -2px;
+}
+
+.mynk-wb-mic-meter {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 14px;
+  margin: 0 2px;
+}
+
+.mynk-wb-mic-bar {
+  width: 3px;
+  border-radius: 2px;
+  background: var(--text-disabled, var(--muted-foreground));
+  opacity: 0.45;
+}
+
+.mynk-wb-mic-bar--b1 { height: 5px; }
+.mynk-wb-mic-bar--b2 { height: 9px; }
+.mynk-wb-mic-bar--b3 { height: 14px; }
+
+.mynk-wb-mic-bar--active {
+  background: var(--accent);
+  opacity: 1;
+}
+
+.mynk-wb-mic-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 320px;
+  max-width: min(400px, 90vw);
+  z-index: 45;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.mynk-wb-mic-popover [data-testid="mic-controls"] {
+  margin-bottom: 0;
+  border: none;
+  border-radius: 10px;
+}
+
+/* View menu — VP-02 */
+.mynk-wb-view-menu {
+  position: relative;
+}
+
+.mynk-wb-view-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 180px;
+  padding: 8px;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 40;
+}
+
+.mynk-wb-view-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--foreground);
+  cursor: pointer;
+  padding: 6px 4px;
+}
+
+/* Theme menu — TU-13 system / light / dark */
+.mynk-wb-theme-menu {
+  position: relative;
+}
+
+.mynk-wb-theme-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 9.5rem;
+  padding: 4px;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 45;
+}
+
+.mynk-wb-theme-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 13px;
+  color: var(--foreground);
+  cursor: pointer;
+  text-align: left;
+}
+
+.mynk-wb-theme-item:hover {
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+
+.mynk-wb-theme-item--active {
+  background: var(--accent-soft);
+  color: var(--foreground);
+}
+
+/* ΓöÇΓöÇ AV cluster — SR-04 top-right, draggable + resizable ΓöÇΓöÇ */
+.mynk-wb-av-cluster {
+  position: absolute;
+  z-index: 25;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  resize: none;
+}
+
+.mynk-wb-av-cluster--mobile {
+  bottom: 12px;
+  right: 12px;
+  top: auto !important;
+  left: auto !important;
+}
+
+.mynk-wb-av-cluster__drag-handle {
+  height: 14px;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-2);
+  flex-shrink: 0;
+  touch-action: none;
+}
+
+.mynk-wb-av-cluster__drag-dots {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+.mynk-wb-av-cluster__tiles {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 4px;
+}
+
+.mynk-wb-av-cluster__controls {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--border);
+  justify-content: center;
+}
+
+.mynk-wb-av-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: transparent;
+  color: var(--foreground);
+  transition: background 0.12s;
+}
+
+/* AV on/off — panel cluster + top-bar mic/camera (subtle accent, not stark inverse). */
+.mynk-wb-av-btn--on,
+.mynk-wb-tb-btn--cam-on,
+.mynk-wb-tb-btn--mic-on {
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-2));
+  color: var(--foreground);
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.mynk-wb-av-btn--off,
+.mynk-wb-tb-btn--cam-off,
+.mynk-wb-tb-btn--mic-off {
+  color: color-mix(in srgb, var(--destructive) 85%, var(--text-muted));
+  border-color: color-mix(in srgb, var(--destructive) 28%, var(--border));
+  background: color-mix(in srgb, var(--destructive) 7%, var(--surface-2));
+}
+
+.mynk-wb-tb-btn--cam-on,
+.mynk-wb-tb-btn--cam-off,
+.mynk-wb-tb-btn--mic-on,
+.mynk-wb-tb-btn--mic-off {
+  border: 1px solid;
+}
+
+.mynk-wb-tb-btn--cam-on:hover:not(:disabled),
+.mynk-wb-tb-btn--mic-on:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface-3));
+  color: var(--foreground);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, var(--border));
+}
+
+.mynk-wb-tb-btn--cam-off:hover:not(:disabled),
+.mynk-wb-tb-btn--mic-off:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--destructive) 11%, var(--surface-2));
+  color: color-mix(in srgb, var(--destructive) 90%, var(--foreground));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--destructive) 22%, var(--border));
+}
+
+.mynk-wb-av-btn--on:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 20%, var(--surface-2));
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.mynk-wb-av-btn--off:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--destructive) 11%, var(--surface-2));
+  border-color: color-mix(in srgb, var(--destructive) 35%, var(--border));
+}
+
+.mynk-wb-av-cluster__resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.mynk-wb-av-cluster__resize-handle::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  opacity: 0.5;
+}
+
+/* ΓöÇΓöÇ PP-06 compact properties — lives in left sidebar rail ΓöÇΓöÇ */
+.mynk-wb-props-compact {
+  position: relative;
+  z-index: 22;
+}
+
+.mynk-wb-props-sidebar {
+  width: 100%;
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.mynk-wb-props-sidebar .mynk-wb-props-compact__summary {
+  flex-direction: column;
+  padding: 8px 6px;
+  gap: 4px;
+  width: 36px;
+}
+
+.mynk-wb-props-sidebar .mynk-wb-props-compact__panel {
+  left: 100%;
+  top: 0;
+  margin-left: 4px;
+}
+
+.mynk-wb-props-compact__summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.mynk-wb-props-compact__summary:hover {
+  background: var(--surface-2);
+  border-color: var(--ring);
+}
+
+.mynk-wb-props-compact__panel {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 260px;
+  padding: 12px;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  /* z-index above the strip and its siblings */
+  z-index: 40;
+}
+
+/* Click-toggle: open state driven by --open class (React state), NOT :hover.
+   The old :hover approach caused the panel to vanish when the cursor moved
+   off the summary button toward the panel. */
+.mynk-wb-props-compact--open .mynk-wb-props-compact__panel {
+  display: block;
+}
+
+.mynk-wb-props-compact--open .mynk-wb-props-compact__summary {
+  background: var(--foreground);
+  color: var(--background);
+  border-color: var(--foreground);
+}
+
+.mynk-wb-summary-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.mynk-wb-summary-stroke {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--foreground);
+}
+
+.mynk-wb-props-compact--open .mynk-wb-props-compact__summary .mynk-wb-summary-stroke {
+  color: var(--background);
+}
+
+.mynk-wb-summary-stroke-line {
+  display: block;
+  width: 100%;
+  background: currentColor;
+  border-radius: 1px;
+}
+
+.mynk-wb-summary-chip {
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-muted);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--surface-2);
+}
+
+.mynk-wb-props-section {
+  margin-bottom: 10px;
+}
+
+.mynk-wb-props-section-title {
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.mynk-wb-props-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.mynk-wb-props-opacity-val {
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-muted);
+}
+
+.mynk-wb-props-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mynk-wb-props-widths {
+  display: flex;
+  gap: 6px;
+}
+
+.mynk-wb-props-chips {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* "More styles" expanded area — subtle separator without muted clash.
+   Previous background: var(--muted) caused white-on-light label in dark mode. */
+.mynk-wb-more-styles-area {
+  margin-top: 8px;
+  padding: 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.mynk-wb-more-styles-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+/* Shapes pulldown — PU-05 */
+.mynk-wb-shapes-menu {
+  position: relative;
+}
+
+/* More overflow — anchored to left-rail Γï« button */
+.mynk-wb-more-menu {
+  position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.mynk-wb-shapes-dropdown {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  margin-left: 4px;
+  min-width: 140px;
+  padding: 4px;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  z-index: 35;
+}
+
+.mynk-wb-shapes-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--foreground);
+  cursor: pointer;
+  text-align: left;
+}
+
+.mynk-wb-shapes-item:hover:not(.mynk-wb-shapes-item--active) {
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+
+.mynk-wb-shapes-item--active {
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.mynk-wb-shapes-item--active:hover {
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.mynk-wb-pulldown-chevron {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  min-height: 22px;
+  padding: 3px 4px 4px 5px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--foreground);
+  line-height: 1;
+  pointer-events: auto;
+  cursor: pointer;
+  opacity: 0.88;
+}
+
+.mynk-wb-pulldown-chevron::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+}
+
+.mynk-wb-tool-btn--active .mynk-wb-pulldown-chevron {
+  color: var(--background);
+  opacity: 1;
+}
+
+[data-layout="narrow"] .mynk-wb-pulldown-chevron,
+[data-layout="tablet-portrait"] .mynk-wb-pulldown-chevron {
+  display: none;
+}
+
+/* ΓöÇΓöÇ Board tab strip — SR-14 ΓöÇΓöÇ */
+.mynk-wb-board-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  height: 36px;
+  padding: 0 8px 0 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: 1;
+}
+
+.mynk-wb-board-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.mynk-wb-board-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  height: 100%;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.12s, color 0.12s;
+}
+
+.mynk-wb-board-tab--active {
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+/* Board tab wrapper — groups the tab button + delete button as a flex row */
+.mynk-wb-board-tab-wrap {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  transition: background 0.12s, color 0.12s, box-shadow 0.12s;
+}
+
+.mynk-wb-board-tab-wrap:not(.mynk-wb-board-tab-wrap--active):hover {
+  background: color-mix(in srgb, var(--surface-3) 75%, var(--foreground) 25%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 50%, var(--foreground) 50%);
+}
+
+.mynk-wb-board-tab-wrap:not(.mynk-wb-board-tab-wrap--active):hover .mynk-wb-board-tab:not(:disabled) {
+  color: var(--foreground);
+}
+
+.mynk-wb-board-tab-wrap .mynk-wb-board-tab {
+  border-right: none;
+  padding-right: 6px;
+  background: transparent;
+}
+
+/* Active-tab underline + fill covers the FULL wrap (tab label + delete area). */
+.mynk-wb-board-tab-wrap--active {
+  border-bottom: 2px solid var(--accent);
+  background: var(--card);
+}
+
+.mynk-wb-board-tab-wrap--active .mynk-wb-board-tab {
+  border-bottom: none;
+  background: transparent;
+}
+
+/* When there is no delete affordance (only 1 board), restore symmetric
+   padding so the board name stays centred. Without this, padding-right: 6px
+   (from the generic wrap selector below) leaves the name left-biased. */
+.mynk-wb-board-tab-wrap--no-delete .mynk-wb-board-tab {
+  padding: 0 14px;
+}
+
+/* Delete ×, Confirm, Cancel buttons */
+.mynk-wb-board-tab-del {
+  display: flex;
+  align-items: center;
+  padding: 0 6px 0 2px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s;
+}
+
+.mynk-wb-board-tab-wrap:hover .mynk-wb-board-tab-del,
+.mynk-wb-board-tab-del--confirm,
+.mynk-wb-board-tab-del--cancel {
+  opacity: 1;
+}
+
+.mynk-wb-board-tab-del:hover:not(:disabled) {
+  color: var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 9%, transparent);
+  border-radius: 3px;
+}
+
+.mynk-wb-board-tab-del--confirm {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--destructive);
+  padding: 0 4px;
+}
+
+.mynk-wb-board-tab-del--cancel {
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 0 4px;
+}
+
+.mynk-wb-board-tab__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.mynk-wb-board-tab--add {
+  padding: 0 12px;
+  font-size: 18px;
+  font-weight: 400;
+  color: var(--text-muted);
+  border-right: none;
+}
+
+.mynk-wb-board-tab--add:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Ghost viewport label — VP-01 (bounds rendering deferred) */
+.mynk-wb-ghost-label {
+  position: absolute;
+  top: 12%;
+  left: 20%;
+  z-index: 4;
+  pointer-events: none;
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 4px;
+  opacity: 0;
+}
+
+.mynk-wb-ghost-label--visible {
+  opacity: 1;
+}
+
+/* ΓöÇΓöÇ Bottom toolbar (mobile / tablet portrait) ΓöÇΓöÇ */
+.mynk-wb-bottom-toolbar {
+  display: none;
+  height: 52px;
+  min-height: 52px;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  align-items: center;
+  justify-content: space-around;
+  padding: 0 4px;
+  flex-shrink: 0;
+  width: 100%;
+}
+
+.mynk-wb-bottom-toolbar .mynk-wb-tool-btn {
+  width: 44px;
+  height: 44px;
+}
+
+.mynk-wb-bottom-toolbar .mynk-wb-more-popover {
+  left: auto;
+  right: 0;
+  top: auto;
+  bottom: 100%;
+  margin-left: 0;
+  margin-bottom: 4px;
+}
+
+/* Props bottom sheet — TM-11 */
+.mynk-wb-props-backdrop {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 90;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.mynk-wb-props-backdrop--open {
+  display: block;
+}
+
+.mynk-wb-props-sheet {
+  display: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 95;
+  max-height: 50%;
+  overflow-y: auto;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  border-radius: 12px 12px 0 0;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.15);
+  padding: 0 16px 16px;
+  transform: translateY(100%);
+  transition: transform 0.25s ease;
+}
+
+.mynk-wb-props-sheet--touch {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mynk-wb-props-sheet--open {
+  transform: translateY(0);
+}
+
+.mynk-wb-props-sheet__handle-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 0 6px;
+  position: relative;
+}
+
+.mynk-wb-props-sheet__handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.mynk-wb-props-sheet__close {
+  position: absolute;
+  right: 0;
+  top: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mynk-wb-props-mobile-bar {
+  display: none;
+  padding: 6px 12px;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+}
+
+.mynk-wb-props-mobile-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--foreground);
+}
+
+/* ΓöÇΓöÇ Responsive layout modes ΓöÇΓöÇ */
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-strip,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-strip {
+  display: none;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-bottom-toolbar,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-bottom-toolbar {
+  display: flex;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-sidebar,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-sidebar,
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-compact,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-compact {
+  display: none;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-mobile-bar,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-mobile-bar {
+  display: block;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-sheet,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-sheet {
+  display: flex;
+  flex-direction: column;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-topbar__inserts,
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-topbar__zoom {
+  display: none;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-wordmark {
+  font-size: 14px;
+  padding: 0 4px;
+}
+
+.mynk-wb-chrome {
+  height: 100dvh;
+}
+
+.mynk-wb-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.mynk-wb-live-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Legacy alias */
+.mynk-wb-av-tile {
+  display: none;
+}
+
+/* ΓöÇΓöÇ Properties popover (legacy anchor — kept for more menu) ΓöÇΓöÇ */
+.mynk-wb-props-popover {
+  position: absolute;
+  left: 52px;
+  top: 50%;
+  transform: translateY(-25%);
+  width: 240px;
+  padding: 12px;
+  z-index: 30;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+/* ΓöÇΓöÇ More overflow popover ΓöÇΓöÇ */
+.mynk-wb-more-popover {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  margin-left: 4px;
+  min-width: 192px;
+  padding: 4px;
+  z-index: 35;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+/* Popover section separator */
+.mynk-wb-popover-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+  opacity: 0.6;
+}
+
+/* ΓöÇΓöÇ Page strip ΓöÇΓöÇ */
+.mynk-wb-pagestrip {
+  flex-shrink: 0;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.mynk-wb-pagestrip::-webkit-scrollbar {
+  display: none;
+}
+
+/* ΓöÇΓöÇ Debug footer ΓöÇΓöÇ */
+.mynk-wb-debug-footer {
+  position: absolute;
+  bottom: 44px;
+  right: 8px;
+  font-size: 10px;
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0.5;
+  font-family: var(--font-mono, monospace);
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+/* ΓöÇΓöÇ Stroke color swatch (20px circle) ΓöÇΓöÇ */
+.mynk-wb-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: box-shadow 0.1s, transform 0.1s;
+}
+
+.mynk-wb-swatch:hover:not(.mynk-wb-swatch--active) {
+  transform: scale(1.15);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.mynk-wb-swatch--active {
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+}
+
+/* Roughness icon chips — square to hold the SVG glyph */
+.mynk-wb-roughness-chips {
+  gap: 6px;
+}
+
+.mynk-wb-roughness-chip {
+  width: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ΓöÇΓöÇ Stroke width preset (28×28px) ΓöÇΓöÇ */
+.mynk-wb-width-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  font-size: 10px;
+  color: var(--foreground);
+  transition: background 0.1s;
+}
+
+.mynk-wb-width-btn:hover:not(.mynk-wb-width-btn--active) {
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+
+.mynk-wb-width-btn--active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.mynk-wb-width-btn--active:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+/* ΓöÇΓöÇ Chip toggle (1A.10 spec) ΓöÇΓöÇ */
+.mynk-wb-chip {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--foreground);
+  font-size: 11px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+  white-space: nowrap;
+}
+
+.mynk-wb-chip:hover:not(.mynk-wb-chip--active) {
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+
+.mynk-wb-chip--active {
+  background: var(--foreground);
+  color: var(--background);
+  border-color: var(--foreground);
+}
+
+/* Active chip must keep its highlight on hover — no specificity slip */
+.mynk-wb-chip--active:hover {
+  background: var(--foreground);
+  color: var(--background);
+  border-color: var(--foreground);
+}
+
+/* ΓöÇΓöÇ Opacity slider ΓöÇΓöÇ */
+/*
+ * Thumb-at-extremes fix: the thumb (16px = 8px radius) must be flush at both
+ * ends. When the slider width equals the container width, the BROWSER centers
+ * the thumb at x=0 (min) and x=slider_width (max), so at min the left 8px of
+ * the thumb overflows left, and vice versa.
+ *
+ * Correct fix: narrow the slider by 2×thumb_radius (16px) and add equal
+ * margin so the element is centered. At min, thumb center = 0 of the SLIDER =
+ * 8px from container left — thumb left edge is flush with container left.
+ * At max, thumb center = slider_width = container_width - 8px — thumb right
+ * edge is flush with container right. No overflow:hidden needed.
+ */
+.mynk-wb-slider-wrap {
+  /* No overflow clipping — the thumb extends to the container edge naturally */
+}
+
+.mynk-wb-slider {
+  display: block;
+  width: calc(100% - 16px);
+  margin: 0 8px;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-2);
+  outline: none;
+  cursor: pointer;
+}
+
+.mynk-wb-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  margin-top: -6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: box-shadow 0.1s;
+}
+
+.mynk-wb-slider::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.mynk-wb-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+}
+
+.mynk-wb-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.mynk-wb-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-2);
+}
+
+/* ΓöÇΓöÇ More panel menu item ΓöÇΓöÇ */
+.mynk-wb-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--foreground);
+  cursor: pointer;
+  font-weight: 400;
+  text-align: left;
+  white-space: nowrap;
+  transition: background 0.1s;
+}
+
+.mynk-wb-menu-item:hover {
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+
+.mynk-wb-menu-item--destructive {
+  color: var(--destructive);
+}
+
+.mynk-wb-menu-item--destructive:hover {
+  background: color-mix(in srgb, var(--destructive) 10%, transparent);
+}
+
+.mynk-wb-menu-item__kbd {
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* ΓöÇΓöÇ Info note in popover ΓöÇΓöÇ */
+.mynk-wb-info-note {
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-muted);
+  padding: 6px 10px;
+  line-height: 1.4;
+}
+
+/* ─── Z-order + delete action buttons (More styles area) ─── */
+/* Use card background for contrast against the muted area background. */
+.mynk-wb-zorder-btn {
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 11px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+  white-space: nowrap;
+}
+
+.mynk-wb-zorder-btn:hover {
+  background: color-mix(in srgb, var(--surface-2) 40%, transparent);
+  border-color: var(--ring);
+}
+
+.mynk-wb-delete-btn {
+  border: 1px solid color-mix(in srgb, var(--destructive) 40%, transparent);
+  background: var(--card);
+  color: var(--destructive);
+  font-size: 11px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.1s;
+  white-space: nowrap;
+}
+
+.mynk-wb-delete-btn:hover {
+  background: color-mix(in srgb, var(--destructive) 10%, transparent);
+}
+
+/* ── Edge sharpness icon chips — same square shape as roughness chips ── */
+.mynk-wb-sharpness-chip {
+  width: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Custom opacity slider (replaces native input[type=range]) ── */
+/*
+ * At value=0: left = calc(0 * (100% - 16px)) = 0  → thumb left edge = 0 (flush) ✓
+ * At value=100: left = calc(1 * (100% - 16px)) = 100% - 16px  → thumb right edge = 100% (flush) ✓
+ */
+.mynk-wb-slider-custom {
+  position: relative;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  outline: none;
+  border-radius: 2px;
+  user-select: none;
+}
+
+.mynk-wb-slider-custom:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.mynk-wb-slider-custom__track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-2);
+  pointer-events: none;
+}
+
+.mynk-wb-slider-custom__thumb {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  top: 50%;
+  margin-top: -8px;
+  transition: box-shadow 0.1s;
+}
+
+.mynk-wb-slider-custom:hover .mynk-wb-slider-custom__thumb,
+.mynk-wb-slider-custom:focus-visible .mynk-wb-slider-custom__thumb {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent);
+}

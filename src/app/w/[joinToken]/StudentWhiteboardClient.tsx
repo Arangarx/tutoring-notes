@@ -278,9 +278,16 @@ export function StudentWhiteboardClient({
     };
   }, [syncClient, liveAv, whiteboardSessionId]);
 
-  /** Peer roster can lag relay broadcasts; tutor strokes still prove overlap. */
+  // callConnected: at least one remote peer is WebRTC-reachable
+  // (peerConnectionState=connected AND iceConnectionState ∈ {connected,completed}).
+  // Used for the call-quality indicator and the timer gate.
+  const callConnected = liveAv.reachableParticipants.length >= 1;
+
+  // Timer gate: require BOTH sync presence AND WebRTC reachability.
+  // Previously keyed on sync-presence alone — the split-brain fix: if
+  // the relay socket is up but WebRTC is dead, the timer must pause.
   const bothPresentForTimer =
-    connected && (otherPeerCount >= 1 || relayShowsCollaborator);
+    connected && callConnected;
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -548,9 +555,10 @@ export function StudentWhiteboardClient({
           </p>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+          {/* Sync-socket presence pill */}
           <div
             aria-live="polite"
-            aria-label={connected ? "Connected" : "Connecting"}
+            aria-label={connected ? "Connected to room" : "Connecting to room"}
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -576,6 +584,39 @@ export function StudentWhiteboardClient({
             />
             {connected ? "Connected" : "Joining…"}
           </div>
+          {/* Call-quality pill: only shown when peers are present.
+              Distinguishes "sync connected" from "WebRTC call connected"
+              so the student knows if audio/video is actually flowing. */}
+          {connected && liveAv.participants.length > 0 && (
+            <div
+              aria-live="polite"
+              aria-label={callConnected ? "Call connected" : "Call reconnecting"}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "4px 10px",
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: 600,
+                background: callConnected
+                  ? "var(--success-soft)"
+                  : "var(--warning-soft)",
+                color: callConnected ? "var(--success)" : "var(--warning)",
+              }}
+            >
+              <span
+                aria-hidden="true"
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  background: callConnected ? "var(--success)" : "var(--warning)",
+                }}
+              />
+              {callConnected ? "Call connected" : "Call reconnecting…"}
+            </div>
+          )}
           <div
             aria-label="Session time"
             style={{
