@@ -350,7 +350,8 @@ export function WhiteboardWorkspaceClient({
 }: Props) {
   const router = useRouter();
   // TU-12: Excalidraw theme follows app-selected theme (not OS-only)
-  const { resolvedTheme: excalidrawTheme } = useTheme();
+  const { resolvedTheme: excalidrawTheme, mode: themeMode, setMode: setThemeMode } =
+    useTheme();
   const { onLocalElementSnapshot, shouldDropRemoteElement } =
     useSyncTombstonedElementIds();
 
@@ -598,20 +599,41 @@ export function WhiteboardWorkspaceClient({
     useState<WbShapeToolType>("line");
   // Single-open menu state — only one chrome popover/dropdown is open at a time.
   // Opening any menu closes all others; outside-click/Esc handled per-menu.
-  const [openMenu, setOpenMenu] = useState<"share" | "view" | "shapes" | "more" | "props" | "theme" | null>(null);
+  const [openMenu, setOpenMenu] = useState<
+    | "share"
+    | "view"
+    | "shapes"
+    | "more"
+    | "props"
+    | "theme"
+    | "topbar-more"
+    | null
+  >(null);
   const shareMenuOpen = openMenu === "share";
   const viewMenuOpen = openMenu === "view";
   const shapesDropdownOpen = openMenu === "shapes";
   const morePopoverOpen = openMenu === "more";
   const propsCompactOpen = openMenu === "props";
   const themeMenuOpen = openMenu === "theme";
-  const toggleMenu = (menu: "share" | "view" | "shapes" | "more" | "props" | "theme") =>
-    setOpenMenu((p) => (p === menu ? null : menu));
+  const topbarMoreOpen = openMenu === "topbar-more";
+  const toggleMenu = (
+    menu:
+      | "share"
+      | "view"
+      | "shapes"
+      | "more"
+      | "props"
+      | "theme"
+      | "topbar-more"
+  ) => setOpenMenu((p) => (p === menu ? null : menu));
   const dismissTouchSheets = useCallback(() => {
     setOpenMenu(null);
   }, []);
   const touchSheetOpen =
-    openMenu === "props" || openMenu === "shapes" || openMenu === "more";
+    openMenu === "props" ||
+    openMenu === "shapes" ||
+    openMenu === "more" ||
+    openMenu === "topbar-more";
   const [gridEnabled, setGridEnabled] = useState(false);
   const [roughness, setRoughness] = useState(0);
   const [roundness, setRoundness] = useState<"sharp" | "round">("sharp");
@@ -3770,6 +3792,127 @@ export function WhiteboardWorkspaceClient({
     </>
   );
 
+  const renderTopBarOverflowItems = () => (
+    <div className="mynk-wb-action-sheet__menu-list">
+      <button
+        type="button"
+        className="mynk-wb-menu-item"
+        disabled={!syncUrl || copyState === "copying"}
+        onClick={() => {
+          void handleCopyStudentLink();
+          setOpenMenu(null);
+        }}
+        data-testid="wb-overflow-copy-link"
+      >
+        <WbIconShare />
+        <span>
+          {copyState === "copying"
+            ? "Copying…"
+            : copyState === "copied"
+              ? "Copied!"
+              : "Copy student join link"}
+        </span>
+      </button>
+      <div className="mynk-wb-popover-sep" />
+      <button
+        type="button"
+        className="mynk-wb-menu-item"
+        disabled={endingBusy}
+        onClick={() => {
+          triggerUndo();
+        }}
+        data-testid="wb-overflow-undo"
+      >
+        <WbIconUndo />
+        <span>Undo</span>
+      </button>
+      <button
+        type="button"
+        className="mynk-wb-menu-item"
+        disabled={endingBusy}
+        onClick={() => {
+          triggerRedo();
+        }}
+        data-testid="wb-overflow-redo"
+      >
+        <WbIconRedo />
+        <span>Redo</span>
+      </button>
+      <button
+        type="button"
+        className="mynk-wb-menu-item"
+        disabled={
+          endingBusy ||
+          liveAv.hasCamPermission === "denied" ||
+          (liveAv.videoDevices?.length ?? 1) === 0
+        }
+        onClick={() => {
+          void handleTopBarCam();
+        }}
+        data-testid="wb-overflow-cam"
+      >
+        <WbIconCamera size={14} />
+        <span>
+          {liveAv.isCamMuted ? "Turn camera on" : "Turn camera off"}
+        </span>
+      </button>
+      <div className="mynk-wb-popover-sep" />
+      <label className="mynk-wb-view-item mynk-wb-menu-item">
+        <input
+          type="checkbox"
+          checked={gridEnabled}
+          onChange={(e) => toggleGrid(e.target.checked)}
+        />
+        Show canvas grid
+      </label>
+      <div className="mynk-wb-popover-sep" />
+      <div className="mynk-wb-topbar-overflow-theme" role="group" aria-label="Theme">
+        {(
+          [
+            { mode: "light" as const, label: "Light theme" },
+            { mode: "dark" as const, label: "Dark theme" },
+            { mode: "system" as const, label: "System theme" },
+          ] as const
+        ).map(({ mode, label }) => (
+          <button
+            key={mode}
+            type="button"
+            className={`mynk-wb-menu-item${themeMode === mode ? " mynk-wb-menu-item--active" : ""}`}
+            aria-pressed={themeMode === mode}
+            onClick={() => setThemeMode(mode)}
+          >
+            <span>{label}</span>
+          </button>
+        ))}
+      </div>
+      <div className="mynk-wb-popover-sep" />
+      <div className="mynk-wb-topbar-overflow-inserts">
+        <PdfImageUploadButton
+          excalidrawAPI={excalidrawAPI}
+          whiteboardSessionId={whiteboardSessionId}
+          studentId={studentId}
+          disabled={endingBusy}
+          integrate={pdfBoardIntegrate}
+          chrome
+        />
+        <MathInsertButton
+          excalidrawAPI={excalidrawAPI}
+          whiteboardSessionId={whiteboardSessionId}
+          studentId={studentId}
+          disabled={endingBusy}
+          chrome
+        />
+        <GraphInsertButton
+          excalidrawAPI={excalidrawAPI}
+          whiteboardSessionId={whiteboardSessionId}
+          studentId={studentId}
+          disabled={endingBusy}
+          chrome
+        />
+      </div>
+    </div>
+  );
+
   const renderMoreOverflowMenu = (iconSize = 16) => (
     <>
       <div className="mynk-wb-more-menu">
@@ -4035,8 +4178,8 @@ export function WhiteboardWorkspaceClient({
         <div style={{ flex: 1, minWidth: 0 }} />
 
         <div className="mynk-wb-topbar__zone" onClick={(e) => e.stopPropagation()}>
-          {/* Share + Copied */}
-          <div className="mynk-wb-share-wrap">
+          {/* Share + Copied — desktop top bar; touch uses overflow sheet */}
+          <div className="mynk-wb-share-wrap mynk-wb-topbar__desktop-only">
             <button
               type="button"
               className={`mynk-wb-tb-btn${copyState === "copied" ? " mynk-wb-tb-btn--copied" : ""}`}
@@ -4086,7 +4229,7 @@ export function WhiteboardWorkspaceClient({
             )}
           </div>
 
-          <span className="mynk-wb-topbar__sep" aria-hidden />
+          <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
 
           <WbTopBarMicControl
             audio={workspaceAudio}
@@ -4098,7 +4241,7 @@ export function WhiteboardWorkspaceClient({
           />
           <button
             type="button"
-            className={`mynk-wb-tb-btn mynk-wb-tb-btn--icon${
+            className={`mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__desktop-only${
               liveAv.hasCamPermission !== "denied" &&
               (liveAv.videoDevices?.length ?? 1) > 0
                 ? liveAv.isCamMuted
@@ -4131,11 +4274,11 @@ export function WhiteboardWorkspaceClient({
             <WbIconCamera size={14} />
           </button>
 
-          <span className="mynk-wb-topbar__sep" aria-hidden />
+          <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
 
           <button
             type="button"
-            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon"
+            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__desktop-only"
             title="Undo (Ctrl+Z)"
             aria-label="Undo"
             disabled={endingBusy}
@@ -4146,7 +4289,7 @@ export function WhiteboardWorkspaceClient({
           </button>
           <button
             type="button"
-            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon"
+            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__desktop-only"
             title="Redo (Ctrl+Shift+Z)"
             aria-label="Redo"
             disabled={endingBusy}
@@ -4156,9 +4299,12 @@ export function WhiteboardWorkspaceClient({
             <WbIconRedo />
           </button>
 
-          <span className="mynk-wb-topbar__sep mynk-wb-topbar__inserts" aria-hidden />
+          <span
+            className="mynk-wb-topbar__sep mynk-wb-topbar__inserts mynk-wb-topbar__desktop-only"
+            aria-hidden
+          />
 
-          <div className="mynk-wb-topbar__zone mynk-wb-topbar__inserts">
+          <div className="mynk-wb-topbar__zone mynk-wb-topbar__inserts mynk-wb-topbar__desktop-only">
             <PdfImageUploadButton
               excalidrawAPI={excalidrawAPI}
               whiteboardSessionId={whiteboardSessionId}
@@ -4183,9 +4329,9 @@ export function WhiteboardWorkspaceClient({
             />
           </div>
 
-          <span className="mynk-wb-topbar__sep" aria-hidden />
+          <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
 
-          <div className="mynk-wb-view-menu">
+          <div className="mynk-wb-view-menu mynk-wb-topbar__desktop-only">
             <button
               type="button"
               className="mynk-wb-tb-btn mynk-wb-tb-btn--icon"
@@ -4217,13 +4363,28 @@ export function WhiteboardWorkspaceClient({
             )}
           </div>
 
-          <WbThemeToggle
-            open={themeMenuOpen}
-            onOpenChange={(v) => setOpenMenu(v ? "theme" : null)}
-          />
+          <div className="mynk-wb-topbar__desktop-only">
+            <WbThemeToggle
+              open={themeMenuOpen}
+              onOpenChange={(v) => setOpenMenu(v ? "theme" : null)}
+            />
+          </div>
         </div>
 
-        <span className="mynk-wb-topbar__sep" aria-hidden />
+        <button
+          type="button"
+          className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__overflow-btn"
+          title="More session options"
+          aria-label="More session options"
+          aria-expanded={topbarMoreOpen}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleMenu("topbar-more");
+          }}
+          data-testid="wb-topbar-overflow"
+        >
+          <WbIconMore size={14} />
+        </button>
 
         <button
           type="button"
@@ -4614,6 +4775,14 @@ export function WhiteboardWorkspaceClient({
               testId="wb-more-sheet"
             >
               <div className="mynk-wb-action-sheet__menu-list">{renderOverflowMenuItems(true)}</div>
+            </WbActionSheet>
+            <WbActionSheet
+              open={openMenu === "topbar-more"}
+              onDismiss={dismissTouchSheets}
+              ariaLabel="More session options"
+              testId="wb-topbar-more-sheet"
+            >
+              {renderTopBarOverflowItems()}
             </WbActionSheet>
           </>
         </WbChromeErrorBoundary>

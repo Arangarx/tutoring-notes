@@ -54,6 +54,9 @@
   align-items: center;
   gap: 2px;
   padding: 0 6px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   /* overflow: visible — dropdowns (Share, Mic, Theme, View) must extend
      below this bar; overflow:hidden clips them at the 44px boundary. */
   overflow: visible;
@@ -1237,9 +1240,19 @@
 
 .mynk-wb-action-sheet__body {
   overflow-y: auto;
+  overflow-x: visible;
   overscroll-behavior: contain;
   flex: 1;
   min-height: 0;
+}
+
+/* Active swatch ring extends 4px outside — pad so left edge isn't clipped */
+.mynk-wb-action-sheet .mynk-wb-props-panel-inner {
+  padding-inline: 4px;
+}
+
+.mynk-wb-action-sheet .mynk-wb-props-swatches {
+  padding: 4px;
 }
 
 .mynk-wb-chrome-error-fallback {
@@ -1342,6 +1355,38 @@
 .mynk-wb-chrome[data-layout="narrow"] .mynk-wb-topbar__inserts,
 .mynk-wb-chrome[data-layout="narrow"] .mynk-wb-topbar__zoom {
   display: none;
+}
+
+/* Touch top bar — slim composition: essentials inline, secondary in overflow sheet */
+.mynk-wb-topbar__overflow-btn {
+  display: none;
+  flex-shrink: 0;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-topbar__desktop-only,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-topbar__desktop-only,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-topbar__desktop-only {
+  display: none;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-topbar__overflow-btn,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-topbar__overflow-btn,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-topbar__overflow-btn {
+  display: inline-flex;
+}
+
+.mynk-wb-topbar-overflow-inserts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.mynk-wb-topbar-overflow-theme {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0;
 }
 
 .mynk-wb-chrome[data-layout="narrow"] .mynk-wb-wordmark {

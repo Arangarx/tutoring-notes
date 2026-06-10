@@ -272,7 +272,11 @@ export function WbStrokePropsPanel({
   const displayOpacity = opacityPreview ?? opacity;
 
   return (
-    <div className="mynk-wb-props-panel-inner">
+    <div
+      className="mynk-wb-props-panel-inner"
+      onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
       {/* ── Stroke color ── always visible */}
       <div className="mynk-wb-props-section">
         <div className="mynk-wb-props-section-title">Stroke color</div>
@@ -340,7 +344,10 @@ export function WbStrokePropsPanel({
       <button
         type="button"
         className="mynk-wb-chip mynk-wb-more-styles-btn"
-        onClick={onMoreStylesToggle}
+        onClick={(e) => {
+          e.stopPropagation();
+          onMoreStylesToggle();
+        }}
         aria-expanded={moreStylesOpen}
       >
         {moreStylesOpen ? "▴ Less styles" : "▾ More styles"}

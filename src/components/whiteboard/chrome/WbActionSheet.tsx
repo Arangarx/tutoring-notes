@@ -72,6 +72,7 @@ export function WbActionSheet({
       aria-hidden={!open}
       data-testid={testId}
       onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
     >
       <div
         className="mynk-wb-action-sheet__handle-row"
