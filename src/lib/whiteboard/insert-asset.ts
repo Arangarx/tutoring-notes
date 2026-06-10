@@ -1122,7 +1122,12 @@ export function insertDesmosEmbedOnCanvas(args: InsertAssetCommonArgs & {
 // Self-hosted JSXGraph embed (replaces Desmos for new inserts)
 // ---------------------------------------------------------------------------
 
-/** Sentinel link for Excalidraw embeddables rendered via `renderEmbeddable`. */
+/**
+ * Sentinel link for Excalidraw embeddables rendered via `renderEmbeddable`.
+ * Required so `validateEmbeddable` + `embedsValidationStatus` pass (Excalidraw
+ * only mounts `renderEmbeddable` for validated links). The native hyperlink UI
+ * for this scheme is suppressed in `whiteboard-chrome.css` + `onLinkOpen`.
+ */
 export const GRAPH_EMBED_LINK = "mynk://graph";
 
 const GRAPH_DEFAULT_WIDTH = DESMOS_DEFAULT_WIDTH;

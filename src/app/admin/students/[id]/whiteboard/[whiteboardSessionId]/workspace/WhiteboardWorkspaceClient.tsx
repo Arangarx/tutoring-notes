@@ -3452,11 +3452,27 @@ export function WhiteboardWorkspaceClient({
       return (
         <GraphEmbeddable
           element={element as { id?: string; width?: number; height?: number; customData?: Record<string, unknown> }}
+          excalidrawAPI={excalidrawAPIRef.current}
         />
       );
     }
     return undefined;
   }, []);
+
+  const handleExcalidrawLinkOpen = useCallback(
+    (
+      element: { link?: string | null; customData?: { wbType?: string } },
+      event: { preventDefault: () => void }
+    ) => {
+      if (
+        element.link === GRAPH_EMBED_LINK ||
+        element.customData?.wbType === "graph"
+      ) {
+        event.preventDefault();
+      }
+    },
+    []
+  );
 
   // â”€â”€â”€ Chrome: selectTool + updateStrokeStyle callbacks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -4284,6 +4300,7 @@ export function WhiteboardWorkspaceClient({
             }}
             validateEmbeddable={validateExcalidrawEmbeddable}
             renderEmbeddable={renderGraphEmbeddable}
+            onLinkOpen={handleExcalidrawLinkOpen}
             initialData={{
               appState: {
                 currentItemRoughness: 0,

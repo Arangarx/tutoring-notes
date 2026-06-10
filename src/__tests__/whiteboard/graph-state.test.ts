@@ -1,8 +1,12 @@
 import {
+  addGraphExpression,
   DEFAULT_GRAPH_BBOX,
   extractGraphStateFromElement,
   parseGraphStateJson,
+  removeGraphExpression,
   serializeGraphStateJson,
+  updateGraphExpression,
+  withGraphBbox,
 } from "@/lib/whiteboard/graph-state";
 
 describe("graph-state", () => {
@@ -51,5 +55,24 @@ describe("graph-state", () => {
       customData: { graphStateJson: json },
     });
     expect(state.expressions).toEqual(["cos(x)"]);
+  });
+
+  it("adds, updates, and removes expressions immutably", () => {
+    const base = { bbox: DEFAULT_GRAPH_BBOX, expressions: ["x"] };
+    const added = addGraphExpression(base, "x^2");
+    expect(added.expressions).toEqual(["x", "x^2"]);
+    expect(base.expressions).toEqual(["x"]);
+
+    const updated = updateGraphExpression(added, 0, "2*x");
+    expect(updated.expressions).toEqual(["2*x", "x^2"]);
+
+    const removed = removeGraphExpression(updated, 1);
+    expect(removed.expressions).toEqual(["2*x"]);
+  });
+
+  it("round-trips bbox via withGraphBbox", () => {
+    const bbox = [-2, 6, 8, -3] as [number, number, number, number];
+    const state = withGraphBbox({ expressions: [] }, bbox);
+    expect(parseGraphStateJson(serializeGraphStateJson(state)).bbox).toEqual(bbox);
   });
 });

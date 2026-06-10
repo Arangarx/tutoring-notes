@@ -71,3 +71,45 @@ export function extractGraphStateFromElement(element: {
   }
   return parseGraphStateJson(customData.graphStateJson);
 }
+
+/** Clone graph state with a normalized expression list. */
+export function cloneGraphState(state: GraphState): GraphState {
+  return {
+    bbox: state.bbox ? ([...state.bbox] as GraphBbox) : DEFAULT_GRAPH_BBOX,
+    expressions: [...(state.expressions ?? [])],
+  };
+}
+
+export function addGraphExpression(state: GraphState, expression: string): GraphState {
+  const next = cloneGraphState(state);
+  const trimmed = expression.trim();
+  if (!trimmed) return next;
+  next.expressions = [...(next.expressions ?? []), trimmed];
+  return next;
+}
+
+export function updateGraphExpression(
+  state: GraphState,
+  index: number,
+  expression: string
+): GraphState {
+  const next = cloneGraphState(state);
+  const expressions = [...(next.expressions ?? [])];
+  if (index < 0 || index >= expressions.length) return next;
+  expressions[index] = expression;
+  next.expressions = expressions;
+  return next;
+}
+
+export function removeGraphExpression(state: GraphState, index: number): GraphState {
+  const next = cloneGraphState(state);
+  const expressions = [...(next.expressions ?? [])];
+  if (index < 0 || index >= expressions.length) return next;
+  expressions.splice(index, 1);
+  next.expressions = expressions;
+  return next;
+}
+
+export function withGraphBbox(state: GraphState, bbox: GraphBbox): GraphState {
+  return { ...cloneGraphState(state), bbox };
+}

@@ -210,6 +210,18 @@
   height: 100%;
 }
 
+/*
+ * Self-hosted graph embeds use link "mynk://graph" only for Excalidraw
+ * embeddable validation (renderEmbeddable path). Hide the native hyperlink
+ * popup for that sentinel so tutors never see a launchable mynk:// URL.
+ * Desmos embeds use https://*.desmos.com links — unaffected.
+ */
+.mynk-wb-chrome .excalidraw-hyperlinkContainer:has(
+  .excalidraw-hyperlinkContainer-link[href="mynk://graph"]
+) {
+  display: none !important;
+}
+
 /* ΓöÇΓöÇ Banners overlay (absolute, top of canvas) ΓöÇΓöÇ */
 .mynk-wb-banners {
   position: absolute;
