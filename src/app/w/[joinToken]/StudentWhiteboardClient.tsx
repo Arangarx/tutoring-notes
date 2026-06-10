@@ -24,7 +24,10 @@ import {
   computeDisplayActiveMs,
 } from "@/lib/whiteboard/active-time";
 import { ExcalidrawDynamic } from "@/components/whiteboard/ExcalidrawDynamic";
-import { GraphEmbeddable } from "@/components/whiteboard/GraphEmbeddable";
+import {
+  GraphEmbeddable,
+  warmJsxGraphModule,
+} from "@/components/whiteboard/GraphEmbeddable";
 import { WhiteboardDebugHud } from "@/components/whiteboard/WhiteboardDebugHud";
 import { validateExcalidrawEmbeddable } from "@/lib/whiteboard/validate-embeddable";
 import { GRAPH_EMBED_LINK } from "@/lib/whiteboard/insert-asset";
@@ -182,6 +185,14 @@ export function StudentWhiteboardClient({
   const excalidrawTheme = useExcalidrawThemeFromSystem();
 
   useWindowScrollToTopOnMount();
+
+  const jsxGraphWarmedRef = useRef(false);
+  useEffect(() => {
+    if (!connected) return;
+    if (jsxGraphWarmedRef.current) return;
+    jsxGraphWarmedRef.current = true;
+    warmJsxGraphModule();
+  }, [connected]);
 
   useEffect(() => {
     const k = readKeyFromHash();
