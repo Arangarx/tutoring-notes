@@ -607,7 +607,7 @@ export function WhiteboardWorkspaceClient({
   const [roundness, setRoundness] = useState<"sharp" | "round">("sharp");
   const { layoutMode, orientation } = useWbLayoutMode();
   const touchLayout = isTouchLayout(layoutMode);
-  const [toolbarHidden] = useState(false);
+  const [toolbarHidden, setToolbarHidden] = useState(false);
   // Stroke props — tracked from Excalidraw onChange (appState).
   // Always initialize to EXCALIDRAW_STROKE_HEX (#1e293b) in both themes.
   // Excalidraw's dark-mode canvas filter (invert+hue-rotate) automatically
@@ -3916,6 +3916,25 @@ export function WhiteboardWorkspaceClient({
             </span>
           )}
         </div>
+
+        <button
+          type="button"
+          className="mynk-wb-toolbar-toggle"
+          data-testid="wb-toolbar-toggle"
+          aria-pressed={toolbarHidden}
+          title={toolbarHidden ? "Show tools" : "Hide tools"}
+          onClick={(e) => {
+            e.stopPropagation();
+            setToolbarHidden((hidden) => !hidden);
+          }}
+        >
+          <span className="mynk-wb-toolbar-toggle__label">
+            {toolbarHidden ? "Show tools" : "Hide tools"}
+          </span>
+          <span className="mynk-wb-toolbar-toggle__chev" aria-hidden>
+            {toolbarHidden ? "▴" : "▾"}
+          </span>
+        </button>
 
         <div style={{ flex: 1, minWidth: 0 }} />
 

@@ -1301,6 +1301,78 @@
   padding: 0 4px;
 }
 
+/* TM-12 — persistent show/hide tools toggle (touch layouts only) */
+.mynk-wb-toolbar-toggle {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-strong);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  transition: background 0.12s, box-shadow 0.2s, color 0.12s;
+}
+
+.mynk-wb-toolbar-toggle:hover {
+  background: var(--accent-soft);
+}
+
+.mynk-wb-toolbar-toggle__chev {
+  font-size: 9px;
+  color: var(--accent-text);
+  line-height: 1;
+  transition: color 0.12s;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-toolbar-toggle,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-toolbar-toggle,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-toolbar-toggle {
+  display: inline-flex;
+}
+
+.mynk-wb-chrome[data-toolbar-hidden="true"] .mynk-wb-toolbar-toggle {
+  background: var(--accent);
+  color: var(--accent-on);
+  border-color: var(--accent-strong);
+  animation: mynk-wb-toolbar-toggle-pulse 2.4s ease-in-out infinite;
+}
+
+.mynk-wb-chrome[data-toolbar-hidden="true"] .mynk-wb-toolbar-toggle__chev {
+  color: var(--accent-on);
+}
+
+@keyframes mynk-wb-toolbar-toggle-pulse {
+  0%,
+  100% {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  }
+  50% {
+    box-shadow:
+      0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent),
+      0 1px 2px rgba(0, 0, 0, 0.06);
+  }
+}
+
+/* Collapse bottom tool chrome when tools hidden — canvas regains vertical space */
+.mynk-wb-chrome[data-toolbar-hidden="true"][data-layout="narrow"] .mynk-wb-bottom-toolbar,
+.mynk-wb-chrome[data-toolbar-hidden="true"][data-layout="tablet-portrait"] .mynk-wb-bottom-toolbar,
+.mynk-wb-chrome[data-toolbar-hidden="true"][data-layout="phone-landscape"] .mynk-wb-bottom-toolbar {
+  display: none;
+}
+
+.mynk-wb-chrome[data-toolbar-hidden="true"][data-layout="narrow"] .mynk-wb-props-mobile-bar,
+.mynk-wb-chrome[data-toolbar-hidden="true"][data-layout="tablet-portrait"] .mynk-wb-props-mobile-bar,
+.mynk-wb-chrome[data-toolbar-hidden="true"][data-layout="phone-landscape"] .mynk-wb-props-mobile-bar {
+  display: none;
+}
+
 .mynk-wb-chrome {
   height: 100dvh;
 }
