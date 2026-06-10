@@ -2,7 +2,7 @@
 
 Branch: `feat/wb-chrome-redo`  
 Baseline: `a150d4f` (PR-01 freedraw latency fix — known-good board separation)  
-Latest commit: TBD (2026-06-09 — C1/C2/C3 content-insert fixes + per-board undo backlog)
+Latest commit: `8afe6f1` (2026-06-09 — C1/C2/C3 content-insert fixes + per-board undo backlog)
 
 ## What this branch does
 
@@ -32,7 +32,7 @@ This branch:
 | **P0/P1/P2 punch list (Andrew's smoke)** | ✅ Done | `ed87f3d` — z-index, mojibake, hover, dark stroke, cam toggle, roundness, board tabs, slider, z-order buttons |
 | **P3 punch list (Andrew's smoke)** | ✅ Done | `1ef0742` — ink swatch adaptive, roughness icons, More styles restructure, single-open menus, hover preservation, Z-order restyle, slider extremes, camera-no-device |
 | **C1/C2/C3 content-insert bugs + backlog** | ✅ Done | TBD — math insert position, math editor dead on second open, Desmos frowny-face CSP fix |
-| npx next build exit 0 | ✅ Done | exit 0 (confirmed TBD) |
+| npx next build exit 0 | ✅ Done | exit 0 (confirmed `8afe6f1`) |
 | npx jest | ✅ Done | 1982 pass / 4 fail (same 4 pre-existing suites; TBD) |
 | Playwright interaction tests | ✅ Written | `tests/integration/wb-chrome-interactions.spec.ts` — 15 tests (added: single-open, inactive hover, selected chip hover, adaptive ink swatch) |
 | npm run test:wb-sync | ⏳ Pending | Docker relay required |
@@ -42,15 +42,15 @@ This branch:
 ## Gate status
 
 - `npx next build`: ✅ exit 0 (TBD)
-- `npx jest`: ✅ 1982 pass / 4 fail (same 4 pre-existing suites, TBD)
+- `npx jest`: ✅ 1982 pass / 4 fail (same 4 pre-existing suites, `8afe6f1`)
 - `npm run test:wb-sync`: ⏳ pending (requires Docker relay)
 - **Interactive controls P0 fix**: ✅ code shipped (`85ebedc`)
 - **Undo cross-board P0 fix**: ✅ code shipped (`914fbc0`) — `captureUpdate:"NEVER"` + `history.clear()` on board switch
 - **Punch-list P0/P1/P2 fix**: ✅ code shipped (`ed87f3d`)
-- **C1 math insert position**: ✅ code shipped (TBD) — viewport center captured before async upload
-- **C2 math editor dead on second open**: ✅ code shipped (TBD) — deps changed to `dialogIsOpen` boolean
-- **C3 Desmos frowny-face**: ✅ code shipped (TBD) — `frame-src` added to middleware CSP builder
-- **Per-board undo backlog**: ✅ logged (TBD) — post-v1 / not-a-gate
+- **C1 math insert position**: ✅ code shipped (`8afe6f1`) — viewport center captured before async upload
+- **C2 math editor dead on second open**: ✅ code shipped (`8afe6f1`) — deps changed to `dialogIsOpen` boolean
+- **C3 Desmos frowny-face**: ✅ code shipped (`8afe6f1`) — `frame-src` added to middleware CSP builder
+- **Per-board undo backlog**: ✅ logged (`8afe6f1`) — post-v1 / not-a-gate
 - **Playwright interaction tests**: ✅ written (15 tests) — run with `npm run test:wb-playwright -- tests/integration/wb-chrome-interactions.spec.ts`
 - Board separation: ⏳ pending real-browser verification
 - Undo isolation (P0): ⏳ pending real-browser Playwright (test written in `wb-chrome-interactions.spec.ts`)
