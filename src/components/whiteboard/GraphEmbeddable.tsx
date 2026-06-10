@@ -5,7 +5,7 @@
  * embeddable via the `renderEmbeddable` prop (tutor workspace).
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTheme } from "@/components/ThemeProvider";
 import {
   addGraphExpression,
@@ -70,7 +70,7 @@ const JSXGRAPH_CSS_ID = "mynk-jsxgraph-css";
 const BBOX_PERSIST_MS = 400;
 const PARSE_ERROR_MSG = "Couldn't understand this expression.";
 
-function ensureJxgStylesheet(): void {
+export function ensureJxgStylesheet(): void {
   if (typeof document === "undefined") return;
   if (document.getElementById(JSXGRAPH_CSS_ID)) return;
   const link = document.createElement("link");
@@ -78,6 +78,18 @@ function ensureJxgStylesheet(): void {
   link.rel = "stylesheet";
   link.href = "/jsxgraph/jsxgraph.css";
   document.head.appendChild(link);
+}
+
+/** Idempotent client-only warm: inject CSS + prime dynamic import cache. */
+export function warmJsxGraphModule(): void {
+  if (typeof window === "undefined") return;
+  ensureJxgStylesheet();
+  void import("jsxgraph").catch((err) => {
+    console.warn(
+      "[GraphEmbeddable] jsxgraph prefetch failed:",
+      (err as Error)?.message ?? String(err)
+    );
+  });
 }
 
 function pickCssToken(style: CSSStyleDeclaration, name: string): string {
@@ -538,7 +550,7 @@ export function GraphEmbeddable({
   }, [element.id, readOnly, scheduleBboxPersist]);
 
   /** Student read-only: re-plot when tutor sync pushes new graphStateJson. */
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!readOnly) return;
     const board = boardRef.current;
     if (!board) return;

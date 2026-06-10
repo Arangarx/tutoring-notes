@@ -112,7 +112,10 @@ import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter"
 import { PdfImageUploadButton } from "@/components/whiteboard/PdfImageUploadButton";
 import { type PageStripRow } from "@/components/whiteboard/PageStrip";
 import { MathInsertButton } from "@/components/whiteboard/MathInsertButton";
-import { GraphEmbeddable } from "@/components/whiteboard/GraphEmbeddable";
+import {
+  GraphEmbeddable,
+  warmJsxGraphModule,
+} from "@/components/whiteboard/GraphEmbeddable";
 import { GraphInsertButton } from "@/components/whiteboard/GraphInsertButton";
 import { BoardTabStrip } from "@/components/whiteboard/chrome/BoardTabStrip";
 import { WbAVCluster } from "@/components/whiteboard/chrome/WbAVCluster";
@@ -345,6 +348,13 @@ export function WhiteboardWorkspaceClient({
     useSyncTombstonedElementIds();
 
   useWindowScrollToTopOnMount();
+
+  const jsxGraphWarmedRef = useRef(false);
+  useEffect(() => {
+    if (jsxGraphWarmedRef.current) return;
+    jsxGraphWarmedRef.current = true;
+    warmJsxGraphModule();
+  }, []);
 
   // ---------------------------------------------------------------
   // Encryption key + sync client lifecycle
