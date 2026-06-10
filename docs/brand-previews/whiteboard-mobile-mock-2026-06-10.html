@@ -97,11 +97,19 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
 .wb-mic-bar--b1{height:5px}.wb-mic-bar--b2{height:9px}.wb-mic-bar--b3{height:14px}
 .wb-mic-bar--active{background:var(--accent);opacity:1}
 
-/* Board tabs — SR-06 ≤40px */
-.wb-board-tabs{height:36px;max-height:40px;flex-shrink:0;display:flex;align-items:stretch;padding:0 4px 0 0;background:var(--surface-1);border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none}
+/* Board tabs footer — SR-06 / SR-14 / SR-17: spreadsheet paradigm @ bottom */
+.wb-board-footer{flex-shrink:0;display:flex;align-items:stretch;background:var(--surface-1);border-top:1px solid var(--border);z-index:34;max-height:40px}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-board-footer{position:absolute;left:0;right:0;bottom:0;z-index:40;background:color-mix(in srgb,var(--surface-1) 94%,transparent);backdrop-filter:blur(8px)}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-boards-list-btn{margin-left:48px}
+.wb-boards-list-btn{display:flex;align-items:center;gap:5px;flex-shrink:0;height:36px;padding:0 10px;border:none;border-right:1px solid var(--border);background:var(--card);color:var(--text);font:600 11px var(--font-body);cursor:pointer;white-space:nowrap}
+.wb-boards-list-btn:hover{background:var(--accent-soft)}
+.wb-boards-list-btn svg{flex-shrink:0;opacity:.85}
+.wb-shell[data-boards-collapsed] .wb-board-tabs{display:none}
+.wb-shell[data-boards-collapsed] .wb-boards-list-btn{border-right:none}
+.wb-board-tabs{height:36px;max-height:40px;flex:1;min-width:0;display:flex;align-items:stretch;padding:0 4px 0 0;background:transparent;overflow-x:auto;scrollbar-width:none}
 .wb-board-tabs::-webkit-scrollbar{display:none}
 .wb-board-tab-wrap{display:flex;align-items:stretch;flex-shrink:0;border-right:1px solid var(--border);transition:background .12s}
-.wb-board-tab-wrap--active{border-bottom:2px solid var(--accent);background:var(--card)}
+.wb-board-tab-wrap--active{border-top:2px solid var(--accent);background:var(--card)}
 .wb-board-tab{display:flex;align-items:center;gap:6px;padding:0 12px;height:100%;border:none;background:transparent;color:var(--text-muted);font:500 12px var(--font-body);cursor:pointer;white-space:nowrap}
 .wb-board-tab-wrap--active .wb-board-tab{color:var(--text);font-weight:600}
 .wb-board-tab__dot{width:5px;height:5px;border-radius:50%;background:var(--accent);flex-shrink:0}
@@ -139,12 +147,16 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
 .wb-callout--av::before{right:14px;top:-5px;border-left:none;border-bottom:none;border-top:1px solid var(--callout-border);border-right:1px solid var(--callout-border)}
 .wb-callout--laser{top:40%;bottom:auto;left:8px;transform:none;max-width:min(220px,52vw);text-align:left}
 .wb-callout--laser::before{left:20px;margin-left:0;bottom:-5px}
+.wb-callout--boards{bottom:100px;left:8px;max-width:min(240px,56vw)}
+.wb-callout--boards::before{left:18px;bottom:-5px}
 .wb-shell.phone-layout[data-orientation="landscape"] .wb-callout--panel-toggle{top:40px;left:8px;bottom:auto;max-width:min(190px,40vw)}
 .wb-shell.phone-layout[data-orientation="landscape"] .wb-callout--panel-toggle::before{left:14px;top:-5px;bottom:auto}
 .wb-shell.phone-layout[data-orientation="landscape"] .wb-callout--overflow{bottom:auto;top:58%;left:52px;right:auto;max-width:min(200px,42vw)}
 .wb-shell.phone-layout[data-orientation="landscape"] .wb-callout--overflow::before{left:14px;top:auto;bottom:-5px;right:auto}
 .wb-shell.phone-layout[data-orientation="landscape"] .wb-callout--student{bottom:108px;left:52px;top:auto;max-width:min(210px,44vw)}
 .wb-shell.phone-layout[data-orientation="landscape"] .wb-callout--laser{top:32%;left:52px;max-width:min(200px,40vw)}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-callout--boards{bottom:44px;left:52px;max-width:min(215px,44vw)}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-callout--boards::before{left:16px}
 .wb-callout strong{color:var(--text);font-weight:600}
 
 /* Panel toggle — persistent show/hide tools (top chrome bar, TM-12) */
@@ -278,6 +290,8 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
   <button class="meta-btn" data-state="overflow" onclick="setMockState('overflow',this)">Overflow ⋮</button>
   <button class="meta-btn" data-state="grid" onclick="setMockState('grid',this)">Grid on</button>
   <button class="meta-btn" data-state="shapes" onclick="setMockState('shapes',this)">Shapes</button>
+  <button class="meta-btn" data-state="boards" onclick="setMockState('boards',this)">Boards list</button>
+  <button class="meta-btn" data-state="boards-collapsed" onclick="setMockState('boards-collapsed',this)">Tabs collapsed</button>
   <button class="meta-btn" data-state="toolbar-hidden" onclick="setMockState('toolbar-hidden',this)">Tools hidden</button>
   <span class="meta-sep"></span>
   <button class="meta-btn active" data-role="tutor" onclick="setRole('tutor',this)">Tutor</button>
@@ -292,7 +306,8 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
     <li><strong>Sheets:</strong> open via toolbar buttons (Styles, ⋮, props summary) — <em>not</em> bottom-edge swipe-up (avoids OS gesture collision). Swipe-down / backdrop / × to dismiss.</li>
     <li><strong>Phone tier-1 (tutor):</strong> Select · Pencil · Eraser · Shapes▾ · Styles · Wand · ⋮</li>
     <li><strong>Phone tier-1 (student):</strong> Select · Pencil · Eraser · Shapes▾ · Styles · Wand (laser) · ⋮ — matches tutor tier-1 set</li>
-    <li><strong>Phone landscape:</strong> tier-1 moves to slim left rail (same tools/order as portrait bottom bar); props summary = compact chip on canvas; bottom bar hidden — frees vertical canvas height</li>
+    <li><strong>Board tabs (SR-06/14/17):</strong> bottom strip — spreadsheet paradigm (Google Sheets / Excel mobile); tabs sit above the bottom toolbar, <em>not</em> under the top bar. Overflow / tight width → bottom-left <em>Boards</em> list button opens overlay picker (iPad Sheets / Excel &ldquo;Sheets&rdquo; pattern).</li>
+    <li><strong>Phone landscape:</strong> tier-1 moves to slim left rail (same tools/order as portrait bottom bar); props summary = compact chip on canvas; bottom toolbar hidden — board footer stays pinned at bottom; <em>Boards</em> list button inset past left rail (no collision with props chip)</li>
     <li><strong>Tablet tier-1:</strong> slim left rail (Select/Pencil/Eraser/Text/Wand) + bottom bar (Shapes▾ · Undo · Styles · ⋮)</li>
     <li><strong>Canvas:</strong> sample board content (PDF page, graph, strokes) — reads as whiteboard, not empty room</li>
     <li><strong>AV:</strong> tutor tile primary + cam on; student self hidden by default (tutor role: self visible); swap + show-self toggles</li>
@@ -342,15 +357,6 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
     </button>
     <button class="wb-tb-btn wb-tb-btn--primary wb-end-btn">End session</button>
   </header>
-
-  <div class="wb-board-tabs">
-    <div class="wb-board-tab-wrap wb-board-tab-wrap--active">
-      <button class="wb-board-tab"><span class="wb-board-tab__dot"></span>Board 1</button>
-    </div>
-    <div class="wb-board-tab-wrap"><button class="wb-board-tab">Board 2</button></div>
-    <div class="wb-board-tab-wrap"><button class="wb-board-tab">Ch.4 PDF</button></div>
-    <button class="wb-board-tab--add wb-tool-btn--tutor-only" title="Add board">+</button>
-  </div>
 
   <div class="wb-body">
     <aside class="wb-tablet-rail wb-tool-btn--tablet-only">
@@ -418,6 +424,7 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
       <div class="wb-callout wb-callout--student"><strong>Student</strong> tier-1: select, pencil, eraser, shapes▾, styles, wand, ⋮</div>
       <div class="wb-callout wb-callout--av"><strong>AV:</strong> tutor primary · cam on · student self hidden (tutor: self on)</div>
       <div class="wb-callout wb-callout--laser">Tutor laser = coral · Student laser = cyan (<strong>TBD</strong>)</div>
+      <div class="wb-callout wb-callout--boards"><strong>Board tabs</strong> — bottom strip (Sheets/Excel); <strong>Boards</strong> button → overlay when tabs overflow or space is tight</div>
 
       <div class="wb-av-pip" title="Video tiles">
         <div class="wb-av-pip__handle">···</div>
@@ -512,6 +519,15 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
         <p style="font:10px var(--font-mono);color:var(--text-muted);margin-top:8px">Opened via ⋮ button — not bottom-edge swipe</p>
       </div>
 
+      <div class="wb-action-sheet" data-overlay="boards">
+        <h3>Boards · SR-17</h3>
+        <button class="wb-menu-item wb-board-tab-wrap--active"><span class="wb-board-tab__dot"></span> Board 1 <small>active</small></button>
+        <button class="wb-menu-item">Board 2</button>
+        <button class="wb-menu-item">Ch.4 PDF</button>
+        <button class="wb-menu-item wb-tool-btn--tutor-only">Add board + <small>tutor</small></button>
+        <p style="font:10px var(--font-mono);color:var(--text-muted);margin-top:8px">Opened via bottom-left Boards button — Sheets/Excel overlay pattern</p>
+      </div>
+
       <div class="wb-action-sheet" data-overlay="shapes">
         <h3>Shapes · PU-05</h3>
         <div class="wb-shapes-grid">
@@ -525,6 +541,21 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
       </div>
     </main>
   </div>
+
+  <footer class="wb-board-footer" aria-label="Board tabs">
+    <button class="wb-boards-list-btn" type="button" data-open-boards aria-label="All boards">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <span>Boards</span>
+    </button>
+    <div class="wb-board-tabs">
+      <div class="wb-board-tab-wrap wb-board-tab-wrap--active">
+        <button class="wb-board-tab"><span class="wb-board-tab__dot"></span>Board 1</button>
+      </div>
+      <div class="wb-board-tab-wrap"><button class="wb-board-tab">Board 2</button></div>
+      <div class="wb-board-tab-wrap"><button class="wb-board-tab">Ch.4 PDF</button></div>
+      <button class="wb-board-tab--add wb-tool-btn--tutor-only" title="Add board">+</button>
+    </div>
+  </footer>
 
   <div class="wb-bottom-bar">
     <div class="wb-props-mobile" data-props-bar>
@@ -590,9 +621,9 @@ function updateCanvasPct(shell,layout){
   let h=layout==='tablet'?TABLET_H:(phoneOrient==='landscape'?PHONE_LANDSCAPE.h:PHONE_PORTRAIT.h);
   const hidden=shell.hasAttribute('data-toolbar-hidden');
   const isPhoneLandscape=layout==='phone'&&phoneOrient==='landscape';
-  let propsBar=0,toolbar=0;
+  let propsBar=0,toolbar=0,boardFooter=36;
   if(!hidden&&!isPhoneLandscape){propsBar=40;toolbar=52}
-  const chrome=44+36+propsBar+toolbar;
+  const chrome=44+boardFooter+propsBar+toolbar;
   const pct=Math.round((h-chrome)/h*100);
   el.textContent='Canvas ~'+pct+'% (SR-01)';
 }
@@ -659,18 +690,23 @@ function applyMockStateToShell(shell,state){
   const props=shell.querySelector('[data-overlay="props"]');
   const overflow=shell.querySelector('[data-overlay="overflow"]');
   const shapes=shell.querySelector('[data-overlay="shapes"]');
+  const boards=shell.querySelector('[data-overlay="boards"]');
   shell.removeAttribute('data-grid-on');
   shell.removeAttribute('data-toolbar-hidden');
-  [backdrop,props,overflow,shapes].forEach(el=>{if(el)el.classList.remove('wb-overlay-backdrop--open','wb-props-sheet--open','wb-action-sheet--open')});
+  shell.removeAttribute('data-boards-collapsed');
+  [backdrop,props,overflow,shapes,boards].forEach(el=>{if(el)el.classList.remove('wb-overlay-backdrop--open','wb-props-sheet--open','wb-action-sheet--open')});
   updatePanelToggleUI(shell);
   if(state==='live'){updateCanvasPct(shell,shell.classList.contains('tablet-layout')?'tablet':'phone');return}
   if(state==='grid'){shell.setAttribute('data-grid-on','');updateCanvasPct(shell,shell.classList.contains('tablet-layout')?'tablet':'phone');return}
   if(state==='toolbar-hidden'){shell.setAttribute('data-toolbar-hidden','');updatePanelToggleUI(shell);updateCanvasPct(shell,shell.classList.contains('tablet-layout')?'tablet':'phone');return}
+  if(state==='boards-collapsed'){shell.setAttribute('data-boards-collapsed','');updateCanvasPct(shell,shell.classList.contains('tablet-layout')?'tablet':'phone');return}
   if(backdrop)backdrop.classList.add('wb-overlay-backdrop--open');
   if(state==='props'&&props){
     props.classList.add('wb-props-sheet--open');
   }else if(state==='overflow'&&overflow){
     overflow.classList.add('wb-action-sheet--open');
+  }else if(state==='boards'&&boards){
+    boards.classList.add('wb-action-sheet--open');
   }else if(state==='shapes'&&shapes){
     shapes.classList.add('wb-action-sheet--open');
   }
