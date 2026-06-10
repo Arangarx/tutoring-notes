@@ -107,7 +107,7 @@ export function WbTopBarMicControl({
 
       <button
         type="button"
-        className={`mynk-wb-tb-btn${isMicMuted ? " mynk-wb-tb-btn--mic-muted" : ""}`}
+        className={`mynk-wb-tb-btn${isMicMuted ? " mynk-wb-tb-btn--mic-off" : " mynk-wb-tb-btn--mic-on"}`}
         title={isMicMuted ? "Unmute microphone" : "Microphone — click to mute"}
         onClick={() => void handleMainClick()}
         disabled={disabled}

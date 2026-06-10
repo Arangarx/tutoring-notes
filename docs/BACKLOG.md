@@ -20,6 +20,7 @@ Not in priority order within sections — that comes when items move to a sprint
 | **A4 Slice-C: TURN credential path** | Medium | TURN server integration for NAT traversal reliability. |
 | **Playwright split-brain injection test** | Medium | Inject a simulated WebRTC drop in a test to verify the split-brain banner and recording pause behavior. |
 | **Share ▾ options expansion** | Low | Current Share ▾ dropdown has only "Copy student join link". Consider adding QR code or email options. |
+| **Equation legibility on white PDF in dark mode** | Post-V1 / revisit | **Andrew decision 2026-06-09 — DEFER.** Inserted math equations store dark ink; Excalidraw dark-mode inversion renders white glyphs — fine on the dark canvas, **invisible over a white PDF page**. Light mode (black glyphs) is fine over PDF. Frequency unknown; do not force always-black in dark mode now. **Candidate revisit:** black glyphs on a small light/white rounded backing plate so equations read on any background. |
 
 ### Graphing tool swap: Desmos → self-hosted JSXGraph (next branch after chrome-redo merge)
 
