@@ -14,6 +14,7 @@ import {
   WB_STROKE_PRESETS,
   WB_STROKE_WIDTHS,
 } from "@/styles/token-values";
+import { StrokeWidthIcon } from "@/components/whiteboard/chrome/wb-icons";
 
 export type WbStrokePropsPanelProps = {
   strokeColor: string;
@@ -87,20 +88,6 @@ const ROUGHNESS_OPTIONS = [
   { value: 1 as const, label: "Artist" },
   { value: 2 as const, label: "Cartoon" },
 ];
-
-/**
- * Stroke-width preview icon — diagonal line at visibly different weight so
- * the button reads as "a stroke of this thickness," not a divider.
- * lineH values (1/2/3/5) are mapped to scaled SVG stroke-widths.
- */
-const StrokeWidthIcon = ({ lineH }: { lineH: number }) => {
-  const svgW = lineH <= 1 ? 1.25 : lineH <= 2 ? 2.5 : lineH <= 3 ? 4 : 6.5;
-  return (
-    <svg width={18} height={18} viewBox="0 0 18 18" fill="none" aria-hidden style={{ display: "block" }}>
-      <line x1="3" y1="15" x2="15" y2="3" stroke="currentColor" strokeWidth={svgW} strokeLinecap="round" />
-    </svg>
-  );
-};
 
 /**
  * Edge sharpness icons — L-corner glyphs that read unambiguously as

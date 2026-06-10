@@ -166,9 +166,14 @@
   position: relative;
 }
 
-.mynk-wb-tool-btn:hover {
-  background: var(--surface-2);
+.mynk-wb-tool-btn:not(.mynk-wb-tool-btn--active):hover {
+  background: color-mix(in srgb, var(--surface-3) 75%, var(--foreground) 25%);
   color: var(--foreground);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 50%, var(--foreground) 50%);
+}
+
+.mynk-wb-tool-btn:not(.mynk-wb-tool-btn--active):hover svg {
+  filter: brightness(1.12);
 }
 
 /* Active tool: inverse colors (mock .rec-tool.is-active).
@@ -298,9 +303,14 @@
   flex-shrink: 0;
 }
 
-.mynk-wb-tb-btn:hover:not(:disabled) {
-  background: var(--surface-2);
+.mynk-wb-tb-btn:hover:not(:disabled):not(.mynk-wb-tb-btn--primary):not(.mynk-wb-tb-btn--copied) {
+  background: color-mix(in srgb, var(--surface-3) 75%, var(--foreground) 25%);
   color: var(--foreground);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 50%, var(--foreground) 50%);
+}
+
+.mynk-wb-tb-btn:hover:not(:disabled):not(.mynk-wb-tb-btn--primary):not(.mynk-wb-tb-btn--copied) svg {
+  filter: brightness(1.12);
 }
 
 .mynk-wb-tb-btn--icon {
@@ -675,14 +685,21 @@
 .mynk-wb-summary-stroke {
   display: flex;
   align-items: center;
+  justify-content: center;
   width: 28px;
   height: 18px;
+  flex-shrink: 0;
+  color: var(--foreground);
+}
+
+.mynk-wb-props-compact--open .mynk-wb-props-compact__summary .mynk-wb-summary-stroke {
+  color: var(--background);
 }
 
 .mynk-wb-summary-stroke-line {
   display: block;
   width: 100%;
-  background: var(--foreground);
+  background: currentColor;
   border-radius: 1px;
 }
 
@@ -811,12 +828,15 @@
 
 .mynk-wb-pulldown-chevron {
   position: absolute;
-  right: 3px;
-  bottom: 3px;
+  right: 1px;
+  bottom: 1px;
+  min-width: 14px;
+  padding: 2px 3px;
   font-size: 7px;
   color: var(--text-muted);
   line-height: 1;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
 }
 
 /* ΓöÇΓöÇ Board tab strip — SR-14 ΓöÇΓöÇ */

@@ -144,7 +144,13 @@ import {
   triggerBringToFront,
   triggerDeleteSelected,
 } from "@/lib/whiteboard/undo-redo";
-import { EXCALIDRAW_STROKE_HEX, EXCALIDRAW_STROKE_DARK_HEX } from "@/styles/token-values";
+import {
+  EXCALIDRAW_STROKE_HEX,
+  EXCALIDRAW_STROKE_DARK_HEX,
+  inkDisplayHex,
+  WB_STROKE_WIDTHS,
+} from "@/styles/token-values";
+import { StrokeWidthIcon } from "@/components/whiteboard/chrome/wb-icons";
 import "./whiteboard-chrome.css";
 import { ExcalidrawDynamic } from "@/components/whiteboard/ExcalidrawDynamic";
 import { WhiteboardDebugHud } from "@/components/whiteboard/WhiteboardDebugHud";
@@ -3577,14 +3583,15 @@ export function WhiteboardWorkspaceClient({
       >
         <span
           className="mynk-wb-summary-swatch"
-          style={{ backgroundColor: strokeColor }}
+          style={{
+            backgroundColor: inkDisplayHex(strokeColor, excalidrawTheme),
+          }}
         />
         <span className="mynk-wb-summary-stroke" aria-hidden>
-          <span
-            className="mynk-wb-summary-stroke-line"
-            style={{
-              height: `${Math.min(4, Math.max(0.5, strokeWidth))}px`,
-            }}
+          <StrokeWidthIcon
+            lineH={
+              WB_STROKE_WIDTHS.find((w) => w.value === strokeWidth)?.lineH ?? 2
+            }
           />
         </span>
         <span
@@ -4339,7 +4346,12 @@ export function WhiteboardWorkspaceClient({
             }}
             aria-label="Stroke properties — tap to expand"
           >
-            <span className="mynk-wb-summary-swatch" style={{ backgroundColor: strokeColor }} />
+            <span
+              className="mynk-wb-summary-swatch"
+              style={{
+                backgroundColor: inkDisplayHex(strokeColor, excalidrawTheme),
+              }}
+            />
             <span
               className="mynk-wb-summary-chip"
               title={roughnessLabel}

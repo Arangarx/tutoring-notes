@@ -139,8 +139,15 @@ export function MathInsertButton({
   const [mathLiveReady, setMathLiveReady] = useState(false);
   /** Bumps once per open transition so each dialog open gets a fresh <math-field>. */
   const [openCount, setOpenCount] = useState(0);
+  /** True once the portal host div is attached — gates field mount on every open. */
+  const [hostReady, setHostReady] = useState(false);
   const fieldHostRef = useRef<HTMLDivElement | null>(null);
   const fieldRef = useRef<HTMLElement | null>(null);
+
+  const fieldHostCallbackRef = useCallback((node: HTMLDivElement | null) => {
+    fieldHostRef.current = node;
+    setHostReady(node !== null);
+  }, []);
 
   // True whenever the dialog is visible (open / rendering / error / success).
   // Used as a deps primitive so the field-mount effect only fires when the
@@ -148,6 +155,10 @@ export function MathInsertButton({
   // (open → rendering → success), which would needlessly tear-down and
   // recreate the MathLive custom element and corrupt its singleton keyboard.
   const dialogIsOpen = state.kind !== "closed";
+
+  useEffect(() => {
+    if (!dialogIsOpen) setHostReady(false);
+  }, [dialogIsOpen]);
 
   // Lazy-load MathLive when the dialog first opens. Subsequent opens
   // reuse the registered custom element.
@@ -233,6 +244,7 @@ export function MathInsertButton({
   useEffect(() => {
     if (!mathLiveReady) return;
     if (!dialogIsOpen) return;
+    if (!hostReady) return;
     const host = fieldHostRef.current;
     if (!host) return;
     const field = document.createElement("math-field");
@@ -240,6 +252,11 @@ export function MathInsertButton({
     field.setAttribute("aria-label", "Equation editor");
     if (latex) field.setAttribute("value", latex);
     host.appendChild(field);
+    try {
+      window.customElements?.upgrade?.(field);
+    } catch {
+      // ignore — upgrade is belt-and-suspenders after append
+    }
     fieldRef.current = field;
     const onInput = () => {
       const v = (field as unknown as { value?: string }).value ?? "";
@@ -269,7 +286,7 @@ export function MathInsertButton({
     // We intentionally exclude `latex` from the deps: re-mounting on
     // every keystroke would steal focus + lose cursor position.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mathLiveReady, dialogIsOpen, openCount]);
+  }, [mathLiveReady, dialogIsOpen, openCount, hostReady]);
 
   const close = useCallback(() => {
     setState({ kind: "closed" });
@@ -387,7 +404,7 @@ export function MathInsertButton({
             )}
 
             <div
-              ref={fieldHostRef}
+              ref={fieldHostCallbackRef}
               style={{
                 border: "1px solid var(--border-default)",
                 borderRadius: 8,

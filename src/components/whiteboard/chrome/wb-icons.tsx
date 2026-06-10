@@ -214,3 +214,37 @@ export function shapeIconFor(type: string, size = 16) {
   const Icon = found?.Icon ?? WbIconLine;
   return <Icon size={size} />;
 }
+
+/**
+ * Stroke-width preview — diagonal line at visibly different weight so the
+ * glyph reads as thickness, not a divider. lineH maps to WB_STROKE_WIDTHS presets.
+ */
+export function StrokeWidthIcon({
+  lineH,
+  size = 18,
+}: {
+  lineH: number;
+  size?: number;
+}) {
+  const svgW = lineH <= 1 ? 2 : lineH <= 2 ? 3.25 : lineH <= 3 ? 5 : 7.5;
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 18 18"
+      fill="none"
+      aria-hidden
+      style={{ display: "block" }}
+    >
+      <line
+        x1="2.5"
+        y1="15.5"
+        x2="15.5"
+        y2="2.5"
+        stroke="currentColor"
+        strokeWidth={svgW}
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}

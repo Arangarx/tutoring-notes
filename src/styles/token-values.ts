@@ -15,6 +15,19 @@ export const EXCALIDRAW_STROKE_HEX = "#1e293b";
 /** Default stroke in dark mode (white, visible on dark Excalidraw canvas). */
 export const EXCALIDRAW_STROKE_DARK_HEX = "#ffffff";
 
+/** Theme-adaptive display hex for ink summary swatches (stored value stays #1e293b). */
+export function inkDisplayHex(
+  strokeColor: string,
+  excalidrawTheme: "light" | "dark"
+): string {
+  if (strokeColor === EXCALIDRAW_STROKE_HEX) {
+    return excalidrawTheme === "dark"
+      ? EXCALIDRAW_STROKE_DARK_HEX
+      : EXCALIDRAW_STROKE_HEX;
+  }
+  return strokeColor;
+}
+
 /** Edge OG ImageResponse cannot resolve CSS variables. */
 export const FAVICON_BRAND_BG = "#7c5cff";
 
