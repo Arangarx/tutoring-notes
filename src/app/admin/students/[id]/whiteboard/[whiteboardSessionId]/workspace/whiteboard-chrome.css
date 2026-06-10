@@ -201,6 +201,12 @@
   position: relative;
   min-width: 0;
   overflow: hidden;
+  background-color: var(--board-paper);
+  background-image: radial-gradient(
+    ellipse 120% 100% at 50% 50%,
+    transparent 55%,
+    var(--board-paper-vignette) 100%
+  );
 }
 
 /* Ensure Excalidraw fills canvas host */
@@ -1252,29 +1258,35 @@
 
 /* ΓöÇΓöÇ Responsive layout modes ΓöÇΓöÇ */
 .mynk-wb-chrome[data-layout="narrow"] .mynk-wb-strip,
-.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-strip {
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-strip,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-strip {
   display: none;
 }
 
 .mynk-wb-chrome[data-layout="narrow"] .mynk-wb-bottom-toolbar,
-.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-bottom-toolbar {
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-bottom-toolbar,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-bottom-toolbar {
   display: flex;
 }
 
 .mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-sidebar,
 .mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-sidebar,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-props-sidebar,
 .mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-compact,
-.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-compact {
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-compact,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-props-compact {
   display: none;
 }
 
 .mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-mobile-bar,
-.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-mobile-bar {
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-mobile-bar,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-props-mobile-bar {
   display: block;
 }
 
 .mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-sheet,
-.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-sheet {
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-sheet,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-props-sheet {
   display: flex;
   flex-direction: column;
 }

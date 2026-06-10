@@ -605,8 +605,9 @@ export function WhiteboardWorkspaceClient({
   const [gridEnabled, setGridEnabled] = useState(false);
   const [roughness, setRoughness] = useState(0);
   const [roundness, setRoundness] = useState<"sharp" | "round">("sharp");
-  const layoutMode = useWbLayoutMode();
+  const { layoutMode, orientation } = useWbLayoutMode();
   const touchLayout = isTouchLayout(layoutMode);
+  const [toolbarHidden] = useState(false);
   // Stroke props — tracked from Excalidraw onChange (appState).
   // Always initialize to EXCALIDRAW_STROKE_HEX (#1e293b) in both themes.
   // Excalidraw's dark-mode canvas filter (invert+hue-rotate) automatically
@@ -3866,6 +3867,8 @@ export function WhiteboardWorkspaceClient({
       className="mynk-wb-chrome"
       data-testid="mynk-wb-chrome"
       data-layout={layoutMode}
+      data-orientation={orientation}
+      data-toolbar-hidden={toolbarHidden ? "true" : "false"}
       onClick={() => {
         setOpenMenu(null);
         if (touchLayout) dismissTouchProps();
