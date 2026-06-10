@@ -621,13 +621,19 @@ test.describe("wb chrome — interactive controls", () => {
     await drawTestStrokeOnRole(page, "tutor", "ink-dark-stroke", 300, 300, 400, 400);
     await waitForElementOnPeer(page, "tutor", "ink-dark-stroke");
 
-    const strokeColorOnCanvas = await page.evaluate(() => {
-      const api = (window as Record<string, unknown>).__wbE2eBridge?.tutor;
-      if (!api) return null;
-      const els = api.getSceneElements?.() ?? [];
-      const el = (els as Array<Record<string, unknown>>).find((e) => e.id === "ink-dark-stroke");
-      return el ? (el.strokeColor as string) : null;
-    });
+    const strokeColorOnCanvas = await page.evaluate((strokeId) => {
+      const bridge = (
+        window as Window & {
+          __TN_WB_E2E__?: Record<
+            string,
+            { getElements: () => Array<{ id: string; strokeColor?: string }> }
+          >;
+        }
+      ).__TN_WB_E2E__?.tutor;
+      if (!bridge?.getElements) return null;
+      const el = bridge.getElements().find((e) => e.id === strokeId);
+      return el?.strokeColor ?? null;
+    }, "ink-dark-stroke");
 
     expect(strokeColorOnCanvas).toBe("#ffffff");
 
