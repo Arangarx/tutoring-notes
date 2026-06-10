@@ -15,6 +15,16 @@
 > 6. [`docs/RECORDER-LIFECYCLE.md`](../RECORDER-LIFECYCLE.md) — FSM/outbox/atomic end-session pillars
 > 7. [`docs/LIVE-AV.md`](../LIVE-AV.md) — live A/V + sync architecture, E2E key model
 
+### Decisions resolved 2026-06-10 (Andrew)
+
+| # | Decision | Outcome |
+|---|---|---|
+| **OQ-1** | Phase 1 cut-point for unclaimed students | **Hard auth-wall** — `/s/[token]` requires AccountHolder or learner session for **all** students; no anonymous fallback. Phase 1 **must** ship a one-time family onboarding/claim flow + cutover plan before the wall goes up. |
+| **OQ-2** | E2E key delivery for Phase 2 | **Option A chosen** — fragment URL (`/join/<sessionId>#k=<key>`) + required learner auth; relay-blind E2E preserved; no server-side key storage. Option B considered and rejected for V1 (server-mediated key delivery would break relay-blind E2E for no practical privacy gain). |
+| **OQ-3** | Key re-entry after login redirect | **Accept + keep-link-valid + fragment-preservation** — join link stays valid for the whole live session; close the login-redirect fragment-strip failure with client-side `sessionStorage` capture/restore of `location.hash`. |
+
+See §8 for full resolution notes. Phase sections below reflect these calls.
+
 ---
 
 ## §1. Provenance + Decision
@@ -34,11 +44,12 @@ Live session join must also require authentication. Given that (a) `allowAudioRe
 | Decision | Value |
 |---|---|
 | **Primary path** | Everyone logs in. Anonymous no-login access is deprecated as the primary path. |
-| **Phase 1** | Notes-login: `/s/[token]` and `/s/[token]/all` require AccountHolder or learner authentication before showing notes. Lower risk, satisfies Sarah's hard ask. Ships first. |
-| **Phase 2** | Session-login: `/join/[sessionId]` replaces anonymous `/w/[joinToken]` as the primary live-session entry point for authenticated learners. The harder piece — the E2E key (see §4). |
+| **Phase 1** | Notes-login: `/s/[token]` and `/s/[token]/all` require AccountHolder or learner authentication before showing notes — **for all students, including unclaimed**. Lower risk entry point, satisfies Sarah's hard ask. Ships first. **Includes** a one-time family onboarding/claim flow so existing pilot families are credentialed before the wall goes up. |
+| **Phase 2** | Session-login: `/join/[sessionId]` replaces anonymous `/w/[joinToken]` as the primary live-session entry point for authenticated learners. Consolidated with Gate A2 waiting room (one route). E2E key via Option A (fragment URL). |
 | **Sequencing** | Phase 1 before Phase 2. Phase 1 does not depend on `SessionParticipant`; Phase 2 does. |
-| **Low-friction credential path** | Magic-link / first-click "claim your account" onboarding CTA. Framed as good onboarding, not a privacy compromise. |
-| **Anonymous fallback** | Anonymous tokens (`ShareLink`, `WhiteboardJoinToken`) remain as fallback **only for unclaimed students** until the 90-day post-V1 sunset (Q-CGC-3 recommendation). This is a transition period, not a permanent path. |
+| **Low-friction credential path** | Magic-link / first-click "claim your account" onboarding — **not** "invent a password from nothing." Framed as good onboarding, not a privacy compromise. |
+| **Anonymous fallback (notes)** | **None.** Hard auth-wall for all students at `/s/[token]`. The draft's anonymous fallback for unclaimed students was rejected (OQ-1) because it would not meet Sarah's requirement. Cutover mitigated by tutor-initiated claim invites + grace window (§3.5). |
+| **Anonymous fallback (live join)** | `/w/[joinToken]` retained **only** for unclaimed students in Phase 2 live sessions until families are claimed; claimed students use `/join/[sessionId]`. Distinct from notes — notes wall is universal in Phase 1. |
 
 ---
 
@@ -76,13 +87,27 @@ The AES-GCM-256 whiteboard encryption key is **generated entirely client-side** 
 
 The relay-blind E2E property means: **relay compromise cannot read session content.** It does not mean our server is blind to session content — our server processes everything for AI notes generation.
 
+### 2.6 Existing claim/onboarding infrastructure (tie-in for Phase 1)
+
+Phase 1 onboarding reuses infrastructure already in the identity stack:
+
+| Piece | Location | Role in onboarding |
+|---|---|---|
+| **Claim invite mint** | `POST /api/students/[studentId]/claim-invites` + `ClaimInviteSection` on tutor student-detail | Tutor sends parent a magic link to `/claim/<token>` |
+| **Claim flow** | `/claim/[token]` → `ClaimAuthGate` → `/claim/[token]/setup` (`CredentialSetupForm`) | Parent creates AccountHolder (or logs in) and links `LearnerProfile` to `Student` |
+| **Connected parent visibility** | `ConnectedParentSection` on tutor student-detail | Tutor sees which account claimed; can disconnect (IAC-13) |
+| **AccountHolder realm** | `/account/login`, `/account/dashboard` | Parent session for notes access post-claim |
+| **Learner PIN** | `/students/login` | Learner session for notes access (child principal) |
+
 ---
 
 ## §3. Phase 1 — Notes-Login
 
 ### 3.1 The problem
 
-`/s/[token]/page.tsx` renders all non-DRAFT notes for a student with zero auth. A parent who receives the share link email can bookmark it and revisit indefinitely. The token never expires. Any person who intercepts the email link also gets access. For claimed students with real `LearnerProfile` rows, this violates Sarah's explicit requirement.
+`/s/[token]/page.tsx` renders all non-DRAFT notes for a student with zero auth. A parent who receives the share link email can bookmark it and revisit indefinitely. The token never expires. Any person who intercepts the email link also gets access. This violates Sarah's explicit requirement regardless of whether the student has been claimed.
+
+**Cutover consequence (OQ-1):** At wall activation, any of Sarah's current families **without** an `AccountHolder` account lose note access until they complete claim onboarding. Phase 1 scope **must** include getting those families credentialed first.
 
 ### 3.2 Auth gate design
 
@@ -90,27 +115,31 @@ Two principals are authorized to view notes for a student:
 1. **AccountHolder (parent/guardian):** must own the `LearnerProfile` linked to the `Student`
 2. **LearnerProfile (learner):** must be the learner linked to the `Student`
 
-Gate logic for `/s/[token]`:
+Gate logic for `/s/[token]` — **hard wall, no anonymous path:**
 
 ```
 ShareLink.token → ShareLink.studentId
   → Student { learnerProfileId, adminUserId }
 
-if Student.learnerProfileId IS NULL:
-  → unclaimed student → allow anonymous access (fallback; show "claim your account" CTA)
-
-if Student.learnerProfileId IS NOT NULL:
-  → claimed student → require auth:
-    if mynk_ah_session present:
-      → getAccountHolderSession(req) → ahSession
-      → assertOwnsLearnerProfile(ahSession.accountHolderId, student.learnerProfileId) → grants access
-    else if mynk_learner_session present:
-      → getLearnerSession(req) → learnerSession
-      → assert learnerSession.learnerProfileId === student.learnerProfileId → grants access
-    else:
-      → redirect to /account/login?returnTo=/s/<token>&source=notes
-        (parent path; the email goes to the parent, so parent auth is the primary case)
+→ require auth (ALL students — claimed and unclaimed):
+  if mynk_ah_session present:
+    → getAccountHolderSession(req) → ahSession
+    → if student.learnerProfileId IS NOT NULL:
+        → assertOwnsLearnerProfile(ahSession.accountHolderId, student.learnerProfileId) → grants access
+    → else (unclaimed — parent has no LearnerProfile link yet):
+        → 403 / "claim required" screen with CTA to complete claim flow
+  else if mynk_learner_session present:
+    → getLearnerSession(req) → learnerSession
+    → if student.learnerProfileId IS NOT NULL:
+        → assert learnerSession.learnerProfileId === student.learnerProfileId → grants access
+    → else:
+        → 403 / "claim required"
+  else:
+    → redirect to /account/login?returnTo=/s/<token>&source=notes
+      (parent path; the email goes to the parent, so parent auth is the primary case)
 ```
+
+**Unclaimed students:** notes are **not** served anonymously. The parent must complete the claim flow (§3.5) so `Student.learnerProfileId` is set and `assertOwnsLearnerProfile` can succeed.
 
 ### 3.3 New helper: `assertCanAccessShareLink`
 
@@ -120,8 +149,8 @@ New file: `src/lib/share-access-scope.ts`
 /**
  * Asserts that the requesting principal has read access to the share page
  * for the given student. Returns the access verdict + student data on success;
- * calls redirect() on unauthenticated; returns { anonymous: true } for
- * unclaimed students (fallback path).
+ * calls redirect() on unauthenticated; calls notFound() or shows claim-required
+ * when student is unclaimed and principal cannot be authorized.
  *
  * Log prefix: sal= (share access log — see AGENTS.md)
  */
@@ -129,16 +158,15 @@ export async function assertCanAccessShareLink(
   req: NextRequest | Request,
   token: string,
 ): Promise<{
-  anonymous: boolean;
   studentId: string;
-  learnerProfileId: string | null;
+  learnerProfileId: string;
 }>;
 ```
 
 **Log prefix:** `sal` (share access log). Key events:
 - `[sal] sal=<token:8> action=access_granted principal=account_holder|learner studentId=<id>`
 - `[sal] sal=<token:8> action=access_denied_redirect studentId=<id> reason=no_session`
-- `[sal] sal=<token:8> action=anonymous_fallback studentId=<id> reason=unclaimed`
+- `[sal] sal=<token:8> action=claim_required studentId=<id> reason=unclaimed`
 - `[sal] sal=<token:8> action=ownership_denied principal=account_holder accountHolderId=<id>`
 
 Register `sal` prefix in `AGENTS.md` § Conventions.
@@ -149,31 +177,65 @@ Register `sal` prefix in `AGENTS.md` § Conventions.
 - `sendUpdateEmail` continues to send `/s/<token>` URLs in notification emails — **the URL itself doesn't change**
 - The `/s/<token>` page changes: adds the auth gate above; the URL is now a "notes access link" that requires login, not a standalone anonymous view
 - **Email UX change:** the email body copy should update to: *"[Student] has a new session note from [Tutor]. Log in to view it: [notes link]"* rather than the current "here are the notes" framing. This is a copy change, not a functional change — the auth gate is the functional change.
-- Existing `ShareLink` rows continue to work after Phase 1 ships; claimed students will simply be prompted to log in on first click.
+- Existing `ShareLink` rows continue to work after Phase 1 ships; **all** clickers are prompted to log in (or claim) on first click.
 
-### 3.5 Parent low-friction credential path ("claim your account")
+### 3.5 Family onboarding + cutover plan (Phase 1 prerequisite)
 
-The email-to-notes flow for a parent who has never logged in:
+**Pilot scale:** Sarah + a handful of families. Manual tutor-driven onboarding is feasible and preferred over building self-serve discovery.
+
+#### 3.5.1 Who triggers onboarding
+
+**Primary path — tutor-initiated claim invite (existing flow):**
+
+1. Sarah (or any tutor) opens the student detail page (`/admin/students/[id]`).
+2. For each unclaimed student (`Student.learnerProfileId IS NULL`), tutor uses **ClaimInviteSection** → `POST /api/students/[studentId]/claim-invites`.
+3. Parent receives email (or tutor copies link) → `/claim/<token>`.
+4. Parent lands on `ClaimAuthGate`: create account or log in → `/claim/<token>/setup` sets credentials via magic-link-style first-click flow (not blank-slate password invention).
+5. On completion: `Student.learnerProfileId` is set; `ConnectedParentSection` shows the linked account.
+6. Tutor optionally sets learner PIN via existing learner-credential path so the child can also access notes.
+
+**Secondary path — parent self-claim from notes email (post-wall):**
+
+After the wall is up, a parent clicking `/s/<token>` without an account hits login → sees claim-required or signup with `returnTo` preserved. If a pending claim invite exists for that student, surface it: *"Your tutor sent you an invite — finish setting up your account."* Reuse `/claim/<token>` rather than inventing a parallel flow.
+
+#### 3.5.2 Low-friction credential rules
+
+- **Parents:** claim link (`/claim/<token>`) is the onboarding front door — account creation + child link in one guided flow. Password setup happens in `CredentialSetupForm` at `/claim/[token]/setup`, not as a cold signup from nothing.
+- **Learners:** after parent claim, tutor distributes PIN (`username@familyid`) for `/students/login` — existing IAC-7 path.
+- **No anonymous notes preview** as a teaser — the wall is the product posture Sarah asked for.
+
+#### 3.5.3 Cutover sequence (invite → grace → wall)
+
+| Step | Action | Duration / trigger |
+|---|---|---|
+| **1. Inventory** | Tutor identifies all active `Student` rows with `learnerProfileId IS NULL` (Sarah's current families). | Pre-deploy |
+| **2. Invite blast** | Tutor sends claim invite to each parent email on file; optional personal nudge (Sarah knows these families). | Deploy day −7 to −1 |
+| **3. Grace window** | Notes remain anonymously accessible **only during this window** via a feature flag (`NOTES_AUTH_WALL=false`). Parents can still click old links while claiming. Tutor dashboard shows claim status per student. | **7 days** (pilot-tunable; 7 days is default) |
+| **4. Wall activation** | Flip `NOTES_AUTH_WALL=true`. All `/s/[token]` routes enforce §3.2 gate. Unclaimed students show claim-required, not notes. | End of grace |
+| **5. Straggler support** | Tutor re-sends claim invite; parent completes claim → immediate notes access. No data loss — notes exist server-side, only the read gate changed. | Ongoing |
+
+**Why a grace flag instead of delaying Phase 1:** the auth gate code ships in Phase 1; the flag controls cutover timing so no parent is hard-locked without warning. Removing the flag (or setting it true) is the explicit "wall goes up" moment.
+
+#### 3.5.4 Parent email-to-notes flow (post-wall, claimed student)
 
 1. Parent receives note notification email → clicks link → `/s/<token>`
 2. Middleware detects no `mynk_ah_session` → redirect to `/account/login?returnTo=/s/<token>&source=notes_email`
 3. `/account/login` shows: **"See [Student]'s session notes — log in or create an account"** (the `source=notes_email` param triggers this welcome copy)
-4. Parent has no account → clicks "Create account" → `/account/signup?returnTo=/s/<token>`
-5. After signup + email verification → redirected to `/s/<token>` → notes shown
-6. If parent already has account: step 3 → login → step 5
-
-If the student is unclaimed (no `LearnerProfile`): notes show anonymously with a prominent **"Want to receive notifications and access notes anytime? Ask [Tutor] to set up your account."** CTA that links to a help article or a contact-tutor flow.
+4. Parent has account → login → redirected to `/s/<token>` → notes shown
+5. Parent has no account but claim invite pending → redirect/surface to `/claim/<token>`
 
 ### 3.6 Files touched
 
 | File | Change |
 |---|---|
-| `src/app/s/[token]/page.tsx` | Add `assertCanAccessShareLink(req, token)` call at top; handle unclaimed fallback |
+| `src/app/s/[token]/page.tsx` | Add `assertCanAccessShareLink(req, token)` call at top; claim-required for unclaimed |
 | `src/app/s/[token]/all/page.tsx` | Same gate |
 | `src/app/s/[token]/whiteboard/[whiteboardSessionId]/page.tsx` | Same gate (replay access) |
 | `src/middleware.ts` | Add cookie-presence check for `/s/` paths: if no `mynk_ah_session` AND no `mynk_learner_session`, redirect to login (UX optimization; handler is the real gate) |
 | `src/lib/share-access-scope.ts` | **New:** `assertCanAccessShareLink` helper |
 | `src/app/account/login/page.tsx` | Handle `source=notes_email` for welcome copy |
+| Tutor student-detail | Claim status badge for unclaimed students; prompt to send invite before wall date |
+| Env / feature flag | `NOTES_AUTH_WALL` (or equivalent) for grace-window cutover |
 | `AGENTS.md` | Register `sal` log prefix |
 
 ### 3.7 Account-level notes view for parents
@@ -199,16 +261,20 @@ This is effectively the same data as `/s/[token]` but via the parent's authentic
 
 | # | Criterion | Blocker? |
 |---|---|---|
-| **P1-AC-1** | Claimed student notes at `/s/[token]` without auth → redirect to login, not 200 | **BLOCKER** |
+| **P1-AC-1** | Notes at `/s/[token]` without auth → redirect to login, not 200 (**all** students) | **BLOCKER** |
 | **P1-AC-2** | Claimed student notes accessible with valid `mynk_ah_session` (parent owns learner) | REQUIRED |
 | **P1-AC-3** | Claimed student notes accessible with valid `mynk_learner_session` (correct learner) | REQUIRED |
-| **P1-AC-4** | Unclaimed student notes still accessible anonymously (fallback, no regression) | **BLOCKER** (regression guard) |
+| **P1-AC-4** | Unclaimed student notes **without** auth → redirect or claim-required, **not** anonymous 200 | **BLOCKER** |
 | **P1-AC-5** | AccountHolder B's session cannot access Student owned by AccountHolder A's child | **BLOCKER** (security) |
 | **P1-AC-6** | Learner session for learner A cannot access learner B's share page | **BLOCKER** (security) |
-| **P1-AC-7** | Email link flow: click → login → notes (returnTo preserved) | REQUIRED |
+| **P1-AC-7** | Email link flow: click → login → notes (`returnTo` preserved) | REQUIRED |
 | **P1-AC-8** | `sal=` log events emitted on access and denial | **BLOCKER** (observability) |
 | **P1-AC-9** | Revoked `ShareLink` returns 404 for all principals (unchanged behavior) | REQUIRED |
 | **P1-AC-10** | `/account/children/[learnerId]/notes` serves parent with valid AH session + owned learner | REQUIRED |
+| **P1-AC-11** | Tutor can mint claim invite from student detail; parent completes `/claim/<token>` flow; `Student.learnerProfileId` set | **BLOCKER** (onboarding) |
+| **P1-AC-12** | Grace-window flag: when off, anonymous notes still served; when on, wall enforced | **BLOCKER** (cutover) |
+| **P1-AC-13** | After wall on: unclaimed student `/s/[token]` shows claim-required CTA (not blank 404) | REQUIRED |
+| **P1-AC-14** | No anonymous note access remains anywhere in `/s/*` after wall activation | **BLOCKER** (Sarah requirement) |
 
 ---
 
@@ -281,14 +347,23 @@ Auth: getLearnerSession(req) → assertIsSessionParticipant(learnerSession.learn
 Renders: SessionLiveClient (new component wrapping the existing StudentWhiteboardClient logic)
 ```
 
+**Fragment preservation (OQ-3 — concrete sub-requirement):**
+
+Before any redirect to `/students/login` (middleware or page-level), client code MUST:
+1. If `window.location.hash` is non-empty, write it to `sessionStorage` under a namespaced key (e.g. `mynk_join_hash_<sessionId>`).
+2. After successful learner login, read and restore the hash onto `window.location` before the join page initializes the encryption key hook.
+
+This closes the login-redirect fragment-strip failure. The `returnTo` query param carries only the path (`/join/<sessionId>`); the fragment is recovered from `sessionStorage`, not the redirect URL.
+
+**Join link validity (OQ-3):** The join URL stays **valid for the entire live session** — session TTL good AND `endedAt == null`. No mid-session key invalidation. The auth wall (`SessionParticipant` + learner session), not key possession alone, is the gate; keeping the link live does not weaken Option A.
+
 **What happens to `/w/[joinToken]`:**
 - **Retained as fallback for unclaimed students** — the token IS the auth for anonymous learners (no `LearnerProfile`)
 - For claimed students: the tutor's "Copy student link" button in `WhiteboardWorkspaceClient.tsx` changes behavior:
   - If `student.learnerProfileId IS NOT NULL`: generate `/join/<sessionId>#k=<key>` (authenticated path)
   - If `student.learnerProfileId IS NULL`: generate `/w/<joinToken>#k=<key>` (anonymous fallback, same as today)
-- The anonymous path continues to work until the 90-day post-V1 sunset for unclaimed students
 
-### 4.5 The E2E key — threat model analysis and recommendation
+### 4.5 The E2E key — threat model analysis and decision
 
 #### What `#k=` actually protects and against whom
 
@@ -307,9 +382,9 @@ The whiteboard AES key is the ONE piece of session content our server does not s
 
 #### Options analysis
 
-**Option A — Fragment URL delivery with required login (recommended for V1)**
+**Option A — Fragment URL delivery with required login (CHOSEN for V1, OQ-2)**
 
-The new authenticated join URL is `/join/<sessionId>#k=<encryptionKey>`. The key continues to travel in the URL fragment (never sent to any server). The page requires a valid `mynk_learner_session` + `SessionParticipant` row.
+The authenticated join URL is `/join/<sessionId>#k=<encryptionKey>`. The key continues to travel in the URL fragment (never sent to any server). The page requires a valid `mynk_learner_session` + `SessionParticipant` row.
 
 What this achieves:
 - URL alone is insufficient (learner auth required) — stronger than today's anyone-with-link
@@ -321,22 +396,11 @@ What this doesn't solve:
 - If the learner shares the URL (with fragment) with another person who also has a valid learner session for the same `whiteboardSessionId`, that person could join. Mitigated by `SessionParticipant` check: only explicitly authorized learners can use the URL at all.
 - The URL fragment remains a bearer token for the key. In V1 the threat model (stranger intercepts URL) is substantially mitigated by requiring auth.
 
-**Option B — Server-mediated key delivery**
+**Option B — Server-mediated key delivery (considered and rejected for V1)**
 
 The tutor generates the key client-side AND registers it with the server via a server action (stored encrypted with a server secret at rest). An authenticated participant hits `/api/sessions/[sessionId]/key` and receives the decrypted key over TLS.
 
-What this achieves:
-- Learner only needs their PIN — no special URL with fragment required
-- Simpler UX for learner onboarding (PIN login → session list → tap session → in)
-
-What this costs:
-- The server now sees (and stores) the whiteboard session key
-- The relay-blind E2E property is lost — not because the relay sees the key, but because our server now knows it
-- Given that our server already processes everything else (audio, events, notes), this is not a meaningful regression in actual content access. But it does remove a principled architectural property.
-
-**Recommendation: Option A for V1** — Keep `#k=` fragment delivery. Require auth for the page. This preserves the relay-blind property without additional server-side key management, and is simpler to implement. The key is still tied to the session URL, but possession of the URL alone is now insufficient to join.
-
-**Option B trade-off for Andrew to sign off:** If simpler learner UX (learner just needs PIN, no special URL) outweighs the architectural cleanliness of relay-blind E2E, Option B is acceptable. The server already has comprehensive content access; withholding the relay key is a principled distinction but not a practical privacy improvement given Whisper/notes. See §8 Open Questions (OQ-2).
+Rejected because: server-side key storage breaks the relay-blind E2E architectural property for no practical privacy gain (our server already processes audio, events, and notes). Option A preserves relay-blind E2E at lower implementation cost.
 
 #### Implementation detail for Option A
 
@@ -351,7 +415,7 @@ to:
 
 The key generation and storage in `window.location.hash` is **unchanged**. Only the destination route changes.
 
-The `SessionLiveClient` (or updated `StudentWhiteboardClient`) extracts the key from `window.location.hash` exactly as today.
+The `SessionLiveClient` (or updated `StudentWhiteboardClient`) extracts the key from `window.location.hash` exactly as today, with fragment restoration from `sessionStorage` after login redirect (§4.4).
 
 ### 4.6 Learner dashboard (session discovery)
 
@@ -381,7 +445,7 @@ const participants = await db.sessionParticipant.findMany({
 });
 ```
 
-Session card shows: date, duration, tutor name, link to notes if `allowNoteSending=true` in the snapshot. Live sessions (no `endedAt`) show "Join session" CTA → `/join/<sessionId>#k=<key>` (but key delivery here is the open question — see §8 OQ-2).
+Session card shows: date, duration, tutor name, link to notes if `allowNoteSending=true` in the snapshot. Live sessions (no `endedAt`) show "Join session" CTA → `/join/<sessionId>#k=<key>` (tutor re-shares link or learner uses browser history — join link valid for whole session per OQ-3).
 
 ### 4.7 API auth seams requiring learner-session variants
 
@@ -404,7 +468,8 @@ All existing `joinToken`-authed paths continue to work for unclaimed students.
 | `src/lib/session-participant-scope.ts` | Replace stub with real DB query |
 | `src/app/admin/students/[id]/whiteboard/actions.ts` | `startWhiteboardSession` creates `SessionParticipant` row when `learnerProfileId` is set |
 | `src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceClient.tsx` | "Copy student link" branches on `student.learnerProfileId`: claimed → `/join/<sessionId>#k=<key>`, unclaimed → `/w/<joinToken>#k=<key>` |
-| `src/app/join/[sessionId]/page.tsx` | **New:** login-gated session page; `getLearnerSession` + `assertIsSessionParticipant`; renders live canvas |
+| `src/app/join/[sessionId]/page.tsx` | **New:** login-gated session page; `getLearnerSession` + `assertIsSessionParticipant`; fragment preservation; renders live canvas |
+| `src/app/students/login/page.tsx` (or shared auth util) | Restore `sessionStorage` hash after login when `returnTo` is `/join/*` |
 | `src/app/students/dashboard/page.tsx` | **New:** learner dashboard; lists sessions via `SessionParticipant` query |
 | `src/app/api/whiteboard/[sessionId]/join-timer/route.ts` | Add learner-session auth branch |
 | `src/app/api/sessions/[sessionId]/wb-asset/route.ts` | **New:** authenticated asset proxy for claimed learners |
@@ -424,6 +489,8 @@ All existing `joinToken`-authed paths continue to work for unclaimed students.
 | **P2-AC-7** | `SessionParticipant` rows created at session start when `learnerProfileId` is set | REQUIRED |
 | **P2-AC-8** | `join-timer` accessible via learner session (no token required for claimed learners) | REQUIRED |
 | **P2-AC-9** | `wb-asset` route accessible via learner session | REQUIRED |
+| **P2-AC-10** | Login redirect preserves `#k=` fragment via `sessionStorage` capture/restore | **BLOCKER** |
+| **P2-AC-11** | Join link remains valid while session live (`endedAt == null`); no mid-session invalidation | REQUIRED |
 
 ---
 
@@ -447,13 +514,13 @@ The authoritative source for which principal authorizes which resource.
 |---|---|---|---|
 | `Student`, `WhiteboardSession`, `SessionNote`, `SessionRecording`, `CostEvent` | **Tutor only** | `requireStudentScope` → `assertOwnsStudent` / `assertOwnsWhiteboardSession` | **Never** give learner or parent principal access through these guards. IAC-1. |
 | `LearnerProfile`, `ConsentRecord`, `AccountHolderSession`, device list | **Parent / AccountHolder** | `getAccountHolderSession` → `assertOwnsLearnerProfile` | Also: `assertOwnsConsentRecord` for consent mutation |
-| Session notes (read) | **Parent** (claimed learner) | `getAccountHolderSession` → `assertOwnsLearnerProfile` + check `allowNoteSending` | Phase 1 |
+| Session notes (read) | **Parent** (claimed learner) | `getAccountHolderSession` → `assertOwnsLearnerProfile` + check `allowNoteSending` | Phase 1 — **all** students require claim + auth |
 | Session notes (read) | **Learner** (own notes) | `getLearnerSession` → `learnerSession.learnerProfileId === student.learnerProfileId` | Phase 1 |
 | Live session join | **Learner** | `getLearnerSession` → `assertIsSessionParticipant` | Phase 2; never via `assertOwnsWhiteboardSession` |
 | `SessionParticipant` row creation | **Tutor** only | Inside `startWhiteboardSession` (tutor-authed server action) | Learner cannot create their own participant row |
 | Session content post-session (replay, recordings) | **Parent** (consent-gated) | `getAccountHolderSession` → `assertOwnsLearnerProfile` → check `SessionConsentSnapshot` | Phase 2+ |
 | Learner dashboard (session list) | **Learner** | `getLearnerSession` → query `SessionParticipant` by `learnerProfileId` | Phase 2 |
-| Admin impersonation | **Admin** only (operator realm) | Existing SEC-1 mechanism, NextAuth only | Never crosses into AccountHolder or LearnerProfile realm |
+| Admin impersonation | **Admin** only (operator realm) | Existing SEC-1 mechanism, NextAuth only | Never crosses into AccountHolder or LearnerRealm |
 
 ### 5.3 Multi-tenant safety invariants
 
@@ -477,12 +544,16 @@ The waiting-room (Gate-A2) and Phase 2 (session-login) share the same technical 
 | `/join/[sessionId]` route | The waiting room IS this route in `pending` state | Live session IS this route in `active` state |
 | `SessionConsentSnapshot` | Created at `startWhiteboardSession` | Gates recording + replay per learner |
 
-**Design principle: `/join/[sessionId]` is ONE route with multiple states:**
+**Design principle: `/join/[sessionId]` is ONE route with multiple states** (Phase 2 session-login == Gate A2 waiting room — not two routes):
 
 ```
 Learner loads /join/<sessionId>#k=<key>
   ↓
+[capture hash to sessionStorage if redirect to login needed]
+  ↓
 getLearnerSession + assertIsSessionParticipant
+  ↓
+[restore hash from sessionStorage after login if needed]
   ↓
 Fetch WhiteboardSession state
   ↓
@@ -511,19 +582,20 @@ if endedAt IS NOT NULL (ended):
 
 | Risk | Severity | Mitigation | Phase gate |
 |---|---|---|---|
-| Claimed student notes become inaccessible to existing parents who don't have accounts yet | **BLOCKER** | Unclaimed student fallback explicitly preserved (anonymous fallback until 90-day sunset). Phase 1 only gates claimed students. | P1 acceptance: test unclaimed path still serves notes |
+| Claimed student notes become inaccessible to existing parents who don't have accounts yet | **BLOCKER** | **Hard wall requires onboarding first.** Phase 1 ships tutor-initiated claim invites (`ClaimInviteSection` → `/claim/<token>`) + 7-day grace window (`NOTES_AUTH_WALL` flag) before wall activation. Tutor inventory of unclaimed students; straggler re-invite path. Pilot scale (handful of families) makes manual onboarding feasible. | P1-AC-11, P1-AC-12, P1-AC-14 |
 | `SessionParticipant` row missing for a claimed student → learner cannot join | **BLOCKER** | Row created inside `startWhiteboardSession` transaction (same transaction as session creation). If `learnerProfileId` is null, no row is created and no attempt to join is possible. | P2 acceptance: test participant row exists after session creation for claimed student |
 | `endWhiteboardSession` sets `leftAt` on `SessionParticipant` — if this fails, orphan open participant rows | MEDIUM | Use `updateMany` (not `update`) inside the atomic transaction — `updateMany` with `where: { whiteboardSessionId, leftAt: null }` is safe even if 0 rows match (no error). | P2 acceptance |
-| `assertCanAccessShareLink` rejects valid parent on tombstoned `LearnerProfile` | MEDIUM | If `learnerProfile.tombstonedAt IS NOT NULL`, `assertOwnsLearnerProfile` returns 404. Notes should fall back to anonymous unclaimed view in this edge case (tombstone effectively = unclaimed for access purposes). Add tombstone-to-unclaimed fallback in `assertCanAccessShareLink`. | P1 acceptance |
+| `assertCanAccessShareLink` rejects valid parent on tombstoned `LearnerProfile` | MEDIUM | If `learnerProfile.tombstonedAt IS NOT NULL`, `assertOwnsLearnerProfile` returns 404. Notes access denied; tutor must re-invite / reconnect. No anonymous fallback. | P1 acceptance |
 
 ### Axis 2 — Recovery / Durability
 
 | Risk | Severity | Mitigation | Phase gate |
 |---|---|---|---|
 | Learner `mynk_learner_session` cookie expires during a live session | **HIGH** | The `/join/[sessionId]` page is a client component. When the learner's session expires mid-session, the server component re-validates on navigation but NOT on the client-side WebRTC stream (which runs independently). The live session continues as long as the tab is open; only a page reload would trigger re-auth. The sync client is independent of the session cookie. This is acceptable behavior and does NOT drop the session. | Architectural invariant: sync is client-state, not request-per-frame |
-| Learner reloads the page after cookie expiry | HIGH | Reload triggers auth check → redirect to login with `returnTo=/join/<sessionId>` (no key — see below) → after login, redirect back. **Key loss on reload is a known limitation of fragment delivery**: the key is in the original URL but the `returnTo` does not carry the fragment (fragments are not preserved across redirects by HTTP spec). Login re-entry point needs to show "Return to your session: [link]" that the learner can tap to re-enter (must be the original URL, which their device likely still has in browser history). **OPEN QUESTION for Andrew:** see OQ-3. | P2 acceptance: test login recovery flow; document key-re-entry |
+| Learner reloads the page after cookie expiry | HIGH | Reload triggers auth check → redirect to login. **Mitigation (OQ-3 resolved):** client captures `location.hash` to `sessionStorage` before redirect; restores after login. Join link stays valid for whole live session. Mid-session reload with re-auth recovers the encryption key without tutor re-share. | P2-AC-10 |
 | Parent email link clicked on a different device than where they created their account | LOW | Standard cookie-based auth; parent logs in on new device normally. No session persistence concern beyond normal browser cross-device behavior. | Standard |
 | `sal=` log events emitted for all denied notes accesses | MEDIUM | Required for production debugging; without it, a parent reporting "can't see notes" cannot be diagnosed. | P1 BLOCKER-O1 |
+| Parent locked out at wall with no claim invite | **BLOCKER** | Grace window + tutor invite blast + claim-required screen with "contact your tutor" / re-send invite path. Tutor dashboard shows unclaimed status. | P1-AC-11, P1-AC-13 |
 
 ### Axis 3 — Concurrency
 
@@ -543,16 +615,19 @@ if endedAt IS NOT NULL (ended):
 | `ShareLink` revocation is honored even for authenticated principals | HIGH | If `shareLink.revokedAt IS NOT NULL`, return 404 regardless of session validity. The auth gate is layered ON TOP of the revocation check, not replacing it. |
 | Tutor cannot access `/join/<sessionId>` routes (wrong realm) | MEDIUM | Tutor NextAuth token → `/join/*` handler calls `getLearnerSession()` → null → redirect to learner login. The handler must NOT fall back to `getServerSession()`. |
 | No `learnerProfileId` on `WhiteboardSession` means learner lookup goes through `Student` | HIGH | Multi-tutor: `Student.learnerProfileId` is the bridge. `assertIsSessionParticipant` uses the `SessionParticipant` table (direct `learnerProfileId`), NOT the `Student` bridge. This is correct and avoids the bridge entirely for live-session auth. |
+| Anonymous notes access after wall activation | **BLOCKER** | Any `/s/[token]` without valid principal → redirect, not 200. Negative test for unclaimed student too. | P1-AC-14 |
 
 **BLOCKERs for Phase 1 acceptance (auth):**
-- `BLOCKER-P1-A1`: Negative test for claimed student notes without auth → redirect (not 200)
+- `BLOCKER-P1-A1`: Negative test for notes without auth → redirect (not 200) — all students
 - `BLOCKER-P1-A2`: Negative test for parent accessing notes for a student whose `learnerProfileId` belongs to a different AccountHolder → 404
 - `BLOCKER-P1-A3`: Negative test for learner A accessing share page for learner B's student → 404
+- `BLOCKER-P1-A4`: Negative test for unclaimed student notes without auth → not anonymous 200
 
 **BLOCKERs for Phase 2 acceptance (auth):**
 - `BLOCKER-P2-A1`: Negative test for learner A joining a session whose `SessionParticipant` row is for learner B → 404
 - `BLOCKER-P2-A2`: Negative test for AccountHolder (parent) session satisfying `/join/*` → 401/redirect to learner login
 - `BLOCKER-P2-A3`: Positive test for tutor's `StudentWhiteboardClient`-equivalent (no regression) — anonymous join still works via `/w/[joinToken]` for unclaimed students
+- `BLOCKER-P2-A4`: Fragment preserved across login redirect (`sessionStorage` round-trip)
 
 ### Axis 5 — Observability
 
@@ -560,7 +635,7 @@ if endedAt IS NOT NULL (ended):
 |---|---|---|---|
 | Notes access granted | `[sal] sal=<tok:8> action=access_granted principal=account_holder studentId=<id>` | `sal` | P1 |
 | Notes access denied (no session) | `[sal] sal=<tok:8> action=access_denied_redirect studentId=<id> reason=no_session` | `sal` | P1 |
-| Notes anonymous fallback (unclaimed) | `[sal] sal=<tok:8> action=anonymous_fallback studentId=<id> reason=unclaimed` | `sal` | P1 |
+| Notes claim required (unclaimed) | `[sal] sal=<tok:8> action=claim_required studentId=<id> reason=unclaimed` | `sal` | P1 |
 | Notes ownership denied | `[sal] sal=<tok:8> action=ownership_denied principal=<type> reason=wrong_owner` | `sal` | P1 |
 | Session join granted | `[lpr] lpr=<id> action=session_join_granted sessionId=<id>` | `lpr` | P2 |
 | Session join denied (no participant row) | `[lpr] lpr=<id> action=join_denied sessionId=<id> reason=not_participant` | `lpr` | P2 (already in stub) |
@@ -577,13 +652,13 @@ Register `sal` in `AGENTS.md` § Conventions.
 
 ## §8. Open Questions for Andrew
 
-These are the questions that cannot be resolved by recommendation alone.
+All questions resolved 2026-06-10. Kept for audit trail.
 
-| # | Question | Gates | Options | Context |
-|---|---|---|---|---|
-| **OQ-1** | **Phase 1 cut-point for unclaimed students:** when Phase 1 ships, should unclaimed student notes immediately show a "sign up to access" wall (no anonymous view), or continue to serve anonymously with a "claim your account" CTA? | P1 scope | (A) Anonymous view + CTA — softer transition, Sarah's families can still see notes before claiming. (B) Auth-wall immediately — harder but cleaner compliance posture. **Recommendation: A** (anonymous fallback for unclaimed, same as today; gate only claimed students) | The 90-day sunset gives families time to claim. Forcing auth on unclaimed students risks breaking Sarah's current workflow before families have accounts. |
-| **OQ-2** | **E2E key delivery for Phase 2 (relay-blind vs. server-mediated):** should V1 preserve relay-blind E2E (keep `#k=` in URL, require auth — Option A), or use server-mediated key delivery (server stores the key, serves it to authenticated participants — Option B)? | P2 implementation | Option A: relay-blind preserved, simpler implementation, key in shareable URL. Option B: simpler learner UX (PIN only, no special URL), server sees key but already sees everything else. **Recommendation: Option A for V1** — preserves the principled relay-blind property; URL sharing is already more constrained by the auth requirement. | Our server already processes audio/transcript/notes/events, so Option B doesn't materially change real privacy. But the relay-blind guarantee is meaningful architecture and cheap to preserve. If Andrew prefers frictionless learner UX (just PIN, no URL to share), Option B is acceptable. |
-| **OQ-3** | **Key re-entry after cookie expiry mid-session:** if a learner's `mynk_learner_session` cookie expires and they reload `/join/<sessionId>`, they are redirected to login. The browser's `returnTo` parameter cannot carry the URL fragment (HTTP spec). After login, the learner lands at `/join/<sessionId>` with no key — they need to get the key URL again from the tutor. Is this acceptable for V1, or should we implement a key re-delivery mechanism (e.g., the learner dashboard entry for an active session links to the full URL with fragment, so they can tap it again)? | P2 UX | (A) Accept: cookie expires during a live session only if the learner is idle for 90 days (sliding renewal), which doesn't happen during a session. The risk is effectively zero in practice. (B) Dashboard entry for active sessions includes the full key URL for recovery. **Recommendation: A** — 90-day session expiry makes mid-session expiry a non-event. | `LearnerDeviceSession` slides on each request. A learner actively in a session will never expire. Reload does re-validate the cookie (it's still valid during the session). The theoretical risk is only if the cookie was revoked by the parent mid-session (legitimate action; learner should be locked out). |
+| # | Question | Status | Resolution |
+|---|---|---|---|
+| **OQ-1** | **Phase 1 cut-point for unclaimed students:** when Phase 1 ships, should unclaimed student notes immediately show a "sign up to access" wall (no anonymous view), or continue to serve anonymously with a "claim your account" CTA? | **RESOLVED** | **Hard auth-wall (Option B).** All students require AccountHolder or learner session for `/s/[token]`. No anonymous fallback. Phase 1 MUST include one-time family onboarding (tutor-initiated claim invites via existing `/claim/<token>` flow) + grace window (`NOTES_AUTH_WALL` flag) before wall activation. See §3.5. Sarah's requirement is the driver; Andrew ratified. |
+| **OQ-2** | **E2E key delivery for Phase 2 (relay-blind vs. server-mediated):** should V1 preserve relay-blind E2E (keep `#k=` in URL, require auth — Option A), or use server-mediated key delivery (server stores the key, serves it to authenticated participants — Option B)? | **RESOLVED** | **Option A chosen.** Fragment URL (`/join/<sessionId>#k=<key>`) + required learner auth; relay-blind E2E preserved; no server-side key storage. Option B considered and rejected for V1 — breaks relay-blind E2E for no practical privacy gain. See §4.5. |
+| **OQ-3** | **Key re-entry after cookie expiry mid-session:** if a learner's `mynk_learner_session` cookie expires and they reload `/join/<sessionId>`, they are redirected to login. The browser's `returnTo` parameter cannot carry the URL fragment (HTTP spec). After login, the learner lands at `/join/<sessionId>` with no key — they need to get the key URL again from the tutor. Is this acceptable for V1, or should we implement a key re-delivery mechanism? | **RESOLVED** | **Accept + keep-link-valid + fragment-preservation.** (a) Join link stays valid for the whole live session (`endedAt == null`); auth wall is the gate, not key invalidation. (b) Close login-redirect fragment-strip with client-side `sessionStorage` capture/restore of `location.hash` before/after auth. See §4.4. Mid-session reload edge case is a non-event. |
 
 ---
 
@@ -603,7 +678,7 @@ The `startedAt DateTime?` column on `WhiteboardSession` (from session-lifecycle-
 
 | Prefix | Scope | Register in |
 |---|---|---|
-| `sal` | Share-link access: granted, denied, anonymous fallback, ownership denied | `AGENTS.md` § Conventions + `RECORDER-LIFECYCLE.md` cheat sheet |
+| `sal` | Share-link access: granted, denied, claim-required, ownership denied | `AGENTS.md` § Conventions + `RECORDER-LIFECYCLE.md` cheat sheet |
 
 Collision check against existing registry (`rid`, `wbsid`, `wba`, `obx`, `dft`, `snp`, `pvw`, `pvs`, `avx`, `cev`, `blb`, `brs`, `imp`, `tfa`, `lpr`, `nsi`, `rol`, `ahx`, `clm`, `cns`, `slc`, `wtr`, `alr`, `tfr`):
 **No collision.**
@@ -614,8 +689,8 @@ Collision check against existing registry (`rid`, `wbsid`, `wba`, `obx`, `dft`, 
 
 | Phase | Prerequisites | What ships | Gate |
 |---|---|---|---|
-| **Phase 1 — Notes-login** | `AccountHolderSession` + `LearnerDeviceSession` auth (P2a already merged or ready) | `/s/[token]` auth gate; `assertCanAccessShareLink`; `/account/children/[learnerId]/notes`; `sal=` logging; email copy update | Sarah's notes-must-require-login requirement |
-| **Phase 2 — Session-login** | Phase 1 complete; `SessionParticipant` model in schema | Real `assertIsSessionParticipant`; `/join/[sessionId]` route (waiting room + live); learner dashboard; learner-session variants for `join-timer` + `wb-asset` + `upload/blob`; "Copy student link" branch | Gate A2 (waiting room) + consent model correctness |
+| **Phase 1 — Notes-login** | `AccountHolderSession` + `LearnerDeviceSession` auth (P2a already merged or ready); existing claim-invite flow | Hard auth-wall on `/s/[token]` (all students); `assertCanAccessShareLink`; family onboarding + grace-window cutover; `/account/children/[learnerId]/notes`; `sal=` logging; email copy update | Sarah's notes-must-require-login requirement |
+| **Phase 2 — Session-login** | Phase 1 complete; `SessionParticipant` model in schema | Real `assertIsSessionParticipant`; `/join/[sessionId]` route (waiting room + live; == Gate A2); fragment preservation; learner dashboard; learner-session variants for `join-timer` + `wb-asset` + `upload/blob`; "Copy student link" branch; Option A E2E key | Gate A2 (waiting room) + consent model correctness |
 
 Phase 2 IS Gate A2. Dispatch them as one executor scope.
 
