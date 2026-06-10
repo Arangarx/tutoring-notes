@@ -269,8 +269,14 @@ deployment alias on `master`; no UI-skin feature flag exists). Build on
    *enumerated* audit-and-fix: every tutor action appears on the student view
    live and timely, and vice versa (freedraw, shapes, lines/arrows, text,
    eraser, move/resize/rotate, style/z-order, page CRUD, PDF, math, graph +
-   expression edits, images, undo/redo, select+delete). **Acceptance:** each
-   type verified bidirectionally via hermetic relay on real browser (**not**
+   expression edits, images, undo/redo, select+delete). **Sub-item (Andrew
+   2026-06-10): peer-visible laser/pointer** — tutor→student + bidirectional
+   student laser (**ST-05**), per-role colors tutor=coral / student=cyan;
+   never built (not a regression); fix via `sync-client.ts` IMMEDIATE pointer
+   envelope + `onPointerUpdate`/`isCollaborating` + `appState.collaborators`
+   on both sides (see Gate A5 in
+   [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md)). **Acceptance:**
+   each type verified bidirectionally via hermetic relay on real browser (**not**
    jsdom); stated timeliness bound; all gaps fixed; extend `test:wb-sync`
    invariants where feasible + manual matrix for the rest. **Starting baseline:**
    [`whiteboard-live-sync-regression.spec.ts`](../tests/integration/whiteboard-live-sync-regression.spec.ts)
