@@ -21,6 +21,32 @@ Not in priority order within sections — that comes when items move to a sprint
 | **Playwright split-brain injection test** | Medium | Inject a simulated WebRTC drop in a test to verify the split-brain banner and recording pause behavior. |
 | **Share ▾ options expansion** | Low | Current Share ▾ dropdown has only "Copy student join link". Consider adding QR code or email options. |
 
+### Graphing tool swap: Desmos → self-hosted JSXGraph (next branch after chrome-redo merge)
+
+**Priority: V1-tier** (graphing feature replacement — own branch **after** `feat/wb-chrome-redo` merges to `v1-redesign`, **not** folded into chrome-redo).
+
+**Decision (Andrew 2026-06-09):** Replace the Desmos graphing embed with a **self-hosted JSXGraph** widget rendered via Excalidraw's `renderEmbeddable` prop.
+
+**Rationale:** Desmos (and GeoGebra) hit Excalidraw's null-origin sandbox iframe wall — their assets fail under our parent CSP / CORS. GeoGebra additionally requires a commercial license. JSXGraph is MIT-licensed, runs as our own code on our own origin (eliminates the entire CORS/CSP/third-party class of failure), shrinks our CSP (removes all `desmos.com` origins), gives coordinate-plane + function-plot UX, and makes graph state capturable for replay.
+
+**Accepted sub-decisions:**
+- **(a)** Accept breakage of old Desmos graphs in existing pilot sessions (only Andrew + Sarah; no real graphs to preserve).
+- **(b)** Do the swap as its **own branch** after `feat/wb-chrome-redo` merges — do not fold into the current chrome-redo branch.
+
+**Scope checklist (~3–5 day effort):**
+- [ ] UI: rename graph insert button (Desmos → Graph / equivalent)
+- [ ] `insert-asset.ts`: `insertGraphOnCanvas` + `buildGraphEmbeddableElement` (replace Desmos paths)
+- [ ] New `src/components/whiteboard/GraphEmbeddable.tsx` — JSXGraph coordinate plane + function plot, rendered via `renderEmbeddable`
+- [ ] Wire `renderEmbeddable` on tutor + student whiteboard clients
+- [ ] `validate-embeddable`: internal-scheme-only (no external iframe origins)
+- [ ] Event-log / `excalidraw-adapter`: `desmos` → `graph` type rename with **legacy read** for old sessions
+- [ ] CSP: remove `www.desmos.com` / `desmos.com` from `frame-src`, `style-src`, `font-src`, `img-src` in **both** `csp.ts` and `next.config.ts`
+- [ ] `docs/PLATFORM-ASSUMPTIONS.md` §5.3.1 — replace Desmos embed assumption with JSXGraph self-hosted
+- [ ] Tests: update `insert-asset`, `csp-headers`, `excalidraw-adapter` tests
+- [ ] Add `jsxgraph` npm dependency
+
+**Cross-ref:** Sarah Q1 graphing ask (Desmos was interim); [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) HEAD — next branch after chrome-redo merge.
+
 ## Whiteboard — implementation / design queue
 
 **Roadmap (ordered waves, pilot vs maintenance vs Phase 2 gate):** see **`docs/WHITEBOARD-ROADMAP-NEXT.md`**. Execution YAML for Cursor Build: **`.cursor/plans/whiteboard_backlog_execution.plan.md`**.
