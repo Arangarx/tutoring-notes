@@ -1,4 +1,7 @@
-import { DESMOS_ALLOWED_HOSTS } from "@/lib/whiteboard/insert-asset";
+import {
+  DESMOS_ALLOWED_HOSTS,
+  GRAPH_EMBED_LINK,
+} from "@/lib/whiteboard/insert-asset";
 
 /**
  * Excalidraw `validateEmbeddable` for iframe embeds. The CSP
@@ -6,6 +9,7 @@ import { DESMOS_ALLOWED_HOSTS } from "@/lib/whiteboard/insert-asset";
  * controls Excalidraw's in-app "trusted source" panel.
  */
 export function validateExcalidrawEmbeddable(url: string): true | undefined {
+  if (url === GRAPH_EMBED_LINK) return true;
   try {
     const parsed = new URL(url);
     if (DESMOS_ALLOWED_HOSTS.includes(parsed.hostname)) return true;

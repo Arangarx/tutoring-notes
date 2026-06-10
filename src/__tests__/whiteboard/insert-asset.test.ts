@@ -19,8 +19,11 @@
  */
 
 import {
+  buildGraphEmbeddableElement,
   computeFitCameraForRect,
+  GRAPH_EMBED_LINK,
   insertDesmosEmbedOnCanvas,
+  insertGraphOnCanvas,
   insertImageOnCanvas,
   insertMathSvgOnCanvas,
   insertPdfPagesAsBoardPages,
@@ -29,6 +32,7 @@ import {
   validateDesmosUrl,
   type ExcalidrawApiLike,
 } from "@/lib/whiteboard/insert-asset";
+import { DEFAULT_GRAPH_BBOX } from "@/lib/whiteboard/graph-state";
 import {
   viewportCoordsToSceneCoords,
   viewportSceneCenterFromScroll,
@@ -990,5 +994,56 @@ describe("insertDesmosEmbedOnCanvas", () => {
     });
     expect(result.ok).toBe(false);
     expect(scenes).toHaveLength(0);
+  });
+});
+
+describe("buildGraphEmbeddableElement", () => {
+  it("builds an embeddable with the graph sentinel link and customData", () => {
+    const el = buildGraphEmbeddableElement({
+      x: 10,
+      y: 20,
+      width: 720,
+      height: 540,
+      graphState: { bbox: DEFAULT_GRAPH_BBOX, expressions: ["x^2"] },
+    }) as Record<string, unknown>;
+    expect(el.type).toBe("embeddable");
+    expect(el.link).toBe(GRAPH_EMBED_LINK);
+    expect(el.x).toBe(10);
+    expect(el.y).toBe(20);
+    const customData = el.customData as {
+      wbType?: string;
+      graph?: { provider: string };
+      graphStateJson?: string;
+    };
+    expect(customData.wbType).toBe("graph");
+    expect(customData.graph?.provider).toBe("jsxgraph");
+    expect(JSON.parse(customData.graphStateJson ?? "{}")).toEqual({
+      bbox: DEFAULT_GRAPH_BBOX,
+      expressions: ["x^2"],
+    });
+  });
+});
+
+describe("insertGraphOnCanvas", () => {
+  it("inserts at viewport center with graph sentinel link", () => {
+    const { api, scenes } = makeFakeApi();
+    const result = insertGraphOnCanvas({
+      excalidrawAPI: api,
+      whiteboardSessionId: "wb-1",
+      studentId: "s-1",
+      initialExpressions: ["sin(x)"],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(scenes).toHaveLength(1);
+    const el = scenes[0][0] as Record<string, unknown>;
+    expect(el.type).toBe("embeddable");
+    expect(el.link).toBe(GRAPH_EMBED_LINK);
+    expect(el.x).toBe(500 - 720 / 2);
+    expect(el.y).toBe(400 - 540 / 2);
+    const customData = el.customData as { graphStateJson?: string };
+    expect(JSON.parse(customData.graphStateJson ?? "{}").expressions).toEqual([
+      "sin(x)",
+    ]);
   });
 });

@@ -20,6 +20,7 @@ tests/integration/.auth/
 # entry in package-lock.json — re-deriving it from node_modules keeps
 # the repo lean and avoids version drift.
 public/pdfjs/
+public/jsxgraph/
 
 # Scratch file used to pass multi-line commit messages on PowerShell
 # (which doesn't accept bash heredocs in `git commit -m`).

@@ -44,9 +44,9 @@ import type { NextConfig } from "next";
  *     across dev/prod/preview deployments.
  *
  *   frame-src 'self' https://www.desmos.com https://desmos.com
- *     The whiteboard's "Insert Desmos" toolbar embeds Desmos
- *     calculator iframes. NO other iframe sources are accepted —
- *     the Excalidraw `validateEmbeddable` allowlist mirrors this.
+ *     Legacy Desmos calculator iframes (Phase 2 removes these origins).
+ *     TODO Phase 2: remove desmos.com origins once legacy migration lands
+ *     New graph inserts use self-hosted JSXGraph via renderEmbeddable.
  *
  *   worker-src 'self' blob:
  *     pdfjs-dist runs its parser in a worker; the bootstrap is

@@ -190,6 +190,7 @@ export function buildContentSecurityPolicy(opts: CspOptions = {}): string {
     // Desmos embeddable iframes are sandboxed without allow-same-origin
     // (null origin) — the parent CSP governs their asset loads; Chrome
     // needs the explicit origin, not just https:, for font/img/style.
+    // TODO Phase 2: remove desmos.com origins once legacy migration lands
     "style-src 'self' 'unsafe-inline' https://www.desmos.com",
     // *.private.blob.vercel-storage.com — Vercel Blob private-access URLs
     // used for whiteboard images/PDFs inserted via the tutor toolbar and
@@ -200,8 +201,8 @@ export function buildContentSecurityPolicy(opts: CspOptions = {}): string {
     "media-src 'self' blob: https://*.public.blob.vercel-storage.com",
     "font-src 'self' data: blob: https: https://www.desmos.com",
     `connect-src ${connectSrc}`,
-    // Desmos calculator iframes — the whiteboard "Insert Desmos" button
-    // embeds https://www.desmos.com/calculator as an Excalidraw embeddable.
+    // Desmos calculator iframes — legacy sessions still render via iframe.
+    // TODO Phase 2: remove desmos.com origins once legacy migration lands
     // Must match next.config.ts `frame-src`. When both CSP headers are
     // emitted (middleware + next.config.ts headers()), the browser enforces
     // the INTERSECTION; without this directive the middleware's default-src

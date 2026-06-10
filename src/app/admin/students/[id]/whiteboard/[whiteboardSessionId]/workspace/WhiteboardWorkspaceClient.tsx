@@ -112,7 +112,8 @@ import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter"
 import { PdfImageUploadButton } from "@/components/whiteboard/PdfImageUploadButton";
 import { type PageStripRow } from "@/components/whiteboard/PageStrip";
 import { MathInsertButton } from "@/components/whiteboard/MathInsertButton";
-import { DesmosInsertButton } from "@/components/whiteboard/DesmosInsertButton";
+import { GraphEmbeddable } from "@/components/whiteboard/GraphEmbeddable";
+import { GraphInsertButton } from "@/components/whiteboard/GraphInsertButton";
 import { BoardTabStrip } from "@/components/whiteboard/chrome/BoardTabStrip";
 import { WbAVCluster } from "@/components/whiteboard/chrome/WbAVCluster";
 import {
@@ -159,6 +160,7 @@ import "./whiteboard-chrome.css";
 import { ExcalidrawDynamic } from "@/components/whiteboard/ExcalidrawDynamic";
 import { WhiteboardDebugHud } from "@/components/whiteboard/WhiteboardDebugHud";
 import {
+  GRAPH_EMBED_LINK,
   type ExcalidrawApiLike,
   type InsertPdfBoardPagesIntegrate,
 } from "@/lib/whiteboard/insert-asset";
@@ -3441,6 +3443,21 @@ export function WhiteboardWorkspaceClient({
     ]
   );
 
+  const renderGraphEmbeddable = useCallback((element: unknown) => {
+    const el = element as {
+      link?: string;
+      customData?: { wbType?: string };
+    };
+    if (el.link === GRAPH_EMBED_LINK || el.customData?.wbType === "graph") {
+      return (
+        <GraphEmbeddable
+          element={element as { id?: string; width?: number; height?: number; customData?: Record<string, unknown> }}
+        />
+      );
+    }
+    return undefined;
+  }, []);
+
   // â”€â”€â”€ Chrome: selectTool + updateStrokeStyle callbacks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   type WbChromeApiExt = ExcalidrawApiLike & {
@@ -4007,7 +4024,7 @@ export function WhiteboardWorkspaceClient({
               disabled={endingBusy}
               chrome
             />
-            <DesmosInsertButton
+            <GraphInsertButton
               excalidrawAPI={excalidrawAPI}
               whiteboardSessionId={whiteboardSessionId}
               studentId={studentId}
@@ -4266,6 +4283,7 @@ export function WhiteboardWorkspaceClient({
               canvasActions: { saveToActiveFile: false, loadScene: false },
             }}
             validateEmbeddable={validateExcalidrawEmbeddable}
+            renderEmbeddable={renderGraphEmbeddable}
             initialData={{
               appState: {
                 currentItemRoughness: 0,

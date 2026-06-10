@@ -27,6 +27,11 @@
  */
 
 import { EXCALIDRAW_STROKE_HEX } from "@/styles/token-values";
+import {
+  DEFAULT_GRAPH_BBOX,
+  serializeGraphStateJson,
+  type GraphState,
+} from "@/lib/whiteboard/graph-state";
 import { uploadWhiteboardAsset } from "@/lib/whiteboard/upload";
 import type { PdfPageRender } from "@/lib/whiteboard/pdf-render";
 import {
@@ -1110,5 +1115,110 @@ export function insertDesmosEmbedOnCanvas(args: InsertAssetCommonArgs & {
     ok: true,
     elementId: (newElement as unknown as { id: string }).id,
     url: validated.url,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Self-hosted JSXGraph embed (replaces Desmos for new inserts)
+// ---------------------------------------------------------------------------
+
+/** Sentinel link for Excalidraw embeddables rendered via `renderEmbeddable`. */
+export const GRAPH_EMBED_LINK = "mynk://graph";
+
+const GRAPH_DEFAULT_WIDTH = DESMOS_DEFAULT_WIDTH;
+const GRAPH_DEFAULT_HEIGHT = DESMOS_DEFAULT_HEIGHT;
+
+/**
+ * Build an Excalidraw `embeddable` element for a self-hosted JSXGraph widget.
+ */
+export function buildGraphEmbeddableElement(args: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  graphState: GraphState;
+}): Record<string, unknown> {
+  const graphStateJson = serializeGraphStateJson(args.graphState);
+  const now = Date.now();
+  return {
+    id: makeRandomElementId(),
+    type: "embeddable",
+    x: args.x,
+    y: args.y,
+    width: args.width,
+    height: args.height,
+    angle: 0,
+    strokeColor: EXCALIDRAW_STROKE_HEX,
+    backgroundColor: "transparent",
+    fillStyle: "solid",
+    strokeWidth: 1,
+    strokeStyle: "solid",
+    roughness: 0,
+    opacity: 100,
+    seed: Math.floor(Math.random() * 2 ** 31),
+    version: 1,
+    versionNonce: Math.floor(Math.random() * 2 ** 31),
+    isDeleted: false,
+    boundElements: null,
+    updated: now,
+    link: GRAPH_EMBED_LINK,
+    locked: false,
+    groupIds: [],
+    frameId: null,
+    roundness: null,
+    customData: {
+      assetUrl: GRAPH_EMBED_LINK,
+      wbType: "graph",
+      graph: {
+        provider: "jsxgraph",
+      },
+      graphStateJson,
+    },
+  };
+}
+
+export type InsertGraphResult =
+  | { ok: true; elementId: string }
+  | { ok: false; reason: string };
+
+/**
+ * Insert a JSXGraph embeddable at the current viewport center.
+ */
+export function insertGraphOnCanvas(
+  args: InsertAssetCommonArgs & {
+    initialExpressions?: string[];
+  }
+): InsertGraphResult {
+  const { excalidrawAPI, initialExpressions } = args;
+  const graphState: GraphState = {
+    bbox: DEFAULT_GRAPH_BBOX,
+    expressions: initialExpressions?.filter((e) => e.trim().length > 0) ?? [],
+  };
+
+  const center = getInsertCenter(excalidrawAPI);
+  const x = center.x - GRAPH_DEFAULT_WIDTH / 2;
+  const y = center.y - GRAPH_DEFAULT_HEIGHT / 2;
+  const newElement = buildGraphEmbeddableElement({
+    x,
+    y,
+    width: GRAPH_DEFAULT_WIDTH,
+    height: GRAPH_DEFAULT_HEIGHT,
+    graphState,
+  });
+
+  const elements = excalidrawAPI.getSceneElements() as ReadonlyArray<unknown>;
+  excalidrawAPI.updateScene({ elements: [...elements, newElement] });
+  try {
+    excalidrawAPI.scrollToContent?.([newElement], {
+      fitToContent: false,
+      animate: true,
+    });
+  } catch {
+    // ignore
+  }
+
+  return {
+    ok: true,
+    elementId: (newElement as unknown as { id: string }).id,
   };
 }
