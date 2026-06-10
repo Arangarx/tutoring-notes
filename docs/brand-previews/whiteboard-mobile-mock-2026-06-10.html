@@ -71,6 +71,10 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
 .wb-shell{display:flex;flex-direction:column;height:100%;min-height:0;background:var(--surface-base);overflow:hidden;position:relative}
 .wb-shell.phone-layout .wb-tablet-rail{display:none}
 .wb-shell.tablet-layout .wb-tablet-rail{display:flex}
+.wb-shell.tablet-layout .wb-phone-rail{display:none}
+.wb-shell.phone-layout .wb-phone-rail{display:none}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-phone-rail{display:flex}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-bottom-bar{display:none}
 
 /* Top bar — live desktop chrome */
 .wb-topbar{height:44px;flex-shrink:0;display:flex;align-items:center;gap:2px;padding:0 6px;background:var(--surface-1);border-bottom:1px solid var(--border);z-index:30}
@@ -107,9 +111,10 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
 /* Body */
 .wb-body{flex:1;display:flex;min-height:0;overflow:hidden;position:relative}
 
-/* Tablet slim rail */
-.wb-tablet-rail{width:44px;flex-shrink:0;display:none;flex-direction:column;align-items:center;padding:6px 0;gap:2px;background:var(--surface-1);border-right:1px solid var(--border);z-index:20}
-.wb-tablet-rail .wb-tool-btn{width:36px;height:36px}
+/* Tablet + phone-landscape slim rails */
+.wb-tablet-rail,.wb-phone-rail{width:44px;flex-shrink:0;display:none;flex-direction:column;align-items:center;padding:6px 0;gap:2px;background:var(--surface-1);border-right:1px solid var(--border);z-index:20}
+.wb-tablet-rail .wb-tool-btn,.wb-phone-rail .wb-tool-btn{width:36px;height:36px}
+.wb-shell.phone-layout[data-orientation="landscape"][data-toolbar-hidden] .wb-phone-rail{display:none}
 
 /* Canvas — reads as whiteboard */
 .wb-canvas{flex:1;position:relative;min-width:0;background:var(--board-paper);overflow:hidden}
@@ -135,6 +140,13 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
 .wb-callout--av::before{right:14px;top:-5px;border-left:none;border-bottom:none;border-top:1px solid var(--callout-border);border-right:1px solid var(--callout-border)}
 .wb-callout--laser{top:40%;bottom:auto;left:8px;transform:none;max-width:min(220px,52vw);text-align:left}
 .wb-callout--laser::before{left:20px;margin-left:0;bottom:-5px}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-callout--panel-toggle{bottom:52px;left:52px;max-width:min(200px,42vw)}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-callout--panel-toggle::before{left:14px;bottom:-5px}
+.wb-shell.phone-layout[data-orientation="landscape"][data-toolbar-hidden] .wb-callout--panel-toggle{bottom:52px;left:8px}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-callout--overflow{bottom:auto;top:58%;left:52px;right:auto;max-width:min(200px,42vw)}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-callout--overflow::before{left:14px;top:auto;bottom:-5px;right:auto}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-callout--student{bottom:108px;left:52px;top:auto;max-width:min(210px,44vw)}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-callout--laser{top:32%;left:52px;max-width:min(200px,40vw)}
 .wb-callout strong{color:var(--text);font-weight:600}
 
 /* Panel toggle — persistent show/hide tools button */
@@ -143,6 +155,8 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
 .wb-panel-toggle__chev{font-size:10px;color:var(--accent-text);transition:transform .2s}
 .wb-shell:not([data-toolbar-hidden]) .wb-panel-toggle{bottom:calc(52px + 40px + 8px)}
 .wb-shell.tablet-layout:not([data-toolbar-hidden]) .wb-panel-toggle{bottom:calc(52px + 40px + 8px)}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-panel-toggle{left:8px;transform:none;bottom:8px}
+.wb-shell.phone-layout[data-orientation="landscape"]:not([data-toolbar-hidden]) .wb-panel-toggle{bottom:8px}
 .wb-shell[data-toolbar-hidden] .wb-panel-toggle{background:var(--accent);color:var(--accent-on);border-color:var(--accent-strong);animation:wb-toggle-pulse 2.4s ease-in-out infinite}
 .wb-shell[data-toolbar-hidden] .wb-panel-toggle .wb-panel-toggle__chev{color:var(--accent-on)}
 @keyframes wb-toggle-pulse{0%,100%{box-shadow:var(--shadow-md)}50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 35%,transparent),var(--shadow-md)}}
@@ -152,6 +166,16 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
 .wb-shell[data-toolbar-hidden] .wb-bottom-bar{transform:translateY(100%);opacity:0;pointer-events:none;position:absolute;left:0;right:0;bottom:0}
 .wb-props-mobile{display:none;padding:6px 12px;border-bottom:1px solid var(--border);background:var(--card)}
 .wb-shell.phone-layout .wb-props-mobile,.wb-shell.tablet-layout .wb-props-mobile{display:block}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-props-mobile{display:none}
+/* Compact props chip — phone landscape only (replaces full-width props bar) */
+.wb-props-landscape-chip{display:none;position:absolute;z-index:45;top:8px;left:8px;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--border);border-radius:999px;background:var(--card);cursor:pointer;font-size:11px;color:var(--text);box-shadow:var(--shadow-sm);transition:opacity .2s,transform .2s}
+.wb-props-landscape-chip:hover{background:var(--accent-soft)}
+.wb-props-landscape-chip .wb-summary-swatch{width:14px;height:14px}
+.wb-props-landscape-chip .wb-summary-stroke{width:18px}
+.wb-props-landscape-chip .wb-summary-chip{font-size:10px;padding:1px 5px}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-props-landscape-chip{display:inline-flex}
+.wb-shell.phone-layout[data-orientation="landscape"][data-toolbar-hidden] .wb-props-landscape-chip{display:none;pointer-events:none;opacity:0}
+.wb-shell.phone-layout[data-orientation="landscape"] .wb-canvas-pct{left:auto;right:8px}
 .wb-props-mobile-btn{width:100%;display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:pointer;font-size:12px;color:var(--text)}
 .wb-summary-swatch{width:18px;height:18px;border-radius:50%;border:1px solid var(--border);background:#15203a;flex-shrink:0}
 .wb-summary-stroke{width:24px;display:flex;align-items:center;justify-content:center}
@@ -274,6 +298,7 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
     <li><strong>Sheets:</strong> open via toolbar buttons (Styles, ⋮, props summary) — <em>not</em> bottom-edge swipe-up (avoids OS gesture collision). Swipe-down / backdrop / × to dismiss.</li>
     <li><strong>Phone tier-1 (tutor):</strong> Select · Pencil · Eraser · Shapes▾ · Styles · Wand · ⋮</li>
     <li><strong>Phone tier-1 (student):</strong> Pencil · Eraser · Shapes▾ · Styles · Wand (laser) · ⋮ — Shapes▾ tier-1 (geometry/graphing); Select in overflow</li>
+    <li><strong>Phone landscape:</strong> tier-1 moves to slim left rail (same tools/order as portrait bottom bar); props summary = compact chip on canvas; bottom bar hidden — frees vertical canvas height</li>
     <li><strong>Tablet tier-1:</strong> slim left rail (Select/Pencil/Eraser/Text/Wand) + bottom bar (Shapes▾ · Undo · Styles · ⋮)</li>
     <li><strong>Canvas:</strong> sample board content (PDF page, graph, strokes) — reads as whiteboard, not empty room</li>
     <li><strong>AV:</strong> tutor tile primary + cam on; student self hidden by default (tutor role: self visible); swap + show-self toggles</li>
@@ -338,6 +363,17 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
       <button class="wb-tool-btn wb-tool-btn--wand-tutor" title="Pointer wand (tutor laser)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="m3 21 9-9"/><path d="M12.2 6.2 11 5"/></svg></button>
     </aside>
 
+    <aside class="wb-phone-rail" aria-label="Drawing tools">
+      <button class="wb-tool-btn wb-tool-btn--tutor-only" title="Select"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 3l14 9-7 1-4 7-3-17z"/></svg></button>
+      <button class="wb-tool-btn wb-tool-btn--active" title="Pencil"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+      <button class="wb-tool-btn" title="Eraser"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21"/><path d="m5.082 11.09 8.828 8.828"/></svg></button>
+      <button class="wb-tool-btn wb-tool-btn--shapes" title="Shapes"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="5" y1="19" x2="19" y2="5"/></svg><span class="wb-pulldown-chevron">▾</span></button>
+      <button class="wb-tool-btn" title="Styles" data-open-props><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></button>
+      <button class="wb-tool-btn wb-tool-btn--wand-tutor wb-tool-btn--tutor-only" title="Pointer wand (tutor)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="m3 21 9-9"/><path d="M12.2 6.2 11 5"/></svg></button>
+      <button class="wb-tool-btn wb-tool-btn--wand-student wb-tool-btn--student-only" title="Laser wand (student)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="m3 21 9-9"/><path d="M12.2 6.2 11 5"/></svg></button>
+      <button class="wb-tool-btn" title="More" data-open-overflow><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>
+    </aside>
+
     <main class="wb-canvas">
       <div class="wb-canvas-grid"></div>
       <div class="wb-canvas-strokes">
@@ -371,6 +407,12 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
         </svg>
       </div>
       <div class="wb-canvas-pct" data-canvas-pct>Canvas ~84%</div>
+
+      <button class="wb-props-landscape-chip" type="button" data-open-props aria-label="Stroke properties — tap to expand">
+        <span class="wb-summary-swatch"></span>
+        <span class="wb-summary-stroke"><span class="wb-summary-stroke-line"></span></span>
+        <span class="wb-summary-chip">Styles</span>
+      </button>
 
       <div class="wb-callout wb-callout--end"><strong>Tutor:</strong> End session · <strong>Student:</strong> Leave</div>
       <div class="wb-callout wb-callout--panel-toggle"><strong>Tools toggle</strong> — always visible; tap to show/hide toolbar + props bar</div>
@@ -532,6 +574,8 @@ function createShell(layout){
   shell.classList.remove('phone-layout','tablet-layout');
   shell.classList.add(layout==='tablet'?'tablet-layout':'phone-layout');
   shell.dataset.role=currentRole;
+  if(layout==='phone')shell.dataset.orientation=phoneOrient;
+  else shell.removeAttribute('data-orientation');
   updateEndBtn(shell);
   updateCanvasPct(shell,layout);
   updateAVForRole(shell);
@@ -552,8 +596,10 @@ function updateCanvasPct(shell,layout){
   const el=shell.querySelector('[data-canvas-pct]');
   if(!el)return;
   let h=layout==='tablet'?TABLET_H:(phoneOrient==='landscape'?PHONE_LANDSCAPE.h:PHONE_PORTRAIT.h);
-  const propsBar=shell.hasAttribute('data-toolbar-hidden')?0:40;
-  const toolbar=shell.hasAttribute('data-toolbar-hidden')?0:52;
+  const hidden=shell.hasAttribute('data-toolbar-hidden');
+  const isPhoneLandscape=layout==='phone'&&phoneOrient==='landscape';
+  let propsBar=0,toolbar=0;
+  if(!hidden&&!isPhoneLandscape){propsBar=40;toolbar=52}
   const chrome=44+36+propsBar+toolbar;
   const pct=Math.round((h-chrome)/h*100);
   el.textContent='Canvas ~'+pct+'% (SR-01)';
@@ -669,8 +715,11 @@ function setPhoneOrient(orient,btn){
   const label=document.getElementById('phoneLabel');
   const dims=orient==='landscape'?PHONE_LANDSCAPE:PHONE_PORTRAIT;
   vp.dataset.w=dims.w;vp.dataset.h=dims.h;
-  if(label)label.textContent=orient==='landscape'?'Phone landscape · 844×390 · tier-1 toolbar':'Phone portrait · 390×844 · tier-1 toolbar';
-  if(shellPhone)updateCanvasPct(shellPhone,'phone');
+  if(label)label.textContent=orient==='landscape'?'Phone landscape · 844×390 · left rail + props chip':'Phone portrait · 390×844 · tier-1 toolbar';
+  if(shellPhone){
+    shellPhone.dataset.orientation=phoneOrient;
+    updateCanvasPct(shellPhone,'phone');
+  }
   scaleDevices();
 }
 
