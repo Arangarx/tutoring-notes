@@ -272,7 +272,7 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
     <li><strong>Panel toggle (TM-NEW):</strong> persistent <em>Show tools / Hide tools</em> pill button — always visible; opens &amp; closes props summary + tier-1 toolbar. Not gesture-only.</li>
     <li><strong>Sheets:</strong> open via toolbar buttons (Styles, ⋮, props summary) — <em>not</em> bottom-edge swipe-up (avoids OS gesture collision). Swipe-down / backdrop / × to dismiss.</li>
     <li><strong>Phone tier-1 (tutor):</strong> Select · Pencil · Eraser · Shapes▾ · Styles · Wand · ⋮</li>
-    <li><strong>Phone tier-1 (student):</strong> Pencil · Eraser · Wand (laser) · Styles · ⋮ — lean but findable; wand tier-1 for K-12 draw-when-needed</li>
+    <li><strong>Phone tier-1 (student):</strong> Pencil · Eraser · Shapes▾ · Styles · Wand (laser) · ⋮ — Shapes▾ tier-1 (geometry/graphing); Select in overflow</li>
     <li><strong>Tablet tier-1:</strong> slim left rail (Select/Pencil/Eraser/Text/Wand) + bottom bar (Shapes▾ · Undo · Styles · ⋮)</li>
     <li><strong>Canvas:</strong> sample board content (PDF page, graph, strokes) — reads as whiteboard, not empty room</li>
     <li><strong>AV:</strong> tutor tile primary + cam on; student self hidden by default (tutor role: self visible); swap + show-self toggles</li>
@@ -374,7 +374,7 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
       <div class="wb-callout wb-callout--end"><strong>Tutor:</strong> End session · <strong>Student:</strong> Leave</div>
       <div class="wb-callout wb-callout--panel-toggle"><strong>Tools toggle</strong> — always visible; tap to show/hide toolbar + props bar</div>
       <div class="wb-callout wb-callout--overflow wb-tool-btn--tutor-only"><strong>Tutor ⋮</strong> inserts, share, theme, board +</div>
-      <div class="wb-callout wb-callout--student"><strong>Student</strong> tier-1: pencil, eraser, wand, styles, ⋮</div>
+      <div class="wb-callout wb-callout--student"><strong>Student</strong> tier-1: pencil, eraser, shapes▾, styles, wand, ⋮</div>
       <div class="wb-callout wb-callout--av"><strong>AV:</strong> tutor primary · cam on · student self hidden (tutor: self on)</div>
       <div class="wb-callout wb-callout--laser">Tutor laser = coral · Student laser = cyan (<strong>TBD</strong>)</div>
 
@@ -467,7 +467,6 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
         <button class="wb-menu-item wb-tool-btn--tutor-only">Insert image</button>
         <button class="wb-menu-item wb-tool-btn--tutor-only">Insert equation ∑</button>
         <button class="wb-menu-item wb-tool-btn--student-only">Select tool</button>
-        <button class="wb-menu-item wb-tool-btn--student-only">Shapes</button>
         <button class="wb-menu-item">Text tool</button>
         <button class="wb-menu-item wb-tool-btn--student-only">Follow tutor viewport <small>on</small></button>
         <button class="wb-menu-item">Undo / Redo</button>
@@ -509,11 +508,11 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
       <button class="wb-tool-btn wb-tool-btn--phone-only wb-tool-btn--tutor-only" title="Select"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 3l14 9-7 1-4 7-3-17z"/></svg></button>
       <button class="wb-tool-btn wb-tool-btn--active" title="Pencil"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
       <button class="wb-tool-btn" title="Eraser"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21"/><path d="m5.082 11.09 8.828 8.828"/></svg></button>
-      <button class="wb-tool-btn wb-tool-btn--phone-only wb-tool-btn--shapes wb-tool-btn--tutor-only" title="Shapes"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="5" y1="19" x2="19" y2="5"/></svg><span class="wb-pulldown-chevron">▾</span></button>
+      <button class="wb-tool-btn wb-tool-btn--phone-only wb-tool-btn--shapes" title="Shapes"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="5" y1="19" x2="19" y2="5"/></svg><span class="wb-pulldown-chevron">▾</span></button>
       <button class="wb-tool-btn wb-tool-btn--phone-only" title="Styles" data-open-props><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></button>
       <button class="wb-tool-btn wb-tool-btn--phone-only wb-tool-btn--wand-tutor wb-tool-btn--tutor-only" title="Pointer wand (tutor)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="m3 21 9-9"/><path d="M12.2 6.2 11 5"/></svg></button>
       <button class="wb-tool-btn wb-tool-btn--phone-only wb-tool-btn--wand-student wb-tool-btn--student-only" title="Laser wand (student)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="m3 21 9-9"/><path d="M12.2 6.2 11 5"/></svg></button>
-      <button class="wb-tool-btn wb-tool-btn--tablet-only wb-tool-btn--shapes wb-tool-btn--tutor-only" title="Shapes"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="5" y1="19" x2="19" y2="5"/></svg><span class="wb-pulldown-chevron">▾</span></button>
+      <button class="wb-tool-btn wb-tool-btn--tablet-only wb-tool-btn--shapes" title="Shapes"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="5" y1="19" x2="19" y2="5"/></svg><span class="wb-pulldown-chevron">▾</span></button>
       <button class="wb-tool-btn wb-tool-btn--tablet-only" title="Undo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg></button>
       <button class="wb-tool-btn wb-tool-btn--tablet-only" title="Styles" data-open-props><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></button>
       <button class="wb-tool-btn" title="More" data-open-overflow><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>
