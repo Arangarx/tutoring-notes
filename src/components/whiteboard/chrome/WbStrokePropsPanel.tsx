@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   triggerBringForward,
   triggerBringToFront,
@@ -126,28 +126,95 @@ const ROUNDNESS_OPTIONS: { value: "sharp" | "round"; label: string }[] = [
  * guaranteeing flush left at 0 and flush right at 100 in all browsers.
  * Fully keyboard-accessible (role=slider, arrow/Home/End keys).
  */
-function WbSlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  const trackRef = useRef<HTMLDivElement>(null);
+const SLIDER_THUMB_PX = 16;
+const SLIDER_THUMB_RADIUS_PX = SLIDER_THUMB_PX / 2;
 
-  const computeValue = (clientX: number): number => {
-    const rect = trackRef.current?.getBoundingClientRect();
-    if (!rect || rect.width === 0) return value;
-    return Math.round(Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100)));
-  };
+function WbSlider({
+  value,
+  onChange,
+  onLiveValueChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  /** Fired during pointer drag for live % label; null when drag ends. */
+  onLiveValueChange?: (v: number | null) => void;
+}) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const dragListenersRef = useRef<{
+    pointerId: number;
+    cleanup: () => void;
+  } | null>(null);
+  const [dragValue, setDragValue] = useState<number | null>(null);
+
+  const displayValue = dragValue ?? value;
+
+  const computeValue = useCallback(
+    (clientX: number): number => {
+      const rect = trackRef.current?.getBoundingClientRect();
+      if (!rect || rect.width <= SLIDER_THUMB_PX) return displayValue;
+      const travel = rect.width - SLIDER_THUMB_PX;
+      const raw = ((clientX - rect.left - SLIDER_THUMB_RADIUS_PX) / travel) * 100;
+      return Math.round(Math.max(0, Math.min(100, raw)));
+    },
+    [displayValue],
+  );
+
+  const endDrag = useCallback(
+    (commitValue: number) => {
+      dragListenersRef.current?.cleanup();
+      dragListenersRef.current = null;
+      setDragValue(null);
+      onLiveValueChange?.(null);
+      onChange(commitValue);
+    },
+    [onChange, onLiveValueChange],
+  );
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
     e.preventDefault();
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    onChange(computeValue(e.clientX));
-  };
+    const el = e.currentTarget as HTMLElement;
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
 
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!(e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) return;
-    onChange(computeValue(e.clientX));
-  };
+    const next = computeValue(e.clientX);
+    setDragValue(next);
+    onLiveValueChange?.(next);
 
-  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+    const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== e.pointerId) return;
+      ev.preventDefault();
+      const v = computeValue(ev.clientX);
+      setDragValue(v);
+      onLiveValueChange?.(v);
+    };
+
+    const onUp = (ev: PointerEvent) => {
+      if (ev.pointerId !== e.pointerId) return;
+      ev.preventDefault();
+      const v = computeValue(ev.clientX);
+      try {
+        el.releasePointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+      endDrag(v);
+    };
+
+    const cleanup = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+
+    dragListenersRef.current?.cleanup();
+    dragListenersRef.current = { pointerId: e.pointerId, cleanup };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
   };
 
   return (
@@ -156,15 +223,12 @@ function WbSlider({ value, onChange }: { value: number; onChange: (v: number) =>
       role="slider"
       aria-valuemin={0}
       aria-valuemax={100}
-      aria-valuenow={value}
+      aria-valuenow={displayValue}
       aria-label="Stroke opacity"
       tabIndex={0}
       className="mynk-wb-slider-custom"
       data-testid="wb-opacity-slider"
       onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
       onKeyDown={(e) => {
         if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
           e.preventDefault();
@@ -185,7 +249,7 @@ function WbSlider({ value, onChange }: { value: number; onChange: (v: number) =>
       <div
         className="mynk-wb-slider-custom__thumb"
         data-testid="wb-opacity-slider-thumb"
-        style={{ left: `calc(${value / 100} * (100% - 16px))` }}
+        style={{ left: `calc(${displayValue / 100} * (100% - ${SLIDER_THUMB_PX}px))` }}
       />
     </div>
   );
@@ -204,6 +268,9 @@ export function WbStrokePropsPanel({
   onRoughnessChange,
   onRoundnessChange,
 }: WbStrokePropsPanelProps) {
+  const [opacityPreview, setOpacityPreview] = useState<number | null>(null);
+  const displayOpacity = opacityPreview ?? opacity;
+
   return (
     <div className="mynk-wb-props-panel-inner">
       {/* ── Stroke color ── always visible */}
@@ -257,10 +324,14 @@ export function WbStrokePropsPanel({
       <div className="mynk-wb-props-section">
         <div className="mynk-wb-props-section-header">
           <div className="mynk-wb-props-section-title">Opacity</div>
-          <span className="mynk-wb-props-opacity-val">{opacity}%</span>
+          <span className="mynk-wb-props-opacity-val">{displayOpacity}%</span>
         </div>
         <div className="mynk-wb-slider-wrap">
-          <WbSlider value={opacity} onChange={(v) => onStrokeChange({ opacity: v })} />
+          <WbSlider
+            value={opacity}
+            onChange={(v) => onStrokeChange({ opacity: v })}
+            onLiveValueChange={setOpacityPreview}
+          />
         </div>
       </div>
 

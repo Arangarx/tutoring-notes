@@ -123,6 +123,7 @@ import {
   WbActionSheet,
   WbActionSheetBackdrop,
 } from "@/components/whiteboard/chrome/WbActionSheet";
+import { WbChromeErrorBoundary } from "@/components/whiteboard/chrome/WbChromeErrorBoundary";
 import {
   WbStrokePropsPanel,
   RoughnessIcon,
@@ -4575,45 +4576,47 @@ export function WhiteboardWorkspaceClient({
 
       {/* Touch bottom sheets — chrome root so they cover toolbar + avoid clip (TM-13) */}
       {touchLayout && (
-        <>
-          <WbActionSheetBackdrop open={touchSheetOpen} onDismiss={dismissTouchSheets} />
-          <WbActionSheet
-            open={openMenu === "props"}
-            onDismiss={dismissTouchSheets}
-            ariaLabel="Stroke properties"
-            testId="wb-props-sheet"
-          >
-            <WbStrokePropsPanel
-              strokeColor={strokeColor}
-              strokeWidth={strokeWidth}
-              opacity={opacity}
-              roughness={roughness}
-              roundness={roundness}
-              moreStylesOpen={moreStylesOpen}
-              inkHex={excalidrawTheme === "dark" ? EXCALIDRAW_STROKE_DARK_HEX : EXCALIDRAW_STROKE_HEX}
-              onStrokeChange={updateStrokeStyle}
-              onMoreStylesToggle={() => setMoreStylesOpen((p) => !p)}
-              onRoughnessChange={(r) => updateStrokeStyle({ roughness: r })}
-              onRoundnessChange={updateRoundness}
-            />
-          </WbActionSheet>
-          <WbActionSheet
-            open={openMenu === "shapes"}
-            onDismiss={dismissTouchSheets}
-            ariaLabel="Shape tools"
-            testId="wb-shapes-sheet"
-          >
-            {renderShapesSheetItems()}
-          </WbActionSheet>
-          <WbActionSheet
-            open={openMenu === "more"}
-            onDismiss={dismissTouchSheets}
-            ariaLabel="More drawing options"
-            testId="wb-more-sheet"
-          >
-            <div className="mynk-wb-action-sheet__menu-list">{renderOverflowMenuItems(true)}</div>
-          </WbActionSheet>
-        </>
+        <WbChromeErrorBoundary>
+          <>
+            <WbActionSheetBackdrop open={touchSheetOpen} onDismiss={dismissTouchSheets} />
+            <WbActionSheet
+              open={openMenu === "props"}
+              onDismiss={dismissTouchSheets}
+              ariaLabel="Stroke properties"
+              testId="wb-props-sheet"
+            >
+              <WbStrokePropsPanel
+                strokeColor={strokeColor}
+                strokeWidth={strokeWidth}
+                opacity={opacity}
+                roughness={roughness}
+                roundness={roundness}
+                moreStylesOpen={moreStylesOpen}
+                inkHex={excalidrawTheme === "dark" ? EXCALIDRAW_STROKE_DARK_HEX : EXCALIDRAW_STROKE_HEX}
+                onStrokeChange={updateStrokeStyle}
+                onMoreStylesToggle={() => setMoreStylesOpen((p) => !p)}
+                onRoughnessChange={(r) => updateStrokeStyle({ roughness: r })}
+                onRoundnessChange={updateRoundness}
+              />
+            </WbActionSheet>
+            <WbActionSheet
+              open={openMenu === "shapes"}
+              onDismiss={dismissTouchSheets}
+              ariaLabel="Shape tools"
+              testId="wb-shapes-sheet"
+            >
+              {renderShapesSheetItems()}
+            </WbActionSheet>
+            <WbActionSheet
+              open={openMenu === "more"}
+              onDismiss={dismissTouchSheets}
+              ariaLabel="More drawing options"
+              testId="wb-more-sheet"
+            >
+              <div className="mynk-wb-action-sheet__menu-list">{renderOverflowMenuItems(true)}</div>
+            </WbActionSheet>
+          </>
+        </WbChromeErrorBoundary>
       )}
     </div>
   );
