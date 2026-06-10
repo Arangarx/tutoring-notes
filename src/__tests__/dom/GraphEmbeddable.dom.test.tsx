@@ -15,6 +15,10 @@ import userEvent from "@testing-library/user-event";
 import { GraphEmbeddable } from "@/components/whiteboard/GraphEmbeddable";
 import { serializeGraphStateJson } from "@/lib/whiteboard/graph-state";
 
+jest.mock("@/components/ThemeProvider", () => ({
+  useTheme: () => ({ resolvedTheme: "light", mode: "light", setMode: jest.fn() }),
+}));
+
 const mockCreate = jest.fn((type: string, parents: unknown[]) => {
   if (type === "functiongraph" && parents[0] === "bad!!!") {
     throw new Error("parse error");
@@ -24,10 +28,15 @@ const mockCreate = jest.fn((type: string, parents: unknown[]) => {
 
 const mockBoard = {
   resizeContainer: jest.fn(),
+  setBoundingBox: jest.fn(),
   update: jest.fn(),
   create: mockCreate,
   removeObject: jest.fn(),
   getBoundingBox: jest.fn(() => [-10, 10, 10, -10]),
+  defaultAxes: {
+    x: { setAttribute: jest.fn() },
+    y: { setAttribute: jest.fn() },
+  },
   on: jest.fn(),
   off: jest.fn(),
 };
@@ -64,7 +73,7 @@ describe("GraphEmbeddable", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("wb-graph-expr-error-0")).toHaveTextContent(
-        "Could not plot"
+        "Couldn't understand"
       );
     });
   });

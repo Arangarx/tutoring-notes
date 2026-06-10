@@ -212,8 +212,13 @@
 
 /*
  * Self-hosted graph embeds use link "mynk://graph" only for Excalidraw
- * embeddable validation (renderEmbeddable path). Hide the native hyperlink
- * popup for that sentinel so tutors never see a launchable mynk:// URL.
+ * embeddable validation (renderEmbeddable path).
+ *
+ * 1. Hyperlink editor popup — hide via :has on the sentinel href (DOM).
+ * 2. On-canvas link badge — drawn by Excalidraw renderLinkIcon (canvas, not
+ *    CSS-targetable). GraphEmbeddable clears link via suppressGraphEmbedLink
+ *    after validation; renderEmbeddable still routes on customData.wbType.
+ *
  * Desmos embeds use https://*.desmos.com links — unaffected.
  */
 .mynk-wb-chrome .excalidraw-hyperlinkContainer:has(

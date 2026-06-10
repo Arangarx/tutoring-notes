@@ -1,4 +1,8 @@
-import { persistGraphElementState } from "@/lib/whiteboard/graph-persist";
+import { GRAPH_EMBED_LINK } from "@/lib/whiteboard/insert-asset";
+import {
+  persistGraphElementState,
+  suppressGraphEmbedLink,
+} from "@/lib/whiteboard/graph-persist";
 import { serializeGraphStateJson } from "@/lib/whiteboard/graph-state";
 
 describe("persistGraphElementState", () => {
@@ -51,5 +55,32 @@ describe("persistGraphElementState", () => {
     const bbox = [-3, 8, 12, -4] as [number, number, number, number];
     const json = serializeGraphStateJson({ bbox, expressions: ["sin(x)"] });
     expect(JSON.parse(json)).toEqual({ bbox, expressions: ["sin(x)"] });
+  });
+
+  it("clears sentinel graph link without touching customData", () => {
+    const element = {
+      id: "graph-2",
+      type: "embeddable",
+      version: 1,
+      link: GRAPH_EMBED_LINK,
+      customData: { wbType: "graph", graphStateJson: "{}" },
+    };
+    const updateScene = jest.fn();
+    const api = {
+      getSceneElements: () => [element],
+      updateScene,
+    };
+
+    expect(
+      suppressGraphEmbedLink({ excalidrawAPI: api, elementId: "graph-2" })
+    ).toBe(true);
+
+    const next = updateScene.mock.calls[0][0].elements[0] as {
+      link: string | null;
+      customData: { wbType: string };
+    };
+    expect(next.link).toBeNull();
+    expect(next.customData.wbType).toBe("graph");
+    expect(updateScene.mock.calls[0][0].captureUpdate).toBe("NEVER");
   });
 });

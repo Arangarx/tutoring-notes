@@ -6,10 +6,14 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTheme } from "@/components/ThemeProvider";
 import {
   addGraphExpression,
   cloneGraphState,
+  DEFAULT_GRAPH_BBOX,
   parseGraphStateJson,
+  preprocessGraphExpression,
+  recomputeBboxForResize,
   removeGraphExpression,
   updateGraphExpression,
   withGraphBbox,
@@ -18,6 +22,7 @@ import {
 } from "@/lib/whiteboard/graph-state";
 import {
   persistGraphElementState,
+  suppressGraphEmbedLink,
   type GraphPersistApiLike,
 } from "@/lib/whiteboard/graph-persist";
 import "./graph-embeddable.css";
@@ -31,6 +36,7 @@ type EmbeddableElementLike = {
 
 type JxgBoard = {
   resizeContainer: (width: number, height: number, dontUpdate?: boolean) => void;
+  setBoundingBox: (bbox: GraphBbox, keep?: boolean) => void;
   update: () => void;
   create: (
     type: string,
@@ -39,6 +45,10 @@ type JxgBoard = {
   ) => { id?: string };
   removeObject: (obj: { id?: string }) => void;
   getBoundingBox: () => GraphBbox;
+  defaultAxes: {
+    x: { setAttribute: (attrs: Record<string, unknown>) => void };
+    y: { setAttribute: (attrs: Record<string, unknown>) => void };
+  };
   on: (event: string, handler: () => void) => void;
   off: (event: string, handler: () => void) => void;
 };
@@ -50,6 +60,7 @@ type Props = {
 
 const JSXGRAPH_CSS_ID = "mynk-jsxgraph-css";
 const BBOX_PERSIST_MS = 400;
+const PARSE_ERROR_MSG = "Couldn't understand this expression.";
 
 function ensureJxgStylesheet(): void {
   if (typeof document === "undefined") return;
@@ -59,6 +70,46 @@ function ensureJxgStylesheet(): void {
   link.rel = "stylesheet";
   link.href = "/jsxgraph/jsxgraph.css";
   document.head.appendChild(link);
+}
+
+function pickCssToken(style: CSSStyleDeclaration, name: string): string {
+  const local = style.getPropertyValue(name).trim();
+  if (local) return local;
+  if (typeof document !== "undefined") {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+  return "";
+}
+
+function readGraphJxgColors(host: HTMLElement | null): {
+  label: string;
+  axis: string;
+  grid: string;
+} {
+  const root = host ?? document.documentElement;
+  const style = getComputedStyle(root);
+  return {
+    label: pickCssToken(style, "--text-strong"),
+    axis: pickCssToken(style, "--border-default"),
+    grid: pickCssToken(style, "--border-subtle"),
+  };
+}
+
+function applyBoardTheme(board: JxgBoard, host: HTMLElement | null): void {
+  const colors = readGraphJxgColors(host);
+  const axisAttrs = {
+    strokeColor: colors.axis,
+    ticks: {
+      strokeColor: colors.axis,
+      label: { strokeColor: colors.label },
+    },
+  };
+  try {
+    board.defaultAxes.x.setAttribute(axisAttrs);
+    board.defaultAxes.y.setAttribute(axisAttrs);
+  } catch {
+    // ignore if axes not ready during teardown
+  }
 }
 
 function plotExpressions(
@@ -82,15 +133,16 @@ function plotExpressions(
       errors.push("");
       continue;
     }
+    const parsed = preprocessGraphExpression(trimmed);
     try {
-      const obj = board.create("functiongraph", [trimmed], {
+      const obj = board.create("functiongraph", [parsed], {
         strokeColor: "var(--accent)",
         strokeWidth: 2,
       });
       plotRefs.push(obj);
       errors.push("");
     } catch {
-      errors.push("Could not plot this expression.");
+      errors.push(PARSE_ERROR_MSG);
     }
   }
   return errors;
@@ -101,17 +153,27 @@ function mountGraphBoard(
   graphState: GraphState,
   JXG: { JSXGraph: { initBoard: (...args: unknown[]) => JxgBoard } }
 ): JxgBoard {
-  const bbox = graphState.bbox ?? [-10, 10, 10, -10];
+  const bbox = graphState.bbox ?? DEFAULT_GRAPH_BBOX;
+  const colors = readGraphJxgColors(container);
   const board = JXG.JSXGraph.initBoard(container, {
     boundingbox: bbox,
-    axis: true,
-    grid: true,
+    axis: {
+      strokeColor: colors.axis,
+      ticks: {
+        strokeColor: colors.axis,
+        label: { strokeColor: colors.label },
+      },
+    },
+    grid: {
+      strokeColor: colors.grid,
+      strokeOpacity: 0.65,
+    },
     showCopyright: false,
-    showNavigation: false,
-    pan: { enabled: true },
-    zoom: { factor: 1.2 },
+    showNavigation: true,
+    pan: { enabled: true, needTwoFingers: false, needShift: false },
+    zoom: { wheel: true, needShift: false, factor: 1.2 },
     resize: { enabled: true },
-    keepaspectratio: false,
+    keepaspectratio: true,
   });
   return board;
 }
@@ -121,6 +183,7 @@ function stopEmbedDrag(event: React.SyntheticEvent): void {
 }
 
 export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
+  const { resolvedTheme } = useTheme();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const boardRef = useRef<JxgBoard | null>(null);
   const plotRefsRef = useRef<Array<{ id?: string }>>([]);
@@ -131,8 +194,10 @@ export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
         : null
     )
   );
+  const containerSizeRef = useRef<{ width: number; height: number } | null>(null);
   const bboxPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bboxHandlerRef = useRef<(() => void) | null>(null);
+  const linkSuppressedRef = useRef(false);
 
   const [panelOpen, setPanelOpen] = useState(true);
   const [expressions, setExpressions] = useState<string[]>(
@@ -206,6 +271,32 @@ export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
     }, BBOX_PERSIST_MS);
   }, [persistState]);
 
+  const resetView = useCallback(() => {
+    const board = boardRef.current;
+    if (!board) return;
+    try {
+      board.setBoundingBox(DEFAULT_GRAPH_BBOX, true);
+      board.update();
+      persistState(withGraphBbox(graphStateRef.current, DEFAULT_GRAPH_BBOX));
+    } catch {
+      // ignore during teardown
+    }
+  }, [persistState]);
+
+  useEffect(() => {
+    if (!excalidrawAPI || !elementId || linkSuppressedRef.current) return;
+    const suppressed = suppressGraphEmbedLink({ excalidrawAPI, elementId });
+    if (suppressed) linkSuppressedRef.current = true;
+  }, [excalidrawAPI, elementId]);
+
+  useEffect(() => {
+    const board = boardRef.current;
+    const host = hostRef.current;
+    if (!board || !host) return;
+    applyBoardTheme(board, host);
+    board.update();
+  }, [resolvedTheme]);
+
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
@@ -243,10 +334,30 @@ export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
       const syncSize = () => {
         if (!hostRef.current || !boardRef.current) return;
         const { clientWidth, clientHeight } = hostRef.current;
-        if (clientWidth > 0 && clientHeight > 0) {
-          boardRef.current.resizeContainer(clientWidth, clientHeight, true);
-          boardRef.current.update();
+        if (clientWidth <= 0 || clientHeight <= 0) return;
+
+        const prev = containerSizeRef.current;
+        const boardNow = boardRef.current;
+
+        if (prev && (prev.width !== clientWidth || prev.height !== clientHeight)) {
+          try {
+            const currentBbox = boardNow.getBoundingBox();
+            const nextBbox = recomputeBboxForResize({
+              bbox: currentBbox,
+              prevWidthPx: prev.width,
+              prevHeightPx: prev.height,
+              nextWidthPx: clientWidth,
+              nextHeightPx: clientHeight,
+            });
+            boardNow.setBoundingBox(nextBbox, true);
+          } catch {
+            // keep current bbox on read errors
+          }
         }
+
+        boardNow.resizeContainer(clientWidth, clientHeight, true);
+        boardNow.update();
+        containerSizeRef.current = { width: clientWidth, height: clientHeight };
       };
 
       syncSize();
@@ -265,6 +376,7 @@ export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
         bboxPersistTimerRef.current = null;
       }
       observer?.disconnect();
+      containerSizeRef.current = null;
       if (board && bboxHandlerRef.current) {
         try {
           board.off("up", bboxHandlerRef.current);
@@ -323,27 +435,44 @@ export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
 
   return (
     <div className="wb-graph-root" data-wb-graph="true" data-testid="wb-graph-embed-host">
-      <div ref={hostRef} className="wb-graph-board-host" />
+      <div
+        ref={hostRef}
+        className="wb-graph-board-host"
+        onPointerDown={stopEmbedDrag}
+        onMouseDown={stopEmbedDrag}
+        onWheel={stopEmbedDrag}
+      />
       <div
         className="wb-graph-expr-panel"
         onPointerDown={stopEmbedDrag}
         onMouseDown={stopEmbedDrag}
       >
-        <button
-          type="button"
-          className="wb-graph-expr-toggle"
-          onClick={() => setPanelOpen((open) => !open)}
-          aria-expanded={panelOpen}
-          data-testid="wb-graph-expr-toggle"
-        >
-          ƒ Expressions
-          <span aria-hidden>{panelOpen ? "▾" : "▸"}</span>
-        </button>
+        <div className="wb-graph-expr-toolbar">
+          <button
+            type="button"
+            className="wb-graph-expr-toggle"
+            onClick={() => setPanelOpen((open) => !open)}
+            aria-expanded={panelOpen}
+            data-testid="wb-graph-expr-toggle"
+          >
+            ƒ Expressions
+            <span aria-hidden>{panelOpen ? "▾" : "▸"}</span>
+          </button>
+          <button
+            type="button"
+            className="wb-graph-expr-btn wb-graph-reset-view"
+            onClick={resetView}
+            title="Reset view to default range"
+            data-testid="wb-graph-reset-view"
+          >
+            Reset view
+          </button>
+        </div>
         {panelOpen && (
           <div className="wb-graph-expr-body" data-testid="wb-graph-expr-panel">
             {expressions.length === 0 && (
               <p className="muted" style={{ margin: 0, fontSize: 11 }}>
-                Add an expression to plot (e.g. x^2, sin(x)).
+                Add an expression to plot (e.g. x^2, sin(x), 5x).
               </p>
             )}
             {expressions.map((expr, index) => (
@@ -406,7 +535,7 @@ export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
             <div className="wb-graph-expr-add">
               <input
                 className="wb-graph-expr-input"
-                placeholder="e.g. 2*x+1"
+                placeholder="e.g. 2*x+1 or 5x"
                 value={draftExpr}
                 onChange={(e) => setDraftExpr(e.target.value)}
                 onKeyDown={(e) => {

@@ -29,7 +29,19 @@
   max-width: min(240px, calc(100% - 16px));
   pointer-events: auto;
   font-size: 12px;
-  color: var(--text-primary);
+  color: var(--text-strong);
+}
+
+.wb-graph-expr-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.wb-graph-reset-view {
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .wb-graph-expr-toggle {
@@ -40,11 +52,11 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface-drawer);
-  color: var(--text-primary);
+  color: var(--text-strong);
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--text-primary) 12%, transparent);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--text-strong) 12%, transparent);
 }
 
 .wb-graph-expr-toggle:hover {
@@ -57,7 +69,7 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface-drawer);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--text-primary) 10%, transparent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--text-strong) 10%, transparent);
   display: grid;
   gap: 6px;
 }
@@ -74,7 +86,7 @@
   border: 1px solid var(--border-default);
   border-radius: 4px;
   background: var(--surface-base);
-  color: var(--text-primary);
+  color: var(--text-strong);
   font-size: 12px;
   font-family: inherit;
 }
@@ -101,7 +113,7 @@
   border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--surface-base);
-  color: var(--text-primary);
+  color: var(--text-strong);
   font-size: 11px;
   cursor: pointer;
 }
@@ -122,4 +134,19 @@
 
 .wb-graph-expr-add .wb-graph-expr-input {
   flex: 1;
+}
+
+/* JSXGraph built-in navigation (+/−/arrows) — theme tokens */
+.wb-graph-root .JXG_navigation {
+  color: var(--text-strong);
+}
+
+.wb-graph-root .JXG_navigation button {
+  background: var(--surface-drawer);
+  border: 1px solid var(--border-default);
+  color: var(--text-strong);
+}
+
+.wb-graph-root .JXG_navigation button:hover {
+  background: var(--surface-raised);
 }
