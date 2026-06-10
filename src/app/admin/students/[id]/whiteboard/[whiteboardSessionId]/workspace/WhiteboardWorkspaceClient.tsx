@@ -138,6 +138,7 @@ import {
   WbIconRedo,
   WbIconSelect,
   WbIconShare,
+  WbIconStyles,
   WbIconText,
   WbIconUndo,
   WbIconWand,
@@ -3710,6 +3711,22 @@ export function WhiteboardWorkspaceClient({
             data-testid="wb-more-popover"
             onPointerDown={(e) => e.stopPropagation()}
           >
+            {touchLayout && (
+              <>
+                <button
+                  type="button"
+                  className="mynk-wb-menu-item"
+                  onClick={() => {
+                    selectTool("text");
+                    setOpenMenu(null);
+                  }}
+                >
+                  <span>Text</span>
+                  <span className="mynk-wb-menu-item__kbd">T</span>
+                </button>
+                <div className="mynk-wb-popover-sep" />
+              </>
+            )}
             <button type="button" className="mynk-wb-menu-item" onClick={() => triggerSendToBack()}>
               <span>Send to back</span>
               <span className="mynk-wb-menu-item__kbd">Ctrl+Shift+[</span>
@@ -3761,9 +3778,58 @@ export function WhiteboardWorkspaceClient({
     </>
   );
 
+  const renderShapesMenu = (iconSize: number) => (
+    <div className="mynk-wb-shapes-menu">
+      <WbToolBtn
+        icon={shapeIconFor(
+          WB_SHAPE_TOOLS.some((s) => s.type === activeToolType)
+            ? activeToolType
+            : selectedShapeTool,
+          iconSize
+        )}
+        label="Shapes"
+        active={WB_SHAPE_TOOLS.some((s) => s.type === activeToolType)}
+        onClick={() => {
+          const shapeActive = WB_SHAPE_TOOLS.some((s) => s.type === activeToolType);
+          // Narrow/tablet: when a shape is already active, primary tap opens the picker.
+          if (touchLayout && shapeActive) {
+            toggleMenu("shapes");
+            return;
+          }
+          selectTool(selectedShapeTool);
+        }}
+        pulldown={!touchLayout}
+        onPulldown={touchLayout ? undefined : () => toggleMenu("shapes")}
+      />
+      {shapesDropdownOpen && (
+        <div className="mynk-wb-shapes-dropdown" role="menu">
+          {WB_SHAPE_TOOLS.map(({ type, label, Icon }) => (
+            <button
+              key={type}
+              type="button"
+              role="menuitem"
+              className={`mynk-wb-shapes-item${
+                (activeToolType === type || selectedShapeTool === type) &&
+                WB_SHAPE_TOOLS.some((s) => s.type === activeToolType)
+                  ? " mynk-wb-shapes-item--active"
+                  : selectedShapeTool === type
+                    ? " mynk-wb-shapes-item--active"
+                    : ""
+              }`}
+              onClick={() => selectTool(type)}
+            >
+              <Icon size={14} />
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   const renderToolStripButtons = (large = false) => {
     const iconSize = large ? 18 : 16;
-    return (
+    const coreTools = (
       <>
         <WbToolBtn
           icon={<WbIconSelect size={iconSize} />}
@@ -3783,65 +3849,54 @@ export function WhiteboardWorkspaceClient({
           active={activeToolType === "eraser"}
           onClick={() => selectTool("eraser")}
         />
-        <WbToolBtn
-          icon={<WbIconText size={iconSize} />}
-          label="Text (T)"
-          active={activeToolType === "text"}
-          onClick={() => selectTool("text")}
-        />
-        <WbToolBtn
-          icon={<WbIconWand size={iconSize} />}
-          label="Pointer wand (K)"
-          active={activeToolType === "laser"}
-          onClick={() => selectTool("laser")}
-          accent
-        />
-        <div className="mynk-wb-shapes-menu">
-          <WbToolBtn
-            icon={shapeIconFor(
-              WB_SHAPE_TOOLS.some((s) => s.type === activeToolType)
-                ? activeToolType
-                : selectedShapeTool,
-              iconSize
-            )}
-            label="Shapes"
-            active={WB_SHAPE_TOOLS.some((s) => s.type === activeToolType)}
-            onClick={() => {
-              const shapeActive = WB_SHAPE_TOOLS.some((s) => s.type === activeToolType);
-              // Narrow/tablet: when a shape is already active, primary tap opens the picker.
-              if (touchLayout && shapeActive) {
-                toggleMenu("shapes");
-                return;
-              }
-              selectTool(selectedShapeTool);
-            }}
-            pulldown={!touchLayout}
-            onPulldown={touchLayout ? undefined : () => toggleMenu("shapes")}
-          />
-          {shapesDropdownOpen && (
-            <div className="mynk-wb-shapes-dropdown" role="menu">
-              {WB_SHAPE_TOOLS.map(({ type, label, Icon }) => (
-                <button
-                  key={type}
-                  type="button"
-                  role="menuitem"
-                  className={`mynk-wb-shapes-item${
-                    (activeToolType === type || selectedShapeTool === type) &&
-                    WB_SHAPE_TOOLS.some((s) => s.type === activeToolType)
-                      ? " mynk-wb-shapes-item--active"
-                      : selectedShapeTool === type
-                        ? " mynk-wb-shapes-item--active"
-                        : ""
-                  }`}
-                  onClick={() => selectTool(type)}
-                >
-                  <Icon size={14} />
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+      </>
+    );
+    const textTool = (
+      <WbToolBtn
+        icon={<WbIconText size={iconSize} />}
+        label="Text (T)"
+        active={activeToolType === "text"}
+        onClick={() => selectTool("text")}
+      />
+    );
+    const stylesTool = (
+      <WbToolBtn
+        icon={<WbIconStyles size={iconSize} />}
+        label="Styles"
+        active={propsSheetOpen}
+        onClick={() => setPropsSheetOpen(true)}
+      />
+    );
+    const wandTool = (
+      <WbToolBtn
+        icon={<WbIconWand size={iconSize} />}
+        label="Pointer wand (K)"
+        active={activeToolType === "laser"}
+        onClick={() => selectTool("laser")}
+        accent
+      />
+    );
+
+    if (touchLayout) {
+      // TB-12 touch tier-1: Select · Pencil · Eraser · Shapes▾ · Styles · Wand · ⋮
+      return (
+        <>
+          {coreTools}
+          {renderShapesMenu(iconSize)}
+          {stylesTool}
+          {wandTool}
+          {renderMoreOverflowMenu(iconSize)}
+        </>
+      );
+    }
+
+    // Desktop left strip — unchanged order
+    return (
+      <>
+        {coreTools}
+        {textTool}
+        {wandTool}
+        {renderShapesMenu(iconSize)}
         {renderMoreOverflowMenu(iconSize)}
       </>
     );
