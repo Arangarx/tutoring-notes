@@ -15,6 +15,7 @@
   --text-default:#15203a;--text-muted:#5a6877;--text-disabled:#94a3b8;
   --brand:#1e3d54;--accent:#e27d60;--accent-soft:#f8e0d6;--accent-on:#15203a;--accent-text:#8a3c25;
   --success:#16a34a;--success-soft:rgba(34,197,94,0.12);
+  --danger-text:#dc2626;--danger-border:#dc2626;
   --shadow-sm:0 1px 3px rgba(0,0,0,0.08);--shadow-md:0 4px 12px rgba(0,0,0,0.12);--shadow-lg:0 8px 24px rgba(0,0,0,0.20);
   --overlay-scrim:rgba(0,0,0,0.4);
   --radius-sm:6px;--radius-md:10px;--radius-lg:16px;
@@ -29,6 +30,7 @@
   --text-default:#f0ede4;--text-muted:#a5b5c0;--text-disabled:rgba(165,181,192,0.45);
   --brand:#7ea4b1;--accent:#e27d60;--accent-soft:#2e1d18;--accent-on:#051a24;--accent-text:#e8a08a;
   --success:#4ade80;--success-soft:rgba(34,197,94,0.12);
+  --danger-text:#fca5a5;--danger-border:#fca5a5;
   --shadow-sm:0 1px 3px rgba(0,0,0,0.30);--shadow-md:0 4px 12px rgba(0,0,0,0.40);--shadow-lg:0 8px 24px rgba(0,0,0,0.55);
   --overlay-scrim:rgba(0,0,0,0.55);
   --meta-header-bg:rgba(2,8,13,0.94);--meta-header-border:rgba(255,255,255,0.08);
@@ -65,6 +67,7 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
 .header-actions{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
 .btn{font:inherit;font-weight:500;font-size:14px;padding:10px 14px;border-radius:var(--radius-md);cursor:pointer;border:1px solid var(--border-strong);background:transparent;color:var(--text-default)}
 .btn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-on);font-weight:600}
+.btn.btn-danger{background:transparent;color:var(--danger-text);border-color:var(--danger-border)}
 .cta-banner{margin:0 24px 16px;padding:14px 16px;background:var(--surface-1);border:1px solid var(--border-default);border-radius:var(--radius-lg);display:flex;align-items:center;gap:12px}
 .cta-banner p{font-size:13px;color:var(--text-muted);flex:1}
 /* tabs desktop */
@@ -103,6 +106,7 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
 .actions-sheet{position:absolute;left:0;right:0;bottom:0;z-index:16;background:var(--surface-1);border-radius:20px 20px 0 0;padding:16px 20px 28px;transform:translateY(100%);transition:transform .25s}
 .actions-sheet.open{transform:translateY(0)}
 .actions-sheet button{width:100%;text-align:left;padding:14px 0;border:none;border-bottom:1px solid var(--border-subtle);background:transparent;font:inherit;font-size:15px;color:var(--text-default);cursor:pointer}
+.actions-sheet button.btn-danger{color:var(--danger-text)}
 </style>
 </head>
 <body>
@@ -158,7 +162,7 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
           <h2>Share link (for parents/students)</h2>
           <p class="desc">No login required. Revoke or regenerate anytime.</p>
           <div class="share-url">mynk.app/s/k7x9m2p4…</div>
-          <div class="row-btns"><button class="btn">Copy link</button><button class="btn">Regenerate</button><button class="btn">Revoke</button></div>
+          <div class="row-btns"><button class="btn">Copy link</button><button class="btn">Regenerate</button><button class="btn btn-danger">Revoke</button></div>
         </div>
         <div class="section-card" data-section="notes">
           <h2>Add session note</h2>
@@ -188,7 +192,7 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
       <div class="actions-sheet" id="actionsSheet">
         <button onclick="closeActions()">Rename student</button>
         <button onclick="closeActions()">View outbox</button>
-        <button onclick="closeActions()">Delete student</button>
+        <button class="btn-danger" onclick="closeActions()">Delete student</button>
       </div>
     </div>
   </div>

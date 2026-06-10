@@ -14,6 +14,7 @@
   --border-default:#c5cfd0;--border-subtle:#e3e8e9;--border-strong:#4a6680;
   --text-default:#15203a;--text-muted:#5a6877;
   --brand:#1e3d54;--accent:#e27d60;--accent-soft:#f8e0d6;--accent-on:#15203a;--accent-text:#8a3c25;
+  --danger-text:#dc2626;--danger-border:#dc2626;
   --shadow-sm:0 1px 3px rgba(0,0,0,0.08);--shadow-md:0 4px 12px rgba(0,0,0,0.12);--shadow-lg:0 8px 24px rgba(0,0,0,0.20);
   --radius-md:10px;--radius-lg:16px;
   --font-body:"Inter",sans-serif;--font-display:"Fraunces",Georgia,serif;--font-mono:"JetBrains Mono",monospace;
@@ -25,6 +26,7 @@
   --border-default:#1c3548;--border-subtle:#0e2a38;--border-strong:#6a8fa0;
   --text-default:#f0ede4;--text-muted:#a5b5c0;
   --brand:#7ea4b1;--accent:#e27d60;--accent-soft:#2e1d18;--accent-on:#051a24;--accent-text:#e8a08a;
+  --danger-text:#fca5a5;--danger-border:#fca5a5;
   --shadow-sm:0 1px 3px rgba(0,0,0,0.30);--shadow-lg:0 8px 24px rgba(0,0,0,0.55);
   --meta-header-bg:rgba(2,8,13,0.94);--meta-header-border:rgba(255,255,255,0.08);
   --meta-chrome-fg:rgba(240,237,228,0.7);--meta-chrome-border:rgba(255,255,255,0.15);--meta-chrome-active-bg:rgba(255,255,255,0.12);
@@ -56,6 +58,7 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
 .share-header .sub{font-size:14px;color:var(--text-muted);margin-top:4px}
 .share-header .top-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
 .btn-link{font-size:14px;font-weight:500;padding:10px 14px;border-radius:var(--radius-md);border:1px solid var(--border-strong);background:transparent;color:var(--text-default);text-decoration:none;white-space:nowrap}
+.btn-link.btn-danger{background:transparent;color:var(--danger-text);border-color:var(--danger-border)}
 .notes-feed{padding:16px 20px 32px;display:flex;flex-direction:column;gap:12px}
 .divider-label{display:flex;align-items:center;gap:10px;margin:8px 0;font-size:12px;font-weight:600;color:var(--accent)}
 .divider-label::before,.divider-label::after{content:'';flex:1;height:1px;background:var(--accent);opacity:.4}
