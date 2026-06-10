@@ -44,8 +44,8 @@ jest.mock("@/components/whiteboard/PdfImageUploadButton", () => ({
 jest.mock("@/components/whiteboard/MathInsertButton", () => ({
   MathInsertButton: () => null,
 }));
-jest.mock("@/components/whiteboard/DesmosInsertButton", () => ({
-  DesmosInsertButton: () => null,
+jest.mock("@/components/whiteboard/GraphInsertButton", () => ({
+  GraphInsertButton: () => null,
 }));
 jest.mock("@/lib/whiteboard/ensure-native-image-asset-urls-for-sync", () => ({
   ensureNativeImageAssetUrlsForSync: jest.fn(async () => null),

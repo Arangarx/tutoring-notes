@@ -8,12 +8,14 @@ import {
   expectedAlignedStudentScroll,
   findFirstImageElementId,
   growStrokeOnRole,
+  insertGraphOnRole,
   insertPngFixtureOnRole,
   moveElementOnRole,
   placeMarkerAtViewportCenter,
   readAppStateCenterXY,
   readElementPosition,
   readEncryptionKeyFromHash,
+  readGraphElementState,
   readImageElementState,
   readSceneElementIds,
   readStrokeWidth,
@@ -674,6 +676,78 @@ test.describe("whiteboard live-sync regression", () => {
       const studentOnP1 = await readSceneElementIds(peers.studentPage, "student");
       expect(studentOnP1).toContain(page1Stroke);
       expect(studentOnP1).not.toContain(page2Stroke);
+    } finally {
+      await peers.close();
+    }
+  });
+
+  test("invariant 12 — tutor graph syncs graphStateJson to student", async ({
+    browser,
+  }) => {
+    test.setTimeout(180_000);
+    const session = await seedWbLiveSyncSession();
+    const peers = await openTutorAndStudent(browser, session);
+    try {
+      const graphId = await insertGraphOnRole(
+        peers.tutorPage,
+        "tutor",
+        session,
+        ["x^2"]
+      );
+      expect(graphId).toBeTruthy();
+
+      const tutorState = await readGraphElementState(
+        peers.tutorPage,
+        "tutor",
+        graphId
+      );
+      expect(tutorState).not.toBeNull();
+      expect(tutorState!.expressions).toContain("x^2");
+      expect(tutorState!.link).toBe("mynk://graph");
+
+      await waitForElementOnPeer(peers.studentPage, "student", graphId, 30_000);
+
+      await peers.studentPage.waitForFunction(
+        (id) => {
+          const bridge = (
+            window as Window & {
+              __TN_WB_E2E__?: Record<
+                string,
+                {
+                  graphElementState: (eid: string) => {
+                    expressions: string[];
+                    graphStateJson: string | null;
+                  } | null;
+                }
+              >;
+            }
+          ).__TN_WB_E2E__?.student;
+          const st = bridge?.graphElementState?.(id);
+          return (
+            st != null &&
+            st.expressions.includes("x^2") &&
+            typeof st.graphStateJson === "string" &&
+            st.graphStateJson.includes("x^2")
+          );
+        },
+        graphId,
+        { timeout: 30_000 }
+      );
+
+      const studentState = await readGraphElementState(
+        peers.studentPage,
+        "student",
+        graphId
+      );
+      expect(studentState).not.toBeNull();
+      expect(studentState!.expressions).toContain("x^2");
+      expect(studentState!.graphStateJson).toContain("x^2");
+      expect(studentState!.bbox).toEqual([-10, 10, 10, -10]);
+      expect(studentState!.link).toBe("mynk://graph");
+
+      const graphHost = peers.studentPage.getByTestId("wb-graph-embed-host");
+      await expect(graphHost).toBeVisible({ timeout: 15_000 });
+      await expect(graphHost).toHaveAttribute("data-read-only", "true");
     } finally {
       await peers.close();
     }

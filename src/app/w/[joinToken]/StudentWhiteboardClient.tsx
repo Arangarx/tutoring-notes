@@ -24,8 +24,10 @@ import {
   computeDisplayActiveMs,
 } from "@/lib/whiteboard/active-time";
 import { ExcalidrawDynamic } from "@/components/whiteboard/ExcalidrawDynamic";
+import { GraphEmbeddable } from "@/components/whiteboard/GraphEmbeddable";
 import { WhiteboardDebugHud } from "@/components/whiteboard/WhiteboardDebugHud";
 import { validateExcalidrawEmbeddable } from "@/lib/whiteboard/validate-embeddable";
+import { GRAPH_EMBED_LINK } from "@/lib/whiteboard/insert-asset";
 import { getOrCreateLocalPeerId } from "@/lib/whiteboard/local-peer-id";
 import { useStudentWhiteboardCanvas } from "@/hooks/useStudentWhiteboardCanvas";
 import { UndoRedoButtons } from "@/components/whiteboard/UndoRedoButtons";
@@ -492,6 +494,44 @@ export function StudentWhiteboardClient({
     [studentSyncOnCanvas, syncActivePageElements, whiteboardSessionId, studentId, pathJoinToken, syncClient, getPageBroadcastExtras]
   );
 
+  const renderGraphEmbeddable = useCallback((element: unknown) => {
+    const el = element as {
+      link?: string;
+      customData?: { wbType?: string };
+    };
+    if (el.link === GRAPH_EMBED_LINK || el.customData?.wbType === "graph") {
+      return (
+        <GraphEmbeddable
+          element={
+            element as {
+              id?: string;
+              width?: number;
+              height?: number;
+              customData?: Record<string, unknown>;
+            }
+          }
+          readOnly
+        />
+      );
+    }
+    return undefined;
+  }, []);
+
+  const handleExcalidrawLinkOpen = useCallback(
+    (
+      element: { link?: string | null; customData?: { wbType?: string } },
+      event: { preventDefault: () => void }
+    ) => {
+      if (
+        element.link === GRAPH_EMBED_LINK ||
+        element.customData?.wbType === "graph"
+      ) {
+        event.preventDefault();
+      }
+    },
+    []
+  );
+
   if (keyMissing) {
     return (
       <div className="container" style={{ maxWidth: 720 }}>
@@ -891,6 +931,8 @@ export function StudentWhiteboardClient({
               canvasActions: { saveToActiveFile: false, loadScene: false },
             }}
             validateEmbeddable={validateExcalidrawEmbeddable}
+            renderEmbeddable={renderGraphEmbeddable}
+            onLinkOpen={handleExcalidrawLinkOpen}
           />
           <WhiteboardDebugHud
             role="student"

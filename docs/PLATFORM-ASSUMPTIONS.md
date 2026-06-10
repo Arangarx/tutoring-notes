@@ -303,17 +303,18 @@
   - Regression pinned: `src/__tests__/regressions/csp-headers.test.ts`
 - **What breaks if violated**: any new external origin (e.g. embedding a YouTube video, adding a font CDN, calling a new third-party API) silently fails until added to CSP. Per AGENTS.md convention, document the addition in the feature's STATUS doc.
 
-### 5.3.1 Desmos calculator embed (`https://www.desmos.com`)
+### 5.3.1 JSXGraph coordinate-plane embed (self-hosted)
 
-- **Assumption**: `https://www.desmos.com` is a load-bearing external origin required in **`frame-src`**, **`font-src`**, **`img-src`**, and **`style-src`**. No Desmos account or API key — anonymous public calculator only.
-- **Why all four directives**: Excalidraw renders the Desmos embeddable as a **sandboxed iframe without `allow-same-origin`** → **null origin** → the **parent page's CSP** governs its asset loads. Chrome does not reliably honor the generic `https:` wildcard in `font-src` for null-origin sandbox contexts; the explicit `https://www.desmos.com` entry is required so icon fonts, images, and styles render (otherwise the calculator appears as empty squares).
+- **Assumption**: Graphing uses **self-hosted JSXGraph** (`jsxgraph` npm package). Assets are copied to `public/jsxgraph/` (CSS) and loaded via dynamic `import("jsxgraph")` — **no external CSP origins**. Graph state (expressions + bounding box) persists in Excalidraw `customData.graphStateJson` and syncs through the existing scene pipeline. Rendering uses Excalidraw's `renderEmbeddable` prop with sentinel link `mynk://graph` — **not an iframe**.
 - **Where baked in**:
-  - `src/lib/security/csp.ts:buildContentSecurityPolicy`
-  - `next.config.ts:CONTENT_SECURITY_POLICY` (`style-src` + `font-src`; `img-src` covered by `https:` wildcard)
-  - `src/lib/whiteboard/insert-asset.ts:validateDesmosUrl` + `DESMOS_ALLOWED_HOSTS`
-  - Regression: `src/__tests__/regressions/csp-headers.test.ts` (frame-src + asset directives)
-- **What breaks if violated**: Insert Desmos shows a frowny-face placeholder (`frame-src` gap) or a live iframe with broken UI glyphs (`font-src` / `img-src` / `style-src` gap).
-- **Migration check**: any new third-party embed that uses a null-origin sandboxed iframe needs the same multi-directive audit — not just `frame-src`.
+  - `src/components/whiteboard/GraphEmbeddable.tsx` + `src/lib/whiteboard/graph-state.ts` + `graph-persist.ts`
+  - `src/lib/whiteboard/insert-asset.ts:GRAPH_EMBED_LINK` + `insertGraphOnCanvas`
+  - `src/lib/whiteboard/validate-embeddable.ts` (sentinel-only allowlist)
+  - Tutor + student `renderEmbeddable` wiring (`WhiteboardWorkspaceClient`, `StudentWhiteboardClient`)
+  - `frame-src 'self'` only — Desmos origins removed from CSP (2026-06-10 Phase 2b)
+- **Legacy read**: Old pilot sessions may still contain Desmos iframe embeds in the event log (`type: "desmos"`). `excalidraw-adapter.ts` maps them for replay without throwing; they no longer render live (CSP blocks external iframes) — acceptable per pilot scope.
+- **What breaks if violated**: graph insert shows "Empty Web Embed" if `link`/`validateEmbeddable` drift; student board shows stale graph if `renderEmbeddable` or `graphStateJson` re-hydrate path is removed.
+- **Migration check**: new embeddable features should prefer `renderEmbeddable` on `'self'` over third-party iframes to avoid multi-directive CSP expansion.
 
 ### 5.4 Permissions-Policy MUST be site-wide (not per-route)
 

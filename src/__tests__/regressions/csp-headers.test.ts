@@ -122,27 +122,16 @@ describe("buildContentSecurityPolicy — directive guards", () => {
     expect(getDirective(csp, "frame-ancestors")).toBe("'none'");
   });
 
-  test("frame-src allows Desmos calculator iframes (Insert Desmos smoke regression)", () => {
-    // The whiteboard 'Insert Desmos' button uses Excalidraw's embeddable
-    // element with https://www.desmos.com/calculator. When middleware emits
-    // a CSP without frame-src, the browser falls back to default-src 'self'
-    // (because both CSP headers are combined and the stricter wins), blocking
-    // the iframe and rendering a frowny-face placeholder. This directive must
-    // match next.config.ts frame-src — keep in sync.
+  test("frame-src is self-only (JSXGraph graphs use renderEmbeddable, not iframes)", () => {
     const frameSrc = getDirective(csp, "frame-src") ?? "";
-    expect(frameSrc).toMatch(/https:\/\/www\.desmos\.com/);
-    expect(frameSrc).toMatch(/https:\/\/desmos\.com/);
-    expect(frameSrc).toMatch(/'self'/);
+    expect(frameSrc).toBe("'self'");
+    expect(frameSrc).not.toMatch(/desmos\.com/);
   });
 
-  test("font-src, img-src, and style-src allow Desmos assets (null-origin embed regression)", () => {
-    // Excalidraw renders Desmos as a sandboxed iframe without
-    // allow-same-origin → null origin → parent CSP governs asset loads.
-    // Generic https: is not reliably honored by Chrome for those contexts;
-    // the explicit origin must appear in each asset directive.
-    expect(getDirective(csp, "font-src")).toMatch(/https:\/\/www\.desmos\.com/);
-    expect(getDirective(csp, "img-src")).toMatch(/https:\/\/www\.desmos\.com/);
-    expect(getDirective(csp, "style-src")).toMatch(/https:\/\/www\.desmos\.com/);
+  test("font-src, img-src, and style-src exclude Desmos origins (Phase 2b)", () => {
+    expect(getDirective(csp, "font-src")).not.toMatch(/desmos\.com/);
+    expect(getDirective(csp, "img-src")).not.toMatch(/desmos\.com/);
+    expect(getDirective(csp, "style-src")).not.toMatch(/desmos\.com/);
   });
 
   test("connect-src allows the Vercel Blob upload endpoint (B1 regression)", () => {

@@ -27,6 +27,11 @@
  */
 
 import { EXCALIDRAW_STROKE_HEX } from "@/styles/token-values";
+import {
+  DEFAULT_GRAPH_BBOX,
+  serializeGraphStateJson,
+  type GraphState,
+} from "@/lib/whiteboard/graph-state";
 import { uploadWhiteboardAsset } from "@/lib/whiteboard/upload";
 import type { PdfPageRender } from "@/lib/whiteboard/pdf-render";
 import {
@@ -918,98 +923,32 @@ export async function insertPdfPagesAsBoardPages(
   };
 }
 
-// -------------------------------------------------------------------
-// Desmos embed
-// -------------------------------------------------------------------
-//
-// Excalidraw natively supports an `embeddable` element type that
-// renders an `<iframe>` for a whitelisted URL. We insert one of those
-// elements pointing at a Desmos calculator URL.
-//
-// The `embeddable` element shape is similar to `image`'s but uses
-// `link` instead of `fileId`. We construct it directly (no Excalidraw
-// type import) for the same reasons as `buildImageElement` above.
-//
-// Replay caveat — DOCUMENTED in `docs/WHITEBOARD-STATUS.md`:
-//   The Desmos iframe runs as a live, interactive widget. The
-//   canonical event log records the *URL* the tutor inserted (and any
-//   move/resize), but does NOT capture intra-iframe state changes
-//   (sliders dragged, equations toggled). Replay therefore shows the
-//   iframe at its initial state. For a static record of a graph,
-//   tutors should use the Save->URL flow inside Desmos and insert the
-//   resulting permalink (which encodes the graph state in the URL).
+// ---------------------------------------------------------------------------
+// Self-hosted JSXGraph embed
+// ---------------------------------------------------------------------------
 
 /**
- * Default size for an inserted Desmos embed (CSS pixels, scene
- * coords). Roughly matches Desmos's recommended default
- * embed dimensions.
+ * Sentinel link for Excalidraw embeddables rendered via `renderEmbeddable`.
+ * Required so `validateEmbeddable` + `embedsValidationStatus` pass (Excalidraw
+ * only mounts `renderEmbeddable` for validated links). The native hyperlink UI
+ * for this scheme is suppressed in `whiteboard-chrome.css` + `onLinkOpen`.
  */
-const DESMOS_DEFAULT_WIDTH = 720;
-const DESMOS_DEFAULT_HEIGHT = 540;
+export const GRAPH_EMBED_LINK = "mynk://graph";
 
-/** Hosts we accept for Desmos embeds. Used by both the toolbar
- * dialog and Excalidraw's `validateEmbeddable` prop. */
-export const DESMOS_ALLOWED_HOSTS: ReadonlyArray<string> = [
-  "www.desmos.com",
-  "desmos.com",
-];
+const GRAPH_DEFAULT_WIDTH = 720;
+const GRAPH_DEFAULT_HEIGHT = 540;
 
 /**
- * Validate (and lightly normalize) a Desmos URL. Returns the absolute
- * URL string we should hand to Excalidraw, or an error reason.
- *
- * Accepts:
- *   - https://www.desmos.com/calculator/<hash>          (saved graph)
- *   - https://www.desmos.com/calculator                  (blank)
- *   - https://www.desmos.com/scientific                  (sci. calc)
- *   - https://www.desmos.com/geometry/<hash>             (geometry)
- *
- * Rejects everything else — we don't want the toolbar to be a generic
- * iframe-anywhere injector.
+ * Build an Excalidraw `embeddable` element for a self-hosted JSXGraph widget.
  */
-export function validateDesmosUrl(
-  raw: string
-): { ok: true; url: string } | { ok: false; reason: string } {
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    return { ok: false, reason: "Enter a Desmos URL or pick 'New blank graph'." };
-  }
-  let parsed: URL;
-  try {
-    parsed = new URL(trimmed);
-  } catch {
-    return {
-      ok: false,
-      reason: "That doesn't look like a URL. Paste the full https:// link.",
-    };
-  }
-  if (parsed.protocol !== "https:") {
-    return { ok: false, reason: "Desmos URLs must use https://." };
-  }
-  if (!DESMOS_ALLOWED_HOSTS.includes(parsed.hostname)) {
-    return {
-      ok: false,
-      reason: `Only Desmos URLs are accepted (got ${parsed.hostname}).`,
-    };
-  }
-  // Strip fragments — Desmos uses hash-routing only for editor state
-  // we wouldn't want to capture in customData (cursor position etc.)
-  parsed.hash = "";
-  return { ok: true, url: parsed.toString() };
-}
-
-/**
- * Build an Excalidraw `embeddable` element pointing at a Desmos URL.
- * Same omit-everything-non-essential approach as `buildImageElement`.
- */
-function buildEmbeddableElement(args: {
+export function buildGraphEmbeddableElement(args: {
   x: number;
   y: number;
   width: number;
   height: number;
-  url: string;
-  desmosKind: "calculator" | "scientific" | "geometry" | "saved";
+  graphState: GraphState;
 }): Record<string, unknown> {
+  const graphStateJson = serializeGraphStateJson(args.graphState);
   const now = Date.now();
   return {
     id: makeRandomElementId(),
@@ -1032,67 +971,49 @@ function buildEmbeddableElement(args: {
     isDeleted: false,
     boundElements: null,
     updated: now,
-    link: args.url,
+    link: GRAPH_EMBED_LINK,
     locked: false,
     groupIds: [],
     frameId: null,
     roundness: null,
     customData: {
-      assetUrl: args.url,
-      // The adapter lifts wbType into the canonical event log so a
-      // future replay (and the AI note pipeline) can distinguish
-      // embeds from image elements without sniffing the URL.
-      wbType: "embed",
-      embed: {
-        provider: "desmos",
-        kind: args.desmosKind,
-        url: args.url,
+      assetUrl: GRAPH_EMBED_LINK,
+      wbType: "graph",
+      graph: {
+        provider: "jsxgraph",
       },
+      graphStateJson,
     },
   };
 }
 
-export type InsertEmbedResult =
-  | { ok: true; elementId: string; url: string }
+export type InsertGraphResult =
+  | { ok: true; elementId: string }
   | { ok: false; reason: string };
 
 /**
- * Insert a Desmos embeddable element at the current viewport center.
- * No upload step — the URL itself is the asset, and CSP handles the
- * rendering safety boundary.
+ * Insert a JSXGraph embeddable at the current viewport center.
  */
-export function insertDesmosEmbedOnCanvas(args: InsertAssetCommonArgs & {
-  url: string;
-}): InsertEmbedResult {
-  const { excalidrawAPI, url } = args;
-  const validated = validateDesmosUrl(url);
-  if (!validated.ok) return validated;
+export function insertGraphOnCanvas(
+  args: InsertAssetCommonArgs & {
+    initialExpressions?: string[];
+  }
+): InsertGraphResult {
+  const { excalidrawAPI, initialExpressions } = args;
+  const graphState: GraphState = {
+    bbox: DEFAULT_GRAPH_BBOX,
+    expressions: initialExpressions?.filter((e) => e.trim().length > 0) ?? [],
+  };
 
-  // Detect the Desmos product from the path so the canonical event
-  // log carries a sensible label (`saved` vs `calculator` etc.).
-  const kind: "calculator" | "scientific" | "geometry" | "saved" = (() => {
-    const parsed = new URL(validated.url);
-    const segs = parsed.pathname.split("/").filter(Boolean);
-    if (segs[0] === "scientific") return "scientific";
-    if (segs[0] === "geometry") {
-      return segs.length > 1 ? "saved" : "geometry";
-    }
-    if (segs[0] === "calculator") {
-      return segs.length > 1 ? "saved" : "calculator";
-    }
-    return "calculator";
-  })();
-
-  const center = viewportCenter(excalidrawAPI);
-  const x = center.x - DESMOS_DEFAULT_WIDTH / 2;
-  const y = center.y - DESMOS_DEFAULT_HEIGHT / 2;
-  const newElement = buildEmbeddableElement({
+  const center = getInsertCenter(excalidrawAPI);
+  const x = center.x - GRAPH_DEFAULT_WIDTH / 2;
+  const y = center.y - GRAPH_DEFAULT_HEIGHT / 2;
+  const newElement = buildGraphEmbeddableElement({
     x,
     y,
-    width: DESMOS_DEFAULT_WIDTH,
-    height: DESMOS_DEFAULT_HEIGHT,
-    url: validated.url,
-    desmosKind: kind,
+    width: GRAPH_DEFAULT_WIDTH,
+    height: GRAPH_DEFAULT_HEIGHT,
+    graphState,
   });
 
   const elements = excalidrawAPI.getSceneElements() as ReadonlyArray<unknown>;
@@ -1109,6 +1030,5 @@ export function insertDesmosEmbedOnCanvas(args: InsertAssetCommonArgs & {
   return {
     ok: true,
     elementId: (newElement as unknown as { id: string }).id,
-    url: validated.url,
   };
 }

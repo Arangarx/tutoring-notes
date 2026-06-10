@@ -22,9 +22,9 @@ Not in priority order within sections — that comes when items move to a sprint
 | **Share ▾ options expansion** | Low | Current Share ▾ dropdown has only "Copy student join link". Consider adding QR code or email options. |
 | **Equation legibility on white PDF in dark mode** | Post-V1 / revisit | **Andrew decision 2026-06-09 — DEFER.** Inserted math equations store dark ink; Excalidraw dark-mode inversion renders white glyphs — fine on the dark canvas, **invisible over a white PDF page**. Light mode (black glyphs) is fine over PDF. Frequency unknown; do not force always-black in dark mode now. **Candidate revisit:** black glyphs on a small light/white rounded backing plate so equations read on any background. |
 
-### Graphing tool swap: Desmos → self-hosted JSXGraph (next branch after chrome-redo merge)
+### Graphing tool swap: Desmos → self-hosted JSXGraph (`feat/wb-graph-jsxgraph`)
 
-**Priority: V1-tier** (graphing feature replacement — own branch **after** `feat/wb-chrome-redo` merges to `v1-redesign`, **not** folded into chrome-redo).
+**Priority: V1-tier** (graphing feature replacement — branch `feat/wb-graph-jsxgraph` on `v1-redesign`).
 
 **Decision (Andrew 2026-06-09):** Replace the Desmos graphing embed with a **self-hosted JSXGraph** widget rendered via Excalidraw's `renderEmbeddable` prop.
 
@@ -34,19 +34,23 @@ Not in priority order within sections — that comes when items move to a sprint
 - **(a)** Accept breakage of old Desmos graphs in existing pilot sessions (only Andrew + Sarah; no real graphs to preserve).
 - **(b)** Do the swap as its **own branch** after `feat/wb-chrome-redo` merges — do not fold into the current chrome-redo branch.
 
-**Scope checklist (~3–5 day effort):**
-- [ ] UI: rename graph insert button (Desmos → Graph / equivalent)
-- [ ] `insert-asset.ts`: `insertGraphOnCanvas` + `buildGraphEmbeddableElement` (replace Desmos paths)
-- [ ] New `src/components/whiteboard/GraphEmbeddable.tsx` — JSXGraph coordinate plane + function plot, rendered via `renderEmbeddable`
-- [ ] Wire `renderEmbeddable` on tutor + student whiteboard clients
-- [ ] `validate-embeddable`: internal-scheme-only (no external iframe origins)
-- [ ] Event-log / `excalidraw-adapter`: `desmos` → `graph` type rename with **legacy read** for old sessions
-- [ ] CSP: remove `www.desmos.com` / `desmos.com` from `frame-src`, `style-src`, `font-src`, `img-src` in **both** `csp.ts` and `next.config.ts`
-- [ ] `docs/PLATFORM-ASSUMPTIONS.md` §5.3.1 — replace Desmos embed assumption with JSXGraph self-hosted
-- [ ] Tests: update `insert-asset`, `csp-headers`, `excalidraw-adapter` tests
-- [ ] Add `jsxgraph` npm dependency
+**Phase 1 — ✅ landed `9d1264a` (tutor-side scaffold):** `jsxgraph` dep + self-hosted CSS; `GraphInsertButton` / `insertGraphOnCanvas` / `buildGraphEmbeddableElement` (`mynk://graph` sentinel); tutor `renderEmbeddable` → `GraphEmbeddable` (axes + grid, no CORS); `validate-embeddable` accepts sentinel; unit tests for insert + graph-state parse.
 
-**Cross-ref:** Sarah Q1 graphing ask (Desmos was interim); [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) HEAD — next branch after chrome-redo merge.
+**Phase 2a — in flight (tutor usability):** resize-fill (`resizeContainer` + full-box CSS); suppress Excalidraw `mynk://graph` hyperlink chrome (CSS `:has` on sentinel href + `onLinkOpen` preventDefault); inline expression panel (add/edit/remove, parse-error inline); persist `graphStateJson` (expressions + bbox) via public `excalidrawAPI.updateScene({ captureUpdate: "NEVER" })` on expression commit + debounced pan/zoom end.
+
+**Phase 2b — remaining (not in 2a):**
+- [ ] Wire `renderEmbeddable` on **student** whiteboard client
+- [ ] Event-log / `excalidraw-adapter`: `desmos` → `graph` type rename with **legacy read** for old sessions
+- [ ] CSP: remove `www.desmos.com` / `desmos.com` from `frame-src`, `style-src`, `font-src`, `img-src` in **both** `csp.ts` and `next.config.ts` (after student path + legacy read)
+- [ ] `docs/PLATFORM-ASSUMPTIONS.md` §5.3.1 — replace Desmos embed assumption with JSXGraph self-hosted
+- [ ] Tests: update `csp-headers`, `excalidraw-adapter` tests
+- [ ] Remove Desmos insert UI / code paths (when swap complete)
+
+**Note (Andrew 2026-06-09):** **Camera-on-by-default** is deferred to **Gate A2 (waiting room)** — A2 owns auto-starting A/V; this graph branch does not change live-A/V behavior.
+
+**Cosmetic (low priority):** On-canvas blue link badge shows on unselected graph embeds; can't hide without clearing `link` (which breaks reload). Needs an Excalidraw API/upstream change.
+
+**Cross-ref:** Sarah Q1 graphing ask (Desmos was interim); [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) HEAD.
 
 ## Whiteboard — implementation / design queue
 

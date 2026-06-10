@@ -210,6 +210,23 @@
   height: 100%;
 }
 
+/*
+ * Self-hosted graph embeds use link "mynk://graph" only for Excalidraw
+ * embeddable validation (renderEmbeddable path).
+ *
+ * 1. Hyperlink editor popup — hide via :has on the sentinel href (DOM).
+ * 2. On-canvas link badge — drawn by Excalidraw renderLinkIcon (canvas, not
+ *    CSS-targetable). Link must stay on the element for reload validation;
+ *    badge is accepted as a minor cosmetic trade-off (see graph-persist.ts).
+ *
+ * Legacy external embed links are unaffected.
+ */
+.mynk-wb-chrome .excalidraw-hyperlinkContainer:has(
+  .excalidraw-hyperlinkContainer-link[href="mynk://graph"]
+) {
+  display: none !important;
+}
+
 /* ΓöÇΓöÇ Banners overlay (absolute, top of canvas) ΓöÇΓöÇ */
 .mynk-wb-banners {
   position: absolute;

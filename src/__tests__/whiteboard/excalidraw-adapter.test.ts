@@ -185,18 +185,39 @@ describe("excalidraw-adapter -- toCanonical", () => {
     expect(wb.assetUrl).toBe("https://blob/eq.svg");
   });
 
-  test("desmos iframe maps to wbType=desmos with desmosStateJson", () => {
+  test("graph embeddable maps to type=graph with graphStateJson", () => {
+    const el = rect({
+      id: "g1",
+      type: "embeddable",
+      link: "mynk://graph",
+      customData: {
+        wbType: "graph",
+        graphStateJson: '{"expressions":["x^2"],"bbox":[-10,10,10,-10]}',
+        assetUrl: "mynk://graph",
+      },
+    });
+    const wb = toCanonical(el)!;
+    expect(wb.type).toBe("graph");
+    expect(wb.graphStateJson).toContain("x^2");
+    expect(wb.assetUrl).toBe("mynk://graph");
+  });
+
+  test("legacy desmos iframe maps without throwing", () => {
     const el = rect({
       id: "ds1",
-      type: "iframe",
+      type: "embeddable",
+      link: "https://www.desmos.com/calculator/abc123",
       customData: {
-        wbType: "desmos",
+        wbType: "embed",
+        assetUrl: "https://www.desmos.com/calculator/abc123",
+        embed: { provider: "desmos" },
         desmosStateJson: '{"version":11}',
       },
     });
     const wb = toCanonical(el)!;
     expect(wb.type).toBe("desmos");
     expect(wb.desmosStateJson).toBe('{"version":11}');
+    expect(wb.assetUrl).toBe("https://www.desmos.com/calculator/abc123");
   });
 });
 
@@ -216,7 +237,25 @@ describe("excalidraw-adapter -- toExcalidraw round-trip", () => {
     expect(back).toEqual(original);
   });
 
-  test("desmos round-trips through iframe slot", () => {
+  test("graph round-trips through embeddable slot", () => {
+    const wb: WBElement = {
+      id: "g1",
+      type: "graph",
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 300,
+      assetUrl: "mynk://graph",
+      graphStateJson: '{"expressions":["sin(x)"]}',
+    };
+    const ex = toExcalidraw(wb);
+    expect(ex.type).toBe("embeddable");
+    expect(ex.link).toBe("mynk://graph");
+    const back = toCanonical(ex);
+    expect(back).toEqual(wb);
+  });
+
+  test("legacy desmos round-trips through iframe slot", () => {
     const wb: WBElement = {
       id: "ds1",
       type: "desmos",
@@ -224,11 +263,19 @@ describe("excalidraw-adapter -- toExcalidraw round-trip", () => {
       y: 0,
       width: 400,
       height: 300,
+      assetUrl: "https://www.desmos.com/calculator/abc",
       desmosStateJson: '{"v":11}',
     };
     const ex = toExcalidraw(wb);
     expect(ex.type).toBe("iframe");
-    const back = toCanonical(ex);
+    const back = toCanonical({
+      ...ex,
+      link: wb.assetUrl,
+      customData: {
+        ...ex.customData,
+        assetUrl: wb.assetUrl,
+      },
+    });
     expect(back).toEqual(wb);
   });
 
