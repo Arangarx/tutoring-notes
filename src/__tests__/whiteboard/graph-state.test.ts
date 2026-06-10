@@ -3,6 +3,7 @@ import {
   clampGraphContainerPx,
   DEFAULT_GRAPH_BBOX,
   extractGraphStateFromElement,
+  fitGraphBboxToSquareUnits,
   normalizeGraphBbox,
   parseGraphStateJson,
   preprocessGraphExpression,
@@ -12,6 +13,18 @@ import {
   updateGraphExpression,
   withGraphBbox,
 } from "@/lib/whiteboard/graph-state";
+
+function assertSquareUnits(
+  bbox: [number, number, number, number],
+  widthPx: number,
+  heightPx: number
+): void {
+  const xRange = bbox[2] - bbox[0];
+  const yRange = bbox[1] - bbox[3];
+  const pxPerUnitX = widthPx / xRange;
+  const pxPerUnitY = heightPx / yRange;
+  expect(pxPerUnitX).toBeCloseTo(pxPerUnitY, 5);
+}
 
 describe("graph-state", () => {
   it("round-trips a minimal graph state", () => {
@@ -98,31 +111,53 @@ describe("graph-state", () => {
     });
   });
 
-  describe("recomputeBboxForResize", () => {
-    it("keeps square units and expands area when container grows", () => {
-      const bbox = DEFAULT_GRAPH_BBOX;
-      const prevW = 400;
-      const prevH = 400;
-      const nextW = 800;
-      const nextH = 400;
+  describe("square-unit bbox math", () => {
+    const aspectCases = [
+      { label: "square", width: 400, height: 400 },
+      { label: "wide", width: 960, height: 240 },
+      { label: "tall", width: 200, height: 900 },
+      { label: "ultra-wide", width: 1200, height: 150 },
+    ] as const;
 
+    it.each(aspectCases)(
+      "fitGraphBboxToSquareUnits keeps 1:1 px-per-unit ($label)",
+      ({ width, height }) => {
+        const fitted = fitGraphBboxToSquareUnits(DEFAULT_GRAPH_BBOX, width, height);
+        assertSquareUnits(fitted, width, height);
+        expect(fitted[0]).toBeLessThan(fitted[2]);
+        expect(fitted[3]).toBeLessThan(fitted[1]);
+      }
+    );
+
+    it.each(aspectCases)(
+      "recomputeBboxForResize keeps 1:1 px-per-unit ($label)",
+      ({ width, height }) => {
+        const prevW = 400;
+        const prevH = 400;
+        const next = recomputeBboxForResize({
+          bbox: DEFAULT_GRAPH_BBOX,
+          prevWidthPx: prevW,
+          prevHeightPx: prevH,
+          nextWidthPx: width,
+          nextHeightPx: height,
+        });
+        assertSquareUnits(next, width, height);
+      }
+    );
+
+    it("expands horizontal range when container grows wider", () => {
+      const bbox = DEFAULT_GRAPH_BBOX;
       const next = recomputeBboxForResize({
         bbox,
-        prevWidthPx: prevW,
-        prevHeightPx: prevH,
-        nextWidthPx: nextW,
-        nextHeightPx: nextH,
+        prevWidthPx: 400,
+        prevHeightPx: 400,
+        nextWidthPx: 800,
+        nextHeightPx: 400,
       });
 
-      const xRange = next[2] - next[0];
-      const yRange = next[1] - next[3];
-      const pxPerUnitX = nextW / xRange;
-      const pxPerUnitY = nextH / yRange;
-      expect(pxPerUnitX).toBeCloseTo(pxPerUnitY, 5);
-      expect(xRange).toBeGreaterThan(bbox[2] - bbox[0]);
-      expect(yRange).toBeCloseTo(bbox[1] - bbox[3], 5);
-      expect(next[0]).toBeLessThan(next[2]);
-      expect(next[3]).toBeLessThan(next[1]);
+      assertSquareUnits(next, 800, 400);
+      expect(next[2] - next[0]).toBeGreaterThan(bbox[2] - bbox[0]);
+      expect(next[1] - next[3]).toBeCloseTo(bbox[1] - bbox[3], 5);
     });
 
     it("normalizes inverted bbox and clamps tiny container sizes", () => {

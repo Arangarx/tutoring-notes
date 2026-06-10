@@ -1,8 +1,5 @@
 import { GRAPH_EMBED_LINK } from "@/lib/whiteboard/insert-asset";
-import {
-  persistGraphElementState,
-  suppressGraphEmbedLink,
-} from "@/lib/whiteboard/graph-persist";
+import { persistGraphElementState } from "@/lib/whiteboard/graph-persist";
 import { serializeGraphStateJson } from "@/lib/whiteboard/graph-state";
 
 describe("persistGraphElementState", () => {
@@ -57,7 +54,7 @@ describe("persistGraphElementState", () => {
     expect(JSON.parse(json)).toEqual({ bbox, expressions: ["sin(x)"] });
   });
 
-  it("clears sentinel graph link without touching customData", () => {
+  it("retains sentinel graph link after persist (reload validation)", () => {
     const element = {
       id: "graph-2",
       type: "embeddable",
@@ -72,14 +69,18 @@ describe("persistGraphElementState", () => {
     };
 
     expect(
-      suppressGraphEmbedLink({ excalidrawAPI: api, elementId: "graph-2" })
+      persistGraphElementState({
+        excalidrawAPI: api,
+        elementId: "graph-2",
+        graphState: { expressions: ["x^2"], bbox: [-10, 10, 10, -10] },
+      })
     ).toBe(true);
 
     const next = updateScene.mock.calls[0][0].elements[0] as {
       link: string | null;
       customData: { wbType: string };
     };
-    expect(next.link).toBeNull();
+    expect(next.link).toBe(GRAPH_EMBED_LINK);
     expect(next.customData.wbType).toBe("graph");
     expect(updateScene.mock.calls[0][0].captureUpdate).toBe("NEVER");
   });

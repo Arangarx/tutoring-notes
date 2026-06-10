@@ -64,6 +64,44 @@ export function normalizeGraphBbox(bbox: GraphBbox): GraphBbox {
 }
 
 /**
+ * Derive a single pixels-per-math-unit scale from a bbox and container size.
+ * Uses the x-axis as the reference so the horizontal extent is preserved.
+ */
+export function graphPxPerUnit(bbox: GraphBbox, widthPx: number): number {
+  const w = clampGraphContainerPx(widthPx);
+  const [xmin, , xmax] = normalizeGraphBbox(bbox);
+  const xRange = Math.max(xmax - xmin, MIN_GRAPH_BBOX_SPAN);
+  return w / xRange;
+}
+
+/**
+ * Fit a bbox to a container so px-per-unit is identical on both axes (square grid).
+ * Preserves the horizontal math extent; adjusts vertical range around the center.
+ */
+export function fitGraphBboxToSquareUnits(
+  bbox: GraphBbox,
+  widthPx: number,
+  heightPx: number
+): GraphBbox {
+  const w = clampGraphContainerPx(widthPx);
+  const h = clampGraphContainerPx(heightPx);
+  const [xmin, ymax, xmax, ymin] = normalizeGraphBbox(bbox);
+  const cx = (xmin + xmax) / 2;
+  const cy = (ymin + ymax) / 2;
+
+  const pxPerUnit = graphPxPerUnit(bbox, w);
+  const newXRange = w / pxPerUnit;
+  const newYRange = h / pxPerUnit;
+
+  return normalizeGraphBbox([
+    cx - newXRange / 2,
+    cy + newYRange / 2,
+    cx + newXRange / 2,
+    cy - newYRange / 2,
+  ]);
+}
+
+/**
  * Recompute bounding box when the embed container resizes so pixels-per-unit
  * stays constant (square units). Expands/contracts around the current center.
  */
@@ -75,22 +113,16 @@ export function recomputeBboxForResize(args: {
   nextHeightPx: number;
 }): GraphBbox {
   const prevW = clampGraphContainerPx(args.prevWidthPx);
-  const prevH = clampGraphContainerPx(args.prevHeightPx);
   const nextW = clampGraphContainerPx(args.nextWidthPx);
   const nextH = clampGraphContainerPx(args.nextHeightPx);
 
+  const pxPerUnit = graphPxPerUnit(args.bbox, prevW);
   const [xmin, ymax, xmax, ymin] = normalizeGraphBbox(args.bbox);
-  const xRange = xmax - xmin;
-  const yRange = ymax - ymin;
-
-  const pxPerUnitX = prevW / xRange;
-  const pxPerUnitY = prevH / yRange;
-  const pxPerUnit = (pxPerUnitX + pxPerUnitY) / 2;
+  const cx = (xmin + xmax) / 2;
+  const cy = (ymin + ymax) / 2;
 
   const newXRange = nextW / pxPerUnit;
   const newYRange = nextH / pxPerUnit;
-  const cx = (xmin + xmax) / 2;
-  const cy = (ymin + ymax) / 2;
 
   return normalizeGraphBbox([
     cx - newXRange / 2,

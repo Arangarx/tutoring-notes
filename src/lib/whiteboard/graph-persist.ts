@@ -1,4 +1,3 @@
-import { GRAPH_EMBED_LINK } from "@/lib/whiteboard/insert-asset";
 import {
   serializeGraphStateJson,
   type GraphState,
@@ -60,41 +59,11 @@ export function persistGraphElementState(args: {
 }
 
 /**
- * Clear the sentinel `mynk://graph` link on a graph embeddable after validation.
- *
- * Excalidraw draws an on-canvas link badge (renderLinkIcon in staticScene.ts) for
- * any element with a non-null `link` when unselected — CSS cannot hide canvas
- * pixels. Clearing `link` removes the badge while `customData.wbType === "graph"`
- * still routes `renderEmbeddable`. Desmos embeds keep https links; normal
- * hyperlinks are unaffected.
+ * Graph embeddables must keep `link === GRAPH_EMBED_LINK` ("mynk://graph") on the
+ * persisted element. Excalidraw only calls `renderEmbeddable` when the link passes
+ * embeddable URL validation on load; clearing link after mount breaks reload
+ * ("Empty Web Embed") even though `customData.wbType === "graph"` still routes in
+ * memory. Hyperlink popup clicks are suppressed via `onLinkOpen` + CSS; the small
+ * on-canvas link badge (renderLinkIcon — canvas pixels, not DOM) is accepted as a
+ * cosmetic trade-off until Excalidraw exposes a persistence-safe hide option.
  */
-export function suppressGraphEmbedLink(args: {
-  excalidrawAPI: GraphPersistApiLike;
-  elementId: string;
-}): boolean {
-  const { excalidrawAPI, elementId } = args;
-  let changed = false;
-
-  const elements = excalidrawAPI.getSceneElements().map((raw) => {
-    const el = raw as SceneElementLike & { link?: string | null };
-    if (el.id !== elementId) return raw;
-    if (el.link !== GRAPH_EMBED_LINK) return raw;
-    changed = true;
-    const now = Date.now();
-    return {
-      ...el,
-      link: null,
-      version: (el.version ?? 1) + 1,
-      versionNonce: Math.floor(Math.random() * 2 ** 31),
-      updated: now,
-    };
-  });
-
-  if (!changed) return false;
-
-  excalidrawAPI.updateScene({
-    elements,
-    captureUpdate: "NEVER",
-  });
-  return true;
-}

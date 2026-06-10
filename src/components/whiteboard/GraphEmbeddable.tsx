@@ -11,6 +11,7 @@ import {
   addGraphExpression,
   cloneGraphState,
   DEFAULT_GRAPH_BBOX,
+  fitGraphBboxToSquareUnits,
   parseGraphStateJson,
   preprocessGraphExpression,
   recomputeBboxForResize,
@@ -22,7 +23,6 @@ import {
 } from "@/lib/whiteboard/graph-state";
 import {
   persistGraphElementState,
-  suppressGraphEmbedLink,
   type GraphPersistApiLike,
 } from "@/lib/whiteboard/graph-persist";
 import "./graph-embeddable.css";
@@ -173,13 +173,23 @@ function mountGraphBoard(
     pan: { enabled: true, needTwoFingers: false, needShift: false },
     zoom: { wheel: true, needShift: false, factor: 1.2 },
     resize: { enabled: true },
-    keepaspectratio: true,
+    // Manual square-unit bbox math (fitGraphBboxToSquareUnits / recomputeBboxForResize)
+    // drives px-per-unit on both axes; keepaspectratio would fight that and skew units.
+    keepaspectratio: false,
   });
   return board;
 }
 
 function stopEmbedDrag(event: React.SyntheticEvent): void {
   event.stopPropagation();
+}
+
+/** Block Excalidraw embeddable drag from control hits (capture phase). */
+function stopEmbedDragCapture(event: React.SyntheticEvent): void {
+  event.stopPropagation();
+  if ("stopImmediatePropagation" in event.nativeEvent) {
+    event.nativeEvent.stopImmediatePropagation();
+  }
 }
 
 export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
@@ -197,7 +207,6 @@ export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
   const containerSizeRef = useRef<{ width: number; height: number } | null>(null);
   const bboxPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bboxHandlerRef = useRef<(() => void) | null>(null);
-  const linkSuppressedRef = useRef(false);
 
   const [panelOpen, setPanelOpen] = useState(true);
   const [expressions, setExpressions] = useState<string[]>(
@@ -284,12 +293,6 @@ export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
   }, [persistState]);
 
   useEffect(() => {
-    if (!excalidrawAPI || !elementId || linkSuppressedRef.current) return;
-    const suppressed = suppressGraphEmbedLink({ excalidrawAPI, elementId });
-    if (suppressed) linkSuppressedRef.current = true;
-  }, [excalidrawAPI, elementId]);
-
-  useEffect(() => {
     const board = boardRef.current;
     const host = hostRef.current;
     if (!board || !host) return;
@@ -339,20 +342,24 @@ export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
         const prev = containerSizeRef.current;
         const boardNow = boardRef.current;
 
-        if (prev && (prev.width !== clientWidth || prev.height !== clientHeight)) {
-          try {
-            const currentBbox = boardNow.getBoundingBox();
-            const nextBbox = recomputeBboxForResize({
-              bbox: currentBbox,
-              prevWidthPx: prev.width,
-              prevHeightPx: prev.height,
-              nextWidthPx: clientWidth,
-              nextHeightPx: clientHeight,
-            });
-            boardNow.setBoundingBox(nextBbox, true);
-          } catch {
-            // keep current bbox on read errors
-          }
+        try {
+          const currentBbox = boardNow.getBoundingBox();
+          const nextBbox = prev
+            ? recomputeBboxForResize({
+                bbox: currentBbox,
+                prevWidthPx: prev.width,
+                prevHeightPx: prev.height,
+                nextWidthPx: clientWidth,
+                nextHeightPx: clientHeight,
+              })
+            : fitGraphBboxToSquareUnits(
+                currentBbox,
+                clientWidth,
+                clientHeight
+              );
+          boardNow.setBoundingBox(nextBbox, true);
+        } catch {
+          // keep current bbox on read errors
         }
 
         boardNow.resizeContainer(clientWidth, clientHeight, true);
@@ -443,33 +450,42 @@ export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
         onWheel={stopEmbedDrag}
       />
       <div
-        className="wb-graph-expr-panel"
-        onPointerDown={stopEmbedDrag}
-        onMouseDown={stopEmbedDrag}
+        className="wb-graph-controls"
+        onPointerDownCapture={stopEmbedDragCapture}
+        onMouseDownCapture={stopEmbedDragCapture}
       >
-        <div className="wb-graph-expr-toolbar">
+        <div className="wb-graph-controls-strip">
           <button
             type="button"
-            className="wb-graph-expr-toggle"
+            className="wb-graph-strip-btn wb-graph-reset-view"
+            onClick={resetView}
+            onPointerDown={stopEmbedDrag}
+            onMouseDown={stopEmbedDrag}
+            title="Reset view to default range"
+            data-testid="wb-graph-reset-view"
+          >
+            Reset view
+          </button>
+          <button
+            type="button"
+            className="wb-graph-strip-btn wb-graph-expr-toggle"
             onClick={() => setPanelOpen((open) => !open)}
+            onPointerDown={stopEmbedDrag}
+            onMouseDown={stopEmbedDrag}
             aria-expanded={panelOpen}
             data-testid="wb-graph-expr-toggle"
           >
             ƒ Expressions
             <span aria-hidden>{panelOpen ? "▾" : "▸"}</span>
           </button>
-          <button
-            type="button"
-            className="wb-graph-expr-btn wb-graph-reset-view"
-            onClick={resetView}
-            title="Reset view to default range"
-            data-testid="wb-graph-reset-view"
-          >
-            Reset view
-          </button>
         </div>
         {panelOpen && (
-          <div className="wb-graph-expr-body" data-testid="wb-graph-expr-panel">
+          <div
+            className="wb-graph-expr-body"
+            data-testid="wb-graph-expr-panel"
+            onPointerDown={stopEmbedDrag}
+            onMouseDown={stopEmbedDrag}
+          >
             {expressions.length === 0 && (
               <p className="muted" style={{ margin: 0, fontSize: 11 }}>
                 Add an expression to plot (e.g. x^2, sin(x), 5x).
@@ -502,6 +518,8 @@ export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
                       type="button"
                       className="wb-graph-expr-input"
                       style={{ textAlign: "left", cursor: "text" }}
+                      onPointerDown={stopEmbedDrag}
+                      onMouseDown={stopEmbedDrag}
                       onClick={() => {
                         setEditingIndex(index);
                         setEditingDraft(expr);
@@ -514,6 +532,8 @@ export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
                       type="button"
                       className="wb-graph-expr-btn wb-graph-expr-btn--danger"
                       aria-label={`Remove expression ${index + 1}`}
+                      onPointerDown={stopEmbedDrag}
+                      onMouseDown={stopEmbedDrag}
                       onClick={() => handleRemove(index)}
                       data-testid={`wb-graph-expr-remove-${index}`}
                     >
@@ -549,6 +569,8 @@ export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
               <button
                 type="button"
                 className="wb-graph-expr-btn"
+                onPointerDown={stopEmbedDrag}
+                onMouseDown={stopEmbedDrag}
                 onClick={handleAddExpression}
                 data-testid="wb-graph-expr-add"
               >

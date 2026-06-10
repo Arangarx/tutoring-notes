@@ -21,34 +21,33 @@
   height: 100% !important;
 }
 
-.wb-graph-expr-panel {
+/* Bottom-left strip — away from Excalidraw corner drag handles + JSXGraph nav (bottom-right). */
+.wb-graph-controls {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 2;
-  max-width: min(240px, calc(100% - 16px));
+  bottom: 8px;
+  left: 8px;
+  z-index: 3;
+  max-width: min(280px, calc(100% - 16px));
   pointer-events: auto;
   font-size: 12px;
   color: var(--text-strong);
 }
 
-.wb-graph-expr-toolbar {
+.wb-graph-controls-strip {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 6px;
   align-items: center;
 }
 
-.wb-graph-reset-view {
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-.wb-graph-expr-toggle {
-  display: flex;
+.wb-graph-strip-btn {
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
-  padding: 4px 8px;
+  min-height: 32px;
+  min-width: 32px;
+  padding: 6px 12px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface-drawer);
@@ -57,10 +56,16 @@
   font-size: 12px;
   font-weight: 600;
   box-shadow: 0 1px 4px color-mix(in srgb, var(--text-strong) 12%, transparent);
+  touch-action: manipulation;
 }
 
-.wb-graph-expr-toggle:hover {
+.wb-graph-strip-btn:hover {
   background: var(--surface-raised);
+}
+
+.wb-graph-reset-view {
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .wb-graph-expr-body {
@@ -109,13 +114,16 @@
 }
 
 .wb-graph-expr-btn {
-  padding: 3px 8px;
+  min-height: 32px;
+  min-width: 32px;
+  padding: 6px 10px;
   border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--surface-base);
   color: var(--text-strong);
   font-size: 11px;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .wb-graph-expr-btn:hover {
@@ -142,9 +150,13 @@
 }
 
 .wb-graph-root .JXG_navigation button {
+  min-width: 28px;
+  min-height: 28px;
+  padding: 4px;
   background: var(--surface-drawer);
   border: 1px solid var(--border-default);
   color: var(--text-strong);
+  touch-action: manipulation;
 }
 
 .wb-graph-root .JXG_navigation button:hover {
