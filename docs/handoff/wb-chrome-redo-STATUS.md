@@ -2,7 +2,7 @@
 
 Branch: `feat/wb-chrome-redo`  
 Baseline: `a150d4f` (PR-01 freedraw latency fix — known-good board separation)  
-Latest commit: `73518fc` (2026-06-09 — P4 smoke fixes: ink draw, edge icons, hover sweep, sidebar roughness icon, slider flush)
+Latest commit: `c1c3fb8` (2026-06-09 — P5 smoke fixes: ink inversion root-cause, icon clarity, hover contrast, shapes split-btn, theme single-open)
 
 ## What this branch does
 
@@ -42,8 +42,8 @@ This branch:
 
 ## Gate status
 
-- `npx next build`: ✅ exit 0 (`73518fc`)
-- `npx jest`: ✅ 1981 pass / 5 fail (iac-13 pre-existing flakiness in full-suite; same 4 known failing suites; `73518fc`)
+- `npx next build`: ✅ exit 0 (`c1c3fb8`)
+- `npx jest`: ✅ 1982 pass / 4 fail (same 4 known failing suites; `c1c3fb8`)
 - `npm run test:wb-sync`: ⏳ pending (requires Docker relay)
 - **Interactive controls P0 fix**: ✅ code shipped (`85ebedc`)
 - **Undo cross-board P0 fix**: ✅ code shipped (`914fbc0`) — `captureUpdate:"NEVER"` + `history.clear()` on board switch
@@ -57,6 +57,11 @@ This branch:
 - **P4 sidebar roughness icon**: ✅ code shipped (`73518fc`) — RoughnessIcon exported, replaces text in compact summary + mobile sheet trigger
 - **P4 hover CSS sweep**: ✅ code shipped (`73518fc`) — zero hsl(var()) patterns remain; 35+ tokens corrected to color-mix / direct var
 - **P4 slider flush**: ✅ code shipped (`73518fc`) — custom WbSlider div with left=calc(v/100*(100%-16px)) guarantees flush at 0 and 100
+- **P5 ink inversion root-cause**: ✅ code shipped (`c1c3fb8`) — always store EXCALIDRAW_STROKE_HEX; Excalidraw THEME_FILTER inverts to white in dark mode
+- **P5 icon clarity**: ✅ code shipped (`c1c3fb8`) — StrokeWidthIcon diagonal SVG; SharpnessIcon L-corner glyphs
+- **P5 hover contrast**: ✅ code shipped (`c1c3fb8`) — tool-btn + tb-btn hover raised to var(--surface-2) full strength
+- **P5 shapes split-button**: ✅ code shipped (`c1c3fb8`) — primary click activates selectedShapeTool; caret opens picker
+- **P5 theme single-open**: ✅ code shipped (`c1c3fb8`) — WbThemeToggle wired into openMenu; opening any menu closes Theme and vice versa
 - **Playwright interaction tests**: ✅ written (17 tests) — run with `npm run test:wb-playwright -- tests/integration/wb-chrome-interactions.spec.ts`
 - Board separation: ⏳ pending real-browser verification
 - Undo isolation (P0): ⏳ pending real-browser Playwright (test written in `wb-chrome-interactions.spec.ts`)
