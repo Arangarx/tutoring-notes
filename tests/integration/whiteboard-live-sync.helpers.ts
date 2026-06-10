@@ -628,6 +628,76 @@ export async function findFirstImageElementId(
   }, role);
 }
 
+/** Insert JSXGraph embeddable via production `insertGraphOnCanvas` (E2E bridge). */
+export async function insertGraphOnRole(
+  page: Page,
+  role: "tutor",
+  session: WbLiveSyncSession,
+  initialExpressions: string[] = ["x^2"]
+): Promise<string> {
+  return page.evaluate(
+    ({ r, wbsid, stid, exprs }) => {
+      const bridge = (
+        window as Window & {
+          __TN_WB_E2E__?: Record<
+            string,
+            {
+              insertGraphFixture: (
+                whiteboardSessionId: string,
+                studentId: string,
+                initialExpressions?: string[]
+              ) => string;
+            }
+          >;
+        }
+      ).__TN_WB_E2E__?.[r];
+      if (!bridge?.insertGraphFixture) {
+        throw new Error(`E2E bridge missing insertGraphFixture for ${r}`);
+      }
+      return bridge.insertGraphFixture(wbsid, stid, exprs);
+    },
+    {
+      r: role,
+      wbsid: session.whiteboardSessionId,
+      stid: session.studentId,
+      exprs: initialExpressions,
+    }
+  );
+}
+
+export async function readGraphElementState(
+  page: Page,
+  role: "tutor" | "student",
+  elementId: string
+): Promise<{
+  graphStateJson: string | null;
+  expressions: string[];
+  bbox: [number, number, number, number] | null;
+  link: string | null;
+} | null> {
+  return page.evaluate(
+    ({ r, id }) => {
+      const bridge = (
+        window as Window & {
+          __TN_WB_E2E__?: Record<
+            string,
+            {
+              graphElementState: (eid: string) => {
+                graphStateJson: string | null;
+                expressions: string[];
+                bbox: [number, number, number, number] | null;
+                link: string | null;
+              } | null;
+            }
+          >;
+        }
+      ).__TN_WB_E2E__?.[r];
+      return bridge?.graphElementState ? bridge.graphElementState(id) : null;
+    },
+    { r: role, id: elementId }
+  );
+}
+
 export function expectedAlignedStudentScroll(
   tutor: ViewportSnapshot,
   student: Pick<ViewportSnapshot, "width" | "height">

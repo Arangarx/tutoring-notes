@@ -4,9 +4,11 @@
  * `NEXT_PUBLIC_WB_E2E_SCENE_HOOK=1`. Not a mock: same instances the app uses.
  */
 import {
+  insertGraphOnCanvas,
   insertImageOnCanvas,
   type ExcalidrawApiLike,
 } from "@/lib/whiteboard/insert-asset";
+import { parseGraphStateJson } from "@/lib/whiteboard/graph-state";
 import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter";
 import { viewportSceneCenterFromScroll } from "@/lib/whiteboard/viewport-align";
 
@@ -52,6 +54,19 @@ export type WbE2eSceneBridge = {
     whiteboardSessionId: string,
     studentId: string
   ) => Promise<string>;
+  /** JSXGraph embeddable insert (Playwright inv 12). */
+  insertGraphFixture: (
+    whiteboardSessionId: string,
+    studentId: string,
+    initialExpressions?: string[]
+  ) => string;
+  /** Graph embeddable state for sync-hydration regressions. */
+  graphElementState: (elementId: string) => {
+    graphStateJson: string | null;
+    expressions: string[];
+    bbox: [number, number, number, number] | null;
+    link: string | null;
+  } | null;
 };
 
 type WbE2eSceneMutationHook = () => void;
@@ -355,6 +370,39 @@ export function registerWbE2eSceneBridge(
       }
       invokeSceneMutationHook(role);
       return result.elementId;
+    },
+    insertGraphFixture(whiteboardSessionId, studentId, initialExpressions) {
+      const result = insertGraphOnCanvas({
+        excalidrawAPI: api,
+        whiteboardSessionId,
+        studentId,
+        initialExpressions,
+      });
+      if (!result.ok) {
+        throw new Error(result.reason);
+      }
+      invokeSceneMutationHook(role);
+      return result.elementId;
+    },
+    graphElementState(elementId) {
+      const el = (api.getSceneElements() as Array<{
+        id?: string;
+        type?: string;
+        link?: string;
+        customData?: { graphStateJson?: string };
+      }>).find((e) => e.id === elementId);
+      if (!el || el.type !== "embeddable") return null;
+      const graphStateJson =
+        typeof el.customData?.graphStateJson === "string"
+          ? el.customData.graphStateJson
+          : null;
+      const parsed = parseGraphStateJson(graphStateJson);
+      return {
+        graphStateJson,
+        expressions: parsed.expressions ?? [],
+        bbox: parsed.bbox ?? null,
+        link: typeof el.link === "string" ? el.link : null,
+      };
     },
   };
 
