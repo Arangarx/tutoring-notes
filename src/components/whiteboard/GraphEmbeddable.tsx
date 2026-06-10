@@ -45,6 +45,12 @@ type JxgBoard = {
   ) => { id?: string };
   removeObject: (obj: { id?: string }) => void;
   getBoundingBox: () => GraphBbox;
+  zoomIn: (x?: number, y?: number) => JxgBoard;
+  zoomOut: (x?: number, y?: number) => JxgBoard;
+  clickLeftArrow: () => JxgBoard;
+  clickRightArrow: () => JxgBoard;
+  clickUpArrow: () => JxgBoard;
+  clickDownArrow: () => JxgBoard;
   defaultAxes: {
     x: { setAttribute: (attrs: Record<string, unknown>) => void };
     y: { setAttribute: (attrs: Record<string, unknown>) => void };
@@ -169,7 +175,7 @@ function mountGraphBoard(
       strokeOpacity: 0.65,
     },
     showCopyright: false,
-    showNavigation: true,
+    showNavigation: false,
     pan: { enabled: true, needTwoFingers: false, needShift: false },
     zoom: { wheel: true, needShift: false, factor: 1.2 },
     resize: { enabled: true },
@@ -280,10 +286,90 @@ export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
     }, BBOX_PERSIST_MS);
   }, [persistState]);
 
+  const persistBboxNow = useCallback(() => {
+    if (bboxPersistTimerRef.current) {
+      clearTimeout(bboxPersistTimerRef.current);
+      bboxPersistTimerRef.current = null;
+    }
+    const board = boardRef.current;
+    if (!board) return;
+    try {
+      const bbox = board.getBoundingBox();
+      const prev = graphStateRef.current.bbox;
+      if (
+        prev &&
+        prev[0] === bbox[0] &&
+        prev[1] === bbox[1] &&
+        prev[2] === bbox[2] &&
+        prev[3] === bbox[3]
+      ) {
+        return;
+      }
+      persistState(withGraphBbox(graphStateRef.current, bbox));
+    } catch {
+      // ignore read errors during teardown
+    }
+  }, [persistState]);
+
+  const runBoardViewAction = useCallback(
+    (action: (board: JxgBoard) => void) => {
+      const board = boardRef.current;
+      if (!board) return;
+      try {
+        action(board);
+        board.update();
+        persistBboxNow();
+      } catch {
+        // ignore during teardown
+      }
+    },
+    [persistBboxNow]
+  );
+
+  const handleZoomIn = useCallback(() => {
+    runBoardViewAction((board) => {
+      board.zoomIn();
+    });
+  }, [runBoardViewAction]);
+
+  const handleZoomOut = useCallback(() => {
+    runBoardViewAction((board) => {
+      board.zoomOut();
+    });
+  }, [runBoardViewAction]);
+
+  const handlePanUp = useCallback(() => {
+    runBoardViewAction((board) => {
+      board.clickUpArrow();
+    });
+  }, [runBoardViewAction]);
+
+  const handlePanDown = useCallback(() => {
+    runBoardViewAction((board) => {
+      board.clickDownArrow();
+    });
+  }, [runBoardViewAction]);
+
+  const handlePanLeft = useCallback(() => {
+    runBoardViewAction((board) => {
+      board.clickLeftArrow();
+    });
+  }, [runBoardViewAction]);
+
+  const handlePanRight = useCallback(() => {
+    runBoardViewAction((board) => {
+      board.clickRightArrow();
+    });
+  }, [runBoardViewAction]);
+
   const resetView = useCallback(() => {
     const board = boardRef.current;
     if (!board) return;
     try {
+      if (bboxPersistTimerRef.current) {
+        clearTimeout(bboxPersistTimerRef.current);
+        bboxPersistTimerRef.current = null;
+      }
       board.setBoundingBox(DEFAULT_GRAPH_BBOX, true);
       board.update();
       persistState(withGraphBbox(graphStateRef.current, DEFAULT_GRAPH_BBOX));
@@ -579,6 +665,93 @@ export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
             </div>
           </div>
         )}
+      </div>
+      <div
+        className="wb-graph-nav"
+        onPointerDownCapture={stopEmbedDragCapture}
+        onMouseDownCapture={stopEmbedDragCapture}
+      >
+        <div className="wb-graph-nav-zoom">
+          <button
+            type="button"
+            className="wb-graph-strip-btn wb-graph-nav-btn"
+            onClick={handleZoomIn}
+            onPointerDown={stopEmbedDrag}
+            onMouseDown={stopEmbedDrag}
+            title="Zoom in"
+            aria-label="Zoom in"
+            data-testid="wb-graph-zoom-in"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            className="wb-graph-strip-btn wb-graph-nav-btn"
+            onClick={handleZoomOut}
+            onPointerDown={stopEmbedDrag}
+            onMouseDown={stopEmbedDrag}
+            title="Zoom out"
+            aria-label="Zoom out"
+            data-testid="wb-graph-zoom-out"
+          >
+            −
+          </button>
+        </div>
+        <div className="wb-graph-nav-pan" role="group" aria-label="Pan graph">
+          <span className="wb-graph-nav-pad" aria-hidden />
+          <button
+            type="button"
+            className="wb-graph-strip-btn wb-graph-nav-btn"
+            onClick={handlePanUp}
+            onPointerDown={stopEmbedDrag}
+            onMouseDown={stopEmbedDrag}
+            title="Pan up"
+            aria-label="Pan up"
+            data-testid="wb-graph-pan-up"
+          >
+            ↑
+          </button>
+          <span className="wb-graph-nav-pad" aria-hidden />
+          <button
+            type="button"
+            className="wb-graph-strip-btn wb-graph-nav-btn"
+            onClick={handlePanLeft}
+            onPointerDown={stopEmbedDrag}
+            onMouseDown={stopEmbedDrag}
+            title="Pan left"
+            aria-label="Pan left"
+            data-testid="wb-graph-pan-left"
+          >
+            ←
+          </button>
+          <span className="wb-graph-nav-pad wb-graph-nav-pad--center" aria-hidden />
+          <button
+            type="button"
+            className="wb-graph-strip-btn wb-graph-nav-btn"
+            onClick={handlePanRight}
+            onPointerDown={stopEmbedDrag}
+            onMouseDown={stopEmbedDrag}
+            title="Pan right"
+            aria-label="Pan right"
+            data-testid="wb-graph-pan-right"
+          >
+            →
+          </button>
+          <span className="wb-graph-nav-pad" aria-hidden />
+          <button
+            type="button"
+            className="wb-graph-strip-btn wb-graph-nav-btn"
+            onClick={handlePanDown}
+            onPointerDown={stopEmbedDrag}
+            onMouseDown={stopEmbedDrag}
+            title="Pan down"
+            aria-label="Pan down"
+            data-testid="wb-graph-pan-down"
+          >
+            ↓
+          </button>
+          <span className="wb-graph-nav-pad" aria-hidden />
+        </div>
       </div>
     </div>
   );

@@ -21,7 +21,7 @@
   height: 100% !important;
 }
 
-/* Bottom-left strip — away from Excalidraw corner drag handles + JSXGraph nav (bottom-right). */
+/* Bottom-left — expression panel; away from Excalidraw corner resize handles. */
 .wb-graph-controls {
   position: absolute;
   bottom: 8px;
@@ -144,21 +144,46 @@
   flex: 1;
 }
 
-/* JSXGraph built-in navigation (+/−/arrows) — theme tokens */
-.wb-graph-root .JXG_navigation {
-  color: var(--text-strong);
+/* Bottom-right — zoom/pan overlay (replaces JSXGraph built-in navigation). */
+.wb-graph-nav {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  pointer-events: auto;
 }
 
-.wb-graph-root .JXG_navigation button {
-  min-width: 28px;
-  min-height: 28px;
-  padding: 4px;
-  background: var(--surface-drawer);
-  border: 1px solid var(--border-default);
-  color: var(--text-strong);
-  touch-action: manipulation;
+.wb-graph-nav-zoom {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.wb-graph-root .JXG_navigation button:hover {
-  background: var(--surface-raised);
+.wb-graph-nav-btn {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 6px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.wb-graph-nav-pan {
+  display: grid;
+  grid-template-columns: repeat(3, 32px);
+  grid-template-rows: repeat(3, 32px);
+  gap: 2px;
+}
+
+.wb-graph-nav-pad {
+  display: block;
+}
+
+.wb-graph-nav-pad--center {
+  border: 1px dashed var(--border-subtle);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--surface-drawer) 50%, transparent);
 }

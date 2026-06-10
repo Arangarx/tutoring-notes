@@ -48,6 +48,8 @@ Not in priority order within sections — that comes when items move to a sprint
 
 **Note (Andrew 2026-06-09):** **Camera-on-by-default** is deferred to **Gate A2 (waiting room)** — A2 owns auto-starting A/V; this graph branch does not change live-A/V behavior.
 
+**Cosmetic (low priority):** On-canvas blue link badge shows on unselected graph embeds; can't hide without clearing `link` (which breaks reload). Needs an Excalidraw API/upstream change.
+
 **Cross-ref:** Sarah Q1 graphing ask (Desmos was interim); [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) HEAD.
 
 ## Whiteboard — implementation / design queue
