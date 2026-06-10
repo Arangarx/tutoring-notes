@@ -265,6 +265,25 @@ deployment alias on `master`; no UI-skin feature flag exists). Build on
    multi-tile auto-expand. **V1-required; deferred from `feat/wb-chrome-redo`.**
    Parent req SR-04 in
    [`whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md).
+6. **Live bidirectional whiteboard sync completeness (Gate A5)** — comprehensive
+   *enumerated* audit-and-fix: every tutor action appears on the student view
+   live and timely, and vice versa (freedraw, shapes, lines/arrows, text,
+   eraser, move/resize/rotate, style/z-order, page CRUD, PDF, math, graph +
+   expression edits, images, undo/redo, select+delete). **Acceptance:** each
+   type verified bidirectionally via hermetic relay on real browser (**not**
+   jsdom); stated timeliness bound; all gaps fixed; extend `test:wb-sync`
+   invariants where feasible + manual matrix for the rest. **Starting baseline:**
+   [`whiteboard-live-sync-regression.spec.ts`](../tests/integration/whiteboard-live-sync-regression.spec.ts)
+   inv 1–12 (partial). **Not yet started — v1-required.**
+7. **Replay fidelity + AV/timer sync (Gate A6)** — replay reconstructs every
+   whiteboard action in correct order and timing, aligned with session timer
+   and recorded audio (same action-type enumeration as A5). **Acceptance:**
+   temporal alignment within stated tolerance; no missing/dropped/reordered
+   events; verified on real recorded sessions. **Starting baseline (partial):**
+   [`recording-end-to-end.spec.ts`](../tests/integration/recording-end-to-end.spec.ts),
+   replay event-log unit tests, [`WHITEBOARD-STATUS.md`](WHITEBOARD-STATUS.md)
+   § 1.4. **Not yet started — v1-required.** Both A5 and A6 embody the
+   north-star reliability bar (no backup recorder alongside our app).
 
 **Design note:** waiting room, live board, and Pass-2 review = **one session
 shell, three modes** — design together
