@@ -570,13 +570,14 @@ export function WhiteboardWorkspaceClient({
   const [propsSheetOpen, setPropsSheetOpen] = useState(false);
   // Single-open menu state — only one chrome popover/dropdown is open at a time.
   // Opening any menu closes all others; outside-click/Esc handled per-menu.
-  const [openMenu, setOpenMenu] = useState<"share" | "view" | "shapes" | "more" | "props" | null>(null);
+  const [openMenu, setOpenMenu] = useState<"share" | "view" | "shapes" | "more" | "props" | "theme" | null>(null);
   const shareMenuOpen = openMenu === "share";
   const viewMenuOpen = openMenu === "view";
   const shapesDropdownOpen = openMenu === "shapes";
   const morePopoverOpen = openMenu === "more";
   const propsCompactOpen = openMenu === "props";
-  const toggleMenu = (menu: "share" | "view" | "shapes" | "more" | "props") =>
+  const themeMenuOpen = openMenu === "theme";
+  const toggleMenu = (menu: "share" | "view" | "shapes" | "more" | "props" | "theme") =>
     setOpenMenu((p) => (p === menu ? null : menu));
   const [gridEnabled, setGridEnabled] = useState(false);
   const [roughness, setRoughness] = useState(0);
@@ -584,36 +585,13 @@ export function WhiteboardWorkspaceClient({
   const layoutMode = useWbLayoutMode();
   const touchLayout = isTouchLayout(layoutMode);
   // Stroke props — tracked from Excalidraw onChange (appState).
-  // Initial stroke color is theme-aware: dark mode defaults to white so
-  // strokes are immediately visible on the dark canvas background.
-  const initialWbStrokeColor = excalidrawTheme === "dark" ? EXCALIDRAW_STROKE_DARK_HEX : EXCALIDRAW_STROKE_HEX;
+  // Always initialize to EXCALIDRAW_STROKE_HEX (#1e293b) in both themes.
+  // Excalidraw's dark-mode canvas filter (invert+hue-rotate) automatically
+  // renders this near-black hex as white on the dark canvas — no white
+  // override needed. Storing #ffffff in dark mode would invert to black.
+  const initialWbStrokeColor = EXCALIDRAW_STROKE_HEX;
   const [strokeColor, setStrokeColor] = useState<string>(initialWbStrokeColor);
   const strokeColorRef = useRef<string>(initialWbStrokeColor);
-
-  // Fix #1 (2026-06-09 smoke): When the theme changes (or the Excalidraw API
-  // first becomes available), if the current stroke color is either of the two
-  // adaptive-ink sentinel hexes, update it to the current theme's ink hex.
-  // This covers (a) SSR hydration mismatch (useState freezes at light-mode hex
-  // even if dark mode resolves later), and (b) mid-session theme switches.
-  // Runs on both excalidrawTheme change and excalidrawAPI availability so the
-  // API update is applied as soon as Excalidraw is ready.
-  useEffect(() => {
-    if (!excalidrawAPI) return;
-    const newInkHex =
-      excalidrawTheme === "dark" ? EXCALIDRAW_STROKE_DARK_HEX : EXCALIDRAW_STROKE_HEX;
-    const currentIsAdaptiveInk =
-      strokeColorRef.current === EXCALIDRAW_STROKE_DARK_HEX ||
-      strokeColorRef.current === EXCALIDRAW_STROKE_HEX;
-    if (!currentIsAdaptiveInk) return;
-    if (strokeColorRef.current === newInkHex) return; // already correct
-    const api = excalidrawAPIRef.current as WbChromeApiExt | null;
-    api?.updateScene?.({ appState: { currentItemStrokeColor: newInkHex } });
-    strokeColorRef.current = newInkHex;
-    setStrokeColor(newInkHex);
-  // excalidrawAPI is the dep that fires when Excalidraw first mounts;
-  // excalidrawTheme fires on every theme toggle. Both paths needed.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [excalidrawTheme, excalidrawAPI]);
 
   const [strokeWidth, setStrokeWidth] = useState<number>(0.5);
   const strokeWidthRef = useRef<number>(0.5);
@@ -3759,9 +3737,11 @@ export function WhiteboardWorkspaceClient({
             label="Shapes"
             active={WB_SHAPE_TOOLS.some((s) => s.type === activeToolType)}
             onClick={() => {
-              toggleMenu("shapes");
+              // Primary click: activate the last-selected (or default) shape tool.
+              selectTool(selectedShapeTool);
             }}
             pulldown
+            onPulldown={() => toggleMenu("shapes")}
           />
           {shapesDropdownOpen && (
             <div className="mynk-wb-shapes-dropdown" role="menu">
@@ -4038,7 +4018,10 @@ export function WhiteboardWorkspaceClient({
             )}
           </div>
 
-          <WbThemeToggle />
+          <WbThemeToggle
+            open={themeMenuOpen}
+            onOpenChange={(v) => setOpenMenu(v ? "theme" : null)}
+          />
         </div>
 
         <span className="mynk-wb-topbar__sep" aria-hidden />
@@ -4414,6 +4397,7 @@ function WbToolBtn({
   onClick,
   disabled,
   pulldown,
+  onPulldown,
   accent,
   collapseControl,
 }: {
@@ -4423,6 +4407,8 @@ function WbToolBtn({
   onClick: () => void;
   disabled?: boolean;
   pulldown?: boolean;
+  /** If provided, the pulldown chevron gets its own click handler (split-button). */
+  onPulldown?: () => void;
   accent?: boolean;
   collapseControl?: boolean;
 }) {
@@ -4438,7 +4424,13 @@ function WbToolBtn({
       style={accent ? { color: "var(--accent-text)" } : undefined}
     >
       {icon}
-      {pulldown && <span className="mynk-wb-pulldown-chevron">▾</span>}
+      {pulldown && (
+        <span
+          className="mynk-wb-pulldown-chevron"
+          onClick={onPulldown ? (e) => { e.stopPropagation(); onPulldown(); } : undefined}
+          aria-label={onPulldown ? "Open shape picker" : undefined}
+        >▾</span>
+      )}
     </button>
   );
 }

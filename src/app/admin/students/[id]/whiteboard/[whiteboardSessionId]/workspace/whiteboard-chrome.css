@@ -167,7 +167,7 @@
 }
 
 .mynk-wb-tool-btn:hover {
-  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+  background: var(--surface-2);
   color: var(--foreground);
 }
 
@@ -299,7 +299,7 @@
 }
 
 .mynk-wb-tb-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+  background: var(--surface-2);
   color: var(--foreground);
 }
 
@@ -632,7 +632,7 @@
 }
 
 .mynk-wb-props-compact__summary:hover {
-  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+  background: var(--surface-2);
   border-color: var(--ring);
 }
 

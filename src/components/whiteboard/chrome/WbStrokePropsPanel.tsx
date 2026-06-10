@@ -9,6 +9,7 @@ import {
   triggerSendToBack,
 } from "@/lib/whiteboard/undo-redo";
 import {
+  EXCALIDRAW_STROKE_HEX,
   WB_INK_ADAPTIVE_SENTINEL,
   WB_STROKE_PRESETS,
   WB_STROKE_WIDTHS,
@@ -87,7 +88,24 @@ const ROUGHNESS_OPTIONS = [
   { value: 2 as const, label: "Cartoon" },
 ];
 
-/** Edge sharpness icons — sharp-corner square vs rounded-corner square. */
+/**
+ * Stroke-width preview icon — diagonal line at visibly different weight so
+ * the button reads as "a stroke of this thickness," not a divider.
+ * lineH values (1/2/3/5) are mapped to scaled SVG stroke-widths.
+ */
+const StrokeWidthIcon = ({ lineH }: { lineH: number }) => {
+  const svgW = lineH <= 1 ? 1.25 : lineH <= 2 ? 2.5 : lineH <= 3 ? 4 : 6.5;
+  return (
+    <svg width={18} height={18} viewBox="0 0 18 18" fill="none" aria-hidden style={{ display: "block" }}>
+      <line x1="3" y1="15" x2="15" y2="3" stroke="currentColor" strokeWidth={svgW} strokeLinecap="round" />
+    </svg>
+  );
+};
+
+/**
+ * Edge sharpness icons — L-corner glyphs that read unambiguously as
+ * "sharp corner" vs "rounded corner," rather than two similar rectangles.
+ */
 const SharpnessIcon = ({ type }: { type: "sharp" | "round" }) => (
   <svg
     width={22}
@@ -98,9 +116,11 @@ const SharpnessIcon = ({ type }: { type: "sharp" | "round" }) => (
     style={{ display: "block" }}
   >
     {type === "sharp" ? (
-      <rect x="4" y="4" width="14" height="14" stroke="currentColor" strokeWidth="1.5" />
+      /* Sharp: two lines meeting at a right-angle — clearly a sharp corner */
+      <path d="M5 17 L5 5 L17 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="miter" />
     ) : (
-      <rect x="4" y="4" width="14" height="14" rx="4" ry="4" stroke="currentColor" strokeWidth="1.5" />
+      /* Round: arc from vertical to horizontal — clearly a rounded corner */
+      <path d="M5 17 L5 9 Q5 5 9 5 L17 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     )}
   </svg>
 );
@@ -204,20 +224,23 @@ export function WbStrokePropsPanel({
         <div className="mynk-wb-props-section-title">Stroke color</div>
         <div className="mynk-wb-props-swatches">
           {WB_STROKE_PRESETS.map((p) => {
-            const resolvedHex = p.hex === WB_INK_ADAPTIVE_SENTINEL ? inkHex : p.hex;
-            const isActive =
-              p.hex === WB_INK_ADAPTIVE_SENTINEL
-                ? strokeColor === inkHex
-                : strokeColor === p.hex;
+            const isInk = p.hex === WB_INK_ADAPTIVE_SENTINEL;
+            // Display hex: adaptive (white in dark / dark in light) for visual preview only.
+            const displayHex = isInk ? inkHex : p.hex;
+            // Stored hex: ink always stores EXCALIDRAW_STROKE_HEX (#1e293b).
+            // Excalidraw's dark-mode canvas filter inverts it to white automatically.
+            // Never store #ffffff — it would invert to black.
+            const storeHex = isInk ? EXCALIDRAW_STROKE_HEX : p.hex;
+            const isActive = strokeColor === storeHex;
             return (
               <button
                 key={p.hex}
                 type="button"
                 className={`mynk-wb-swatch${isActive ? " mynk-wb-swatch--active" : ""}`}
-                style={{ backgroundColor: resolvedHex }}
+                style={{ backgroundColor: displayHex }}
                 aria-label={p.label}
                 aria-pressed={isActive}
-                onClick={() => onStrokeChange({ color: resolvedHex })}
+                onClick={() => onStrokeChange({ color: storeHex })}
               />
             );
           })}
@@ -237,15 +260,7 @@ export function WbStrokePropsPanel({
               aria-pressed={strokeWidth === w.value}
               onClick={() => onStrokeChange({ width: w.value })}
             >
-              <span
-                style={{
-                  display: "block",
-                  width: 16,
-                  height: w.lineH,
-                  borderRadius: 2,
-                  background: "currentColor",
-                }}
-              />
+              <StrokeWidthIcon lineH={w.lineH} />
             </button>
           ))}
         </div>
