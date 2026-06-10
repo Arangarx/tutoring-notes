@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mynk — Site Redesign Mock · Student Detail (2026-06-10)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,SOFT,wght@9..144,0..100,400..900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root,[data-theme="light"]{
+  --surface-base:#f5f4ec;--surface-1:#fcfbf4;--surface-2:#ecebe1;--surface-3:#e3e2d8;
+  --border-subtle:#e3e8e9;--border-default:#c5cfd0;--border-strong:#4a6680;
+  --text-default:#15203a;--text-muted:#5a6877;--text-disabled:#94a3b8;
+  --brand:#1e3d54;--accent:#e27d60;--accent-soft:#f8e0d6;--accent-on:#15203a;--accent-text:#8a3c25;
+  --success:#16a34a;--success-soft:rgba(34,197,94,0.12);
+  --shadow-sm:0 1px 3px rgba(0,0,0,0.08);--shadow-md:0 4px 12px rgba(0,0,0,0.12);--shadow-lg:0 8px 24px rgba(0,0,0,0.20);
+  --overlay-scrim:rgba(0,0,0,0.4);
+  --radius-sm:6px;--radius-md:10px;--radius-lg:16px;
+  --font-body:"Inter",sans-serif;--font-display:"Fraunces",Georgia,serif;--font-mono:"JetBrains Mono",monospace;
+  --meta-header-bg:rgba(235,233,224,0.94);--meta-header-border:rgba(0,0,0,0.08);
+  --meta-chrome-fg:var(--text-muted);--meta-chrome-border:rgba(0,0,0,0.15);--meta-chrome-active-bg:rgba(0,0,0,0.06);
+  --avatar-1:#f97316;
+}
+[data-theme="dark"]{
+  --surface-base:#051a24;--surface-1:#0e2a38;--surface-2:#142f3e;--surface-3:#1c3548;
+  --border-subtle:#0e2a38;--border-default:#1c3548;--border-strong:#6a8fa0;
+  --text-default:#f0ede4;--text-muted:#a5b5c0;--text-disabled:rgba(165,181,192,0.45);
+  --brand:#7ea4b1;--accent:#e27d60;--accent-soft:#2e1d18;--accent-on:#051a24;--accent-text:#e8a08a;
+  --success:#4ade80;--success-soft:rgba(34,197,94,0.12);
+  --shadow-sm:0 1px 3px rgba(0,0,0,0.30);--shadow-md:0 4px 12px rgba(0,0,0,0.40);--shadow-lg:0 8px 24px rgba(0,0,0,0.55);
+  --overlay-scrim:rgba(0,0,0,0.55);
+  --meta-header-bg:rgba(2,8,13,0.94);--meta-header-border:rgba(255,255,255,0.08);
+  --meta-chrome-fg:rgba(240,237,228,0.7);--meta-chrome-border:rgba(255,255,255,0.15);--meta-chrome-active-bg:rgba(255,255,255,0.12);
+}
+html,body{font-family:var(--font-body);background:var(--surface-base);color:var(--text-default);min-height:100dvh;display:flex;flex-direction:column}
+.meta-header{position:sticky;top:0;z-index:200;background:var(--meta-header-bg);backdrop-filter:blur(12px);border-bottom:1px solid var(--meta-header-border);padding:10px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.meta-title{font-family:var(--font-display);font-variation-settings:"opsz" 144,"SOFT" 60,"wght" 700;font-size:15px;margin-right:auto}
+.meta-title .dot{color:var(--accent)}
+.meta-btn{font:500 11px var(--font-mono);padding:5px 12px;border-radius:6px;cursor:pointer;border:1px solid var(--meta-chrome-border);color:var(--meta-chrome-fg);background:transparent}
+.meta-btn.active,.meta-btn:hover{background:var(--meta-chrome-active-bg);color:var(--text-default)}
+.mock-notes{max-width:1280px;margin:0 auto;padding:16px 20px 0;font-size:13px;line-height:1.55;color:var(--text-muted)}
+.mock-notes ul{margin:8px 0 0 18px}
+.viewport-root{flex:1;display:flex;flex-direction:column;min-height:0}
+.stage-desktop{flex:1;padding:16px;display:flex;flex-direction:column}
+.stage-devices{flex:1;display:none;align-items:center;padding:12px 16px 24px;overflow:auto}
+.stage-devices.active{display:flex}
+.devices-row{display:flex;gap:28px;justify-content:center;flex-wrap:wrap;width:100%;max-width:1200px}
+.device-wrap{flex:1 1 320px;max-width:calc(50% - 14px);display:flex;flex-direction:column;align-items:center;gap:8px}
+.device-label{font:600 11px var(--font-mono);color:var(--text-muted)}
+.device-scale{display:flex;justify-content:center}
+.device-viewport{overflow:hidden;background:var(--surface-base);border:2px solid var(--border-strong);box-shadow:var(--shadow-lg);transform-origin:top center}
+.device-viewport[data-device="phone"]{border-radius:28px}
+.device-screen{width:100%;height:100%;position:relative;overflow:hidden}
+.app-shell{display:flex;flex-direction:column;min-height:580px;height:calc(100dvh - 200px);max-width:960px;margin:0 auto;width:100%;background:var(--surface-base);border:1px solid var(--border-default);border-radius:var(--radius-lg);overflow:hidden}
+.device-viewport .app-shell{width:100%!important;height:100%!important;max-width:none!important;margin:0!important;border:none!important;border-radius:0!important;min-height:0!important}
+/* header */
+.page-header{padding:20px 24px 0;background:var(--surface-base)}
+.back-link{font-size:14px;color:var(--brand);text-decoration:none;font-weight:500;display:inline-flex;align-items:center;gap:4px;margin-bottom:8px}
+.hero{display:flex;align-items:flex-start;gap:16px;margin-bottom:16px}
+.avatar{width:56px;height:56px;border-radius:50%;background:var(--avatar-1);color:#fff;font-weight:700;font-size:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.hero h1{font-family:var(--font-display);font-variation-settings:"opsz" 144,"SOFT" 0,"wght" 700;font-size:28px;letter-spacing:-0.02em}
+.hero-meta{font:12px var(--font-mono);color:var(--text-muted);margin-top:4px}
+.header-actions{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+.btn{font:inherit;font-weight:500;font-size:14px;padding:10px 14px;border-radius:var(--radius-md);cursor:pointer;border:1px solid var(--border-default);background:var(--surface-1)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-on);font-weight:600}
+.cta-banner{margin:0 24px 16px;padding:14px 16px;background:var(--surface-1);border:1px solid var(--border-default);border-radius:var(--radius-lg);display:flex;align-items:center;gap:12px}
+.cta-banner p{font-size:13px;color:var(--text-muted);flex:1}
+/* tabs desktop */
+.section-tabs{display:flex;gap:4px;padding:0 24px 12px;border-bottom:1px solid var(--border-default);overflow-x:auto}
+.tab{padding:8px 14px;border-radius:999px;font-size:13px;font-weight:500;color:var(--text-muted);border:none;background:transparent;cursor:pointer;white-space:nowrap}
+.tab.active{background:var(--accent-soft);color:var(--accent-text)}
+.content{flex:1;overflow:auto;padding:20px 24px 24px}
+.section-card{background:var(--surface-1);border:1px solid var(--border-default);border-radius:var(--radius-lg);padding:18px 20px;margin-bottom:14px}
+.section-card h2{font-size:15px;font-weight:600;margin-bottom:4px}
+.section-card .desc{font-size:13px;color:var(--text-muted);margin-bottom:14px}
+.share-url{display:flex;gap:8px;align-items:center;background:var(--surface-2);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:10px 12px;font:12px var(--font-mono);word-break:break-all}
+.pill{display:inline-flex;align-items:center;gap:6px;font:11px var(--font-mono);padding:4px 10px;border-radius:999px;background:var(--success-soft);color:var(--success)}
+.row-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.note-preview{border-top:1px solid var(--border-subtle);margin-top:14px;padding-top:14px;font-size:13px;color:var(--text-muted)}
+/* mobile */
+.mobile-tabs{display:none;position:sticky;bottom:0;left:0;right:0;background:var(--surface-1);border-top:1px solid var(--border-default);height:56px;align-items:stretch;justify-content:space-around;z-index:8}
+.mobile-tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:10px;font-weight:500;color:var(--text-muted);border:none;background:transparent;cursor:pointer}
+.mobile-tab.active{color:var(--accent-text)}
+.mobile-tab .ico{font-size:18px}
+.sticky-cta{display:none;position:sticky;bottom:56px;left:0;right:0;padding:12px 16px;background:linear-gradient(transparent,var(--surface-base) 30%);z-index:7}
+.sticky-cta .btn-primary{width:100%;height:48px;font-size:15px}
+.app-shell.narrow .header-actions{display:none}
+.app-shell.narrow .section-tabs{display:none}
+.app-shell.narrow .page-header{padding:12px 16px 0}
+.app-shell.narrow .content{padding:12px 16px 80px}
+.app-shell.narrow .cta-banner{margin:0 16px 12px}
+.app-shell.narrow .hero h1{font-size:22px}
+.app-shell.narrow .mobile-tabs{display:flex}
+.app-shell.narrow .sticky-cta{display:block}
+.app-shell.narrow .section-card[data-section]:not([data-active]){display:none}
+.sheet-backdrop{display:none;position:absolute;inset:0;background:var(--overlay-scrim);z-index:15}
+.sheet-backdrop.open{display:block}
+.actions-sheet{position:absolute;left:0;right:0;bottom:0;z-index:16;background:var(--surface-1);border-radius:20px 20px 0 0;padding:16px 20px 28px;transform:translateY(100%);transition:transform .25s}
+.actions-sheet.open{transform:translateY(0)}
+.actions-sheet button{width:100%;text-align:left;padding:14px 0;border:none;border-bottom:1px solid var(--border-subtle);background:transparent;font:inherit;font-size:15px;color:var(--text-default);cursor:pointer}
+</style>
+</head>
+<body>
+<header class="meta-header">
+  <div class="meta-title">Mynk<span class="dot">·</span> Student Detail <span style="font-size:11px;opacity:.5">/admin/students/[id]</span></div>
+  <div class="meta-controls">
+    <button class="meta-btn" data-view="desktop" onclick="setView('desktop',this)">Desktop</button>
+    <button class="meta-btn" data-view="phone" onclick="setView('phone',this)">Phone</button>
+    <button class="meta-btn active" data-view="compare" onclick="setView('compare',this)">Compare</button>
+    <button class="meta-btn" onclick="toggleTheme()" id="themeBtn">☾ Dark</button>
+  </div>
+</header>
+<div class="mock-notes">
+  <strong>Proposals vs today:</strong> Mobile uses bottom tab bar (Session · Share · Notes · More) so one primary section fills the screen; sticky “Start whiteboard” CTA always reachable. Desktop keeps all sections scrollable with horizontal section tabs. Overflow actions (rename, outbox) move to ⋯ sheet on mobile.
+</div>
+<div class="viewport-root">
+  <div class="stage-desktop" id="stageDesktop">
+    <div class="app-shell" id="appShell">
+      <div class="page-header">
+        <a class="back-link" href="#">← Students</a>
+        <div class="hero">
+          <div class="avatar">ER</div>
+          <div style="flex:1;min-width:0">
+            <h1>Emma R.</h1>
+            <div class="hero-meta">12 notes · last Jun 8 · 1 open session</div>
+          </div>
+          <div class="header-actions">
+            <button class="btn">Rename</button>
+            <button class="btn">Outbox</button>
+            <button class="btn icon-more" onclick="openActions(event)">⋯</button>
+          </div>
+        </div>
+      </div>
+      <div class="cta-banner">
+        <p>Start a whiteboard session to record and generate notes.</p>
+        <button class="btn btn-primary">Start session</button>
+      </div>
+      <div class="section-tabs">
+        <button class="tab active" onclick="setTab('session',this)">Whiteboard</button>
+        <button class="tab" onclick="setTab('share',this)">Share link</button>
+        <button class="tab" onclick="setTab('notes',this)">Notes &amp; email</button>
+        <button class="tab" onclick="setTab('parent',this)">Parent account</button>
+      </div>
+      <div class="content" id="mainContent">
+        <div class="section-card" data-section="session" data-active>
+          <h2>Whiteboard session</h2>
+          <p class="desc">Live whiteboard with audio recording. Generates session notes from what you wrote and said.</p>
+          <div class="pill">● 1 open session · started 2:14 PM</div>
+          <div class="row-btns"><button class="btn">Continue session</button><button class="btn">End session</button></div>
+          <div class="note-preview">Recording default: <strong>On</strong> for new sessions</div>
+        </div>
+        <div class="section-card" data-section="share">
+          <h2>Share link (for parents/students)</h2>
+          <p class="desc">No login required. Revoke or regenerate anytime.</p>
+          <div class="share-url">mynk.app/s/k7x9m2p4…</div>
+          <div class="row-btns"><button class="btn">Copy link</button><button class="btn">Regenerate</button><button class="btn">Revoke</button></div>
+        </div>
+        <div class="section-card" data-section="notes">
+          <h2>Add session note</h2>
+          <p class="desc">Upload audio or enter notes manually — AI structures when enabled.</p>
+          <div class="row-btns"><button class="btn btn-primary">Upload recording</button><button class="btn">Manual entry</button></div>
+          <div class="note-preview" style="margin-top:16px"><strong>12 session notes</strong> · <a href="#" style="color:var(--brand)">View all →</a></div>
+          <hr style="border:none;border-top:1px solid var(--border-subtle);margin:16px 0">
+          <h2 style="font-size:15px;margin-bottom:8px">Send update email</h2>
+          <p class="desc">Sends the share link to the parent.</p>
+          <input style="width:100%;height:44px;padding:0 12px;border:1px solid var(--border-default);border-radius:var(--radius-md);background:var(--surface-base);font:inherit;margin-bottom:10px" placeholder="parent@email.com" value="sarah.parent@email.com">
+          <button class="btn btn-primary">Send update</button>
+        </div>
+        <div class="section-card" data-section="parent">
+          <h2>Parent account</h2>
+          <p class="desc">Invite a parent to create a Mynk account and connect this student.</p>
+          <button class="btn btn-primary">Send invite</button>
+        </div>
+      </div>
+      <div class="sticky-cta"><button class="btn btn-primary">Start whiteboard session</button></div>
+      <nav class="mobile-tabs" aria-label="Student sections">
+        <button class="mobile-tab active" data-tab="session" onclick="setTab('session',this)"><span class="ico">▣</span>Session</button>
+        <button class="mobile-tab" data-tab="share" onclick="setTab('share',this)"><span class="ico">🔗</span>Share</button>
+        <button class="mobile-tab" data-tab="notes" onclick="setTab('notes',this)"><span class="ico">📝</span>Notes</button>
+        <button class="mobile-tab" data-tab="parent" onclick="setTab('parent',this)"><span class="ico">⋯</span>More</button>
+      </nav>
+      <div class="sheet-backdrop" id="actionsBackdrop" onclick="closeActions()"></div>
+      <div class="actions-sheet" id="actionsSheet">
+        <button onclick="closeActions()">Rename student</button>
+        <button onclick="closeActions()">View outbox</button>
+        <button onclick="closeActions()">Delete student</button>
+      </div>
+    </div>
+  </div>
+  <div class="stage-devices active" id="stageDevices">
+    <div class="devices-row">
+      <div class="device-wrap"><div class="device-label">Phone · tab: Session</div><div class="device-scale"><div class="device-viewport" data-device="phone" data-w="390" data-h="844"><div class="device-screen" id="phoneMount"></div></div></div></div>
+      <div class="device-wrap" id="deskWrap"><div class="device-label">Desktop</div><div class="device-scale"><div class="device-viewport" data-w="920" data-h="620" style="border-radius:12px"><div class="device-screen" id="deskMount"></div></div></div></div>
+    </div>
+  </div>
+</div>
+<script>
+let shellClone=null;
+function toggleTheme(){const h=document.documentElement,d=h.getAttribute('data-theme')==='dark';h.setAttribute('data-theme',d?'light':'dark');document.getElementById('themeBtn').textContent=d?'☾ Dark':'☀ Light'}
+function setTab(id,el){
+  document.querySelectorAll('.tab,.mobile-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('[data-tab="'+id+'"],.tab').forEach(t=>{if(t.getAttribute('onclick')?.includes("'"+id+"'")||t.dataset.tab===id)t.classList.add('active')});
+  if(el?.classList?.contains('tab')||el?.classList?.contains('mobile-tab'))el.classList.add('active');
+  document.querySelectorAll('[data-section]').forEach(s=>{s.toggleAttribute('data-active',s.dataset.section===id)});
+  getShells().forEach(s=>s.querySelectorAll('[data-section]').forEach(sec=>sec.toggleAttribute('data-active',sec.dataset.section===id)));
+}
+function openActions(e){e?.stopPropagation();getShells().forEach(s=>{s.querySelector('.sheet-backdrop')?.classList.add('open');s.querySelector('.actions-sheet')?.classList.add('open')})}
+function closeActions(){getShells().forEach(s=>{s.querySelector('.sheet-backdrop')?.classList.remove('open');s.querySelector('.actions-sheet')?.classList.remove('open')})}
+function getShells(){return[document.getElementById('appShell'),shellClone].filter(Boolean)}
+function setLayout(s,n){s.classList.toggle('narrow',n)}
+function scaleDevices(){document.querySelectorAll('.device-viewport').forEach(vp=>{const w=+vp.dataset.w,h=+vp.dataset.h;vp.style.width=w+'px';vp.style.height=h+'px';const outer=vp.parentElement,avail=outer?outer.clientWidth:400;const scale=Math.min(avail/w,(window.innerHeight-200)/h,1);vp.style.transform='scale('+scale+')';if(outer){outer.style.height=Math.ceil(h*scale)+'px';outer.style.width=Math.ceil(w*scale)+'px'}})}
+function setView(view,btn){
+  document.querySelectorAll('[data-view]').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');
+  const p=document.getElementById('appShell'),sd=document.getElementById('stageDesktop'),sp=document.getElementById('stageDevices'),pm=document.getElementById('phoneMount'),dm=document.getElementById('deskMount');
+  closeActions();
+  if(view==='desktop'){sd.style.display='';sp.classList.remove('active');if(p.parentElement!==sd)sd.appendChild(p);setLayout(p,false);if(shellClone?.parentElement)shellClone.remove();return}
+  sd.style.display='none';sp.classList.add('active');
+  setLayout(p,true);pm.appendChild(p);
+  if(view==='compare'){if(!shellClone){shellClone=p.cloneNode(true);shellClone.removeAttribute('id');setLayout(shellClone,false)}dm.appendChild(shellClone)}else if(shellClone?.parentElement)shellClone.remove();
+  scaleDevices();
+}
+window.addEventListener('resize',scaleDevices);
+setView('compare',document.querySelector('[data-view="compare"]'));
+</script>
+</body>
+</html>
