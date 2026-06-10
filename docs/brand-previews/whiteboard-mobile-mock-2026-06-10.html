@@ -107,7 +107,8 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
 
 /* Canvas */
 .wb-canvas{flex:1;position:relative;min-width:0;background:var(--surface-base);overflow:hidden}
-.wb-canvas-grid{position:absolute;inset:0;background-image:linear-gradient(var(--border-subtle) 1px,transparent 1px),linear-gradient(90deg,var(--border-subtle) 1px,transparent 1px);background-size:32px 32px;opacity:.35;pointer-events:none}
+.wb-canvas-grid{display:none;position:absolute;inset:0;background-image:linear-gradient(var(--border-subtle) 1px,transparent 1px),linear-gradient(90deg,var(--border-subtle) 1px,transparent 1px);background-size:32px 32px;opacity:.35;pointer-events:none}
+.wb-shell[data-grid-on] .wb-canvas-grid{display:block}
 .wb-canvas-strokes{position:absolute;inset:0;pointer-events:none;z-index:2}
 .wb-canvas-pct{position:absolute;top:6px;left:6px;z-index:5;font:500 9px var(--font-mono);color:var(--text-muted);background:color-mix(in srgb,var(--surface-1) 85%,transparent);border:1px dashed var(--border);border-radius:4px;padding:2px 6px;pointer-events:none}
 
@@ -126,6 +127,7 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
 .wb-av-pip{position:absolute;z-index:25;right:10px;bottom:10px;width:108px;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-md);display:flex;flex-direction:column;overflow:hidden}
 .wb-shell.tablet-layout .wb-av-pip{width:128px}
 .wb-av-pip__handle{height:12px;display:flex;align-items:center;justify-content:center;background:var(--surface-2);cursor:grab;font:10px var(--font-mono);letter-spacing:2px;color:var(--text-muted)}
+.wb-shell.phone-layout .wb-av-pip__handle,.wb-shell.tablet-layout .wb-av-pip__handle,.wb-shell.phone-layout .wb-av-resize,.wb-shell.tablet-layout .wb-av-resize{display:none}
 .wb-av-pip__tiles{padding:3px;display:flex;flex-direction:column;gap:3px}
 .wb-av-tile{aspect-ratio:16/10;background:var(--surface-3);border-radius:4px;position:relative;display:flex;align-items:center;justify-content:center;color:var(--text-muted)}
 .wb-av-tile span{position:absolute;top:3px;left:4px;font:500 8px var(--font-mono);color:var(--text-muted)}
@@ -137,7 +139,8 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
 
 /* Bottom toolbar */
 .wb-bottom-bar{flex-shrink:0;background:var(--card);border-top:1px solid var(--border)}
-.wb-props-mobile{display:none;padding:6px 10px;border-bottom:1px solid var(--border)}
+.wb-props-mobile{display:none;padding:6px 12px;border-bottom:1px solid var(--border);background:var(--card)}
+.wb-shell.phone-layout .wb-props-mobile,.wb-shell.tablet-layout .wb-props-mobile{display:block}
 .wb-props-mobile-btn{width:100%;display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:pointer;font-size:12px;color:var(--text)}
 .wb-summary-swatch{width:18px;height:18px;border-radius:50%;border:1px solid var(--border);background:#15203a;flex-shrink:0}
 .wb-summary-stroke{width:24px;display:flex;align-items:center;justify-content:center}
@@ -166,6 +169,17 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
 .wb-props-sheet__handle{width:36px;height:4px;border-radius:2px;background:var(--border)}
 .wb-props-sheet__close{position:absolute;right:0;top:6px;width:28px;height:28px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
 .wb-props-section-title{font:500 10px var(--font-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:6px}
+.wb-props-section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.wb-props-section-header .wb-props-section-title{margin-bottom:0}
+.wb-props-opacity-val{font:10px var(--font-mono);color:var(--text-muted)}
+.wb-popover-sep{height:1px;background:var(--border);margin:4px 0}
+.wb-props-chips{display:flex;gap:6px;flex-wrap:wrap}
+.wb-roughness-chip{width:36px;padding:0;display:inline-flex;align-items:center;justify-content:center}
+.wb-more-styles-btn{width:100%;justify-content:center;display:flex}
+.wb-more-styles-area{margin-top:8px;padding:8px;border:1px solid var(--border);border-radius:6px}
+.wb-zorder-btn{border:1px solid var(--border);background:var(--card);color:var(--text);font-size:11px;height:28px;padding:0 8px;border-radius:4px;font-weight:500;cursor:pointer;white-space:nowrap}
+.wb-delete-btn{width:100%;border:1px solid color-mix(in srgb,var(--destructive) 40%,var(--border));background:var(--card);color:var(--destructive);font-size:11px;height:28px;padding:0 8px;border-radius:4px;font-weight:500;cursor:pointer;margin-top:4px}
+.wb-summary-chip--icon{padding:2px 4px;background:transparent}
 .wb-props-swatches{display:flex;flex-wrap:wrap;gap:6px}
 .wb-swatch{width:28px;height:28px;border-radius:50%;border:1px solid var(--border);cursor:pointer}
 .wb-swatch--active{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--ring)}
@@ -202,7 +216,8 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
   <span class="meta-sep"></span>
   <button class="meta-btn state-active" data-state="live" onclick="setMockState('live',this)">Live</button>
   <button class="meta-btn" data-state="props" onclick="setMockState('props',this)">Props sheet</button>
-  <button class="meta-btn" data-state="overflow" onclick="setMockState('overflow',this)">Overflow ···</button>
+  <button class="meta-btn" data-state="overflow" onclick="setMockState('overflow',this)">Overflow ⋮</button>
+  <button class="meta-btn" data-state="grid" onclick="setMockState('grid',this)">Grid on</button>
   <button class="meta-btn" data-state="shapes" onclick="setMockState('shapes',this)">Shapes</button>
   <span class="meta-sep"></span>
   <button class="meta-btn active" data-role="tutor" onclick="setRole('tutor',this)">Tutor</button>
@@ -213,8 +228,10 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
 <div class="mock-notes">
   <strong>Visual proposal only — no production code.</strong> Adapts current live desktop chrome (<code>whiteboard-chrome.css</code> + chrome components) to phone/tablet by <em>screen resolution</em>. Tutor vs student differs only by control set (Decision E) — use callouts on device frames.
   <ul>
-    <li><strong>Phone tier-1:</strong> Select · Pencil · Eraser · Styles · Shapes▾ · ···</li>
-    <li><strong>Tablet tier-1:</strong> slim left rail (Select/Pencil/Eraser/Text/Wand) + bottom bar (Shapes▾ · Undo · Styles · ···)</li>
+    <li><strong>Phone tier-1 (tutor):</strong> Select · Pencil · Eraser · Styles · Shapes▾ · ⋮</li>
+    <li><strong>Phone tier-1 (student):</strong> Pencil · Eraser · ⋮ — Shapes + Styles in overflow (ST-04)</li>
+    <li><strong>Tablet tier-1:</strong> slim left rail (Select/Pencil/Eraser/Text/Wand) + bottom bar (Shapes▾ · Undo · Styles · ⋮)</li>
+    <li><strong>VP-02:</strong> grid OFF by default — use <em>Grid on</em> meta toggle to preview</li>
     <li><strong>SR-01 target:</strong> canvas ≥80% — annotated on each frame</li>
   </ul>
 </div>
@@ -289,8 +306,8 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
       <div class="wb-canvas-pct" data-canvas-pct>Canvas ~84%</div>
 
       <div class="wb-callout wb-callout--end"><strong>Tutor:</strong> End session · <strong>Student:</strong> Leave (same shell)</div>
-      <div class="wb-callout wb-callout--overflow wb-tool-btn--tutor-only"><strong>Tutor ···</strong> inserts, share, theme, board +</div>
-      <div class="wb-callout wb-callout--student"><strong>Student ···</strong> follow-tutor (default on), no inserts; pencil+eraser tier-1 only</div>
+      <div class="wb-callout wb-callout--overflow wb-tool-btn--tutor-only"><strong>Tutor ⋮</strong> inserts, share, theme, board +</div>
+      <div class="wb-callout wb-callout--student"><strong>Student ⋮</strong> follow-tutor (default on), shapes/styles; pencil+eraser tier-1 only</div>
 
       <div class="wb-av-pip" title="Drag to reposition · resize corner">
         <div class="wb-av-pip__handle">···</div>
@@ -327,14 +344,44 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
           <button class="wb-width-btn"><span style="display:block;width:14px;height:3px;background:currentColor"></span></button>
           <button class="wb-width-btn"><span style="display:block;width:14px;height:5px;background:currentColor"></span></button>
         </div>
-        <div class="wb-props-section-title">Roughness</div>
-        <div style="display:flex;gap:4px;flex-wrap:wrap">
-          <button class="wb-chip wb-chip--active">Architect</button>
-          <button class="wb-chip">Artist</button>
-          <button class="wb-chip">Cartoon</button>
+        <div class="wb-props-section-header">
+          <div class="wb-props-section-title">Opacity</div>
+          <span class="wb-props-opacity-val">72%</span>
         </div>
-        <div class="wb-props-section-title">Opacity · 72%</div>
         <div class="wb-slider-custom"><div class="wb-slider-custom__track"></div><div class="wb-slider-custom__thumb"></div></div>
+        <div class="wb-popover-sep"></div>
+        <button class="wb-chip wb-more-styles-btn wb-chip--active" type="button">▴ Less styles</button>
+        <div class="wb-more-styles-area">
+          <div class="wb-props-section-title">Roughness</div>
+          <div class="wb-props-chips">
+            <button class="wb-chip wb-roughness-chip wb-chip--active" type="button" title="Architect" aria-label="Architect">
+              <svg width="24" height="14" viewBox="0 0 24 14" fill="none" aria-hidden><line x1="3" y1="11" x2="21" y2="3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
+            <button class="wb-chip wb-roughness-chip" type="button" title="Artist" aria-label="Artist">
+              <svg width="24" height="14" viewBox="0 0 24 14" fill="none" aria-hidden><path d="M2 7 Q6 3 10 7 Q14 11 18 7 Q20 5 22 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg>
+            </button>
+            <button class="wb-chip wb-roughness-chip" type="button" title="Cartoon" aria-label="Cartoon">
+              <svg width="24" height="14" viewBox="0 0 24 14" fill="none" aria-hidden><polyline points="2,11 6,3 10,11 14,3 18,11 22,3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+            </button>
+          </div>
+          <div class="wb-props-section-title">Edge sharpness</div>
+          <div class="wb-props-chips">
+            <button class="wb-chip wb-roughness-chip wb-chip--active" type="button" title="Sharp" aria-label="Sharp">
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden><path d="M5 17 L5 5 L17 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="miter"/></svg>
+            </button>
+            <button class="wb-chip wb-roughness-chip" type="button" title="Round" aria-label="Round">
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden><path d="M5 17 L5 9 Q5 5 9 5 L17 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+          <div class="wb-props-section-title">Z-order</div>
+          <div class="wb-props-chips" style="margin-bottom:8px">
+            <button class="wb-zorder-btn" type="button">Send to back</button>
+            <button class="wb-zorder-btn" type="button">Send backward</button>
+            <button class="wb-zorder-btn" type="button">Bring forward</button>
+            <button class="wb-zorder-btn" type="button">Bring to front</button>
+          </div>
+          <button class="wb-delete-btn" type="button">Delete selected</button>
+        </div>
         <div class="wb-dismiss-hint">TM-11: tap backdrop · swipe handle · × close</div>
       </div>
 
@@ -343,6 +390,9 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
         <button class="wb-menu-item wb-tool-btn--tutor-only">Insert PDF <small>tutor</small></button>
         <button class="wb-menu-item wb-tool-btn--tutor-only">Insert image</button>
         <button class="wb-menu-item wb-tool-btn--tutor-only">Insert equation ∑</button>
+        <button class="wb-menu-item wb-tool-btn--student-only">Select tool</button>
+        <button class="wb-menu-item wb-tool-btn--student-only">Shapes</button>
+        <button class="wb-menu-item wb-tool-btn--student-only">Styles / colors</button>
         <button class="wb-menu-item">Text tool</button>
         <button class="wb-menu-item">Pointer wand</button>
         <button class="wb-menu-item wb-tool-btn--student-only">Follow tutor viewport <small>on</small></button>
@@ -369,23 +419,27 @@ html,body{font-family:var(--font-body);background:var(--surface-base);color:var(
 
   <div class="wb-bottom-bar">
     <div class="wb-props-mobile" data-props-bar>
-      <button class="wb-props-mobile-btn" type="button">
+      <button class="wb-props-mobile-btn" type="button" aria-label="Stroke properties — tap to expand">
         <span class="wb-summary-swatch"></span>
-        <span class="wb-summary-stroke"><span class="wb-summary-stroke-line"></span></span>
-        <span class="wb-summary-chip">Architect</span>
+        <span class="wb-summary-chip wb-summary-chip--icon" title="Architect" aria-label="Architect">
+          <svg width="24" height="14" viewBox="0 0 24 14" fill="none" aria-hidden><line x1="3" y1="11" x2="21" y2="3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </span>
+        <span class="wb-summary-chip wb-summary-chip--icon" title="Sharp" aria-label="Sharp">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden><path d="M5 17 L5 5 L17 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="miter"/></svg>
+        </span>
         <span style="margin-left:auto;font-size:11px;color:var(--text-muted)">Colors &amp; styles</span>
       </button>
     </div>
     <nav class="wb-bottom-toolbar" aria-label="Drawing tools">
-      <button class="wb-tool-btn wb-tool-btn--phone-only" title="Select"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 3l14 9-7 1-4 7-3-17z"/></svg></button>
+      <button class="wb-tool-btn wb-tool-btn--phone-only wb-tool-btn--tutor-only" title="Select"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 3l14 9-7 1-4 7-3-17z"/></svg></button>
       <button class="wb-tool-btn wb-tool-btn--active" title="Pencil"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
       <button class="wb-tool-btn" title="Eraser"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21"/><path d="m5.082 11.09 8.828 8.828"/></svg></button>
-      <button class="wb-tool-btn wb-tool-btn--phone-only wb-tool-btn--shapes" title="Shapes"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="5" y1="19" x2="19" y2="5"/></svg><span class="wb-pulldown-chevron">▾</span></button>
-      <button class="wb-tool-btn wb-tool-btn--phone-only" title="Styles" data-open-props><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></button>
-      <button class="wb-tool-btn wb-tool-btn--tablet-only wb-tool-btn--shapes" title="Shapes"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="5" y1="19" x2="19" y2="5"/></svg><span class="wb-pulldown-chevron">▾</span></button>
+      <button class="wb-tool-btn wb-tool-btn--phone-only wb-tool-btn--shapes wb-tool-btn--tutor-only" title="Shapes"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="5" y1="19" x2="19" y2="5"/></svg><span class="wb-pulldown-chevron">▾</span></button>
+      <button class="wb-tool-btn wb-tool-btn--phone-only wb-tool-btn--tutor-only" title="Styles" data-open-props><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></button>
+      <button class="wb-tool-btn wb-tool-btn--tablet-only wb-tool-btn--shapes wb-tool-btn--tutor-only" title="Shapes"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="5" y1="19" x2="19" y2="5"/></svg><span class="wb-pulldown-chevron">▾</span></button>
       <button class="wb-tool-btn wb-tool-btn--tablet-only" title="Undo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg></button>
-      <button class="wb-tool-btn wb-tool-btn--tablet-only" title="Styles" data-open-props><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></button>
-      <button class="wb-tool-btn" title="More"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button>
+      <button class="wb-tool-btn wb-tool-btn--tablet-only wb-tool-btn--tutor-only" title="Styles" data-open-props><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></button>
+      <button class="wb-tool-btn" title="More"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>
     </nav>
   </div>
 </div>
@@ -418,7 +472,8 @@ function updateCanvasPct(shell,layout){
   const el=shell.querySelector('[data-canvas-pct]');
   if(!el)return;
   const h=layout==='tablet'?TABLET_H:PHONE_H;
-  const chrome=44+36+52; // top + tabs + toolbar (props bar hidden in live)
+  const propsBar=40; // PP-06 collapsed summary bar (always on mobile/tablet)
+  const chrome=44+36+propsBar+52; // top + tabs + props summary + toolbar
   const pct=Math.round((h-chrome)/h*100);
   el.textContent='Canvas ~'+pct+'% (SR-01)';
 }
@@ -428,13 +483,13 @@ function applyMockStateToShell(shell,state){
   const props=shell.querySelector('[data-overlay="props"]');
   const overflow=shell.querySelector('[data-overlay="overflow"]');
   const shapes=shell.querySelector('[data-overlay="shapes"]');
-  const propsBar=shell.querySelector('[data-props-bar]');
+  shell.removeAttribute('data-grid-on');
   [backdrop,props,overflow,shapes].forEach(el=>{if(el)el.classList.remove('wb-overlay-backdrop--open','wb-props-sheet--open','wb-action-sheet--open')});
-  if(propsBar)propsBar.style.display='none';
   if(state==='live')return;
+  if(state==='grid'){shell.setAttribute('data-grid-on','');return}
   if(backdrop)backdrop.classList.add('wb-overlay-backdrop--open');
-  if(state==='props'){
-    if(props){props.classList.add('wb-props-sheet--open');if(propsBar)propsBar.style.display='block'}
+  if(state==='props'&&props){
+    props.classList.add('wb-props-sheet--open');
   }else if(state==='overflow'&&overflow){
     overflow.classList.add('wb-action-sheet--open');
   }else if(state==='shapes'&&shapes){
