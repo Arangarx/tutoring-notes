@@ -219,7 +219,7 @@
  *    CSS-targetable). Link must stay on the element for reload validation;
  *    badge is accepted as a minor cosmetic trade-off (see graph-persist.ts).
  *
- * Desmos embeds use https://*.desmos.com links — unaffected.
+ * Legacy external embed links are unaffected.
  */
 .mynk-wb-chrome .excalidraw-hyperlinkContainer:has(
   .excalidraw-hyperlinkContainer-link[href="mynk://graph"]

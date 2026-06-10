@@ -187,27 +187,19 @@ export function buildContentSecurityPolicy(opts: CspOptions = {}): string {
   return [
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-    // Desmos embeddable iframes are sandboxed without allow-same-origin
-    // (null origin) — the parent CSP governs their asset loads; Chrome
-    // needs the explicit origin, not just https:, for font/img/style.
-    // TODO Phase 2: remove desmos.com origins once legacy migration lands
-    "style-src 'self' 'unsafe-inline' https://www.desmos.com",
+    "style-src 'self' 'unsafe-inline'",
     // *.private.blob.vercel-storage.com — Vercel Blob private-access URLs
     // used for whiteboard images/PDFs inserted via the tutor toolbar and
     // displayed on the student page. The private CDN hostname differs from
     // the public one; without this Chrome blocks <img> loaded from signed
     // private Blob URLs with "violates img-src 'self' data: blob:".
-    "img-src 'self' data: blob: https://*.public.blob.vercel-storage.com https://*.private.blob.vercel-storage.com https://www.desmos.com",
+    "img-src 'self' data: blob: https://*.public.blob.vercel-storage.com https://*.private.blob.vercel-storage.com",
     "media-src 'self' blob: https://*.public.blob.vercel-storage.com",
-    "font-src 'self' data: blob: https: https://www.desmos.com",
+    "font-src 'self' data: blob: https:",
     `connect-src ${connectSrc}`,
-    // Desmos calculator iframes — legacy sessions still render via iframe.
-    // TODO Phase 2: remove desmos.com origins once legacy migration lands
-    // Must match next.config.ts `frame-src`. When both CSP headers are
-    // emitted (middleware + next.config.ts headers()), the browser enforces
-    // the INTERSECTION; without this directive the middleware's default-src
-    // 'self' fallback blocks Desmos iframes with a "frowny face" placeholder.
-    "frame-src 'self' https://www.desmos.com https://desmos.com",
+    // Must match next.config.ts `frame-src`. JSXGraph graphs render via
+    // renderEmbeddable on 'self' — no external frame origins.
+    "frame-src 'self'",
     "frame-ancestors 'none'",
   ].join("; ");
 }

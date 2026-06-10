@@ -27,7 +27,7 @@
  *
  *   - PDF/image upload toolbar (separate todo `phase1-pdf-upload`).
  *   - Math equation popover (`phase1-math-equations`).
- *   - Desmos embed (`phase1-graphing`).
+ *   - JSXGraph embed (`phase1-graphing`).
  *   - Audio capture — one shared `useAudioRecorder` feeds
  *     `WhiteboardWorkspaceAudioBridge`, which renders `RecordingControlPanel`
  *     (same mic UI as the recorder tab) and registers Blob segments with this

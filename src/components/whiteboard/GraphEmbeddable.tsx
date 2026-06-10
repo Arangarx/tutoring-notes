@@ -62,6 +62,8 @@ type JxgBoard = {
 type Props = {
   element: EmbeddableElementLike;
   excalidrawAPI?: GraphPersistApiLike | null;
+  /** Student / replay view: display synced state only — no edits or persist. */
+  readOnly?: boolean;
 };
 
 const JSXGRAPH_CSS_ID = "mynk-jsxgraph-css";
@@ -157,8 +159,10 @@ function plotExpressions(
 function mountGraphBoard(
   container: HTMLDivElement,
   graphState: GraphState,
-  JXG: { JSXGraph: { initBoard: (...args: unknown[]) => JxgBoard } }
+  JXG: { JSXGraph: { initBoard: (...args: unknown[]) => JxgBoard } },
+  options?: { interactive?: boolean }
 ): JxgBoard {
+  const interactive = options?.interactive !== false;
   const bbox = graphState.bbox ?? DEFAULT_GRAPH_BBOX;
   const colors = readGraphJxgColors(container);
   const board = JXG.JSXGraph.initBoard(container, {
@@ -176,8 +180,8 @@ function mountGraphBoard(
     },
     showCopyright: false,
     showNavigation: false,
-    pan: { enabled: true, needTwoFingers: false, needShift: false },
-    zoom: { wheel: true, needShift: false, factor: 1.2 },
+    pan: { enabled: interactive, needTwoFingers: false, needShift: false },
+    zoom: { wheel: interactive, needShift: false, factor: 1.2 },
     resize: { enabled: true },
     // Manual square-unit bbox math (fitGraphBboxToSquareUnits / recomputeBboxForResize)
     // drives px-per-unit on both axes; keepaspectratio would fight that and skew units.
@@ -198,7 +202,11 @@ function stopEmbedDragCapture(event: React.SyntheticEvent): void {
   }
 }
 
-export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
+export function GraphEmbeddable({
+  element,
+  excalidrawAPI,
+  readOnly = false,
+}: Props) {
   const { resolvedTheme } = useTheme();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const boardRef = useRef<JxgBoard | null>(null);
@@ -225,8 +233,14 @@ export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
 
   const elementId = element.id ?? "";
 
+  const graphStateJsonRaw =
+    typeof element.customData?.graphStateJson === "string"
+      ? element.customData.graphStateJson
+      : null;
+
   const persistState = useCallback(
     (state: GraphState) => {
+      if (readOnly) return;
       graphStateRef.current = state;
       if (!excalidrawAPI || !elementId) return;
       persistGraphElementState({
@@ -235,7 +249,7 @@ export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
         graphState: state,
       });
     },
-    [excalidrawAPI, elementId]
+    [excalidrawAPI, elementId, readOnly]
   );
 
   const replot = useCallback(
@@ -413,7 +427,9 @@ export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
           freeBoard: (board: JxgBoard) => void;
         };
       };
-      board = mountGraphBoard(hostRef.current, initialState, JXG);
+      board = mountGraphBoard(hostRef.current, initialState, JXG, {
+        interactive: !readOnly,
+      });
       boardRef.current = board;
 
       const initialExprs = initialState.expressions ?? [];
@@ -457,9 +473,11 @@ export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
       observer = new ResizeObserver(syncSize);
       observer.observe(hostRef.current);
 
-      const onBboxChange = () => scheduleBboxPersist();
-      bboxHandlerRef.current = onBboxChange;
-      board.on("up", onBboxChange);
+      if (!readOnly) {
+        const onBboxChange = () => scheduleBboxPersist();
+        bboxHandlerRef.current = onBboxChange;
+        board.on("up", onBboxChange);
+      }
     })();
 
     return () => {
@@ -493,9 +511,35 @@ export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
     // Board lifecycle follows element identity only — graphStateJson updates from
     // our own persist must not remount JSXGraph (would reset pan/zoom mid-edit).
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: element.id only
-  }, [element.id, scheduleBboxPersist]);
+  }, [element.id, readOnly, scheduleBboxPersist]);
+
+  /** Student read-only: re-plot when tutor sync pushes new graphStateJson. */
+  useEffect(() => {
+    if (!readOnly) return;
+    const board = boardRef.current;
+    if (!board) return;
+
+    const synced = parseGraphStateJson(graphStateJsonRaw);
+    graphStateRef.current = synced;
+    setExpressions(synced.expressions ?? []);
+
+    const errors = plotExpressions(
+      board,
+      synced.expressions ?? [],
+      plotRefsRef.current
+    );
+    setExprErrors(errors);
+
+    try {
+      board.setBoundingBox(synced.bbox ?? DEFAULT_GRAPH_BBOX, true);
+      board.update();
+    } catch {
+      // ignore during teardown
+    }
+  }, [readOnly, graphStateJsonRaw]);
 
   const handleAddExpression = () => {
+    if (readOnly) return;
     const trimmed = draftExpr.trim();
     if (!trimmed) return;
     const nextState = addGraphExpression(graphStateRef.current, trimmed);
@@ -527,14 +571,20 @@ export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
   };
 
   return (
-    <div className="wb-graph-root" data-wb-graph="true" data-testid="wb-graph-embed-host">
+    <div
+      className="wb-graph-root"
+      data-wb-graph="true"
+      data-read-only={readOnly ? "true" : undefined}
+      data-testid="wb-graph-embed-host"
+    >
       <div
         ref={hostRef}
         className="wb-graph-board-host"
-        onPointerDown={stopEmbedDrag}
-        onMouseDown={stopEmbedDrag}
-        onWheel={stopEmbedDrag}
+        onPointerDown={readOnly ? undefined : stopEmbedDrag}
+        onMouseDown={readOnly ? undefined : stopEmbedDrag}
+        onWheel={readOnly ? undefined : stopEmbedDrag}
       />
+      {!readOnly && (
       <div
         className="wb-graph-controls"
         onPointerDownCapture={stopEmbedDragCapture}
@@ -666,6 +716,8 @@ export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
           </div>
         )}
       </div>
+      )}
+      {!readOnly && (
       <div
         className="wb-graph-nav"
         onPointerDownCapture={stopEmbedDragCapture}
@@ -753,6 +805,7 @@ export function GraphEmbeddable({ element, excalidrawAPI }: Props) {
           <span className="wb-graph-nav-pad" aria-hidden />
         </div>
       </div>
+      )}
     </div>
   );
 }

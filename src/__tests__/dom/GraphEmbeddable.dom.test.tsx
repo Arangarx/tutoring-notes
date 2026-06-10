@@ -112,6 +112,36 @@ describe("GraphEmbeddable", () => {
     expect(screen.getByTestId("wb-graph-expr-display-0")).toHaveTextContent("x^2");
   });
 
+  it("hides expression panel and nav controls when readOnly", async () => {
+    const graphStateJson = serializeGraphStateJson({
+      expressions: ["x^2"],
+      bbox: [-10, 10, 10, -10],
+    });
+
+    render(
+      <GraphEmbeddable
+        element={{
+          id: "el-graph-ro",
+          customData: { graphStateJson, wbType: "graph" },
+        }}
+        readOnly
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("wb-graph-embed-host")).toHaveAttribute(
+        "data-read-only",
+        "true"
+      );
+    });
+
+    expect(screen.queryByTestId("wb-graph-expr-panel")).toBeNull();
+    expect(screen.queryByTestId("wb-graph-expr-toggle")).toBeNull();
+    expect(screen.queryByTestId("wb-graph-reset-view")).toBeNull();
+    expect(screen.queryByTestId("wb-graph-zoom-in")).toBeNull();
+    expect(screen.queryByTestId("wb-graph-pan-up")).toBeNull();
+  });
+
   it("does not clear sentinel graph link on mount/persist", async () => {
     const user = userEvent.setup();
     const element = {

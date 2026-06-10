@@ -183,14 +183,6 @@ export function WbIconImage({ size = 14, className }: IconProps) {
   );
 }
 
-export function WbIconDesmos({ size = 14, className }: IconProps) {
-  return (
-    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-    </svg>
-  );
-}
-
 /** Coordinate-plane graph icon for JSXGraph insert */
 export function WbIconGraph({ size = 14, className }: IconProps) {
   return (

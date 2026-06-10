@@ -39,8 +39,9 @@ export const WB_EVENT_LOG_SCHEMA_VERSION = 1 as const;
  *
  * The `type` discriminator covers the surfaces we persist in Phase 1:
  * freehand strokes, lines, shapes, arrows, text, images (used both for
- * raster paste AND PDF-page-tile AND math-equation-SVG), and Desmos
- * iframe embeds. Everything else (libraries-of-shapes, frames, custom
+ * raster paste AND PDF-page-tile AND math-equation-SVG), JSXGraph
+ * graph embeds, and legacy Desmos iframe embeds. Everything else
+ * (libraries-of-shapes, frames, custom
  * tools) is normalized into one of these on the way in.
  */
 export type WBElement = {
@@ -55,6 +56,7 @@ export type WBElement = {
     | "arrow"
     | "text"
     | "image"
+    | "graph"
     | "desmos";
   /**
    * Top-left x of the element's bounding box in scene coordinates.
@@ -85,7 +87,7 @@ export type WBElement = {
   fontFamily?: number | string;
   /** For image / equation / pdf-page elements: URL of the underlying asset (Vercel Blob). */
   assetUrl?: string;
-  /** Optional alt text for images / equations / desmos. */
+  /** Optional alt text for images / equations / graph / legacy desmos. */
   altText?: string;
   /**
    * For math-equation images: the source LaTeX string. Preserved so the
@@ -93,7 +95,13 @@ export type WBElement = {
    * doing OCR on the rendered SVG.
    */
   latex?: string;
-  /** For desmos elements: the initial state JSON (`Calculator.getState()`). */
+  /** For graph elements: serialized JSXGraph state (expressions + bbox). */
+  graphStateJson?: string;
+  /**
+   * Legacy Desmos embeds (pre–JSXGraph swap): initial state JSON from
+   * `Calculator.getState()`. Still read from old recordings; new inserts
+   * use `graph` + `graphStateJson`.
+   */
   desmosStateJson?: string;
   /**
    * Per-client originator id (excalidraw-room socket id). Used by the

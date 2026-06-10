@@ -22,14 +22,12 @@ import {
   buildGraphEmbeddableElement,
   computeFitCameraForRect,
   GRAPH_EMBED_LINK,
-  insertDesmosEmbedOnCanvas,
   insertGraphOnCanvas,
   insertImageOnCanvas,
   insertMathSvgOnCanvas,
   insertPdfPagesAsBoardPages,
   insertPdfPagesOnCanvas,
   pdfBoardPageTitle,
-  validateDesmosUrl,
   type ExcalidrawApiLike,
 } from "@/lib/whiteboard/insert-asset";
 import { DEFAULT_GRAPH_BBOX } from "@/lib/whiteboard/graph-state";
@@ -894,106 +892,6 @@ describe("insertPdfPagesOnCanvas", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toMatch(/No pages/);
-  });
-});
-
-describe("validateDesmosUrl", () => {
-  it("accepts a saved-graph URL and strips fragments", () => {
-    const result = validateDesmosUrl(
-      "https://www.desmos.com/calculator/abc123#editor"
-    );
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.url).toBe("https://www.desmos.com/calculator/abc123");
-  });
-
-  it("accepts the blank calculator URL", () => {
-    const result = validateDesmosUrl("https://www.desmos.com/calculator");
-    expect(result.ok).toBe(true);
-  });
-
-  it("accepts the apex domain (no www) for forwarded links", () => {
-    const result = validateDesmosUrl("https://desmos.com/calculator/xyz");
-    expect(result.ok).toBe(true);
-  });
-
-  it("rejects non-https URLs", () => {
-    const result = validateDesmosUrl("http://www.desmos.com/calculator");
-    expect(result.ok).toBe(false);
-  });
-
-  it("rejects non-Desmos hosts", () => {
-    const evil = validateDesmosUrl("https://evil.example/calculator");
-    expect(evil.ok).toBe(false);
-    if (evil.ok) return;
-    expect(evil.reason).toMatch(/Only Desmos/);
-  });
-
-  it("rejects garbage input", () => {
-    const result = validateDesmosUrl("not a url at all");
-    expect(result.ok).toBe(false);
-  });
-
-  it("rejects empty input with a tutor-friendly hint", () => {
-    const result = validateDesmosUrl("   ");
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.reason).toMatch(/Enter a Desmos URL/);
-  });
-});
-
-describe("insertDesmosEmbedOnCanvas", () => {
-  it("inserts an embeddable element with the validated URL", () => {
-    const { api, scenes } = makeFakeApi();
-    const result = insertDesmosEmbedOnCanvas({
-      excalidrawAPI: api,
-      whiteboardSessionId: "wb-1",
-      studentId: "s-1",
-      url: "https://www.desmos.com/calculator/abc123",
-    });
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(scenes).toHaveLength(1);
-    const el = scenes[0][0] as Record<string, unknown>;
-    expect(el.type).toBe("embeddable");
-    expect(el.link).toBe("https://www.desmos.com/calculator/abc123");
-    const customData = el.customData as {
-      assetUrl?: string;
-      wbType?: string;
-      embed?: { provider: string; kind: string; url: string };
-    };
-    expect(customData.assetUrl).toBe("https://www.desmos.com/calculator/abc123");
-    expect(customData.wbType).toBe("embed");
-    expect(customData.embed?.provider).toBe("desmos");
-    expect(customData.embed?.kind).toBe("saved");
-  });
-
-  it("labels a blank calculator as `calculator` (not `saved`)", () => {
-    const { api, scenes } = makeFakeApi();
-    const result = insertDesmosEmbedOnCanvas({
-      excalidrawAPI: api,
-      whiteboardSessionId: "wb-1",
-      studentId: "s-1",
-      url: "https://www.desmos.com/calculator",
-    });
-    expect(result.ok).toBe(true);
-    const el = scenes[0][0] as Record<string, unknown>;
-    const customData = el.customData as {
-      embed?: { kind: string };
-    };
-    expect(customData.embed?.kind).toBe("calculator");
-  });
-
-  it("does not mutate the scene if the URL is invalid", () => {
-    const { api, scenes } = makeFakeApi();
-    const result = insertDesmosEmbedOnCanvas({
-      excalidrawAPI: api,
-      whiteboardSessionId: "wb-1",
-      studentId: "s-1",
-      url: "https://evil.example/calculator",
-    });
-    expect(result.ok).toBe(false);
-    expect(scenes).toHaveLength(0);
   });
 });
 
