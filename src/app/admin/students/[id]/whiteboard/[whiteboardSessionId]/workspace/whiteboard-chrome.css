@@ -559,6 +559,48 @@
   min-height: 0;
   overflow: hidden;
   padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* SR-04a — video tiles fill the resizable cluster (override AVTile 160px default). */
+.mynk-wb-av-cluster__tiles-panel {
+  flex: 1 1 auto;
+  display: flex !important;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  gap: 4px;
+  align-items: stretch !important;
+}
+
+/* Manual resize / viewport-capped fallback — tiles share the fixed cluster height. */
+.mynk-wb-av-cluster:not([data-auto-grow="true"])
+  .mynk-wb-av-cluster__tiles-panel
+  > [data-testid^="av-tile-"] {
+  width: 100% !important;
+  height: auto;
+  flex: 1 1 0;
+  min-height: 0;
+  max-width: 100%;
+}
+
+/* Auto-grow — fixed tile height; cluster grows/shrinks with tile count (no stretch). */
+.mynk-wb-av-cluster[data-auto-grow="true"]
+  .mynk-wb-av-cluster__tiles-panel
+  > [data-testid^="av-tile-"] {
+  width: 100% !important;
+  height: auto;
+  flex: 0 0 var(--wb-av-tile-target-h, 213px);
+  min-height: var(--wb-av-tile-target-h, 213px);
+  max-width: 100%;
+}
+
+.mynk-wb-av-cluster__tiles-panel > [data-testid^="av-tile-"] > div:first-child {
+  flex: 1 1 auto !important;
+  aspect-ratio: unset !important;
+  min-height: 0;
 }
 
 .mynk-wb-av-cluster__controls {
@@ -1041,6 +1083,14 @@
   border-radius: 50%;
   background: var(--accent);
   flex-shrink: 0;
+}
+
+.mynk-wb-board-tab__pdf-icon {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: currentColor;
+  opacity: 0.75;
 }
 
 .mynk-wb-board-tab--add {
