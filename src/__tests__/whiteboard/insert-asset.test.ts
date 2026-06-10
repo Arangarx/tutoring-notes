@@ -767,6 +767,79 @@ describe("insertPdfPagesOnCanvas", () => {
     expect(scenes).toHaveLength(0);
   });
 
+  it("centers math SVG at insertCenter on PDF-fit camera despite stale scroll during upload", async () => {
+    uploadMock.mockResolvedValue({
+      ok: true,
+      blobUrl: "https://blob.example/eq.svg",
+      sizeBytes: 100,
+    });
+    const viewportWidth = 1000;
+    const viewportHeight = 800;
+    const pdfWidthPx = 720;
+    const pdfHeightPx = 960;
+    const contentWidth = 720;
+    const contentHeight = 720 * (pdfHeightPx / pdfWidthPx);
+    const fitCamera = computeFitCameraForRect({
+      centerSceneX: contentWidth / 2,
+      centerSceneY: contentHeight / 2,
+      contentWidth,
+      contentHeight,
+      viewportWidth,
+      viewportHeight,
+    });
+    expect(fitCamera).not.toBeNull();
+    if (!fitCamera) return;
+
+    const insertCenter = viewportSceneCenterFromScroll(
+      fitCamera.panX,
+      fitCamera.panY,
+      fitCamera.zoom,
+      viewportWidth,
+      viewportHeight
+    );
+
+    let getAppStateCalls = 0;
+    const { api, scenes } = makeFakeApi();
+    api.getAppState = () => {
+      getAppStateCalls += 1;
+      // After the first read, simulate live-sync clobbering scrollY.
+      const scrollY =
+        getAppStateCalls > 1 ? fitCamera.panY + 600 : fitCamera.panY;
+      return {
+        scrollX: fitCamera.panX,
+        scrollY,
+        width: viewportWidth,
+        height: viewportHeight,
+        zoom: { value: fitCamera.zoom },
+      };
+    };
+
+    const svg = new Blob(["<svg>...</svg>"], { type: "image/svg+xml" });
+    const result = await insertMathSvgOnCanvas({
+      excalidrawAPI: api,
+      whiteboardSessionId: "wb-1",
+      studentId: "s-1",
+      svgBlob: svg,
+      widthPx: 240,
+      heightPx: 80,
+      latex: "x^2",
+      insertCenter,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const inserted = scenes[0][0] as {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    };
+    expect(inserted.x + inserted.width / 2).toBeCloseTo(insertCenter.x, 5);
+    expect(inserted.y + inserted.height / 2).toBeCloseTo(insertCenter.y, 5);
+    // Viewport center on a PDF-fit board is the page center — not below the image.
+    expect(inserted.y + inserted.height / 2).toBeCloseTo(contentHeight / 2, 5);
+  });
+
   it("inserts a math SVG with latex preserved in customData", async () => {
     uploadMock.mockResolvedValue({
       ok: true,

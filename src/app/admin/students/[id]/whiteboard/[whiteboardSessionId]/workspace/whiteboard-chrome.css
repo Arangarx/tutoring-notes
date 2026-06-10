@@ -578,6 +578,19 @@
   background: color-mix(in srgb, var(--destructive) 8%, transparent);
 }
 
+/* Top-bar camera toggle — mirrors mynk-wb-av-btn on/off (SR-04 panel controls). */
+.mynk-wb-tb-btn--cam-on {
+  background: var(--foreground);
+  color: var(--background);
+  border-color: var(--foreground);
+}
+
+.mynk-wb-tb-btn--cam-off {
+  color: var(--destructive);
+  border-color: color-mix(in srgb, var(--destructive) 30%, transparent);
+  background: color-mix(in srgb, var(--destructive) 8%, transparent);
+}
+
 .mynk-wb-av-cluster__resize-handle {
   position: absolute;
   right: 0;
@@ -828,15 +841,35 @@
 
 .mynk-wb-pulldown-chevron {
   position: absolute;
-  right: 1px;
-  bottom: 1px;
-  min-width: 14px;
-  padding: 2px 3px;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  min-height: 22px;
+  padding: 4px;
   font-size: 7px;
-  color: var(--text-muted);
+  color: currentColor;
   line-height: 1;
   pointer-events: auto;
   cursor: pointer;
+}
+
+.mynk-wb-pulldown-chevron::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+}
+
+.mynk-wb-tool-btn--active .mynk-wb-pulldown-chevron {
+  color: var(--background);
+  opacity: 0.9;
+}
+
+[data-layout="narrow"] .mynk-wb-pulldown-chevron,
+[data-layout="tablet-portrait"] .mynk-wb-pulldown-chevron {
+  display: none;
 }
 
 /* ΓöÇΓöÇ Board tab strip — SR-14 ΓöÇΓöÇ */
@@ -873,9 +906,10 @@
   transition: background 0.12s, color 0.12s;
 }
 
-.mynk-wb-board-tab:hover:not(:disabled) {
-  background: var(--card);
+.mynk-wb-board-tab:not(.mynk-wb-board-tab--active):not(:disabled):hover {
+  background: color-mix(in srgb, var(--surface-3) 75%, var(--foreground) 25%);
   color: var(--foreground);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 50%, var(--foreground) 50%);
 }
 
 .mynk-wb-board-tab--active {

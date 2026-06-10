@@ -115,7 +115,11 @@ import { MathInsertButton } from "@/components/whiteboard/MathInsertButton";
 import { DesmosInsertButton } from "@/components/whiteboard/DesmosInsertButton";
 import { BoardTabStrip } from "@/components/whiteboard/chrome/BoardTabStrip";
 import { WbAVCluster } from "@/components/whiteboard/chrome/WbAVCluster";
-import { WbStrokePropsPanel, RoughnessIcon } from "@/components/whiteboard/chrome/WbStrokePropsPanel";
+import {
+  WbStrokePropsPanel,
+  RoughnessIcon,
+  SharpnessIcon,
+} from "@/components/whiteboard/chrome/WbStrokePropsPanel";
 import {
   isTouchLayout,
   useWbLayoutMode,
@@ -3554,6 +3558,7 @@ export function WhiteboardWorkspaceClient({
 
   const roughnessLabel =
     roughness === 0 ? "Architect" : roughness === 1 ? "Artist" : "Cartoon";
+  const roundnessLabel = roundness === "sharp" ? "Sharp" : "Round";
 
   const showPropsChrome =
     activeToolType !== "selection" &&
@@ -3601,6 +3606,14 @@ export function WhiteboardWorkspaceClient({
           style={{ padding: "2px 4px", background: "transparent" }}
         >
           <RoughnessIcon level={roughness as 0 | 1 | 2} />
+        </span>
+        <span
+          className="mynk-wb-summary-chip"
+          title={roundnessLabel}
+          aria-label={roundnessLabel}
+          style={{ padding: "2px 4px", background: "transparent" }}
+        >
+          <SharpnessIcon type={roundness} />
         </span>
       </button>
       <div
@@ -3744,11 +3757,16 @@ export function WhiteboardWorkspaceClient({
             label="Shapes"
             active={WB_SHAPE_TOOLS.some((s) => s.type === activeToolType)}
             onClick={() => {
-              // Primary click: activate the last-selected (or default) shape tool.
+              const shapeActive = WB_SHAPE_TOOLS.some((s) => s.type === activeToolType);
+              // Narrow/tablet: when a shape is already active, primary tap opens the picker.
+              if (touchLayout && shapeActive) {
+                toggleMenu("shapes");
+                return;
+              }
               selectTool(selectedShapeTool);
             }}
-            pulldown
-            onPulldown={() => toggleMenu("shapes")}
+            pulldown={!touchLayout}
+            onPulldown={touchLayout ? undefined : () => toggleMenu("shapes")}
           />
           {shapesDropdownOpen && (
             <div className="mynk-wb-shapes-dropdown" role="menu">
@@ -3913,7 +3931,14 @@ export function WhiteboardWorkspaceClient({
           />
           <button
             type="button"
-            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon"
+            className={`mynk-wb-tb-btn mynk-wb-tb-btn--icon${
+              liveAv.hasCamPermission !== "denied" &&
+              (liveAv.videoDevices?.length ?? 1) > 0
+                ? liveAv.isCamMuted
+                  ? " mynk-wb-tb-btn--cam-off"
+                  : " mynk-wb-tb-btn--cam-on"
+                : ""
+            }`}
             title={
               liveAv.hasCamPermission === "denied"
                 ? "Camera permission denied"
@@ -4089,6 +4114,30 @@ export function WhiteboardWorkspaceClient({
           data-testid="tutor-whiteboard-canvas-mount"
           onClick={() => {
             setOpenMenu(null);
+          }}
+          onContextMenuCapture={(event) => {
+            // Right-click during multi-point line/arrow drawing finalizes the
+            // stroke (same as Esc). StudentWhiteboardClient is bare Excalidraw —
+            // mirror there later if needed.
+            const api = excalidrawAPIRef.current;
+            if (!api) return;
+            const st = api.getAppState() as { multiElement?: unknown };
+            if (st.multiElement == null) return;
+            event.preventDefault();
+            event.stopPropagation();
+            const target =
+              (event.currentTarget as HTMLElement).querySelector(".excalidraw") ??
+              event.currentTarget;
+            target.dispatchEvent(
+              new KeyboardEvent("keydown", {
+                key: "Escape",
+                code: "Escape",
+                bubbles: true,
+              })
+            );
+            console.debug(
+              `[whiteboard] wbsid=${whiteboardSessionId} action=finalize-multipoint-line`
+            );
           }}
         >
           {/* Banners overlay */}
@@ -4359,6 +4408,14 @@ export function WhiteboardWorkspaceClient({
               style={{ padding: "2px 4px", background: "transparent" }}
             >
               <RoughnessIcon level={roughness as 0 | 1 | 2} />
+            </span>
+            <span
+              className="mynk-wb-summary-chip"
+              title={roundnessLabel}
+              aria-label={roundnessLabel}
+              style={{ padding: "2px 4px", background: "transparent" }}
+            >
+              <SharpnessIcon type={roundness} />
             </span>
             <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-muted)" }}>
               Colors &amp; styles

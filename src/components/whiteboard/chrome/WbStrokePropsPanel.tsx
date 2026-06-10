@@ -93,7 +93,7 @@ const ROUGHNESS_OPTIONS = [
  * Edge sharpness icons — L-corner glyphs that read unambiguously as
  * "sharp corner" vs "rounded corner," rather than two similar rectangles.
  */
-const SharpnessIcon = ({ type }: { type: "sharp" | "round" }) => (
+export const SharpnessIcon = ({ type }: { type: "sharp" | "round" }) => (
   <svg
     width={22}
     height={22}

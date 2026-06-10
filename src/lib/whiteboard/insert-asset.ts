@@ -176,6 +176,11 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+/** Scene coords at the current viewport center — for callers that must snapshot before async work. */
+export function getInsertCenter(api: ExcalidrawApiLike): { x: number; y: number } {
+  return viewportCenter(api);
+}
+
 function viewportCenter(api: ExcalidrawApiLike): { x: number; y: number } {
   const s = api.getAppState() as {
     scrollX: number;
@@ -529,6 +534,8 @@ export async function insertMathSvgOnCanvas(args: InsertAssetCommonArgs & {
   widthPx: number;
   heightPx: number;
   latex: string;
+  /** When provided, used for placement instead of a fresh viewportCenter() call. */
+  insertCenter?: { x: number; y: number };
 }): Promise<InsertImageResult> {
   const {
     excalidrawAPI,
@@ -538,13 +545,10 @@ export async function insertMathSvgOnCanvas(args: InsertAssetCommonArgs & {
     widthPx,
     heightPx,
     latex,
+    insertCenter,
   } = args;
 
-  // Capture viewport center BEFORE any async work so the element lands
-  // where the tutor was looking when they clicked Insert — not after a
-  // ~1-2s upload round-trip during which live-sync remote-element updates
-  // may flush a new scroll/zoom value into Excalidraw's appState.
-  const center = viewportCenter(excalidrawAPI);
+  const center = insertCenter ?? viewportCenter(excalidrawAPI);
 
   const upload = await uploadWhiteboardAsset({
     whiteboardSessionId,

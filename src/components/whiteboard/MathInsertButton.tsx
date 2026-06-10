@@ -31,6 +31,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ModalPortal } from "@/components/ModalPortal";
 import {
+  getInsertCenter,
   insertMathSvgOnCanvas,
   type ExcalidrawApiLike,
 } from "@/lib/whiteboard/insert-asset";
@@ -305,6 +306,9 @@ export function MathInsertButton({
       setState({ kind: "error", message: "Equation is empty." });
       return;
     }
+    // Snapshot viewport center before any async work — live-sync updateScene
+    // during render/upload can clobber scrollX/scrollY (PDF boards especially).
+    const insertCenter = getInsertCenter(excalidrawAPI);
     setState({ kind: "rendering" });
     const render = await renderLatexToSvgViaRoute(
       whiteboardSessionId,
@@ -323,6 +327,7 @@ export function MathInsertButton({
       widthPx: render.widthPx,
       heightPx: render.heightPx,
       latex: trimmed,
+      insertCenter,
     });
     if (!inserted.ok) {
       setState({ kind: "error", message: inserted.reason });
