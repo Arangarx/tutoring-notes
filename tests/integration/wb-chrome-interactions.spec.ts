@@ -561,6 +561,141 @@ test.describe("wb chrome — interactive controls", () => {
     await context.close();
   });
 
+  /**
+   * Dark-mode ink swatch DRAW path gate (2026-06-09, smoke fix).
+   *
+   * The P3 patch fixed the display path (backgroundColor = white in dark mode)
+   * but the DRAW path (currentItemStrokeColor applied to Excalidraw) was
+   * incorrect when excalidrawTheme resolved late (SSR hydration mismatch) or
+   * when the user switched from light to dark mid-session.
+   *
+   * Fix: useEffect in WhiteboardWorkspaceClient watches excalidrawTheme +
+   * excalidrawAPI; when either changes, if the current stroke is an adaptive-
+   * ink sentinel hex, it pushes the new-theme ink hex into Excalidraw via
+   * api.updateScene({ appState: { currentItemStrokeColor: newInkHex } }).
+   *
+   * Assertion: after switching to dark mode and clicking the Ink swatch, the
+   * React strokeColor state matches the dark-mode ink hex (#ffffff).
+   * (Verifying the actual drawn element strokeColor requires drawing a stroke
+   * and reading the scene element — done here via the E2E bridge helper.)
+   *
+   * NOTE: requires full dev stack (Playwright + dev server + DB).
+   */
+  test("Dark-mode ink swatch DRAW path: clicking Ink swatch sets strokeColor to white (#ffffff)", async ({ browser }) => {
+    const session = await seedWbLiveSyncSession();
+    const context = await browser.newContext({
+      storageState: "tests/integration/.auth/tutor.json",
+      viewport: { width: 1280, height: 900 },
+    });
+    const page = await context.newPage();
+    await loadTutorBoard(page, session);
+
+    // Switch to dark theme via the toggle
+    const themeBtn = page.getByTestId("wb-theme-toggle");
+    await themeBtn.click();
+    const dropdown = page.locator(".mynk-wb-theme-dropdown");
+    await dropdown.getByRole("menuitemradio", { name: "Dark" }).click();
+    // Give the useEffect a tick to fire and push new ink hex to Excalidraw
+    await page.waitForTimeout(200);
+
+    // Open props panel and click the Ink swatch
+    await page.getByRole("button", { name: "Pencil (P)" }).click();
+    const trigger = page.getByTestId("wb-props-compact-trigger");
+    await trigger.click();
+    const panel = page.getByTestId("wb-props-panel");
+    await expect(panel).toBeVisible({ timeout: 3_000 });
+
+    const inkSwatch = panel.locator('.mynk-wb-swatch[aria-label="Ink"]');
+    await expect(inkSwatch).toBeVisible();
+    // Click the swatch to explicitly select it
+    await inkSwatch.click();
+
+    // The swatch must now be active (aria-pressed=true)
+    await expect(inkSwatch).toHaveAttribute("aria-pressed", "true");
+
+    // The swatch must display white in dark mode (backgroundColor = rgb(255,255,255))
+    const bgColor = await inkSwatch.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(bgColor).toBe("rgb(255, 255, 255)");
+
+    // Draw a stroke and read back the element's strokeColor from the Excalidraw scene
+    await drawTestStrokeOnRole(page, "tutor", "ink-dark-stroke", 300, 300, 400, 400);
+    await waitForElementOnPeer(page, "tutor", "ink-dark-stroke");
+
+    const strokeColorOnCanvas = await page.evaluate(() => {
+      const api = (window as Record<string, unknown>).__wbE2eBridge?.tutor;
+      if (!api) return null;
+      const els = api.getSceneElements?.() ?? [];
+      const el = (els as Array<Record<string, unknown>>).find((e) => e.id === "ink-dark-stroke");
+      return el ? (el.strokeColor as string) : null;
+    });
+
+    expect(strokeColorOnCanvas).toBe("#ffffff");
+
+    await context.close();
+  });
+
+  /**
+   * Opacity slider flush gate: custom WbSlider thumb must be flush at both
+   * 0% and 100% track ends.
+   *
+   * Implementation: the custom slider uses
+   *   left = calc((value / 100) * (100% - 16px))
+   * which guarantees left-edge flush at 0 and right-edge flush at 100 by
+   * construction, independent of browser-specific track padding for native
+   * range inputs.
+   *
+   * NOTE: requires full dev stack. Not executed in jest.
+   */
+  test("Opacity slider thumb is flush at 0% and 100%", async ({ browser }) => {
+    const session = await seedWbLiveSyncSession();
+    const context = await browser.newContext({
+      storageState: "tests/integration/.auth/tutor.json",
+      viewport: { width: 1280, height: 900 },
+    });
+    const page = await context.newPage();
+    await loadTutorBoard(page, session);
+
+    // Open props panel
+    await page.getByRole("button", { name: "Pencil (P)" }).click();
+    const trigger = page.getByTestId("wb-props-compact-trigger");
+    await trigger.click();
+    const panel = page.getByTestId("wb-props-panel");
+    await expect(panel).toBeVisible({ timeout: 3_000 });
+
+    const slider = page.getByTestId("wb-opacity-slider");
+    const thumb = page.getByTestId("wb-opacity-slider-thumb");
+    await expect(slider).toBeVisible();
+
+    // Press Home to set value=0
+    await slider.focus();
+    await slider.press("Home");
+    await page.waitForTimeout(50);
+
+    const trackBox0 = await slider.boundingBox();
+    const thumbBox0 = await thumb.boundingBox();
+    expect(trackBox0).not.toBeNull();
+    expect(thumbBox0).not.toBeNull();
+
+    // At 0%: thumb left edge must be flush with track left edge (within 1px)
+    expect(Math.abs(thumbBox0!.x - trackBox0!.x)).toBeLessThanOrEqual(1);
+
+    // Press End to set value=100
+    await slider.press("End");
+    await page.waitForTimeout(50);
+
+    const trackBox100 = await slider.boundingBox();
+    const thumbBox100 = await thumb.boundingBox();
+    expect(trackBox100).not.toBeNull();
+    expect(thumbBox100).not.toBeNull();
+
+    // At 100%: thumb right edge must be flush with track right edge (within 1px)
+    const thumbRight = thumbBox100!.x + thumbBox100!.width;
+    const trackRight = trackBox100!.x + trackBox100!.width;
+    expect(Math.abs(thumbRight - trackRight)).toBeLessThanOrEqual(1);
+
+    await context.close();
+  });
+
   test("Board delete affordance: add board, delete board 2, board 1 intact", async ({ browser }) => {
     const session = await seedWbLiveSyncSession();
     const context = await browser.newContext({

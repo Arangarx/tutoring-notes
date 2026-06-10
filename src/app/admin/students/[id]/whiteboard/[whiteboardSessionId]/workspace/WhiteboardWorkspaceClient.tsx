@@ -115,7 +115,7 @@ import { MathInsertButton } from "@/components/whiteboard/MathInsertButton";
 import { DesmosInsertButton } from "@/components/whiteboard/DesmosInsertButton";
 import { BoardTabStrip } from "@/components/whiteboard/chrome/BoardTabStrip";
 import { WbAVCluster } from "@/components/whiteboard/chrome/WbAVCluster";
-import { WbStrokePropsPanel } from "@/components/whiteboard/chrome/WbStrokePropsPanel";
+import { WbStrokePropsPanel, RoughnessIcon } from "@/components/whiteboard/chrome/WbStrokePropsPanel";
 import {
   isTouchLayout,
   useWbLayoutMode,
@@ -589,6 +589,32 @@ export function WhiteboardWorkspaceClient({
   const initialWbStrokeColor = excalidrawTheme === "dark" ? EXCALIDRAW_STROKE_DARK_HEX : EXCALIDRAW_STROKE_HEX;
   const [strokeColor, setStrokeColor] = useState<string>(initialWbStrokeColor);
   const strokeColorRef = useRef<string>(initialWbStrokeColor);
+
+  // Fix #1 (2026-06-09 smoke): When the theme changes (or the Excalidraw API
+  // first becomes available), if the current stroke color is either of the two
+  // adaptive-ink sentinel hexes, update it to the current theme's ink hex.
+  // This covers (a) SSR hydration mismatch (useState freezes at light-mode hex
+  // even if dark mode resolves later), and (b) mid-session theme switches.
+  // Runs on both excalidrawTheme change and excalidrawAPI availability so the
+  // API update is applied as soon as Excalidraw is ready.
+  useEffect(() => {
+    if (!excalidrawAPI) return;
+    const newInkHex =
+      excalidrawTheme === "dark" ? EXCALIDRAW_STROKE_DARK_HEX : EXCALIDRAW_STROKE_HEX;
+    const currentIsAdaptiveInk =
+      strokeColorRef.current === EXCALIDRAW_STROKE_DARK_HEX ||
+      strokeColorRef.current === EXCALIDRAW_STROKE_HEX;
+    if (!currentIsAdaptiveInk) return;
+    if (strokeColorRef.current === newInkHex) return; // already correct
+    const api = excalidrawAPIRef.current as WbChromeApiExt | null;
+    api?.updateScene?.({ appState: { currentItemStrokeColor: newInkHex } });
+    strokeColorRef.current = newInkHex;
+    setStrokeColor(newInkHex);
+  // excalidrawAPI is the dep that fires when Excalidraw first mounts;
+  // excalidrawTheme fires on every theme toggle. Both paths needed.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [excalidrawTheme, excalidrawAPI]);
+
   const [strokeWidth, setStrokeWidth] = useState<number>(0.5);
   const strokeWidthRef = useRef<number>(0.5);
   const [opacity, setOpacity] = useState<number>(100);
@@ -3583,7 +3609,14 @@ export function WhiteboardWorkspaceClient({
             }}
           />
         </span>
-        <span className="mynk-wb-summary-chip">{roughnessLabel}</span>
+        <span
+          className="mynk-wb-summary-chip"
+          title={roughnessLabel}
+          aria-label={roughnessLabel}
+          style={{ padding: "2px 4px", background: "transparent" }}
+        >
+          <RoughnessIcon level={roughness as 0 | 1 | 2} />
+        </span>
       </button>
       <div
         className="mynk-wb-props-compact__panel"
@@ -4324,8 +4357,15 @@ export function WhiteboardWorkspaceClient({
             aria-label="Stroke properties — tap to expand"
           >
             <span className="mynk-wb-summary-swatch" style={{ backgroundColor: strokeColor }} />
-            <span className="mynk-wb-summary-chip">{roughnessLabel}</span>
-            <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--muted-foreground)" }}>
+            <span
+              className="mynk-wb-summary-chip"
+              title={roughnessLabel}
+              aria-label={roughnessLabel}
+              style={{ padding: "2px 4px", background: "transparent" }}
+            >
+              <RoughnessIcon level={roughness as 0 | 1 | 2} />
+            </span>
+            <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-muted)" }}>
               Colors &amp; styles
             </span>
           </button>

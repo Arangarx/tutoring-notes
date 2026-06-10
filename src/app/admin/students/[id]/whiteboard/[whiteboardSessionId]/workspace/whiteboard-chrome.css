@@ -157,7 +157,7 @@
   border-radius: 6px;
   border: none;
   background: transparent;
-  color: var(--muted-foreground);
+  color: var(--text-muted);
   cursor: pointer;
   font-size: 15px;
   line-height: 1;
@@ -167,7 +167,7 @@
 }
 
 .mynk-wb-tool-btn:hover {
-  background: hsl(var(--muted) / 0.6);
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
   color: var(--foreground);
 }
 
@@ -292,14 +292,14 @@
   white-space: nowrap;
   font-size: 13px;
   font-weight: 500;
-  color: var(--muted-foreground);
+  color: var(--text-muted);
   background: transparent;
   transition: background 0.12s, color 0.12s;
   flex-shrink: 0;
 }
 
 .mynk-wb-tb-btn:hover:not(:disabled) {
-  background: hsl(var(--muted) / 0.6);
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
   color: var(--foreground);
 }
 
@@ -480,7 +480,7 @@
 }
 
 .mynk-wb-theme-item:hover {
-  background: hsl(var(--muted) / 0.6);
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
 }
 
 .mynk-wb-theme-item--active {
@@ -515,7 +515,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--muted);
+  background: var(--surface-2);
   flex-shrink: 0;
   touch-action: none;
 }
@@ -523,7 +523,7 @@
 .mynk-wb-av-cluster__drag-dots {
   font-size: 10px;
   letter-spacing: 2px;
-  color: var(--muted-foreground);
+  color: var(--text-muted);
   line-height: 1;
 }
 
@@ -564,8 +564,8 @@
 
 .mynk-wb-av-btn--off {
   color: var(--destructive);
-  border-color: hsl(var(--destructive) / 0.3);
-  background: hsl(var(--destructive) / 0.08);
+  border-color: color-mix(in srgb, var(--destructive) 30%, transparent);
+  background: color-mix(in srgb, var(--destructive) 8%, transparent);
 }
 
 .mynk-wb-av-cluster__resize-handle {
@@ -585,8 +585,8 @@
   bottom: 3px;
   width: 8px;
   height: 8px;
-  border-right: 2px solid var(--muted-foreground);
-  border-bottom: 2px solid var(--muted-foreground);
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
   opacity: 0.5;
 }
 
@@ -632,7 +632,7 @@
 }
 
 .mynk-wb-props-compact__summary:hover {
-  background: hsl(var(--muted) / 0.6);
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
   border-color: var(--ring);
 }
 
@@ -689,10 +689,10 @@
 .mynk-wb-summary-chip {
   font-size: 11px;
   font-family: var(--font-mono, monospace);
-  color: var(--muted-foreground);
+  color: var(--text-muted);
   padding: 2px 6px;
   border-radius: 4px;
-  background: var(--muted);
+  background: var(--surface-2);
 }
 
 .mynk-wb-props-section {
@@ -704,7 +704,7 @@
   font-family: var(--font-mono, monospace);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--muted-foreground);
+  color: var(--text-muted);
   margin-bottom: 6px;
 }
 
@@ -718,7 +718,7 @@
 .mynk-wb-props-opacity-val {
   font-size: 10px;
   font-family: var(--font-mono, monospace);
-  color: var(--muted-foreground);
+  color: var(--text-muted);
 }
 
 .mynk-wb-props-swatches {
@@ -796,7 +796,7 @@
 }
 
 .mynk-wb-shapes-item:hover:not(.mynk-wb-shapes-item--active) {
-  background: hsl(var(--muted) / 0.6);
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
 }
 
 .mynk-wb-shapes-item--active {
@@ -814,7 +814,7 @@
   right: 3px;
   bottom: 3px;
   font-size: 7px;
-  color: var(--muted-foreground);
+  color: var(--text-muted);
   line-height: 1;
   pointer-events: none;
 }
@@ -844,7 +844,7 @@
   border: none;
   border-right: 1px solid var(--border);
   background: transparent;
-  color: var(--muted-foreground);
+  color: var(--text-muted);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -901,7 +901,7 @@
   padding: 0 6px 0 2px;
   border: none;
   background: transparent;
-  color: var(--muted-foreground);
+  color: var(--text-muted);
   font-size: 14px;
   cursor: pointer;
   opacity: 0;
@@ -927,7 +927,7 @@
 
 .mynk-wb-board-tab-del--cancel {
   font-size: 10px;
-  color: var(--muted-foreground);
+  color: var(--text-muted);
   padding: 0 4px;
 }
 
@@ -943,7 +943,7 @@
   padding: 0 12px;
   font-size: 18px;
   font-weight: 400;
-  color: var(--muted-foreground);
+  color: var(--text-muted);
   border-right: none;
 }
 
@@ -961,11 +961,11 @@
   pointer-events: none;
   font-family: var(--font-mono, monospace);
   font-size: 10px;
-  color: var(--muted-foreground);
+  color: var(--text-muted);
   letter-spacing: 0.04em;
   padding: 2px 6px;
-  background: hsl(var(--accent) / 0.08);
-  border: 1px dashed hsl(var(--accent) / 0.35);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--accent) 35%, transparent);
   border-radius: 4px;
   opacity: 0;
 }
@@ -1067,7 +1067,7 @@
   border-radius: 4px;
   border: 1px solid var(--border);
   background: transparent;
-  color: var(--muted-foreground);
+  color: var(--text-muted);
   cursor: pointer;
   font-size: 16px;
   display: flex;
@@ -1228,7 +1228,7 @@
   opacity: 0.5;
   font-family: var(--font-mono, monospace);
   white-space: nowrap;
-  color: var(--muted-foreground);
+  color: var(--text-muted);
 }
 
 /* ΓöÇΓöÇ Stroke color swatch (20px circle) ΓöÇΓöÇ */
@@ -1281,7 +1281,7 @@
 }
 
 .mynk-wb-width-btn:hover:not(.mynk-wb-width-btn--active) {
-  background: hsl(var(--muted) / 0.6);
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
 }
 
 .mynk-wb-width-btn--active {
@@ -1310,7 +1310,7 @@
 }
 
 .mynk-wb-chip:hover:not(.mynk-wb-chip--active) {
-  background: hsl(var(--muted) / 0.6);
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
 }
 
 .mynk-wb-chip--active {
@@ -1351,7 +1351,7 @@
   appearance: none;
   height: 4px;
   border-radius: 2px;
-  background: hsl(var(--muted));
+  background: var(--surface-2);
   outline: none;
   cursor: pointer;
 }
@@ -1369,7 +1369,7 @@
 }
 
 .mynk-wb-slider::-webkit-slider-thumb:hover {
-  box-shadow: 0 0 0 4px hsl(var(--accent) / 0.2);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 .mynk-wb-slider::-webkit-slider-runnable-track {
@@ -1390,7 +1390,7 @@
 .mynk-wb-slider::-moz-range-track {
   height: 4px;
   border-radius: 2px;
-  background: hsl(var(--muted));
+  background: var(--surface-2);
 }
 
 /* ΓöÇΓöÇ More panel menu item ΓöÇΓöÇ */
@@ -1414,7 +1414,7 @@
 }
 
 .mynk-wb-menu-item:hover {
-  background: hsl(var(--muted) / 0.6);
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
 }
 
 .mynk-wb-menu-item--destructive {
@@ -1422,13 +1422,13 @@
 }
 
 .mynk-wb-menu-item--destructive:hover {
-  background: hsl(var(--destructive) / 0.1);
+  background: color-mix(in srgb, var(--destructive) 10%, transparent);
 }
 
 .mynk-wb-menu-item__kbd {
   font-size: 10px;
   font-family: var(--font-mono, monospace);
-  color: var(--muted-foreground);
+  color: var(--text-muted);
   margin-left: auto;
 }
 
@@ -1436,7 +1436,7 @@
 .mynk-wb-info-note {
   font-size: 11px;
   font-family: var(--font-mono, monospace);
-  color: var(--muted-foreground);
+  color: var(--text-muted);
   padding: 6px 10px;
   line-height: 1.4;
 }
@@ -1458,12 +1458,12 @@
 }
 
 .mynk-wb-zorder-btn:hover {
-  background: hsl(var(--muted) / 0.4);
+  background: color-mix(in srgb, var(--surface-2) 40%, transparent);
   border-color: var(--ring);
 }
 
 .mynk-wb-delete-btn {
-  border: 1px solid hsl(var(--destructive) / 0.4);
+  border: 1px solid color-mix(in srgb, var(--destructive) 40%, transparent);
   background: var(--card);
   color: var(--destructive);
   font-size: 11px;
@@ -1478,5 +1478,63 @@
 }
 
 .mynk-wb-delete-btn:hover {
-  background: hsl(var(--destructive) / 0.1);
+  background: color-mix(in srgb, var(--destructive) 10%, transparent);
+}
+
+/* ── Edge sharpness icon chips — same square shape as roughness chips ── */
+.mynk-wb-sharpness-chip {
+  width: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Custom opacity slider (replaces native input[type=range]) ── */
+/*
+ * At value=0: left = calc(0 * (100% - 16px)) = 0  → thumb left edge = 0 (flush) ✓
+ * At value=100: left = calc(1 * (100% - 16px)) = 100% - 16px  → thumb right edge = 100% (flush) ✓
+ */
+.mynk-wb-slider-custom {
+  position: relative;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  outline: none;
+  border-radius: 2px;
+  user-select: none;
+}
+
+.mynk-wb-slider-custom:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.mynk-wb-slider-custom__track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-2);
+  pointer-events: none;
+}
+
+.mynk-wb-slider-custom__thumb {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  top: 50%;
+  margin-top: -8px;
+  transition: box-shadow 0.1s;
+}
+
+.mynk-wb-slider-custom:hover .mynk-wb-slider-custom__thumb,
+.mynk-wb-slider-custom:focus-visible .mynk-wb-slider-custom__thumb {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent);
 }

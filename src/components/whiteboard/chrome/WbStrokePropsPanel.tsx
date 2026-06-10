@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import {
   triggerBringForward,
   triggerBringToFront,
@@ -34,8 +35,8 @@ export type WbStrokePropsPanelProps = {
   onRoundnessChange: (roundness: "sharp" | "round") => void;
 };
 
-/** Roughness level icons — simple SVGs representing Architect / Artist / Cartoon. */
-const RoughnessIcon = ({ level }: { level: 0 | 1 | 2 }) => (
+/** Roughness level icons — simple SVGs representing Architect / Artist / Cartoon. Exported for reuse in sidebar summary. */
+export const RoughnessIcon = ({ level }: { level: 0 | 1 | 2 }) => (
   <svg
     width={24}
     height={14}
@@ -86,10 +87,102 @@ const ROUGHNESS_OPTIONS = [
   { value: 2 as const, label: "Cartoon" },
 ];
 
+/** Edge sharpness icons — sharp-corner square vs rounded-corner square. */
+const SharpnessIcon = ({ type }: { type: "sharp" | "round" }) => (
+  <svg
+    width={22}
+    height={22}
+    viewBox="0 0 22 22"
+    fill="none"
+    aria-hidden
+    style={{ display: "block" }}
+  >
+    {type === "sharp" ? (
+      <rect x="4" y="4" width="14" height="14" stroke="currentColor" strokeWidth="1.5" />
+    ) : (
+      <rect x="4" y="4" width="14" height="14" rx="4" ry="4" stroke="currentColor" strokeWidth="1.5" />
+    )}
+  </svg>
+);
+
 const ROUNDNESS_OPTIONS: { value: "sharp" | "round"; label: string }[] = [
   { value: "sharp", label: "Sharp" },
   { value: "round", label: "Round" },
 ];
+
+/**
+ * Custom opacity slider — thumb is flush at both 0% and 100%.
+ *
+ * Native range inputs have browser-specific track padding that prevents exact
+ * flush at extremes; this custom component places the thumb at
+ *   left = (value/100) * (trackWidth − thumbWidth)
+ * guaranteeing flush left at 0 and flush right at 100 in all browsers.
+ * Fully keyboard-accessible (role=slider, arrow/Home/End keys).
+ */
+function WbSlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const trackRef = useRef<HTMLDivElement>(null);
+
+  const computeValue = (clientX: number): number => {
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0) return value;
+    return Math.round(Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100)));
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    onChange(computeValue(e.clientX));
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!(e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) return;
+    onChange(computeValue(e.clientX));
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+  };
+
+  return (
+    <div
+      ref={trackRef}
+      role="slider"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={value}
+      aria-label="Stroke opacity"
+      tabIndex={0}
+      className="mynk-wb-slider-custom"
+      data-testid="wb-opacity-slider"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      onKeyDown={(e) => {
+        if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
+          e.preventDefault();
+          onChange(Math.max(0, value - 1));
+        } else if (e.key === "ArrowRight" || e.key === "ArrowUp") {
+          e.preventDefault();
+          onChange(Math.min(100, value + 1));
+        } else if (e.key === "Home") {
+          e.preventDefault();
+          onChange(0);
+        } else if (e.key === "End") {
+          e.preventDefault();
+          onChange(100);
+        }
+      }}
+    >
+      <div className="mynk-wb-slider-custom__track" />
+      <div
+        className="mynk-wb-slider-custom__thumb"
+        data-testid="wb-opacity-slider-thumb"
+        style={{ left: `calc(${value / 100} * (100% - 16px))` }}
+      />
+    </div>
+  );
+}
 
 export function WbStrokePropsPanel({
   strokeColor,
@@ -165,15 +258,7 @@ export function WbStrokePropsPanel({
           <span className="mynk-wb-props-opacity-val">{opacity}%</span>
         </div>
         <div className="mynk-wb-slider-wrap">
-          <input
-            type="range"
-            className="mynk-wb-slider"
-            min={0}
-            max={100}
-            value={opacity}
-            aria-label="Stroke opacity"
-            onChange={(e) => onStrokeChange({ opacity: Number(e.target.value) })}
-          />
+          <WbSlider value={opacity} onChange={(v) => onStrokeChange({ opacity: v })} />
         </div>
       </div>
 
@@ -210,19 +295,21 @@ export function WbStrokePropsPanel({
             </div>
           </div>
 
-          {/* ── Edge sharpness ── */}
+          {/* ── Edge sharpness ── icon buttons with title tooltip, no text labels */}
           <div className="mynk-wb-props-section">
             <div className="mynk-wb-props-section-title">Edge sharpness</div>
-            <div className="mynk-wb-props-chips">
+            <div className="mynk-wb-props-chips mynk-wb-roughness-chips">
               {ROUNDNESS_OPTIONS.map((r) => (
                 <button
                   key={r.value}
                   type="button"
-                  className={`mynk-wb-chip${roundness === r.value ? " mynk-wb-chip--active" : ""}`}
+                  className={`mynk-wb-chip mynk-wb-roughness-chip mynk-wb-sharpness-chip${roundness === r.value ? " mynk-wb-chip--active" : ""}`}
+                  title={r.label}
+                  aria-label={r.label}
                   aria-pressed={roundness === r.value}
                   onClick={() => onRoundnessChange(r.value)}
                 >
-                  {r.label}
+                  <SharpnessIcon type={r.value} />
                 </button>
               ))}
             </div>
