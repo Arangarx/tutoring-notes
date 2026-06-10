@@ -140,10 +140,17 @@ export function MathInsertButton({
   const fieldHostRef = useRef<HTMLDivElement | null>(null);
   const fieldRef = useRef<HTMLElement | null>(null);
 
+  // True whenever the dialog is visible (open / rendering / error / success).
+  // Used as a deps primitive so the field-mount effect only fires when the
+  // dialog actually opens or closes — NOT on every internal state transition
+  // (open → rendering → success), which would needlessly tear-down and
+  // recreate the MathLive custom element and corrupt its singleton keyboard.
+  const dialogIsOpen = state.kind !== "closed";
+
   // Lazy-load MathLive when the dialog first opens. Subsequent opens
   // reuse the registered custom element.
   useEffect(() => {
-    if (state.kind === "closed") return;
+    if (!dialogIsOpen) return;
     if (mathLiveReady) return;
     let cancelled = false;
     void (async () => {
@@ -208,15 +215,22 @@ export function MathInsertButton({
     return () => {
       cancelled = true;
     };
-  }, [state.kind, mathLiveReady]);
+  }, [dialogIsOpen, mathLiveReady]);
 
   // Mount the <math-field> after MathLive registers — we create the
   // element imperatively because React's JSX type checker doesn't
   // know about it without a global declaration, and the value-binding
   // story is cleaner via the imperative API anyway.
+  //
+  // Deps use `dialogIsOpen` (boolean) rather than `state.kind` (string)
+  // so the field is only torn down / recreated when the dialog opens or
+  // closes — not on internal transitions like open→rendering→success.
+  // Each needless recreation cycles MathLive's singleton virtual keyboard
+  // through disconnect/reconnect, corrupting its state and preventing the
+  // `input` event from firing on the next open (C2 bug fix).
   useEffect(() => {
     if (!mathLiveReady) return;
-    if (state.kind === "closed") return;
+    if (!dialogIsOpen) return;
     const host = fieldHostRef.current;
     if (!host) return;
     const field = document.createElement("math-field");
@@ -248,7 +262,7 @@ export function MathInsertButton({
     // We intentionally exclude `latex` from the deps: re-mounting on
     // every keystroke would steal focus + lose cursor position.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mathLiveReady, state.kind]);
+  }, [mathLiveReady, dialogIsOpen]);
 
   const close = useCallback(() => {
     setState({ kind: "closed" });

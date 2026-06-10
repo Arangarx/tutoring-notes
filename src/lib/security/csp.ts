@@ -197,6 +197,13 @@ export function buildContentSecurityPolicy(opts: CspOptions = {}): string {
     "media-src 'self' blob: https://*.public.blob.vercel-storage.com",
     "font-src 'self' data: blob: https:",
     `connect-src ${connectSrc}`,
+    // Desmos calculator iframes — the whiteboard "Insert Desmos" button
+    // embeds https://www.desmos.com/calculator as an Excalidraw embeddable.
+    // Must match next.config.ts `frame-src`. When both CSP headers are
+    // emitted (middleware + next.config.ts headers()), the browser enforces
+    // the INTERSECTION; without this directive the middleware's default-src
+    // 'self' fallback blocks Desmos iframes with a "frowny face" placeholder.
+    "frame-src 'self' https://www.desmos.com https://desmos.com",
     "frame-ancestors 'none'",
   ].join("; ");
 }

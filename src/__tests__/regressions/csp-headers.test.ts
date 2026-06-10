@@ -122,6 +122,19 @@ describe("buildContentSecurityPolicy — directive guards", () => {
     expect(getDirective(csp, "frame-ancestors")).toBe("'none'");
   });
 
+  test("frame-src allows Desmos calculator iframes (Insert Desmos smoke regression)", () => {
+    // The whiteboard 'Insert Desmos' button uses Excalidraw's embeddable
+    // element with https://www.desmos.com/calculator. When middleware emits
+    // a CSP without frame-src, the browser falls back to default-src 'self'
+    // (because both CSP headers are combined and the stricter wins), blocking
+    // the iframe and rendering a frowny-face placeholder. This directive must
+    // match next.config.ts frame-src — keep in sync.
+    const frameSrc = getDirective(csp, "frame-src") ?? "";
+    expect(frameSrc).toMatch(/https:\/\/www\.desmos\.com/);
+    expect(frameSrc).toMatch(/https:\/\/desmos\.com/);
+    expect(frameSrc).toMatch(/'self'/);
+  });
+
   test("connect-src allows the Vercel Blob upload endpoint (B1 regression)", () => {
     expect(getDirective(csp, "connect-src")).toMatch(/\bhttps:\/\/vercel\.com\b/);
   });

@@ -540,6 +540,12 @@ export async function insertMathSvgOnCanvas(args: InsertAssetCommonArgs & {
     latex,
   } = args;
 
+  // Capture viewport center BEFORE any async work so the element lands
+  // where the tutor was looking when they clicked Insert — not after a
+  // ~1-2s upload round-trip during which live-sync remote-element updates
+  // may flush a new scroll/zoom value into Excalidraw's appState.
+  const center = viewportCenter(excalidrawAPI);
+
   const upload = await uploadWhiteboardAsset({
     whiteboardSessionId,
     studentId,
@@ -567,7 +573,6 @@ export async function insertMathSvgOnCanvas(args: InsertAssetCommonArgs & {
     },
   ]);
 
-  const center = viewportCenter(excalidrawAPI);
   const x = center.x - widthPx / 2;
   const y = center.y - heightPx / 2;
   const baseElement = buildImageElement({
