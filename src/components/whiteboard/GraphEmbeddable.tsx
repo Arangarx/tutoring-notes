@@ -230,6 +230,7 @@ export function GraphEmbeddable({
   const [draftExpr, setDraftExpr] = useState("");
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingDraft, setEditingDraft] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const elementId = element.id ?? "";
 
@@ -411,72 +412,85 @@ export function GraphEmbeddable({
     );
     graphStateRef.current = initialState;
     setExpressions(initialState.expressions ?? []);
+    setLoadError(null);
 
     let cancelled = false;
     let board: JxgBoard | null = null;
     let observer: ResizeObserver | null = null;
 
     void (async () => {
-      ensureJxgStylesheet();
-      const jxgMod = await import("jsxgraph");
-      if (cancelled || !hostRef.current) return;
+      try {
+        ensureJxgStylesheet();
+        const jxgMod = await import("jsxgraph");
+        if (cancelled || !hostRef.current) return;
 
-      const JXG = jxgMod.default as unknown as {
-        JSXGraph: {
-          initBoard: (...args: unknown[]) => JxgBoard;
-          freeBoard: (board: JxgBoard) => void;
+        const JXG = jxgMod.default as unknown as {
+          JSXGraph: {
+            initBoard: (...args: unknown[]) => JxgBoard;
+            freeBoard: (board: JxgBoard) => void;
+          };
         };
-      };
-      board = mountGraphBoard(hostRef.current, initialState, JXG, {
-        interactive: !readOnly,
-      });
-      boardRef.current = board;
+        board = mountGraphBoard(hostRef.current, initialState, JXG, {
+          interactive: !readOnly,
+        });
+        boardRef.current = board;
 
-      const initialExprs = initialState.expressions ?? [];
-      const errors = plotExpressions(board, initialExprs, plotRefsRef.current);
-      if (!cancelled) setExprErrors(errors);
+        const initialExprs = initialState.expressions ?? [];
+        const errors = plotExpressions(board, initialExprs, plotRefsRef.current);
+        if (!cancelled) setExprErrors(errors);
 
-      const syncSize = () => {
-        if (!hostRef.current || !boardRef.current) return;
-        const { clientWidth, clientHeight } = hostRef.current;
-        if (clientWidth <= 0 || clientHeight <= 0) return;
+        const syncSize = () => {
+          if (!hostRef.current || !boardRef.current) return;
+          const { clientWidth, clientHeight } = hostRef.current;
+          if (clientWidth <= 0 || clientHeight <= 0) return;
 
-        const prev = containerSizeRef.current;
-        const boardNow = boardRef.current;
+          const prev = containerSizeRef.current;
+          const boardNow = boardRef.current;
 
-        try {
-          const currentBbox = boardNow.getBoundingBox();
-          const nextBbox = prev
-            ? recomputeBboxForResize({
-                bbox: currentBbox,
-                prevWidthPx: prev.width,
-                prevHeightPx: prev.height,
-                nextWidthPx: clientWidth,
-                nextHeightPx: clientHeight,
-              })
-            : fitGraphBboxToSquareUnits(
-                currentBbox,
-                clientWidth,
-                clientHeight
-              );
-          boardNow.setBoundingBox(nextBbox, true);
-        } catch {
-          // keep current bbox on read errors
+          try {
+            const currentBbox = boardNow.getBoundingBox();
+            const nextBbox = prev
+              ? recomputeBboxForResize({
+                  bbox: currentBbox,
+                  prevWidthPx: prev.width,
+                  prevHeightPx: prev.height,
+                  nextWidthPx: clientWidth,
+                  nextHeightPx: clientHeight,
+                })
+              : fitGraphBboxToSquareUnits(
+                  currentBbox,
+                  clientWidth,
+                  clientHeight
+                );
+            boardNow.setBoundingBox(nextBbox, true);
+          } catch {
+            // keep current bbox on read errors
+          }
+
+          boardNow.resizeContainer(clientWidth, clientHeight, true);
+          boardNow.update();
+          containerSizeRef.current = { width: clientWidth, height: clientHeight };
+        };
+
+        syncSize();
+        observer = new ResizeObserver(syncSize);
+        observer.observe(hostRef.current);
+
+        if (!readOnly) {
+          const onBboxChange = () => scheduleBboxPersist();
+          bboxHandlerRef.current = onBboxChange;
+          board.on("up", onBboxChange);
         }
-
-        boardNow.resizeContainer(clientWidth, clientHeight, true);
-        boardNow.update();
-        containerSizeRef.current = { width: clientWidth, height: clientHeight };
-      };
-
-      syncSize();
-      observer = new ResizeObserver(syncSize);
-      observer.observe(hostRef.current);
-
-      if (!readOnly) {
-        const onBboxChange = () => scheduleBboxPersist();
-        bboxHandlerRef.current = onBboxChange;
-        board.on("up", onBboxChange);
+      } catch (err) {
+        if (!cancelled) {
+          console.warn(
+            "[GraphEmbeddable] jsxgraph load/mount failed:",
+            (err as Error)?.message ?? String(err)
+          );
+          setLoadError(
+            "Couldn't load the graph tool — check your connection"
+          );
+        }
       }
     })();
 
@@ -508,8 +522,18 @@ export function GraphEmbeddable({
       boardRef.current = null;
       plotRefsRef.current = [];
     };
-    // Board lifecycle follows element identity only — graphStateJson updates from
-    // our own persist must not remount JSXGraph (would reset pan/zoom mid-edit).
+    // Board lifecycle keys on element.id only — intentional for tutor (interactive):
+    // graphStateRef holds live edit state; remounting on every graphStateJson change
+    // would reset pan/zoom mid-edit. Our own persist updates graphStateJson but must
+    // NOT trigger remount.
+    //
+    // STALENESS TRAP (V1 assumption: only the tutor edits graphs): if graphStateJson
+    // changes externally while the tutor has this embed open (e.g. future multi-editor
+    // sync or a second device applying tutor state), the interactive board will NOT
+    // re-hydrate from the new JSON — graphStateRef and the mounted board stay on the
+    // stale snapshot until remount (element.id change). The readOnly student path has a
+    // separate effect that re-plots on graphStateJsonRaw; add an equivalent external-
+    // resync seam here before enabling multi-editor graph edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: element.id only
   }, [element.id, readOnly, scheduleBboxPersist]);
 
@@ -577,13 +601,23 @@ export function GraphEmbeddable({
       data-read-only={readOnly ? "true" : undefined}
       data-testid="wb-graph-embed-host"
     >
-      <div
-        ref={hostRef}
-        className="wb-graph-board-host"
-        onPointerDown={readOnly ? undefined : stopEmbedDrag}
-        onMouseDown={readOnly ? undefined : stopEmbedDrag}
-        onWheel={readOnly ? undefined : stopEmbedDrag}
-      />
+      {loadError ? (
+        <div
+          className="wb-graph-load-error"
+          role="alert"
+          data-testid="wb-graph-load-error"
+        >
+          {loadError}
+        </div>
+      ) : (
+        <div
+          ref={hostRef}
+          className="wb-graph-board-host"
+          onPointerDown={readOnly ? undefined : stopEmbedDrag}
+          onMouseDown={readOnly ? undefined : stopEmbedDrag}
+          onWheel={readOnly ? undefined : stopEmbedDrag}
+        />
+      )}
       {!readOnly && (
       <div
         className="wb-graph-controls"

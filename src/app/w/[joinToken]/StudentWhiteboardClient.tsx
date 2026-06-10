@@ -517,6 +517,21 @@ export function StudentWhiteboardClient({
     return undefined;
   }, []);
 
+  const handleExcalidrawLinkOpen = useCallback(
+    (
+      element: { link?: string | null; customData?: { wbType?: string } },
+      event: { preventDefault: () => void }
+    ) => {
+      if (
+        element.link === GRAPH_EMBED_LINK ||
+        element.customData?.wbType === "graph"
+      ) {
+        event.preventDefault();
+      }
+    },
+    []
+  );
+
   if (keyMissing) {
     return (
       <div className="container" style={{ maxWidth: 720 }}>
@@ -917,6 +932,7 @@ export function StudentWhiteboardClient({
             }}
             validateEmbeddable={validateExcalidrawEmbeddable}
             renderEmbeddable={renderGraphEmbeddable}
+            onLinkOpen={handleExcalidrawLinkOpen}
           />
           <WhiteboardDebugHud
             role="student"

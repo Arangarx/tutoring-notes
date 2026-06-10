@@ -16,8 +16,10 @@ const destDir = join(repoRoot, "public", "jsxgraph");
 const dest = join(destDir, "jsxgraph.css");
 
 if (!existsSync(source)) {
-  console.warn("[copy-jsxgraph-css] jsxgraph not installed — skipping");
-  process.exit(0);
+  console.error(
+    "[copy-jsxgraph-css] missing source: node_modules/jsxgraph/distrib/jsxgraph.css — run npm install"
+  );
+  process.exit(1);
 }
 
 mkdirSync(destDir, { recursive: true });
