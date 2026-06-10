@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mynk — Site Redesign Mock · Login (2026-06-10)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,SOFT,wght@9..144,0..100,400..900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root,[data-theme="light"]{
+  --surface-base:#f5f4ec;--surface-1:#fcfbf4;--surface-2:#ecebe1;
+  --border-default:#c5cfd0;--text-default:#15203a;--text-muted:#5a6877;
+  --brand:#1e3d54;--accent:#e27d60;--accent-on:#15203a;
+  --success:#16a34a;--radius-md:10px;--radius-lg:16px;
+  --font-body:"Inter",sans-serif;--font-display:"Fraunces",Georgia,serif;--font-mono:"JetBrains Mono",monospace;
+  --shadow-md:0 4px 12px rgba(0,0,0,0.12);--shadow-lg:0 8px 24px rgba(0,0,0,0.20);
+  --meta-header-bg:rgba(235,233,224,0.94);--meta-header-border:rgba(0,0,0,0.08);
+  --meta-chrome-fg:var(--text-muted);--meta-chrome-border:rgba(0,0,0,0.15);--meta-chrome-active-bg:rgba(0,0,0,0.06);
+}
+[data-theme="dark"]{
+  --surface-base:#051a24;--surface-1:#0e2a38;--surface-2:#142f3e;
+  --border-default:#1c3548;--text-default:#f0ede4;--text-muted:#a5b5c0;
+  --brand:#7ea4b1;--accent:#e27d60;--accent-on:#051a24;
+  --success:#4ade80;--shadow-lg:0 8px 24px rgba(0,0,0,0.55);
+  --meta-header-bg:rgba(2,8,13,0.94);--meta-header-border:rgba(255,255,255,0.08);
+  --meta-chrome-fg:rgba(240,237,228,0.7);--meta-chrome-border:rgba(255,255,255,0.15);--meta-chrome-active-bg:rgba(255,255,255,0.12);
+}
+html,body{font-family:var(--font-body);background:var(--surface-base);color:var(--text-default);min-height:100dvh;display:flex;flex-direction:column}
+.meta-header{position:sticky;top:0;z-index:200;background:var(--meta-header-bg);backdrop-filter:blur(12px);border-bottom:1px solid var(--meta-header-border);padding:10px 20px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.meta-title{font-family:var(--font-display);font-variation-settings:"opsz" 144,"SOFT" 60,"wght" 700;font-size:15px;margin-right:auto}
+.meta-title .dot{color:var(--accent)}
+.meta-btn{font:500 11px var(--font-mono);padding:5px 12px;border-radius:6px;cursor:pointer;border:1px solid var(--meta-chrome-border);color:var(--meta-chrome-fg);background:transparent}
+.meta-btn.active,.meta-btn:hover{background:var(--meta-chrome-active-bg);color:var(--text-default)}
+.mock-notes{max-width:1280px;margin:0 auto;padding:16px 20px 0;font-size:13px;color:var(--text-muted);line-height:1.55}
+.viewport-root{flex:1;display:flex;flex-direction:column}
+.stage-desktop{flex:1;padding:16px;display:flex;align-items:center;justify-content:center}
+.stage-devices{flex:1;display:none;align-items:center;padding:12px 16px 24px;overflow:auto}
+.stage-devices.active{display:flex}
+.devices-row{display:flex;gap:28px;justify-content:center;flex-wrap:wrap;width:100%}
+.device-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;flex:1 1 300px;max-width:calc(50% - 14px)}
+.device-label{font:600 11px var(--font-mono);color:var(--text-muted)}
+.device-scale{display:flex;justify-content:center}
+.device-viewport{overflow:hidden;background:var(--surface-base);border:2px solid var(--border-default);box-shadow:var(--shadow-lg);transform-origin:top center}
+.device-viewport[data-device="phone"]{border-radius:28px}
+.device-screen{width:100%;height:100%;overflow:auto;display:flex;flex-direction:column}
+.auth-page{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 20px;min-height:520px}
+.auth-page.narrow{padding:20px 16px;justify-content:flex-start;padding-top:48px}
+.wordmark{font-family:var(--font-display);font-variation-settings:"opsz" 144,"SOFT" 60,"wght" 700;font-size:32px;color:var(--brand);letter-spacing:-0.025em;margin-bottom:28px}
+.wordmark .dot{color:var(--accent)}
+.auth-card{width:100%;max-width:400px;background:var(--surface-1);border:1px solid var(--border-default);border-radius:var(--radius-lg);padding:28px 24px;box-shadow:var(--shadow-md)}
+.auth-page.narrow .auth-card{max-width:none;border:none;box-shadow:none;background:transparent;padding:0}
+.auth-card h1{font-family:var(--font-display);font-size:24px;font-weight:700;letter-spacing:-0.02em;margin-bottom:6px}
+.auth-card .desc{font-size:14px;color:var(--text-muted);margin-bottom:20px}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:13px;font-weight:500;margin-bottom:6px}
+.field input{width:100%;height:48px;padding:0 14px;border:1px solid var(--border-default);border-radius:var(--radius-md);background:var(--surface-base);font:inherit;color:var(--text-default)}
+.field .hint{margin-top:8px;font-size:13px}
+.field .hint a{color:var(--brand);text-decoration:none}
+.btn-submit{width:100%;height:48px;margin-top:8px;border:none;border-radius:var(--radius-md);background:var(--accent);color:var(--accent-on);font:inherit;font-size:15px;font-weight:600;cursor:pointer}
+.footer{margin-top:20px;font-size:14px;color:var(--text-muted);text-align:center}
+.footer a{color:var(--brand);font-weight:500}
+.status{font-size:13px;color:var(--success);margin-bottom:12px}
+</style>
+</head>
+<body>
+<header class="meta-header">
+  <div class="meta-title">Mynk<span class="dot">·</span> Login <span style="font-size:11px;opacity:.5">/login</span></div>
+  <div class="meta-controls">
+    <button class="meta-btn" data-view="desktop" onclick="setView('desktop',this)">Desktop</button>
+    <button class="meta-btn" data-view="phone" onclick="setView('phone',this)">Phone</button>
+    <button class="meta-btn active" data-view="compare" onclick="setView('compare',this)">Compare</button>
+    <button class="meta-btn" onclick="toggleTheme()" id="themeBtn">☾ Dark</button>
+  </div>
+</header>
+<div class="mock-notes">Auth uses same Mynka Blue tokens. Mobile: edge-to-edge form (no double card padding), 48px touch targets. Desktop: centered card on base surface. Claim/setup would reuse this shell.</div>
+<div class="viewport-root">
+  <div class="stage-desktop" id="stageDesktop">
+    <div class="auth-page" id="authPage">
+      <div class="wordmark">Mynk<span class="dot">·</span></div>
+      <div class="auth-card">
+        <h1>Welcome back</h1>
+        <p class="desc">Sign in with your tutor account.</p>
+        <form>
+          <div class="field"><label for="email">Email</label><input id="email" type="email" placeholder="you@example.com" autocomplete="email"></div>
+          <div class="field"><label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password"><p class="hint"><a href="#">Forgot your password?</a></p></div>
+          <button type="button" class="btn-submit">Sign in</button>
+        </form>
+        <p class="footer">Don&apos;t have an account? <a href="#">Sign up</a></p>
+      </div>
+    </div>
+  </div>
+  <div class="stage-devices active" id="stageDevices">
+    <div class="devices-row">
+      <div class="device-wrap"><div class="device-label">Phone</div><div class="device-scale"><div class="device-viewport" data-device="phone" data-w="390" data-h="844"><div class="device-screen" id="phoneMount"></div></div></div></div>
+      <div class="device-wrap"><div class="device-label">Desktop</div><div class="device-scale"><div class="device-viewport" data-w="720" data-h="520" style="border-radius:12px"><div class="device-screen" id="deskMount"></div></div></div></div>
+    </div>
+  </div>
+</div>
+<script>
+let shellClone=null;
+function toggleTheme(){const h=document.documentElement,d=h.getAttribute('data-theme')==='dark';h.setAttribute('data-theme',d?'light':'dark');document.getElementById('themeBtn').textContent=d?'☾ Dark':'☀ Light'}
+function setLayout(s,n){s.classList.toggle('narrow',n)}
+function scaleDevices(){document.querySelectorAll('.device-viewport').forEach(vp=>{const w=+vp.dataset.w,h=+vp.dataset.h;vp.style.width=w+'px';vp.style.height=h+'px';const outer=vp.parentElement,avail=outer?outer.clientWidth:400;const scale=Math.min(avail/w,(window.innerHeight-160)/h,1);vp.style.transform='scale('+scale+')';if(outer){outer.style.height=Math.ceil(h*scale)+'px';outer.style.width=Math.ceil(w*scale)+'px'}})}
+function setView(view,btn){
+  document.querySelectorAll('[data-view]').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');
+  const p=document.getElementById('authPage'),sd=document.getElementById('stageDesktop'),sp=document.getElementById('stageDevices'),pm=document.getElementById('phoneMount'),dm=document.getElementById('deskMount');
+  if(view==='desktop'){sd.style.display='flex';sp.classList.remove('active');if(p.parentElement!==sd)sd.appendChild(p);setLayout(p,false);if(shellClone?.parentElement)shellClone.remove();return}
+  sd.style.display='none';sp.classList.add('active');
+  setLayout(p,true);pm.appendChild(p);
+  if(view==='compare'){if(!shellClone){shellClone=p.cloneNode(true);shellClone.removeAttribute('id');setLayout(shellClone,false)}dm.appendChild(shellClone)}else if(shellClone?.parentElement)shellClone.remove();
+  scaleDevices();
+}
+window.addEventListener('resize',scaleDevices);
+setView('compare',document.querySelector('[data-view="compare"]'));
+</script>
+</body>
+</html>
