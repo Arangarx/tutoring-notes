@@ -39,12 +39,31 @@ jest.mock("@vercel/blob", () => ({
 }));
 
 const dbCreateMock = jest.fn();
+const dbStudentFindUniqueMock = jest.fn();
+const dbConsentRecordFindFirstMock = jest.fn();
+// Minimal $transaction: just invokes the callback with a proxy tx object
+const dbTransactionMock = jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
+  const tx = {
+    whiteboardSession: { create: (...args: unknown[]) => dbCreateMock(...args) },
+    consentRecord: { findFirst: (...args: unknown[]) => dbConsentRecordFindFirstMock(...args) },
+    consentRestriction: { findUnique: jest.fn().mockResolvedValue(null) },
+    sessionConsentSnapshot: { create: jest.fn().mockResolvedValue({}) },
+  };
+  return fn(tx);
+});
 jest.mock("@/lib/db", () => ({
   __esModule: true,
   db: {
-    whiteboardSession: {
-      create: (...args: unknown[]) => dbCreateMock(...args),
+    student: {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      findUnique: (arg: any) => dbStudentFindUniqueMock(arg),
     },
+    consentRecord: {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      findFirst: (arg: any) => dbConsentRecordFindFirstMock(arg),
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    $transaction: (fn: any) => dbTransactionMock(fn),
   },
   withDbRetry: <T,>(fn: () => Promise<T>) => fn(),
 }));
@@ -57,6 +76,21 @@ jest.mock("@/lib/student-scope", () => ({
   assertOwnsStudent: (id: string) => assertOwnsStudentMock(id),
 }));
 
+// Mock consent-scope so unit tests don't hit the real DB for consent checks.
+// The consent-scope logic itself is tested in consent-b2.test.ts (integration).
+jest.mock("@/lib/consent-scope", () => ({
+  __esModule: true,
+  isConsentEnforcementEnabled: jest.fn(() => false),
+  assertEffectiveConsent: jest.fn().mockResolvedValue(undefined),
+  createSessionConsentSnapshot: jest.fn().mockResolvedValue(undefined),
+  ConsentError: class ConsentError extends Error {
+    constructor(public permission: string, message?: string) {
+      super(message ?? permission);
+      this.name = "ConsentError";
+    }
+  },
+}));
+
 import { createWhiteboardSession } from "@/app/admin/students/[id]/whiteboard/actions";
 import { put } from "@vercel/blob";
 import { redirect } from "next/navigation";
@@ -67,9 +101,19 @@ const redirectMock = redirect as jest.MockedFunction<typeof redirect>;
 beforeEach(() => {
   putMock.mockReset();
   dbCreateMock.mockReset();
+  dbTransactionMock.mockClear();
+  dbStudentFindUniqueMock.mockReset();
+  dbConsentRecordFindFirstMock.mockReset();
   requireStudentScopeMock.mockReset();
   assertOwnsStudentMock.mockClear();
   redirectMock.mockClear();
+
+  // Default: unclaimed student (learnerProfileId null) → no consent check needed
+  dbStudentFindUniqueMock.mockResolvedValue({ learnerProfileId: null });
+  // Default: no consent record
+  dbConsentRecordFindFirstMock.mockResolvedValue(null);
+  // Ensure CONSENT_ENFORCEMENT is off for all these unit tests
+  delete process.env.CONSENT_ENFORCEMENT;
 });
 
 function fdWith(consent: string | undefined): FormData {
@@ -131,6 +175,7 @@ describe("createWhiteboardSession - consent enforcement", () => {
       contentDisposition: "",
       downloadUrl: "x",
     } as Awaited<ReturnType<typeof put>>);
+    // $transaction callback calls dbCreateMock via the tx proxy
     dbCreateMock.mockResolvedValue({ id: "wb-session-xyz", studentId: "student-1" });
 
     await expect(
