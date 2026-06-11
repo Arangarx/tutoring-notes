@@ -1,0 +1,21 @@
+---
+description: No duplicate components post-redesign; compose complex UIs from shared primitives; single-source styling — fix once, fixes everywhere.
+globs: src/components/**,src/app/**/*.tsx,src/styles/**
+alwaysApply: false
+---
+
+# Component reuse — single source of truth
+
+**Binding (Andrew 2026-06-11):** post-redesign, **no duplicate components** unless absolutely necessary (document why). Every complex component **composes** shared lower-level components/primitives — not re-implemented per page. Styling and behavior are **single-source**: fix a shared component once; every consumer updates. No per-page hardcoded colors/spacing.
+
+## Rules
+
+1. **No duplication** — before adding a component, check [`docs/V1-COMPONENT-LIBRARY.md`](../../docs/V1-COMPONENT-LIBRARY.md) §1 inventory. Extend canonicals; do not fork.
+2. **Compose, don't copy** — complex UIs = shared primitives (`ui/*`, §1A patterns, inventory canonicals), not inline duplicate JSX.
+3. **Tokens + shared components only** — no hardcoded color/style literals; pairs with §2.11 theme-agnostic gate.
+4. **Done = grep-clean** — no duplicated structure or one-off styling that should live in a shared component.
+
+## References
+
+- [`docs/V1-COMPONENT-LIBRARY.md`](../../docs/V1-COMPONENT-LIBRARY.md) §2.12 (HARD acceptance gate)
+- [`docs/BACKLOG.md`](../../docs/BACKLOG.md) § V1 redesign — component-duplication audit (feeds Gate A1)

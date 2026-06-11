@@ -567,9 +567,28 @@ Token palettes for light + dark already exist via `[data-theme]` + `prefers-colo
 - **Whiteboard:** Mynk chrome + Excalidraw `theme` prop follow app selection (**TU-12** in [`whiteboard-chrome-requirements.md`](handoff/whiteboard-chrome-requirements.md); design: [`whiteboard-chrome-design-2026-06-07.md`](handoff/whiteboard-chrome-design-2026-06-07.md)).
 - **Backlog of record:** [`BACKLOG.md`](BACKLOG.md) § V1 redesign — pre-master requirements.
 
+### 2.12 Single-source-of-truth components — no duplication (HARD gate, Andrew 2026-06-11)
+
+**Architectural principle (Andrew 2026-06-11):** *"I'm getting the feeling that we aren't re-using components properly just based on the fact that you'd had to fix colors and what not on things on separate pages. We should NOT have any duplicate components unless absolutely necessary after the re-design. Every complex component should be composed of components. If you fix how something works in one place it should fix it everywhere."*
+
+Post-redesign, the component tree is a **library**, not a page-by-page reimplementation. The "fix color in two places" smell is a **BLOCKER** for marking a surface done.
+
+#### Rules
+
+| # | Rule |
+|---|---|
+| **(a)** | **No duplicate components** post-redesign unless **absolutely necessary** — and if necessary, document **why** in this doc's inventory table (`Dedup Status` column) or the PR handoff. |
+| **(b)** | Every **complex / composite** component **MUST** be composed of shared lower-level components and primitives (`ui/*`, §1A primitives, inventory canonicals) — not re-implemented inline on each page. |
+| **(c)** | **Styling and behavior are single-source** — no per-page hardcoded colors, spacing, or one-off JSX structure. Consume design tokens and shared components only; a fix to a shared component's look or behavior **must propagate to every consumer** without duplicate edits. |
+| **(d)** | **Acceptance:** reviewer greps for duplicated JSX/structure and hardcoded color/style literals in component code; a change to a shared component's look/behavior must **visibly affect every consumer** in smoke. Pairs with §2.11 (tokens, not hex) and §2.9 (no raw hex). |
+
+#### Agent enforcement
+
+[`.cursor/rules/component-reuse.mdc`](../.cursor/rules/component-reuse.mdc) — scoped to component/page source. **Backlog audit:** [`BACKLOG.md`](BACKLOG.md) § V1 redesign — component-duplication audit + consolidation (feeds **Gate A1**).
+
 ---
 
-## §2.12 Token Vocabulary Gap Resolution
+## §2.13 Token Vocabulary Gap Resolution
 
 > **Status:** Design intent decisions for tokens not yet in `tokens.css`. The next token-extension pass should add these. Derived from mock `:root`.
 
@@ -619,7 +638,7 @@ Once added, use `rounded-panel` and `rounded-chip` in component code.
 
 ---
 
-## §2.13 Cohesion Resolutions (§2.10 items — ratified design decisions)
+## §2.14 Cohesion Resolutions (§2.10 items — ratified design decisions)
 
 Ratified design decisions addressing Andrew's Chunk-1 cohesion feedback (§2.10). Reference tokens, not implementation — executors build to these specs.
 
@@ -799,7 +818,7 @@ The following files are locked to recording slice 3 or live-session infrastructu
 
 | # | Surface | Route | Current state | Composition target | Chunk | Priority |
 |---|---|---|---|---|---|---|
-| 1 | **Dashboard** | `/admin` | **[RESKIN FLOOR]** Top-nav + AdminPageShell. Monochrome. No sidebar, stats row, two-column, pending strip, brand-bg card. | **Left sidebar (1A.8)** + stats row 4-col + two-column main (sessions 2fr + right col 1fr) + `accent-soft` pending-recap strip + `bg-brand` Start Session card (replaces mock's scheduling card). All accent application per §2.13 #4. | B2 | **HIGH** |
+| 1 | **Dashboard** | `/admin` | **[RESKIN FLOOR]** Top-nav + AdminPageShell. Monochrome. No sidebar, stats row, two-column, pending strip, brand-bg card. | **Left sidebar (1A.8)** + stats row 4-col + two-column main (sessions 2fr + right col 1fr) + `accent-soft` pending-recap strip + `bg-brand` Start Session card (replaces mock's scheduling card). All accent application per §2.14 #4. | B2 | **HIGH** |
 | 2 | **Student list** | `/admin/students` | **[RESKIN FLOOR]** Top-nav + AdminPageShell + `StudentsRoster`. Monochrome. | Same sidebar shell as dashboard. Student list with search. Per-student `accent-soft` status badge. Coral "Add student" / "Start session" CTA. | B2 | HIGH |
 | 3 | **Student detail** | `/admin/students/[id]` | **[RESKIN FLOOR]** AdminPageShell. | Student header: `bg-brand` avatar circle, student name `.heading`, metadata `.label-mono`. Session list for student. `accent-soft` "Recap ready" badges. Coral "Start session" CTA. | B2 | MEDIUM |
 | 4 | **Session list / billing** | `/sessions` | **[NOT YET BUILT]** | Date range picker + student filter + session table + subtotal row + export button. Session rows use 1A.7 pattern. | B3 | MEDIUM |
@@ -808,9 +827,9 @@ The following files are locked to recording slice 3 or live-session infrastructu
 | 7 | **Live workspace** | `/sessions/[id]/workspace` | **[RESKIN FLOOR]** Existing workspace with `AdminNav` chrome. | Session bar (44px, `bg-card border-b`): live badge `bg-accent-soft text-accent-text` + coral dot + timer `font-mono font-semibold` + end-session inverse button. Canvas dominant. P1.2 chrome per visual design doc. Status bar bottom. Optional transcript side panel. NO `AdminPageShell` wrapping. | B5 + P1.1 | **HIGH** |
 | 8 | **Pre-session preview** | Workspace before Start | **[RESKIN FLOOR]** Basic centered card. | Centered full-viewport. Eyebrow `text-accent-text` label-mono. 2-column mic-check + whiteboard preview cards. `accent-soft` last-session context strip. Coral "Start session" btn-lg + ghost "Continue last whiteboard". | B5 | **HIGH** |
 | 9 | **Student join** | `/join/[token]` | **[RESKIN FLOOR]** Current workspace layout. | Phone-first, `100dvh`. Canvas ≥80% viewport. Compact page strip (pill tabs). Follow-tutor toggle: `bg-accent-soft text-accent-text` when ON. AV tile: `position: fixed` bottom-right overlay. Minimal floating tool buttons. | B6 | HIGH |
-| 10 | **Auth surfaces** | `/login`, `/signup`, `/forgot`, `/reset` | **[PARTIALLY MOCK-FAITHFUL]** B1 shipped wordmark + centered card. | Verify: `bg-background` (cream/navy) page bg. Wordmark `text-[28px]`. OAuth notice ABOVE Connect-Gmail button (§2.13 #3 resolution). Coral CTA pair with ghost. | B1 follow-up / cohesive | LOW |
+| 10 | **Auth surfaces** | `/login`, `/signup`, `/forgot`, `/reset` | **[PARTIALLY MOCK-FAITHFUL]** B1 shipped wordmark + centered card. | Verify: `bg-background` (cream/navy) page bg. Wordmark `text-[28px]`. OAuth notice ABOVE Connect-Gmail button (§2.14 #3 resolution). Coral CTA pair with ghost. | B1 follow-up / cohesive | LOW |
 | 11 | **Marketing landing** | `/` | **[FIRST CUT / NOT MERGED]** Phase D, `feature/phase-d-landing-about` @ `37d8178`. | Phase D v2 decisions (see v1-component-redesign-design-2026-05-31.md §5 D v2). MarketingHeader with single Sign-in menu. Hero: "Session notes that write themselves." `accent-text` eyebrow. Coral CTA pair. Value props 3-col. "How it works" 3-step. Trust CTA. SiteFooter. | D (Phase D v2 review) | MEDIUM |
-| 12 | **Settings index + sub-pages** | `/admin/settings/**` | **[RESKIN FLOOR / CHUNK 1]** Chunk 1 functional. §2.10 items apply. | Left settings sub-nav (180px sidebar per §2.13 #1). Content area with `AdminSectionCard`. OAuth notice above button (§2.13 #3). Amber warning token (§2.13 #5). | Cohesive pass | MEDIUM |
+| 12 | **Settings index + sub-pages** | `/admin/settings/**` | **[RESKIN FLOOR / CHUNK 1]** Chunk 1 functional. §2.10 items apply. | Left settings sub-nav (180px sidebar per §2.14 #1). Content area with `AdminSectionCard`. OAuth notice above button (§2.14 #3). Amber warning token (§2.14 #5). | Cohesive pass | MEDIUM |
 | 13 | **Whiteboard chrome** | Workspace overlay | **[NOT YET BUILT]** P1.1 pending. | P1.2 visual design: [`docs/handoff/whiteboard-chrome-p1.2-visual-design-2026-06-08.md`](handoff/whiteboard-chrome-p1.2-visual-design-2026-06-08.md). Surface 4 visual language. Active tool = inverse colors (NOT coral). | P1.1 | **HIGH** |
 | 14 | **`SubmitButton` sites** | Various forms | **[DEBT]** Pre-B1 component. | Migrate to `<Button>` from shadcn/ui opportunistically when touching a page. No forced sweep. | Ongoing | LOW |
 | 15 | **`dark:` hardcodes** (~30 usages) | Various components | **[DEBT]** Key off OS not `[data-theme]`. | Migrate to token-driven classes per §2.11 end-state. Eliminate `dark:` from component code when touching a file. | Ongoing | LOW |
@@ -842,4 +861,5 @@ The following files are locked to recording slice 3 or live-session infrastructu
 - **2026-06-07:** **§2.11 light/dark theme parity** + planned `ThemeToggle` deliverable (§1 inventory, §3 tracker row A′). Pre-master gate per Andrew.
 - **2026-06-07:** **§2.11 strengthened to HARD per-component acceptance gate** — no separate theming pass; foundational plumbing = first slice (A′); agent rule `.cursor/rules/both-theme-components.mdc`.
 - **2026-06-07:** **§2.11 sharpened to theme-agnostic architectural principle** — tokens only in components (no `light`/`dark`); N-theme-capable; boundary-adapter carve-outs; `dark:`→token migration target as end-state debt.
-- **2026-06-08:** **PAPER design pass additions** (Opus orchestrator, SCOPE REFINEMENT applied): added **§1A Ratified Primitive Spec** (11 primitives derived from mock six surfaces: coral CTA, ghost button, accent strip, brand-bg card, stat tile, session badge, session row, left sidebar nav + identity chip, toolbar icon-control, chip toggle, popover container); **§2.12 Token vocabulary gap resolution** (spacing scale = Tailwind default, radius unification: `--radius-panel: 10px`); **§2.13 Cohesion resolutions** (§2.10 #1–#6 ratified: settings left sub-nav, layout/density/density composition targets per surface, OAuth notice above CTA, amber warning token, validation-state coloring deferred); **§5 Legacy-surface migration checklist** (all surfaces flagged RESKIN FLOOR vs MOCK-FAITHFUL TARGET, build-order guidance). Branch `v1-redesign`.
+- **2026-06-08:** **PAPER design pass additions** (Opus orchestrator, SCOPE REFINEMENT applied): added **§1A Ratified Primitive Spec** (11 primitives derived from mock six surfaces: coral CTA, ghost button, accent strip, brand-bg card, stat tile, session badge, session row, left sidebar nav + identity chip, toolbar icon-control, chip toggle, popover container); **§2.13 Token vocabulary gap resolution** (spacing scale = Tailwind default, radius unification: `--radius-panel: 10px`); **§2.14 Cohesion resolutions** (§2.10 #1–#6 ratified: settings left sub-nav, layout/density/density composition targets per surface, OAuth notice above CTA, amber warning token, validation-state coloring deferred); **§5 Legacy-surface migration checklist** (all surfaces flagged RESKIN FLOOR vs MOCK-FAITHFUL TARGET, build-order guidance). Branch `v1-redesign`.
+- **2026-06-11:** **§2.12 Single-source-of-truth components — no duplication** (HARD gate, Andrew directive); prior §2.12/§2.13 renumbered to §2.13/§2.14. Companion rule `.cursor/rules/component-reuse.mdc`. Branch `v1-redesign`.
