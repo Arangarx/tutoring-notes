@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db, withDbRetry } from "@/lib/db";
 import WhiteboardReplay from "@/components/whiteboard/WhiteboardReplay";
+import { assertCanAccessShareLink } from "@/lib/share-access-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,11 @@ export default async function ShareWhiteboardPage({
 
   console.log(
     `[wbShareReplay.page] wbsid=${whiteboardSessionId} token=${token.slice(0, 8)}…`
+  );
+
+  await assertCanAccessShareLink(
+    token,
+    `/s/${token}/whiteboard/${whiteboardSessionId}`
   );
 
   // Validate share link.

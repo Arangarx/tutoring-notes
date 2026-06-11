@@ -599,7 +599,19 @@
 - **`playwright@test.local` prod-safety**: this account is created only by `tests/visual/helpers.ts` → `seedTestAdmin()`, which calls `assertLocalDatabaseUrlForHarness()` and aborts unless `DATABASE_URL` points to a local Docker Postgres. The webServer forces a local DB URL; Neon (prod/preview) is never the target. There is no API endpoint or admin UI path that creates `playwright@test.local` in a production DB.
 - **Migration check**: any new test runner or CI environment that needs the wb-regression suite must set `WB_E2E_HARNESS=1` in its local webServer env. This flag must never be set in platform env vars (Vercel, AWS, etc.).
 
-### 10.9 Dev-tools fixture dashboard — VERCEL_ENV gate
+### 10.9 NOTES_AUTH_WALL — notes share-page authentication gate
+
+- **Assumption**: `NOTES_AUTH_WALL` is a **server-only** env var (no `NEXT_PUBLIC_` prefix) that controls whether `/s/[token]` notes pages require authentication.
+- **Where baked in**:
+  - `src/lib/share-access-scope.ts` — `isNotesAuthWallEnabled()` reads `process.env.NOTES_AUTH_WALL`.
+  - `src/middleware.ts` — reads `process.env.NOTES_AUTH_WALL` for edge-layer cookie-presence check.
+- **Default: false / unset** — grace window; anonymous `/s/*` access preserved exactly as today for family onboarding.
+- **Wall activation** (`true`): flip in Vercel env after all of Sarah's families complete the claim flow. Do NOT flip before the family onboarding grace window completes.
+- **Value semantics**: `"true"` or `"1"` → wall on; anything else (including unset) → wall off. The flag is read at request time, not at build time — toggling in Vercel triggers no redeploy.
+- **MUST NOT** be set in production until onboarding is complete. Premature activation locks out any parent without an AccountHolder account.
+- **Migration check**: when flipping to `true` in Vercel, confirm in `sal=` logs that no `action=access_denied_redirect` floods appear for active-session parents (would indicate accounts not yet created).
+
+### 10.10 Dev-tools fixture dashboard — VERCEL_ENV gate
 
 - **Assumption**: The `/admin/dev-tools` page and its server actions are enabled only when `VERCEL_ENV !== 'production'`. The gate is checked in two places for defense-in-depth:
   1. `isDevToolsEnabled()` in `src/lib/dev-fixtures.ts` — called at the top of every fixture function (throws in prod).

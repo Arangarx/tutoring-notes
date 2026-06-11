@@ -9,6 +9,7 @@ import {
   loadWhiteboardReplayIdsByNoteIds,
   mergeWhiteboardStubsForShareCard,
 } from "@/lib/share/loadWhiteboardReplayIdsForNotes";
+import { assertCanAccessShareLink } from "@/lib/share-access-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,10 @@ export default async function SharePage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
+
+  // Auth gate: assertCanAccessShareLink handles revocation check + wall enforcement.
+  // On wall=off (grace): passes through anonymously. On wall=on: requires session.
+  await assertCanAccessShareLink(token, `/s/${token}`);
 
   const link = await db.shareLink.findUnique({
     where: { token },

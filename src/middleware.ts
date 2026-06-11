@@ -247,6 +247,26 @@ export async function middleware(req: NextRequest) {
     }
   }
 
+  // --- Notes share page protection (NOTES_AUTH_WALL flag — cookie-presence only) ---
+  //
+  // When NOTES_AUTH_WALL=true and neither an AccountHolder nor a learner session
+  // cookie is present, redirect to parent login. This is a UX fast-path; the
+  // authoritative gate is assertCanAccessShareLink in each route handler.
+  //
+  // When NOTES_AUTH_WALL=false (default, grace window): no redirect — anonymous
+  // /s/* access preserved exactly as today.
+  if (pathname.startsWith("/s/") && process.env.NOTES_AUTH_WALL === "true") {
+    const ahCookie = req.cookies.get("mynk_ah_session");
+    const learnerCookie = req.cookies.get("mynk_learner_session");
+    if (!ahCookie && !learnerCookie) {
+      const loginUrl = req.nextUrl.clone();
+      loginUrl.pathname = "/account/login";
+      loginUrl.searchParams.set("returnTo", pathname);
+      loginUrl.searchParams.set("source", "notes_email");
+      return addSecurityHeaders(NextResponse.redirect(loginUrl), pathname);
+    }
+  }
+
   // --- All other routes: pass through with security headers ---
   return addSecurityHeaders(NextResponse.next(), pathname);
 }
