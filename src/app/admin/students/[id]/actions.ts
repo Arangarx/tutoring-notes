@@ -992,7 +992,7 @@ export async function sendUpdateEmail(
   const bodyText = `Hi,
 
 ${signer} has posted ${noteCountLabel} for ${student.name}.${recentPreview}
-The link below shows all notes, homework, assessment, and the plan for next time. It works on any device and does not require a login:
+Log in to see the notes, homework, assessment, and the plan for next time:
 ${linkUrl}
 
 ${noteCount > 1 ? `This email shows only the most recent session. Open the link to see all ${noteCount} notes.` : "Open the link to see the full note with homework, assessment, and the plan for next time."}

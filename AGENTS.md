@@ -116,7 +116,14 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   `rol` (JWT role-refresh — auth-options jwt callback
   periodic DB re-check; writes `[rol] sub=<id> role_corrected role=<old>-><new>` when
   stale role is corrected, `[rol] sub=<id> refresh=account_deleted fail_closed` when
-  the DB row is missing, `[rol] sub=<id> refresh_error fail_open` on transient DB error).
+  the DB row is missing, `[rol] sub=<id> refresh_error fail_open` on transient DB error),
+  `sal` (share-link access — `src/lib/share-access-scope.ts`; emitted on every
+  `/s/*` page and API access decision; writes
+  `[sal] sal=<token:8> action=access_granted principal=account_holder|learner studentId=<id>`,
+  `[sal] sal=<token:8> action=access_granted_anon_grace studentId=<id>`,
+  `[sal] sal=<token:8> action=access_denied_redirect studentId=<id> reason=no_session`,
+  `[sal] sal=<token:8> action=claim_required studentId=<id> reason=unclaimed`,
+  `[sal] sal=<token:8> action=ownership_denied principal=<type> ...`).
   See
   [docs/RECORDER-LIFECYCLE.md](docs/RECORDER-LIFECYCLE.md) for the
   registry.- **Migrations are additive.** Production runs on Neon; never drop or

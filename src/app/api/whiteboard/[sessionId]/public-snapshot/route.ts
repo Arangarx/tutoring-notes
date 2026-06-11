@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db, withDbRetry } from "@/lib/db";
 import { createActionCorrelationId } from "@/lib/action-correlation";
+import { checkApiShareAccess } from "@/lib/share-access-scope";
 
 /**
  * Share-token gated proxy for the whiteboard final-snapshot PNG.
@@ -26,18 +27,16 @@ export async function GET(
     return NextResponse.json({ error: "Missing token." }, { status: 401 });
   }
 
-  const link = await withDbRetry(
-    () =>
-      db.shareLink.findUnique({
-        where: { token: shareToken },
-        select: { revokedAt: true, studentId: true },
-      }),
-    { label: "wbPublicSnapshot.route.shareLink" }
+  // Auth wall check: when NOTES_AUTH_WALL=true, session must match token ownership.
+  const access = await checkApiShareAccess(
+    req,
+    shareToken,
+    `/api/whiteboard/${sessionId}/public-snapshot?token=${shareToken}`
   );
-  if (!link || link.revokedAt) {
+  if (!access.allowed) {
     return NextResponse.json(
-      { error: "Invalid or expired link." },
-      { status: 403 }
+      { error: "Access denied." },
+      { status: access.status }
     );
   }
 
@@ -54,7 +53,7 @@ export async function GET(
     { label: "wbPublicSnapshot.route.session" }
   );
 
-  if (!session || session.studentId !== link.studentId) {
+  if (!session || session.studentId !== access.studentId) {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
   if (!session.endedAt) {

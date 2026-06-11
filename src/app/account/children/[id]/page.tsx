@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import { db } from "@/lib/db";
-import { getAccountHolderSessionFromHeaders } from "@/lib/server-session";
+import { requireAccountHolderSession } from "@/lib/server-session";
 import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
 import { isCredentialHardLocked } from "@/lib/learner-pin-rate-limit";
 import { AccountPageShell } from "@/components/account/AccountPageShell";
@@ -22,10 +22,7 @@ export default async function ChildDetailPage({
 }) {
   const { id } = await params;
 
-  const session = await getAccountHolderSessionFromHeaders();
-  if (!session) {
-    redirect(`/account/login?returnTo=/account/children/${id}`);
-  }
+  const session = await requireAccountHolderSession(`/account/children/${id}`);
 
   const accountHolder = await db.accountHolder.findUnique({
     where: { id: session.accountHolderId },

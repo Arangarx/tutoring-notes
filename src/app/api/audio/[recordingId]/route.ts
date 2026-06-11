@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { streamBlobWithRangeSupport } from "@/lib/audio/proxy-stream";
 import { logBlobEgressEvent } from "@/lib/observability/cost-events";
+import { checkApiShareAccess } from "@/lib/share-access-scope";
 
 /**
  * Proxy private Vercel Blob audio to browsers on the share page.
@@ -35,28 +36,30 @@ export async function GET(
     return NextResponse.json({ error: "Missing token" }, { status: 401 });
   }
 
-  const link = await db.shareLink.findUnique({
-    where: { token: shareToken },
-    select: { revokedAt: true, studentId: true },
-  });
-  if (!link || link.revokedAt) {
-    return NextResponse.json({ error: "Invalid or expired link" }, { status: 403 });
+  // Auth wall check: when NOTES_AUTH_WALL=true, session must match token ownership.
+  const access = await checkApiShareAccess(
+    req,
+    shareToken,
+    `/api/audio/${recordingId}?token=${shareToken}`
+  );
+  if (!access.allowed) {
+    return NextResponse.json({ error: "Access denied." }, { status: access.status });
   }
 
   const recording = await db.sessionRecording.findFirst({
     where: {
       id: recordingId,
-      studentId: link.studentId,
+      studentId: access.studentId,
       OR: [
         { note: { shareRecordingInEmail: true } },
         {
           note: {
-            whiteboardSessions: { some: { studentId: link.studentId } },
+            whiteboardSessions: { some: { studentId: access.studentId } },
           },
         },
         {
           whiteboardSession: {
-            studentId: link.studentId,
+            studentId: access.studentId,
           },
         },
       ],

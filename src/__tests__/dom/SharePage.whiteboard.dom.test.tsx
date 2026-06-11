@@ -32,7 +32,10 @@ jest.mock("@/lib/db", () => ({
       findMany: (...a: unknown[]) => mockNoteViewFindMany(...a),
       createMany: (...a: unknown[]) => mockCreateMany(...a),
     },
-    adminUser: { findFirst: (...a: unknown[]) => mockAdminFindFirst(...a) },
+    adminUser: {
+      findFirst: (...a: unknown[]) => mockAdminFindFirst(...a),
+      findUnique: (...a: unknown[]) => mockAdminFindFirst(...a),
+    },
     whiteboardSession: {
       findMany: (...a: unknown[]) => mockWbSessionFindMany(...a),
     },
@@ -40,6 +43,9 @@ jest.mock("@/lib/db", () => ({
       findMany: (...a: unknown[]) => mockSessionRecordingFindMany(...a),
     },
   },
+  // withDbRetry: assertCanAccessShareLink uses this; wall is off by default in tests
+  // so session helpers are never called — just need the DB call to work.
+  withDbRetry: <T,>(fn: () => Promise<T>) => fn(),
 }));
 
 /** Shape from `sessionNote.findMany` + `parentShareNoteInclude` for ParentShareNoteCard. */

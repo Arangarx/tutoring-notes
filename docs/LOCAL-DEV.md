@@ -104,6 +104,26 @@ Playwright starts the Next dev server on port **3100** with `WHITEBOARD_SYNC_URL
 
 Pre-merge: any whiteboard-touching branch must show green `npm run test:wb-sync` before `git merge --no-ff` (see `AGENTS.md`).
 
+## NOTES_AUTH_WALL — notes share-page auth gate
+
+`NOTES_AUTH_WALL` controls whether `/s/[token]` notes pages require authentication.
+
+| Value | Behavior |
+|---|---|
+| **unset or `false`** (default) | Grace window: anonymous access preserved exactly as today. |
+| **`true`** | Wall on: `/s/*` pages and their API dependencies require an AccountHolder or Learner session. |
+
+**Local smoke procedure:**
+1. `NOTES_AUTH_WALL=false` (or unset): open `/s/<any-token>` in incognito → notes load anonymously. ✓
+2. `NOTES_AUTH_WALL=true`: same URL → redirected to `/account/login`. Log in as owning parent → redirected back → notes shown. ✓
+
+Add to your `.env` to toggle:
+```
+NOTES_AUTH_WALL=true
+```
+
+Leave unset (or false) for routine local development unless you are smoke-testing the auth wall specifically. The wall is only flipped to `true` in production at the v1→master cutover, after all of Sarah's families have completed the claim flow.
+
 ## Migrating from old SQLite `dev.db`
 
 If you previously used SQLite, that file is obsolete for this schema. Start Postgres (Docker or Neon), point `.env` at it, run `npm run db:push`, and recreate admin data via `/setup` if needed. Optionally export/import data separately — not automated here.

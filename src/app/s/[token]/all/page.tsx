@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { db } from "@/lib/db";
+import { assertCanAccessShareLink } from "@/lib/share-access-scope";
 import { formatDateOnlyDisplay } from "@/lib/date-only";
 import { NotesSearchBar } from "@/components/notes/NotesSearchBar";
 import { PageSizeSelect } from "@/components/notes/PageSizeSelect";
@@ -35,6 +36,8 @@ interface PageProps {
 export default async function ShareAllPage({ params, searchParams }: PageProps) {
   const { token } = await params;
   const { q = "", page = "1", size = String(DEFAULT_PAGE_SIZE) } = await searchParams;
+
+  await assertCanAccessShareLink(token, `/s/${token}/all`);
 
   const link = await db.shareLink.findUnique({
     where: { token },

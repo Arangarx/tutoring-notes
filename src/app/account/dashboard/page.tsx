@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { db } from "@/lib/db";
-import { getAccountHolderSessionFromHeaders } from "@/lib/server-session";
+import { requireAccountHolderSession } from "@/lib/server-session";
 import { AccountPageShell } from "@/components/account/AccountPageShell";
 import { AccountSectionCard } from "@/components/account/AccountSectionCard";
 import { CopyableLearnerHandle } from "@/components/account/CopyableLearnerHandle";
@@ -12,10 +12,7 @@ import { formatLearnerLoginHandle } from "@/lib/family-id";
 export const dynamic = "force-dynamic";
 
 export default async function AccountDashboardPage() {
-  const session = await getAccountHolderSessionFromHeaders();
-  if (!session) {
-    redirect("/account/login?returnTo=/account/dashboard");
-  }
+  const session = await requireAccountHolderSession("/account/dashboard");
 
   const accountHolder = await db.accountHolder.findUnique({
     where: { id: session.accountHolderId },
