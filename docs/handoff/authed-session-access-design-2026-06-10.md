@@ -50,7 +50,7 @@ Live session join must also require authentication. Given that (a) `allowAudioRe
 | **Phase 2** | Session-login: `/join/[sessionId]` replaces anonymous `/w/[joinToken]` as the primary live-session entry point for authenticated learners. Consolidated with Gate A2 waiting room (one route). E2E key via Option A (fragment URL). |
 | **Sequencing** | Phase 1 before Phase 2. Phase 1 does not depend on `SessionParticipant`; Phase 2 does. |
 | **Low-friction credential path** | Magic-link / first-click "claim your account" onboarding — **not** "invent a password from nothing." Framed as good onboarding, not a privacy compromise. |
-| **Anonymous fallback (notes)** | **None.** Hard auth-wall for all students at `/s/[token]`. The draft's anonymous fallback for unclaimed students was rejected (OQ-1) because it would not meet Sarah's requirement. Cutover mitigated by tutor-initiated claim invites + grace window (§3.5). |
+| **Anonymous fallback (notes)** | **None.** Hard auth-wall for all students at `/s/[token]`. The draft's anonymous fallback for unclaimed students was rejected (OQ-1) because it would not meet Sarah's requirement. Cutover mitigated by tutor-initiated claim invites + claim-before-flip cutover (§3.5.3; no grace window at pilot scale). |
 | **Anonymous fallback (live join)** | `/w/[joinToken]` retained **only** for unclaimed students in Phase 2 live sessions until families are claimed; claimed students use `/join/[sessionId]`. Distinct from notes — notes wall is universal in Phase 1. |
 
 ---
@@ -206,17 +206,22 @@ After the wall is up, a parent clicking `/s/<token>` without an account hits log
 - **Learners:** after parent claim, tutor distributes PIN (`username@familyid`) for `/students/login` — existing IAC-7 path.
 - **No anonymous notes preview** as a teaser — the wall is the product posture Sarah asked for.
 
-#### 3.5.3 Cutover sequence (invite → grace → wall)
+#### 3.5.3 Cutover sequence (claim → flip — no grace window at pilot scale)
 
-| Step | Action | Duration / trigger |
+**Supersedes (Andrew 2026-06-10):** the prior "invite → 7-day grace (`NOTES_AUTH_WALL=false`) → wall" plan. Andrew: *"I really don't think at our scale we need a grace period."* The grace window only protected a **multi-family** migration — a stretch where some families have claimed and others haven't, so old anonymous links must keep working. At one pilot family (N=1) there is no such stretch. Re-introduce a grace window only if the pilot grows to multiple un-migrated families before the flip.
+
+| Step | Action | Trigger |
 |---|---|---|
-| **1. Inventory** | Tutor identifies all active `Student` rows with `learnerProfileId IS NULL` (Sarah's current families). | Pre-deploy |
-| **2. Invite blast** | Tutor sends claim invite to each parent email on file; optional personal nudge (Sarah knows these families). | Deploy day −7 to −1 |
-| **3. Grace window** | Notes remain anonymously accessible **only during this window** via a feature flag (`NOTES_AUTH_WALL=false`). Parents can still click old links while claiming. Tutor dashboard shows claim status per student. | **7 days** (pilot-tunable; 7 days is default) |
-| **4. Wall activation** | Flip `NOTES_AUTH_WALL=true`. All `/s/[token]` routes enforce §3.2 gate. Unclaimed students show claim-required, not notes. | End of grace |
-| **5. Straggler support** | Tutor re-sends claim invite; parent completes claim → immediate notes access. No data loss — notes exist server-side, only the read gate changed. | Ongoing |
+| **1. Claim** | Sarah's pilot parent **claims** the student (creates account + links to learner via `/claim/<token>`). | **Before** master cut |
+| **2. Wall flip** | Set `NOTES_AUTH_WALL=true` at the `v1-redesign`→`master` cutover. All `/s/[token]` routes enforce §3.2 gate. | Master cut |
+| **3. Parent access** | Parent logs in → sees notes (dashboard + `/s/<token>` deep links). No anonymous-links-still-work grace window. | Ongoing |
+| **4. Straggler support** | If a family is unclaimed at flip: tutor re-sends claim invite; parent completes claim → immediate notes access. No data loss — notes exist server-side, only the read gate changed. | Ongoing |
 
-**Why a grace flag instead of delaying Phase 1:** the auth gate code ships in Phase 1; the flag controls cutover timing so no parent is hard-locked without warning. Removing the flag (or setting it true) is the explicit "wall goes up" moment.
+**Caveat:** Any `/s/<token>` link Sarah already emailed becomes login-required the instant the wall flips. The parent **must** have claimed before step 2, or the existing link redirects to login with the "sign in to view these notes" message (`source=notes_email` — commit [`a7f0935`](https://github.com/Arangarx/tutoring-notes/commit/a7f0935), not a silent failure). Ordering steps 1→2 gives zero downtime.
+
+`NOTES_AUTH_WALL` still ships **default-false (dormant)** in code — unchanged. What changes is the **operational** cutover plan: no deliberate grace-window phase; flip on at master cut after the single family is claimed.
+
+**Why the flag remains:** the auth gate code ships in Phase 1; the flag controls the explicit "wall goes up" moment at master cut (not a timed grace period).
 
 #### 3.5.4 Parent email-to-notes flow (post-wall, claimed student)
 
@@ -237,7 +242,7 @@ After the wall is up, a parent clicking `/s/<token>` without an account hits log
 | `src/lib/share-access-scope.ts` | **New:** `assertCanAccessShareLink` helper |
 | `src/app/account/login/page.tsx` | Handle `source=notes_email` for welcome copy |
 | Tutor student-detail | Claim status badge for unclaimed students; prompt to send invite before wall date |
-| Env / feature flag | `NOTES_AUTH_WALL` (or equivalent) for grace-window cutover |
+| Env / feature flag | `NOTES_AUTH_WALL` (default `false`; flip `true` at master cut after claim) |
 | `AGENTS.md` | Register `sal` log prefix |
 
 ### 3.7 Account-level notes view for parents
@@ -274,7 +279,7 @@ This is effectively the same data as `/s/[token]` but via the parent's authentic
 | **P1-AC-9** | Revoked `ShareLink` returns 404 for all principals (unchanged behavior) | REQUIRED |
 | **P1-AC-10** | `/account/children/[learnerId]/notes` serves parent with valid AH session + owned learner | REQUIRED |
 | **P1-AC-11** | Tutor can mint claim invite from student detail; parent completes `/claim/<token>` flow; `Student.learnerProfileId` set | **BLOCKER** (onboarding) |
-| **P1-AC-12** | Grace-window flag: when off, anonymous notes still served; when on, wall enforced | **BLOCKER** (cutover) |
+| **P1-AC-12** | Dormant wall flag: when off, anonymous notes still served; when on, wall enforced | **BLOCKER** (cutover) |
 | **P1-AC-13** | After wall on: unclaimed student `/s/[token]` shows claim-required CTA (not blank 404) | REQUIRED |
 | **P1-AC-14** | No anonymous note access remains anywhere in `/s/*` after wall activation | **BLOCKER** (Sarah requirement) |
 
@@ -599,7 +604,7 @@ if endedAt IS NOT NULL (ended):
 
 | Risk | Severity | Mitigation | Phase gate |
 |---|---|---|---|
-| Claimed student notes become inaccessible to existing parents who don't have accounts yet | **BLOCKER** | **Hard wall requires onboarding first.** Phase 1 ships tutor-initiated claim invites (`ClaimInviteSection` → `/claim/<token>`) + 7-day grace window (`NOTES_AUTH_WALL` flag) before wall activation. Tutor inventory of unclaimed students; straggler re-invite path. Pilot scale (handful of families) makes manual onboarding feasible. | P1-AC-11, P1-AC-12, P1-AC-14 |
+| Claimed student notes become inaccessible to existing parents who don't have accounts yet | **BLOCKER** | **Hard wall requires onboarding first.** Phase 1 ships tutor-initiated claim invites (`ClaimInviteSection` → `/claim/<token>`) + **claim-before-flip** cutover (no grace window at N=1; `NOTES_AUTH_WALL` flips at master cut only after pilot family claims). Tutor inventory of unclaimed students; straggler re-invite path. Pilot scale (one family) makes manual onboarding feasible. | P1-AC-11, P1-AC-12, P1-AC-14 |
 | `SessionParticipant` row missing for a claimed student → learner cannot join | **BLOCKER** | Row created inside `startWhiteboardSession` transaction (same transaction as session creation). If `learnerProfileId` is null, no row is created and no attempt to join is possible. | P2 acceptance: test participant row exists after session creation for claimed student |
 | `endWhiteboardSession` sets `leftAt` on `SessionParticipant` — if this fails, orphan open participant rows | MEDIUM | Use `updateMany` (not `update`) inside the atomic transaction — `updateMany` with `where: { whiteboardSessionId, leftAt: null }` is safe even if 0 rows match (no error). | P2 acceptance |
 | `assertCanAccessShareLink` rejects valid parent on tombstoned `LearnerProfile` | MEDIUM | If `learnerProfile.tombstonedAt IS NOT NULL`, `assertOwnsLearnerProfile` returns 404. Notes access denied; tutor must re-invite / reconnect. No anonymous fallback. | P1 acceptance |
@@ -612,7 +617,7 @@ if endedAt IS NOT NULL (ended):
 | Learner reloads the page after cookie expiry | HIGH | Reload triggers auth check → redirect to login. **Mitigation (OQ-3 resolved):** client captures `location.hash` to `sessionStorage` before redirect; restores after login. Join link stays valid for whole live session. Mid-session reload with re-auth recovers the encryption key without tutor re-share. | P2-AC-10 |
 | Parent email link clicked on a different device than where they created their account | LOW | Standard cookie-based auth; parent logs in on new device normally. No session persistence concern beyond normal browser cross-device behavior. | Standard |
 | `sal=` log events emitted for all denied notes accesses | MEDIUM | Required for production debugging; without it, a parent reporting "can't see notes" cannot be diagnosed. | P1 BLOCKER-O1 |
-| Parent locked out at wall with no claim invite | **BLOCKER** | Grace window + tutor invite blast + claim-required screen with "contact your tutor" / re-send invite path. Tutor dashboard shows unclaimed status. | P1-AC-11, P1-AC-13 |
+| Parent locked out at wall with no claim invite | **BLOCKER** | Claim-before-flip ordering + tutor invite + claim-required screen with "contact your tutor" / re-send invite path. Tutor dashboard shows unclaimed status. | P1-AC-11, P1-AC-13 |
 
 ### Axis 3 — Concurrency
 
@@ -673,7 +678,7 @@ All questions resolved 2026-06-10. Kept for audit trail.
 
 | # | Question | Status | Resolution |
 |---|---|---|---|
-| **OQ-1** | **Phase 1 cut-point for unclaimed students:** when Phase 1 ships, should unclaimed student notes immediately show a "sign up to access" wall (no anonymous view), or continue to serve anonymously with a "claim your account" CTA? | **RESOLVED** | **Hard auth-wall (Option B).** All students require AccountHolder or learner session for `/s/[token]`. No anonymous fallback. Phase 1 MUST include one-time family onboarding (tutor-initiated claim invites via existing `/claim/<token>` flow) + grace window (`NOTES_AUTH_WALL` flag) before wall activation. See §3.5. Sarah's requirement is the driver; Andrew ratified. |
+| **OQ-1** | **Phase 1 cut-point for unclaimed students:** when Phase 1 ships, should unclaimed student notes immediately show a "sign up to access" wall (no anonymous view), or continue to serve anonymously with a "claim your account" CTA? | **RESOLVED** | **Hard auth-wall (Option B).** All students require AccountHolder or learner session for `/s/[token]`. No anonymous fallback. Phase 1 MUST include one-time family onboarding (tutor-initiated claim invites via existing `/claim/<token>` flow) before wall activation. **Operational cutover updated 2026-06-10:** claim-then-flip at master cut — no grace window at pilot scale (supersedes prior 7-day grace plan; see §3.5.3). Sarah's requirement is the driver; Andrew ratified. |
 | **OQ-2** | **E2E key delivery for Phase 2 (relay-blind vs. server-mediated):** should V1 preserve relay-blind E2E (keep `#k=` in URL, require auth — Option A), or use server-mediated key delivery (server stores the key, serves it to authenticated participants — Option B)? | **RESOLVED** | **Option A chosen.** Fragment URL (`/join/<sessionId>#k=<key>`) + required learner auth; relay-blind E2E preserved; no server-side key storage. Option B considered and rejected for V1 — breaks relay-blind E2E for no practical privacy gain. See §4.5. |
 | **OQ-3** | **Key re-entry after cookie expiry mid-session:** if a learner's `mynk_learner_session` cookie expires and they reload `/join/<sessionId>`, they are redirected to login. The browser's `returnTo` parameter cannot carry the URL fragment (HTTP spec). After login, the learner lands at `/join/<sessionId>` with no key — they need to get the key URL again from the tutor. Is this acceptable for V1, or should we implement a key re-delivery mechanism? | **RESOLVED** | **Accept + keep-link-valid + fragment-preservation.** (a) Join link stays valid for the whole live session (`endedAt == null`); auth wall is the gate, not key invalidation. (b) Close login-redirect fragment-strip with client-side `sessionStorage` capture/restore of `location.hash` before/after auth. See §4.4. Mid-session reload edge case is a non-event. |
 
@@ -706,7 +711,7 @@ Collision check against existing registry (`rid`, `wbsid`, `wba`, `obx`, `dft`, 
 
 | Phase | Prerequisites | What ships | Gate |
 |---|---|---|---|
-| **Phase 1 — Notes-login** | `AccountHolderSession` + `LearnerDeviceSession` auth (P2a already merged or ready); existing claim-invite flow | Hard auth-wall on `/s/[token]` (all students); `assertCanAccessShareLink`; family onboarding + grace-window cutover; `/account/children/[learnerId]/notes`; `sal=` logging; email copy update | Sarah's notes-must-require-login requirement |
+| **Phase 1 — Notes-login** | `AccountHolderSession` + `LearnerDeviceSession` auth (P2a already merged or ready); existing claim-invite flow | Hard auth-wall on `/s/[token]` (all students); `assertCanAccessShareLink`; family onboarding + claim-then-flip cutover (no grace at N=1); `/account/children/[learnerId]/notes`; `sal=` logging; email copy update | Sarah's notes-must-require-login requirement |
 | **Phase 2 — Session-login** | Phase 1 complete; `SessionParticipant` model in schema | Real `assertIsSessionParticipant`; `/join/[sessionId]` route (waiting room + live; == Gate A2); fragment preservation; learner dashboard; learner-session variants for `join-timer` + `wb-asset` + `upload/blob`; "Copy student link" branch; Option A E2E key | Gate A2 (waiting room) + consent model correctness |
 
 Phase 2 IS Gate A2. Dispatch them as one executor scope.
@@ -715,12 +720,13 @@ Phase 2 IS Gate A2. Dispatch them as one executor scope.
 
 ## Kickoff decisions 2026-06-10 (build)
 
-Andrew locked the following at Phase 1 build kickoff. These refine §3.5.3 grace-window language for **implementation and cutover timing**; the hard-wall design (OQ-1) is unchanged.
+Andrew locked the following at Phase 1 build kickoff. These refine §3.5.3 for **implementation and cutover timing**; the hard-wall design (OQ-1) is unchanged.
 
 | Decision | Outcome |
 |---|---|
 | **Wall ships dormant** | Phase 1 (notes-login) builds the **full** auth-wall mechanism (`assertCanAccessShareLink`, middleware, anon API hardening, `/account/children/[learnerId]/notes`, tests, `sal=` logging) but ships with **`NOTES_AUTH_WALL` default `false`**. On `v1-redesign`, anonymous `/s/[token]` access continues until the flag is explicitly enabled. |
-| **When the flag flips** | `NOTES_AUTH_WALL=true` **only** at the **`v1-redesign`→`master` cutover**, and **only after** Sarah's pilot families are claimed/credentialed. Rationale: Sarah has only ever used `master` (production); enabling the wall on `master` before v1 lands there, or before families are credentialed, would lock her out of notes. |
+| **When the flag flips** | `NOTES_AUTH_WALL=true` **only** at the **`v1-redesign`→`master` cutover**, and **only after** Sarah's pilot family is claimed/credentialed. Rationale: Sarah has only ever used `master` (production); enabling the wall on `master` before v1 lands there, or before the family is credentialed, would lock her out of notes. |
+| **No grace window (pilot scale)** | **Supersedes** the prior grace-window cutover plan (§3.5.3). Andrew 2026-06-10: *"I really don't think at our scale we need a grace period."* At N=1: parent **claims before** flip → `NOTES_AUTH_WALL=true` at master cut → parent logs in and sees notes. No period where anonymous emailed links still work post-claim. Emailed `/s/<token>` links become login-required instantly at flip (`source=notes_email`). Re-evaluate (reintroduce grace window) only if the pilot grows to multiple un-migrated families before the flip. |
 | **View vs consent** | Phase 1 gates **viewing** session notes on **ownership** (`assertOwnsLearnerProfile` / learner self-match) **alone**. Parent privacy **consent** enforcement (Gate B2 — `SessionConsentSnapshot`, capture gating) is a **separate parallel thread**, intentionally decoupled from the notes-login wall. |
 | **Sequencing** | **Phase 1 first** (notes-login on `feat/notes-login`). **Then** Phase 2 + Gate A2 (session-login + waiting room) as **one combined executor scope** — not two branches to merge later (see §6). |
 
