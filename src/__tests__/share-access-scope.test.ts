@@ -92,9 +92,27 @@ jest.mock("@/lib/learner-session", () => ({
 }));
 
 // ---------------------------------------------------------------------------
+// server-session mock — for the page variant (assertCanAccessShareLink).
+// Uses header-based session helpers (no req arg).
+// ---------------------------------------------------------------------------
+
+const getAccountHolderSessionFromHeadersMock = jest.fn();
+const getLearnerSessionFromHeadersMock = jest.fn();
+
+jest.mock("@/lib/server-session", () => ({
+  __esModule: true,
+  getAccountHolderSessionFromHeaders: () => getAccountHolderSessionFromHeadersMock(),
+  getLearnerSessionFromHeaders: () => getLearnerSessionFromHeadersMock(),
+}));
+
+// ---------------------------------------------------------------------------
 // Import under test (after all mocks are in place).
 // ---------------------------------------------------------------------------
-import { checkApiShareAccess, isNotesAuthWallEnabled } from "@/lib/share-access-scope";
+import {
+  checkApiShareAccess,
+  assertCanAccessShareLink,
+  isNotesAuthWallEnabled,
+} from "@/lib/share-access-scope";
 
 // ---------------------------------------------------------------------------
 // Test fixtures
@@ -675,5 +693,172 @@ describe("API route integration — studentId comes from access result, not re-f
     if (result.allowed) {
       expect(result.learnerProfileId).toBe(LEARNER_PROFILE_A);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// assertCanAccessShareLink (page variant) — S-2 coverage
+//
+// Uses DIFFERENT session helpers than checkApiShareAccess:
+//   getAccountHolderSessionFromHeaders() and getLearnerSessionFromHeaders()
+//   from @/lib/server-session (no req argument — reads from request headers
+//   via Next.js's headers() API).
+//
+// On deny: throws NEXT_NOT_FOUND (notFound()) or NEXT_REDIRECT:... (redirect()).
+// On allow: returns { studentId, learnerProfileId }.
+// ---------------------------------------------------------------------------
+
+describe("assertCanAccessShareLink (page variant)", () => {
+  const TOKEN = TOKEN_VALID;
+  const PAGE_PATH = `/s/${TOKEN}`;
+
+  // -------------------------------------------------------------------------
+  // Wall OFF: anonymous grace — must pass through without auth check
+  // -------------------------------------------------------------------------
+
+  describe("wall OFF — anonymous grace (no behavior change today)", () => {
+    beforeEach(() => {
+      delete process.env.NOTES_AUTH_WALL;
+      shareLinkFindUniqueMock.mockResolvedValue(validLinkClaimed);
+      getAccountHolderSessionFromHeadersMock.mockResolvedValue(null);
+      getLearnerSessionFromHeadersMock.mockResolvedValue(null);
+    });
+
+    test("allows anonymous access and returns studentId + learnerProfileId", async () => {
+      const result = await assertCanAccessShareLink(TOKEN, PAGE_PATH);
+
+      expect(result.studentId).toBe(STUDENT_A);
+      expect(result.learnerProfileId).toBe(LEARNER_PROFILE_A);
+    });
+
+    test("does NOT call header-based session helpers in grace mode", async () => {
+      await assertCanAccessShareLink(TOKEN, PAGE_PATH);
+
+      expect(getAccountHolderSessionFromHeadersMock).not.toHaveBeenCalled();
+      expect(getLearnerSessionFromHeadersMock).not.toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Wall ON: no session → redirect to /account/login
+  // -------------------------------------------------------------------------
+
+  describe("wall ON — no session → redirect", () => {
+    beforeEach(() => {
+      process.env.NOTES_AUTH_WALL = "true";
+      shareLinkFindUniqueMock.mockResolvedValue(validLinkClaimed);
+      // Independent oracles: session IDs distinct from student/profile IDs
+      getAccountHolderSessionFromHeadersMock.mockResolvedValue(null);
+      getLearnerSessionFromHeadersMock.mockResolvedValue(null);
+    });
+
+    test("throws redirect signal pointing to /account/login", async () => {
+      await expect(assertCanAccessShareLink(TOKEN, PAGE_PATH)).rejects.toThrow(
+        /NEXT_REDIRECT:.*\/account\/login/
+      );
+    });
+
+    test("redirect includes source=notes_email", async () => {
+      await expect(assertCanAccessShareLink(TOKEN, PAGE_PATH)).rejects.toThrow(
+        /NEXT_REDIRECT:.*source=notes_email/
+      );
+    });
+
+    test("redirect includes returnTo with the share page path", async () => {
+      await expect(assertCanAccessShareLink(TOKEN, PAGE_PATH)).rejects.toThrow(
+        /NEXT_REDIRECT:.*returnTo=/
+      );
+    });
+
+    test("uses header-based session helpers (not req-arg helpers)", async () => {
+      await expect(assertCanAccessShareLink(TOKEN, PAGE_PATH)).rejects.toThrow(
+        /NEXT_REDIRECT/
+      );
+      // Confirms server-session helpers were invoked, not the API-route helpers
+      expect(getAccountHolderSessionFromHeadersMock).toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Wall ON: owning AccountHolder → allowed
+  // -------------------------------------------------------------------------
+
+  describe("wall ON — owning AccountHolder → allowed", () => {
+    beforeEach(() => {
+      process.env.NOTES_AUTH_WALL = "true";
+      shareLinkFindUniqueMock.mockResolvedValue(validLinkClaimed);
+      // AH A owns LearnerProfile A — independent ids, not back-derived from impl
+      getAccountHolderSessionFromHeadersMock.mockResolvedValue(ahSessionA);
+      getLearnerSessionFromHeadersMock.mockResolvedValue(null);
+      learnerProfileFindUniqueMock.mockResolvedValue(learnerProfileA);
+    });
+
+    test("grants access and returns studentId", async () => {
+      const result = await assertCanAccessShareLink(TOKEN, PAGE_PATH);
+
+      expect(result.studentId).toBe(STUDENT_A);
+      expect(result.learnerProfileId).toBe(LEARNER_PROFILE_A);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Wall ON: non-owner AccountHolder → notFound()
+  // -------------------------------------------------------------------------
+
+  describe("wall ON — non-owner AccountHolder → deny (notFound)", () => {
+    beforeEach(() => {
+      process.env.NOTES_AUTH_WALL = "true";
+      shareLinkFindUniqueMock.mockResolvedValue(validLinkClaimed); // StudentA → LearnerProfileA → AH A
+      // AH B is logged in — does NOT own LearnerProfile A
+      getAccountHolderSessionFromHeadersMock.mockResolvedValue(ahSessionB);
+      getLearnerSessionFromHeadersMock.mockResolvedValue(null);
+      // DB confirms profile is owned by AH A, not AH B
+      learnerProfileFindUniqueMock.mockResolvedValue(learnerProfileA);
+    });
+
+    test("throws notFound signal (deny, anti-enumeration) for non-owner", async () => {
+      await expect(assertCanAccessShareLink(TOKEN, PAGE_PATH)).rejects.toThrow(
+        "NEXT_NOT_FOUND"
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Wall ON: matching learner → allowed
+  // -------------------------------------------------------------------------
+
+  describe("wall ON — matching Learner session → allowed", () => {
+    beforeEach(() => {
+      process.env.NOTES_AUTH_WALL = "true";
+      shareLinkFindUniqueMock.mockResolvedValue(validLinkClaimed); // learnerProfileId = LEARNER_PROFILE_A
+      getAccountHolderSessionFromHeadersMock.mockResolvedValue(null);
+      getLearnerSessionFromHeadersMock.mockResolvedValue(learnerSessionA); // learnerProfileId = LEARNER_PROFILE_A
+    });
+
+    test("grants access to matching learner and returns studentId", async () => {
+      const result = await assertCanAccessShareLink(TOKEN, PAGE_PATH);
+
+      expect(result.studentId).toBe(STUDENT_A);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Wall ON: wrong learner → notFound()
+  // -------------------------------------------------------------------------
+
+  describe("wall ON — wrong Learner session → deny (notFound)", () => {
+    beforeEach(() => {
+      process.env.NOTES_AUTH_WALL = "true";
+      shareLinkFindUniqueMock.mockResolvedValue(validLinkClaimed); // studentA → LEARNER_PROFILE_A
+      getAccountHolderSessionFromHeadersMock.mockResolvedValue(null);
+      // Learner B has LEARNER_PROFILE_B — mismatch against LEARNER_PROFILE_A
+      getLearnerSessionFromHeadersMock.mockResolvedValue(learnerSessionB);
+    });
+
+    test("throws notFound signal when learner does not match the link's student", async () => {
+      await expect(assertCanAccessShareLink(TOKEN, PAGE_PATH)).rejects.toThrow(
+        "NEXT_NOT_FOUND"
+      );
+    });
   });
 });

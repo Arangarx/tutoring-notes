@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { checkApiShareAccess } from "@/lib/share-access-scope";
 
 /**
  * POST /api/share/mark-seen
@@ -16,6 +17,13 @@ export async function POST(req: Request): Promise<Response> {
 
     if (!token || !noteId) {
       return NextResponse.json({ error: "token and noteId required" }, { status: 400 });
+    }
+
+    // Auth wall check: when NOTES_AUTH_WALL=true, session must match token ownership.
+    // When wall off, passes through on token alone (grace mode).
+    const access = await checkApiShareAccess(req, token, `/s/${token}`);
+    if (!access.allowed) {
+      return NextResponse.json({ error: "Access denied." }, { status: access.status });
     }
 
     // Validate the share link is active.

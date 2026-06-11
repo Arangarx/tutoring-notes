@@ -255,7 +255,8 @@ export async function middleware(req: NextRequest) {
   //
   // When NOTES_AUTH_WALL=false (default, grace window): no redirect — anonymous
   // /s/* access preserved exactly as today.
-  if (pathname.startsWith("/s/") && process.env.NOTES_AUTH_WALL === "true") {
+  const _notesAuthWallVal = process.env.NOTES_AUTH_WALL;
+  if (pathname.startsWith("/s/") && (_notesAuthWallVal === "true" || _notesAuthWallVal === "1")) {
     const ahCookie = req.cookies.get("mynk_ah_session");
     const learnerCookie = req.cookies.get("mynk_learner_session");
     if (!ahCookie && !learnerCookie) {
