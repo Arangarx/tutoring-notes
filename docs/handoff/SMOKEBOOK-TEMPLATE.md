@@ -31,12 +31,15 @@ Fill **Preview** with a markdown link whose URL is the verified Vercel `branchAl
 | **Branch** | Git branch under test (exact ref). |
 | **Tip commit** | `git log -1 --format=%H` on that branch at smoke time; link to GitHub. |
 | **Preview** | Vercel preview for that branch — **fetched** via Vercel MCP (`list_deployments` → match `meta.githubCommitRef` → `https://<meta.branchAlias>`). If MCP unavailable, use `<unverified — confirm in Vercel dashboard>` and fix before Andrew runs smoke. |
-| **Overall result** | Check **PASS** only if every in-scope test item is PASS. Check **FAIL** if any in-scope item fails. Leave both unchecked until the run is complete. |
+| **Overall result** | Check **PASS** only if every in-scope test item is PASS (deliberate per-item SKIPs must be called out in Notes). Check **FAIL** if any in-scope item fails. Leave both unchecked until the run is complete. Overall verdict is PASS/FAIL only — no overall SKIP. |
 | **Action** | Concrete steps: role (tutor/student/parent), device/browser, route, clicks, inputs, preconditions. Enough detail that Andrew does not have to infer the path. |
 | **Expect** | Observable pass criteria — what you should see/hear/record; not implementation guesses. |
 | **Ignore this run** | Known noise, out-of-scope UI, deferred adjacent work, or env quirks **for this item only**. Write `Nothing.` if there is nothing to ignore — field is always present. |
-| **PASS / FAIL** (per item) | Two separate checkboxes. Check exactly one per item when done. |
-| **Notes** | Freeform observations, screenshots paths, console errors worth filing. |
+| **PASS** (per item) | Checked = test ran and passed. |
+| **FAIL** (per item) | Checked = test ran and failed (explain in Notes). |
+| **SKIP** (per item) | Checked = test deliberately skipped this run — **reason required in Notes** (e.g. blocked by env, out of scope this pass, dependency not ready). |
+| **None checked** (per item) | Not yet run / missed — **not** the same as a deliberate SKIP. Check exactly one box per item when the run is complete; leave all unchecked if not yet reached. |
+| **Notes** | Freeform observations, screenshots paths, console errors worth filing. SKIP items must state why here. |
 
 Run order: top to bottom unless a block says otherwise. Re-run **Cross-branch / post-merge** after integration merges.
 
@@ -44,7 +47,7 @@ Run order: top to bottom unless a block says otherwise. Re-run **Cross-branch / 
 
 ## Per-test-item block (repeat for every test)
 
-Each numbered item **must** include all fields below **in this order**. Do not combine PASS/FAIL into one line.
+Each numbered item **must** include all fields below **in this order**. Do not combine PASS/FAIL/SKIP into one line.
 
 ```markdown
 ### N. <short title>
@@ -57,6 +60,7 @@ Each numbered item **must** include all fields below **in this order**. Do not c
 
 - [ ] PASS
 - [ ] FAIL
+- [ ] SKIP
 
 **Notes:**
 
@@ -75,6 +79,7 @@ Each numbered item **must** include all fields below **in this order**. Do not c
 
 - [ ] PASS
 - [ ] FAIL
+- [ ] SKIP
 
 **Notes:**
 
@@ -96,6 +101,7 @@ Each numbered item **must** include all fields below **in this order**. Do not c
 
 - [ ] PASS
 - [ ] FAIL
+- [ ] SKIP
 
 **Notes:**
 
@@ -126,6 +132,7 @@ Run this section **after** the feature branch merges into the integration branch
 
 - [ ] PASS
 - [ ] FAIL
+- [ ] SKIP
 
 **Notes:**
 
@@ -139,5 +146,6 @@ Run this section **after** the feature branch merges into the integration branch
 
 - [ ] PASS
 - [ ] FAIL
+- [ ] SKIP
 
 **Notes:**
