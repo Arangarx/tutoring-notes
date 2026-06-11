@@ -172,7 +172,7 @@ export function StartWhiteboardSession({
                   label="Start session"
                   pendingLabel="Starting…"
                   disabled={!consent}
-                  className="primary"
+                  variant="default"
                 />
               </div>
             </form>

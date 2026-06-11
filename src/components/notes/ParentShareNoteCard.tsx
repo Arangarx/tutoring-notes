@@ -1,5 +1,11 @@
 import Link from "next/link";
 import { SeenTracker } from "@/app/s/[token]/SeenTracker";
+import {
+  formatNoteDurationLabel,
+  formatNoteTime,
+  orderedUnique,
+  safeJsonArray,
+} from "@/lib/notes/display-utils";
 
 export type ShareNoteRecordingStub = {
   id: string;
@@ -29,42 +35,6 @@ export type ParentShareNoteModel = {
   recordings: ShareNoteRecordingStub[];
   whiteboardSessions: ShareNoteWhiteboardSessionStub[];
 };
-
-function safeJsonArray(value: string): string[] {
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-function orderedUnique(ids: Array<string | null | undefined>): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const id of ids) {
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    out.push(id);
-  }
-  return out;
-}
-
-function formatDuration(seconds: number | null): string {
-  if (!seconds) return "";
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
-
-function formatTimeDisplay(d: Date | null): string {
-  if (!d) return "";
-  const h = d.getUTCHours();
-  const m = d.getUTCMinutes();
-  const ampm = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 || 12;
-  return `${h12}:${m.toString().padStart(2, "0")} ${ampm}`;
-}
 
 /**
  * Single note card for parent `/s/[token]` pages — extracted for Jest and shared markup.
@@ -105,9 +75,9 @@ export function ParentShareNoteCard(props: {
           </div>
           {(note.startTime || note.endTime) && (
             <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-              {formatTimeDisplay(note.startTime)}
+              {formatNoteTime(note.startTime)}
               {note.startTime && note.endTime && " – "}
-              {formatTimeDisplay(note.endTime)}
+              {formatNoteTime(note.endTime)}
             </div>
           )}
         </div>
@@ -193,7 +163,7 @@ export function ParentShareNoteCard(props: {
             {audioUrls.map((audioUrl, idx) => {
               const rec = note.recordings[idx];
               const durationLabel = rec?.durationSeconds
-                ? ` · ${formatDuration(rec.durationSeconds)}`
+                ? ` · ${formatNoteDurationLabel(rec.durationSeconds)}`
                 : "";
               return (
                 <div key={audioUrl} style={{ marginBottom: idx < audioUrls.length - 1 ? 10 : 0 }}>

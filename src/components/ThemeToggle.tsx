@@ -1,45 +1,13 @@
 "use client";
 
-import { Monitor, Moon, Sun } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
-
-import { useTheme } from "@/components/ThemeProvider";
+import { useThemeDropdown } from "@/hooks/useThemeDropdown";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { ThemeMode } from "@/lib/theme";
-
-const OPTIONS: { mode: ThemeMode; label: string; Icon: typeof Sun }[] = [
-  { mode: "light", label: "Light", Icon: Sun },
-  { mode: "dark", label: "Dark", Icon: Moon },
-  { mode: "system", label: "System", Icon: Monitor },
-];
 
 export function ThemeToggle({ className }: { className?: string }) {
-  const { mode, setMode } = useTheme();
-  const [open, setOpen] = useState(false);
-  const menuId = useId();
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  const active = OPTIONS.find((o) => o.mode === mode) ?? OPTIONS[2];
+  const { mode, open, toggleOpen, menuId, rootRef, active, options, selectMode } =
+    useThemeDropdown();
   const ActiveIcon = active.Icon;
-
-  useEffect(() => {
-    if (!open) return;
-    function onPointerDown(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
 
   return (
     <div ref={rootRef} className={cn("relative", className)}>
@@ -51,7 +19,7 @@ export function ThemeToggle({ className }: { className?: string }) {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggleOpen}
         title={`Theme: ${active.label}`}
       >
         <ActiveIcon className="size-5" aria-hidden />
@@ -65,7 +33,7 @@ export function ThemeToggle({ className }: { className?: string }) {
           aria-label="Theme"
           className="absolute right-0 top-full z-[60] mt-1 min-w-[9.5rem] rounded-md border border-border bg-popover p-1 shadow-md"
         >
-          {OPTIONS.map(({ mode: optionMode, label, Icon }) => (
+          {options.map(({ mode: optionMode, label, Icon }) => (
             <button
               key={optionMode}
               type="button"
@@ -76,10 +44,7 @@ export function ThemeToggle({ className }: { className?: string }) {
                 "hover:bg-muted focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
                 mode === optionMode && "bg-accent-soft text-foreground"
               )}
-              onClick={() => {
-                setMode(optionMode);
-                setOpen(false);
-              }}
+              onClick={() => selectMode(optionMode)}
             >
               <Icon className="size-4 shrink-0" aria-hidden />
               {label}
