@@ -143,12 +143,14 @@ describe("POST /api/upload/audio", () => {
     expect(json.clientToken).toBe("stubbed-token-abc");
   });
 
-  test("returns 400 when handleUpload throws (e.g. signature/auth failure)", async () => {
+  test("returns 400 with a generic error (no internal detail) when handleUpload throws", async () => {
     handleUploadMock.mockRejectedValue(new Error("bad signature"));
     const res = await POST(makeRequest({ type: "blob.generate-client-token", payload: {} }));
     expect(res.status).toBe(400);
     const json = (await res.json()) as { error?: string; debugId?: string };
-    expect(json.error).toContain("bad signature");
+    // Error must not expose internal exception detail to the client.
+    expect(json.error).not.toContain("bad signature");
+    expect(json.error).toContain("authorization");
     expect(typeof json.debugId).toBe("string");
   });
 });

@@ -51,8 +51,21 @@ const VALID_PAYLOAD = {
 // ---------------------------------------------------------------------------
 
 describe("POST /api/queues/chunk-transcribe", () => {
+  const originalCronSecret = process.env.CRON_SECRET;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    // Clear CRON_SECRET so the auth guard is bypassed in these worker-logic tests.
+    // Auth behaviour is tested separately in src/__tests__/security/chunk-transcribe-auth.test.ts.
+    delete process.env.CRON_SECRET;
+  });
+
+  afterEach(() => {
+    if (originalCronSecret === undefined) {
+      delete process.env.CRON_SECRET;
+    } else {
+      process.env.CRON_SECRET = originalCronSecret;
+    }
   });
 
   // -------------------------------------------------------------------------

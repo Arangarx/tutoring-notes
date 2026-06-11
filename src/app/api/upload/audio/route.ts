@@ -125,6 +125,9 @@ export async function POST(request: Request): Promise<Response> {
     console.error(`[uploadAudio.route] rid=${rid} handleUpload threw:`, msg);
     // 400 here surfaces as a thrown error on the client side — see
     // uploadAudioDirect for how it maps to a user-facing message.
-    return NextResponse.json({ error: msg, debugId: rid }, { status: 400 });
+    return NextResponse.json(
+      { error: "Upload authorization failed. Please try again.", debugId: rid },
+      { status: 400 }
+    );
   }
 }
