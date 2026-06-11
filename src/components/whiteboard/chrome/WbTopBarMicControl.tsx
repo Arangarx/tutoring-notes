@@ -99,7 +99,7 @@ export function WbTopBarMicControl({
   };
 
   return (
-    <div className="mynk-wb-mic-wrap" ref={wrapRef} data-testid="wb-topbar-mic">
+    <div className="mynk-wb-mic-wrap" data-testid="wb-topbar-mic">
       {/* Hidden meter target — recorder rAF writes here when popover is closed */}
       <div className="mynk-wb-mic-meter-hidden" aria-hidden>
         <div ref={audio.meterBarRef} style={{ width: "0%", height: "100%" }} />
@@ -116,27 +116,29 @@ export function WbTopBarMicControl({
         <WbIconMic />
         <WbInlineMicMeter level={meterLevel} />
       </button>
-      <button
-        type="button"
-        className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-mic-caret"
-        title="Microphone settings"
-        aria-label="Microphone settings"
-        aria-expanded={popoverOpen}
-        disabled={disabled}
-        onClick={(e) => {
-          e.stopPropagation();
-          setPopoverOpen((p) => !p);
-        }}
-        data-testid="wb-topbar-mic-settings"
-      >
-        <span className="mynk-wb-share-chevron">▾</span>
-      </button>
+      <div className="mynk-wb-mic-settings-anchor" ref={wrapRef}>
+        <button
+          type="button"
+          className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-mic-caret"
+          title="Microphone settings"
+          aria-label="Microphone settings"
+          aria-expanded={popoverOpen}
+          disabled={disabled}
+          onClick={(e) => {
+            e.stopPropagation();
+            setPopoverOpen((p) => !p);
+          }}
+          data-testid="wb-topbar-mic-settings"
+        >
+          <span className="mynk-wb-share-chevron">▾</span>
+        </button>
 
-      {popoverOpen && (
-        <div className="mynk-wb-mic-popover" role="dialog" aria-label="Microphone settings">
-          <MicControls {...micControls} />
-        </div>
-      )}
+        {popoverOpen && (
+          <div className="mynk-wb-mic-popover" role="dialog" aria-label="Microphone settings">
+            <MicControls {...micControls} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

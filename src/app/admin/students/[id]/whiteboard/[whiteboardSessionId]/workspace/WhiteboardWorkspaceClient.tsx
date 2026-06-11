@@ -137,6 +137,7 @@ import {
   shapeIconFor,
   WbIconCamera,
   WbIconCollapse,
+  WbIconEndSession,
   WbIconEraser,
   WbIconMore,
   WbIconPencil,
@@ -4371,37 +4372,54 @@ export function WhiteboardWorkspaceClient({
           </div>
         </div>
 
-        <button
-          type="button"
-          className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__overflow-btn"
-          title="More session options"
-          aria-label="More session options"
-          aria-expanded={topbarMoreOpen}
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleMenu("topbar-more");
-          }}
-          data-testid="wb-topbar-overflow"
-        >
-          <WbIconMore size={14} />
-        </button>
+        <div className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing">
+          <button
+            type="button"
+            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__overflow-btn"
+            title="More session options"
+            aria-label="More session options"
+            aria-expanded={topbarMoreOpen}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleMenu("topbar-more");
+            }}
+            data-testid="wb-topbar-overflow"
+          >
+            <WbIconMore size={14} />
+          </button>
 
-        <button
-          type="button"
-          className="mynk-wb-tb-btn mynk-wb-tb-btn--primary"
-          onClick={handleEndSession}
-          disabled={endingBusy}
-          data-testid="wb-end-session"
-        >
-          {endingState === "finalizing"
-            ? finalizingOutboxState === "uploading" &&
-              finalizingSegmentCount > 0
-              ? `Saving ${finalizingSegmentCount} segment${finalizingSegmentCount === 1 ? "" : "s"}…`
-              : "Finalizing…"
-            : endingState === "ending"
-              ? "Finalizing…"
-              : "End session"}
-        </button>
+          {(() => {
+            const endSessionLabel =
+              endingState === "finalizing"
+                ? finalizingOutboxState === "uploading" &&
+                  finalizingSegmentCount > 0
+                  ? `Saving ${finalizingSegmentCount} segment${finalizingSegmentCount === 1 ? "" : "s"}…`
+                  : "Finalizing…"
+                : endingState === "ending"
+                  ? "Finalizing…"
+                  : "End session";
+            return (
+              <button
+                type="button"
+                className={`mynk-wb-tb-btn mynk-wb-tb-btn--primary${touchLayout ? " mynk-wb-tb-btn--end-touch" : ""}`}
+                onClick={handleEndSession}
+                disabled={endingBusy}
+                data-testid="wb-end-session"
+                aria-label={endSessionLabel}
+                title={endSessionLabel}
+              >
+                {touchLayout ? (
+                  <>
+                    <WbIconEndSession size={14} />
+                    <span className="mynk-wb-sr-only">{endSessionLabel}</span>
+                  </>
+                ) : (
+                  endSessionLabel
+                )}
+              </button>
+            );
+          })()}
+        </div>
       </header>
 
       <div className="mynk-wb-live-column">
@@ -4685,6 +4703,13 @@ export function WhiteboardWorkspaceClient({
                 backgroundColor: inkDisplayHex(strokeColor, excalidrawTheme),
               }}
             />
+            <span className="mynk-wb-summary-stroke" aria-hidden>
+              <StrokeWidthIcon
+                lineH={
+                  WB_STROKE_WIDTHS.find((w) => w.value === strokeWidth)?.lineH ?? 2
+                }
+              />
+            </span>
             <span
               className="mynk-wb-summary-chip"
               title={roughnessLabel}

@@ -71,6 +71,12 @@
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
+  min-width: 0;
+}
+
+.mynk-wb-topbar__zone--trailing {
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .mynk-wb-topbar__sep {
@@ -116,6 +122,7 @@
   width: 24px;
   padding: 4px 0;
   align-items: center;
+  overflow: hidden;
 }
 
 .mynk-wb-strip--collapsed .mynk-wb-strip__tools,
@@ -139,6 +146,15 @@
 .mynk-wb-strip__collapse-btn {
   width: 100%;
   justify-content: center;
+}
+
+.mynk-wb-strip--collapsed .mynk-wb-strip__collapse-btn {
+  width: 24px;
+  max-width: 24px;
+  min-width: 24px;
+  height: 32px;
+  border-radius: 4px;
+  overflow: hidden;
 }
 
 .mynk-wb-strip__sep {
@@ -357,6 +373,15 @@
   color: var(--accent-on);
 }
 
+/* Touch top bar — icon-only End session saves horizontal space at ~390px */
+.mynk-wb-tb-btn--end-touch {
+  width: 32px;
+  min-width: 32px;
+  padding: 0;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
 .mynk-wb-tb-btn--copied {
   color: var(--success);
 }
@@ -395,6 +420,15 @@
   position: relative;
   display: flex;
   align-items: center;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.mynk-wb-mic-settings-anchor {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .mynk-wb-mic-meter-hidden {
@@ -1208,7 +1242,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 10px 0 6px;
+  padding: 10px 40px 6px 0;
   position: relative;
   flex-shrink: 0;
   touch-action: none;
@@ -1223,19 +1257,28 @@
 
 .mynk-wb-action-sheet__close {
   position: absolute;
-  right: 0;
-  top: 8px;
-  width: 28px;
-  height: 28px;
-  border-radius: 4px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-muted);
+  right: 4px;
+  top: 6px;
+  z-index: 3;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--card);
+  color: var(--foreground);
   cursor: pointer;
-  font-size: 16px;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+.mynk-wb-action-sheet__close:hover {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
 }
 
 .mynk-wb-action-sheet__body {
@@ -1392,6 +1435,45 @@
 .mynk-wb-chrome[data-layout="narrow"] .mynk-wb-wordmark {
   font-size: 14px;
   padding: 0 4px;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-topbar__sep,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-topbar__sep,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-topbar__sep {
+  margin: 0 2px;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-timer,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-timer,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-timer {
+  padding: 0 4px;
+  font-size: 13px;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-toolbar-toggle,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-toolbar-toggle,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-toolbar-toggle {
+  padding: 0 8px;
+  max-width: 96px;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-toolbar-toggle__label,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-toolbar-toggle__label,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-toolbar-toggle__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-mobile-btn,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-mobile-btn {
+  gap: 6px;
+  padding: 8px;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-mobile-btn .mynk-wb-summary-stroke,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-mobile-btn .mynk-wb-summary-stroke {
+  width: 22px;
 }
 
 /* TM-12 — persistent show/hide tools toggle (touch layouts only) */
