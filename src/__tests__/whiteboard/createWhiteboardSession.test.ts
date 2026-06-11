@@ -55,15 +55,12 @@ jest.mock("@/lib/db", () => ({
   __esModule: true,
   db: {
     student: {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      findUnique: (arg: any) => dbStudentFindUniqueMock(arg),
+      findUnique: (...args: unknown[]) => dbStudentFindUniqueMock(...args),
     },
     consentRecord: {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      findFirst: (arg: any) => dbConsentRecordFindFirstMock(arg),
+      findFirst: (...args: unknown[]) => dbConsentRecordFindFirstMock(...args),
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    $transaction: (fn: any) => dbTransactionMock(fn),
+    $transaction: (fn: (tx: unknown) => Promise<unknown>) => dbTransactionMock(fn),
   },
   withDbRetry: <T,>(fn: () => Promise<T>) => fn(),
 }));
