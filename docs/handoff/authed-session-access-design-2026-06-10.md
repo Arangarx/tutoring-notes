@@ -25,6 +25,8 @@
 
 See §8 for full resolution notes. Phase sections below reflect these calls.
 
+**Build kickoff (Andrew 2026-06-10):** Phase 1 ships the full auth-wall mechanism with `NOTES_AUTH_WALL` **default `false`** (dormant on `v1-redesign`). The flag flips to `true` **only** at the `v1-redesign`→`master` cutover, and **only after** Sarah's pilot families are claimed/credentialed — Sarah has only ever used `master` (prod); flipping earlier would lock her out. Phase 1 gates **viewing** of notes on **ownership alone**; consent enforcement (Gate B2) is a **separate parallel thread**, intentionally decoupled. Sequencing confirmed: Phase 1 first, then Phase 2 (session-login + Gate A2 waiting room) as **one combined scope**. Full addendum: [Kickoff decisions 2026-06-10](#kickoff-decisions-2026-06-10-build).
+
 ---
 
 ## §1. Provenance + Decision
@@ -693,6 +695,19 @@ Collision check against existing registry (`rid`, `wbsid`, `wba`, `obx`, `dft`, 
 | **Phase 2 — Session-login** | Phase 1 complete; `SessionParticipant` model in schema | Real `assertIsSessionParticipant`; `/join/[sessionId]` route (waiting room + live; == Gate A2); fragment preservation; learner dashboard; learner-session variants for `join-timer` + `wb-asset` + `upload/blob`; "Copy student link" branch; Option A E2E key | Gate A2 (waiting room) + consent model correctness |
 
 Phase 2 IS Gate A2. Dispatch them as one executor scope.
+
+---
+
+## Kickoff decisions 2026-06-10 (build)
+
+Andrew locked the following at Phase 1 build kickoff. These refine §3.5.3 grace-window language for **implementation and cutover timing**; the hard-wall design (OQ-1) is unchanged.
+
+| Decision | Outcome |
+|---|---|
+| **Wall ships dormant** | Phase 1 (notes-login) builds the **full** auth-wall mechanism (`assertCanAccessShareLink`, middleware, anon API hardening, `/account/children/[learnerId]/notes`, tests, `sal=` logging) but ships with **`NOTES_AUTH_WALL` default `false`**. On `v1-redesign`, anonymous `/s/[token]` access continues until the flag is explicitly enabled. |
+| **When the flag flips** | `NOTES_AUTH_WALL=true` **only** at the **`v1-redesign`→`master` cutover**, and **only after** Sarah's pilot families are claimed/credentialed. Rationale: Sarah has only ever used `master` (production); enabling the wall on `master` before v1 lands there, or before families are credentialed, would lock her out of notes. |
+| **View vs consent** | Phase 1 gates **viewing** session notes on **ownership** (`assertOwnsLearnerProfile` / learner self-match) **alone**. Parent privacy **consent** enforcement (Gate B2 — `SessionConsentSnapshot`, capture gating) is a **separate parallel thread**, intentionally decoupled from the notes-login wall. |
+| **Sequencing** | **Phase 1 first** (notes-login on `feat/notes-login`). **Then** Phase 2 + Gate A2 (session-login + waiting room) as **one combined executor scope** — not two branches to merge later (see §6). |
 
 ---
 
