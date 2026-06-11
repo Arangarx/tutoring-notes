@@ -64,7 +64,16 @@ export type ExcalidrawApiLike = {
       created: number;
     }>
   ) => void;
-  updateScene: (data: { elements: ReadonlyArray<unknown> }) => void;
+  updateScene: (data: {
+    elements?: ReadonlyArray<unknown>;
+    collaborators?: Map<string, {
+      pointer?: { x: number; y: number; tool: "pointer" | "laser"; renderCursor?: boolean; laserColor?: string };
+      button?: "up" | "down";
+      username?: string | null;
+      color?: { background: string; stroke: string };
+    }>;
+    captureUpdate?: string;
+  }) => void;
   scrollToContent?: (
     target?: ReadonlyArray<unknown>,
     opts?: { fitToContent?: boolean; animate?: boolean }

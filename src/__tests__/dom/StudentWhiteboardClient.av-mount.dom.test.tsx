@@ -84,8 +84,10 @@ type FakeSyncClient = {
   onDisconnect: jest.Mock;
   onPeerCountChange: jest.Mock;
   onRoomPeersChange: jest.Mock;
+  onRemotePointer: jest.Mock;
   broadcastScene: jest.Mock;
   broadcastDocument: jest.Mock;
+  broadcastPointer: jest.Mock;
   flushPendingBroadcast: jest.Mock;
   __triggerConnect: () => void;
   __triggerDisconnect: () => void;
@@ -119,8 +121,10 @@ const mockCreateWhiteboardSyncClient = jest.fn(
       }),
       onPeerCountChange: jest.fn(() => () => {}),
       onRoomPeersChange: jest.fn(() => () => {}),
+      onRemotePointer: jest.fn(() => () => {}),
       broadcastScene: jest.fn(),
       broadcastDocument: jest.fn(),
+      broadcastPointer: jest.fn(),
       flushPendingBroadcast: jest.fn(),
       __triggerConnect: () => {
         connected = true;

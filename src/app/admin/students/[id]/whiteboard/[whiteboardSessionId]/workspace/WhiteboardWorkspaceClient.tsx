@@ -164,6 +164,7 @@ import {
   EXCALIDRAW_STROKE_DARK_HEX,
   inkDisplayHex,
   WB_STROKE_WIDTHS,
+  WB_LASER_TUTOR_HEX,
 } from "@/styles/token-values";
 import { StrokeWidthIcon } from "@/components/whiteboard/chrome/wb-icons";
 import "./whiteboard-chrome.css";
@@ -3341,6 +3342,59 @@ export function WhiteboardWorkspaceClient({
   }, [recorder, paintRecoveredSceneIntoExcalidraw]);
 
   // ---------------------------------------------------------------
+  // Excalidraw onPointerUpdate wiring — laser sync (B9 pilot fix)
+  // ---------------------------------------------------------------
+
+  // Throttle pointer broadcasts to ~16ms max cadence (≈60fps ceiling).
+  // This is entirely separate from the 50ms document throttle; the laser
+  // path NEVER enters handleExcalidrawChange / scheduleDocumentBroadcast.
+  const pointerThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastPointerEmitRef = useRef<number>(0);
+
+  const handlePointerUpdate = useCallback(
+    (payload: {
+      pointer: { x: number; y: number; tool: "pointer" | "laser" };
+      button: "down" | "up";
+    }) => {
+      if (!sync || !syncUrl) return;
+      if (activeToolTypeRef.current !== "laser") return;
+      if (payload.pointer.tool !== "laser") return;
+
+      const now = Date.now();
+      const elapsed = now - lastPointerEmitRef.current;
+      const MIN_INTERVAL_MS = 16;
+
+      const emit = () => {
+        lastPointerEmitRef.current = Date.now();
+        sync.broadcastPointer({
+          pageId: activePageIdRef.current,
+          x: payload.pointer.x,
+          y: payload.pointer.y,
+          tool: "laser",
+          button: payload.button,
+          color: WB_LASER_TUTOR_HEX,
+        });
+      };
+
+      if (elapsed >= MIN_INTERVAL_MS) {
+        if (pointerThrottleRef.current !== null) {
+          clearTimeout(pointerThrottleRef.current);
+          pointerThrottleRef.current = null;
+        }
+        emit();
+      } else {
+        if (pointerThrottleRef.current === null) {
+          pointerThrottleRef.current = setTimeout(() => {
+            pointerThrottleRef.current = null;
+            emit();
+          }, MIN_INTERVAL_MS - elapsed);
+        }
+      }
+    },
+    [sync, syncUrl]
+  );
+
+  // ---------------------------------------------------------------
   // Excalidraw onChange wiring
   // ---------------------------------------------------------------
 
@@ -4614,6 +4668,8 @@ export function WhiteboardWorkspaceClient({
             validateEmbeddable={validateExcalidrawEmbeddable}
             renderEmbeddable={renderGraphEmbeddable}
             onLinkOpen={handleExcalidrawLinkOpen}
+            isCollaborating={Boolean(sync && syncUrl)}
+            onPointerUpdate={handlePointerUpdate}
             initialData={{
               appState: {
                 currentItemRoughness: 0,
