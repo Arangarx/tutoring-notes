@@ -269,6 +269,21 @@
   pointer-events: auto;
 }
 
+/*
+ * Mobile AV pip is fixed top-right (.mynk-wb-av-cluster--mobile: inset 12px,
+ * width 120px narrow/phone-landscape or 180px tablet-portrait — WbAVCluster).
+ * Keep banners left of the pip so "waiting for student" stays readable (z-20
+ * sits under z-25 pip; shrinking the box beats lowering z-index).
+ */
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-banners,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-banners {
+  right: calc(12px + 120px + 8px);
+}
+
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-banners {
+  right: calc(12px + 180px + 8px);
+}
+
 /* ΓöÇΓöÇ Wordmark + LIVE badge (session shell mock) ΓöÇΓöÇ */
 .mynk-wb-wordmark {
   font-family: var(--font-display, var(--font-sans));
