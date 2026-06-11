@@ -96,6 +96,28 @@ export function WbIconEllipse({ size = 16, className }: IconProps) {
   );
 }
 
+/** Stroke styles / colors — swatch + diagonal stroke reads as “adjust styles”. */
+export function WbIconStyles({ size = 16, className }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="8" cy="8" r="3.5" fill="currentColor" stroke="none" opacity="0.85" />
+      <line x1="11" y1="11" x2="20" y2="20" />
+      <path d="M16 20h4v-4" />
+    </svg>
+  );
+}
+
+/** End session — door/exit glyph for compact touch top bar. */
+export function WbIconEndSession({ size = 16, className }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  );
+}
+
 export function WbIconMore({ size = 16, className }: IconProps) {
   return (
     <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

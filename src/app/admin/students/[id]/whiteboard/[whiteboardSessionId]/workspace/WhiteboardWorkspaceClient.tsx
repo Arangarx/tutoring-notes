@@ -120,6 +120,11 @@ import { GraphInsertButton } from "@/components/whiteboard/GraphInsertButton";
 import { BoardTabStrip } from "@/components/whiteboard/chrome/BoardTabStrip";
 import { WbAVCluster } from "@/components/whiteboard/chrome/WbAVCluster";
 import {
+  WbActionSheet,
+  WbActionSheetBackdrop,
+} from "@/components/whiteboard/chrome/WbActionSheet";
+import { WbChromeErrorBoundary } from "@/components/whiteboard/chrome/WbChromeErrorBoundary";
+import {
   WbStrokePropsPanel,
   RoughnessIcon,
   SharpnessIcon,
@@ -132,12 +137,14 @@ import {
   shapeIconFor,
   WbIconCamera,
   WbIconCollapse,
+  WbIconEndSession,
   WbIconEraser,
   WbIconMore,
   WbIconPencil,
   WbIconRedo,
   WbIconSelect,
   WbIconShare,
+  WbIconStyles,
   WbIconText,
   WbIconUndo,
   WbIconWand,
@@ -344,7 +351,8 @@ export function WhiteboardWorkspaceClient({
 }: Props) {
   const router = useRouter();
   // TU-12: Excalidraw theme follows app-selected theme (not OS-only)
-  const { resolvedTheme: excalidrawTheme } = useTheme();
+  const { resolvedTheme: excalidrawTheme, mode: themeMode, setMode: setThemeMode } =
+    useTheme();
   const { onLocalElementSnapshot, shouldDropRemoteElement } =
     useSyncTombstonedElementIds();
 
@@ -590,23 +598,49 @@ export function WhiteboardWorkspaceClient({
   const [moreStylesOpen, setMoreStylesOpen] = useState(false);
   const [selectedShapeTool, setSelectedShapeTool] =
     useState<WbShapeToolType>("line");
-  const [propsSheetOpen, setPropsSheetOpen] = useState(false);
   // Single-open menu state — only one chrome popover/dropdown is open at a time.
   // Opening any menu closes all others; outside-click/Esc handled per-menu.
-  const [openMenu, setOpenMenu] = useState<"share" | "view" | "shapes" | "more" | "props" | "theme" | null>(null);
+  const [openMenu, setOpenMenu] = useState<
+    | "share"
+    | "view"
+    | "shapes"
+    | "more"
+    | "props"
+    | "theme"
+    | "topbar-more"
+    | null
+  >(null);
   const shareMenuOpen = openMenu === "share";
   const viewMenuOpen = openMenu === "view";
   const shapesDropdownOpen = openMenu === "shapes";
   const morePopoverOpen = openMenu === "more";
   const propsCompactOpen = openMenu === "props";
   const themeMenuOpen = openMenu === "theme";
-  const toggleMenu = (menu: "share" | "view" | "shapes" | "more" | "props" | "theme") =>
-    setOpenMenu((p) => (p === menu ? null : menu));
+  const topbarMoreOpen = openMenu === "topbar-more";
+  const toggleMenu = (
+    menu:
+      | "share"
+      | "view"
+      | "shapes"
+      | "more"
+      | "props"
+      | "theme"
+      | "topbar-more"
+  ) => setOpenMenu((p) => (p === menu ? null : menu));
+  const dismissTouchSheets = useCallback(() => {
+    setOpenMenu(null);
+  }, []);
+  const touchSheetOpen =
+    openMenu === "props" ||
+    openMenu === "shapes" ||
+    openMenu === "more" ||
+    openMenu === "topbar-more";
   const [gridEnabled, setGridEnabled] = useState(false);
   const [roughness, setRoughness] = useState(0);
   const [roundness, setRoundness] = useState<"sharp" | "round">("sharp");
-  const layoutMode = useWbLayoutMode();
+  const { layoutMode, orientation } = useWbLayoutMode();
   const touchLayout = isTouchLayout(layoutMode);
+  const [toolbarHidden, setToolbarHidden] = useState(false);
   // Stroke props — tracked from Excalidraw onChange (appState).
   // Always initialize to EXCALIDRAW_STROKE_HEX (#1e293b) in both themes.
   // Excalidraw's dark-mode canvas filter (invert+hue-rotate) automatically
@@ -3550,10 +3584,6 @@ export function WhiteboardWorkspaceClient({
     api?.updateScene?.({ appState: { gridModeEnabled: enabled } });
   }, []);
 
-  const dismissTouchProps = useCallback(() => {
-    setPropsSheetOpen(false);
-  }, []);
-
   const handleAcquireMic = useCallback(async () => {
     if (!workspaceAudio.localMicStream && !liveAv.localAudioStream) {
       await liveAv.requestMic();
@@ -3583,27 +3613,6 @@ export function WhiteboardWorkspaceClient({
     void liveAv.requestCam();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveAv.hasCamPermission]);
-
-  const propsSheetSwipeRef = useRef<{ startY: number } | null>(null);
-
-  const onPropsSheetHandlePointerDown = useCallback((e: React.PointerEvent) => {
-    if (!propsSheetOpen) return;
-    propsSheetSwipeRef.current = { startY: e.clientY };
-    e.currentTarget.setPointerCapture(e.pointerId);
-  }, [propsSheetOpen]);
-
-  const onPropsSheetHandlePointerMove = useCallback((e: React.PointerEvent) => {
-    const swipe = propsSheetSwipeRef.current;
-    if (!swipe) return;
-    if (e.clientY - swipe.startY > 60) {
-      propsSheetSwipeRef.current = null;
-      dismissTouchProps();
-    }
-  }, [dismissTouchProps]);
-
-  const onPropsSheetHandlePointerUp = useCallback(() => {
-    propsSheetSwipeRef.current = null;
-  }, []);
 
   const roughnessLabel =
     roughness === 0 ? "Architect" : roughness === 1 ? "Artist" : "Cartoon";
@@ -3690,6 +3699,221 @@ export function WhiteboardWorkspaceClient({
     </div>
   );
 
+  const renderOverflowMenuItems = (closeAfterAction: boolean) => (
+    <>
+      {touchLayout && (
+        <>
+          <button
+            type="button"
+            className="mynk-wb-menu-item"
+            onClick={() => {
+              selectTool("text");
+              if (closeAfterAction) setOpenMenu(null);
+            }}
+          >
+            <span>Text</span>
+            <span className="mynk-wb-menu-item__kbd">T</span>
+          </button>
+          <div className="mynk-wb-popover-sep" />
+        </>
+      )}
+      <button
+        type="button"
+        className="mynk-wb-menu-item"
+        onClick={() => {
+          triggerSendToBack();
+          if (closeAfterAction) setOpenMenu(null);
+        }}
+      >
+        <span>Send to back</span>
+        <span className="mynk-wb-menu-item__kbd">Ctrl+Shift+[</span>
+      </button>
+      <button
+        type="button"
+        className="mynk-wb-menu-item"
+        onClick={() => {
+          triggerSendBackward();
+          if (closeAfterAction) setOpenMenu(null);
+        }}
+      >
+        <span>↓ Send backward</span>
+        <span className="mynk-wb-menu-item__kbd">Ctrl+[</span>
+      </button>
+      <button
+        type="button"
+        className="mynk-wb-menu-item"
+        onClick={() => {
+          triggerBringForward();
+          if (closeAfterAction) setOpenMenu(null);
+        }}
+      >
+        <span>↑ Bring forward</span>
+        <span className="mynk-wb-menu-item__kbd">Ctrl+]</span>
+      </button>
+      <button
+        type="button"
+        className="mynk-wb-menu-item"
+        onClick={() => {
+          triggerBringToFront();
+          if (closeAfterAction) setOpenMenu(null);
+        }}
+      >
+        <span>Bring to front</span>
+        <span className="mynk-wb-menu-item__kbd">Ctrl+Shift+]</span>
+      </button>
+      <div className="mynk-wb-popover-sep" />
+      <button
+        type="button"
+        className="mynk-wb-menu-item mynk-wb-menu-item--destructive"
+        onClick={() => {
+          triggerDeleteSelected();
+          setOpenMenu(null);
+        }}
+        aria-label="Delete selected elements"
+      >
+        <span>Delete selected</span>
+        <span className="mynk-wb-menu-item__kbd">Delete</span>
+      </button>
+      <div className="mynk-wb-popover-sep" />
+      <button
+        type="button"
+        className="mynk-wb-menu-item"
+        onClick={() => {
+          selectTool("hand");
+          setOpenMenu(null);
+        }}
+      >
+        <span>Hand / pan</span>
+        <span className="mynk-wb-menu-item__kbd">H</span>
+      </button>
+      <div className="mynk-wb-popover-sep" />
+      <p className="mynk-wb-info-note">
+        PDF pages are always below your drawing.
+      </p>
+    </>
+  );
+
+  const renderTopBarOverflowItems = () => (
+    <div className="mynk-wb-action-sheet__menu-list">
+      <button
+        type="button"
+        className="mynk-wb-menu-item"
+        disabled={!syncUrl || copyState === "copying"}
+        onClick={() => {
+          void handleCopyStudentLink();
+          setOpenMenu(null);
+        }}
+        data-testid="wb-overflow-copy-link"
+      >
+        <WbIconShare />
+        <span>
+          {copyState === "copying"
+            ? "Copying…"
+            : copyState === "copied"
+              ? "Copied!"
+              : "Copy student join link"}
+        </span>
+      </button>
+      <div className="mynk-wb-popover-sep" />
+      <button
+        type="button"
+        className="mynk-wb-menu-item"
+        disabled={endingBusy}
+        onClick={() => {
+          triggerUndo();
+        }}
+        data-testid="wb-overflow-undo"
+      >
+        <WbIconUndo />
+        <span>Undo</span>
+      </button>
+      <button
+        type="button"
+        className="mynk-wb-menu-item"
+        disabled={endingBusy}
+        onClick={() => {
+          triggerRedo();
+        }}
+        data-testid="wb-overflow-redo"
+      >
+        <WbIconRedo />
+        <span>Redo</span>
+      </button>
+      <button
+        type="button"
+        className="mynk-wb-menu-item"
+        disabled={
+          endingBusy ||
+          liveAv.hasCamPermission === "denied" ||
+          (liveAv.videoDevices?.length ?? 1) === 0
+        }
+        onClick={() => {
+          void handleTopBarCam();
+        }}
+        data-testid="wb-overflow-cam"
+      >
+        <WbIconCamera size={14} />
+        <span>
+          {liveAv.isCamMuted ? "Turn camera on" : "Turn camera off"}
+        </span>
+      </button>
+      <div className="mynk-wb-popover-sep" />
+      <label className="mynk-wb-view-item mynk-wb-menu-item">
+        <input
+          type="checkbox"
+          checked={gridEnabled}
+          onChange={(e) => toggleGrid(e.target.checked)}
+        />
+        Show canvas grid
+      </label>
+      <div className="mynk-wb-popover-sep" />
+      <div className="mynk-wb-topbar-overflow-theme" role="group" aria-label="Theme">
+        {(
+          [
+            { mode: "light" as const, label: "Light theme" },
+            { mode: "dark" as const, label: "Dark theme" },
+            { mode: "system" as const, label: "System theme" },
+          ] as const
+        ).map(({ mode, label }) => (
+          <button
+            key={mode}
+            type="button"
+            className={`mynk-wb-menu-item${themeMode === mode ? " mynk-wb-menu-item--active" : ""}`}
+            aria-pressed={themeMode === mode}
+            onClick={() => setThemeMode(mode)}
+          >
+            <span>{label}</span>
+          </button>
+        ))}
+      </div>
+      <div className="mynk-wb-popover-sep" />
+      <div className="mynk-wb-topbar-overflow-inserts">
+        <PdfImageUploadButton
+          excalidrawAPI={excalidrawAPI}
+          whiteboardSessionId={whiteboardSessionId}
+          studentId={studentId}
+          disabled={endingBusy}
+          integrate={pdfBoardIntegrate}
+          chrome
+        />
+        <MathInsertButton
+          excalidrawAPI={excalidrawAPI}
+          whiteboardSessionId={whiteboardSessionId}
+          studentId={studentId}
+          disabled={endingBusy}
+          chrome
+        />
+        <GraphInsertButton
+          excalidrawAPI={excalidrawAPI}
+          whiteboardSessionId={whiteboardSessionId}
+          studentId={studentId}
+          disabled={endingBusy}
+          chrome
+        />
+      </div>
+    </div>
+  );
+
   const renderMoreOverflowMenu = (iconSize = 16) => (
     <>
       <div className="mynk-wb-more-menu">
@@ -3701,7 +3925,7 @@ export function WhiteboardWorkspaceClient({
             toggleMenu("more");
           }}
         />
-        {morePopoverOpen && (
+        {!touchLayout && morePopoverOpen && (
           <div
             className="mynk-wb-more-popover"
             role="dialog"
@@ -3709,60 +3933,89 @@ export function WhiteboardWorkspaceClient({
             data-testid="wb-more-popover"
             onPointerDown={(e) => e.stopPropagation()}
           >
-            <button type="button" className="mynk-wb-menu-item" onClick={() => triggerSendToBack()}>
-              <span>Send to back</span>
-              <span className="mynk-wb-menu-item__kbd">Ctrl+Shift+[</span>
-            </button>
-            <button type="button" className="mynk-wb-menu-item" onClick={() => triggerSendBackward()}>
-              <span>↓ Send backward</span>
-              <span className="mynk-wb-menu-item__kbd">Ctrl+[</span>
-            </button>
-            <button type="button" className="mynk-wb-menu-item" onClick={() => triggerBringForward()}>
-              <span>↑ Bring forward</span>
-              <span className="mynk-wb-menu-item__kbd">Ctrl+]</span>
-            </button>
-            <button type="button" className="mynk-wb-menu-item" onClick={() => triggerBringToFront()}>
-              <span>Bring to front</span>
-              <span className="mynk-wb-menu-item__kbd">Ctrl+Shift+]</span>
-            </button>
-            <div className="mynk-wb-popover-sep" />
-            <button
-              type="button"
-              className="mynk-wb-menu-item mynk-wb-menu-item--destructive"
-              onClick={() => {
-                triggerDeleteSelected();
-                setOpenMenu(null);
-              }}
-              aria-label="Delete selected elements"
-            >
-              <span>Delete selected</span>
-              <span className="mynk-wb-menu-item__kbd">Delete</span>
-            </button>
-            <div className="mynk-wb-popover-sep" />
-            <button
-              type="button"
-              className="mynk-wb-menu-item"
-              onClick={() => {
-                selectTool("hand");
-                setOpenMenu(null);
-              }}
-            >
-              <span>Hand / pan</span>
-              <span className="mynk-wb-menu-item__kbd">H</span>
-            </button>
-            <div className="mynk-wb-popover-sep" />
-            <p className="mynk-wb-info-note">
-              PDF pages are always below your drawing.
-            </p>
+            {renderOverflowMenuItems(false)}
           </div>
         )}
       </div>
     </>
   );
 
+  const renderShapesSheetItems = () => (
+    <div className="mynk-wb-action-sheet__shapes-list" role="menu">
+      {WB_SHAPE_TOOLS.map(({ type, label, Icon }) => (
+        <button
+          key={type}
+          type="button"
+          role="menuitem"
+          className={`mynk-wb-shapes-item${
+            (activeToolType === type || selectedShapeTool === type) &&
+            WB_SHAPE_TOOLS.some((s) => s.type === activeToolType)
+              ? " mynk-wb-shapes-item--active"
+              : selectedShapeTool === type
+                ? " mynk-wb-shapes-item--active"
+                : ""
+          }`}
+          onClick={() => selectTool(type)}
+        >
+          <Icon size={16} />
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  const renderShapesMenu = (iconSize: number) => (
+    <div className="mynk-wb-shapes-menu">
+      <WbToolBtn
+        icon={shapeIconFor(
+          WB_SHAPE_TOOLS.some((s) => s.type === activeToolType)
+            ? activeToolType
+            : selectedShapeTool,
+          iconSize
+        )}
+        label="Shapes"
+        active={WB_SHAPE_TOOLS.some((s) => s.type === activeToolType)}
+        onClick={() => {
+          const shapeActive = WB_SHAPE_TOOLS.some((s) => s.type === activeToolType);
+          // Narrow/tablet: when a shape is already active, primary tap opens the picker.
+          if (touchLayout && shapeActive) {
+            toggleMenu("shapes");
+            return;
+          }
+          selectTool(selectedShapeTool);
+        }}
+        pulldown={!touchLayout}
+        onPulldown={touchLayout ? undefined : () => toggleMenu("shapes")}
+      />
+      {!touchLayout && shapesDropdownOpen && (
+        <div className="mynk-wb-shapes-dropdown" role="menu">
+          {WB_SHAPE_TOOLS.map(({ type, label, Icon }) => (
+            <button
+              key={type}
+              type="button"
+              role="menuitem"
+              className={`mynk-wb-shapes-item${
+                (activeToolType === type || selectedShapeTool === type) &&
+                WB_SHAPE_TOOLS.some((s) => s.type === activeToolType)
+                  ? " mynk-wb-shapes-item--active"
+                  : selectedShapeTool === type
+                    ? " mynk-wb-shapes-item--active"
+                    : ""
+              }`}
+              onClick={() => selectTool(type)}
+            >
+              <Icon size={14} />
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   const renderToolStripButtons = (large = false) => {
     const iconSize = large ? 18 : 16;
-    return (
+    const coreTools = (
       <>
         <WbToolBtn
           icon={<WbIconSelect size={iconSize} />}
@@ -3782,65 +4035,54 @@ export function WhiteboardWorkspaceClient({
           active={activeToolType === "eraser"}
           onClick={() => selectTool("eraser")}
         />
-        <WbToolBtn
-          icon={<WbIconText size={iconSize} />}
-          label="Text (T)"
-          active={activeToolType === "text"}
-          onClick={() => selectTool("text")}
-        />
-        <WbToolBtn
-          icon={<WbIconWand size={iconSize} />}
-          label="Pointer wand (K)"
-          active={activeToolType === "laser"}
-          onClick={() => selectTool("laser")}
-          accent
-        />
-        <div className="mynk-wb-shapes-menu">
-          <WbToolBtn
-            icon={shapeIconFor(
-              WB_SHAPE_TOOLS.some((s) => s.type === activeToolType)
-                ? activeToolType
-                : selectedShapeTool,
-              iconSize
-            )}
-            label="Shapes"
-            active={WB_SHAPE_TOOLS.some((s) => s.type === activeToolType)}
-            onClick={() => {
-              const shapeActive = WB_SHAPE_TOOLS.some((s) => s.type === activeToolType);
-              // Narrow/tablet: when a shape is already active, primary tap opens the picker.
-              if (touchLayout && shapeActive) {
-                toggleMenu("shapes");
-                return;
-              }
-              selectTool(selectedShapeTool);
-            }}
-            pulldown={!touchLayout}
-            onPulldown={touchLayout ? undefined : () => toggleMenu("shapes")}
-          />
-          {shapesDropdownOpen && (
-            <div className="mynk-wb-shapes-dropdown" role="menu">
-              {WB_SHAPE_TOOLS.map(({ type, label, Icon }) => (
-                <button
-                  key={type}
-                  type="button"
-                  role="menuitem"
-                  className={`mynk-wb-shapes-item${
-                    (activeToolType === type || selectedShapeTool === type) &&
-                    WB_SHAPE_TOOLS.some((s) => s.type === activeToolType)
-                      ? " mynk-wb-shapes-item--active"
-                      : selectedShapeTool === type
-                        ? " mynk-wb-shapes-item--active"
-                        : ""
-                  }`}
-                  onClick={() => selectTool(type)}
-                >
-                  <Icon size={14} />
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+      </>
+    );
+    const textTool = (
+      <WbToolBtn
+        icon={<WbIconText size={iconSize} />}
+        label="Text (T)"
+        active={activeToolType === "text"}
+        onClick={() => selectTool("text")}
+      />
+    );
+    const stylesTool = (
+      <WbToolBtn
+        icon={<WbIconStyles size={iconSize} />}
+        label="Styles"
+        active={openMenu === "props"}
+        onClick={() => toggleMenu("props")}
+      />
+    );
+    const wandTool = (
+      <WbToolBtn
+        icon={<WbIconWand size={iconSize} />}
+        label="Pointer wand (K)"
+        active={activeToolType === "laser"}
+        onClick={() => selectTool("laser")}
+        accent
+      />
+    );
+
+    if (touchLayout) {
+      // TB-12 touch tier-1: Select · Pencil · Eraser · Shapes▾ · Styles · Wand · ⋮
+      return (
+        <>
+          {coreTools}
+          {renderShapesMenu(iconSize)}
+          {stylesTool}
+          {wandTool}
+          {renderMoreOverflowMenu(iconSize)}
+        </>
+      );
+    }
+
+    // Desktop left strip — unchanged order
+    return (
+      <>
+        {coreTools}
+        {textTool}
+        {wandTool}
+        {renderShapesMenu(iconSize)}
         {renderMoreOverflowMenu(iconSize)}
       </>
     );
@@ -3866,9 +4108,10 @@ export function WhiteboardWorkspaceClient({
       className="mynk-wb-chrome"
       data-testid="mynk-wb-chrome"
       data-layout={layoutMode}
+      data-orientation={orientation}
+      data-toolbar-hidden={toolbarHidden ? "true" : "false"}
       onClick={() => {
         setOpenMenu(null);
-        if (touchLayout) dismissTouchProps();
       }}
     >
       {/* Non-visual mounts */}
@@ -3914,11 +4157,30 @@ export function WhiteboardWorkspaceClient({
           )}
         </div>
 
+        <button
+          type="button"
+          className="mynk-wb-toolbar-toggle"
+          data-testid="wb-toolbar-toggle"
+          aria-pressed={toolbarHidden}
+          title={toolbarHidden ? "Show tools" : "Hide tools"}
+          onClick={(e) => {
+            e.stopPropagation();
+            setToolbarHidden((hidden) => !hidden);
+          }}
+        >
+          <span className="mynk-wb-toolbar-toggle__label">
+            {toolbarHidden ? "Show tools" : "Hide tools"}
+          </span>
+          <span className="mynk-wb-toolbar-toggle__chev" aria-hidden>
+            {toolbarHidden ? "▴" : "▾"}
+          </span>
+        </button>
+
         <div style={{ flex: 1, minWidth: 0 }} />
 
         <div className="mynk-wb-topbar__zone" onClick={(e) => e.stopPropagation()}>
-          {/* Share + Copied */}
-          <div className="mynk-wb-share-wrap">
+          {/* Share + Copied — desktop top bar; touch uses overflow sheet */}
+          <div className="mynk-wb-share-wrap mynk-wb-topbar__desktop-only">
             <button
               type="button"
               className={`mynk-wb-tb-btn${copyState === "copied" ? " mynk-wb-tb-btn--copied" : ""}`}
@@ -3968,7 +4230,7 @@ export function WhiteboardWorkspaceClient({
             )}
           </div>
 
-          <span className="mynk-wb-topbar__sep" aria-hidden />
+          <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
 
           <WbTopBarMicControl
             audio={workspaceAudio}
@@ -3980,7 +4242,7 @@ export function WhiteboardWorkspaceClient({
           />
           <button
             type="button"
-            className={`mynk-wb-tb-btn mynk-wb-tb-btn--icon${
+            className={`mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__desktop-only${
               liveAv.hasCamPermission !== "denied" &&
               (liveAv.videoDevices?.length ?? 1) > 0
                 ? liveAv.isCamMuted
@@ -4013,11 +4275,11 @@ export function WhiteboardWorkspaceClient({
             <WbIconCamera size={14} />
           </button>
 
-          <span className="mynk-wb-topbar__sep" aria-hidden />
+          <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
 
           <button
             type="button"
-            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon"
+            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__desktop-only"
             title="Undo (Ctrl+Z)"
             aria-label="Undo"
             disabled={endingBusy}
@@ -4028,7 +4290,7 @@ export function WhiteboardWorkspaceClient({
           </button>
           <button
             type="button"
-            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon"
+            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__desktop-only"
             title="Redo (Ctrl+Shift+Z)"
             aria-label="Redo"
             disabled={endingBusy}
@@ -4038,9 +4300,12 @@ export function WhiteboardWorkspaceClient({
             <WbIconRedo />
           </button>
 
-          <span className="mynk-wb-topbar__sep mynk-wb-topbar__inserts" aria-hidden />
+          <span
+            className="mynk-wb-topbar__sep mynk-wb-topbar__inserts mynk-wb-topbar__desktop-only"
+            aria-hidden
+          />
 
-          <div className="mynk-wb-topbar__zone mynk-wb-topbar__inserts">
+          <div className="mynk-wb-topbar__zone mynk-wb-topbar__inserts mynk-wb-topbar__desktop-only">
             <PdfImageUploadButton
               excalidrawAPI={excalidrawAPI}
               whiteboardSessionId={whiteboardSessionId}
@@ -4065,9 +4330,9 @@ export function WhiteboardWorkspaceClient({
             />
           </div>
 
-          <span className="mynk-wb-topbar__sep" aria-hidden />
+          <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
 
-          <div className="mynk-wb-view-menu">
+          <div className="mynk-wb-view-menu mynk-wb-topbar__desktop-only">
             <button
               type="button"
               className="mynk-wb-tb-btn mynk-wb-tb-btn--icon"
@@ -4099,30 +4364,62 @@ export function WhiteboardWorkspaceClient({
             )}
           </div>
 
-          <WbThemeToggle
-            open={themeMenuOpen}
-            onOpenChange={(v) => setOpenMenu(v ? "theme" : null)}
-          />
+          <div className="mynk-wb-topbar__desktop-only">
+            <WbThemeToggle
+              open={themeMenuOpen}
+              onOpenChange={(v) => setOpenMenu(v ? "theme" : null)}
+            />
+          </div>
         </div>
 
-        <span className="mynk-wb-topbar__sep" aria-hidden />
+        <div className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing">
+          <button
+            type="button"
+            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__overflow-btn"
+            title="More session options"
+            aria-label="More session options"
+            aria-expanded={topbarMoreOpen}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleMenu("topbar-more");
+            }}
+            data-testid="wb-topbar-overflow"
+          >
+            <WbIconMore size={14} />
+          </button>
 
-        <button
-          type="button"
-          className="mynk-wb-tb-btn mynk-wb-tb-btn--primary"
-          onClick={handleEndSession}
-          disabled={endingBusy}
-          data-testid="wb-end-session"
-        >
-          {endingState === "finalizing"
-            ? finalizingOutboxState === "uploading" &&
-              finalizingSegmentCount > 0
-              ? `Saving ${finalizingSegmentCount} segment${finalizingSegmentCount === 1 ? "" : "s"}…`
-              : "Finalizing…"
-            : endingState === "ending"
-              ? "Finalizing…"
-              : "End session"}
-        </button>
+          {(() => {
+            const endSessionLabel =
+              endingState === "finalizing"
+                ? finalizingOutboxState === "uploading" &&
+                  finalizingSegmentCount > 0
+                  ? `Saving ${finalizingSegmentCount} segment${finalizingSegmentCount === 1 ? "" : "s"}…`
+                  : "Finalizing…"
+                : endingState === "ending"
+                  ? "Finalizing…"
+                  : "End session";
+            return (
+              <button
+                type="button"
+                className={`mynk-wb-tb-btn mynk-wb-tb-btn--primary${touchLayout ? " mynk-wb-tb-btn--end-touch" : ""}`}
+                onClick={handleEndSession}
+                disabled={endingBusy}
+                data-testid="wb-end-session"
+                aria-label={endSessionLabel}
+                title={endSessionLabel}
+              >
+                {touchLayout ? (
+                  <>
+                    <WbIconEndSession size={14} />
+                    <span className="mynk-wb-sr-only">{endSessionLabel}</span>
+                  </>
+                ) : (
+                  endSessionLabel
+                )}
+              </button>
+            );
+          })()}
+        </div>
       </header>
 
       <div className="mynk-wb-live-column">
@@ -4374,53 +4671,7 @@ export function WhiteboardWorkspaceClient({
             }
           />
 
-          {/* Touch props bottom sheet */}
-          {touchLayout && (
-            <>
-              <div
-                className={`mynk-wb-props-backdrop${propsSheetOpen ? " mynk-wb-props-backdrop--open" : ""}`}
-                onClick={dismissTouchProps}
-                aria-hidden={!propsSheetOpen}
-              />
-              <div
-                className={`mynk-wb-props-sheet mynk-wb-props-sheet--touch${propsSheetOpen ? " mynk-wb-props-sheet--open" : ""}`}
-                role="dialog"
-                aria-label="Stroke properties"
-                onPointerDown={(e) => e.stopPropagation()}
-              >
-                <div
-                  className="mynk-wb-props-sheet__handle-row"
-                  onPointerDown={onPropsSheetHandlePointerDown}
-                  onPointerMove={onPropsSheetHandlePointerMove}
-                  onPointerUp={onPropsSheetHandlePointerUp}
-                  onPointerCancel={onPropsSheetHandlePointerUp}
-                >
-                  <div className="mynk-wb-props-sheet__handle" />
-                  <button
-                    type="button"
-                    className="mynk-wb-props-sheet__close"
-                    aria-label="Dismiss properties"
-                    onClick={dismissTouchProps}
-                  >
-                    ×
-                  </button>
-                </div>
-                <WbStrokePropsPanel
-                  strokeColor={strokeColor}
-                  strokeWidth={strokeWidth}
-                  opacity={opacity}
-                  roughness={roughness}
-                  roundness={roundness}
-                  moreStylesOpen={moreStylesOpen}
-                  inkHex={excalidrawTheme === "dark" ? EXCALIDRAW_STROKE_DARK_HEX : EXCALIDRAW_STROKE_HEX}
-                  onStrokeChange={updateStrokeStyle}
-                  onMoreStylesToggle={() => setMoreStylesOpen((p) => !p)}
-                  onRoughnessChange={(r) => updateStrokeStyle({ roughness: r })}
-                  onRoundnessChange={updateRoundness}
-                />
-              </div>
-            </>
-          )}
+          {/* Touch props bottom sheet — moved to chrome root (TM-13) */}
 
           {debugOverlayVisible && (
             <div className="mynk-wb-debug-footer" aria-hidden>
@@ -4442,7 +4693,7 @@ export function WhiteboardWorkspaceClient({
             className="mynk-wb-props-mobile-btn"
             onClick={(e) => {
               e.stopPropagation();
-              setPropsSheetOpen(true);
+              toggleMenu("props");
             }}
             aria-label="Stroke properties — tap to expand"
           >
@@ -4452,6 +4703,13 @@ export function WhiteboardWorkspaceClient({
                 backgroundColor: inkDisplayHex(strokeColor, excalidrawTheme),
               }}
             />
+            <span className="mynk-wb-summary-stroke" aria-hidden>
+              <StrokeWidthIcon
+                lineH={
+                  WB_STROKE_WIDTHS.find((w) => w.value === strokeWidth)?.lineH ?? 2
+                }
+              />
+            </span>
             <span
               className="mynk-wb-summary-chip"
               title={roughnessLabel}
@@ -4501,6 +4759,59 @@ export function WhiteboardWorkspaceClient({
         />
       </footer>
       </div>
+
+      {/* Touch bottom sheets — chrome root so they cover toolbar + avoid clip (TM-13) */}
+      {touchLayout && (
+        <WbChromeErrorBoundary>
+          <>
+            <WbActionSheetBackdrop open={touchSheetOpen} onDismiss={dismissTouchSheets} />
+            <WbActionSheet
+              open={openMenu === "props"}
+              onDismiss={dismissTouchSheets}
+              ariaLabel="Stroke properties"
+              testId="wb-props-sheet"
+            >
+              <WbStrokePropsPanel
+                strokeColor={strokeColor}
+                strokeWidth={strokeWidth}
+                opacity={opacity}
+                roughness={roughness}
+                roundness={roundness}
+                moreStylesOpen={moreStylesOpen}
+                inkHex={excalidrawTheme === "dark" ? EXCALIDRAW_STROKE_DARK_HEX : EXCALIDRAW_STROKE_HEX}
+                onStrokeChange={updateStrokeStyle}
+                onMoreStylesToggle={() => setMoreStylesOpen((p) => !p)}
+                onRoughnessChange={(r) => updateStrokeStyle({ roughness: r })}
+                onRoundnessChange={updateRoundness}
+              />
+            </WbActionSheet>
+            <WbActionSheet
+              open={openMenu === "shapes"}
+              onDismiss={dismissTouchSheets}
+              ariaLabel="Shape tools"
+              testId="wb-shapes-sheet"
+            >
+              {renderShapesSheetItems()}
+            </WbActionSheet>
+            <WbActionSheet
+              open={openMenu === "more"}
+              onDismiss={dismissTouchSheets}
+              ariaLabel="More drawing options"
+              testId="wb-more-sheet"
+            >
+              <div className="mynk-wb-action-sheet__menu-list">{renderOverflowMenuItems(true)}</div>
+            </WbActionSheet>
+            <WbActionSheet
+              open={openMenu === "topbar-more"}
+              onDismiss={dismissTouchSheets}
+              ariaLabel="More session options"
+              testId="wb-topbar-more-sheet"
+            >
+              {renderTopBarOverflowItems()}
+            </WbActionSheet>
+          </>
+        </WbChromeErrorBoundary>
+      )}
     </div>
   );
 }

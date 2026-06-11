@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 
 import { AVTilesPanel, type AVTilesPanelProps } from "@/components/av/AVTilesPanel";
 import { WbIconCamera, WbIconMic } from "@/components/whiteboard/chrome/wb-icons";
+import type { WbLayoutMode } from "@/components/whiteboard/chrome/useWbLayoutMode";
 
 export type WbAVClusterProps = AVTilesPanelProps & {
   isMicMuted: boolean;
@@ -13,7 +14,7 @@ export type WbAVClusterProps = AVTilesPanelProps & {
   disabled?: boolean;
   /** True when camera permission is denied or no camera device is available. */
   camDisabled?: boolean;
-  layoutMode: "desktop" | "narrow" | "tablet-portrait";
+  layoutMode: WbLayoutMode;
 };
 
 const DEFAULT_SIZE = { width: 240, height: 280 };
@@ -90,7 +91,13 @@ export function WbAVCluster({
   useEffect(() => {
     if (isMobileLayout) {
       setPos(null);
-      setSize({ width: layoutMode === "narrow" ? 120 : 180, height: 200 });
+      setSize({
+        width:
+          layoutMode === "narrow" || layoutMode === "phone-landscape"
+            ? 120
+            : 180,
+        height: 200,
+      });
     } else {
       setSize(DEFAULT_SIZE);
     }

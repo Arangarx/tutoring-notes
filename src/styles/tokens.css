@@ -102,6 +102,9 @@
   --excalidraw-bg: #ffffff;
   --excalidraw-bg-dark: #121212;
 
+  --board-paper: #faf9f5;
+  --board-paper-vignette: rgba(15, 23, 42, 0.06);
+
   accent-color: var(--accent);
 }
 
@@ -194,6 +197,9 @@
 
     --page-bg-dark: #02080d;
 
+    --board-paper: #0c2433;
+    --board-paper-vignette: rgba(0, 0, 0, 0.35);
+
     accent-color: var(--accent);
   }
 }
@@ -285,6 +291,9 @@
   --excalidraw-bg-dark: #021018;
 
   --page-bg-dark: #02080d;
+
+  --board-paper: #0c2433;
+  --board-paper-vignette: rgba(0, 0, 0, 0.35);
 
   accent-color: var(--accent);
 }

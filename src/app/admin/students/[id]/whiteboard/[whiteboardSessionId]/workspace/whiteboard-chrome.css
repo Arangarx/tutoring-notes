@@ -54,6 +54,9 @@
   align-items: center;
   gap: 2px;
   padding: 0 6px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   /* overflow: visible — dropdowns (Share, Mic, Theme, View) must extend
      below this bar; overflow:hidden clips them at the 44px boundary. */
   overflow: visible;
@@ -68,6 +71,12 @@
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
+  min-width: 0;
+}
+
+.mynk-wb-topbar__zone--trailing {
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .mynk-wb-topbar__sep {
@@ -113,6 +122,7 @@
   width: 24px;
   padding: 4px 0;
   align-items: center;
+  overflow: hidden;
 }
 
 .mynk-wb-strip--collapsed .mynk-wb-strip__tools,
@@ -136,6 +146,15 @@
 .mynk-wb-strip__collapse-btn {
   width: 100%;
   justify-content: center;
+}
+
+.mynk-wb-strip--collapsed .mynk-wb-strip__collapse-btn {
+  width: 24px;
+  max-width: 24px;
+  min-width: 24px;
+  height: 32px;
+  border-radius: 4px;
+  overflow: hidden;
 }
 
 .mynk-wb-strip__sep {
@@ -201,6 +220,12 @@
   position: relative;
   min-width: 0;
   overflow: hidden;
+  background-color: var(--board-paper);
+  background-image: radial-gradient(
+    ellipse 120% 100% at 50% 50%,
+    transparent 55%,
+    var(--board-paper-vignette) 100%
+  );
 }
 
 /* Ensure Excalidraw fills canvas host */
@@ -242,6 +267,21 @@
 
 .mynk-wb-banners > * {
   pointer-events: auto;
+}
+
+/*
+ * Mobile AV pip is fixed top-right (.mynk-wb-av-cluster--mobile: inset 12px,
+ * width 120px narrow/phone-landscape or 180px tablet-portrait — WbAVCluster).
+ * Keep banners left of the pip so "waiting for student" stays readable (z-20
+ * sits under z-25 pip; shrinking the box beats lowering z-index).
+ */
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-banners,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-banners {
+  right: calc(12px + 120px + 8px);
+}
+
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-banners {
+  right: calc(12px + 180px + 8px);
 }
 
 /* ΓöÇΓöÇ Wordmark + LIVE badge (session shell mock) ΓöÇΓöÇ */
@@ -348,6 +388,15 @@
   color: var(--accent-on);
 }
 
+/* Touch top bar — icon-only End session saves horizontal space at ~390px */
+.mynk-wb-tb-btn--end-touch {
+  width: 32px;
+  min-width: 32px;
+  padding: 0;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
 .mynk-wb-tb-btn--copied {
   color: var(--success);
 }
@@ -386,6 +435,15 @@
   position: relative;
   display: flex;
   align-items: center;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.mynk-wb-mic-settings-anchor {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .mynk-wb-mic-meter-hidden {
@@ -530,9 +588,9 @@
 }
 
 .mynk-wb-av-cluster--mobile {
-  bottom: 12px;
+  top: 12px;
   right: 12px;
-  top: auto !important;
+  bottom: auto;
   left: auto !important;
 }
 
@@ -1156,28 +1214,28 @@
   margin-bottom: 4px;
 }
 
-/* Props bottom sheet — TM-11 */
-.mynk-wb-props-backdrop {
+/* Touch bottom sheets — TM-11 props, TM-13 shapes/overflow */
+.mynk-wb-action-sheet-backdrop {
   display: none;
-  position: absolute;
+  position: fixed;
   inset: 0;
   z-index: 90;
   background: rgba(0, 0, 0, 0.35);
 }
 
-.mynk-wb-props-backdrop--open {
+.mynk-wb-action-sheet-backdrop--open {
   display: block;
 }
 
-.mynk-wb-props-sheet {
+.mynk-wb-action-sheet {
   display: none;
-  position: absolute;
+  position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
   z-index: 95;
-  max-height: 50%;
-  overflow-y: auto;
+  max-height: min(60dvh, 420px);
+  overflow: hidden;
   background: var(--card);
   border-top: 1px solid var(--border);
   border-radius: 12px 12px 0 0;
@@ -1185,48 +1243,116 @@
   padding: 0 16px 16px;
   transform: translateY(100%);
   transition: transform 0.25s ease;
-}
-
-.mynk-wb-props-sheet--touch {
-  display: flex;
   flex-direction: column;
   gap: 10px;
+  pointer-events: none;
 }
 
-.mynk-wb-props-sheet--open {
+.mynk-wb-action-sheet--open {
   transform: translateY(0);
+  pointer-events: auto;
 }
 
-.mynk-wb-props-sheet__handle-row {
+.mynk-wb-action-sheet__handle-row {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 10px 0 6px;
+  padding: 10px 40px 6px 0;
   position: relative;
+  flex-shrink: 0;
+  touch-action: none;
 }
 
-.mynk-wb-props-sheet__handle {
+.mynk-wb-action-sheet__handle {
   width: 36px;
   height: 4px;
   border-radius: 2px;
   background: var(--border);
 }
 
-.mynk-wb-props-sheet__close {
+.mynk-wb-action-sheet__close {
   position: absolute;
-  right: 0;
-  top: 8px;
-  width: 28px;
-  height: 28px;
-  border-radius: 4px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-muted);
+  right: 4px;
+  top: 6px;
+  z-index: 3;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--card);
+  color: var(--foreground);
   cursor: pointer;
-  font-size: 16px;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+.mynk-wb-action-sheet__close:hover {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+}
+
+.mynk-wb-action-sheet__body {
+  overflow-y: auto;
+  overflow-x: visible;
+  overscroll-behavior: contain;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Active swatch ring extends 4px outside — pad so left edge isn't clipped */
+.mynk-wb-action-sheet .mynk-wb-props-panel-inner {
+  padding-inline: 4px;
+}
+
+.mynk-wb-action-sheet .mynk-wb-props-swatches {
+  padding: 4px;
+}
+
+.mynk-wb-chrome-error-fallback {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  z-index: 1200;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-1);
+  color: var(--text);
+  font-size: 14px;
+  text-align: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.mynk-wb-action-sheet__shapes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 4px;
+}
+
+.mynk-wb-action-sheet__shapes-list .mynk-wb-shapes-item {
+  padding: 12px 14px;
+  font-size: 14px;
+  border-radius: 8px;
+}
+
+.mynk-wb-action-sheet__menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 4px;
+}
+
+.mynk-wb-action-sheet__menu-list .mynk-wb-menu-item {
+  padding: 12px 14px;
+  font-size: 14px;
+  border-radius: 8px;
 }
 
 .mynk-wb-props-mobile-bar {
@@ -1252,31 +1378,36 @@
 
 /* ΓöÇΓöÇ Responsive layout modes ΓöÇΓöÇ */
 .mynk-wb-chrome[data-layout="narrow"] .mynk-wb-strip,
-.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-strip {
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-strip,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-strip {
   display: none;
 }
 
 .mynk-wb-chrome[data-layout="narrow"] .mynk-wb-bottom-toolbar,
-.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-bottom-toolbar {
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-bottom-toolbar,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-bottom-toolbar {
   display: flex;
 }
 
 .mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-sidebar,
 .mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-sidebar,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-props-sidebar,
 .mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-compact,
-.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-compact {
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-compact,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-props-compact {
   display: none;
 }
 
 .mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-mobile-bar,
-.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-mobile-bar {
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-mobile-bar,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-props-mobile-bar {
   display: block;
 }
 
-.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-sheet,
-.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-sheet {
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-action-sheet,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-action-sheet,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-action-sheet {
   display: flex;
-  flex-direction: column;
 }
 
 .mynk-wb-chrome[data-layout="narrow"] .mynk-wb-topbar__inserts,
@@ -1284,9 +1415,152 @@
   display: none;
 }
 
+/* Touch top bar — slim composition: essentials inline, secondary in overflow sheet */
+.mynk-wb-topbar__overflow-btn {
+  display: none;
+  flex-shrink: 0;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-topbar__desktop-only,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-topbar__desktop-only,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-topbar__desktop-only {
+  display: none;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-topbar__overflow-btn,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-topbar__overflow-btn,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-topbar__overflow-btn {
+  display: inline-flex;
+}
+
+.mynk-wb-topbar-overflow-inserts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.mynk-wb-topbar-overflow-theme {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0;
+}
+
 .mynk-wb-chrome[data-layout="narrow"] .mynk-wb-wordmark {
   font-size: 14px;
   padding: 0 4px;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-topbar__sep,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-topbar__sep,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-topbar__sep {
+  margin: 0 2px;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-timer,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-timer,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-timer {
+  padding: 0 4px;
+  font-size: 13px;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-toolbar-toggle,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-toolbar-toggle,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-toolbar-toggle {
+  padding: 0 8px;
+  max-width: 96px;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-toolbar-toggle__label,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-toolbar-toggle__label,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-toolbar-toggle__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-mobile-btn,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-mobile-btn {
+  gap: 6px;
+  padding: 8px;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-mobile-btn .mynk-wb-summary-stroke,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-mobile-btn .mynk-wb-summary-stroke {
+  width: 22px;
+}
+
+/* TM-12 — persistent show/hide tools toggle (touch layouts only) */
+.mynk-wb-toolbar-toggle {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-strong);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  transition: background 0.12s, box-shadow 0.2s, color 0.12s;
+}
+
+.mynk-wb-toolbar-toggle:hover {
+  background: var(--accent-soft);
+}
+
+.mynk-wb-toolbar-toggle__chev {
+  font-size: 9px;
+  color: var(--accent-text);
+  line-height: 1;
+  transition: color 0.12s;
+}
+
+.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-toolbar-toggle,
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-toolbar-toggle,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-toolbar-toggle {
+  display: inline-flex;
+}
+
+.mynk-wb-chrome[data-toolbar-hidden="true"] .mynk-wb-toolbar-toggle {
+  background: var(--accent);
+  color: var(--accent-on);
+  border-color: var(--accent-strong);
+  animation: mynk-wb-toolbar-toggle-pulse 2.4s ease-in-out infinite;
+}
+
+.mynk-wb-chrome[data-toolbar-hidden="true"] .mynk-wb-toolbar-toggle__chev {
+  color: var(--accent-on);
+}
+
+@keyframes mynk-wb-toolbar-toggle-pulse {
+  0%,
+  100% {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  }
+  50% {
+    box-shadow:
+      0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent),
+      0 1px 2px rgba(0, 0, 0, 0.06);
+  }
+}
+
+/* Collapse bottom tool chrome when tools hidden — canvas regains vertical space */
+.mynk-wb-chrome[data-toolbar-hidden="true"][data-layout="narrow"] .mynk-wb-bottom-toolbar,
+.mynk-wb-chrome[data-toolbar-hidden="true"][data-layout="tablet-portrait"] .mynk-wb-bottom-toolbar,
+.mynk-wb-chrome[data-toolbar-hidden="true"][data-layout="phone-landscape"] .mynk-wb-bottom-toolbar {
+  display: none;
+}
+
+.mynk-wb-chrome[data-toolbar-hidden="true"][data-layout="narrow"] .mynk-wb-props-mobile-bar,
+.mynk-wb-chrome[data-toolbar-hidden="true"][data-layout="tablet-portrait"] .mynk-wb-props-mobile-bar,
+.mynk-wb-chrome[data-toolbar-hidden="true"][data-layout="phone-landscape"] .mynk-wb-props-mobile-bar {
+  display: none;
 }
 
 .mynk-wb-chrome {
@@ -1658,6 +1932,7 @@
   outline: none;
   border-radius: 2px;
   user-select: none;
+  touch-action: none;
 }
 
 .mynk-wb-slider-custom:focus-visible {
