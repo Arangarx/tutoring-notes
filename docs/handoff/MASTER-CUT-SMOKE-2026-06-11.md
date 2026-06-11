@@ -26,7 +26,7 @@ Single top-to-bottom smoke runbook for the 8 overnight master-cut branches; mark
 
 **What changed:** Presentational + shared-logic consolidation only — notes display utils, `SubmitButton` variants, dead `.admin-nav*` CSS removed, `useThemeDropdown` hook. **No visual or behavioral change intended.**
 
-**Preview:** <Vercel preview for branch feat/component-dry-mechanical>
+**Preview:** [feat/component-dry-mechanical](https://tutoring-notes-git-feat-componen-570185-arangarx-5209s-projects.vercel.app)
 
 **Result:** PASS / FAIL
 
@@ -72,7 +72,7 @@ Single top-to-bottom smoke runbook for the 8 overnight master-cut branches; mark
 
 **What changed:** Chunk-transcribe auth guard (`CRON_SECRET` bearer), forgot-password stale-token cleanup, upload error message sanitization + 16 new security tests. **API-only — no UI changes.**
 
-**Preview:** <Vercel preview for branch feat/security-tier-b>
+**Preview:** [feat/security-tier-b](https://tutoring-notes-git-feat-security-tier-b-arangarx-5209s-projects.vercel.app)
 
 **Result:** PASS / FAIL
 
@@ -106,7 +106,7 @@ Single top-to-bottom smoke runbook for the 8 overnight master-cut branches; mark
 
 **What changed:** Tutor→student laser pointer broadcast over encrypted sync envelope. **Bidirectional student wand deferred** (student toolbar has no wand yet).
 
-**Preview:** <Vercel preview for branch feat/wb-laser-sync>
+**Preview:** [feat/wb-laser-sync](https://tutoring-notes-git-feat-wb-laser-sync-arangarx-5209s-projects.vercel.app)
 
 **Result:** PASS / FAIL
 
@@ -159,7 +159,7 @@ Single top-to-bottom smoke runbook for the 8 overnight master-cut branches; mark
 
 **What changed:** End session flips workspace shell **in-place** to review mode (notes primary, board preview, lazy replay drill-down). No `router.replace` off `/workspace`. Standalone revisit route unchanged.
 
-**Preview:** <Vercel preview for branch feat/wb-end-session-review>
+**Preview:** [feat/wb-end-session-review](https://tutoring-notes-git-feat-wb-end-s-e8ec41-arangarx-5209s-projects.vercel.app)
 
 **Result:** PASS / FAIL
 
@@ -233,7 +233,7 @@ Single top-to-bottom smoke runbook for the 8 overnight master-cut branches; mark
 
 **What changed:** JSXGraph embeddables **render in replay** (admin review + share replay). **Does not** fix multi-segment custom player regression (A6-1).
 
-**Preview:** <Vercel preview for branch feat/wb-replay-a6-slice>
+**Preview:** [feat/wb-replay-a6-slice](https://tutoring-notes-git-feat-wb-repla-e77c07-arangarx-5209s-projects.vercel.app)
 
 **Result:** PASS / FAIL
 
@@ -283,7 +283,7 @@ Primary hypothesis: #1 multi-segment / #2 graphs / other: ___
 
 **What changed:** Parents create learners without claim link + set up child login (PIN). Auth boundary HIGH (children's credentials + ownership).
 
-**Preview:** <Vercel preview for branch feat/parent-create-learner>
+**Preview:** [feat/parent-create-learner](https://tutoring-notes-git-feat-parent-c-b911e1-arangarx-5209s-projects.vercel.app)
 
 **Result:** PASS / FAIL
 
@@ -358,7 +358,7 @@ Primary hypothesis: #1 multi-segment / #2 graphs / other: ___
 
 **What changed:** New tutor signups → WAITLISTED; cannot incur external cost until operator approves. Existing tutors grandfathered APPROVED by migration.
 
-**Preview:** <Vercel preview for branch feat/signup-waitlist>
+**Preview:** [feat/signup-waitlist](https://tutoring-notes-git-feat-signup-waitlist-arangarx-5209s-projects.vercel.app)
 
 **Result:** PASS / FAIL
 
@@ -440,7 +440,7 @@ Primary hypothesis: #1 multi-segment / #2 graphs / other: ___
 
 **What changed:** Versioned `ConsentRecord`, capture gating, claim Panel A — **fully behind dormant `CONSENT_ENFORCEMENT`** (default OFF). Schema + snapshot on session create.
 
-**Preview:** <Vercel preview for branch feat/b2-consent>
+**Preview:** [feat/b2-consent](https://tutoring-notes-git-feat-b2-consent-arangarx-5209s-projects.vercel.app)
 
 **Result:** PASS / FAIL
 
