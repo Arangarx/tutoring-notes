@@ -1,11 +1,10 @@
 /**
  * POST /api/claim/[token]/setup
  *
- * Post-claim onboarding: sets up the child's login credentials.
- * Two sub-actions via `action` body field:
+ * Post-claim onboarding: sets up the child's login credentials and consent.
+ * Sub-actions via `action` body field:
  *   "credentials" — create LearnerCredential (username + PIN)
- *
- * Consent setup (Panel A) is Phase 3 — ConsentRecord model not yet implemented.
+ *   "consent"     — create/update ConsentRecord for this (learner, tutor) pair (B2)
  *
  * Requires: AccountHolder session + claim must be completed by this AccountHolder.
  */
@@ -66,11 +65,63 @@ export async function POST(
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
 
-  const { action, username, pin } = body as {
+  const bodyObj = body as {
     action?: string;
     username?: string;
     pin?: string;
+    allowLiveSession?: boolean;
+    allowAudioRecording?: boolean;
+    allowWhiteboardRecording?: boolean;
+    allowNoteSending?: boolean;
   };
+  const { action, username, pin } = bodyObj;
+
+  // B2: consent action — create/update ConsentRecord for this (learner, tutor) pair.
+  if (action === "consent") {
+    const allowLiveSession = Boolean(bodyObj.allowLiveSession);
+    const allowAudioRecording = Boolean(bodyObj.allowAudioRecording);
+    const allowWhiteboardRecording = Boolean(bodyObj.allowWhiteboardRecording);
+    const allowNoteSending = Boolean(bodyObj.allowNoteSending);
+
+    // Cross-tenant safety: setByAccountHolderId must equal the learner's accountHolderId.
+    const learnerProfile = await db.learnerProfile.findUnique({
+      where: { id: learnerProfileId },
+      select: { accountHolderId: true, isSelfLearner: true },
+    });
+    if (!learnerProfile) {
+      return NextResponse.json({ error: "profile_not_found" }, { status: 404 });
+    }
+    if (learnerProfile.accountHolderId !== ahSession.accountHolderId) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+
+    // Compute next version: MAX(existing version) + 1, or 1 for first record.
+    const maxVersion = await db.consentRecord.aggregate({
+      where: { learnerProfileId, adminUserId: invite.adminUserId },
+      _max: { version: true },
+    });
+    const nextVersion = (maxVersion._max.version ?? 0) + 1;
+
+    await db.consentRecord.create({
+      data: {
+        learnerProfileId,
+        adminUserId: invite.adminUserId,
+        version: nextVersion,
+        allowLiveSession,
+        allowAudioRecording,
+        allowWhiteboardRecording,
+        allowNoteSending,
+        setByAccountHolderId: ahSession.accountHolderId,
+        captureMethod: "electronic",
+      },
+    });
+
+    console.log(
+      `[cns] learnerProfileId=${learnerProfileId} adminUserId=${invite.adminUserId} action=consent_set version=${nextVersion} accountHolderId=${ahSession.accountHolderId}`
+    );
+
+    return NextResponse.json({ ok: true, version: nextVersion });
+  }
 
   if (action === "credentials") {
     if (!username || !pin) {
