@@ -15,6 +15,8 @@ Using the **same placeholder passwords** in `.env.example` as in `docker-compose
 
 1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows / macOS) or Docker Engine (Linux).
 
+   `npm run db:up`, `npm run relay:build`, and `npm run test:wb-sync` call `ensure:docker` first: if the daemon is down, they start Docker Desktop (or `systemctl start docker` on Linux) and wait up to **180s** (override with `DOCKER_WAIT_TIMEOUT_MS`).
+
 2. Start Postgres:
 
    ```bash
