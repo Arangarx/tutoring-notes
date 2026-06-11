@@ -35,6 +35,65 @@ function getHmacSecret(): string | null {
 }
 
 /**
+ * Validate the Learner session from a raw token string.
+ *
+ * Parallel to validateAccountHolderSessionFromRawToken in account-holder-session.ts.
+ * Used by getLearnerSessionFromHeaders (server-component multi-cookie path) so we
+ * can try each duplicate-cookie candidate without going through getCookieFromRequest.
+ *
+ * Side effect: same sliding renewal as getLearnerSession.
+ */
+export async function validateLearnerSessionFromRawToken(
+  rawToken: string
+): Promise<LearnerSessionData | null> {
+  const secret = getHmacSecret();
+  if (!secret) {
+    console.error("[lpr] lpr=unknown action=session_invalid reason=missing_hmac_secret");
+    return null;
+  }
+
+  let tokenHash: string;
+  try {
+    tokenHash = hmacToken(rawToken, secret);
+  } catch {
+    return null;
+  }
+
+  const now = new Date();
+
+  const row = await db.learnerDeviceSession.findUnique({
+    where: { tokenHash },
+    include: {
+      learnerProfile: {
+        select: { accountHolderId: true, tombstonedAt: true },
+      },
+    },
+  });
+
+  if (!row) return null;
+  if (row.revokedAt) return null;
+  if (row.expiresAt < now) return null;
+  if (row.learnerProfile.tombstonedAt) return null;
+
+  const timeUntilExpiry = row.expiresAt.getTime() - now.getTime();
+  if (timeUntilExpiry < SLIDE_THRESHOLD_MS) {
+    await db.learnerDeviceSession.update({
+      where: { id: row.id },
+      data: {
+        lastSeenAt: now,
+        expiresAt: new Date(now.getTime() + LEARNER_SESSION_TTL_MS),
+      },
+    });
+  }
+
+  return {
+    learnerProfileId: row.learnerProfileId,
+    accountHolderId: row.learnerProfile.accountHolderId,
+    sessionId: row.id,
+  };
+}
+
+/**
  * Validate the learner session from the request cookie.
  * Returns session data on success; null on any failure.
  *

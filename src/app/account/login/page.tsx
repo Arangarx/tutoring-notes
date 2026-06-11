@@ -16,6 +16,7 @@ function AccountLoginForm() {
   const searchParams = useSearchParams();
   const returnTo = searchParams.get("returnTo") ?? "/account/dashboard";
   const notice = searchParams.get("notice");
+  const source = searchParams.get("source");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -31,6 +32,16 @@ function AccountLoginForm() {
         ? "Your password was updated. Sign in with your new password."
         : notice === "link_already_used"
           ? "That verification link has already been used — your account is active. Sign in below."
+          : null;
+
+  // Messages for wall-redirect sources (notes auth wall + session state).
+  const sourceMessage =
+    source === "notes_email"
+      ? "To view these notes, sign in with the account that received the link."
+      : source === "claim_required"
+        ? "Please sign in to claim this student\u2019s notes and view them here."
+        : source === "session_expired"
+          ? "Your session expired \u2014 please sign in again."
           : null;
 
   async function handleSubmit(e: React.FormEvent) {
@@ -94,6 +105,11 @@ function AccountLoginForm() {
       {noticeMessage ? (
         <p className="mb-4 text-sm text-muted-foreground" role="status">
           {noticeMessage}
+        </p>
+      ) : null}
+      {sourceMessage ? (
+        <p className="mb-4 text-sm text-muted-foreground" role="status">
+          {sourceMessage}
         </p>
       ) : null}
 

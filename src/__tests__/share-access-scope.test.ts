@@ -98,11 +98,15 @@ jest.mock("@/lib/learner-session", () => ({
 
 const getAccountHolderSessionFromHeadersMock = jest.fn();
 const getLearnerSessionFromHeadersMock = jest.fn();
+const hasAccountHolderSessionCookieMock = jest.fn();
+const hasLearnerSessionCookieMock = jest.fn();
 
 jest.mock("@/lib/server-session", () => ({
   __esModule: true,
   getAccountHolderSessionFromHeaders: () => getAccountHolderSessionFromHeadersMock(),
   getLearnerSessionFromHeaders: () => getLearnerSessionFromHeadersMock(),
+  hasAccountHolderSessionCookie: () => hasAccountHolderSessionCookieMock(),
+  hasLearnerSessionCookie: () => hasLearnerSessionCookieMock(),
 }));
 
 // ---------------------------------------------------------------------------
@@ -743,13 +747,16 @@ describe("assertCanAccessShareLink (page variant)", () => {
   // Wall ON: no session → redirect to /account/login
   // -------------------------------------------------------------------------
 
-  describe("wall ON — no session → redirect", () => {
+  describe("wall ON — no session cookie at all → notes_email redirect", () => {
     beforeEach(() => {
       process.env.NOTES_AUTH_WALL = "true";
       shareLinkFindUniqueMock.mockResolvedValue(validLinkClaimed);
       // Independent oracles: session IDs distinct from student/profile IDs
       getAccountHolderSessionFromHeadersMock.mockResolvedValue(null);
       getLearnerSessionFromHeadersMock.mockResolvedValue(null);
+      // No cookie present at all → notes_email path
+      hasAccountHolderSessionCookieMock.mockResolvedValue(false);
+      hasLearnerSessionCookieMock.mockResolvedValue(false);
     });
 
     test("throws redirect signal pointing to /account/login", async () => {
@@ -779,6 +786,59 @@ describe("assertCanAccessShareLink (page variant)", () => {
     });
   });
 
+  describe("wall ON — stale/revoked cookie present → session_expired loop-break", () => {
+    beforeEach(() => {
+      process.env.NOTES_AUTH_WALL = "true";
+      shareLinkFindUniqueMock.mockResolvedValue(validLinkClaimed);
+      // Sessions resolve to null (expired/revoked token) despite cookie being present
+      getAccountHolderSessionFromHeadersMock.mockResolvedValue(null);
+      getLearnerSessionFromHeadersMock.mockResolvedValue(null);
+      // AH cookie IS present (stale value that failed validation)
+      hasAccountHolderSessionCookieMock.mockResolvedValue(true);
+      hasLearnerSessionCookieMock.mockResolvedValue(false);
+    });
+
+    test("redirects through clear-stale-session handler (breaks the loop)", async () => {
+      await expect(assertCanAccessShareLink(TOKEN, PAGE_PATH)).rejects.toThrow(
+        /NEXT_REDIRECT:.*\/api\/auth\/clear-stale-session/
+      );
+    });
+
+    test("clear-stale-session ?then includes source=session_expired", async () => {
+      await expect(assertCanAccessShareLink(TOKEN, PAGE_PATH)).rejects.toThrow(
+        /session_expired/
+      );
+    });
+
+    test("clear-stale-session ?then includes returnTo with share page path", async () => {
+      // returnTo is double-encoded inside the ?then= param, so match the key only
+      await expect(assertCanAccessShareLink(TOKEN, PAGE_PATH)).rejects.toThrow(
+        /returnTo/
+      );
+    });
+
+    test("emits sal=access_denied_redirect reason=stale_session_cleared log", async () => {
+      const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+      await expect(assertCanAccessShareLink(TOKEN, PAGE_PATH)).rejects.toThrow(
+        /NEXT_REDIRECT/
+      );
+
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.stringContaining("stale_session_cleared")
+      );
+    });
+
+    test("learner stale cookie also triggers the loop-break path", async () => {
+      hasAccountHolderSessionCookieMock.mockResolvedValue(false);
+      hasLearnerSessionCookieMock.mockResolvedValue(true);
+
+      await expect(assertCanAccessShareLink(TOKEN, PAGE_PATH)).rejects.toThrow(
+        /NEXT_REDIRECT:.*\/api\/auth\/clear-stale-session/
+      );
+    });
+  });
+
   // -------------------------------------------------------------------------
   // Wall ON: owning AccountHolder → allowed
   // -------------------------------------------------------------------------
@@ -802,10 +862,10 @@ describe("assertCanAccessShareLink (page variant)", () => {
   });
 
   // -------------------------------------------------------------------------
-  // Wall ON: non-owner AccountHolder → notFound()
+  // Wall ON: non-owner AccountHolder → neutral /account/not-my-notes redirect
   // -------------------------------------------------------------------------
 
-  describe("wall ON — non-owner AccountHolder → deny (notFound)", () => {
+  describe("wall ON — non-owner AccountHolder → neutral denial (not-my-notes)", () => {
     beforeEach(() => {
       process.env.NOTES_AUTH_WALL = "true";
       shareLinkFindUniqueMock.mockResolvedValue(validLinkClaimed); // StudentA → LearnerProfileA → AH A
@@ -816,9 +876,21 @@ describe("assertCanAccessShareLink (page variant)", () => {
       learnerProfileFindUniqueMock.mockResolvedValue(learnerProfileA);
     });
 
-    test("throws notFound signal (deny, anti-enumeration) for non-owner", async () => {
+    test("redirects to /account/not-my-notes (neutral denial, not generic 404)", async () => {
       await expect(assertCanAccessShareLink(TOKEN, PAGE_PATH)).rejects.toThrow(
-        "NEXT_NOT_FOUND"
+        /NEXT_REDIRECT:.*\/account\/not-my-notes/
+      );
+    });
+
+    test("emits sal=ownership_denied principal=account_holder log", async () => {
+      const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+      await expect(assertCanAccessShareLink(TOKEN, PAGE_PATH)).rejects.toThrow(
+        /NEXT_REDIRECT/
+      );
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining("ownership_denied")
       );
     });
   });
@@ -843,10 +915,10 @@ describe("assertCanAccessShareLink (page variant)", () => {
   });
 
   // -------------------------------------------------------------------------
-  // Wall ON: wrong learner → notFound()
+  // Wall ON: wrong learner → neutral /account/not-my-notes redirect
   // -------------------------------------------------------------------------
 
-  describe("wall ON — wrong Learner session → deny (notFound)", () => {
+  describe("wall ON — wrong Learner session → neutral denial (not-my-notes)", () => {
     beforeEach(() => {
       process.env.NOTES_AUTH_WALL = "true";
       shareLinkFindUniqueMock.mockResolvedValue(validLinkClaimed); // studentA → LEARNER_PROFILE_A
@@ -855,9 +927,21 @@ describe("assertCanAccessShareLink (page variant)", () => {
       getLearnerSessionFromHeadersMock.mockResolvedValue(learnerSessionB);
     });
 
-    test("throws notFound signal when learner does not match the link's student", async () => {
+    test("redirects to /account/not-my-notes when learner does not match the link's student", async () => {
       await expect(assertCanAccessShareLink(TOKEN, PAGE_PATH)).rejects.toThrow(
-        "NEXT_NOT_FOUND"
+        /NEXT_REDIRECT:.*\/account\/not-my-notes/
+      );
+    });
+
+    test("emits sal=ownership_denied principal=learner log", async () => {
+      const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+      await expect(assertCanAccessShareLink(TOKEN, PAGE_PATH)).rejects.toThrow(
+        /NEXT_REDIRECT/
+      );
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining("ownership_denied")
       );
     });
   });

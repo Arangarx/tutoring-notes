@@ -14,9 +14,18 @@
  *   components would resolve a different cookie than route-handlers (which use
  *   the @edge-runtime/cookies Map API — last-value wins).
  *
- *   Fix: read the AH session cookie directly via the cookies() Map API (last
- *   value) and pass the raw token straight to validateAccountHolderSessionFromRawToken,
- *   removing the intermediate fake-Request + linear-scan path entirely.
+ *   Fix: use cookieStore.getAll(name) to retrieve ALL candidate values for the
+ *   session cookie, then try each in reverse order (last-set first, consistent
+ *   with Map-API / @edge-runtime behaviour) and return the FIRST that validates.
+ *   This handles both the Q3-A last-value alignment AND the case where the last
+ *   value is a stale/revoked token but an earlier value is still valid.
+ *
+ * Loop-break helpers:
+ *   hasAccountHolderSessionCookie() / hasLearnerSessionCookie() detect whether
+ *   a session cookie is present (regardless of validity). Used by
+ *   assertCanAccessShareLink to distinguish "no cookie" (→ notes_email redirect)
+ *   from "cookie present but invalid" (→ clear-stale-session bounce that emits
+ *   Set-Cookie Max-Age=0 before redirecting with source=session_expired).
  *
  * SERVER-ONLY: never import on the client.
  */
@@ -27,40 +36,71 @@ import {
   validateAccountHolderSessionFromRawToken,
   type AccountHolderSessionData,
 } from "@/lib/account-holder-session";
-import { getLearnerSession, type LearnerSessionData } from "@/lib/learner-session";
-
-/** Build a minimal Request from the current server-component cookies (learner realm). */
-async function buildRequestFromHeaders(): Promise<Request> {
-  const cookieStore = await cookies();
-  const cookieHeader = cookieStore
-    .getAll()
-    .map((c) => `${c.name}=${c.value}`)
-    .join("; ");
-  return new Request("http://localhost/", {
-    headers: { cookie: cookieHeader },
-  });
-}
+import {
+  LEARNER_SESSION_COOKIE,
+  validateLearnerSessionFromRawToken,
+  type LearnerSessionData,
+} from "@/lib/learner-session";
 
 /**
  * Get the AccountHolder session in a server component.
- * Uses the cookies() Map API (last-value) to read the AH session cookie,
- * aligning server-component resolution with route-handler resolution (Q3-A fix).
+ *
+ * Tries all `mynk_ah_session` cookie values in reverse (last-set-first) order
+ * and returns the first that validates successfully. Handles duplicate/stale
+ * cookies from the RC-A preview-domain split (Q3-A fix).
+ *
  * Returns null if no valid session exists.
  */
 export async function getAccountHolderSessionFromHeaders(): Promise<AccountHolderSessionData | null> {
   const cookieStore = await cookies();
-  // Map API: if duplicate cookie names are present, .get() returns the last value —
-  // consistent with the @edge-runtime/cookies behaviour used in NextRequest route handlers.
-  const rawToken = cookieStore.get(AH_SESSION_COOKIE)?.value ?? null;
-  if (!rawToken) return null;
-  return validateAccountHolderSessionFromRawToken(rawToken);
+  // getAll(name) returns every cookie with this name in insertion order.
+  // We iterate in reverse so the most-recently-set value is tried first,
+  // consistent with the @edge-runtime/cookies Map-API (last-value wins).
+  const candidates = cookieStore.getAll(AH_SESSION_COOKIE);
+  for (let i = candidates.length - 1; i >= 0; i--) {
+    const result = await validateAccountHolderSessionFromRawToken(candidates[i].value);
+    if (result) return result;
+  }
+  return null;
 }
 
 /**
  * Get the Learner session in a server component.
+ *
+ * Tries all `mynk_learner_session` cookie values in reverse (last-set-first)
+ * order and returns the first that validates successfully. Mirrors the
+ * duplicate-cookie resilience of getAccountHolderSessionFromHeaders.
+ *
  * Returns null if no valid session exists.
  */
 export async function getLearnerSessionFromHeaders(): Promise<LearnerSessionData | null> {
-  const req = await buildRequestFromHeaders();
-  return getLearnerSession(req);
+  const cookieStore = await cookies();
+  const candidates = cookieStore.getAll(LEARNER_SESSION_COOKIE);
+  for (let i = candidates.length - 1; i >= 0; i--) {
+    const result = await validateLearnerSessionFromRawToken(candidates[i].value);
+    if (result) return result;
+  }
+  return null;
+}
+
+/**
+ * Returns true if any non-empty `mynk_ah_session` cookie is present in the
+ * request, regardless of whether the token validates.
+ *
+ * Used by assertCanAccessShareLink to distinguish:
+ *   - cookie present but invalid → stale_session_cleared (loop-break path)
+ *   - no cookie at all           → no_session (standard login redirect)
+ */
+export async function hasAccountHolderSessionCookie(): Promise<boolean> {
+  const cookieStore = await cookies();
+  return cookieStore.getAll(AH_SESSION_COOKIE).some((c) => c.value.length > 0);
+}
+
+/**
+ * Returns true if any non-empty `mynk_learner_session` cookie is present in
+ * the request, regardless of whether the token validates.
+ */
+export async function hasLearnerSessionCookie(): Promise<boolean> {
+  const cookieStore = await cookies();
+  return cookieStore.getAll(LEARNER_SESSION_COOKIE).some((c) => c.value.length > 0);
 }

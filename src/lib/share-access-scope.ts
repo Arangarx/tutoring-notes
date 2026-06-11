@@ -6,7 +6,11 @@
  *   - AccountHolder session: asserts assertOwnsLearnerProfile
  *   - Learner session: asserts learnerProfileId matches
  *   - Unclaimed student (learnerProfileId null): "claim required" — no anonymous path
- *   - No session: redirects to /account/login?returnTo=...&source=notes_email
+ *   - No session cookie: redirects to /account/login?returnTo=...&source=notes_email
+ *   - Cookie present but invalid: bounces through clear-stale-session to break the
+ *     redirect loop, landing on /account/login?...&source=session_expired
+ *   - Valid session but wrong owner/learner: redirects to /account/not-my-notes
+ *     (neutral denial — not 404, not login redirect)
  *
  * When NOTES_AUTH_WALL=false (wall off, grace window):
  *   - Returns student data on any valid (non-revoked) token with no auth check.
@@ -16,6 +20,7 @@
  *   [sal] sal=<token:8> action=access_granted principal=account_holder|learner studentId=<id>
  *   [sal] sal=<token:8> action=access_granted_anon_grace studentId=<id>
  *   [sal] sal=<token:8> action=access_denied_redirect studentId=<id> reason=no_session
+ *   [sal] sal=<token:8> action=access_denied_redirect studentId=<id> reason=stale_session_cleared
  *   [sal] sal=<token:8> action=claim_required studentId=<id> reason=unclaimed
  *   [sal] sal=<token:8> action=ownership_denied principal=account_holder accountHolderId=<id>
  *   [sal] sal=<token:8> action=ownership_denied principal=learner learnerProfileId=<id>
@@ -23,14 +28,23 @@
  * SERVER-ONLY: never import on the client.
  */
 
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import type { NextRequest } from "next/server";
 import { db, withDbRetry } from "@/lib/db";
-import { getAccountHolderSession } from "@/lib/account-holder-session";
-import { getLearnerSession } from "@/lib/learner-session";
+import {
+  getAccountHolderSession,
+  AH_SESSION_COOKIE,
+} from "@/lib/account-holder-session";
+import {
+  getLearnerSession,
+  LEARNER_SESSION_COOKIE,
+} from "@/lib/learner-session";
 import {
   getAccountHolderSessionFromHeaders,
   getLearnerSessionFromHeaders,
+  hasAccountHolderSessionCookie,
+  hasLearnerSessionCookie,
 } from "@/lib/server-session";
 
 export interface ShareAccessResult {
@@ -54,9 +68,11 @@ export function isNotesAuthWallEnabled(): boolean {
  * On success: returns { studentId, learnerProfileId } from the resolved ShareLink.
  * On revoked/missing token: calls notFound() (unchanged behavior, all modes).
  * On wall=off: always returns without auth check (anonymous grace mode).
- * On wall=on + no session: redirects to /account/login with returnTo.
+ * On wall=on + no session cookie: redirects to /account/login with source=notes_email.
+ * On wall=on + cookie present but invalid: bounces through /api/auth/clear-stale-session
+ *   → /account/login?source=session_expired (breaks the redirect loop definitively).
  * On wall=on + unclaimed student: redirects to /account/login with source=claim_required.
- * On wall=on + wrong owner/learner: calls notFound() (deny, anti-enumeration).
+ * On wall=on + wrong owner/learner: redirects to /account/not-my-notes (neutral denial).
  *
  * @param token         The raw share token from the URL.
  * @param sharePagePath The full path of the share page for returnTo (e.g. "/s/<token>").
@@ -134,7 +150,9 @@ export async function assertCanAccessShareLink(
       console.error(
         `[sal] sal=${shortToken} action=ownership_denied principal=account_holder accountHolderId=${ahSession.accountHolderId} studentId=${studentId}`
       );
-      notFound();
+      // Neutral denial: authenticated user who doesn't own this link.
+      // NOT notFound() (which leaks no info but is confusing) and NOT login redirect.
+      redirect("/account/not-my-notes");
     }
 
     console.log(
@@ -160,7 +178,8 @@ export async function assertCanAccessShareLink(
       console.error(
         `[sal] sal=${shortToken} action=ownership_denied principal=learner learnerProfileId=${learnerSession.learnerProfileId} studentId=${studentId}`
       );
-      notFound();
+      // Neutral denial for learner wrong-account case.
+      redirect("/account/not-my-notes");
     }
 
     console.log(
@@ -169,7 +188,32 @@ export async function assertCanAccessShareLink(
     return { studentId, learnerProfileId };
   }
 
-  // No session at all → redirect to parent login with returnTo.
+  // -------------------------------------------------------------------------
+  // No valid session found. Distinguish two cases:
+  //   1. Cookie present but invalid → stale/expired/revoked token.
+  //      Clear via bounce handler to break the redirect loop; redirect with
+  //      source=session_expired so the login page shows an actionable message.
+  //   2. No cookie at all → first visit; redirect with source=notes_email.
+  // -------------------------------------------------------------------------
+  const hasCookie =
+    (await hasAccountHolderSessionCookie()) ||
+    (await hasLearnerSessionCookie());
+
+  if (hasCookie) {
+    // Stale cookie detected. Route through the clear-stale-session handler
+    // which emits Set-Cookie Max-Age=0 before redirecting to login.
+    // This definitively breaks the loop regardless of browser cookie ordering.
+    console.log(
+      `[sal] sal=${shortToken} action=access_denied_redirect studentId=${studentId} reason=stale_session_cleared`
+    );
+    redirect(
+      `/api/auth/clear-stale-session?then=${encodeURIComponent(
+        `/account/login?returnTo=${encodeURIComponent(sharePagePath)}&source=session_expired`
+      )}`
+    );
+  }
+
+  // No cookie at all → standard first-visit redirect.
   console.log(
     `[sal] sal=${shortToken} action=access_denied_redirect studentId=${studentId} reason=no_session`
   );
@@ -187,7 +231,8 @@ export async function assertCanAccessShareLink(
  *
  * On wall=off: returns { allowed: true, studentId, learnerProfileId }.
  * On wall=on + authenticated + authorized: returns { allowed: true, ... }.
- * On wall=on + no/wrong session: returns { allowed: false, status, redirectTo? }.
+ * On wall=on + no/stale session: returns { allowed: false, status: 401, redirectTo }.
+ * On wall=on + wrong owner/learner: returns { allowed: false, status: 403 }.
  * On revoked/missing token: returns { allowed: false, status: 403 }.
  */
 export type ApiShareAccessResult =
@@ -293,12 +338,20 @@ export async function checkApiShareAccess(
     return { allowed: true, studentId, learnerProfileId };
   }
 
+  // No valid session. Detect cookie-present-but-invalid to distinguish
+  // stale session (→ session_expired) from first visit (→ notes_email).
+  const cookieHeader = req.headers.get("cookie") ?? "";
+  const hasStaleCookie =
+    cookieHeader.includes(`${AH_SESSION_COOKIE}=`) ||
+    cookieHeader.includes(`${LEARNER_SESSION_COOKIE}=`);
+
+  const source = hasStaleCookie ? "session_expired" : "notes_email";
   console.log(
-    `[sal] sal=${shortToken} action=access_denied_redirect studentId=${studentId} reason=no_session`
+    `[sal] sal=${shortToken} action=access_denied_redirect studentId=${studentId} reason=${hasStaleCookie ? "stale_session" : "no_session"}`
   );
   return {
     allowed: false,
     status: 401,
-    redirectTo: `/account/login?returnTo=${encodeURIComponent(sharePagePath)}&source=notes_email`,
+    redirectTo: `/account/login?returnTo=${encodeURIComponent(sharePagePath)}&source=${source}`,
   };
 }
