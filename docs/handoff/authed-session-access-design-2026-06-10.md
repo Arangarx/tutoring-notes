@@ -494,6 +494,21 @@ All existing `joinToken`-authed paths continue to work for unclaimed students.
 | **P2-AC-10** | Login redirect preserves `#k=` fragment via `sessionStorage` capture/restore | **BLOCKER** |
 | **P2-AC-11** | Join link remains valid while session live (`endedAt == null`); no mid-session invalidation | REQUIRED |
 
+### 4.10 Notes page — first-class authenticated site integration (forward requirement)
+
+**Captured 2026-06-10 (Andrew, pilot/design conversation).** Not Phase 1 scope — belongs to the notes-page redesign alongside Phase 2 dashboard work.
+
+Andrew: *"When we get to the redesign of the notes page lets make sure they can navigate away. There's no reason to not just have the notes page as part of the parent/child's site."*
+
+**Requirement:** The notes view MUST be redesigned as a **first-class page within the authenticated parent/child site** — normal app nav/chrome, ability to navigate away to dashboard and other account routes — **not** a standalone dead-end share page. Anonymous `/s/[token]` routes are being deprecated in favor of authenticated parent/learner dashboards (`/account/children/[learnerId]/notes`, learner dashboard session cards); the notes UX should follow that model even when reached via email deep-link (`returnTo`).
+
+| # | Criterion | Blocker? |
+|---|---|---|
+| **P2-AC-12** | Notes view renders inside authenticated parent/child chrome with working nav to dashboard and sibling routes (not a nav-less dead end) | REQUIRED |
+| **P2-AC-13** | Parent or learner can leave the notes view without signing out or closing the tab (standard site navigation) | REQUIRED |
+
+Cross-ref: §3.7 account-level notes route; §4.6 learner dashboard; [`docs/BACKLOG.md`](../BACKLOG.md) § Identity / access.
+
 ---
 
 ## §5. Auth-Boundary Map
@@ -708,6 +723,27 @@ Andrew locked the following at Phase 1 build kickoff. These refine §3.5.3 grace
 | **When the flag flips** | `NOTES_AUTH_WALL=true` **only** at the **`v1-redesign`→`master` cutover**, and **only after** Sarah's pilot families are claimed/credentialed. Rationale: Sarah has only ever used `master` (production); enabling the wall on `master` before v1 lands there, or before families are credentialed, would lock her out of notes. |
 | **View vs consent** | Phase 1 gates **viewing** session notes on **ownership** (`assertOwnsLearnerProfile` / learner self-match) **alone**. Parent privacy **consent** enforcement (Gate B2 — `SessionConsentSnapshot`, capture gating) is a **separate parallel thread**, intentionally decoupled from the notes-login wall. |
 | **Sequencing** | **Phase 1 first** (notes-login on `feat/notes-login`). **Then** Phase 2 + Gate A2 (session-login + waiting room) as **one combined executor scope** — not two branches to merge later (see §6). |
+
+---
+
+## §9. Gate B2 — Parent Privacy Consent (forward requirements)
+
+Gate B2 (`ConsentRecord`, `SessionConsentSnapshot`, server-enforced capture gating) is a **separate parallel thread** from Phase 1 notes-login (see [Kickoff decisions 2026-06-10](#kickoff-decisions-2026-06-10-build)). Phase 1 gates **viewing** on ownership alone; B2 gates **capture and sharing** per consent toggles. Items below are **B2 acceptance requirements**, not Phase 1.
+
+### 9.1 Per-tutor privacy re-consent at claim / reconnect
+
+**Captured 2026-06-10 (Andrew, pilot/design conversation).** Observed during claim flow: parent claimed via link without being prompted to set privacy options again — acceptable for Phase 1, but **must not carry into Gate B2**.
+
+Andrew: *"I had to have the parent claim the account first, I notice it didn't ask to set creds again, which is possibly fine for now but with the privacy toggles, a parent should probably have to at least set that again when reconnecting to a tutor. Let's make sure that when we do the privacy toggles a parent who uses a claim link has to set the privacy options for that tutor again."*
+
+**Requirement:** When Gate B2 privacy/consent toggles ship, a parent who uses a **claim link** to connect (or **reconnect**) to a tutor MUST be required to **(re)set privacy/consent options for that tutor at claim time**. Consent is **per-tutor** (scoped to the `Student` / tutor relationship), not global to the `AccountHolder`. Prior consent for another tutor, or stale consent from a prior connection to the same tutor, MUST **not** silently carry over or default-on across claim/reconnect — the parent explicitly confirms toggles for **this** tutor before the connection is complete.
+
+| # | Criterion | Blocker? |
+|---|---|---|
+| **B2-AC-1** | Claim (or reconnect) flow blocks completion until parent sets privacy toggles for **this** tutor | **BLOCKER** (B2) |
+| **B2-AC-2** | No silent inherit of another tutor's consent or prior-session defaults on claim/reconnect | **BLOCKER** (B2) |
+
+Cross-ref: [`session-lifecycle-consent-design-2026-05-31.md`](session-lifecycle-consent-design-2026-05-31.md) §4; [`identity-phase2-auth-session-design-2026-06-01.md`](identity-phase2-auth-session-design-2026-06-01.md) §7; [`docs/BACKLOG.md`](../BACKLOG.md) § Gate B2.
 
 ---
 
