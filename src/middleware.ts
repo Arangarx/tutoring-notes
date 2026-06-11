@@ -156,6 +156,36 @@ export async function middleware(req: NextRequest) {
     });
 
     // ---------------------------------------------------------------------------
+    // B1 approval gate
+    //
+    // WAITLISTED tutors can only see /admin/pending-approval (+ login / signout).
+    // Exemptions: isTestAccount, impersonating sessions, env-only admin, pending-approval page itself.
+    // approvalStatus is absent for the env-only admin (sub="admin") and legacy sessions —
+    // treat absent as APPROVED (safe default: those were approved before this feature shipped).
+    // ---------------------------------------------------------------------------
+    const isApprovalExemptPath =
+      pathname === "/admin/pending-approval" ||
+      pathname.startsWith("/admin/pending-approval/") ||
+      pathname.startsWith("/api/auth/");
+
+    if (!isApprovalExemptPath) {
+      const approvalStatus = token.approvalStatus as string | undefined;
+      const isTestAccount = (token.isTestAccount as boolean | undefined) ?? false;
+      const isImpersonating = (token.isImpersonating as boolean | undefined) ?? false;
+      const isEnvAdmin = token.sub === "admin";
+
+      if (!isTestAccount && !isImpersonating && !isEnvAdmin && approvalStatus === "WAITLISTED") {
+        console.log(
+          `[tap] sub=${token.sub ?? "?"} action=middleware_redirect_pending pathname=${pathname}`
+        );
+        const pendingUrl = req.nextUrl.clone();
+        pendingUrl.pathname = "/admin/pending-approval";
+        pendingUrl.search = "";
+        return addSecurityHeaders(NextResponse.redirect(pendingUrl), pathname);
+      }
+    }
+
+    // ---------------------------------------------------------------------------
     // 2FA gate (Identity Phase 1)
     //
     // Non-test TUTOR/ADMIN must complete 2FA before accessing /admin/*.

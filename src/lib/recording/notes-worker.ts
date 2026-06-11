@@ -33,6 +33,7 @@ import "server-only";
 import OpenAI from "openai";
 import { env } from "@/lib/env";
 import { db, withDbRetry } from "@/lib/db";
+import { isTutorApproved } from "@/lib/tutor-approval-scope";
 import {
   getTutorNoteBySessionId,
   getTranscriptChunksBySessionId,
@@ -196,7 +197,7 @@ export async function processNotesReduceJob(
     return { outcome: "skipped", reason: `already_${note.status}` };
   }
 
-  // --- 2. Session-not-sealed guard -----------------------------------------------
+  // --- 2. Session-not-sealed guard + B1 cost gate --------------------------------
   const session = await withDbRetry(
     () =>
       db.whiteboardSession.findUnique({
@@ -204,6 +205,7 @@ export async function processNotesReduceJob(
         select: {
           id: true,
           endedAt: true,
+          adminUserId: true,
         },
       }),
     { label: "processNotesReduceJob.session" }
@@ -212,6 +214,17 @@ export async function processNotesReduceJob(
   if (!session) {
     console.error(`[tnt] wbsid=${sessionId} action=reduce_failed reason=session_not_found`);
     return { outcome: "failed", error: "Session not found" };
+  }
+
+  // B1 cost gate: skip notes reduce for WAITLISTED tutors (OpenAI spend).
+  {
+    const approved = await isTutorApproved(session.adminUserId);
+    if (!approved) {
+      console.log(
+        `[tap] wbsid=${sessionId} action=reduce_skip_unapproved adminUserId=${session.adminUserId}`
+      );
+      return { outcome: "skipped", reason: "tutor_not_approved" };
+    }
   }
 
   if (!session.endedAt) {

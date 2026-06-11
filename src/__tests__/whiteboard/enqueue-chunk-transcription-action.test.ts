@@ -57,7 +57,10 @@ jest.mock("next/navigation", () => ({
 jest.mock("@vercel/blob", () => ({ __esModule: true, put: jest.fn() }));
 jest.mock("@/lib/db", () => ({
   __esModule: true,
-  db: {},
+  db: {
+    // B1: default APPROVED so existing tests are unaffected by the approval gate.
+    adminUser: { findUnique: jest.fn().mockResolvedValue({ approvalStatus: "APPROVED" }) },
+  },
   withDbRetry: <T,>(fn: () => Promise<T>) => fn(),
 }));
 jest.mock("@/lib/action-correlation", () => ({

@@ -1,7 +1,7 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
-import type { AdminRole } from "@prisma/client";
+import type { AdminRole, TutorApprovalStatus } from "@prisma/client";
 import { env } from "@/lib/env";
 import { getAdminByEmail, getAdminById, hasAdminUsers, verifyPassword } from "@/lib/auth-db";
 import {
@@ -64,6 +64,7 @@ export const authOptions: NextAuthOptions = {
             name: admin.displayName ?? "Admin",
             isTestAccount: admin.isTestAccount,
             role: admin.role,
+            approvalStatus: admin.approvalStatus,
           };
         }
 
@@ -112,14 +113,16 @@ export const authOptions: NextAuthOptions = {
 
     async jwt({ token, user, account }) {
       if (user) {
-        // CredentialsProvider: authorize() sets isTestAccount + role on the returned user.
+        // CredentialsProvider: authorize() sets isTestAccount + role + approvalStatus on the returned user.
         const u = user as {
           isTestAccount?: boolean;
           role?: AdminRole;
+          approvalStatus?: TutorApprovalStatus;
           email?: string;
         };
         token.isTestAccount = u.isTestAccount ?? false;
         if (u.role !== undefined) token.role = u.role;
+        if (u.approvalStatus !== undefined) token.approvalStatus = u.approvalStatus;
         // Fresh login: 2FA not yet verified this session (non-test accounts must pass the gate).
         // isTestAccount accounts are exempt — we mark them pre-verified so middleware skips them.
         // Playwright wb-regression harness: credentials login for playwright@test.local
@@ -140,6 +143,7 @@ export const authOptions: NextAuthOptions = {
           token.sub = admin.id;
           token.isTestAccount = admin.isTestAccount;
           token.role = admin.role;
+          token.approvalStatus = admin.approvalStatus;
           // Google login: same 2FA gate — not verified yet.
           // isTestAccount exempts (Google path can't produce test accounts per signIn callback,
           // but guard anyway for safety).
@@ -190,15 +194,18 @@ export const authOptions: NextAuthOptions = {
             } else {
               const roleChanged = dbAdmin.role !== (token.role as string | undefined);
               const testChanged = dbAdmin.isTestAccount !== (token.isTestAccount as boolean | undefined);
-              if (roleChanged || testChanged) {
+              const approvalChanged = dbAdmin.approvalStatus !== (token.approvalStatus as string | undefined);
+              if (roleChanged || testChanged || approvalChanged) {
                 console.log(
                   `[rol] sub=${token.sub} role_corrected` +
                     (roleChanged ? ` role=${String(token.role)}->${dbAdmin.role}` : "") +
-                    (testChanged ? ` isTestAccount=${String(token.isTestAccount)}->${String(dbAdmin.isTestAccount)}` : "")
+                    (testChanged ? ` isTestAccount=${String(token.isTestAccount)}->${String(dbAdmin.isTestAccount)}` : "") +
+                    (approvalChanged ? ` approvalStatus=${String(token.approvalStatus)}->${dbAdmin.approvalStatus}` : "")
                 );
               }
               token.role = dbAdmin.role;
               token.isTestAccount = dbAdmin.isTestAccount;
+              token.approvalStatus = dbAdmin.approvalStatus;
               token._roleCheckedAt = now;
             }
           } catch (err) {
@@ -224,6 +231,7 @@ export const authOptions: NextAuthOptions = {
         session.user.impersonationLogId =
           (token.impersonationLogId as string | null | undefined) ?? null;
         session.user.role = (token.role as AdminRole | undefined);
+        session.user.approvalStatus = (token.approvalStatus as TutorApprovalStatus | undefined);
         session.user.twoFactorVerified =
           (token.twoFactorVerified as boolean | undefined) ?? false;
       }

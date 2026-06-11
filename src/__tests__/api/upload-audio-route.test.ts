@@ -34,6 +34,17 @@ jest.mock("@vercel/blob/client", () => ({
 jest.mock("@/lib/student-scope", () => ({
   __esModule: true,
   assertOwnsStudent: (id: string) => assertOwnsStudentMock(id),
+  // B1: default APPROVED so existing tests are unaffected by the approval gate.
+  requireStudentScope: jest.fn().mockResolvedValue({ kind: "admin", adminId: "admin_test_1" }),
+}));
+
+// B1: mock db for the approval check (adminUser.findUnique returns APPROVED).
+jest.mock("@/lib/db", () => ({
+  __esModule: true,
+  db: {
+    adminUser: { findUnique: jest.fn().mockResolvedValue({ approvalStatus: "APPROVED" }) },
+  },
+  withDbRetry: <T,>(fn: () => Promise<T>) => fn(),
 }));
 
 import { POST } from "@/app/api/upload/audio/route";

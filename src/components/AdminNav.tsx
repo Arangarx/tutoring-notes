@@ -49,6 +49,7 @@ export function AdminNav({
     ...(showOperatorLinks
       ? [
           { href: "/admin/feedback", label: "Feedback inbox" } as const,
+          { href: "/admin/tutor-approvals", label: "Tutor approvals" } as const,
         ]
       : []),
     ...(showCostDashboard ? [{ href: "/admin/cost", label: "Cost" } as const] : []),

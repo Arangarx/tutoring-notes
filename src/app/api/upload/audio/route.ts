@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { BLOB_MAX_BYTES } from "@/lib/audio-constants";
-import { assertOwnsStudent } from "@/lib/student-scope";
+import { assertOwnsStudent, requireStudentScope } from "@/lib/student-scope";
 import { createActionCorrelationId } from "@/lib/action-correlation";
+import { assertTutorApproved } from "@/lib/tutor-approval-scope";
 
 /**
  * Client-direct Vercel Blob upload route.
@@ -92,6 +93,12 @@ export async function POST(request: Request): Promise<Response> {
         // response on the client. The tutor sees our user-facing copy
         // surfaced by uploadAudioDirect's catch path.
         await assertOwnsStudent(studentId);
+
+        // B1 cost gate: WAITLISTED tutors cannot upload audio (no Whisper spend).
+        const audioScope = await requireStudentScope();
+        if (audioScope.kind === "admin") {
+          await assertTutorApproved(audioScope.adminId);
+        }
 
         return {
           // Vercel Blob's matcher supports glob suffixes ("text/*") and

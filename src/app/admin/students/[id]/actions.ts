@@ -21,6 +21,7 @@ import {
 import { createActionCorrelationId } from "@/lib/action-correlation";
 import { revalidateStudentSharePages } from "@/lib/revalidateStudentSharePages";
 import { looksLikeSilenceHallucination } from "@/lib/whisper-guardrails";
+import { assertTutorApproved } from "@/lib/tutor-approval-scope";
 
 const HALLUCINATION_MIC_MESSAGE =
   "We couldn't detect clear speech in this recording. Whisper sometimes invents text when the mic picks up silence or the wrong device. Check the browser's microphone permission, choose the correct input, speak for at least 15–20 seconds, then try again. You can also use Upload and pick a file from another recorder.";
@@ -253,6 +254,11 @@ export async function generateNoteFromTextAction(
   const scope = await getStudentScope();
   const adminUserId = scope.kind === "admin" ? scope.adminId : null;
 
+  // B1 cost gate: WAITLISTED tutors cannot use AI note generation (OpenAI spend).
+  if (adminUserId) {
+    await assertTutorApproved(adminUserId);
+  }
+
   const trimmed = sessionText.trim();
   if (!trimmed) return { ok: false, error: "Please enter some session text first." };
   if (estimateTokens(trimmed) > MAX_INPUT_TOKENS) {
@@ -387,6 +393,9 @@ async function _transcribeAndGenerateImpl(
   }
   const tutorAdminId = scope.adminId;
   await assertOwnsStudent(studentId);
+
+  // B1 cost gate: WAITLISTED tutors cannot run transcription (Whisper + OpenAI spend).
+  await assertTutorApproved(tutorAdminId);
 
   if (recordings.length === 0) {
     return transcribeFail(rid, "No recordings provided.");

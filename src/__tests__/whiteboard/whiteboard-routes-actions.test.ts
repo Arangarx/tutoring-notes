@@ -85,7 +85,11 @@ jest.mock("@/lib/db", () => {
   (globalThis as unknown as DbMockSidechannel).__dbMock = mock;
   return {
     __esModule: true,
-    db: mock,
+    db: {
+      ...mock,
+      // B1: default APPROVED so existing tests are unaffected by the approval gate.
+      adminUser: { findUnique: jest.fn().mockResolvedValue({ approvalStatus: "APPROVED" }) },
+    },
     withDbRetry: <T,>(fn: () => Promise<T>) => fn(),
   };
 });// ── Auth / scope mock ────────────────────────────────────────────────

@@ -1,10 +1,11 @@
-// Type augmentation for NextAuth v4 — SEC-1 impersonation fields + role + Identity Phase 1 2FA.
+// Type augmentation for NextAuth v4 — SEC-1 impersonation fields + role + Identity Phase 1 2FA
+// + B1 tutor approval status.
 //
 // These extend the built-in Session and JWT interfaces so TypeScript
 // knows about the custom fields we write in auth-options.ts callbacks,
 // src/lib/impersonation.ts token-minting helpers, and 2FA verify action.
 import "next-auth";
-import type { AdminRole } from "@prisma/client";
+import type { AdminRole, TutorApprovalStatus } from "@prisma/client";
 
 declare module "next-auth" {
   interface Session {
@@ -37,6 +38,13 @@ declare module "next-auth" {
        * isTestAccount accounts are exempt and always treated as verified.
        */
       twoFactorVerified?: boolean;
+      /**
+       * B1 tutor signup-waitlist approval status.
+       * WAITLISTED: account pending operator approval; cannot incur external cost.
+       * APPROVED: full access granted.
+       * Refreshed via the role-refresh interval (same cadence as `role`).
+       */
+      approvalStatus?: TutorApprovalStatus;
     };
   }
 }
@@ -56,5 +64,10 @@ declare module "next-auth/jwt" {
      * Absent or false means the user must complete 2FA before accessing /admin.
      */
     twoFactorVerified?: boolean;
+    /**
+     * B1 tutor approval status — persisted in JWT so middleware can redirect without DB.
+     * Refreshed at the same interval as `role` via the role-refresh block in auth-options.ts.
+     */
+    approvalStatus?: TutorApprovalStatus;
   }
 }

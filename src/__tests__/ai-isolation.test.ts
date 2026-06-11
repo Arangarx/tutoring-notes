@@ -25,6 +25,8 @@ const mockFindUniqueOrThrow = jest.fn();
 const mockFindMany = jest.fn();
 jest.mock("@/lib/db", () => ({
   db: {
+    // B1: default APPROVED so existing tests are unaffected by the approval gate.
+    adminUser: { findUnique: jest.fn().mockResolvedValue({ approvalStatus: "APPROVED" }) },
     student: {
       findUnique: (...args: unknown[]) => mockFindUnique(...args),
       findUniqueOrThrow: (...args: unknown[]) => mockFindUniqueOrThrow(...args),

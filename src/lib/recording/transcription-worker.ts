@@ -35,6 +35,8 @@ import {
 } from "@/lib/recording/transcript-store";
 import { transcribeChunk } from "@/lib/recording/transcribe-chunk";
 import { extractChunkMap } from "@/lib/recording/extract-chunk";
+import { db } from "@/lib/db";
+import { isTutorApproved } from "@/lib/tutor-approval-scope";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -95,6 +97,23 @@ export async function processChunkTranscribeJob(
   console.log(
     `[txc] wbsid=${sessionId} action=worker_start chunkBlobUrl=${chunkBlobUrl}`
   );
+
+  // --- 0. B1 cost gate — skip WAITLISTED tutor sessions ----------------------
+  // Load the session's owning tutor and check approval before any Whisper spend.
+  // This catches rows that were enqueued before approval was revoked (belt-and-suspenders).
+  const wbRow = await db.whiteboardSession.findUnique({
+    where: { id: sessionId },
+    select: { adminUserId: true },
+  });
+  if (wbRow) {
+    const approved = await isTutorApproved(wbRow.adminUserId);
+    if (!approved) {
+      console.log(
+        `[tap] wbsid=${sessionId} action=worker_skip_unapproved adminUserId=${wbRow.adminUserId}`
+      );
+      return "skipped";
+    }
+  }
 
   // --- 1. Idempotency check ---------------------------------------------------
   const existing = await getTranscriptChunkByBlobUrl(sessionId, chunkBlobUrl);
