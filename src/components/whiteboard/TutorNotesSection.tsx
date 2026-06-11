@@ -48,6 +48,13 @@ type Props = {
   initialNote: TutorNoteStatusResult;
   /** Whether the session has any audio recordings. */
   hasAudio: boolean;
+  /**
+   * A3 in-shell review variant: when provided, Save stays in the shell
+   * and calls this callback (with an inline "Saved — visible to parent"
+   * confirmation) instead of navigating to the notes list.
+   * When omitted, the original router.push(/notes) behaviour is preserved.
+   */
+  onSaved?: () => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -110,6 +117,7 @@ export default function TutorNotesSection({
   studentId,
   initialNote,
   hasAudio,
+  onSaved,
 }: Props) {
   const router = useRouter();
 
@@ -127,6 +135,7 @@ export default function TutorNotesSection({
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [savedInShell, setSavedInShell] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const startTimeRef = useRef<number>(Date.now());
@@ -226,6 +235,7 @@ export default function TutorNotesSection({
   const handleSave = useCallback(async () => {
     setSaving(true);
     setSaveError(null);
+    setSavedInShell(false);
     try {
       const result = await saveSessionNotesAction(
         whiteboardSessionId,
@@ -233,8 +243,12 @@ export default function TutorNotesSection({
       );
       if (!result.ok) {
         setSaveError(result.error ?? "Could not save the note. Please try again.");
+      } else if (onSaved) {
+        // A3 in-shell variant: stay in the shell, show inline confirmation
+        setSavedInShell(true);
+        onSaved();
       } else {
-        // Navigate to the student notes list to see the live note
+        // Standalone review page: navigate to the student notes list
         router.push(`/admin/students/${studentId}/notes`);
       }
     } catch (err: unknown) {
@@ -244,7 +258,7 @@ export default function TutorNotesSection({
     } finally {
       setSaving(false);
     }
-  }, [whiteboardSessionId, fields, router, studentId]);
+  }, [whiteboardSessionId, fields, onSaved, router, studentId]);
 
   const handleDelete = useCallback(async () => {
     if (
@@ -415,6 +429,28 @@ export default function TutorNotesSection({
               }}
             >
               {saveError}
+            </div>
+          )}
+
+          {savedInShell && (
+            <div
+              role="status"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                background: "var(--success-soft, var(--info-soft))",
+                border: "1px solid var(--success-border, var(--info-border))",
+                borderRadius: 6,
+                padding: "6px 12px",
+                fontSize: 13,
+                fontWeight: 500,
+                marginTop: 8,
+                color: "var(--success-text, var(--text))",
+              }}
+              data-testid="wb-save-note-confirmation"
+            >
+              ✓ Saved — visible to parent
             </div>
           )}
 

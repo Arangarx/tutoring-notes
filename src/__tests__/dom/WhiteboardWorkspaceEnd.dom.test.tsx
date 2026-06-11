@@ -73,10 +73,13 @@ jest.mock("@/lib/whiteboard/sync-client", () => ({
   generateEncryptionKeyBase64Url: () => "test-integration-key-16chars-min",
 }));
 
+// Stable router mock — shared reference so tests can assert on replace/refresh calls.
+const mockRouterReplace = jest.fn();
+const mockRouterRefresh = jest.fn();
 jest.mock("next/navigation", () => ({
   useRouter: () => ({
-    replace: jest.fn(),
-    refresh: jest.fn(),
+    replace: mockRouterReplace,
+    refresh: mockRouterRefresh,
   }),
 }));
 
@@ -368,6 +371,8 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
   beforeEach(() => {
     jest.useRealTimers();
     window.scrollTo = jest.fn();
+    mockRouterReplace.mockClear();
+    mockRouterRefresh.mockClear();
     mockEnd.mockClear();
     mockUpload.mockClear();
     mockSnapshotUpload.mockClear();
@@ -924,5 +929,153 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     expect(alert.textContent).toMatch(/Vercel Blob 500/);
     expect(alert.textContent).toMatch(/2 audio segments still saving/i);
     expect(mockEnd).not.toHaveBeenCalled();
+  });
+
+  // ---- A3 in-shell mode flip (Phase A) ----------------------------------------
+
+  test("A3: onSessionEnded is called instead of router.replace when prop is provided", async () => {
+    // Contract: when the shell supplies onSessionEnded, the pipeline should
+    // call it (triggering the in-shell mode flip) and must NOT call
+    // router.replace / router.refresh. This prevents nav-away on end session.
+    const onSessionEnded = jest.fn();
+
+    render(
+      <WhiteboardWorkspaceClient
+        whiteboardSessionId="ws-a3-shell-flip"
+        studentId="stu-1"
+        studentName="Test Student"
+        adminUserId="admin-1"
+        startedAtIso="2026-05-09T10:00:00.000Z"
+        bothConnectedAtIso={null}
+        initialActiveMs={0}
+        initialLastActiveAtIso={null}
+        syncUrl={null}
+        initialUserWantsRecording
+        onSessionEnded={onSessionEnded}
+      />
+    );
+
+    await screen.findByTestId("wb-mock-excalidraw-canvas");
+    await userEvent.click(screen.getByTestId("wb-end-session"));
+
+    // Pipeline must still complete (atomic action called).
+    await waitFor(() => {
+      expect(mockEnd).toHaveBeenCalledWith(
+        "ws-a3-shell-flip",
+        "https://abc.blob.vercel-storage.com/blob-events",
+        { segments: [] }
+      );
+    });
+
+    // onSessionEnded callback must fire.
+    await waitFor(() => {
+      expect(onSessionEnded).toHaveBeenCalledTimes(1);
+    });
+
+    // router.replace must NOT be called when onSessionEnded is provided.
+    expect(mockRouterReplace).not.toHaveBeenCalled();
+    expect(mockRouterRefresh).not.toHaveBeenCalled();
+  });
+
+  test("A3: fallback — router.replace IS called when onSessionEnded is not provided", async () => {
+    // Legacy fallback contract: without the shell prop, the old navigation
+    // behaviour is preserved (router.replace to the review page).
+    render(
+      <WhiteboardWorkspaceClient
+        whiteboardSessionId="ws-a3-legacy-nav"
+        studentId="stu-1"
+        studentName="Test Student"
+        adminUserId="admin-1"
+        startedAtIso="2026-05-09T10:00:00.000Z"
+        bothConnectedAtIso={null}
+        initialActiveMs={0}
+        initialLastActiveAtIso={null}
+        syncUrl={null}
+        initialUserWantsRecording
+        // onSessionEnded intentionally omitted
+      />
+    );
+
+    await screen.findByTestId("wb-mock-excalidraw-canvas");
+    await userEvent.click(screen.getByTestId("wb-end-session"));
+
+    await waitFor(() => {
+      expect(mockEnd).toHaveBeenCalled();
+    });
+
+    // Legacy path: router.replace must be called with the review href.
+    await waitFor(() => {
+      expect(mockRouterReplace).toHaveBeenCalledWith(
+        "/admin/students/stu-1/whiteboard/ws-a3-legacy-nav"
+      );
+    });
+    expect(mockRouterRefresh).toHaveBeenCalled();
+  });
+
+  test("A3: step ordering with onSessionEnded — atomic pipeline still completes before flip", async () => {
+    // Verify that even with the in-shell flip, the ordering contract
+    // (stop→flush→drain→assemble→end) is preserved and onSessionEnded
+    // fires AFTER endWhiteboardSession completes (not before).
+    const callLog: string[] = [];
+    const onSessionEnded = jest.fn(() => {
+      callLog.push("onSessionEnded");
+    });
+    audioCtl.state = "recording";
+    audioCtl.stopAndUpload.mockImplementation((mode?: unknown) => {
+      callLog.push(`stopAndUpload:${String(mode)}`);
+    });
+    audioCtl.flushPendingUploads.mockImplementation(async () => {
+      callLog.push("flushPendingUploads");
+    });
+    mockDrainOutboxOrTimeout.mockImplementation(async () => {
+      callLog.push("drainOutboxOrTimeout");
+      return {
+        timedOut: false,
+        remainingCount: 0,
+        remainingByStream: new Map<string, number>(),
+        lastError: null,
+      };
+    });
+    mockAssembleEndSessionSegments.mockImplementation(async () => {
+      callLog.push("assembleEndSessionSegments");
+      return [];
+    });
+    mockEnd.mockImplementation(async () => {
+      callLog.push("endWhiteboardSession");
+      return { endedAt: "2026-05-10T00:00:00Z", durationSeconds: 100, registeredSegments: 0 };
+    });
+
+    render(
+      <WhiteboardWorkspaceClient
+        whiteboardSessionId="ws-a3-ordering"
+        studentId="stu-1"
+        studentName="Test Student"
+        adminUserId="admin-1"
+        startedAtIso="2026-05-09T10:00:00.000Z"
+        bothConnectedAtIso={null}
+        initialActiveMs={0}
+        initialLastActiveAtIso={null}
+        syncUrl={null}
+        initialUserWantsRecording
+        onSessionEnded={onSessionEnded}
+      />
+    );
+
+    await screen.findByTestId("wb-mock-excalidraw-canvas");
+    await userEvent.click(screen.getByTestId("wb-end-session"));
+
+    await waitFor(() => {
+      expect(onSessionEnded).toHaveBeenCalled();
+    });
+
+    // onSessionEnded fires AFTER endWhiteboardSession, not before.
+    expect(callLog).toEqual([
+      "stopAndUpload:final",
+      "flushPendingUploads",
+      "drainOutboxOrTimeout",
+      "assembleEndSessionSegments",
+      "endWhiteboardSession",
+      "onSessionEnded",
+    ]);
   });
 });

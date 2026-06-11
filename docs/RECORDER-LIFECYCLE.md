@@ -274,7 +274,8 @@ on when generation fails best-effort.
 7. finalizeOutboxAfterEnd(wbsid)           # drop IDB rows
         │
         ▼
-8. router.replace(reviewHref) + router.refresh()    # land on review page
+8. onSessionEnded?.() → shell flips mode="review"  # A3 in-shell flip
+   ↳ fallback: router.replace(reviewHref) + router.refresh()  # if no shell
 ```
 
 **Order is load-bearing.** Steps 1-4 must happen exactly in that
@@ -282,19 +283,27 @@ order; step 5/5b can fail without affecting steps 6-8; step 7 must
 happen after step 6 succeeds (otherwise a refresh between 6 and 7
 would leak orphan rows and re-upload them on next mount).
 
-**Phase 1c clarification on step 8:** the immediate post-End
-destination is still the read-only **review** page, *not* the
-preview-before-Start surface. Most of the high-value
-immediate-post-session actions (AI-generate notes from the
-session audio — the wedge — plus replay scrub, snapshot capture,
-share-link copy) live on the review page; landing the tutor
-there directly avoids an extra click for those flows. The
-preview-before-Start surface (Pillar 4 Task 6) is for the
-**re-entry** case: a tutor returning to `/workspace` later (via
-a pinned tab, a browser bookmark, or a manually-edited URL) sees
-the read-only final-frame preview + the Start-new affordance
-instead of the old "session has already ended" 404. See the
-"Workspace preview-before-Start" section below for the routing.
+**A3 clarification on step 8 (Phase A, 2026-06-11):** step 8 is now an
+**in-shell mode flip** rather than a page navigation. `WhiteboardSessionShell`
+receives an `onSessionEnded` callback from the workspace; when `handleEndSession`
+reaches step 8 it calls `onSessionEnded?.()` which sets `mode="review"`.
+This unmounts the live subtree (firing sync disconnect + useLiveAV
+teardown + active-ping cleanup), then mounts `SessionReviewMode` (notes
+primary, read-only board preview, lazy replay drill-down). The URL does not
+change. The standalone review route (`/admin/students/[id]/whiteboard/[whiteboardSessionId]`)
+still works for revisiting past sessions and deep links from notes.
+
+**Legacy fallback:** if `onSessionEnded` is undefined (e.g. a caller that
+doesn't use `WhiteboardSessionShell`), step 8 falls back to the original
+`router.replace(reviewHref) + router.refresh()` navigation.
+
+**Phase 1c clarification:** most high-value immediate-post-session actions
+(AI-generate notes, replay, snapshot, share-link copy) are now in the
+in-shell `SessionReviewMode`. The preview-before-Start surface
+(`WorkspacePreviousSessionPreview`, Pillar 4 Task 6) still serves the
+**re-entry** case: a tutor returning to `/workspace` later (pinned tab,
+browser bookmark, manual URL) sees the final-frame preview + Start-new
+affordance. See the "Workspace preview-before-Start" section below.
 
 ---
 

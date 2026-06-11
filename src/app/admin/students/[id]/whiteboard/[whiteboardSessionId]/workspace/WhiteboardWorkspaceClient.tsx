@@ -233,6 +233,16 @@ type Props = {
    * can still flip mid-session — this is the initial state only.
    */
   initialUserWantsRecording: boolean;
+  /**
+   * A3 in-shell review: called in place of router.replace/refresh once
+   * the atomic end-session pipeline completes. The shell's handler sets
+   * mode="review", unmounting this client subtree (which fires all the
+   * existing cleanup effects: sync disconnect, useLiveAV mesh/signaling
+   * dispose, active-ping clear). When undefined, falls back to the
+   * legacy router.replace navigation (safe for any future callers that
+   * don't use the shell wrapper).
+   */
+  onSessionEnded?: () => void;
 };
 
 // Phase 4d Commit 6: stable empty Set so the FSM's
@@ -348,6 +358,7 @@ export function WhiteboardWorkspaceClient({
   initialLastActiveAtIso,
   syncUrl,
   initialUserWantsRecording,
+  onSessionEnded,
 }: Props) {
   const router = useRouter();
   // TU-12: Excalidraw theme follows app-selected theme (not OS-only)
@@ -3050,22 +3061,25 @@ export function WhiteboardWorkspaceClient({
       // session.endedAt server-side gate is the real guard).
       clearEncryptionKeyForSession(whiteboardSessionId);
 
-      // Post-End-session navigation: bounce to the review page.
+      // A3 in-shell review (Phase A): flip the shell to review mode rather
+      // than navigating away. The shell's onSessionEnded sets mode="review",
+      // which unmounts this client subtree — firing all existing cleanup
+      // effects (sync disconnect, useLiveAV mesh/signaling dispose,
+      // active-ping interval clear). markPersisted + clearSessionSceneDraft
+      // below still run because onSessionEnded() is a synchronous React
+      // state-update dispatch; React schedules the unmount for the next
+      // render, so this async function continues before the subtree tears down.
       //
-      // Phase 1c originally tried to stay on `/workspace` so the new
-      // preview-before-Start surface (Pillar 4 Task 6) would take
-      // over the same tab — but that delayed the most common
-      // immediate-post-session actions (AI-generate notes from the
-      // session audio is THE wedge feature, plus replay, snapshot,
-      // share-link copy — all on the review page) by an extra click.
-      // The preview surface still serves its actual purpose for the
-      // re-entry case (pinned tab, browser bookmark, manual URL),
-      // because `workspace/page.tsx` no longer redirects ended
-      // sessions away from `/workspace` — it just renders the
-      // preview component when `detail.endedAt` is set.
-      const reviewHref = `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}`;
-      router.replace(reviewHref);
-      router.refresh();
+      // Fallback: if onSessionEnded is not provided (e.g. a future caller
+      // that doesn't use WhiteboardSessionShell), use the legacy router
+      // navigation so behaviour is unchanged for those paths.
+      if (onSessionEnded) {
+        onSessionEnded();
+      } else {
+        const reviewHref = `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}`;
+        router.replace(reviewHref);
+        router.refresh();
+      }
 
       try {
         await recorder.markPersisted();
@@ -3092,7 +3106,7 @@ export function WhiteboardWorkspaceClient({
       // Don't auto-retry — the tutor decides whether to retry End or
       // keep the session open and try again.
     }
-  }, [recorder, router, studentId, whiteboardSessionId]);
+  }, [onSessionEnded, recorder, router, studentId, whiteboardSessionId]);
 
   // ---------------------------------------------------------------
   // After refresh: (1) auto-paint after stale-room "Resume session" when
