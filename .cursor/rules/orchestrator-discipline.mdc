@@ -31,6 +31,8 @@ Yes, dispatching has its own meta-cost (writing the scope blob + reviewing the r
 | Investigate a failing CI check | `Task` `subagent_type="ci-investigator"` |
 | 5-axis adversarial reliability review on a large diff | `Task` `subagent_type="generalPurpose"` `model="claude-4.6-sonnet-medium-thinking"` |
 
+**Smokebook dispatches:** any prompt that asks a subagent to produce a smokebook MUST reference [`docs/handoff/SMOKEBOOK-TEMPLATE.md`](../../docs/handoff/SMOKEBOOK-TEMPLATE.md) + the fetch-don't-guess preview URL rule ([`.cursor/rules/smokebook-template.mdc`](smokebook-template.mdc)); supply the verified Vercel `branchAlias` when already known.
+
 ## What in-chat tool calls in an Opus chat ARE for
 
 1. **Orchestration decisions** — which work next, which model tier, design trade-offs, when to merge, when to defer, when to escalate.

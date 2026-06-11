@@ -429,7 +429,10 @@ While the pilot is solo (just Andrew + Sarah) and there's no adversarial
 CI agent reviewing PRs automatically:
 
 - Executors deliver a **smokeable branch** with the Vercel Preview URL +
-  a smoke checklist + a clear final report. They do NOT open PRs.
+  a smoke checklist + a clear final report. Smokebooks MUST follow
+  [`docs/handoff/SMOKEBOOK-TEMPLATE.md`](docs/handoff/SMOKEBOOK-TEMPLATE.md)
+  (enforced by [`.cursor/rules/smokebook-template.mdc`](.cursor/rules/smokebook-template.mdc)).
+  They do NOT open PRs.
 - Andrew (or the orchestrator after Andrew confirms smoke pass) merges
   directly to master via `git merge --no-ff <branch>` to keep a clean,
   revertable merge commit. The branch is preserved (and later cleaned up

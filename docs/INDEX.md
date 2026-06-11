@@ -110,6 +110,7 @@ No standalone security doc. The canonical list of open security items lives in [
 
 | Doc | What's in it | When to read |
 |---|---|---|
+| [docs/handoff/SMOKEBOOK-TEMPLATE.md](docs/handoff/SMOKEBOOK-TEMPLATE.md) | Canonical smokebook/runbook template — per-item Action/Expect/Ignore/PASS/FAIL/Notes; header with branch, tip commit, verified preview URL | Before authoring any smokebook or smoke-runbook |
 | [docs/SMOKE-LONG-FORM-TRANSCRIBE.md](docs/SMOKE-LONG-FORM-TRANSCRIBE.md) | Long-form transcribe (60–90 min) Tier 1 smoke harness — **Wave 1 BLOCKER-PROD** (Vercel Pro 300s ceiling validation); the only supported trigger is the authenticated admin UI Server Action | Before running long-form transcribe smoke on Production or Preview |
 | [docs/PHASE-2-IOS-SMOKE-MATRIX.md](docs/PHASE-2-IOS-SMOKE-MATRIX.md) | iOS Safari real-hardware smoke matrix — **Wave 1 BLOCKER-PROD** (Axis 4 cross-platform parity; Sarah uses iPhone); becomes the living iOS limitations doc as rows are ticked | Before iOS Safari smoke pass; fill on real hardware only |
 | [docs/whiteboard-smoke-log.md](docs/whiteboard-smoke-log.md) | Manual whiteboard smoke log — living doc updated after each smoke pass or pilot quote capture | After any whiteboard smoke run |

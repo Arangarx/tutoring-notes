@@ -1,0 +1,39 @@
+---
+description: Canonical smokebook/runbook shape — Action/Expect/Ignore/PASS/FAIL/Notes per item; preview URLs fetched from Vercel MCP, never guessed.
+alwaysApply: true
+---
+
+# Smokebook template — mandatory shape
+
+Every **smokebook** or **smoke-runbook** produced in this repo (typically under `docs/handoff/`, or feature-scoped `docs/*SMOKE*.md`) **MUST** follow [`docs/handoff/SMOKEBOOK-TEMPLATE.md`](../../docs/handoff/SMOKEBOOK-TEMPLATE.md).
+
+## Required structure
+
+1. **Header block** — feature name; `Branch:`; `Tip commit:` (linked); `Preview:` (markdown link to real Vercel alias); `Overall result:` with **both** `- [ ] PASS` and `- [ ] FAIL`.
+2. **Per test item** (in order) — `### N. <title>` → `**Action:**` (detailed steps) → `**Expect:**` → `**Ignore this run:**` (always present; `Nothing.` if none) → separate `- [ ] PASS` and `- [ ] FAIL` → `**Notes:**`.
+3. **Cross-branch / post-merge** section stub when the smoke spans merges.
+
+Do not ship one-line actions, combined pass/fail lines, or items missing **Ignore this run**.
+
+## HARD RULE — preview URLs are fetched, never guessed
+
+Per-branch Vercel preview aliases include an **unpredictable truncated hash** for long branch names (e.g. `tutoring-notes-git-feat-wb-repla-e77c07-...`). The hash **cannot** be reconstructed from the branch name.
+
+**Agents MUST obtain the URL from the Vercel MCP** (read-only — no greenlight required):
+
+1. Call `list_deployments` for project `tutoring-notes` (use the configured team id).
+2. Find the deployment whose `meta.githubCommitRef` matches the branch under test.
+3. Set the preview URL to `https://<meta.branchAlias>` in the smokebook header.
+
+Only if the MCP is unavailable: placeholder `Preview: <unverified — confirm in Vercel dashboard>` and tell Andrew to fix before smoke.
+
+**Never** invent or pattern-match a `tutoring-notes-git-*` URL from the branch slug.
+
+## Orchestrator obligation
+
+Any dispatch prompt that asks a subagent to **produce a smokebook** MUST:
+
+- Reference this template and the fetch-don't-guess preview rule.
+- Include the **verified** `branchAlias` URL when the orchestrator already fetched it (or dispatch a read-only MCP lookup first).
+
+See also [`.cursor/rules/orchestrator-discipline.mdc`](orchestrator-discipline.mdc) and [`AGENTS.md`](../../AGENTS.md) § Merging convention.
