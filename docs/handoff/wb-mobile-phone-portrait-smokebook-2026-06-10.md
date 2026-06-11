@@ -47,7 +47,7 @@ Spot-check these during the smoke (in addition to the section checklist):
 
 - **Action:** At phone-portrait width, open the tutor whiteboard workspace. **Expected:** Touch chrome is active — **bottom toolbar** (and props summary above it), **not** the desktop left tool strip.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
@@ -56,7 +56,7 @@ Spot-check these during the smoke (in addition to the section checklist):
 
 - **Action:** Rotate to **landscape** (or set DevTools to ~844×390 landscape). **Expected:** Still shows **touch chrome**, **not** the desktop left strip. *(P0 fix — dedicated landscape rail is a later phase; layout may be rough; only verify touch-vs-desktop classification.)*
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
@@ -65,25 +65,25 @@ Spot-check these during the smoke (in addition to the section checklist):
 
 - **Action:** With an empty canvas, inspect the board surface in **light** theme. **Expected:** Subtle board-paper affordance — faint paper fill / vignette (not flat sterile white) *(look for a faint warm paper tint + subtle edge vignette versus a flat pure-white fill — compare by toggling theme)*.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
 
-> *(type here)*
+> *It doesn't feel very papery to me...but it does look the same as desktop /shrug*
 
 - **Action:** Switch to **dark** theme (or System+dark) and repeat on empty canvas. **Expected:** Same subtle board-paper affordance reads in dark mode *(look for a faint warm paper tint + subtle edge vignette versus a flat pure-dark fill — compare by toggling theme)*.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
 
-> *(type here)*
+> Same notes as light.
 
 **Section A verdict** (check one):
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
@@ -96,7 +96,7 @@ Spot-check these during the smoke (in addition to the section checklist):
 
 - **Action:** In portrait, look at the top bar after the LIVE/timer area (left cluster). **Expected:** A **"Hide tools"** pill is visible **in the top bar**, **not** floating over the canvas.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
@@ -105,7 +105,7 @@ Spot-check these during the smoke (in addition to the section checklist):
 
 - **Action:** Tap **"Hide tools"**. **Expected:** Bottom toolbar **and** props summary bar collapse; canvas gains vertical space.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
@@ -114,7 +114,7 @@ Spot-check these during the smoke (in addition to the section checklist):
 
 - **Action:** While tools are hidden, inspect the pill. **Expected:** Label reads **"Show tools"** with a gentle pulse/accent so it's discoverable.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
@@ -123,7 +123,7 @@ Spot-check these during the smoke (in addition to the section checklist):
 
 - **Action:** Tap **"Show tools"**. **Expected:** Bottom chrome returns to default (toolbar + props summary visible).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
@@ -132,7 +132,7 @@ Spot-check these during the smoke (in addition to the section checklist):
 
 - **Action:** Toggle hidden ↔ shown; watch pill placement. **Expected:** The toggle **never** sits over the canvas in either state.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
@@ -141,7 +141,7 @@ Spot-check these during the smoke (in addition to the section checklist):
 
 **Section B verdict** (check one):
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
@@ -154,7 +154,7 @@ Spot-check these during the smoke (in addition to the section checklist):
 
 - **Action:** Inspect the bottom tier-1 toolbar order. **Expected:** **Select · Pencil · Eraser · Shapes▾ · Styles · Wand · ⋮** (left to right).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
@@ -163,7 +163,7 @@ Spot-check these during the smoke (in addition to the section checklist):
 
 - **Action:** Tap **"Styles"**. **Expected:** Props **bottom sheet** opens (colors & styles).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
@@ -172,7 +172,7 @@ Spot-check these during the smoke (in addition to the section checklist):
 
 - **Action:** Scan tier-1 for Text. **Expected:** **Text is NOT** in tier-1.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
@@ -181,7 +181,7 @@ Spot-check these during the smoke (in addition to the section checklist):
 
 - **Action:** Tap **⋮** and scan overflow. **Expected:** **Text** lives inside the overflow menu/sheet.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
@@ -190,7 +190,7 @@ Spot-check these during the smoke (in addition to the section checklist):
 
 - **Action:** Exercise each tier-1 tool: Select (tap/move), Pencil (draw), Eraser (erase), Shapes▾ (pick a shape, draw), Wand. **Expected:** Each tool selects and works on the canvas.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
@@ -199,7 +199,7 @@ Spot-check these during the smoke (in addition to the section checklist):
 
 **Section C verdict** (check one):
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
@@ -212,7 +212,7 @@ Spot-check these during the smoke (in addition to the section checklist):
 
 - **Action:** With a shape already active, tap **Shapes▾** again (second tap). **Expected:** A **bottom sheet** of shape options opens; picking a shape selects it and **closes** the sheet.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
@@ -221,7 +221,7 @@ Spot-check these during the smoke (in addition to the section checklist):
 
 - **Action:** Tap **⋮**. **Expected:** **Overflow bottom sheet** opens, including **Text**, z-order, delete, hand/pan (or equivalent overflow actions).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
@@ -230,16 +230,16 @@ Spot-check these during the smoke (in addition to the section checklist):
 
 - **Action:** Open props (Styles), then open Shapes sheet, then overflow. **Expected:** **Only ONE sheet** open at a time (opening shapes closes props, etc.).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
 
-> *(type here)*
+> *Three dots in landscape are a ways from the rest of the buttons (the bottom 3 dots) probably not a big deal as this is moving to the side anyway*
 
 - **Action:** Open any sheet; dismiss via **swipe-down** on the handle. **Expected:** Sheet closes.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
@@ -248,7 +248,7 @@ Spot-check these during the smoke (in addition to the section checklist):
 
 - **Action:** Re-open; dismiss by tapping the **backdrop/scrim**. **Expected:** Sheet closes.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
@@ -257,7 +257,7 @@ Spot-check these during the smoke (in addition to the section checklist):
 
 - **Action:** Re-open; dismiss via the **×** close button. **Expected:** Sheet closes.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
@@ -266,7 +266,7 @@ Spot-check these during the smoke (in addition to the section checklist):
 
 - **Action:** Open shapes and overflow sheets in **portrait** and **landscape**. **Expected:** Sheets are **not clipped/cut off** at the screen edge in either orientation.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
@@ -275,7 +275,7 @@ Spot-check these during the smoke (in addition to the section checklist):
 
 **Section D verdict** (check one):
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
@@ -288,7 +288,7 @@ Spot-check these during the smoke (in addition to the section checklist):
 
 - **Action:** At **desktop width** (≥1024px or your usual tutor desktop), open the same whiteboard workspace. **Expected:** Looks/behaves **exactly as before** — persistent **left strip**, desktop shapes **flyout** + overflow **popover**, props **sidebar**. No mobile bottom toolbar or mobile sheets leaking in.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
@@ -297,7 +297,7 @@ Spot-check these during the smoke (in addition to the section checklist):
 
 - **Action:** On **mobile**, open props via **Styles** and exercise color/stroke controls. **Expected:** Props bottom sheet still works as before (controls respond; sheet dismisses cleanly).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 
 **Notes:**
@@ -307,16 +307,16 @@ Spot-check these during the smoke (in addition to the section checklist):
 - **Action:** On mobile (tools visible), locate the AV pip. **Expected:** AV pip stays **top-right on canvas**, clear of the top-bar Show/Hide tools toggle.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 
 **Notes:**
 
-> *(type here)*
+> *AV PIP is sitting bottom right on mobile not top right. (this is not a regression of the last fixes, this is how it's been since I started smoking mobile)*
 
 **Section E verdict** (check one):
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 
 **Notes:**
 
@@ -327,7 +327,7 @@ Spot-check these during the smoke (in addition to the section checklist):
 ## Overall result (pick one)
 
 - [ ] **PASS** — All sections green; safe to merge Phases 0–3 into integration branch.
-- [ ] **PARTIAL** — Works with caveats (document below); decide before merge.
+- [x] **PARTIAL** — Works with caveats (document below); decide before merge.
 - [ ] **FAIL** — Blocking issues; do not merge until fixed.
 
 **Blocking issues found:**
