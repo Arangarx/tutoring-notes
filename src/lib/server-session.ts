@@ -31,6 +31,7 @@
  */
 
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import {
   AH_SESSION_COOKIE,
   validateAccountHolderSessionFromRawToken,
@@ -103,4 +104,45 @@ export async function hasAccountHolderSessionCookie(): Promise<boolean> {
 export async function hasLearnerSessionCookie(): Promise<boolean> {
   const cookieStore = await cookies();
   return cookieStore.getAll(LEARNER_SESSION_COOKIE).some((c) => c.value.length > 0);
+}
+
+/**
+ * Require an AccountHolder session in a server component.
+ *
+ * Standard 3-way auth guard for /account/* dashboard pages. Mirrors the
+ * stale-cookie handling in share-access-scope.ts assertCanAccessShareLink.
+ * Always redirects (never returns null) so callers get a guaranteed non-null
+ * result — no `if (!session)` guard needed at the call site.
+ *
+ *  1. Valid session   → returns the session object.
+ *  2. Cookie present but invalid (stale/expired/revoked) → redirects through
+ *     /api/auth/clear-stale-session to emit Set-Cookie Max-Age=0, then lands
+ *     on /account/login?returnTo=...&source=session_expired so the login page
+ *     shows an actionable "session expired" message.
+ *  3. No cookie at all → redirects to /account/login?returnTo=... with no
+ *     source param (plain first-visit redirect, matching prior behavior).
+ *
+ * @param returnTo  Decoded path to redirect back to after login
+ *                  (e.g. "/account/dashboard"). Encoded internally; do NOT
+ *                  pre-encode the value passed in.
+ */
+export async function requireAccountHolderSession(
+  returnTo: string
+): Promise<AccountHolderSessionData> {
+  const session = await getAccountHolderSessionFromHeaders();
+  if (session) return session;
+
+  if (await hasAccountHolderSessionCookie()) {
+    // Stale cookie: bounce through the clear-stale-session handler which
+    // emits Set-Cookie Max-Age=0 before redirecting. The nested login URL
+    // carries source=session_expired for an actionable user message.
+    redirect(
+      `/api/auth/clear-stale-session?then=${encodeURIComponent(
+        `/account/login?returnTo=${encodeURIComponent(returnTo)}&source=session_expired`
+      )}`
+    );
+  }
+
+  // No cookie at all: plain login redirect with no source param.
+  redirect(`/account/login?returnTo=${encodeURIComponent(returnTo)}`);
 }

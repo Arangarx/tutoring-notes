@@ -17,10 +17,10 @@
 
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import { db } from "@/lib/db";
-import { getAccountHolderSessionFromHeaders } from "@/lib/server-session";
+import { requireAccountHolderSession } from "@/lib/server-session";
 import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
 import { formatDateOnlyDisplay } from "@/lib/date-only";
 import { AccountPageShell } from "@/components/account/AccountPageShell";
@@ -54,10 +54,7 @@ export default async function LearnerNotesPage({
 }) {
   const { id: learnerId } = await params;
 
-  const session = await getAccountHolderSessionFromHeaders();
-  if (!session) {
-    redirect(`/account/login?returnTo=/account/children/${learnerId}/notes`);
-  }
+  const session = await requireAccountHolderSession(`/account/children/${learnerId}/notes`);
 
   const accountHolder = await db.accountHolder.findUnique({
     where: { id: session.accountHolderId },
