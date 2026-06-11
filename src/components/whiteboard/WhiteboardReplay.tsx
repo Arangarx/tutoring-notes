@@ -75,6 +75,12 @@ import {
   globalMsToSegmentLocal,
 } from "@/lib/whiteboard/replay-audio-timeline";
 import { resolveWhiteboardAssetReadUrl } from "@/lib/whiteboard/resolve-asset-read-url";
+import {
+  GraphEmbeddable,
+  warmJsxGraphModule,
+} from "@/components/whiteboard/GraphEmbeddable";
+import { GRAPH_EMBED_LINK } from "@/lib/whiteboard/insert-asset";
+import { validateExcalidrawEmbeddable } from "@/lib/whiteboard/validate-embeddable";
 // Note: attachReplayScrubAudioDefer intentionally NOT imported.
 // All audio scrubbing now goes through the custom <input type="range"> that
 // is rendered for both single-segment and multi-segment sessions.  The native
@@ -322,6 +328,36 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
   const scrubWasPlayingRef = useRef(false);
 
   const excalidrawTheme = useExcalidrawThemeFromSystem();
+
+  const jsxGraphWarmedRef = useRef(false);
+  useEffect(() => {
+    if (jsxGraphWarmedRef.current) return;
+    jsxGraphWarmedRef.current = true;
+    warmJsxGraphModule();
+  }, []);
+
+  const renderGraphEmbeddable = useCallback((element: unknown) => {
+    const el = element as {
+      link?: string;
+      customData?: { wbType?: string };
+    };
+    if (el.link === GRAPH_EMBED_LINK || el.customData?.wbType === "graph") {
+      return (
+        <GraphEmbeddable
+          element={
+            element as {
+              id?: string;
+              width?: number;
+              height?: number;
+              customData?: Record<string, unknown>;
+            }
+          }
+          readOnly
+        />
+      );
+    }
+    return null;
+  }, []);
 
   const activeSegment =
     effectiveSegments[activeSegmentIndex] ?? effectiveSegments[0] ?? null;
@@ -1263,6 +1299,8 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
           viewModeEnabled
           gridModeEnabled={false}
           theme={excalidrawTheme}
+          validateEmbeddable={validateExcalidrawEmbeddable}
+          renderEmbeddable={renderGraphEmbeddable}
           // `name` is shown in the menu — keep it neutral so it
           // doesn't read like an editor.
           name="whiteboard-replay"
