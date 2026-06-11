@@ -21,6 +21,7 @@ import {
 import { createActionCorrelationId } from "@/lib/action-correlation";
 import { revalidateStudentSharePages } from "@/lib/revalidateStudentSharePages";
 import { looksLikeSilenceHallucination } from "@/lib/whisper-guardrails";
+import { assertConsentFromLiveRecord, ConsentError } from "@/lib/consent-scope";
 
 const HALLUCINATION_MIC_MESSAGE =
   "We couldn't detect clear speech in this recording. Whisper sometimes invents text when the mic picks up silence or the wrong device. Check the browser's microphone permission, choose the correct input, speak for at least 15–20 seconds, then try again. You can also use Upload and pick a file from another recorder.";
@@ -957,6 +958,23 @@ export async function sendUpdateEmail(
   await assertOwnsStudent(studentId);
   const toEmail = String(formData.get("toEmail") ?? "").trim();
   if (!studentId || !toEmail) return { ok: false, sent: false, error: "Student and email required" };
+
+  // B2: consent gate for notes email — hard-blocks when flag ON + no consent (D-7).
+  const consentScope = await getStudentScope();
+  if (consentScope?.kind === "admin") {
+    try {
+      await assertConsentFromLiveRecord(studentId, consentScope.adminId, "allowNoteSending");
+    } catch (err) {
+      if (err instanceof ConsentError) {
+        return {
+          ok: false,
+          sent: false,
+          error: "Parental consent for notes updates has not been granted. The parent can update consent preferences from their account.",
+        };
+      }
+      throw err;
+    }
+  }
 
   const activeLink =
     (await db.shareLink.findFirst({
