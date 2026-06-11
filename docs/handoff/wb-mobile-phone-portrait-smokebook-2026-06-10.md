@@ -12,9 +12,9 @@
 
 | **Tester** | |
 
-| **Branch under test** | `feat/wb-mobile-chrome` @ `25d7538` (HEAD — Phases 0–3) |
+| **Branch under test** | `feat/wb-mobile-chrome` @ `40a3e94` (HEAD — Phases 0–3 + Round-2 fixes) |
 
-| **Commits covered** | `133a5fa` (Phase 0) · `7e15518` (Phase 1) · `e36bab6` (Phase 2) · `25d7538` (Phase 3) |
+| **Commits covered** | `133a5fa` (Phase 0) · `7e15518` (Phase 1) · `e36bab6` (Phase 2) · `25d7538` (Phase 3) · `40a3e94` (Round-2 fixes) |
 
 | **Viewport** | Phone portrait **~390×844** (real phone or browser DevTools device mode). Also rotate to **landscape** for Section A item 2 and Section D sheet clipping. |
 
@@ -22,13 +22,24 @@
 
 ## Open it
 
-- **Preview (give it ~2 min if cold):** [feat/wb-mobile-chrome @ 25d7538](https://tutoring-notes-git-feat-wb-mobil-fe878a-arangarx-5209s-projects.vercel.app)
+- **Preview (give it ~2 min if cold):** [feat/wb-mobile-chrome @ 40a3e94](https://tutoring-notes-git-feat-wb-mobil-fe878a-arangarx-5209s-projects.vercel.app)
 - **Branch alias (stable):** `tutoring-notes-git-feat-wb-mobil-fe878a-arangarx-5209s-projects.vercel.app` — Vercel hashes long branch names; if the alias 404s, open [Vercel → tutoring-notes → Deployments](https://vercel.com/arangarx-5209s-projects/tutoring-notes) and pick the latest **READY** deploy for `feat/wb-mobile-chrome`.
 - **Deploy inspector (this commit):** [Inspector for dpl_CXuF9…](https://vercel.com/arangarx-5209s-projects/tutoring-notes/CXuF9LJPZT6mNMvZnjGEz9w2nLZd)
 
 ## Merge bar (read first)
 
 This smoke validates **Phases 0–3 tutor touch chrome** only. **Do not fail** on polish items explicitly deferred (dedicated phone-landscape left rail, student chrome, bottom board tabs). **Do fail** on: desktop chrome leaking into mobile, mobile chrome leaking into desktop, broken tool selection/draw, sheets that clip or won't dismiss, or the P0 landscape misclassification (desktop left strip on phone landscape).
+
+## Round-2 fixes to verify (commit 40a3e94)
+
+Spot-check these during the smoke (in addition to the section checklist):
+
+- End-session button fully visible on phone top bar (compact icon on touch layouts) — nothing clipped on the right.
+- "Colors & styles" props summary bar shows **all four** previews: color, stroke-width, roughness, sharpness.
+- Mic/audio dropdown opens aligned under its caret (not left-justified).
+- Action-sheet × close button is high-contrast and does not overlap the selected-element highlight in portrait.
+- Styles toolbar button icon reads as "styles" (swatch+stroke), not a lamp.
+- Desktop: sidebar expand/collapse hover highlight stays within the collapsed rail.
 
 ---
 
@@ -37,11 +48,11 @@ This smoke validates **Phases 0–3 tutor touch chrome** only. **Do not fail** o
 - **Action:** At phone-portrait width, open the tutor whiteboard workspace. **Expected:** Touch chrome is active — **bottom toolbar** (and props summary above it), **not** the desktop left tool strip.
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
 
 **Notes:**
 
-> *The top bar extends off the screen.  When I click Share to get a link the video button pops into view for a second.  By default, I can see up to the audio button and part of the pulldown next to it.  For the popups for options, the left edge of the white ink selector is cut off.  I think there's a hard border just to the left. I don't think options should auto close till I tap out. Also, clicking "more styles" or "less styles" closes the options panel.  In landscape, the bars are on the bottom, not the left like approved.  The n-gon funtionality on phone could use some QOL, like showing the line you are ABOUT to draw, kust right now just tapping you see nothing till the second tap.  Also on the n-gon I think the "I clicked near the origin node, so snap and end it" needs to have a little more range on mobile.  I tapped near origin to end an n-gon and it just made a new vertice very near by.  FYI, don't forget that by default students need to track the tutor's view (pan and zoom) and there needs to be a way for the student to toggle it.  Student laser is red, but pretty sure that's a follow up to change it, just in case though I'm mentioning it.  On mobile to select a different alt shape I have to tap then tap again...is there possibly a better pattern for this?  I tried to see if long press was an alternate to open it and it was not.  I tried sliding the opacity slider and it didn't seem to want to follow my finger very far.  I tried several times to slide more than a percent or two and then got an application error. "Application error: a client-side exception has occurred while loading [tutoring-notes-git-feat-wb-mobil-fe878a-arangarx-5209s-projects.vercel.app](http://tutoring-notes-git-feat-wb-mobil-fe878a-arangarx-5209s-projects.vercel.app) (see the browser console for more information)"   Board crashed entirely.  Dunno that I should bother with the rest of the smoke right now.*
+> *(type here)*
 
 - **Action:** Rotate to **landscape** (or set DevTools to ~844×390 landscape). **Expected:** Still shows **touch chrome**, **not** the desktop left strip. *(P0 fix — dedicated landscape rail is a later phase; layout may be rough; only verify touch-vs-desktop classification.)*
 
@@ -52,7 +63,7 @@ This smoke validates **Phases 0–3 tutor touch chrome** only. **Do not fail** o
 
 > *(type here)*
 
-- **Action:** With an empty canvas, inspect the board surface in **light** theme. **Expected:** Subtle board-paper affordance — faint paper fill / vignette (not flat sterile white).
+- **Action:** With an empty canvas, inspect the board surface in **light** theme. **Expected:** Subtle board-paper affordance — faint paper fill / vignette (not flat sterile white) *(look for a faint warm paper tint + subtle edge vignette versus a flat pure-white fill — compare by toggling theme)*.
 
 - [ ] PASS
 - [ ] FAIL
@@ -61,7 +72,7 @@ This smoke validates **Phases 0–3 tutor touch chrome** only. **Do not fail** o
 
 > *(type here)*
 
-- **Action:** Switch to **dark** theme (or System+dark) and repeat on empty canvas. **Expected:** Same subtle board-paper affordance reads in dark mode.
+- **Action:** Switch to **dark** theme (or System+dark) and repeat on empty canvas. **Expected:** Same subtle board-paper affordance reads in dark mode *(look for a faint warm paper tint + subtle edge vignette versus a flat pure-dark fill — compare by toggling theme)*.
 
 - [ ] PASS
 - [ ] FAIL

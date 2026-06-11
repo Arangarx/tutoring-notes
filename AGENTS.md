@@ -166,6 +166,13 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
 
 Cross-cutting rules from production debugging. Add dated evidence under **Real-world observations** (Model usage protocol) when new ones land.
 
+### Subagent git safety — never discard uncommitted work (2026-06-10, smokebook loss)
+
+- A dispatched subagent, blocked from `git checkout`-ing a branch by the user's **uncommitted** working-tree edits (full smoke notes), ran a `git restore` that **discarded** those notes. A separate fumble created an **accidental local merge** of an in-progress feature branch into the integration branch (`v1-redesign`). No code was lost (feature branch was pushed) but the user's notes were unrecoverable.
+- **Rule:** subagent dispatch prompts that involve branch switching MUST instruct: if `git checkout`/`switch` is blocked by uncommitted changes, **STOP and report** — never `git restore`/`checkout -- <file>`/`stash drop`/`reset --hard`/`pull`-merge to "unblock." Uncommitted working-tree edits may be the user's hand-written work and are not in git history.
+- **Rule:** subagents must never `git merge` or `git pull` into a shared branch (`v1-redesign`/`master`) as a side effect of checkout; merges into shared branches are orchestrator-only (`merge --no-ff` after approval).
+- **Corollary:** the orchestrator should commit the user's hand-entered artifacts (smoke notes, etc.) promptly rather than leaving them as long-lived uncommitted working-tree state that a dispatch can clobber.
+
 ### Whiteboard chrome — extend don't rewrite (2026-06-09, wb-chrome-redo)
 
 - **Two successive chrome attempts (P1.1, P2) regressed board separation and killed interactive controls** because executors rewrote `WhiteboardWorkspaceClient.tsx` rather than extending it. The engine's page/board switching, `pageDataRef` guards, live-sync wiring, and recording lifecycle are tightly coupled and fragile to restructuring.
