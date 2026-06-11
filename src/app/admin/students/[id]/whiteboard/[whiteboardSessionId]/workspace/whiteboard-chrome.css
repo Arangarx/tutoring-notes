@@ -573,9 +573,9 @@
 }
 
 .mynk-wb-av-cluster--mobile {
-  bottom: 12px;
+  top: 12px;
   right: 12px;
-  top: auto !important;
+  bottom: auto;
   left: auto !important;
 }
 
