@@ -8,251 +8,231 @@ Multi-day epic on branch **`v1-redesign`** (active V1 integration branch; **not 
 
 ---
 
-## ⏩ HEAD — 2026-06-11 (notes-login merged; overnight contraction push)
+## ⏩ HEAD — 2026-06-11 overnight wind-down (8 branches ready for morning smoke)
 
 | Field | Value |
 |---|---|
-| **Last action completed** | **`feat/notes-login` merged `--no-ff` → `v1-redesign` @ [`d3a9e8b`](https://github.com/Arangarx/tutoring-notes/commit/d3a9e8b)** — Phase 1 authenticated notes access (`NOTES_AUTH_WALL`, default-false/dormant) + non-owner redirect-loop fix + dashboard stale-cookie consistency fix. Andrew smoke-confirmed: wrong-parent → `/account/not-my-notes`; stale cookie on `/s/` and on `/account/*` dashboard → "session expired" message. No-grace cutover decision already recorded. |
-| **Next action(s)** | **Overnight "contraction-to-master-cut" push** (Andrew 2026-06-11) — drive hard toward V1→master across all gate targets (see **Overnight push 2026-06-11** below). Each target lands on a **separate branch** with a smokebook for Andrew's review **tomorrow**; **nothing merges to `v1-redesign` overnight**. Serial dispatch is fine. Then Andrew smokes the resulting branches. **Phase 2** (session-login + A2 waiting room) follows the overnight wave. |
-| **Open Andrew-confirms** | (1) **N-2 semantics** — parent dashboard shows child notes regardless of share-link revocation (orchestrator read: intended, ownership-based access; awaiting Andrew confirm/override). (2) **Overnight branch smoke queue** — Andrew to work through smokebooks for each gate branch tomorrow. |
-| **Open v1 requirements** | **Theme-agnostic token-driven components (no light/dark in component code); N-theme-capable** — per-component build standard; enforced via `V1-COMPONENT-LIBRARY.md` §2.11 HARD gate + `.cursor/rules/both-theme-components.mdc`. **Single-source component reuse (Andrew 2026-06-11):** no duplicate components post-redesign unless absolutely necessary; compose complex UIs from shared primitives — `V1-COMPONENT-LIBRARY.md` §2.12 + `.cursor/rules/component-reuse.mdc` + `BACKLOG.md` component-duplication audit (feeds **A1**). **Notes-login cutover (Andrew 2026-06-10):** no grace window at pilot scale — claim Sarah's one pilot family **before** `NOTES_AUTH_WALL=true` at master cut. **Phase 1 notes-login: DONE/merged.** **Parked:** (1) **B2** — per-tutor privacy re-consent at claim/reconnect; (2) **Phase 2** — notes page inside authenticated parent/child chrome ([`authed-session-access-design-2026-06-10.md`](authed-session-access-design-2026-06-10.md) §4.10). |
-| **In-flight subagents** | **Overnight wave in progress** (2026-06-11) — orchestrator dispatching gate-target branches for Andrew's tomorrow smoke queue. Parallelism not required; serial is fine. |
-| **Morning smoke queue (Andrew)** | **Primary:** smoke overnight gate branches (one smokebook per branch — see **Overnight push 2026-06-11**). **Also on `v1-redesign` preview if desired:** (1) **Graph swap** — insert graph, expressions, pan/zoom/reset, reload re-render, tutor↔student. (2) **A3a/A3b** spot-check @ [`c05d939`](https://github.com/Arangarx/tutoring-notes/commit/c05d939). (3) **Site mocks** — [`site-redesign-mocks-2026-06-10-INDEX.md`](../brand-previews/site-redesign-mocks-2026-06-10-INDEX.md) → approve direction for A1. **Mobile whiteboard mock: design-complete.** (4) **Decide A3** end-session design direction. |
-| **Cross-domain email collision — RESOLVED (Andrew 2026-06-07)** | **Decision: one email = one account (Option A); no tutor+parent dual persona.** Enforcement + one-time collision cleanup folded into the **Google-OAuth-signup fast-follow wave** (post-V1). Captured `6986370`: `BACKLOG.md`, `v1-redesign-STATUS.md`, new **IAC-14** invariant. (`arangarx@hotmail.com` dual-account = the exploit that surfaced it.) |
-| **Component pass** | `v1-component-spine` **MERGED** to `v1-redesign` (merge `aac690c`) on functional-correctness per Andrew's policy. One cohesive **visual review still pending** for a complete page/flow vs palette mocks (foundation chunks don't get per-chunk visual sign-off). **Not sufficient alone for master cut** — see **Pre-master gates (two-tier)** below. |
-| **Deferred reliability (slice-3 review)** | **S3:** concurrent `after()`+cron `processNotesReduceJob` can orphan a 2nd DRAFT (no job-in-flight lock; both read `noteId=null`). Fix = unique constraint on `WhiteboardSession.noteId` + migration, or `SELECT FOR UPDATE`. **N1** dashboard count inflation, **N2** SENT→READY downgrade, **N3** mark-seen accepts DRAFT, **N4** regen update lacks cross-student check. → capture in `BACKLOG.md`. |
-| **Uncommitted / unmerged** | **`feat/notes-login` MERGED** to `v1-redesign` @ [`d3a9e8b`](https://github.com/Arangarx/tutoring-notes/commit/d3a9e8b). **Overnight gate branches** — in flight on separate branches (not merged to `v1-redesign` until Andrew smoke pass). N-1 (double DB fetch on `/s/*` pages) deferred as perf nicety. **Unmerged → master:** entire `v1-redesign` epic (held for full Gate A). **Parked:** `feature/sarah-forward-migration-q6` @ `a396ab5`. |
+| **Last action completed** | **Overnight contraction push COMPLETE** — 8 feature branches built, pushed, smokebooked; **none merged to `v1-redesign`**. Integration tip unchanged @ [`5fe29b1`](https://github.com/Arangarx/tutoring-notes/commit/5fe29b1) (`feat/notes-login` merge + component-reuse standard). |
+| **Next action(s)** | **Andrew morning smoke queue** — work through the 8 branches below (one Vercel Preview per branch; smokebook on each branch tip). After green smokes: merge to `v1-redesign` in **recommended order** (see below). **Do not merge B1+B2 without applying migrations on preview Neon first.** **Top post-smoke build candidate:** VIDEO recording + replay (designed, not built — riskiest/least-defined; deferred per Andrew). |
+| **Open Andrew-confirms** | See **Open decisions — Andrew confirms** section below (B2 design D-1/D-2/D-5 + flag flip timing; B2 Step 6 deferred; B1 deferred TODOs; Security Tier B SHOULD-FIX-2 chunk-transcribe F&F vs cron; N-2 parent dashboard semantics; merge order approval). |
+| **In-flight subagents** | **None** — overnight wave closed. |
+| **Uncommitted / unmerged** | **8 overnight branches** (all pushed to `origin`; smokebooks on branch tips — not yet on `v1-redesign`): see **Morning smoke queue** table. **`v1-redesign` → `master`:** entire epic held for full Gate A. **Parked:** `feature/sarah-forward-migration-q6` @ `a396ab5`. |
 
 **Process directive (Andrew 2026-06-07):** prefer **agent-runnable validation harnesses** over manual smoke wherever behavior is verifiable without Andrew's hardware (transcription E2E + sweep validations were the exemplars).
 
-### Overnight push 2026-06-11 (contraction to master cut)
+---
 
-**Andrew directive:** drive hard toward the **V1→master cut** across all gates. Andrew is **"itching to start recruiting pilot users"** — strong momentum mandate.
+## Morning smoke queue (Andrew — start here)
 
-| Rule | Detail |
-|---|---|
-| **Branch discipline** | Everything lands on **separate branches** with smokebooks for Andrew's review **tomorrow**. **Nothing merges to `v1-redesign` overnight.** |
-| **Parallelism** | Not required — **serial dispatch is fine**. |
-| **Smoke** | Andrew smokes each branch tomorrow before any merge to `v1-redesign`. |
+> **Legend (every smokebook):** `[x]` = step **PASSED**; unchecked = skipped/failed with reason on **Notes:** line. Each target ends with a per-target `- [ ] PASS` / `- [ ] FAIL` verdict checkbox.
+>
+> **Preview:** deploy each branch tip to Vercel Preview (or local `npm run dev`). Smokebooks live on the **branch tip** under `docs/handoff/` — check out the branch or read via `git show <branch>:docs/handoff/<file>`.
 
-**Gate targets named (overnight wave):**
+| # | Branch | Tip | What it does | Smokebook | Risk / smoke notes | Merge slot |
+|---|---|---|---|---|---|---|
+| 1 | `feat/component-dry-mechanical` | [`c3abe88`](https://github.com/Arangarx/tutoring-notes/commit/c3abe88) | Mechanical component DRY — shared notes display utils, `SubmitButton` variants, dead `.admin-nav*` CSS removed, `useThemeDropdown` hook. **No visual change intended.** | [`component-dry-mechanical-smokebook-2026-06-11.md`](component-dry-mechanical-smokebook-2026-06-11.md) | Touches `globals.css`, theme toggles, admin nav, submit buttons across admin/parent surfaces. Low behavioral risk; spot-check theme + nav. | **1st** — styling/base pass; merge before WB chrome branches |
+| 2 | `feat/security-tier-b` | [`09eabc0`](https://github.com/Arangarx/tutoring-notes/commit/09eabc0) | Security Tier B — chunk-transcribe auth guard, forgot-pw stale-token cleanup, upload error sanitization + tests + runbooks. | [`security-tier-b-findings-2026-06-11.md`](security-tier-b-findings-2026-06-11.md) § Smoke checklist *(no separate smokebook)* | **Andrew decision:** SHOULD-FIX-2 — F&F chunk-transcribe calls may 401 when `CRON_SECRET` set. Verify E2E transcription still works. API-only; no UI. | **2nd** — independent of WB; merge early |
+| 3 | `feat/wb-laser-sync` | [`72c4c35`](https://github.com/Arangarx/tutoring-notes/commit/72c4c35) | A5 sub-item — tutor→student laser pointer broadcast (B9 pilot fix). Bidirectional student wand **deferred**. | [`wb-laser-sync-smokebook-2026-06-11.md`](wb-laser-sync-smokebook-2026-06-11.md) | **Real hardware required** — jsdom cannot prove laser visibility. `test:wb-sync` green on branch. | **3rd** — before end-session review (conflicts on `WhiteboardWorkspaceClient.tsx`) |
+| 4 | `feat/wb-end-session-review` | [`29d2f7c`](https://github.com/Arangarx/tutoring-notes/commit/29d2f7c) | **Gate A3 Phase A** — in-shell mode flip on End Session (notes-primary review, board preview, lazy replay drill-down). No `router.replace` off workspace. | [`wb-end-session-review-smokebook-2026-06-11.md`](wb-end-session-review-smokebook-2026-06-11.md) | **Real browser required.** Touches recorder lifecycle + `WhiteboardWorkspaceClient`. Reconcile with laser-sync if merging out of order. | **4th** — after laser-sync |
+| 5 | `feat/wb-replay-a6-slice` | [`15ee25a`](https://github.com/Arangarx/tutoring-notes/commit/15ee25a) | A6 safe slice — JSXGraph embeddables render in replay (admin + share). **Does not** fix multi-segment player regression. | [`wb-replay-a6-slice-smokebook-2026-06-11.md`](wb-replay-a6-slice-smokebook-2026-06-11.md) | Smokebook §2 characterizes master vs preview replay regression. Graph sessions required. | **5th** — mostly `WhiteboardReplay.tsx`; low conflict if A3 merged first |
+| 6 | `feat/parent-create-learner` | [`e1ffe8c`](https://github.com/Arangarx/tutoring-notes/commit/e1ffe8c) | Parents create learners without claim link + set up child login (PIN). Auth boundary HIGH. | [`parent-create-learner-smokebook-2026-06-11.md`](parent-create-learner-smokebook-2026-06-11.md) | Children's credentials + ownership. 14 unit tests green. Independent of WB branches. | **6th** — identity UI; before schema branches |
+| 7 | `feat/signup-waitlist` | [`5cb137e`](https://github.com/Arangarx/tutoring-notes/commit/5cb137e) | **Gate B1** — tutor signup waitlist + cost gating. Grandfather backfill approves existing tutors. `/admin/pending-approval` + `/admin/tutor-approvals`. | [`signup-waitlist-smokebook-2026-06-11.md`](signup-waitlist-smokebook-2026-06-11.md) | **Migration required** before preview smoke (`20260611000000_b1_tutor_approval`). Cost-path negative tests critical. | **7th** — schema migration; merge before B2 |
+| 8 | `feat/b2-consent` | [`8e8ab9c`](https://github.com/Arangarx/tutoring-notes/commit/8e8ab9c) | **Gate B2** — parent privacy consent FULLY behind dormant `CONSENT_ENFORCEMENT` (default OFF). Schema + capture gates + claim Panel A. 77 tests. | [`b2-consent-smokebook-2026-06-11.md`](b2-consent-smokebook-2026-06-11.md) | **Migration required** (`20260611010000_b2_consent_schema`). Smoke flag-OFF first (Sarah-safe). Flag-ON smoke on preview only. Design: [`b2-consent-design-2026-06-11.md`](b2-consent-design-2026-06-11.md). | **8th (last)** — heaviest schema + overlaps B1 on `schema.prisma`, actions |
 
-| Gate / item | Target |
-|---|---|
-| **B3** | Security tests + final cleanups |
-| **B2** | Privacy toggles / consent — signup flow + per-tutor consent + sensible defaults |
-| **A5** | Whiteboard element sync — tutor↔student completeness (enumerated audit-and-fix) |
-| **A6** | Replay — all elements in sync with audio (+ timer); includes v1-redesign preview replay regression |
-| **VIDEO** *(NEW — not yet a numbered gate)* | Video recording + replay integration — **flag for sequencing** before master cut |
-| **A1 + A2** | Redesign of everything **outside** the whiteboard, including waiting room |
-| **A3** | In-WB post-end-session review (Pass-2 session shell) |
-| **B1** | Tutor signup → waitlist (approval-gating) |
-| **Parents w/o claim link** *(NEW)* | Parents creating learners **without** a claim link — needs design + build; not yet in gate table |
+### Recommended merge order → `v1-redesign`
 
-**Component reuse standard (same session):** Andrew — *"We should NOT have any duplicate components unless absolutely necessary after the re-design. Every complex component should be composed of components. If you fix how something works in one place it should fix it everywhere."* Captured: [`V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) §2.12, [`.cursor/rules/component-reuse.mdc`](../../.cursor/rules/component-reuse.mdc), `BACKLOG.md` component-duplication audit (feeds A1).
+```
+1 feat/component-dry-mechanical
+2 feat/security-tier-b
+3 feat/wb-laser-sync
+4 feat/wb-end-session-review   ← reconcile WhiteboardWorkspaceClient with #3
+5 feat/wb-replay-a6-slice
+6 feat/parent-create-learner
+7 feat/signup-waitlist         ← apply B1 migration first
+8 feat/b2-consent              ← apply B2 migration; reconcile with B1 on schema + actions
+```
 
-### Pre-master gates — two-tier checklist (RATIFIED Andrew 2026-06-08)
+**Conflict hotspots (merge-tree verified):**
 
-> **Canonical operational list** — `BACKLOG.md`, `RELEASE-ROADMAP.md`, and `v1-redesign-STATUS.md` cross-reference here; do not duplicate verbatim elsewhere.
-
-**Vocabulary (ratified Andrew 2026-06-08):** **V1** = master cut (Gate A). **Release** = opening to recruit/advertise **new** pilots (Gate B era complete). Tiering: **V1 / master cut → post-V1 / pre-release → release**.
-
-**Master cut** = `v1-redesign → master` = Sarah's live site (`tutoring-notes.vercel.app` / `usemynk.com`). Held until the **full** V1 redesign is complete and coherent across the whole site (Gate A only).
-
-**Design note (one place):** waiting room, clean live board (A/V verification in the green room; board A/V options = drill-down only), and Pass-2 review mode are **one session shell with three modes** — waiting room / live board / review. Design together, not in isolation. Refs: [`session-lifecycle-consent-design-2026-05-31.md`](session-lifecycle-consent-design-2026-05-31.md); [`v1-component-redesign-design-2026-05-31.md`](v1-component-redesign-design-2026-05-31.md) Q-8; chrome req **TU-06**.
-
-#### Gate A — blocks master cut (Sarah's live site must be correct + coherent)
-
-| # | Gate | Status |
+| Pair | Files | Mitigation |
 |---|---|---|
-| A1 | **Visual redesign + whiteboard chrome + theme parity** — component-pass cohesive visual review; Mynk custom chrome (PR-01 incl. freedraw latency); both-theme per-component gate (**§2.11**); **single-source component reuse** (**§2.12** — no duplication post-redesign); **mobile whiteboard mock approved** @ [`334e5f4`](https://github.com/Arangarx/tutoring-notes/commit/334e5f4) — **BUILD pending** (mock-approved; real-device use unblocks further design) | **Desktop whiteboard chrome DONE** (merged `f73f5ee`, smoked GREEN); **mobile chrome BUILD next** from approved mock; **component-pass cohesive visual review still pending** for full pages/flows vs site palette mocks; **component-duplication audit** (`BACKLOG.md`) feeds this gate |
-| A2 | **Waiting room** — Google-Meet/Teams-style green room: grant A/V permissions + verify sound/video **before** entering the board; admit flow; session timer starts when student **leaves** the waiting room | **Designed, NOT built** — [`session-lifecycle-consent-design-2026-05-31.md`](session-lifecycle-consent-design-2026-05-31.md); TU-06 |
-| A3 | **Pass-2 in-context end-session** — one shared session shell; End session auto-transitions the **same shell** into review mode in place (no nav-away); notes primary/in-context; replay demoted to lazy "Review video while editing" drill-down. **Today's** redirect off `/workspace` to `/admin/students/[id]/whiteboard/[whiteboardSessionId]` (replay-first, notes-below) = intentional **Pass-1 INTERIM**. **P2 reference (2026-06-09 git search): NOT FOUND** on `feat/wb-chrome-p2` — `handleEndSession` in `WhiteboardWorkspaceClient.tsx` still `router.replace` to replay-first review page at tip `6430aff`; no in-shell review mode. **Reconstruct from:** [`whiteboard-session-shell-design-2026-06-08.md`](whiteboard-session-shell-design-2026-06-08.md) + [`whiteboard-session-shell-mock-2026-06-08.html`](../brand-previews/whiteboard-session-shell-mock-2026-06-08.html) (notes-primary review §). **Deferred from `feat/wb-chrome-redo`** — v1-required, land after chrome merge. | **Tracked master gate — deferred, v1-required** |
-| A3a | **PDF page-tab indicator** — board tabs for PDF pages show a PDF icon in `BoardTabStrip`. **Blocked:** `PageStripRow` has no `isPdf` field; need type + propagation from board/session data. Deferred from `feat/wb-chrome-redo` — v1-required. Ref: [`wb-chrome-redo-STATUS.md`](wb-chrome-redo-STATUS.md). | **Deferred, v1-required** |
-| A3b | **SR-04a video-tile sizing** — live-A/V video does not enlarge to fill its panel / multi-tile auto-expand. Parent req **SR-04** ([`whiteboard-chrome-requirements.md`](whiteboard-chrome-requirements.md)). Deferred from `feat/wb-chrome-redo` — v1-required. | **Deferred, v1-required** |
-| A5 | **Live bidirectional whiteboard sync completeness** — comprehensive *enumerated* audit-and-fix pass: every tutor whiteboard action appears on the student view **live and timely**, and vice versa. Enumerate and verify each action/element type (freedraw strokes, shapes, lines/arrows incl. multi-point, text, eraser, move/resize/rotate, style changes — stroke color/width/opacity/roughness/edge-sharpness — z-order, page add/switch/delete/reorder, PDF page insert, math LaTeX→SVG, graph JSXGraph insert + expression edits + persisted state, image/asset insert, undo/redo, select+delete). **In-scope sub-item — peer-visible laser/pointer (Andrew 2026-06-10):** tutor→student **and** bidirectional student laser (**ST-05**); per-role colors tutor=coral / student=cyan (session-shell mocks). **Known gap, never built — not a regression:** tutor wand only drives local Excalidraw `laser`; pointers never captured (`onPointerUpdate` missing), never broadcast (no pointer/live-state envelope in `sync-client.ts` — only scene/document/follow/page/presence/webrtc-signal/pageViewState), never rendered (`appState.collaborators` Map never populated; `relayShowsCollaborator` scaffolding abandoned). **Fix loci:** `sync-client.ts` — new IMMEDIATE envelope (`kind: "pointer"` / `"live-state"`, `peerId`/`role`/scene `x`/`y`/`tool`/`button`, same immediate path as `pageViewState` not ~50ms document throttle); `WhiteboardWorkspaceClient.tsx` tutor mount (~L4303) — `isCollaborating={true}` + `onPointerUpdate` → broadcast; `StudentWhiteboardClient.tsx` (~L931) and/or `useCollaboratorPointers` — subscribe, maintain `Map<peerId, Collaborator>`, `updateScene({ appState: { collaborators } })`; bidirectional also needs student toolbar wand → `selectTool("laser")` + tutor subscribes to student pointers. **Reliability seams:** do NOT route pointers through `handleExcalidrawChange`/`broadcastDocument`; separate hook preserves scene-merge guards; respect `applyingRemoteToCanvasRef` so collaborator updates don't trigger outbound student scene broadcast; scene-space coords via `onPointerUpdate` — verify on **real hardware** (jsdom blind spot). **B8** (tutor laser offset from own cursor) = separate local-viewport issue, not B9 (invisible to peer). Sarah pilot 05-26; audit T-16. | **Not started — v1-required** |
-| A6 | **Replay fidelity + AV/timer sync** — comprehensive pass proving session **replay** reconstructs every whiteboard action in correct **order and timing**, in sync with the session **timer** and recorded **audio**. Same enumerated action-type coverage as A5. **🔴 Known regression (v1-redesign preview only; prod/master replay OK):** session replay broken on `v1-redesign` preview — discovered 2026-06-10; symptom TBD; candidate causes: JSXGraph graph-embed replay rendering, whiteboard chrome changes, other v1-redesign integration commits. **Root-cause + fix folded into this gate's comprehensive replay pass** (not ad-hoc investigation now). **Acceptance:** replay shows all action types temporally aligned with audio + timer within a stated tolerance; no missing, dropped, or reordered events; verified against real recorded sessions. **Starting baseline (partial):** [`recording-end-to-end.spec.ts`](../tests/integration/recording-end-to-end.spec.ts) (30s solo → replay stroke events + audio scrubber); [`replay-scrub-audio-defer.test.ts`](../src/__tests__/whiteboard/replay-scrub-audio-defer.test.ts); `useWhiteboardRecorder` event-log unit tests; [`WHITEBOARD-STATUS.md`](../WHITEBOARD-STATUS.md) § 1.4 replay routes + viewport tier-c-lite; [`TESTING-COVERAGE.md`](../TESTING-COVERAGE.md) (replay scrub = **M** today). A6 is the *comprehensive enumerated completion* of that partial coverage — not net-new from zero. Embodies north-star reliability bar. | **Not started — v1-required; 🔴 replay regression on preview (high priority within A6)** |
+| `feat/wb-laser-sync` ↔ `feat/wb-end-session-review` | `WhiteboardWorkspaceClient.tsx`, `RECORDER-LIFECYCLE.md`, `WhiteboardWorkspaceEnd.dom.test.tsx` | Merge laser **before** end-session; manual reconcile on workspace client |
+| `feat/signup-waitlist` ↔ `feat/b2-consent` | `prisma/schema.prisma`, `src/app/admin/students/[id]/actions.ts`, `whiteboard/actions.ts`, `createWhiteboardSession.test.ts`, `consent-scope.ts` | Merge B1 then B2; single combined migration deploy on preview |
+| WB stack (any order violation) | Shared `WhiteboardWorkspaceClient.tsx`, `page.tsx`, `TutorNotesSection.tsx` | Serial WB merges 3→4→5 |
 
-#### Gate B — post-V1 / pre-release (before **release** = recruiting new pilots; some urgent because site is already live)
-
-| # | Gate | Urgency |
-|---|---|---|
-| B1 | **Approval-gating / waitlist** — sign-up allowed but **parked** on waitlist; until Andrew approves, user cannot incur cost (OpenAI/transcription/storage). Site is **already live** in production (unadvertised) — cost exposure exists **today** | **URGENT** — land quickly; does not strictly block master cut |
-| B2 | **Parent privacy consent** — real consent architecture: versioned `ConsentRecord`, server-enforced capture gating, per-session `SessionConsentSnapshot`, parent-ceiling + learner-narrowing. **V1 toggle scope only:** `allowAudioRecording`, `allowWhiteboardRecording`, `allowNoteSending`, `allowLiveSession` kill-switch. **Do NOT** build toggles for not-yet-shipping features (`allowMessaging`, `allowVideoRecording`) until those features ship — **consent surface tracks the feature surface**. Replaces P2a stubs + `/claim/[token]/setup` "Coming soon — Phase 3" placeholder | **Pre-release required** (Sarah runs real children's data) |
-| B3 | **Security checks + final cleanups** — Tier B audit, incident/secret runbooks, remaining hardening before pilot recruitment | Before release — loosely tracked elsewhere |
-| B4 | **Scheduling + external calendar integration** — post-V1, pre-release; **not** a master-cut gate. Full spec: [`BACKLOG.md`](../BACKLOG.md) § Scheduling proposal. Needs design pass + sequencing within pre-release window | Before release — [`BACKLOG.md`](../BACKLOG.md) |
-
-**Scope trap (do not conflate):** `Student.recordingDefaultEnabled` = tutor UX convenience default for the Start toggle. **Parent privacy consent** = net-new permission lattice — orthogonal. See `BACKLOG.md` if a line equates them.
+**Post-smoke top build candidate (NOT built overnight):** VIDEO recording + replay integration — designed, flagged for sequencing, deferred as riskiest/least-defined per Andrew ("riskiest last").
 
 ---
 
-**Process directive — runbook legend (Andrew 2026-06-07):** every smoke runbook MUST open with an explicit legend: `[x]` = step **PASSED** (executed + behaved as expected); skipped/failed steps stay unchecked with the reason on the **Notes:** line; a fully-checked target = green merge gate. **Each target also ends with a clickable per-target verdict** (`- [ ] PASS` / `- [ ] FAIL` markdown checkboxes — NOT `☐` glyphs, which aren't checkable). Removes the "done vs pass" ambiguity. Any future runbook (or runbook-generating dispatch) includes this legend + verdict format verbatim. **Each target MUST embed its concrete check items inline** (the actual surfaces/steps/URLs to verify) — NOT a generic placeholder that defers the real checklist to chat (Andrew 2026-06-07: Target B's admin-surface "must-not-see" list lived only in chat, which made recording results awkward).
+## Open decisions — Andrew confirms
+
+### B2 parent privacy consent (`feat/b2-consent`)
+
+| Item | Status | Andrew action |
+|---|---|---|
+| **D-1** — `events.json` always uploaded; `allowWhiteboardRecording` gates **parent replay access**, not upload | Built — confirm in smoke | Confirm or override in [`b2-consent-smokebook-2026-06-11.md`](b2-consent-smokebook-2026-06-11.md) § Design decisions |
+| **D-2** — `ConsentRestriction` schema built; all-false defaults; **no child UI** in V1 | Built — confirm | Confirm child-narrowing deferred is acceptable |
+| **D-5** — Self-learners (`isSelfLearner`) auto-pass all consent | Built — confirm | Confirm adult self-learner bypass |
+| **When to flip `CONSENT_ENFORCEMENT=true`** | Not decided | Same dormant-then-flip playbook as `NOTES_AUTH_WALL` — pilot families must set consent at claim **before** production flip |
+| **Step 6 deferred** — parent per-tutor consent management `/account/children/[id]` + update route + tutor workspace toggle display | **Not built** | Schedule follow-up build or defer past V1 |
+
+### B1 tutor waitlist (`feat/signup-waitlist`)
+
+Deferred TODOs (not in overnight scope): REJECTED status, revocation UI, approval email, Google OAuth auto-provision, marketing-waitlist separation, pagination.
+
+### Security Tier B (`feat/security-tier-b`)
+
+**SHOULD-FIX-2:** `enqueueChunkTranscriptionAction` fire-and-forget to `/api/queues/chunk-transcribe` lacks Bearer token — will **401 when `CRON_SECRET` set**. Options: (A) pass secret in server-side F&F header, or (B) rely on cron/sweep only. **Decide before merge.** See [`security-tier-b-findings-2026-06-11.md`](security-tier-b-findings-2026-06-11.md).
+
+### Other standing confirms
+
+| Item | Notes |
+|---|---|
+| **N-2 semantics** | Parent dashboard shows child notes regardless of share-link revocation (ownership-based access?) — awaiting confirm/override |
+| **Merge order** | Recommended order above — approve or reorder before first `--no-ff` merge |
+| **A3 Phase B** | Visual polish for in-shell review deferred to Andrew post-smoke |
+| **Laser bidirectional** | Student wand → tutor deferred; tutor→student only in overnight slice |
+
+---
+
+### Overnight push 2026-06-11 — COMPLETE
+
+**Andrew directive (2026-06-11):** drive hard toward V1→master cut. Overnight wave **delivered 8 branches**; Andrew smokes tomorrow; merges follow smoke pass.
+
+| Rule | Detail |
+|---|---|
+| **Branch discipline** | ✅ Each target on separate branch + smokebook/findings doc |
+| **Merge gate** | Andrew smoke PASS → `merge --no-ff` to `v1-redesign` in recommended order |
+| **Not built overnight** | VIDEO recording + replay; A2 waiting room; B2 Step 6 parent consent management UI; laser bidirectional; A6 multi-segment player regression fix |
+
+**Component reuse standard (ratified 2026-06-11):** [`V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) §2.12, [`.cursor/rules/component-reuse.mdc`](../../.cursor/rules/component-reuse.mdc), `BACKLOG.md` audit. `feat/component-dry-mechanical` is the mechanical pass — smoke for no visual drift.
+
+### Pre-master gates — two-tier checklist (RATIFIED Andrew 2026-06-08)
+
+> **Canonical operational list** — `BACKLOG.md`, `RELEASE-ROADMAP.md`, and `v1-redesign-STATUS.md` cross-reference here.
+
+**Vocabulary:** **V1** = master cut (Gate A). **Release** = recruiting new pilots (Gate B era complete).
+
+#### Gate A — blocks master cut
+
+| # | Gate | Status (post-overnight) |
+|---|---|---|
+| A1 | Visual redesign + chrome + theme + component reuse | Desktop WB chrome DONE; mobile chrome merged; **component DRY branch awaiting smoke**; cohesive visual review vs site mocks still pending |
+| A2 | Waiting room | **Designed, NOT built** |
+| A3 | Pass-2 in-context end-session | **BUILD on `feat/wb-end-session-review` @ `29d2f7c`** — Phase A functional; Phase B polish deferred; **awaiting smoke** |
+| A3a | PDF page-tab indicator | **MERGED** to `v1-redesign` @ `c05d939` |
+| A3b | SR-04a video-tile sizing | **MERGED** to `v1-redesign` @ `c05d939` |
+| A5 | Live bidirectional sync completeness | **Partial overnight** — tutor→student laser on `feat/wb-laser-sync`; full enumerated audit still open; student laser deferred |
+| A6 | Replay fidelity + AV/timer sync | **Partial overnight** — JSXGraph replay on `feat/wb-replay-a6-slice`; 🔴 multi-segment player regression on preview **not fixed** this branch; full enumerated pass still open |
+
+#### Gate B — post-V1 / pre-release
+
+| # | Gate | Status (post-overnight) |
+|---|---|---|
+| B1 | Approval-gating / waitlist | **BUILD on `feat/signup-waitlist` @ `5cb137e`** — awaiting smoke + migration |
+| B2 | Parent privacy consent | **BUILD on `feat/b2-consent` @ `8e8ab9c`** — dormant flag; awaiting smoke + migration + Andrew design confirms |
+| B3 | Security Tier B | **Partial on `feat/security-tier-b` @ `09eabc0`** — 3 fixes + runbooks; awaiting smoke + SHOULD-FIX-2 decision |
+| B4 | Scheduling + calendar | Post-V1 — not started |
+
+**Scope trap:** `Student.recordingDefaultEnabled` ≠ parent privacy consent. See `BACKLOG.md`.
+
+**Cross-domain email collision — RESOLVED (Andrew 2026-06-07):** one email = one account (Option A). Enforcement in Google-OAuth-signup fast-follow wave.
+
+**Open v1 requirements:** Theme-agnostic token-driven components (§2.11); single-source reuse (§2.12). **Notes-login cutover:** no grace — claim Sarah's pilot family before `NOTES_AUTH_WALL=true` at master. **Phase 1 notes-login: MERGED** @ `d3a9e8b`.
+
+**Component pass:** `v1-component-spine` MERGED. Cohesive visual review still pending for master cut.
+
+**Deferred reliability (slice-3 review):** S3 orphan DRAFT race, N1–N4 → `BACKLOG.md`.
+
+---
+
+**Process directive — runbook legend (Andrew 2026-06-07):** every smoke runbook opens with `[x]` = PASSED; per-target `- [ ] PASS` / `- [ ] FAIL` verdict at end. Embed concrete check items inline.
 
 ### ✅ Slice-3 save-bridge — Pass-1 rework MERGED (2026-06-07)
 
-**Pass 1 complete** @ [`0fa2363`](https://github.com/Arangarx/tutoring-notes/commit/0fa2363) → **MERGED `--no-ff` → `v1-redesign` @ [`3f62b58`](https://github.com/Arangarx/tutoring-notes/commit/3f62b58)**: all 3 smoke defects fixed, `test:wb-sync` 12/12 GREEN (confirmed by Andrew locally), recording jest 255/255 green, Target A smoke PASS, LOCKED B4 save-model implemented (details below). Original failure context retained below for the audit trail.
+**Pass 1 complete** @ [`0fa2363`](https://github.com/Arangarx/tutoring-notes/commit/0fa2363) → **MERGED `--no-ff` → `v1-redesign` @ [`3f62b58`](https://github.com/Arangarx/tutoring-notes/commit/3f62b58)**. Target A smoke PASS. B4 Save-model LOCKED.
 
-Andrew smoked the *original* bridge (runbook §4). It was **NOT merge-ready**. Root issue: the bridge **guessed** on REQ-S3-2a "Save semantics" which the spec explicitly deferred to the B4 design pass ("Do not guess"). It built a `DRAFT→READY→SENT` model that **conflicted with Andrew's intent** (no DRAFT, Save = immediately parent-visible, "new/unseen" via the **existing `NoteView`** mechanism, no SENT). Investigation: [`8f7e28d3`](8f7e28d3-40cf-42c3-8b77-ae6d77ad529e).
+**Pass 2 (session-end UX — Gate A3):** now **built overnight** on `feat/wb-end-session-review` (Phase A). Pass-1 INTERIM redirect still the fallback when `onSessionEnded` not wired.
 
-**B4 Save-model decision: LOCKED (Andrew 2026-06-07).** Principle: **everything is immediately live, both directions.**
-- `TutorNote` = AI working draft (never parent-visible, regeneratable). `SessionNote` = the live note.
-- **Save** = create/update ONE live `SessionNote` per session (idempotent via `WhiteboardSession.noteId`), status `READY` (never DRAFT). Instantly parent-visible.
-- After save: review page edits the **live** note (each save instantly live). **Regenerate** re-seeds editable fields from a fresh AI pass; not live until Save again.
-- **Delete** a saved note = allowed + instantly removed for parent (DROP the bridge's "refuse delete on finalized" guard).
-- **Parent markers (V1):** "New" (never seen) + "Updated" (changed since seen) via existing `NoteView`.
-- **"Send" = notification only** (manual now, scheduled later — "you have new notes" → share page). NOT a note state. `DRAFT/READY/SENT` enum is **legacy** (from when sending was stateful) → retire in the separate cleanup; decouple sending from status there.
-
-**Execution split (Andrew 2026-06-07):**
-- **Pass 1 (notes correctness — merge-blocker, dispatching now):** remove auto-DRAFT-`SessionNote` creation; reduce writes structured fields into `TutorNote`; Save creates/updates one READY `SessionNote`; drop delete-guard + delete-resilience (redirect-regardless + cron + fix 60s timeout); fix `test:wb-sync` import coupling (move `REDUCE_PROMPT_VERSION` out of `notes-worker.ts`); fix `s/[token]/page.tsx` `findFirst` wrong-tutor-name leak. Notes stay on current review page. → re-smoke → merge.
-- **Pass 2 (session-end UX — Gate A3 master gate, Opus-designed):** shared **session shell** (thin top nav + sidebar tabs) — one of **three modes** in the session shell (waiting room / live board / review); live mode = today's workspace UNCHANGED; **review mode** = lightweight notes editor (replay lazy-loaded on "Review video while editing", controls stripped); end-session auto-transitions shell into review mode (same shell, no nav-away); same review component for first-review vs after-the-fact edit (different buttons); unsaved-session **recovery** surface (V1 req). **Pass-1 INTERIM** (current): redirect off `/workspace` to separate review page — replay-first, notes-below. **Caution captured:** keep live engine + replay/notes engine as SEPARATE implementations under a shared shell — do NOT literally merge them (the `WhiteboardWorkspaceClient` reliability boundary; the `test:wb-sync` break is this coupling class). Overlaps the component-pass workspace-chrome redesign — coordinate. **Blocks master cut** — see Pre-master gates above.
-
-**Defects found — ALL RESOLVED in Pass 1 (`0fa2363`):**
-1. ✅ `test:wb-sync` FAIL (6 tests/2 suites) — bridge made `notes-actions.ts` import `REDUCE_PROMPT_VERSION` from `notes-worker.ts`, dragging `next/cache` into `WhiteboardWorkspaceClient`'s import graph → `TextEncoder is not defined`. **Fixed:** constant moved to dep-free `notes-reduce-config.ts`; DOM suites mock `notes-actions` at the boundary → 12/12 green.
-2. ✅ Delete-session timeout — review page `maxDuration=60` + sync cascade delete. **Fixed:** `handleDelete` redirects to student detail regardless of outcome (cron sweeps orphans); `maxDuration` 60→300.
-3. ✅ Share-page tutor name — `src/app/s/[token]/page.tsx` `db.adminUser.findFirst()` with NO `where` → arbitrary admin's name to every parent. **Fixed:** `findUnique({ where: { id: student.adminUserId } })`; null `adminUserId` → no name (safe).
-
-**Target A re-smoke result (Andrew 2026-06-07): PASS — no blockers.** Steps 1-5 all checked. Slice-3 merge gated ONLY on `test:wb-sync` green locally. Follow-ups from the typed notes:
-1. **Delete-list "bug" = NOT A BUG (Andrew clarified):** per-note delete works as intended — the note disappears and the tutor stays on the list page. Original "stayed on the list" was a misread. Investigation confirmed the slice-3 auto-notes path never creates DRAFTs (only manual `createNote`/`Mark draft` do).
-2. **Stale DRAFT SessionNote residue:** tutor saw one note in DRAFT + an older one READY ("two different states, weird"). Pass-1 removed all DRAFT creation → the DRAFT is **pre-rework residue**, not new behavior (investigation confirms). One-time data cleanup + legacy-enum retirement folded into the separate cleanup below.
-3. **No loading skeleton/blur** while notes generate → UX/component pass (Andrew: fine if explicitly later).
-4. **No "Updated" parent pill yet** on re-save → Pass-2 `NoteView` New/Updated markers (intentional, deferred).
-
-**Scope decisions (Andrew 2026-06-07):** legacy `DRAFT/READY/SENT` enum + `sendUpdateEmail` + "Mark ready/draft" controls → **separate** BACKLOG cleanup (do not balloon slice-3). 
-
-**DEFERRED — MUST NOT MISS (Andrew flagged explicitly):**
-- **Native `confirm()`/`alert()` → in-site modals** (Save/Cancel/Regenerate). Deferred to the **component pass**, but Andrew said do not lose it.
-- **Notes quality poor + Regenerate returned identical output** → prompt/quality thread (REQ-S3-4 / `REDUCE_PROMPT_VERSION` iteration). Separate from the architecture rework.
+**DEFERRED — MUST NOT MISS:** native `confirm()`/`alert()` → in-site modals (component pass); notes quality / Regenerate thread.
 
 ---
 
 ## Current focus
 
-**Wave 1 reliability floor** on `v1-redesign`: whiteboard sync redesign + regression net **done**; SEC-1 **complete**; usemynk.com cutover **merged** (Sarah still on `tutoring-notes.vercel.app` until Search Console + OAuth watch-items clear).
+**Morning priority:** smoke the **8-branch overnight queue** (table above), then serial `--no-ff` merges to `v1-redesign`.
 
-**Active build thread:** **Recording re-architecture Phase 1** — slices 1–2b + durable transport **shipped** on `v1-redesign`. **Slice 3** (auto-notes, map-reduce, end-session sweep, retire manual transcribe button) is the **next major dispatch**.
+**Wave 1 reliability floor** on `v1-redesign`: whiteboard sync + regression net **done**; SEC-1 **complete**; mobile WB chrome **merged**; notes-login Phase 1 **merged**.
 
-**WB/recording smoke FROZEN** for interim whiteboard bugs until the v1 redesign ships (Sarah feedback 2026-06-06: Ctrl+Z, copy-link clipboard, intermittent "Loading scene" join — all **backlog**, not slice-3 blockers).
+**WB/recording smoke FROZEN** for interim whiteboard bugs until v1 redesign ships (Sarah 2026-06-06 backlog items).
 
 ---
 
-## Recording P1 Slice 3 — SHIPPED (awaiting smoke + merge)
+## Recording P1 Slice 3 — SHIPPED (on `v1-redesign`)
 
-**Status:** **SHIPPED** on `feat/recording-p1-slice3-autonotes` — awaiting Andrew smoke + `merge --no-ff` to `v1-redesign`.
-
-**Branch head:** [`4f601a3`](https://github.com/Arangarx/tutoring-notes/commit/4f601a3)
-
-**Path shipped:** Full map-reduce (D8) — not the reduce-at-end fallback.
-
-| # | Deliverable | Status |
-|---|---|---|
-| **(a)** | **End-session sweep** | ✅ `kickSessionChunksAction` fired F&F from workspace after `endWhiteboardSession`. |
-| **(b)** | **Map phase** | ✅ `extract-chunk.ts` runs per-chunk after `status=done`; idempotent on `chunkId`. |
-| **(c)** | **Reduce phase** | ✅ `notes-worker.ts` — completion gate, 5-min timeout, partial path, DB-as-queue + cron sweep. |
-| **(d)** | **Post-session UX** | ✅ Manual button retired; `TutorNotesSection` auto-polls, skeleton, partial badge, regenerate. |
-
-**5-axis review:** 1 BLOCKER found + fixed (stuck skeleton when TutorNote row not yet created). See commit `4f601a3`.
-
-**Design ref:** [`recording-rearchitecture-design-2026-06-05.md`](recording-rearchitecture-design-2026-06-05.md). Bootstrapper: [`recording-slice3-autonotes-bootstrapper.md`](recording-slice3-autonotes-bootstrapper.md).
+Merged on `v1-redesign`. Map-reduce auto-notes, end-session sweep, manual transcribe button retired. See [`recording-rearchitecture-design-2026-06-05.md`](recording-rearchitecture-design-2026-06-05.md).
 
 ---
 
 ## Recording transport thread — CLOSED (2026-06-07)
 
-Supersedes the 2026-06-06 PM/AM smoke queues and open DECISION bullets for transport + Q1.
-
-**What shipped (all on `v1-redesign`, merged + pushed):**
-
-| Milestone | Merge / SHA | What |
-|---|---|---|
-| Slice 1 schema | `6abbc30` | `TranscriptChunk` / `TranscriptChunkExtraction` / `TutorNote` + store scaffolding (`txc`/`tnt`). Zero runtime. |
-| Cost-obs Phase 1 | `83870a3` (`b040276`) | `rate-card.ts`, `cev` v2, `/admin/cost` dashboard. **Smoke PASSED** Andrew 2026-06-06. |
-| Slice 2a pipeline | `359bd16` | `transcribe-chunk.ts` (`gpt-4o-mini-transcribe` + `whisper-1` fallback), idempotent worker, queue-consumer route. |
-| Slice 2b producer | `758230f` | `enqueueChunkTranscriptionAction` + fire-and-forget client wire. |
-| Transcription fixes | `93157d5` | Private-blob auth (`fetchPrivateBlobBytes`, Bearer `BLOB_READ_WRITE_TOKEN`); `gpt-4o-mini-transcribe` uses `response_format: json`; `durationMs` via ffmpeg probe (see follow-up); whisper-1 keeps `verbose_json`. |
-| Durable transport | `234d05b` | DB-as-queue (enqueue upserts `pending` before fire-and-forget) + Vercel Cron `* * * * *` backstop (`/api/cron/transcribe-sweep`, `CRON_SECRET`, migration `20260607120000` `attempts`/`updatedAt`). |
-
-**Decisions resolved:**
-
-- **Transport:** DB-as-queue + cron/sweep **ratified** over Vercel Queues beta — built + validated.
-- **Q1 (`gpt-4o-mini-transcribe`):** **PASS** — orchestrator E2E on real audio + Andrew confirmed; swept rows produced clean transcripts of a real 2-voice math lesson.
-
-**Validated on live infra:**
-
-- Transcription E2E (real blob + real OpenAI → `status=done`, good quality).
-- Cron sweep recovers stragglers (2 previously-failed chunks: 403 + `verbose_json` → `failed`→`transcribing`→`done` via authenticated sweep on deployed preview).
-
-**Deferred from transport slice (intentional):** end-session sweep → **slice 3** (guarded `handleEndSession`).
-
-**Superseded runbooks:** `MORNING-RUNBOOK-2026-06-07.md` + `RETURN-RUNBOOK-2026-06-06-PM.md` — smoke items complete; **archived to `docs/archive/handoff/` (cold storage) 2026-06-07**. Live smoke runbook: [`SMOKE-RUNBOOK-2026-06-07.md`](SMOKE-RUNBOOK-2026-06-07.md).
+DB-as-queue + cron sweep ratified and shipped. Q1 `gpt-4o-mini-transcribe` PASS.
 
 ---
 
-## Known follow-ups (non-blocking — track in state / fold into slice 3 where sensible)
+## Known follow-ups (non-blocking)
 
 | Item | Notes |
 |---|---|
-| **`durationMs` null on Vercel** | ffmpeg-static probe not resolving in serverless/sweep context; offsets use producer wall-clock approximation. Revisit with recording-clock work (design D3/D4). Address in slice 3 or consciously defer with logged decision. |
-| **Preview cron limitation** | Vercel Cron runs on **production deployments only**; preview can't auto-fire cron AND Deployment Protection blocks non-browser clients → preview cron testing = manual authenticated endpoint call (or protection-bypass). Documented in [`docs/PLATFORM-ASSUMPTIONS.md`](../PLATFORM-ASSUMPTIONS.md) §1.6. |
-| **Cost-event FK on `whiteboardSessionId`** | `logCostEvent` can FK-fail during worker run if session row not present (was local-only artifact) — verify on real preview session during slice 3 work. |
-| **Cost-event durability hardening** | Design [`cost-observability-design-2026-06-06.md`](cost-observability-design-2026-06-06.md) §3.2.4: `isTestFixture` + `tutorKey` + `tutorLabel` snapshot + orphaned/unattributed bucket + fixture-vs-real pricing-floor filter — **RATIFIED FULL** (Andrew 2026-06-06) but **NOT BUILT**. Ready-to-build, additive. |
-| **Sarah WB bugs (FROZEN)** | Ctrl+Z/Cmd+Z undo misbehaves; copy-link silent clipboard failure; intermittent student "Loading scene" on join — [`docs/BACKLOG.md`](../BACKLOG.md). |
+| **`durationMs` null on Vercel** | ffmpeg probe in serverless — revisit with recording-clock work |
+| **Preview cron limitation** | [`PLATFORM-ASSUMPTIONS.md`](../PLATFORM-ASSUMPTIONS.md) §1.6 |
+| **Cost-event durability hardening** | Ratified, NOT BUILT — [`cost-observability-design-2026-06-06.md`](cost-observability-design-2026-06-06.md) |
+| **Sarah WB bugs (FROZEN)** | Ctrl+Z, copy-link, "Loading scene" — `BACKLOG.md` |
+| **VIDEO recording + replay** | Top post-smoke build candidate — designed, not built |
 
 ---
 
-## Standing ratified decisions (recording + cost — condensed)
+## Standing ratified decisions (condensed)
 
-- **Recording Q1:** `gpt-4o-mini-transcribe` (cheaper + better on realistic audio; whisper-1 fallback retained).
-- **Recording Q5:** skeleton/blurred notes-loading timeout → **5 min** before "acknowledge defeat."
-- **Recording Q6:** **migrate-forward** Sarah's real prod data at cutover (not purge) — tiny scope (4 WB sessions + 19 recordings).
-- **Recording Q7:** start with `gpt-4o-mini` for reduce; escalate if quality insufficient.
-- **Recording Q8:** log prefixes `txc`/`tnt` — don't-care on naming.
-- **Cost Q8:** no tutor-facing cost until pricing model locked (session-tokens leaning).
-- **Baseline principle:** clean industry-standard architecture; **storage is cheap — never skimp per user.**
-- **Vercel-lock OK if documented:** every Vercel-specific dep = capability-contract in [`docs/PLATFORM-ASSUMPTIONS.md`](../PLATFORM-ASSUMPTIONS.md).
-- **Pricing-floor cross-doc:** cost doc used whisper-1 floor (~$0.36/60min); recording doc's `gpt-4o-mini-transcribe` halves transcription cost (~$0.18/60min) — conservative floor in cost doc, real floor likely ~half.
-
-Full Q-answers + adversarial review: [`recording-rearchitecture-design-2026-06-05.md`](recording-rearchitecture-design-2026-06-05.md).
+Recording Q1/Q5/Q6/Q7/Q8, cost Q8, pricing-floor, Vercel-lock OK — see [`recording-rearchitecture-design-2026-06-05.md`](recording-rearchitecture-design-2026-06-05.md).
 
 ---
 
-## Parallel standing work (not slice 3 — do not lose)
+## Parallel standing work (do not lose)
 
 | Thread | Status |
 |---|---|
-| **v1 component redesign / UI pass** | Whiteboard bigger, declutter, Wyzant-like, pen UX, button rename — Sarah feedback maps here. |
-| **Identity / access epic** | Phase 3 consent models, IAC-13 disconnect build, etc. — see [`v1-redesign-STATUS.md`](v1-redesign-STATUS.md). |
-| **Sarah forward-migration** | One-time cutover script as part of Phase 1 recording cutover (Q6). |
-| **Cost-durability hardening** | Ratified, ready-to-build — separate dispatch from slice 3 unless folded deliberately. |
-| **Master / pilot** | Sarah on `tutoring-notes.vercel.app` until usemynk watch-items clear; `interim-capture-attestation` on `master` awaits migrate+smoke. |
+| **v1 component redesign / UI pass** | A1 + component DRY branch awaiting smoke |
+| **Identity / access** | Parent-create-learner + B1 + B2 branches awaiting smoke; IAC-13 disconnect build open |
+| **Phase 2 authed session chrome** | Notes page inside parent/child shell — post-overnight |
+| **Sarah forward-migration** | `feature/sarah-forward-migration-q6` parked |
+| **Master / pilot** | Sarah on `tutoring-notes.vercel.app` |
 
 ---
 
-## Pilot context (Sarah — 2026-06-06 live session)
+## Pilot context (Sarah — 2026-06-06)
 
-**Capture:** [`sarah-pilot-feedback-2026-06-06-orchestrator-report.md`](sarah-pilot-feedback-2026-06-06-orchestrator-report.md) + 5 backlog items.
-
-**Themes:** notes-as-institutional-memory; wants auto-notes without manual click (slice 3 directly addresses); WB UX issues **deferred** to redesign pass (do not chase in slice 3).
+[`sarah-pilot-feedback-2026-06-06-orchestrator-report.md`](sarah-pilot-feedback-2026-06-06-orchestrator-report.md). Laser pointer (B9) addressed on `feat/wb-laser-sync`.
 
 ---
 
 ## Project arc (compressed)
 
-- **North star:** [`AGENTS.md`](../../AGENTS.md) — Sarah must use the app with confidence; no backup recorder alongside our app.
-- **Reliability bar:** 5-axis adversarial review; BLOCKERs in Phase-1 acceptance — [`../../agenticPipeline/.cursor/rules/reliability-bar.mdc`](../../agenticPipeline/.cursor/rules/reliability-bar.mdc).
-- **SEC-1:** complete + extended (ADMIN/TUTOR role split merged).
-- **Whiteboard view-sync:** resolved; standing `npm run test:wb-sync` gate for WB sync touches.
-- **Strategic pivot (2026-06-05):** stop interim WB/recording patches; recording re-arch is the foundation pillar for B5 workspace.
+- **North star:** [`AGENTS.md`](../../AGENTS.md)
+- **Reliability bar:** [`../../agenticPipeline/.cursor/rules/reliability-bar.mdc`](../../agenticPipeline/.cursor/rules/reliability-bar.mdc)
+- **SEC-1:** complete
+- **Whiteboard view-sync:** `npm run test:wb-sync` gate for WB sync touches
 
-**Deep history (2026-06-04 overnight chain, session-wrong-identity, replay v3, join-reliability, landing-B, etc.):** all merged to `v1-redesign` in prior sessions — audit via `git log --oneline v1-redesign` and `git log -p docs/handoff/ORCHESTRATOR-STATE.md`. Do not re-derive from this file.
+**Deep history:** `git log --oneline v1-redesign` and `git log -p docs/handoff/ORCHESTRATOR-STATE.md`.
 
 ---
 
 ## How we work (process — pointers only)
 
-- **Orchestration model:** [`AGENTS.md`](../../AGENTS.md) § "Model usage protocol" — Opus orchestrates; Composer 2.5 ships by default; Sonnet for auth boundaries + adversarial/5-axis review. Dispatch inline via `Task`; **always set `model` explicitly**, including on `resume`.
-- **Dispatch vs in-chat boundary:** [`.cursor/rules/orchestrator-discipline.mdc`](../../.cursor/rules/orchestrator-discipline.mdc).
-- **Merging (solo pilot):** smokeable branch → Andrew smoke → `merge --no-ff` on feature branch into `v1-redesign` (then `v1-redesign` → `master` at V1 cutover); branch preserved. Whiteboard sync touches require `npm run test:wb-sync` green. Build-surface changes require `npx next build` green.
-- **Commits on Windows/PowerShell:** multi-line messages via `.git/COMMIT_MSG_DRAFT.txt` + `git commit -F` — see `AGENTS.md` § Conventions.
+- **Orchestration model:** [`AGENTS.md`](../../AGENTS.md) § "Model usage protocol"
+- **Dispatch boundary:** [`.cursor/rules/orchestrator-discipline.mdc`](../../.cursor/rules/orchestrator-discipline.mdc)
+- **Merging (solo pilot):** smokeable branch → Andrew smoke → `merge --no-ff` into `v1-redesign`; WB sync → `npm run test:wb-sync`; build-surface → `npx next build`
+- **Commits on Windows/PowerShell:** `.git/COMMIT_MSG_DRAFT.txt` + `git commit -F`
 
 ---
 
@@ -261,21 +241,16 @@ Full Q-answers + adversarial review: [`recording-rearchitecture-design-2026-06-0
 Fresh orchestrator — read in order:
 
 1. [`AGENTS.md`](../../AGENTS.md)
-2. [`docs/handoff/ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md) (this file)
-3. [`docs/handoff/recording-slice3-autonotes-bootstrapper.md`](recording-slice3-autonotes-bootstrapper.md) — **next dispatch**
-4. [`docs/handoff/recording-rearchitecture-design-2026-06-05.md`](recording-rearchitecture-design-2026-06-05.md) — slice 3 design (D7, D8, Q1–Q8)
-5. [`docs/RECORDER-LIFECYCLE.md`](../RECORDER-LIFECYCLE.md) — **before touching `handleEndSession`**
-6. [`docs/handoff/v1-redesign-STATUS.md`](v1-redesign-STATUS.md) — V1 epic ledger
-7. [`docs/handoff/cost-observability-design-2026-06-06.md`](cost-observability-design-2026-06-06.md) — cost durability follow-up
-8. [`docs/PLATFORM-ASSUMPTIONS.md`](../PLATFORM-ASSUMPTIONS.md) — cron §1.6, Vercel contracts
-9. [`docs/RELEASE-ROADMAP.md`](../RELEASE-ROADMAP.md)
-10. [`docs/BACKLOG.md`](../BACKLOG.md)
-11. [`docs/handoff/sarah-pilot-feedback-2026-06-06-orchestrator-report.md`](sarah-pilot-feedback-2026-06-06-orchestrator-report.md)
+2. [`docs/handoff/ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md) (this file) — **morning smoke queue table**
+3. [`docs/handoff/v1-redesign-STATUS.md`](v1-redesign-STATUS.md) — V1 epic ledger
+4. [`docs/RECORDER-LIFECYCLE.md`](../RECORDER-LIFECYCLE.md) — before touching `handleEndSession`
+5. [`docs/handoff/b2-consent-design-2026-06-11.md`](b2-consent-design-2026-06-11.md) — on `feat/b2-consent` tip
+6. [`docs/RELEASE-ROADMAP.md`](../RELEASE-ROADMAP.md)
+7. [`docs/BACKLOG.md`](../BACKLOG.md)
+8. [`docs/PLATFORM-ASSUMPTIONS.md`](../PLATFORM-ASSUMPTIONS.md)
 
 ---
 
 ## History / audit trail
 
-This file is **updated in place**; full history: `git log -p docs/handoff/ORCHESTRATOR-STATE.md`.
-
-Dated `docs/handoff/orchestrator-state-<YYYY-MM-DD>-<HHMM>.md` files are **legacy snapshots** (retained, not the live source). Template for heavy restructures: [`docs/handoff/orchestrator-state-template.md`](orchestrator-state-template.md).
+Updated in place; `git log -p docs/handoff/ORCHESTRATOR-STATE.md`. Template: [`docs/handoff/orchestrator-state-template.md`](orchestrator-state-template.md).
