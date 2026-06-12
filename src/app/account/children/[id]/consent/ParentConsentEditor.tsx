@@ -195,7 +195,13 @@ export function ParentConsentEditor({
                 </div>
               </AccordionTrigger>
               <AccordionContent className="pb-4">
-                <div className="space-y-3">
+                <div
+                  className={cn(
+                    "space-y-3 rounded-[10px] p-3",
+                    !tutor.allowLiveSession &&
+                      "border border-warning/30 border-l-4 border-l-warning/50 bg-warning/10"
+                  )}
+                >
                   {PERMISSION_TOGGLES.map((perm) => (
                     <PermissionToggleRow
                       key={perm.key}
@@ -281,22 +287,23 @@ function PermissionToggleRow({
   const inputId = `${tutor.adminUserId}-${perm.key}`;
   const isCritical = perm.emphasis === "critical";
   const isRecommended = perm.emphasis === "recommended";
+  const liveSessionsOff = isCritical && !tutor.allowLiveSession;
 
   return (
     <div
       className={cn(
         "rounded-[10px] border bg-background p-3",
-        isCritical
-          ? "border-accent/50 bg-accent-soft/40 ring-1 ring-accent/20"
+        liveSessionsOff
+          ? "border-warning/30"
           : isRecommended
             ? "border-accent/30 bg-accent-soft/20"
             : "border-border"
       )}
     >
-      {isCritical ? (
-        <div className="mb-3 rounded-[8px] border border-accent/40 bg-accent-soft px-3 py-2">
-          <p className="text-sm font-semibold text-accent-text">
-            Required for the app to actually do anything
+      {liveSessionsOff ? (
+        <div className="mb-3 rounded-[8px] border border-warning/30 bg-warning/10 px-3 py-2">
+          <p className="text-sm font-medium text-warning">
+            Limited to scheduling without live sessions
           </p>
           <p className="mt-1 text-xs text-foreground">
             {
