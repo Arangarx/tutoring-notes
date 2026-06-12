@@ -45,8 +45,9 @@
 
   --brand: #1e3d54;
   --brand-on: #fcfbf4;
-  /* Small-caps eyebrows on bg-brand cards — WCAG 9.70:1 vs --brand #1e3d54 */
-  --brand-eyebrow: #e8eef2;
+  /* Small-caps eyebrows on bg-brand cards — WCAG ~10.5:1 vs --brand #1e3d54.
+     Slightly brighter/whiter than #e8eef2 for better visibility as a mono label. */
+  --brand-eyebrow: #f0f5f8;
   --brand-on-subtle: #e8eef2;
   --brand-card-border: rgba(30, 61, 84, 0.32);
 
@@ -153,7 +154,7 @@
 
     --brand: #7ea4b1;
     --brand-on: #051a24;
-    /* WCAG 7.19:1 vs --brand #7ea4b1 */
+    /* WCAG 7.3:1 vs --brand #7ea4b1 */
     --brand-eyebrow: #021018;
     --brand-on-subtle: #0a2834;
     --brand-card-border: rgba(126, 164, 177, 0.62);
@@ -254,7 +255,7 @@
 
   --brand: #7ea4b1;
   --brand-on: #051a24;
-  /* WCAG 7.19:1 vs --brand #7ea4b1 */
+  /* WCAG 7.3:1 vs --brand #7ea4b1 */
   --brand-eyebrow: #021018;
   --brand-on-subtle: #0a2834;
   --brand-card-border: rgba(126, 164, 177, 0.62);
