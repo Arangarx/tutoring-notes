@@ -1,6 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { MarketingHeader } from "@/components/marketing/MarketingHeader";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+
 /**
  * Privacy policy — Tutoring Notes (product subordinate facade).
  *
@@ -33,12 +42,17 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <div className="container" style={{ maxWidth: 720 }}>
-      <div className="card">
-        <h1 style={{ marginTop: 0 }}>Privacy Policy</h1>
-        <p className="muted" style={{ fontSize: 14 }}>Last updated: May 31, 2026</p>
-
-        <p className="muted" style={{ marginTop: 12, fontSize: 14, lineHeight: 1.6 }}>
+    <>
+      <MarketingHeader />
+      <main id="main-content" className="px-4 py-10">
+        <div className="mx-auto w-full max-w-3xl">
+          <Card>
+            <CardHeader>
+              <CardTitle className="heading text-3xl font-normal">Privacy Policy</CardTitle>
+              <p className="text-sm text-muted-foreground">Last updated: May 31, 2026</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+        <p className="text-sm leading-relaxed text-muted-foreground">
           This policy applies to <strong>Tutoring Notes</strong>, a web application operated
           by Andrew Mortensen under the Mortensen Apps umbrella. It supplements the
           umbrella privacy policy at{" "}
@@ -49,11 +63,11 @@ export default function PrivacyPage() {
           policy governs.
         </p>
 
-        <div className="divider" style={{ margin: "20px 0" }} />
+        <Separator className="my-5" />
 
-        <section style={{ display: "grid", gap: 16 }}>
+        <section className="grid gap-4">
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>What Tutoring Notes is</h2>
+            <h2 className="heading m-0 text-lg font-normal">What Tutoring Notes is</h2>
             <p style={{ margin: "8px 0 0" }}>
               Tutoring Notes is a web application that helps private tutors record session
               audio, draft session notes, run a shared whiteboard during lessons, and share
@@ -62,7 +76,7 @@ export default function PrivacyPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>What data we collect</h2>
+            <h2 className="heading m-0 text-lg font-normal">What data we collect</h2>
             <ul style={{ margin: "8px 0 0", paddingLeft: 20, lineHeight: 1.7 }}>
               <li><strong>Account information:</strong> email address, hashed password, and optional display name when you create a tutor account.</li>
               <li><strong>Session notes:</strong> student names, session dates, topics, homework, assessment, plan, and links you enter.</li>
@@ -81,7 +95,7 @@ export default function PrivacyPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>How we use your data</h2>
+            <h2 className="heading m-0 text-lg font-normal">How we use your data</h2>
             <p style={{ margin: "8px 0 0" }}>
               Your data is used solely to operate the product: signing you in, storing and
               displaying notes / audio / whiteboard sessions, generating share links, and
@@ -92,7 +106,7 @@ export default function PrivacyPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Sharing, disclosure, and recipients</h2>
+            <h2 className="heading m-0 text-lg font-normal">Sharing, disclosure, and recipients</h2>
             <p style={{ margin: "8px 0 0" }}>
               We share or disclose information only as needed to run the product, as
               described below.
@@ -139,7 +153,7 @@ export default function PrivacyPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Google account and Gmail (Connect Gmail)</h2>
+            <h2 className="heading m-0 text-lg font-normal">Google account and Gmail (Connect Gmail)</h2>
             <p style={{ margin: "8px 0 0" }}>
               When you click &ldquo;Connect Gmail,&rdquo; the app requests permission to send
               email on your behalf using the <strong>Gmail API</strong>{" "}
@@ -163,7 +177,7 @@ export default function PrivacyPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>AI note generation (OpenAI)</h2>
+            <h2 className="heading m-0 text-lg font-normal">AI note generation (OpenAI)</h2>
             <p style={{ margin: "8px 0 0" }}>
               When you use the <strong>Auto-fill from session</strong> feature, content
               you provide (typed notes, uploaded audio, or in-browser recording) is sent
@@ -183,7 +197,7 @@ export default function PrivacyPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Session audio recordings (Vercel Blob)</h2>
+            <h2 className="heading m-0 text-lg font-normal">Session audio recordings (Vercel Blob)</h2>
             <p style={{ margin: "8px 0 0" }}>
               When you upload or record a session audio file, the recording is stored in{" "}
               <strong>Vercel Blob</strong> (private, US region). Audio is never publicly
@@ -215,7 +229,7 @@ export default function PrivacyPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Where data is stored</h2>
+            <h2 className="heading m-0 text-lg font-normal">Where data is stored</h2>
             <p style={{ margin: "8px 0 0" }}>
               Data is stored in a PostgreSQL database hosted on <strong>Neon</strong>{" "}
               (US region). The application is hosted on <strong>Vercel</strong>. Both
@@ -224,7 +238,7 @@ export default function PrivacyPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Data retention and deletion</h2>
+            <h2 className="heading m-0 text-lg font-normal">Data retention and deletion</h2>
             <p style={{ margin: "8px 0 0" }}>
               We retain data as long as your account exists and as needed to provide the
               service and meet legal obligations. Tutors can delete individual students
@@ -249,7 +263,7 @@ export default function PrivacyPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Security</h2>
+            <h2 className="heading m-0 text-lg font-normal">Security</h2>
             <p style={{ margin: "8px 0 0" }}>
               We use commercially reasonable safeguards appropriate to the sensitivity of
               tutoring data and the nature of our hosted software:
@@ -269,7 +283,7 @@ export default function PrivacyPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Children</h2>
+            <h2 className="heading m-0 text-lg font-normal">Children</h2>
             <p style={{ margin: "8px 0 0" }}>
               Tutoring Notes is intended for use by <strong>tutors</strong> (adults).
               Tutors are responsible for obtaining any parent, guardian, or
@@ -288,7 +302,7 @@ export default function PrivacyPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Children&rsquo;s data and parental rights (COPPA)</h2>
+            <h2 className="heading m-0 text-lg font-normal">Children&rsquo;s data and parental rights (COPPA)</h2>
             <p style={{ margin: "8px 0 0" }}>
               Tutoring Notes is a platform designed for K–12 tutoring and knowingly
               collects personal information from students who may be under 13. We are
@@ -398,7 +412,7 @@ export default function PrivacyPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Changes</h2>
+            <h2 className="heading m-0 text-lg font-normal">Changes</h2>
             <p style={{ margin: "8px 0 0" }}>
               We may update this policy from time to time. The &ldquo;Last updated&rdquo; date
               above will change when we do. Material changes may also be communicated
@@ -408,7 +422,7 @@ export default function PrivacyPage() {
           </div>
 
           <div>
-            <h2 style={{ fontSize: 18, margin: 0 }}>Contact</h2>
+            <h2 className="heading m-0 text-lg font-normal">Contact</h2>
             <p style={{ margin: "8px 0 0" }}>
               For privacy questions, data deletion requests, or concerns specific to
               Tutoring Notes, email{" "}
@@ -421,15 +435,18 @@ export default function PrivacyPage() {
           </div>
         </section>
 
-        <div className="divider" style={{ margin: "20px 0" }} />
+        <Separator className="my-5" />
 
-        <p className="muted" style={{ fontSize: 13 }}>
+        <p className="text-[13px] text-muted-foreground">
           <Link href="/">Home</Link> · <Link href="/terms">Terms</Link> ·{" "}
           <a href="https://www.mortensenapps.com/privacy" target="_blank" rel="noreferrer">
             Umbrella privacy policy
           </a>
         </p>
-      </div>
-    </div>
+            </CardContent>
+          </Card>
+        </div>
+      </main>
+    </>
   );
 }
