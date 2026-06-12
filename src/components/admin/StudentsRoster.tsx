@@ -86,6 +86,7 @@ export function StudentsRoster({ students }: StudentsRosterProps) {
         <AdminSectionCard
           title="Add a student"
           description="Create a roster entry to start sessions and notes."
+          className="border-accent/20 bg-accent-soft/60"
         >
           <AddStudentForm idPrefix="desktop-" />
         </AdminSectionCard>
@@ -94,8 +95,8 @@ export function StudentsRoster({ students }: StudentsRosterProps) {
       {/* Sticky search toolbar */}
       <div className="sticky top-0 z-10 -mx-4 bg-background/95 px-4 py-3 backdrop-blur-sm md:static md:mx-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="relative flex min-h-11 flex-1 items-center gap-2 rounded-[10px] border border-ring/40 bg-muted/40 px-3">
-            <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <div className="relative flex min-h-11 flex-1 items-center gap-2 rounded-[10px] border border-accent/25 bg-accent-soft/50 px-3">
+            <Search className="size-4 shrink-0 text-accent-text" aria-hidden />
             <Label htmlFor="student-search" className="sr-only">
               Search students
             </Label>
@@ -125,7 +126,7 @@ export function StudentsRoster({ students }: StudentsRosterProps) {
 
       {students.length === 0 ? (
         <div
-          className="rounded-2xl border border-dashed border-border bg-card/50 px-6 py-12 text-center"
+          className="rounded-2xl border border-dashed border-accent/30 bg-accent-soft/40 px-6 py-12 text-center"
           role="status"
         >
           <p className="text-lg font-medium text-foreground">No students yet</p>
@@ -163,7 +164,7 @@ export function StudentsRoster({ students }: StudentsRosterProps) {
                   </div>
                 </div>
                 <ChevronRight
-                  className="size-[18px] shrink-0 text-muted-foreground group-hover:text-foreground"
+                  className="size-[18px] shrink-0 text-muted-foreground group-hover:text-accent-text"
                   aria-hidden
                 />
               </Link>

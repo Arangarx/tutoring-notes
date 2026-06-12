@@ -18,7 +18,10 @@ export default async function StudentsPage() {
   return (
     <AdminPageShell
       title="Students"
-      description="Your roster — add students, open profiles, and start whiteboard sessions."
+      eyebrow={
+        <p className="label-mono m-0 text-accent-text">Your roster</p>
+      }
+      description="Add students, open profiles, and start whiteboard sessions."
     >
       <StudentsRoster
         students={students.map((s) => ({

@@ -36,12 +36,15 @@ export default async function SettingsIndexPage() {
       description="Your profile and account settings."
       className="mx-auto max-w-xl"
       eyebrow={
-        <Link
-          href="/admin/students"
-          className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-        >
-          ← Students
-        </Link>
+        <div className="space-y-2">
+          <Link
+            href="/admin/students"
+            className="inline-flex min-h-11 items-center text-sm font-medium text-brand transition-colors hover:underline"
+          >
+            ← Students
+          </Link>
+          <p className="label-mono m-0 text-accent-text">Preferences</p>
+        </div>
       }
     >
       <SettingsNavList items={settingsLinks} />

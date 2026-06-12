@@ -143,12 +143,15 @@ export default async function LearnerConsentPage({
       description="Choose what each tutor may do, and optional limits that always apply to your child."
       userEmail={accountHolder?.email}
       eyebrow={
-        <Link
-          href="/account/dashboard"
-          className="inline-flex min-h-11 items-center text-brand underline-offset-2 hover:underline"
-        >
-          {"\u2190"} Dashboard
-        </Link>
+        <div className="space-y-2">
+          <Link
+            href="/account/dashboard"
+            className="inline-flex min-h-11 items-center text-brand underline-offset-2 hover:underline"
+          >
+            {"\u2190"} Dashboard
+          </Link>
+          <p className="label-mono m-0 text-accent-text">Privacy & consent</p>
+        </div>
       }
     >
       <AccountChildNav learnerId={learnerId} />
@@ -168,7 +171,7 @@ export default async function LearnerConsentPage({
         <AccountSectionCard
           title="Privacy preferences"
           description="Per-tutor permissions you grant, plus optional hard limits your child cannot override."
-          className="rounded-[10px] border-border"
+          className="rounded-[10px] border-border bg-accent-soft/30"
         >
           <ParentConsentEditor
             learnerName={learnerName}

@@ -65,6 +65,9 @@ export default async function AccountDashboardPage() {
   return (
     <AccountPageShell
       title={greeting}
+      eyebrow={
+        <p className="label-mono m-0 text-accent-text">Family account</p>
+      }
       description={
         hasChildren
           ? "Manage your learners' tutoring access, notes, and privacy."
@@ -75,7 +78,7 @@ export default async function AccountDashboardPage() {
       <AccountSectionCard
         title={sectionTitle}
         description={sectionDescription}
-        className="rounded-[10px] border-border shadow-sm"
+        className="rounded-[10px] border-border border-l-[3px] border-l-accent bg-accent-soft/35 shadow-sm"
       >
         {learnerProfiles.length === 0 ? (
           <div className="rounded-[10px] border border-dashed border-border bg-muted/20 px-4 py-6 text-sm text-muted-foreground">

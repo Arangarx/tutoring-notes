@@ -77,7 +77,7 @@ export default function FeaturesPage() {
 
         <section
           aria-labelledby="product-heading"
-          className="border-y border-border bg-muted/40 px-6 py-[60px]"
+          className="border-y border-border bg-accent-soft/50 px-6 py-[60px]"
         >
           <div className="mx-auto max-w-4xl">
             <p className="label-mono mb-3 block text-center text-accent-text">
@@ -92,7 +92,10 @@ export default function FeaturesPage() {
 
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {PRODUCT_FEATURES.map(({ label, detail }) => (
-                <Card key={label} className="rounded-[10px] bg-background">
+                <Card
+                  key={label}
+                  className="rounded-[10px] border-t-2 border-t-accent/40 bg-background"
+                >
                   <CardContent className="pt-5">
                     <h3 className="heading mb-2 mt-0 text-[0.95rem]">{label}</h3>
                     <p className="m-0 text-sm leading-relaxed text-muted-foreground">
@@ -137,7 +140,7 @@ export default function FeaturesPage() {
           </div>
         </section>
 
-        <section className="border-t border-border bg-muted/40 px-6 py-12">
+        <section className="border-t border-border bg-accent-soft/35 px-6 py-12">
           <div className="mx-auto flex max-w-xl flex-col items-start gap-4">
             <div className="flex items-center gap-3">
               <MynkWordmark size="sm" />

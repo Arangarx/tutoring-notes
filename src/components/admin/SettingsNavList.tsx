@@ -20,8 +20,8 @@ export function SettingsNavList({ items, className }: SettingsNavListProps) {
     <nav
       aria-label="Settings sections"
       className={cn(
-        "overflow-hidden rounded-2xl border border-border bg-card shadow-sm",
-        "max-md:-mx-4 max-md:rounded-none max-md:border-x-0",
+        "overflow-hidden rounded-2xl border border-border border-l-[3px] border-l-accent bg-card shadow-sm",
+        "max-md:-mx-4 max-md:rounded-none max-md:border-x-0 max-md:border-l-0",
         className
       )}
     >
@@ -30,13 +30,13 @@ export function SettingsNavList({ items, className }: SettingsNavListProps) {
           <li key={href}>
             <Link
               href={href}
-              className="flex min-h-16 items-center gap-3 px-[18px] py-4 transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset"
+              className="flex min-h-16 items-center gap-3 px-[18px] py-4 transition-colors hover:bg-accent-soft/50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset"
             >
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-semibold text-foreground">{label}</div>
                 <p className="mt-0.5 text-[13px] text-muted-foreground">{description}</p>
               </div>
-              <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+              <ChevronRight className="size-4 shrink-0 text-accent-text/70" aria-hidden />
             </Link>
           </li>
         ))}

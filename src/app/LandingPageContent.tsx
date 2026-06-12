@@ -105,8 +105,12 @@ export function LandingPageContent() {
 
         <section
           aria-labelledby="value-props-heading"
-          className="mx-auto max-w-[1100px] px-6 pb-20"
+          className="bg-accent-soft/45 px-6 py-16"
         >
+          <div className="mx-auto max-w-[1100px]">
+            <p className="label-mono mb-6 block text-center text-accent-text">
+              Why tutors choose Mynk
+            </p>
           <h2 id="value-props-heading" className="sr-only">
             How Mynk works
           </h2>
@@ -126,6 +130,7 @@ export function LandingPageContent() {
               headline="Your rate stays yours"
               body="Mynk doesn't take a cut of what you charge. Your session data stays under your account — parent and student access is through secure sign-in, no ads, no tracking."
             />
+          </div>
           </div>
         </section>
 
@@ -179,7 +184,7 @@ export function LandingPageContent() {
           className="px-6 py-[72px] text-center"
         >
           <div className="mx-auto max-w-xl">
-            <p className="label-mono mb-3 block text-muted-foreground">Pilot access</p>
+            <p className="label-mono mb-3 block text-accent-text">Pilot access</p>
             <h2
               id="trust-heading"
               className="heading text-balance mb-4 mt-0 text-[clamp(1.4rem,3vw,2rem)]"
@@ -191,6 +196,15 @@ export function LandingPageContent() {
               a cut of what you charge. Your account is protected by login — parent and
               student views use secure sign-in through accounts you invite.
             </p>
+
+            <div className="mx-auto mb-8 max-w-md rounded-2xl bg-brand px-6 py-5 text-left">
+              <p className="label-mono m-0 text-[10px] text-[color:var(--brand-on)]/70">
+                Built for independents
+              </p>
+              <p className="heading mt-2 mb-0 text-lg text-[color:var(--brand-on)]">
+                Your rate stays yours — Mynk is infrastructure, not a marketplace.
+              </p>
+            </div>
 
             {!signedIn ? (
               <div className="flex flex-wrap justify-center gap-3">
