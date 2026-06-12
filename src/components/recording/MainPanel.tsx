@@ -4,6 +4,8 @@ import {
   effectiveSegmentMaxSeconds,
   formatSegmentTimeLeft,
 } from "@/lib/recording/segment-policy";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import MicControls, { type MicControlsProps } from "./MicControls";
 import { formatDuration } from "./format-duration";
 
@@ -60,18 +62,19 @@ export default function MainPanel({
       <MicControls {...micControls} />
 
       {(state === "idle" || state === "acquiring" || state === "ready") && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button
+        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <Button
             type="button"
-            className="btn primary"
+            variant="accent"
+            className="min-h-11 shrink-0 whitespace-nowrap"
             onClick={onStart}
             disabled={disabled || state === "acquiring"}
             aria-label="Start recording"
             data-testid="audio-record-start"
           >
             {state === "acquiring" ? "● Connecting…" : "● Start recording"}
-          </button>
-          <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--color-muted)" }}>
+          </Button>
+          <span className="text-xs leading-relaxed text-muted-foreground sm:ml-auto">
             {state === "ready"
               ? "Speak — watch the level bar — then click Start."
               : `Long sessions auto-save every ~${Math.round(effectiveSegmentMaxSeconds() / 60)} min so you can keep recording. Speak at least 15–20 seconds per segment when possible.`}
@@ -80,101 +83,82 @@ export default function MainPanel({
       )}
 
       {(state === "recording" || state === "paused") && (
-        <div data-testid="audio-record-controls">
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+        <div data-testid="audio-record-controls" className="mt-3 space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
             <span
               aria-hidden="true"
-              style={{
-                display: "inline-block",
-                width: 10,
-                height: 10,
-                borderRadius: "50%",
-                background:
-                  state === "recording"
-                    ? "var(--color-error)"
-                    : "var(--color-muted)",
-                animation: state === "recording" ? "pulse 1s infinite" : undefined,
-              }}
+              className={cn(
+                "inline-block size-2.5 shrink-0 rounded-full",
+                state === "recording" ? "animate-pulse bg-destructive" : "bg-muted-foreground"
+              )}
             />
             <span
               aria-live="polite"
               aria-label={`Segment ${displayPart}, duration ${formatDuration(elapsed)}`}
-              style={{
-                fontVariantNumeric: "tabular-nums",
-                fontWeight: 600,
-                fontSize: 18,
-                color: isWarning ? "var(--color-error)" : undefined,
-              }}
+              className={cn(
+                "text-lg font-semibold tabular-nums",
+                isWarning ? "text-destructive" : "text-foreground"
+              )}
             >
               Part {displayPart} · {formatDuration(elapsed)}
             </span>
-            {isWarning && (
-              <span role="alert" style={{ fontSize: 12, color: "var(--color-error)" }}>
-                {formatSegmentTimeLeft(effectiveSegmentMaxSeconds() - elapsed)} in this segment — will save &amp; continue automatically
+            {isWarning ? (
+              <span role="alert" className="text-xs text-destructive">
+                {formatSegmentTimeLeft(effectiveSegmentMaxSeconds() - elapsed)} in this segment —
+                will save &amp; continue automatically
               </span>
-            )}
-            <span
-              aria-live="polite"
-              style={{ marginLeft: "auto", fontSize: 12, color: "var(--color-muted)" }}
-            >
+            ) : null}
+            <span aria-live="polite" className="ml-auto text-xs text-muted-foreground">
               {state === "paused" ? "Paused" : "Recording…"}
             </span>
           </div>
 
-          <div style={{ display: "flex", gap: 8 }}>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             {state === "recording" ? (
-              <button
+              <Button
                 type="button"
-                className="btn"
+                variant="outline"
+                className="min-h-11 shrink-0 whitespace-nowrap"
                 onClick={onPause}
                 aria-label="Pause recording"
                 data-testid="audio-record-pause"
               >
                 ⏸ Pause
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
                 type="button"
-                className="btn"
+                variant="outline"
+                className="min-h-11 shrink-0 whitespace-nowrap"
                 onClick={onResume}
                 aria-label="Resume recording"
                 data-testid="audio-record-resume"
               >
                 ▶ Resume
-              </button>
+              </Button>
             )}
-            {/* Wrap onStop in an arrow on the consumer side so the synthetic
-                MouseEvent isn't passed as the `mode` argument — that
-                regression was caught and fixed live; do not change to
-                onClick={onStop} if `onStop` accepts an optional first arg. */}
-            <button
+            <Button
               type="button"
-              className="btn primary"
+              variant="accent"
+              className="min-h-11 shrink-0 whitespace-nowrap"
               onClick={onStop}
               aria-label="Stop and save recording"
               data-testid="audio-record-stop"
             >
               ■ Stop & save
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="btn"
-              style={{ marginLeft: "auto" }}
+              variant="outline"
+              className="min-h-11 shrink-0 whitespace-nowrap sm:ml-auto"
               onClick={onReset}
               aria-label="Discard recording"
             >
               Discard
-            </button>
+            </Button>
           </div>
         </div>
       )}
-
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.2; }
-        }
-      `}</style>
     </div>
   );
 }

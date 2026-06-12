@@ -186,7 +186,7 @@ export function StartWhiteboardSession({
       <Button
         type="button"
         variant="accent"
-        className="min-h-11"
+        className="min-h-11 whitespace-nowrap"
         onClick={() => setOpen(true)}
         data-testid="start-whiteboard-session-btn"
       >
