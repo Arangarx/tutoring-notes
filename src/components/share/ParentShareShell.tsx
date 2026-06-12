@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -32,9 +33,10 @@ export function ParentShareShell({
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
             </div>
-            {headerAction ? (
-              <div className="w-full shrink-0 sm:w-auto">{headerAction}</div>
-            ) : null}
+            <div className="flex w-full shrink-0 items-center justify-end gap-2 sm:w-auto">
+              <ThemeToggle />
+              {headerAction ? <div>{headerAction}</div> : null}
+            </div>
           </div>
         </header>
         <div className="flex flex-col gap-3 px-4 py-4 pb-8 md:px-5">{children}</div>

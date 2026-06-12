@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 
 import { MynkWordmark } from "@/components/auth/MynkWordmark";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { cn } from "@/lib/utils";
 
 type StudentPageShellProps = {
@@ -30,9 +31,10 @@ export function StudentPageShell({
         >
           <MynkWordmark size="sm" />
         </Link>
-        {actions ? (
-          <div className="flex items-center gap-2">{actions}</div>
-        ) : null}
+        <div className="flex items-center gap-1">
+          <ThemeToggle />
+          {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
+        </div>
       </header>
       <main className="flex flex-1 flex-col">{children}</main>
     </div>

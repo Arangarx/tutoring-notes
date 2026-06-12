@@ -3,6 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { Suspense, useId, useState } from "react";
 import { MynkWordmark } from "@/components/auth/MynkWordmark";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -103,7 +104,8 @@ function StudentLoginForm() {
   const isLockedOut = retryAfter !== null && retryAfter > 0 || hardLocked;
 
   return (
-    <main className="flex min-h-[100dvh] flex-col items-center justify-center bg-background px-4 py-8">
+    <main className="relative flex min-h-[100dvh] flex-col items-center justify-center bg-background px-4 py-8">
+      <ThemeToggle className="absolute right-4 top-4 z-10" />
       <div className="w-full max-w-[360px]">
         <div className="mb-8 flex justify-center">
           <MynkWordmark />
