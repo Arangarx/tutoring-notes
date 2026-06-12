@@ -8,6 +8,7 @@ import { AccountSectionCard } from "@/components/account/AccountSectionCard";
 import { CopyableLearnerHandle } from "@/components/account/CopyableLearnerHandle";
 import { Button } from "@/components/ui/button";
 import { formatLearnerLoginHandle } from "@/lib/family-id";
+import { AddLearnerForm } from "./AddLearnerForm";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +55,7 @@ export default async function AccountDashboardPage() {
     ? `${learnerProfiles.length} ${learnerProfiles.length !== 1 ? "learners" : "learner"} linked to your account.`
     : isSelfLearner
     ? "You are set up as a learner on this account."
-    : "No learners linked yet. Your tutor will send you a link to connect.";
+    : "Add a learner, or wait for your tutor to send you a claim link.";
 
   return (
     <AccountPageShell
@@ -67,11 +68,11 @@ export default async function AccountDashboardPage() {
         description={sectionDescription}
       >
         {learnerProfiles.length === 0 ? (
-          <div className="py-4 text-sm text-muted-foreground">
+          <div className="pb-2 text-sm text-muted-foreground">
             <p>
-              When your tutor sends you a claim link, click it to connect a learner
-              to your account. You&apos;ll then be able to manage their login and session access
-              from here.
+              {"You haven't added any learners yet. Click "}
+              <strong>{"Add learner"}</strong>
+              {" to create one, or wait for your tutor to send a claim link."}
             </p>
           </div>
         ) : (
@@ -116,6 +117,9 @@ export default async function AccountDashboardPage() {
             ))}
           </ul>
         )}
+        <div className="mt-4 border-t border-border pt-4">
+          <AddLearnerForm />
+        </div>
       </AccountSectionCard>
 
       {/* IAC-11-I / IAC-12: child login independence copy — only shown when child learners have credentials */}
