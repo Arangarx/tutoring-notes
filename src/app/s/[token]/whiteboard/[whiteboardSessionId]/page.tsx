@@ -146,44 +146,37 @@ export default async function ShareWhiteboardPage({
   }));
 
   return (
-    <div className="container" style={{ maxWidth: 1280 }}>
-      {/* Header */}
-      <div
-        className="row"
-        style={{
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          marginBottom: 12,
-          flexWrap: "wrap",
-          gap: 8,
-        }}
-      >
-        <div>
-          <Link href={`/s/${token}`} className="muted">
-            ← Back to {studentName}&apos;s notes
-          </Link>
-          <h1 style={{ margin: "6px 0 0" }}>{sessionLabel}</h1>
-          <p className="muted" style={{ margin: "4px 0 0", fontSize: 13 }}>
-            Whiteboard recording shared by your tutor
-          </p>
-        </div>
-      </div>
+    <main className="min-h-dvh bg-background">
+      <div className="mx-auto w-full max-w-[1280px] px-4 py-4 md:px-5 md:py-6">
+        <header className="mb-3 flex flex-wrap items-start justify-between gap-2 border-b border-border bg-card pb-4">
+          <div className="min-w-0">
+            <Link
+              href={`/s/${token}`}
+              className="text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              ← Back to {studentName}&apos;s notes
+            </Link>
+            <h1 className="heading mt-1.5 mb-0 text-xl font-bold tracking-tight md:text-2xl">
+              {sessionLabel}
+            </h1>
+            <p className="mt-1 text-[13px] text-muted-foreground">
+              Whiteboard recording shared by your tutor
+            </p>
+          </div>
+        </header>
 
-      {/* Replay */}
-      <WhiteboardReplay
-        eventsBlobUrl={eventsApiUrl}
-        audioSegments={audioSegments}
-        snapshotBlobUrl={snapshotApiUrl}
-        title={sessionLabel}
-      />
+        {/* Replay player — fenced; page chrome only reskinned above/below */}
+        <WhiteboardReplay
+          eventsBlobUrl={eventsApiUrl}
+          audioSegments={audioSegments}
+          snapshotBlobUrl={snapshotApiUrl}
+          title={sessionLabel}
+        />
 
-      {/* Footer meta */}
-      <div
-        className="muted"
-        style={{ fontSize: 11, textAlign: "right", marginTop: 8 }}
-      >
-        schema v{session.eventsSchemaVersion}
+        <p className="mt-2 text-right font-mono text-[11px] text-muted-foreground">
+          schema v{session.eventsSchemaVersion}
+        </p>
       </div>
-    </div>
+    </main>
   );
 }

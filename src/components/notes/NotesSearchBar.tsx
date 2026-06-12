@@ -3,10 +3,14 @@
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useTransition } from "react";
 
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+
 interface NotesSearchBarProps {
   placeholder?: string;
   /** aria-label for the input */
   label?: string;
+  className?: string;
 }
 
 /**
@@ -16,6 +20,7 @@ interface NotesSearchBarProps {
 export function NotesSearchBar({
   placeholder = "Search notes…",
   label = "Search notes",
+  className,
 }: NotesSearchBarProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -40,34 +45,27 @@ export function NotesSearchBar({
   );
 
   return (
-    <div style={{ position: "relative", flex: 1, minWidth: 180 }}>
+    <div className={cn("relative min-w-[180px] flex-1", className)}>
       <label htmlFor="notes-search" className="sr-only">
         {label}
       </label>
-      <input
+      <Input
         id="notes-search"
         type="search"
         aria-label={label}
         defaultValue={searchParams.get("q") ?? ""}
         onChange={handleChange}
         placeholder={placeholder}
-        style={{ width: "100%", paddingRight: isPending ? 28 : undefined }}
+        className={cn(isPending && "pr-8")}
       />
-      {isPending && (
+      {isPending ? (
         <span
           aria-hidden="true"
-          style={{
-            position: "absolute",
-            right: 8,
-            top: "50%",
-            transform: "translateY(-50%)",
-            fontSize: 12,
-            opacity: 0.5,
-          }}
+          className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground opacity-50"
         >
           …
         </span>
-      )}
+      ) : null}
     </div>
   );
 }
