@@ -1,11 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { db } from "@/lib/db";
-import { requireAccountHolderSession } from "@/lib/server-session";
-import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
 import { AccountPageShell } from "@/components/account/AccountPageShell";
 import { AccountSectionCard } from "@/components/account/AccountSectionCard";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { db } from "@/lib/db";
+import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
+import { requireAccountHolderSession } from "@/lib/server-session";
+
+import { AccountChildNav } from "../AccountChildNav";
 import { DeviceRevokeButtons } from "./DeviceRevokeButtons";
 
 export const dynamic = "force-dynamic";
@@ -73,15 +77,18 @@ export default async function ChildDevicesPage({
       userEmail={accountHolder?.email}
       eyebrow={
         <Link
-          href={`/account/children/${id}`}
+          href="/account/dashboard"
           className="inline-flex min-h-11 items-center text-brand underline-offset-2 hover:underline"
         >
-          {`\u2190 ${profile.displayName}`}
+          {"\u2190"} Dashboard
         </Link>
       }
     >
+      <AccountChildNav learnerId={id} />
+
       <AccountSectionCard
         title="Active sessions"
+        className="rounded-[10px] border-border shadow-sm"
         description={
           profile.deviceSessions.length === 0
             ? "No active device sessions."
@@ -90,18 +97,25 @@ export default async function ChildDevicesPage({
         actions={
           profile.deviceSessions.length > 1 ? (
             <DeviceRevokeButtons learnerProfileId={id} mode="all" label="Revoke all" />
+          ) : profile.deviceSessions.length === 1 ? (
+            <Badge className="bg-accent-soft text-accent-text font-mono text-[10px] uppercase">
+              1 active
+            </Badge>
           ) : null
         }
       >
         {profile.deviceSessions.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
+          <div className="rounded-[10px] border border-dashed border-border bg-muted/20 px-4 py-6 text-sm text-muted-foreground">
             Your child is not signed in on any devices.
-          </p>
+          </div>
         ) : (
-          <ul className="divide-y divide-border" role="list">
-            {profile.deviceSessions.map((device) => (
-              <li key={device.id} className="py-4 first:pt-0 last:pb-0">
-                <div className="flex items-start justify-between gap-4">
+          <div className="overflow-hidden rounded-[10px] border border-border bg-background">
+            <ul role="list">
+              {profile.deviceSessions.map((device) => (
+                <li
+                  key={device.id}
+                  className="flex items-start justify-between gap-4 border-b border-border px-4 py-4 last:border-b-0"
+                >
                   <div className="min-w-0 space-y-1">
                     <p className="font-medium text-foreground">
                       {parseDeviceInfo(device.deviceInfo)}
@@ -119,29 +133,32 @@ export default async function ChildDevicesPage({
                     mode="one"
                     label="Revoke"
                   />
-                </div>
-              </li>
-            ))}
-          </ul>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </AccountSectionCard>
 
-      <div className="text-sm text-muted-foreground">
-        <p>
-          Revoking a device signs your child out immediately. They&apos;ll need to log in again
-          with their username and PIN on that device.
-        </p>
-        <p className="mt-1">
-          {"If a device is lost or shared, revoke it right away. If you think the PIN was compromised, also "}
-          <Link
-            href={`/account/children/${id}`}
-            className="text-brand underline-offset-2 hover:underline"
-          >
-            change the PIN
-          </Link>
-          .
-        </p>
-      </div>
+      <Alert className="rounded-[10px] border-l-[3px] border-accent bg-accent-soft">
+        <AlertTitle className="text-accent-text">Security tip</AlertTitle>
+        <AlertDescription className="text-foreground">
+          <p>
+            Revoking a device signs your child out immediately. They&apos;ll need to log in
+            again with their username and PIN on that device.
+          </p>
+          <p className="mt-2">
+            {"If a device is lost or shared, revoke it right away. If you think the PIN was compromised, also "}
+            <Link
+              href={`/account/children/${id}`}
+              className="font-medium text-accent-text underline-offset-2 hover:underline"
+            >
+              change the PIN
+            </Link>
+            .
+          </p>
+        </AlertDescription>
+      </Alert>
     </AccountPageShell>
   );
 }
