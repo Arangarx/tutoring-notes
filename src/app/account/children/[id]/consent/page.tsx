@@ -140,7 +140,7 @@ export default async function LearnerConsentPage({
   return (
     <AccountPageShell
       title={`${learnerName} — Privacy`}
-      description="Control what each tutor can capture and share."
+      description="Choose what each tutor may do, and optional limits that always apply to your child."
       userEmail={accountHolder?.email}
       eyebrow={
         <Link
@@ -167,7 +167,7 @@ export default async function LearnerConsentPage({
       ) : (
         <AccountSectionCard
           title="Privacy preferences"
-          description="Per-tutor consent and optional child restrictions."
+          description="Per-tutor permissions you grant, plus optional hard limits your child cannot override."
           className="rounded-[10px] border-border"
         >
           <ParentConsentEditor

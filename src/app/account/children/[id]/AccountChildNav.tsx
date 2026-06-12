@@ -19,7 +19,7 @@ export function AccountChildNav({ learnerId }: { learnerId: string }) {
   return (
     <nav
       aria-label="Learner sections"
-      className="overflow-x-auto border-b border-border"
+      className="overflow-x-auto overflow-y-hidden border-b border-border"
     >
       <div className="flex min-w-max gap-1">
         {TAB_DEFS.map(({ segment, label }) => {
