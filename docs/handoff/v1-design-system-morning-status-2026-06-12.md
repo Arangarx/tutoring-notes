@@ -164,6 +164,31 @@ Six branches merged `--no-ff` into `v1-design-system` in order: **A, B, D, E, C,
 
 ---
 
+## Post-review tweak wave (2026-06-12)
+
+Andrew's morning surface review spawned a docs-only tweak wave merged `--no-ff` into `v1-design-system` (tip [`6587592`](https://github.com/Arangarx/tutoring-notes/commit/6587592)). One line per item:
+
+| ID | Change | Merge source |
+|---|---|---|
+| **T1** | `AccountChildNav` tab strip: removed stray vertical scrollbar (`overflow-y-hidden`). | [`95669a5`](https://github.com/Arangarx/tutoring-notes/commit/95669a5) (`v1ds/tweak-account`) |
+| **Consent copy** | Consent editor labels clarified — "What each tutor may do" (per-tutor grants) vs "Always-off limits" (cross-tutor hard blocks); no logic change. | same |
+| **T8** | Admin desktop content width `max-w-4xl` → `max-w-6xl xl:max-w-7xl`; sidebar↔content gap `gap-8` → `gap-6`. | [`861bfdb`](https://github.com/Arangarx/tutoring-notes/commit/861bfdb) (`v1ds/tweak-admin-shell-scheduler`) |
+| **schedule-nav** | "Schedule" link added to desktop `AdminSidebarNav` (was mobile-only). | same |
+| **S1** | Scheduler calendar: event dots stack under the day digit (`ScheduleDayButton`) instead of cell-centered. | same |
+| **S2** | Scheduler "Day detail" card: more padding, `whitespace-nowrap` time ranges, wider day-detail grid column. | same |
+| **S3/S4** | Logged as wiring-phase design notes in [`scheduling-requirements-2026-06-11.md`](scheduling-requirements-2026-06-11.md) — not UI changes this pass. | same |
+| **T6** | Student detail: section tabs wired to contained scroll area + `IntersectionObserver` scroll-spy (chrome fixed; only content below divider scrolls). | [`b57de9e`](https://github.com/Arangarx/tutoring-notes/commit/b57de9e) (`v1ds/tweak-student-detail`) |
+| **T7** | Student detail recording controls: layout cleanup (no wrapping, aligned row/stack, coral `<Button variant="accent">` CTAs); no recording logic touched. | same |
+| **T3** | `StudentAvatar`: deterministic FNV-1a name hash → one of eight `--avatar-N` palette tokens, white semibold initials, ring. | [`6036b8d`](https://github.com/Arangarx/tutoring-notes/commit/6036b8d) (`v1ds/tweak-primitives-email`) |
+| **T4** | Shared `CheckboxField` primitive (`gap-3` box↔label) in `checkbox.tsx`; email SMTP TLS toggle migrated off one-off native checkbox. | same |
+| **T5** | Connect Gmail: Mortensen Apps notice moved **above** the button; CTA now `<Button variant="accent" asChild>`. | same |
+
+**Not merged:** **T2** fuller accent-recipe pass remains on proposal branch `v1ds/accent-recipe-proposal` — awaiting Andrew's approval.
+
+**Smoke:** [`v1ds-tweak-wave-smokebook-2026-06-12.md`](v1ds-tweak-wave-smokebook-2026-06-12.md).
+
+---
+
 ## Consolidated library-gap follow-up
 
 For a future **foundation pass** — the big actionable list after Andrew's morning review.
