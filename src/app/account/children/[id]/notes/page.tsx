@@ -4,33 +4,27 @@
  * Route: GET /account/children/[id]/notes
  *
  * Auth: AccountHolder session → assertOwnsLearnerProfile
- *
- * Shows the same session notes as the /s/[token] share page for the tutor-
- * scoped Student linked to this LearnerProfile. For a learner with multiple
- * tutors (IAC-2), we find all linked Students and merge their notes, ordered
- * by date descending, since there is no single canonical token here.
- *
- * This is the "pull" model — notes appear in the parent's authenticated
- * dashboard, not just via email links. Removes dependency on the tutor
- * remembering to send emails.
  */
 
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { db } from "@/lib/db";
-import { requireAccountHolderSession } from "@/lib/server-session";
-import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
-import { formatDateOnlyDisplay } from "@/lib/date-only";
 import { AccountPageShell } from "@/components/account/AccountPageShell";
 import { AccountSectionCard } from "@/components/account/AccountSectionCard";
 import { ParentShareNoteCard } from "@/components/notes/ParentShareNoteCard";
-import { parentShareNoteInclude } from "@/lib/share/parentShareNotePayload";
+import { Badge } from "@/components/ui/badge";
+import { db } from "@/lib/db";
+import { formatDateOnlyDisplay } from "@/lib/date-only";
+import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
 import {
   loadWhiteboardReplayIdsByNoteIds,
   mergeWhiteboardStubsForShareCard,
 } from "@/lib/share/loadWhiteboardReplayIdsForNotes";
+import { parentShareNoteInclude } from "@/lib/share/parentShareNotePayload";
+import { requireAccountHolderSession } from "@/lib/server-session";
+
+import { AccountChildNav } from "../AccountChildNav";
 
 export const dynamic = "force-dynamic";
 
@@ -61,7 +55,6 @@ export default async function LearnerNotesPage({
     select: { email: true },
   });
 
-  // assertOwnsLearnerProfile calls notFound() on mismatch / tombstone.
   await assertOwnsLearnerProfile(session.accountHolderId, learnerId);
 
   const learnerProfile = await db.learnerProfile.findUnique({
@@ -70,8 +63,6 @@ export default async function LearnerNotesPage({
   });
   if (!learnerProfile) notFound();
 
-  // IAC-2: a LearnerProfile may be linked to multiple tutors' Students.
-  // Gather all linked Student rows so we can aggregate notes across tutors.
   const students = await db.student.findMany({
     where: { learnerProfileId: learnerId },
     select: { id: true, adminUserId: true },
@@ -85,8 +76,6 @@ export default async function LearnerNotesPage({
     orderBy: { createdAt: "desc" },
   });
 
-  // Pick one share link per student (most recent non-revoked) for the
-  // per-note "View share page" link. Map: studentId → token.
   const shareTokenByStudentId = new Map<string, string>();
   for (const sl of shareLinks) {
     if (!shareTokenByStudentId.has(sl.studentId)) {
@@ -102,7 +91,6 @@ export default async function LearnerNotesPage({
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     include: {
       ...parentShareNoteInclude,
-      // Include studentId so we can resolve the share token per note.
       student: { select: { id: true } },
     },
   });
@@ -116,18 +104,29 @@ export default async function LearnerNotesPage({
   return (
     <AccountPageShell
       title={`${learnerName} — Session notes`}
+      description="Notes from tutoring sessions, updated automatically."
       userEmail={accountHolder?.email}
       eyebrow={
         <Link
-          href={`/account/children/${learnerId}`}
+          href="/account/dashboard"
           className="inline-flex min-h-11 items-center text-brand underline-offset-2 hover:underline"
         >
-          {"\u2190"} Back to {learnerName}
+          {"\u2190"} Dashboard
         </Link>
       }
     >
+      <AccountChildNav learnerId={learnerId} />
+
       <AccountSectionCard
         title="Session notes"
+        className="rounded-[10px] border-border shadow-sm"
+        actions={
+          notes.length > 0 ? (
+            <Badge className="bg-accent-soft text-accent-text font-mono text-[10px] uppercase">
+              {notes.length} total
+            </Badge>
+          ) : null
+        }
         description={
           notes.length === 0
             ? students.length === 0
@@ -137,22 +136,20 @@ export default async function LearnerNotesPage({
         }
       >
         {notes.length === 0 ? (
-          students.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {
-                "This learner isn't connected to a tutor yet. Notes will appear here once a tutor is connected and sessions begin. "
-              }
-              {/* TODO: tutor-discovery/connection flow for parent-created learners */}
-              {
-                "Your tutor can send you a claim link to connect, or tutor-discovery will be available in a future update."
-              }
-            </p>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              No session notes yet. They will appear here automatically after
-              each tutoring session.
-            </p>
-          )
+          <div className="rounded-[10px] border border-dashed border-border bg-muted/20 px-4 py-6 text-sm text-muted-foreground">
+            {students.length === 0 ? (
+              <p>
+                {
+                  "This learner isn't connected to a tutor yet. Notes will appear here once a tutor is connected and sessions begin. Your tutor can send you a claim link to connect."
+                }
+              </p>
+            ) : (
+              <p>
+                No session notes yet. They will appear here automatically after each
+                tutoring session.
+              </p>
+            )}
+          </div>
         ) : (
           <div className="grid gap-3">
             {notes.map((note) => {

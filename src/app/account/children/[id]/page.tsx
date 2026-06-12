@@ -1,18 +1,22 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { db } from "@/lib/db";
-import { requireAccountHolderSession } from "@/lib/server-session";
-import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
-import { isCredentialHardLocked } from "@/lib/learner-pin-rate-limit";
 import { AccountPageShell } from "@/components/account/AccountPageShell";
 import { AccountSectionCard } from "@/components/account/AccountSectionCard";
 import { CopyableLearnerHandle } from "@/components/account/CopyableLearnerHandle";
+import { StudentAvatar } from "@/components/admin/StudentAvatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { db } from "@/lib/db";
 import { formatLearnerLoginHandle } from "@/lib/family-id";
+import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
+import { isCredentialHardLocked } from "@/lib/learner-pin-rate-limit";
+import { requireAccountHolderSession } from "@/lib/server-session";
+
+import { AccountChildNav } from "./AccountChildNav";
 import { ChangePinForm } from "./ChangePinForm";
-import { UnlockPinButton } from "./UnlockPinButton";
 import { SetupLoginForm } from "./SetupLoginForm";
+import { UnlockPinButton } from "./UnlockPinButton";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +34,6 @@ export default async function ChildDetailPage({
     select: { email: true, familyId: true },
   });
 
-  // assertOwnsLearnerProfile will notFound() if not owned or tombstoned
   await assertOwnsLearnerProfile(session.accountHolderId, id);
 
   const fullProfile = await db.learnerProfile.findUnique({
@@ -39,6 +42,7 @@ export default async function ChildDetailPage({
       id: true,
       displayName: true,
       accessMode: true,
+      isSelfLearner: true,
       createdAt: true,
       credential: { select: { id: true, username: true } },
       students: { select: { name: true }, take: 1 },
@@ -51,7 +55,6 @@ export default async function ChildDetailPage({
     where: { learnerProfileId: id, revokedAt: null },
   });
 
-  // IAC-10: check hard-lock state (in-memory; null if no credential)
   let isPinHardLocked = false;
   const familyId = accountHolder?.familyId;
   if (fullProfile.credential && familyId) {
@@ -67,6 +70,7 @@ export default async function ChildDetailPage({
   return (
     <AccountPageShell
       title={fullProfile.displayName}
+      description="Profile, login, and quick links."
       userEmail={accountHolder?.email}
       eyebrow={
         <Link
@@ -76,22 +80,67 @@ export default async function ChildDetailPage({
           {"\u2190"} Dashboard
         </Link>
       }
+      actions={
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <Button asChild className="min-h-11 w-full rounded-full sm:w-auto">
+            <Link href={`/account/children/${id}/notes`}>Session notes</Link>
+          </Button>
+          {!fullProfile.isSelfLearner ? (
+            <Button
+              asChild
+              variant="outline"
+              className="min-h-11 w-full rounded-full sm:w-auto"
+            >
+              <Link href={`/account/children/${id}/consent`}>Privacy</Link>
+            </Button>
+          ) : null}
+        </div>
+      }
     >
-      <AccountSectionCard title="Learner details">
-        <dl className="space-y-2 text-sm">
-          <div className="flex items-center justify-between gap-4">
+      <AccountChildNav learnerId={id} />
+
+      <div className="flex items-center gap-4 rounded-[10px] border border-border bg-card p-4">
+        <StudentAvatar name={fullProfile.displayName} size="lg" />
+        <div className="min-w-0">
+          <p className="heading text-xl font-normal text-foreground">
+            {fullProfile.displayName}
+          </p>
+          <div className="mt-1 flex flex-wrap gap-2">
+            <Badge variant="outline" className="font-mono text-[10px] uppercase">
+              {fullProfile.accessMode === "child_pin_required"
+                ? "Own login"
+                : "Guardian picks"}
+            </Badge>
+            {activeDeviceCount > 0 ? (
+              <Badge className="bg-accent-soft text-accent-text font-mono text-[10px] uppercase">
+                {activeDeviceCount} active{" "}
+                {activeDeviceCount !== 1 ? "devices" : "device"}
+              </Badge>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      <AccountSectionCard
+        title="Learner details"
+        className="rounded-[10px] border-border shadow-sm"
+      >
+        <dl className="divide-y divide-border rounded-[10px] border border-border bg-background text-sm">
+          <div className="flex items-center justify-between gap-4 px-4 py-3">
             <dt className="text-muted-foreground">Name</dt>
             <dd className="font-medium text-foreground">{fullProfile.displayName}</dd>
           </div>
           {fullProfile.students[0] ? (
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center justify-between gap-4 px-4 py-3">
               <dt className="text-muted-foreground">{"Tutor's name for this student"}</dt>
-              <dd className="font-medium text-foreground">{fullProfile.students[0].name}</dd>
+              <dd className="text-right font-medium text-foreground">
+                {fullProfile.students[0].name}
+              </dd>
             </div>
           ) : null}
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-4 px-4 py-3">
             <dt className="text-muted-foreground">Login mode</dt>
-            <dd className="font-medium text-foreground">
+            <dd className="text-right font-medium text-foreground">
               {fullProfile.accessMode === "child_pin_required"
                 ? "Child uses own username + PIN"
                 : "Parent/Guardian selects learner (no independent login)"}
@@ -107,8 +156,9 @@ export default async function ChildDetailPage({
             ? "Your child signs in with the handle below and their PIN."
             : "No login credentials set up yet."
         }
+        className="rounded-[10px] border-border shadow-sm"
         actions={
-          <Button asChild variant="outline" size="sm">
+          <Button asChild variant="outline" size="sm" className="rounded-full">
             <Link href={`/account/children/${id}/devices`}>
               {activeDeviceCount > 0
                 ? `${activeDeviceCount} ${activeDeviceCount !== 1 ? "devices" : "device"}`
@@ -124,17 +174,15 @@ export default async function ChildDetailPage({
             ) : null}
             <p className="text-sm text-muted-foreground">
               {"Your child signs in at "}
-              <a
+              <Link
                 href="/students/login"
                 className="text-brand underline-offset-2 hover:underline"
               >
                 the student login page
-              </a>
+              </Link>
               {" using their username and PIN — completely separate from your account."}
             </p>
-            {isPinHardLocked ? (
-              <UnlockPinButton learnerProfileId={id} />
-            ) : null}
+            {isPinHardLocked ? <UnlockPinButton learnerProfileId={id} /> : null}
             <ChangePinForm learnerProfileId={id} />
           </div>
         ) : (
@@ -151,6 +199,24 @@ export default async function ChildDetailPage({
           </div>
         )}
       </AccountSectionCard>
+
+      {!fullProfile.isSelfLearner ? (
+        <AccountSectionCard
+          title="Privacy & consent"
+          description="Control what tutors can capture and share."
+          className="rounded-[10px] border-border shadow-sm"
+          actions={
+            <Button asChild variant="outline" size="sm" className="rounded-full">
+              <Link href={`/account/children/${id}/consent`}>Manage privacy</Link>
+            </Button>
+          }
+        >
+          <p className="text-sm text-muted-foreground">
+            Set per-tutor preferences for live sessions, recordings, and session notes.
+            Child restrictions can narrow what you allow.
+          </p>
+        </AccountSectionCard>
+      ) : null}
     </AccountPageShell>
   );
 }
