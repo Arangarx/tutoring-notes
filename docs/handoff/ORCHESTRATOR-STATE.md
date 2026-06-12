@@ -2,23 +2,143 @@
 
 > **READ THIS FIRST.** This file is the **single source of current orchestrator state** for tutoring-notes. We keep it current continuously (lightweight head every material turn; full restructure at milestones). A **brand-new orchestrator chat** must read it before dispatching work and must **NOT** ask Andrew for catch-up on what's done, where we are, what's next, or how we work — this doc, its reading list, and `git log` are authoritative.
 
-## V1 Redesign (active epic)
-
-Multi-day epic on branch **`v1-redesign`** (active V1 integration branch; **not yet merged to `master`**). **Decisions ledger + sub-pass tracker:** [`docs/handoff/v1-redesign-STATUS.md`](v1-redesign-STATUS.md) — do not duplicate the full ledger here.
+> **Operating contract (`.cursor/rules/orchestrator-discipline.mdc`, explicit @ [`7341ff9`](https://github.com/Arangarx/tutoring-notes/commit/7341ff9)):** State durability is a **primary reliability obligation**, not a nicety. Andrew offloads project memory to the orchestrator on purpose — at any moment a session can be lost and a fresh orchestrator must resume with **minimal re-guidance** (ideally just "continue"). Keep this file continuously current; treat "I'll update state later" as a silent failure.
 
 ---
 
-## ⏩ HEAD — 2026-06-11 recording/replay invariant matrix ratified
+## ⏩ HEAD — 2026-06-11 overnight v1 design-system build (`v1-design-system`)
 
 | Field | Value |
 |---|---|
-| **Last action completed** | **Ratified recording/replay invariant matrix (2026-06-11)** + captured canonically in [`recording-rearchitecture-design-2026-06-05.md`](recording-rearchitecture-design-2026-06-05.md) § Recording & Replay Invariant Matrix (I1–I5/M1–M6); D3/D4 SUPERSEDED/CLARIFIED notes preserved; lifecycle-brief freeze-vs-advance resolved; BACKLOG items added (billing basis open, map/reduce accuracy workstream). **Prior:** student-WB migration steps 1-2 merged @ [`dfb221c`](https://github.com/Arangarx/tutoring-notes/commit/dfb221c); trust-model + COPPA resolved. |
-| **Next action(s)** | **Build recording consolidation slice (fix path B)** implementing I1–I5/M1–M6 matrix; restore defer-on-release scrub (M2) + native single-stream playback; map/reduce accuracy as separate workstream. **Parallel:** X2 v1 design + student-WB migration steps 3-9 (Andrew confirms c/e before step 4). |
-| **Open Andrew-confirms** | **RESOLVED:** (a) Encryption trust model; (b) stored-content operator-blind encryption backlogged. **STILL OPEN:** (c) student URL keep vs retire; (d) learner-swap; (e) student camera default; (f) C1–C4 before `CONSENT_ENFORCEMENT`; (g) env scoping at master cut. Standing: B2 D-1/D-2/D-5, B1 deferred TODOs, N-2. **RATIFIED 2026-06-11:** platform→tutor metering = wall-clock for both cash + tokens (see [`docs/BACKLOG.md`](../BACKLOG.md) § Pricing; break-forgiveness = optional future grace layer). Lawyer-needed: VPC method/copy, retention in /privacy, FERPA/SOPIPA. |
-| **In-flight subagents** | None. |
-| **Uncommitted / unmerged** | **None uncommitted.** Merged to `v1-redesign`: harness-fix, steps-1-2. Feature + fix branches remain on remote (stale-sweep eligible). **`v1-redesign` → `master`:** held for full Gate A + comprehensive re-smoke. **Parked:** `feature/sarah-forward-migration-q6` @ `a396ab5`. |
+| **Last action completed** | **Frozen v1 component-library foundation DONE** @ [`300ef0b`](https://github.com/Arangarx/tutoring-notes/commit/300ef0b) (`npx next build` exit 0, 40 static pages; jest 2219 pass / 6 pre-existing unrelated DB-env failures). State-durability operating contract @ [`7341ff9`](https://github.com/Arangarx/tutoring-notes/commit/7341ff9); overnight bootstrap handoff @ [`06f4dc3`](https://github.com/Arangarx/tutoring-notes/commit/06f4dc3). **Scheduling requirements captured** @ [`37c114e`](https://github.com/Arangarx/tutoring-notes/commit/37c114e). |
+| **Next action(s)** | **Surface fan-out Groups A–G** — isolated worktrees off `300ef0b`, merge each `--no-ff` into `v1-design-system` with `next build` gate; Andrew reviews every surface in the morning. Library is **FROZEN** — surface agents consume, don't edit; gaps → foundation follow-up. Final morning status doc (every surface: done/partial + logged library gaps). |
+| **Open Andrew-confirms** | **RESOLVED:** (a) Encryption trust model; (b) stored-content operator-blind encryption backlogged. **STILL OPEN:** (c) student URL keep vs retire; (d) learner-swap; (e) student camera default; (f) C1–C4 before `CONSENT_ENFORCEMENT`; (g) env scoping at master cut. Standing: B2 D-1/D-2/D-5, B1 deferred TODOs, N-2. **RATIFIED 2026-06-11:** platform→tutor metering = wall-clock for both cash + tokens (see [`docs/BACKLOG.md`](../BACKLOG.md) § Pricing). Lawyer-needed: VPC method/copy, retention in /privacy, FERPA/SOPIPA. |
+| **In-flight subagents** | Surface fan-out **Groups A–G** dispatched in isolated worktrees off `300ef0b` (see § In-flight overnight fan-out). |
+| **Uncommitted / unmerged** | **None uncommitted** (post this restructure commit). Branch layering: **`master`** ← **`v1-redesign`** (held for full Gate A + comprehensive re-smoke) ← **`v1-design-system`** (tonight's redesign layer). **`v1-redesign` → `master`:** held. **Parked:** `feature/sarah-forward-migration-q6` @ `a396ab5`. |
 
-**Process directive (Andrew 2026-06-07):** prefer **agent-runnable validation harnesses** over manual smoke wherever behavior is verifiable without Andrew's hardware (transcription E2E + sweep validations were the exemplars).
+**Andrew directive (2026-06-11 overnight):** By morning, produce a single branch with the **entire site** redesigned into the v1 look & feel from a **frozen canonical component library**. Maximize breadth/coverage; he reviews every surface in the morning. Explicitly **not** WB-sync work (low regression risk).
+
+**Process directive (Andrew 2026-06-07):** prefer **agent-runnable validation harnesses** over manual smoke wherever behavior is verifiable without Andrew's hardware.
+
+---
+
+## Branch layering
+
+```
+master  ←  v1-redesign  ←  v1-design-system
+          (Gate A +      (tonight's full-site
+           re-smoke       v1 design-system layer;
+           held)          created off v1-redesign @ 1456581)
+```
+
+- **`v1-redesign`:** Active V1 integration branch; smoke round 1 **8/8 merged** @ [`27ac5db`](https://github.com/Arangarx/tutoring-notes/commit/27ac5db). **Not yet merged to `master`** — held for full Gate A + comprehensive re-smoke.
+- **`v1-design-system`:** Overnight redesign layer branched off `v1-redesign` @ [`1456581`](https://github.com/Arangarx/tutoring-notes/commit/1456581). All overnight surface work merges here for Andrew's morning review, then eventually merges into `v1-redesign`.
+
+**Decisions ledger + sub-pass tracker:** [`docs/handoff/v1-redesign-STATUS.md`](v1-redesign-STATUS.md) — do not duplicate the full ledger here.
+
+---
+
+## Project arc + North Star
+
+Pre-public pilot with one tutor (Sarah). North Star from [`AGENTS.md`](../../AGENTS.md): *"People need to use the app with confidence. Sarah is being patient, but that won't last forever."* Reliability bar: [`../../agenticPipeline/.cursor/rules/reliability-bar.mdc`](../../agenticPipeline/.cursor/rules/reliability-bar.mdc).
+
+---
+
+## Current Wave focus
+
+**Active:** Overnight full-site v1 design-system build on `v1-design-system` (library-first, coverage-over-caution).  
+**Imminent after morning review:** Andrew comprehensive re-smoke of merged `v1-redesign` + integration of `v1-design-system` layer.  
+**Wave 1 reliability floor** on `v1-redesign`: whiteboard sync + regression net **done**; SEC-1 **complete**; smoke round 1 **8/8 merged**.
+
+---
+
+## Latest committed state (`v1-design-system`)
+
+| Commit | Summary |
+|---|---|
+| [`37c114e`](https://github.com/Arangarx/tutoring-notes/commit/37c114e) | Scheduling requirements capture + BACKLOG § Scheduling expand |
+| [`7341ff9`](https://github.com/Arangarx/tutoring-notes/commit/7341ff9) | State-durability operating contract explicit |
+| [`06f4dc3`](https://github.com/Arangarx/tutoring-notes/commit/06f4dc3) | Overnight v1-design-system bootstrap handoff |
+| [`300ef0b`](https://github.com/Arangarx/tutoring-notes/commit/300ef0b) | Frozen v1 component-library foundation (27 primitives, build gate green) |
+
+**On `v1-redesign` (recent, not on design-system branch yet):**
+
+| Commit | Summary |
+|---|---|
+| [`950d13a`](https://github.com/Arangarx/tutoring-notes/commit/950d13a) | Recording/replay invariant matrix I1–I5/M1–M6 ratified |
+| [`1456581`](https://github.com/Arangarx/tutoring-notes/commit/1456581) | Platform→tutor metering = wall-clock (cash + tokens) |
+
+---
+
+## In-flight overnight fan-out (Groups A–G)
+
+Surface agents **CONSUME** the frozen library and may **not** edit it (log gaps → consolidated foundation follow-up). Isolated worktrees (`best-of-n-runner`), branched off `300ef0b`, file-disjoint → safe true parallelism. Each merges `--no-ff` into `v1-design-system` with **`npx next build` exit 0** gate between merges.
+
+| Group | Scope | Notes |
+|---|---|---|
+| **A** | Public/legal/feedback: `/`, `/features`, `/privacy`, `/terms`, `/feedback` | Heavy LEGACY |
+| **B** | Parent share: `/s/[token]`, `/s/[token]/all`, `/s/[token]/whiteboard/[wsid]` | Faithful to parent-share mock |
+| **C** | Admin/tutor: students, settings, outbox, cost, operator lists | Mocks: student-list, detail, settings |
+| **D** | Account/parent: dashboard, children, **new parent consent-edit page** | |
+| **E** | Student: `/students/login`, `/join` → **waiting room (Gate A2)**, sub-options page | |
+| **F** | Scheduling | Visual-only per [`scheduling-requirements-2026-06-11.md`](scheduling-requirements-2026-06-11.md); net-new, no mock |
+| **G** | WB phone-landscape bars-to-left | Sync-fenced; `npm run test:wb-sync`-gated; best-effort |
+
+Auth pages (`/login`, `/signup`, `/account/*` auth, claim flow) already **V1** — minor polish only.
+
+**Whiteboard fence (do NOT touch in visual pass):** `src/lib/whiteboard/**`, `useLiveAV.ts`, `WhiteboardWorkspaceClient.tsx`, `StudentWhiteboardClient.tsx`, recording components, etc. Safe chrome boundary: `src/components/whiteboard/chrome/**` only (Group G exception).
+
+---
+
+## Foundation deferred library gaps
+
+Surface agents need these; log for consolidated foundation follow-up:
+
+- `AdminSidebarNav` composed component **not built** — use `AdminPageShell` `sidebar`/`sidebarWidth` props + §1A.8 patterns.
+- `FormattedNotesBody` / `RecapEditor` (B4) **not built**.
+- No `rounded-panel` Tailwind alias — use `rounded-[10px]` until config extends.
+- Legacy `.btn`/`.card`/`.container` still in `globals.css` — delete only after surfaces migrate.
+- `next-themes` dep pulled by shadcn CLI but unused — removable in cleanup pass.
+- 27 primitives in `src/components/ui/`; `Providers` mounts `TooltipProvider` + `Toaster` app-wide; `/admin/pending-approval` duplicate-nav fixed.
+
+---
+
+## Recently ratified (on `v1-redesign`, 2026-06-11)
+
+### Recording/replay invariant matrix @ [`950d13a`](https://github.com/Arangarx/tutoring-notes/commit/950d13a)
+
+Canonized in [`recording-rearchitecture-design-2026-06-05.md`](recording-rearchitecture-design-2026-06-05.md) § Recording & Replay Invariant Matrix (I1–I5/M1–M6). D3/D4 SUPERSEDED/CLARIFIED notes preserve audit trail.
+
+**Fix path B for replay:** build consolidation + restore native single-stream + defer-on-release scrub (M2); **don't polish the stitcher**.
+
+### Platform→tutor metering @ [`1456581`](https://github.com/Arangarx/tutoring-notes/commit/1456581)
+
+**Wall-clock** for both cash + tokens. Distinct from tutor→student billing (already settled). See [`docs/BACKLOG.md`](../BACKLOG.md) § Pricing; break-forgiveness = optional future grace layer.
+
+---
+
+## Parked threads (after the redesign)
+
+| Thread | Notes |
+|---|---|
+| **Recording consolidation slice** | Fix path B implementing I1–I5/M1–M6 matrix |
+| **Map/reduce auto-notes ACCURACY** | Currently poor — own design+eval pass |
+| **Student-WB migration steps 3–9** | Flag-gated shell wiring + cutover; needs Andrew confirms: (c) student URL keep/retire, (e) camera default; real 2-device smoke |
+| **Learner-swap design** | Learner-scoped tokens, per-learner privacy/consent + notes finalization |
+| **VIDEO recording + replay** | Top post-smoke build candidate — designed, not built |
+| **A6-1 replay player (R1/R2)** | Multi-segment regression — dedicated fix thread |
+| **Live AV (X1)** | Video capture/display broken — dedicated investigation |
+
+---
+
+## Queued dispatches (post fan-out)
+
+1. Final `next build` gate + morning status doc (every surface: done/partial + logged library gaps)
+2. Andrew morning review of all surfaces on `v1-design-system`
+3. Merge `v1-design-system` → `v1-redesign` (after Andrew approval)
+4. Foundation follow-up for deferred library gaps
+5. Recording consolidation slice (fix path B)
+6. Map/reduce accuracy workstream
 
 ---
 
@@ -61,7 +181,7 @@ Multi-day epic on branch **`v1-redesign`** (active V1 integration branch; **not 
 | **R1/R2** | Replay multi-segment custom-player regression (A6-1) — audio not synced, plays past scrubber end, scrub restarts audio | Dedicated fix thread |
 | **X1** | Live video capture/display broken (won't turn on; student video tile never appears) | Dedicated investigation |
 | **L2/L3** | Laser + replay **position** | Re-smoke once tutor & student both run the **NEW** WB interface |
-| **X2** | **v1-design-application via shared components** (Andrew's central point) — final v1 design not applied in many places (WB session start panel, 2FA setup page TFA2, pending-approval, signup, "Connected" pill L6, AV pip clarity X3); no-duplication rule = build components once + compose + apply everywhere | **Likely next major thread** |
+| **X2** | **v1-design-application via shared components** — **IN FLIGHT** as overnight `v1-design-system` build | Was "likely next major thread"; now active overnight run |
 
 ### Polish / design backlog (see `docs/BACKLOG.md`)
 
@@ -99,7 +219,7 @@ Deferred TODOs (not in overnight scope): REJECTED status, revocation UI, approva
 
 ---
 
-### Overnight push 2026-06-11 — COMPLETE (smoke + merge)
+### Overnight push 2026-06-11 — COMPLETE (smoke + merge to `v1-redesign`)
 
 **Andrew directive (2026-06-11):** drive hard toward V1→master cut. Overnight wave **delivered 8 branches**; smoke round 1 triaged; **all 8 merged to `v1-redesign`** @ [`27ac5db`](https://github.com/Arangarx/tutoring-notes/commit/27ac5db).
 
@@ -107,7 +227,7 @@ Deferred TODOs (not in overnight scope): REJECTED status, revocation UI, approva
 |---|---|
 | **Branch discipline** | ✅ Each target on separate branch + smokebook/findings doc |
 | **Merge gate** | ✅ Andrew smoke → fixes on branch → `merge --no-ff` to `v1-redesign` (8/8 complete) |
-| **Not built overnight** | VIDEO recording + replay; A2 waiting room; B2 Step 6 parent consent management UI; laser bidirectional; A6 multi-segment player regression fix |
+| **Not built overnight (smoke wave)** | VIDEO recording + replay; A2 waiting room; B2 Step 6 parent consent management UI; laser bidirectional; A6 multi-segment player regression fix |
 
 **Component reuse standard (ratified 2026-06-11):** [`V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) §2.12, [`.cursor/rules/component-reuse.mdc`](../../.cursor/rules/component-reuse.mdc), `BACKLOG.md` audit. `feat/component-dry-mechanical` is the mechanical pass — smoke for no visual drift.
 
@@ -121,30 +241,30 @@ Deferred TODOs (not in overnight scope): REJECTED status, revocation UI, approva
 
 | # | Gate | Status (post smoke-round-1 merge) |
 |---|---|---|
-| A1 | Visual redesign + chrome + theme + component reuse | Desktop WB chrome DONE; mobile chrome merged; **component DRY MERGED** @ `f6e2f23`; cohesive visual review vs site mocks still pending — **X2 thread** |
-| A2 | Waiting room | **Designed, NOT built** |
+| A1 | Visual redesign + chrome + theme + component reuse | Desktop WB chrome DONE; mobile chrome merged; **component DRY MERGED** @ `f6e2f23`; **X2 IN FLIGHT** as `v1-design-system` overnight build |
+| A2 | Waiting room | **Designed; IN FLIGHT** as Group E overnight build |
 | A3 | Pass-2 in-context end-session | **MERGED** @ `5922c6f` — Phase A functional (E1 fixed); Phase B polish deferred |
 | A3a | PDF page-tab indicator | **MERGED** to `v1-redesign` @ `c05d939` |
 | A3b | SR-04a video-tile sizing | **MERGED** to `v1-redesign` @ `c05d939` |
-| A5 | Live bidirectional sync completeness | **Partial** — tutor→student laser MERGED @ `6f861ea` (L1 fixed; L2/L3 position deferred); student laser deferred; full enumerated audit still open |
-| A6 | Replay fidelity + AV/timer sync | **Partial** — JSXGraph replay MERGED @ `e150e86`; 🔴 multi-segment player regression (R1/R2, A6-1) **not fixed**; full enumerated pass still open |
+| A5 | Live bidirectional sync completeness | **Partial** — tutor→student laser MERGED @ `6f861ea` (L1 fixed; L2/L3 position deferred); student laser deferred |
+| A6 | Replay fidelity + AV/timer sync | **Partial** — JSXGraph replay MERGED @ `e150e86`; 🔴 multi-segment player regression (R1/R2, A6-1) **not fixed** |
 
 #### Gate B — post-V1 / pre-release
 
 | # | Gate | Status (post smoke-round-1 merge) |
 |---|---|---|
-| B1 | Approval-gating / waitlist | **MERGED** @ `f0b9667` — W1/TFA1/W2/W4 fixed; migration deployed on preview |
-| B2 | Parent privacy consent | **MERGED** @ `27ac5db` — dormant `CONSENT_ENFORCEMENT`; C1/C2/C3/C4 block flag flip; Andrew design confirms (D-1/D-2/D-5) still open |
+| B1 | Approval-gating / waitlist | **MERGED** @ `f0b9667` — W1/TFA1/W2/W4 fixed |
+| B2 | Parent privacy consent | **MERGED** @ `27ac5db` — dormant `CONSENT_ENFORCEMENT`; C1/C2/C3/C4 block flag flip |
 | B3 | Security Tier B | **MERGED** @ `6395771` — S1 + SHOULD-FIX-2 option A shipped |
-| B4 | Scheduling + calendar | Post-V1 — not started |
+| B4 | Scheduling + calendar | Requirements captured @ `37c114e`; **visual-only IN FLIGHT** (Group F); wiring post-V1 |
 
 **Scope trap:** `Student.recordingDefaultEnabled` ≠ parent privacy consent. See `BACKLOG.md`.
 
-**Cross-domain email collision — RESOLVED (Andrew 2026-06-07):** one email = one account (Option A). Enforcement in Google-OAuth-signup fast-follow wave.
+**Cross-domain email collision — RESOLVED (Andrew 2026-06-07):** one email = one account (Option A).
 
 **Open v1 requirements:** Theme-agnostic token-driven components (§2.11); single-source reuse (§2.12). **Notes-login cutover:** no grace — claim Sarah's pilot family before `NOTES_AUTH_WALL=true` at master. **Phase 1 notes-login: MERGED** @ `d3a9e8b`.
 
-**Component pass:** `v1-component-spine` MERGED. Cohesive visual review still pending for master cut.
+**Component pass:** `v1-component-spine` MERGED. **`v1-design-system` overnight build** is the cohesive visual application pass.
 
 **Deferred reliability (slice-3 review):** S3 orphan DRAFT race, N1–N4 → `BACKLOG.md`.
 
@@ -159,16 +279,6 @@ Deferred TODOs (not in overnight scope): REJECTED status, revocation UI, approva
 **Pass 2 (session-end UX — Gate A3):** **MERGED** @ `5922c6f` (Phase A; E1 fixed). Pass-1 INTERIM redirect still the fallback when `onSessionEnded` not wired.
 
 **DEFERRED — MUST NOT MISS:** native `confirm()`/`alert()` → in-site modals (component pass); notes quality / Regenerate thread.
-
----
-
-## Current focus
-
-**Priority:** Andrew **comprehensive re-smoke** of merged `v1-redesign` (single preview, full app) → pick next major thread (likely **X2** v1-design-application via shared components).
-
-**Wave 1 reliability floor** on `v1-redesign`: whiteboard sync + regression net **done**; SEC-1 **complete**; mobile WB chrome **merged**; notes-login Phase 1 **merged**; smoke round 1 **8/8 merged** @ `27ac5db`.
-
-**WB/recording smoke FROZEN** for interim whiteboard bugs until v1 redesign ships (Sarah 2026-06-06 backlog items).
 
 ---
 
@@ -198,7 +308,7 @@ DB-as-queue + cron sweep ratified and shipped. Q1 `gpt-4o-mini-transcribe` PASS.
 
 ## Standing ratified decisions (condensed)
 
-Recording Q1/Q5/Q6/Q7/Q8, cost Q8, pricing-floor, Vercel-lock OK — see [`recording-rearchitecture-design-2026-06-05.md`](recording-rearchitecture-design-2026-06-05.md).
+Recording Q1/Q5/Q6/Q7/Q8, cost Q8, pricing-floor, Vercel-lock OK — see [`recording-rearchitecture-design-2026-06-05.md`](recording-rearchitecture-design-2026-06-05.md). Platform→tutor metering = wall-clock @ `1456581`. Replay invariant matrix I1–I5/M1–M6 @ `950d13a`.
 
 ---
 
@@ -206,7 +316,7 @@ Recording Q1/Q5/Q6/Q7/Q8, cost Q8, pricing-floor, Vercel-lock OK — see [`recor
 
 | Thread | Status |
 |---|---|
-| **v1 component redesign / UI pass (X2)** | Component DRY merged; **v1-design-application** (shared components everywhere) likely next major thread |
+| **v1 design-system overnight (X2)** | **IN FLIGHT** — `v1-design-system` branch, Groups A–G fan-out |
 | **Identity / access** | Parent-create-learner + B1 + B2 **merged**; IAC-13 disconnect build open |
 | **Replay player (A6-1)** | R1/R2 multi-segment regression — dedicated fix thread |
 | **Live AV (X1)** | Video capture/display broken — dedicated investigation |
@@ -218,18 +328,19 @@ Recording Q1/Q5/Q6/Q7/Q8, cost Q8, pricing-floor, Vercel-lock OK — see [`recor
 
 ## Pilot context (Sarah — 2026-06-06)
 
-[`sarah-pilot-feedback-2026-06-06-orchestrator-report.md`](sarah-pilot-feedback-2026-06-06-orchestrator-report.md). Laser pointer (B9) merged @ `6f861ea`.
+[`sarah-pilot-feedback-2026-06-06-orchestrator-report.md`](sarah-pilot-feedback-2026-06-06-orchestrator-report.md). Laser pointer (B9) merged @ `6f861ea`. **Apple Calendar integration** — Sarah's explicit scheduling request (captured @ `37c114e`).
 
 ---
 
-## Project arc (compressed)
+## Open questions still in flight
 
-- **North star:** [`AGENTS.md`](../../AGENTS.md)
-- **Reliability bar:** [`../../agenticPipeline/.cursor/rules/reliability-bar.mdc`](../../agenticPipeline/.cursor/rules/reliability-bar.mdc)
-- **SEC-1:** complete
-- **Whiteboard view-sync:** `npm run test:wb-sync` gate for WB sync touches
-
-**Deep history:** `git log --oneline v1-redesign` and `git log -p docs/handoff/ORCHESTRATOR-STATE.md`.
+| Question | Status |
+|---|---|
+| Two-way calendar sync (webhooks/subscriptions)? | **Unresolved** — see [`scheduling-requirements-2026-06-11.md`](scheduling-requirements-2026-06-11.md) |
+| Learner-swap design (d) | Awaiting Andrew |
+| Student URL keep vs retire (c) | Awaiting Andrew |
+| Student camera default (e) | Awaiting Andrew |
+| Map/reduce auto-notes accuracy | Poor today — needs design+eval pass |
 
 ---
 
@@ -237,7 +348,8 @@ Recording Q1/Q5/Q6/Q7/Q8, cost Q8, pricing-floor, Vercel-lock OK — see [`recor
 
 - **Orchestration model:** [`AGENTS.md`](../../AGENTS.md) § "Model usage protocol"
 - **Dispatch boundary:** [`.cursor/rules/orchestrator-discipline.mdc`](../../.cursor/rules/orchestrator-discipline.mdc)
-- **Merging (solo pilot):** smokeable branch → Andrew smoke → `merge --no-ff` into `v1-redesign`; WB sync → `npm run test:wb-sync`; build-surface → `npx next build`
+- **Merging (solo pilot):** smokeable branch → Andrew smoke → `merge --no-ff` into integration branch; WB sync → `npm run test:wb-sync`; build-surface → `npx next build`
+- **Overnight constraints:** one tree-writer at a time in main working tree; true parallelism = isolated worktrees; library FROZEN during surface fan-out
 - **Commits on Windows/PowerShell:** `.git/COMMIT_MSG_DRAFT.txt` + `git commit -F`
 
 ---
@@ -248,15 +360,20 @@ Fresh orchestrator — read in order:
 
 1. [`AGENTS.md`](../../AGENTS.md)
 2. [`docs/handoff/ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md) (this file) — **HEAD + merge status + open threads**
-3. [`docs/handoff/v1-redesign-STATUS.md`](v1-redesign-STATUS.md) — V1 epic ledger
-4. [`docs/RECORDER-LIFECYCLE.md`](../RECORDER-LIFECYCLE.md) — before touching `handleEndSession`
-5. [`docs/handoff/b2-consent-design-2026-06-11.md`](b2-consent-design-2026-06-11.md) — B2 consent design (merged on `v1-redesign`)
-6. [`docs/RELEASE-ROADMAP.md`](../RELEASE-ROADMAP.md)
-7. [`docs/BACKLOG.md`](../BACKLOG.md)
-8. [`docs/PLATFORM-ASSUMPTIONS.md`](../PLATFORM-ASSUMPTIONS.md)
+3. [`docs/handoff/overnight-v1-design-system-handoff-2026-06-11.md`](overnight-v1-design-system-handoff-2026-06-11.md) — **most current re: overnight run**
+4. [`docs/handoff/scheduling-requirements-2026-06-11.md`](scheduling-requirements-2026-06-11.md) — Group F scheduler requirements (visual-only tonight)
+5. [`docs/V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) — frozen library catalog
+6. [`docs/handoff/v1-redesign-STATUS.md`](v1-redesign-STATUS.md) — V1 epic ledger
+7. [`docs/RECORDER-LIFECYCLE.md`](../RECORDER-LIFECYCLE.md) — before touching `handleEndSession`
+8. [`docs/handoff/b2-consent-design-2026-06-11.md`](b2-consent-design-2026-06-11.md) — B2 consent design (merged on `v1-redesign`)
+9. [`docs/RELEASE-ROADMAP.md`](../RELEASE-ROADMAP.md)
+10. [`docs/BACKLOG.md`](../BACKLOG.md)
+11. [`docs/PLATFORM-ASSUMPTIONS.md`](../PLATFORM-ASSUMPTIONS.md)
 
 ---
 
 ## History / audit trail
 
 Updated in place; `git log -p docs/handoff/ORCHESTRATOR-STATE.md`. Template: [`docs/handoff/orchestrator-state-template.md`](orchestrator-state-template.md).
+
+Deep history: `git log --oneline v1-redesign` and `git log --oneline v1-design-system`.
