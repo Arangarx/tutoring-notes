@@ -15,7 +15,7 @@
 | **Merge-train build commit** | [`20f175d`](https://github.com/Arangarx/tutoring-notes/commit/20f175d) |
 | **Build gate** | Combined `npx next build` **exit 0** — **41 static pages**, full route table. Only pre-existing whiteboard/recording ESLint warnings (fenced files untouched). |
 | **Branch layering** | `master` ← `v1-redesign` (held) ← `v1-design-system` |
-| **Preview** | `<orchestrator will confirm the v1-design-system branch alias via Vercel>` — a per-branch Vercel preview deploys automatically on push; do **not** guess or pattern-match a `tutoring-notes-git-*` URL (hash is unpredictable). |
+| **Preview** | [tutoring-notes-git-v1-design-system](https://tutoring-notes-git-v1-design-system-arangarx-5209s-projects.vercel.app) — branch alias (always tracks latest `v1-design-system` push; confirmed via Vercel MCP `list_deployments`, `meta.branchAlias` for `githubCommitRef=v1-design-system`). Latest deploy `d4a6e75` was BUILDING at handoff — give it a minute. |
 
 ---
 
@@ -239,6 +239,6 @@ For a future **foundation pass** — the big actionable list after Andrew's morn
 
 **All seven groups A–G** shipped, merged `--no-ff`, build-green, and pushed to `v1-design-system` (tip after G merge: [`287aa3d`](https://github.com/Arangarx/tutoring-notes/commit/287aa3d)). All new feature surfaces (waiting room, consent editor, scheduler) are **VISUAL-ONLY** pending Andrew's design calls + functional wiring threads. One **pre-existing** WB sync-client jest failure logged for the Phase 4a thread (not a redesign regression — see Group G).
 
-**Andrew's morning job:** review every surface on the `v1-design-system` preview (URL to be confirmed by orchestrator via Vercel MCP), answer the design questions above, and decide merge/cut timing relative to `v1-redesign` and `master`.
+**Andrew's morning job:** review every surface on the [`v1-design-system` preview](https://tutoring-notes-git-v1-design-system-arangarx-5209s-projects.vercel.app), answer the design questions above, and decide merge/cut timing relative to `v1-redesign` and `master`.
 
 **Library remains FROZEN** until a dedicated foundation follow-up pass absorbs the gap list above.
