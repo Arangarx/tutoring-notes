@@ -39,27 +39,32 @@ export function ActiveWhiteboardSessionsList({
           return (
             <li
               key={s.id}
-              className="flex flex-wrap items-center gap-3 py-3 first:pt-0 last:pb-0"
+              className="flex flex-col gap-3 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
             >
-              <span className="min-w-[10rem] flex-1 text-sm text-muted-foreground">
+              <span className="min-w-0 flex-1 text-sm text-muted-foreground">
                 Started{" "}
                 <LocalDateTimeText dateTime={startedAtIso} className="text-muted-foreground" />
                 <span className="label-mono ml-2 text-[11px] opacity-70">({s.id.slice(0, 8)}…)</span>
               </span>
-              <div className="flex flex-wrap gap-2">
-                <Button asChild variant="accent" className="min-h-11">
+              <div className="flex shrink-0 flex-wrap items-center gap-2">
+                <Button asChild variant="accent" className="min-h-11 whitespace-nowrap">
                   <Link
                     href={`/admin/students/${studentId}/whiteboard/${s.id}/workspace`}
                   >
                     Continue
                   </Link>
                 </Button>
-                <form action={endOpenWhiteboardFromStudentPage} title={`Session ${s.id}`}>
+                <form
+                  action={endOpenWhiteboardFromStudentPage}
+                  title={`Session ${s.id}`}
+                  className="shrink-0"
+                >
                   <input type="hidden" name="whiteboardSessionId" value={s.id} />
                   <SubmitButton
                     label="End"
                     pendingLabel="Ending…"
                     variant="outline"
+                    className="min-h-11 whitespace-nowrap"
                     aria-label="End this open whiteboard room"
                   />
                 </form>

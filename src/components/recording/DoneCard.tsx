@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import { formatDuration } from "./format-duration";
 
 export type DoneCardProps = {
@@ -16,28 +17,21 @@ export type DoneCardProps = {
 export default function DoneCard({ doneSegmentSeconds, onReset }: DoneCardProps) {
   return (
     <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "10px 14px",
-        background: "var(--color-success-bg)",
-        borderRadius: 6,
-        border: "1px solid var(--color-success-border)",
-      }}
+      className="flex flex-wrap items-center gap-3 rounded-md border border-success/30 bg-success/10 px-3.5 py-2.5"
       data-testid="audio-record-done"
     >
-      <span style={{ color: "var(--color-success)", fontWeight: 600, fontSize: 14 }}>
+      <span className="text-sm font-semibold text-success">
         ✓ Recording saved ({formatDuration(doneSegmentSeconds)})
       </span>
-      <button
+      <Button
         type="button"
-        className="btn"
-        style={{ marginLeft: "auto", fontSize: 12 }}
+        variant="outline"
+        size="sm"
+        className="ml-auto shrink-0 whitespace-nowrap"
         onClick={onReset}
       >
         Re-record
-      </button>
+      </Button>
     </div>
   );
 }

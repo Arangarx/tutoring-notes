@@ -123,7 +123,7 @@ export default async function StudentDetailPage({
   );
 
   const stickyCta = (
-    <div className="[&_button]:h-12 [&_button]:w-full [&_button]:text-[15px] md:[&_button]:h-11 md:[&_button]:w-auto">
+    <div className="w-full md:w-auto [&_button]:h-12 [&_button]:w-full [&_button]:text-[15px] md:[&_button]:h-11 md:[&_button]:w-auto">
       <StartWhiteboardSession studentId={student.id} />
     </div>
   );
@@ -133,7 +133,6 @@ export default async function StudentDetailPage({
       <SectionHeading
         title="Whiteboard session"
         description="Live whiteboard with audio recording. Generates session notes from what you wrote and said."
-        actions={<div className="hidden md:block">{stickyCta}</div>}
       />
       <ActiveWhiteboardSessionsList
         studentId={student.id}
