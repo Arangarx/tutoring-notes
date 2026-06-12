@@ -79,8 +79,8 @@ export function StudentActions({
       </Button>
       <Button
         type="button"
-        variant="ghost"
-        className="min-h-11 text-destructive hover:text-destructive"
+        variant="outline"
+        className="min-h-11 border-destructive/40 text-destructive hover:bg-destructive/5 hover:border-destructive/60"
         onClick={() => setConfirmDelete(true)}
       >
         Delete student
