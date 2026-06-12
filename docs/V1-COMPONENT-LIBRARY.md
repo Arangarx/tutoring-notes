@@ -72,6 +72,7 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 | `Label` | `src/components/ui/label.tsx` | Form field labels (Radix) | **canonical** |
 | `Textarea` | `src/components/ui/textarea.tsx` | Multi-line text input | **canonical** |
 | `Checkbox` | `src/components/ui/checkbox.tsx` | Boolean toggle (Radix) | **canonical** |
+| `CheckboxField` | `src/components/ui/checkbox.tsx` | Checkbox + linked `Label` in a horizontal row (`flex items-center gap-3`) — use for boolean form fields instead of hand-rolled native `<input type="checkbox">` | **canonical** |
 | `RadioGroup`, `RadioGroupItem` | `src/components/ui/radio-group.tsx` | Exclusive choice group | **canonical** |
 | `Switch` | `src/components/ui/switch.tsx` | On/off toggle | **canonical** |
 | `Select` (+ subcomponents) | `src/components/ui/select.tsx` | Dropdown select (Radix) | **canonical** |
@@ -132,7 +133,7 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 | Component | File | Purpose | Key Props | Surfaces | Dedup Status |
 |---|---|---|---|---|---|
 | `StudentsRoster` | `src/components/admin/StudentsRoster.tsx` | Student list with search + add student (B2 reskin) | `students`, `adminUserId` | `/admin/students` | **canonical** |
-| `StudentAvatar` | `src/components/admin/StudentAvatar.tsx` | Initials avatar with `--avatar-N` color ring | `name`, `size` | Student list, student detail | **canonical** |
+| `StudentAvatar` | `src/components/admin/StudentAvatar.tsx` | Deterministic initials avatar: FNV-1a hash of normalized display name (`trim` + lowercase) → one of eight curated `--avatar-1`…`--avatar-8` fills (`student-initials.ts`); 1–2 letter initials (`studentInitials`); white semibold text; `ring-2 ring-background`. Sizes: `sm` (36px), `md` (44px), `lg` (56px). Same name → same color on every surface. | `name`, `size`, `className` | Student list, student detail, scheduler, account dashboard, learner waiting room | **canonical** |
 
 ### Recording / Session Capture (Slice 3 collision zone — DO NOT EDIT from UI chunks)
 
@@ -418,8 +419,9 @@ The user identity chip in the sidebar (1A.8) IS this primitive — it satisfies 
 
 ### 2.1 Layout & Spacing
 
-- **Page max-width:** `max-w-4xl` (896px), centered with `mx-auto px-4 py-8`
-- **Section spacing:** `gap-8` between `AdminPageShell` header and content; `gap-6` between sibling `AdminSectionCard` components
+- **Page max-width (admin/tutor shell):** `max-w-6xl` (1152px) with `xl:max-w-7xl` (1280px) at xl breakpoint — set on `admin/layout.tsx` `<main>`; centered with `mx-auto px-4 py-6 md:px-6 md:py-8`. Other realms (account, marketing) may use narrower widths per surface.
+- **Page max-width (legacy default):** `max-w-4xl` (896px) where a surface has not yet adopted the admin shell width.
+- **Section spacing:** `gap-8` between `AdminPageShell` header and content; `gap-6` between sibling `AdminSectionCard` components and between sidebar rail and main column (`AdminPageShell` sidebar layout)
 - **Form field spacing within a section:** `space-y-4` (between field groups), `space-y-1.5` (between label and input)
 - **Content max-width within cards:** `max-w-md` or `max-w-lg` for form fields; never full card width for narrow inputs
 - **Mobile:** single-column; cards stack naturally. Min touch target: `min-h-11` (44px)
@@ -930,6 +932,7 @@ Existing shells (`AdminNav`, `AuthShell`, `AccountPageShell`, `MarketingHeader`,
 
 ## Changelog
 
+- **2026-06-12:** **Doc sync — post-review tweak wave** (library remains FROZEN): admin shell max width `max-w-6xl xl:max-w-7xl` + sidebar `gap-6` (§2.1); `CheckboxField` inventory row; `StudentAvatar` deterministic FNV-1a `--avatar-N` palette spec expanded. Shipped on `v1-design-system` @ `6587592`.
 - **2026-06-11:** **§6 Frozen foundation** — full shadcn new-york primitive catalog on `v1-design-system`; theme-agnostic reconciliation (no `dark:` in `ui/`); `AdminPageShell` sidebar props; pending-approval dup-nav fix; `Providers` toaster/tooltip; strengthened `component-reuse.mdc`; surface conversion build order.
 - **2026-06-07:** Initial doc. Component-pass chunk 1 (Settings/operator reskin). Authored by Sonnet subagent on branch `v1-component-spine`.
 - **2026-06-07:** Slice 3 smoke requirements **REQ-S3-1/2/2a** added (§3.1, Notes inventory, Chunk 3 row). Branch `docs/v1-redesign-notes-ux-reqs`.
