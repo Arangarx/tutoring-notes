@@ -71,10 +71,25 @@ type DevToolsClientProps = {
 // Helpers
 // ---------------------------------------------------------------------------
 
+const COPIED_LABEL = "✓ copied";
+
 function CopyCell({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <span className="inline-flex min-w-0 items-center gap-2">
+    <span className="inline-grid max-w-full">
+      {/* Phantom cells reserve max(value, copied) width so the swap never reflows siblings. */}
+      <span
+        className="invisible col-start-1 row-start-1 whitespace-nowrap px-1 font-mono text-xs"
+        aria-hidden="true"
+      >
+        {value}
+      </span>
+      <span
+        className="invisible col-start-1 row-start-1 whitespace-nowrap px-1 font-mono text-xs"
+        aria-hidden="true"
+      >
+        {COPIED_LABEL}
+      </span>
       <button
         type="button"
         onClick={() => {
@@ -83,18 +98,14 @@ function CopyCell({ value }: { value: string }) {
             setTimeout(() => setCopied(false), 1500);
           });
         }}
-        className="min-w-0 truncate rounded px-1 font-mono text-xs hover:bg-muted"
+        className={`col-start-1 row-start-1 min-w-0 truncate whitespace-nowrap rounded px-1 text-left font-mono text-xs hover:bg-muted ${
+          copied ? "text-muted-foreground" : ""
+        }`}
         title="Click to copy"
-      >
-        {value}
-      </button>
-      <span
-        className="w-14 shrink-0 font-mono text-xs text-muted-foreground"
         aria-live="polite"
-        aria-hidden={!copied}
       >
-        {copied ? "✓ copied" : ""}
-      </span>
+        {copied ? COPIED_LABEL : value}
+      </button>
     </span>
   );
 }
