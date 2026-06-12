@@ -133,6 +133,7 @@ import {
   isTouchLayout,
   useWbLayoutMode,
 } from "@/components/whiteboard/chrome/useWbLayoutMode";
+import { LiveBoardChrome } from "@/components/whiteboard/chrome/LiveBoardChrome";
 import { WbRoleProvider } from "@/components/whiteboard/chrome/wb-role";
 import {
   shapeIconFor,
@@ -4174,17 +4175,13 @@ export function WhiteboardWorkspaceClient({
 
   return (
     <WbRoleProvider role="tutor">
-    <div
-      className="mynk-wb-chrome"
-      data-testid="mynk-wb-chrome"
-      data-layout={layoutMode}
-      data-orientation={orientation}
-      data-toolbar-hidden={toolbarHidden ? "true" : "false"}
-      onClick={() => {
-        setOpenMenu(null);
-      }}
-    >
-      {/* Non-visual mounts */}
+    <LiveBoardChrome
+      layoutMode={layoutMode}
+      orientation={orientation}
+      role="tutor"
+      toolbarHidden={toolbarHidden}
+      onChromeClick={() => setOpenMenu(null)}
+      nonVisualMounts={
       <WhiteboardWorkspaceAudioBridge
         ref={audioBridgeRef}
         audio={workspaceAudio}
@@ -4195,8 +4192,8 @@ export function WhiteboardWorkspaceClient({
         onMicDeviceChange={(deviceId) => void liveAv.setMicDevice(deviceId)}
         showPanel={false}
       />
-
-      {/* â”€â”€ Top bar â”€â”€ */}
+      }
+      topBar={
       <header
         className="mynk-wb-topbar bg-card border-b border-border"
         role="toolbar"
@@ -4491,11 +4488,8 @@ export function WhiteboardWorkspaceClient({
           })()}
         </div>
       </header>
-
-      <div className="mynk-wb-live-column">
-      {/* â”€â”€ Body: left strip + canvas â”€â”€ */}
-      <div className="mynk-wb-body">
-        {/* Left tool strip */}
+      }
+      toolStrip={
         <nav
           className={`mynk-wb-strip bg-card border-r border-border${stripCollapsed ? " mynk-wb-strip--collapsed" : ""}`}
           aria-label={stripCollapsed ? "Drawing tools (collapsed)" : "Drawing tools"}
@@ -4523,8 +4517,8 @@ export function WhiteboardWorkspaceClient({
             onClick={() => setStripCollapsed((c) => !c)}
           />
         </nav>
-
-        {/* Canvas area */}
+      }
+      canvas={
         <div
           className="mynk-wb-canvas"
           data-testid="tutor-whiteboard-canvas-mount"
@@ -4755,10 +4749,8 @@ export function WhiteboardWorkspaceClient({
             </div>
           )}
         </div>
-      </div>
-
-      {/* Mobile props compact bar */}
-      {touchLayout && showPropsChrome && (
+      }
+      propsMobileBar={touchLayout && showPropsChrome ? (
         <div className="mynk-wb-props-mobile-bar">
           <button
             type="button"
@@ -4803,9 +4795,8 @@ export function WhiteboardWorkspaceClient({
             </span>
           </button>
         </div>
-      )}
-
-      {/* Mobile bottom toolbar */}
+      ) : null}
+      bottomToolbar={
       <nav
         className="mynk-wb-bottom-toolbar"
         aria-label="Drawing tools (mobile)"
@@ -4814,8 +4805,8 @@ export function WhiteboardWorkspaceClient({
       >
         {renderToolStripButtons(true)}
       </nav>
-
-      {/* SR-14 — board tab strip */}
+      }
+      boardTabStrip={
       <footer
         className="mynk-wb-pagestrip bg-card border-t border-border"
         aria-label="Boards"
@@ -4830,10 +4821,8 @@ export function WhiteboardWorkspaceClient({
           onDeletePage={removeTutorPage}
         />
       </footer>
-      </div>
-
-      {/* Touch bottom sheets — chrome root so they cover toolbar + avoid clip (TM-13) */}
-      {touchLayout && (
+      }
+      actionSheets={touchLayout ? (
         <WbChromeErrorBoundary>
           <>
             <WbActionSheetBackdrop open={touchSheetOpen} onDismiss={dismissTouchSheets} />
@@ -4883,8 +4872,8 @@ export function WhiteboardWorkspaceClient({
             </WbActionSheet>
           </>
         </WbChromeErrorBoundary>
-      )}
-    </div>
+      ) : null}
+    />
     </WbRoleProvider>
   );
 }
