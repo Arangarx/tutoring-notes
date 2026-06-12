@@ -162,17 +162,26 @@ Action items not yet built; design where noted. (Live status: `docs/WHITEBOARD-S
 
 > **Status (2026-06-08):** **DECISION (Andrew 2026-06-08): post-V1, pre-release.** Not a master-cut gate; required before recruiting new pilots. Needs its own design pass + sequencing within the pre-release window. Sarah considers this a **release feature** (opening to recruit/advertise new pilots). **Canonical tier vocabulary:** **V1** = master cut (Gate A); **release** = recruiting new pilots (Gate B era). See [`RELEASE-ROADMAP.md`](RELEASE-ROADMAP.md) § V1 sequencing tiers; [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) § Pre-master gates.
 
-**Problem:** Tutors already live in an external calendar (Google Calendar, etc.). A from-scratch in-app scheduler duplicates their workflow. Sarah wants sessions **visible, remindable, and joinable** without re-entering everything manually.
+**Canonical requirements (2026-06-11):** [`docs/handoff/scheduling-requirements-2026-06-11.md`](handoff/scheduling-requirements-2026-06-11.md) — full capture; **not yet a build spec**. Overnight Group F on `v1-design-system` ships **visual-only** scheduler surface baking in connect-calendar affordance, per-event sync state, and integrations settings (no wiring tonight).
 
-**Proposal — integrate, don't replace:**
+**Native-first (Andrew 2026-06-11):** Scheduling works fully through our app; external calendar is **optional**. **Apple Calendar** (Sarah's explicit request) + **Google Calendar** (Andrew) are first-class integrations; design room for "other." When connected, in-app events **also push** to the external calendar.
 
-1. **External calendar sync (read + write where permitted)** — Connect the tutor's **existing** calendar app (e.g. Google Calendar OAuth). **Sync** scheduled events into Mynk; do **not** build a standalone calendaring product as the primary surface.
-2. **In-app schedule layer** — Mynk keeps its own **session schedule tracking**: upcoming sessions list, reminders, and per-session metadata (student, subject, soft duration). Each row exposes a **start-session** deep link for the tutor.
-3. **Student / parent surface** — Upcoming session visible on the student (or parent) side with a **join** action from that row (approved link flow; respects consent gates).
-4. **Soft session length** — Tutor specifies how much calendar time a session **occupies** (e.g. 60 minutes on the calendar) as a **soft duration** — **not** a hard cap on the live board or recording. Timer and end-session remain tutor-controlled; calendar block is planning metadata only.
-5. **Design + sequencing** — Needs a dedicated **design pass** (tutor dashboard widget, session-create/edit, OAuth consent copy, reminder channels, timezone handling). **Sequencing locked:** post-V1 / pre-release (Gate B era alongside approval-gating, parent consent, security cleanups) — not a master-cut blocker.
+**Key open questions (unresolved — see requirements doc for detail):**
 
-**Out of scope for this proposal (explicit):** Replacing Google/Outlook calendaring; student self-scheduling without tutor; hard auto-end when calendar block elapses.
+| # | Question |
+|---|---|
+| **Two-way sync** | Do we need webhooks/subscriptions (Google Calendar push / Apple CalDAV) to detect changes made **on** the external calendar and reflect them back into Mynk? **Not decided.** |
+| **Google OAuth bundling** | Calendar scopes + Google Sign-in (auth) should land in the **same** Mortensen Apps consent-screen verification cycle ([`LEGAL-SYNC.md`](LEGAL-SYNC.md)) — avoid repeated verification rounds. |
+| **Apple path** | CalDAV vs EventKit bridge — not started. |
+| **Reminders / timezone** | Channels + policy — not started. |
+
+**Still relevant from 2026-06-08 proposal:**
+
+1. **In-app schedule layer** — upcoming sessions list, reminders, per-session metadata (student, subject, soft duration), **start-session** deep links.
+2. **Student / parent surface** — upcoming session + **join** action (approved link flow; consent gates).
+3. **Soft session length** — calendar block is planning metadata only; timer and end-session remain tutor-controlled.
+
+**Out of scope (explicit):** Replacing Google/Outlook calendaring entirely; student self-scheduling without tutor; hard auto-end when calendar block elapses.
 
 **Cross-ref:** [`RELEASE-ROADMAP.md`](RELEASE-ROADMAP.md) Wave 3 IA row (scheduling Y/N); [`whiteboard-session-shell-design-2026-06-08.md`](handoff/whiteboard-session-shell-design-2026-06-08.md) open Q8.
 
