@@ -26,6 +26,8 @@ Every **smokebook** or **smoke-runbook** produced in this repo (typically under 
 
 3. **Cross-branch / post-merge** section stub when the smoke spans merges.
 
+4. **Comprehensive pre-master smoke — both themes (F5b, Andrew 2026-06-12).** The **pre-master comprehensive smoke** (full-site / MASTER-CUT style run before merge to `master`) MUST exercise **every in-scope item in both light and dark** color schemes — Andrew wants to have seen every surface in both themes before a master cut. Per-branch feature smokebooks are **not** required to duplicate all items in both themes unless that branch explicitly scopes theme work. Record as paired sub-items or a single item whose **Action** says *"Repeat in light, then dark"*; PASS only if both themes pass. See [`docs/handoff/SMOKEBOOK-TEMPLATE.md`](../../docs/handoff/SMOKEBOOK-TEMPLATE.md) § Comprehensive pre-master smoke.
+
 Do not ship one-line actions, combined pass/fail lines, or items missing **Ignore this run**.
 
 ## HARD RULE — preview URLs are fetched, never guessed

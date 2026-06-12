@@ -45,6 +45,23 @@ Run order: top to bottom unless a block says otherwise. Re-run **Cross-branch / 
 
 ---
 
+## Comprehensive pre-master smoke — both themes (F5b, Andrew 2026-06-12)
+
+**Applies to:** the **pre-master comprehensive smoke** (integration cut before `v1-redesign` / feature stack merges to `master` — e.g. MASTER-CUT or equivalent full-site runbook). **Does not** require every per-branch feature smokebook to duplicate all items in both themes unless that branch explicitly scopes theme parity.
+
+**Requirement:** Andrew must have **seen every in-scope surface in both light and dark** before a master cut. For each test item in the comprehensive runbook, run the **Action** / **Expect** pass **twice** — once with the app in **light** mode, once in **dark** mode (use the product theme toggle; note `System` only if the smoke item explicitly covers follow-OS behavior).
+
+**How to record:**
+
+- Prefer **paired sub-items** when a surface has theme-specific expectations (e.g. `### 12a. … (light)` / `### 12b. … (dark)`), **or**
+- A single item whose **Action** explicitly says *"Repeat in light, then dark"* and whose **Notes** record both passes.
+
+**Per-item verdict:** PASS only if **both** themes pass (or the item's **Ignore this run** excludes one theme with a stated reason). A failure in either theme → FAIL for that item.
+
+Cross-ref: Gate A1 both-theme component gate ([`docs/BACKLOG.md`](../BACKLOG.md)); [`.cursor/rules/both-theme-components.mdc`](../../.cursor/rules/both-theme-components.mdc).
+
+---
+
 ## Per-test-item block (repeat for every test)
 
 Each numbered item **must** include all fields below **in this order**. Do not combine PASS/FAIL/SKIP into one line.
