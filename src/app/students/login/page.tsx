@@ -6,6 +6,7 @@ import { MynkWordmark } from "@/components/auth/MynkWordmark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Card,
   CardContent,
@@ -108,10 +109,10 @@ function StudentLoginForm() {
           <MynkWordmark />
         </div>
 
-        <Card className="border-border shadow-sm">
-          <CardHeader className="pb-0 text-center">
+        <Card className="rounded-[10px] border-border shadow-sm">
+          <CardHeader className="gap-2 pb-0 text-center">
             <CardTitle className="heading text-2xl font-normal">Student sign in</CardTitle>
-            <CardDescription className="text-base">
+            <CardDescription className="text-base text-muted-foreground">
               {"Sign in with your own username and PIN — this is separate from your parent/guardian's account."}
             </CardDescription>
           </CardHeader>
@@ -190,48 +191,47 @@ function StudentLoginForm() {
               </div>
 
               {error === "invalid_credentials" && (
-                <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
-                  {"That username or PIN isn't right. Try again!"}
-                </p>
+                <Alert variant="destructive">
+                  <AlertDescription>
+                    {"That username or PIN isn't right. Try again!"}
+                  </AlertDescription>
+                </Alert>
               )}
               {error === "access_mode_mismatch" && (
-                <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
-                  {"This account doesn't use a PIN login. Ask a parent/guardian to sign in instead."}
-                </p>
+                <Alert variant="destructive">
+                  <AlertDescription>
+                    {"This account doesn't use a PIN login. Ask a parent/guardian to sign in instead."}
+                  </AlertDescription>
+                </Alert>
               )}
               {error === "network" && (
-                <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
-                  {"Connection problem. Check your internet and try again."}
-                </p>
+                <Alert variant="destructive">
+                  <AlertDescription>
+                    {"Connection problem. Check your internet and try again."}
+                  </AlertDescription>
+                </Alert>
               )}
 
               {hardLocked && (
-                <div
-                  className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-3 text-sm"
-                  role="alert"
-                >
-                  <p className="font-medium text-destructive">{"Account locked"}</p>
-                  <p className="text-destructive/80 text-xs mt-1">
+                <Alert variant="destructive">
+                  <AlertTitle>Account locked</AlertTitle>
+                  <AlertDescription>
                     {"Too many failed attempts. Ask a parent/guardian to unlock your account from their account settings."}
-                  </p>
-                </div>
+                  </AlertDescription>
+                </Alert>
               )}
 
               {isLockedOut && !hardLocked && (
-                <div
-                  className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm dark:border-amber-700 dark:bg-amber-900/20"
-                  role="status"
-                  aria-live="polite"
-                >
-                  <p className="text-amber-800 dark:text-amber-300">
+                <Alert className="border-accent/30 bg-accent-soft text-accent-text">
+                  <AlertDescription>
                     {`Slow down — try again in ${formatCooldown(retryAfter!)}.`}
-                  </p>
-                  {retryAfter && retryAfter > 60 ? (
-                    <p className="text-amber-700 dark:text-amber-400 text-xs mt-1">
-                      {"If you keep having trouble, ask a parent/guardian for help."}
-                    </p>
-                  ) : null}
-                </div>
+                    {retryAfter && retryAfter > 60 ? (
+                      <span className="mt-1 block text-xs opacity-90">
+                        {"If you keep having trouble, ask a parent/guardian for help."}
+                      </span>
+                    ) : null}
+                  </AlertDescription>
+                </Alert>
               )}
 
               <Button
