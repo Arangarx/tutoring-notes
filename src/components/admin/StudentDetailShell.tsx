@@ -113,29 +113,29 @@ export function StudentDetailShell({
     const pickActiveFromScroll = () => {
       if (!mq.matches || scrollSpyLockRef.current) return;
 
+      const firstId = sections[0]?.id;
+      if (container.scrollTop <= 8 && firstId) {
+        setActiveTab(firstId);
+        return;
+      }
+
       const containerRect = container.getBoundingClientRect();
-      const anchor = containerRect.top + containerRect.height * 0.25;
+      const activationLine =
+        containerRect.top + Math.min(72, container.clientHeight * 0.12);
 
-      let bestId: string | null = null;
-      let bestDistance = Number.POSITIVE_INFINITY;
-
+      let activeId = firstId ?? null;
       for (const section of sections) {
         const el = sectionRefs.current.get(section.id);
         if (!el) continue;
 
         const rect = el.getBoundingClientRect();
-        if (rect.bottom <= containerRect.top + 8) continue;
-        if (rect.top >= containerRect.bottom - 8) continue;
-
-        const distance = Math.abs(rect.top - anchor);
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          bestId = section.id;
+        if (rect.top <= activationLine + 2) {
+          activeId = section.id;
         }
       }
 
-      if (bestId) {
-        setActiveTab(bestId);
+      if (activeId) {
+        setActiveTab(activeId);
       }
     };
 
@@ -145,7 +145,7 @@ export function StudentDetailShell({
       },
       {
         root: container,
-        rootMargin: "-12% 0px -55% 0px",
+        rootMargin: "-8% 0px -72% 0px",
         threshold: [0, 0.1, 0.25, 0.5, 0.75, 1],
       }
     );
