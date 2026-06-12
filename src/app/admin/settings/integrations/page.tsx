@@ -7,9 +7,20 @@ import { getStudentScope } from "@/lib/student-scope";
 
 export const dynamic = "force-dynamic";
 
-export default async function IntegrationsSettingsPage() {
+type IntegrationsSettingsPageProps = {
+  searchParams: Promise<{ from?: string }>;
+};
+
+export default async function IntegrationsSettingsPage({
+  searchParams,
+}: IntegrationsSettingsPageProps) {
   const scope = await getStudentScope();
   if (scope.kind === "none") redirect("/login");
+
+  const { from } = await searchParams;
+  const fromSchedule = from === "schedule";
+  const backHref = fromSchedule ? "/admin/schedule" : "/admin/settings";
+  const backLabel = fromSchedule ? "← Schedule" : "← Settings";
 
   return (
     <AdminPageShell
@@ -17,10 +28,10 @@ export default async function IntegrationsSettingsPage() {
       description="Connect external calendars so sessions you schedule in Mynk also appear on Apple Calendar or Google Calendar. This page is visual-only tonight — no OAuth wiring."
       eyebrow={
         <Link
-          href="/admin/settings"
+          href={backHref}
           className="text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
-          ← Settings
+          {backLabel}
         </Link>
       }
     >

@@ -18,19 +18,33 @@ import {
   sessionsOnDate,
   type MockScheduledSession,
 } from "@/lib/schedule/mock-data";
+import { SCHEDULE_INTEGRATIONS_SETTINGS_HREF } from "@/lib/schedule/navigation";
+import { cn } from "@/lib/utils";
 import { CalendarDaysIcon, ListIcon, PlayIcon, Settings2Icon } from "lucide-react";
 
 function ScheduleDayButton({
   modifiers,
   children,
+  className,
   ...props
 }: ComponentProps<typeof CalendarDayButton>) {
   return (
-    <CalendarDayButton modifiers={modifiers} {...props}>
+    <CalendarDayButton
+      modifiers={modifiers}
+      className={cn(
+        modifiers.today &&
+          "bg-accent-soft font-semibold text-accent-text ring-2 ring-accent-text/45 ring-inset",
+        className
+      )}
+      {...props}
+    >
       <span className="inline-flex flex-col items-center gap-0.5 leading-none">
         <span>{children}</span>
         {modifiers.hasSession ? (
-          <span className="size-1.5 shrink-0 rounded-full bg-accent" aria-hidden />
+          <span
+            className="size-2 shrink-0 rounded-full bg-accent-text shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent-text)_35%,transparent)]"
+            aria-hidden
+          />
         ) : null}
       </span>
     </CalendarDayButton>
@@ -196,9 +210,13 @@ export function SchedulePageClient() {
     [sessionDates]
   );
 
-  const modifiersClassNames = {
-    hasSession: "",
-  };
+  const calendarClassNames = useMemo(
+    () => ({
+      today:
+        "rounded-md bg-accent-soft font-semibold text-accent-text ring-2 ring-accent-text/40",
+    }),
+    []
+  );
 
   return (
     <div className="space-y-6">
@@ -208,7 +226,7 @@ export function SchedulePageClient() {
           data, no calendar OAuth or persistence. React to layout and affordances.
         </p>
         <Button asChild variant="outline" size="sm" className="min-h-9 shrink-0">
-          <Link href="/admin/settings/integrations">
+          <Link href={SCHEDULE_INTEGRATIONS_SETTINGS_HREF}>
             <Settings2Icon aria-hidden />
             Calendar settings
           </Link>
@@ -245,9 +263,9 @@ export function SchedulePageClient() {
                 onSelect={setSelectedDate}
                 defaultMonth={selectedDate}
                 modifiers={modifiers}
-                modifiersClassNames={modifiersClassNames}
+                classNames={calendarClassNames}
                 components={{ DayButton: ScheduleDayButton }}
-                className="rounded-[10px] border border-border bg-card p-2"
+                className="rounded-[10px] border border-border bg-card p-2 [--cell-size:--spacing(9)]"
               />
             </AdminSectionCard>
 
@@ -276,6 +294,7 @@ export function SchedulePageClient() {
         connections={mockCalendarConnections}
         compact
         showSettingsLink
+        settingsHref={SCHEDULE_INTEGRATIONS_SETTINGS_HREF}
       />
     </div>
   );

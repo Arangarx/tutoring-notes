@@ -12,6 +12,8 @@ type CalendarIntegrationsPanelProps = {
   /** When true, show compact summary suitable for schedule page sidebar. */
   compact?: boolean;
   showSettingsLink?: boolean;
+  /** Override Manage link target (e.g. include `?from=schedule` for back-nav). */
+  settingsHref?: string;
 };
 
 function ProviderIcon({ provider }: { provider: MockCalendarConnection["provider"] }) {
@@ -49,6 +51,7 @@ export function CalendarIntegrationsPanel({
   connections,
   compact = false,
   showSettingsLink = true,
+  settingsHref = "/admin/settings/integrations",
 }: CalendarIntegrationsPanelProps) {
   const connectedCount = connections.filter((c) => c.connected).length;
 
@@ -63,7 +66,7 @@ export function CalendarIntegrationsPanel({
       actions={
         showSettingsLink && compact ? (
           <Button asChild variant="ghost" size="sm" className="min-h-9">
-            <Link href="/admin/settings/integrations">Manage</Link>
+            <Link href={settingsHref}>Manage</Link>
           </Button>
         ) : undefined
       }
