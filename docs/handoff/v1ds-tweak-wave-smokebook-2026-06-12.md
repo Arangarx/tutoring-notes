@@ -1,7 +1,7 @@
 # v1 design-system post-review tweak wave — smoke runbook
 
 **Branch:** `v1-design-system`
-**Tip commit:** [`6587592`](https://github.com/Arangarx/tutoring-notes/commit/6587592b02ad3026c6c9caab9a5a63d9eb776ca5)
+**Tip commit:** `[6587592](https://github.com/Arangarx/tutoring-notes/commit/6587592b02ad3026c6c9caab9a5a63d9eb776ca5)`
 **Preview:** [v1-design-system preview](https://tutoring-notes-git-v1-design-system-arangarx-5209s-projects.vercel.app)
 **Overall result:**
 
@@ -12,7 +12,7 @@
 
 ## Legend
 
-See [`SMOKEBOOK-TEMPLATE.md`](SMOKEBOOK-TEMPLATE.md) for field definitions. Run items top to bottom on the **Preview** URL unless noted.
+See `[SMOKEBOOK-TEMPLATE.md](SMOKEBOOK-TEMPLATE.md)` for field definitions. Run items top to bottom on the **Preview** URL unless noted.
 
 ---
 
@@ -26,7 +26,7 @@ See [`SMOKEBOOK-TEMPLATE.md`](SMOKEBOOK-TEMPLATE.md) for field definitions. Run 
 
 **Ignore this run:** Content scrolling below the tab strip (expected). Consent save behavior (visual-only).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -40,11 +40,11 @@ See [`SMOKEBOOK-TEMPLATE.md`](SMOKEBOOK-TEMPLATE.md) for field definitions. Run 
 
 **Ignore this run:** Save button behavior (still visual-only). Whether toggles persist (out of scope).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Pass BUT we need to STRONGLY encourage allow live sessions (the app is almost pointless without it), and audio and whiteboard replay...basically the first option is required to do anything, the second two are needed to make replay and review ability have meaning.**
 
 ### 3. T8 — Admin desktop content width + sidebar gap
 
@@ -54,11 +54,11 @@ See [`SMOKEBOOK-TEMPLATE.md`](SMOKEBOOK-TEMPLATE.md) for field definitions. Run 
 
 **Ignore this run:** Whiteboard workspace routes (different chrome). Operator-only pages if sidebar is absent.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Pass BUT I should be able to click out of the menu to close it (when the view is narrow and nav is in the hamburger)**
 
 ### 4. schedule-nav — Schedule link on desktop sidebar
 
@@ -68,11 +68,11 @@ See [`SMOKEBOOK-TEMPLATE.md`](SMOKEBOOK-TEMPLATE.md) for field definitions. Run 
 
 **Ignore this run:** Scheduler data/OAuth (visual-only placeholders). Mobile bottom-tab Schedule link (separate nav — should still work).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  When I shrink my view, the hamburger menu shouldn't pop up automatically.  For some reason it started doing that mid session when I'm changing size.  I know it's not hooked up yet, but if I get to calendar settings from the calendar, nav back should to back to the calendar, not the settings page.**
 
 ### 5. S1 — Scheduler calendar day dots under digit
 
@@ -82,11 +82,11 @@ See [`SMOKEBOOK-TEMPLATE.md`](SMOKEBOOK-TEMPLATE.md) for field definitions. Run 
 
 **Ignore this run:** Agenda view layout. Placeholder event data accuracy.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Pass, BUT the dots and today highlighter (particularly the dots under the dates) need more visability in dark mode.  I reviewed light mode too and the today is maybe okay, but the dots underneath definitely need more visibility there too.  If I sit back a bit, I almost can't even see them.  When we do the comprehensive smoke before the master cut, make sure the smoke book is doing everything in both color schemes so I have looked at everything at least once before master.**
 
 ### 6. S2 — Scheduler day detail card spacing
 
@@ -96,7 +96,7 @@ See [`SMOKEBOOK-TEMPLATE.md`](SMOKEBOOK-TEMPLATE.md) for field definitions. Run 
 
 **Ignore this run:** Sync badge vocabulary / OAuth (wiring-phase). Create-session dialog behavior.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -110,21 +110,21 @@ See [`SMOKEBOOK-TEMPLATE.md`](SMOKEBOOK-TEMPLATE.md) for field definitions. Run 
 
 **Ignore this run:** Recording FSM behavior. Whiteboard session start/end.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Pass BUT When I'm scrolled to the top of the section it doesn't highlight "Whiteboard"  The "which section am I" highlighting could use slightly better detection, but I love that it's there.**
 
 ### 8. T7 — Student detail recording controls layout
 
 **Action:** On `/admin/students/[id]`, locate the recording control block (mic / start session / recording CTAs in the student detail chrome). View at desktop width and narrow (~400px). Inspect button alignment and wrapping.
 
-**Expect:** Controls sit in a **clean row or deliberate stack** — no awkward mid-row wraps or misaligned baselines. Primary coral actions use **`<Button variant="accent">`** styling (coral pill). **No recording logic change** — same states as before; only layout/visual cleanup.
+**Expect:** Controls sit in a **clean row or deliberate stack** — no awkward mid-row wraps or misaligned baselines. Primary coral actions use `**<Button variant="accent">`** styling (coral pill). **No recording logic change** — same states as before; only layout/visual cleanup.
 
 **Ignore this run:** Actual record/upload lifecycle. Outbox errors.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -138,7 +138,7 @@ See [`SMOKEBOOK-TEMPLATE.md`](SMOKEBOOK-TEMPLATE.md) for field definitions. Run 
 
 **Ignore this run:** Learner waiting room if no easy test student. Upload photo avatars (not implemented).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -148,25 +148,25 @@ See [`SMOKEBOOK-TEMPLATE.md`](SMOKEBOOK-TEMPLATE.md) for field definitions. Run 
 
 **Action:** On the **Preview** URL, signed in as tutor, navigate to `/admin/settings/email`. Find the SMTP TLS / secure connection checkbox (or equivalent boolean field using the shared primitive).
 
-**Expect:** Toggle renders as shadcn **`Checkbox` + `Label`** in a horizontal row with **`gap-3`** between box and label (`CheckboxField`). Label is clickable and toggles the box. **No native** `<input type="checkbox">` styling for this field. Focus ring visible on keyboard tab.
+**Expect:** Toggle renders as shadcn `**Checkbox` + `Label`** in a horizontal row with `**gap-3**` between box and label (`CheckboxField`). Label is clickable and toggles the box. **No native** `<input type="checkbox">` styling for this field. Focus ring visible on keyboard tab.
 
 **Ignore this run:** Gmail OAuth connect flow (separate item). Actually sending email.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Pass for the spacing but fail for alignment.  The text should be in line with the checkbox, not higher.**
 
 ### 11. T5 — Connect Gmail notice above CTA
 
 **Action:** On `/admin/settings/email`, locate the **Connect Gmail** section. Read the Mortensen Apps legal notice relative to the connect button.
 
-**Expect:** **`AuthMortensenNotice`** (or equivalent mortensenapps.com copy) appears **above** the Connect Gmail button — not only below it. Connect CTA is a **coral accent button** (`<Button variant="accent" asChild>` wrapping the link/action). User can read the notice before clicking.
+**Expect:** `**AuthMortensenNotice`** (or equivalent mortensenapps.com copy) appears **above** the Connect Gmail button — not only below it. Connect CTA is a **coral accent button** (`<Button variant="accent" asChild>` wrapping the link/action). User can read the notice before clicking.
 
 **Ignore this run:** Actual OAuth redirect / token storage. IMAP SMTP fields below.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -182,7 +182,7 @@ Run this section **after** the tweak wave merges into the integration branch (`v
 
 **Integration branch:** `<e.g. v1-redesign>`
 **Integration tip commit:** `<short-sha>`
-**Integration preview:** [<label>](https://<branchAlias>)
+**Integration preview:** 
 
 **Overall integration result:**
 
