@@ -104,6 +104,10 @@ Consider making **Agenda** the left/first tab and the **default** selected view 
 
 The Month view likely will not scale for full-time tutors with **8+ sessions per day** — dot indicators and day cells become unreadable. Wiring phase should pick a denser default or a different primary view (Agenda, week strip, or hybrid) for high-volume schedules; Month may remain useful as a secondary/overview mode.
 
+### S5 — Scheduled topic + notes visible in live session (Andrew 2026-06-12)
+
+When a tutor schedules a session, the scheduler captures **per-session topic and notes** (planning metadata). **Wiring-phase requirement:** surface that scheduled **topic + notes inside the live whiteboard session** on the tutor side — space-permitting, e.g. a collapsible **"Today's plan"** panel or a compact header chip. **Tutor-only by default** (student does not see unless we later decide otherwise). **Depends on** scheduler → live-session linkage (not built in the visual-only prototype). **Source:** Andrew's wife noticed the scheduler already captures session notes and asked whether they'd be visible once the session starts.
+
 ---
 
 ## Cross-references
