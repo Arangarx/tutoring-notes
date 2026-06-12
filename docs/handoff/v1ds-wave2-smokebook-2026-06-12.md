@@ -3,10 +3,6 @@
 **Branch:** `v1-design-system`
 **Tip commit:** [`14e09ea`](https://github.com/Arangarx/tutoring-notes/commit/14e09eab42f43dfed543efe0085c91c31e6550eb)
 **Preview:** [v1-design-system preview](https://tutoring-notes-git-v1-design-system-arangarx-5209s-projects.vercel.app)
-**Overall result:**
-
-- [ ] PASS
-- [ ] FAIL
 
 ---
 
@@ -329,3 +325,10 @@ Run this section **after** Wave 2 merges into the integration branch (`v1-redesi
 - [ ] SKIP
 
 **Notes:**
+
+---
+
+## Overall result
+
+- [ ] PASS
+- [ ] FAIL

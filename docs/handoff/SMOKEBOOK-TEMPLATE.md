@@ -14,10 +14,6 @@ Copy this file (or `@`-reference it) when authoring a new smokebook. Replace eve
 **Branch:** `<branch-name>`
 **Tip commit:** [`<short-sha>`](https://github.com/Arangarx/tutoring-notes/commit/<full-sha>)
 **Preview:** [<branch-name> preview](https://<branchAlias-from-Vercel-MCP>)
-**Overall result:**
-
-- [ ] PASS
-- [ ] FAIL
 ```
 
 Fill **Preview** with a markdown link whose URL is the verified Vercel `branchAlias` (see rule file — never guess the hash segment). Link label = branch name or short feature label.
@@ -166,3 +162,12 @@ Run this section **after** the feature branch merges into the integration branch
 - [ ] SKIP
 
 **Notes:**
+
+---
+
+## Overall result
+
+Check **PASS** only if every in-scope test item is PASS (deliberate per-item SKIPs must be called out in Notes). Check **FAIL** if any in-scope item fails. Leave both unchecked until the run is complete. Overall verdict is PASS/FAIL only — no overall SKIP.
+
+- [ ] PASS
+- [ ] FAIL
