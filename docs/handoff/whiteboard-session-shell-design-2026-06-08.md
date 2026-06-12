@@ -636,6 +636,27 @@ No left rail. No two-column squeeze. All text wraps normally at full phone width
 
 Notes are never squeezed into a narrow rail. Board/video is opt-in via overlay.
 
+### 7.5.1 Student-role migration onto the unified shell (2026-06-11 Andrew direction)
+
+**Status of the shell as of 2026-06-11 (verified):** the responsive chrome — desktop, tablet, and phone breakpoints — **is built** and lives in `useWbLayoutMode.ts` + the `chrome/*` components (`WbActionSheet`, `WbTopBar`, `WbStrokePropsPanel`, `WbAVCluster`, etc.). The **only** top-level route client that mounts that chrome is the **tutor workspace** (`WhiteboardWorkspaceClient.tsx`). The **student route `/w/[joinToken]` is NOT wired to it** — it still mounts the separate legacy `StudentWhiteboardClient.tsx` (old `container`/`card` shell + default Excalidraw toolbar). So the gap is **wiring/migration, not "the small views don't exist."**
+
+**Andrew direction (2026-06-11):**
+
+1. **Route the student to the same shell.** Do not maintain a separate student page long-term. The student should render the unified responsive chrome, in a **student-role** configuration.
+2. **The shell MUST recognize which role it is rendering under.** Role must be an explicit input to the shell so it can select the student control set (§7.2) and the camera-default behavior below — not inferred ad hoc.
+3. **Control-set deltas are already handled in the mocks** and are small. Per Andrew the substantive differences reduce to:
+   - **Close vs. End session** — tutor gets "End session"; student gets a "Close"/"Leave" affordance (already in §7.2).
+   - **Camera default** — tutor defaults to **both** tutor + student tiles; the **student** should default to **just the peer (tutor) view, not their own self-view.** Rationale: Andrew's wife raised that a student seeing **themselves** on camera is distracting. **Sarah's actual preference is unconfirmed** — treat student-self-view-off as the working default, confirm with Sarah, and keep it a per-role setting rather than a hardcode. (Extends Q2.)
+4. **Mobile is NOT finished.** Desktop chrome is visually complete; **mobile has deferred items**, explicitly including **moving the bottom bars to the left side in phone landscape** (landscape should not keep the portrait bottom-bar layout). Other mobile-phase deferrals remain open — do not assume mobile parity with desktop.
+5. **Wiring caution (HARD constraint — Andrew, regression-averse).** If student vs. tutor wiring differs subtly, some of that logic may need to **migrate into the new shell** rather than being duplicated. **This migration is the highest-regression-risk item on the master-cut board** (the student route is what Sarah's pilot families actually touch). The mandate is **do not break the working tutor path or the working student functional path** while migrating. Approach must be incremental + smoke-gated (see migration approach below), NOT a big-bang rewrite. Andrew: "I do NOT want to go into a regress/patch session for another 2 weeks."
+
+**De-risked migration approach (to be confirmed before any code):**
+- Treat the existing legacy `StudentWhiteboardClient` as the **behavioral oracle** — enumerate every functional capability it currently provides (join, sync apply-path, follow-tutor, A/V, viewport) before changing anything, so nothing silently regresses.
+- Introduce **role** as an explicit prop/context on the shell; render the student control set from §7.2 behind it.
+- Migrate shared wiring **up into the shell** only where tutor and student genuinely diverge; keep role-agnostic behavior single-sourced.
+- Keep the legacy student path available behind a flag until the shell-based student path smokes green on real hardware (tutor + student devices), then cut over.
+- `npm run test:wb-sync` must stay GREEN at every step (sync invariants are the load-bearing reliability gate).
+
 ### 7.5 Per-mode tablet layout (mock-validated 2026-06-08)
 
 Visual reference: same mock — **Tablet** viewport (iPad Air 834×1194 portrait, 1194×834 landscape) or **Compare** (phone + tablet simultaneously). Each frame renders at true CSS viewport dimensions then scales to fit the page.
@@ -867,4 +888,5 @@ This checklist is the gate the eventual chrome build must pass. P1.1 was rejecte
 - **2026-06-08:** Mobile responsive pass — §7.0 **Primary-content dominance** principle; per-mode phone layouts (§7.4); mock updated with single-column waiting room, full-bleed canvas + properties bottom sheet + AV pip on live board, notes-primary + board slide-in overlay on review. Desktop layouts unchanged.
 - **2026-06-08:** Device-frame mock pass — true-proportion **Phone** (390×844), **Tablet** (iPad Air portrait/landscape), and **Compare** viewports with CSS `transform: scale()` fit; §7.5 tablet per-mode treatment (portrait hybrid, landscape desktop).
 - **2026-06-08:** Live-feedback pass — **VP-01** role-appropriate ghost labels; **VP-02** canvas grid toggle (default OFF); **PP-06** compact properties bar (hover desktop / tap+TM-11 touch); open Q7 asymmetric viewport handling.
+- **2026-06-11:** Student-role migration direction (§7.5.1) — verified the responsive chrome (all breakpoints) is built but mounted **only** by the tutor `WhiteboardWorkspaceClient`; the student `/w/[joinToken]` route still renders legacy `StudentWhiteboardClient`. Andrew direction: route student onto the unified shell with an **explicit role input**; control-set deltas are small (Close vs End session; **student camera defaults to peer-only, self-view OFF** pending Sarah confirm — distraction concern); **mobile NOT finished** (deferred incl. phone-landscape bottom-bars→left-side); wiring migration is the **highest-regression-risk** master-cut item — incremental, flag-gated, `test:wb-sync`-green at every step, legacy student path retained until shell path smokes green on real hardware.
 - **2026-06-08:** Sarah pilot batch — **IC-01** eraser glyph; **ST-07** wand icon; **PU-05** shapes pulldown (line default); **TU-15** Share→Copied; **SR-13** desktop review notes narrower; **SR-14** board tab strip; **SR-04** AV cluster top-right + both participants + resize; **TU-16** parent-friendly recording copy; open Q8 scheduling.
