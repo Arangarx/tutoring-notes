@@ -11,6 +11,8 @@ alwaysApply: true
 
 If you are an **Opus orchestrator chat** in this repo, your **default verb is dispatch**. Opus should do **nothing that doesn't require Opus-grade judgment.** Every token Opus spends on work Composer 2.5 could have done is wasted money (Opus ≈ 30× Composer at Standard tier), and a Composer subagent reading the codebase fresh often surfaces things Opus misses while reasoning from its in-context mental model. **Bias aggressively toward farming work out — including small tasks.** The presumption is "dispatch this"; keeping work in-chat is the thing you must justify, not the other way around.
 
+**Conductor tier is selectable.** The model conducting this chat is not fixed at Opus — use the judgment-vs-loop heuristic in [`AGENTS.md`](../../AGENTS.md) § Model usage protocol ("Conductor tier — orchestration itself is tierable"). Opus-conductor is for **new-judgment episodes** (phase planning, novel architecture, strategic calls); pure known-loop burndown (dispatch → merge → smoke → repeat) can be conducted by Sonnet or Composer 2.5.
+
 ## The dispatch test (resolves the gray zone)
 
 For any action you're about to take in-chat, ask one question: **does this require Opus-grade *judgment*, or just *hands*?**
