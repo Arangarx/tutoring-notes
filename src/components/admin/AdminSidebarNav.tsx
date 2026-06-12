@@ -78,17 +78,17 @@ export function AdminSidebarNav({
   return (
     <nav
       aria-label="Admin"
-      className="flex h-full min-h-[calc(100dvh-0px)] w-[220px] flex-col gap-5 border-r border-border bg-card p-5"
+      className="flex h-full w-[220px] flex-col gap-5 border-r border-border bg-card p-5"
     >
       <Link
         href="/"
-        className="mb-1 inline-flex rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        className="mb-1 inline-flex shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         aria-label="Home"
       >
         <MynkWordmark size="sm" />
       </Link>
 
-      <div className="flex flex-col gap-0.5">
+      <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
         {links.map((l) => (
           <Link
             key={l.href}
@@ -106,7 +106,7 @@ export function AdminSidebarNav({
         ))}
       </div>
 
-      <div className="mt-auto flex flex-col gap-3 border-t border-border pt-4">
+      <div className="mt-auto flex shrink-0 flex-col gap-3 border-t border-border pt-4">
         <div className="flex items-center px-1">
           <ThemeToggle />
         </div>
