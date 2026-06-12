@@ -95,7 +95,7 @@ export function StudentsRoster({ students }: StudentsRosterProps) {
       {/* Sticky search toolbar */}
       <div className="sticky top-0 z-10 -mx-4 bg-background/95 px-4 py-3 backdrop-blur-sm md:static md:mx-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="relative flex min-h-11 flex-1 items-center gap-2 rounded-[10px] border border-accent/25 bg-accent-soft/50 px-3">
+          <div className="relative flex min-h-11 flex-1 items-center gap-2 overflow-hidden rounded-full border border-accent/25 bg-accent-soft/50 px-4">
             <Search className="size-4 shrink-0 text-accent-text" aria-hidden />
             <Label htmlFor="student-search" className="sr-only">
               Search students
@@ -107,7 +107,7 @@ export function StudentsRoster({ students }: StudentsRosterProps) {
               placeholder="Search students…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="min-h-10 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+              className="min-h-10 flex-1 rounded-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
               aria-describedby="student-search-hint"
             />
           </div>

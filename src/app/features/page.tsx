@@ -94,7 +94,7 @@ export default function FeaturesPage() {
               {PRODUCT_FEATURES.map(({ label, detail }) => (
                 <Card
                   key={label}
-                  className="rounded-[10px] border-t-2 border-t-accent/40 bg-background"
+                  className="rounded-[10px] border border-border border-t-[3px] border-t-[color:var(--accent-strong)] bg-background"
                 >
                   <CardContent className="pt-5">
                     <h3 className="heading mb-2 mt-0 text-[0.95rem]">{label}</h3>
