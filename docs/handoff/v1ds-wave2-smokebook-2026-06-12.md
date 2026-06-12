@@ -1,14 +1,14 @@
 # v1 design-system Wave 2 — post-smoke fixes + accent refinements — smoke runbook
 
 **Branch:** `v1-design-system`
-**Tip commit:** [`14e09ea`](https://github.com/Arangarx/tutoring-notes/commit/14e09eab42f43dfed543efe0085c91c31e6550eb)
+**Tip commit:** `[14e09ea](https://github.com/Arangarx/tutoring-notes/commit/14e09eab42f43dfed543efe0085c91c31e6550eb)`
 **Preview:** [v1-design-system preview](https://tutoring-notes-git-v1-design-system-arangarx-5209s-projects.vercel.app)
 
 ---
 
 ## Legend
 
-See [`SMOKEBOOK-TEMPLATE.md`](SMOKEBOOK-TEMPLATE.md) for field definitions. Run items top to bottom on the **Preview** URL unless noted.
+See `[SMOKEBOOK-TEMPLATE.md](SMOKEBOOK-TEMPLATE.md)` for field definitions. Run items top to bottom on the **Preview** URL unless noted.
 
 **Both-theme rule (this smokebook):** Every item below must be exercised in **light** and **dark** mode. Each **Action** says where to toggle theme for that surface. **PASS** for an item requires both themes to pass; a failure in either theme → mark **FAIL** for that item.
 
@@ -25,10 +25,10 @@ See [`SMOKEBOOK-TEMPLATE.md`](SMOKEBOOK-TEMPLATE.md) for field definitions. Run 
 **Ignore this run:** Gmail OAuth connect flow. IMAP field values. Actually sending mail.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Didn't move at all. Text is still higher than the checkbox.**
 
 ### 2. F8 — Destructive buttons readable in dark (and still legible in light)
 
@@ -44,10 +44,14 @@ On each surface, read button label text on the coral/destructive fill at a norma
 **Ignore this run:** Actually deleting production students or fixtures (visual-only unless disposable test data). Non-destructive accent buttons (separate accent recipe scope).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  Not a regression, just a note. Do we really need a separate page navigation for 2fa? Shouldn't it work similar to other modern logins where just the login panel itself changes to the 2fa or it slides in or whatever?**  
+  
+**On this one the fail is more my fault for not checking the light mode side, but I wonder if we have the opposite problem. On that shade of red, the foreground color is not very readable. (it's dark in light mode).**  
+  
+**In general, maybe we can tone the red down slightly in light mode, and tone the red up slightly in dark mode.**
 
 ### 3. A4 — Accent-soft tints visible in dark mode (students list)
 
@@ -57,11 +61,11 @@ On each surface, read button label text on the coral/destructive fill at a norma
 
 **Ignore this run:** Student data accuracy. Avatar colors (T3 — prior wave). Mobile hamburger nav (F2/F3).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  I think pass...but honestly I can't tell if those tints are coral specifically or not :D**
 
 ### 4. F2 — Mobile admin: outside-click closes hamburger drawer
 
@@ -74,11 +78,11 @@ On each surface, read button label text on the coral/destructive fill at a norma
 
 **Ignore this run:** Desktop sidebar (no hamburger). Whiteboard workspace mobile chrome.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Unless I REALLY need to sign in as tutor (if it's a different control), I passed this from admin admin.**
 
 ### 5. F3 — Admin: resize does not auto-open hamburger
 
@@ -88,7 +92,7 @@ On each surface, read button label text on the coral/destructive fill at a norma
 
 **Ignore this run:** Intentional hamburger open/close behavior (F2). Schedule/calendar data.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -98,38 +102,40 @@ On each surface, read button label text on the coral/destructive fill at a norma
 
 **Action:** **Light mode:** sign in as tutor. From any admin page, click the **"Mynk"** wordmark in the header/sidebar brand area. Note the URL after navigation settles. **Dark mode:** toggle theme; click wordmark again from a different admin sub-route (e.g. `/admin/students`).
 
-**Expect:** Wordmark `href` targets `/`. While logged in as tutor, server redirect lands on **`/admin`** (dashboard), **not** `/admin/students`. Behavior is consistent in **both** themes. No flash of wrong destination or auth loop.
+**Expect:** Wordmark `href` targets `/`. While logged in as tutor, server redirect lands on `**/admin`** (dashboard), **not** `/admin/students`. Behavior is consistent in **both** themes. No flash of wrong destination or auth loop.
 
 **Ignore this run:** Logged-out marketing home (`/` without redirect). Parent/account shell wordmark if different component (spot-check only if same brand link).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  You did what you said you were going to do, but it's not what I actually meant, I think wordmark links should just hit / shouldn't they? Fight me if I'm wrong or if this contradicts a previous directive from me.**
 
 ### 7. T9 — Theme toggle present and working on all listed shells
 
 **Action:** For **each** surface below, confirm a theme toggle is **visible** and **functional** (light ↔ dark flip applies immediately). Run **light → dark → light** on each. Use the toggle located on that shell (not devtools).
 
-| Surface | Route / context | Toggle location |
-|---|---|---|
-| Admin desktop | `/admin` | Sidebar **footer** |
-| Account/parent shell | `/account/dashboard` (or `/account/children/[id]`) | Account nav / shell |
-| Marketing | `/` or `/features` (logged out OK) | Marketing **header** |
-| Student login | `/students/login` | Top-**right** |
-| Join flow | `/join` and `/join/preferences` | Header area |
-| Share link | `/s/[token]` (valid share token) | Share **header** |
+
+| Surface              | Route / context                                    | Toggle location      |
+| -------------------- | -------------------------------------------------- | -------------------- |
+| Admin desktop        | `/admin`                                           | Sidebar **footer**   |
+| Account/parent shell | `/account/dashboard` (or `/account/children/[id]`) | Account nav / shell  |
+| Marketing            | `/` or `/features` (logged out OK)                 | Marketing **header** |
+| Student login        | `/students/login`                                  | Top-**right**        |
+| Join flow            | `/join` and `/join/preferences`                    | Header area          |
+| Share link           | `/s/[token]` (valid share token)                   | Share **header**     |
+
 
 **Expect:** Every row above has a working theme control in **both** starting themes. Toggling updates that page's chrome immediately without full reload (unless share page requires reload — note if so). No missing toggle on any listed route.
 
 **Ignore this run:** Whiteboard workspace theme (separate whiteboard smoke). System/follow-OS option unless explicitly labeled.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Pass, but should signup pages have it too? They don't currently.**
 
 ### 8. A1 — Navy focal card eyebrow legible on navy (both themes)
 
@@ -140,10 +146,12 @@ On each surface, read button label text on the coral/destructive fill at a norma
 **Ignore this run:** Non-navy cards' eyebrows. Body copy inside cards (contrast is eyebrow-specific).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  I think you're confused.  Tutor doesn't have an "/admin" page and no operator boxes. That was admin admin.**  
+  
+**You are calling that light blue Navy...right? If not there's some confusion what I've been asking for.  The light blue cards like the "Built for independents" card and previously the first operator card.  The eyebrow is still not very legible. far too light.**
 
 ### 9. A3 — Tutor approvals quick-link: navy focal only when pending > 0
 
@@ -158,11 +166,11 @@ On each surface, read button label text on the coral/destructive fill at a norma
 
 **Ignore this run:** Actually approving/rejecting tutors (optional). If no pending tutor available to verify Case B, **SKIP** with reason in Notes — Case A still must pass.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  Again, not sign in as tutor.  Do we need a separate true admin login? For orgs we're going to need an operator login right? I didn't put something in the queue to test this, I'll trust for now till final comprehensive smoke.**
 
 ### 10. F9 — Dev-tools copy button: fixed slot, no column reflow
 
@@ -173,10 +181,10 @@ On each surface, read button label text on the coral/destructive fill at a norma
 **Ignore this run:** Whether copied value is correct secret (clipboard not verified unless easy). Destructive actions on same page (F8).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: I actually like the quick replacment of the text as it was before, just need to make sure other text around it doesn't jump.  Either way this would fail because the checkmark and copied spans two lines and widens the line for a second.**
 
 ### 11. F6 — Student detail scroll-spy: "Whiteboard" active at top
 
@@ -186,11 +194,11 @@ On each surface, read button label text on the coral/destructive fill at a norma
 
 **Ignore this run:** Mobile stacked layout if tabs differ. Recording FSM / session start.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Now you can't actually scroll far enough to activate parent account, but I think that's fine for bottom of page stuff where other sections are still in view.  So no action on this yet unless you think that's a problem**
 
 ### 12. F5 — Schedule calendar: event dots and today highlight visible
 
@@ -201,10 +209,10 @@ On each surface, read button label text on the coral/destructive fill at a norma
 **Ignore this run:** Agenda view. Placeholder event data accuracy. OAuth/sync badges.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: So, I don't fail it because you failed to make it more visible. I failed because...those dots feel slightly..bleh?  I think the today outline is good, and the current day selection is good.  I just think we can punch those dots up a little bit.**
 
 ### 13. F4 — Schedule → integrations back link context
 
@@ -215,11 +223,11 @@ On each surface, read button label text on the coral/destructive fill at a norma
 
 **Dark mode:** repeat both entry paths.
 
-**Expect:** From **schedule** entry (with `?from=schedule` or equivalent), back link reads **"← Schedule"** and returns to **`/admin/schedule`**. From **Settings index** entry, back link reads **"← Settings"** and returns to settings context. Correct link in **both** themes for both entry paths.
+**Expect:** From **schedule** entry (with `?from=schedule` or equivalent), back link reads **"← Schedule"** and returns to `**/admin/schedule`**. From **Settings index** entry, back link reads **"← Settings"** and returns to settings context. Correct link in **both** themes for both entry paths.
 
 **Ignore this run:** OAuth connect buttons. Actual calendar sync.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -233,11 +241,11 @@ On each surface, read button label text on the coral/destructive fill at a norma
 
 **Ignore this run:** Saving/editing names if not in scope. Children with zero tutors (empty state — note in Notes).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  Good distinction.  I think this could stand out as a list or subsection more.  Maybe "What each tutor..." section is collapsable?**
 
 ### 15. F1 — Consent page: live-sessions callout + Recommended labels
 
@@ -247,11 +255,13 @@ On each surface, read button label text on the coral/destructive fill at a norma
 
 **Ignore this run:** POST/save persistence. Per-tutor grant matrix (T10/T2 prior items).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  I think that's pretty good.  I think we should give that permission section a bit of a red tint when it's off...or is that too aggressive? They need to know "off = bad" but without seeming like we're bullying them.  I don't want to anti-pattern them into accepting it, but...they really need it on haha.**  
+  
+**Also, this is not a regression from this branch just a note: The checkboxes in the floor block are not particularly visible with light borders and having the same background color as the panel around it.**
 
 ### 16. BG2 — Students roster search pill shape
 
@@ -261,11 +271,11 @@ On each surface, read button label text on the coral/destructive fill at a norma
 
 **Ignore this run:** Search functionality/filter results. Accent tint inside pill (A4).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: I think it looks good but it's not what I meant.  It was like...some sort of effect INSIDE the box.  I dunno**
 
 ### 17. A2 — /features cards: top accent border (3px accent-strong)
 
@@ -275,7 +285,7 @@ On each surface, read button label text on the coral/destructive fill at a norma
 
 **Ignore this run:** Feature copy accuracy. Other marketing pages' cards if not the six-up grid.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -285,13 +295,13 @@ On each surface, read button label text on the coral/destructive fill at a norma
 
 ## Cross-branch / post-merge
 
-This Wave 2 smokebook builds on the **Wave 1 tweak smoke** ([`v1ds-tweak-wave-smokebook-2026-06-12.md`](v1ds-tweak-wave-smokebook-2026-06-12.md) — all items passed) and the **accent recipe proposal** branch (merged into `v1-design-system`; Andrew verdict **KEEP**). Re-run regression spot-checks after this wave merges into the integration branch.
+This Wave 2 smokebook builds on the **Wave 1 tweak smoke** (`[v1ds-tweak-wave-smokebook-2026-06-12.md](v1ds-tweak-wave-smokebook-2026-06-12.md)` — all items passed) and the **accent recipe proposal** branch (merged into `v1-design-system`; Andrew verdict **KEEP**). Re-run regression spot-checks after this wave merges into the integration branch.
 
 Run this section **after** Wave 2 merges into the integration branch (`v1-redesign` or `master`). Use the **integration branch preview** (fetch alias via Vercel MCP — branch name changes).
 
 **Integration branch:** `<e.g. v1-redesign>`
 **Integration tip commit:** `<short-sha>`
-**Integration preview:** [<label>](https://<branchAlias>)
+**Integration preview:** 
 
 **Overall integration result:**
 
