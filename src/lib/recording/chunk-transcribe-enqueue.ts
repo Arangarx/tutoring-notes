@@ -26,6 +26,7 @@ import {
   upsertTranscriptChunk,
 } from "@/lib/recording/transcript-store";
 import { processChunkTranscribeJob, type ChunkTranscribeInput } from "@/lib/recording/transcription-worker";
+import { getPublicBaseUrl } from "@/lib/public-url";
 
 export type { ChunkTranscribeInput };
 
@@ -34,6 +35,36 @@ function fireAndForgetWorker(job: ChunkTranscribeInput): void {
   // Without this, bare `void` promises are dropped when the serverless response
   // is sent — leaving TranscriptChunk rows stuck at `transcribing` on Preview.
   after(async () => {
+    const secret = process.env.CRON_SECRET;
+    if (secret) {
+      // SHOULD-FIX-2 Option A: when CRON_SECRET is configured, route the work
+      // through the guarded /api/queues/chunk-transcribe endpoint with a bearer
+      // token so all worker invocations pass the same auth guard as the cron
+      // sweep. The secret is only accessed server-side (this file is server-only).
+      // When CRON_SECRET is absent, fall through to the direct-call path.
+      const base = getPublicBaseUrl();
+      try {
+        const res = await fetch(`${base}/api/queues/chunk-transcribe`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${secret}`,
+          },
+          body: JSON.stringify(job),
+        });
+        if (!res.ok) {
+          console.error(
+            `[txc] wbsid=${job.sessionId} action=after_worker_fetch_error status=${res.status}`
+          );
+        }
+      } catch (err: unknown) {
+        console.error(
+          `[txc] wbsid=${job.sessionId} action=after_worker_fetch_error err=${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+      return;
+    }
+    // Fail-open: CRON_SECRET not set — call worker directly (local dev / pre-config).
     try {
       await processChunkTranscribeJob(job);
     } catch (err: unknown) {
