@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { useId, useState } from "react";
-import { validateLearnerPin } from "@/lib/pin-strength";
+import {
+  validateLearnerPin,
+  validateLearnerUsername,
+} from "@/lib/learner-credential-validation";
 import { CopyableLearnerHandle } from "@/components/account/CopyableLearnerHandle";
 import { AuthFieldError } from "@/components/auth/AuthFieldError";
 import { Button } from "@/components/ui/button";
@@ -33,21 +36,26 @@ export function CredentialSetupForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
     setError(null);
+
+    const usernameCheck = validateLearnerUsername(username);
+    if (!usernameCheck.ok) {
+      setError("invalid_username");
+      return;
+    }
 
     if (pin !== confirmPin) {
       setError("pin_mismatch");
-      setBusy(false);
       return;
     }
 
     const pinCheck = validateLearnerPin(pin);
     if (!pinCheck.ok) {
-      setError("pin_too_weak");
-      setBusy(false);
+      setError(pinCheck.error?.includes("6 digits") ? "pin_too_short" : "pin_too_weak");
       return;
     }
+
+    setBusy(true);
 
     try {
       const res = await fetch(`/api/claim/${rawToken}/setup`, {

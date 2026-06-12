@@ -49,6 +49,10 @@ import { createAccountHolderSession } from "@/lib/account-holder-session";
 import { createChildLearnerAction } from "@/app/account/dashboard/actions";
 import { getAccountHolderSessionFromHeaders } from "@/lib/server-session";
 import { POST as credentialsPost } from "@/app/api/learner-profiles/[id]/credentials/route";
+import {
+  validateLearnerPin,
+  validateLearnerUsername,
+} from "@/lib/learner-credential-validation";
 import { NextRequest } from "next/server";
 
 // ---------------------------------------------------------------------------
@@ -198,6 +202,29 @@ describe("assertOwnsLearnerProfile — cross-tenant", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Shared learner credential validators (claim + parent-create parity)
+// ---------------------------------------------------------------------------
+
+describe("learner credential validation — shared module", () => {
+  it("rejects blocklisted weak PIN 123456", () => {
+    const result = validateLearnerPin("123456");
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/too easy to guess/i);
+  });
+
+  it("rejects username with spaces (smoke P2: no spaces)", () => {
+    const result = validateLearnerUsername("no spaces");
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/3–20 characters/i);
+  });
+
+  it("accepts valid username alex1 and PIN 847263", () => {
+    expect(validateLearnerUsername("alex1").ok).toBe(true);
+    expect(validateLearnerPin("847263").ok).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // POST /api/learner-profiles/[id]/credentials — ownership + validation
 // ---------------------------------------------------------------------------
 
@@ -236,7 +263,7 @@ describe("POST /api/learner-profiles/[id]/credentials", () => {
     ).rejects.toThrow("NEXT_NOT_FOUND");
   });
 
-  it("rejects invalid username (400)", async () => {
+  it("rejects invalid username no spaces (400, smoke P2)", async () => {
     const ah = await createTestAccountHolder("cred-bad-uname");
     const profile = await createTestLearnerProfile(ah.id);
     const req = await buildAuthRequest(ah.id);
@@ -246,16 +273,17 @@ describe("POST /api/learner-profiles/[id]/credentials", () => {
         "Content-Type": "application/json",
         cookie: req.headers.get("cookie") ?? "",
       },
-      body: JSON.stringify({ username: "no spaces allowed here", pin: "847261" }),
+      body: JSON.stringify({ username: "no spaces", pin: "847263" }),
     });
 
     const res = await credentialsPost(bodyReq, { params: Promise.resolve({ id: profile.id }) });
     expect(res.status).toBe(400);
-    const data = await res.json() as { error: string };
+    const data = await res.json() as { error: string; message?: string };
     expect(data.error).toBe("invalid_username");
+    expect(data.message).toMatch(/3–20 characters/i);
   });
 
-  it("rejects weak PIN (400)", async () => {
+  it("rejects weak PIN 123456 (400, smoke P1)", async () => {
     const ah = await createTestAccountHolder("cred-weak-pin");
     const profile = await createTestLearnerProfile(ah.id);
     const req = await buildAuthRequest(ah.id);
@@ -265,13 +293,14 @@ describe("POST /api/learner-profiles/[id]/credentials", () => {
         "Content-Type": "application/json",
         cookie: req.headers.get("cookie") ?? "",
       },
-      body: JSON.stringify({ username: "sam123", pin: "123456" }),
+      body: JSON.stringify({ username: "alex1", pin: "123456" }),
     });
 
     const res = await credentialsPost(bodyReq, { params: Promise.resolve({ id: profile.id }) });
     expect(res.status).toBe(400);
-    const data = await res.json() as { error: string };
+    const data = await res.json() as { error: string; message?: string };
     expect(data.error).toBe("pin_too_weak");
+    expect(data.message).toMatch(/too easy to guess/i);
   });
 
   it("creates credential successfully, sets accessMode=child_pin_required, assigns familyId", async () => {
@@ -284,7 +313,7 @@ describe("POST /api/learner-profiles/[id]/credentials", () => {
         "Content-Type": "application/json",
         cookie: req.headers.get("cookie") ?? "",
       },
-      body: JSON.stringify({ username: "jordan5", pin: "847261" }),
+      body: JSON.stringify({ username: "alex1", pin: "847263" }),
     });
 
     const res = await credentialsPost(bodyReq, { params: Promise.resolve({ id: profile.id }) });
@@ -292,7 +321,7 @@ describe("POST /api/learner-profiles/[id]/credentials", () => {
     const data = await res.json() as { ok: boolean; familyId: string; loginHandle: string };
     expect(data.ok).toBe(true);
     expect(data.familyId).toBeDefined();
-    expect(data.loginHandle).toBe(`jordan5@${data.familyId}`);
+    expect(data.loginHandle).toBe(`alex1@${data.familyId}`);
 
     // DB state: accessMode updated, credential row created.
     const updatedProfile = await db.learnerProfile.findUnique({ where: { id: profile.id } });
@@ -300,7 +329,7 @@ describe("POST /api/learner-profiles/[id]/credentials", () => {
 
     const cred = await db.learnerCredential.findUnique({ where: { learnerProfileId: profile.id } });
     expect(cred).not.toBeNull();
-    expect(cred!.username).toBe("jordan5");
+    expect(cred!.username).toBe("alex1");
     expect(cred!.accountHolderId).toBe(ah.id);
 
     // AccountHolder has a familyId assigned.

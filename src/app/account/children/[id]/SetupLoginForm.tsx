@@ -3,6 +3,10 @@
 import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import {
+  validateLearnerPin,
+  validateLearnerUsername,
+} from "@/lib/learner-credential-validation";
 import { AuthFieldError } from "@/components/auth/AuthFieldError";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,12 +39,26 @@ export function SetupLoginForm({ learnerProfileId, learnerName }: SetupLoginForm
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setError(null);
+
+    const usernameCheck = validateLearnerUsername(username);
+    if (!usernameCheck.ok) {
+      setError("invalid_username");
+      return;
+    }
+
     if (pin !== confirmPin) {
       setError("mismatch");
       return;
     }
+
+    const pinCheck = validateLearnerPin(pin);
+    if (!pinCheck.ok) {
+      setError(pinCheck.error?.includes("6 digits") ? "pin_too_short" : "pin_too_weak");
+      return;
+    }
+
     setBusy(true);
-    setError(null);
 
     try {
       const res = await fetch(`/api/learner-profiles/${learnerProfileId}/credentials`, {

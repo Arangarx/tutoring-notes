@@ -22,7 +22,10 @@ import { db } from "@/lib/db";
 import { getAccountHolderSession } from "@/lib/account-holder-session";
 import { assertOwnsLearnerProfile } from "@/lib/learner-profile-scope";
 import { hashLearnerPin } from "@/lib/account-holder-auth";
-import { validateLearnerPin } from "@/lib/pin-strength";
+import {
+  validateLearnerPin,
+  validateLearnerUsername,
+} from "@/lib/learner-credential-validation";
 import { ensureFamilyId, formatLearnerLoginHandle } from "@/lib/family-id";
 
 export async function POST(
@@ -52,12 +55,14 @@ export async function POST(
     return NextResponse.json({ error: "missing_fields" }, { status: 400 });
   }
 
-  const normalizedUsername = username.trim().toLowerCase();
-
-  // Username validation: alphanumeric + underscore, 3–20 chars (mirrors claim setup).
-  if (!/^[a-z0-9_]{3,20}$/.test(normalizedUsername)) {
-    return NextResponse.json({ error: "invalid_username" }, { status: 400 });
+  const usernameCheck = validateLearnerUsername(username);
+  if (!usernameCheck.ok) {
+    return NextResponse.json(
+      { error: "invalid_username", message: usernameCheck.error },
+      { status: 400 }
+    );
   }
+  const normalizedUsername = usernameCheck.normalized!;
 
   // PIN validation: 6 numeric digits, block obvious patterns.
   const pinCheck = validateLearnerPin(pin);
