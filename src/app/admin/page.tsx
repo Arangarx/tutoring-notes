@@ -49,11 +49,40 @@ export default async function AdminHomePage() {
         </>
       }
       actions={
-        <Button asChild variant="outline" className="min-h-11">
-          <Link href="/admin/settings">Settings</Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline" className="min-h-11">
+            <Link href="/admin/tutor-approvals">Tutor approvals</Link>
+          </Button>
+          <Button asChild variant="outline" className="min-h-11">
+            <Link href="/admin/settings">Settings</Link>
+          </Button>
+        </div>
       }
     >
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <Link
+          href="/admin/tutor-approvals"
+          className="rounded-[10px] border border-border bg-card px-4 py-3.5 shadow-sm transition-colors hover:border-ring hover:bg-card/90"
+        >
+          <p className="text-xs text-muted-foreground">Operator</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">Tutor approvals</p>
+        </Link>
+        <Link
+          href="/admin/feedback"
+          className="rounded-[10px] border border-border bg-card px-4 py-3.5 shadow-sm transition-colors hover:border-ring hover:bg-card/90"
+        >
+          <p className="text-xs text-muted-foreground">Operator</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">Feedback inbox</p>
+        </Link>
+        <Link
+          href="/admin/cost"
+          className="rounded-[10px] border border-border bg-card px-4 py-3.5 shadow-sm transition-colors hover:border-ring hover:bg-card/90"
+        >
+          <p className="text-xs text-muted-foreground">Operator</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">Cost dashboard</p>
+        </Link>
+      </div>
+
       <AdminSectionCard
         title="Test accounts"
         description="Log in as a test tutor without signing out your admin session. Use Exit impersonation to return here."

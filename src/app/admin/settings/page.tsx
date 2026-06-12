@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { SettingsNavList } from "@/components/admin/SettingsNavList";
 
 export const dynamic = "force-dynamic";
 
@@ -27,46 +28,17 @@ export default async function SettingsIndexPage() {
     <AdminPageShell
       title="Settings"
       description="Your profile and account settings."
+      className="mx-auto max-w-xl"
       eyebrow={
         <Link
           href="/admin/students"
-          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           ← Students
         </Link>
       }
     >
-      <nav aria-label="Settings sections">
-        <ul className="divide-y divide-border rounded-lg border border-border bg-card" role="list">
-          {settingsLinks.map(({ href, label, description }) => (
-            <li key={href}>
-              <Link
-                href={href}
-                className="flex min-h-16 items-center justify-between gap-4 px-4 py-4 transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 first:rounded-t-lg last:rounded-b-lg"
-              >
-                <div className="min-w-0 space-y-0.5">
-                  <div className="text-sm font-semibold text-foreground">{label}</div>
-                  <p className="text-sm text-muted-foreground">{description}</p>
-                </div>
-                <svg
-                  className="size-4 shrink-0 text-muted-foreground"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M6 3l5 5-5 5"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </nav>
+      <SettingsNavList items={settingsLinks} />
     </AdminPageShell>
   );
 }

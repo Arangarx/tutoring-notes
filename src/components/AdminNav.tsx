@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { signOut } from "next-auth/react";
+import { Inbox, Settings } from "lucide-react";
 import { exitImpersonation } from "@/app/admin/actions/impersonate";
 
 import { MynkWordmark } from "@/components/auth/MynkWordmark";
@@ -11,26 +12,33 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { AdminSessionMode } from "@/lib/admin-routing";
+import type { AdminSidebarNavProps } from "@/components/admin/AdminSidebarNav";
 
-type AdminNavProps = {
-  /** Show operator-only nav links (feedback inbox, waitlist, cost dashboard). */
-  showOperatorLinks?: boolean;
-  /** Show the /admin/cost link — operator + ADMIN role only. */
-  showCostDashboard?: boolean;
-  sessionMode?: AdminSessionMode;
-  /**
-   * When true, the "Sign out" button routes through exitImpersonation() instead
-   * of next-auth signOut() — dropping the impersonation and restoring the admin's
-   * verified session rather than terminating it entirely.
-   */
-  isImpersonating?: boolean;
-  /**
-   * Show the "Dev tools" link — only in non-production environments and for
-   * operator-authenticated sessions. The page itself enforces the env gate
-   * (notFound() in production); this prop controls nav visibility.
-   */
-  showDevTools?: boolean;
+type AdminNavProps = AdminSidebarNavProps & {
+  /** `mobile` = compact top bar (desktop uses sidebar). Omit for legacy full nav. */
+  layout?: "mobile" | "full";
 };
+
+function buildNavLinks(props: AdminSidebarNavProps) {
+  const tutorLinks = [
+    { href: "/admin/students", label: "Students" },
+    { href: "/admin/outbox", label: "Outbox" },
+  ];
+  return [
+    { href: "/admin", label: "Dashboard" },
+    ...(props.sessionMode === "tutor-experience" ? tutorLinks : []),
+    ...(props.showOperatorLinks
+      ? [
+          { href: "/admin/feedback", label: "Feedback inbox" } as const,
+          { href: "/admin/tutor-approvals", label: "Tutor approvals" } as const,
+        ]
+      : []),
+    ...(props.showCostDashboard ? [{ href: "/admin/cost", label: "Cost" } as const] : []),
+    { href: "/feedback", label: "Send feedback" },
+    { href: "/admin/settings", label: "Settings" },
+    ...(props.showDevTools ? [{ href: "/admin/dev-tools", label: "Dev tools" } as const] : []),
+  ];
+}
 
 export function AdminNav({
   showOperatorLinks = false,
@@ -38,25 +46,15 @@ export function AdminNav({
   sessionMode = "tutor-experience",
   isImpersonating = false,
   showDevTools = false,
+  layout = "full",
 }: AdminNavProps) {
-  const tutorLinks = [
-    { href: "/admin/students", label: "Students" },
-    { href: "/admin/outbox", label: "Outbox" },
-  ];
-  const adminLinks = [
-    { href: "/admin", label: "Dashboard" },
-    ...(sessionMode === "tutor-experience" ? tutorLinks : []),
-    ...(showOperatorLinks
-      ? [
-          { href: "/admin/feedback", label: "Feedback inbox" } as const,
-          { href: "/admin/tutor-approvals", label: "Tutor approvals" } as const,
-        ]
-      : []),
-    ...(showCostDashboard ? [{ href: "/admin/cost", label: "Cost" } as const] : []),
-    { href: "/feedback", label: "Send feedback" },
-    { href: "/admin/settings", label: "Settings" },
-    ...(showDevTools ? [{ href: "/admin/dev-tools", label: "Dev tools" } as const] : []),
-  ];
+  const adminLinks = buildNavLinks({
+    showOperatorLinks,
+    showCostDashboard,
+    sessionMode,
+    isImpersonating,
+    showDevTools,
+  });
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -71,10 +69,140 @@ export function AdminNav({
       "inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium transition-colors",
       "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
       isActive(href)
-        ? "bg-accent-soft text-foreground"
+        ? "bg-accent-soft text-accent-text"
         : "text-muted-foreground hover:bg-muted hover:text-foreground",
       mobile && "w-full justify-start"
     );
+
+  const homeHref = sessionMode === "real-admin-home" ? "/admin" : "/admin/students";
+
+  if (layout === "mobile") {
+    return (
+      <>
+        <header className="sticky top-0 z-50 border-b border-border bg-card md:hidden">
+          <div className="flex h-[52px] items-center justify-between gap-3 px-4">
+            <Link
+              href={homeHref}
+              className="inline-flex min-h-11 items-center rounded-md focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              aria-label="Home"
+            >
+              <MynkWordmark size="sm" />
+            </Link>
+            <div className="flex items-center gap-2">
+              {sessionMode === "tutor-experience" ? (
+                <Button
+                  asChild
+                  variant="outline"
+                  size="icon"
+                  className="size-10 shrink-0 rounded-[10px]"
+                >
+                  <Link href="/admin/outbox" aria-label="Outbox">
+                    <Inbox className="size-[18px]" />
+                  </Link>
+                </Button>
+              ) : null}
+              <Button
+                asChild
+                variant="outline"
+                size="icon"
+                className="size-10 shrink-0 rounded-[10px]"
+              >
+                <Link href="/admin/settings" aria-label="Settings">
+                  <Settings className="size-[18px]" />
+                </Link>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="size-10 shrink-0 rounded-[10px]"
+                onClick={() => setOpen(!open)}
+                aria-expanded={open}
+                aria-controls="admin-mobile-nav"
+                aria-label={open ? "Close menu" : "Open menu"}
+              >
+                <span className="sr-only">{open ? "Close" : "Menu"}</span>
+                <span className="flex flex-col gap-1.5" aria-hidden>
+                  <span
+                    className={cn(
+                      "block h-0.5 w-5 rounded-full bg-foreground transition-transform",
+                      open && "translate-y-2 rotate-45"
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "block h-0.5 w-5 rounded-full bg-foreground transition-opacity",
+                      open && "opacity-0"
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "block h-0.5 w-5 rounded-full bg-foreground transition-transform",
+                      open && "-translate-y-2 -rotate-45"
+                    )}
+                  />
+                </span>
+              </Button>
+            </div>
+          </div>
+        </header>
+
+        {open ? (
+          <>
+            <button
+              type="button"
+              className="fixed inset-0 z-40 bg-black/50 md:hidden"
+              aria-label="Close menu"
+              onClick={() => setOpen(false)}
+            />
+            <nav
+              id="admin-mobile-nav"
+              className="fixed inset-y-0 right-0 z-50 flex w-[min(100%,280px)] flex-col gap-1 border-l border-border bg-card p-4 shadow-lg md:hidden"
+              aria-label="Main"
+            >
+              {adminLinks.map((l) => (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  className={linkClass(l.href, true)}
+                  onClick={() => setOpen(false)}
+                >
+                  {l.label}
+                </Link>
+              ))}
+              <div className="px-1 py-2">
+                <ThemeToggle />
+              </div>
+              {isImpersonating ? (
+                <form action={exitImpersonation}>
+                  <Button
+                    type="submit"
+                    variant="ghost"
+                    className="mt-2 min-h-11 w-full justify-start text-destructive"
+                    onClick={() => setOpen(false)}
+                  >
+                    Sign out
+                  </Button>
+                </form>
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="mt-2 min-h-11 w-full justify-start text-destructive"
+                  onClick={() => {
+                    setOpen(false);
+                    signOut({ callbackUrl: "/login" });
+                  }}
+                >
+                  Sign out
+                </Button>
+              )}
+            </nav>
+          </>
+        ) : null}
+      </>
+    );
+  }
 
   return (
     <>
