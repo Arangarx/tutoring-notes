@@ -131,11 +131,17 @@ Surface fan-out **consumed** the frozen library; the library was **not edited** 
 
 ---
 
-### Group G — WB phone-landscape bars-to-left
+### Group G — WB phone-landscape bars-to-left — SHIPPED + MERGED
 
-> **Result pending — orchestrator will update** (shipped+merged / abandoned-left-for-WB-thread).
+**SHIPPED** @ [`11ad38e`](https://github.com/Arangarx/tutoring-notes/commit/11ad38e), merged `--no-ff` into `v1-design-system` (merge commit [`287aa3d`](https://github.com/Arangarx/tutoring-notes/commit/287aa3d)). **CSS-only — touched only** `whiteboard-chrome.css` (fence-compliant).
 
-Isolated sync-fenced worktree, best-effort, `test:wb-sync`-gated. Not merged at morning handoff time.
+On phone-landscape (`data-layout="phone-landscape"`, e.g. 844×390): tier-1 tools move to a **44px left vertical rail** (bottom toolbar hidden), props bar becomes a **compact canvas chip** (top-left), board tabs pin bottom with a 44px left inset past the rail. Matches the mobile mock intent.
+
+**WB gate (run in main repo):** `npx next build` exit 0; **`test:wb-playwright` 13 passed / 1 skipped** (all live-sync invariants green — invariant 8 PDF pre-existing skip). G's CSS change provably does not affect live sync.
+
+> ⚠️ **Pre-existing failure logged (NOT caused by tonight's work):** `test:wb-sync` jest half has 1 deterministic failure — `src/__tests__/whiteboard/sync-client.test.ts › broadcastSignal bypasses the scene throttle (Phase 4a webrtc-signal envelope)` (expects 1 server-broadcast, receives 2). **`git diff 300ef0b HEAD` for `src/lib/whiteboard/**` + the sync test is EMPTY** — the code under test is byte-identical to the foundation, so this fails identically on `300ef0b`/`v1-redesign` independent of the redesign merges or G's CSS. **Action:** route to the WB/sync (Phase 4a live-AV) thread; do NOT treat as a redesign blocker.
+
+**Left for WB thread:** real-device phone-landscape smoke (rail visibility, props-chip tap, board-tab overlap); student shell if it adopts `LiveBoardChrome`; popover/sheet anchoring in the vertical rail; the props-chip "hide label" rule targets `> span:last-child` (fragile if the fenced `WhiteboardWorkspaceClient` markup changes).
 
 ---
 
@@ -231,7 +237,7 @@ For a future **foundation pass** — the big actionable list after Andrew's morn
 
 ## Bottom line
 
-**Groups A–F** shipped, merged, build-green, and pushed to `v1-design-system`. All new feature surfaces (waiting room, consent editor, scheduler) are **VISUAL-ONLY** pending Andrew's design calls + functional wiring threads. **Group G** pending.
+**All seven groups A–G** shipped, merged `--no-ff`, build-green, and pushed to `v1-design-system` (tip after G merge: [`287aa3d`](https://github.com/Arangarx/tutoring-notes/commit/287aa3d)). All new feature surfaces (waiting room, consent editor, scheduler) are **VISUAL-ONLY** pending Andrew's design calls + functional wiring threads. One **pre-existing** WB sync-client jest failure logged for the Phase 4a thread (not a redesign regression — see Group G).
 
 **Andrew's morning job:** review every surface on the `v1-design-system` preview (URL to be confirmed by orchestrator via Vercel MCP), answer the design questions above, and decide merge/cut timing relative to `v1-redesign` and `master`.
 
