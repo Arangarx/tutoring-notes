@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 
 export type TutorConsentState = {
   adminUserId: string;
@@ -31,39 +32,48 @@ export type ConsentRestrictionState = {
   restrictNoteSending: boolean;
 };
 
-const PERMISSION_TOGGLES = [
+type PermissionKey = keyof Omit<
+  TutorConsentState,
+  "adminUserId" | "tutorLabel" | "version"
+>;
+
+type PermissionToggleDef = {
+  key: PermissionKey;
+  label: string;
+  description: string;
+  emphasis: "critical" | "recommended" | "standard";
+};
+
+const PERMISSION_TOGGLES: ReadonlyArray<PermissionToggleDef> = [
   {
-    key: "allowLiveSession" as const,
+    key: "allowLiveSession",
     label: "Allow live sessions",
     description:
-      "Your child can join real-time whiteboard tutoring sessions with this tutor.",
+      "Your child joins real-time whiteboard tutoring with this tutor — the core reason you use Mynk.",
+    emphasis: "critical",
   },
   {
-    key: "allowAudioRecording" as const,
+    key: "allowAudioRecording",
     label: "Allow audio recording",
     description:
-      "Session audio may be recorded for note generation and tutor review.",
+      "Captures what was said so session notes reflect the actual lesson, not just what appeared on the board.",
+    emphasis: "recommended",
   },
   {
-    key: "allowWhiteboardRecording" as const,
+    key: "allowWhiteboardRecording",
     label: "Allow whiteboard replay",
     description:
-      "Whiteboard strokes are saved so you can replay sessions — this controls parent-facing access, not the tutor's own session data.",
+      "Saves every stroke so you and your child can revisit the work later — most families want this on.",
+    emphasis: "recommended",
   },
   {
-    key: "allowNoteSending" as const,
+    key: "allowNoteSending",
     label: "Allow session notes email",
     description:
       "Session summary notes can be emailed to you after each session.",
+    emphasis: "standard",
   },
-] satisfies ReadonlyArray<{
-  key: keyof Omit<
-    TutorConsentState,
-    "adminUserId" | "tutorLabel" | "version"
-  >;
-  label: string;
-  description: string;
-}>;
+];
 
 const RESTRICTION_TOGGLES = [
   {
@@ -187,28 +197,14 @@ export function ParentConsentEditor({
               <AccordionContent className="pb-4">
                 <div className="space-y-3">
                   {PERMISSION_TOGGLES.map((perm) => (
-                    <div
+                    <PermissionToggleRow
                       key={perm.key}
-                      className="flex items-start justify-between gap-4 rounded-[10px] border border-border bg-background p-3"
-                    >
-                      <div className="min-w-0 flex-1 space-y-0.5">
-                        <Label
-                          htmlFor={`${tutor.adminUserId}-${perm.key}`}
-                          className="cursor-pointer text-sm font-medium"
-                        >
-                          {perm.label}
-                        </Label>
-                        <p className="text-xs text-muted-foreground">{perm.description}</p>
-                      </div>
-                      <Switch
-                        id={`${tutor.adminUserId}-${perm.key}`}
-                        checked={tutor[perm.key]}
-                        onCheckedChange={(checked) =>
-                          updateTutorToggle(tutor.adminUserId, perm.key, checked)
-                        }
-                        aria-label={perm.label}
-                      />
-                    </div>
+                      perm={perm}
+                      tutor={tutor}
+                      onToggle={(checked) =>
+                        updateTutorToggle(tutor.adminUserId, perm.key, checked)
+                      }
+                    />
                   ))}
                 </div>
               </AccordionContent>
@@ -268,6 +264,88 @@ export function ParentConsentEditor({
               : "Saving is not wired yet. Toggles reflect loaded data for review; backend route is deferred (B2 Step 6)."}
           </AlertDescription>
         </Alert>
+      </div>
+    </div>
+  );
+}
+
+function PermissionToggleRow({
+  perm,
+  tutor,
+  onToggle,
+}: {
+  perm: PermissionToggleDef;
+  tutor: TutorConsentState;
+  onToggle: (checked: boolean) => void;
+}) {
+  const inputId = `${tutor.adminUserId}-${perm.key}`;
+  const isCritical = perm.emphasis === "critical";
+  const isRecommended = perm.emphasis === "recommended";
+
+  return (
+    <div
+      className={cn(
+        "rounded-[10px] border bg-background p-3",
+        isCritical
+          ? "border-accent/50 bg-accent-soft/40 ring-1 ring-accent/20"
+          : isRecommended
+            ? "border-accent/30 bg-accent-soft/20"
+            : "border-border"
+      )}
+    >
+      {isCritical ? (
+        <div className="mb-3 rounded-[8px] border border-accent/40 bg-accent-soft px-3 py-2">
+          <p className="text-sm font-semibold text-accent-text">
+            Required for the app to actually do anything
+          </p>
+          <p className="mt-1 text-xs text-foreground">
+            {
+              "Without live sessions, Mynk is effectively just a scheduling calendar — your child cannot join tutoring on the whiteboard. You can decline, but there is little reason to use the app if this stays off."
+            }
+          </p>
+        </div>
+      ) : null}
+
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <Label
+              htmlFor={inputId}
+              className={cn(
+                "cursor-pointer",
+                isCritical ? "text-base font-semibold" : "text-sm font-medium"
+              )}
+            >
+              {perm.label}
+            </Label>
+            {isRecommended ? (
+              <Badge className="bg-accent-soft text-accent-text font-mono text-[10px] uppercase">
+                Recommended
+              </Badge>
+            ) : null}
+          </div>
+          <p
+            className={cn(
+              "text-muted-foreground",
+              isCritical || isRecommended ? "text-sm" : "text-xs"
+            )}
+          >
+            {perm.description}
+          </p>
+          {isRecommended ? (
+            <p className="text-xs text-foreground">
+              You can turn this off, but most families keep it on so sessions are
+              useful after class ends.
+            </p>
+          ) : null}
+        </div>
+        <Switch
+          id={inputId}
+          checked={tutor[perm.key]}
+          onCheckedChange={onToggle}
+          aria-label={perm.label}
+          className="shrink-0"
+        />
       </div>
     </div>
   );
