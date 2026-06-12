@@ -1,8 +1,8 @@
 # Recording / whiteboard re-architecture — capture-in-chunks → transcribe-during-session → summarize-on-end → play-as-one
 
-> **Design date:** 2026-06-05 (v1) — **Revised 2026-06-06 (v2)**  
+> **Design date:** 2026-06-05 (v1) — **Revised 2026-06-06 (v2)** — **Invariant matrix ratified 2026-06-11 (v3)**  
 > **Branch:** `v1-redesign`  
-> **Status:** **RATIFIED v2 (Andrew 2026-06-06)** — Q1–Q8 answered below; **build authorized** (high blast radius — Phase 1 dispatch on isolated branch)  
+> **Status:** **RATIFIED v2 (Andrew 2026-06-06)** + **invariant matrix v3 (Andrew 2026-06-11)** — Q1–Q8 answered below; I1–I5/M1–M6 matrix locks replay/capture semantics; **build authorized** (consolidation slice = fix path B)  
 > **Authored by:** v1 Composer-authored from Opus scope blob; v2 revised inline by Composer subagent from Andrew dialogue + independent best-practice research  
 > **Deliverable type:** Design / ratify document — no production code, no migrations applied  
 > **Owner directive (Andrew, 2026-06-05):** STOP interim-patching the whiteboard recording/playback methodology; re-engineer it properly for scale and real use.  
@@ -155,6 +155,8 @@ None of these agree. The monotonic recording-time clock (D3) fixes all three.
 - VAD (Silero VAD via `ricky0123/vad` or `vad-web`) can set speech-boundaries to avoid mid-word chunk splits. **Relevant if word-boundary artifacts appear in transcription.** For Phase 1, the 25MB / 240s Whisper split boundary is the alignment concern, not the 30s timeslice.
 - **Recommendation: keep 30s timeslice for Phase 1.** Evaluate VAD-bounded chunking in a later phase if mid-word splits surface as a real quality issue in Sarah's transcriptions.
 
+> **SUPERSEDED / CLARIFIED 2026-06-11 (Andrew):** Audio chunking is **silence-triggered (VAD)**, analogous to a sentence-boundary chunker (Andrew uses the identical pattern in a Discord-bot transcriber that chunks between sentences). Rationale vs the 30s-timeslice default above: silence-aligned boundaries mean each second of audio is transcribed exactly once — no overlapping windows, no re-transcription/stitch-for-accuracy — which is both cheaper and more accurate. A **max-duration cap** backstops it (flush on silence OR at the cap, whichever comes first) so an unbroken talk-stretch cannot starve the pipeline or grow the last-unsaved-chunk risk window. In practice it is near-impossible to talk 5 minutes with zero VAD-detectable silence. Original 30s-timeslice recommendation preserved above for audit trail.
+
 ### Async pipeline mechanisms on Vercel
 
 **Validated against**: Vercel Queues docs (vercel.com/docs/queues), Vercel Workflows blog (vercel.com/blog), Vercel Labs reel0 example — high confidence on Queues (GA), medium confidence on Workflows (newer, DevKit availability).
@@ -241,6 +243,8 @@ For our specific "tutor notes" use case, the map step extracts structured per-ch
 
 **Phase gate:** D3 is Phase 3 (after capture changes in Phase 2 stabilize). Phase 1 uses the existing `getAudioMs` / `durationSeconds` axes for transcript offset — imperfect but functional for the Phase 1 notes pipeline.
 
+> **SUPERSEDED / CLARIFIED 2026-06-11 (Andrew):** The 2026-06-06 ratification above treated "recording-time clock" as advancing only while actively recording, with all pauses collapsing per D4. The **2026-06-11 invariant matrix** (§ Recording & Replay Invariant Matrix) refines this into three separable clocks: (1) the **session timer** — billing-relevant, ungameable, starts on any boundary signal (I1); (2) **recording-time** — consent-gated capture axis; (3) **replay timeline** — real wall-clock fidelity (I4) with explicit-pause collapse only (I5). Passive in-recording silence is **not** collapsed — it is preserved via synthetic silence padding so audio length equals real elapsed recording time. Original D3 text preserved above for audit trail.
+
 ---
 
 ### D4 — Pauses collapse (gapless)
@@ -254,6 +258,8 @@ For our specific "tutor notes" use case, the map step extracts structured per-ch
 **Evidence:** Andrew's H1 hardware observation — collapse "looked okay": audio stayed in sync, strokes resumed at the right place.
 
 **Phase gate:** D4 is formally Phase 3 (requires D3). The Phase 1 transcription pipeline tolerates the imperfection: chunk offsets accumulate across pause-segment gaps (wall-clock adjacent, recording-time collapsed). Notes quality is acceptable; precise timestamp alignment waits for Phase 3.
+
+> **SUPERSEDED / CLARIFIED 2026-06-11 (Andrew):** The 2026-06-06 ratification above collapsed **all** pause spans. **I5** refines this: collapse applies to **explicit pause only** (tutor toolbar pause, formal recording pause). Whiteboard strokes drawn during an explicit pause appear *en masse* at resume — Andrew validated this behavior and is happy with it. **Passive silence** while recording remains active is **not** collapsed — gaps are preserved by padding audio with synthetic silence. This reconciles the prior doc-vs-doc conflict (D4 "collapse all" vs lifecycle-brief P0 "preserve gaps"): both are correct for different cases. Original D4 text preserved above for audit trail.
 
 ---
 
@@ -810,6 +816,56 @@ All migrations are additive. No column drops or renames. Existing `SessionRecord
 | **Disposition** | Q1, Q5, Q6, Q7 answered explicitly; Q2–Q4, Q8 = ratified at default ("for the other questions I didn't specifically answer, the recommendations are fine") |
 | **Build authorized** | **Yes** — Phase 1 dispatch on isolated branch |
 | **v1 Qs resolved** | Q1 (collapse), Q2 (disconnect), Q3 (async always), Q4 (keep rows), Q5 (rollover), Q7 (cns), Q8 (Phase 1 first), Q9 (iOS gate) = RATIFIED by dialogue. Q6 = SUPERSEDED → forward-migrate Sarah's real data once (2026-06-06). Q10 = answered by research (WebM/Opus, now Q2 above). |
+
+---
+
+## Recording & Replay Invariant Matrix — RATIFIED 2026-06-11 (Andrew)
+
+> **Source:** Andrew orchestration session 2026-06-11 on `v1-redesign`. Refines D3/D4 (see dated SUPERSEDED/CLARIFIED notes adjacent to those sections). Resolves lifecycle-brief P0 freeze-vs-advance (see [`session-lifecycle-redesign-brief-2026-06-02.md`](session-lifecycle-redesign-brief-2026-06-02.md) resolution note).
+
+### Core invariants (I1–I5)
+
+| ID | Invariant | Detail |
+|---|---|---|
+| **I1** | **Recording is ungameable / auto-armed** | Neither tutor nor student chooses when the session or recording starts. The **session timer** (billing-relevant clock) starts the instant any boundary signal appears: audio detected, OR whiteboard action detected, OR (future) chat activity. **Recording** starts automatically too, but only for streams that have been consented to. Key distinction: the session timer is the hard, ungameable requirement (it determines how much the student is billed); whether *recording* starts is gated on consent and matters less if "gamed." Future corollary: may need to block whiteboard usage until the student is actually present. |
+| **I2** | **Capture everything consent allows** | All consent-gated audio, all consent-gated video, and all consent-gated whiteboard actions are captured into the replay. |
+| **I3** | **Perfect cross-stream sync** | Audio remains exactly aligned with its associated video and its associated whiteboard actions throughout replay. |
+| **I4** | **Real-clock fidelity, no compression** | Events replay at the real wall-clock time they actually occurred. The **only** exception is explicitly-paused spans (see I5). |
+| **I5** | **Explicit pause = collapse; passive silence = preserved** | Refines 2026-06-06 D4. An **explicit pause** span is collapsed/removed from the replay timeline; whiteboard strokes drawn during an explicit pause appear *en masse* at the point recording resumes (Andrew validated this behavior). In contrast, **passive silence** while recording is still active is **not** collapsed — it is preserved by padding the audio with synthetic silence so the audio length always equals real elapsed recording time. Collapse applies to explicit pause only; never to passive in-recording silence. Reconciles D4 "collapse" vs lifecycle-brief P0 "preserve gaps": both are right for different cases. |
+
+### Additional invariants (M1–M6)
+
+| ID | Invariant | Detail |
+|---|---|---|
+| **M1** | **Durability / crash-safety** | We **never** lose a session's data. Worst-case loss is the single last unsaved chunk. Survives tab crash, refresh, disconnect, and network drop. Enables session recovery **and** note recovery even if the tutor never explicitly clicks "End session." Core reliability-bar promise: a tutor never needs a backup recorder. |
+| **M2** | **Scrub/seek correctness with deferred A/V** | Seeking to any time T reconstructs the exact whiteboard scene, audio position, and video frame at T (no restart-to-zero, no drift). **Implementation invariant:** during active scrubbing, **only** whiteboard events replay live (held in local memory — cheap visual cue of landing position). Audio and video seeks **must be deferred** until the scrubber is released (the dot "lands"). Firing audio/video seeks mid-drag causes a storm of calls that crashes the player. Master implemented this via `attachReplayScrubAudioDefer`; the v1-redesign custom scrubber regressed by dropping it — current replay breakage. |
+| **M3** | **Boundary completeness (final flush)** | At end-session, the final/straggler audio chunk and the last whiteboard actions are captured — nothing dropped at the seam. Consolidation yields a **complete** canonical stream with no truncated tail. |
+| **M4** | **Consent precedes capture** | Nothing is persisted until consent for that stream is resolved. Live-A/V consent and recorded-A/V consent are **separate toggles** (already exist in the consent model). Auto-arming arms only already-consented streams; the session timer starts regardless (the timer is not "recording"). Pre-consent activity is never written. |
+| **M5** | **Stream topology** | Audio = **one mixed mixdown** of all consent-gated microphones. Video = **one track per participant** (future N-party scales the same way). Audio and video are **separate streams** — no forced single combined A+V blob (kept separate unless combining ever proves beneficial; video is inherently clock-synced). |
+| **M6** | **Mid-session join/leave** | A participant who joins late starts their A/V at their join time on the shared session clock; leaving stops their track; replay tolerates partial presence. Relevant to the future learner-swap thread. |
+
+### Supporting decisions — capture cadence
+
+Audio chunking is **silence-triggered (VAD)**, analogous to a sentence-boundary chunker. Each second of audio is transcribed exactly once — no overlapping windows, no re-transcription/stitch-for-accuracy. A **max-duration cap** backstops it (flush on silence OR at cap, whichever first). Supersedes/clarifies the "30s timeslice default, VAD as later option" language in § Chunked capture cadence and VAD (dated note there).
+
+### Supporting decisions — streams & consolidation
+
+Replay plays the consolidated canonical stream(s); multi-segment stitching is a **fallback only** (consistent with D9). Current v1-redesign replay breakage stems from running on the not-yet-built consolidation path with a buggy multi-segment stitcher that also displaced the native single-stream player and dropped defer-on-release scrubbing (M2). **Chosen fix path (Andrew, option B):** **build consolidation** (do not invest in polishing the fallback stitcher); restore defer-on-release scrub (M2) and native single-stream playback.
+
+### Supporting decisions — notes-pipeline contract (regression guard)
+
+The **"Regenerate notes"** feature (label "Regenerate notes", `TutorNotesSection.tsx`, action `regenerateNotesAction`) is a **reduce-only retry** that depends entirely on existing `TranscriptChunk` / `TranscriptChunkExtraction` rows — it does not touch audio blobs, `SessionRecording`, or any future `canonicalAudioUrl`.
+
+**Contract for consolidation work:** consolidation must keep producing the same `TranscriptChunk` / `TranscriptChunkExtraction` rows (same `sessionId + chunkBlobUrl` idempotency, `recordingTimeOffsetMs` ordering, extractions populated), or explicitly re-derive them from the canonical stream before reduce runs — otherwise regenerate produces empty/stale notes.
+
+### Ratification record (2026-06-11)
+
+| Field | Value |
+|---|---|
+| **Ratified by** | Andrew — 2026-06-11 (orchestrator chat) |
+| **Refines** | D3, D4 (dated notes preserved); capture cadence (VAD-first); lifecycle-brief freeze-vs-advance |
+| **Fix path** | Option B — build consolidation + restore M2 defer-on-release scrub + native single-stream playback |
+| **Open (backlogged)** | Billing basis wall-clock vs session-timer — see [`docs/BACKLOG.md`](../BACKLOG.md) § Pricing |
 
 ---
 

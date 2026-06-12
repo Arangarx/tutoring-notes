@@ -88,6 +88,8 @@ They **converge** on the happy path and **legitimately diverge** in the A/V-fall
 
 **REQUIREMENT — currently UNVERIFIED.** Whether today's system actually upholds this invariant is **unknown**. Per the reliability bar, treat it as **broken until proven on real hardware**. Andrew explicitly walked back an earlier "it works as far as I remember" — that is a soft memory signal, **not evidence**, and must not be recorded as fact.
 
+> **Semantics locked 2026-06-11:** Target replay behavior ratified in [`recording-rearchitecture-design-2026-06-05.md`](recording-rearchitecture-design-2026-06-05.md) § Recording & Replay Invariant Matrix (**I4** real-clock fidelity; **I5** explicit-pause collapse vs passive-silence preservation). Implementation still UNVERIFIED on hardware until consolidation + M2 scrub fix ship.
+
 Every captured track (audio now, whiteboard events, video later) must be anchored to a **single session wall-clock timeline**.
 
 When recording pauses while the session continues:
@@ -137,6 +139,8 @@ The design pass **must** decide:
 Audio **and** whiteboard must use **one** chosen semantics. The concrete untested scenario remains: **tutor draws while student disconnected / timer stopped** — where do those strokes and the next audio segment land on the timeline? (Named hardware test case above.)
 
 Until this is locked, do **not** implement the four-part LTX fix outline in the spike STATUS doc (stamp `timelineStartMs` → persist → assemble by timestamp → gap-inclusive coverage).
+
+> **RESOLVED 2026-06-11 (Andrew):** Both semantics apply — to different cases. **Explicit pause** → collapse (freeze-during-pause for that span; whiteboard strokes en masse at resume). **Passive silence while recording is active** → preserve gaps (advance on wall-clock via synthetic silence padding). Canonical spec: [`recording-rearchitecture-design-2026-06-05.md`](recording-rearchitecture-design-2026-06-05.md) § Recording & Replay Invariant Matrix — **I4** (real-clock fidelity) + **I5** (explicit pause = collapse; passive silence = preserved). Reconciles this brief's P0 "preserve gaps" with design doc D4 "collapse all."
 
 #### Verification
 

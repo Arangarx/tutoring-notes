@@ -571,6 +571,7 @@ Surfaced during a long planning conversation about naming, pricing, and competit
 - **Crowded ≠ overserved.** A useful distinction surfaced when Andrew worried about market saturation after the competitive landscape conversation. The space is genuinely crowded on marketplaces and basic scheduling. It's much less crowded on what we're actually building: **session memory across weeks, AI-generated lesson notes, whiteboard + recording + notes living in one product, tutor workflow consolidation**. Sarah's pilot wishlist behavior — actively volunteering gaps in existing products — is a stronger signal than any market report. Internal mantra to revisit when doubt creeps in: *"Solve one painful problem so well tutors immediately miss it when it's gone"* — higher-probability path than "build a broad platform before proving the sharp pain point."
 
 ### Pricing
+- **OPEN DECISION — billing basis: wall-clock vs session-timer (active-time) for charging tutors (cash or tokens) (2026-06-11).** Edge cases: explicit pause, or student disconnect while side-activity continues. Leaning (not ratified): bill on session-timer/active-time (fair to student, matches Wyzant-style norms); use the wall-clock minus active-time delta as an integrity signal to monitor pause-gaming rather than engineer against at pilot scale. Owner decision pending. Cross-ref: [`recording-rearchitecture-design-2026-06-05.md`](handoff/recording-rearchitecture-design-2026-06-05.md) § I1 (session timer vs recording).
 - **Minimum viable subscription amount.** Need 3–5 independent tutors' "I'd pay for this without breaking a sweat" numbers before committing to a price.
 - **Anchor against Wyzant's 25% cut.** A tutor making $50/hr through Wyzant loses $12.50/hr (~$50/wk for 4 sessions) to the platform. Subscription priced **well below their Wyzant losses** is an easy yes if our tools match or beat Wyzant's. Use this in marketing copy.
 - **Tier structure.** Solo tutor vs tutor with multiple students vs small tutoring business. Not worth designing tiers until we know if anyone hits a ceiling on a flat plan.
@@ -738,6 +739,8 @@ Items from the 2026-06-02 brand review (Andrew + wife) on landing + Features pag
 ## Recording re-architecture — Phase 1 follow-ups
 
 Cross-ref: [`docs/handoff/recording-rearchitecture-design-2026-06-05.md`](handoff/recording-rearchitecture-design-2026-06-05.md). Slice 3 (auto-notes / notes-bridge) ships on `feat/recording-p1-slice3-autonotes`.
+
+- **Map/reduce auto-notes ACCURACY is its own first-class workstream (2026-06-11).** Currently poor quality per Andrew — must be genuinely good before V1 ship. Needs a dedicated design + eval pass (decoupled from audio storage/consolidation plumbing, since the regenerate path proved notes depend only on `TranscriptChunk` / `TranscriptChunkExtraction` rows). Cross-ref: design doc § notes-pipeline contract (regression guard).
 
 ### Slice-3 notes-bridge — deferred review findings (2026-06-07)
 
