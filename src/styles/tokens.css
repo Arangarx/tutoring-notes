@@ -45,8 +45,8 @@
 
   --brand: #1e3d54;
   --brand-on: #fcfbf4;
-  /* Small-caps eyebrows on bg-brand (steel) cards — solid contrast, no opacity fade */
-  --brand-eyebrow: #c5d8e2;
+  /* Small-caps eyebrows on bg-brand cards — WCAG 9.70:1 vs --brand #1e3d54 */
+  --brand-eyebrow: #e8eef2;
   --brand-on-subtle: #e8eef2;
   --brand-card-border: rgba(30, 61, 84, 0.32);
 
@@ -153,7 +153,8 @@
 
     --brand: #7ea4b1;
     --brand-on: #051a24;
-    --brand-eyebrow: #021820;
+    /* WCAG 7.19:1 vs --brand #7ea4b1 */
+    --brand-eyebrow: #021018;
     --brand-on-subtle: #0a2834;
     --brand-card-border: rgba(126, 164, 177, 0.62);
 
@@ -253,7 +254,8 @@
 
   --brand: #7ea4b1;
   --brand-on: #051a24;
-  --brand-eyebrow: #021820;
+  /* WCAG 7.19:1 vs --brand #7ea4b1 */
+  --brand-eyebrow: #021018;
   --brand-on-subtle: #0a2834;
   --brand-card-border: rgba(126, 164, 177, 0.62);
 
