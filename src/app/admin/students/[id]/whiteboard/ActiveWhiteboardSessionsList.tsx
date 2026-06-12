@@ -59,7 +59,7 @@ export function ActiveWhiteboardSessionsList({
                   <SubmitButton
                     label="End"
                     pendingLabel="Ending…"
-                    className="btn"
+                    variant="outline"
                     aria-label="End this open whiteboard room"
                   />
                 </form>

@@ -39,7 +39,7 @@ export async function AdminTestAccountsPanel() {
             </div>
           </div>
           <form action={startImpersonation.bind(null, acct.id)}>
-            <SubmitButton label="Log in as" pendingLabel="Opening…" className="primary" />
+            <SubmitButton label="Log in as" pendingLabel="Opening…" variant="default" />
           </form>
         </li>
       ))}

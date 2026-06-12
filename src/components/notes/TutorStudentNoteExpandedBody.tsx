@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { orderedUnique, safeJsonArray } from "@/lib/notes/display-utils";
 
 export type TutorNoteRecordingStub = {
   id: string;
@@ -11,26 +12,6 @@ export type TutorNoteRecordingStub = {
 export type TutorNoteWhiteboardSessionStub = {
   id: string;
 };
-
-function orderedUnique(ids: Array<string | null | undefined>): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const id of ids) {
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    out.push(id);
-  }
-  return out;
-}
-
-function safeJsonArray(value: string): string[] {
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
-  } catch {
-    return [];
-  }
-}
 
 /**
  * Topics / homework / assessment / recordings / whiteboard links for one row

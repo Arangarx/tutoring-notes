@@ -63,7 +63,7 @@ export function StudentActions({
           />
         </div>
         <div className="flex flex-wrap gap-2">
-          <SubmitButton label="Save" pendingLabel="Saving…" className="primary" />
+          <SubmitButton label="Save" pendingLabel="Saving…" variant="default" />
           <Button type="button" variant="outline" className="min-h-11" onClick={() => setEditing(false)}>
             Cancel
           </Button>

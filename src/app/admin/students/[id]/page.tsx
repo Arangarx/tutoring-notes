@@ -172,10 +172,10 @@ export default async function StudentDetailPage({
                   <ShareLinkRow url={url} />
                   <div className="mt-4 flex flex-wrap gap-2">
                     <form action={regenerateShareLink.bind(null, student.id)}>
-                      <SubmitButton label="Regenerate" pendingLabel="Regenerating…" className="btn" />
+                      <SubmitButton label="Regenerate" pendingLabel="Regenerating…" variant="outline" />
                     </form>
                     <form action={revokeShareLink.bind(null, student.id)}>
-                      <SubmitButton label="Revoke" pendingLabel="Revoking…" className="btn" />
+                      <SubmitButton label="Revoke" pendingLabel="Revoking…" variant="outline" />
                     </form>
                   </div>
                 </>
@@ -186,7 +186,7 @@ export default async function StudentDetailPage({
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">No active share link yet.</p>
             <form action={regenerateShareLink.bind(null, student.id)}>
-              <SubmitButton label="Create share link" className="primary" />
+              <SubmitButton label="Create share link" variant="default" />
             </form>
           </div>
         )}

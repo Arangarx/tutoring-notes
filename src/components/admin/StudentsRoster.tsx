@@ -65,7 +65,7 @@ export function StudentsRoster({ students }: StudentsRosterProps) {
               autoComplete="off"
             />
           </div>
-          <SubmitButton label="Add student" className="primary" />
+          <SubmitButton label="Add student" variant="default" />
         </form>
       </AdminSectionCard>
 

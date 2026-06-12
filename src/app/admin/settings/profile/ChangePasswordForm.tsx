@@ -1,21 +1,14 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { SubmitButton } from "@/components/SubmitButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { changePassword, sendPasswordResetEmail } from "./actions";
 
-function SubmitButton({ pending }: { pending: boolean }) {
-  return (
-    <Button type="submit" disabled={pending}>
-      {pending ? "Saving…" : "Update password"}
-    </Button>
-  );
-}
-
 export default function ChangePasswordForm() {
-  const [state, formAction, isPending] = useActionState(changePassword, null);
+  const [state, formAction] = useActionState(changePassword, null);
   const formRef = useRef<HTMLFormElement>(null);
   const [resetMsg, setResetMsg] = useState<string | null>(null);
   const [resetErr, setResetErr] = useState<string | null>(null);
@@ -72,7 +65,11 @@ export default function ChangePasswordForm() {
           </p>
         ) : null}
 
-        <SubmitButton pending={isPending} />
+        <SubmitButton
+          label="Update password"
+          pendingLabel="Saving…"
+          className="h-9 min-h-9"
+        />
       </form>
 
       <div className="border-t border-border pt-6 space-y-3">
