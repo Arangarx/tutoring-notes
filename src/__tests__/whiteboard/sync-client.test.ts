@@ -28,6 +28,7 @@ import {
   type WhiteboardWirePresence,
   type WhiteboardWireSignal,
   type WhiteboardWireSignalPayload,
+  type WhiteboardWirePointerMsg,
 } from "@/lib/whiteboard/sync-client";
 import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter";
 
@@ -2448,6 +2449,227 @@ describe("sync-client pageViewState envelope (Phase 5 task 8)", () => {
     await realTick(20);
     await flushMicrotasks(20);
     expect(recv).toHaveBeenCalledWith("tutor-remote", payload);
+    client.disconnect();
+  });
+});
+
+describe("sync-client pointer envelope (B9 laser sync)", () => {
+  test("encrypt → decrypt round-trip for pointer msg", async () => {
+    const k = generateEncryptionKeyBase64Url();
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const msg: WhiteboardWirePointerMsg = {
+      v: 1,
+      kind: "pointer",
+      peerId: "tutor-p1",
+      role: "tutor",
+      pageId: "p1",
+      x: 42.5,
+      y: -18.2,
+      tool: "laser",
+      button: "down",
+      color: "#e27d60",
+    };
+    const { data, iv } = await _testing.encryptMessage(aes, msg);
+    const out = await _testing.decryptMessage(aes, data, iv);
+    expect(out).toEqual(msg);
+  });
+
+  test("rejects pointer with NaN x", async () => {
+    const k = generateEncryptionKeyBase64Url();
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const msg = {
+      v: 1 as const,
+      kind: "pointer" as const,
+      peerId: "t",
+      role: "tutor" as const,
+      pageId: "p1",
+      x: NaN,
+      y: 0,
+      tool: "laser" as const,
+      button: "up" as const,
+      color: "#e27d60",
+    };
+    const { data, iv } = await _testing.encryptMessage(aes, msg);
+    await expect(_testing.decryptMessage(aes, data, iv)).rejects.toThrow(
+      /bad x\/y/
+    );
+  });
+
+  test("rejects pointer with unknown tool", async () => {
+    const k = generateEncryptionKeyBase64Url();
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const msg = {
+      v: 1 as const,
+      kind: "pointer" as const,
+      peerId: "t",
+      role: "tutor" as const,
+      pageId: "p1",
+      x: 1,
+      y: 2,
+      tool: "selection",
+      button: "up" as const,
+      color: "#e27d60",
+    };
+    const { data, iv } = await _testing.encryptMessage(aes, msg);
+    await expect(_testing.decryptMessage(aes, data, iv)).rejects.toThrow(
+      /bad tool/
+    );
+  });
+
+  test("onRemotePointer receives decrypted tutor pointer", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const recv = jest.fn();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-ptr",
+      encryptionKeyBase64Url: k,
+      role: "student",
+      peerId: "student-self",
+      _ioFactory: factory,
+    });
+    client.onRemotePointer(recv);
+    await realTick(10);
+    await flushMicrotasks(20);
+    const payload: WhiteboardWirePointerMsg = {
+      v: 1,
+      kind: "pointer",
+      peerId: "tutor-remote",
+      role: "tutor",
+      pageId: "p2",
+      x: 100,
+      y: 200,
+      tool: "laser",
+      button: "up",
+      color: "#e27d60",
+    };
+    const { data, iv } = await _testing.encryptMessage(aes, payload);
+    sockets[0]!.inject("client-broadcast", data, iv);
+    await realTick(20);
+    await flushMicrotasks(20);
+    expect(recv).toHaveBeenCalledWith("tutor-remote", payload);
+    client.disconnect();
+  });
+
+  test("onRemotePointer does NOT fire for own peerId (echo suppression)", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const recv = jest.fn();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-ptr-echo",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-self",
+      _ioFactory: factory,
+    });
+    client.onRemotePointer(recv);
+    await realTick(10);
+    await flushMicrotasks(20);
+    // Inject a pointer whose peerId is the LOCAL peer — should be suppressed.
+    const payload: WhiteboardWirePointerMsg = {
+      v: 1,
+      kind: "pointer",
+      peerId: "tutor-self",
+      role: "tutor",
+      pageId: "p1",
+      x: 50,
+      y: 50,
+      tool: "laser",
+      button: "down",
+      color: "#e27d60",
+    };
+    const { data, iv } = await _testing.encryptMessage(aes, payload);
+    sockets[0]!.inject("client-broadcast", data, iv);
+    await realTick(20);
+    await flushMicrotasks(20);
+    expect(recv).not.toHaveBeenCalled();
+    client.disconnect();
+  });
+
+  test("broadcastPointer emits encrypted pointer envelope", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-ptr-send",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-sender",
+      _ioFactory: factory,
+    });
+    await realTick(10);
+    await flushMicrotasks(20);
+    const sock = sockets[0]!;
+    const emittedBefore = sock.emitted.filter((e) => e.event === "server-broadcast").length;
+    client.broadcastPointer({
+      pageId: "p1",
+      x: 77,
+      y: 88,
+      tool: "laser",
+      button: "down",
+      color: "#e27d60",
+    });
+    await realTick(20);
+    await flushMicrotasks(20);
+    const broadcasts = sock.emitted.filter((e) => e.event === "server-broadcast");
+    expect(broadcasts.length).toBeGreaterThan(emittedBefore);
+    // Decrypt the last broadcast and verify it's a pointer envelope.
+    const last = broadcasts[broadcasts.length - 1]!;
+    const [, data, iv] = last.args as [unknown, ArrayBuffer, ArrayBuffer];
+    const decoded = await _testing.decryptMessage(aes, data, iv);
+    expect(decoded).toMatchObject({
+      v: 1,
+      kind: "pointer",
+      peerId: "tutor-sender",
+      role: "tutor",
+      pageId: "p1",
+      x: 77,
+      y: 88,
+      tool: "laser",
+      button: "down",
+      color: "#e27d60",
+    });
+    client.disconnect();
+  });
+
+  test("unsubscribed onRemotePointer callback is not called", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const recv = jest.fn();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-ptr-unsub",
+      encryptionKeyBase64Url: k,
+      role: "student",
+      peerId: "student-xyz",
+      _ioFactory: factory,
+    });
+    const off = client.onRemotePointer(recv);
+    off(); // unsubscribe immediately
+    await realTick(10);
+    await flushMicrotasks(20);
+    const payload: WhiteboardWirePointerMsg = {
+      v: 1,
+      kind: "pointer",
+      peerId: "tutor-remote",
+      role: "tutor",
+      pageId: "p1",
+      x: 10,
+      y: 20,
+      tool: "laser",
+      button: "up",
+      color: "#e27d60",
+    };
+    const { data, iv } = await _testing.encryptMessage(aes, payload);
+    sockets[0]!.inject("client-broadcast", data, iv);
+    await realTick(20);
+    await flushMicrotasks(20);
+    expect(recv).not.toHaveBeenCalled();
     client.disconnect();
   });
 });

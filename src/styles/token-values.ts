@@ -57,6 +57,14 @@ export const WB_STROKE_PRESETS: ReadonlyArray<{ hex: string; label: string }> = 
   { hex: "#22c55e", label: "Green" },
 ];
 
+/**
+ * Per-role laser pointer colors for Excalidraw collaborator rendering.
+ * Tutor = coral accent (#e27d60 matches --accent); student = sky cyan.
+ * Used by broadcastPointer (outbound) and useCollaboratorPointers (inbound render).
+ */
+export const WB_LASER_TUTOR_HEX = "#e27d60";
+export const WB_LASER_STUDENT_HEX = "#0891b2";
+
 /** Default stroke width presets (Excalidraw currentItemStrokeWidth). */
 export const WB_STROKE_WIDTHS: ReadonlyArray<{ value: number; label: string; lineH: number }> = [
   { value: 0.5, label: "Hair", lineH: 1 },

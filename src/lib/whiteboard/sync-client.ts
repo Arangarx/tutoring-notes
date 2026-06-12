@@ -156,7 +156,8 @@ export type AnyWhiteboardWireMessage =
   | WhiteboardWireMessageV3
   | WhiteboardWireSignal
   | WhiteboardWirePresence
-  | WhiteboardWirePageViewStateMsg;
+  | WhiteboardWirePageViewStateMsg
+  | WhiteboardWirePointerMsg;
 
 /** Extras attached to each `broadcastScene` (throttled on the tutor). */
 export type WhiteboardWireBroadcastExtras = {
@@ -285,6 +286,35 @@ export type WhiteboardWirePageViewStateMsg = {
   panX: number;
   panY: number;
   zoom: number;
+};
+
+/**
+ * Ephemeral laser/pointer position. Never throttled — takes the same
+ * immediate path as presence and pageViewState (encryptAndEmitImmediate).
+ * NOT persisted to outbox, pageDataRef, or event-log.
+ *
+ * `x`,`y` are SCENE coordinates (not viewport pixels) so the peer can
+ * feed them directly into Excalidraw's `updateScene({ collaborators })`
+ * without applying any viewport transform.
+ *
+ * B9 pilot fix — tutor wand becomes visible on student canvas.
+ */
+export type WhiteboardWirePointerMsg = {
+  v: 1;
+  kind: "pointer";
+  /** Sender's stable peer id (same convention as all other envelopes). */
+  peerId: string;
+  role: "tutor" | "student";
+  /** Active tab id at the moment of emission (e.g. "p1", "p2"). */
+  pageId: string;
+  /** Scene-coordinate X. */
+  x: number;
+  /** Scene-coordinate Y. */
+  y: number;
+  tool: "laser";
+  button: "up" | "down";
+  /** Hex color for Excalidraw Collaborator.color.stroke (e.g. "#e27d60"). */
+  color: string;
 };
 
 /**
@@ -465,6 +495,23 @@ export type WhiteboardSyncClient = {
   /** Subscribe to inbound per-page viewport patches (Phase 5 task 8). */
   onRemotePageViewState: (
     cb: (fromPeerId: string, msg: WhiteboardWirePageViewStateMsg) => void
+  ) => () => void;
+  /**
+   * Emit an ephemeral laser/pointer position to all peers in the room.
+   * Bypasses the scene throttle (immediate path, same as pageViewState).
+   * NOT persisted — ephemeral only. B9 pilot fix.
+   */
+  broadcastPointer: (args: {
+    pageId: string;
+    x: number;
+    y: number;
+    tool: "laser";
+    button: "up" | "down";
+    color: string;
+  }) => void;
+  /** Subscribe to inbound laser/pointer positions from peers. */
+  onRemotePointer: (
+    cb: (fromPeerId: string, msg: WhiteboardWirePointerMsg) => void
   ) => () => void;
   /**
    * Phase 4b — subscribe to changes in the room's participant set.
@@ -746,6 +793,54 @@ function validateWirePageViewState(parsed: unknown): WhiteboardWirePageViewState
   };
 }
 
+function validateWirePointer(parsed: unknown): WhiteboardWirePointerMsg {
+  const p = parsed as Partial<WhiteboardWirePointerMsg>;
+  if (p.v !== 1) {
+    throw new Error("[sync-client] pointer envelope: bad v");
+  }
+  if (p.kind !== "pointer") {
+    throw new Error("[sync-client] pointer envelope: bad kind");
+  }
+  if (typeof p.peerId !== "string" || p.peerId.length === 0) {
+    throw new Error("[sync-client] pointer envelope: bad peerId");
+  }
+  if (p.role !== "tutor" && p.role !== "student") {
+    throw new Error("[sync-client] pointer envelope: bad role");
+  }
+  if (typeof p.pageId !== "string" || p.pageId.length === 0) {
+    throw new Error("[sync-client] pointer envelope: bad pageId");
+  }
+  if (
+    typeof p.x !== "number" ||
+    !Number.isFinite(p.x) ||
+    typeof p.y !== "number" ||
+    !Number.isFinite(p.y)
+  ) {
+    throw new Error("[sync-client] pointer envelope: bad x/y");
+  }
+  if (p.tool !== "laser") {
+    throw new Error("[sync-client] pointer envelope: bad tool");
+  }
+  if (p.button !== "up" && p.button !== "down") {
+    throw new Error("[sync-client] pointer envelope: bad button");
+  }
+  if (typeof p.color !== "string" || p.color.length === 0) {
+    throw new Error("[sync-client] pointer envelope: bad color");
+  }
+  return {
+    v: 1,
+    kind: "pointer",
+    peerId: p.peerId,
+    role: p.role,
+    pageId: p.pageId,
+    x: p.x,
+    y: p.y,
+    tool: p.tool,
+    button: p.button,
+    color: p.color,
+  };
+}
+
 function validateWireMessage(parsed: unknown): AnyWhiteboardWireMessage {
   if (!parsed || typeof parsed !== "object") {
     throw new Error("[sync-client] decoded payload: not an object");
@@ -765,6 +860,9 @@ function validateWireMessage(parsed: unknown): AnyWhiteboardWireMessage {
   }
   if (kind === "pageViewState") {
     return validateWirePageViewState(parsed);
+  }
+  if (kind === "pointer") {
+    return validateWirePointer(parsed);
   }
   if (typeof kind !== "undefined") {
     throw new Error(
@@ -917,10 +1015,15 @@ export function createWhiteboardSyncClient(
     fromPeerId: string,
     msg: WhiteboardWirePageViewStateMsg
   ) => void;
+  type RemotePointerCb = (
+    fromPeerId: string,
+    msg: WhiteboardWirePointerMsg
+  ) => void;
   type RoomPeersCb = (peers: ReadonlyArray<RoomPeer>) => void;
   const remoteSceneSubs = new Set<RemoteSceneCb>();
   const remoteSignalSubs = new Set<RemoteSignalCb>();
   const remotePageViewStateSubs = new Set<RemotePageViewStateCb>();
+  const remotePointerSubs = new Set<RemotePointerCb>();
   const connectSubs = new Set<() => void>();
   const disconnectSubs = new Set<() => void>();
   const peerCountSubs = new Set<(count: number) => void>();
@@ -1295,6 +1398,23 @@ export function createWhiteboardSyncClient(
         } catch (err) {
           log.warn(
             "onRemotePageViewState subscriber threw:",
+            (err as Error)?.message ?? String(err)
+          );
+        }
+      }
+      return;
+    }
+    if ((msg as Partial<WhiteboardWirePointerMsg>).kind === "pointer") {
+      const m = msg as WhiteboardWirePointerMsg;
+      log.log(
+        `kind=pointer recv from=${m.peerId} pageId=${m.pageId} x=${m.x} y=${m.y} tool=${m.tool} button=${m.button}`
+      );
+      for (const cb of remotePointerSubs) {
+        try {
+          cb(m.peerId, m);
+        } catch (err) {
+          log.warn(
+            "onRemotePointer subscriber threw:",
             (err as Error)?.message ?? String(err)
           );
         }
@@ -1743,6 +1863,7 @@ export function createWhiteboardSyncClient(
       | WhiteboardWireSignal
       | WhiteboardWirePresence
       | WhiteboardWirePageViewStateMsg
+      | WhiteboardWirePointerMsg
   ): Promise<void> {
     const job = (async () => {
       if (!aesKey || !socket) return;
@@ -1807,6 +1928,34 @@ export function createWhiteboardSyncClient(
     void encryptAndEmitImmediate(msg);
   }
 
+  function broadcastPointer(args: {
+    pageId: string;
+    x: number;
+    y: number;
+    tool: "laser";
+    button: "up" | "down";
+    color: string;
+  }): void {
+    if (disposed) return;
+    if (aesKeyError) return;
+    const msg: WhiteboardWirePointerMsg = {
+      v: 1,
+      kind: "pointer",
+      peerId,
+      role,
+      pageId: args.pageId,
+      x: args.x,
+      y: args.y,
+      tool: args.tool,
+      button: args.button,
+      color: args.color,
+    };
+    log.log(
+      `kind=pointer send pageId=${args.pageId} x=${args.x} y=${args.y} tool=${args.tool} button=${args.button}`
+    );
+    void encryptAndEmitImmediate(msg);
+  }
+
   // ---------------------------------------------------------------
   // Public surface
   // ---------------------------------------------------------------
@@ -1856,6 +2005,13 @@ export function createWhiteboardSyncClient(
     flushPendingBroadcast: tryFlushPendingBroadcastNow,
     broadcastSignal,
     broadcastPageViewState,
+    broadcastPointer,
+    onRemotePointer: (cb) => {
+      remotePointerSubs.add(cb);
+      return () => {
+        remotePointerSubs.delete(cb);
+      };
+    },
     onRemoteSignal: (cb) => {
       remoteSignalSubs.add(cb);
       // **May 15 hotfix #3 — replay buffered signals to late subscribers.**
@@ -1936,6 +2092,7 @@ export function createWhiteboardSyncClient(
       remoteSceneSubs.clear();
       remoteSignalSubs.clear();
       remotePageViewStateSubs.clear();
+      remotePointerSubs.clear();
       connectSubs.clear();
       disconnectSubs.clear();
       peerCountSubs.clear();
