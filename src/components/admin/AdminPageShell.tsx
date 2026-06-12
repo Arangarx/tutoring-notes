@@ -49,7 +49,7 @@ export function AdminPageShell({
         ) : null}
       </header>
       {sidebar ? (
-        <div className="flex flex-col gap-8 md:flex-row md:items-start">
+        <div className="flex flex-col gap-6 md:flex-row md:items-start md:gap-6">
           <aside className={cn("shrink-0", sidebarWidthClass)}>{sidebar}</aside>
           <div className="flex min-w-0 flex-1 flex-col gap-6">{children}</div>
         </div>

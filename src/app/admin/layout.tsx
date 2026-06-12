@@ -53,7 +53,7 @@ export default async function AdminLayout({
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">
           <AdminNav {...navProps} layout="mobile" />
-          <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6 md:px-8 md:py-8">
+          <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 md:px-6 md:py-8 xl:max-w-7xl">
             {children}
           </main>
         </div>

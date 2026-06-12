@@ -92,6 +92,20 @@ Prior proposal items still relevant where not superseded:
 
 ---
 
+## Wiring-phase design notes (2026-06-12 Andrew review)
+
+Captured during v1 scheduler visual polish — **deferred to wiring phase**, not built in the visual-only prototype.
+
+### S3 — Agenda as primary/default view
+
+Consider making **Agenda** the left/first tab and the **default** selected view (instead of Month). Agenda may also be the better default tutor login landing — tutors often care about “what’s next” more than a month grid. Revisit tab order, default `Tabs` value, and post-login redirect when real schedule data exists.
+
+### S4 — Month view density for full-time tutors
+
+The Month view likely will not scale for full-time tutors with **8+ sessions per day** — dot indicators and day cells become unreadable. Wiring phase should pick a denser default or a different primary view (Agenda, week strip, or hybrid) for high-volume schedules; Month may remain useful as a secondary/overview mode.
+
+---
+
 ## Cross-references
 
 - [`docs/BACKLOG.md`](../BACKLOG.md) § Scheduling — concise pointer + open questions

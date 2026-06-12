@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ComponentProps } from "react";
 import Link from "next/link";
-import { Calendar } from "@/components/ui/calendar";
+import { Calendar, CalendarDayButton } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
@@ -19,6 +19,70 @@ import {
   type MockScheduledSession,
 } from "@/lib/schedule/mock-data";
 import { CalendarDaysIcon, ListIcon, PlayIcon, Settings2Icon } from "lucide-react";
+
+function ScheduleDayButton({
+  modifiers,
+  children,
+  ...props
+}: ComponentProps<typeof CalendarDayButton>) {
+  return (
+    <CalendarDayButton modifiers={modifiers} {...props}>
+      <span className="inline-flex flex-col items-center gap-0.5 leading-none">
+        <span>{children}</span>
+        {modifiers.hasSession ? (
+          <span className="size-1.5 shrink-0 rounded-full bg-accent" aria-hidden />
+        ) : null}
+      </span>
+    </CalendarDayButton>
+  );
+}
+
+function DayDetailSessionItem({ session }: { session: MockScheduledSession }) {
+  return (
+    <li className="rounded-[10px] border border-border bg-card p-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <StudentAvatar name={session.studentName} size="md" />
+          <div className="min-w-0 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-semibold text-foreground">{session.studentName}</p>
+              <SessionSyncBadge state={session.syncState} />
+            </div>
+            <p className="text-sm text-muted-foreground">{session.subject}</p>
+            <p className="text-sm text-foreground">
+              <span className="whitespace-nowrap">
+                {session.startTime}&ndash;{session.endTime}
+              </span>
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {session.durationLabel}
+              {session.location ? ` · ${session.location}` : ""}
+            </p>
+            {session.notes ? (
+              <p className="text-xs leading-relaxed text-muted-foreground">{session.notes}</p>
+            ) : null}
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:flex-col sm:items-stretch lg:flex-row lg:items-center">
+          <CreateSessionDialog
+            defaultDate={session.date}
+            trigger={
+              <Button type="button" variant="outline" size="sm" className="min-h-9">
+                Edit
+              </Button>
+            }
+          />
+          <Button type="button" variant="accent" size="sm" className="min-h-9" asChild>
+            <Link href="/admin/students">
+              <PlayIcon aria-hidden />
+              Start session
+            </Link>
+          </Button>
+        </div>
+      </div>
+    </li>
+  );
+}
 
 function SessionRow({ session }: { session: MockScheduledSession }) {
   const sessionDate = parseSessionDate(session.date);
@@ -38,7 +102,10 @@ function SessionRow({ session }: { session: MockScheduledSession }) {
             <SessionSyncBadge state={session.syncState} />
           </div>
           <p className="text-sm text-muted-foreground">
-            {session.subject} · {dateLabel} · {session.startTime}–{session.endTime}
+            {session.subject} · {dateLabel} ·{" "}
+            <span className="whitespace-nowrap">
+              {session.startTime}&ndash;{session.endTime}
+            </span>
           </p>
           <p className="text-xs text-muted-foreground">
             {session.durationLabel}
@@ -100,11 +167,11 @@ function DaySessionsPanel({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <p className="text-sm font-medium text-foreground">{label}</p>
-      <ul className="space-y-3" role="list">
+      <ul className="space-y-4" role="list">
         {daySessions.map((s) => (
-          <SessionRow key={s.id} session={s} />
+          <DayDetailSessionItem key={s.id} session={s} />
         ))}
       </ul>
     </div>
@@ -130,8 +197,7 @@ export function SchedulePageClient() {
   );
 
   const modifiersClassNames = {
-    hasSession:
-      "relative after:absolute after:bottom-1 after:left-1/2 after:size-1.5 after:-translate-x-1/2 after:rounded-full after:bg-accent after:content-['']",
+    hasSession: "",
   };
 
   return (
@@ -162,7 +228,7 @@ export function SchedulePageClient() {
         </TabsList>
 
         <TabsContent value="month" className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.35fr)]">
             <AdminSectionCard
               title="Calendar"
               description="Native Mynk scheduling — external calendars are optional."
@@ -180,11 +246,12 @@ export function SchedulePageClient() {
                 defaultMonth={selectedDate}
                 modifiers={modifiers}
                 modifiersClassNames={modifiersClassNames}
+                components={{ DayButton: ScheduleDayButton }}
                 className="rounded-[10px] border border-border bg-card p-2"
               />
             </AdminSectionCard>
 
-            <AdminSectionCard title="Day detail" contentClassName="pt-2">
+            <AdminSectionCard title="Day detail" contentClassName="pt-2 min-w-0">
               <DaySessionsPanel selectedDate={selectedDate} sessions={mockScheduledSessions} />
             </AdminSectionCard>
           </div>
