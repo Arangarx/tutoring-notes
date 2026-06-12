@@ -17,10 +17,10 @@
  * chunk-transcribe-enqueue.ts), register this route as the consumer handler
  * for the 'chunk-transcribe' topic.
  *
- * TODO(vercel-queues): Add signature verification of the Vercel Queue delivery
- * header (vercel-signature / HMAC) once the topic is provisioned and the secret
- * is available. Until then, the route relies on it being invoked only by
- * internal infrastructure (not publicly reachable).
+ * TODO(vercel-queues): Replace the CRON_SECRET bearer-token guard below with
+ * proper Vercel Queue HMAC signature verification once the topic is provisioned
+ * and the Vercel-Signature secret is available. The CRON_SECRET guard is a
+ * placeholder that protects the endpoint in the interim.
  */
 
 import { NextResponse } from "next/server";
@@ -44,6 +44,20 @@ export type ChunkTranscribePayload = z.infer<typeof ChunkTranscribePayloadSchema
 // ---------------------------------------------------------------------------
 
 export async function POST(req: Request): Promise<Response> {
+  // --- Internal-caller guard ------------------------------------------------
+  // When CRON_SECRET is configured, require it as a Bearer token so this
+  // endpoint is not callable by unauthenticated external actors. Fail-open
+  // when CRON_SECRET is absent (preserves local-dev / pre-config behaviour).
+  // TODO(vercel-queues): replace with Vercel Queue HMAC signature check.
+  const secret = process.env.CRON_SECRET;
+  if (secret) {
+    const auth = req.headers.get("authorization");
+    if (auth !== `Bearer ${secret}`) {
+      console.warn("[txc] action=queue_auth_rejected");
+      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    }
+  }
+
   // --- Parse + validate payload ---------------------------------------------
   let rawBody: unknown;
   try {

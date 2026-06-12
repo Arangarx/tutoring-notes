@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import { createActionCorrelationId } from "@/lib/action-correlation";
+import { assertTutorApproved } from "@/lib/tutor-approval-scope";
 
 /**
  * Whiteboard session partial-checkpoint upload.
@@ -73,6 +74,15 @@ export async function POST(
     // assertOwnsWhiteboardSession calls notFound() which throws a
     // NEXT_NOT_FOUND error; let Next handle it consistently.
     throw err;
+  }
+
+  // B1 cost gate: WAITLISTED tutors cannot write checkpoint blobs.
+  try {
+    await assertTutorApproved(session.adminUserId);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.log(`[wbCheckpoint.route] rid=${rid} wbsid=${sessionId} tap_rejected: ${msg}`);
+    return NextResponse.json({ error: "Account pending approval." }, { status: 403 });
   }
 
   if (session.endedAt) {

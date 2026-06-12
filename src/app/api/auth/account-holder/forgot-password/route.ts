@@ -35,6 +35,17 @@ export async function POST(req: NextRequest) {
 
   // Only send reset email if account exists AND email is verified
   if (row && row.emailVerifiedAt && !row.tombstonedAt) {
+    // Revoke any existing unused reset tokens for this account before creating
+    // a new one. Prevents accumulation of valid reset tokens across repeated
+    // requests (attacker IP-rotating to bypass the in-memory rate limit).
+    await db.accountHolderEmailToken.deleteMany({
+      where: {
+        accountHolderId: row.id,
+        purpose: "PASSWORD_RESET",
+        consumedAt: null,
+      },
+    });
+
     const rawToken = generateRawToken();
     const tokenHash = hashToken(rawToken);
     const expiresAt = new Date(Date.now() + EMAIL_TOKEN_TTL_MS_1H);

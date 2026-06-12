@@ -5,6 +5,27 @@ Not in priority order within sections — that comes when items move to a sprint
 
 **Authoritative for tutoring-notes:** Known open work for this app should appear in this file (or be explicitly ✅ **Shipped** here with any follow-ups cross-linked). If it is not here, assume it was never captured — add it. Day-to-day tickets/PRs can still exist; this document is the backlog of record when they disagree.
 
+## Smoke round 1 — master-cut branch findings (2026-06-11)
+
+> **Canonical triage:** [`docs/handoff/smoke-round-1-findings-2026-06-11.md`](handoff/smoke-round-1-findings-2026-06-11.md) — Andrew's full smoke of 8 overnight branches. BLOCKERs tracked there; non-blocker items below so they aren't lost.
+
+| Item | Priority | Notes |
+|------|----------|-------|
+| **B2 parent consent management UI (Step 6)** | Gate B2 / HIGH | **C2** — no parent UI to view/change consent after claim; Andrew bypassed via DB. Deferred B2 Step 6; blocks `CONSENT_ENFORCEMENT=true` flip. Build `/account/children/[id]` per-tutor consent page + update route. |
+| **Claim Panel A ordering + `allowLiveSession` framing** | Design | **C3** — login setup above privacy prefs; frame "Allow live sessions" as base contract (decline = can't use service); strongly encourage audio + WB recording ON with explicit decline warnings. |
+| **Consent × retention governing principle** | Design | **C4** — if WB recording not allowed, can't retain data (PDF w/ child info); audio may still record tutor-only; future: tutor-strokes-only or protected-info flag on uploads. Reinforces C3 warnings. |
+| **Billable minutes on notes screens** | Design | **C5/N1** — live-recording notes show start/end times; consider billable minutes instead (align with WB session billing display). Informed by **X6**. |
+| **Remove stale `/admin/waitlist` route** | Medium | **W4** — dupe of `/admin/tutor-approvals`; remove or redirect. |
+| **Live video capture/display broken** | HIGH | **X1** — video off-by-default (known) AND won't turn on when toggled; student tile missing (L4). Dedicated investigation — no longer deferrable post-smoke. |
+| **v1-design-application via shared components** | Gate A1 / META | **X2** — full-site audit premature; v1 design not applied everywhere (2FA, pending-approval, signup, Connected pill, AV pip, WB start panel). DRY + design-application must proceed together; "fix once fixes everywhere." |
+| **AV pip on/off clarity** | Low | **X3** — audio/video toggle on pip less clear than top-bar distinction. |
+| **Echo cancellation + capture-start timing** | Medium | **X4** — speaker→mic loopback; audio started mid-stream (feedback noise or capture delay). |
+| **Student-initials list versioning UX** | Low | **X5** — "Child1 Kalearn"/"Child1 McFamily" reads like a glitch. |
+| **Interactive PIN strength feedback** | Medium | **P1** (enhancement) — beyond weak-PIN rejection: live strength indicator + visible weak-PIN disallowed requirement (password-style). |
+| **2FA setup page v1 redesign** | Design | **TFA2** — offcenter tile; backup codes block nearly unreadable. Fold into v1-design-application. |
+| **"Connected" status pill — new design** | Low | **L6** — not yet in v1 chrome. Fold into v1-design-application. |
+| **Continue button text color inconsistency** | Low | **X7** — white text on coral Continue vs dark text on other coral buttons (WB session panel). |
+
 **Status as of 2026-05-20:** Recent ships marked ✅ below with commit refs where applicable. **Latest merges (master):** `4118f3e` (Tier A security: security.txt + signup anti-enumeration), `249327a` (#6 reliability: note save vs transcribe race — merge-into-empty populate, 26 new tests), `939b1e3` (AI prompt v6→v7: reaction-aware Assessment extraction). **Open reliability BLOCKER-PRODs:** #1+#2 (audio data durability — IndexedDB persistence), #7 (hot-swap mic / unplug silent), #13/#14 (rid coverage on remaining mutating actions). **Blocked:** Phase 11 executor work until umbrella legal paragraphs publish to www.mortensenapps.com. **Brand Phase 2 decisions landed 2026-05-19 PM:** all four pillars decided — palette = **Mynka Blue** (`#1E3D54`), typography = Fraunces V4 wordmark + V2 heading + Inter 400 body. See `docs/MYNK-BRAND-PHASE-2-DECISIONS.md` (canonical), `docs/BRAND.md` (engineering ref), `docs/brand-previews/palette-mocks-FINAL-mynka-blue.html` (live mockup). Unblocks `docs/DESIGN-TOKENS-PLAN.md` Phase 0+1 (in-app palette migration).
 
 ## wb-chrome-redo follow-ups (post-merge, 2026-06-09)

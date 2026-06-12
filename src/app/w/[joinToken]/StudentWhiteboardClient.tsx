@@ -33,6 +33,7 @@ import { validateExcalidrawEmbeddable } from "@/lib/whiteboard/validate-embeddab
 import { GRAPH_EMBED_LINK } from "@/lib/whiteboard/insert-asset";
 import { getOrCreateLocalPeerId } from "@/lib/whiteboard/local-peer-id";
 import { useStudentWhiteboardCanvas } from "@/hooks/useStudentWhiteboardCanvas";
+import { useCollaboratorPointers } from "@/hooks/useCollaboratorPointers";
 import { UndoRedoButtons } from "@/components/whiteboard/UndoRedoButtons";
 import { PageStrip } from "@/components/whiteboard/PageStrip";
 import type { ExcalidrawApiLike } from "@/lib/whiteboard/insert-asset";
@@ -414,6 +415,8 @@ export function StudentWhiteboardClient({
     pageList,
     sectionsRegistry,
     activePageId: studentActivePageId,
+    activePageIdRef: studentActivePageIdRef,
+    applyingRemoteRef: studentApplyingRemoteRef,
     selectStudentPage,
     tutorStreamReady,
   } = useStudentWhiteboardCanvas(
@@ -426,6 +429,16 @@ export function StudentWhiteboardClient({
       followTutorView: !independentView,
       followDebugTelemetry,
     }
+  );
+
+  // B9 pilot fix: render the tutor's laser pointer on the student canvas.
+  // Subscribes to inbound pointer messages and renders them via Excalidraw's
+  // collaborator overlay. Guard (studentApplyingRemoteRef) prevents echo.
+  useCollaboratorPointers(
+    syncClient,
+    excalidrawAPI,
+    studentApplyingRemoteRef,
+    studentActivePageIdRef
   );
 
   useEffect(() => {
@@ -944,6 +957,7 @@ export function StudentWhiteboardClient({
             validateEmbeddable={validateExcalidrawEmbeddable}
             renderEmbeddable={renderGraphEmbeddable}
             onLinkOpen={handleExcalidrawLinkOpen}
+            isCollaborating={Boolean(syncClient)}
           />
           <WhiteboardDebugHud
             role="student"

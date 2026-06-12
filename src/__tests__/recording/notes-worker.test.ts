@@ -13,6 +13,10 @@
 
 jest.mock("@/lib/db", () => ({
   db: {
+    adminUser: {
+      // B1: default APPROVED so existing tests are unaffected by the approval gate.
+      findUnique: jest.fn().mockResolvedValue({ approvalStatus: "APPROVED" }),
+    },
     whiteboardSession: {
       findUnique: jest.fn(),
       update: jest.fn(),

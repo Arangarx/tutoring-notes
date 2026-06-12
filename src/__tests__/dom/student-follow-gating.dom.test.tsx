@@ -67,8 +67,10 @@ jest.mock("@/lib/whiteboard/sync-client", () => ({
     onDisconnect: jest.fn(() => () => {}),
     onPeerCountChange: jest.fn(() => () => {}),
     onRoomPeersChange: jest.fn(() => () => {}),
+    onRemotePointer: jest.fn(() => () => {}),
     broadcastScene: jest.fn(),
     broadcastDocument: jest.fn(),
+    broadcastPointer: jest.fn(),
     flushPendingBroadcast: jest.fn(),
   }),
   generateEncryptionKeyBase64Url: () =>

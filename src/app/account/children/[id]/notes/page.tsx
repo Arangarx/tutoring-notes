@@ -130,15 +130,29 @@ export default async function LearnerNotesPage({
         title="Session notes"
         description={
           notes.length === 0
-            ? "No notes yet. Notes will appear here after each session."
+            ? students.length === 0
+              ? "No tutor connected yet."
+              : "No notes yet. Notes will appear here after each session."
             : `${notes.length} note${notes.length !== 1 ? "s" : ""} from your tutor`
         }
       >
         {notes.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No session notes yet. They will appear here automatically after
-            each tutoring session.
-          </p>
+          students.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {
+                "This learner isn't connected to a tutor yet. Notes will appear here once a tutor is connected and sessions begin. "
+              }
+              {/* TODO: tutor-discovery/connection flow for parent-created learners */}
+              {
+                "Your tutor can send you a claim link to connect, or tutor-discovery will be available in a future update."
+              }
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No session notes yet. They will appear here automatically after
+              each tutoring session.
+            </p>
+          )
         ) : (
           <div className="grid gap-3">
             {notes.map((note) => {

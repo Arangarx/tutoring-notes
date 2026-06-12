@@ -12,11 +12,11 @@ export async function getAdminByEmail(email: string) {
   return db.adminUser.findUnique({ where: { email: email.trim().toLowerCase() } });
 }
 
-/** Fetch minimal role fields by id — used by the JWT refresh path in auth-options. */
+/** Fetch minimal role + approval fields by id — used by the JWT refresh path in auth-options. */
 export async function getAdminById(id: string) {
   return db.adminUser.findUnique({
     where: { id },
-    select: { id: true, role: true, isTestAccount: true },
+    select: { id: true, role: true, isTestAccount: true, approvalStatus: true },
   });
 }
 
@@ -43,11 +43,14 @@ export async function createAdmin(
 ) {
   const hash = await bcrypt.hash(plainPassword, SALT_ROUNDS);
   const dn = displayName?.trim() || null;
+  // B1: new signups always land WAITLISTED. The schema @default(WAITLISTED) also
+  // covers it, but being explicit here makes intent clear and testable.
   return db.adminUser.create({
     data: {
       email: email.trim().toLowerCase(),
       passwordHash: hash,
       displayName: dn,
+      approvalStatus: "WAITLISTED",
     },
   });
 }

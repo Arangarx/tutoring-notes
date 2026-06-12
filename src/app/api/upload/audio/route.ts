@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { BLOB_MAX_BYTES } from "@/lib/audio-constants";
-import { assertOwnsStudent } from "@/lib/student-scope";
+import { assertOwnsStudent, requireStudentScope } from "@/lib/student-scope";
 import { createActionCorrelationId } from "@/lib/action-correlation";
+import { assertTutorApproved } from "@/lib/tutor-approval-scope";
 
 /**
  * Client-direct Vercel Blob upload route.
@@ -93,6 +94,12 @@ export async function POST(request: Request): Promise<Response> {
         // surfaced by uploadAudioDirect's catch path.
         await assertOwnsStudent(studentId);
 
+        // B1 cost gate: WAITLISTED tutors cannot upload audio (no Whisper spend).
+        const audioScope = await requireStudentScope();
+        if (audioScope.kind === "admin") {
+          await assertTutorApproved(audioScope.adminId);
+        }
+
         return {
           // Vercel Blob's matcher supports glob suffixes ("text/*") and
           // does NOT understand codec parameters ("audio/webm;codecs=opus")
@@ -125,6 +132,9 @@ export async function POST(request: Request): Promise<Response> {
     console.error(`[uploadAudio.route] rid=${rid} handleUpload threw:`, msg);
     // 400 here surfaces as a thrown error on the client side — see
     // uploadAudioDirect for how it maps to a user-facing message.
-    return NextResponse.json({ error: msg, debugId: rid }, { status: 400 });
+    return NextResponse.json(
+      { error: "Upload authorization failed. Please try again.", debugId: rid },
+      { status: 400 }
+    );
   }
 }

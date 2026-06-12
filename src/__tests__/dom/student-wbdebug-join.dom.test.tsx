@@ -77,8 +77,10 @@ const mockCreateWhiteboardSyncClient = jest.fn((_opts: unknown) => ({
   onDisconnect: jest.fn(() => () => {}),
   onPeerCountChange: jest.fn(() => () => {}),
   onRoomPeersChange: jest.fn(() => () => {}),
+  onRemotePointer: jest.fn(() => () => {}),
   broadcastScene: jest.fn(),
   broadcastDocument: jest.fn(),
+  broadcastPointer: jest.fn(),
   flushPendingBroadcast: jest.fn(),
 }));
 

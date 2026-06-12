@@ -738,6 +738,8 @@ export function useStudentWhiteboardCanvas(
     pageList,
     sectionsRegistry,
     activePageId,
+    activePageIdRef,
+    applyingRemoteRef,
     pageSwitchProgrammaticRef,
     selectStudentPage,
     tutorStreamReady,

@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { formatLearnerLoginHandle } from "@/lib/family-id";
 import { ChangePinForm } from "./ChangePinForm";
 import { UnlockPinButton } from "./UnlockPinButton";
+import { SetupLoginForm } from "./SetupLoginForm";
 
 export const dynamic = "force-dynamic";
 
@@ -137,17 +138,16 @@ export default async function ChildDetailPage({
             <ChangePinForm learnerProfileId={id} />
           </div>
         ) : (
-          <div className="text-sm text-muted-foreground">
-            <p>
-              {"Set up a username and PIN in the "}
-              <Link
-                href="/account/dashboard"
-                className="text-brand underline-offset-2 hover:underline"
-              >
-                claim setup flow
-              </Link>
-              {", or ask your tutor to resend the claim link."}
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              {
+                "No login set up yet. Set up a username and PIN so your learner can sign in independently on their own device."
+              }
             </p>
+            <SetupLoginForm
+              learnerProfileId={id}
+              learnerName={fullProfile.displayName}
+            />
           </div>
         )}
       </AccountSectionCard>

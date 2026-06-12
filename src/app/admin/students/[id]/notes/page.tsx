@@ -9,6 +9,7 @@ import { PageSizeSelect } from "@/components/notes/PageSizeSelect";
 import { formatDateOnlyDisplay, formatDateOnlyInput } from "@/lib/date-only";
 import { formatUtcTimeSnapped } from "@/lib/time/snap";
 import { TutorStudentNoteExpandedBody } from "@/components/notes/TutorStudentNoteExpandedBody";
+import { formatNoteTime, safeJsonArray } from "@/lib/notes/display-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -23,25 +24,6 @@ const DEFAULT_PAGE_SIZE = 20;
  */
 function formatTimeInput(d: Date | null): string {
   return formatUtcTimeSnapped(d);
-}
-
-/** Format a UTC DateTime as "3:00 PM" for display. */
-function formatTimeDisplay(d: Date | null): string {
-  if (!d) return "";
-  const h = d.getUTCHours();
-  const m = d.getUTCMinutes();
-  const ampm = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 || 12;
-  return `${h12}:${m.toString().padStart(2, "0")} ${ampm}`;
-}
-
-function safeJsonArray(value: string): string[] {
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
-  } catch {
-    return [];
-  }
 }
 
 interface PageProps {
@@ -223,7 +205,7 @@ export default async function StudentNotesPage({ params, searchParams }: PagePro
                     <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
                       {(n.startTime || n.endTime) && (
                         <span>
-                          {formatTimeDisplay(n.startTime)} {n.startTime && n.endTime && "–"} {formatTimeDisplay(n.endTime)}
+                          {formatNoteTime(n.startTime)} {n.startTime && n.endTime && "–"} {formatNoteTime(n.endTime)}
                           {" · "}
                         </span>
                       )}

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useId, useState } from "react";
+import { useActionState, useEffect, useId, useState } from "react";
 import zxcvbn from "zxcvbn";
 
 import { AuthFieldError } from "@/components/auth/AuthFieldError";
@@ -18,6 +18,14 @@ export default function SignupForm() {
   const [password, setPassword] = useState("");
   const [passwordScore, setPasswordScore] = useState<number | null>(null);
   const formErrorId = useId();
+
+  // Reset the submitting state whenever the server action returns an error so
+  // the button re-enables and the user can correct their input and retry.
+  useEffect(() => {
+    if (state?.error) {
+      setBusy(false);
+    }
+  }, [state?.error]);
 
   return (
     <form action={formAction} className="flex flex-col gap-4" onSubmit={() => setBusy(true)}>

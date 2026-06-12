@@ -49,11 +49,11 @@ export function AdminNav({
     ...(showOperatorLinks
       ? [
           { href: "/admin/feedback", label: "Feedback inbox" } as const,
+          { href: "/admin/tutor-approvals", label: "Tutor approvals" } as const,
         ]
       : []),
     ...(showCostDashboard ? [{ href: "/admin/cost", label: "Cost" } as const] : []),
     { href: "/feedback", label: "Send feedback" },
-    ...(showOperatorLinks ? [{ href: "/admin/waitlist", label: "Waitlist" } as const] : []),
     { href: "/admin/settings", label: "Settings" },
     ...(showDevTools ? [{ href: "/admin/dev-tools", label: "Dev tools" } as const] : []),
   ];

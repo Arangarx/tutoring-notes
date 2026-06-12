@@ -63,7 +63,11 @@ export async function POST(req: NextRequest) {
   const accountHolder = tokenRow.accountHolder;
   const newPasswordHash = await hashAccountHolderPassword(newPassword);
 
-  // BLOCKER-P2-S2: bulk-revoke all existing sessions in the same transaction
+  // BLOCKER-P2-S2: bulk-revoke all existing sessions in the same transaction.
+  // S1 defense-in-depth: also delete any remaining unused PASSWORD_RESET tokens
+  // for this account so a stale token from a race condition cannot be used
+  // after this consume. (The issuance path already deletes prior tokens, but
+  // two concurrent requests can race; the consume path must also clean up.)
   await db.$transaction([
     db.accountHolder.update({
       where: { id: accountHolder.id },
@@ -76,6 +80,14 @@ export async function POST(req: NextRequest) {
     db.accountHolderSession.updateMany({
       where: { accountHolderId: accountHolder.id, revokedAt: null },
       data: { revokedAt: now },
+    }),
+    db.accountHolderEmailToken.deleteMany({
+      where: {
+        accountHolderId: accountHolder.id,
+        purpose: "PASSWORD_RESET",
+        consumedAt: null,
+        NOT: { id: tokenRow.id },
+      },
     }),
   ]);
 

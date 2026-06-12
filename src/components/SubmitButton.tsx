@@ -9,6 +9,7 @@ interface SubmitButtonProps {
   label: string;
   pendingLabel?: string;
   className?: string;
+  variant?: "default" | "outline" | "destructive";
   /**
    * Caller-imposed disabled state, ORed with the in-flight `pending`
    * state. Used by forms that require an interactive precondition
@@ -30,11 +31,12 @@ export function SubmitButton({
   label,
   pendingLabel,
   className,
+  variant: variantProp,
   disabled,
   "aria-label": ariaLabel,
 }: SubmitButtonProps) {
   const { pending } = useFormStatus();
-  const variant = variantFromLegacyClass(className);
+  const variant = variantProp ?? variantFromLegacyClass(className);
 
   return (
     <Button

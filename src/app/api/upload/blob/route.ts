@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { BLOB_MAX_BYTES } from "@/lib/audio-constants";
-import { assertOwnsStudent } from "@/lib/student-scope";
+import { assertOwnsStudent, requireStudentScope } from "@/lib/student-scope";
 import {
   assertJoinTokenAllowsWhiteboardAssetUpload,
   assertOwnsWhiteboardSession,
 } from "@/lib/whiteboard-scope";
 import { createActionCorrelationId } from "@/lib/action-correlation";
+import { assertTutorApproved } from "@/lib/tutor-approval-scope";
 
 /**
  * Generalized client-direct Vercel Blob upload route.
@@ -145,6 +146,11 @@ export async function POST(request: Request): Promise<Response> {
             throw new Error("Missing studentId in clientPayload.");
           }
           await assertOwnsStudent(studentId);
+          // B1 cost gate: WAITLISTED tutors cannot upload audio blobs.
+          const audioBlobScope = await requireStudentScope();
+          if (audioBlobScope.kind === "admin") {
+            await assertTutorApproved(audioBlobScope.adminId);
+          }
           console.log(
             `[uploadBlob.route] rid=${rid} kind=audio studentId=${studentId} pathname=${pathname}`
           );
@@ -187,6 +193,8 @@ export async function POST(request: Request): Promise<Response> {
           }
           const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
           studentIdForToken = session.studentId;
+          // B1 cost gate: WAITLISTED tutors cannot upload whiteboard blobs.
+          await assertTutorApproved(session.adminUserId);
           console.log(
             `[uploadBlob.route] rid=${rid} kind=${kind} wbsid=${whiteboardSessionId} studentId=${studentIdForToken} assetTag=${payload?.assetTag ?? "-"} pathname=${pathname}`
           );
@@ -210,6 +218,9 @@ export async function POST(request: Request): Promise<Response> {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[uploadBlob.route] rid=${rid} handleUpload threw:`, msg);
-    return NextResponse.json({ error: msg, debugId: rid }, { status: 400 });
+    return NextResponse.json(
+      { error: "Upload authorization failed. Please try again.", debugId: rid },
+      { status: 400 }
+    );
   }
 }
