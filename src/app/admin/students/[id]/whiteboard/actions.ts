@@ -21,6 +21,12 @@ import { parseDateOnlyInput } from "@/lib/date-only";
 import { revalidateStudentSharePages } from "@/lib/revalidateStudentSharePages";
 import { enqueueChunkTranscribe } from "@/lib/recording/chunk-transcribe-enqueue";
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
+import {
+  isConsentEnforcementEnabled,
+  assertEffectiveConsent,
+  createSessionConsentSnapshot,
+  ConsentError,
+} from "@/lib/consent-scope";
 
 /**
  * Whiteboard session lifecycle server actions.
@@ -106,9 +112,48 @@ export async function createWhiteboardSession(
   }
   await assertOwnsStudent(studentId);
 
-  // B1 cost gate: WAITLISTED tutors cannot start whiteboard sessions
-  // (no Blob seed write, no live-session cost).
+  // B1 cost gate: WAITLISTED tutors cannot start whiteboard sessions.
+  // Runs BEFORE B2 consent check and BEFORE Blob write — no cost incurred
+  // until the tutor is confirmed approved to operate.
   await assertTutorApproved(scope.adminId);
+
+  // B2: consent pre-check — load learnerProfileId and the latest ConsentRecord.
+  // Block ONLY when flag ON + claimed + allowLiveSession=false (D-3, D-1).
+  // Runs after tutor-approval (cheap auth hierarchy) and BEFORE Blob write
+  // so we fail fast without orphaning a Blob object.
+  const studentForConsent = await withDbRetry(
+    () =>
+      db.student.findUnique({
+        where: { id: studentId },
+        select: { learnerProfileId: true },
+      }),
+    { label: "createWhiteboardSession.studentForConsent" }
+  );
+  const learnerProfileId = studentForConsent?.learnerProfileId ?? null;
+
+  if (learnerProfileId && isConsentEnforcementEnabled()) {
+    const latestRecord = await withDbRetry(
+      () =>
+        db.consentRecord.findFirst({
+          where: { learnerProfileId, adminUserId: scope.adminId },
+          orderBy: { version: "desc" },
+          include: { learnerProfile: { select: { isSelfLearner: true } } },
+        }),
+      { label: "createWhiteboardSession.consentRecord" }
+    );
+    // D-5: self-learners always pass
+    if (!latestRecord?.learnerProfile?.isSelfLearner) {
+      if (latestRecord && !latestRecord.allowLiveSession) {
+        console.warn(
+          `[createWhiteboardSession] rid=${rid} studentId=${studentId} REJECTED: allowLiveSession=false (B2)`
+        );
+        throw new ConsentError(
+          "allowLiveSession",
+          "Parental consent for live sessions has not been granted. Please update consent preferences from your account."
+        );
+      }
+    }
+  }
 
   const startedAtIso = new Date().toISOString();
   let eventsBlobUrl: string;
@@ -149,24 +194,38 @@ export async function createWhiteboardSession(
 
   let session;
   try {
+    // B2: session row + consent snapshot in the same transaction (atomic).
+    // The snapshot freeze is NOT flag-gated — we always record what consent
+    // was authorized at session start, even when enforcement is off.
     session = await withDbRetry(
       () =>
-        db.whiteboardSession.create({
-          data: {
-            adminUserId: scope.adminId,
-            studentId,
-            consentAcknowledged: true,
-            eventsBlobUrl,
-            eventsSchemaVersion: PHASE1_SCHEMA_VERSION,
-            // startedAt + createdAt default to now() in the schema.
-          },
-          select: { id: true, studentId: true },
+        db.$transaction(async (tx) => {
+          const row = await tx.whiteboardSession.create({
+            data: {
+              adminUserId: scope.adminId,
+              studentId,
+              consentAcknowledged: true,
+              eventsBlobUrl,
+              eventsSchemaVersion: PHASE1_SCHEMA_VERSION,
+              // startedAt + createdAt default to now() in the schema.
+            },
+            select: { id: true, studentId: true },
+          });
+          // createSessionConsentSnapshot is a no-op for unclaimed/no-record
+          // sessions; it never throws.
+          await createSessionConsentSnapshot(
+            tx,
+            row.id,
+            learnerProfileId,
+            scope.adminId
+          );
+          return row;
         }),
       { label: "createWhiteboardSession" }
     );
   } catch (err) {
     console.error(
-      `[createWhiteboardSession] rid=${rid} studentId=${studentId} db.create failed:`,
+      `[createWhiteboardSession] rid=${rid} studentId=${studentId} db.transaction failed:`,
       err
     );
     throw new Error(
@@ -533,6 +592,25 @@ export async function endWhiteboardSession(
     }
   }
 
+  // B2: pre-check audio consent BEFORE the transaction.
+  // If audio consent is denied, we skip segment registration but the session
+  // ALWAYS closes successfully — no lost sessions (reliability invariant).
+  let audioConsentGranted = true;
+  if (segments.length > 0) {
+    try {
+      await assertEffectiveConsent(whiteboardSessionId, "allowAudioRecording");
+    } catch (err) {
+      if (err instanceof ConsentError) {
+        audioConsentGranted = false;
+        console.warn(
+          `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} audio_consent_denied — segments will NOT be registered; session close proceeds`
+        );
+      } else {
+        throw err;
+      }
+    }
+  }
+
   const now = new Date();
   let updated: { id: string; endedAt: Date | null; durationSeconds: number | null };
   let registeredSegments = 0;
@@ -577,8 +655,10 @@ export async function endWhiteboardSession(
           //      the in-flight race where two tabs both reach end
           //      with overlapping payloads — extremely unlikely in
           //      practice but cheap to defend).
+          // B2: audioConsentGranted=false skips registration entirely;
+          // session close + token revocation still proceed.
           let newSegments = 0;
-          if (segments.length > 0) {
+          if (segments.length > 0 && audioConsentGranted) {
             const existingRows = await tx.sessionRecording.findMany({
               where: {
                 whiteboardSessionId,
@@ -893,6 +973,9 @@ export async function generateNotesFromWhiteboardSessionAction(
   const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
   const studentId = session.studentId;
 
+  // B2: consent gate for notes sending (flag-gated).
+  await assertEffectiveConsent(whiteboardSessionId, "allowNoteSending");
+
   // Load all audio recordings for this whiteboard session.
   const audioRows = await withDbRetry(
     () =>
@@ -1185,6 +1268,9 @@ export async function registerWhiteboardSessionAudioSegmentAction(
         debugId: rid,
       };
     }
+
+    // B2: consent gate — flag-gated; throws ConsentError when flag ON + denied.
+    await assertEffectiveConsent(whiteboardSessionId, "allowAudioRecording");
 
     const last = await withDbRetry(
       () =>

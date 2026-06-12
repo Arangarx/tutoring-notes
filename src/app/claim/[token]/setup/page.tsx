@@ -5,9 +5,11 @@ import { redirect } from "next/navigation";
 import { hashToken } from "@/lib/crypto/session-tokens";
 import { db } from "@/lib/db";
 import { getAccountHolderSession } from "@/lib/account-holder-session";
+import { isConsentEnforcementEnabled } from "@/lib/consent-scope";
 import { MynkWordmark } from "@/components/auth/MynkWordmark";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { CredentialSetupForm } from "./CredentialSetupForm";
+import { ConsentSetupForm } from "./ConsentSetupForm";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +43,7 @@ export default async function ClaimSetupPage({
           },
         },
       },
-      adminUser: { select: { displayName: true } },
+      adminUser: { select: { displayName: true, id: true } },
     },
   });
 
@@ -60,6 +62,18 @@ export default async function ClaimSetupPage({
   }
 
   const credentialAlreadySet = !!profile.credential;
+  const enforcementEnabled = isConsentEnforcementEnabled();
+
+  // Check if a ConsentRecord already exists for this (learner, tutor) pair
+  const existingConsent = await db.consentRecord.findFirst({
+    where: {
+      learnerProfileId: profile.id,
+      adminUserId: invite.adminUserId,
+    },
+    orderBy: { version: "desc" },
+    select: { id: true },
+  });
+  const consentAlreadySaved = !!existingConsent;
 
   return (
     <main className="flex min-h-[calc(100dvh-4rem)] flex-col items-center justify-center px-4 py-10">
@@ -77,22 +91,35 @@ export default async function ClaimSetupPage({
           </p>
         </div>
 
-        {/* Phase 3: consent ceiling panel placeholder */}
+        {/* Panel A: Parental consent preferences (B2) */}
         <Card className="mb-4 border-border shadow-sm">
           <CardHeader className="gap-1 pb-0">
             <CardTitle className="heading text-lg font-normal">
-              Parental consent preferences
+              Privacy preferences
             </CardTitle>
             <CardDescription className="text-sm">
-              Coming soon — Phase 3
+              {consentAlreadySaved
+                ? "Your preferences have been saved. You can update them from your account dashboard."
+                : `Control what ${invite.student.name}'s tutor may record and share.`}
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-4">
-            {/* Phase 3: consent ceiling panel — ConsentRecord model not yet built */}
-            <p className="text-sm text-muted-foreground">
-              {"Session recording consent and data-sharing preferences will be set up here. " +
-                "Your tutor will let you know when this is available."}
-            </p>
+            {consentAlreadySaved ? (
+              <div className="rounded-md border border-border bg-muted/40 p-4">
+                <p className="text-sm font-medium text-foreground">
+                  ✓ Preferences saved
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  You can update these preferences any time from your account dashboard.
+                </p>
+              </div>
+            ) : (
+              <ConsentSetupForm
+                rawToken={rawToken}
+                studentName={invite.student.name}
+                enforcementEnabled={enforcementEnabled}
+              />
+            )}
           </CardContent>
         </Card>
 

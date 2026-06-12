@@ -371,6 +371,9 @@ model WhiteboardSession {
    */
   tutorNote        TutorNote?
 
+  /// B2: frozen consent snapshot at session start (legal record).
+  consentSnapshot SessionConsentSnapshot?
+
   createdAt  DateTime    @default(now())
   costEvents CostEvent[]
 
@@ -593,6 +596,8 @@ model AdminUser {
   /// isTestAccount rows are EXEMPT and will never have a twoFactor row.
   twoFactor               AdminUser2FA?
   claimInvites            StudentClaimInvite[]   @relation("TutorClaimInvites")
+  /// B2: consent records where this tutor is the recipient of the parent's consent grant.
+  consentRecords          ConsentRecord[]        @relation("TutorConsentRecords")
 }
 
 /// TOTP 2FA enrollment for AdminUser accounts (Identity Phase 1).
@@ -835,6 +840,10 @@ model LearnerProfile {
   deviceSessions  LearnerDeviceSession[]
   /// IAC-2: one LearnerProfile can be linked to multiple tutor-scoped Student rows (multi-tutor).
   students        Student[]
+  /// B2: versioned per-tutor consent records for this learner.
+  consentRecords  ConsentRecord[]
+  /// B2: optional child-narrowing restrictions (defaults all-false = no restrictions).
+  consentRestriction ConsentRestriction?
 
   @@index([accountHolderId])
 }
@@ -988,4 +997,76 @@ model LearnerLoginThrottle {
   updatedAt     DateTime  @updatedAt
 
   @@index([kind, updatedAt])
+}
+
+// =============================================================================
+// B2 PARENT PRIVACY CONSENT (ADDITIVE — gate B2, feat/b2-consent)
+// All three tables are empty on deploy; no existing rows are touched.
+// Enforcement is dormant until CONSENT_ENFORCEMENT=true.
+// =============================================================================
+
+/// Versioned per-tutor consent record set by the parent (AccountHolder).
+/// Each "Save preferences" creates a new version (MAX+1 or 1 for first).
+/// Legal record: onDelete: Restrict on both FKs — rows are never deleted.
+/// Per-tutor: (learnerProfileId, adminUserId) pair; consent for tutor A
+/// does not propagate to tutor B.
+model ConsentRecord {
+  id                        String         @id @default(uuid())
+  learnerProfileId          String
+  learnerProfile            LearnerProfile @relation(fields: [learnerProfileId], references: [id], onDelete: Restrict)
+  adminUserId               String
+  adminUser                 AdminUser      @relation("TutorConsentRecords", fields: [adminUserId], references: [id], onDelete: Restrict)
+  /// Version counter — monotonically increasing per (learnerProfileId, adminUserId).
+  /// Starts at 1; incremented on each "Save preferences".
+  version                   Int
+  /// V1 consent toggles — boolean ceiling set by the parent.
+  allowLiveSession          Boolean
+  allowAudioRecording       Boolean
+  allowWhiteboardRecording  Boolean
+  allowNoteSending          Boolean
+  /// AccountHolder who set this record (must equal LearnerProfile.accountHolderId).
+  setByAccountHolderId      String
+  /// Capture method — always "electronic" in V1 (web form).
+  captureMethod             String         @default("electronic")
+  setAt                     DateTime       @default(now())
+
+  /// Per-tutor versioning uniqueness.
+  @@unique([learnerProfileId, adminUserId, version])
+  @@index([learnerProfileId, adminUserId])
+}
+
+/// Child-narrowing restrictions (floor) set on a LearnerProfile.
+/// In V1 all default to false (no restrictions from child side).
+/// No child-facing UI ships in V1; reserved for future phase.
+/// Cascade: deleting a LearnerProfile removes its restrictions.
+model ConsentRestriction {
+  id                          String         @id @default(uuid())
+  learnerProfileId            String         @unique
+  learnerProfile              LearnerProfile @relation(fields: [learnerProfileId], references: [id], onDelete: Cascade)
+  restrictAudioRecording      Boolean        @default(false)
+  restrictWhiteboardRecording Boolean        @default(false)
+  restrictNoteSending         Boolean        @default(false)
+  createdAt                   DateTime       @default(now())
+  updatedAt                   DateTime       @updatedAt
+}
+
+/// Frozen consent state at the moment a WhiteboardSession was created.
+/// Legal record: onDelete: Restrict on whiteboardSession — must tombstone
+/// snapshot before deleting a session that has a legal consent record.
+/// consentRecordId/Version are null when no record existed at session start
+/// (unclaimed learner or pre-B2 session).
+model SessionConsentSnapshot {
+  id                        String            @id @default(uuid())
+  whiteboardSessionId       String            @unique
+  whiteboardSession         WhiteboardSession @relation(fields: [whiteboardSessionId], references: [id], onDelete: Restrict)
+  /// Effective consent values frozen at session start.
+  allowLiveSession          Boolean
+  allowAudioRecording       Boolean
+  allowWhiteboardRecording  Boolean
+  allowNoteSending          Boolean
+  /// Reference to the ConsentRecord used to compute this snapshot.
+  /// Null when no record existed (unclaimed / pre-consent session).
+  consentRecordId           String?
+  consentRecordVersion      Int?
+  frozenAt                  DateTime          @default(now())
 }
