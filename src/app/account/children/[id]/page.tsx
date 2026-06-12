@@ -45,7 +45,18 @@ export default async function ChildDetailPage({
       isSelfLearner: true,
       createdAt: true,
       credential: { select: { id: true, username: true } },
-      students: { select: { name: true }, take: 1 },
+      students: {
+        select: {
+          id: true,
+          name: true,
+          adminUser: {
+            select: {
+              displayName: true,
+              email: true,
+            },
+          },
+        },
+      },
     },
   });
 
@@ -133,13 +144,31 @@ export default async function ChildDetailPage({
             <dt className="text-muted-foreground">Name</dt>
             <dd className="font-medium text-foreground">{fullProfile.displayName}</dd>
           </div>
-          {fullProfile.students[0] ? (
-            <div className="flex items-center justify-between gap-4 px-4 py-3">
-              <dt className="text-muted-foreground">{"Tutor's name for this student"}</dt>
-              <dd className="text-right font-medium text-foreground">
-                {fullProfile.students[0].name}
-              </dd>
-            </div>
+          {fullProfile.students.length > 0 ? (
+            <>
+              <div className="px-4 py-2.5">
+                <p className="text-sm text-muted-foreground">
+                  {`What each tutor calls ${fullProfile.displayName}`}
+                </p>
+              </div>
+              {fullProfile.students.map((student) => {
+                const tutorLabel =
+                  student.adminUser?.displayName?.trim() ||
+                  student.adminUser?.email ||
+                  "Tutor";
+                return (
+                  <div
+                    key={student.id}
+                    className="flex items-center justify-between gap-4 px-4 py-3"
+                  >
+                    <dt className="text-muted-foreground">{tutorLabel}</dt>
+                    <dd className="text-right font-medium text-foreground">
+                      {student.name}
+                    </dd>
+                  </div>
+                );
+              })}
+            </>
           ) : null}
           <div className="flex items-center justify-between gap-4 px-4 py-3">
             <dt className="text-muted-foreground">Login mode</dt>
