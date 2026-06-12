@@ -10,6 +10,10 @@ type AdminPageShellProps = {
   actions?: ReactNode;
   children: ReactNode;
   className?: string;
+  /** Optional left rail (dashboard sidebar, settings sub-nav). Renders beside main content. */
+  sidebar?: ReactNode;
+  /** Width preset for `sidebar` — default 220px (dashboard), narrow 180px (settings). */
+  sidebarWidth?: "default" | "narrow";
 };
 
 /** Consistent page chrome for tutor/admin surfaces (B2). */
@@ -20,7 +24,12 @@ export function AdminPageShell({
   actions,
   children,
   className,
+  sidebar,
+  sidebarWidth = "default",
 }: AdminPageShellProps) {
+  const sidebarWidthClass =
+    sidebarWidth === "narrow" ? "w-full md:w-[180px]" : "w-full md:w-[220px]";
+
   return (
     <div className={cn("flex flex-col gap-8", className)}>
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -39,7 +48,14 @@ export function AdminPageShell({
           <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
         ) : null}
       </header>
-      {children}
+      {sidebar ? (
+        <div className="flex flex-col gap-6 md:flex-row md:items-start md:gap-6">
+          <aside className={cn("shrink-0", sidebarWidthClass)}>{sidebar}</aside>
+          <div className="flex min-w-0 flex-1 flex-col gap-6">{children}</div>
+        </div>
+      ) : (
+        children
+      )}
     </div>
   );
 }

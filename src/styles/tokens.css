@@ -45,6 +45,13 @@
 
   --brand: #1e3d54;
   --brand-on: #fcfbf4;
+  /* Small-caps eyebrows on bg-brand cards — WCAG ~10.5:1 vs --brand #1e3d54.
+     Slightly brighter/whiter than #e8eef2 for better visibility as a mono label. */
+  --brand-eyebrow: #f0f5f8;
+  --brand-on-subtle: #e8eef2;
+  --brand-card-border: rgba(30, 61, 84, 0.32);
+
+  --calendar-event-dot: #c96a50;
 
   --accent: #e27d60;
   --accent-soft: #f8e0d6;
@@ -147,9 +154,15 @@
 
     --brand: #7ea4b1;
     --brand-on: #051a24;
+    /* WCAG 7.3:1 vs --brand #7ea4b1 */
+    --brand-eyebrow: #021018;
+    --brand-on-subtle: #0a2834;
+    --brand-card-border: rgba(126, 164, 177, 0.62);
+
+    --calendar-event-dot: #e27d60;
 
     --accent: #e27d60;
-    --accent-soft: #2e1d18;
+    --accent-soft: rgba(226, 125, 96, 0.22);
     --accent-strong: #d06b4e;
     --accent-on: #051a24;
     --accent-text: #e8a08a;
@@ -242,9 +255,15 @@
 
   --brand: #7ea4b1;
   --brand-on: #051a24;
+  /* WCAG 7.3:1 vs --brand #7ea4b1 */
+  --brand-eyebrow: #021018;
+  --brand-on-subtle: #0a2834;
+  --brand-card-border: rgba(126, 164, 177, 0.62);
+
+  --calendar-event-dot: #e27d60;
 
   --accent: #e27d60;
-  --accent-soft: #2e1d18;
+  --accent-soft: rgba(226, 125, 96, 0.22);
   --accent-strong: #d06b4e;
   --accent-on: #051a24;
   --accent-text: #e8a08a;

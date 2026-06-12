@@ -1,9 +1,7 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { AdminPageShell } from "@/components/admin/AdminPageShell";
 import { StudentsRoster } from "@/components/admin/StudentsRoster";
-import { Button } from "@/components/ui/button";
 import { getStudentScope, studentsWhereForScope } from "@/lib/student-scope";
 
 export const dynamic = "force-dynamic";
@@ -20,12 +18,10 @@ export default async function StudentsPage() {
   return (
     <AdminPageShell
       title="Students"
-      description="Your roster — add students, open profiles, and start whiteboard sessions."
-      actions={
-        <Button asChild variant="outline" className="min-h-11">
-          <Link href="/admin/outbox">View outbox</Link>
-        </Button>
+      eyebrow={
+        <p className="label-mono m-0 text-accent-text">Your roster</p>
       }
+      description="Add students, open profiles, and start whiteboard sessions."
     >
       <StudentsRoster
         students={students.map((s) => ({

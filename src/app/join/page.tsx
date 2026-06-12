@@ -1,20 +1,23 @@
 /**
- * /join — Learner landing page (post-login destination).
+ * /join — Learner waiting room (Gate A2, visual-first).
  *
- * After a successful student login, the child is redirected here.
- * Full live-session join wiring is a later phase; this is a
- * holding-pattern page that confirms the login worked.
- *
- * Auth: gated by getLearnerSession() — redirects to /students/login
- * if no learner session is present. Middleware does NOT gate /join
- * (the page handles auth itself, keeping middleware minimal).
+ * After student login, the child lands here until the tutor admits them.
+ * Presence/admit polling and whiteboard entry are live-AV follow-ups.
  */
 
 import { redirect } from "next/navigation";
+import {
+  LearnerWaitingRoom,
+  type LearnerWaitingRoomState,
+} from "@/components/student/LearnerWaitingRoom";
 import { getLearnerSessionFromHeaders } from "@/lib/server-session";
 import { db } from "@/lib/db";
 
-export default async function JoinPage() {
+type JoinPageProps = {
+  searchParams: Promise<{ preview?: string }>;
+};
+
+export default async function JoinPage({ searchParams }: JoinPageProps) {
   const session = await getLearnerSessionFromHeaders();
   if (!session) {
     redirect("/students/login?returnTo=/join");
@@ -25,26 +28,12 @@ export default async function JoinPage() {
     select: { displayName: true },
   });
 
-  const displayName = profile?.displayName ?? "learner";
+  const displayName = profile?.displayName ?? "Student";
+  const params = await searchParams;
 
-  return (
-    <main className="flex min-h-[100dvh] flex-col items-center justify-center bg-background px-4 py-12">
-      <div className="w-full max-w-[420px] space-y-6 text-center">
-        <div className="space-y-2">
-          <h1 className="heading text-2xl font-normal text-foreground">
-            {"You're signed in, "}
-            <span className="font-semibold">{displayName}</span>
-            {"!"}
-          </h1>
-          <p className="text-base text-muted-foreground">
-            Your tutor will start the session here. Hang tight!
-          </p>
-        </div>
+  // Dev/preview only — toggles admitted visual without live wiring.
+  const previewState: LearnerWaitingRoomState =
+    params.preview === "admitted" ? "admitted" : "waiting";
 
-        <div className="rounded-md border border-border bg-muted/40 px-6 py-5 text-sm text-muted-foreground">
-          <p>{"Waiting for your tutor to begin…"}</p>
-        </div>
-      </div>
-    </main>
-  );
+  return <LearnerWaitingRoom displayName={displayName} state={previewState} />;
 }

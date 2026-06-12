@@ -71,22 +71,42 @@ type DevToolsClientProps = {
 // Helpers
 // ---------------------------------------------------------------------------
 
+const COPIED_LABEL = "✓ copied";
+
 function CopyCell({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <button
-      type="button"
-      onClick={() => {
-        void navigator.clipboard.writeText(value).then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        });
-      }}
-      className="rounded px-1 font-mono text-xs hover:bg-muted"
-      title="Click to copy"
-    >
-      {copied ? "✓ copied" : value}
-    </button>
+    <span className="inline-grid max-w-full">
+      {/* Phantom cells reserve max(value, copied) width so the swap never reflows siblings. */}
+      <span
+        className="invisible col-start-1 row-start-1 whitespace-nowrap px-1 font-mono text-xs"
+        aria-hidden="true"
+      >
+        {value}
+      </span>
+      <span
+        className="invisible col-start-1 row-start-1 whitespace-nowrap px-1 font-mono text-xs"
+        aria-hidden="true"
+      >
+        {COPIED_LABEL}
+      </span>
+      <button
+        type="button"
+        onClick={() => {
+          void navigator.clipboard.writeText(value).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          });
+        }}
+        className={`col-start-1 row-start-1 min-w-0 truncate whitespace-nowrap rounded px-1 text-left font-mono text-xs hover:bg-muted ${
+          copied ? "text-muted-foreground" : ""
+        }`}
+        title="Click to copy"
+        aria-live="polite"
+      >
+        {copied ? COPIED_LABEL : value}
+      </button>
+    </span>
   );
 }
 

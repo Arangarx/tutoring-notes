@@ -24,6 +24,7 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { endStaleWhiteboardSession } from "@/app/admin/students/[id]/whiteboard/actions";
+import { Button } from "@/components/ui/button";
 import {
   deriveResumeGateState,
   describeResumeGate,
@@ -123,9 +124,9 @@ export function WorkspaceResumeGate({
       </p>
 
       <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-        <button
+        <Button
           type="button"
-          className="btn btn-primary"
+          variant="accent"
           onClick={() => {
             markSkipIndexedDbResumeAfterGate(whiteboardSessionId);
             setConsented(true);
@@ -135,16 +136,16 @@ export function WorkspaceResumeGate({
           autoFocus
         >
           Resume session
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className="btn"
+          variant="outline"
           onClick={handleEnd}
           disabled={pending}
           data-testid="wb-resume-gate-end"
         >
           {pending ? "Ending…" : "End session"}
-        </button>
+        </Button>
       </div>
 
       {endError && (

@@ -3,6 +3,15 @@
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useCallback } from "react";
 
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 
 interface PageSizeSelectProps {
@@ -18,12 +27,12 @@ export function PageSizeSelect({ defaultSize = 20 }: PageSizeSelectProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const current = Number(searchParams.get("size") ?? defaultSize);
+  const current = String(Number(searchParams.get("size") ?? defaultSize));
 
   const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>) => {
+    (value: string) => {
       const params = new URLSearchParams(searchParams.toString());
-      params.set("size", e.target.value);
+      params.set("size", value);
       params.delete("page");
       router.replace(`${pathname}?${params.toString()}`);
     },
@@ -31,22 +40,22 @@ export function PageSizeSelect({ defaultSize = 20 }: PageSizeSelectProps) {
   );
 
   return (
-    <div className="row" style={{ gap: 6, alignItems: "center", flexShrink: 0 }}>
-      <label htmlFor="page-size-select" style={{ fontSize: 13, whiteSpace: "nowrap" }}>
+    <div className="flex shrink-0 items-center gap-2">
+      <Label htmlFor="page-size-select" className="text-[13px] whitespace-nowrap">
         Per page:
-      </label>
-      <select
-        id="page-size-select"
-        value={current}
-        onChange={handleChange}
-        style={{ width: "auto" }}
-      >
-        {PAGE_SIZE_OPTIONS.map((n) => (
-          <option key={n} value={n}>
-            {n}
-          </option>
-        ))}
-      </select>
+      </Label>
+      <Select value={current} onValueChange={handleChange}>
+        <SelectTrigger id="page-size-select" className="w-[72px]" size="sm">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {PAGE_SIZE_OPTIONS.map((n) => (
+            <SelectItem key={n} value={String(n)}>
+              {n}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

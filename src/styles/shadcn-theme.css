@@ -17,6 +17,9 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  /* Coral CTA fill + foreground — maps to tokens.css --accent / --accent-on / --accent-strong */
+  --color-accent-on: var(--accent-on);
+  --color-accent-strong: var(--accent-strong);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--shadcn-muted);
@@ -51,8 +54,8 @@
   --shadcn-muted-foreground: var(--text-muted);
   --shadcn-accent: var(--accent-soft);
   --shadcn-accent-foreground: var(--text-default);
-  --destructive: var(--error);
-  --destructive-foreground: var(--text-default);
+  --destructive: #c42b2b;
+  --destructive-foreground: #fcfbf4;
   --border: var(--border-default);
   --input: var(--surface-input);
   --ring: var(--focus-ring);
@@ -74,8 +77,8 @@
     --shadcn-muted-foreground: var(--text-muted);
     --shadcn-accent: var(--accent-soft);
     --shadcn-accent-foreground: var(--text-default);
-    --destructive: var(--error);
-    --destructive-foreground: var(--text-default);
+    --destructive: #e54848;
+    --destructive-foreground: #fcfbf4;
     --border: var(--border-default);
     --input: var(--surface-input);
     --ring: var(--focus-ring);
@@ -97,8 +100,8 @@
   --shadcn-muted-foreground: var(--text-muted);
   --shadcn-accent: var(--accent-soft);
   --shadcn-accent-foreground: var(--text-default);
-  --destructive: var(--error);
-  --destructive-foreground: var(--text-default);
+  --destructive: #e54848;
+  --destructive-foreground: #fcfbf4;
   --border: var(--border-default);
   --input: var(--surface-input);
   --ring: var(--focus-ring);

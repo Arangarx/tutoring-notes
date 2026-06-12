@@ -349,6 +349,44 @@ criteria in the next subsection):
   determining the shape of a future Phase that doesn't yet have a
   scope.
 
+**Conductor tier — orchestration itself is tierable (2026-06-12)**
+
+The tier-assignment bullets above govern which model **executes** work
+(via subagent dispatch). A separate axis governs which model **conducts**
+the orchestration chat itself — and this is where the largest API-cost
+lever lives.
+
+- **The cost mechanic:** subagents are cheap; the expensive line item is
+  the *standing Opus orchestration chat*. Every turn re-bills the entire
+  accumulated context at Opus rates, and reasoning-effort multiplies it.
+  Two levers: (a) what **tier conducts**, (b) **context hygiene** — a
+  fresh chat bootstrapped from `ORCHESTRATOR-STATE.md` is far cheaper
+  than letting one chat balloon; restart fresh after big milestones.
+- **The judgment-vs-loop heuristic:** ask of the orchestration session —
+  *"Am I mostly making NEW judgment calls (sequencing, design trade-offs,
+  is-this-grouping-safe, when-to-merge/defer/escalate), or mostly running
+  a KNOWN loop (dispatch scoped item → merge → build → push → repeat)?"*
+  - **Known-loop backlog burndown** (e.g. a visual/UX tweak wave with
+    pre-specified items) → **Composer 2.5** conducts (if every decision
+    is already made) or **Sonnet** (if you want a safety net that reads
+    subagent reports critically).
+  - **Mixed** (scoped work + live design/grouping/reliability calls) →
+    **Sonnet** conducts.
+  - **New judgment** (phase planning, novel architecture, auth/migration
+    design, strategic calls like cut-to-master / Vercel tier / brand
+    gating, multi-day high-blast-radius) → **Opus**, **episodically** —
+    spin up Opus for that one session, then drop back down.
+- **Key reframe:** "Opus reserved for orchestration only" (above) is
+  refined — orchestration is a **spectrum**. Planning/design/strategy
+  orchestration = Opus; execution-queue / merge-train orchestration =
+  Sonnet or Composer. Keep Opus for **episodes**, not as a standing
+  conductor. The "in doubt → Opus" rule is for **judgment/quality-risk
+  calls**, NOT for keeping a conductor warm.
+- **Validating example (2026-06-12):** the v1 design-system wave-2
+  burndown (6-agent fan-out + merge-train + smokebook) was a known loop;
+  the only genuine Opus-grade call was grouping agents for file-
+  disjointness, which Sonnet would also handle.
+
 **Proven patterns** — combine tiers when it pays off:
 
 - **"Opus dispatches inline"** (default since 2026-05-18 refinement).

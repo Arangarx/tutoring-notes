@@ -61,21 +61,47 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 
 ## §1. Component Inventory Table
 
-### Shared UI Primitives (shadcn/ui — installed Phase B1)
+### Shared UI Primitives (shadcn/ui new-york — **frozen foundation 2026-06-11**)
 
-| Component | File | Purpose | Key Props | Surfaces | Dedup Status |
-|---|---|---|---|---|---|
-| `Button` | `src/components/ui/button.tsx` | All interactive buttons | `variant` (default/outline/ghost/secondary/destructive/link), `size` (xs/sm/default/lg/icon) | App-wide | **canonical** |
-| `Input` | `src/components/ui/input.tsx` | Text input fields | Standard HTML input props + shadcn styling | Forms app-wide | **canonical** |
-| `Label` | `src/components/ui/label.tsx` | Form field labels (Radix) | Standard label props | Forms app-wide | **canonical** |
-| `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent` | `src/components/ui/card.tsx` | Card container primitives | Standard div props | Via `AdminSectionCard`, `AccountSectionCard` | **canonical** |
+> **Branch:** `v1-design-system`. Full primitive catalog installed via `npx shadcn@latest add`. All primitives are **theme-agnostic** (semantic tokens only; **zero** `dark:` Tailwind variants in `src/components/ui/`). `Toaster` + `TooltipProvider` wired in `Providers.tsx`. Surface-conversion agents **consume** these — do not fork.
+
+| Component | File | Purpose | Dedup Status |
+|---|---|---|---|
+| `Button` | `src/components/ui/button.tsx` | All interactive buttons (`variant`, `size`) | **canonical** |
+| `Input` | `src/components/ui/input.tsx` | Text input fields | **canonical** |
+| `Label` | `src/components/ui/label.tsx` | Form field labels (Radix) | **canonical** |
+| `Textarea` | `src/components/ui/textarea.tsx` | Multi-line text input | **canonical** |
+| `Checkbox` | `src/components/ui/checkbox.tsx` | Boolean toggle (Radix) | **canonical** |
+| `CheckboxField` | `src/components/ui/checkbox.tsx` | Checkbox + linked `Label` in a horizontal row (`flex items-center gap-3`) — use for boolean form fields instead of hand-rolled native `<input type="checkbox">` | **canonical** |
+| `RadioGroup`, `RadioGroupItem` | `src/components/ui/radio-group.tsx` | Exclusive choice group | **canonical** |
+| `Switch` | `src/components/ui/switch.tsx` | On/off toggle | **canonical** |
+| `Select` (+ subcomponents) | `src/components/ui/select.tsx` | Dropdown select (Radix) | **canonical** |
+| `Card` (+ header/title/description/content/footer/action) | `src/components/ui/card.tsx` | Card container primitives | **canonical** |
+| `Badge` | `src/components/ui/badge.tsx` | Status pill / label chip | **canonical** |
+| `Alert` (+ title/description) | `src/components/ui/alert.tsx` | Inline banner messages | **canonical** |
+| `Dialog` (+ subcomponents) | `src/components/ui/dialog.tsx` | Modal overlay | **canonical** |
+| `AlertDialog` (+ subcomponents) | `src/components/ui/alert-dialog.tsx` | Confirmation modal | **canonical** |
+| `Sheet` (+ subcomponents) | `src/components/ui/sheet.tsx` | Slide-over panel (mobile nav) | **canonical** |
+| `Popover` (+ subcomponents) | `src/components/ui/popover.tsx` | Floating content panel | **canonical** |
+| `Tooltip` (+ provider) | `src/components/ui/tooltip.tsx` | Hover hint | **canonical** |
+| `DropdownMenu` (+ subcomponents) | `src/components/ui/dropdown-menu.tsx` | Context / action menu | **canonical** |
+| `Tabs` (+ list/trigger/content) | `src/components/ui/tabs.tsx` | Tab strip navigation | **canonical** |
+| `Accordion` (+ subcomponents) | `src/components/ui/accordion.tsx` | Collapsible sections | **canonical** |
+| `Table` (+ header/body/row/cell/…) | `src/components/ui/table.tsx` | Data tables (session list, billing) | **canonical** |
+| `Separator` | `src/components/ui/separator.tsx` | Visual divider | **canonical** |
+| `Skeleton` | `src/components/ui/skeleton.tsx` | Loading placeholder | **canonical** |
+| `Progress` | `src/components/ui/progress.tsx` | Progress bar | **canonical** |
+| `Avatar` (+ image/fallback) | `src/components/ui/avatar.tsx` | User/student avatar circle | **canonical** — prefer `StudentAvatar` for roster rows with `--avatar-N` rings |
+| `ScrollArea` | `src/components/ui/scroll-area.tsx` | Constrained scroll container | **canonical** |
+| `Calendar` | `src/components/ui/calendar.tsx` | Date picker grid (`react-day-picker` v10) | **canonical** — scheduling surface |
+| `Toaster` | `src/components/ui/sonner.tsx` | Toast notifications (`sonner`) | **canonical** |
 
 ### Admin Layout + Navigation
 
 | Component | File | Purpose | Key Props | Surfaces | Dedup Status |
 |---|---|---|---|---|---|
 | `AdminNav` | `src/components/AdminNav.tsx` | Sticky top nav for all tutor/admin surfaces. Wordmark left, nav links, sign-out right. Mobile hamburger. **REQ-S3-3:** redesign must add a persistent signed-in identity indicator (display name/email; badge when impersonating or test account) — pairs with `ImpersonationBanner`. | `showOperatorLinks`, `sessionMode`, `isImpersonating`, `showDevTools`, `showCostDashboard` | All `/admin/**` pages via `admin/layout.tsx` | **canonical** |
-| `AdminPageShell` | `src/components/admin/AdminPageShell.tsx` | Page chrome: `<h1>` title, optional eyebrow, optional description, optional actions slot | `title`, `description`, `eyebrow`, `actions`, `children`, `className` | Dashboard, students, settings (chunk 1) | **canonical** |
+| `AdminPageShell` | `src/components/admin/AdminPageShell.tsx` | Page chrome: `<h1>` title, optional eyebrow, optional description, optional actions slot. **2026-06-11:** optional `sidebar` + `sidebarWidth` for left-rail layouts. | `title`, `description`, `eyebrow`, `actions`, `children`, `className`, `sidebar`, `sidebarWidth` | Dashboard, students, settings (chunk 1) | **canonical** |
 | `AdminSectionCard` | `src/components/admin/AdminSectionCard.tsx` | Section grouping within a page. Wraps shadcn `Card`. Title + optional description + optional actions header + content slot. | `title`, `description`, `actions`, `children`, `id`, `data-testid` | Dashboard, students, settings (chunk 1) | **canonical** |
 
 ### Account Holder (Parent) Layout
@@ -107,7 +133,7 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 | Component | File | Purpose | Key Props | Surfaces | Dedup Status |
 |---|---|---|---|---|---|
 | `StudentsRoster` | `src/components/admin/StudentsRoster.tsx` | Student list with search + add student (B2 reskin) | `students`, `adminUserId` | `/admin/students` | **canonical** |
-| `StudentAvatar` | `src/components/admin/StudentAvatar.tsx` | Initials avatar with `--avatar-N` color ring | `name`, `size` | Student list, student detail | **canonical** |
+| `StudentAvatar` | `src/components/admin/StudentAvatar.tsx` | Deterministic initials avatar: FNV-1a hash of normalized display name (`trim` + lowercase) → one of eight curated `--avatar-1`…`--avatar-8` fills (`student-initials.ts`); 1–2 letter initials (`studentInitials`); white semibold text; `ring-2 ring-background`. Sizes: `sm` (36px), `md` (44px), `lg` (56px). Same name → same color on every surface. | `name`, `size`, `className` | Student list, student detail, scheduler, account dashboard, learner waiting room | **canonical** |
 
 ### Recording / Session Capture (Slice 3 collision zone — DO NOT EDIT from UI chunks)
 
@@ -177,7 +203,11 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 
 **Mock source:** `.btn-primary { background: var(--accent); color: var(--accent-on); border-radius: 999px; }`
 
-**Token class:** `bg-accent text-accent-on hover:bg-accent-strong rounded-full font-medium transition-colors`
+**Library:** `<Button variant="accent">` — `bg-primary text-primary-foreground hover:bg-accent-strong rounded-full` (maps to `--accent` fill + `--accent-on` foreground via `--primary-foreground`). **Do not** hand-roll coral pills with `rounded-full` on `variant="default"`; do not use `bg-accent` for the fill (`bg-accent` is `--accent-soft`, not coral).
+
+**Foreground contract (WCAG — hard to regress):** `--accent-on` = dark text on coral in **both** themes: light `#15203a` (5.64:1 AA), dark `#051a24` (6.22:1 AA). Never light/cream text on coral (`#fcfbf4` on `#e27d60` fails). Token lives in `tokens.css`; shadcn `--primary-foreground` aliases it. For `Button asChild` + `<Link>`, `globals.css` excludes `[data-slot="button"]` from `a { color: inherit }` so link CTAs keep `--accent-on` instead of inheriting body text.
+
+**Token class (legacy / non-Button only):** `bg-primary text-primary-foreground hover:bg-accent-strong rounded-full font-medium transition-colors`
 
 | Size | Classes | Use when |
 |---|---|---|
@@ -389,8 +419,9 @@ The user identity chip in the sidebar (1A.8) IS this primitive — it satisfies 
 
 ### 2.1 Layout & Spacing
 
-- **Page max-width:** `max-w-4xl` (896px), centered with `mx-auto px-4 py-8`
-- **Section spacing:** `gap-8` between `AdminPageShell` header and content; `gap-6` between sibling `AdminSectionCard` components
+- **Page max-width (admin/tutor shell):** `max-w-6xl` (1152px) with `xl:max-w-7xl` (1280px) at xl breakpoint — set on `admin/layout.tsx` `<main>`; centered with `mx-auto px-4 py-6 md:px-6 md:py-8`. Other realms (account, marketing) may use narrower widths per surface.
+- **Page max-width (legacy default):** `max-w-4xl` (896px) where a surface has not yet adopted the admin shell width.
+- **Section spacing:** `gap-8` between `AdminPageShell` header and content; `gap-6` between sibling `AdminSectionCard` components and between sidebar rail and main column (`AdminPageShell` sidebar layout)
 - **Form field spacing within a section:** `space-y-4` (between field groups), `space-y-1.5` (between label and input)
 - **Content max-width within cards:** `max-w-md` or `max-w-lg` for form fields; never full card width for narrow inputs
 - **Mobile:** single-column; cards stack naturally. Min touch target: `min-h-11` (44px)
@@ -851,8 +882,58 @@ The following files are locked to recording slice 3 or live-session infrastructu
 
 ---
 
+## §6. Frozen foundation (2026-06-11)
+
+**Branch:** `v1-design-system` — **critical-path dependency root** for full-site v1 visual redesign. Surface-conversion agents consume this output; do not reinvent primitives.
+
+### Primitive catalog (27 files in `src/components/ui/`)
+
+`accordion`, `alert`, `alert-dialog`, `avatar`, `badge`, `button`, `calendar`, `card`, `checkbox`, `dialog`, `dropdown-menu`, `input`, `label`, `popover`, `progress`, `radio-group`, `scroll-area`, `select`, `separator`, `sheet`, `skeleton`, `sonner` (Toaster), `switch`, `table`, `tabs`, `textarea`, `tooltip`
+
+**New runtime deps (2026-06-11):** `date-fns`, `react-day-picker`, `sonner` (plus `next-themes` pulled by shadcn CLI but **not used** — app theme is `ThemeProvider` / `[data-theme]`).
+
+### Theme-agnostic contract (HARD)
+
+- Primitives use **only** semantic token classes (`bg-background`, `text-foreground`, `border-border`, `bg-primary`, `text-muted-foreground`, etc.) mapped in `shadcn-theme.css`.
+- **No `dark:` variants** in `src/components/ui/` — dark mode is handled exclusively by `[data-theme]` token swaps.
+- Agent rules: [`.cursor/rules/both-theme-components.mdc`](../.cursor/rules/both-theme-components.mdc) + strengthened [`.cursor/rules/component-reuse.mdc`](../.cursor/rules/component-reuse.mdc).
+
+### Shell additive changes (no breaking prop changes)
+
+| Shell | Change |
+|---|---|
+| `AdminPageShell` | Optional `sidebar` + `sidebarWidth` (`default` 220px / `narrow` 180px) for dashboard + settings sub-nav layouts |
+| `Providers` | `TooltipProvider` + `Toaster` (sonner) mounted app-wide |
+| `/admin/pending-approval` | Removed duplicate `AdminNav` (layout already provides it) |
+
+Existing shells (`AdminNav`, `AuthShell`, `AccountPageShell`, `MarketingHeader`, `StudentsRoster`, etc.) already compose `ui/` primitives — no behavioral changes.
+
+### Surface conversion build order (tonight)
+
+| Order | Group | Surfaces |
+|---|---|---|
+| 1 | Public / legal / feedback | `/`, `/features`, `/privacy`, `/terms`, `/feedback` |
+| 2 | Parent share | `/s/[token]`, `/s/[token]/all` |
+| 3 | Admin / tutor | `/admin`, `/admin/students`, `/admin/students/[id]`, settings, operator pages |
+| 4 | Account / parent | `/account/**` |
+| 5 | Student | `/join`, `/w/[joinToken]`, `/students/login` |
+| 6 | New pages | `/sessions` (billing log), other net-new routes |
+| 7 | Scheduling | Calendar-backed scheduling UI (post-v1 if gated) |
+
+### Deferred library gaps (surface agents own)
+
+- `ThemeToggle` — inventory lists as planned; already in `AdminNav` but not documented as frozen here
+- `FormattedNotesBody`, `RecapEditor` — Chunk 3/B4 targets (§1 Notes inventory)
+- `AdminSidebarNav` composed component — use `AdminPageShell sidebar` + §1A.8 token patterns; no dedicated component yet
+- `rounded-panel` (`10px`) Tailwind token — use `rounded-[10px]` until `tailwind.config` extends (§2.13)
+- Legacy `.btn` / `.card` / `.container` in `globals.css` — still required by unmigrated surfaces; remove only after full conversion
+
+---
+
 ## Changelog
 
+- **2026-06-12:** **Doc sync — post-review tweak wave** (library remains FROZEN): admin shell max width `max-w-6xl xl:max-w-7xl` + sidebar `gap-6` (§2.1); `CheckboxField` inventory row; `StudentAvatar` deterministic FNV-1a `--avatar-N` palette spec expanded. Shipped on `v1-design-system` @ `6587592`.
+- **2026-06-11:** **§6 Frozen foundation** — full shadcn new-york primitive catalog on `v1-design-system`; theme-agnostic reconciliation (no `dark:` in `ui/`); `AdminPageShell` sidebar props; pending-approval dup-nav fix; `Providers` toaster/tooltip; strengthened `component-reuse.mdc`; surface conversion build order.
 - **2026-06-07:** Initial doc. Component-pass chunk 1 (Settings/operator reskin). Authored by Sonnet subagent on branch `v1-component-spine`.
 - **2026-06-07:** Slice 3 smoke requirements **REQ-S3-1/2/2a** added (§3.1, Notes inventory, Chunk 3 row). Branch `docs/v1-redesign-notes-ux-reqs`.
 - **2026-06-07:** **REQ-S3-3** signed-in identity indicator (§3.1, `AdminNav` inventory). Branch `docs/v1-redesign-notes-ux-reqs`.

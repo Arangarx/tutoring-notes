@@ -172,7 +172,7 @@ export function StartWhiteboardSession({
                   label="Start session"
                   pendingLabel="Starting…"
                   disabled={!consent}
-                  variant="default"
+                  variant="accent"
                 />
               </div>
             </form>
@@ -185,7 +185,8 @@ export function StartWhiteboardSession({
     <>
       <Button
         type="button"
-        className="min-h-11"
+        variant="accent"
+        className="min-h-11 whitespace-nowrap"
         onClick={() => setOpen(true)}
         data-testid="start-whiteboard-session-btn"
       >

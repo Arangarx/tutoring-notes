@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { MynkWordmark } from "@/components/auth/MynkWordmark";
 import { AccountSignOutButton } from "@/components/account/AccountSignOutButton";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { cn } from "@/lib/utils";
 
 type AccountPageShellProps = {
@@ -37,12 +38,13 @@ export function AccountPageShell({
           <Link href="/?view=home" aria-label="View home page">
             <MynkWordmark size="sm" />
           </Link>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             {userEmail ? (
               <span className="hidden max-w-[200px] truncate text-sm text-muted-foreground sm:block">
                 {userEmail}
               </span>
             ) : null}
+            <ThemeToggle />
             <AccountSignOutButton />
           </div>
         </div>

@@ -30,6 +30,7 @@ import { authOptions } from "@/auth-options";
 import { db } from "@/lib/db";
 import { AdminPageShell } from "@/components/admin/AdminPageShell";
 import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { SettingsSubNav } from "@/components/admin/SettingsSubNav";
 import { TwoFactorSetupForm } from "./setup/TwoFactorSetupForm";
 import { TwoFactorManageView } from "./TwoFactorManageView";
 
@@ -80,24 +81,24 @@ export default async function TwoFactorManagePage() {
   // Not enrolled or unconfirmed → show setup form.
   if (!twoFaRow) {
     return (
-      <div className="mx-auto max-w-lg">
-        <AdminPageShell
-          title="Set up Two-Factor Authentication"
-          description="Protect your account with a one-time code from an authenticator app."
-          eyebrow={
-            <Link
-              href="/admin/settings"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              ← Settings
-            </Link>
-          }
-        >
+      <AdminPageShell
+        title="Set up Two-Factor Authentication"
+        description="Protect your account with a one-time code from an authenticator app."
+        eyebrow={
+          <Link
+            href="/admin/settings"
+            className="text-sm text-muted-foreground transition-colors hover:text-foreground md:hidden"
+          >
+            ← Settings
+          </Link>
+        }
+        sidebar={<SettingsSubNav />}
+        sidebarWidth="narrow"
+      >
           <AdminSectionCard title="Authenticator setup">
             <TwoFactorSetupForm />
           </AdminSectionCard>
-        </AdminPageShell>
-      </div>
+      </AdminPageShell>
     );
   }
 
@@ -105,18 +106,19 @@ export default async function TwoFactorManagePage() {
   const isAdmin = session.user.role === "ADMIN";
 
   return (
-    <div className="mx-auto max-w-lg">
-      <AdminPageShell
-        title="Two-Factor Authentication"
-        eyebrow={
-          <Link
-            href="/admin/settings"
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            ← Settings
-          </Link>
-        }
-      >
+    <AdminPageShell
+      title="Two-Factor Authentication"
+      eyebrow={
+        <Link
+          href="/admin/settings"
+          className="text-sm text-muted-foreground transition-colors hover:text-foreground md:hidden"
+        >
+          ← Settings
+        </Link>
+      }
+      sidebar={<SettingsSubNav />}
+      sidebarWidth="narrow"
+    >
         <AdminSectionCard title="Authentication status">
           <TwoFactorManageView
             enrolledAt={twoFaRow.enrolledAt.toISOString()}
@@ -125,7 +127,6 @@ export default async function TwoFactorManagePage() {
             userId={session.user.id ?? ""}
           />
         </AdminSectionCard>
-      </AdminPageShell>
-    </div>
+    </AdminPageShell>
   );
 }

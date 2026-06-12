@@ -1,13 +1,16 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { db } from "@/lib/db";
-import { requireAccountHolderSession } from "@/lib/server-session";
 import { AccountPageShell } from "@/components/account/AccountPageShell";
 import { AccountSectionCard } from "@/components/account/AccountSectionCard";
 import { CopyableLearnerHandle } from "@/components/account/CopyableLearnerHandle";
+import { StudentAvatar } from "@/components/admin/StudentAvatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { db } from "@/lib/db";
 import { formatLearnerLoginHandle } from "@/lib/family-id";
+import { requireAccountHolderSession } from "@/lib/server-session";
+
 import { AddLearnerForm } from "./AddLearnerForm";
 
 export const dynamic = "force-dynamic";
@@ -45,30 +48,40 @@ export default async function AccountDashboardPage() {
   const { email, displayName, isSelfLearner, familyId, learnerProfiles } = accountHolder;
   const greeting = displayName ? `Welcome back, ${displayName}` : "Your account";
 
-  // IAC-12: show guardian/child framing only when the account has child learner profiles.
-  // Fresh accounts and self-learner-only accounts get neutral copy.
   const childProfiles = learnerProfiles.filter((p) => !p.isSelfLearner);
   const hasChildren = childProfiles.length > 0;
 
-  const sectionTitle = hasChildren ? "Your learners" : (isSelfLearner ? "Your learner profile" : "Learners");
+  const sectionTitle = hasChildren
+    ? "Your learners"
+    : isSelfLearner
+      ? "Your learner profile"
+      : "Learners";
   const sectionDescription = hasChildren
     ? `${learnerProfiles.length} ${learnerProfiles.length !== 1 ? "learners" : "learner"} linked to your account.`
     : isSelfLearner
-    ? "You are set up as a learner on this account."
-    : "Add a learner, or wait for your tutor to send you a claim link.";
+      ? "You are set up as a learner on this account."
+      : "Add a learner, or wait for your tutor to send you a claim link.";
 
   return (
     <AccountPageShell
       title={greeting}
-      description={hasChildren ? "Manage your learners' tutoring access." : "Your account."}
+      eyebrow={
+        <p className="label-mono m-0 text-accent-text">Family account</p>
+      }
+      description={
+        hasChildren
+          ? "Manage your learners' tutoring access, notes, and privacy."
+          : "Your account."
+      }
       userEmail={email}
     >
       <AccountSectionCard
         title={sectionTitle}
         description={sectionDescription}
+        className="rounded-[10px] border-border border-l-[3px] border-l-accent bg-accent-soft/35 shadow-sm"
       >
         {learnerProfiles.length === 0 ? (
-          <div className="pb-2 text-sm text-muted-foreground">
+          <div className="rounded-[10px] border border-dashed border-border bg-muted/20 px-4 py-6 text-sm text-muted-foreground">
             <p>
               {"You haven't added any learners yet. Click "}
               <strong>{"Add learner"}</strong>
@@ -76,17 +89,33 @@ export default async function AccountDashboardPage() {
             </p>
           </div>
         ) : (
-          <ul className="divide-y divide-border" role="list">
-            {learnerProfiles.map((profile) => (
-              <li key={profile.id} className="py-4 first:pt-0 last:pb-0">
-                <div className="flex items-center justify-between gap-4">
+          <div className="overflow-hidden rounded-[10px] border border-border bg-background">
+            <ul role="list">
+              {learnerProfiles.map((profile) => (
+                <li
+                  key={profile.id}
+                  className="grid grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-border px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/40 sm:grid-cols-[auto_1fr_auto_auto]"
+                >
+                  <StudentAvatar name={profile.displayName} size="sm" />
                   <div className="min-w-0">
-                    <p className="font-medium text-foreground">
-                      {profile.displayName}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-medium text-foreground">
+                        {profile.displayName}
+                      </p>
                       {profile.isSelfLearner ? (
-                        <span className="ml-2 text-xs text-muted-foreground font-normal">(you)</span>
+                        <Badge variant="outline" className="font-mono text-[10px] uppercase">
+                          You
+                        </Badge>
                       ) : null}
-                    </p>
+                      <Badge
+                        variant="outline"
+                        className="font-mono text-[10px] uppercase text-muted-foreground"
+                      >
+                        {profile.accessMode === "child_pin_required"
+                          ? "Own login"
+                          : "Guardian picks"}
+                      </Badge>
+                    </div>
                     {profile.credential && familyId ? (
                       <CopyableLearnerHandle
                         className="mt-2"
@@ -97,67 +126,71 @@ export default async function AccountDashboardPage() {
                         label="Login handle"
                       />
                     ) : (
-                      <p className="text-sm text-muted-foreground">
+                      <p className="mt-1 text-xs text-muted-foreground">
                         {profile.credential
                           ? profile.credential.username
                           : "No login set up yet"}
                       </p>
                     )}
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {profile.accessMode === "child_pin_required"
-                        ? "Uses own PIN"
-                        : "Account holder selects"}
-                    </p>
                   </div>
-                  <Button asChild variant="outline" size="sm" className="shrink-0">
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 rounded-full"
+                  >
                     <Link href={`/account/children/${profile.id}`}>Manage</Link>
                   </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
         <div className="mt-4 border-t border-border pt-4">
           <AddLearnerForm />
         </div>
       </AccountSectionCard>
 
-      {/* IAC-11-I / IAC-12: child login independence copy — only shown when child learners have credentials */}
       {childProfiles.some((p) => p.credential) ? (
-        <div className="rounded-md border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-          <p>
+        <div className="rounded-[10px] border-l-[3px] border-accent bg-accent-soft px-4 py-3 text-sm text-foreground">
+          <p className="text-[10px] font-mono font-semibold uppercase tracking-widest text-accent-text">
+            Child sign-in
+          </p>
+          <p className="mt-2">
             {"Your child signs in on their own device using "}
             <strong>{"username@" + (familyId ?? "familyid")}</strong>
             {" + PIN — it's a completely separate login from yours. No need to log out."}
           </p>
-          <p className="mt-1">
-            {"Go to "}
-            <a
+          <p className="mt-2">
+            <Link
               href="/students/login"
-              className="text-brand underline-offset-2 hover:underline"
+              className="font-medium text-accent-text underline-offset-2 hover:underline"
             >
-              the student login page
-            </a>
-            {"."}
+              Go to the student login page
+            </Link>
           </p>
         </div>
       ) : null}
 
-      <AccountSectionCard title="Account" description="Your email and security settings.">
-        <div className="space-y-2 text-sm">
-          <div className="flex items-center justify-between gap-4">
+      <AccountSectionCard
+        title="Account"
+        description="Your email and security settings."
+        className="rounded-[10px] border-border shadow-sm"
+      >
+        <div className="divide-y divide-border rounded-[10px] border border-border bg-background text-sm">
+          <div className="flex items-center justify-between gap-4 px-4 py-3">
             <span className="text-muted-foreground">Email</span>
-            <span className="break-all font-medium text-foreground">{email}</span>
+            <span className="break-all text-right font-medium text-foreground">{email}</span>
           </div>
           {displayName ? (
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center justify-between gap-4 px-4 py-3">
               <span className="text-muted-foreground">Name</span>
               <span className="font-medium text-foreground">{displayName}</span>
             </div>
           ) : null}
         </div>
         <div className="mt-4">
-          <Button asChild variant="outline" size="sm">
+          <Button asChild variant="outline" size="sm" className="rounded-full">
             <Link href="/account/forgot-password">Change password</Link>
           </Button>
         </div>

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 
 import { MynkWordmark } from "@/components/auth/MynkWordmark";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 
 const SIGN_IN_LINKS = [
@@ -148,14 +149,15 @@ export function MarketingHeader() {
             Features
           </Link>
 
+          <ThemeToggle />
           {signedIn ? (
-            <Button asChild size="sm">
+            <Button asChild variant="accent" size="sm">
               <Link href="/admin">Dashboard</Link>
             </Button>
           ) : (
             <>
               <SignInMenu />
-              <Button asChild size="sm">
+              <Button asChild variant="accent" size="sm">
                 <Link href="/signup">Create account</Link>
               </Button>
             </>

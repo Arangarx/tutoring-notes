@@ -1,6 +1,16 @@
 import Link from "next/link";
 import { assertAdminOrNotFound } from "@/lib/impersonation";
 import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   daysSinceRateCardVerified,
   isRateCardStale,
@@ -19,7 +29,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-function SummaryCard({
+function StatTile({
   label,
   value,
   sub,
@@ -29,16 +39,10 @@ function SummaryCard({
   sub?: string;
 }) {
   return (
-    <div className="card" style={{ padding: "14px 16px" }}>
-      <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
-        {label}
-      </div>
-      <div style={{ fontSize: 22, fontWeight: 700 }}>{value}</div>
-      {sub ? (
-        <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-          {sub}
-        </div>
-      ) : null}
+    <div className="rounded-[10px] border border-border bg-card px-4 py-3.5 shadow-sm">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-foreground">{value}</p>
+      {sub ? <p className="mt-1 text-[11px] text-muted-foreground">{sub}</p> : null}
     </div>
   );
 }
@@ -71,179 +75,133 @@ export default async function AdminCostPage() {
       }
     >
       {stale ? (
-        <div
-          className="card"
-          style={{
-            marginBottom: 16,
-            padding: "12px 14px",
-            background: "var(--warning-soft)",
-            border: "1px solid var(--warning-border)",
-            fontSize: 13,
-          }}
-        >
-          Rate card last verified {verifiedLabel} ({daysSince} days ago) — review{" "}
-          <a
-            href="https://developers.openai.com/api/docs/pricing"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            OpenAI
-          </a>
-          ,{" "}
-          <a href="https://vercel.com/pricing" target="_blank" rel="noopener noreferrer">
-            Vercel
-          </a>
-          , and{" "}
-          <a href="https://neon.com/pricing" target="_blank" rel="noopener noreferrer">
-            Neon
-          </a>{" "}
-          pricing and update{" "}
-          <code className="text-xs">src/lib/observability/rate-card.ts</code>.
-        </div>
+        <Alert className="mb-6 border-warning/30 bg-warning/10">
+          <AlertDescription className="text-sm text-warning">
+            Rate card last verified {verifiedLabel} ({daysSince} days ago) — review{" "}
+            <a
+              href="https://developers.openai.com/api/docs/pricing"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2"
+            >
+              OpenAI
+            </a>
+            ,{" "}
+            <a href="https://vercel.com/pricing" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">
+              Vercel
+            </a>
+            , and{" "}
+            <a href="https://neon.com/pricing" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">
+              Neon
+            </a>{" "}
+            pricing and update{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+              src/lib/observability/rate-card.ts
+            </code>
+            .
+          </AlertDescription>
+        </Alert>
       ) : (
-        <p className="muted" style={{ fontSize: 12, marginBottom: 16 }}>
+        <p className="mb-6 text-xs text-muted-foreground">
           Rate card {RATE_CARD_VERSION} · verified {verifiedLabel} ({daysSince} days ago)
         </p>
       )}
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-          gap: 12,
-          marginBottom: 20,
-        }}
-      >
-        <SummaryCard
-          label="This month (estimated)"
-          value={formatUsd(summary.monthTotalUsd)}
-        />
-        <SummaryCard
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile label="This month (estimated)" value={formatUsd(summary.monthTotalUsd)} />
+        <StatTile
           label="Avg / session (30d)"
           value={formatUsd(summary.avgCostPerSessionUsd)}
           sub={`${summary.sessionsLast30Days} sessions`}
         />
-        <SummaryCard
-          label="Sessions this month"
-          value={String(summary.monthSessionCount)}
-        />
-        <SummaryCard
+        <StatTile label="Sessions this month" value={String(summary.monthSessionCount)} />
+        <StatTile
           label="Pricing floor (60 min)"
           value={formatUsd(PRICING_FLOOR_60MIN_USD)}
           sub={`Whisper @ $${WHISPER_1_USD_PER_AUDIO_MINUTE}/min dominates`}
         />
       </div>
 
-      <section style={{ marginBottom: 24 }}>
-        <h2 style={{ fontSize: 16, marginBottom: 8 }}>By cost source (this month)</h2>
-        <div className="card" style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
-            <thead>
-              <tr className="muted">
-                <th style={{ textAlign: "left", padding: "8px 12px" }}>Source</th>
-                <th style={{ textAlign: "left", padding: "8px 12px" }}>Usage</th>
-                <th style={{ textAlign: "right", padding: "8px 12px" }}>Est. cost</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bySource.map((row) => (
-                <tr key={row.kindGroup}>
-                  <td style={{ padding: "8px 12px" }}>{row.label}</td>
-                  <td className="muted" style={{ padding: "8px 12px" }}>
-                    {row.detail}
-                  </td>
-                  <td style={{ padding: "8px 12px", textAlign: "right" }}>
-                    {formatUsd(row.totalUsd)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section style={{ marginBottom: 24 }}>
-        <h2 style={{ fontSize: 16, marginBottom: 8 }}>By tutor (this month)</h2>
-        {byTutor.length === 0 ? (
-          <p className="muted">No cost events with tutor attribution yet.</p>
-        ) : (
-          <div className="card" style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
-              <thead>
-                <tr className="muted">
-                  <th style={{ textAlign: "left", padding: "8px 12px" }}>Tutor</th>
-                  <th style={{ textAlign: "right", padding: "8px 12px" }}>Sessions</th>
-                  <th style={{ textAlign: "right", padding: "8px 12px" }}>Whisper min</th>
-                  <th style={{ textAlign: "right", padding: "8px 12px" }}>Est. cost</th>
-                </tr>
-              </thead>
-              <tbody>
-                {byTutor.map((row) => (
-                  <tr key={row.adminUserId}>
-                    <td style={{ padding: "8px 12px" }}>{row.tutorName}</td>
-                    <td style={{ padding: "8px 12px", textAlign: "right" }}>
-                      {row.sessionCount}
-                    </td>
-                    <td style={{ padding: "8px 12px", textAlign: "right" }}>
-                      {row.whisperMinutes.toFixed(1)}
-                    </td>
-                    <td style={{ padding: "8px 12px", textAlign: "right" }}>
-                      {formatUsd(row.totalUsd)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      <section style={{ marginBottom: 24 }}>
-        <h2 style={{ fontSize: 16, marginBottom: 8 }}>Monthly trend (6 months)</h2>
-        <div className="card" style={{ padding: "16px" }}>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 8, minHeight: 120 }}>
-            {monthlyBars.map((bar) => (
-              <div
-                key={bar.month}
-                style={{
-                  flex: 1,
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: 4,
-                }}
-              >
-                <div
-                  title={formatUsd(bar.totalUsd)}
-                  style={{
-                    width: "100%",
-                    maxWidth: 48,
-                    height: `${Math.max(4, (bar.totalUsd / maxBarUsd) * 100)}px`,
-                    background: "var(--accent)",
-                    borderRadius: 4,
-                  }}
-                />
-                <span className="muted" style={{ fontSize: 10, textAlign: "center" }}>
-                  {bar.month}
-                </span>
-              </div>
+      <AdminSectionCard title="By cost source (this month)" contentClassName="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Source</TableHead>
+              <TableHead>Usage</TableHead>
+              <TableHead className="text-right">Est. cost</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {bySource.map((row) => (
+              <TableRow key={row.kindGroup}>
+                <TableCell>{row.label}</TableCell>
+                <TableCell className="text-muted-foreground">{row.detail}</TableCell>
+                <TableCell className="text-right">{formatUsd(row.totalUsd)}</TableCell>
+              </TableRow>
             ))}
-          </div>
-        </div>
-      </section>
+          </TableBody>
+        </Table>
+      </AdminSectionCard>
 
-      <section className="card" style={{ padding: "14px 16px", fontSize: 13 }}>
-        <h2 style={{ fontSize: 15, margin: "0 0 8px" }}>Pricing-floor reference</h2>
-        <p className="muted" style={{ margin: "0 0 8px" }}>
+      <AdminSectionCard title="By tutor (this month)" className="mt-6" contentClassName="p-0">
+        {byTutor.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-muted-foreground">
+            No cost events with tutor attribution yet.
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Tutor</TableHead>
+                <TableHead className="text-right">Sessions</TableHead>
+                <TableHead className="text-right">Whisper min</TableHead>
+                <TableHead className="text-right">Est. cost</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {byTutor.map((row) => (
+                <TableRow key={row.adminUserId}>
+                  <TableCell>{row.tutorName}</TableCell>
+                  <TableCell className="text-right">{row.sessionCount}</TableCell>
+                  <TableCell className="text-right">{row.whisperMinutes.toFixed(1)}</TableCell>
+                  <TableCell className="text-right">{formatUsd(row.totalUsd)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </AdminSectionCard>
+
+      <AdminSectionCard title="Monthly trend (6 months)" className="mt-6">
+        <div className="flex min-h-[120px] items-end gap-2">
+          {monthlyBars.map((bar) => (
+            <div key={bar.month} className="flex flex-1 flex-col items-center gap-1">
+              <div
+                title={formatUsd(bar.totalUsd)}
+                className="w-full max-w-12 rounded bg-accent"
+                style={{
+                  height: `${Math.max(4, (bar.totalUsd / maxBarUsd) * 100)}px`,
+                }}
+              />
+              <span className="text-center text-[10px] text-muted-foreground">{bar.month}</span>
+            </div>
+          ))}
+        </div>
+      </AdminSectionCard>
+
+      <AdminSectionCard title="Pricing-floor reference" className="mt-6">
+        <p className="text-sm text-muted-foreground">
           60-minute whiteboard session variable cost anchor (design doc §1.3): Whisper ~$0.36,
           GPT + blob + compute rounding errors. Use per-session drill-down on{" "}
-          <Link href="/admin/students">student whiteboard review</Link> pages to validate against
-          real sessions.
+          <Link href="/admin/students" className="font-medium text-foreground underline-offset-2 hover:underline">
+            student whiteboard review
+          </Link>{" "}
+          pages to validate against real sessions.
         </p>
-        <p className="muted" style={{ margin: 0, fontSize: 12 }}>
+        <p className="mt-2 text-xs text-muted-foreground">
           Tutor-facing cost UI is deferred until the pricing model is locked (session tokens).
         </p>
-      </section>
+      </AdminSectionCard>
     </AdminPageShell>
   );
 }

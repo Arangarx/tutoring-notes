@@ -33,7 +33,7 @@ export default function NotMyNotesPage() {
         the correct account.
       </p>
 
-      <Button asChild className="min-h-11 w-full text-base">
+      <Button asChild variant="accent" className="min-h-11 w-full text-base">
         <Link href="/account/dashboard">Go to your dashboard</Link>
       </Button>
 

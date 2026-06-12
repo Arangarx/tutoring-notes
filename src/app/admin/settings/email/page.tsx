@@ -9,6 +9,7 @@ import { getStudentScope } from "@/lib/student-scope";
 import { getGmailConnectionForTutor, isEmailConfiguredForTutor } from "@/lib/email";
 import { AdminPageShell } from "@/components/admin/AdminPageShell";
 import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { SettingsSubNav } from "@/components/admin/SettingsSubNav";
 import EmailConfigForm from "./EmailConfigForm";
 import OAuthEmailSection from "./OAuthEmailSection";
 
@@ -68,11 +69,13 @@ export default async function EmailSettingsPage({
       eyebrow={
         <Link
           href="/admin/settings"
-          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="text-sm text-muted-foreground transition-colors hover:text-foreground md:hidden"
         >
           ← Settings
         </Link>
       }
+      sidebar={<SettingsSubNav />}
+      sidebarWidth="narrow"
     >
       {configured ? (
         <div className="rounded-md border border-success/30 bg-success/10 px-4 py-3">

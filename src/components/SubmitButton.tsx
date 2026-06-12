@@ -9,7 +9,7 @@ interface SubmitButtonProps {
   label: string;
   pendingLabel?: string;
   className?: string;
-  variant?: "default" | "outline" | "destructive";
+  variant?: "default" | "accent" | "outline" | "destructive";
   /**
    * Caller-imposed disabled state, ORed with the in-flight `pending`
    * state. Used by forms that require an interactive precondition
