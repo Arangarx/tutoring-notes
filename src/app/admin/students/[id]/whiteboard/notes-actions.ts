@@ -462,3 +462,104 @@ export async function deleteWhiteboardSessionAndDataAction(
     return { ok: false, error: msg };
   }
 }
+
+// ---------------------------------------------------------------------------
+// (h) Load in-shell review payload — called from SessionReviewMode on mount
+// ---------------------------------------------------------------------------
+
+export type SessionReviewPayload = {
+  studentName: string;
+  startedAtIso: string;
+  endedAtIso: string | null;
+  durationSeconds: number | null;
+  hasAudio: boolean;
+  eventsProxyUrl: string;
+  snapshotProxyUrl: string | null;
+  audioSegments: Array<{
+    url: string;
+    mimeType: string;
+    durationSeconds: number | null;
+  }>;
+  initialNote: TutorNoteStatusResult;
+};
+
+/**
+ * Load review-mode data for the in-shell post-end-session surface.
+ *
+ * Called client-side from SessionReviewMode when the shell flips
+ * mode="review" after a successful handleEndSession. Returns the same
+ * data the standalone review page.tsx assembles SSR, so the in-shell
+ * surface can display notes + board preview + lazy replay without a
+ * full page navigation.
+ *
+ * Trust: assertOwnsWhiteboardSession.
+ * Log prefix: [nsi]
+ */
+export async function loadSessionReviewPayload(
+  whiteboardSessionId: string
+): Promise<SessionReviewPayload> {
+  await assertOwnsWhiteboardSession(whiteboardSessionId);
+
+  const detail = await withDbRetry(
+    () =>
+      db.whiteboardSession.findUnique({
+        where: { id: whiteboardSessionId },
+        select: {
+          id: true,
+          startedAt: true,
+          endedAt: true,
+          durationSeconds: true,
+          snapshotBlobUrl: true,
+          student: { select: { id: true, name: true } },
+          audioRecordings: {
+            select: {
+              id: true,
+              mimeType: true,
+              durationSeconds: true,
+              orderIndex: true,
+            },
+            orderBy: [{ orderIndex: "asc" }, { createdAt: "asc" }],
+          },
+        },
+      }),
+    { label: "loadSessionReviewPayload.detail" }
+  );
+
+  if (!detail) {
+    throw new Error(`Session ${whiteboardSessionId} not found`);
+  }
+
+  const note = await getTutorNoteBySessionId(whiteboardSessionId);
+  const initialNote: TutorNoteStatusResult = note
+    ? {
+        found: true,
+        status: note.status,
+        content: note.content ?? null,
+        isPartial: note.isPartial,
+        error: note.error ?? null,
+        generatedAt: note.generatedAt?.toISOString() ?? null,
+      }
+    : { found: false };
+
+  console.log(
+    `[nsi] wbsid=${whiteboardSessionId} action=load_review_payload hasAudio=${detail.audioRecordings.length > 0} noteFound=${initialNote.found}`
+  );
+
+  return {
+    studentName: detail.student.name,
+    startedAtIso: detail.startedAt.toISOString(),
+    endedAtIso: detail.endedAt?.toISOString() ?? null,
+    durationSeconds: detail.durationSeconds,
+    hasAudio: detail.audioRecordings.length > 0,
+    eventsProxyUrl: `/api/whiteboard/${whiteboardSessionId}/events`,
+    snapshotProxyUrl: detail.snapshotBlobUrl
+      ? `/api/whiteboard/${whiteboardSessionId}/snapshot`
+      : null,
+    audioSegments: detail.audioRecordings.map((rec) => ({
+      url: `/api/audio/admin/${rec.id}`,
+      mimeType: rec.mimeType,
+      durationSeconds: rec.durationSeconds,
+    })),
+    initialNote,
+  };
+}

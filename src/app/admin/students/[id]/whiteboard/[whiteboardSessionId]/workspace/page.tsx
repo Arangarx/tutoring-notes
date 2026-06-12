@@ -5,8 +5,7 @@ import { db, withDbRetry } from "@/lib/db";
 import { env } from "@/lib/env";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import { requireStudentScope } from "@/lib/student-scope";
-import { WhiteboardWorkspaceClient } from "./WhiteboardWorkspaceClient";
-import { WorkspaceResumeGate } from "./WorkspaceResumeGate";
+import { WhiteboardSessionShell } from "./WhiteboardSessionShell";
 import { WorkspacePreviousSessionPreview } from "./WorkspacePreviousSessionPreview";
 
 /**
@@ -213,26 +212,19 @@ export default async function WhiteboardWorkspacePage({
         )}
       </div>
 
-      <WorkspaceResumeGate
+      <WhiteboardSessionShell
         whiteboardSessionId={detail.id}
         studentId={detail.student.id}
+        studentName={detail.student.name}
+        adminUserId={session.adminUserId}
         startedAtIso={detail.startedAt.toISOString()}
+        bothConnectedAtIso={detail.bothConnectedAt?.toISOString() ?? null}
+        initialActiveMs={detail.activeMs}
         initialLastActiveAtIso={detail.lastActiveAt?.toISOString() ?? null}
+        syncUrl={syncEnabled ? env.WHITEBOARD_SYNC_URL! : null}
+        initialUserWantsRecording={detail.student.recordingDefaultEnabled}
         syncEnabled={syncEnabled}
-      >
-        <WhiteboardWorkspaceClient
-          whiteboardSessionId={detail.id}
-          studentId={detail.student.id}
-          studentName={detail.student.name}
-          adminUserId={session.adminUserId}
-          startedAtIso={detail.startedAt.toISOString()}
-          bothConnectedAtIso={detail.bothConnectedAt?.toISOString() ?? null}
-          initialActiveMs={detail.activeMs}
-          initialLastActiveAtIso={detail.lastActiveAt?.toISOString() ?? null}
-          syncUrl={syncEnabled ? env.WHITEBOARD_SYNC_URL! : null}
-          initialUserWantsRecording={detail.student.recordingDefaultEnabled}
-        />
-      </WorkspaceResumeGate>
+      />
     </div>
   );
 }

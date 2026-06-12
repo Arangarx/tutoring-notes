@@ -2506,7 +2506,9 @@ describe("sync-client pointer envelope (B9 laser sync)", () => {
       pageId: "p1",
       x: 1,
       y: 2,
-      tool: "selection",
+      // Intentionally invalid tool value to exercise "bad tool" rejection
+      // in decryptMessage. Cast required because the type now enforces "laser".
+      tool: "selection" as "laser",
       button: "up" as const,
       color: "#e27d60",
     };

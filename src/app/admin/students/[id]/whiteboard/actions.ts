@@ -655,9 +655,19 @@ export async function endWhiteboardSession(
   revalidatePath(
     `/admin/students/${session.studentId}/whiteboard/${whiteboardSessionId}`
   );
-  revalidatePath(
-    `/admin/students/${session.studentId}/whiteboard/${whiteboardSessionId}/workspace`
-  );
+  // NOTE: do NOT revalidatePath for the /workspace route here.
+  // The A3 in-shell mode flip (WhiteboardSessionShell) handles the
+  // live→review transition client-side via onSessionEnded(). If we
+  // revalidate /workspace, Next.js App Router re-renders page.tsx
+  // server-side (which now sees endedAt=set and returns
+  // WorkspacePreviousSessionPreview), replacing the client's
+  // WhiteboardSessionShell tree before SessionReviewMode can mount.
+  // The workspace page is force-dynamic so there is no server-side
+  // cache to warm; revalidating it is a no-op for caching and only
+  // triggers the unwanted RSC replacement. On the next manual
+  // navigation to /workspace (new tab, refresh, link click) the
+  // page correctly serves WorkspacePreviousSessionPreview because
+  // endedAt is durably stamped in the DB.
 
   return {
     endedAt: updated.endedAt!.toISOString(),
