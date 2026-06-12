@@ -4,6 +4,8 @@
 **For:** the fresh orchestrator chat picking up the overnight redesign.
 **Read order for a fresh chat:** `AGENTS.md` → `docs/handoff/ORCHESTRATOR-STATE.md` → **this doc** (most current re: the overnight run) → `docs/V1-COMPONENT-LIBRARY.md`.
 
+> **Operating contract (see `.cursor/rules/orchestrator-discipline.mdc`):** state durability is a primary reliability obligation. Andrew offloads project memory to the orchestrator on purpose — at any moment a session can be lost and a fresh orchestrator must resume with **minimal re-guidance** (ideally just "continue"). Keep `ORCHESTRATOR-STATE.md` continuously current; treat "I'll update state later" as a silent failure. When you do the heavy STATE restructure, ensure this contract is reflected at the top of that doc too.
+
 > ORCHESTRATOR-STATE.md was NOT updated for the overnight run at handoff time because the working tree was owned by the live foundation build (write/git race). **First durable-write task once the tree is free: a heavy ORCHESTRATOR-STATE restructure** folding in everything below.
 
 ---
