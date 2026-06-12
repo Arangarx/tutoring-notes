@@ -16,7 +16,8 @@ setup("authenticate tutor storageState", async ({ page }) => {
   await page.waitForURL(
     (url) =>
       url.pathname.startsWith("/admin") &&
-      !url.pathname.startsWith("/admin/settings/2fa"),
+      !url.pathname.startsWith("/admin/settings/2fa") &&
+      url.pathname !== "/admin/pending-approval",
     { timeout: 15_000 }
   );
 
