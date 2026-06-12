@@ -149,7 +149,7 @@
     --brand-on: #051a24;
 
     --accent: #e27d60;
-    --accent-soft: #2e1d18;
+    --accent-soft: rgba(226, 125, 96, 0.22);
     --accent-strong: #d06b4e;
     --accent-on: #051a24;
     --accent-text: #e8a08a;
@@ -244,7 +244,7 @@
   --brand-on: #051a24;
 
   --accent: #e27d60;
-  --accent-soft: #2e1d18;
+  --accent-soft: rgba(226, 125, 96, 0.22);
   --accent-strong: #d06b4e;
   --accent-on: #051a24;
   --accent-text: #e8a08a;

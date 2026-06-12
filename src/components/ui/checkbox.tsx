@@ -46,7 +46,10 @@ function CheckboxField({
       <Checkbox id={id} {...checkboxProps} />
       <Label
         htmlFor={id}
-        className={cn("cursor-pointer font-normal", labelClassName)}
+        className={cn(
+          "m-0 cursor-pointer font-normal leading-4",
+          labelClassName
+        )}
       >
         {label}
       </Label>

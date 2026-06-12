@@ -78,7 +78,8 @@
     --shadcn-accent: var(--accent-soft);
     --shadcn-accent-foreground: var(--text-default);
     --destructive: var(--error);
-    --destructive-foreground: var(--text-default);
+    /* Dark text on light error fill — mirrors coral CTA (--accent-on) for AA contrast */
+    --destructive-foreground: var(--accent-on);
     --border: var(--border-default);
     --input: var(--surface-input);
     --ring: var(--focus-ring);
@@ -101,7 +102,8 @@
   --shadcn-accent: var(--accent-soft);
   --shadcn-accent-foreground: var(--text-default);
   --destructive: var(--error);
-  --destructive-foreground: var(--text-default);
+  /* Dark text on light error fill — mirrors coral CTA (--accent-on) for AA contrast */
+  --destructive-foreground: var(--accent-on);
   --border: var(--border-default);
   --input: var(--surface-input);
   --ring: var(--focus-ring);
