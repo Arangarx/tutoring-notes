@@ -9,6 +9,8 @@ import {
 } from "@/lib/security/csp";
 import {
   getAdminSessionMode,
+  is2faExemptAdminPath,
+  isApprovalExemptAdminPath,
   isTutorExperiencePath,
   realAdminHomePath,
   tutorExperienceLandingPath,
@@ -163,12 +165,7 @@ export async function middleware(req: NextRequest) {
     // approvalStatus is absent for the env-only admin (sub="admin") and legacy sessions —
     // treat absent as APPROVED (safe default: those were approved before this feature shipped).
     // ---------------------------------------------------------------------------
-    const isApprovalExemptPath =
-      pathname === "/admin/pending-approval" ||
-      pathname.startsWith("/admin/pending-approval/") ||
-      pathname.startsWith("/api/auth/");
-
-    if (!isApprovalExemptPath) {
+    if (!isApprovalExemptAdminPath(pathname)) {
       const approvalStatus = token.approvalStatus as string | undefined;
       const isTestAccount = (token.isTestAccount as boolean | undefined) ?? false;
       const isImpersonating = (token.isImpersonating as boolean | undefined) ?? false;
@@ -195,11 +192,7 @@ export async function middleware(req: NextRequest) {
     //   - The 2FA setup and verify routes themselves (must be reachable unenrolled)
     //   - env-only admin (sub="admin", no DB row — no 2FA support in V1)
     // ---------------------------------------------------------------------------
-    const is2faExemptPath =
-      pathname.startsWith("/admin/settings/2fa/setup") ||
-      pathname.startsWith("/admin/settings/2fa/verify");
-
-    if (!is2faExemptPath) {
+    if (!is2faExemptAdminPath(pathname)) {
       const isTestAccount = token.isTestAccount as boolean | undefined;
       const isImpersonating = token.isImpersonating as boolean | undefined;
       const isEnvAdmin = token.sub === "admin";
