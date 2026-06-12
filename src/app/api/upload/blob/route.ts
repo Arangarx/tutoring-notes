@@ -210,6 +210,9 @@ export async function POST(request: Request): Promise<Response> {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[uploadBlob.route] rid=${rid} handleUpload threw:`, msg);
-    return NextResponse.json({ error: msg, debugId: rid }, { status: 400 });
+    return NextResponse.json(
+      { error: "Upload authorization failed. Please try again.", debugId: rid },
+      { status: 400 }
+    );
   }
 }
