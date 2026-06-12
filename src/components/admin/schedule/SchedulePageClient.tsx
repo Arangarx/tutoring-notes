@@ -42,7 +42,7 @@ function ScheduleDayButton({
         <span>{children}</span>
         {modifiers.hasSession ? (
           <span
-            className="size-2 shrink-0 rounded-full bg-accent-text shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent-text)_35%,transparent)]"
+            className="size-2.5 shrink-0 rounded-full bg-[color:var(--calendar-event-dot)] shadow-[0_0_0_1px_color-mix(in_srgb,var(--calendar-event-dot)_55%,transparent)]"
             aria-hidden
           />
         ) : null}

@@ -54,8 +54,8 @@
   --shadcn-muted-foreground: var(--text-muted);
   --shadcn-accent: var(--accent-soft);
   --shadcn-accent-foreground: var(--text-default);
-  --destructive: var(--error);
-  --destructive-foreground: var(--text-default);
+  --destructive: #c42b2b;
+  --destructive-foreground: #fcfbf4;
   --border: var(--border-default);
   --input: var(--surface-input);
   --ring: var(--focus-ring);
@@ -77,9 +77,8 @@
     --shadcn-muted-foreground: var(--text-muted);
     --shadcn-accent: var(--accent-soft);
     --shadcn-accent-foreground: var(--text-default);
-    --destructive: var(--error);
-    /* Dark text on light error fill — mirrors coral CTA (--accent-on) for AA contrast */
-    --destructive-foreground: var(--accent-on);
+    --destructive: #e54848;
+    --destructive-foreground: #fcfbf4;
     --border: var(--border-default);
     --input: var(--surface-input);
     --ring: var(--focus-ring);
@@ -101,9 +100,8 @@
   --shadcn-muted-foreground: var(--text-muted);
   --shadcn-accent: var(--accent-soft);
   --shadcn-accent-foreground: var(--text-default);
-  --destructive: var(--error);
-  /* Dark text on light error fill — mirrors coral CTA (--accent-on) for AA contrast */
-  --destructive-foreground: var(--accent-on);
+  --destructive: #e54848;
+  --destructive-foreground: #fcfbf4;
   --border: var(--border-default);
   --input: var(--surface-input);
   --ring: var(--focus-ring);

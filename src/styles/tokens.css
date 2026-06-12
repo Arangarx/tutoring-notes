@@ -45,6 +45,12 @@
 
   --brand: #1e3d54;
   --brand-on: #fcfbf4;
+  /* Small-caps eyebrows on bg-brand (steel) cards — solid contrast, no opacity fade */
+  --brand-eyebrow: #c5d8e2;
+  --brand-on-subtle: #e8eef2;
+  --brand-card-border: rgba(30, 61, 84, 0.32);
+
+  --calendar-event-dot: #c96a50;
 
   --accent: #e27d60;
   --accent-soft: #f8e0d6;
@@ -147,6 +153,11 @@
 
     --brand: #7ea4b1;
     --brand-on: #051a24;
+    --brand-eyebrow: #021820;
+    --brand-on-subtle: #0a2834;
+    --brand-card-border: rgba(126, 164, 177, 0.62);
+
+    --calendar-event-dot: #e27d60;
 
     --accent: #e27d60;
     --accent-soft: rgba(226, 125, 96, 0.22);
@@ -242,6 +253,11 @@
 
   --brand: #7ea4b1;
   --brand-on: #051a24;
+  --brand-eyebrow: #021820;
+  --brand-on-subtle: #0a2834;
+  --brand-card-border: rgba(126, 164, 177, 0.62);
+
+  --calendar-event-dot: #e27d60;
 
   --accent: #e27d60;
   --accent-soft: rgba(226, 125, 96, 0.22);

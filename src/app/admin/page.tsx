@@ -88,7 +88,7 @@ export default async function AdminHomePage() {
               className={cn(
                 "label-mono text-[10px]",
                 hasPendingApprovals
-                  ? "text-[color:var(--brand-on)]/90"
+                  ? "text-[color:var(--brand-eyebrow)]"
                   : quickLinkEyebrowClass
               )}
             >

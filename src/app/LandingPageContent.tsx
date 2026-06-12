@@ -198,7 +198,7 @@ export function LandingPageContent() {
             </p>
 
             <div className="mx-auto mb-8 max-w-md rounded-2xl bg-brand px-6 py-5 text-left">
-              <p className="label-mono m-0 text-[11px] text-[color:var(--brand-on)]">
+              <p className="label-mono m-0 text-[11px] text-[color:var(--brand-eyebrow)]">
                 Built for independents
               </p>
               <p className="heading mt-2 mb-0 text-lg text-[color:var(--brand-on)]">
