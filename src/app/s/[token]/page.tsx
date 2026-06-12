@@ -4,12 +4,18 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { formatDateOnlyDisplay } from "@/lib/date-only";
 import { ParentShareNoteCard } from "@/components/notes/ParentShareNoteCard";
+import {
+  ParentShareShell,
+  ShareBrowseAllLink,
+  ShareDividerLabel,
+} from "@/components/share/ParentShareShell";
 import { parentShareNoteInclude } from "@/lib/share/parentShareNotePayload";
 import {
   loadWhiteboardReplayIdsByNoteIds,
   mergeWhiteboardStubsForShareCard,
 } from "@/lib/share/loadWhiteboardReplayIdsForNotes";
 import { assertCanAccessShareLink } from "@/lib/share-access-scope";
+import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
 
@@ -135,121 +141,74 @@ export default async function SharePage({
     );
   }
 
+  const subtitle = (
+    <>
+      {tutorName ? `Notes shared by ${tutorName}` : "Session notes"}
+      {totalNotes > 0 && (
+        <>
+          {" "}
+          · {totalNotes} note{totalNotes !== 1 ? "s" : ""}
+        </>
+      )}
+    </>
+  );
+
   return (
-    <div className="container" style={{ maxWidth: 860 }}>
-      <div className="card" style={{ background: "var(--surface-1)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
-          <div>
-            <h1 style={{ marginTop: 0, marginBottom: 4 }}>{student.name}</h1>
-            <p className="muted" style={{ margin: 0 }}>
-              {tutorName ? `Notes shared by ${tutorName}` : "Session notes"}
-              {totalNotes > 0 && (
-                <> · {totalNotes} note{totalNotes !== 1 ? "s" : ""}</>
-              )}
-            </p>
-          </div>
-          {totalNotes > SEEN_NOTES_SHOWN && (
-            <Link
-              className="btn"
-              href={`/s/${token}/all`}
-              style={{ flexShrink: 0 }}
-            >
-              Browse all notes →
-            </Link>
-          )}
-        </div>
+    <ParentShareShell
+      studentName={student.name}
+      subtitle={subtitle}
+      headerAction={
+        totalNotes > SEEN_NOTES_SHOWN ? (
+          <ShareBrowseAllLink
+            href={`/s/${token}/all`}
+            label="Browse all notes →"
+          />
+        ) : undefined
+      }
+    >
+      {totalNotes === 0 ? (
+        <p className="text-sm text-muted-foreground">No notes yet.</p>
+      ) : (
+        <>
+          {unseenNotes.length > 0 ? (
+            <>
+              <ShareDividerLabel>New since your last visit</ShareDividerLabel>
+              {unseenNotes.map((n) => (
+                <NoteCard key={n.id} note={n} isNew={true} />
+              ))}
+              {seenNotes.length > 0 ? (
+                <ShareDividerLabel variant="muted">Previously seen</ShareDividerLabel>
+              ) : null}
+            </>
+          ) : null}
 
-        <div className="divider" />
+          {seenTop.map((n) => (
+            <NoteCard key={n.id} note={n} isNew={false} />
+          ))}
 
-        {totalNotes === 0 ? (
-          <p className="muted">No notes yet.</p>
-        ) : (
-          <div style={{ display: "grid", gap: 12 }}>
-            {/* ── Unseen notes (returning visitors only) ── */}
-            {unseenNotes.length > 0 && (
-              <>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    margin: "4px 0",
-                  }}
-                >
-                  <div style={{ flex: 1, height: 1, background: "var(--color-primary)", opacity: 0.5 }} />
-                  <span
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: "var(--color-primary)",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    New since your last visit
-                  </span>
-                  <div style={{ flex: 1, height: 1, background: "var(--color-primary)", opacity: 0.5 }} />
-                </div>
-
-                {unseenNotes.map((n) => (
-                  <NoteCard key={n.id} note={n} isNew={true} />
+          {seenOlder.length > 0 ? (
+            <details className="mt-1 group">
+              <summary className="cursor-pointer py-2.5 text-[13px] text-muted-foreground select-none list-none [&::-webkit-details-marker]:hidden">
+                {seenOlder.length} older note{seenOlder.length !== 1 ? "s" : ""} — tap to
+                expand
+              </summary>
+              <div className="flex flex-col gap-3 pt-2">
+                {seenOlder.map((n) => (
+                  <NoteCard key={n.id} note={n} isNew={false} />
                 ))}
+              </div>
+            </details>
+          ) : null}
+        </>
+      )}
 
-                {seenNotes.length > 0 && (
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      margin: "4px 0",
-                    }}
-                  >
-                    <div style={{ flex: 1, height: 1, background: "var(--color-border)" }} />
-                    <span className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
-                      Previously seen
-                    </span>
-                    <div style={{ flex: 1, height: 1, background: "var(--color-border)" }} />
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* ── Seen / first-visit notes ── */}
-            {seenTop.map((n) => (
-              <NoteCard key={n.id} note={n} isNew={false} />
-            ))}
-
-            {/* ── Older seen notes collapsed ── */}
-            {seenOlder.length > 0 && (
-              <details style={{ marginTop: 4 }}>
-                <summary
-                  style={{
-                    cursor: "pointer",
-                    fontSize: 13,
-                    color: "var(--color-muted)",
-                    padding: "8px 0",
-                    userSelect: "none",
-                  }}
-                >
-                  {seenOlder.length} older note{seenOlder.length !== 1 ? "s" : ""} — click to expand
-                </summary>
-                <div style={{ display: "grid", gap: 12, marginTop: 8 }}>
-                  {seenOlder.map((n) => (
-                    <NoteCard key={n.id} note={n} isNew={false} />
-                  ))}
-                </div>
-              </details>
-            )}
-          </div>
-        )}
-
-        {totalNotes > SEEN_NOTES_SHOWN && (
-          <div style={{ marginTop: 20, textAlign: "center" }}>
-            <Link className="btn" href={`/s/${token}/all`}>
-              Browse all {totalNotes} notes →
-            </Link>
-          </div>
-        )}
-      </div>
-    </div>
+      {totalNotes > SEEN_NOTES_SHOWN ? (
+        <div className="mt-4 text-center">
+          <Button variant="outline" className="h-auto px-4 py-2.5" asChild>
+            <Link href={`/s/${token}/all`}>Browse all {totalNotes} notes →</Link>
+          </Button>
+        </div>
+      ) : null}
+    </ParentShareShell>
   );
 }

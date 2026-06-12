@@ -8,6 +8,7 @@ import { formatDateOnlyDisplay } from "@/lib/date-only";
 import { NotesSearchBar } from "@/components/notes/NotesSearchBar";
 import { PageSizeSelect } from "@/components/notes/PageSizeSelect";
 import { ParentShareNoteCard } from "@/components/notes/ParentShareNoteCard";
+import { ParentShareShell } from "@/components/share/ParentShareShell";
 import {
   parentShareRecordingsArgs,
   parentShareWhiteboardSessionsArgs,
@@ -16,6 +17,8 @@ import {
   loadWhiteboardReplayIdsByNoteIds,
   mergeWhiteboardStubsForShareCard,
 } from "@/lib/share/loadWhiteboardReplayIdsForNotes";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -107,11 +110,13 @@ export default async function ShareAllPage({ params, searchParams }: PageProps) 
     return (
       <nav
         aria-label="Note pages"
-        style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}
+        className="flex flex-wrap items-center gap-2"
       >
-        {pageNum > 1 && (
-          <Link className="btn" href={buildPageUrl(pageNum - 1)}>← Previous</Link>
-        )}
+        {pageNum > 1 ? (
+          <Button variant="outline" size="sm" asChild>
+            <Link href={buildPageUrl(pageNum - 1)}>← Previous</Link>
+          </Button>
+        ) : null}
         {Array.from({ length: totalPages }, (_, i) => i + 1)
           .filter((p) => Math.abs(p - pageNum) <= 2 || p === 1 || p === totalPages)
           .reduce<(number | "…")[]>((acc, p, idx, arr) => {
@@ -123,92 +128,102 @@ export default async function ShareAllPage({ params, searchParams }: PageProps) 
           }, [])
           .map((p, idx) =>
             p === "…" ? (
-              <span key={`e${idx}`} style={{ alignSelf: "center", padding: "0 4px" }}>…</span>
+              <span key={`e${idx}`} className="px-1 text-muted-foreground">
+                …
+              </span>
             ) : (
-              <Link
+              <Button
                 key={p}
-                className="btn"
-                href={buildPageUrl(p as number)}
+                variant={p === pageNum ? "secondary" : "outline"}
+                size="sm"
+                className={cn(p === pageNum && "pointer-events-none opacity-60")}
+                asChild={p !== pageNum}
                 aria-current={p === pageNum ? "page" : undefined}
-                style={p === pageNum ? { opacity: 0.6, pointerEvents: "none" } : {}}
               >
-                {p}
-              </Link>
+                {p === pageNum ? (
+                  <span>{p}</span>
+                ) : (
+                  <Link href={buildPageUrl(p as number)}>{p}</Link>
+                )}
+              </Button>
             )
           )}
-        {pageNum < totalPages && (
-          <Link className="btn" href={buildPageUrl(pageNum + 1)}>Next →</Link>
-        )}
+        {pageNum < totalPages ? (
+          <Button variant="outline" size="sm" asChild>
+            <Link href={buildPageUrl(pageNum + 1)}>Next →</Link>
+          </Button>
+        ) : null}
       </nav>
     );
   }
 
   return (
-    <div className="container" style={{ maxWidth: 860 }}>
-      <div className="card" style={{ background: "var(--surface-1)" }}>
-        {/* Breadcrumb */}
-        <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-          <Link href={`/s/${token}`}>← Back to {student.name}&apos;s notes</Link>
+    <ParentShareShell
+      studentName={`${student.name} — All session notes`}
+      subtitle={
+        <Link
+          href={`/s/${token}`}
+          className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+        >
+          ← Back to {student.name}&apos;s notes
+        </Link>
+      }
+    >
+      <Suspense>
+        <div className="flex flex-wrap items-center gap-2">
+          <NotesSearchBar placeholder="Search topics, homework, assessment, plan…" />
+          <PageSizeSelect defaultSize={DEFAULT_PAGE_SIZE} />
         </div>
+      </Suspense>
 
-        <h1 style={{ marginTop: 0, marginBottom: 4 }}>{student.name} — All session notes</h1>
-
-        {/* Toolbar */}
-        <Suspense>
-          <div className="row" style={{ flexWrap: "wrap", gap: 8, margin: "16px 0" }}>
-            <NotesSearchBar placeholder="Search topics, homework, assessment, plan…" />
-            <PageSizeSelect defaultSize={DEFAULT_PAGE_SIZE} />
-          </div>
-        </Suspense>
-
-        {/* Count + top pagination */}
-        <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 12, alignItems: "center" }}>
-          <p className="muted" style={{ fontSize: 13, margin: 0 }}>
-            {q
-              ? `${totalCount} note${totalCount !== 1 ? "s" : ""} matching "${q}"`
-              : `${totalCount} note${totalCount !== 1 ? "s" : ""} total`}
-            {totalPages > 1 && ` — page ${pageNum} of ${totalPages}`}
-          </p>
-          <PaginationNav />
-        </div>
-
-        {notes.length === 0 ? (
-          <p className="muted">{q ? "No notes match your search." : "No notes yet."}</p>
-        ) : (
-          <div style={{ display: "grid", gap: 12 }}>
-            {notes.map((n) => (
-              <ParentShareNoteCard
-                key={n.id}
-                token={token}
-                dateLabel={formatDateOnlyDisplay(n.date)}
-                note={{
-                  id: n.id,
-                  date: n.date,
-                  startTime: n.startTime,
-                  endTime: n.endTime,
-                  template: n.template,
-                  topics: n.topics,
-                  homework: n.homework,
-                  assessment: n.assessment,
-                  nextSteps: n.nextSteps,
-                  linksJson: n.linksJson,
-                  shareRecordingInEmail: n.shareRecordingInEmail,
-                  recordings: n.recordings,
-                  whiteboardSessions: mergeWhiteboardStubsForShareCard(
-                    n,
-                    whiteboardIdsByNote.get(n.id)
-                  ),
-                }}
-                isNew={false}
-              />
-            ))}
-          </div>
-        )}
-
-        <div style={{ marginTop: 20 }}>
-          <PaginationNav />
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="m-0 text-[13px] text-muted-foreground">
+          {q
+            ? `${totalCount} note${totalCount !== 1 ? "s" : ""} matching "${q}"`
+            : `${totalCount} note${totalCount !== 1 ? "s" : ""} total`}
+          {totalPages > 1 ? ` — page ${pageNum} of ${totalPages}` : ""}
+        </p>
+        <PaginationNav />
       </div>
-    </div>
+
+      {notes.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {q ? "No notes match your search." : "No notes yet."}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {notes.map((n) => (
+            <ParentShareNoteCard
+              key={n.id}
+              token={token}
+              dateLabel={formatDateOnlyDisplay(n.date)}
+              note={{
+                id: n.id,
+                date: n.date,
+                startTime: n.startTime,
+                endTime: n.endTime,
+                template: n.template,
+                topics: n.topics,
+                homework: n.homework,
+                assessment: n.assessment,
+                nextSteps: n.nextSteps,
+                linksJson: n.linksJson,
+                shareRecordingInEmail: n.shareRecordingInEmail,
+                recordings: n.recordings,
+                whiteboardSessions: mergeWhiteboardStubsForShareCard(
+                  n,
+                  whiteboardIdsByNote.get(n.id)
+                ),
+              }}
+              isNew={false}
+            />
+          ))}
+        </div>
+      )}
+
+      <div className="mt-2">
+        <PaginationNav />
+      </div>
+    </ParentShareShell>
   );
 }
