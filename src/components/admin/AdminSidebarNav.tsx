@@ -6,6 +6,7 @@ import { signOut } from "next-auth/react";
 
 import { exitImpersonation } from "@/app/admin/actions/impersonate";
 import { MynkWordmark } from "@/components/auth/MynkWordmark";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { AdminSessionMode } from "@/lib/admin-routing";
@@ -80,7 +81,7 @@ export function AdminSidebarNav({
       className="flex h-full min-h-[calc(100dvh-0px)] w-[220px] flex-col gap-5 border-r border-border bg-card p-5"
     >
       <Link
-        href={sessionMode === "real-admin-home" ? "/admin" : "/admin/students"}
+        href="/"
         className="mb-1 inline-flex rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         aria-label="Home"
       >
@@ -106,6 +107,9 @@ export function AdminSidebarNav({
       </div>
 
       <div className="mt-auto flex flex-col gap-3 border-t border-border pt-4">
+        <div className="flex items-center px-1">
+          <ThemeToggle />
+        </div>
         <div className="flex items-center gap-3 rounded-[10px] border border-border bg-background p-3">
           <div
             className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand text-[13px] font-semibold text-[color:var(--surface)]"

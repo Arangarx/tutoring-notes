@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { signOut } from "next-auth/react";
 import { Inbox, Settings } from "lucide-react";
 import { exitImpersonation } from "@/app/admin/actions/impersonate";
@@ -58,6 +58,27 @@ export function AdminNav({
   });
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const mobileMenuRef = useRef<HTMLElement>(null);
+  const mobileToggleRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as Node;
+      if (mobileMenuRef.current?.contains(target)) return;
+      if (mobileToggleRef.current?.contains(target)) return;
+      setOpen(false);
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [open]);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const closeMenu = () => setOpen(false);
+    mq.addEventListener("change", closeMenu);
+    return () => mq.removeEventListener("change", closeMenu);
+  }, []);
 
   function isActive(href: string) {
     if (href === "/admin") return pathname === "/admin";
@@ -75,15 +96,13 @@ export function AdminNav({
       mobile && "w-full justify-start"
     );
 
-  const homeHref = sessionMode === "real-admin-home" ? "/admin" : "/admin/students";
-
   if (layout === "mobile") {
     return (
       <>
         <header className="sticky top-0 z-50 border-b border-border bg-card md:hidden">
           <div className="flex h-[52px] items-center justify-between gap-3 px-4">
             <Link
-              href={homeHref}
+              href="/"
               className="inline-flex min-h-11 items-center rounded-md focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
               aria-label="Home"
             >
@@ -112,38 +131,40 @@ export function AdminNav({
                   <Settings className="size-[18px]" />
                 </Link>
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="size-10 shrink-0 rounded-[10px]"
-                onClick={() => setOpen(!open)}
-                aria-expanded={open}
-                aria-controls="admin-mobile-nav"
-                aria-label={open ? "Close menu" : "Open menu"}
-              >
-                <span className="sr-only">{open ? "Close" : "Menu"}</span>
-                <span className="flex flex-col gap-1.5" aria-hidden>
-                  <span
-                    className={cn(
-                      "block h-0.5 w-5 rounded-full bg-foreground transition-transform",
-                      open && "translate-y-2 rotate-45"
-                    )}
-                  />
-                  <span
-                    className={cn(
-                      "block h-0.5 w-5 rounded-full bg-foreground transition-opacity",
-                      open && "opacity-0"
-                    )}
-                  />
-                  <span
-                    className={cn(
-                      "block h-0.5 w-5 rounded-full bg-foreground transition-transform",
-                      open && "-translate-y-2 -rotate-45"
-                    )}
-                  />
-                </span>
-              </Button>
+              <span ref={mobileToggleRef} className="inline-flex">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="size-10 shrink-0 rounded-[10px]"
+                  onClick={() => setOpen(!open)}
+                  aria-expanded={open}
+                  aria-controls="admin-mobile-nav"
+                  aria-label={open ? "Close menu" : "Open menu"}
+                >
+                  <span className="sr-only">{open ? "Close" : "Menu"}</span>
+                  <span className="flex flex-col gap-1.5" aria-hidden>
+                    <span
+                      className={cn(
+                        "block h-0.5 w-5 rounded-full bg-foreground transition-transform",
+                        open && "translate-y-2 rotate-45"
+                      )}
+                    />
+                    <span
+                      className={cn(
+                        "block h-0.5 w-5 rounded-full bg-foreground transition-opacity",
+                        open && "opacity-0"
+                      )}
+                    />
+                    <span
+                      className={cn(
+                        "block h-0.5 w-5 rounded-full bg-foreground transition-transform",
+                        open && "-translate-y-2 -rotate-45"
+                      )}
+                    />
+                  </span>
+                </Button>
+              </span>
             </div>
           </div>
         </header>
@@ -154,9 +175,11 @@ export function AdminNav({
               type="button"
               className="fixed inset-0 z-40 bg-black/50 md:hidden"
               aria-label="Close menu"
+              tabIndex={-1}
               onClick={() => setOpen(false)}
             />
             <nav
+              ref={mobileMenuRef}
               id="admin-mobile-nav"
               className="fixed inset-y-0 right-0 z-50 flex w-[min(100%,280px)] flex-col gap-1 border-l border-border bg-card p-4 shadow-lg md:hidden"
               aria-label="Main"
@@ -210,9 +233,9 @@ export function AdminNav({
       <header className="sticky top-0 z-50 border-b border-border bg-background/85 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-4xl items-center justify-between gap-4 px-4">
           <Link
-            href="/?view=home"
+            href="/"
             className="inline-flex min-h-11 min-w-11 items-center rounded-md focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-            aria-label="View home page"
+            aria-label="Home"
           >
             <MynkWordmark size="sm" />
           </Link>

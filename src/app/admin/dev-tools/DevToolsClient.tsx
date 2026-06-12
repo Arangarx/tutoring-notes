@@ -74,19 +74,28 @@ type DevToolsClientProps = {
 function CopyCell({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <button
-      type="button"
-      onClick={() => {
-        void navigator.clipboard.writeText(value).then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        });
-      }}
-      className="rounded px-1 font-mono text-xs hover:bg-muted"
-      title="Click to copy"
-    >
-      {copied ? "✓ copied" : value}
-    </button>
+    <span className="inline-flex min-w-0 items-center gap-2">
+      <button
+        type="button"
+        onClick={() => {
+          void navigator.clipboard.writeText(value).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          });
+        }}
+        className="min-w-0 truncate rounded px-1 font-mono text-xs hover:bg-muted"
+        title="Click to copy"
+      >
+        {value}
+      </button>
+      <span
+        className="w-14 shrink-0 font-mono text-xs text-muted-foreground"
+        aria-live="polite"
+        aria-hidden={!copied}
+      >
+        {copied ? "✓ copied" : ""}
+      </span>
+    </span>
   );
 }
 

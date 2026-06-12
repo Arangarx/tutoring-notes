@@ -11,6 +11,8 @@ import { AdminTestAccountsPanel } from "./AdminTestAccountsPanel";
 import { AdminPageShell } from "@/components/admin/AdminPageShell";
 import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
 import { Button } from "@/components/ui/button";
+import { listWaitlistedTutors } from "@/lib/tutor-approval-scope";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +40,15 @@ export default async function AdminHomePage() {
 
   const email = session?.user?.email ?? "admin";
   console.log(`[imp] route=${realAdminHomePath()} mode=real-admin-home admin=${email}`);
+
+  const pendingApprovals = await listWaitlistedTutors();
+  const pendingApprovalCount = pendingApprovals.length;
+  const hasPendingApprovals = pendingApprovalCount > 0;
+
+  const quickLinkCardClass =
+    "rounded-[10px] border border-border bg-card px-4 py-3.5 shadow-sm transition-colors hover:border-accent/40 hover:bg-card/90";
+  const quickLinkEyebrowClass = "label-mono text-[10px] text-accent-text";
+  const quickLinkTitleClass = "mt-1 text-sm font-semibold text-foreground";
 
   return (
     <AdminPageShell
@@ -67,26 +78,43 @@ export default async function AdminHomePage() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Link
             href="/admin/tutor-approvals"
-            className="rounded-[10px] bg-brand px-4 py-4 shadow-sm transition-opacity hover:opacity-95"
+            className={cn(
+              hasPendingApprovals
+                ? "rounded-[10px] bg-brand px-4 py-4 shadow-sm transition-opacity hover:opacity-95"
+                : quickLinkCardClass
+            )}
           >
-            <p className="label-mono text-[10px] text-[color:var(--brand-on)]/70">Operator</p>
-            <p className="mt-1 text-sm font-semibold text-[color:var(--brand-on)]">
+            <p
+              className={cn(
+                "label-mono text-[10px]",
+                hasPendingApprovals
+                  ? "text-[color:var(--brand-on)]/90"
+                  : quickLinkEyebrowClass
+              )}
+            >
+              Operator
+            </p>
+            <p
+              className={cn(
+                "mt-1 text-sm font-semibold",
+                hasPendingApprovals ? "text-[color:var(--brand-on)]" : quickLinkTitleClass
+              )}
+            >
               Tutor approvals
+              {hasPendingApprovals ? (
+                <span className="ml-1.5 font-mono text-xs font-normal opacity-90">
+                  ({pendingApprovalCount} pending)
+                </span>
+              ) : null}
             </p>
           </Link>
-          <Link
-            href="/admin/feedback"
-            className="rounded-[10px] border border-border bg-card px-4 py-3.5 shadow-sm transition-colors hover:border-accent/40 hover:bg-card/90"
-          >
-            <p className="label-mono text-[10px] text-accent-text">Operator</p>
-            <p className="mt-1 text-sm font-semibold text-foreground">Feedback inbox</p>
+          <Link href="/admin/feedback" className={quickLinkCardClass}>
+            <p className={quickLinkEyebrowClass}>Operator</p>
+            <p className={quickLinkTitleClass}>Feedback inbox</p>
           </Link>
-          <Link
-            href="/admin/cost"
-            className="rounded-[10px] border border-border bg-card px-4 py-3.5 shadow-sm transition-colors hover:border-accent/40 hover:bg-card/90"
-          >
-            <p className="label-mono text-[10px] text-accent-text">Operator</p>
-            <p className="mt-1 text-sm font-semibold text-foreground">Cost dashboard</p>
+          <Link href="/admin/cost" className={quickLinkCardClass}>
+            <p className={quickLinkEyebrowClass}>Operator</p>
+            <p className={quickLinkTitleClass}>Cost dashboard</p>
           </Link>
         </div>
       </div>
