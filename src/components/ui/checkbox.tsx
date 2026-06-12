@@ -5,7 +5,6 @@ import { CheckIcon } from "lucide-react"
 import { Checkbox as CheckboxPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
-import { Label } from "@/components/ui/label"
 
 function Checkbox({
   className,
@@ -42,17 +41,17 @@ function CheckboxField({
   labelClassName?: string
 }) {
   return (
-    <div className={cn("flex items-center gap-3", className)}>
-      <Checkbox id={id} {...checkboxProps} />
-      <Label
+    <div className={cn("inline-flex items-center gap-3", className)}>
+      <Checkbox id={id} className="shrink-0" {...checkboxProps} />
+      <label
         htmlFor={id}
         className={cn(
-          "m-0 cursor-pointer font-normal leading-4",
+          "!mb-0 flex h-4 cursor-pointer items-center text-sm leading-none font-normal text-foreground select-none",
           labelClassName
         )}
       >
         {label}
-      </Label>
+      </label>
     </div>
   )
 }

@@ -211,12 +211,12 @@ export function StudentDetailShell({
           </div>
         </header>
 
-        <div className="mb-4 flex flex-col gap-3 rounded-2xl bg-brand px-4 py-4 sm:flex-row sm:items-center md:mx-0">
+        <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-[color:var(--brand-card-border)] bg-brand px-4 py-4 sm:flex-row sm:items-center md:mx-0">
           <div className="min-w-0 flex-1">
-            <p className="label-mono m-0 text-[10px] text-[color:var(--brand-on)]/70">
+            <p className="label-mono m-0 text-[10px] text-[color:var(--brand-eyebrow)]">
               Ready to teach
             </p>
-            <p className="mt-1 text-[13px] text-[color:var(--brand-on)]/90">
+            <p className="mt-1 text-[13px] text-[color:var(--brand-on-subtle)]">
               Start a whiteboard session to record and generate notes.
             </p>
           </div>
