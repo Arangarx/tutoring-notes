@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { studentAvatarHueClass, studentInitials } from "@/components/admin/student-initials";
+import { studentAvatarColor, studentInitials } from "@/components/admin/student-initials";
 
 type StudentAvatarProps = {
   name: string;
@@ -17,11 +17,11 @@ export function StudentAvatar({ name, size = "md", className }: StudentAvatarPro
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-full font-medium tabular-nums",
-        studentAvatarHueClass(name),
+        "inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white tabular-nums ring-2 ring-background",
         sizeClasses[size],
         className
       )}
+      style={{ backgroundColor: studentAvatarColor(name) }}
       aria-hidden
     >
       {studentInitials(name)}

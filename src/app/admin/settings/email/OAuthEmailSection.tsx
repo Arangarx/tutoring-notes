@@ -31,17 +31,17 @@ export default function OAuthEmailSection({
         </div>
       ) : googleOAuthAvailable && canUseGmailConnect ? (
         <div className="space-y-3">
-          {/* Full-page navigation so the server redirect to Google is followed;
-              Link would client-navigate and can flash an error on 302 */}
-          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-          <a href="/api/auth/gmail/connect" className="inline-flex min-h-9 items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-xs transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
-            Connect Gmail
-          </a>
           {/* AuthMortensenNotice MUST appear here — legally binding placement per v1-redesign-STATUS.md */}
           <AuthMortensenNotice
             variant="connect"
             className="text-sm text-muted-foreground leading-relaxed"
           />
+          {/* Full-page navigation so the server redirect to Google is followed;
+              Link would client-navigate and can flash an error on 302 */}
+          <Button variant="accent" asChild>
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+            <a href="/api/auth/gmail/connect">Connect Gmail</a>
+          </Button>
         </div>
       ) : googleOAuthAvailable && !canUseGmailConnect ? (
         <p className="text-sm text-muted-foreground">
