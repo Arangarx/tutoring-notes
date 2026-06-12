@@ -17,9 +17,11 @@
  *   - Pointers are ephemeral — nothing is persisted to pageDataRef,
  *     outbox, or event-log here.
  *
- * Per-role colors are imported from token-values:
+ * Per-role colors via laser-colors.ts (token-values):
  *   tutor  = coral WB_LASER_TUTOR_HEX   (#e27d60, matches --accent)
  *   student = sky  WB_LASER_STUDENT_HEX  (#0891b2)
+ * Tutor-local laser uses Excalidraw DEFAULT_LASER_COLOR ("red") — overridden
+ * to coral in whiteboard-chrome.css; only remote overlay color is API-set here.
  *
  * B9 pilot fix — makes the tutor wand visible on the student canvas.
  */
@@ -28,11 +30,7 @@ import { useEffect } from "react";
 import type React from "react";
 import type { WhiteboardSyncClient } from "@/lib/whiteboard/sync-client";
 import type { ExcalidrawApiLike } from "@/lib/whiteboard/insert-asset";
-import { WB_LASER_TUTOR_HEX, WB_LASER_STUDENT_HEX } from "@/styles/token-values";
-
-function colorForRole(role: "tutor" | "student"): string {
-  return role === "tutor" ? WB_LASER_TUTOR_HEX : WB_LASER_STUDENT_HEX;
-}
+import { buildCollaboratorLaserEntry } from "@/lib/whiteboard/laser-colors";
 
 /**
  * Wire up inbound pointer/laser messages from the sync client and render
@@ -76,20 +74,15 @@ export function useCollaboratorPointers(
       // needing to re-subscribe every time the student turns a page.
       if (msg.pageId !== activePageIdRef.current) return;
 
-      const strokeColor = colorForRole(msg.role);
-
-      collaboratorMap.set(fromPeerId, {
-        pointer: {
+      collaboratorMap.set(
+        fromPeerId,
+        buildCollaboratorLaserEntry({
+          role: msg.role,
           x: msg.x,
           y: msg.y,
-          tool: "laser",
-          renderCursor: false,
-          laserColor: strokeColor,
-        },
-        button: msg.button,
-        username: msg.role === "tutor" ? "Tutor" : "Student",
-        color: { background: strokeColor, stroke: strokeColor },
-      });
+          button: msg.button,
+        })
+      );
 
       applyingRemoteRef.current = true;
       try {

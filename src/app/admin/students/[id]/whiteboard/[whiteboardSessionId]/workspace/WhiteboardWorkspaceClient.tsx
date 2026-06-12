@@ -164,8 +164,8 @@ import {
   EXCALIDRAW_STROKE_DARK_HEX,
   inkDisplayHex,
   WB_STROKE_WIDTHS,
-  WB_LASER_TUTOR_HEX,
 } from "@/styles/token-values";
+import { laserColorForRole } from "@/lib/whiteboard/laser-colors";
 import { StrokeWidthIcon } from "@/components/whiteboard/chrome/wb-icons";
 import "./whiteboard-chrome.css";
 import { ExcalidrawDynamic } from "@/components/whiteboard/ExcalidrawDynamic";
@@ -3372,7 +3372,7 @@ export function WhiteboardWorkspaceClient({
           y: payload.pointer.y,
           tool: "laser",
           button: payload.button,
-          color: WB_LASER_TUTOR_HEX,
+          color: laserColorForRole("tutor"),
         });
       };
 
