@@ -1,10 +1,11 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getStudentScope } from "@/lib/student-scope";
 import { AdminPageShell } from "@/components/admin/AdminPageShell";
 import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
 import { LocalDateTimeText } from "@/components/LocalDateTimeText";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export const dynamic = "force-dynamic";
 
@@ -33,33 +34,30 @@ export default async function OutboxPage() {
         ) : (
           <ul className="divide-y divide-border" role="list">
             {messages.map((m) => (
-              <li key={m.id} className="px-4 py-4 space-y-3">
-                <div className="flex items-start justify-between gap-3 flex-wrap">
+              <li key={m.id} className="space-y-3 px-4 py-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-foreground">{m.subject}</p>
-                    <p className="text-xs text-muted-foreground font-mono mt-1">
+                    <p className="mt-1 font-mono text-xs text-muted-foreground">
                       To {m.toEmail} &bull;{" "}
                       <LocalDateTimeText dateTime={m.createdAt.toISOString()} />
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <input
+                  <Input
                     readOnly
                     value={m.linkUrl}
-                    className="h-8 min-w-0 flex-1 rounded-md border border-input bg-muted/40 px-3 text-xs font-mono text-muted-foreground"
+                    className="h-9 min-w-0 flex-1 font-mono text-xs"
                     aria-label="Share link URL"
                   />
-                  <a
-                    className="inline-flex h-8 shrink-0 items-center rounded-md border border-input bg-background px-3 text-xs font-medium text-foreground shadow-xs transition-colors hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                    href={m.linkUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Open link
-                  </a>
+                  <Button asChild variant="outline" size="sm" className="shrink-0">
+                    <a href={m.linkUrl} target="_blank" rel="noreferrer">
+                      Open link
+                    </a>
+                  </Button>
                 </div>
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{m.bodyText}</p>
+                <p className="whitespace-pre-wrap text-sm text-muted-foreground">{m.bodyText}</p>
               </li>
             ))}
           </ul>

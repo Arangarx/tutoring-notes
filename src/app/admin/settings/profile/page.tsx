@@ -4,6 +4,7 @@ import { authOptions } from "@/auth-options";
 import { getAdminByEmail } from "@/lib/auth-db";
 import { AdminPageShell } from "@/components/admin/AdminPageShell";
 import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { SettingsSubNav } from "@/components/admin/SettingsSubNav";
 import ChangePasswordForm from "./ChangePasswordForm";
 import ProfileForm from "./ProfileForm";
 
@@ -36,11 +37,13 @@ export default async function ProfileSettingsPage() {
       eyebrow={
         <Link
           href="/admin/settings"
-          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="text-sm text-muted-foreground transition-colors hover:text-foreground md:hidden"
         >
           ← Settings
         </Link>
       }
+      sidebar={<SettingsSubNav />}
+      sidebarWidth="narrow"
     >
       <div className="space-y-6">
         <AdminSectionCard

@@ -35,7 +35,7 @@ export default async function DevToolsPage() {
       title="Dev tools"
       description={
         <>
-          <span className="font-semibold text-yellow-600 dark:text-yellow-400">
+          <span className="font-semibold text-warning">
             ⚠ Dev / preview only — not available in production.
           </span>{" "}
           Create and reset throwaway fixture users for testing. All rows marked{" "}
