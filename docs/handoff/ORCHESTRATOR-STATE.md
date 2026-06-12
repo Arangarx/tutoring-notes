@@ -8,15 +8,15 @@ Multi-day epic on branch **`v1-redesign`** (active V1 integration branch; **not 
 
 ---
 
-## ⏩ HEAD — 2026-06-11 overnight wind-down (8 branches ready for morning smoke)
+## ⏩ HEAD — 2026-06-11 smoke round 1 triaged
 
 | Field | Value |
 |---|---|
-| **Last action completed** | **Overnight contraction push COMPLETE** — 8 feature branches built, pushed, smokebooked; **none merged to `v1-redesign`**. Integration tip unchanged @ [`5fe29b1`](https://github.com/Arangarx/tutoring-notes/commit/5fe29b1) (`feat/notes-login` merge + component-reuse standard). |
-| **Next action(s)** | **Andrew morning smoke queue** — work through the 8 branches below (one Vercel Preview per branch; smokebook on each branch tip). After green smokes: merge to `v1-redesign` in **recommended order** (see below). **Do not merge B1+B2 without applying migrations on preview Neon first.** **Top post-smoke build candidate:** VIDEO recording + replay (designed, not built — riskiest/least-defined; deferred per Andrew). |
-| **Open Andrew-confirms** | See **Open decisions — Andrew confirms** section below (B2 design D-1/D-2/D-5 + flag flip timing; B2 Step 6 deferred; B1 deferred TODOs; Security Tier B SHOULD-FIX-2 chunk-transcribe F&F vs cron; N-2 parent dashboard semantics; merge order approval). |
-| **In-flight subagents** | **None** — overnight wave closed. |
-| **Uncommitted / unmerged** | **8 overnight branches** (all pushed to `origin`; smokebooks on branch tips — not yet on `v1-redesign`): see **Morning smoke queue** table. **`v1-redesign` → `master`:** entire epic held for full Gate A. **Parked:** `feature/sarah-forward-migration-q6` @ `a396ab5`. |
+| **Last action completed** | **Smoke round 1 COMPLETE** — Andrew smoked all 8 overnight branches; inline notes committed @ [`a176e4f`](https://github.com/Arangarx/tutoring-notes/commit/a176e4f) (`MASTER-CUT-SMOKE-2026-06-11.md`). Findings triaged in [`smoke-round-1-findings-2026-06-11.md`](smoke-round-1-findings-2026-06-11.md) (40 items: 8 BLOCKER, 9 HIGH, 4 MED, 5 LOW, 5 DESIGN, 9 INFO). **None merged to `v1-redesign`.** Integration tip unchanged @ [`5fe29b1`](https://github.com/Arangarx/tutoring-notes/commit/5fe29b1). |
+| **Next action(s)** | **Fix BLOCKERs + sequence merges** (pending Andrew): W1/TFA1 redirect loop, C1 ConsentError UI, C2 Step 6 parent consent UI, P1/P2 child credential validation, E1 end-session shell flip; then re-smoke and merge to `v1-redesign` in recommended order. Many cross-branch tests (L2/L3 laser position, replay) require `v1-redesign` re-merged into WB branches first. |
+| **Open Andrew-confirms** | **SHOULD-FIX-2** (S-DEC) — orchestrator to recommend chunk-transcribe F&F bearer option A vs B. **Merge/fix order** — which BLOCKERs before first merge vs fix-on-branch. **`NOTES_AUTH_WALL` + `CONSENT_ENFORCEMENT`** — env-scope-at-cut note (preview vs prod flip playbook). Plus standing: B2 D-1/D-2/D-5, flag flip timing, B1 deferred TODOs, N-2 parent dashboard semantics. |
+| **In-flight subagents** | **None**. |
+| **Uncommitted / unmerged** | **8 feature branches** still unmerged to `v1-redesign` (see Morning smoke queue). **This commit:** findings doc + BACKLOG append + state HEAD on `v1-redesign`. **`v1-redesign` → `master`:** entire epic held for full Gate A. **Parked:** `feature/sarah-forward-migration-q6` @ `a396ab5`. |
 
 **Process directive (Andrew 2026-06-07):** prefer **agent-runnable validation harnesses** over manual smoke wherever behavior is verifiable without Andrew's hardware (transcription E2E + sweep validations were the exemplars).
 
