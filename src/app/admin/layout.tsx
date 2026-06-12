@@ -45,19 +45,19 @@ export default async function AdminLayout({
   };
 
   return (
-    <>
+    <div className="flex min-h-dvh flex-col bg-background md:h-dvh md:overflow-hidden">
       {isImpersonating ? <ImpersonationBanner email={impersonatedEmail} /> : null}
-      <div className="flex min-h-dvh bg-background">
-        <aside className="sticky top-0 hidden h-dvh shrink-0 md:block">
+      <div className="flex min-h-0 min-w-0 flex-1 md:overflow-hidden">
+        <aside className="hidden h-full shrink-0 md:block">
           <AdminSidebarNav {...navProps} />
         </aside>
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col md:overflow-y-auto">
           <AdminNav {...navProps} layout="mobile" />
           <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 md:px-6 md:py-8 xl:max-w-7xl">
             {children}
           </main>
         </div>
       </div>
-    </>
+    </div>
   );
 }
