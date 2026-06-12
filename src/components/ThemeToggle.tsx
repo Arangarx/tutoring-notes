@@ -1,13 +1,32 @@
 "use client";
 
+import { useLayoutEffect, useRef, useState } from "react";
+
 import { useThemeDropdown } from "@/hooks/useThemeDropdown";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+const MENU_ESTIMATED_WIDTH_PX = 152; // min-w-[9.5rem]
+const VIEWPORT_EDGE_PADDING_PX = 8;
 
 export function ThemeToggle({ className }: { className?: string }) {
   const { mode, open, toggleOpen, menuId, rootRef, active, options, selectMode } =
     useThemeDropdown();
   const ActiveIcon = active.Icon;
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuAlign, setMenuAlign] = useState<"start" | "end">("end");
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setMenuAlign("end");
+      return;
+    }
+    const trigger = rootRef.current?.getBoundingClientRect();
+    if (!trigger) return;
+    const menuWidth = menuRef.current?.offsetWidth ?? MENU_ESTIMATED_WIDTH_PX;
+    const endAlignedLeft = trigger.right - menuWidth;
+    setMenuAlign(endAlignedLeft < VIEWPORT_EDGE_PADDING_PX ? "start" : "end");
+  }, [open, rootRef]);
 
   return (
     <div ref={rootRef} className={cn("relative", className)}>
@@ -28,10 +47,14 @@ export function ThemeToggle({ className }: { className?: string }) {
 
       {open ? (
         <div
+          ref={menuRef}
           id={menuId}
           role="menu"
           aria-label="Theme"
-          className="absolute right-0 top-full z-[60] mt-1 min-w-[9.5rem] rounded-md border border-border bg-popover p-1 shadow-md"
+          className={cn(
+            "absolute top-full z-[60] mt-1 min-w-[9.5rem] rounded-md border border-border bg-popover p-1 shadow-md",
+            menuAlign === "end" ? "right-0" : "left-0"
+          )}
         >
           {options.map(({ mode: optionMode, label, Icon }) => (
             <button
