@@ -41,6 +41,7 @@ export function AdminNav({
 }: AdminNavProps) {
   const tutorLinks = [
     { href: "/admin/students", label: "Students" },
+    { href: "/admin/schedule", label: "Schedule" },
     { href: "/admin/outbox", label: "Outbox" },
   ];
   const adminLinks = [

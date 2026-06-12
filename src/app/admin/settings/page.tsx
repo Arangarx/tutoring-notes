@@ -16,6 +16,12 @@ const settingsLinks = [
       'Connect Gmail or SMTP so "Send update" and password reset emails deliver.',
   },
   {
+    href: "/admin/settings/integrations",
+    label: "Calendar integrations",
+    description:
+      "Connect Apple Calendar or Google Calendar to mirror scheduled sessions outward.",
+  },
+  {
     href: "/admin/settings/2fa",
     label: "Two-Factor Authentication",
     description: "Set up or rotate your TOTP authenticator for mandatory 2FA.",
