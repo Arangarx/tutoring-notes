@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { CheckboxField } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { saveEmailConfig } from "./actions";
@@ -22,6 +23,7 @@ export default function EmailConfigForm({
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [secure, setSecure] = useState(defaultSecure);
 
   return (
     <form
@@ -65,16 +67,14 @@ export default function EmailConfigForm({
               defaultValue={defaultPort}
             />
           </div>
-          <label className="flex items-center gap-2 pb-2 text-sm text-foreground cursor-pointer">
-            <input
-              type="checkbox"
-              name="secure"
-              value="true"
-              defaultChecked={defaultSecure}
-              className="size-4 rounded border-input accent-primary"
-            />
-            TLS (secure)
-          </label>
+          <CheckboxField
+            id="smtp-secure"
+            label="TLS (secure)"
+            checked={secure}
+            onCheckedChange={(checked) => setSecure(checked === true)}
+            className="pb-2"
+          />
+          <input type="hidden" name="secure" value={secure ? "true" : "false"} />
         </div>
 
         <div className="space-y-1.5">
