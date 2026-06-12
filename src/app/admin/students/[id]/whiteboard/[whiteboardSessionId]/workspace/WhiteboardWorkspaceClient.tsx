@@ -133,6 +133,7 @@ import {
   isTouchLayout,
   useWbLayoutMode,
 } from "@/components/whiteboard/chrome/useWbLayoutMode";
+import { WbRoleProvider } from "@/components/whiteboard/chrome/wb-role";
 import {
   shapeIconFor,
   WbIconCamera,
@@ -4172,6 +4173,7 @@ export function WhiteboardWorkspaceClient({
   });
 
   return (
+    <WbRoleProvider role="tutor">
     <div
       className="mynk-wb-chrome"
       data-testid="mynk-wb-chrome"
@@ -4883,6 +4885,7 @@ export function WhiteboardWorkspaceClient({
         </WbChromeErrorBoundary>
       )}
     </div>
+    </WbRoleProvider>
   );
 }
 
