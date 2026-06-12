@@ -142,11 +142,13 @@ input[type="radio"]:focus-visible {
   outline: none;
 }
 
-label {
-  display: block;
-  font-size: 12px;
-  color: var(--muted);
-  margin-bottom: 6px;
+@layer base {
+  label {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
 }
 
 .muted {
