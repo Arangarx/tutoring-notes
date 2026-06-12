@@ -68,19 +68,21 @@ const PERMISSION_TOGGLES = [
 const RESTRICTION_TOGGLES = [
   {
     key: "restrictAudioRecording" as const,
-    label: "Never allow audio recording",
+    label: "Always block audio recording",
     description:
-      "Child-narrowing floor — even if you enable audio above, this blocks it for your child.",
+      "Applies to every tutor. If checked, session audio cannot be recorded even when a tutor's setting above is on.",
   },
   {
     key: "restrictWhiteboardRecording" as const,
-    label: "Never allow whiteboard replay",
-    description: "Blocks parent-facing whiteboard replay access for your child.",
+    label: "Always block whiteboard replay",
+    description:
+      "Applies to every tutor. If checked, you cannot replay saved whiteboard sessions even when a tutor's setting above is on.",
   },
   {
     key: "restrictNoteSending" as const,
-    label: "Never allow notes email",
-    description: "Blocks session summary emails for your child.",
+    label: "Always block session notes email",
+    description:
+      "Applies to every tutor. If checked, summary emails are not sent even when a tutor's setting above is on.",
   },
 ] satisfies ReadonlyArray<{
   key: keyof ConsentRestrictionState;
@@ -139,22 +141,22 @@ export function ParentConsentEditor({
   return (
     <div className="space-y-6">
       <Alert className="rounded-[10px] border-accent/30 bg-accent-soft">
-        <AlertTitle className="text-accent-text">What this controls</AlertTitle>
+        <AlertTitle className="text-accent-text">How privacy settings work</AlertTitle>
         <AlertDescription className="text-foreground">
           <p>
-            {`These settings decide what ${learnerName}'s tutors can capture and share with you. Each tutor has separate preferences — consent for one tutor does not apply to another.`}
+            {`You control privacy in two layers for ${learnerName}. First, choose what each tutor may do — those choices are separate per tutor. Second, you can optionally set hard limits that apply to every tutor and that ${learnerName} cannot change.`}
           </p>
           <p className="mt-2">
-            Effective permissions are the parent ceiling minus any child restrictions below.
+            {`What actually happens in a session: a tutor may only do something when you have turned it on for that tutor and you have not blocked it in the hard limits below.`}
           </p>
         </AlertDescription>
       </Alert>
 
       <div className="space-y-3">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">Per-tutor preferences</h2>
+          <h2 className="text-sm font-semibold text-foreground">What each tutor may do</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Enable only what you are comfortable with for each tutor.
+            Turn on only what you are comfortable with for each tutor. Allowing something for one tutor does not affect another.
           </p>
         </div>
 
@@ -215,9 +217,9 @@ export function ParentConsentEditor({
         </Accordion>
       </div>
 
-      <AccountSectionCardLike title="Child restrictions (floor)">
+      <AccountSectionCardLike title={`Always-off limits for ${learnerName}`}>
         <p className="mb-4 text-sm text-muted-foreground">
-          Optional narrowing — your child cannot override these. All off by default.
+          Optional. Check a box to block that activity for every tutor, even if you turned it on above. Your child cannot change these. All unchecked by default — nothing extra is blocked.
         </p>
         <div className="space-y-3">
           {RESTRICTION_TOGGLES.map((item) => (
