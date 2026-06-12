@@ -10,6 +10,9 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        /** Coral pill CTA — mock `.btn-primary`; foreground = `--accent-on` via `--primary-foreground`. */
+        accent:
+          "bg-primary text-primary-foreground hover:bg-accent-strong rounded-full font-medium transition-colors",
         destructive:
           "bg-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:ring-destructive/20",
         outline:

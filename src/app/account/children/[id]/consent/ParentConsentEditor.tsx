@@ -251,7 +251,8 @@ export function ParentConsentEditor({
       <div className="space-y-3 border-t border-border pt-4">
         <Button
           type="button"
-          className="w-full min-h-11 rounded-full sm:w-auto"
+          variant="accent"
+          className="w-full min-h-11 sm:w-auto"
           onClick={handlePreviewSave}
         >
           Save privacy preferences

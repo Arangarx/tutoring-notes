@@ -17,6 +17,9 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  /* Coral CTA fill + foreground — maps to tokens.css --accent / --accent-on / --accent-strong */
+  --color-accent-on: var(--accent-on);
+  --color-accent-strong: var(--accent-strong);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--shadcn-muted);

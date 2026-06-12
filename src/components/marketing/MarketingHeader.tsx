@@ -149,13 +149,13 @@ export function MarketingHeader() {
           </Link>
 
           {signedIn ? (
-            <Button asChild size="sm">
+            <Button asChild variant="accent" size="sm">
               <Link href="/admin">Dashboard</Link>
             </Button>
           ) : (
             <>
               <SignInMenu />
-              <Button asChild size="sm">
+              <Button asChild variant="accent" size="sm">
                 <Link href="/signup">Create account</Link>
               </Button>
             </>

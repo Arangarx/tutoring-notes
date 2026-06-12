@@ -37,7 +37,7 @@ export function CreateSessionDialog({ defaultDate, trigger }: CreateSessionDialo
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {trigger ?? (
-          <Button type="button" className="min-h-11">
+          <Button type="button" variant="accent" className="min-h-11">
             <CalendarPlusIcon aria-hidden />
             New session
           </Button>

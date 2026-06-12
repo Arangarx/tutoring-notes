@@ -82,7 +82,7 @@ export default async function ChildDetailPage({
       }
       actions={
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-          <Button asChild className="min-h-11 w-full rounded-full sm:w-auto">
+          <Button asChild variant="accent" className="min-h-11 w-full sm:w-auto">
             <Link href={`/account/children/${id}/notes`}>Session notes</Link>
           </Button>
           {!fullProfile.isSelfLearner ? (

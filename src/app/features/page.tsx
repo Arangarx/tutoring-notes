@@ -128,7 +128,7 @@ export default function FeaturesPage() {
           </p>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button asChild size="lg">
+            <Button asChild variant="accent" size="lg">
               <Link href="/signup">Create your account — free</Link>
             </Button>
             <Button asChild variant="outline" size="lg">

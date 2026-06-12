@@ -43,7 +43,7 @@ function AddStudentForm({ idPrefix = "" }: { idPrefix?: string }) {
           autoComplete="off"
         />
       </div>
-      <SubmitButton label="Add student" variant="default" className="min-h-11 sm:min-w-[140px]" />
+      <SubmitButton label="Add student" variant="accent" className="min-h-11 sm:min-w-[140px]" />
     </form>
   );
 }
@@ -134,6 +134,7 @@ export function StudentsRoster({ students }: StudentsRosterProps) {
           </p>
           <Button
             type="button"
+            variant="accent"
             className="mt-6 min-h-11 md:hidden"
             onClick={() => setSheetOpen(true)}
           >
@@ -174,8 +175,9 @@ export function StudentsRoster({ students }: StudentsRosterProps) {
       {/* Mobile FAB */}
       <Button
         type="button"
+        variant="accent"
         size="icon"
-        className="fixed bottom-6 right-4 z-20 size-14 rounded-full shadow-md md:hidden"
+        className="fixed bottom-6 right-4 z-20 size-14 shadow-md md:hidden"
         aria-label="Add student"
         onClick={() => setSheetOpen(true)}
       >

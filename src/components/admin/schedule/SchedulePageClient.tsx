@@ -58,7 +58,7 @@ function SessionRow({ session }: { session: MockScheduledSession }) {
             </Button>
           }
         />
-        <Button type="button" variant="default" size="sm" className="min-h-9" asChild>
+        <Button type="button" variant="accent" size="sm" className="min-h-9" asChild>
           <Link href="/admin/students">
             <PlayIcon aria-hidden />
             Start session

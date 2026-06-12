@@ -125,6 +125,16 @@ describe("tokens.css — Mynka Blue dark (no legacy purple)", () => {
   });
 });
 
+describe("globals.css — coral CTA link safety", () => {
+  test("button-styled links are excluded from a{color:inherit}", () => {
+    expect(GLOBALS).toMatch(/a:not\(\[data-slot="button"\]\)/);
+  });
+
+  test("btn.btn-primary alias matches coral CTA foreground token", () => {
+    expect(GLOBALS).toMatch(/\.btn\.btn-primary[\s\S]*color:\s*var\(--accent-on\)/);
+  });
+});
+
 describe("typography.css — brand utility classes", () => {
   test("defines wordmark, heading, ai-prose, label-mono", () => {
     expect(TYPOGRAPHY).toMatch(/\.wordmark\b/);

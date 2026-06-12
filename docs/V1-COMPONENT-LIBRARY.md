@@ -202,7 +202,11 @@ Andrew has **approved this mock for COLORS and FONTS only** — not as a final c
 
 **Mock source:** `.btn-primary { background: var(--accent); color: var(--accent-on); border-radius: 999px; }`
 
-**Token class:** `bg-accent text-accent-on hover:bg-accent-strong rounded-full font-medium transition-colors`
+**Library:** `<Button variant="accent">` — `bg-primary text-primary-foreground hover:bg-accent-strong rounded-full` (maps to `--accent` fill + `--accent-on` foreground via `--primary-foreground`). **Do not** hand-roll coral pills with `rounded-full` on `variant="default"`; do not use `bg-accent` for the fill (`bg-accent` is `--accent-soft`, not coral).
+
+**Foreground contract (WCAG — hard to regress):** `--accent-on` = dark text on coral in **both** themes: light `#15203a` (5.64:1 AA), dark `#051a24` (6.22:1 AA). Never light/cream text on coral (`#fcfbf4` on `#e27d60` fails). Token lives in `tokens.css`; shadcn `--primary-foreground` aliases it. For `Button asChild` + `<Link>`, `globals.css` excludes `[data-slot="button"]` from `a { color: inherit }` so link CTAs keep `--accent-on` instead of inheriting body text.
+
+**Token class (legacy / non-Button only):** `bg-primary text-primary-foreground hover:bg-accent-strong rounded-full font-medium transition-colors`
 
 | Size | Classes | Use when |
 |---|---|---|

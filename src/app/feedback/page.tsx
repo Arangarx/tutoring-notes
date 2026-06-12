@@ -62,7 +62,7 @@ export default function FeedbackPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Button asChild>
+                <Button asChild variant="accent">
                   <Link href={homeHref}>
                     {signedIn ? "Back to dashboard" : "Back to home"}
                   </Link>

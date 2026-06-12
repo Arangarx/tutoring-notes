@@ -233,6 +233,8 @@ Every token pair that can render text or convey UI state, in both modes. Ratios 
 
 **Decision: Option A — dark text on coral.** Light-mode `--accent-on` changed from cream `#FCFBF4` (2.76:1, FAILED) to text-color `#15203A` (5.64:1, AA). Dark mode unchanged (already dark text on coral, 6.22 AA). Coral keeps its CTA role; only the text on top inverts to dark.
 
+**Implementation guard (2026-06-12):** Coral CTAs must use `Button variant="accent"` (or `text-primary-foreground` / `--accent-on` on the fill) — not inherited link/body text on `bg-primary`; see `docs/V1-COMPONENT-LIBRARY.md` §1A.1.
+
 **Why Option A won** (Andrew's selection after viewing all four side-by-side at `docs/brand-previews/cta-options-comparison.html`):
 
 - **Token-cheapest fix.** One value changes; no new tokens to manage; no cascading layout consequences.

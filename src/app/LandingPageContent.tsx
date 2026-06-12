@@ -67,7 +67,7 @@ export function LandingPageContent() {
           <div className="flex flex-wrap items-center justify-center gap-3">
             {signedIn ? (
               <>
-                <Button asChild size="lg">
+                <Button asChild variant="accent" size="lg">
                   <Link href="/admin">Go to dashboard</Link>
                 </Button>
                 <Button
@@ -80,7 +80,7 @@ export function LandingPageContent() {
               </>
             ) : (
               <>
-                <Button asChild size="lg">
+                <Button asChild variant="accent" size="lg">
                   <Link href="/signup">Create your account</Link>
                 </Button>
                 <Button asChild variant="outline" size="lg">
@@ -194,7 +194,7 @@ export function LandingPageContent() {
 
             {!signedIn ? (
               <div className="flex flex-wrap justify-center gap-3">
-                <Button asChild size="lg">
+                <Button asChild variant="accent" size="lg">
                   <Link href="/signup">Get started — it&apos;s free</Link>
                 </Button>
                 <Button asChild variant="outline" size="lg">

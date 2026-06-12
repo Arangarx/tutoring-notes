@@ -47,7 +47,7 @@ export function ActiveWhiteboardSessionsList({
                 <span className="label-mono ml-2 text-[11px] opacity-70">({s.id.slice(0, 8)}…)</span>
               </span>
               <div className="flex flex-wrap gap-2">
-                <Button asChild className="min-h-11">
+                <Button asChild variant="accent" className="min-h-11">
                   <Link
                     href={`/admin/students/${studentId}/whiteboard/${s.id}/workspace`}
                   >
