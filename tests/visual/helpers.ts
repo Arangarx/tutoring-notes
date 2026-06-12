@@ -27,17 +27,17 @@ export async function seedTestAdmin(): Promise<string> {
   assertLocalDatabaseUrlForHarness();
   const prisma = new PrismaClient();
   try {
-    const existing = await prisma.adminUser.findUnique({
-      where: { email: TEST_ADMIN.email },
-    });
-    if (existing) return existing.id;
-
     const hash = await bcrypt.hash(TEST_ADMIN.password, 10);
-    const user = await prisma.adminUser.create({
-      data: {
+    const user = await prisma.adminUser.upsert({
+      where: { email: TEST_ADMIN.email },
+      create: {
         email: TEST_ADMIN.email,
         passwordHash: hash,
         displayName: TEST_ADMIN.displayName,
+        approvalStatus: "APPROVED",
+      },
+      update: {
+        approvalStatus: "APPROVED",
       },
     });
     return user.id;
@@ -135,7 +135,8 @@ export async function loginAsTestAdmin(page: Page): Promise<void> {
   await page.waitForURL(
     (url) =>
       url.pathname.startsWith("/admin") &&
-      !url.pathname.startsWith("/admin/settings/2fa"),
+      !url.pathname.startsWith("/admin/settings/2fa") &&
+      url.pathname !== "/admin/pending-approval",
     { timeout: 15_000 }
   );
 }
