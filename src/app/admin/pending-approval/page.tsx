@@ -1,7 +1,6 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth-options";
 import { redirect } from "next/navigation";
-import { AdminNav } from "@/components/AdminNav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PendingApprovalSignOut } from "./PendingApprovalSignOut";
 
@@ -22,10 +21,8 @@ export default async function PendingApprovalPage() {
   const email = session.user.email ?? "your account";
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <AdminNav />
-      <main className="flex flex-1 flex-col items-center justify-center px-4 py-12">
-        <Card className="w-full max-w-md">
+    <div className="flex flex-col items-center justify-center py-12">
+      <Card className="w-full max-w-md">
           <CardHeader className="space-y-1">
             <CardTitle className="text-xl">Account pending approval</CardTitle>
           </CardHeader>
@@ -42,8 +39,7 @@ export default async function PendingApprovalPage() {
               <PendingApprovalSignOut />
             </div>
           </CardContent>
-        </Card>
-      </main>
+      </Card>
     </div>
   );
 }

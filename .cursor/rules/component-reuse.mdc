@@ -6,14 +6,18 @@ alwaysApply: false
 
 # Component reuse — single source of truth
 
-**Binding (Andrew 2026-06-11):** post-redesign, **no duplicate components** unless absolutely necessary (document why). Every complex component **composes** shared lower-level components/primitives — not re-implemented per page. Styling and behavior are **single-source**: fix a shared component once; every consumer updates. No per-page hardcoded colors/spacing.
+**Binding (Andrew 2026-06-11):** post-redesign, the component tree is a **library**, not a page-by-page reimplementation. The "fix color in two places" smell is a **BLOCKER** for marking a surface done.
 
 ## Rules
 
-1. **No duplication** — before adding a component, check [`docs/V1-COMPONENT-LIBRARY.md`](../../docs/V1-COMPONENT-LIBRARY.md) §1 inventory. Extend canonicals; do not fork.
-2. **Compose, don't copy** — complex UIs = shared primitives (`ui/*`, §1A patterns, inventory canonicals), not inline duplicate JSX.
-3. **Tokens + shared components only** — no hardcoded color/style literals; pairs with §2.11 theme-agnostic gate.
-4. **Done = grep-clean** — no duplicated structure or one-off styling that should live in a shared component.
+1. **Library-first — no page-local components** — a UI piece must **first** exist in the library (`src/components/ui/` primitive, or a shared composed component under `src/components/`), **then** be consumed by the page/surface. Do **not** introduce bespoke JSX, styling, or behavior directly in a route file when a library component should own it.
+2. **No duplication** — before adding a component, check [`docs/V1-COMPONENT-LIBRARY.md`](../../docs/V1-COMPONENT-LIBRARY.md) §1 inventory. Extend canonicals; do not fork.
+3. **Compose, don't copy** — complex UIs = shared primitives (`ui/*`, §1A patterns, inventory canonicals), not inline duplicate JSX.
+4. **Similar compositions = one component** — extremely similar composed components should be the **same** component, parameterized. A single new internal piece does **not** justify a new composition; make the layout handle that piece being present/absent. Different component types are acceptable only when parameterization would genuinely be worse.
+5. **Shared-component changes require full regression** — modifying a shared/library component **requires** grepping **all** known consumers, verifying each still renders and behaves correctly, and a green `npx next build` before the change is accepted.
+6. **Tokens + shared components only** — no per-page hardcoded colors/spacing; pairs with §2.11 theme-agnostic gate in `both-theme-components.mdc`.
+7. **No unnecessary duplication of UI surfaces OR provider/services** — one `Providers`, one toast host, one theme hook; extend rather than fork.
+8. **Done = grep-clean** — no duplicated structure or one-off styling that should live in a shared component.
 
 ## References
 
