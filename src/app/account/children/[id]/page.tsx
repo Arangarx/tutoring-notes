@@ -73,12 +73,15 @@ export default async function ChildDetailPage({
       description="Profile, login, and quick links."
       userEmail={accountHolder?.email}
       eyebrow={
-        <Link
-          href="/account/dashboard"
-          className="inline-flex min-h-11 items-center text-brand underline-offset-2 hover:underline"
-        >
-          {"\u2190"} Dashboard
-        </Link>
+        <div className="space-y-2">
+          <Link
+            href="/account/dashboard"
+            className="inline-flex min-h-11 items-center text-brand underline-offset-2 hover:underline"
+          >
+            {"\u2190"} Dashboard
+          </Link>
+          <p className="label-mono m-0 text-accent-text">Learner profile</p>
+        </div>
       }
       actions={
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
@@ -99,7 +102,7 @@ export default async function ChildDetailPage({
     >
       <AccountChildNav learnerId={id} />
 
-      <div className="flex items-center gap-4 rounded-[10px] border border-border bg-card p-4">
+      <div className="flex items-center gap-4 rounded-[10px] border border-accent/25 bg-accent-soft/50 p-4">
         <StudentAvatar name={fullProfile.displayName} size="lg" />
         <div className="min-w-0">
           <p className="heading text-xl font-normal text-foreground">
@@ -156,7 +159,7 @@ export default async function ChildDetailPage({
             ? "Your child signs in with the handle below and their PIN."
             : "No login credentials set up yet."
         }
-        className="rounded-[10px] border-border shadow-sm"
+        className="rounded-[10px] border-border border-l-[3px] border-l-accent shadow-sm"
         actions={
           <Button asChild variant="outline" size="sm" className="rounded-full">
             <Link href={`/account/children/${id}/devices`}>

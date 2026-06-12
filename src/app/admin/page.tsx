@@ -42,6 +42,9 @@ export default async function AdminHomePage() {
   return (
     <AdminPageShell
       title="Admin dashboard"
+      eyebrow={
+        <p className="label-mono m-0 text-accent-text">Operator console</p>
+      }
       description={
         <>
           Signed in as <span className="font-medium text-foreground">{email}</span>. Open a test
@@ -59,33 +62,39 @@ export default async function AdminHomePage() {
         </div>
       }
     >
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Link
-          href="/admin/tutor-approvals"
-          className="rounded-[10px] border border-border bg-card px-4 py-3.5 shadow-sm transition-colors hover:border-ring hover:bg-card/90"
-        >
-          <p className="text-xs text-muted-foreground">Operator</p>
-          <p className="mt-1 text-sm font-semibold text-foreground">Tutor approvals</p>
-        </Link>
-        <Link
-          href="/admin/feedback"
-          className="rounded-[10px] border border-border bg-card px-4 py-3.5 shadow-sm transition-colors hover:border-ring hover:bg-card/90"
-        >
-          <p className="text-xs text-muted-foreground">Operator</p>
-          <p className="mt-1 text-sm font-semibold text-foreground">Feedback inbox</p>
-        </Link>
-        <Link
-          href="/admin/cost"
-          className="rounded-[10px] border border-border bg-card px-4 py-3.5 shadow-sm transition-colors hover:border-ring hover:bg-card/90"
-        >
-          <p className="text-xs text-muted-foreground">Operator</p>
-          <p className="mt-1 text-sm font-semibold text-foreground">Cost dashboard</p>
-        </Link>
+      <div className="mb-6 rounded-2xl bg-accent-soft px-4 py-5 sm:px-5">
+        <p className="label-mono mb-3 text-accent-text">Quick links</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Link
+            href="/admin/tutor-approvals"
+            className="rounded-[10px] bg-brand px-4 py-4 shadow-sm transition-opacity hover:opacity-95"
+          >
+            <p className="label-mono text-[10px] text-[color:var(--brand-on)]/70">Operator</p>
+            <p className="mt-1 text-sm font-semibold text-[color:var(--brand-on)]">
+              Tutor approvals
+            </p>
+          </Link>
+          <Link
+            href="/admin/feedback"
+            className="rounded-[10px] border border-border bg-card px-4 py-3.5 shadow-sm transition-colors hover:border-accent/40 hover:bg-card/90"
+          >
+            <p className="label-mono text-[10px] text-accent-text">Operator</p>
+            <p className="mt-1 text-sm font-semibold text-foreground">Feedback inbox</p>
+          </Link>
+          <Link
+            href="/admin/cost"
+            className="rounded-[10px] border border-border bg-card px-4 py-3.5 shadow-sm transition-colors hover:border-accent/40 hover:bg-card/90"
+          >
+            <p className="label-mono text-[10px] text-accent-text">Operator</p>
+            <p className="mt-1 text-sm font-semibold text-foreground">Cost dashboard</p>
+          </Link>
+        </div>
       </div>
 
       <AdminSectionCard
         title="Test accounts"
         description="Log in as a test tutor without signing out your admin session. Use Exit impersonation to return here."
+        className="border-l-[3px] border-l-accent"
       >
         <AdminTestAccountsPanel />
       </AdminSectionCard>

@@ -30,10 +30,12 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 function SectionHeading({
+  kicker,
   title,
   description,
   actions,
 }: {
+  kicker?: string;
   title: string;
   description?: React.ReactNode;
   actions?: React.ReactNode;
@@ -41,6 +43,9 @@ function SectionHeading({
   return (
     <div className="mb-3.5 flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0 space-y-1">
+        {kicker ? (
+          <p className="label-mono m-0 text-[11px] text-accent-text">{kicker}</p>
+        ) : null}
         <h2 className="text-[15px] font-semibold text-foreground">{title}</h2>
         {description ? (
           <p className="text-[13px] leading-relaxed text-muted-foreground">{description}</p>
@@ -131,6 +136,7 @@ export default async function StudentDetailPage({
   const sessionSection = (
     <>
       <SectionHeading
+        kicker="Live session"
         title="Whiteboard session"
         description="Live whiteboard with audio recording. Generates session notes from what you wrote and said."
       />
@@ -191,10 +197,11 @@ export default async function StudentDetailPage({
         blobEnabled={!!env.BLOB_READ_WRITE_TOKEN}
       />
       <div className="mt-6 border-t border-border pt-6">
-        <SectionHeading
-          title="Send update email"
-          description="Sends the share link to the parent. The parent email address is saved for this student for next time."
-        />
+      <SectionHeading
+        kicker="Parent communication"
+        title="Send update email"
+        description="Sends the share link to the parent. The parent email address is saved for this student for next time."
+      />
         <SendUpdateForm studentId={student.id} defaultToEmail={student.parentEmail} />
       </div>
       <div className="mt-6 border-t border-border pt-4">
