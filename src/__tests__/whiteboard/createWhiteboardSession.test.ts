@@ -42,6 +42,8 @@ const dbCreateMock = jest.fn();
 jest.mock("@/lib/db", () => ({
   __esModule: true,
   db: {
+    // B1: default APPROVED so existing tests are unaffected by the approval gate.
+    adminUser: { findUnique: jest.fn().mockResolvedValue({ approvalStatus: "APPROVED" }) },
     whiteboardSession: {
       create: (...args: unknown[]) => dbCreateMock(...args),
     },

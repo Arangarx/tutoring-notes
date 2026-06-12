@@ -30,6 +30,8 @@ const mockRecordingDelete = jest.fn();
 
 jest.mock("@/lib/db", () => ({
   db: {
+    // B1: default APPROVED so existing tests are unaffected by the approval gate.
+    adminUser: { findUnique: jest.fn().mockResolvedValue({ approvalStatus: "APPROVED" }) },
     student: {
       findUnique: (...args: unknown[]) => mockStudentFindUnique(...args),
       findUniqueOrThrow: (...args: unknown[]) => mockStudentFindUniqueOrThrow(...args),

@@ -20,6 +20,7 @@ import { looksLikeSilenceHallucination } from "@/lib/whisper-guardrails";
 import { parseDateOnlyInput } from "@/lib/date-only";
 import { revalidateStudentSharePages } from "@/lib/revalidateStudentSharePages";
 import { enqueueChunkTranscribe } from "@/lib/recording/chunk-transcribe-enqueue";
+import { assertTutorApproved } from "@/lib/tutor-approval-scope";
 
 /**
  * Whiteboard session lifecycle server actions.
@@ -104,6 +105,10 @@ export async function createWhiteboardSession(
     );
   }
   await assertOwnsStudent(studentId);
+
+  // B1 cost gate: WAITLISTED tutors cannot start whiteboard sessions
+  // (no Blob seed write, no live-session cost).
+  await assertTutorApproved(scope.adminId);
 
   const startedAtIso = new Date().toISOString();
   let eventsBlobUrl: string;
@@ -872,6 +877,9 @@ export async function generateNotesFromWhiteboardSessionAction(
     }
     const tutorAdminId = scope.adminId;
 
+  // B1 cost gate: WAITLISTED tutors cannot trigger notes generation (OpenAI spend).
+  await assertTutorApproved(tutorAdminId);
+
   const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
   const studentId = session.studentId;
 
@@ -1252,7 +1260,10 @@ export async function enqueueChunkTranscriptionAction(
   const { chunkBlobUrl, recordingTimeOffsetMs } = payload;
 
   // 1. Ownership check — multi-tenant gate, must be first.
-  await assertOwnsWhiteboardSession(whiteboardSessionId);
+  const enqueueSession = await assertOwnsWhiteboardSession(whiteboardSessionId);
+
+  // B1 cost gate: WAITLISTED tutors cannot enqueue transcription jobs.
+  await assertTutorApproved(enqueueSession.adminUserId);
 
   // 2. Blob host validation — reuse the same regex used by endWhiteboardSession.
   if (

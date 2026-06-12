@@ -58,6 +58,17 @@ enum AdminRole {
   TUTOR
 }
 
+/// Tutor account approval status (B1 signup-waitlist).
+/// New tutor signups land WAITLISTED; operator must approve before they can incur cost.
+/// Existing rows are backfilled to APPROVED via the migration (grandfather).
+/// WAITLISTED: cannot incur external cost (Blob, OpenAI, Whisper).
+/// APPROVED: full cost access granted.
+/// (REJECTED is deferred — see feat/signup-waitlist smokebook TODOs.)
+enum TutorApprovalStatus {
+  WAITLISTED
+  APPROVED
+}
+
 model Student {
   id                      String              @id @default(uuid())
   name                    String
@@ -559,6 +570,14 @@ model AdminUser {
   /// Default TUTOR — new accounts land in the safe/restricted role by default.
   /// Orthogonal to isTestAccount (a TUTOR can be a real login OR a test account target).
   role                    AdminRole              @default(TUTOR)
+  /// Tutor approval status (B1 signup-waitlist).
+  /// New signups default WAITLISTED; all existing rows are backfilled to APPROVED.
+  /// WAITLISTED tutors are blocked from incurring any external cost.
+  approvalStatus          TutorApprovalStatus    @default(WAITLISTED)
+  /// Timestamp when this account was approved by an operator.
+  approvedAt              DateTime?
+  /// AdminUser.id of the operator who approved this account.
+  approvedByAdminId       String?
   createdAt               DateTime               @default(now())
   updatedAt               DateTime               @updatedAt
   students                Student[]

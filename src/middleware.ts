@@ -9,6 +9,8 @@ import {
 } from "@/lib/security/csp";
 import {
   getAdminSessionMode,
+  is2faExemptAdminPath,
+  isApprovalExemptAdminPath,
   isTutorExperiencePath,
   realAdminHomePath,
   tutorExperienceLandingPath,
@@ -156,6 +158,31 @@ export async function middleware(req: NextRequest) {
     });
 
     // ---------------------------------------------------------------------------
+    // B1 approval gate
+    //
+    // WAITLISTED tutors can only see /admin/pending-approval (+ login / signout).
+    // Exemptions: isTestAccount, impersonating sessions, env-only admin, pending-approval page itself.
+    // approvalStatus is absent for the env-only admin (sub="admin") and legacy sessions —
+    // treat absent as APPROVED (safe default: those were approved before this feature shipped).
+    // ---------------------------------------------------------------------------
+    if (!isApprovalExemptAdminPath(pathname)) {
+      const approvalStatus = token.approvalStatus as string | undefined;
+      const isTestAccount = (token.isTestAccount as boolean | undefined) ?? false;
+      const isImpersonating = (token.isImpersonating as boolean | undefined) ?? false;
+      const isEnvAdmin = token.sub === "admin";
+
+      if (!isTestAccount && !isImpersonating && !isEnvAdmin && approvalStatus === "WAITLISTED") {
+        console.log(
+          `[tap] sub=${token.sub ?? "?"} action=middleware_redirect_pending pathname=${pathname}`
+        );
+        const pendingUrl = req.nextUrl.clone();
+        pendingUrl.pathname = "/admin/pending-approval";
+        pendingUrl.search = "";
+        return addSecurityHeaders(NextResponse.redirect(pendingUrl), pathname);
+      }
+    }
+
+    // ---------------------------------------------------------------------------
     // 2FA gate (Identity Phase 1)
     //
     // Non-test TUTOR/ADMIN must complete 2FA before accessing /admin/*.
@@ -165,11 +192,7 @@ export async function middleware(req: NextRequest) {
     //   - The 2FA setup and verify routes themselves (must be reachable unenrolled)
     //   - env-only admin (sub="admin", no DB row — no 2FA support in V1)
     // ---------------------------------------------------------------------------
-    const is2faExemptPath =
-      pathname.startsWith("/admin/settings/2fa/setup") ||
-      pathname.startsWith("/admin/settings/2fa/verify");
-
-    if (!is2faExemptPath) {
+    if (!is2faExemptAdminPath(pathname)) {
       const isTestAccount = token.isTestAccount as boolean | undefined;
       const isImpersonating = token.isImpersonating as boolean | undefined;
       const isEnvAdmin = token.sub === "admin";

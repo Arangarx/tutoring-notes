@@ -24,6 +24,7 @@ import { revalidatePath } from "next/cache";
 import { db, withDbRetry } from "@/lib/db";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import { enqueueNotesReduce } from "@/lib/recording/notes-enqueue";
+import { assertTutorApproved } from "@/lib/tutor-approval-scope";
 import { enqueueChunkTranscribe } from "@/lib/recording/chunk-transcribe-enqueue";
 import {
   getTutorNoteBySessionId,
@@ -51,7 +52,9 @@ import { REDUCE_PROMPT_VERSION } from "@/lib/recording/notes-reduce-config";
 export async function kickSessionChunksAction(
   whiteboardSessionId: string
 ): Promise<{ kicked: number }> {
-  await assertOwnsWhiteboardSession(whiteboardSessionId);
+  const kickSession = await assertOwnsWhiteboardSession(whiteboardSessionId);
+  // B1 cost gate: WAITLISTED tutors cannot trigger transcription kicks.
+  await assertTutorApproved(kickSession.adminUserId);
 
   const chunks = await getTranscriptChunksBySessionId(whiteboardSessionId);
 
@@ -95,7 +98,9 @@ export async function kickSessionChunksAction(
 export async function triggerNotesGenerationAction(
   whiteboardSessionId: string
 ): Promise<void> {
-  await assertOwnsWhiteboardSession(whiteboardSessionId);
+  const triggerSession = await assertOwnsWhiteboardSession(whiteboardSessionId);
+  // B1 cost gate: WAITLISTED tutors cannot trigger notes generation (OpenAI spend).
+  await assertTutorApproved(triggerSession.adminUserId);
 
   console.log(
     `[tnt] wbsid=${whiteboardSessionId} action=trigger_notes_generation`
@@ -178,7 +183,9 @@ export async function regenerateNotesAction(
   whiteboardSessionId: string
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    await assertOwnsWhiteboardSession(whiteboardSessionId);
+    const regenSession = await assertOwnsWhiteboardSession(whiteboardSessionId);
+    // B1 cost gate: WAITLISTED tutors cannot regenerate notes (OpenAI spend).
+    await assertTutorApproved(regenSession.adminUserId);
 
     const existing = await getTutorNoteBySessionId(whiteboardSessionId);
     if (existing && (existing.status === "generating")) {
