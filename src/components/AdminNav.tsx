@@ -22,6 +22,7 @@ type AdminNavProps = AdminSidebarNavProps & {
 function buildNavLinks(props: AdminSidebarNavProps) {
   const tutorLinks = [
     { href: "/admin/students", label: "Students" },
+    { href: "/admin/schedule", label: "Schedule" },
     { href: "/admin/outbox", label: "Outbox" },
   ];
   return [
