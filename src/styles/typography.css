@@ -56,9 +56,14 @@ body {
   letter-spacing: 0.06em;
 }
 
-/* Zero-specificity muted default — Tailwind text-color utilities (e.g. brand-eyebrow) win */
-:where(.label-mono) {
-  color: var(--text-muted);
+/* Muted fallback for label-mono — placed in @layer base so Tailwind utilities (@layer utilities)
+   win in the cascade. Zero specificity alone is not sufficient: unlayered rules beat layered
+   rules regardless of specificity, so without this @layer wrapper the :where() rule silently
+   overrides any text-color utility (e.g. text-[color:var(--brand-eyebrow)] on brand cards). */
+@layer base {
+  :where(.label-mono) {
+    color: var(--text-muted);
+  }
 }
 
 .tabular-nums {
