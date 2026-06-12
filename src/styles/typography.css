@@ -50,6 +50,10 @@ body {
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+
+/* Zero-specificity muted default — Tailwind text-color utilities (e.g. brand-eyebrow) win */
+:where(.label-mono) {
   color: var(--text-muted);
 }
 
