@@ -25,20 +25,24 @@ body {
   margin-left: 1px;
 }
 
-/* V2 heading — crisp + bold */
+/* V2 heading — crisp + bold.
+   No `color` here: this class loads after Tailwind utilities at equal
+   specificity, so a baked-in color silently beats component text utilities
+   (e.g. text-[color:var(--brand-on)] on bg-brand cards). Color is owned by
+   the component utility/token; default surfaces inherit --text-default from
+   body. */
 .heading {
   font-family: var(--font-display), "Iowan Old Style", Georgia, serif;
   font-variation-settings: "opsz" 144, "SOFT" 0, "wght" 700;
-  color: var(--text-default);
   letter-spacing: -0.02em;
   line-height: 1.12;
 }
 
-/* AI-generated prose surfaces */
+/* AI-generated prose surfaces. No `color` — same cascade reason as .heading;
+   color is utility/token-driven, default surfaces inherit from body. */
 .ai-prose {
   font-family: var(--font-display), "Iowan Old Style", Georgia, serif;
   font-variation-settings: "opsz" 14, "SOFT" 30, "wght" 400;
-  color: var(--text-default);
   line-height: 1.55;
   max-width: 65ch;
 }
