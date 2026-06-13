@@ -102,6 +102,19 @@ export type MicAudioGraph = {
    * destinations (MediaRecorder continues on the same mixed graph).
    */
   swapLocalMicSource: (newMicStream: MediaStream) => void;
+  /**
+   * Frame-accurate recording clock. Returns elapsed recording-active
+   * milliseconds: frames counted while setActive(true), converted via
+   * sampleRate. Monotonic. Cumulative across rollovers (never resets).
+   * Freezes if the AudioContext is suspended (e.g. iOS background).
+   */
+  frameClockGetMs: () => number;
+  /**
+   * Gate the frame counter. Call true on recording start/resume,
+   * false on pause/stop. Only frames counted while active contribute
+   * to the clock — matches the MediaRecorder's recording/paused state.
+   */
+  frameClockSetActive: (active: boolean) => void;
 };
 
 /**
@@ -118,6 +131,12 @@ export async function createMicAudioGraph(
     const audioContext = new AudioContext();
     await audioContext.resume();
 
+    audioContext.onstatechange = () => {
+      console.log(
+        `[mic-recorder-audio] avx=${sid} event=audiocontext-state-change state=${audioContext.state}`
+      );
+    };
+
     let inboundMicStream = micStream;
     let mediaStreamSource = audioContext.createMediaStreamSource(micStream);
     const gainNode = audioContext.createGain();
@@ -132,9 +151,112 @@ export async function createMicAudioGraph(
     const data = new Float32Array(analyser.fftSize);
 
     mediaStreamSource.connect(gainNode);
-    gainNode.connect(recordingDest);
     gainNode.connect(publishDest);
     gainNode.connect(analyser);
+
+    // Frame counter — accumulates only while frameClockActive=true.
+    let frameClockActive = false;
+    let accumulatedFrames = 0;
+    let lastWorkletFrames = 0;
+
+    gainNode.disconnect(recordingDest);
+
+    const workletName = `frame-counter-${sid}-${Date.now()}`;
+    const workletCode = `
+      class FrameCounterProcessor extends AudioWorkletProcessor {
+        constructor() { super(); this._active = false; this._frames = 0;
+          this.port.onmessage = e => { if (e.data?.type === 'setActive') this._active = e.data.active; };
+        }
+        process(inputs, outputs) {
+          const ch = inputs[0]?.[0];
+          if (this._active && ch?.length) {
+            this._frames += ch.length;
+            if (this._frames % 1024 < ch.length) this.port.postMessage({ frames: this._frames });
+          }
+          const out = outputs[0]?.[0];
+          if (out && ch) out.set(ch);
+          return true;
+        }
+      }
+      registerProcessor('${workletName}', FrameCounterProcessor);
+    `;
+
+    let useWorklet = false;
+    let workletNode: AudioWorkletNode | null = null;
+    let scriptNode: ScriptProcessorNode | null = null;
+
+    if (audioContext.audioWorklet) {
+      try {
+        const blob = new Blob([workletCode], { type: "text/javascript" });
+        const url = URL.createObjectURL(blob);
+        await audioContext.audioWorklet.addModule(url);
+        URL.revokeObjectURL(url);
+        workletNode = new AudioWorkletNode(audioContext, workletName);
+        workletNode.port.onmessage = (e) => {
+          if (e.data?.frames !== undefined) lastWorkletFrames = e.data.frames;
+        };
+        workletNode.port.postMessage({ type: "setActive", active: false });
+        gainNode.connect(workletNode);
+        workletNode.connect(recordingDest);
+        useWorklet = true;
+        console.log(`[mic-recorder-audio] avx=${sid} frame-counter=audioworklet`);
+      } catch (err) {
+        console.warn(
+          `[mic-recorder-audio] avx=${sid} AudioWorklet init failed; falling back:`,
+          (err as Error)?.message ?? String(err)
+        );
+        try {
+          gainNode.connect(recordingDest);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
+    if (!useWorklet) {
+      try {
+        scriptNode = audioContext.createScriptProcessor(256, 1, 1);
+        scriptNode.onaudioprocess = (e) => {
+          if (frameClockActive) accumulatedFrames += e.inputBuffer.length;
+          const inCh = e.inputBuffer.getChannelData(0);
+          const outCh = e.outputBuffer.getChannelData(0);
+          outCh.set(inCh);
+        };
+        gainNode.connect(scriptNode);
+        scriptNode.connect(recordingDest);
+        console.log(`[mic-recorder-audio] avx=${sid} frame-counter=script-processor`);
+      } catch (err) {
+        console.warn(
+          `[mic-recorder-audio] avx=${sid} ScriptProcessorNode init failed; frame clock unavailable:`,
+          (err as Error)?.message ?? String(err)
+        );
+        try {
+          gainNode.connect(recordingDest);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
+    const sampleRate = audioContext.sampleRate;
+
+    const frameClockGetMs = (): number => {
+      if (useWorklet) {
+        return Math.floor((lastWorkletFrames * 1000) / sampleRate);
+      }
+      return Math.floor((accumulatedFrames * 1000) / sampleRate);
+    };
+
+    const frameClockSetActive = (active: boolean): void => {
+      frameClockActive = active;
+      if (useWorklet && workletNode) {
+        try {
+          workletNode.port.postMessage({ type: "setActive", active });
+        } catch {
+          /* AudioContext may be closed */
+        }
+      }
+    };
 
     // Track attached remote sources so dispose() can detach them
     // explicitly. Detach also happens implicitly when the AudioContext
@@ -160,6 +282,16 @@ export async function createMicAudioGraph(
       dispose: () => {
         if (disposed) return;
         disposed = true;
+        try {
+          workletNode?.disconnect();
+        } catch {
+          /* ignore */
+        }
+        try {
+          scriptNode?.disconnect();
+        } catch {
+          /* ignore */
+        }
         for (const entry of [...remoteEntries]) {
           try {
             entry.source.disconnect();
@@ -306,6 +438,8 @@ export async function createMicAudioGraph(
           }
         }
       },
+      frameClockGetMs,
+      frameClockSetActive,
     };
 
     function disconnectRemoteEntry(entry: RemoteEntry): void {
