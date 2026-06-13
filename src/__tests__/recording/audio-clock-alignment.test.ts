@@ -219,3 +219,109 @@ describe("audio-clock alignment", () => {
     expect(result.current.getAudioMs()).toBeGreaterThan(5_900);
   });
 });
+
+// ---------------------------------------------------------------------------
+// perf.now FALLBACK — both frame sources fail (e.g. iOS CSP blocks blob: URL)
+// ---------------------------------------------------------------------------
+
+/**
+ * Renders the hook with a fake graph that reports hasFrameClock=false.
+ * Uses an independent oracle: performance.now() advances via
+ * jest.advanceTimersByTime(), completely separate from the fake frame counter
+ * (which always returns 0). This proves the fallback is backed by wall-clock
+ * time, not the dead frame counter.
+ */
+async function startRecordingNoClock(opts: { recordingDraft?: boolean } = {}) {
+  const fakeGraph = new FakeMicAudioGraph({ hasFrameClock: false });
+  const onRecorded = jest.fn();
+  const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+  const view = renderHook(() =>
+    useAudioRecorder({
+      studentId: "s1",
+      onRecorded,
+      avLogSessionId: "test-session",
+      _graphOverride: fakeGraph,
+      ...(opts.recordingDraft
+        ? { recordingDraft: { sessionId: "s1", streamId: "mic" } }
+        : {}),
+    })
+  );
+  await flushAsync();
+  await act(async () => {
+    await view.result.current.handleStartRecording();
+  });
+  FakeMediaRecorder.lastInstance().feedData();
+  return { ...view, onRecorded, fakeGraph, logSpy };
+}
+
+describe("audio-clock fallback (perf.now) — both frame sources unavailable", () => {
+  it("FAILS-BEFORE/PASSES-AFTER: getAudioMs() is non-zero and advances when hasFrameClock=false", async () => {
+    // RED: before this change, rawFrameClockMs() always returned 0 when
+    // hasFrameClock=false (no frame node). readAudioClockMs() = 0 + 0 - 0 = 0.
+    // GREEN: perf.now fallback accumulates elapsed recording-active time.
+    // Oracle: jest.advanceTimersByTime advances performance.now() independently
+    // of the fake frame counter (which stays at 0 — an independent oracle).
+    const { result, logSpy } = await startRecordingNoClock();
+
+    // Advance 10 s of wall-clock. The fake frame counter stays 0 (proven
+    // by fakeGraph.frameClockGetMs() always returning this._ms which is 0).
+    jest.advanceTimersByTime(10_000);
+
+    const audioMs = result.current.getAudioMs();
+
+    // (a) non-zero and advancing
+    expect(audioMs).toBeGreaterThan(9_000);
+
+    // (c) init log shows perfnow-fallback (from useAudioRecorder with rid=)
+    const perfnowLog = logSpy.mock.calls.some((args) =>
+      String(args[0]).includes("frame-counter=perfnow-fallback")
+    );
+    expect(perfnowLog).toBe(true);
+
+    logSpy.mockRestore();
+  });
+
+  it("(b) paused intervals do NOT accumulate — fallback is gated on recording-active", async () => {
+    const { result, logSpy } = await startRecordingNoClock();
+
+    // Record 5 s
+    jest.advanceTimersByTime(5_000);
+    const msAfter5s = result.current.getAudioMs();
+    expect(msAfter5s).toBeGreaterThan(4_500);
+
+    // Pause: clock must freeze
+    act(() => result.current.pauseRecording());
+
+    // 10 wall-clock seconds pass while paused — should NOT accumulate
+    jest.advanceTimersByTime(10_000);
+    const msDuringPause = result.current.getAudioMs();
+    expect(msDuringPause).toBeLessThan(msAfter5s + 500); // tolerance for timing jitter
+
+    // Resume and record 3 more seconds
+    act(() => result.current.resumeRecording());
+    jest.advanceTimersByTime(3_000);
+    const msAfterResume = result.current.getAudioMs();
+
+    // Total should be ~8 s (5 before pause + 3 after), NOT ~18 s
+    expect(msAfterResume).toBeGreaterThan(7_500);
+    expect(msAfterResume).toBeLessThan(9_500);
+
+    logSpy.mockRestore();
+  });
+
+  it("perf.now fallback does NOT engage when hasFrameClock=true (frame clock wins)", async () => {
+    // Safety net: confirms the strict `=== false` guard prevents the fallback
+    // from shadowing a working frame counter and reintroducing drift.
+    const fakeGraph = new FakeMicAudioGraph({ hasFrameClock: true });
+    const { result } = await startRecordingWithFakeGraph(fakeGraph);
+
+    // Advance frame clock by 7 s, wall-clock by 12 s.
+    // If perf.now fallback were engaged it would return ~12 s (wrong).
+    // Frame clock returns 7 s (correct).
+    fakeGraph.advance(7_000);
+    jest.advanceTimersByTime(12_000);
+
+    // Must track the frame counter, NOT wall-clock
+    expect(result.current.getAudioMs()).toBe(7_000);
+  });
+});

@@ -384,6 +384,23 @@ export function useAudioRecorder({
   const watchdogLastFrameMsRef = useRef(0);
   const watchdogLastChunkCountRef = useRef(0);
   const watchdogInitializedRef = useRef(false);
+  /**
+   * Last-resort perf.now fallback — engaged ONLY when the audio graph
+   * reports `hasFrameClock === false` (both AudioWorklet and
+   * ScriptProcessorNode failed to init, e.g. iOS CSP blocks the
+   * `blob:` URL). The fallback mirrors the frame-clock gate:
+   * `accumulated` advances only while recording-active; freezes on
+   * pause and rollover (just like the real frame counter).
+   *
+   * CRITICAL: this path must NEVER engage when a real frame source is
+   * available — that would reintroduce the pre-1b performance.now drift.
+   * The guard `graphRef.current?.hasFrameClock === false` (strict false,
+   * not falsy) is the only gate.
+   */
+  const perfNowFallbackRef = useRef<{
+    accumulated: number;
+    lastActivatedAt: number | null;
+  }>({ accumulated: 0, lastActivatedAt: null });
 
   /**
    * Synchronously add a deferred Promise to `pendingUploadsRef` and
@@ -421,7 +438,33 @@ export function useAudioRecorder({
   }
 
   function rawFrameClockMs(): number {
+    // LAST-RESORT path: graph is present but has no frame-counting node.
+    // Use the perf.now accumulator (gated on recording-active) so WB events
+    // never stamp at t=0. This path must NOT engage when hasFrameClock is
+    // true — the strict `=== false` guard prevents accidental drift.
+    if (graphRef.current?.hasFrameClock === false) {
+      const fb = perfNowFallbackRef.current;
+      const liveMs =
+        fb.lastActivatedAt !== null
+          ? performance.now() - fb.lastActivatedAt
+          : 0;
+      return fb.accumulated + liveMs;
+    }
     return graphRef.current?.frameClockGetMs?.() ?? 0;
+  }
+
+  function perfNowFallbackActivate(): void {
+    if (graphRef.current?.hasFrameClock !== false) return;
+    perfNowFallbackRef.current.lastActivatedAt = performance.now();
+  }
+
+  function perfNowFallbackDeactivate(): void {
+    if (graphRef.current?.hasFrameClock !== false) return;
+    const fb = perfNowFallbackRef.current;
+    if (fb.lastActivatedAt !== null) {
+      fb.accumulated += performance.now() - fb.lastActivatedAt;
+      fb.lastActivatedAt = null;
+    }
   }
 
   function readAudioClockMs(): number {
@@ -435,6 +478,7 @@ export function useAudioRecorder({
 
   function resetSegmentAudioClockState(): void {
     segmentPrimingBaselineRef.current = null;
+    perfNowFallbackRef.current = { accumulated: 0, lastActivatedAt: null };
     watchdogLastFrameMsRef.current = 0;
     watchdogLastChunkCountRef.current = 0;
     watchdogInitializedRef.current = false;
@@ -1248,6 +1292,15 @@ export function useAudioRecorder({
     }
     mediaRecorderRef.current = recorder;
     graphRef.current?.frameClockSetActive?.(true);
+    // Activate perf.now fallback when no frame-counting node is available.
+    // Must come AFTER frameClockSetActive so the gate state is consistent.
+    perfNowFallbackActivate();
+    if (graphRef.current?.hasFrameClock === false) {
+      // Log the active clock source so smoke/console reveals the fallback.
+      console.log(
+        `[useAudioRecorder] rid=${avLogSessionId ?? "?"} frame-counter=perfnow-fallback`
+      );
+    }
     // Capture the recording-start baseline now — NOT at first ondataavailable.
     // With DRAFT_TIMESLICE_MS = 30_000 the first chunk arrives ~30 s late;
     // keying the baseline to that event made the clock wrong by ~30 s per
@@ -1290,6 +1343,7 @@ export function useAudioRecorder({
   function pauseRecording() {
     if (mediaRecorderRef.current?.state === "recording") {
       graphRef.current?.frameClockSetActive?.(false);
+      perfNowFallbackDeactivate();
       mediaRecorderRef.current.pause();
       stopTimer();
       setRecordState("paused");
@@ -1302,6 +1356,7 @@ export function useAudioRecorder({
       // miss the first batch of encoded frames (S-RESUME-ORDER: up to ~23 ms
       // gap on AudioWorklet if the gate opens after resume).
       graphRef.current?.frameClockSetActive?.(true);
+      perfNowFallbackActivate();
       mediaRecorderRef.current.resume();
       startTimer();
       setRecordState("recording");
@@ -1316,6 +1371,7 @@ export function useAudioRecorder({
     // be blocked behind a confirm popup.
     stopTimer();
     graphRef.current?.frameClockSetActive?.(false);
+    perfNowFallbackDeactivate();
     const recorder = mediaRecorderRef.current;
     if (!recorder) {
       rolloverInProgressRef.current = false;

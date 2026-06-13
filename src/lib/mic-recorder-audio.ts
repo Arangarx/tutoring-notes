@@ -115,6 +115,17 @@ export type MicAudioGraph = {
    * to the clock — matches the MediaRecorder's recording/paused state.
    */
   frameClockSetActive: (active: boolean) => void;
+  /**
+   * True when a frame-counting node (AudioWorklet or ScriptProcessor)
+   * was successfully installed. False when both init attempts failed
+   * (e.g. iOS CSP blocks the AudioWorklet `blob:` URL and
+   * ScriptProcessorNode is also unavailable). When false, the
+   * consumer (useAudioRecorder) MUST fall back to a
+   * `performance.now()` delta clock — returning 0 from
+   * `frameClockGetMs` forever would stamp every WB event at t=0,
+   * which is worse than the old `performance.now()` behavior.
+   */
+  hasFrameClock: boolean;
 };
 
 /**
@@ -237,6 +248,16 @@ export async function createMicAudioGraph(
     }
 
     const sampleRate = audioContext.sampleRate;
+
+    // True when at least one frame-counting node initialised. If false,
+    // the consumer must engage a perf.now() fallback — returning 0
+    // permanently from frameClockGetMs would stamp every WB event at t=0.
+    const hasFrameClock = useWorklet || scriptNode !== null;
+    if (!hasFrameClock) {
+      console.log(
+        `[mic-recorder-audio] avx=${sid} frame-counter=perfnow-fallback`
+      );
+    }
 
     const frameClockGetMs = (): number => {
       if (useWorklet) {
@@ -438,6 +459,7 @@ export async function createMicAudioGraph(
       },
       frameClockGetMs,
       frameClockSetActive,
+      hasFrameClock,
     };
 
     function disconnectRemoteEntry(entry: RemoteEntry): void {

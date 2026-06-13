@@ -146,7 +146,7 @@
 
 | ID | Note |
 |----|------|
-| **N-CSP** | AudioWorklet loads from a `blob:` URL — tight CSP may log console errors even when recording works. Check console; file a follow-up only if recording/graph init actually fails. |
+| **N-CSP** | AudioWorklet loads from a `blob:` URL — tight CSP may log console errors. With the 3-tier fallback (Worklet → ScriptProcessor → `performance.now()`), a CSP-blocked worklet on iOS now degrades gracefully instead of breaking replay: check console for `frame-counter=` source on graph init (`audioworklet` = best, `script-processor` = ok, `perfnow-fallback` = degraded-but-functional). If `perfnow-fallback` appears, investigate CSP and file a follow-up to allowlist `blob:` for AudioWorklet; do NOT block on this. Silent broken replay (t=0 stamps) is no longer possible on this path. |
 | **N-WATCHDOG-60S** | Stall detection runs on the 30 s draft-checkpoint interval; first interval initializes baselines — expect **30–60 s** latency before banner, not instant. |
 | **N-MACOSSAFARI** | No-timeslice path keys off `audio/mp4` MIME, not UA sniff — macOS Safari may share iOS MP4 behavior. Item 7 captures finding; UA-gate deferred. |
 | **N-PRIMING** | ~47 ms AAC priming offset at segment baseline is accepted fixed error (within 250 ms bar). |

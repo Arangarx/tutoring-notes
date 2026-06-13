@@ -10,6 +10,7 @@ export class FakeMicAudioGraph
       MicAudioGraph,
       | "frameClockGetMs"
       | "frameClockSetActive"
+      | "hasFrameClock"
       | "recordingStream"
       | "dispose"
       | "getLevel"
@@ -22,6 +23,17 @@ export class FakeMicAudioGraph
 {
   private _active = false;
   private _ms = 0;
+
+  /**
+   * Whether this fake graph simulates a working frame-counting node.
+   * Defaults to true (normal operation). Set to false via the
+   * constructor option to simulate the iOS/CSP no-frame-clock path.
+   */
+  hasFrameClock: boolean;
+
+  constructor({ hasFrameClock = true }: { hasFrameClock?: boolean } = {}) {
+    this.hasFrameClock = hasFrameClock;
+  }
 
   recordingStream = { getAudioTracks: () => [], getTracks: () => [] } as unknown as MediaStream;
   publishStream = { getAudioTracks: () => [], getTracks: () => [] } as unknown as MediaStream;
