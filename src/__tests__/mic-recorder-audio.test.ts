@@ -421,6 +421,78 @@ describe("createMicAudioGraph", () => {
     graph!.dispose();
   });
 
+  test("worklet module is loaded from a same-origin path, not a blob: URL", async () => {
+    // Regression guard: ensures the AudioWorklet module URL stays a
+    // same-origin static path ('/audio/frame-counter-worklet.js') so it
+    // loads under script-src 'self'. A blob: URL would be blocked by our
+    // tight CSP and silently fall to the ScriptProcessor tier on every
+    // platform. jsdom cannot run a real worklet, so we assert the load
+    // PATH/mechanism rather than running actual audio processing.
+    const gainParam: GainParam = { value: 0 };
+    const sourceNode: FakeNode = { connect: jest.fn() };
+    const gainNode = { gain: gainParam, connect: jest.fn() };
+    const analyserNode = {
+      fftSize: 0,
+      smoothingTimeConstant: 0,
+      getFloatTimeDomainData: jest.fn(),
+    };
+    const destinations = [{ stream: { id: "r" } }, { stream: { id: "p" } }];
+    let destIdx = 0;
+
+    const addModuleMock = jest.fn().mockResolvedValue(undefined);
+    const fakeWorkletNode = {
+      port: { onmessage: null as unknown, postMessage: jest.fn() },
+      connect: jest.fn(),
+      disconnect: jest.fn(),
+    };
+    const AudioWorkletNodeMock = jest.fn(() => fakeWorkletNode);
+    const prevAWN = (globalThis as Record<string, unknown>).AudioWorkletNode;
+    (globalThis as Record<string, unknown>).AudioWorkletNode =
+      AudioWorkletNodeMock;
+
+    const ctx = {
+      createMediaStreamSource: jest.fn(() => sourceNode),
+      createGain: jest.fn(() => gainNode),
+      createAnalyser: jest.fn(() => analyserNode),
+      createMediaStreamDestination: jest.fn(() => destinations[destIdx++]),
+      resume: jest.fn().mockResolvedValue(undefined),
+      close: jest.fn().mockResolvedValue(undefined),
+      audioWorklet: { addModule: addModuleMock },
+      sampleRate: 48000,
+      onstatechange: null,
+    };
+
+    (globalThis as { AudioContext?: unknown }).AudioContext = jest.fn(() => ctx);
+
+    const stream = fakeMicStream();
+    const consoleSpy = jest
+      .spyOn(console, "log")
+      .mockImplementation(() => {});
+    try {
+      const graph = await createMicAudioGraph(stream as unknown as MediaStream, 1);
+      expect(graph).not.toBeNull();
+
+      // addModule must have been called exactly once.
+      expect(addModuleMock).toHaveBeenCalledTimes(1);
+      const moduleUrl: string = addModuleMock.mock.calls[0]?.[0] as string;
+
+      // Must NOT be a blob: URL (that would be blocked by script-src 'self').
+      expect(moduleUrl).not.toMatch(/^blob:/i);
+
+      // Must be the known same-origin static path.
+      expect(moduleUrl).toBe("/audio/frame-counter-worklet.js");
+
+      graph!.dispose();
+    } finally {
+      consoleSpy.mockRestore();
+      if (prevAWN === undefined) {
+        delete (globalThis as Record<string, unknown>).AudioWorkletNode;
+      } else {
+        (globalThis as Record<string, unknown>).AudioWorkletNode = prevAWN;
+      }
+    }
+  });
+
   test("addRemoteAudio after dispose is a safe no-op", async () => {
     const sourceNode = { connect: jest.fn(), disconnect: jest.fn() };
     const gainNode = { gain: { value: 0 }, connect: jest.fn() };

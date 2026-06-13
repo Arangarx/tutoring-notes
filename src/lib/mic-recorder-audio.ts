@@ -170,25 +170,11 @@ export async function createMicAudioGraph(
     let accumulatedFrames = 0;
     let lastWorkletFrames = 0;
 
-    const workletName = `frame-counter-${sid}-${Date.now()}`;
-    const workletCode = `
-      class FrameCounterProcessor extends AudioWorkletProcessor {
-        constructor() { super(); this._active = false; this._frames = 0;
-          this.port.onmessage = e => { if (e.data?.type === 'setActive') this._active = e.data.active; };
-        }
-        process(inputs, outputs) {
-          const ch = inputs[0]?.[0];
-          if (this._active && ch?.length) {
-            this._frames += ch.length;
-            if (this._frames % 1024 < ch.length) this.port.postMessage({ frames: this._frames });
-          }
-          const out = outputs[0]?.[0];
-          if (out && ch) out.set(ch);
-          return true;
-        }
-      }
-      registerProcessor('${workletName}', FrameCounterProcessor);
-    `;
+    // Processor name matches the registerProcessor call in
+    // public/audio/frame-counter-worklet.js. Each AudioContext has its own
+    // isolated worklet scope, so the same name is safe across concurrent graph
+    // instances without a per-session suffix.
+    const workletName = "frame-counter-processor";
 
     let useWorklet = false;
     let workletNode: AudioWorkletNode | null = null;
@@ -196,10 +182,12 @@ export async function createMicAudioGraph(
 
     if (audioContext.audioWorklet) {
       try {
-        const blob = new Blob([workletCode], { type: "text/javascript" });
-        const url = URL.createObjectURL(blob);
-        await audioContext.audioWorklet.addModule(url);
-        URL.revokeObjectURL(url);
+        // Load the worklet from a same-origin static file (public/audio/) so
+        // it satisfies script-src 'self'. A blob: URL would be blocked by our
+        // tight CSP and fall to the ScriptProcessor tier on EVERY platform.
+        await audioContext.audioWorklet.addModule(
+          "/audio/frame-counter-worklet.js"
+        );
         workletNode = new AudioWorkletNode(audioContext, workletName);
         workletNode.port.onmessage = (e) => {
           if (e.data?.frames !== undefined) lastWorkletFrames = e.data.frames;
