@@ -38,6 +38,19 @@ import {
 } from "@/app/admin/students/[id]/whiteboard/notes-actions";
 
 // ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+type StructuredFields = {
+  topics: string;
+  assessment: string;
+  nextSteps: string;
+  links: string;
+};
+
+export type StructuredNoteFields = StructuredFields;
+
+// ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
@@ -55,17 +68,13 @@ type Props = {
    * When omitted, the original router.push(/notes) behaviour is preserved.
    */
   onSaved?: () => void;
-};
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-type StructuredFields = {
-  topics: string;
-  assessment: string;
-  nextSteps: string;
-  links: string;
+  /** Controlled mode — lifted fields from SessionReviewMode (BLOCKER-1). */
+  fields?: StructuredFields;
+  onFieldsChange?: (fields: StructuredFields) => void;
+  /** When false, poll updates do not overwrite fields (S4). Default true. */
+  pollSyncAllowed?: boolean;
+  /** Layout variant for drawer vs hero. */
+  variant?: "default" | "drawer";
 };
 
 // ---------------------------------------------------------------------------
@@ -86,7 +95,7 @@ const SKELETON_TIMEOUT_MS = 5 * 60 * 1_000;
  * Parse TutorNote.content as structured JSON.
  * Falls back gracefully for legacy markdown content (pre-bridge rows).
  */
-function parseNoteContent(content: string | null): StructuredFields {
+export function parseNoteContent(content: string | null): StructuredFields {
   if (!content) return { topics: "", assessment: "", nextSteps: "", links: "" };
   try {
     const parsed = JSON.parse(content) as Record<string, unknown>;
@@ -118,19 +127,37 @@ export default function TutorNotesSection({
   initialNote,
   hasAudio,
   onSaved,
+  fields: controlledFields,
+  onFieldsChange,
+  pollSyncAllowed = true,
+  variant = "default",
 }: Props) {
   const router = useRouter();
+  const isControlled =
+    controlledFields !== undefined && onFieldsChange !== undefined;
 
   const [note, setNote] = useState<TutorNoteStatusResult>(initialNote);
   const [timedOut, setTimedOut] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [regenError, setRegenError] = useState<string | null>(null);
 
-  // Editable form state — initialized from parsed note content when done
-  const [fields, setFields] = useState<StructuredFields>(() =>
+  const [internalFields, setInternalFields] = useState<StructuredFields>(() =>
     initialNote.found && initialNote.content
       ? parseNoteContent(initialNote.content)
       : { topics: "", assessment: "", nextSteps: "", links: "" }
+  );
+
+  const fields = isControlled ? controlledFields! : internalFields;
+
+  const updateFields = useCallback(
+    (updater: (prev: StructuredFields) => StructuredFields) => {
+      if (isControlled) {
+        onFieldsChange!(updater(fields));
+      } else {
+        setInternalFields(updater);
+      }
+    },
+    [fields, isControlled, onFieldsChange]
   );
 
   const [saving, setSaving] = useState(false);
@@ -151,12 +178,18 @@ export default function TutorNotesSection({
   const isFailed = note.found && note.status === "failed";
   const isNotStarted = !note.found;
 
-  // Sync fields whenever a fresh note arrives from polling
+  // Sync fields whenever a fresh note arrives from polling (S4 guard)
   useEffect(() => {
+    if (!pollSyncAllowed) return;
     if (note.found && note.content) {
-      setFields(parseNoteContent(note.content));
+      const parsed = parseNoteContent(note.content);
+      if (isControlled) {
+        onFieldsChange?.(parsed);
+      } else {
+        setInternalFields(parsed);
+      }
     }
-  }, [note]);
+  }, [isControlled, note, onFieldsChange, pollSyncAllowed]);
 
   // Poll while active
   const scheduleNextPoll = useCallback(() => {
@@ -300,7 +333,11 @@ export default function TutorNotesSection({
   return (
     <div
       className="card"
-      style={{ padding: "14px 16px", display: "grid", gap: 12 }}
+      style={{
+        padding: variant === "drawer" ? "10px 12px" : "14px 16px",
+        display: "grid",
+        gap: 12,
+      }}
       data-testid="tutor-notes-section"
     >
       <div
@@ -388,21 +425,21 @@ export default function TutorNotesSection({
               label="Topics covered"
               id="wb-note-topics"
               value={fields.topics}
-              onChange={(v) => setFields((f) => ({ ...f, topics: v }))}
+              onChange={(v) => updateFields((f) => ({ ...f, topics: v }))}
               placeholder="e.g. Quadratics, factoring, FOIL method"
             />
             <NoteField
               label="Assessment"
               id="wb-note-assessment"
               value={fields.assessment}
-              onChange={(v) => setFields((f) => ({ ...f, assessment: v }))}
+              onChange={(v) => updateFields((f) => ({ ...f, assessment: v }))}
               placeholder="Where the student stands — strengths, struggles, mastery level"
             />
             <NoteField
               label="Plan / Next steps"
               id="wb-note-nextsteps"
               value={fields.nextSteps}
-              onChange={(v) => setFields((f) => ({ ...f, nextSteps: v }))}
+              onChange={(v) => updateFields((f) => ({ ...f, nextSteps: v }))}
               placeholder="What to do next, including any homework"
               hint="Covers both plan and homework"
             />
@@ -410,7 +447,7 @@ export default function TutorNotesSection({
               label="Links"
               id="wb-note-links"
               value={fields.links}
-              onChange={(v) => setFields((f) => ({ ...f, links: v }))}
+              onChange={(v) => updateFields((f) => ({ ...f, links: v }))}
               placeholder="URLs mentioned (one per line)"
             />
           </div>
