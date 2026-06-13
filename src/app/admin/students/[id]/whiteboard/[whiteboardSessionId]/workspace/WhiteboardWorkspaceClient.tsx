@@ -303,31 +303,9 @@ function CanvasPlaceholder({ label }: { label: string }) {
 // module docblock for full lifecycle + threat-model notes.
 
 /**
- * Audio-clock surrogate. The plan calls for `MediaRecorder.getElapsedAudioMs()`
- * (blocker #2) — the audio recorder doesn't expose that yet (tracked
- * in `docs/BACKLOG.md` "Reliability gaps"). Until it lands, we drive
- * `getAudioMs` off `performance.now()` deltas, accumulating across
- * pauses. ms precision; doesn't account for iOS background-tab clock
- * throttling (the BACKLOG item covers that follow-up).
+ * Audio-clock surrogate removed (Phase 1b): `getAudioMs` now comes from
+ * `useAudioRecorder.getAudioMs()` — frame-counting node in the Web Audio graph.
  */
-function useAudioMsClock(active: boolean): () => number {
-  const startedAtRef = useRef<number | null>(null);
-  const accruedMsRef = useRef(0);
-  useEffect(() => {
-    if (active) {
-      startedAtRef.current = performance.now();
-    } else if (startedAtRef.current !== null) {
-      accruedMsRef.current += performance.now() - startedAtRef.current;
-      startedAtRef.current = null;
-    }
-  }, [active]);
-  return useCallback(() => {
-    if (startedAtRef.current === null) return Math.floor(accruedMsRef.current);
-    return Math.floor(
-      accruedMsRef.current + (performance.now() - startedAtRef.current)
-    );
-  }, []);
-}
 
 /** Session timer — minutes only per design spec (Sarah rounds to 5/15 min). */
 function formatTimerMinutesOnly(ms: number): string {
@@ -843,9 +821,8 @@ export function WhiteboardWorkspaceClient({
   //
   // What's wired:
   //   - `recordingActive` → useWhiteboardRecorder + audio pause/resume ✔
-  //   - `getAudioMs`      → performance.now()-based surrogate (clock tracks
-  //                         the same pauses as strokes; optional refinement:
-  //                         read live elapsed from the audio hook).
+  //   - `getAudioMs`      → frame-counting audio graph clock via
+  //                         `useAudioRecorder.getAudioMs()`.
   //   - Mic picker / meter / timer → `RecordingControlPanel` in the bridge ✔
 
   // `userWantsRecording` is the tutor's explicit intent (Start / Pause
@@ -1010,6 +987,7 @@ export function WhiteboardWorkspaceClient({
   const [audioDraftRecovery, setAudioDraftRecovery] =
     useState<DraftSegmentRow | null>(null);
   const [audioDraftRecoveryBusy, setAudioDraftRecoveryBusy] = useState(false);
+  const [recordingStallWarning, setRecordingStallWarning] = useState(false);
 
   /**
    * Wall-clock ms when the first audio segment was handed off to the outbox.
@@ -1122,6 +1100,12 @@ export function WhiteboardWorkspaceClient({
     recordingDraft: {
       sessionId: whiteboardSessionId,
       streamId: TUTOR_MIC_STREAM_ID,
+    },
+    onWatchdogAlert: (type) => {
+      console.warn(
+        `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} watchdog alert type=${type}`
+      );
+      setRecordingStallWarning(true);
     },
     // Seed the displayed recording timer at the session's already-elapsed
     // time so a page refresh doesn't reset it to 0 while the session
@@ -1857,7 +1841,7 @@ export function WhiteboardWorkspaceClient({
     registerSessionStudentId(whiteboardSessionId, studentId);
   }, [whiteboardSessionId, studentId]);
 
-  const getAudioMs = useAudioMsClock(recordingActive);
+  const getAudioMs = workspaceAudio.getAudioMs;
 
   const getWireBroadcastExtras = useCallback(():
     | WhiteboardWireBroadcastExtras
@@ -4579,6 +4563,11 @@ export function WhiteboardWorkspaceClient({
                     Discard
                   </button>
                 </span>
+              </Banner>
+            )}
+            {recordingStallWarning && (
+              <Banner tone="warning" testId="wb-recording-stall-banner">
+                Recording may have stopped — check your microphone.
               </Banner>
             )}
             {presence.bannerMessage && (

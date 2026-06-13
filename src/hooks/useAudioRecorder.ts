@@ -148,6 +148,16 @@ export type UseAudioRecorderOptions = {
     sessionId: string;
     streamId: string;
   };
+  /**
+   * TEST-ONLY: inject a fake MicAudioGraph so unit tests can control
+   * the frame clock without a real AudioContext.
+   */
+  _graphOverride?: MicAudioGraph;
+  /**
+   * Called when the recording watchdog detects a potential stall or
+   * empty rollover segment.
+   */
+  onWatchdogAlert?: (type: "stall" | "empty-rollover") => void;
 };
 
 export type UseAudioRecorderReturn = {
@@ -259,6 +269,12 @@ export type UseAudioRecorderReturn = {
   flushPendingUploads: () => Promise<void>;
   /** Hot-swap the mic while the Web Audio graph is live (workspace + live A/V). */
   swapMicDevice: (deviceId: string) => Promise<void>;
+  /**
+   * Frame-accurate, pause-aware audio clock. Returns elapsed
+   * recording-active milliseconds. Cumulative across auto-rollovers.
+   * Backed by the frame-counting node in the Web Audio graph.
+   */
+  getAudioMs: () => number;
 };
 
 /** Decide bar colour by level — green/yellow/red zones for visible feedback. */
@@ -276,6 +292,8 @@ export function useAudioRecorder({
   initialElapsedSeconds = 0,
   avLogSessionId,
   recordingDraft,
+  _graphOverride,
+  onWatchdogAlert,
 }: UseAudioRecorderOptions): UseAudioRecorderReturn {
   const [recordState, setRecordState] = useState<RecordState>("idle");
   const [elapsed, setElapsed] = useState(initialElapsedSeconds);
@@ -349,6 +367,20 @@ export function useAudioRecorder({
   const timesliceDataReceivedRef = useRef(false);
   const draftPagehideHandlerRef = useRef<(() => void) | null>(null);
   const draftVisibilityHandlerRef = useRef<(() => void) | null>(null);
+  const graphOverrideRef = useRef(_graphOverride);
+  graphOverrideRef.current = _graphOverride;
+  const onWatchdogAlertRef = useRef(onWatchdogAlert);
+  onWatchdogAlertRef.current = onWatchdogAlert;
+  /** Cumulative ms from completed segments (rollover boundaries). */
+  const sessionAudioMsRef = useRef(0);
+  /**
+   * Raw frame-clock ms at first ondataavailable of the current segment —
+   * skips AAC/MP4 codec priming frames at segment boundaries.
+   */
+  const segmentPrimingBaselineRef = useRef<number | null>(null);
+  const watchdogLastFrameMsRef = useRef(0);
+  const watchdogLastChunkCountRef = useRef(0);
+  const watchdogInitializedRef = useRef(false);
 
   /**
    * Synchronously add a deferred Promise to `pendingUploadsRef` and
@@ -383,6 +415,103 @@ export function useAudioRecorder({
       pendingUploadsRef.current.delete(promise);
     });
     return { settle, promise };
+  }
+
+  function rawFrameClockMs(): number {
+    return graphRef.current?.frameClockGetMs?.() ?? 0;
+  }
+
+  function noteFirstChunkForAudioClock(): void {
+    if (segmentPrimingBaselineRef.current !== null) return;
+    segmentPrimingBaselineRef.current = rawFrameClockMs();
+  }
+
+  function readAudioClockMs(): number {
+    const raw = rawFrameClockMs();
+    const baseline = segmentPrimingBaselineRef.current;
+    if (baseline === null) {
+      return Math.floor(sessionAudioMsRef.current);
+    }
+    return Math.floor(sessionAudioMsRef.current + raw - baseline);
+  }
+
+  function resetSegmentAudioClockState(): void {
+    segmentPrimingBaselineRef.current = null;
+    watchdogLastFrameMsRef.current = 0;
+    watchdogLastChunkCountRef.current = 0;
+    watchdogInitializedRef.current = false;
+  }
+
+  function commitSessionAudioMsAtRollover(): void {
+    sessionAudioMsRef.current = readAudioClockMs();
+    segmentPrimingBaselineRef.current = null;
+  }
+
+  function startRecorderWithDraftPolicy(recorder: MediaRecorder): void {
+    if (!recordingDraft) {
+      recorder.start();
+      return;
+    }
+    const mime = recorder.mimeType || chooseMimeType() || "";
+    const mightBeIOS = mime.startsWith("audio/mp4");
+    if (mightBeIOS) {
+      recorder.start();
+      console.warn(
+        `[useAudioRecorder] rid=${avLogSessionId ?? "?"} event=ios-no-timeslice mimeType=${recorder.mimeType}`
+      );
+    } else {
+      try {
+        recorder.start(DRAFT_TIMESLICE_MS);
+      } catch {
+        recorder.start();
+      }
+    }
+  }
+
+  function wireRecorderOnDataAvailable(
+    recorder: MediaRecorder,
+    targetChunks: Blob[] = chunksRef.current
+  ): void {
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) {
+        targetChunks.push(e.data);
+        noteFirstChunkForAudioClock();
+        if (recordingDraft) {
+          if (firstChunkMsRef.current === null) {
+            firstChunkMsRef.current = Date.now();
+          }
+          if (recorder.state === "recording") {
+            timesliceDataReceivedRef.current = true;
+          }
+        }
+      }
+    };
+  }
+
+  function runWatchdogCheck(): void {
+    const alert = onWatchdogAlertRef.current;
+    if (!alert) return;
+    const recorderState = mediaRecorderRef.current?.state;
+    if (recorderState !== "recording") return;
+    const currentFrameMs = readAudioClockMs();
+    const currentChunkCount = chunksRef.current.length;
+    if (!watchdogInitializedRef.current) {
+      watchdogLastFrameMsRef.current = currentFrameMs;
+      watchdogLastChunkCountRef.current = currentChunkCount;
+      watchdogInitializedRef.current = true;
+      return;
+    }
+    if (
+      currentFrameMs === watchdogLastFrameMsRef.current &&
+      currentChunkCount === watchdogLastChunkCountRef.current
+    ) {
+      console.warn(
+        `[useAudioRecorder] rid=${avLogSessionId ?? "?"} event=watchdog-stall frameMs=${currentFrameMs} chunks=${currentChunkCount}`
+      );
+      alert("stall");
+    }
+    watchdogLastFrameMsRef.current = currentFrameMs;
+    watchdogLastChunkCountRef.current = currentChunkCount;
   }
 
   async function flushPendingUploads(): Promise<void> {
@@ -543,6 +672,7 @@ export function useAudioRecorder({
     clearDraftCheckpointScheduling();
     draftCheckpointIntervalRef.current = setInterval(() => {
       void checkpointDraftToStore();
+      runWatchdogCheck();
     }, DRAFT_CHECKPOINT_INTERVAL_MS);
     const onPageHide = () => {
       void checkpointDraftToStore();
@@ -581,8 +711,11 @@ export function useAudioRecorder({
   function teardownMicStream() {
     clearDraftCheckpointScheduling();
     stopMeter();
-    graphRef.current?.dispose();
-    graphRef.current = null;
+    const g = graphRef.current;
+    if (g && g !== graphOverrideRef.current) {
+      g.dispose();
+    }
+    graphRef.current = graphOverrideRef.current ?? null;
     try {
       streamRef.current?.getTracks().forEach((t) => t.stop());
     } catch {
@@ -714,31 +847,18 @@ export function useAudioRecorder({
     elapsedRef.current = 0;
     setElapsed(0);
     approachingCapSoundPlayedRef.current = false;
+    commitSessionAudioMsAtRollover();
+    watchdogLastFrameMsRef.current = readAudioClockMs();
+    watchdogLastChunkCountRef.current = 0;
     segmentNumberRef.current = oldPartIndex + 1;
     setSegmentNumber(oldPartIndex + 1);
 
-    newRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) {
-        chunksRef.current.push(e.data);
-        if (recordingDraft) {
-          if (firstChunkMsRef.current === null) {
-            firstChunkMsRef.current = Date.now();
-          }
-          if (newRecorder.state === "recording") {
-            timesliceDataReceivedRef.current = true;
-          }
-        }
-      }
-    };
+    wireRecorderOnDataAvailable(newRecorder);
     if (recordingDraft) {
       segmentIdForDraftRef.current = mintDraftSegmentId();
       firstChunkMsRef.current = null;
       timesliceDataReceivedRef.current = false;
-      try {
-        newRecorder.start(DRAFT_TIMESLICE_MS);
-      } catch {
-        newRecorder.start();
-      }
+      startRecorderWithDraftPolicy(newRecorder);
     } else {
       newRecorder.start();
     }
@@ -757,11 +877,10 @@ export function useAudioRecorder({
         try {
           const blob = new Blob(oldChunks, { type: oldMimeType });
           if (blob.size === 0) {
-            // Empty segment is non-fatal during a rollover — the new segment is
-            // already running. Log and clear the in-progress flag.
             console.warn(
               "[useAudioRecorder] rollover: old segment was empty, skipping upload"
             );
+            onWatchdogAlertRef.current?.("empty-rollover");
             rolloverInProgressRef.current = false;
             return;
           }
@@ -956,11 +1075,13 @@ export function useAudioRecorder({
 
     // Build the audio graph (gain + meter). Returns null if Web Audio is unavailable
     // or the stream isn't a real MediaStream (test stub) — fall back to raw stream below.
-    const graph = await createMicAudioGraph(
-      stream,
-      gainLinear,
-      avLogSessionId ? { sessionId: avLogSessionId } : undefined
-    );
+    const graph =
+      graphOverrideRef.current ??
+      (await createMicAudioGraph(
+        stream,
+        gainLinear,
+        avLogSessionId ? { sessionId: avLogSessionId } : undefined
+      ));
     graphRef.current = graph;
 
     // Expose the stream that downstream consumers (useLiveAV) should use.
@@ -1088,6 +1209,8 @@ export function useAudioRecorder({
       setSegmentNumber(1);
       segmentNumberRef.current = 1;
       totalSessionElapsedRef.current = 0;
+      sessionAudioMsRef.current = 0;
+      resetSegmentAudioClockState();
     }
     if (recordingDraft) {
       segmentIdForDraftRef.current = mintDraftSegmentId();
@@ -1111,33 +1234,10 @@ export function useAudioRecorder({
       return;
     }
 
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) {
-        chunksRef.current.push(e.data);
-        if (recordingDraft) {
-          if (firstChunkMsRef.current === null) {
-            firstChunkMsRef.current = Date.now();
-          }
-          if (recorder.state === "recording") {
-            timesliceDataReceivedRef.current = true;
-          }
-        }
-      }
-    };
+    wireRecorderOnDataAvailable(recorder);
 
-    // Workspace draft durability: optional 30s timeslice so chunks exist
-    // between stop() events (see PLATFORM-ASSUMPTIONS §8.1). Recorder-tab
-    // path keeps start() without timeslice (iOS MP4 fragmentation guard).
     if (recordingDraft) {
-      try {
-        recorder.start(DRAFT_TIMESLICE_MS);
-      } catch (err) {
-        console.warn(
-          "[useAudioRecorder] draft timeslice start failed; using stop-only checkpoints:",
-          err
-        );
-        recorder.start();
-      }
+      startRecorderWithDraftPolicy(recorder);
     } else {
       // IMPORTANT: do NOT pass a timeslice argument to start(). Chunked output
       // (start(1000)) makes iOS Safari emit fragmented MP4 pieces that don't
@@ -1145,6 +1245,7 @@ export function useAudioRecorder({
       recorder.start();
     }
     mediaRecorderRef.current = recorder;
+    graphRef.current?.frameClockSetActive?.(true);
     setRecordState("recording");
     startTimer();
   }
@@ -1181,6 +1282,7 @@ export function useAudioRecorder({
 
   function pauseRecording() {
     if (mediaRecorderRef.current?.state === "recording") {
+      graphRef.current?.frameClockSetActive?.(false);
       mediaRecorderRef.current.pause();
       stopTimer();
       setRecordState("paused");
@@ -1190,6 +1292,7 @@ export function useAudioRecorder({
   function resumeRecording() {
     if (mediaRecorderRef.current?.state === "paused") {
       mediaRecorderRef.current.resume();
+      graphRef.current?.frameClockSetActive?.(true);
       startTimer();
       setRecordState("recording");
     }
@@ -1202,6 +1305,7 @@ export function useAudioRecorder({
     // utterances ("bring the worksheet next time") are valid notes and shouldn't
     // be blocked behind a confirm popup.
     stopTimer();
+    graphRef.current?.frameClockSetActive?.(false);
     const recorder = mediaRecorderRef.current;
     if (!recorder) {
       rolloverInProgressRef.current = false;
@@ -1351,6 +1455,8 @@ export function useAudioRecorder({
     rolloverInProgressRef.current = false;
     segmentNumberRef.current = 1;
     setSegmentNumber(1);
+    sessionAudioMsRef.current = 0;
+    resetSegmentAudioClockState();
     setUploadMode(null);
     setDoneSegmentSeconds(0);
     setError(null);
@@ -1407,6 +1513,8 @@ export function useAudioRecorder({
     []
   );
 
+  const getAudioMs = useCallback((): number => readAudioClockMs(), []);
+
   return {
     state: recordState,
     uploadMode,
@@ -1438,6 +1546,7 @@ export function useAudioRecorder({
     handleReset,
     flushPendingUploads,
     swapMicDevice,
+    getAudioMs,
   };
 }
 
