@@ -220,191 +220,670 @@ npx jest --runInBand --testPathPatterns "whiteboard|recording|lifecycle|outbox|u
 
 ---
 
-## Workstream 1b — Audio-clock fix
+## Workstream 1b — Audio-clock fix (REVISED 2026-06-13)
 
-### The problem (confirmed in code)
+> **Superseded approach:** the original plan proposed using `AudioContext.currentTime` as the clock source. The 5-axis adversarial review (B1) ruled this out: iOS Safari suspends AudioContext instances when tabs are backgrounded, causing `currentTime` to freeze just as `performance.now()` throttles — no improvement. Additionally, WebKit bug 263627 can freeze `currentTime` while `state === "running"`, so `onstatechange` cannot even detect the problem. **The chosen approach (Andrew approved "do it right") is a frame-counting node inserted into the audio graph.**
 
-`WhiteboardWorkspaceClient.tsx`, lines 305-330:
+### Why frame counting solves the problem cleanly
+
+The frame-counting node sits between the gain node and `recordingDest` in the existing graph. It counts every audio frame that physically passes through the recording path — the same frames that `MediaRecorder` encodes. This creates a strict identity:
+
+**frames counted ≡ samples encoded ≡ samples decoded at replay**
+
+When the AudioContext is suspended (iOS background, phone call, any interruption), the graph stops producing frames. The frame counter freezes AND `MediaRecorder` receives no more data AND the encoded file is short by exactly that amount. Replay's `audio.currentTime` also won't advance past the short file. So `t` stays aligned through every failure mode automatically — not because we compensate for drift, but because the clock and the encoder are the same signal path.
+
+This is strictly better than `performance.now()` (which keeps ticking while audio freezes) and `AudioContext.currentTime` (which can freeze while the encoder has already committed frames). The frame counter CANNOT drift relative to the encoded audio because it IS the encoded audio.
+
+### Graph topology
+
+Current graph (from `createMicAudioGraph`, `mic-recorder-audio.ts:118–159`):
+```
+source → gainNode → recordingDest   (MediaRecorder input)
+               ↓
+         publishDest   (WebRTC)
+               ↓
+           analyser    (level meter)
+```
+
+New graph after 1b — insert `frameCounterNode` between `gainNode` and `recordingDest`:
+```
+source → gainNode → frameCounterNode → recordingDest   (MediaRecorder input)
+               ↓
+         publishDest   (WebRTC — unchanged)
+               ↓
+           analyser    (level meter — unchanged)
+```
+
+`publishDest` and `analyser` still connect directly from `gainNode` (no change). Only the recording path goes through the counter. Remote audio sources (`remoteSource → remoteGain → recordingDest`) are unchanged — the counter does NOT need to count remote frames because any frame flowing through the local mic path proves the AudioContext is alive.
+
+### Implementation: AudioWorklet preferred, ScriptProcessorNode fallback
+
+**Why not just use ScriptProcessorNode?** ScriptProcessorNode is deprecated and blocks the main thread. Where AudioWorklet is available, it runs in the audio rendering thread and is the correct long-term approach.
+
+**Why not just use AudioWorklet?** AudioWorklet requires async `addModule()` and communicates via async `port.postMessage`. Since `getAudioMs()` must be synchronous (called inline in `flushPendingDiff` → `getAudioMsRef.current()`), we need a synchronous read path. For the AudioWorklet, we use a short (every ~1024 frames ≈ 23ms @ 44100 Hz) postMessage cadence to keep the main-thread ref current; the max read lag is ~23ms, well within the 250ms budget.
+
+**Fallback trigger:** ScriptProcessorNode is used when:
+- `audioContext.audioWorklet` is undefined (older browsers)
+- `audioContext.audioWorklet.addModule()` throws (e.g. CSP blocks `blob:` URLs)
+- Any other AudioWorklet init error
+
+The fallback is logged: `[mic-recorder-audio] avx=${sid} frame-counter=script-processor`.
+
+**iOS note:** Both AudioWorklet and ScriptProcessorNode stop firing when iOS suspends the AudioContext. This is correct behavior — the counter and the encoder both freeze simultaneously, maintaining alignment. The `audioContext.onstatechange` handler (see File 1 below) surfaces this to logs for post-hoc debugging.
+
+### File 1: `src/lib/mic-recorder-audio.ts`
+
+**Interface additions** (after line 104, `swapLocalMicSource`):
+```typescript
+/**
+ * Frame-accurate recording clock. Returns elapsed recording-active
+ * milliseconds: frames counted while setActive(true), converted via
+ * sampleRate. Monotonic. Cumulative across rollovers (never resets).
+ * Freezes if the AudioContext is suspended (e.g. iOS background).
+ */
+frameClockGetMs: () => number;
+/**
+ * Gate the frame counter. Call true on recording start/resume,
+ * false on pause/stop. Only frames counted while active contribute
+ * to the clock — matches the MediaRecorder's recording/paused state.
+ */
+frameClockSetActive: (active: boolean) => void;
+```
+
+**Implementation inside `createMicAudioGraph`**, after line 119 (`await audioContext.resume()`):
 
 ```typescript
-// File: src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceClient.tsx
-// Lines 305-330
+// Observability: log AudioContext state changes for iOS debugging.
+audioContext.onstatechange = () => {
+  console.log(
+    `[mic-recorder-audio] avx=${sid} event=audiocontext-state-change state=${audioContext.state}`
+  );
+};
 
-/**
- * Audio-clock surrogate. The plan calls for `MediaRecorder.getElapsedAudioMs()`
- * (blocker #2) — the audio recorder doesn't expose that yet (tracked
- * in `docs/BACKLOG.md` "Reliability gaps"). Until it lands, we drive
- * `getAudioMs` off `performance.now()` deltas, accumulating across
- * pauses. ms precision; doesn't account for iOS background-tab clock
- * throttling (the BACKLOG item covers that follow-up).
- */
-function useAudioMsClock(active: boolean): () => number {
-  const startedAtRef = useRef<number | null>(null);
-  const accruedMsRef = useRef(0);
-  useEffect(() => {
-    if (active) {
-      startedAtRef.current = performance.now();
-    } else if (startedAtRef.current !== null) {
-      accruedMsRef.current += performance.now() - startedAtRef.current;
-      startedAtRef.current = null;
+// Frame counter — accumulates only while frameClockActive=true.
+let frameClockActive = false;
+let accumulatedFrames = 0;
+let lastWorkletFrames = 0; // updated by AudioWorklet postMessage
+
+// Worklet code inlined as blob URL (avoids an extra static file and
+// keeps the module self-contained). The unique suffix on the processor
+// name avoids name collisions if multiple AudioContexts are created.
+const workletName = `frame-counter-${sid}-${Date.now()}`;
+const workletCode = `
+  class FrameCounterProcessor extends AudioWorkletProcessor {
+    constructor() {
+      super();
+      this._active = false;
+      this.port.onmessage = (e) => {
+        if (e.data?.type === 'setActive') this._active = e.data.active;
+      };
     }
-  }, [active]);
-  return useCallback(() => {
-    if (startedAtRef.current === null) return Math.floor(accruedMsRef.current);
-    return Math.floor(
-      accruedMsRef.current + (performance.now() - startedAtRef.current)
-    );
-  }, []);
+    process(inputs, outputs) {
+      if (this._active && inputs[0]?.[0]?.length) {
+        // Count frames and report every 1024 frames (~23ms @ 44100).
+        globalThis.__fcFrames = (globalThis.__fcFrames ?? 0) + inputs[0][0].length;
+        if (globalThis.__fcFrames % 1024 < inputs[0][0].length) {
+          this.port.postMessage({ frames: globalThis.__fcFrames });
+        }
+      }
+      if (outputs[0]?.[0] && inputs[0]?.[0]) {
+        outputs[0][0].set(inputs[0][0]); // passthrough
+      }
+      return true;
+    }
+  }
+  registerProcessor('${workletName}', FrameCounterProcessor);
+`;
+```
+
+> **Implementation note:** The `globalThis.__fcFrames` pattern above uses a shared global in the worklet scope. A cleaner approach is an instance-level `_frames` counter on the processor. Use an instance field:
+
+```typescript
+// Corrected worklet (use in actual implementation):
+const workletCode = `
+  class FrameCounterProcessor extends AudioWorkletProcessor {
+    constructor() { super(); this._active = false; this._frames = 0;
+      this.port.onmessage = e => { if (e.data?.type === 'setActive') this._active = e.data.active; };
+    }
+    process(inputs, outputs) {
+      const ch = inputs[0]?.[0];
+      if (this._active && ch?.length) {
+        this._frames += ch.length;
+        if (this._frames % 1024 < ch.length) this.port.postMessage({ frames: this._frames });
+      }
+      const out = outputs[0]?.[0];
+      if (out && ch) out.set(ch);
+      return true;
+    }
+  }
+  registerProcessor('${workletName}', FrameCounterProcessor);
+`;
+```
+
+**Init sequence** (try AudioWorklet, fall back to ScriptProcessorNode):
+
+```typescript
+// Disconnect direct gainNode→recordingDest before inserting the counter.
+gainNode.disconnect(recordingDest);
+
+let useWorklet = false;
+let workletNode: AudioWorkletNode | null = null;
+let scriptNode: ScriptProcessorNode | null = null;
+
+if (audioContext.audioWorklet) {
+  try {
+    const blob = new Blob([workletCode], { type: 'text/javascript' });
+    const url = URL.createObjectURL(blob);
+    await audioContext.audioWorklet.addModule(url);
+    URL.revokeObjectURL(url);
+    workletNode = new AudioWorkletNode(audioContext, workletName);
+    workletNode.port.onmessage = (e) => {
+      if (e.data?.frames !== undefined) lastWorkletFrames = e.data.frames;
+    };
+    workletNode.port.onmessage({ data: { type: 'setActive', active: false } }); // init
+    gainNode.connect(workletNode);
+    workletNode.connect(recordingDest);
+    useWorklet = true;
+    console.log(`[mic-recorder-audio] avx=${sid} frame-counter=audioworklet`);
+  } catch (err) {
+    console.warn(`[mic-recorder-audio] avx=${sid} AudioWorklet init failed; falling back:`,
+      (err as Error)?.message ?? String(err));
+    gainNode.connect(recordingDest); // restore direct connection before ScriptProcessor setup
+  }
 }
+
+if (!useWorklet) {
+  // ScriptProcessorNode: deprecated but widely supported, runs on the
+  // main thread (no IPC needed for synchronous getAudioMs reads).
+  try {
+    scriptNode = audioContext.createScriptProcessor(256, 1, 1);
+    scriptNode.onaudioprocess = (e) => {
+      if (frameClockActive) accumulatedFrames += e.inputBuffer.length;
+      const inCh = e.inputBuffer.getChannelData(0);
+      const outCh = e.outputBuffer.getChannelData(0);
+      outCh.set(inCh); // passthrough
+    };
+    gainNode.connect(scriptNode);
+    scriptNode.connect(recordingDest);
+    console.log(`[mic-recorder-audio] avx=${sid} frame-counter=script-processor`);
+  } catch (err) {
+    console.warn(`[mic-recorder-audio] avx=${sid} ScriptProcessorNode init failed; frame clock unavailable:`,
+      (err as Error)?.message ?? String(err));
+    gainNode.connect(recordingDest); // restore so recording still works
+  }
+}
+
+const sampleRate = audioContext.sampleRate; // 44100, 48000, etc.
+
+const frameClockGetMs = (): number => {
+  if (useWorklet) {
+    return Math.floor(lastWorkletFrames * 1000 / sampleRate);
+  }
+  return Math.floor(accumulatedFrames * 1000 / sampleRate);
+};
+
+const frameClockSetActive = (active: boolean): void => {
+  frameClockActive = active;
+  if (useWorklet && workletNode) {
+    try { workletNode.port.postMessage({ type: 'setActive', active }); } catch {}
+  }
+};
 ```
 
-**Why this drifts:** `performance.now()` runs at the OS scheduler rate. On iOS when the browser tab is backgrounded:
-- iOS throttles JS execution and `performance.now()` advancement (to save battery)
-- The MediaRecorder however records at hardware audio rate (the iOS audio system does not throttle)
-- Consequently, after a backgrounded period, `performance.now()` reads LESS elapsed time than the audio actually contains
-- Stroke `t` values are therefore SMALLER than their true audio position
-- On replay: strokes appear too early relative to the audio (audio has advanced more than strokes show)
-
-This is plan blocker #2 from `docs/WHITEBOARD-STATUS.md` (adversarial review item 2).
-
-**Drift magnitude:** iOS background throttling can skip tens of milliseconds per minute. Over a 50-minute session where the student backgrounds their tab for 5 minutes: potentially 1-5 seconds of drift, making replay unwatchable at the affected segments.
-
-### Drift threshold
-
-Target: **< 250ms over 50 minutes** (per the program roadmap). This is a looser bound than the original "< 100ms" from the adversarial review, reflecting the challenge of eliminating all OS-level sources. < 250ms is imperceptible to a user reviewing a replay.
-
-### The fix
-
-#### Why `AudioContext.currentTime` is the right clock
-
-`AudioContext.currentTime` is driven by the Web Audio hardware scheduler, not the OS job scheduler:
-
-1. It runs at sample-accurate precision (44100 Hz granularity)
-2. On iOS, it matches the physical hardware audio timeline — it does NOT slow down when the tab is backgrounded, because the audio subsystem is still running
-3. It is the same clock that drives the `recordingStream`'s MediaRecorder input (the stream goes through the AudioContext graph)
-
-The `AudioContext` is already created in `src/lib/mic-recorder-audio.ts` at `createMicAudioGraph` (line 118). Currently it is NOT exposed through the `MicAudioGraph` interface.
-
-#### Three-file change
-
-**File 1: `src/lib/mic-recorder-audio.ts`**
-
-Add `getAudioContextElapsedMs: () => number` to the `MicAudioGraph` interface and implement it:
-
+**In `dispose()`** (after `void audioContext.close()`):
 ```typescript
-// In MicAudioGraph type (after line 104):
+try { workletNode?.disconnect(); } catch {}
+try { scriptNode?.disconnect(); } catch {}
+```
+
+**Return additions** in the factory return object:
+```typescript
+frameClockGetMs,
+frameClockSetActive,
+```
+
+### File 2: `src/hooks/useAudioRecorder.ts`
+
+**New option** (in `UseAudioRecorderOptions`, after `recordingDraft`):
+```typescript
 /**
- * Returns elapsed milliseconds since the AudioContext was created,
- * based on AudioContext.currentTime (hardware clock, not JS scheduler).
- * Callers must handle the accumulation-across-pauses pattern themselves
- * if they want a pause-aware elapsed — this is the raw AudioContext clock.
+ * TEST-ONLY: inject a fake MicAudioGraph so unit tests can control
+ * the frame clock without a real AudioContext. In production this
+ * is always undefined; the hook creates the real graph via
+ * createMicAudioGraph. Must implement at minimum:
+ * frameClockGetMs, frameClockSetActive, recordingStream, dispose,
+ * getLevel, setGain, addRemoteAudio, setRemoteGain, swapLocalMicSource.
  */
-getAudioContextElapsedMs: () => number;
+_graphOverride?: MicAudioGraph;
 ```
 
-Implementation (in `createMicAudioGraph`, after `const audioContext = new AudioContext()`):
+**New return field** (in `UseAudioRecorderReturn`, after `flushPendingUploads`):
 ```typescript
-// Capture the audioContext creation time once; all elapsedMs calls
-// are relative to this anchor (not relative to when recording started).
-const ctxCreatedAt = audioContext.currentTime;
-```
-Return from the factory:
-```typescript
-getAudioContextElapsedMs: () =>
-  Math.floor((audioContext.currentTime - ctxCreatedAt) * 1000),
-```
-
-**File 2: `src/hooks/useAudioRecorder.ts`**
-
-Add `getAudioMs: () => number` to `UseAudioRecorderReturn` (new field — backward compatible, existing callers don't need to use it).
-
-Internally: store a ref to the graph's `getAudioContextElapsedMs`. Implement the accumulation-across-pauses pattern analogous to the current `useAudioMsClock` but using the AudioContext clock:
-
-```typescript
-// New field in UseAudioRecorderReturn:
 /**
- * Pause-aware audio-clock getter backed by AudioContext.currentTime.
- * Returns elapsed recording-active milliseconds (0 when not yet started).
- * Use this instead of performance.now()-based surrogates for WB event `t`.
+ * Frame-accurate, pause-aware audio clock. Returns elapsed
+ * recording-active milliseconds. Zero before recording starts.
+ * Monotonically increasing while recording, frozen while paused.
+ * Cumulative across auto-rollovers — do NOT reset on rollover.
+ *
+ * Backed by the frame-counting node in the Web Audio graph.
+ * Falls back to performance.now() deltas if the graph is null
+ * (e.g. mic not yet acquired).
+ *
+ * This is the authoritative source of truth for WB event `t`.
  */
 getAudioMs: () => number;
 ```
 
-Implementation adds two refs in `useAudioRecorder`:
-- `audioContextAccruedMsRef`: total ms accumulated from all completed recording intervals
-- `audioContextActiveStartMsRef`: the `getAudioContextElapsedMs()` reading when the current recording interval started (null when not active)
+**New options** (in `UseAudioRecorderOptions`):
+```typescript
+/**
+ * Called when the recording watchdog detects a potential stall:
+ * neither the frame clock nor the chunk list has advanced in the
+ * last 30s while the recorder is nominally active.
+ * Workspace surfaces this as a warning banner. Type:
+ * - 'stall': frame counter frozen mid-session (iOS interrupt, encoder wedge)
+ * - 'empty-rollover': rollover produced a 0-byte segment (existing console-only warning)
+ */
+onWatchdogAlert?: (type: 'stall' | 'empty-rollover') => void;
+```
 
-These are updated in the same `active`-state-change effect where `startedAtRef` is currently managed. The `getAudioMs` callback returns `audioContextAccruedMsRef + (getAudioContextElapsedMs() - audioContextActiveStartMsRef)` when active, or just `audioContextAccruedMsRef` when paused.
+**New refs** (in `useAudioRecorder`):
+```typescript
+// Performance.now() fallback for getAudioMs before graph is built.
+const perfFallbackAccruedRef = useRef(0);
+const perfFallbackStartRef = useRef<number | null>(null);
+// Watchdog state for stall detection.
+const watchdogLastFrameMsRef = useRef(0);
+const watchdogLastChunkCountRef = useRef(0);
+```
 
-**Fallback:** if `graphRef.current` is null (mic not yet acquired), fall back to `performance.now()` deltas — this preserves the current behavior during the pre-mic period (before `handleStartRecording` succeeds).
+**`getAudioMs` implementation** (stable callback, reads from graph or perf fallback):
+```typescript
+const getAudioMs = useCallback((): number => {
+  const graph = graphRef.current;
+  if (graph?.frameClockGetMs) {
+    return graph.frameClockGetMs();
+  }
+  // Fallback: performance.now() deltas (pre-graph-build only).
+  // The fallback only accumulates while the recorder is active —
+  // same gate as frameClockSetActive — so t=0 for pre-recording events.
+  if (perfFallbackStartRef.current === null) {
+    return Math.floor(perfFallbackAccruedRef.current);
+  }
+  return Math.floor(
+    perfFallbackAccruedRef.current + (performance.now() - perfFallbackStartRef.current)
+  );
+}, []);
+```
 
-**File 3: `src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceClient.tsx`**
+**Gate calls** (activate/deactivate the frame counter alongside MediaRecorder state):
 
-Replace the `getAudioMs` local derivation:
+In `startMediaRecorder()`, after `setRecordState("recording")`:
+```typescript
+graphRef.current?.frameClockSetActive(true);
+// Fallback: mark perf start only if graph unavailable.
+if (!graphRef.current?.frameClockGetMs) {
+  perfFallbackStartRef.current = performance.now();
+}
+```
+
+In `pauseRecording()`, before `mediaRecorderRef.current.pause()`:
+```typescript
+graphRef.current?.frameClockSetActive(false);
+if (perfFallbackStartRef.current !== null) {
+  perfFallbackAccruedRef.current += performance.now() - perfFallbackStartRef.current;
+  perfFallbackStartRef.current = null;
+}
+```
+
+In `resumeRecording()`, after `mediaRecorderRef.current.resume()`:
+```typescript
+graphRef.current?.frameClockSetActive(true);
+if (!graphRef.current?.frameClockGetMs) {
+  perfFallbackStartRef.current = performance.now();
+}
+```
+
+In `stopAndUpload()`, after `stopTimer()`:
+```typescript
+graphRef.current?.frameClockSetActive(false);
+if (perfFallbackStartRef.current !== null) {
+  perfFallbackAccruedRef.current += performance.now() - perfFallbackStartRef.current;
+  perfFallbackStartRef.current = null;
+}
+```
+
+**Rollover:** `rolloverSegmentGapless()` does NOT call `frameClockSetActive(false/true)`. The counter must keep accumulating continuously through the rollover handoff — recording never pauses, neither should the clock. The display timer (`elapsedRef.current = 0` at line 714 of `useAudioRecorder.ts`) resets independently; the frame clock is cumulative for the session.
+
+> **CRITICAL executor note:** `elapsedRef.current = 0` on rollover resets the per-segment display timer. The frame clock (`frameClockGetMs`) must never be reset on rollover. These are two different counters with different semantics. Any PR that adds `frameClockSetActive(false); frameClockSetActive(true)` around the rollover boundary is a bug.
+
+**`_graphOverride` wiring**: if `opts._graphOverride` is defined, skip `createMicAudioGraph` and set `graphRef.current = opts._graphOverride` immediately. This lets unit tests control the frame clock without a real AudioContext.
+
+### iOS timeslice truncation: analysis and resolution
+
+**The conflict (code confirmed):**
+
+`useAudioRecorder.ts` lines 13-16 (invariant comment at top):
+> *"iOS Safari MP4 fragmentation guard: `recorder.start()` is called with NO timeslice argument. Chunked output (`start(1000)`) makes iOS Safari emit fragmented MP4 pieces that don't concatenate into a playable / Whisper-decodable file."*
+
+`useAudioRecorder.ts` lines 1131-1145 (workspace draft path):
+```typescript
+if (recordingDraft) {
+  try {
+    recorder.start(DRAFT_TIMESLICE_MS); // 30_000ms timeslice
+  } catch {
+    recorder.start();
+  }
+}
+```
+
+**These are contradictory.** The invariant warns against timeslice. The workspace draft path uses timeslice. The comment at line 88-89 acknowledges this: `"/** MediaRecorder timeslice when draft durability is enabled (iOS may not fire — see PLATFORM-ASSUMPTIONS §8.1). */"`
+
+**Tradeoff:**
+
+| | Draft durability (with timeslice) | iOS playability (no timeslice) |
+|---|---|---|
+| Crash recovery | Coarser: only data flushed at last `pagehide` / `stop()` | Stop-only: at most one 30s checkpoint interval of data lost in crash |
+| iOS playability | ❌ May produce fragmented MP4 Whisper can't decode | ✅ Single clean blob |
+| Desktop playability | ✅ WebM/Opus fragmented blobs concatenate fine | ✅ |
+
+**Proposed resolution: iOS-conditional no-timeslice**
+
+Detection heuristic: use the selected MIME type as the proxy. `chooseMimeType()` returns `audio/mp4` (or an `audio/mp4`-prefixed string) on iOS Safari — the same signal the rest of the codebase already uses for iOS-specific logic. This avoids UA string parsing.
 
 ```typescript
-// Current (lines 1858-1860):
+// In startMediaRecorder() and rolloverSegmentGapless(), replace:
+if (recordingDraft) { try { recorder.start(DRAFT_TIMESLICE_MS); } catch { recorder.start(); } }
+
+// With:
+if (recordingDraft) {
+  const mightBeIOS = (recorder.mimeType || chooseMimeType() || '').startsWith('audio/mp4');
+  if (mightBeIOS) {
+    // iOS Safari: timeslice fragments MP4 — use stop-only checkpoints.
+    // Crash recovery is coarser but the final file is Whisper-decodable.
+    recorder.start();
+    console.warn(`[useAudioRecorder] rid=? event=ios-no-timeslice mimeType=${recorder.mimeType}`);
+  } else {
+    try { recorder.start(DRAFT_TIMESLICE_MS); } catch { recorder.start(); }
+  }
+}
+```
+
+**What the iOS no-timeslice path loses:** if iOS crashes the browser mid-session (not just backgrounds it — actual Safari crash or OOM kill), and the last `pagehide` handler didn't fire, at most 30 seconds of audio can be unrecoverable from IDB. For a pilot-stage tool used synchronously with a student this is acceptable: the tutor can restart the session.
+
+**What REQUIRES Andrew's iOS hardware to confirm:**
+1. That `chooseMimeType()` returning `audio/mp4` reliably identifies iOS Safari (not macOS Safari, which also supports mp4 but handles timeslice correctly)
+2. That the stop-only + `pagehide` checkpoint correctly fires on iOS background/foreground
+3. That the final audio blob without timeslice is Whisper-decodable (smoke: 5-min iOS recording → notes generation succeeds)
+
+If `audio/mp4` also fires on macOS Safari where timeslice IS safe, add an explicit UA check for `iPhone|iPad|iPod` in addition.
+
+### Silent wedge watchdog: design
+
+**The gap (code confirmed):**
+
+`useAudioRecorder.ts` lines 759-766 (rollover empty segment — console-only):
+```typescript
+if (blob.size === 0) {
+  console.warn("[useAudioRecorder] rollover: old segment was empty, skipping upload");
+  rolloverInProgressRef.current = false;
+  return;
+}
+```
+
+Lines 1247-1253 (final stop empty blob — surfaces error):
+```typescript
+if (blob.size === 0) {
+  setError("Recording appears empty. Please try again.");
+  // ...
+}
+```
+
+Intermediate encoder stalls (no new chunks between timeslice events) are fully invisible.
+
+**Watchdog design:**
+
+The watchdog piggybacks on the existing `DRAFT_CHECKPOINT_INTERVAL_MS = 30_000` interval in `startDraftCheckpointScheduling()`. Every 30 seconds it checks:
+
+1. Is `mediaRecorderRef.current?.state === 'recording'`? (If paused/stopped, no stall.)
+2. Has `frameClockGetMs()` advanced since the last check?
+3. Has `chunksRef.current.length` increased since the last check?
+
+If (2) AND (3) are both false while (1) is true: the encoder is stalled. Fire `onWatchdogAlert('stall')`.
+
+```typescript
+// Add to the existing checkpoint interval callback in startDraftCheckpointScheduling:
+if (opts.onWatchdogAlert) {
+  const recorderState = mediaRecorderRef.current?.state;
+  if (recorderState === 'recording') {
+    const currentFrameMs = graphRef.current?.frameClockGetMs?.() ?? 0;
+    const currentChunkCount = chunksRef.current.length;
+    if (
+      currentFrameMs === watchdogLastFrameMsRef.current &&
+      currentChunkCount === watchdogLastChunkCountRef.current
+    ) {
+      console.warn(
+        `[useAudioRecorder] event=watchdog-stall frameMs=${currentFrameMs} chunks=${currentChunkCount}`
+      );
+      opts.onWatchdogAlert('stall');
+    }
+    watchdogLastFrameMsRef.current = currentFrameMs;
+    watchdogLastChunkCountRef.current = currentChunkCount;
+  }
+}
+```
+
+Also: upgrade the empty-rollover branch (lines 759-766) to call `onWatchdogAlert('empty-rollover')` in addition to the existing `console.warn`.
+
+**Workspace surface (File 3 concern):** the workspace component receives `onWatchdogAlert` and uses it to display a persistent warning banner: `"Recording may have stopped — please check your microphone and try ending/restarting."` The banner stays visible until the tutor ends or resets the session (not auto-dismissing). This preserves the honesty axis: we never silently ship truncated/desynced replay.
+
+### File 3: `src/components/whiteboard/WhiteboardWorkspaceClient.tsx`
+
+**Delete** `useAudioMsClock` (lines 305-330) — it becomes dead code.
+
+**Replace** at line 1860:
+```typescript
+// Before:
 const getAudioMs = useAudioMsClock(recordingActive);
 
-// New:
-const getAudioMs = audioRecorder.getAudioMs;
-// (delete useAudioMsClock entirely — it becomes dead code)
+// After:
+const getAudioMs = workspaceAudio.getAudioMs;
 ```
 
-The `audioRecorder` variable already holds the `useAudioRecorder(...)` return value (lines ~1730-1740 area). Adding `getAudioMs` to that return and consuming it here is a one-line change.
+`workspaceAudio` is the `useAudioRecorder(...)` return at line 1118-1130. `getAudioMs` is consumed at line 2192 in `useWhiteboardRecorder`. This is a one-line change.
 
-### Drift threshold verification test (agent-runnable)
+**Add** `onWatchdogAlert` to the `useAudioRecorder` call (lines 1118-1130):
+```typescript
+const workspaceAudio = useAudioRecorder({
+  // ... existing props ...
+  onWatchdogAlert: (type) => {
+    console.warn(`[WhiteboardWorkspaceClient] watchdog alert type=${type}`);
+    setRecordingStallWarning(true); // new state: drives a visible warning banner
+  },
+});
+```
 
-**The challenge:** jsdom does not implement Web Audio API — `new AudioContext()` throws in jsdom. Real timing cannot be injected via jest fake timers because `AudioContext.currentTime` is a read-only property on the real object.
+### Multi-segment behavior: frame counter is cumulative
 
-**Approach: injectable clock interface (no jsdom AudioContext)**
+Replay positions WB events via `segmentLocalToGlobalMs(segmentIndex, audio.currentTime * 1000, timeline)`, where `segmentStartsMs[N]` = sum of Whisper `durationSeconds` for segments 0..N-1.
 
-The fix introduces an abstraction layer:
+The frame counter MUST accumulate cumulatively across rollovers so that `t` at the start of segment N matches `segmentStartsMs[N]`. This is automatic because:
+- `frameClockSetActive` is NOT called false/true around `rolloverSegmentGapless()` — the counter runs uninterrupted
+- The rollover only resets `elapsedRef.current` (the per-segment display timer), not the frame counter
+
+**Codec priming offset:** AAC (iOS MP4) has ~2112 priming samples at the start of each segment. ffprobe typically reports these as part of the container duration. The frame counter counts ALL frames including priming. If Whisper's `durationSeconds` includes the priming frames, alignment is perfect. If Whisper's `durationSeconds` excludes them, there is a ~47ms undercount per rollover boundary. Over 6 segments, this is ~280ms — barely outside the 250ms budget. Mitigation: zero the frame counter at first `ondataavailable` per segment, which skips priming frames that will also be skipped by the decoder. Flag for the executor to implement and verify against a multi-segment smoke.
+
+### Test strategy (agent-runnable)
+
+**The jsdom constraint:** `new AudioContext()` throws in jsdom. The `_graphOverride` escape hatch in `UseAudioRecorderOptions` (test-only) bypasses `createMicAudioGraph` entirely.
+
+**Fake graph helper** (add to `src/__tests__/recording/helpers/fakeMicAudioGraph.ts`):
+```typescript
+export class FakeMicAudioGraph implements Pick<MicAudioGraph,
+  'frameClockGetMs' | 'frameClockSetActive' | 'recordingStream' | 'dispose' |
+  'getLevel' | 'setGain' | 'addRemoteAudio' | 'setRemoteGain' | 'swapLocalMicSource'
+> {
+  private _active = false;
+  private _ms = 0;
+  recordingStream = new MediaStream(); // or mock
+  frameClockGetMs = () => this._ms;
+  frameClockSetActive = (a: boolean) => { this._active = a; };
+  /** Advance the fake clock — only accumulates when active. */
+  advance(ms: number) { if (this._active) this._ms += ms; }
+  getLevel = () => 0;
+  setGain = (_g: number) => {};
+  addRemoteAudio = (_s: MediaStream) => () => {};
+  setRemoteGain = () => {};
+  swapLocalMicSource = () => {};
+  dispose = () => {};
+}
+```
+
+**Test file 1: `src/__tests__/recording/audio-clock-alignment.test.ts`**
+
+Oracle: the injected fake graph controls the clock independently of `jest.fakeTimers`. The test proves `getAudioMs()` follows the frame counter, not wall time.
 
 ```typescript
-// New type in mic-recorder-audio.ts or a shared types file:
-export type AudioClockSource = {
-  /** Returns elapsed ms on the hardware audio clock. */
-  getElapsedMs: () => number;
-};
+it('getAudioMs follows frame clock, not performance.now drift', async () => {
+  const fakeGraph = new FakeMicAudioGraph();
+  const { result } = renderHook(() =>
+    useAudioRecorder({ studentId: 's1', onRecorded: jest.fn(), _graphOverride: fakeGraph })
+  );
+
+  await act(() => result.current.handleStartRecording());
+  // Advance frame clock by 10,000ms
+  fakeGraph.advance(10_000);
+  // Advance wall clock by a DIFFERENT amount (simulates iOS throttling)
+  jest.advanceTimersByTime(11_500);
+
+  // getAudioMs must follow the frame clock, not wall clock
+  expect(result.current.getAudioMs()).toBe(10_000);
+});
+
+it('getAudioMs accumulates correctly across pause/resume', async () => {
+  const fakeGraph = new FakeMicAudioGraph();
+  const { result } = renderHook(() =>
+    useAudioRecorder({ studentId: 's1', onRecorded: jest.fn(), _graphOverride: fakeGraph })
+  );
+  await act(() => result.current.handleStartRecording());
+  fakeGraph.advance(5_000); // 5s recording
+  act(() => result.current.pauseRecording());
+  fakeGraph.advance(3_000); // 3s paused — should NOT count
+  act(() => result.current.resumeRecording());
+  fakeGraph.advance(2_000); // 2s more recording
+  // Total recording-active = 5 + 2 = 7s
+  expect(result.current.getAudioMs()).toBe(7_000);
+});
+
+it('getAudioMs does NOT reset on auto-rollover', async () => {
+  const fakeGraph = new FakeMicAudioGraph();
+  const { result } = renderHook(() =>
+    useAudioRecorder({ studentId: 's1', onRecorded: jest.fn(), _graphOverride: fakeGraph })
+  );
+  await act(() => result.current.handleStartRecording());
+  // Simulate a rollover boundary
+  fakeGraph.advance(SEGMENT_MAX_SECONDS * 1000);
+  jest.advanceTimersByTime(SEGMENT_MAX_SECONDS * 1000); // triggers auto-rollover timer
+  // elapsedRef resets to 0 (display timer), but getAudioMs stays cumulative
+  fakeGraph.advance(1_000);
+  expect(result.current.getAudioMs()).toBeGreaterThan(SEGMENT_MAX_SECONDS * 1000 + 900);
+});
 ```
 
-`useAudioRecorder` accepts an optional `_clockSourceOverride?: AudioClockSource` in its options for testing. In production, the clock source is derived from `graph.getAudioContextElapsedMs`.
+**The independent oracle:** `fakeGraph.advance(10_000)` is the oracle. It is completely separate from the implementation's internal time tracking. The test CANNOT accidentally pass by asserting the implementation's own formula back at itself — the oracle is an external counter, not derived from the code under test.
 
-**Test file:** `src/__tests__/recording/audio-clock-alignment.test.ts`
+**Test file 2: `src/__tests__/recording/watchdog.test.ts`**
 
-Test structure:
-1. Create a mock `AudioClockSource` with a manually-advanceable `currentMs` ref
-2. Mount `useAudioRecorder` (via `renderHook`) with the mock clock source injected
-3. Simulate recording start (flip `recordingActive` to true)
-4. Advance the mock audio clock by 10,000ms
-5. Simultaneously advance `jest.fakeTimers` by a DIFFERENT amount (e.g. 11,500ms) — simulating iOS clock drift
-6. Call a stroke-record action and capture the `t` value
-7. **Oracle assertion:** `t === 10000` (follows audio clock, NOT performance.now())
-8. Simulate a pause → advance audio clock 5000ms → resume → advance 3000ms
-9. Assert total `getAudioMs()` = 13000ms (accumulated correctly across pause)
+```typescript
+it('watchdog fires stall alert when frame clock does not advance', async () => {
+  const fakeGraph = new FakeMicAudioGraph();
+  const onWatchdogAlert = jest.fn();
+  const { result } = renderHook(() =>
+    useAudioRecorder({ studentId: 's1', onRecorded: jest.fn(), _graphOverride: fakeGraph, onWatchdogAlert })
+  );
+  await act(() => result.current.handleStartRecording());
+  fakeGraph.advance(1_000); // initial advance
+  // 30s pass but NO more advancement (stall)
+  jest.advanceTimersByTime(30_000);
+  expect(onWatchdogAlert).toHaveBeenCalledWith('stall');
+});
+```
 
-This test has zero hardware/real-browser dependency and can run in CI. The injected clock replaces `performance.now()` at the source, making the oracle independent of the implementation.
+**Test file 3: `src/__tests__/recording/ios-timeslice.test.ts`**
 
-### Additional verification: replay drift measurement harness
+```typescript
+it('iOS-conditional no-timeslice: audio/mp4 mimeType triggers start() without timeslice', async () => {
+  jest.spyOn(require('@/lib/recording/mime'), 'chooseMimeType').mockReturnValue('audio/mp4');
+  // ... setup recorder with recordingDraft ...
+  const startSpy = jest.spyOn(MockMediaRecorder.prototype, 'start');
+  await act(() => result.current.handleStartRecording());
+  // Should call start() with NO argument (undefined timeslice)
+  expect(startSpy).toHaveBeenCalledWith(); // no args
+  expect(startSpy).not.toHaveBeenCalledWith(expect.any(Number));
+});
+```
 
-For the **< 250ms over 50 min** threshold claim:
+### Agent-runnable vs Andrew-hardware split
 
-**File:** `src/__tests__/recording/replay-drift-50min.test.ts`
+**Agent-runnable (CI-safe, no hardware):**
+- `audio-clock-alignment.test.ts` — fake graph, oracle independent of implementation
+- `audio-clock-pause-resume.test.ts` — accumulation across state transitions
+- `audio-clock-rollover.test.ts` — frame clock does NOT reset on auto-rollover
+- `watchdog.test.ts` — stall alert fires correctly
+- `ios-timeslice.test.ts` — `audio/mp4` mimeType triggers no-timeslice path
+- `grep audit: useAudioMsClock` — must return 0 matches after the change
+- `grep audit: performance\.now` in `getAudioMs` call path — must return 0 matches
+- `npx jest --runInBand --testPathPatterns "whiteboard|recording"` — no regressions
 
-Test: simulate a 50-minute "session" by injecting 180,000 stroke events at 100ms intervals, each stamped from the mock AudioContext clock. Introduce a simulated iOS background period (audio clock advances at 1x, `performance.now()` advances at 0.3x for 10 minutes). Verify the max |`t` - expected audio position| < 250ms across all events. This test runs in well under a second since it's pure data manipulation with no DOM.
+**REQUIRES Andrew's iOS hardware (cannot be verified by jsdom or Playwright relay):**
+1. **iOS background-suspend alignment:** On iOS Safari, start a session. At the 4-minute mark, background Safari for 3 minutes. Return to foreground. End session. In replay: strokes at the 4-minute mark must appear visually simultaneous with the corresponding spoken word (< 250ms subjective tolerance). Also verify `[mic-recorder-audio] event=audiocontext-state-change state=suspended` appears in console after backgrounding.
+2. **iOS phone call interrupt + watchdog:** Receive an incoming call mid-session (or use "Airplane mode" toggle to simulate). Verify either: (a) the watchdog banner appears within 30s of the interruption, OR (b) the session resumes cleanly when the call ends (AudioContext resumes, frame counter continues).
+3. **iOS timeslice playability:** Record a 5-minute session on iOS Safari. End session. Verify notes generation succeeds (Whisper can decode the mp4). Confirm `event=ios-no-timeslice` appears in console.
+4. **`audio/mp4` heuristic accuracy:** Confirm the `chooseMimeType() === audio/mp4` heuristic correctly identifies iOS Safari and does NOT trigger on macOS Safari (where timeslice is safe). If macOS Safari also returns `audio/mp4`, add UA check for `iPhone|iPad|iPod` in addition.
+5. **Long-session drift (50 min):** Record a ~50-minute session (can use auto-rollover). Replay from start. Verify strokes at the 45-minute mark are visually in sync with audio (< 250ms subjective). This confirms the cumulative-across-rollover behavior is correct in production.
 
-### Acceptance criteria for 1b
+### Acceptance criteria for 1b (revised)
 
-- [ ] `src/__tests__/recording/audio-clock-alignment.test.ts` green (new)
-- [ ] `src/__tests__/recording/replay-drift-50min.test.ts` green (new)  
-- [ ] `npx jest --runInBand --testPathPatterns "whiteboard|recording"` all green (no regressions)
-- [ ] Manual replay smoke (part of 1a smoke or a dedicated 1b smoke item): 30-min session, replay stays visually in-sync through the whole recording
-- [ ] `performance.now()` no longer appears in the `getAudioMs` call path (grep audit)
+**Frame-counter clock:**
+- [ ] `audio-clock-alignment.test.ts` green — `getAudioMs()` follows injected fake clock, not wall time
+- [ ] Pause/resume accumulation test green — 7s total from 5s + 3s-paused + 2s
+- [ ] Rollover non-reset test green — frame clock is cumulative across segment boundary
+- [ ] `useAudioMsClock` deleted from `WhiteboardWorkspaceClient.tsx` (grep returns 0)
+- [ ] `performance.now` not in `getAudioMs` call path (grep returns 0)
+- [ ] `[mic-recorder-audio] event=audiocontext-state-change` logged on AudioContext state change (verify in a desktop browser session)
+- [ ] `[mic-recorder-audio] frame-counter=audioworklet` OR `frame-counter=script-processor` logged on graph init
 
-### Founding-constraint flag for 1b
+**iOS timeslice:**
+- [ ] `ios-timeslice.test.ts` green — `audio/mp4` triggers no-timeslice `recorder.start()`
+- [ ] iOS hardware smoke: 5-min recording produces a Whisper-decodable mp4 (Andrew hardware)
+- [ ] `audio/mp4` heuristic accuracy confirmed on Andrew's device (Andrew hardware)
 
-No schema changes. No new egress. The AudioContext is a browser-internal resource — no CSP change needed. This fix does NOT foreclose any future marketplace/portability constraints.
+**Watchdog:**
+- [ ] `watchdog.test.ts` green — `onWatchdogAlert('stall')` fires after 30s of no advancement
+- [ ] Workspace component wires `onWatchdogAlert` to a visible warning banner (visual smoke)
+- [ ] Empty-rollover path calls `onWatchdogAlert('empty-rollover')` (not just console.warn)
+
+**Regression:**
+- [ ] `npx jest --runInBand --testPathPatterns "whiteboard|recording"` — all green (no regressions)
+
+**Hardware (Andrew):**
+- [ ] iOS background-suspend smoke: strokes at 4-min mark align within 250ms after 3-min background
+- [ ] iOS phone-call interrupt: watchdog fires OR session resumes cleanly
+- [ ] 50-min drift check: strokes at 45-min mark visually in sync
+
+### Founding-constraint audit for 1b
+
+- **No schema changes.** All changes are in-browser. `MicAudioGraph` interface extension is backward-compatible (new fields only).
+- **No new egress.** The AudioWorklet worklet code is a blob URL, never sent to an external server. No CSP change needed.
+- **No new DB columns.**
+- **CSP consideration:** `blob:` URLs for the AudioWorklet `addModule()` are same-origin and do not require changes to `Content-Security-Policy`'s `script-src` directive when using blob URLs — these are generated in-page by the browser, not loaded from a remote origin. Verify in smoke that AudioWorklet init succeeds (no CSP errors in console).
+
+### Decisions still open for Andrew
+
+1. **AudioWorklet vs ScriptProcessorNode as primary:** the plan implements AudioWorklet-preferred with ScriptProcessorNode fallback. If Andrew prefers simplicity over future-proofing (ScriptProcessorNode only, TODO to upgrade), say so — it saves ~30 lines of worklet code. The clock behavior is identical.
+2. **`_graphOverride` test API:** adds a private hook to `UseAudioRecorderOptions`. Alternative approach: module-level mock of `createMicAudioGraph`. Andrew's preference on test architecture.
+3. **Codec priming offset per rollover (~47ms per segment):** do we zero the frame counter at first `ondataavailable` to skip priming frames, or accept ≤47ms per boundary and note it's within budget for < 6 segments? (For 7+ segments, accumulated priming could exceed 250ms.) Recommendation: zero at first `ondataavailable` per segment. But this adds complexity. Andrew's call.
+4. **Watchdog UI surface:** where does the stall warning appear in the workspace? Banner above the whiteboard? The workspace chrome is Andrew's domain — confirm the right surface before the executor builds it.
 
 ---
 

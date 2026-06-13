@@ -62,55 +62,70 @@ The one new data path is 1c: `admitStudentAction` writes `bothConnectedAt`. This
 
 **Scope:** drift over 50+ minutes, monotonicity, single source of truth for `t`, iOS backgrounding.
 
-### Assessment
+### B1 — SUPERSEDED (original `AudioContext.currentTime` approach)
 
-This is the central axis for 1b. The plan's diagnosis of the problem is correct: `performance.now()` does not track the MediaRecorder's audio timeline on iOS when the tab is backgrounded. The proposed fix — using `AudioContext.currentTime` — is a reasonable approach in theory. The implementation design (inject mock clock for tests, accumulate across pauses) is technically sound.
+> **Status: SUPERSEDED.** The original B1 blocker ("`AudioContext.currentTime` iOS suspension claim is unverified and may be false") has been resolved by choosing a different approach entirely. The revised 1b plan now uses a **frame-counting node** in the Web Audio graph rather than `AudioContext.currentTime`. The original B1 text is preserved below for audit trail; all findings from S2–S5 and N2 have been incorporated into the revised design or explicitly addressed.
 
-However, the plan makes a **critical unverified assumption** as its primary justification:
+**Original B1 (archived):**
+> *The plan's core assertion for 1b — that `AudioContext.currentTime` tracks the hardware audio timeline on iOS even when the tab is backgrounded — is stated as fact but is unverified in the codebase, unverified by any cited reference, and contradicted by the known iOS behavior of suspending AudioContext instances for backgrounded tabs.*
 
-> *"On iOS, it [AudioContext.currentTime] matches the physical hardware audio timeline — it does NOT slow down when the tab is backgrounded, because the audio subsystem is still running."*
+**Why the frame-counter approach resolves B1:** When iOS suspends the AudioContext, two things happen simultaneously: (1) the frame-counting node stops receiving samples (no `onaudioprocess` / worklet `process()` calls), (2) `MediaRecorder` receives no data from the AudioContext's `recordingDest` stream. Both the frame counter and the encoded audio freeze by the same amount. This is the correct behavior for clock alignment — not because we detect and compensate for the suspension, but because the clock IS the encoder's signal path. The original B1 risk (that the clock advances while encoding freezes, or vice versa) is structurally eliminated.
 
-This claim is the load-bearing hypothesis of the entire 1b fix. It is not backed by any code, test, hardware observation, or cited reference in the plan. Examining the codebase confirms there is no existing test or empirical data for this claim.
+---
 
-**What is actually known about iOS AudioContext backgrounding:**
+### Red-team of the revised 1b: frame-counting node approach
 
-The iOS Safari Web Audio specification behavior is that AudioContext instances are **suspended by the OS when the tab is backgrounded**, even if they have active audio sources. `AudioContext.currentTime` freezes when the context is suspended — it does not advance during the suspension period. When the tab returns to foreground and the context resumes (via `audioContext.resume()`), `currentTime` picks up from where it stopped, not from the real wall-clock position.
+#### Assessment
 
-The question is: does an active `MediaRecorder` running from the `AudioContext`'s `recordingStream` (as wired in this codebase) prevent iOS from suspending the AudioContext? The answer depends on iOS version, Safari version, and whether the OS classifies the audio session as a "background capture" session. This is platform behavior that varies by OS version and has been the subject of multiple WebKit bug reports.
+The frame-counter design replaces one clock source with another. The adversarial review of the NEW approach follows.
 
-The existing code in `createMicAudioGraph` calls `await audioContext.resume()` on creation, which handles the initial autoplay-policy suspension. It does **not** handle mid-session suspension events — there is no `audioContext.onstatechange` listener anywhere in the codebase.
+**Axis 2.1 — Drift immunity**
 
-**If the plan's iOS assumption is wrong:** after a backgrounding event, `AudioContext.currentTime` would be behind the MediaRecorder's actual captured audio by the suspension duration. The fix would behave identically to `performance.now()` in the failure mode it claims to solve. The `< 250ms over 50 min` target would be unmet in exactly the iOS scenario it targets.
+The frame counter's alignment guarantee: `frames_counted × 1000 / sampleRate` = elapsed ms of recording-active audio — because counted frames ARE the encoded frames. This is correct by construction for the ScriptProcessorNode path (frames counted in `onaudioprocess` = frames delivered to `recordingDest`). For the AudioWorklet path, frames counted in `process()` = frames in the worklet's input buffer = frames that flow into `recordingDest` (same signal path).
 
-**The test does not cover this:**
+**No new drift source is introduced** for the normal-operation case. The question is edge cases.
 
-The proposed test `audio-clock-alignment.test.ts` injects a mock `AudioClockSource` and advances it independently of `jest.fakeTimers`. This proves the accumulation math is correct — it follows the mock clock rather than wall time. It does NOT prove that `AudioContext.currentTime` advances at the hardware audio rate on real iOS hardware. The oracle is independent from `performance.now()`, but it is not an oracle for the hardware claim.
+**Axis 2.2 — Codec priming offset (NEW NOTE)**
 
-The `replay-drift-50min.test.ts` simulates the scenario by making the mock audio clock advance at 1× while `performance.now()` advances at 0.3× (the comment says simulating "iOS background period"). But on real iOS, the problem would be `AudioContext.currentTime` advancing at 0× (suspended) while audio recording continues — a scenario the test cannot exercise because `AudioContext` is mocked out entirely.
+AAC/MP4 (iOS path) has an encoder priming period: the first ~2112 samples (@ 44100 Hz = ~47.9ms) are silence that the decoder skips. The frame counter counts these priming frames. If the replay timeline's `durationSeconds` (from ffprobe) reports the container duration INCLUDING priming (as is common), the offset is zero — both the frame counter and the replay timeline include the same priming samples. If ffprobe excludes priming from its `duration` report, there is a ~47ms undercount per segment boundary.
 
-**Accumulation across rollovers:**
+For a session with 6 segments (each ~8 minutes at `SEGMENT_MAX_SECONDS`), the worst case is 6 × 47ms = 282ms — barely over the 250ms budget. The revised plan proposes zeroing the counter at first `ondataavailable` per segment to skip priming frames. **This is a NEW SHOULD-FIX.**
 
-The plan correctly designs `audioContextAccruedMsRef` to accumulate cumulative recording-active time rather than resetting on rollover. However, the plan is not explicit about this distinction. In the existing `rolloverSegmentGapless()`, `elapsedRef.current = 0` resets the DISPLAY timer at line 715. A careless executor might also reset `audioContextAccruedMsRef` here, thinking it mirrors `elapsedRef`. The plan should explicitly state: "**do not reset `audioContextAccruedMsRef` on rollover** — only the display timer (`elapsedRef`) resets."
+> **SHOULD-FIX S2-NEW (codec priming offset):** The executor must verify the priming behavior on both WebM (desktop Chrome) and MP4 (iOS). If ffprobe's `durationSeconds` includes priming, no action needed. If it excludes priming, implement the "zero counter at first `ondataavailable`" mitigation in the rollover path. Add a test: record a 3-segment session, compare `getAudioMs()` at the start of segment 3 against `sum(Whisper durationSeconds for segments 1+2) × 1000`. Discrepancy > 50ms per boundary = priming issue present.
 
-**`performance.now()` / AudioContext clock boundary:**
+**Axis 2.3 — ScriptProcessorNode buffer granularity (NOTE)**
 
-The plan says "if `graphRef.current` is null (mic not yet acquired), fall back to `performance.now()` deltas." This creates a potential mixed-timeline issue: some events are stamped using `performance.now()`-derived `t` values, and subsequent events use AudioContext-derived `t` values. The two clocks do not share an epoch and may diverge. If the mic acquisition happens mid-session (which the FSM allows via solo mode), events before and after acquisition use different clocks. The plan doesn't address how the boundary is handled to maintain monotonicity.
+ScriptProcessorNode processes 256 frames per `onaudioprocess` call. At 44100 Hz, this is one call every 5.8ms. `getAudioMs()` can be called between two `onaudioprocess` calls, introducing up to 5.8ms of read lag. This is negligible and within the 250ms budget. No action needed.
 
-Looking at the current code: `useAudioMsClock` only receives `recordingActive` — it accumulates time only while recording is active. The new implementation should behave the same way: `t` should be 0 (or near 0) for events stamped before the first recording interval, because the accumulator hasn't yet started. This is probably what the plan intends, but the language "fall back to `performance.now()` deltas" suggests the pre-mic period would still accumulate time. The plan needs to clarify whether the fallback path accumulates `t` during the pre-mic period.
+**Axis 2.4 — AudioWorklet postMessage latency (NOTE)**
 
-### Findings
+The AudioWorklet sends frame count updates every 1024 frames (~23ms @ 44100). Between updates, `getAudioMs()` reads the last received count. Max read lag: 23ms. Well within the 250ms budget. No action needed.
 
-> **BLOCKER B1:** The plan's assertion that `AudioContext.currentTime` is immune to iOS background throttling is unverified and may be false. The AudioContext is known to be suspended by iOS when tabs are backgrounded. If suspended, `currentTime` freezes exactly as `performance.now()` throttles — the fix may not fix the targeted failure mode. The 1b acceptance criteria do not include an iOS-specific backgrounding smoke test (the 30-min manual replay is not required to include iOS backgrounding during the session). **Before authorizing 1b execution, Andrew must either: (a) provide hardware evidence that an active MediaRecorder prevents AudioContext suspension on iOS Safari, (b) explicitly accept the risk and add an iOS backgrounding step to the 1b smoke acceptance, or (c) choose an alternative approach (e.g., `onstatechange` gap tracking + clock correction).** Without this resolution, 1b ships claiming to fix iOS drift when it may not.
+**Axis 2.5 — Rollover boundary (MUST VERIFY)**
 
-> **SHOULD-FIX S2:** Add an `audioContext.onstatechange` handler in `createMicAudioGraph` that logs `[mic-recorder-audio] audioContext state changed: running | suspended | closed` and, if possible, accumulates the suspended period so `getAudioContextElapsedMs` can correct for it. Even if the plan's iOS hypothesis is correct, this is essential observability — prod debugging of "replay drift" reports is currently impossible without knowing whether the AudioContext was suspended.
+The revised plan explicitly states: "Do NOT call `frameClockSetActive(false/true)` around `rolloverSegmentGapless()`. The counter runs uninterrupted." An executor who misreads this and adds a `setActive(false); setActive(true)` around rollover would:
+- Miss ~100ms of frames during the brief old-recorder-stop / new-recorder-start overlap
+- Create a monotonicity gap in `t` values (a brief jump backward then forward)
 
-> **SHOULD-FIX S3:** The plan must explicitly state: **do not reset `audioContextAccruedMsRef` on rollover.** The sentence "On auto-rollover we PRE-WARM a second MediaRecorder" in `useAudioRecorder.ts` already notes the complexity of rollover. An executor who also resets the new accumulator would silently make `t` non-monotonic (resetting to 0 mid-session), breaking replay ordering.
+The test `audio-clock-rollover.test.ts` (in the revised plan) specifically catches this by asserting `getAudioMs() > SEGMENT_MAX_SECONDS * 1000 + 900` after a rollover + 1s advance. Green = the counter was not reset.
 
-> **SHOULD-FIX S4:** Clarify the `performance.now()` fallback boundary. The safest implementation is: the fallback accumulator only starts when `recordingActive` transitions from false → true (same gate as `audioContextAccruedMsRef`). Events before recording starts have `t = 0`. The plan's current language "fall back if `graphRef.current` is null" implies continuous accumulation from hook mount, which would stamp pre-recording events with non-zero `t` values that can't align to the audio timeline.
+**Axis 2.6 — Performance.now() fallback boundary (MUST SPECIFY)**
 
-> **SHOULD-FIX S5:** The 50-minute drift test (`replay-drift-50min.test.ts`) is presented as proving "< 250ms over 50 min." It does not. It proves the accumulation math is correct under the mock clock assumptions. The only empirical proof of the < 250ms threshold on real hardware is a real 50-minute smoke session on iOS with backgrounding events, which the plan defers. Rename the test to `replay-drift-50min-mock.test.ts` or add a comment that this tests accumulation math only, and explicitly add iOS backgrounding to the 1b hardware smoke acceptance criteria.
+The revised plan states: "the fallback accumulator only starts when recording starts (same gate as `frameClockSetActive`)." This correctly means pre-recording events have `t = 0`. The executor must NOT start the `perfFallbackStartRef` at hook mount — only at `startMediaRecorder()` / `resumeRecording()`. This is specified in the File 2 section above. The test suite's fake-graph path bypasses the fallback entirely, so this must be verified via a code review at PR time.
 
-> **NOTE N2:** The `getAudioContextElapsedMs` implementation anchors to `ctxCreatedAt = audioContext.currentTime` captured at graph creation. Since a freshly created AudioContext always starts `currentTime` at 0.0, `ctxCreatedAt` will always be 0 (or very near it if `resume()` takes perceptible time). The subtraction `(audioContext.currentTime - ctxCreatedAt) * 1000` simplifies to `audioContext.currentTime * 1000`. This is fine functionally but the `ctxCreatedAt` variable is misleading — consider naming it `ctxCresumedAt` and capturing it AFTER `await audioContext.resume()` to anchor to the first running moment.
+**Axis 2.7 — `onaudioprocess` on Firefox audio thread (NOTE)**
+
+In Firefox, `ScriptProcessorNode.onaudioprocess` may fire on a separate audio thread (not the main thread), while `frameClockSetActive` is called from the main thread. This creates a potential data race: a frame is counted between `setActive(false)` and when the node actually reads the flag. At most 1 buffer (256 samples = 5.8ms) of over-counting. This is negligible. Document as an acknowledged 5.8ms tolerance.
+
+### Findings for revised 1b (Axis 2)
+
+> **SHOULD-FIX S2-NEW:** Codec priming verification (see §2.2). Verify per-rollover priming offset. If ffprobe excludes priming from `durationSeconds`, implement "zero counter at first `ondataavailable`" mitigation. Add a multi-segment test comparing frame counter offset vs Whisper durations.
+
+> **NOTE N2-NEW:** ScriptProcessorNode `onaudioprocess` fires on the Firefox audio thread — acknowledged 5.8ms data-race tolerance on pause/resume boundaries. Acceptable and within the 250ms budget. No action required.
+
+> **NOTE N3-NEW:** AudioWorklet postMessage latency: 23ms max read lag between worklet updates. Within budget. No action required.
+
+> **NOTE N4-NEW (replacing original N2):** `audioContext.onstatechange` is now included in the revised design (File 1 of the plan) as an observability hook, logging `event=audiocontext-state-change state=X`. This closes the observability gap identified in original S2.
 
 ---
 
@@ -185,29 +200,36 @@ The plan explicitly defers real-time tutor-side "student arrived" detection (Ope
 
 **Scope:** iOS Safari, Android Chrome, desktop Chrome, Firefox, macOS Safari.
 
-### Assessment
+### Assessment (updated for revised 1b frame-counter approach)
 
-The plan acknowledges iOS as the primary drift concern for 1b. The `performance.now()` throttling problem was documented for iOS specifically. The plan's fix (AudioContext clock) would be most valuable on iOS if the hypothesis holds.
+**1b platform matrix (revised):**
 
-**1b platform matrix as the plan leaves it:**
+| Platform | Frame counter mechanism | Agent-runnable test? | Hardware smoke needed? |
+|---|---|---|---|
+| Desktop Chrome | AudioWorklet (primary) or ScriptProcessorNode (fallback) | ✅ Fake graph injection | No |
+| iOS Safari | ScriptProcessorNode (AudioWorklet fallback if init fails) | ✅ Fake graph injection | ✅ Background suspend + phone call |
+| macOS Safari | AudioWorklet primary (Safari 14.5+) | ✅ Fake graph injection | Optional |
+| Firefox | ScriptProcessorNode primary (AudioWorklet available but audio-thread IPC) | ✅ Fake graph injection | No |
+| Android Chrome | AudioWorklet primary | ✅ Fake graph injection | No |
 
-| Platform | 1b fix tested? |
-|---|---|
-| Desktop Chrome | ✅ Agent-runnable test + smoke |
-| iOS Safari | ⚠️ Only the mock-clock unit test (does NOT test real `AudioContext.currentTime` behavior) |
-| Android Chrome | ❌ Not mentioned |
-| Firefox | ❌ Not mentioned |
-| Safari macOS | ❌ Not mentioned |
+**iOS Safari notes for revised approach:**
 
-iOS Safari is the most important platform (Sarah's stated fallback, and the platform where the drift is worst). The plan defers hardware verification to the manual smoke, but the smoke item (smoke item 7) does not require: "background the iOS tab for 5 minutes mid-session, return, verify replay stays in sync." Without this specific step, the iOS acceptance is based on hoping the `AudioContext` assumption is correct.
+The revised approach does NOT require `AudioContext.currentTime` to advance during iOS suspension. Instead, it requires that when iOS suspends the AudioContext, BOTH the frame counter AND the MediaRecorder encoder freeze — which is structurally guaranteed because they share the same signal path.
 
-**1c platform concerns:**
+The key iOS hardware tests (from revised 1b acceptance criteria):
+1. Background suspend: verify `event=audiocontext-state-change state=suspended` in console, and replay aligns after return
+2. Phone call: verify watchdog fires OR session recovers
+3. Timeslice: verify iOS-conditional no-timeslice path produces a playable mp4
 
-The `GET /api/whiteboard/[sessionId]/admission-status` polling endpoint is new. On iOS Safari, `setInterval`-based polling can be throttled or frozen when a background tab is targeted. If the student tabs away from the waiting room while polling, the poll can freeze. When they return, the poll resumes. This is not a data loss issue (the session is still waiting) but the student may experience a longer-than-3s admission latency after returning to the tab.
+**`audio/mp4` heuristic and macOS Safari:** `chooseMimeType()` may return `audio/mp4` on macOS Safari as well. If so, macOS Safari would also get the no-timeslice path, which is conservative but safe (stop-only checkpoints are less resilient but always correct). Clarify with Andrew whether a UA check (`iPhone|iPad|iPod` in userAgent) should gate the no-timeslice path more precisely.
+
+**1c platform concerns (unchanged):**
+
+The `GET /api/whiteboard/[sessionId]/admission-status` polling endpoint. On iOS Safari, `setInterval`-based polling can be throttled when the tab backgrounds. This is not data loss but may extend admission latency.
 
 ### Findings
 
-> **SHOULD-FIX S8:** The 1b acceptance criteria require "Manual replay smoke: 30-min session, replay stays visually in-sync." This smoke must be explicitly required to include: (a) being run on an iOS device (iPhone or iPad), and (b) deliberately backgrounding the iOS tab for at least 2 minutes during the session to exercise the exact failure mode the fix targets. Without this specific iOS background step in the smoke checklist, the acceptance bar for 1b is incomplete. Add a dedicated smoke item: "**iOS background drift test:** On iOS Safari, record a 10-minute session. At the 4-minute mark, background the Safari app for 3 minutes. Return to foreground. End session. In replay, verify that the strokes at the 4-minute mark align with the audio within the < 250ms tolerance (subjective check — stroke appears on replay visually simultaneous with the corresponding spoken word)."
+> **SHOULD-FIX S8 (revised):** The 1b iOS hardware smoke must include: (a) background Safari for 3 minutes during a session, (b) verify `event=audiocontext-state-change state=suspended` in console, (c) verify replay aligns within 250ms after return, (d) phone call interruption → watchdog surfaces or session recovers. Also: verify timeslice iOS-conditional smoke (item 3 in revised 1b acceptance). These replace the original S8 (which targeted the old `AudioContext.currentTime` approach).
 
 ---
 
@@ -273,52 +295,58 @@ The stub is structurally correct (follows SMOKEBOOK-TEMPLATE.md shape). Findings
 
 ---
 
-## Summary
+## Summary (updated 2026-06-13 re-scope)
 
-| Classification | Count |
-|---|---|
-| **BLOCKER** | **3** |
-| **SHOULD-FIX** | **9** |
-| **NOTE** | **8** |
+| Classification | Count | Status |
+|---|---|---|
+| **BLOCKER** | **3** | B1 SUPERSEDED by revised approach; B2 + B3 remain open for 1c |
+| **SHOULD-FIX** | **9 original + 1 new** | S2-NEW (codec priming) added for revised 1b |
+| **NOTE** | **8 original + 4 new** | N2-NEW through N4-NEW added for revised 1b |
 
----
+**B1 status:** SUPERSEDED. The frame-counting node approach structurally eliminates the iOS AudioContext suspension risk that B1 identified. The clock cannot advance without frames, and frames cannot flow without the graph running — by construction. No Andrew decision required on B1.
 
-## BLOCKER list (verbatim)
-
-**B1 — AudioContext.currentTime iOS suspension claim is unverified and may be false (Axis 2 / Axis 4)**
-
-The plan's core assertion for 1b — that `AudioContext.currentTime` tracks the hardware audio timeline on iOS even when the tab is backgrounded — is stated as fact but is unverified in the codebase, unverified by any cited reference, and contradicted by the known iOS behavior of suspending AudioContext instances for backgrounded tabs. The `createMicAudioGraph` function has no `onstatechange` handler and no mid-session suspension detection. If the AudioContext is suspended during iOS backgrounding, `currentTime` freezes exactly as `performance.now()` throttles, making 1b a null fix for the stated problem on the stated platform. The acceptance criteria for 1b do not include an iOS backgrounding smoke step. Before authorizing 1b execution, Andrew must: (a) provide hardware evidence that active MediaRecorder prevents AudioContext suspension on iOS Safari, (b) explicitly accept the risk and add a mandatory iOS backgrounding step to the 1b smoke, or (c) choose an alternative clock approach (e.g., track AudioContext suspension periods via `onstatechange` and compensate).
+**B2 and B3 remain BLOCKERS for 1c** (no change — still require plan-completion work before 1c can execute).
 
 ---
 
-**B2 — Waiting mode End/Cancel button has no implementation path (Axis 3)**
+## BLOCKER list
 
-The plan analyzes "End from waiting mode" as a valid flow ("End from waiting mode works cleanly with no audio, no error") but `handleEndSession` is defined inside `WhiteboardWorkspaceClient` at L2884, and the workspace client is explicitly NOT mounted when `ShellMode === "waiting"`. The shell's waiting mode render has only an Admit button — no End or Cancel button. Without a cancel path, if the tutor abandons the waiting room (closes the browser, navigates away, or decides not to proceed), the `WhiteboardSession` row remains with `endedAt = null` indefinitely, the join token stays active, and the session appears live in all lists and reports. This must be resolved before 1c can execute. The simplest fix is a new `cancelWaitingSessionAction` server action callable directly from `WhiteboardSessionShell`'s waiting-mode render, which calls `endWhiteboardSession` with empty segments.
+**B1 — AudioContext.currentTime iOS suspension claim (SUPERSEDED)**
 
----
+> *Original: The plan's core assertion for 1b — `AudioContext.currentTime` tracks the hardware audio timeline on iOS even when backgrounded — was unverified and contradicted by known iOS behavior.*
 
-**B3 — "Student is waiting" copy is shown without evidence of student presence (Honesty/Transparency axis, Axis 3)**
-
-The plan's waiting mode shell render shows "Student is waiting to be admitted" unconditionally when `bothConnectedAt === null`. This copy is false when no student has opened the join link. The shell enters waiting mode on page load if `bothConnectedAt === null` — the tutor sees "Student is waiting" from the moment they load the workspace URL, regardless of whether any student has opened the link. Per the founding principle: "not one single claim in the praise/encouragement system is made unless backed by specific provable data." This extends to operational UI copy: showing the tutor that a student is waiting when we have no evidence of student presence is a factual misrepresentation. The plan must either: (a) add tutor-side polling for student arrival (separate from admitted status — the student registers arrival without triggering admit), or (b) use truthful copy that doesn't claim student presence: "Waiting for your student..." changes to "Your student has arrived" only after the student has registered arrival. Option (b) requires a lightweight `studentArrivedAt` signal (does NOT need a DB column — a server log or an API call from the student page is sufficient to inform the tutor's poll).
+**Resolution (2026-06-13):** Superseded by the revised 1b approach (frame-counting node). The frame counter freezes simultaneously with the encoder when iOS suspends the AudioContext — the structural identity `frames_counted = samples_encoded` eliminates the drift risk by construction. No hardware claim required; no `onstatechange` compensation needed (though the `onstatechange` observability hook IS included in the revised design). B1 is closed.
 
 ---
 
-## Verdict
+**B2 — Waiting mode End/Cancel button has no implementation path (Axis 3) — STILL OPEN**
 
-**BLOCKED-NEEDS-ANDREW**
-
-The plan is **CLEAN-FOR-1b CODE AUTHORING ONLY** with Andrew's explicit acceptance of B1's iOS risk and a commitment to add iOS backgrounding to the 1b smoke. The plan is **BLOCKED for 1c execution** until B2 (End button mechanics) and B3 (honest waiting copy) are resolved.
-
-The three BLOCKERs do not require abandoning the plan's approach — they require Andrew to make two deliberate choices (iOS clock risk on B1; waiting-copy semantics on B3) and to add one architectural clarification to the spec (End/Cancel button on B2). None of the BLOCKERs invalidate the core insights of the plan: the `bothConnectedAt` timer fix is correct, the AudioContext approach for drift is worth pursuing, and the FSM/waiting-room sequencing analysis is sound. The plan is close — these are resolvable in < half a day of Andrew's attention before handing to an executor.
+The plan analyzes "End from waiting mode" as a valid flow but `handleEndSession` is defined inside `WhiteboardWorkspaceClient` at L2884, and the workspace client is explicitly NOT mounted when `ShellMode === "waiting"`. Without a cancel path, if the tutor abandons the waiting room, the `WhiteboardSession` row remains with `endedAt = null` indefinitely. This must be resolved before 1c can execute. Required: a `cancelWaitingSessionAction` server action callable directly from `WhiteboardSessionShell`'s waiting-mode render (ownership-asserted, sets `endedAt`, clears the join token).
 
 ---
 
-## Orchestrator synthesis + recommended resolutions (Opus, 2026-06-13 ~03:40)
+**B3 — "Student is waiting" copy shown without evidence of student presence (STILL OPEN)**
 
-I (orchestrator) reviewed both the plan and this adversarial pass. Per Andrew's standing "execute-if-clean" delegation, the independent verdict is **not clean**, so **no code was executed tonight.** Below are my recommended resolutions so Andrew's morning is a fast approve/adjust rather than open-ended design. **B2 and B3 are clear plan-completeness fixes (no judgment needed — I recommend just folding them in). B1 is the one genuine judgment call.**
+The plan's waiting mode shell shows "Student is waiting to be admitted" unconditionally when `bothConnectedAt === null`. This is false when no student has opened the link. Per the founding transparency principle: no claim without evidence. Required: either (a) tutor-side polling for student arrival separate from admitted status, or (b) truthful copy ("Waiting for your student…" → "Your student has arrived" only after a `studentArrivedAt` signal). Folded into 1c scope.
 
-- **B1 (iOS AudioContext suspension) — RECOMMEND: proceed with the AudioContext clock + mitigation, fold iOS smoke into acceptance (downgrades B1 to an accepted-with-mitigation item).** Reasoning: even if iOS suspends `AudioContext` on background, that is arguably the *correct* behavior for our alignment goal — when the audio recording pauses, we *want* the event clock to pause in lockstep so audio and WB events stay on the same timeline (the perf.now bug is precisely that it keeps ticking while audio is frozen, causing drift). The risk isn't "freeze" — it's an *unlogged, unhandled* freeze. **Mitigation to fold into 1b scope:** add an `AudioContext.onstatechange` handler that logs suspend/resume gaps (`rid=`/`avx=` line) so any divergence is visible, and design the clock to be monotonic across suspend. Then Andrew's iOS-background smoke step *validates* rather than *gates*. Net: 1b becomes authorable without an unverified premise, because the fix is strictly >= perf.now under either AudioContext behavior. **Andrew decision needed:** approve this approach, OR insist on hardware confirmation first.
-- **B2 (no End/Cancel path in waiting mode) — RECOMMEND: fold a `cancelWaitingSessionAction` into 1c scope** (lightweight server action, ownership-asserted, sets `endedAt`/cleans the session; surfaced as a Cancel control in the waiting shell). No judgment needed — it's an obvious gap in the plan; just add it. Prevents orphaned `endedAt = null` sessions.
-- **B3 (false "student is waiting" copy) — RECOMMEND: fold the truthful-copy + arrival-signal fix into 1c scope** (reviewer's option (b): "Waiting for your student…" → "Your student has arrived" only on a real `studentArrivedAt` signal). This is directly mandated by the founding transparency principle, so it's not optional — just build it that way. No judgment needed.
+---
 
-**Net execution decision:** PAUSED pending Andrew's single B1 call. Once B1 is approved (with the onstatechange mitigation), **1b is clean to author tonight-equivalent**; **1c proceeds after the 1a baseline 2-device smoke** (still Andrew-gated hardware) with B2+B3 folded in. Recommended order unchanged: Andrew approves B1 → execute 1b (agent-runnable) → Andrew 2-device baseline smoke (covers 1a + the 1b iOS-background step) → execute 1c with B2/B3 folded → smoke 1c.
+## Verdict (updated 2026-06-13)
+
+**1b: CLEAN TO EXECUTE** — B1 superseded; the frame-counting node approach is sound, the agent-runnable test strategy is specified with independent oracles, and the iOS hardware smoke items are clearly separated. The executor can proceed.
+
+**1c: STILL BLOCKED** — B2 (End/Cancel button) and B3 (honest waiting copy) must be folded into the 1c plan before execution. Neither requires Andrew's decision — both are clear plan-completeness gaps.
+
+---
+
+## Orchestrator synthesis (updated 2026-06-13)
+
+The re-scope conversation produced the "do it right" decision: frame-counting node instead of `AudioContext.currentTime`. This closes B1 cleanly and is strictly better because the structural alignment guarantee requires no platform-specific assumptions.
+
+**Open decisions still needing Andrew (now only for 1b detail, not 1b gate):**
+1. AudioWorklet vs ScriptProcessorNode as primary (complexity vs simplicity)
+2. `_graphOverride` test injection pattern vs module-level mock
+3. Codec priming: implement zero-at-first-ondataavailable, or accept ≤47ms per boundary
+4. Watchdog warning UI surface in the workspace
+
+**Execution order (unchanged):** 1b executes (agent-runnable) → Andrew 2-device smoke (1a baseline + iOS background/timeslice items from 1b) → 1c executes with B2+B3 folded in → 1c hardware smoke.
