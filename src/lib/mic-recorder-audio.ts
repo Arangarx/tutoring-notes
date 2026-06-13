@@ -159,8 +159,6 @@ export async function createMicAudioGraph(
     let accumulatedFrames = 0;
     let lastWorkletFrames = 0;
 
-    gainNode.disconnect(recordingDest);
-
     const workletName = `frame-counter-${sid}-${Date.now()}`;
     const workletCode = `
       class FrameCounterProcessor extends AudioWorkletProcessor {
