@@ -30,6 +30,7 @@ const customJestConfig = {
     "<rootDir>/node_modules/",
     "<rootDir>/tests/",
     "<rootDir>/test-results/",
+    "<rootDir>/src/__tests__/recording/helpers/",
   ],
   globalSetup: "<rootDir>/jest.global-setup.ts",
   moduleNameMapper: {
