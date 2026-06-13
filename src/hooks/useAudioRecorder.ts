@@ -374,8 +374,11 @@ export function useAudioRecorder({
   /** Cumulative ms from completed segments (rollover boundaries). */
   const sessionAudioMsRef = useRef(0);
   /**
-   * Raw frame-clock ms at first ondataavailable of the current segment —
-   * skips AAC/MP4 codec priming frames at segment boundaries.
+   * Raw frame-clock ms captured at recording-start (or rollover-start) for
+   * each segment. readAudioClockMs() = sessionAudioMsRef + (rawFrameClockMs() - baseline).
+   * null before recording begins; set to rawFrameClockMs() at frameClockSetActive(true).
+   * ≤47ms of AAC priming offset is accepted at each boundary (within 250ms budget for
+   * <6 segments per session).
    */
   const segmentPrimingBaselineRef = useRef<number | null>(null);
   const watchdogLastFrameMsRef = useRef(0);
@@ -419,11 +422,6 @@ export function useAudioRecorder({
 
   function rawFrameClockMs(): number {
     return graphRef.current?.frameClockGetMs?.() ?? 0;
-  }
-
-  function noteFirstChunkForAudioClock(): void {
-    if (segmentPrimingBaselineRef.current !== null) return;
-    segmentPrimingBaselineRef.current = rawFrameClockMs();
   }
 
   function readAudioClockMs(): number {
@@ -475,7 +473,6 @@ export function useAudioRecorder({
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) {
         targetChunks.push(e.data);
-        noteFirstChunkForAudioClock();
         if (recordingDraft) {
           if (firstChunkMsRef.current === null) {
             firstChunkMsRef.current = Date.now();
@@ -848,6 +845,11 @@ export function useAudioRecorder({
     setElapsed(0);
     approachingCapSoundPlayedRef.current = false;
     commitSessionAudioMsAtRollover();
+    // Capture the rollover-boundary baseline immediately so readAudioClockMs()
+    // is correct from the first frame of the new segment onward. The frame
+    // clock is NOT stopped during rollover, so rawFrameClockMs() here is the
+    // natural segment boundary reference point.
+    segmentPrimingBaselineRef.current = rawFrameClockMs();
     watchdogLastFrameMsRef.current = readAudioClockMs();
     watchdogLastChunkCountRef.current = 0;
     segmentNumberRef.current = oldPartIndex + 1;
@@ -1246,6 +1248,11 @@ export function useAudioRecorder({
     }
     mediaRecorderRef.current = recorder;
     graphRef.current?.frameClockSetActive?.(true);
+    // Capture the recording-start baseline now — NOT at first ondataavailable.
+    // With DRAFT_TIMESLICE_MS = 30_000 the first chunk arrives ~30 s late;
+    // keying the baseline to that event made the clock wrong by ~30 s per
+    // segment (B-CLOCK-2) and 0 for the entire session on iOS (B-CLOCK-1).
+    segmentPrimingBaselineRef.current = rawFrameClockMs();
     setRecordState("recording");
     startTimer();
   }
@@ -1291,8 +1298,11 @@ export function useAudioRecorder({
 
   function resumeRecording() {
     if (mediaRecorderRef.current?.state === "paused") {
-      mediaRecorderRef.current.resume();
+      // Open the frame-clock gate BEFORE resuming the encoder so we don't
+      // miss the first batch of encoded frames (S-RESUME-ORDER: up to ~23 ms
+      // gap on AudioWorklet if the gate opens after resume).
       graphRef.current?.frameClockSetActive?.(true);
+      mediaRecorderRef.current.resume();
       startTimer();
       setRecordState("recording");
     }

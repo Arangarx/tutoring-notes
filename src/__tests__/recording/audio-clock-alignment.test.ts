@@ -64,6 +64,37 @@ async function startRecordingWithFakeGraph(
   return { ...view, onRecorded };
 }
 
+/**
+ * Like startRecordingWithFakeGraph but does NOT call feedData() after start.
+ * Simulates the production timeslice latency: ondataavailable is not delivered
+ * until 30s (non-iOS) or stop() (iOS) — never at frame 0.
+ *
+ * Used by tests that prove the baseline is captured at recording-start, NOT
+ * at first ondataavailable.
+ */
+async function startRecordingNoChunk(
+  fakeGraph: FakeMicAudioGraph,
+  opts: { recordingDraft?: boolean } = {}
+) {
+  const onRecorded = jest.fn();
+  const view = renderHook(() =>
+    useAudioRecorder({
+      studentId: "s1",
+      onRecorded,
+      _graphOverride: fakeGraph,
+      ...(opts.recordingDraft
+        ? { recordingDraft: { sessionId: "s1", streamId: "mic" } }
+        : {}),
+    })
+  );
+  await flushAsync();
+  await act(async () => {
+    await view.result.current.handleStartRecording();
+  });
+  // No feedData() — baseline must already be correct from recording-start.
+  return { ...view, onRecorded };
+}
+
 beforeEach(() => {
   jest.useFakeTimers({ doNotFake: ["queueMicrotask"] });
   FakeMediaRecorder.reset();
@@ -129,5 +160,62 @@ describe("audio-clock alignment", () => {
     fakeGraph.advance(1_000);
 
     expect(result.current.getAudioMs()).toBeGreaterThan(5_000 + 900);
+  });
+
+  /**
+   * B-TEST-1 replacement — proves the baseline is captured at recording-start,
+   * not at first ondataavailable.
+   *
+   * Production reality: with DRAFT_TIMESLICE_MS = 30_000, the first
+   * ondataavailable fires after ~30 s. On broken code (baseline keyed to
+   * first chunk), getAudioMs() returns 0 for the entire first 30 s. This
+   * test would FAIL on the broken implementation and must PASS after the fix.
+   */
+  it("baseline captured at recording-start: clock reads correctly before first ondataavailable (30s timeslice sim)", async () => {
+    const fakeGraph = new FakeMicAudioGraph();
+    // No feedData() call — simulates the 30 s timeslice latency where
+    // ondataavailable has not yet fired.
+    const { result } = await startRecordingNoChunk(fakeGraph);
+
+    // Advance 30 s of audio frames — no chunk delivered yet.
+    fakeGraph.advance(30_000);
+    jest.advanceTimersByTime(30_000);
+
+    // On broken code: segmentPrimingBaselineRef is null (no chunk yet),
+    // readAudioClockMs() = Math.floor(sessionAudioMsRef.current) = 0.
+    // On fixed code: baseline was captured at frameClockSetActive(true) time
+    // (= rawFrameClockMs() at recording-start = 0), so
+    // readAudioClockMs() = 0 + 30_000 - 0 = 30_000.
+    expect(result.current.getAudioMs()).toBeGreaterThan(28_000);
+  });
+
+  /**
+   * B-TEST-1 replacement (iOS path) — getAudioMs must not be 0 mid-session
+   * even when ondataavailable has NEVER fired yet (iOS no-timeslice path:
+   * ondataavailable fires only at stop()).
+   *
+   * On broken code this test fails: baseline stays null the whole session,
+   * getAudioMs() = 0 for every whiteboard event.
+   */
+  it("iOS no-timeslice: getAudioMs is non-zero mid-session before any ondataavailable fires", async () => {
+    const fakeGraph = new FakeMicAudioGraph();
+    // No feedData() at all — simulates iOS where ondataavailable fires only
+    // at recorder.stop().
+    const { result } = await startRecordingNoChunk(fakeGraph);
+
+    fakeGraph.advance(5_000);
+    jest.advanceTimersByTime(5_000);
+
+    // On broken code: getAudioMs() = 0 (baseline null before first chunk).
+    // On fixed code: baseline = rawFrameClockMs() at recording-start = 0,
+    // so getAudioMs() = 0 + 5_000 - 0 = 5_000.
+    expect(result.current.getAudioMs()).toBeGreaterThan(4_900);
+
+    // Now simulate iOS stop(): ondataavailable fires for the first time.
+    FakeMediaRecorder.lastInstance().feedData();
+    fakeGraph.advance(1_000);
+
+    // Clock must continue advancing correctly after the first chunk arrives.
+    expect(result.current.getAudioMs()).toBeGreaterThan(5_900);
   });
 });
