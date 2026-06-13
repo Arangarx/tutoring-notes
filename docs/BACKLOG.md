@@ -5,6 +5,24 @@ Not in priority order within sections — that comes when items move to a sprint
 
 **Authoritative for tutoring-notes:** Known open work for this app should appear in this file (or be explicitly ✅ **Shipped** here with any follow-ups cross-linked). If it is not here, assume it was never captured — add it. Day-to-day tickets/PRs can still exist; this document is the backlog of record when they disagree.
 
+---
+
+## 🧭 Program mapping — Experience-Driven Wedge (2026-06-12)
+
+> **Overlay, not a re-file.** A 2026-06-12 strategy refinement adopted the **Experience-Driven Wedge** program (`~/.cursor/plans/experience-driven_wedge_ae2776e1.plan.md`; rationale: [continuity-wedge brainstorm](research/continuity-wedge-brainstorm-2026-06-12.md)). This banner maps backlog *themes* onto program phases so nothing is lost; individual rows below are NOT re-filed (deliberate — rolling-wave; only the next phase gets detailed). **Founding principle now governs all product work: no dark patterns; total honesty + transparency.**
+>
+> **Fold into the program (when its phase comes up):**
+> - **Phase 1 — WB reliability floor:** the `## V1 redesign — pre-master requirements` Gate A items (waiting room / A2, live bidirectional sync / A5, replay fidelity / A6), `## Whiteboard — implementation / design queue` reliability rows, `## Recording re-architecture — Phase 1 follow-ups`, and the **audio-clock fix** (replay drift root cause). Plus the Gate A1 `@layer base` CSS cleanup + checkbox-label follow-up.
+> - **Phase 2 — continuity engine V1:** `sr-notes-in-session` (scheduled topic+notes in live session, upgraded to carryover surfacing) + the new "would you agree?" confirm mechanism + evidence-atom/provenance scaffolding. **NEW — most of this is not yet a backlog row; the brainstorm doc is its spec.**
+> - **Phase 3 — note-quality (the moat):** note-quality elevated from "`## Weeks… where the moat lives`" polish to first-class; transcription (diarization, Whisper guardrails) vs reduction (prompt iteration) split.
+> - **Phase 4 — instrumentation:** `## Cost observability` + the deferred "Phase 11a PostHog" item, **reframed first-party + learner-type-keyed (sub-learner zero 3rd-party egress).**
+>
+> **Explicitly deferred (design-compatible-for, NOT near-term):** engagement/dopamine surfaces (mascot/charts/streaks), parent progress arc, marketplace substrate→live (`## Identity/access`, org items), Durability-B seasonal presence (pull/in-app, never email-default), school-handoff bigger bet. Consent v2 (BL-A tutor-visible consent, BL-B educational-use toggle) stays where logged until prioritized.
+>
+> **Bank-now data-model constraints (so we never retrofit):** record portable to a future/next tutor; account/record persists free through dormancy; event schema engagement-ready (effort/coverage signals captured from session one); egress keyed on learner type.
+
+---
+
 ## Smoke round 1 — master-cut branch findings (2026-06-11)
 
 > **Canonical triage:** [`docs/handoff/smoke-round-1-findings-2026-06-11.md`](handoff/smoke-round-1-findings-2026-06-11.md) — Andrew's full smoke of 8 overnight branches. BLOCKERs tracked there; non-blocker items below so they aren't lost.

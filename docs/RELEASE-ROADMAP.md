@@ -1,11 +1,30 @@
 # Release roadmap — solo tutor floor → university pitch readiness
 
-**Last updated:** 2026-06-08
+**Last updated:** 2026-06-12
 
 > Audience: orchestrators, executors, and Andrew sequencing work across
 > the tutoring-notes pilot through Aug 2026. This doc is a **thin
 > orchestration overlay** on the canonical master plan — not a substitute
 > for phase-spec depth.
+
+---
+
+## Strategic refresh — Experience-Driven Wedge (2026-06-12)
+
+> **READ ALONGSIDE this roadmap.** A 2026-06-12 strategy brainstorm **refined the compass** (refinement, NOT pivot — the original sequencing was market-research-aligned and still is). The current strategic overlay is the **Experience-Driven Wedge** program: `~/.cursor/plans/experience-driven_wedge_ae2776e1.plan.md` (full rationale: [continuity-wedge brainstorm](research/continuity-wedge-brainstorm-2026-06-12.md)).
+>
+> **What changed:**
+> - **Publicity-driven re-sequencing de-emphasized** — backlog is ~1 month from complete; sequence by *practical* concern, not pitch optics.
+> - **The wedge is now named:** experience-driven competition. WB + reliability = **ground floor (a GATE)**; the win is an **accreting, honest, transparent, seamless** experience (**tutor-first** → parent/student).
+> - **Founding principle (supersedes all):** no dark patterns; **total honesty + total transparency** — engagement claims derived-from-evidence with drilldowns.
+>
+> **How the program maps onto this roadmap (no row deletions — this is an overlay):**
+> - **Program Phase 1 (WB reliability floor)** = existing **Gate A2 (waiting room)** + **Gate A5 (live bidirectional sync)** + **Gate A6 (replay fidelity + AV/timer sync)** + the **audio-clock fix** (`useAudioMsClock` perf.now surrogate = root cause under A6). Still the master-cut gate.
+> - **Program Phases 2–3 (continuity engine + note-quality)** = **NEW strategic overlay**, not previously in the wave map — this is the moat. **Note-quality is elevated from Wave 6 polish to a first-class wedge.**
+> - **Program Phase 4 (instrumentation)** = reframes deferred **Backlog "Phase 11a PostHog"** to **first-party, learner-type-keyed** capture (sub-learner = zero 3rd-party egress).
+> - Engagement/dopamine, parent progress arc, marketplace = **design-compatible-for now, NOT near-term scope.**
+>
+> **Cadence: rolling-wave** — detailed-plan only the *next* phase. This roadmap's wave/gate ledger remains valid as depth; the program is the current compass.
 
 ---
 
@@ -472,4 +491,5 @@ Master plan body can lag shipped reality. Treat **plan status block
 
 ## Changelog
 
+- **2026-06-12:** Added "Strategic refresh — Experience-Driven Wedge" overlay (top). Compass refined (not pivoted): publicity-driven re-sequencing de-emphasized; wedge named (experience-driven competition, tutor-first); founding principle (no dark patterns / total honesty + transparency); program-to-wave mapping (Phase 1 = Gate A2/A5/A6 + audio-clock; Phases 2-3 continuity + note-quality = new moat overlay; Phase 4 = first-party instrumentation reframing Phase 11a). Rolling-wave cadence.
 - **2026-05-20:** Initial roadmap committed during release-pivot orchestration session.
