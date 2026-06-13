@@ -1,12 +1,12 @@
 # Phase 1 — WB Replay In-Frame — smoke runbook
 
 **Branch:** `phase1/wb-replay-in-frame`  
-**Tip commit:** [`028a280`](https://github.com/Arangarx/tutoring-notes/commit/028a280aa013ed6ee2c56346420bf6e5cbf33162)  
+**Tip commit:** [`030a3c2`](https://github.com/Arangarx/tutoring-notes/commit/030a3c2e509db04e541328f9d254e3e639bd94b3)  
 **Preview:** [phase1/wb-replay-in-frame preview](https://tutoring-notes-git-phase1-wb-rep-7d986c-arangarx-5209s-projects.vercel.app)
 
 > **Smoke focus = the NEW in-frame two-state review surface** (reach it via **End Session → in-shell review** on a session with a recording). The standalone admin/share replay page parity refactor is **DEFERRED this round** — do **NOT** expect its scrubber fixed; only check it for **NO REGRESSION vs before**.
 
-> **Preview deploy (Vercel MCP @ authoring):** latest `phase1/wb-replay-in-frame` deployment `dpl_8uJzEkyyAPkwquSuejakmVyVftfz` @ `40cbcfb` was **BUILDING** — confirm **READY** in [Vercel inspector](https://vercel.com/arangarx-5209s-projects/tutoring-notes/8uJzEkyyAPkwquSuejakmVyVftfz) before hardware smoke.
+> **Preview deploy (Vercel MCP @ push):** tip deployment `dpl_7RvmZb22VVofvhqebfrjDrbKUVCZ` @ `030a3c2` was **INITIALIZING** — confirm **READY** in [Vercel inspector](https://vercel.com/arangarx-5209s-projects/tutoring-notes/7RvmZb22VVofvhqebfrjDrbKUVCZ) before hardware smoke. Prior deploy @ `40cbcfb` reached **READY** on same branch alias.
 
 ---
 
