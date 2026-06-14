@@ -5,6 +5,22 @@
 > **Scope:** Admin/tutor NextAuth realm only (`AdminUser` / `AdminUser2FA`). AccountHolder and LearnerProfile realms are out of scope (they have their own session models).  
 > **Parent infra:** Identity Phase 1 TOTP (`AdminUser2FA`, `verifyTotpCode`, middleware `twoFactorVerified` gate)
 
+### Rev 2 — 5-axis fixes folded (2026-06-13)
+
+Amended per [`2fa-remember-device-5axis-2026-06-13.md`](2fa-remember-device-5axis-2026-06-13.md) (verdict NEEDS-REVISION → ready-to-build):
+
+| ID | Change |
+|---|---|
+| **B1** | §6 — `startImpersonation` added to sensitive-op step-up table + UI; test TD-14 |
+| **B2** | §4 — `tryTrustedDeviceLoginSkip`: best-effort `lastUsedAt`; try-catch around `mintTwoFactorVerifiedSession` → return `false` on throw; tests TD-8 / TD-18 |
+| **B3** | §6 — `verifyTotpStepUp` calls `check2faVerifyRateLimit(adminId)` first (shared bucket with `verifyTotpCode`); tests TD-10 / TD-11 / TD-15 |
+| **SF-1** | §1 — HMAC secret **rotation** ops note for `PLATFORM-ASSUMPTIONS.md` |
+| **SF-2** | §2 — inline comment in `buildAdminTfaDeviceCookie` documenting `SameSite=Lax` (OAuth) |
+| **SF-3** | §7 — `trusted_device_rejected` promoted to **required** with `reason=` enum |
+| **SF-4** | §7 — `device_evicted` log includes `tfa=<evictedDeviceId>` |
+| **SF-5** | §7 — step-up logs bind `tfa=<AdminUser2FA.id>` |
+| **SF-6** | §8 — five new tests TD-15–TD-19 (rate limit, cap eviction, missing secret, `isCurrent`, mint throw) |
+
 ---
 
 ## Summary
@@ -86,12 +102,14 @@ trustedDevices AdminTrustedDevice[]
 
 ### Caps and cleanup
 
-- **Max 10 active devices per `adminUserId`** (non-revoked, unexpired). On mint when at cap: revoke oldest by `lastUsedAt` (log `action=device_evicted`).
+- **Max 10 active devices per `adminUserId`** (non-revoked, unexpired). On mint when at cap: revoke oldest by `lastUsedAt` (log `action=device_evicted` with `tfa=<evictedDeviceId>` — see §7).
 - Optional cron/CLI later — not Phase-1 acceptance; expired rows are rejected at lookup time.
 
 ### Env var (new)
 
 `ADMIN_TFA_DEVICE_HMAC_SECRET` — dedicated HMAC secret (same pattern as `AH_SESSION_HMAC_SECRET` / `LEARNER_SESSION_HMAC_SECRET`). Add to `src/lib/env.ts` as optional-in-dev / required-in-prod (fail-closed on skip/mint when unset in prod). Document in `docs/PLATFORM-ASSUMPTIONS.md` in the implementation commit.
+
+**Secret rotation (ops):** Rotating `ADMIN_TFA_DEVICE_HMAC_SECRET` instantly invalidates **all** existing trusted-device rows — stored `tokenHash` values were computed with the old secret, so no cookie will match after rotation. All users are silently demoted to TOTP-required on their next login (no error surfaced to the user). This is expected fail-closed behavior; document explicitly in `PLATFORM-ASSUMPTIONS.md`: *"Rotating this secret invalidates all existing trusted-device tokens; all users will be prompted for TOTP on their next login. Plan a maintenance window or notify users if rotating."*
 
 ---
 
@@ -114,10 +132,10 @@ trustedDevices AdminTrustedDevice[]
 Mirror `account-holder-session.ts`:
 
 - `export const ADMIN_TFA_DEVICE_COOKIE` — resolves dev vs prod name
-- `buildAdminTfaDeviceCookie(rawToken, expiresAt, isDev)` → Set-Cookie string
+- `buildAdminTfaDeviceCookie(rawToken, expiresAt, isDev)` → Set-Cookie string. **Must include an inline comment** explaining why `SameSite=Lax` (not `Strict`): *"SameSite=Lax is required — admin logins may complete via Google OAuth redirect; Strict would suppress this cookie on the callback and force TOTP despite a valid trusted device."* (`buildAhSessionCookie` uses `Strict` because the AH realm has no OAuth — do not copy that pattern here.)
 - `clearAdminTfaDeviceCookie(isDev)` → Max-Age=0
 - `mintAdminTrustedDevice(adminUserId, userAgent?)` → `{ rawToken, deviceId, expiresAt }`
-- `validateAdminTrustedDevice(rawToken, adminUserId)` → `{ deviceId } | null` (fail-closed)
+- `validateAdminTrustedDevice(rawToken, adminUserId)` → `{ deviceId } | null` (fail-closed). On every non-success path, emit required `trusted_device_rejected` log with `reason=` (see §7).
 - `revokeAdminTrustedDevice(deviceId, adminUserId)` — sets `revokedAt`
 - `revokeAllAdminTrustedDevices(adminUserId)` — bulk revoke
 
@@ -189,13 +207,22 @@ export async function tryTrustedDeviceLoginSkip(
 Implementation:
 
 1. Read `ADMIN_TFA_DEVICE_COOKIE` from `cookies()`
-2. `validateAdminTrustedDevice(rawToken, adminUserId)` — checks hash lookup, `adminUserId` match, `revokedAt IS NULL`, `expiresAt > now`
-3. On success:
-   - Update `lastUsedAt`
-   - `await mintTwoFactorVerifiedSession(currentToken)`
-   - Log: `[tfa] tfa=<deviceId> adminUserId=<id> action=login_skipped_via_trusted_device`
-   - Return `true`
-4. On any failure: return `false` (caller shows normal verify UI)
+2. `validateAdminTrustedDevice(rawToken, adminUserId)` — checks hash lookup, `adminUserId` match, `revokedAt IS NULL`, `expiresAt > now`. On every non-success path, emit required `trusted_device_rejected` log (see §7).
+3. On validation success:
+   - **3.1 Best-effort `lastUsedAt` update** — fire-and-forget; if the DB write fails, `console.error` but **do not** abort the skip. A failed `lastUsedAt` write must never cause `return false` after the session cookie is already minted (otherwise the user sees the TOTP form while already logged in).
+   - **3.2 Try-catch around session mint** — mirror `verifyTotpCode` (actions.ts L329–349):
+     ```typescript
+     try {
+       await mintTwoFactorVerifiedSession(currentToken);
+     } catch (e) {
+       console.error("[tfa] trusted_device_skip_mint_failed", e);
+       // Log: [tfa] tfa=<deviceId> adminUserId=<id> action=trusted_device_skip_mint_failed
+       return false; // fail-closed: caller shows TOTP form, NOT a 500
+     }
+     ```
+   - **3.3** Log: `[tfa] tfa=<deviceId> adminUserId=<id> action=login_skipped_via_trusted_device`
+   - **3.4** Return `true`
+4. On any other failure (missing cookie, validate returned null, mint threw): return `false` (caller shows normal verify UI). **Never propagate** `mintTwoFactorVerifiedSession` exceptions to the page.
 
 ### Call sites (exact insertion points)
 
@@ -302,15 +329,28 @@ Add shared helper in `src/lib/two-factor-step-up.ts` (or inside `actions.ts` if 
 /**
  * Validates a fresh TOTP or backup code for step-up.
  * Does NOT mint trusted device. Does NOT set remember-device.
- * Logs action=step-up-success | step-up-fail.
+ * Logs action=step-up-success | step-up-fail (tfa=<AdminUser2FA.id>).
+ *
+ * FIRST operation: check2faVerifyRateLimit(adminUserId) — same per-user
+ * bucket as verifyTotpCode (AuthThrottle table). Step-up brute-force counts
+ * against login-verify attempts intentionally.
  */
 export async function verifyTotpStepUp(
   adminUserId: string,
   codeInput: string
-): Promise<{ ok: true } | { ok: false; error: string }>
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const rl = await check2faVerifyRateLimit(adminUserId);
+  if (!rl.allowed) {
+    return {
+      ok: false,
+      error: `Too many attempts. Try again in ${Math.ceil(rl.retryAfterMs / 1000)} seconds.`,
+    };
+  }
+  // ... then validateTotpOrBackup(adminUserId, codeInput)
+}
 ```
 
-Reuse validation logic from `verifyTotpCode` (extract shared internal `validateTotpOrBackup(adminId, code)` to avoid duplication).
+Reuse validation logic from `verifyTotpCode` (extract shared internal `validateTotpOrBackup(adminId, code)` to avoid duplication). Import `check2faVerifyRateLimit` from the same module `verifyTotpCode` uses.
 
 ### Actions that MUST call step-up (exact list)
 
@@ -322,6 +362,7 @@ Reuse validation logic from `verifyTotpCode` (extract shared internal `validateT
 | **Regenerate backup codes** | `actions.ts` → `regenerateBackupCodes` | `twoFactorVerified` | Require `totpCode` param + step-up |
 | **Self-reset 2FA** | `actions.ts` → `adminResetTwoFactor` when `targetAdminUserId === actingAdminId` | page gate only | Require `totpCode` param + step-up before delete |
 | **Admin reset another user's 2FA** | `adminResetTwoFactor` (other target) | `assertIsAdmin()` | Require acting admin `totpCode` + step-up (high privilege) |
+| **Start impersonation** | `src/lib/impersonation.ts` → `startImpersonation` (or its triggering server action / admin UI entry point) | `assertIsAdmin()` only | Require acting admin `totpCode` param; call `verifyTotpStepUp` **before** `mintImpersonationSession`. Highest-privilege action — a trusted-device login skip must not allow impersonation without fresh TOTP. |
 
 **NOT step-up gated (by design):**
 
@@ -334,8 +375,9 @@ Reuse validation logic from `verifyTotpCode` (extract shared internal `validateT
 - `ChangePasswordForm.tsx` — add TOTP code field (6-digit) above submit
 - `TwoFactorManageView.tsx` — collect TOTP before Rotate / Regen / Self-reset buttons fire
 - Admin-reset-another-user dialog — TOTP field for acting admin
+- Impersonation start UI/dialog — TOTP field for acting admin before `startImpersonation` fires
 
-**Trusted-device cookie state is irrelevant** — step-up always demands a code in the request body.
+**Trusted-device cookie state is irrelevant** — step-up always demands a code in the request body. A user who reached `twoFactorVerified=true` via trusted-device skip (never entered a code this session) must still pass step-up for every row in the table above, including impersonation.
 
 ---
 
@@ -349,11 +391,12 @@ Extend existing convention (never log secrets or raw tokens):
 | `login_skipped_via_trusted_device` | `tryTrustedDeviceLoginSkip` success |
 | `device_revoked` | Single device revoke |
 | `all_devices_revoked` | Bulk revoke |
-| `device_evicted` | Oldest device revoked due to cap |
-| `trusted_device_rejected` | Optional debug: expired / revoked / wrong user / bad HMAC (no token values) |
-| `step-up-success` / `step-up-fail` | Sensitive op TOTP validation |
+| `device_evicted` | Oldest device revoked due to 10-device cap — **must include evicted row id**: `[tfa] tfa=<evictedDeviceId> adminUserId=<id> action=device_evicted` |
+| `trusted_device_rejected` | **Required** — emitted from `validateAdminTrustedDevice` on every non-success path (missing row, wrong userId, expired, revoked, HMAC error). Format: `[tfa] tfa=<deviceId or "unknown"> adminUserId=<id> action=trusted_device_rejected reason=<notfound or wrong_user or expired or revoked or hmac_error>`. No raw token values. |
+| `trusted_device_skip_mint_failed` | `mintTwoFactorVerifiedSession` threw inside `tryTrustedDeviceLoginSkip` (§4 step 3.2) |
+| `step-up-success` / `step-up-fail` | Sensitive op TOTP validation — bind `tfa=<AdminUser2FA.id>` (enrollment row id, same anchor as `enroll-confirm`, `verify-success`, `rotate-confirm`) |
 
-Format: `[tfa] tfa=<deviceId|rowId> adminUserId=<id> action=<action> [optional key=value]`
+Format: `[tfa] tfa=<deviceId|AdminUser2FA.id> adminUserId=<id> action=<action> [optional key=value]`
 
 Register new actions in `AGENTS.md` § Conventions `tfa` bullet (implementation commit).
 
@@ -373,13 +416,19 @@ Mock `db`, `cookies`, `headers` — follow patterns in `src/__tests__/identity-2
 | **TD-4** | Revoked row (`revokedAt` set) → validate returns null |
 | **TD-5** | Wrong `adminUserId` on validate → null (cookie not portable across accounts) |
 | **TD-6** | Tampered cookie (random hex, no DB row) → null |
-| **TD-7** | `tryTrustedDeviceLoginSkip` success calls `mintTwoFactorVerifiedSession` (mock) and logs `login_skipped_via_trusted_device` |
-| **TD-8** | DB throw during validate → skip returns false (fail-closed, no mint) |
+| **TD-7** | `tryTrustedDeviceLoginSkip` success: returns `true`, calls `mintTwoFactorVerifiedSession` (mock), and logs `login_skipped_via_trusted_device`. Assert mock session-cookie side effect (not just "mock was called"). |
+| **TD-8** | Fail-closed paths return `false`, no uncaught throw: (a) DB throw during `validateAdminTrustedDevice` → skip returns `false`, no mint; (b) validate succeeds but `mintTwoFactorVerifiedSession` throws → skip returns `false`, logs `trusted_device_skip_mint_failed` (validates B2 mint path). |
 | **TD-9** | `verifyTotpCode` with `rememberDevice: true` sets cookie + creates row |
-| **TD-10** | `changePassword` with valid password but **no** / **wrong** `totpCode` → rejected |
-| **TD-11** | `rotateTotpStart` rejected without step-up even when `twoFactorVerified=true` in mock session |
+| **TD-10** | `changePassword` with valid password but **no** / **wrong** `totpCode` → rejected. Mock `check2faVerifyRateLimit` and assert it is called before TOTP validation in the step-up path. |
+| **TD-11** | `rotateTotpStart` rejected without step-up even when `twoFactorVerified=true` in mock session. Assert `check2faVerifyRateLimit` called before TOTP validation. |
 | **TD-12** | `revokeAllTrustedDevices` sets `revokedAt` on all rows; subsequent skip fails |
 | **TD-13** | `changePassword` success revokes all trusted devices (integration with mock db) |
+| **TD-14** | `startImpersonation` rejected without step-up even when `twoFactorVerified=true` via trusted-device skip mock (validates B1) |
+| **TD-15** | `verifyTotpStepUp` calls `check2faVerifyRateLimit(adminId)` as its **first** operation before any TOTP/backup logic (validates B3) |
+| **TD-16** | `mintAdminTrustedDevice` at 10 active devices → oldest evicted by `lastUsedAt`; exactly 10 active rows post-mint; `device_evicted` logged with `tfa=<evictedDeviceId>` |
+| **TD-17** | `ADMIN_TFA_DEVICE_HMAC_SECRET` undefined → `mintAdminTrustedDevice` and `validateAdminTrustedDevice` fail-closed (no undefined behavior) |
+| **TD-18** | `mintTwoFactorVerifiedSession` throw in skip → `tryTrustedDeviceLoginSkip` returns `false`, does not propagate exception (validates B2; overlaps TD-8b) |
+| **TD-19** | `listTrustedDevices` returns `isCurrent=true` for device matching request cookie hash, `false` for others |
 
 **Extend:** `src/__tests__/identity-2fa.test.ts` — one test that setup/verify page source contains `tryTrustedDeviceLoginSkip` call (static guard, same style as existing enroll redirect tests).
 
@@ -409,10 +458,18 @@ Mock `db`, `cookies`, `headers` — follow patterns in `src/__tests__/identity-2
 - [ ] Password change → all trusts revoked (TD-13)
 - [ ] 2FA self-reset / rotation confirm → all trusts revoked
 
-### Sensitive ops guardrail
+### Sensitive ops guardrail (BLOCKER acceptance gates)
 
 - [ ] With valid trusted device + skipped login, **Rotate / Regen / Change password / Self-reset** still demand TOTP (TD-10, TD-11)
-- [ ] Trusted-device skip does **not** bypass step-up
+- [ ] **B1 — Impersonation:** With trusted-device skip (`twoFactorVerified=true` without entering TOTP this session), **start impersonation** still demands fresh TOTP step-up (TD-14)
+- [ ] **B3 — Rate limit:** `verifyTotpStepUp` enforces `check2faVerifyRateLimit` on the shared per-user bucket before TOTP validation (TD-15; TD-10/TD-11 also assert call order)
+- [ ] Trusted-device skip does **not** bypass step-up for any §6 table row
+
+### Skip path resilience (BLOCKER acceptance gate)
+
+- [ ] **B2 — Mint fail-closed:** When `validateAdminTrustedDevice` succeeds but `mintTwoFactorVerifiedSession` throws, `tryTrustedDeviceLoginSkip` returns `false` and the verify/setup page shows the TOTP form — **no 500** (TD-8b, TD-18)
+- [ ] `lastUsedAt` DB failure after successful mint does not revert skip or show TOTP form again (best-effort only)
+- [ ] `trusted_device_rejected` logged on every skip failure path with `reason=` (SF-3) — grep test or unit assertion
 
 ### Regression
 
@@ -427,6 +484,7 @@ Mock `db`, `cookies`, `headers` — follow patterns in `src/__tests__/identity-2
 - [ ] Settings → trusted devices list shows current device
 - [ ] Revoke → sign in → prompt returns
 - [ ] Change password with TOTP step-up field works
+- [ ] Start impersonation with TOTP step-up field works (trusted-device skip must not bypass)
 
 ---
 
@@ -437,6 +495,10 @@ Mock `db`, `cookies`, `headers` — follow patterns in `src/__tests__/identity-2
 | **Cookie theft** | Stolen `mynk_admin_tfa_device` + active NextAuth session cookie → attacker skips TOTP until expiry/revoke | HttpOnly + Secure + SameSite=Lax; fixed 30d TTL; server-side revoke; password change / 2FA rotation revokes all; user education on shared machines; **does not** grant sensitive-op access without fresh TOTP |
 | **DB compromise** | Leaked `tokenHash` rows | HMAC keyed with `ADMIN_TFA_DEVICE_HMAC_SECRET` — cannot forge cookies without secret (same as AH sessions) |
 | **Fail-closed** | DB down during skip check | `tryTrustedDeviceLoginSkip` returns false → user sees normal TOTP prompt (TD-8) |
+| **Fail-closed** | `mintTwoFactorVerifiedSession` throws during skip | try-catch → return false, log `trusted_device_skip_mint_failed` — no page 500 (TD-8b, TD-18) |
+| **Brute-force** | Step-up TOTP without rate limit | `verifyTotpStepUp` calls `check2faVerifyRateLimit` first — shared bucket with login verify (TD-15) |
+| **Ops footgun** | HMAC secret rotation | All trusted devices silently invalidated — documented in PLATFORM-ASSUMPTIONS (SF-1) |
+| **Impersonation** | Trusted skip → immediate impersonate | `startImpersonation` in §6 step-up table (TD-14) |
 | **Fail-closed** | HMAC secret missing in prod | Skip/mint throws or returns false; no bypass |
 | **Revocation completeness** | Stale trust after password change | Cascade revoke on `changePassword` + 2FA reset/rotate |
 | **Scope creep** | Trusted device used for step-up | Explicit inline TOTP on sensitive actions; rotate-confirm exception documented |
@@ -465,7 +527,7 @@ Step 2 — Core lib
   • src/lib/admin-trusted-device.ts (mint, validate, revoke, cookie builders)
   • src/lib/two-factor-step-up.ts (or extracted validate helper)
   • env.ts + PLATFORM-ASSUMPTIONS.md for ADMIN_TFA_DEVICE_HMAC_SECRET
-  • Unit tests TD-1 – TD-8
+  • Unit tests TD-1 – TD-8, TD-16 – TD-19
 
 Step 3 — Login skip wiring
   • tryTrustedDeviceLoginSkip + calls in setup/page.tsx + verify/page.tsx
@@ -481,9 +543,9 @@ Step 5 — Revocation actions + UI
   • Cascade hooks on changePassword, adminResetTwoFactor, rotateTotpConfirm
 
 Step 6 — Sensitive op step-up
-  • verifyTotpStepUp + wire changePassword, rotateTotpStart, regenerateBackupCodes, adminResetTwoFactor
-  • UI TOTP fields
-  • Tests TD-10 – TD-13
+  • verifyTotpStepUp (rate limit first) + wire changePassword, rotateTotpStart, regenerateBackupCodes, adminResetTwoFactor, startImpersonation
+  • UI TOTP fields (incl. impersonation dialog)
+  • Tests TD-10 – TD-15, TD-14 (impersonation)
 
 Step 7 — Verification
   • Full jest identity suite
@@ -515,6 +577,6 @@ Step 8 — Andrew hardware smoke → merge --no-ff to v1-redesign after PASS
 | 4 | Remember checkbox + `verifyTotpCode` extend | Agent |
 | 5 | Revoke list/UI + cascades | Agent |
 | 6 | Sensitive op step-up + UI fields | Agent |
-| 7 | Jest suite TD-1 – TD-13 | Agent |
+| 7 | Jest suite TD-1 – TD-19 | Agent |
 | 8 | `npx next build` | Agent |
 | 9 | Hardware smoke | Andrew |
