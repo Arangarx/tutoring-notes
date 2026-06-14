@@ -1,15 +1,14 @@
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { decode } from "next-auth/jwt";
 import { authOptions } from "@/auth-options";
 import { TwoFactorVerifyForm } from "./TwoFactorVerifyForm";
-import { tryTrustedDeviceLoginSkip } from "@/lib/admin-trusted-device";
+import { ADMIN_TFA_DEVICE_COOKIE } from "@/lib/admin-trusted-device";
 
 export const dynamic = "force-dynamic";
 
 interface Props {
-  searchParams: Promise<{ callbackUrl?: string }>;
+  searchParams: Promise<{ callbackUrl?: string; td?: string }>;
 }
 
 /**
@@ -28,38 +27,34 @@ export default async function TwoFactorVerifyPage({ searchParams }: Props) {
   // Test accounts are exempt.
   if (session.user.isTestAccount) redirect("/admin");
 
+  const { callbackUrl, td } = await searchParams;
+
   // Already verified this session.
   if (session.user.twoFactorVerified) {
-    const { callbackUrl } = await searchParams;
     redirect(safeReturnTo(callbackUrl));
   }
 
-  // Trusted-device skip: check if this browser has a valid 30-day trust cookie.
-  // Exempt: isTestAccount (already redirected above), isImpersonating, env-only admin.
-  if (session.user.id && !session.user.isTestAccount) {
-    const cookieName =
-      process.env.NODE_ENV === "production"
-        ? "__Secure-next-auth.session-token"
-        : "next-auth.session-token";
+  // Trusted-device skip: when the trusted-device cookie is present AND the td=0
+  // sentinel is absent, route to the Route Handler which is the only context where
+  // cookies().set() is legal (Server Component renders throw on cookie writes).
+  //
+  // Loop-safety: the Route Handler sets td=0 when the skip fails, so a handler
+  // failure redirects here with td=0 and we fall through to the TOTP form — at
+  // most one round trip, never an infinite loop.
+  //
+  // REGRESSION NOTE: Prior implementation called tryTrustedDeviceLoginSkip here in
+  // the RSC render. mintTwoFactorVerifiedSession's cookies().set() threw
+  // "Cookies can only be modified in a Server Action or Route Handler", silently
+  // swallowed by the try-catch → skip always returned false → TOTP always shown.
+  if (session.user.id && !session.user.isTestAccount && td !== "0") {
     const cookieStore = await cookies();
-    const sessionToken = cookieStore.get(cookieName)?.value;
-    if (sessionToken) {
-      const currentToken = await decode({
-        token: sessionToken,
-        secret: process.env.NEXTAUTH_SECRET!,
-      });
-      if (currentToken) {
-        const { callbackUrl: cbUrl } = await searchParams;
-        const skipped = await tryTrustedDeviceLoginSkip(
-          session.user.id,
-          currentToken as Record<string, unknown>
-        );
-        if (skipped) redirect(safeReturnTo(cbUrl));
-      }
+    if (cookieStore.get(ADMIN_TFA_DEVICE_COOKIE)) {
+      const params = new URLSearchParams();
+      if (callbackUrl) params.set("callbackUrl", callbackUrl);
+      redirect(`/api/auth/2fa/trusted-device-check?${params}`);
     }
   }
 
-  const { callbackUrl } = await searchParams;
   const safe = safeReturnTo(callbackUrl);
 
   return (

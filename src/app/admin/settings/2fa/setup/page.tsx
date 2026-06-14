@@ -1,11 +1,10 @@
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { decode } from "next-auth/jwt";
 import { authOptions } from "@/auth-options";
 import { db } from "@/lib/db";
 import { TwoFactorSetupForm } from "./TwoFactorSetupForm";
-import { tryTrustedDeviceLoginSkip } from "@/lib/admin-trusted-device";
+import { ADMIN_TFA_DEVICE_COOKIE } from "@/lib/admin-trusted-device";
 
 export const dynamic = "force-dynamic";
 
@@ -34,27 +33,15 @@ export default async function TwoFactorSetupPage() {
     const isConfirmed = (admin?.twoFactor?._count?.backupCodes ?? 0) > 0;
 
     if (isConfirmed && !session.user.twoFactorVerified && session.user.id) {
-      // Trusted-device skip: check if this browser has a valid 30-day trust cookie.
-      // If skip succeeds, the session is minted as verified and we redirect to /admin.
-      // Exempt: isTestAccount (already redirected above), isImpersonating, env-only admin.
-      const cookieName =
-        process.env.NODE_ENV === "production"
-          ? "__Secure-next-auth.session-token"
-          : "next-auth.session-token";
+      // Trusted-device skip: route to the Route Handler if the cookie is present.
+      // Cookie writes throw in Server Component renders — the handler is the only
+      // legal context for mintTwoFactorVerifiedSession (see route.ts regression note).
+      //
+      // No td=0 sentinel check needed here: on handler failure, the handler redirects
+      // to /verify (not back to /setup), so there is no redirect loop through this page.
       const cookieStore = await cookies();
-      const sessionToken = cookieStore.get(cookieName)?.value;
-      if (sessionToken) {
-        const currentToken = await decode({
-          token: sessionToken,
-          secret: process.env.NEXTAUTH_SECRET!,
-        });
-        if (currentToken) {
-          const skipped = await tryTrustedDeviceLoginSkip(
-            session.user.id,
-            currentToken as Record<string, unknown>
-          );
-          if (skipped) redirect("/admin");
-        }
+      if (cookieStore.get(ADMIN_TFA_DEVICE_COOKIE)) {
+        redirect("/api/auth/2fa/trusted-device-check");
       }
 
       // No valid trusted device — fall through to TOTP gate.

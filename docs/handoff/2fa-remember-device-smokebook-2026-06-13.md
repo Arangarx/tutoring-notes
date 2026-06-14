@@ -1,9 +1,9 @@
 # 2FA Remember-This-Device — smoke runbook
 
 **Branch:** `auth/2fa-remember-device`
-**Tip commit:** [`7e23f88`](https://github.com/Arangarx/tutoring-notes/commit/7e23f8826ed48266d3e00933b670861d9e36741e)
+**Tip commit:** *update after skip-fix commit pushed*
 **Preview:** [auth/2fa-remember-device preview](https://tutoring-notes-git-auth-2fa-reme-afa2a4-arangarx-5209s-projects.vercel.app)
-*(URL source: Vercel MCP `list_deployments` → `meta.branchAlias` for `auth/2fa-remember-device`; new deploy triggered by `7e23f88` push — wait for Vercel build to finish before smoking.)*
+*(URL source: Vercel MCP `list_deployments` → `meta.branchAlias` for `auth/2fa-remember-device`; re-deploy triggered by skip-fix push.)*
 
 ---
 
@@ -22,37 +22,43 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 
 ### 1. First-time trust opt-in
 
+*Re-test after skip-fix (trusted-device-check Route Handler added). Prior FAIL was due to missing `__Secure-` prefix on non-production cookie — now using `ADMIN_TFA_DEVICE_COOKIE` constant which is env-aware.*
+
 **Action:** Log out of the admin account. Navigate to `/login`, enter credentials for an admin with 2FA enrolled. On the TOTP verify screen (`/admin/settings/2fa/verify`), check the "Remember this device for 30 days" checkbox, enter the correct TOTP code, and click Verify.
 
-**Expect:** Login succeeds and you land on `/admin`. No error shown. The `__Secure-mynk_admin_tfa_device` cookie is set (check DevTools → Application → Cookies; value is a long hex string, not the raw HMAC secret). No raw token appears in any network response body or console log.
+**Expect:** Login succeeds and you land on `/admin`. No error shown. The `mynk_admin_tfa_device` cookie is set in preview (no `__Secure-` prefix on Vercel preview; production would have `__Secure-mynk_admin_tfa_device`). Check DevTools → Application → Cookies; value is a long hex string. No raw token in response body or console.
 
 **Ignore this run:** Cosmetic styling of the checkbox; the exact label text.
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
 - [ ] SKIP
 
-**Notes: I don't see the key you said to look for.  I've attached a shot of the cookies I do see.**
+**Notes:**
 
 ---
 
 ### 2. Subsequent login skip (trusted device)
 
+*Re-test after skip-fix (Route Handler for trusted-device-check). Prior FAIL: cookies().set() threw in RSC render, silently swallowed, skip always returned false. Now fixed by moving the session re-mint into a Route Handler.*
+
 **Action:** In the same browser where test 1 was run, log out of the admin account. Navigate to `/login`, enter credentials. Watch whether the TOTP verify screen appears.
 
 **Expect:** The TOTP screen is **skipped** — you land directly on `/admin` without entering a code. The `twoFactorVerified` claim is present in the session (you can verify by checking that protected admin pages load without redirect).
 
-**Ignore this run:** Any flash/redirect animation through the verify URL; minor latency.
+**Ignore this run:** Any flash/redirect animation through `/api/auth/2fa/trusted-device-check`; minor latency.
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
 - [ ] SKIP
 
-**Notes: It keeps taking me back to the 2fa entry screen**
+**Notes:**
 
 ---
 
 ### 3. Trusted device listed in 2FA settings
+
+*Re-test after skip-fix. Prior FAIL was downstream of test 2 (skip never fired, so no trusted device was registered in the session).*
 
 **Action:** After test 2 (while logged in on the trusted device), navigate to `/admin/settings/2fa`. Scroll to the "Trusted devices" section.
 
@@ -61,7 +67,7 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 **Ignore this run:** Exact label formatting; date/time display format.
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
 - [ ] SKIP
 
 **Notes:**
