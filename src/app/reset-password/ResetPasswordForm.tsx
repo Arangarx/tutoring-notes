@@ -87,18 +87,18 @@ export default function ResetPasswordForm({
         }}
       >
         {email ? (
-          /* Hidden username anchor: visually hidden but NOT aria-hidden so the
-             browser password manager associates the email with the new-password
-             fields and offers to save / generate a credential (FIX 3). */
-          <input
-            type="email"
-            name="username"
-            autoComplete="username"
-            value={email}
-            readOnly
-            tabIndex={-1}
-            className="sr-only"
-          />
+          <div className="space-y-2">
+            <Label htmlFor="reset-email">Resetting password for</Label>
+            <Input
+              id="reset-email"
+              type="email"
+              name="username"
+              autoComplete="username"
+              value={email}
+              readOnly
+              className="min-h-11"
+            />
+          </div>
         ) : null}
         <div className="space-y-2">
           <Label htmlFor="password">New password</Label>
