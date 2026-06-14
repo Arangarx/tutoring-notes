@@ -23,6 +23,15 @@ Not in priority order within sections — that comes when items move to a sprint
 
 ---
 
+## Login-friction thread follow-ups (2026-06-14)
+
+| Item | Priority | Notes |
+|------|----------|-------|
+| **BL-RESET-DOMAIN — password-reset email link should respect the originating host** | Medium | When a reset is requested from `preview.usemynk.com`, the emailed link is built from `VERCEL_URL` (= the branch's `*.vercel.app` alias), so it returns to the *branch-alias* domain rather than the originating domain. It's the right deployment but the "wrong" domain, so the preview SSO cookies (scoped to `preview.usemynk.com`) don't apply and continuity breaks. Fix: derive the link base from the request `Host` header (when it's an allowlisted host) instead of `VERCEL_URL`. Root: `src/lib/public-url.ts` `getPublicBaseUrl`. Found during 2FA remember-device smoke (2026-06-14). |
+| **BL-ADMIN-UUID-PICKER — easier admin UUID lookup for `adminResetTwoFactor`** | Low | The admin 2FA-reset flow requires pasting another admin's UUID, which is tedious to find. Add a picker/typeahead (or list) so the operator can select the target admin instead of hand-entering a UUID. From 2FA smokebook test 10 note (2026-06-14). |
+
+---
+
 ## Smoke round 1 — master-cut branch findings (2026-06-11)
 
 > **Canonical triage:** [`docs/handoff/smoke-round-1-findings-2026-06-11.md`](handoff/smoke-round-1-findings-2026-06-11.md) — Andrew's full smoke of 8 overnight branches. BLOCKERs tracked there; non-blocker items below so they aren't lost.
