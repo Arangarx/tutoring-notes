@@ -396,15 +396,13 @@ export function DevToolsClient({ initialTutors, initialFamilies }: DevToolsClien
                     </div>
                     <div className="flex gap-2">
                       <form action={startImpersonation.bind(null, t.id)}>
-                        <Button
+                        <button
                           type="submit"
-                          variant="outline"
-                          size="sm"
                           disabled={isPending}
-                          className="min-h-8 text-xs"
+                          className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 min-h-8"
                         >
-                          Impersonate
-                        </Button>
+                          Log in as
+                        </button>
                       </form>
                       <Button
                         variant="destructive"

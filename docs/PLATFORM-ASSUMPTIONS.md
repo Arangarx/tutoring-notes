@@ -577,6 +577,17 @@
 - **Build safety**: optional in `env.ts`; build succeeds without it.
 - **Migration check**: MUST add `LEARNER_SESSION_HMAC_SECRET` to all envs before P2b goes live.
 
+### 10.7a ADMIN_TFA_DEVICE_HMAC_SECRET — Admin trusted-device token signing (2FA remember-device, 2026-06-13)
+
+- **Assumption**: `ADMIN_TFA_DEVICE_HMAC_SECRET` env var must be present (32+ bytes, base64) on any deployment where the admin/tutor "Remember this device" 2FA skip feature is active. Missing key causes `mintAdminTrustedDevice()` to throw and `validateAdminTrustedDevice()` to return null → user is always prompted for TOTP (fail-closed, not an error page).
+- **Where baked in**:
+  - `src/lib/admin-trusted-device.ts` — `getHmacSecret()` reads `process.env.ADMIN_TFA_DEVICE_HMAC_SECRET` at call time.
+  - `src/lib/crypto/session-tokens.ts` — `hmacToken()` throws if secret is empty.
+- **Security tier**: high — an attacker who obtains this secret can forge trusted-device cookies and bypass the TOTP login gate (but NOT sensitive-op step-up, which always requires a live code in the request). Treat with same care as `NEXTAUTH_SECRET`.
+- **Rotation**: rotating this key **instantly invalidates ALL existing trusted-device rows** — stored `tokenHash` values were computed with the old secret, so no cookie will match after rotation. All users are silently demoted to TOTP-required on their next login (no error surfaced). Plan a maintenance window or notify users if rotating. No dual-key support in V1.
+- **Build safety**: optional in `env.ts` Zod schema — `next build` succeeds without it. Remember-device feature fails-closed at request time only.
+- **Migration check**: MUST add `ADMIN_TFA_DEVICE_HMAC_SECRET` to Vercel env vars before remember-device ships. Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`.
+
 ### 10.7 AH_TOTP_ENCRYPTION_KEY — AccountHolder TOTP secret encryption (Phase 6, reserved)
 
 - **Assumption**: Reserved now (Identity Phase 2a) so Phase 6 executor does not pick a conflicting name. Must decode to exactly 32 bytes (base64url) when Phase 6 AccountHolder 2FA enrollment is activated.
@@ -730,6 +741,7 @@
 - [ ] `TOTP_ENCRYPTION_KEY` set on all envs (32-byte base64url); key-rotation story documented to tutors. (§10.4)
 - [ ] `AH_SESSION_HMAC_SECRET` set on all envs before P2b AccountHolder auth goes live (§10.5)
 - [ ] `LEARNER_SESSION_HMAC_SECRET` set on all envs before P2b learner login goes live (§10.6)
+- [ ] `ADMIN_TFA_DEVICE_HMAC_SECRET` set on Vercel before remember-device feature is used (§10.7a); rotation story documented above.
 - [ ] `AH_TOTP_ENCRYPTION_KEY` reserved; required before Phase 6 AccountHolder 2FA ships (§10.7)
 - [ ] `WB_E2E_HARNESS` is NOT set in any Vercel env var (prod or preview); it is local-harness-only (§10.8)
 - [ ] Host allowlist in `ALLOWLISTED_HOST_PATTERNS` (`src/lib/public-url.ts`) updated for new Vercel team slug or production domain (§5.8)

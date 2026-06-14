@@ -4,6 +4,7 @@ import { getAdminByEmail, hasAdminUsers, updateAdminPassword } from "@/lib/auth-
 import { sendMail } from "@/lib/email";
 import { getPublicBaseUrl } from "@/lib/public-url";
 import { validatePasswordStrength } from "@/lib/password-strength";
+import { revokeAllAdminTrustedDevices } from "@/lib/admin-trusted-device";
 
 const TOKEN_BYTES = 32;
 const RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -56,6 +57,23 @@ export async function requestPasswordReset(email: string): Promise<{
   return { emailed: result.sent };
 }
 
+/** Read-only: email tied to a valid, unused, unexpired reset token (for password-manager username anchor). */
+export async function getEmailForValidResetToken(rawToken: string): Promise<string | null> {
+  const trimmed = rawToken.trim();
+  if (!trimmed) return null;
+
+  const tokenHash = hashResetToken(trimmed);
+  const row = await db.passwordResetToken.findUnique({
+    where: { tokenHash },
+  });
+
+  if (!row || row.usedAt || row.expiresAt.getTime() < Date.now()) {
+    return null;
+  }
+
+  return row.email;
+}
+
 export async function completePasswordReset(
   rawToken: string,
   newPassword: string
@@ -89,6 +107,22 @@ export async function completePasswordReset(
   await db.passwordResetToken.deleteMany({
     where: { email: row.email, usedAt: null },
   });
+
+  // Account-recovery cascade: revoke all trusted devices so the attacker who
+  // triggered a reset (or a legitimate user recovering a compromised account)
+  // cannot skip TOTP on existing sessions. A failure here must NOT abort the
+  // reset itself — log and continue so the user is not locked out.
+  try {
+    const admin = await getAdminByEmail(row.email);
+    if (admin) {
+      const revokedCount = await revokeAllAdminTrustedDevices(admin.id);
+      console.log(
+        `[tfa] adminUserId=${admin.id} action=password_reset_cascade count=${revokedCount}`
+      );
+    }
+  } catch (err) {
+    console.error("[tfa] adminUserId=unknown action=password_reset_cascade_error", err);
+  }
 
   return { ok: true };
 }

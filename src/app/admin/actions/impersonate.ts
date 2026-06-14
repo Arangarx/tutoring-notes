@@ -34,6 +34,13 @@ import { tutorExperienceLandingPath } from "@/lib/admin-routing";
  *  - idempotency: if an open ImpersonationLog row already exists for this
  *    (adminUserId, impersonatedUserId) pair, re-mints and redirects without creating
  *    a second row (Q6=A)
+ *
+ * NOTE — TOTP step-up intentionally NOT required here (2026-06-14, Andrew):
+ * Impersonation is hard-restricted to isTestAccount=true test shells, so this
+ * is a low-stakes dev/operator tool, not a real-identity takeover. Requiring a
+ * fresh code nagged the admin on every smoke/dev cycle for no meaningful gain.
+ * If/when real-account impersonation is built, MANDATORY step-up MUST return
+ * as the first gate — see backlog item BL-IMP-REAL.
  */
 export async function startImpersonation(targetUserId: string): Promise<void> {
   const admin = await assertIsRealAdmin();

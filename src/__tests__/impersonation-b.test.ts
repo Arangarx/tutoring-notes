@@ -130,6 +130,7 @@ describe("Blocker #10 — startImpersonation blocked for test-account session", 
       "@/lib/impersonation"
     );
 
+    // assertIsRealAdmin() throws before any target check; totpCode irrelevant here.
     await expect(startImpersonation("some-target-id")).rejects.toThrow(
       ImpersonationForbiddenError
     );

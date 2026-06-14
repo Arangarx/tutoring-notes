@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { authOptions } from "@/auth-options";
 import { db } from "@/lib/db";
 import { TwoFactorSetupForm } from "./TwoFactorSetupForm";
+import { ADMIN_TFA_DEVICE_COOKIE } from "@/lib/admin-trusted-device";
 
 export const dynamic = "force-dynamic";
 
@@ -31,8 +32,19 @@ export default async function TwoFactorSetupPage() {
     // trapping users who started but never completed enrollment.
     const isConfirmed = (admin?.twoFactor?._count?.backupCodes ?? 0) > 0;
 
-    if (isConfirmed && !session.user.twoFactorVerified) {
-      // Confirmed enrollment but not verified this session → gate.
+    if (isConfirmed && !session.user.twoFactorVerified && session.user.id) {
+      // Trusted-device skip: route to the Route Handler if the cookie is present.
+      // Cookie writes throw in Server Component renders — the handler is the only
+      // legal context for mintTwoFactorVerifiedSession (see route.ts regression note).
+      //
+      // No td=0 sentinel check needed here: on handler failure, the handler redirects
+      // to /verify (not back to /setup), so there is no redirect loop through this page.
+      const cookieStore = await cookies();
+      if (cookieStore.get(ADMIN_TFA_DEVICE_COOKIE)) {
+        redirect("/api/auth/2fa/trusted-device-check");
+      }
+
+      // No valid trusted device — fall through to TOTP gate.
       redirect("/admin/settings/2fa/verify");
     }
 

@@ -23,6 +23,16 @@ Not in priority order within sections — that comes when items move to a sprint
 
 ---
 
+## Login-friction thread follow-ups (2026-06-14)
+
+| Item | Priority | Notes |
+|------|----------|-------|
+| **BL-RESET-DOMAIN — password-reset email link should respect the originating host** | Medium | When a reset is requested from `preview.usemynk.com`, the emailed link is built from `VERCEL_URL` (= the branch's `*.vercel.app` alias), so it returns to the *branch-alias* domain rather than the originating domain. It's the right deployment but the "wrong" domain, so the preview SSO cookies (scoped to `preview.usemynk.com`) don't apply and continuity breaks. Fix: derive the link base from the request `Host` header (when it's an allowlisted host) instead of `VERCEL_URL`. Root: `src/lib/public-url.ts` `getPublicBaseUrl`. Found during 2FA remember-device smoke (2026-06-14). |
+| **BL-ADMIN-UUID-PICKER — easier admin UUID lookup for `adminResetTwoFactor`** | Low | The admin 2FA-reset flow requires pasting another admin's UUID, which is tedious to find. Add a picker/typeahead (or list) so the operator can select the target admin instead of hand-entering a UUID. From 2FA smokebook test 10 note (2026-06-14). |
+| **BL-RESET-GENERATE — `/reset-password` should offer Chrome's "suggest strong password"** | Low | Chrome offers its generate-password dropdown on the change-password form (it has a `current-password` field anchoring the "credential change" classification) but NOT on `/reset-password`, which only has new-password fields with no logged-in account context. Save-via-Credential-API and the strength meter already work on reset; only the generate convenience is missing. A visible read-only username field was tried (commit `ba2012a`) and did **not** help — reverted at `8483278`. Needs real investigation of Chrome's generation heuristic (form structure / autocomplete combo / possibly a hidden `current-password` anchor or different field ordering). Found during 2FA remember-device re-smoke (2026-06-14). Andrew wants this fixed eventually. |
+
+---
+
 ## Smoke round 1 — master-cut branch findings (2026-06-11)
 
 > **Canonical triage:** [`docs/handoff/smoke-round-1-findings-2026-06-11.md`](handoff/smoke-round-1-findings-2026-06-11.md) — Andrew's full smoke of 8 overnight branches. BLOCKERs tracked there; non-blocker items below so they aren't lost.
@@ -1156,6 +1166,15 @@ Items captured from 2026-06-06 Andrew smoke of `/admin/dev-tools` fixture dashbo
 - **Dev-tools: adopt existing manual test user as a managed fixture.** `arangarx+test1@gmail.com` (and any other hand-created test accounts) are not marked `isTestFixture=true` and therefore fall outside the "Clear all fixtures" sweep. Options: (a) a one-shot "adopt as fixture" action in dev-tools that sets `isTestFixture=true` on the existing `AdminUser`/`AccountHolder` by email, or (b) a migration script that bulk-marks known test emails. Either way, the fixture dashboard and clear-all should cover them going forward. (Andrew, 2026-06-06 smoke.)
 
 - **Dev-tools / admin UX (undecided — discuss):** consider moving the impersonation list off the main admin dashboard into dev-tools only, and redirecting to dev-tools after exiting impersonation. Andrew noted the main admin landing is now heavily test-oriented; unsure if that's the permanent shape or if impersonation lives better in dev-tools where all the other fixture/test machinery lives. Revisit once the pilot grows beyond solo use and the admin dashboard's permanent information hierarchy is clearer. (Andrew, 2026-06-06 smoke.)
+
+- **[BL-IMP-REAL] Support impersonation of REAL accounts (operator/support "login as user").** Standard SaaS support/debugging pattern. Currently HARD-blocked: `startImpersonation` enforces `isTestAccount=true` on both the caller (via `assertIsRealAdmin`) and the target (explicit guard "Can only impersonate test accounts.") — enabling real-account impersonation is a distinct feature that requires ALL of:
+  - **Unforgeable audit trail** — extend existing `ImpersonationLog` + `imp` log prefix + on-screen banner to record the real user's email/id and the operator's identity. Must be non-repudiable.
+  - **MANDATORY TOTP step-up** (the B1 gate removed 2026-06-14 returns here as essential — this was the primary motivation for B1 in the first place; dropped only because impersonation is currently test-only).
+  - **Consent / notification** — consider notifying the impersonated account holder (email or in-app) when their session is entered.
+  - **Scope constraints** — consider read-only mode and/or time-boxed sessions to limit blast radius.
+  - **Minor-data legal review** — FERPA/SOPIPA/parental consent implications when impersonating a parent who has access to a minor's tutoring data. "After lawyer consult" (Andrew, 2026-06-14).
+  - **Real-account impersonation UI** — separate trigger from the current test-account `isTestAccount` panel; clear labeling so operators cannot accidentally impersonate real users via the test-account path.
+  *Added 2026-06-14 when B1 step-up was removed from the test-only impersonation path.*
 
 ---
 
