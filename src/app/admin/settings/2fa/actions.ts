@@ -30,6 +30,7 @@ import { headers } from "next/headers";
 import { check2faVerifyRateLimit } from "@/lib/auth-rate-limit";
 import {
   mintAdminTrustedDevice,
+  validateAdminTrustedDevice,
   buildAdminTfaDeviceCookie,
   revokeAllAdminTrustedDevices,
   ADMIN_TFA_DEVICE_COOKIE,
@@ -365,13 +366,31 @@ export async function verifyTotpCode(
   }
 
   // Remember-device: mint a 30-day trusted-device cookie if opted in.
+  // Dedup: if the browser already has a valid trusted-device cookie/row, skip minting
+  // a new row. Each login with "remember device" would otherwise create a duplicate.
   if (opts?.rememberDevice === true) {
     try {
+      const isDev = process.env.NODE_ENV !== "production";
       const headerStore = await headers();
       const userAgent = headerStore.get("user-agent") ?? undefined;
-      const { rawToken, deviceId, expiresAt } = await mintAdminTrustedDevice(adminId, userAgent);
-      const isDev = process.env.NODE_ENV !== "production";
       const cookieStore = await cookies();
+
+      // Check for an existing valid trusted-device cookie before minting.
+      const existingRawToken = cookieStore.get(ADMIN_TFA_DEVICE_COOKIE)?.value;
+      if (existingRawToken) {
+        const existing = await validateAdminTrustedDevice(existingRawToken, adminId);
+        if (existing) {
+          // Valid device already present — no new row needed.
+          const type = isBackupCode ? " type=backup" : "";
+          console.log(
+            `[tfa] tfa=${existing.deviceId} adminUserId=${adminId} action=device_trust_noop_existing${type}`
+          );
+          return { ok: true };
+        }
+      }
+
+      // No valid existing device — mint a fresh one.
+      const { rawToken, deviceId, expiresAt } = await mintAdminTrustedDevice(adminId, userAgent);
       cookieStore.set(ADMIN_TFA_DEVICE_COOKIE, rawToken, {
         httpOnly: true,
         sameSite: "lax",

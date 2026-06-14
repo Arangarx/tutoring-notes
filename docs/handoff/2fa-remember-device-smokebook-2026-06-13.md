@@ -68,12 +68,10 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 **Ignore this run:** Exact label formatting; date/time display format.
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
 - [ ] SKIP
 
-**Notes: Multiple entries for same machine (I assume messy data left over after initial passes, but maybe not?).**  
-  
-I failed it because the "this device" indicator doesn't appear if the view is too narrow,
+**Notes: Fixed (commit after c7519d3): (a) "this device" badge moved out of truncated `<p>` into a flex sibling so it wraps rather than clips at narrow widths; (b) dedup — `verifyTotpCode` now checks for an existing valid trusted-device cookie before minting a new row, preventing duplicate entries from re-login with "remember device" checked. Re-smoke both sub-issues.
 
 ---
 
@@ -214,10 +212,10 @@ I failed it because the "this device" indicator doesn't appear if the view is to
 **Ignore this run:** Nothing.
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
 - [ ] SKIP
 
-**Notes: Trusted devices are not revoked after password change.**
+**Notes: Fixed (commit after c7519d3): cascade now also clears the trusted-device cookie (belt-and-suspenders on top of the existing DB revocation). Root cause: `revokeAllAdminTrustedDevices` was called but the stale browser cookie could still trigger the route-handler skip path. Cookie is now cleared by the server action so the verify page never redirects to the skip route. Re-smoke: trust device → change password → log out → log in → TOTP screen should appear.**
 
 ---
 

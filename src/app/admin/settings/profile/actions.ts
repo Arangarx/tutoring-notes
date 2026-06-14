@@ -6,9 +6,10 @@ import { authOptions } from "@/auth-options";
 import { getAdminByEmail, updateAdminDisplayName, updateAdminPassword, verifyPassword } from "@/lib/auth-db";
 import { requestPasswordReset } from "@/lib/password-reset";
 import { requireAdminSession } from "@/lib/require-admin";
-import { revokeAllAdminTrustedDevices } from "@/lib/admin-trusted-device";
+import { revokeAllAdminTrustedDevices, ADMIN_TFA_DEVICE_COOKIE } from "@/lib/admin-trusted-device";
 import { verifyTotpStepUp } from "@/lib/two-factor-step-up";
 import { db } from "@/lib/db";
+import { cookies } from "next/headers";
 
 const MIN_PASSWORD_LEN = 8;
 
@@ -80,8 +81,27 @@ export async function changePassword(
   await updateAdminPassword(email, nextPass);
 
   // Cascade: password change revokes all trusted devices for this admin.
+  // Belt-and-suspenders: both revoke DB rows (so validate fails on next login)
+  // AND clear the cookie (so the verify page never even redirects to the skip route).
   if (adminRow) {
-    await revokeAllAdminTrustedDevices(adminRow.id);
+    const revokedCount = await revokeAllAdminTrustedDevices(adminRow.id);
+    console.log(
+      `[tfa] adminUserId=${adminRow.id} action=password_change_cascade count=${revokedCount}`
+    );
+    // Clear the trust cookie for this browser. Best-effort — non-fatal if it throws.
+    try {
+      const isDev = process.env.NODE_ENV !== "production";
+      const cookieStore = await cookies();
+      cookieStore.set(ADMIN_TFA_DEVICE_COOKIE, "", {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: !isDev,
+        path: "/",
+        maxAge: 0,
+      });
+    } catch {
+      // Non-critical — the DB revocation is the authoritative mechanism.
+    }
   }
 
   revalidatePath("/admin/settings/profile");

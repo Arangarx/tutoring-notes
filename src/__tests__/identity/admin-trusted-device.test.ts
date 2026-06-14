@@ -618,14 +618,16 @@ describe("TD-12: revokeAllTrustedDevices → subsequent skip fails", () => {
 });
 
 // ---------------------------------------------------------------------------
-// TD-13: changePassword success revokes all trusted devices
+// TD-13: changePassword success revokes all trusted devices AND clears cookie
 // ---------------------------------------------------------------------------
-describe("TD-13: changePassword success cascade revokes trusted devices", () => {
-  it("revokeAllAdminTrustedDevices called after successful password change", async () => {
+describe("TD-13: changePassword success cascade revokes trusted devices + clears cookie", () => {
+  it("revokeAllAdminTrustedDevices called AND trust cookie cleared after successful password change", async () => {
     const mockRevokeAll = jest.fn().mockResolvedValue(2);
+    const mockCookieSet = jest.fn();
 
     jest.mock("@/lib/admin-trusted-device", () => ({
       revokeAllAdminTrustedDevices: mockRevokeAll,
+      ADMIN_TFA_DEVICE_COOKIE: "mynk_admin_tfa_device",
     }));
 
     jest.mock("@/lib/two-factor-step-up", () => ({
@@ -650,6 +652,9 @@ describe("TD-13: changePassword success cascade revokes trusted devices", () => 
       },
     }));
     jest.mock("next/cache", () => ({ revalidatePath: jest.fn() }));
+    jest.mock("next/headers", () => ({
+      cookies: jest.fn().mockResolvedValue({ set: mockCookieSet }),
+    }));
 
     const formData = new FormData();
     formData.set("currentPassword", "OldPass123!");
@@ -661,7 +666,112 @@ describe("TD-13: changePassword success cascade revokes trusted devices", () => 
     const result = await changePassword(null, formData);
 
     expect(result.ok).toBe(true);
+    // DB revocation must fire with the correct admin id.
     expect(mockRevokeAll).toHaveBeenCalledWith("admin-13");
+    // Trust cookie must be cleared (maxAge: 0) — belt-and-suspenders so a stale
+    // cookie can never bypass the revoked-device DB check on the next login.
+    expect(mockCookieSet).toHaveBeenCalledWith(
+      "mynk_admin_tfa_device",
+      "",
+      expect.objectContaining({ maxAge: 0 })
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TD-20: verifyTotpCode with rememberDevice:true + existing valid cookie → no dup row
+// ---------------------------------------------------------------------------
+describe("TD-20: verifyTotpCode dedup — existing valid cookie skips mintAdminTrustedDevice", () => {
+  it("does not call mintAdminTrustedDevice when a valid trusted-device cookie already exists", async () => {
+    const consoleSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const mockMintTD = jest.fn();
+
+    // validateAdminTrustedDevice returns a valid device for the existing cookie.
+    jest.mock("@/lib/admin-trusted-device", () => ({
+      mintAdminTrustedDevice: mockMintTD,
+      validateAdminTrustedDevice: jest.fn().mockResolvedValue({ deviceId: "device-20" }),
+      buildAdminTfaDeviceCookie: jest.fn().mockReturnValue("cookie-string"),
+      ADMIN_TFA_DEVICE_COOKIE: "mynk_admin_tfa_device",
+      revokeAllAdminTrustedDevices: jest.fn().mockResolvedValue(0),
+      listAdminTrustedDevices: jest.fn().mockResolvedValue([]),
+      revokeAdminTrustedDevice: jest.fn().mockResolvedValue(undefined),
+      clearAdminTfaDeviceCookie: jest.fn().mockReturnValue(""),
+      tryTrustedDeviceLoginSkip: jest.fn().mockResolvedValue(false),
+    }));
+
+    jest.mock("@/lib/two-factor-step-up", () => ({
+      verifyTotpStepUp: jest.fn().mockResolvedValue({ ok: true }),
+    }));
+
+    const existingRawToken = "t".repeat(64);
+    const mockCookiesStore = {
+      get: jest.fn().mockReturnValue({ value: existingRawToken }),
+      set: jest.fn(),
+    };
+    jest.mock("next/headers", () => ({
+      cookies: jest.fn().mockResolvedValue(mockCookiesStore),
+      headers: jest.fn().mockResolvedValue({ get: jest.fn().mockReturnValue("TestAgent/1.0") }),
+    }));
+
+    jest.mock("next-auth", () => ({
+      getServerSession: jest.fn().mockResolvedValue({
+        user: { email: "admin@test.com", id: "admin-20", isTestAccount: false },
+      }),
+    }));
+    jest.mock("@/auth-options", () => ({ authOptions: {} }));
+
+    jest.mock("@/lib/db", () => ({
+      db: {
+        adminUser: { findUnique: jest.fn().mockResolvedValue({ id: "admin-20", isTestAccount: false }) },
+        adminUser2FA: {
+          findUnique: jest.fn().mockResolvedValue({ id: "tfa-20", totpSecretEnc: "enc" }),
+          update: jest.fn().mockResolvedValue({}),
+        },
+      },
+    }));
+
+    jest.mock("@/lib/student-scope", () => ({
+      requireStudentScope: jest.fn().mockResolvedValue({ kind: "admin", adminId: "admin-20" }),
+    }));
+
+    jest.mock("@/lib/auth-rate-limit", () => ({
+      check2faVerifyRateLimit: jest.fn().mockResolvedValue({ allowed: true, requestCount: 1, retryAfterMs: 0 }),
+    }));
+
+    jest.mock("@/lib/crypto/totp-secret", () => ({
+      decryptTotpSecret: jest.fn().mockReturnValue("JBSWY3DPEHPK3PXP"),
+    }));
+
+    jest.mock("otpauth", () => ({
+      TOTP: jest.fn().mockImplementation(() => ({
+        validate: jest.fn().mockReturnValue(0),
+      })),
+      Secret: { fromBase32: jest.fn().mockReturnValue({}) },
+    }));
+
+    jest.mock("next-auth/jwt", () => ({
+      decode: jest.fn().mockResolvedValue({ sub: "admin-20" }),
+    }));
+
+    jest.mock("@/lib/two-factor-session", () => ({
+      mintTwoFactorVerifiedSession: jest.fn().mockResolvedValue(undefined),
+    }));
+
+    jest.mock("@/lib/impersonation", () => ({
+      assertIsAdmin: jest.fn().mockResolvedValue({ adminId: "admin-20", email: "admin@test.com" }),
+    }));
+
+    const { verifyTotpCode } = await import("@/app/admin/settings/2fa/actions");
+    const result = await verifyTotpCode("123456", { rememberDevice: true });
+
+    expect(result.ok).toBe(true);
+    // Must NOT mint a new device — existing valid device found.
+    expect(mockMintTD).not.toHaveBeenCalled();
+    // Must log device_trust_noop_existing.
+    const logCalls = consoleSpy.mock.calls.map((args) => String(args[0]));
+    expect(logCalls.some((l) => l.includes("device_trust_noop_existing"))).toBe(true);
+
+    consoleSpy.mockRestore();
   });
 });
 

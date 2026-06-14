@@ -668,14 +668,16 @@ export function TwoFactorManageView({
                 className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-sm"
               >
                 <div className="min-w-0">
-                  <p className="truncate font-mono text-xs text-muted-foreground">
-                    {device.deviceLabel ?? "Unknown device"}
+                  <div className="flex items-center gap-x-2 min-w-0">
+                    <p className="truncate font-mono text-xs text-muted-foreground min-w-0">
+                      {device.deviceLabel ?? "Unknown device"}
+                    </p>
                     {device.isCurrent && (
-                      <span className="ml-2 rounded bg-primary/10 px-1 py-0.5 text-[10px] font-semibold text-primary">
+                      <span className="shrink-0 rounded bg-primary/10 px-1 py-0.5 text-[10px] font-semibold text-primary whitespace-nowrap">
                         this device
                       </span>
                     )}
-                  </p>
+                  </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Last used{" "}
                     {new Date(device.lastUsedAt).toLocaleDateString("en-US", {
