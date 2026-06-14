@@ -36,7 +36,7 @@ export function PreviewBranchBadge({ branch, shortSha }: PreviewBranchBadgeProps
 
   async function handleCopy() {
     try {
-      await copyTextToClipboard(branch);
+      await copyTextToClipboard(`${branch} · ${shortSha}`);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -63,7 +63,7 @@ export function PreviewBranchBadge({ branch, shortSha }: PreviewBranchBadgeProps
       <button
         type="button"
         onClick={handleCopy}
-        title="Click to copy branch name"
+        title="Click to copy branch + commit"
         className={cn(
           "pointer-events-auto rounded-full focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         )}
