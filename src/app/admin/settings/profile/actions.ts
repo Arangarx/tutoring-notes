@@ -55,13 +55,24 @@ export async function changePassword(
   if (nextPass !== confirm) {
     return { error: "New passwords do not match." };
   }
-  if (nextPass === current) {
-    return { error: "New password must be different from your current password." };
-  }
 
+  // (a) Verify current password BEFORE the must-differ check. The old order ran the
+  // plain-text equality check first, which false-positives when a password manager
+  // fills both fields with the same auto-generated value (common without a username
+  // anchor): the current-password input holds the new strong password, not the real
+  // saved one, so the strings are equal even though the user chose a different password.
   const match = await verifyPassword(current, admin.passwordHash);
   if (!match) {
     return { error: "Current password is incorrect." };
+  }
+
+  // (b) Must-differ check against the stored hash — NOT plain-text equality.
+  // Plain-text comparison still false-positives if the browser puts the same string
+  // in both inputs; bcrypt.compare against the stored hash is the correct semantic
+  // ("does the proposed new password match the credential already stored?").
+  const sameAsCurrent = await verifyPassword(nextPass, admin.passwordHash);
+  if (sameAsCurrent) {
+    return { error: "New password must be different from your current password." };
   }
 
   // Step-up: if the admin has 2FA enrolled, require a fresh TOTP code.

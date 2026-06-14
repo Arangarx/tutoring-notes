@@ -235,6 +235,88 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 
 ---
 
+---
+
+### A. Change-password username anchor — browser updates saved credential
+
+**Action:** On `/admin/settings/profile`, open the Password section. Open DevTools → Application → Cookies and confirm the session email is known. Submit the change-password form with the correct current password, a strong new password, and (if 2FA enrolled) a fresh TOTP code. After success, open Chrome's credential manager (or the browser's built-in save-credential UI) and check whether it offered to **update** the existing saved credential rather than create a blank new entry.
+
+**Expect:** The browser offers "Update saved password for [your email]" (or similar). The hidden `<input type="email" name="username" autoComplete="username">` field is present in the form (verify via DevTools → Elements). The new password is saved under the existing email entry, not as a blank/new credential.
+
+**Ignore this run:** Exact wording of the browser's credential-manager prompt — it varies by browser version.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### B. Reset-password form username anchor — saves credential correctly
+
+**Action:** Request a fresh password-reset link via `/forgot-password`. Click the link in the email (or copy the `?token=…` URL). Observe the `/reset-password` page. Check DevTools → Elements for the hidden `<input type="email" name="username" autoComplete="username">` field. Submit a new strong password. After redirect to `/login?reset=1`, check whether the browser offered to save/update the credential with the correct email address.
+
+**Expect:** The form renders with the username anchor pre-populated with your email. The browser offers to save the credential under that email address. Login with the new password succeeds.
+
+**Ignore this run:** Exact wording of the browser credential-save prompt.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### C. Change-password to a genuinely new strong password succeeds (no false must-differ)
+
+**Action:** On `/admin/settings/profile`, attempt to change your password. Enter the correct **current** password in the current-password field. Enter a brand-new strong password (e.g. a passphrase not previously used) in both the new-password and confirm fields. Submit (with TOTP if enrolled).
+
+**Expect:** The change succeeds with "Password updated" confirmation. No false "must be different from your current password" error appears even if a password manager pre-filled the current-password field with a strong auto-generated value that happens to differ from the stored credential. Root cause of the old bug: the plain-text equality check (`nextPass === current`) fired before bcrypt verification of the current-password field, so a password manager filling both fields with the same new strong value triggered a false positive. Now fixed by checking (a) bcrypt-verify current, then (b) bcrypt-compare new against stored hash.
+
+**Ignore this run:** Nothing.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### D. Reset-password with expired or used token shows Invalid-link state (no dead form)
+
+**Action:** Obtain an expired or already-used reset token URL (e.g. re-use a token from a prior reset, or wait for a token to expire). Navigate directly to `/reset-password?token=<expired-or-used-token>`.
+
+**Expect:** The page shows the **"Invalid link"** AuthShell state with the message "This reset link has expired or was already used." and a "Request a new link" link to `/forgot-password`. No password input fields are rendered (the dead form with no username anchor is not shown).
+
+**Ignore this run:** Nothing.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### E. Forgot-password token reset revokes trusted devices
+
+**Action:** (1) Set up trust on a device (test 1). (2) Confirm the trusted-device cookie is set and the next login skips TOTP (test 2). (3) From any browser, go to `/forgot-password`, request a reset link for the same admin email, click the link, and complete the password reset with a new strong password. (4) In the original trusted browser, log out and attempt to log back in with the new password.
+
+**Expect:** On step 4, the **TOTP verify screen reappears** — the forgot-password reset triggered `revokeAllAdminTrustedDevices`, so the trusted-device cookie from step 1 is no longer valid. Check the server logs for `[tfa] adminUserId=<id> action=password_reset_cascade count=1` (or count matching how many devices were trusted).
+
+**Ignore this run:** Nothing.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] SKIP
+
+**Notes:**
+
+---
+
 ## Cross-branch / post-merge
 
 No cross-branch items for this feature. After merge to `v1-redesign` or `master`, re-run tests 1–2 to confirm skip survives the merge.

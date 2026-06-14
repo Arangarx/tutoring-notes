@@ -642,7 +642,9 @@ describe("TD-13: changePassword success cascade revokes trusted devices + clears
     jest.mock("@/lib/auth-db", () => ({
       getAdminByEmail: jest.fn().mockResolvedValue({ id: "admin-13", passwordHash: "hashed" }),
       updateAdminPassword: jest.fn().mockResolvedValue(undefined),
-      verifyPassword: jest.fn().mockResolvedValue(true),
+      // First call: current-password verify → true (correct).
+      // Second call: must-differ bcrypt check → false (new ≠ stored hash, so proceed).
+      verifyPassword: jest.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false),
     }));
     jest.mock("@/lib/db", () => ({
       db: {

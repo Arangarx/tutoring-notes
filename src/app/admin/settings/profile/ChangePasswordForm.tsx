@@ -8,11 +8,13 @@ import { Label } from "@/components/ui/label";
 import { changePassword, sendPasswordResetEmail } from "./actions";
 
 interface Props {
+  /** The signed-in admin's email — used as a hidden username anchor for password managers. */
+  email: string;
   /** When true, a TOTP step-up field is shown above the submit button. */
   has2FA?: boolean;
 }
 
-export default function ChangePasswordForm({ has2FA }: Props) {
+export default function ChangePasswordForm({ email, has2FA }: Props) {
   const [state, formAction] = useActionState(changePassword, null);
   const formRef = useRef<HTMLFormElement>(null);
   const [resetMsg, setResetMsg] = useState<string | null>(null);
@@ -26,6 +28,18 @@ export default function ChangePasswordForm({ has2FA }: Props) {
   return (
     <div className="max-w-sm space-y-6">
       <form ref={formRef} action={formAction} className="space-y-4">
+        {/* Hidden username anchor so the browser password manager updates the existing
+            credential instead of creating a blank new entry (Chrome requires this field). */}
+        <input
+          type="email"
+          name="username"
+          autoComplete="username"
+          value={email}
+          readOnly
+          aria-hidden="true"
+          tabIndex={-1}
+          className="sr-only"
+        />
         <div className="space-y-1.5">
           <Label htmlFor="current-password">Current password</Label>
           <Input
