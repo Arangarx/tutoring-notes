@@ -1,10 +1,14 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import zxcvbn from "zxcvbn";
+import { PasswordStrengthField } from "@/components/auth/PasswordStrengthField";
 import { SubmitButton } from "@/components/SubmitButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { storePasswordCredential } from "@/lib/credential-manager";
+import { MIN_PASSWORD_LENGTH } from "@/lib/password-strength";
 import { changePassword, sendPasswordResetEmail } from "./actions";
 
 interface Props {
@@ -17,26 +21,41 @@ interface Props {
 export default function ChangePasswordForm({ email, has2FA }: Props) {
   const [state, formAction] = useActionState(changePassword, null);
   const formRef = useRef<HTMLFormElement>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordScore, setPasswordScore] = useState<number | null>(null);
+  // Ref captures the latest typed value at the moment the server action resolves
+  // without adding it to useEffect deps (avoids double-fire on every keystroke).
+  const latestNewPasswordRef = useRef("");
   const [resetMsg, setResetMsg] = useState<string | null>(null);
   const [resetErr, setResetErr] = useState<string | null>(null);
   const [resetPending, startReset] = useTransition();
 
   useEffect(() => {
-    if (state?.ok) formRef.current?.reset();
-  }, [state?.ok]);
+    if (state?.ok) {
+      // Prompt the browser to save / update the credential before clearing the form.
+      void storePasswordCredential(email, latestNewPasswordRef.current);
+      formRef.current?.reset();
+      setNewPassword("");
+      setPasswordScore(null);
+      latestNewPasswordRef.current = "";
+    }
+  }, [state?.ok, email]);
 
   return (
     <div className="max-w-sm space-y-6">
       <form ref={formRef} action={formAction} className="space-y-4">
-        {/* Hidden username anchor so the browser password manager updates the existing
-            credential instead of creating a blank new entry (Chrome requires this field). */}
+        {/* Hidden username anchor: visually hidden but NOT aria-hidden so the
+            browser password manager associates the email with the new-password
+            fields and offers to generate / update the saved credential.
+            aria-hidden was removed (FIX 3) — screen readers skip sr-only nodes
+            via DOM order; the false aria-hidden was preventing Chrome from
+            recognising the form as a credential form. */}
         <input
           type="email"
           name="username"
           autoComplete="username"
           value={email}
           readOnly
-          aria-hidden="true"
           tabIndex={-1}
           className="sr-only"
         />
@@ -52,13 +71,20 @@ export default function ChangePasswordForm({ email, has2FA }: Props) {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="new-password">New password</Label>
-          <Input
+          <PasswordStrengthField
             id="new-password"
             name="newPassword"
-            type="password"
             autoComplete="new-password"
-            minLength={8}
+            minLength={MIN_PASSWORD_LENGTH}
             required
+            value={newPassword}
+            onChange={(e) => {
+              const val = e.target.value;
+              setNewPassword(val);
+              latestNewPasswordRef.current = val;
+              setPasswordScore(val.length > 0 ? zxcvbn(val).score : null);
+            }}
+            strengthScore={passwordScore}
           />
         </div>
         <div className="space-y-1.5">
@@ -68,7 +94,7 @@ export default function ChangePasswordForm({ email, has2FA }: Props) {
             name="confirmPassword"
             type="password"
             autoComplete="new-password"
-            minLength={8}
+            minLength={MIN_PASSWORD_LENGTH}
             required
           />
         </div>

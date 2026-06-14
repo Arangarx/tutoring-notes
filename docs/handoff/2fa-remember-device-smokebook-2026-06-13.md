@@ -237,32 +237,32 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 
 ---
 
-### A. Change-password username anchor — browser updates saved credential
+### A. Change-password — browser save/update prompt via Credential Management API
 
-**Action:** On `/admin/settings/profile`, open the Password section. Open DevTools → Application → Cookies and confirm the session email is known. Submit the change-password form with the correct current password, a strong new password, and (if 2FA enrolled) a fresh TOTP code. After success, open Chrome's credential manager (or the browser's built-in save-credential UI) and check whether it offered to **update** the existing saved credential rather than create a blank new entry.
+**Action:** On `/admin/settings/profile`, open the Password section. Submit the change-password form with the correct current password, a **new strong password (≥ 10 chars, strength meter ≥ "Good")**, and (if 2FA enrolled) a fresh TOTP code. After the green "Password updated" banner appears, watch for Chrome's credential-save/update banner (address bar or top of page). In Chrome DevTools → Sources you can also verify that `navigator.credentials.store()` was called by setting a breakpoint in `credential-manager.ts`.
 
-**Expect:** The browser offers "Update saved password for [your email]" (or similar). The hidden `<input type="email" name="username" autoComplete="username">` field is present in the form (verify via DevTools → Elements). The new password is saved under the existing email entry, not as a blank/new credential.
+**Expect:** Chrome shows "Update saved password for [your email]?" (or equivalent save prompt) immediately after the success banner. The credential is stored under the existing email entry. The hidden username anchor (`<input type="email" name="username" autoComplete="username">`) is visible in DevTools → Elements **without** `aria-hidden` so the password manager sees it.
 
-**Ignore this run:** Exact wording of the browser's credential-manager prompt — it varies by browser version.
+**Ignore this run:** Exact wording of the browser's credential-manager prompt — it varies by Chrome version. Chrome's GENERATE offer on the new-password field is best-effort (depends on Chrome's heuristic recognising the form structure); see item F notes.
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
 - [ ] SKIP
 
 **Notes:**
 
 ---
 
-### B. Reset-password form username anchor — saves credential correctly
+### B. Reset-password — browser save prompt via Credential Management API
 
-**Action:** Request a fresh password-reset link via `/forgot-password`. Click the link in the email (or copy the `?token=…` URL). Observe the `/reset-password` page. Check DevTools → Elements for the hidden `<input type="email" name="username" autoComplete="username">` field. Submit a new strong password. After redirect to `/login?reset=1`, check whether the browser offered to save/update the credential with the correct email address.
+**Action:** Request a fresh password-reset link via `/forgot-password`. Click the link in the email (or copy the `?token=…` URL). On `/reset-password`, confirm DevTools → Elements shows the hidden username anchor (no `aria-hidden`). Enter a strong new password (≥ 10 chars, strength meter ≥ "Good"), confirm, and click Save password. Watch for Chrome's credential-save banner before or during the redirect to `/login?reset=1`.
 
-**Expect:** The form renders with the username anchor pre-populated with your email. The browser offers to save the credential under that email address. Login with the new password succeeds.
+**Expect:** Chrome shows "Save password for [your email]?" (or update prompt) before leaving the page. The username anchor is pre-populated with the reset email. The redirect to `/login?reset=1` completes normally. Login with the new password succeeds.
 
-**Ignore this run:** Exact wording of the browser credential-save prompt.
+**Ignore this run:** Exact wording of the browser credential-save prompt. Chrome may show the banner slightly after redirect — that's acceptable as long as the credential is eventually stored.
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
 - [ ] SKIP
 
 **Notes:**
@@ -315,9 +315,26 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 
 **Notes:**
 
+### F. New-password strength indicator + requirements (both forms, correct minimum)
+
+**Action:** 
+1. Navigate to `/admin/settings/profile` and click into the **New password** field. Verify the requirements hint ("Minimum 10 characters — strength meter must reach "Good" or better.") appears while the field is empty. Begin typing a password — the strength bar and label should update live. Try a short or common password (e.g. "abc123") and confirm the bar stays red/weak. Type a strong passphrase and confirm the bar reaches "Good" or "Strong".
+2. Repeat on `/reset-password` (use a valid reset-link URL) — the same strength meter and requirements text should appear under the **New password** field.
+3. On both forms, try submitting with a password that is fewer than 10 characters or too simple. Confirm the **server** returns an appropriate error (not a silent save).
+
+**Expect:** Both forms show the live strength meter and "Minimum 10 characters" requirement text. The `minLength` HTML attribute on both new-password inputs is `10` (visible in DevTools → Elements). A weak or short password is rejected server-side with a clear message. A strong password (≥ 10 chars, zxcvbn score ≥ 2) is accepted.
+
+**Ignore this run:** Exact colour of the strength bar segments (theme-dependent). Minor label wording differences between themes.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] SKIP
+
+**Notes:**
+
 ---
 
-## Cross-branch / post-merge
+---
 
 No cross-branch items for this feature. After merge to `v1-redesign` or `master`, re-run tests 1–2 to confirm skip survives the merge.
 
@@ -326,4 +343,4 @@ No cross-branch items for this feature. After merge to `v1-redesign` or `master`
 ## Overall result
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL

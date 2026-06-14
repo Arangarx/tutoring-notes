@@ -6,12 +6,11 @@ import { authOptions } from "@/auth-options";
 import { getAdminByEmail, updateAdminDisplayName, updateAdminPassword, verifyPassword } from "@/lib/auth-db";
 import { requestPasswordReset } from "@/lib/password-reset";
 import { requireAdminSession } from "@/lib/require-admin";
+import { validatePasswordStrength } from "@/lib/password-strength";
 import { revokeAllAdminTrustedDevices, ADMIN_TFA_DEVICE_COOKIE } from "@/lib/admin-trusted-device";
 import { verifyTotpStepUp } from "@/lib/two-factor-step-up";
 import { db } from "@/lib/db";
 import { cookies } from "next/headers";
-
-const MIN_PASSWORD_LEN = 8;
 
 export async function saveProfileDisplayName(formData: FormData) {
   const session = await getServerSession(authOptions);
@@ -49,8 +48,9 @@ export async function changePassword(
   if (!current || !nextPass || !confirm) {
     return { error: "Fill in current password, new password, and confirmation." };
   }
-  if (nextPass.length < MIN_PASSWORD_LEN) {
-    return { error: `New password must be at least ${MIN_PASSWORD_LEN} characters.` };
+  const strengthCheck = validatePasswordStrength(nextPass);
+  if (!strengthCheck.ok) {
+    return { error: strengthCheck.feedback || "Password must be at least 10 characters and not too simple." };
   }
   if (nextPass !== confirm) {
     return { error: "New passwords do not match." };
