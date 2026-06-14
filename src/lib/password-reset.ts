@@ -56,6 +56,23 @@ export async function requestPasswordReset(email: string): Promise<{
   return { emailed: result.sent };
 }
 
+/** Read-only: email tied to a valid, unused reset token (for password-manager username anchor). */
+export async function getEmailForValidResetToken(rawToken: string): Promise<string | null> {
+  const trimmed = rawToken.trim();
+  if (!trimmed) return null;
+
+  const tokenHash = hashResetToken(trimmed);
+  const row = await db.passwordResetToken.findUnique({
+    where: { tokenHash },
+  });
+
+  if (!row || row.usedAt || row.expiresAt.getTime() < Date.now()) {
+    return null;
+  }
+
+  return row.email;
+}
+
 export async function completePasswordReset(
   rawToken: string,
   newPassword: string

@@ -58,7 +58,7 @@ export default async function ProfileSettingsPage() {
             title="Password"
             description="Change your sign-in password or request a reset link."
           >
-            <ChangePasswordForm />
+            <ChangePasswordForm email={email ?? ""} />
           </AdminSectionCard>
         ) : (
           <AdminSectionCard title="Password">

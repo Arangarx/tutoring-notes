@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { changePassword, sendPasswordResetEmail } from "./actions";
 
-export default function ChangePasswordForm() {
+export default function ChangePasswordForm({ email }: { email: string }) {
   const [state, formAction] = useActionState(changePassword, null);
   const formRef = useRef<HTMLFormElement>(null);
   const [resetMsg, setResetMsg] = useState<string | null>(null);
@@ -21,6 +21,17 @@ export default function ChangePasswordForm() {
   return (
     <div className="max-w-sm space-y-6">
       <form ref={formRef} action={formAction} className="space-y-4">
+        {/* Hidden username field so the browser password manager updates the existing credential instead of creating a blank new entry */}
+        <input
+          type="email"
+          name="username"
+          autoComplete="username"
+          value={email}
+          readOnly
+          aria-hidden="true"
+          tabIndex={-1}
+          className="sr-only"
+        />
         <div className="space-y-1.5">
           <Label htmlFor="current-password">Current password</Label>
           <Input
