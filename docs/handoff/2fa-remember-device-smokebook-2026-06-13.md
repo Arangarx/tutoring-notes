@@ -1,7 +1,7 @@
 # 2FA Remember-This-Device — smoke runbook
 
 **Branch:** `auth/2fa-remember-device`
-**Tip commit:** `[dbe8178](https://github.com/Arangarx/tutoring-notes/commit/dbe8178580838bcbe4b2d6cad77853a14efe0288)`
+**Tip commit:** `[f6a5f91](https://github.com/Arangarx/tutoring-notes/commit/f6a5f919318e6bde9a441f96718ae9e4f16c71d1)`
 **Preview:** [auth/2fa-remember-device preview](https://tutoring-notes-git-auth-2fa-reme-afa2a4-arangarx-5209s-projects.vercel.app)
 *(URL source: Vercel MCP `list_deployments` → `meta.branchAlias` for `auth/2fa-remember-device`; re-deploy triggered by skip-fix push.)*
 
