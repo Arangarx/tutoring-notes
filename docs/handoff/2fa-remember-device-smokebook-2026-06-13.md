@@ -1,7 +1,7 @@
 # 2FA Remember-This-Device — smoke runbook
 
 **Branch:** `auth/2fa-remember-device`
-**Tip commit:** [`5db8a76`](https://github.com/Arangarx/tutoring-notes/commit/5db8a763dba79e76a39e663159db953af9c1d4ee)
+**Tip commit:** `[5db8a76](https://github.com/Arangarx/tutoring-notes/commit/5db8a763dba79e76a39e663159db953af9c1d4ee)`
 **Preview:** [auth/2fa-remember-device preview](https://tutoring-notes-git-auth-2fa-reme-afa2a4-arangarx-5209s-projects.vercel.app)
 *(URL source: Vercel MCP `list_deployments` → `meta.branchAlias` for `auth/2fa-remember-device`; re-deploy triggered by skip-fix push.)*
 
@@ -14,6 +14,7 @@ Covers: first-time trust opt-in, subsequent skip, expiry path, revocation (per-d
 sensitive-op step-up for every gated action, and the cross-device negative (trusted on A ≠ skip on B).
 
 **Prerequisites:**
+
 - Admin account with TOTP 2FA enrolled (use a test account or the real admin account)
 - Two different browsers or browser profiles (for cross-device negative test)
 - `ADMIN_TFA_DEVICE_HMAC_SECRET` set in the deployed env (otherwise minting will throw and skip won't work)
@@ -30,7 +31,7 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 
 **Ignore this run:** Cosmetic styling of the checkbox; the exact label text.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -48,7 +49,7 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 
 **Ignore this run:** Any flash/redirect animation through `/api/auth/2fa/trusted-device-check`; minor latency.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -67,10 +68,12 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 **Ignore this run:** Exact label formatting; date/time display format.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Multiple entries for same machine (I assume messy data left over after initial passes, but maybe not?).**  
+  
+I failed it because the "this device" indicator doesn't appear if the view is too narrow,
 
 ---
 
@@ -82,7 +85,7 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -98,7 +101,7 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -114,7 +117,7 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -130,7 +133,7 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -146,7 +149,7 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -162,7 +165,7 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -178,11 +181,11 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 
 **Ignore this run:** This test requires an ADMIN-role account; skip if only a TUTOR account is available (note that in Notes).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Do we have backlogged a way for me to either easily find another Admin's uuid, or just provide a list of them right there to reset?**
 
 ---
 
@@ -194,7 +197,7 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -211,10 +214,10 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 **Ignore this run:** Nothing.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Trusted devices are not revoked after password change.**
 
 ---
 
@@ -228,7 +231,7 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] SKIP
+- [x] SKIP
 
 **Notes:**
 
