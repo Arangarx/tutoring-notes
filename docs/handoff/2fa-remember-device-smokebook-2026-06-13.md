@@ -245,7 +245,7 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 
 **Ignore this run:** Exact wording of the browser's credential-manager prompt — it varies by Chrome version. Chrome's GENERATE offer on the new-password field is best-effort (depends on Chrome's heuristic recognising the form structure); see item F notes.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -262,7 +262,7 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 **Ignore this run:** Exact wording of the browser credential-save prompt. Chrome may show the banner slightly after redirect — that's acceptable as long as the credential is eventually stored.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
 **Notes:**
@@ -318,6 +318,7 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 ### F. New-password strength indicator + requirements (both forms, correct minimum)
 
 **Action:** 
+
 1. Navigate to `/admin/settings/profile` and click into the **New password** field. Verify the requirements hint ("Minimum 10 characters — strength meter must reach "Good" or better.") appears while the field is empty. Begin typing a password — the strength bar and label should update live. Try a short or common password (e.g. "abc123") and confirm the bar stays red/weak. Type a strong passphrase and confirm the bar reaches "Good" or "Strong".
 2. Repeat on `/reset-password` (use a valid reset-link URL) — the same strength meter and requirements text should appear under the **New password** field.
 3. On both forms, try submitting with a password that is fewer than 10 characters or too simple. Confirm the **server** returns an appropriate error (not a silent save).
@@ -326,7 +327,7 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 
 **Ignore this run:** Exact colour of the strength bar segments (theme-dependent). Minor label wording differences between themes.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -342,5 +343,5 @@ No cross-branch items for this feature. After merge to `v1-redesign` or `master`
 
 ## Overall result
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
