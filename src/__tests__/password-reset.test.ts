@@ -26,12 +26,14 @@ test("completePasswordReset updates password when token is valid", async () => {
     },
   });
 
-  const result = await completePasswordReset(raw, "newpassword99");
+  // Must score >= 2 on zxcvbn; use a multi-word phrase to satisfy the strength check.
+  const newPw = "Purple-Monkey-Dishwasher-42!";
+  const result = await completePasswordReset(raw, newPw);
   expect(result).toEqual({ ok: true });
 
   const admin = await db.adminUser.findUnique({ where: { email: "tutor-reset@test.com" } });
   expect(admin).not.toBeNull();
-  expect(await verifyPassword("newpassword99", admin!.passwordHash)).toBe(true);
+  expect(await verifyPassword(newPw, admin!.passwordHash)).toBe(true);
   expect(await verifyPassword("oldpassword123", admin!.passwordHash)).toBe(false);
 });
 
