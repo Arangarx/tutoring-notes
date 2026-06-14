@@ -211,7 +211,7 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -246,7 +246,7 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 **Ignore this run:** Exact wording of the browser's credential-manager prompt — it varies by browser version.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
 **Notes:**
@@ -262,7 +262,7 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 **Ignore this run:** Exact wording of the browser credential-save prompt.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
 **Notes:**
@@ -277,7 +277,7 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -295,7 +295,7 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] SKIP
+- [x] SKIP
 
 **Notes:**
 
@@ -309,7 +309,7 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -326,4 +326,4 @@ No cross-branch items for this feature. After merge to `v1-redesign` or `master`
 ## Overall result
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
