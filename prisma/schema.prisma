@@ -598,6 +598,8 @@ model AdminUser {
   claimInvites            StudentClaimInvite[]   @relation("TutorClaimInvites")
   /// B2: consent records where this tutor is the recipient of the parent's consent grant.
   consentRecords          ConsentRecord[]        @relation("TutorConsentRecords")
+  /// Trusted-browser records for 30-day 2FA login skip. ADDITIVE ONLY.
+  trustedDevices          AdminTrustedDevice[]
 }
 
 /// TOTP 2FA enrollment for AdminUser accounts (Identity Phase 1).
@@ -635,6 +637,30 @@ model AdminUser2FABackupCode {
   createdAt DateTime     @default(now())
 
   @@index([twoFaId])
+}
+
+/// Trusted-browser record for admin/tutor 2FA login skip (30-day).
+/// ADDITIVE ONLY — no existing columns renamed or dropped.
+/// Raw device token is NEVER stored — only HMAC-SHA-256(rawToken, ADMIN_TFA_DEVICE_HMAC_SECRET).
+model AdminTrustedDevice {
+  id          String    @id @default(uuid())
+  adminUserId String
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  /// HMAC-SHA-256(rawToken, ADMIN_TFA_DEVICE_HMAC_SECRET). Raw token NEVER stored or logged.
+  tokenHash   String    @unique
+
+  /// Truncated User-Agent (max 128 chars on write) for device list UI.
+  deviceLabel String?
+
+  createdAt   DateTime  @default(now())
+  lastUsedAt  DateTime  @default(now())
+  /// Fixed 30-day absolute expiry from creation (no sliding renewal).
+  expiresAt   DateTime
+  revokedAt   DateTime?
+
+  @@index([adminUserId])
+  @@index([adminUserId, revokedAt])
 }
 
 /// Audit log for every admin impersonation session. endedAt = null means

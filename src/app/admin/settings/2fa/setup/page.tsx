@@ -1,9 +1,11 @@
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
+import { decode } from "next-auth/jwt";
 import { authOptions } from "@/auth-options";
 import { db } from "@/lib/db";
 import { TwoFactorSetupForm } from "./TwoFactorSetupForm";
+import { tryTrustedDeviceLoginSkip } from "@/lib/admin-trusted-device";
 
 export const dynamic = "force-dynamic";
 
@@ -31,8 +33,31 @@ export default async function TwoFactorSetupPage() {
     // trapping users who started but never completed enrollment.
     const isConfirmed = (admin?.twoFactor?._count?.backupCodes ?? 0) > 0;
 
-    if (isConfirmed && !session.user.twoFactorVerified) {
-      // Confirmed enrollment but not verified this session → gate.
+    if (isConfirmed && !session.user.twoFactorVerified && session.user.id) {
+      // Trusted-device skip: check if this browser has a valid 30-day trust cookie.
+      // If skip succeeds, the session is minted as verified and we redirect to /admin.
+      // Exempt: isTestAccount (already redirected above), isImpersonating, env-only admin.
+      const cookieName =
+        process.env.NODE_ENV === "production"
+          ? "__Secure-next-auth.session-token"
+          : "next-auth.session-token";
+      const cookieStore = await cookies();
+      const sessionToken = cookieStore.get(cookieName)?.value;
+      if (sessionToken) {
+        const currentToken = await decode({
+          token: sessionToken,
+          secret: process.env.NEXTAUTH_SECRET!,
+        });
+        if (currentToken) {
+          const skipped = await tryTrustedDeviceLoginSkip(
+            session.user.id,
+            currentToken as Record<string, unknown>
+          );
+          if (skipped) redirect("/admin");
+        }
+      }
+
+      // No valid trusted device — fall through to TOTP gate.
       redirect("/admin/settings/2fa/verify");
     }
 

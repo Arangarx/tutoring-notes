@@ -26,7 +26,19 @@ import { requireStudentScope } from "@/lib/student-scope";
 import { assertIsAdmin } from "@/lib/impersonation";
 import { decode } from "next-auth/jwt";
 import { cookies } from "next/headers";
+import { headers } from "next/headers";
 import { check2faVerifyRateLimit } from "@/lib/auth-rate-limit";
+import {
+  mintAdminTrustedDevice,
+  buildAdminTfaDeviceCookie,
+  revokeAllAdminTrustedDevices,
+  ADMIN_TFA_DEVICE_COOKIE,
+  listAdminTrustedDevices,
+  revokeAdminTrustedDevice,
+  clearAdminTfaDeviceCookie,
+  type TrustedDeviceListItem,
+} from "@/lib/admin-trusted-device";
+import { verifyTotpStepUp } from "@/lib/two-factor-step-up";
 
 const APP_ISSUER = "Mynk";
 const TOTP_DIGITS = 6;
@@ -247,8 +259,12 @@ export type VerifyTotpResult =
  * On success, mints a new session with twoFactorVerified=true.
  *
  * @param codeInput - 6-digit TOTP string or 8-char backup code.
+ * @param opts.rememberDevice - When true, mints a 30-day trusted-device cookie.
  */
-export async function verifyTotpCode(codeInput: string): Promise<VerifyTotpResult> {
+export async function verifyTotpCode(
+  codeInput: string,
+  opts?: { rememberDevice?: boolean }
+): Promise<VerifyTotpResult> {
   let adminId: string;
   try {
     const result = await getCurrentAdminId();
@@ -348,6 +364,31 @@ export async function verifyTotpCode(codeInput: string): Promise<VerifyTotpResul
     console.error("[tfa] mintTwoFactorVerifiedSession failed:", e);
   }
 
+  // Remember-device: mint a 30-day trusted-device cookie if opted in.
+  if (opts?.rememberDevice === true) {
+    try {
+      const headerStore = await headers();
+      const userAgent = headerStore.get("user-agent") ?? undefined;
+      const { rawToken, deviceId, expiresAt } = await mintAdminTrustedDevice(adminId, userAgent);
+      const isDev = process.env.NODE_ENV !== "production";
+      const cookieStore = await cookies();
+      cookieStore.set(ADMIN_TFA_DEVICE_COOKIE, rawToken, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: !isDev,
+        path: "/",
+        maxAge: Math.floor((expiresAt.getTime() - Date.now()) / 1000),
+      });
+      const type = isBackupCode ? " type=backup" : "";
+      console.log(
+        `[tfa] tfa=${deviceId} adminUserId=${adminId} action=device_trusted${type}`
+      );
+    } catch (e) {
+      // Non-critical — verify succeeded even if trust cookie mint fails.
+      console.error("[tfa] mintAdminTrustedDevice failed (non-critical):", e);
+    }
+  }
+
   return { ok: true };
 }
 
@@ -364,9 +405,9 @@ export type RotateStartResult =
  * The existing totpSecretEnc is NOT touched — the current authenticator remains
  * valid until rotateTotpConfirm() swaps the secrets atomically (no-lockout guarantee).
  *
- * Requires: caller must be session-2FA-verified.
+ * Requires: session-2FA-verified + fresh TOTP step-up (trusted-device skip does not satisfy).
  */
-export async function rotateTotpStart(): Promise<RotateStartResult> {
+export async function rotateTotpStart(totpCode: string): Promise<RotateStartResult> {
   const session = await getServerSession(authOptions);
   if (!session?.user?.twoFactorVerified) {
     return { ok: false, error: "Session 2FA verification required to rotate authenticator." };
@@ -380,6 +421,13 @@ export async function rotateTotpStart(): Promise<RotateStartResult> {
   } catch (e) {
     return { ok: false, error: String(e) };
   }
+
+  // Step-up: require fresh TOTP/backup code (trusted-device skip does not satisfy).
+  if (!totpCode?.trim()) {
+    return { ok: false, error: "Current 2FA code required to rotate authenticator." };
+  }
+  const stepUp = await verifyTotpStepUp(adminId, totpCode.trim());
+  if (!stepUp.ok) return { ok: false, error: stepUp.error };
 
   const row = await db.adminUser2FA.findUnique({
     where: { adminUserId: adminId },
@@ -510,6 +558,10 @@ export async function rotateTotpConfirm(token: string): Promise<RotateConfirmRes
   });
 
   console.log(`[tfa] tfa=${row.id} adminUserId=${adminId} action=rotate-confirm`);
+
+  // Cascade: rotation invalidates all trusted devices (new authenticator = new trust baseline).
+  await revokeAllAdminTrustedDevices(adminId);
+
   return { ok: true, backupCodes: codes.map((c) => c.plaintext) };
 }
 
@@ -525,9 +577,9 @@ export type RegenBackupCodesResult =
  * Deletes all existing codes, generates 10 fresh ones, bcrypt-hashes them,
  * and returns the plaintext codes (shown once — never returned again).
  *
- * Requires: caller must be session-2FA-verified.
+ * Requires: session-2FA-verified + fresh TOTP step-up (trusted-device skip does not satisfy).
  */
-export async function regenerateBackupCodes(): Promise<RegenBackupCodesResult> {
+export async function regenerateBackupCodes(totpCode: string): Promise<RegenBackupCodesResult> {
   const session = await getServerSession(authOptions);
   if (!session?.user?.twoFactorVerified) {
     return { ok: false, error: "Session 2FA verification required to regenerate backup codes." };
@@ -541,6 +593,13 @@ export async function regenerateBackupCodes(): Promise<RegenBackupCodesResult> {
   } catch (e) {
     return { ok: false, error: String(e) };
   }
+
+  // Step-up: require fresh TOTP/backup code.
+  if (!totpCode?.trim()) {
+    return { ok: false, error: "Current 2FA code required to regenerate backup codes." };
+  }
+  const stepUp = await verifyTotpStepUp(adminId, totpCode.trim());
+  if (!stepUp.ok) return { ok: false, error: stepUp.error };
 
   const row = await db.adminUser2FA.findUnique({
     where: { adminUserId: adminId },
@@ -570,10 +629,11 @@ export type AdminResetResult =
 /**
  * ADMIN-only: deletes the target user's AdminUser2FA row (and backup codes via CASCADE).
  * The target must re-enroll on next login.
- * Caller must have role=ADMIN (enforced via assertIsAdmin()).
+ * Caller must have role=ADMIN (enforced via assertIsAdmin()) + fresh TOTP step-up.
  */
 export async function adminResetTwoFactor(
-  targetAdminUserId: string
+  targetAdminUserId: string,
+  totpCode: string
 ): Promise<AdminResetResult> {
   let actingAdminId: string;
   try {
@@ -585,9 +645,19 @@ export async function adminResetTwoFactor(
 
   if (!targetAdminUserId) return { ok: false, error: "targetAdminUserId is required." };
 
+  // Step-up: require fresh TOTP/backup code from acting admin (high-privilege action).
+  if (!totpCode?.trim()) {
+    return { ok: false, error: "Your current 2FA code is required to reset another user's 2FA." };
+  }
+  const stepUp = await verifyTotpStepUp(actingAdminId, totpCode.trim());
+  if (!stepUp.ok) return { ok: false, error: stepUp.error };
+
   const deleted = await db.adminUser2FA.deleteMany({
     where: { adminUserId: targetAdminUserId },
   });
+
+  // Cascade: 2FA reset revokes all trusted devices for the target.
+  await revokeAllAdminTrustedDevices(targetAdminUserId);
 
   console.log(
     `[tfa] adminUserId=${targetAdminUserId} action=reset reset-by=${actingAdminId} rows-deleted=${deleted.count}`
@@ -625,4 +695,110 @@ export async function clearPostEnrollCookie(): Promise<void> {
   } catch (_) {
     // Non-critical.
   }
+}
+
+// ---------------------------------------------------------------------------
+// Trusted device management actions (remember-device, 2026-06-13)
+// ---------------------------------------------------------------------------
+
+export type ListTrustedDevicesResult =
+  | { ok: true; devices: TrustedDeviceListItem[] }
+  | { ok: false; error: string };
+
+/**
+ * List non-revoked, non-expired trusted devices for the current admin.
+ * Returns isCurrent=true for the device matching the active cookie.
+ */
+export async function listTrustedDevices(): Promise<ListTrustedDevicesResult> {
+  let adminId: string;
+  try {
+    const result = await getCurrentAdminId();
+    adminId = result.adminId;
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+
+  const devices = await listAdminTrustedDevices(adminId);
+  return { ok: true, devices };
+}
+
+export type RevokeTrustedDeviceResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+/**
+ * Revoke a single trusted device by id (ownership-checked).
+ * If the revoked device is the current cookie's device, also clears the cookie.
+ */
+export async function revokeTrustedDevice(deviceId: string): Promise<RevokeTrustedDeviceResult> {
+  let adminId: string;
+  try {
+    const result = await getCurrentAdminId();
+    adminId = result.adminId;
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+
+  if (!deviceId) return { ok: false, error: "deviceId is required." };
+
+  await revokeAdminTrustedDevice(deviceId, adminId);
+
+  // If the revoked device matches the current cookie, clear it.
+  const isDev = process.env.NODE_ENV !== "production";
+  const cookieStore = await cookies();
+  const rawToken = cookieStore.get(ADMIN_TFA_DEVICE_COOKIE)?.value;
+  if (rawToken) {
+    const secret = process.env.ADMIN_TFA_DEVICE_HMAC_SECRET;
+    if (secret) {
+      try {
+        const { hmacToken } = await import("@/lib/crypto/session-tokens");
+        const hash = hmacToken(rawToken, secret);
+        const row = await db.adminTrustedDevice.findUnique({
+          where: { tokenHash: hash },
+          select: { id: true },
+        });
+        if (row?.id === deviceId) {
+          cookieStore.set(ADMIN_TFA_DEVICE_COOKIE, "", {
+            httpOnly: true, sameSite: "lax", secure: !isDev, path: "/", maxAge: 0,
+          });
+        }
+      } catch {
+        // Non-critical.
+      }
+    }
+  }
+
+  return { ok: true };
+}
+
+export type RevokeAllTrustedDevicesResult =
+  | { ok: true; count: number }
+  | { ok: false; error: string };
+
+/**
+ * Revoke all trusted devices for the current admin + clear the trust cookie.
+ */
+export async function revokeAllTrustedDevices(): Promise<RevokeAllTrustedDevicesResult> {
+  let adminId: string;
+  try {
+    const result = await getCurrentAdminId();
+    adminId = result.adminId;
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+
+  const count = await revokeAllAdminTrustedDevices(adminId);
+
+  // Clear the trust cookie.
+  const isDev = process.env.NODE_ENV !== "production";
+  try {
+    const cookieStore = await cookies();
+    cookieStore.set(ADMIN_TFA_DEVICE_COOKIE, "", {
+      httpOnly: true, sameSite: "lax", secure: !isDev, path: "/", maxAge: 0,
+    });
+  } catch {
+    // Non-critical.
+  }
+
+  return { ok: true, count };
 }

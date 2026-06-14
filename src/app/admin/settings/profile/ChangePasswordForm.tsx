@@ -7,7 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { changePassword, sendPasswordResetEmail } from "./actions";
 
-export default function ChangePasswordForm() {
+interface Props {
+  /** When true, a TOTP step-up field is shown above the submit button. */
+  has2FA?: boolean;
+}
+
+export default function ChangePasswordForm({ has2FA }: Props) {
   const [state, formAction] = useActionState(changePassword, null);
   const formRef = useRef<HTMLFormElement>(null);
   const [resetMsg, setResetMsg] = useState<string | null>(null);
@@ -53,6 +58,25 @@ export default function ChangePasswordForm() {
             required
           />
         </div>
+
+        {has2FA && (
+          <div className="space-y-1.5">
+            <Label htmlFor="totp-code">2FA code</Label>
+            <Input
+              id="totp-code"
+              name="totpCode"
+              type="text"
+              inputMode="numeric"
+              maxLength={8}
+              placeholder="000000"
+              autoComplete="one-time-code"
+              className="w-36 font-mono tracking-widest"
+            />
+            <p className="text-xs text-muted-foreground">
+              Enter your authenticator code or backup code to confirm the password change.
+            </p>
+          </div>
+        )}
 
         {state?.error ? (
           <p className="text-sm text-destructive" role="alert">

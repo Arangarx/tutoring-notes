@@ -105,6 +105,21 @@ const EnvSchema = z.object({
     z.string().optional()
   ),
   /**
+   * HMAC-SHA-256 signing secret for AdminTrustedDevice tokens (2FA remember-device).
+   * 32+ bytes random. Generate: node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+   * Optional at build time — fails-closed at request time if unset:
+   *   mintAdminTrustedDevice throws; validateAdminTrustedDevice returns null → TOTP required.
+   * REQUIRED in production for the remember-device feature to work.
+   * Rotation: rotating this secret instantly invalidates ALL existing trusted-device rows
+   *   (stored tokenHash values were computed with the old secret). All users will be prompted
+   *   for TOTP on their next login. Plan a maintenance window or notify users if rotating.
+   *   See docs/PLATFORM-ASSUMPTIONS.md for the full rotation story.
+   */
+  ADMIN_TFA_DEVICE_HMAC_SECRET: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().optional()
+  ),
+  /**
    * AES-256-GCM key for AccountHolder TOTP secret encryption (Phase 6).
    * Isolated from TOTP_ENCRYPTION_KEY so rotating tutor 2FA doesn't affect parent 2FA.
    * Reserved in Phase 2a so Phase 6 executor doesn't pick a conflicting name.
@@ -151,6 +166,7 @@ const parsed = EnvSchema.safeParse({
   WHITEBOARD_SYNC_URL: process.env.WHITEBOARD_SYNC_URL,
   AH_SESSION_HMAC_SECRET: process.env.AH_SESSION_HMAC_SECRET,
   LEARNER_SESSION_HMAC_SECRET: process.env.LEARNER_SESSION_HMAC_SECRET,
+  ADMIN_TFA_DEVICE_HMAC_SECRET: process.env.ADMIN_TFA_DEVICE_HMAC_SECRET,
   AH_TOTP_ENCRYPTION_KEY: process.env.AH_TOTP_ENCRYPTION_KEY,
 });
 

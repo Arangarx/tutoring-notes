@@ -1,25 +1,38 @@
 "use client";
 
 /**
- * 2FA Management View — Identity Phase 1.
+ * 2FA Management View — Identity Phase 1 + remember-device (2026-06-13).
  *
  * Rendered when the user is enrolled + confirmed + session-2FA-verified.
  * Provides:
  *   - Status: 2FA active, enrolled date, remaining backup codes count
- *   - Rotate authenticator: inline QR flow with no-lockout (old secret stays valid
- *     until new code is confirmed; see rotateTotpStart/rotateTotpConfirm in actions.ts)
+ *   - Trusted devices: list + per-device revoke + forget-all
+ *   - Rotate authenticator: inline QR flow with no-lockout
  *   - Regenerate backup codes: invalidates old set, shows new ones once
  *   - Admin reset: ADMIN-only — reset own or another admin's 2FA
  */
 
-import { useState, useTransition, useCallback } from "react";
+import { useState, useTransition, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   rotateTotpStart,
   rotateTotpConfirm,
   regenerateBackupCodes,
   adminResetTwoFactor,
+  listTrustedDevices,
+  revokeTrustedDevice,
+  revokeAllTrustedDevices,
+  type ListTrustedDevicesResult,
 } from "./actions";
+
+interface TrustedDevice {
+  id: string;
+  deviceLabel: string | null;
+  createdAt: Date | string;
+  lastUsedAt: Date | string;
+  expiresAt: Date | string;
+  isCurrent: boolean;
+}
 
 interface Props {
   enrolledAt: string;       // ISO string
@@ -30,6 +43,7 @@ interface Props {
 
 type ViewState =
   | "idle"
+  | "step-up"
   | "rotating-loading"
   | "rotating-show-qr"
   | "rotating-confirming"
@@ -59,12 +73,24 @@ export function TwoFactorManageView({
   const [newBackupCodes, setNewBackupCodes] = useState<string[]>([]);
   const [codeCopied, setCodeCopied] = useState(false);
 
+  // Step-up state (shared across rotate/regen/reset actions)
+  const [stepUpCode, setStepUpCode] = useState("");
+  const [stepUpFor, setStepUpFor] = useState<"rotate" | "regen" | "reset-self" | "reset-other" | null>(null);
+
   // Regen state
   const [regenCodes, setRegenCodes] = useState<string[]>([]);
   const [regenCopied, setRegenCopied] = useState(false);
 
   // Admin reset state
   const [resetTargetId, setResetTargetId] = useState("");
+
+  // Trusted devices state
+  const [trustedDevices, setTrustedDevices] = useState<TrustedDevice[]>([]);
+  const [devicesLoaded, setDevicesLoaded] = useState(false);
+  const [devicesError, setDevicesError] = useState("");
+  const [revokingDeviceId, setRevokingDeviceId] = useState<string | null>(null);
+  const [showForgetAllConfirm, setShowForgetAllConfirm] = useState(false);
+  const [forgettingAll, setForgettingAll] = useState(false);
 
   const enrolledDate = new Date(enrolledAt).toLocaleDateString("en-US", {
     year: "numeric",
@@ -73,20 +99,71 @@ export function TwoFactorManageView({
   });
 
   // ---------------------------------------------------------------------------
+  // Trusted devices
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    if (view !== "idle" || devicesLoaded) return;
+    listTrustedDevices().then((result: ListTrustedDevicesResult) => {
+      if (result.ok) {
+        setTrustedDevices(result.devices as TrustedDevice[]);
+      } else {
+        setDevicesError(result.error);
+      }
+      setDevicesLoaded(true);
+    });
+  }, [view, devicesLoaded]);
+
+  function handleRevokeDevice(deviceId: string) {
+    setRevokingDeviceId(deviceId);
+    startTransition(async () => {
+      const result = await revokeTrustedDevice(deviceId);
+      setRevokingDeviceId(null);
+      if (!result.ok) {
+        setDevicesError(result.error);
+        return;
+      }
+      setTrustedDevices((prev) => prev.filter((d) => d.id !== deviceId));
+    });
+  }
+
+  function handleForgetAll() {
+    setForgettingAll(true);
+    startTransition(async () => {
+      const result = await revokeAllTrustedDevices();
+      setForgettingAll(false);
+      setShowForgetAllConfirm(false);
+      if (!result.ok) {
+        setDevicesError(result.error);
+        return;
+      }
+      setTrustedDevices([]);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // Rotate authenticator
   // ---------------------------------------------------------------------------
   function handleRotateStart() {
     setError("");
+    setStepUpCode("");
+    setStepUpFor("rotate");
+    setView("step-up" as ViewState);
+  }
+
+  function handleRotateStartWithCode(code: string) {
     setView("rotating-loading");
     startTransition(async () => {
-      const result = await rotateTotpStart();
+      const result = await rotateTotpStart(code);
       if (!result.ok) {
         setError(result.error);
+        setStepUpFor(null);
         setView("idle");
         return;
       }
       setRotateQr(result.qrDataUri);
       setRotateSecret(result.secret);
+      setStepUpFor(null);
       setView("rotating-show-qr");
     });
   }
@@ -138,15 +215,23 @@ export function TwoFactorManageView({
   // ---------------------------------------------------------------------------
   function handleRegenStart() {
     setError("");
+    setStepUpCode("");
+    setStepUpFor("regen");
+    setView("step-up" as ViewState);
+  }
+
+  function handleRegenWithCode(code: string) {
     setView("regen-loading");
     startTransition(async () => {
-      const result = await regenerateBackupCodes();
+      const result = await regenerateBackupCodes(code);
       if (!result.ok) {
         setError(result.error);
+        setStepUpFor(null);
         setView("idle");
         return;
       }
       setRegenCodes(result.backupCodes);
+      setStepUpFor(null);
       setView("regen-done");
     });
   }
@@ -173,20 +258,23 @@ export function TwoFactorManageView({
   // ---------------------------------------------------------------------------
   function handleResetSelf() {
     setError("");
-    setView("reset-confirm");
+    setStepUpCode("");
+    setStepUpFor("reset-self");
+    setView("step-up" as ViewState);
   }
 
-  function handleResetConfirm() {
-    setError("");
+  function handleResetSelfWithCode(code: string) {
     setView("reset-loading");
     startTransition(async () => {
-      const result = await adminResetTwoFactor(userId);
+      const result = await adminResetTwoFactor(userId, code);
       if (!result.ok) {
         setError(result.error);
-        setView("reset-confirm");
+        setStepUpFor(null);
+        setView("idle");
         return;
       }
       console.log("[tfa] self-reset complete; redirecting to setup");
+      setStepUpFor(null);
       setView("reset-done");
     });
   }
@@ -200,14 +288,22 @@ export function TwoFactorManageView({
   function handleResetTargetSubmit() {
     if (!resetTargetId.trim()) return;
     setError("");
+    setStepUpCode("");
+    setStepUpFor("reset-other");
+    setView("step-up" as ViewState);
+  }
+
+  function handleResetOtherWithCode(code: string) {
     setView("reset-loading");
     startTransition(async () => {
-      const result = await adminResetTwoFactor(resetTargetId.trim());
+      const result = await adminResetTwoFactor(resetTargetId.trim(), code);
       if (!result.ok) {
         setError(result.error);
-        setView("reset-target");
+        setStepUpFor(null);
+        setView("idle");
         return;
       }
+      setStepUpFor(null);
       setView("reset-done");
     });
   }
@@ -226,6 +322,70 @@ export function TwoFactorManageView({
             {c}
           </code>
         ))}
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Step-up TOTP prompt (shared for rotate/regen/reset-self/reset-other)
+  // ---------------------------------------------------------------------------
+  if (view === ("step-up" as ViewState)) {
+    const labels: Record<NonNullable<typeof stepUpFor>, string> = {
+      "rotate": "rotate your authenticator",
+      "regen": "regenerate backup codes",
+      "reset-self": "reset your own 2FA",
+      "reset-other": "reset another admin's 2FA",
+    };
+    const label = stepUpFor ? labels[stepUpFor] : "continue";
+
+    function handleStepUpConfirm() {
+      const code = stepUpCode.trim();
+      if (!code) return;
+      if (stepUpFor === "rotate") handleRotateStartWithCode(code);
+      else if (stepUpFor === "regen") handleRegenWithCode(code);
+      else if (stepUpFor === "reset-self") handleResetSelfWithCode(code);
+      else if (stepUpFor === "reset-other") handleResetOtherWithCode(code);
+    }
+
+    const canSubmit = stepUpCode.trim().length >= 6 && !isPending;
+
+    return (
+      <div className="space-y-4">
+        <div className="rounded-md border border-border p-4">
+          <h2 className="text-base font-semibold mb-1">Confirm your identity</h2>
+          <p className="text-sm text-muted-foreground mb-3">
+            Enter your 6-digit authenticator code or 8-character backup code to {label}.
+          </p>
+          {error && <p className="text-sm text-destructive mb-2">{error}</p>}
+          <form onSubmit={(e) => { e.preventDefault(); handleStepUpConfirm(); }} className="flex gap-2 items-center">
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={8}
+              placeholder="000000"
+              value={stepUpCode}
+              onChange={(e) => setStepUpCode(e.target.value.replace(/[^0-9A-Za-z]/g, "").slice(0, 8))}
+              className="border rounded-md px-3 py-2 text-sm w-36 font-mono tracking-widest"
+              autoComplete="one-time-code"
+              autoFocus
+            />
+            <button
+              type="submit"
+              disabled={!canSubmit}
+              className="bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+            >
+              {isPending ? "Verifying…" : "Continue"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setStepUpFor(null); setView("idle"); setError(""); }}
+              disabled={isPending}
+              className="text-sm text-muted-foreground underline disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </form>
+        </div>
       </div>
     );
   }
@@ -397,36 +557,11 @@ export function TwoFactorManageView({
   // Admin reset views
   // ---------------------------------------------------------------------------
   if (view === "reset-confirm") {
-    return (
-      <div className="space-y-4">
-        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4">
-          <h2 className="text-base font-semibold mb-2">Reset your own 2FA?</h2>
-          <p className="text-sm text-muted-foreground mb-3">
-            This will delete your 2FA enrollment and backup codes. You will need to re-enroll
-            on your next session. This action cannot be undone.
-          </p>
-          {error && <p className="text-sm text-destructive mb-2">{error}</p>}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={handleResetConfirm}
-              disabled={isPending}
-              className="bg-destructive text-destructive-foreground rounded-md px-4 py-2 text-sm font-medium hover:bg-destructive/90 disabled:opacity-50"
-            >
-              {isPending ? "Resetting…" : "Yes, reset my 2FA"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setView("idle")}
-              disabled={isPending}
-              className="text-sm text-muted-foreground underline disabled:opacity-50"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+    // This state is no longer reachable (reset-self now goes directly to step-up).
+    // Kept for ViewState completeness; redirect to step-up.
+    setView("step-up" as ViewState);
+    setStepUpFor("reset-self");
+    return null;
   }
 
   if (view === "reset-target") {
@@ -513,6 +648,98 @@ export function TwoFactorManageView({
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
+
+      {/* Trusted devices */}
+      <div className="space-y-3">
+        <h2 className="text-sm font-semibold">Trusted devices</h2>
+        <p className="text-sm text-muted-foreground">
+          Browsers where you checked &ldquo;Remember this device&rdquo; — these skip the
+          verification code at login for 30 days.
+        </p>
+        {devicesError && <p className="text-sm text-destructive">{devicesError}</p>}
+        {devicesLoaded && trustedDevices.length === 0 && (
+          <p className="text-sm text-muted-foreground italic">No trusted devices.</p>
+        )}
+        {trustedDevices.length > 0 && (
+          <div className="space-y-2">
+            {trustedDevices.map((device) => (
+              <div
+                key={device.id}
+                className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-sm"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-mono text-xs text-muted-foreground">
+                    {device.deviceLabel ?? "Unknown device"}
+                    {device.isCurrent && (
+                      <span className="ml-2 rounded bg-primary/10 px-1 py-0.5 text-[10px] font-semibold text-primary">
+                        this device
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Last used{" "}
+                    {new Date(device.lastUsedAt).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}{" "}
+                    · Expires{" "}
+                    {new Date(device.expiresAt).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleRevokeDevice(device.id)}
+                  disabled={isPending || revokingDeviceId === device.id}
+                  className="shrink-0 text-xs text-destructive underline hover:no-underline disabled:opacity-50"
+                >
+                  {revokingDeviceId === device.id ? "Revoking…" : "Revoke"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {trustedDevices.length > 0 && (
+          <div>
+            {showForgetAllConfirm ? (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Forget all devices?</span>
+                <button
+                  type="button"
+                  onClick={handleForgetAll}
+                  disabled={forgettingAll}
+                  className="text-sm text-destructive underline hover:no-underline disabled:opacity-50"
+                >
+                  {forgettingAll ? "Forgetting…" : "Yes, forget all"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowForgetAllConfirm(false)}
+                  disabled={forgettingAll}
+                  className="text-sm text-muted-foreground underline hover:no-underline disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowForgetAllConfirm(true)}
+                disabled={isPending}
+                className="text-sm text-muted-foreground underline hover:no-underline disabled:opacity-50"
+              >
+                Forget all trusted devices
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      <hr className="border-border" />
 
       {/* Rotate authenticator */}
       <div className="space-y-1">

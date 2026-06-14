@@ -6,6 +6,9 @@ import { authOptions } from "@/auth-options";
 import { getAdminByEmail, updateAdminDisplayName, updateAdminPassword, verifyPassword } from "@/lib/auth-db";
 import { requestPasswordReset } from "@/lib/password-reset";
 import { requireAdminSession } from "@/lib/require-admin";
+import { revokeAllAdminTrustedDevices } from "@/lib/admin-trusted-device";
+import { verifyTotpStepUp } from "@/lib/two-factor-step-up";
+import { db } from "@/lib/db";
 
 const MIN_PASSWORD_LEN = 8;
 
@@ -40,6 +43,7 @@ export async function changePassword(
   const current = String(formData.get("currentPassword") ?? "");
   const nextPass = String(formData.get("newPassword") ?? "");
   const confirm = String(formData.get("confirmPassword") ?? "");
+  const totpCode = String(formData.get("totpCode") ?? "").trim();
 
   if (!current || !nextPass || !confirm) {
     return { error: "Fill in current password, new password, and confirmation." };
@@ -59,7 +63,27 @@ export async function changePassword(
     return { error: "Current password is incorrect." };
   }
 
+  // Step-up: if the admin has 2FA enrolled, require a fresh TOTP code.
+  // Trusted-device skip does not satisfy password-change step-up.
+  const adminRow = await db.adminUser.findUnique({
+    where: { email },
+    select: { id: true, twoFactor: { select: { id: true } } },
+  });
+  if (adminRow?.twoFactor) {
+    if (!totpCode) {
+      return { error: "Your 2FA code is required to change your password." };
+    }
+    const stepUp = await verifyTotpStepUp(adminRow.id, totpCode);
+    if (!stepUp.ok) return { error: stepUp.error };
+  }
+
   await updateAdminPassword(email, nextPass);
+
+  // Cascade: password change revokes all trusted devices for this admin.
+  if (adminRow) {
+    await revokeAllAdminTrustedDevices(adminRow.id);
+  }
+
   revalidatePath("/admin/settings/profile");
 
   return { ok: true };

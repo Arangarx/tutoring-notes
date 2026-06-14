@@ -19,6 +19,7 @@ import {
   mintAdminSession,
 } from "@/lib/impersonation";
 import { tutorExperienceLandingPath } from "@/lib/admin-routing";
+import { verifyTotpStepUp } from "@/lib/two-factor-step-up";
 
 // ---------------------------------------------------------------------------
 // startImpersonation
@@ -31,12 +32,22 @@ import { tutorExperienceLandingPath } from "@/lib/admin-routing";
  *  - assertIsRealAdmin(): rejects test accounts and already-impersonating sessions
  *    (during impersonation, scope.adminId = test account id → isTestAccount=true → throw)
  *  - target must be isTestAccount=true
+ *  - TOTP step-up (B1): fresh TOTP/backup code required — trusted-device skip does NOT satisfy
+ *    impersonation start (highest-privilege action)
  *  - idempotency: if an open ImpersonationLog row already exists for this
  *    (adminUserId, impersonatedUserId) pair, re-mints and redirects without creating
  *    a second row (Q6=A)
  */
-export async function startImpersonation(targetUserId: string): Promise<void> {
+export async function startImpersonation(targetUserId: string, totpCode: string): Promise<void> {
   const admin = await assertIsRealAdmin();
+
+  // B1: Step-up TOTP required before impersonation — highest-privilege action.
+  // A trusted-device cookie that granted twoFactorVerified=true at login does NOT satisfy this.
+  if (!totpCode?.trim()) {
+    throw new Error("Your 2FA code is required to start impersonation.");
+  }
+  const stepUp = await verifyTotpStepUp(admin.adminId, totpCode.trim());
+  if (!stepUp.ok) throw new Error(stepUp.error);
 
   const target = await db.adminUser.findUnique({
     where: { id: targetUserId },

@@ -24,6 +24,7 @@ export default async function ProfileSettingsPage() {
     );
   }
   const admin = await getAdminByEmail(email);
+  const has2FA = !!(admin && session?.user?.twoFactorVerified);
 
   return (
     <AdminPageShell
@@ -58,7 +59,7 @@ export default async function ProfileSettingsPage() {
             title="Password"
             description="Change your sign-in password or request a reset link."
           >
-            <ChangePasswordForm />
+            <ChangePasswordForm has2FA={has2FA} />
           </AdminSectionCard>
         ) : (
           <AdminSectionCard title="Password">
