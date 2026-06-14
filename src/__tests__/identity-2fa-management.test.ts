@@ -386,8 +386,9 @@ describe("adminResetTwoFactor — ADMIN-only guard (source check)", () => {
     const content = fs.readFileSync(actionsPath, "utf-8");
     const resetIdx = content.indexOf("async function adminResetTwoFactor");
     expect(resetIdx).toBeGreaterThan(-1);
-    // Use a larger window (800 chars) to encompass the full function body.
-    const section = content.slice(resetIdx, resetIdx + 800);
+    // Use a larger window (1500 chars) to encompass the full function body
+    // (step-up TOTP verification was added before the mutation, expanding the body).
+    const section = content.slice(resetIdx, resetIdx + 1500);
     // assertIsAdmin must appear before the deleteMany call.
     const assertIdx = section.indexOf("assertIsAdmin");
     const deleteIdx = section.indexOf("deleteMany");

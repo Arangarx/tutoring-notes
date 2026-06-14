@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * 2FA Verify Client Component — Identity Phase 1.
+ * 2FA Verify Client Component — Identity Phase 1 + remember-device (2026-06-13).
  * Shown when a non-test TUTOR/ADMIN is enrolled but has not yet verified this session.
  */
 
@@ -10,6 +10,7 @@ import { verifyTotpCode } from "../actions";
 
 export function TwoFactorVerifyForm({ callbackUrl }: { callbackUrl: string }) {
   const [codeInput, setCodeInput] = useState("");
+  const [rememberDevice, setRememberDevice] = useState(false);
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
 
@@ -18,7 +19,7 @@ export function TwoFactorVerifyForm({ callbackUrl }: { callbackUrl: string }) {
     if (!input) return;
     setError("");
     startTransition(async () => {
-      const result = await verifyTotpCode(input);
+      const result = await verifyTotpCode(input, { rememberDevice });
       if (!result.ok) {
         setError(result.error);
         return;
@@ -64,6 +65,19 @@ export function TwoFactorVerifyForm({ callbackUrl }: { callbackUrl: string }) {
           {isPending ? "Verifying…" : "Verify"}
         </button>
       </div>
+      <label className="flex items-center gap-2 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={rememberDevice}
+          onChange={(e) => setRememberDevice(e.target.checked)}
+          className="rounded border-border"
+        />
+        <span className="text-sm">Remember this device for 30 days</span>
+      </label>
+      <p className="text-xs text-muted-foreground -mt-2">
+        Skip the verification code on this browser when you sign in again.
+        Don&apos;t use on shared computers.
+      </p>
     </div>
   );
 }
