@@ -21,6 +21,20 @@ Amended per [`2fa-remember-device-5axis-2026-06-13.md`](2fa-remember-device-5axi
 | **SF-5** | §7 — step-up logs bind `tfa=<AdminUser2FA.id>` |
 | **SF-6** | §8 — five new tests TD-15–TD-19 (rate limit, cap eviction, missing secret, `isCurrent`, mint throw) |
 
+### Rev 3 — Impersonation step-up removed (2026-06-14)
+
+Decision (Andrew, 2026-06-14): B1 (impersonation TOTP step-up) reverted.
+
+**Rationale:** Impersonation is hard-restricted to `isTestAccount=true` test shells (server-side guard in `assertIsRealAdmin()` + `isTestAccount` target check — it cannot assume real tutor/parent/learner identities). This makes it a low-stakes dev/operator tool rather than a high-privilege identity takeover. Requiring a fresh TOTP code nagged the admin on every smoke/dev cycle with no meaningful security gain for a test-only path.
+
+**What changed:**
+- `startImpersonation` signature reverted to `(targetUserId: string)` — no `totpCode` param.
+- `ImpersonateButton.tsx` (B1-added client TOTP prompt) removed; callers rewired to the pre-B1 `<form action={startImpersonation.bind(null, id)}>` pattern.
+- TD-14 test removed from `admin-trusted-device.test.ts`; `impersonation-b.test.ts` updated to match new signature.
+- Step-up listed as `startImpersonation` in §6 acceptance criteria is struck — the **other four** ops (password change, rotate start, backup-code regen, self/other 2FA reset) remain fully intact.
+
+**If real-account impersonation is ever built:** MANDATORY step-up MUST be reinstated as the first gate. See backlog item **BL-IMP-REAL** (`docs/BACKLOG.md`).
+
 ---
 
 ## Summary
@@ -362,7 +376,7 @@ Reuse validation logic from `verifyTotpCode` (extract shared internal `validateT
 | **Regenerate backup codes** | `actions.ts` → `regenerateBackupCodes` | `twoFactorVerified` | Require `totpCode` param + step-up |
 | **Self-reset 2FA** | `actions.ts` → `adminResetTwoFactor` when `targetAdminUserId === actingAdminId` | page gate only | Require `totpCode` param + step-up before delete |
 | **Admin reset another user's 2FA** | `adminResetTwoFactor` (other target) | `assertIsAdmin()` | Require acting admin `totpCode` + step-up (high privilege) |
-| **Start impersonation** | `src/lib/impersonation.ts` → `startImpersonation` (or its triggering server action / admin UI entry point) | `assertIsAdmin()` only | Require acting admin `totpCode` param; call `verifyTotpStepUp` **before** `mintImpersonationSession`. Highest-privilege action — a trusted-device login skip must not allow impersonation without fresh TOTP. |
+| ~~**Start impersonation**~~ | ~~`src/lib/impersonation.ts` → `startImpersonation`~~ | ~~`assertIsAdmin()` only~~ | ~~**REMOVED Rev 3**~~ — impersonation is hard-restricted to `isTestAccount=true` test shells; step-up intentionally dropped as a dev-cycle QoL improvement (see Rev 3 note above). MUST return when real-account impersonation lands (BL-IMP-REAL). |
 
 **NOT step-up gated (by design):**
 
@@ -375,9 +389,9 @@ Reuse validation logic from `verifyTotpCode` (extract shared internal `validateT
 - `ChangePasswordForm.tsx` — add TOTP code field (6-digit) above submit
 - `TwoFactorManageView.tsx` — collect TOTP before Rotate / Regen / Self-reset buttons fire
 - Admin-reset-another-user dialog — TOTP field for acting admin
-- Impersonation start UI/dialog — TOTP field for acting admin before `startImpersonation` fires
+- ~~Impersonation start UI/dialog — TOTP field for acting admin before `startImpersonation` fires~~ **REMOVED Rev 3**
 
-**Trusted-device cookie state is irrelevant** — step-up always demands a code in the request body. A user who reached `twoFactorVerified=true` via trusted-device skip (never entered a code this session) must still pass step-up for every row in the table above, including impersonation.
+**Trusted-device cookie state is irrelevant** — step-up always demands a code in the request body. A user who reached `twoFactorVerified=true` via trusted-device skip (never entered a code this session) must still pass step-up for the remaining rows in the table above (password change, rotate start, backup-code regen, self/other 2FA reset).
 
 ---
 
@@ -461,9 +475,9 @@ Mock `db`, `cookies`, `headers` — follow patterns in `src/__tests__/identity-2
 ### Sensitive ops guardrail (BLOCKER acceptance gates)
 
 - [ ] With valid trusted device + skipped login, **Rotate / Regen / Change password / Self-reset** still demand TOTP (TD-10, TD-11)
-- [ ] **B1 — Impersonation:** With trusted-device skip (`twoFactorVerified=true` without entering TOTP this session), **start impersonation** still demands fresh TOTP step-up (TD-14)
+- [x] ~~**B1 — Impersonation:** With trusted-device skip (`twoFactorVerified=true` without entering TOTP this session), **start impersonation** still demands fresh TOTP step-up (TD-14)~~ **REMOVED Rev 3** — impersonation is test-only (`isTestAccount=true` hard guard); step-up returns when real-account impersonation lands (BL-IMP-REAL)
 - [ ] **B3 — Rate limit:** `verifyTotpStepUp` enforces `check2faVerifyRateLimit` on the shared per-user bucket before TOTP validation (TD-15; TD-10/TD-11 also assert call order)
-- [ ] Trusted-device skip does **not** bypass step-up for any §6 table row
+- [ ] Trusted-device skip does **not** bypass step-up for any remaining §6 table row (password change, rotate start, backup-code regen, self/other 2FA reset)
 
 ### Skip path resilience (BLOCKER acceptance gate)
 

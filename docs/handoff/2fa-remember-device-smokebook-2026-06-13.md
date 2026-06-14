@@ -29,10 +29,10 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 **Ignore this run:** Cosmetic styling of the checkbox; the exact label text.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: I don't see the key you said to look for.  I've attached a shot of the cookies I do see.**
 
 ---
 
@@ -45,10 +45,10 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 **Ignore this run:** Any flash/redirect animation through the verify URL; minor latency.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: It keeps taking me back to the 2fa entry screen**
 
 ---
 
@@ -61,7 +61,7 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 **Ignore this run:** Exact label formatting; date/time display format.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
 **Notes:**
@@ -180,11 +180,11 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 
 ---
 
-### 11. Sensitive op step-up — impersonation start (B1)
+### 11. Impersonation start — no TOTP prompt (step-up intentionally removed, Rev 3)
 
-**Action:** While logged in with a trusted device (TOTP was skipped at login), navigate to the admin dev-tools or test-accounts panel. Attempt to start impersonation of a test account. A TOTP code input should appear in the UI before impersonation fires.
+**Action:** While logged in with a trusted device (TOTP was skipped at login), navigate to the admin dev-tools or test-accounts panel. Click "Log in as" on a test account.
 
-**Expect:** The impersonation modal/inline prompt collects a fresh TOTP code. Correct code starts impersonation. Empty or wrong code shows an error without starting impersonation. A trusted-device cookie does NOT satisfy impersonation step-up.
+**Expect:** Impersonation starts **directly** — no TOTP code input or modal appears. You are taken to the tutor landing. This is expected: impersonation is hard-restricted to `isTestAccount=true` test shells and the TOTP step-up was intentionally removed (Rev 3, 2026-06-14). See `docs/BACKLOG.md` BL-IMP-REAL for when it returns.
 
 **Ignore this run:** Nothing.
 
@@ -230,7 +230,7 @@ sensitive-op step-up for every gated action, and the cross-device negative (trus
 
 ## Cross-branch / post-merge
 
-No cross-branch items for this feature. After merge to `v1-redesign` or `master`, re-run tests 1–2 and 11 to confirm skip and impersonation step-up survive the merge.
+No cross-branch items for this feature. After merge to `v1-redesign` or `master`, re-run tests 1–2 to confirm skip survives the merge.
 
 ---
 

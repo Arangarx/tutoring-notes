@@ -1,12 +1,11 @@
 /**
  * SEC-1 Dispatch C — Test accounts list + "Log in as" on the real-admin dashboard.
- *
- * Uses ImpersonateButton (client component) to prompt for TOTP step-up (B1, 2026-06-13).
  */
 
 import { db } from "@/lib/db";
 import { assertIsRealAdmin } from "@/lib/impersonation";
-import { ImpersonateButton } from "@/app/admin/ImpersonateButton";
+import { startImpersonation } from "@/app/admin/actions/impersonate";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export async function AdminTestAccountsPanel() {
   await assertIsRealAdmin();
@@ -39,7 +38,9 @@ export async function AdminTestAccountsPanel() {
               Created {acct.createdAt.toLocaleDateString()}
             </div>
           </div>
-          <ImpersonateButton targetUserId={acct.id} />
+          <form action={startImpersonation.bind(null, acct.id)}>
+            <SubmitButton label="Log in as" pendingLabel="Opening…" variant="default" />
+          </form>
         </li>
       ))}
     </ul>

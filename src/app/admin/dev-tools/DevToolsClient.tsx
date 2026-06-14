@@ -15,7 +15,7 @@ import {
   actionDeleteAllFixtures,
   actionRegenerateClaimInvite,
 } from "./actions";
-import { ImpersonateButton } from "@/app/admin/ImpersonateButton";
+import { startImpersonation } from "@/app/admin/actions/impersonate";
 import {
   FIXTURE_TUTOR_PASSWORD,
   FIXTURE_PARENT_PASSWORD,
@@ -395,7 +395,15 @@ export function DevToolsClient({ initialTutors, initialFamilies }: DevToolsClien
                       </span>
                     </div>
                     <div className="flex gap-2">
-                      <ImpersonateButton targetUserId={t.id} />
+                      <form action={startImpersonation.bind(null, t.id)}>
+                        <button
+                          type="submit"
+                          disabled={isPending}
+                          className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 min-h-8"
+                        >
+                          Log in as
+                        </button>
+                      </form>
                       <Button
                         variant="destructive"
                         size="sm"

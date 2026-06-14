@@ -130,11 +130,11 @@ describe("Blocker #10 — startImpersonation blocked for test-account session", 
       "@/lib/impersonation"
     );
 
-    // assertIsRealAdmin() throws before TOTP check; totpCode irrelevant here.
-    await expect(startImpersonation("some-target-id", "")).rejects.toThrow(
+    // assertIsRealAdmin() throws before any target check; totpCode irrelevant here.
+    await expect(startImpersonation("some-target-id")).rejects.toThrow(
       ImpersonationForbiddenError
     );
-    await expect(startImpersonation("some-target-id", "")).rejects.toThrow(
+    await expect(startImpersonation("some-target-id")).rejects.toThrow(
       "TUTOR accounts cannot impersonate"
     );
   });
@@ -176,7 +176,7 @@ describe("Blocker #10 — startImpersonation blocked for test-account session", 
       "@/lib/impersonation"
     );
 
-    await expect(startImpersonation("another-target", "")).rejects.toThrow(
+    await expect(startImpersonation("another-target")).rejects.toThrow(
       ImpersonationForbiddenError
     );
   });
@@ -222,10 +222,10 @@ describe("Blocker #10 — startImpersonation blocked for test-account session", 
       "@/lib/impersonation"
     );
 
-    await expect(startImpersonation("some-target-id", "")).rejects.toThrow(
+    await expect(startImpersonation("some-target-id")).rejects.toThrow(
       ImpersonationForbiddenError
     );
-    await expect(startImpersonation("some-target-id", "")).rejects.toThrow(
+    await expect(startImpersonation("some-target-id")).rejects.toThrow(
       "TUTOR accounts cannot impersonate"
     );
   });
@@ -258,16 +258,11 @@ describe("Blocker #10 — startImpersonation blocked for test-account session", 
       env: { NEXTAUTH_SECRET: "test-secret-32-chars-minimum-pad" },
     }));
 
-    // Step-up passes so the test reaches the target-check (added for B1 TOTP gate).
-    jest.doMock("@/lib/two-factor-step-up", () => ({
-      verifyTotpStepUp: jest.fn().mockResolvedValue({ ok: true }),
-    }));
-
     const { startImpersonation } = await import(
       "@/app/admin/actions/impersonate"
     );
 
-    await expect(startImpersonation("another-admin", "123456")).rejects.toThrow(
+    await expect(startImpersonation("another-admin")).rejects.toThrow(
       "Can only impersonate test accounts."
     );
   });
@@ -322,11 +317,6 @@ describe("startImpersonation happy path", () => {
       env: { NEXTAUTH_SECRET: "test-secret-32-chars-minimum-pad" },
     }));
 
-    // Step-up passes so the happy path is reached (added for B1 TOTP gate).
-    jest.doMock("@/lib/two-factor-step-up", () => ({
-      verifyTotpStepUp: jest.fn().mockResolvedValue({ ok: true }),
-    }));
-
     // Re-mock db with the impersonation mock overriding assertIsRealAdmin
     jest.doMock("@/lib/db", () => ({
       db: {
@@ -347,7 +337,7 @@ describe("startImpersonation happy path", () => {
     );
 
     const { redirected, redirectTo } = await runCatchingRedirect(() =>
-      startImpersonation("test-acct-456", "123456")
+      startImpersonation("test-acct-456")
     );
 
     expect(redirected).toBe(true);
@@ -384,11 +374,6 @@ describe("startImpersonation happy path", () => {
       ImpersonationForbiddenError: class ImpersonationForbiddenError extends Error {},
     }));
 
-    // Step-up passes (added for B1 TOTP gate).
-    jest.doMock("@/lib/two-factor-step-up", () => ({
-      verifyTotpStepUp: jest.fn().mockResolvedValue({ ok: true }),
-    }));
-
     jest.doMock("@/lib/db", () => ({
       db: {
         adminUser: {
@@ -406,7 +391,7 @@ describe("startImpersonation happy path", () => {
     );
 
     const { redirected } = await runCatchingRedirect(() =>
-      startImpersonation("test-acct-456", "123456")
+      startImpersonation("test-acct-456")
     );
 
     expect(redirected).toBe(true);

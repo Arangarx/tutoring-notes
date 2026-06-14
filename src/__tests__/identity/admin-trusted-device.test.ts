@@ -18,7 +18,9 @@
  * TD-11 rotateTotpStart rejected without step-up even when twoFactorVerified=true
  * TD-12 revokeAllTrustedDevices sets revokedAt on all rows; subsequent skip fails
  * TD-13 changePassword success revokes all trusted devices
- * TD-14 startImpersonation rejected without step-up even when twoFactorVerified=true (B1)
+ * TD-14 REMOVED (2026-06-14): startImpersonation step-up removed — impersonation is
+ *       test-only (isTestAccount=true hard guard); step-up re-added when real-account
+ *       impersonation lands (BL-IMP-REAL)
  * TD-15 verifyTotpStepUp calls check2faVerifyRateLimit as FIRST operation before TOTP (B3)
  * TD-16 mintAdminTrustedDevice at 10 active devices → oldest evicted; device_evicted logged
  * TD-17 ADMIN_TFA_DEVICE_HMAC_SECRET undefined → mint/validate fail-closed
@@ -660,71 +662,6 @@ describe("TD-13: changePassword success cascade revokes trusted devices", () => 
 
     expect(result.ok).toBe(true);
     expect(mockRevokeAll).toHaveBeenCalledWith("admin-13");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// TD-14: startImpersonation rejected without step-up (B1)
-// ---------------------------------------------------------------------------
-describe("TD-14: startImpersonation requires TOTP step-up (B1)", () => {
-  it("throws when no totpCode provided, even with twoFactorVerified=true", async () => {
-    jest.mock("@/lib/impersonation", () => ({
-      assertIsRealAdmin: jest.fn().mockResolvedValue({ adminId: "admin-14", email: "admin@test.com" }),
-      mintImpersonationSession: jest.fn().mockResolvedValue(undefined),
-    }));
-    jest.mock("@/lib/two-factor-step-up", () => ({
-      verifyTotpStepUp: jest.fn().mockResolvedValue({ ok: true }),
-    }));
-    jest.mock("@/lib/db", () => ({
-      db: {
-        adminUser: { findUnique: jest.fn().mockResolvedValue({ id: "target-14", isTestAccount: true, role: "TUTOR", email: "target@test.com" }) },
-        impersonationLog: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: "log-14" }) },
-      },
-    }));
-    jest.mock("@/lib/admin-routing", () => ({ tutorExperienceLandingPath: jest.fn().mockReturnValue("/admin") }));
-    jest.mock("next/navigation", () => ({ redirect: jest.fn().mockImplementation((url: string) => { throw new Error(`REDIRECT:${url}`); }) }));
-
-    const { startImpersonation } = await import("@/app/admin/actions/impersonate");
-
-    // No totpCode provided.
-    await expect(startImpersonation("target-14", "")).rejects.toThrow(/2FA code/i);
-  });
-
-  it("verifyTotpStepUp is called before mintImpersonationSession", async () => {
-    const callOrder: string[] = [];
-
-    jest.mock("@/lib/impersonation", () => ({
-      assertIsRealAdmin: jest.fn().mockResolvedValue({ adminId: "admin-14b", email: "admin@test.com" }),
-      mintImpersonationSession: jest.fn().mockImplementation(async () => {
-        callOrder.push("mint");
-      }),
-    }));
-
-    const mockStepUp = jest.fn().mockImplementation(async () => {
-      callOrder.push("stepUp");
-      return { ok: true };
-    });
-    jest.mock("@/lib/two-factor-step-up", () => ({
-      verifyTotpStepUp: mockStepUp,
-    }));
-
-    jest.mock("@/lib/db", () => ({
-      db: {
-        adminUser: { findUnique: jest.fn().mockResolvedValue({ id: "target-14b", isTestAccount: true, role: "TUTOR", email: "t@test.com" }) },
-        impersonationLog: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: "log-14b" }) },
-      },
-    }));
-    jest.mock("@/lib/admin-routing", () => ({ tutorExperienceLandingPath: jest.fn().mockReturnValue("/admin") }));
-    jest.mock("next/navigation", () => ({ redirect: jest.fn().mockImplementation(() => { throw new Error("REDIRECT"); }) }));
-
-    const { startImpersonation } = await import("@/app/admin/actions/impersonate");
-    try {
-      await startImpersonation("target-14b", "123456");
-    } catch {
-      // redirect throws
-    }
-
-    expect(callOrder.indexOf("stepUp")).toBeLessThan(callOrder.indexOf("mint"));
   });
 });
 

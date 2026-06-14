@@ -1157,6 +1157,15 @@ Items captured from 2026-06-06 Andrew smoke of `/admin/dev-tools` fixture dashbo
 
 - **Dev-tools / admin UX (undecided — discuss):** consider moving the impersonation list off the main admin dashboard into dev-tools only, and redirecting to dev-tools after exiting impersonation. Andrew noted the main admin landing is now heavily test-oriented; unsure if that's the permanent shape or if impersonation lives better in dev-tools where all the other fixture/test machinery lives. Revisit once the pilot grows beyond solo use and the admin dashboard's permanent information hierarchy is clearer. (Andrew, 2026-06-06 smoke.)
 
+- **[BL-IMP-REAL] Support impersonation of REAL accounts (operator/support "login as user").** Standard SaaS support/debugging pattern. Currently HARD-blocked: `startImpersonation` enforces `isTestAccount=true` on both the caller (via `assertIsRealAdmin`) and the target (explicit guard "Can only impersonate test accounts.") — enabling real-account impersonation is a distinct feature that requires ALL of:
+  - **Unforgeable audit trail** — extend existing `ImpersonationLog` + `imp` log prefix + on-screen banner to record the real user's email/id and the operator's identity. Must be non-repudiable.
+  - **MANDATORY TOTP step-up** (the B1 gate removed 2026-06-14 returns here as essential — this was the primary motivation for B1 in the first place; dropped only because impersonation is currently test-only).
+  - **Consent / notification** — consider notifying the impersonated account holder (email or in-app) when their session is entered.
+  - **Scope constraints** — consider read-only mode and/or time-boxed sessions to limit blast radius.
+  - **Minor-data legal review** — FERPA/SOPIPA/parental consent implications when impersonating a parent who has access to a minor's tutoring data. "After lawyer consult" (Andrew, 2026-06-14).
+  - **Real-account impersonation UI** — separate trigger from the current test-account `isTestAccount` panel; clear labeling so operators cannot accidentally impersonate real users via the test-account path.
+  *Added 2026-06-14 when B1 step-up was removed from the test-only impersonation path.*
+
 ---
 
 ## Docs cleanup pass (next)
