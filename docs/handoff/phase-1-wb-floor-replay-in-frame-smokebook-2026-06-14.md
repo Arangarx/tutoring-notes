@@ -1,8 +1,8 @@
 # Phase 1 — WB Review Correct (in-frame) — smoke runbook
 
 **Branch:** `phase1/wb-review-correct`  
-**Tip commit:** `<pending — update after push>`  
-**Preview:** <unverified — confirm in Vercel dashboard after first deploy>
+**Tip commit:** [`fb53b2f`](https://github.com/Arangarx/tutoring-notes/commit/fb53b2f)  
+**Preview:** <unverified — confirm in Vercel dashboard; MCP unavailable at commit time>
 
 > **Smoke focus = corrected in-frame two-state review** (End Session → notes-hero; replay looks like live WB minus controls). Standalone admin/share replay scrubber parity remains **DEFERRED** — regression-check only (D-items).
 
