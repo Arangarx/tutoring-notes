@@ -45,6 +45,8 @@ export type WhiteboardSessionShellProps = {
   syncUrl: string | null;
   initialUserWantsRecording: boolean;
   syncEnabled: boolean;
+  /** Server hint when reopening an ended session — lands on notes-hero. */
+  initialMode?: ShellMode;
 };
 
 export function WhiteboardSessionShell({
@@ -59,8 +61,9 @@ export function WhiteboardSessionShell({
   syncUrl,
   initialUserWantsRecording,
   syncEnabled,
+  initialMode = "live",
 }: WhiteboardSessionShellProps) {
-  const [mode, setMode] = useState<ShellMode>("live");
+  const [mode, setMode] = useState<ShellMode>(initialMode);
 
   const handleSessionEnded = useCallback(() => {
     setMode("review");

@@ -2,8 +2,18 @@
  * @jest-environment jsdom
  */
 
+import React from "react";
 import { render, screen } from "@testing-library/react";
 import { WhiteboardReplayInFrame } from "@/components/whiteboard/replay/WhiteboardReplayInFrame";
+
+jest.mock("@/components/ThemeProvider", () => ({
+  ThemeProvider: ({ children }: { children: React.ReactNode }) => children,
+  useTheme: () => ({
+    mode: "system" as const,
+    resolvedTheme: "light" as const,
+    setMode: jest.fn(),
+  }),
+}));
 
 jest.mock("@excalidraw/excalidraw", () => ({
   __esModule: true,
@@ -73,5 +83,6 @@ describe("WhiteboardReplayInFrame", () => {
     expect(screen.getByTestId("wb-replay-play-toggle")).toBeInTheDocument();
     expect(screen.getByTestId("wb-replay-global-seek")).toBeInTheDocument();
     expect(screen.getByTestId("mynk-wb-chrome-replay")).toBeInTheDocument();
+    expect(screen.getByTestId("wb-replay-tool-strip")).toBeInTheDocument();
   });
 });

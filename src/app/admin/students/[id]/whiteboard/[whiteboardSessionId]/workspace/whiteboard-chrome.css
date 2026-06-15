@@ -2160,13 +2160,6 @@
   padding: 8px;
 }
 
-.wb-review-hero-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.55fr);
-  gap: 16px;
-  align-items: start;
-}
-
 .wb-review-notes-column,
 .wb-review-board-column {
   display: grid;
@@ -2176,6 +2169,56 @@
 
 .wb-replay-persist-wrapper {
   /* Mount point only — replay chrome escapes via position:fixed */
+}
+
+.wb-session-review-root {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: var(--background);
+  overflow: hidden;
+}
+
+.wb-session-review-root--loading,
+.wb-session-review-root--error {
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.wb-session-review-root:not(.wb-session-review-root--replay-active) .wb-review-hero-layout {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.wb-review-topbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--success-soft, var(--info-soft));
+  border-bottom: 1px solid var(--success-border, var(--info-border));
+}
+
+.wb-review-hero-grid {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.55fr);
+  gap: 16px;
+  align-items: start;
 }
 
 .wb-replay-loading-overlay {

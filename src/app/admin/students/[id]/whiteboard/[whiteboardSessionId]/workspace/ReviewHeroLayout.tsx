@@ -11,7 +11,7 @@ type Props = {
 
 export function ReviewHeroLayout({ notesColumn, boardColumn, topBar }: Props) {
   return (
-    <div data-testid="wb-review-hero-layout">
+    <div data-testid="wb-review-hero-layout" className="wb-review-hero-layout">
       {topBar}
       <div className="wb-review-layout wb-review-hero-grid">
         <div className="wb-review-notes-column">

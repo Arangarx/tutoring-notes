@@ -17,11 +17,15 @@ export interface LiveBoardChromeSlots {
   actionSheets?: ReactNode;
 }
 
+export type WbChromeMode = "live" | "replay";
+
 export interface LiveBoardChromeProps extends LiveBoardChromeSlots {
   layoutMode: WbLayoutMode;
   orientation: WbOrientation;
   role: WbParticipantRole;
   toolbarHidden: boolean;
+  /** When `"replay"`, sets `data-mode` and replay-specific body class names. */
+  chromeMode?: WbChromeMode;
   onChromeClick?: () => void;
 }
 
@@ -35,6 +39,7 @@ export function LiveBoardChrome({
   orientation,
   role,
   toolbarHidden,
+  chromeMode = "live",
   onChromeClick,
   nonVisualMounts,
   topBar,
@@ -48,7 +53,8 @@ export function LiveBoardChrome({
   return (
     <div
       className="mynk-wb-chrome"
-      data-testid="mynk-wb-chrome"
+      data-testid={chromeMode === "replay" ? "mynk-wb-chrome-replay" : "mynk-wb-chrome"}
+      data-mode={chromeMode}
       data-layout={layoutMode}
       data-orientation={orientation}
       data-role={role}
@@ -57,8 +63,18 @@ export function LiveBoardChrome({
     >
       {nonVisualMounts}
       {topBar}
-      <div className="mynk-wb-live-column">
-        <div className="mynk-wb-body">
+      <div
+        className={
+          chromeMode === "replay"
+            ? "mynk-wb-live-column mynk-wb-replay-column"
+            : "mynk-wb-live-column"
+        }
+      >
+        <div
+          className={
+            chromeMode === "replay" ? "mynk-wb-body mynk-wb-replay-body" : "mynk-wb-body"
+          }
+        >
           {toolStrip}
           {canvas}
         </div>

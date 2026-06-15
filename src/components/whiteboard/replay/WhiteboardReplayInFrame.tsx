@@ -4,8 +4,11 @@ import { useEffect, useRef } from "react";
 import { maxEventTimestampMs } from "@/lib/whiteboard/event-log";
 import { useReplayTimelineController } from "@/hooks/useReplayTimelineController";
 import type { ReplayAudioSegment } from "@/lib/whiteboard/replay-helpers";
-import { ReplayBoardChrome } from "@/components/whiteboard/replay/ReplayBoardChrome";
+import { LiveBoardChrome } from "@/components/whiteboard/chrome/LiveBoardChrome";
+import { useWbLayoutMode } from "@/components/whiteboard/chrome/useWbLayoutMode";
+import { WbRoleProvider } from "@/components/whiteboard/chrome/wb-role";
 import { ReplayCanvasSurface } from "@/components/whiteboard/replay/ReplayCanvasSurface";
+import { buildReplayReadOnlyChromeSlots } from "@/components/whiteboard/replay/ReplayReadOnlyChromeSlots";
 import { ReplayTimelineScrubber } from "@/components/whiteboard/replay/ReplayTimelineScrubber";
 
 export type WhiteboardReplayInFrameProps = {
@@ -48,6 +51,7 @@ export function WhiteboardReplayInFrame({
   const applySceneAtRef = useRef<(timeMs: number) => void>(() => {});
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const entryPaintDoneRef = useRef(false);
+  const { layoutMode, orientation } = useWbLayoutMode();
 
   const controller = useReplayTimelineController({
     eventsBlobUrl,
@@ -63,7 +67,6 @@ export function WhiteboardReplayInFrame({
     log,
     hasAudio,
     effectiveSegments,
-    activeSegment,
     replayAudioMime,
     replayExcaliRestoreReady,
     audioReady,
@@ -144,43 +147,84 @@ export function WhiteboardReplayInFrame({
   const needsReplayExcalCanvas = log.events.length > 0 || hasAudio;
   const multiSegment = effectiveSegments.length > 1;
 
-  const topBar = (
-    <div className="mynk-wb-topbar mynk-wb-replay-topbar">
-      <div className="mynk-wb-topbar__zone" style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ fontWeight: 600, fontSize: 13 }}>
-          Session replay
-          {studentName ? ` — ${studentName}` : ""}
-        </span>
-        {durationSeconds != null && (
-          <span className="muted" style={{ fontSize: 11, marginLeft: 8 }}>
-            {formatDuration(durationSeconds)}
-          </span>
-        )}
-      </div>
-      <div className="mynk-wb-topbar__zone" style={{ gap: 8 }}>
-        {notesDrawerToggle}
-        {onBackToNotes && (
-          <button
-            type="button"
-            className="btn"
-            style={{ fontSize: 12 }}
-            data-testid="wb-replay-back-to-notes"
-            onClick={() => {
-              pause();
-              onBackToNotes();
-            }}
-          >
-            Back to notes
-          </button>
-        )}
-        {reviewHref && (
-          <a href={reviewHref} className="btn" style={{ fontSize: 12 }}>
-            Open full replay
-          </a>
-        )}
-      </div>
+  const trailingActions = (
+    <>
+      {notesDrawerToggle}
+      {onBackToNotes && (
+        <button
+          type="button"
+          className="btn"
+          style={{ fontSize: 12 }}
+          data-testid="wb-replay-back-to-notes"
+          onClick={() => {
+            pause();
+            onBackToNotes();
+          }}
+        >
+          Back to notes
+        </button>
+      )}
+      {reviewHref && (
+        <a href={reviewHref} className="btn" style={{ fontSize: 12 }}>
+          Open full replay
+        </a>
+      )}
+    </>
+  );
+
+  const timelineStrip = (
+    <ReplayTimelineScrubber
+      globalMs={globalMs}
+      scrubberMax={scrubberMax}
+      playing={playing}
+      hasAudio={hasAudio}
+      audioReady={audioReady}
+      onTogglePlay={togglePlay}
+      onScrubPointerDown={handleScrubPointerDown}
+      onScrubChange={handleScrubChange}
+      onScrubPointerUp={handleScrubPointerUp}
+    />
+  );
+
+  const replayCanvas = needsReplayExcalCanvas ? (
+    <ReplayCanvasSurface
+      log={log}
+      hasAudio={hasAudio}
+      restoreReady={replayExcaliRestoreReady}
+      paintReady={paintReady}
+      whiteboardSessionId={whiteboardSessionId}
+      resolveAssetUrl={resolveAssetUrl}
+      applySceneAtRef={applySceneAtRef}
+      containerRef={canvasContainerRef}
+      gateVisibility
+      style={{ height: "100%", minHeight: 280 }}
+    />
+  ) : (
+    <div className="muted" style={{ padding: 24 }}>
+      No board content to replay.
     </div>
   );
+
+  const chromeSlots = buildReplayReadOnlyChromeSlots({
+    layoutMode,
+    studentName,
+    durationLabel: formatDuration(durationSeconds),
+    trailingActions,
+    canvas: replayCanvas,
+    timelineStrip,
+    nonVisualMounts:
+      hasAudio ? (
+        <audio
+          ref={audioRef}
+          controls={false}
+          preload="metadata"
+          src={effectiveSegments[0]?.url}
+          {...(replayAudioMime ? { type: replayAudioMime } : {})}
+          data-testid="wb-replay-audio"
+          style={{ display: "none" }}
+        />
+      ) : undefined,
+  });
 
   return (
     <div data-testid="wb-replay-in-frame" className="mynk-wb-replay-root">
@@ -198,62 +242,21 @@ export function WhiteboardReplayInFrame({
           Multi-part recording — timing may drift at part boundaries
         </div>
       )}
-      <ReplayBoardChrome
-        nonVisualMounts={
-          hasAudio ? (
-            <audio
-              ref={audioRef}
-              controls={false}
-              preload="metadata"
-              src={effectiveSegments[0]?.url}
-              {...(replayAudioMime ? { type: replayAudioMime } : {})}
-              data-testid="wb-replay-audio"
-              style={{ display: "none" }}
-            />
-          ) : undefined
-        }
-        topBar={topBar}
-        canvas={
-          needsReplayExcalCanvas ? (
-            <ReplayCanvasSurface
-              log={log}
-              hasAudio={hasAudio}
-              restoreReady={replayExcaliRestoreReady}
-              paintReady={paintReady}
-              whiteboardSessionId={whiteboardSessionId}
-              resolveAssetUrl={resolveAssetUrl}
-              applySceneAtRef={applySceneAtRef}
-              containerRef={canvasContainerRef}
-              gateVisibility
-              style={{ height: "100%", minHeight: 280 }}
-            />
-          ) : (
-            <div className="muted" style={{ padding: 24 }}>
-              No board content to replay.
-            </div>
-          )
-        }
-        timelineStrip={
-          <ReplayTimelineScrubber
-            globalMs={globalMs}
-            scrubberMax={scrubberMax}
-            playing={playing}
-            hasAudio={hasAudio}
-            audioReady={audioReady}
-            onTogglePlay={togglePlay}
-            onScrubPointerDown={handleScrubPointerDown}
-            onScrubChange={handleScrubChange}
-            onScrubPointerUp={handleScrubPointerUp}
-          />
-        }
-        drawerSlot={drawerSlot}
-      />
+      <WbRoleProvider role="tutor">
+        <LiveBoardChrome
+          chromeMode="replay"
+          layoutMode={layoutMode}
+          orientation={orientation}
+          role="tutor"
+          toolbarHidden={false}
+          {...chromeSlots}
+        />
+      </WbRoleProvider>
+      {drawerSlot}
       <div className="muted" style={{ fontSize: 11, padding: "4px 8px" }}>
-        {(log.events.length).toLocaleString()} events · log span{" "}
+        {log.events.length.toLocaleString()} events · log span{" "}
         {formatDuration(
-          Math.floor(
-            Math.max(log.durationMs, maxEventTimestampMs(log)) / 1000
-          )
+          Math.floor(Math.max(log.durationMs, maxEventTimestampMs(log)) / 1000)
         )}
       </div>
     </div>

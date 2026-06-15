@@ -15,6 +15,7 @@ import TutorNotesSection, {
 } from "@/components/whiteboard/TutorNotesSection";
 import { ReviewHeroLayout } from "./ReviewHeroLayout";
 import { ReviewBoardThumbnail } from "./ReviewBoardThumbnail";
+import { StartWhiteboardSession } from "@/app/admin/students/[id]/whiteboard/StartWhiteboardSession";
 import type { ReviewSurfaceState } from "./review-surface-state";
 import {
   loadSessionReviewPayload,
@@ -188,12 +189,7 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
   if (loadState.kind === "loading") {
     return (
       <div
-        style={{
-          padding: "32px 16px",
-          textAlign: "center",
-          color: "var(--muted)",
-          fontSize: 14,
-        }}
+        className="wb-session-review-root wb-session-review-root--loading"
         data-testid="wb-review-loading"
       >
         Loading review…
@@ -204,24 +200,30 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
   if (loadState.kind === "error") {
     return (
       <div
-        className="card"
-        style={{
-          padding: "16px",
-          background: "var(--error-soft)",
-          border: "1px solid var(--error-border)",
-          fontSize: 13,
-          color: "var(--sign-out)",
-        }}
+        className="wb-session-review-root wb-session-review-root--error"
         data-testid="wb-review-error"
       >
-        <strong>Could not load review data.</strong> {loadState.message}
-        <div style={{ marginTop: 8 }}>
-          <a
-            href={`/admin/students/${studentId}/whiteboard/${whiteboardSessionId}`}
-            className="btn"
-          >
-            Open full review page
-          </a>
+        <div
+          className="card"
+          style={{
+            padding: "16px",
+            background: "var(--error-soft)",
+            border: "1px solid var(--error-border)",
+            fontSize: 13,
+            color: "var(--sign-out)",
+            maxWidth: 480,
+            margin: "auto",
+          }}
+        >
+          <strong>Could not load review data.</strong> {loadState.message}
+          <div style={{ marginTop: 8 }}>
+            <a
+              href={`/admin/students/${studentId}/whiteboard/${whiteboardSessionId}`}
+              className="btn"
+            >
+              Open full review page
+            </a>
+          </div>
         </div>
       </div>
     );
@@ -233,18 +235,8 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
 
   const topBar = (
     <div
-      className="card wb-review-topbar"
-      style={{
-        padding: "12px 16px",
-        background: "var(--success-soft, var(--info-soft))",
-        border: "1px solid var(--success-border, var(--info-border))",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        flexWrap: "wrap",
-        gap: 8,
-        marginBottom: 16,
-      }}
+      className="wb-review-topbar"
+      data-testid="wb-review-topbar"
     >
       <div>
         <div style={{ fontWeight: 700, fontSize: 15 }}>
@@ -256,7 +248,7 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
           </div>
         )}
       </div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         {noteSaved && (
           <span
             style={{
@@ -271,6 +263,7 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
             ✓ Notes saved
           </span>
         )}
+        <StartWhiteboardSession studentId={studentId} />
         <a href={reviewHref} className="btn" style={{ fontSize: 12 }}>
           Open full replay
         </a>
@@ -279,7 +272,10 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
   );
 
   return (
-    <div data-testid="wb-session-review-mode" className="wb-session-review-root">
+    <div
+      data-testid="wb-session-review-mode"
+      className={`wb-session-review-root${reviewSurface === "replay" ? " wb-session-review-root--replay-active" : ""}`}
+    >
       {reviewSurface === "hero" && (
         <ReviewHeroLayout
           topBar={topBar}

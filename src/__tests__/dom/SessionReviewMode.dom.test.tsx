@@ -23,6 +23,14 @@ jest.mock("@/components/whiteboard/replay/ReplayNotesDrawer", () => ({
   ReplayNotesDrawerPanel: () => null,
 }));
 
+jest.mock("@/app/admin/students/[id]/whiteboard/StartWhiteboardSession", () => ({
+  StartWhiteboardSession: ({ studentId }: { studentId: string }) => (
+    <button type="button" data-testid="mock-start-new-session">
+      Start new session ({studentId})
+    </button>
+  ),
+}));
+
 jest.mock(
   "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/ReviewBoardThumbnail",
   () => ({
@@ -83,9 +91,13 @@ describe("SessionReviewMode two-state surface", () => {
       <SessionReviewMode whiteboardSessionId="wbs-1" studentId="stu-1" />
     );
     expect(await screen.findByTestId("wb-session-review-mode")).toBeInTheDocument();
+    expect(screen.getByTestId("wb-session-review-mode")).toHaveClass(
+      "wb-session-review-root"
+    );
     expect(screen.getByTestId("wb-review-hero-layout")).toBeInTheDocument();
     expect(screen.getByTestId("wb-review-confirm-slot")).toBeInTheDocument();
     expect(screen.getByTestId("wb-review-enter-replay")).toBeInTheDocument();
+    expect(screen.getByTestId("mock-start-new-session")).toBeInTheDocument();
     expect(screen.queryByTestId("mock-wb-replay-in-frame")).not.toBeInTheDocument();
   });
 
