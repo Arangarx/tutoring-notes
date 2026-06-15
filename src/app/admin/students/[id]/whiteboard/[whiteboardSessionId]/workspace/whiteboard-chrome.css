@@ -2093,11 +2093,14 @@
 
 /* ── In-frame replay mode (Phase 1 wb-replay-in-frame) ── */
 .mynk-wb-chrome[data-mode="replay"] {
-  position: relative;
-  inset: auto;
-  z-index: 1;
-  height: 100%;
-  min-height: 480px;
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--background);
+  overflow: hidden;
 }
 
 .mynk-wb-chrome[data-mode="replay"] .mynk-wb-replay-body {
@@ -2172,7 +2175,19 @@
 }
 
 .wb-replay-persist-wrapper {
-  min-height: 520px;
+  /* Mount point only — replay chrome escapes via position:fixed */
+}
+
+.wb-replay-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--background);
+  color: var(--muted);
+  font-size: 14px;
 }
 
 @media (max-width: 768px) {

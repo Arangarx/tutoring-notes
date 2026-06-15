@@ -27,7 +27,17 @@ const WhiteboardReplayInFrame = dynamic(
     import("@/components/whiteboard/replay/WhiteboardReplayInFrame").then(
       (m) => ({ default: m.WhiteboardReplayInFrame })
     ),
-  { ssr: false }
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        className="wb-replay-loading-overlay"
+        data-testid="wb-replay-loading"
+      >
+        Loading replay…
+      </div>
+    ),
+  }
 );
 
 const ReplayNotesDrawerPanel = dynamic(
@@ -123,6 +133,15 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [isDirty]);
+
+  useEffect(() => {
+    if (reviewSurface !== "replay") return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [reviewSurface]);
 
   const handleNoteSaved = useCallback(() => {
     setNoteSaved(true);
@@ -352,6 +371,7 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
       {/* BLOCKER-2: persist-once replay wrapper — never unmount after first enter */}
       {hasEnteredReplay && (
         <div
+          className="wb-replay-persist-wrapper"
           data-testid="wb-replay-persist-wrapper"
           aria-hidden={reviewSurface !== "replay"}
           style={{

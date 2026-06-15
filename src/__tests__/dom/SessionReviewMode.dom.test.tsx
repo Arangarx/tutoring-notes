@@ -89,6 +89,22 @@ describe("SessionReviewMode two-state surface", () => {
     expect(screen.queryByTestId("mock-wb-replay-in-frame")).not.toBeInTheDocument();
   });
 
+  it("enters replay on clean hero without dirty confirm", async () => {
+    render(
+      <SessionReviewMode whiteboardSessionId="wbs-1" studentId="stu-1" />
+    );
+    await screen.findByTestId("wb-review-enter-replay");
+    fireEvent.click(screen.getByTestId("wb-review-enter-replay"));
+    await waitFor(() => {
+      expect(screen.getByTestId("mock-wb-replay-in-frame")).toBeInTheDocument();
+    });
+    const wrapper = screen.getByTestId("wb-replay-persist-wrapper");
+    expect(wrapper).toHaveStyle({ display: "block" });
+    expect(wrapper).toHaveAttribute("aria-hidden", "false");
+    expect(screen.queryByTestId("wb-review-hero-layout")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("wb-review-dirty-confirm")).not.toBeInTheDocument();
+  });
+
   it("shows dirty confirm before entering replay when notes edited", async () => {
     render(
       <SessionReviewMode whiteboardSessionId="wbs-1" studentId="stu-1" />
