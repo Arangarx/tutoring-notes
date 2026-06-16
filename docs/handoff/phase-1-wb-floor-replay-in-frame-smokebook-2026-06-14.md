@@ -1,7 +1,7 @@
 # Phase 1 — WB Review Correct (in-frame) — smoke runbook
 
 **Branch:** `phase1/wb-review-correct`  
-**Tip commit:** [`5cb1d72`](https://github.com/Arangarx/tutoring-notes/commit/5cb1d72dc0ac82a15a3d5aa061578e4efd7dec95)  
+**Tip commit:** `[5cb1d72](https://github.com/Arangarx/tutoring-notes/commit/5cb1d72dc0ac82a15a3d5aa061578e4efd7dec95)`  
 **Preview:** [tutoring-notes-git-phase1-wb-rev-46b0a1](https://tutoring-notes-git-phase1-wb-rev-46b0a1-arangarx-5209s-projects.vercel.app)
 
 > **Smoke focus = unified in-frame review surface** (one `TutorNotesSection` reflows prominent ↔ docked with **animated** transition; replay fills main frame inside live WB chrome; persist-once replay; **Hide replay** collapse). Standalone admin/share replay scrubber parity remains **DEFERRED** — regression-check only (D-items).
@@ -17,10 +17,10 @@
 **Ignore this run:** Confirm section content (Phase 2). Notes AI quality. Tutor scratchy audio (B4). Polished blurred-line skeleton (backlogged).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: If the thumbnail is supposed to already show final board state this is failing.**
 
 ---
 
@@ -33,10 +33,12 @@
 **Ignore this run:** Laser pointer. Live board tab switching (single static tab).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Notes recede (it was a very quick animation but I think it did it)**  
+**Canvas still docked beneath wb frame, not in**  
+**Audio starts over at dropped scrubber still regardless of position, Honestly how fucking hard can it be to just move to that position in the audio???  WTF is goign on?**
 
 ---
 
@@ -48,11 +50,11 @@
 
 **Ignore this run:** Multi-segment boundary hitch (A6-1 deferred).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Why is "Scroll back to content" excalidraw native button popping up when scrubber/audio reaches end.**
 
 ---
 
@@ -65,7 +67,7 @@
 **Ignore this run:** Sub-250ms jitter.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
 **Notes:**
@@ -81,10 +83,10 @@
 **Ignore this run:** Nothing.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  I think there is some confusion here that you noted in your thinking earlier but never resolved.  If I click something like "hide replay" anything that makes the replay go away even visually, then yes the audio should pause.  When I said the audio didn't need to pause with a drawer, that was with the assumption that the replay would still be at least partly visible.**
 
 ---
 
@@ -96,7 +98,7 @@
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -113,10 +115,10 @@
 **Ignore this run:** Nothing.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Scrubber showed preserved position, but reset to beginning when I hit play.**
 
 ---
 
@@ -128,7 +130,7 @@
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -145,10 +147,14 @@
 **Ignore this run:** Nothing.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  "Cancel and delete session data" should not use javascript alert() >.>  Get that message in page ;p  Button says "Deleting..." but we didn't navigate away.  We should navigate away regardless and let cron clean the orphans.  I mention all this here because I was trying to do a new session to test this.**  
+  
+**New session is not starting a new session, it continues the last one.**  
+  
+**See empty thumbnail instead of message.  Though I'm not entirely certain it was a truly new session given the previous bug mentioned.**
 
 ---
 
@@ -160,11 +166,11 @@
 
 **Ignore this run:** Stroke/audio drift precision on long no-audio sessions.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  Strokes play at right time.**
 
 ---
 
@@ -178,9 +184,9 @@
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] SKIP
+- [x] SKIP
 
-**Notes:**
+**Notes:  Not going to bother testing this.  When everything works this won't even be a thing.**
 
 ---
 
@@ -192,7 +198,7 @@
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -209,10 +215,12 @@
 **Ignore this run:** Nothing.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  Bug: Canvas thumbnail steals priority from theme dropdown.  If my mouse is over the thumbnail AND the theme selector, the thumbnail underneath takes priority on my click.**  
+  
+**Originally passed this till I tried playing the replay and it was the replay from a previous session.  These sessions are not idempotent at all now ;p**
 
 ---
 
@@ -225,10 +233,10 @@
 **Ignore this run:** Mobile/tablet layouts (desktop Chrome primary).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Viewport center does not realign.  Strokes just appear offscreen or partly off screen.**
 
 ---
 
@@ -299,4 +307,4 @@
 ## Overall result
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
