@@ -1,10 +1,10 @@
 # Phase 1 — WB Review Correct (in-frame) — smoke runbook
 
 **Branch:** `phase1/wb-review-correct`  
-**Tip commit:** `[90f8d8f](https://github.com/Arangarx/tutoring-notes/commit/90f8d8fd5285363af46e07103762f24bb19e8ef9)`  
+**Tip commit:** [`5cb1d72`](https://github.com/Arangarx/tutoring-notes/commit/5cb1d72dc0ac82a15a3d5aa061578e4efd7dec95)  
 **Preview:** [tutoring-notes-git-phase1-wb-rev-46b0a1](https://tutoring-notes-git-phase1-wb-rev-46b0a1-arangarx-5209s-projects.vercel.app)
 
-> **Smoke focus = unified in-frame review surface** (one `TutorNotesSection` reflows prominent ↔ docked; replay fills main frame; no lossy transition, no dirty confirm, no "Open full replay"). Standalone admin/share replay scrubber parity remains **DEFERRED** — regression-check only (D-items).
+> **Smoke focus = unified in-frame review surface** (one `TutorNotesSection` reflows prominent ↔ docked with **animated** transition; replay fills main frame inside live WB chrome; persist-once replay; **Hide replay** collapse). Standalone admin/share replay scrubber parity remains **DEFERRED** — regression-check only (D-items).
 
 ---
 
@@ -12,39 +12,31 @@
 
 **Action:** Tutor on desktop Chrome: start a whiteboard session → record ~30s with strokes and audio → **End session** (stay in workspace). Observe default view. Confirm **no** admin back-link, page `h1`, or `.container` framing — surface should take the full viewport like the live board.
 
-**Expect:** **Notes-prominent** layout — single `TutorNotesSection` editable (`wb-review-notes-prominent`); confirm slot placeholder (`wb-review-confirm-slot`); board **final-frame** thumbnail (not black) in secondary column; **Replay session** CTA. **No** scrubber in hero. **No** "Open full replay" link. While transcribe+reduce runs, notes form stays visible with inline **Generating notes…** (not blanked). **Start whiteboard session** is under top-bar **More** menu (low prominence), not a competing primary button.
+**Expect:** **Notes-prominent** layout — single `TutorNotesSection` editable (`wb-review-notes-prominent`); confirm slot placeholder (`wb-review-confirm-slot`); board **final-frame** thumbnail (not black) in secondary column; **Replay session** CTA. **No** scrubber in hero. **No** "Open full replay". **Persistent Mynk WB top bar** (`wb-review-wb-topbar`) with **theme toggle** in hero state — not the old green "Session complete" bar. **No** Start whiteboard session anywhere on this surface (removed from top bar and More menu).
 
 **Ignore this run:** Confirm section content (Phase 2). Notes AI quality. Tutor scratchy audio (B4). Polished blurred-line skeleton (backlogged).
 
-- [x] PASS
+- [ ] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:  I'll ask the same question again.  Why is there a start whiteboard session button on the end session screen?  Even if it is now hidden behind "more".**  
-  
-**Should I see something in the little canvas on the right?  Didn't you say this should show what the final WB looks like? Also...how exactly is that supposed to function when there's more than one page?**  
-  
-**So..it still "feels" like a separate page this way not having either the side or top bar from the WB.  There's also no way for me to change theme here or anything.**  
-
+**Notes:**
 
 ---
 
-### 2. Enter replay — live chrome read-only, notes docked (light theme)
+### 2. Enter replay — animated transition + live chrome (light theme)
 
-**Action:** From item 1 hero, click **Replay session** (with unsaved note edits if you like). Observe transition — should be **instant** layout reflow, no modal, no dynamic-import flash. Scrubber at 0:00. Press **Play** without touching scrubber.
+**Action:** From item 1 hero, click **Replay session** (with unsaved note edits if you like). Watch the transition — should be a **smooth ~250ms in-place reveal** (notes column narrows, replay pane slides in); **not** an instant hard swap or navigation feel. Scrubber at 0:00. Press **Play** without touching scrubber.
 
-**Expect:** **Same notes surface** recedes to docked panel (`wb-review-notes-docked`) — still visible and editable; **not** a discoverable drawer toggle. Replay uses **live whiteboard chrome** read-only; canvas **fills** the main frame (no dead-space gap). Consolidated **WbCustomSlider** scrubber (same component family as opacity). Canvas shows **empty or first stroke** — NOT final-board flash. Audio from beginning. **No** unsaved-changes confirm. **No** "Open full replay".
+**Expect:** Notes recede to docked panel (`wb-review-notes-docked`) with CSS transition; replay pane fades/slides in (`wb-review-replay-pane--visible`). Replay uses **live whiteboard chrome** read-only; **Excalidraw canvas fills the chrome canvas region** (inside `mynk-wb-canvas`, below top bar, right of tool strip — **no dead-space gap** below chrome). Consolidated **WbCustomSlider** scrubber. Canvas shows **empty or first stroke** — NOT final-board flash. Audio from beginning. **Hide replay** (‹ chevron) on replay chrome top bar — **not** "Back to notes" on session top bar. **No** unsaved-changes confirm.
 
 **Ignore this run:** Laser pointer. Live board tab switching (single static tab).
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
 - [ ] SKIP
 
-**Notes: Canvas is still UNDER WB frame, not inside it.**  
-**"Back to notes" copy feels weird here.  IF we keep this layout...shouldn't it be more like "Hide replay" or something...I dunno what makes most sense right now.**  
-**Scrubber finally starts and ends at extremes.**  
-**Audio still completely restarts regardless of where scrubber is dropped.**
+**Notes:**
 
 ---
 
@@ -57,25 +49,23 @@
 **Ignore this run:** Multi-segment boundary hitch (A6-1 deferred).
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
 - [ ] SKIP
 
-**Notes:  Partial pass.  Audio DOES just stop outright when it hits the end of the scrubber (good) but that doesn't mean it's at the end of the audio right now because audio starts over on scrubber drop.**  
-**Hit play after stop does start scrubber at beginning.**  
-**New requirement: If I resize the window, recenter the replay.  Meaning whatever was "center" in the smaller/larger viewport should move to the center in the larger/smaller viewport.  Make sense?**
+**Notes:**
 
 ---
 
-### 4. Scrub drag mid-session — in-frame (light theme)
+### 4. Scrub drag mid-session — audio seek (light theme)
 
 **Action:** Pause in-frame replay. Drag scrubber to ~50% → release → **Play**.
 
-**Expect:** Audio `currentTime` and scene resume from ~50%. No audio from t=0 after drop. No corrupted audio during drag.
+**Expect:** Audio `currentTime` and scene resume from ~50%. **No audio from t=0** after drop. No corrupted audio during drag. (Hook test `useReplayTimelineController.scrub.test.ts` pins `audio.currentTime` on scrub commit + play; **Andrew must confirm in real browser with audible audio**.)
 
 **Ignore this run:** Sub-250ms jitter.
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
 - [ ] SKIP
 
 **Notes:**
@@ -90,23 +80,7 @@
 
 **Ignore this run:** Nothing.
 
-- [x] PASS
-- [ ] FAIL
-- [ ] SKIP
-
-**Notes: Pass, BUT audio keeps going when I "back to notes".  Replay should probably stop if I go to the "just notes" overlay.**
-
----
-
-### 6. Prominent↔docked edit survival — single notes instance (light theme)
-
-**Action:** On hero, edit notes without saving. Click **Replay session** (no confirm expected). Edit another field in docked panel. Click **Back to notes**. Re-enter replay.
-
-**Expect:** **No** dirty confirm on hero→replay. **Same text** in prominent and docked modes (one React state). Re-enter replay preserves edits. **Save** persists all via nsi.
-
-**Ignore this run:** Nothing.
-
-- [x] PASS
+- [ ] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -114,15 +88,31 @@
 
 ---
 
-### 7. Back to notes + replay return — persist-once replay (light theme)
+### 6. Prominent↔docked edit survival — single notes instance (light theme)
 
-**Action:** While replay playing, click **Back to notes**. Then re-enter replay via **Replay session**.
+**Action:** On hero, edit notes without saving. Click **Replay session** (no confirm expected). Edit another field in docked panel. Click **Hide replay**. Re-enter replay.
 
-**Expect:** Returns to prominent notes layout; edits preserved. Re-enter replay: scrubber shows **preserved position (not 0:00)**. No audio leak after back. **No** escape to legacy standalone replay page anywhere on this surface.
+**Expect:** **No** dirty confirm on hero→replay. **Same text** in prominent and docked modes (one React state). Re-enter replay preserves edits. **Save** persists all via nsi.
 
 **Ignore this run:** Nothing.
 
-- [x] PASS
+- [ ] PASS
+- [ ] FAIL
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### 7. Hide replay + replay return — persist-once replay (light theme)
+
+**Action:** While replay playing, click **Hide replay** on replay chrome. Then re-enter via **Replay session**.
+
+**Expect:** **Animated** return to prominent notes; edits preserved. Re-enter replay: scrubber shows **preserved position (not 0:00)**. Replay does **not** auto-pause audio on hide (persist-once; Andrew dropped auto-pause requirement). **No** escape to legacy standalone replay page.
+
+**Ignore this run:** Nothing.
+
+- [ ] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -134,11 +124,11 @@
 
 **Action:** On hero, edit notes. Click **Replay session** — confirm no modal. Attempt browser tab close / navigate away (optional).
 
-**Expect:** **No** "unsaved changes / continue?" dialog entering replay. **No** `beforeunload` guard (notes auto-save as DRAFT via nsi). Instant client-side prominence switch only.
+**Expect:** **No** "unsaved changes / continue?" dialog entering replay. **No** `beforeunload` guard (notes auto-save as DRAFT via nsi). Client-side prominence switch only (animated, not full navigation).
 
 **Ignore this run:** Nothing.
 
-- [x] PASS
+- [ ] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -154,7 +144,7 @@
 
 **Ignore this run:** Nothing.
 
-- [x] PASS
+- [ ] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -187,28 +177,26 @@
 **Ignore this run:** Boundary hitch fix (A6-1 deferred).
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
 - [ ] SKIP
 
-**Notes: "No board strokes recorded"  This is a weird one because I didn't bring a student in.  With waiting room I guess this becomes a moot issue.  Recording doesn't start without student there...but...hm....yeah I guess I should test with a student since that's probably this test's intention.**  
-  
-Still fail, no strokes recorded, even though strokes are supposed to be a record force start.
+**Notes:**
 
 ---
 
 ### 12. Both themes — prominent + docked + replay
 
-**Action:** Repeat items 1–2 and 5 with **dark** theme, then **light** (toggle app theme).
+**Action:** Repeat items 1–2 and 5 with **dark** theme, then **light** (toggle via WB top bar theme menu in **both** hero and replay states).
 
-**Expect:** Prominent notes, docked notes, and replay chrome readable in both themes. No white flash on stroke paint in dark.
+**Expect:** Prominent notes, docked notes, and replay chrome readable in both themes. Theme reachable from hero (not replay-only). No white flash on stroke paint in dark.
 
 **Ignore this run:** Nothing.
 
-- [x] PASS
+- [ ] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes: Didn't test absolutely everything but saw enough to be okay with it for now.**
+**Notes:**
 
 ---
 
@@ -220,7 +208,7 @@ Still fail, no strokes recorded, even though strokes are supposed to be a record
 
 **Ignore this run:** Nothing.
 
-- [x] PASS
+- [ ] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -228,19 +216,25 @@ Still fail, no strokes recorded, even though strokes are supposed to be a record
 
 ---
 
-### 14. Start new session from review More menu (light theme)
+### 14. Window resize — replay recenter (light theme)
 
-**Action:** On notes-hero (item 1 or 13), open top-bar **More** → **Start whiteboard session**.
+**Action:** Enter in-frame replay with visible strokes. Note what's centered in the viewport. Resize browser window narrower, then wider.
 
-**Expect:** Consent/start flow opens; minting a fresh session works. Deliberate low-prominence affordance — not competing with review.
+**Expect:** After each resize, replay canvas **recenters** so the same scene content stays at viewport center (ResizeObserver + scroll recompute). No blank gap or canvas detached from chrome frame.
 
-**Ignore this run:** Consent-click retirement (Phase 3).
+**Ignore this run:** Mobile/tablet layouts (desktop Chrome primary).
 
-- [x] PASS
+- [ ] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes: Again, aside from me starting session after session for the sake of testing...why?**
+**Notes:**
+
+---
+
+### ~~14. Start new session from review~~ — REMOVED
+
+> **N/A this round.** Start whiteboard session was removed from the review surface entirely (new sessions start from student detail page). Former item 14 replaced by resize-recenter above.
 
 ---
 
@@ -258,7 +252,7 @@ Still fail, no strokes recorded, even though strokes are supposed to be a record
 
 - [ ] PASS
 - [ ] FAIL
-- [x] SKIP
+- [ ] SKIP
 
 **Notes:**
 
@@ -274,7 +268,7 @@ Still fail, no strokes recorded, even though strokes are supposed to be a record
 
 - [ ] PASS
 - [ ] FAIL
-- [x] SKIP
+- [ ] SKIP
 
 **Notes:**
 
@@ -290,7 +284,7 @@ Still fail, no strokes recorded, even though strokes are supposed to be a record
 
 - [ ] PASS
 - [ ] FAIL
-- [x] SKIP
+- [ ] SKIP
 
 **Notes:**
 
@@ -305,4 +299,4 @@ Still fail, no strokes recorded, even though strokes are supposed to be a record
 ## Overall result
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
