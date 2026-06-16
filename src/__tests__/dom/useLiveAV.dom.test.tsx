@@ -1360,6 +1360,95 @@ describe("useLiveAV — remote tracks + state", () => {
 
     unmount();
   });
+
+  /**
+   * TRACK-BEFORE-PRESENCE regression test (2026-06-16).
+   *
+   * Reproduces the tutor-side asymmetric-receive bug: on the host
+   * (tutor), peer-mesh can fire ontrack for the student's peerId
+   * BEFORE sync presence has emitted that peerId via onRoomPeersChange.
+   * The pre-fix code dropped the track permanently. The fix buffers the
+   * track and flushes it when the peer's internal entry is first created.
+   *
+   * jsdom cannot exercise real WebRTC. This test validates the
+   * buffer/flush logic path only. The definitive proof is a two-device
+   * LV-2 smoke: student grants cam → tutor sees a second tile with live
+   * video.
+   */
+  test("TRACK-BEFORE-PRESENCE: remote track arriving before sync presence is buffered and flushed when presence arrives", async () => {
+    const sync = makeFakeSyncClient();
+    const meshHandles = makeFakeMesh();
+    const sig = makeFakeSignaling();
+    const props = makeBaseProps({
+      syncClient: sync.sync,
+      _createPeerMesh: meshHandles.factory,
+      _createSignaling: sig.factory,
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await act(async () => {
+      await result.current.requestMic();
+    });
+    await waitFor(() => {
+      expect(result.current.isActive).toBe(true);
+    });
+
+    // At this point: no presence for "student-B" yet.
+    expect(result.current.participants.length).toBe(0);
+
+    // Remote track arrives BEFORE presence — the race scenario.
+    const remoteVideo = new FakeMediaStreamTrack("video");
+    act(() => {
+      meshHandles.emitTrack(
+        "student-B",
+        remoteVideo as unknown as MediaStreamTrack
+      );
+    });
+
+    // Track should still be buffered — no participant entry yet.
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current.participants.length).toBe(0);
+
+    // Now presence arrives — buffer must be drained.
+    act(() => {
+      sync.emitPeers([{ peerId: "student-B", role: "student" }]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.participants.length).toBe(1);
+    });
+
+    // The buffered track must have been flushed onto the participant.
+    const participant = result.current.participants[0]!;
+    expect(participant.peerId).toBe("student-B");
+    expect(participant.videoStream).not.toBeNull();
+    const vs = participant.videoStream as unknown as FakeMediaStream;
+    expect(vs.getVideoTracks().length).toBe(1);
+    expect(vs.getVideoTracks()[0]).toBe(remoteVideo);
+
+    unmount();
+  });
+
+  test("presence-then-track happy path still works (no regression)", async () => {
+    // Normal order: presence first, then track. Must keep working.
+    const { result, unmount, meshHandles } = await withPeer("student-C");
+    const remoteAudio = new FakeMediaStreamTrack("audio");
+    act(() => {
+      meshHandles.emitTrack(
+        "student-C",
+        remoteAudio as unknown as MediaStreamTrack
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.participants[0]?.audioStream).not.toBeNull();
+    });
+    const stream = result.current.participants[0]!
+      .audioStream as unknown as FakeMediaStream;
+    expect(stream.getAudioTracks()[0]).toBe(remoteAudio);
+
+    unmount();
+  });
 });
 
 describe("useLiveAV — mute control + reconnect", () => {

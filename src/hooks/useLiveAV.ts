@@ -1298,6 +1298,13 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       addedToMesh: boolean;
     };
     const internal = new Map<string, Internal>();
+    // Tracks that arrived from peer-mesh before sync presence created
+    // the peer's internal entry. Drained in ensureEntry's first-create
+    // path (onRoomPeersChange). Cleared on peer removal and dispose.
+    const pendingRemoteTracks = new Map<
+      string,
+      Array<MediaStreamTrack>
+    >();
 
     function rebuild() {
       if (disposed) return;
@@ -1361,6 +1368,45 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       return entry;
     }
 
+    function applyRemoteTrack(
+      entry: Internal,
+      peerId: string,
+      track: MediaStreamTrack
+    ): void {
+      const targetStream =
+        track.kind === "audio" ? entry.audioStream : entry.videoStream;
+      try {
+        targetStream.addTrack(track);
+      } catch (err) {
+        log.warn(
+          `${track.kind}Stream.addTrack threw peer=${peerId} err=${
+            (err as Error)?.message ?? String(err)
+          }`
+        );
+        return;
+      }
+      if (track.kind === "audio") entry.hasAudioTrack = true;
+      else entry.hasVideoTrack = true;
+      log.log(`track received peer=${peerId} kind=${track.kind}`);
+      track.addEventListener("ended", () => {
+        if (disposed) return;
+        try {
+          targetStream.removeTrack(track);
+        } catch {
+          /* ignore */
+        }
+        if (track.kind === "audio") {
+          entry.hasAudioTrack =
+            entry.audioStream.getAudioTracks().length > 0;
+        } else {
+          entry.hasVideoTrack =
+            entry.videoStream.getVideoTracks().length > 0;
+        }
+        rebuild();
+      });
+      rebuild();
+    }
+
     const unsubPeers = syncClient.onRoomPeersChange((peers) => {
       if (disposed) return;
       // Reconcile: addPeer first, then removePeer (so glare
@@ -1380,6 +1426,17 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
                 (err as Error)?.message ?? String(err)
               }`
             );
+          }
+        }
+        // Drain tracks that arrived before this peer's presence event.
+        const buffered = pendingRemoteTracks.get(p.peerId);
+        if (buffered && buffered.length > 0) {
+          log.log(
+            `avx=${sid} peer=${p.peerId} remote-track flushed n=${buffered.length}`
+          );
+          pendingRemoteTracks.delete(p.peerId);
+          for (const t of buffered) {
+            applyRemoteTrack(entry, p.peerId, t);
           }
         }
       }
@@ -1410,6 +1467,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           }
         }
         internal.delete(peerId);
+        pendingRemoteTracks.delete(peerId);
       }
       rebuild();
     });
@@ -1424,45 +1482,18 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       }
       const entry = internal.get(peerId);
       if (!entry) {
+        // Presence hasn't arrived yet — buffer the track so it isn't
+        // lost. The drain runs in onRoomPeersChange when this peer's
+        // entry is first created by ensureEntry.
         log.warn(
-          `onRemoteTrack for unknown peer ${peerId} — dropping track (no entry; presence not yet observed?)`
+          `avx=${sid} peer=${peerId} remote-track buffered kind=${track.kind} (presence not yet observed)`
         );
+        const pending = pendingRemoteTracks.get(peerId) ?? [];
+        pending.push(track);
+        pendingRemoteTracks.set(peerId, pending);
         return;
       }
-      const targetStream =
-        track.kind === "audio" ? entry.audioStream : entry.videoStream;
-      try {
-        targetStream.addTrack(track);
-      } catch (err) {
-        log.warn(
-          `${track.kind}Stream.addTrack threw peer=${peerId} err=${
-            (err as Error)?.message ?? String(err)
-          }`
-        );
-        return;
-      }
-      if (track.kind === "audio") entry.hasAudioTrack = true;
-      else entry.hasVideoTrack = true;
-      log.log(
-        `track received peer=${peerId} kind=${track.kind}`
-      );
-      track.addEventListener("ended", () => {
-        if (disposed) return;
-        try {
-          targetStream.removeTrack(track);
-        } catch {
-          /* ignore */
-        }
-        if (track.kind === "audio") {
-          entry.hasAudioTrack =
-            entry.audioStream.getAudioTracks().length > 0;
-        } else {
-          entry.hasVideoTrack =
-            entry.videoStream.getVideoTracks().length > 0;
-        }
-        rebuild();
-      });
-      rebuild();
+      applyRemoteTrack(entry, peerId, track);
     });
 
     // Stale-peer eviction: if a peer's peerConnectionState stays
@@ -1587,6 +1618,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         }
       }
       internal.clear();
+      pendingRemoteTracks.clear();
       setParticipants([]);
       setReachableParticipants([]);
     };
