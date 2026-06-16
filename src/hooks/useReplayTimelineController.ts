@@ -505,25 +505,39 @@ export function useReplayTimelineController(
       setPlaying(true);
       const el = audioRef.current;
       if (el) {
-        // Guard: the WebM fix sets el.currentTime = 1e101, which Chrome
-        // reports as Infinity.  Calling play() from Infinity snaps playback
-        // to the end of the file (observed: AbortError → seeked to 94.7 s →
-        // onEnded fires).  Correct currentTime to the intended position
-        // before calling play() so the user hears from where they are.
-        if (!Number.isFinite(el.currentTime)) {
+        // Position-sync: always verify el.currentTime matches the controller's
+        // intended position before calling play().
+        //
+        // Two failure modes leave el.currentTime wrong:
+        //   1. Infinity: el.currentTime = 1e101 while WebM scan still running.
+        //   2. Finite-parked-at-end: Chrome fires durationchange while
+        //      audio.seeking=true (our own 1e101 scan completing), which blocked
+        //      the webm-fix reset-to-0 guard, leaving currentTime at the
+        //      measured duration (e.g. 94.741). The previous Infinity-only guard
+        //      missed this case because 94.741 is finite.
+        //
+        // We compute the intended local position from globalMsRef and use a
+        // 50 ms tolerance to avoid spurious seeks on normal resume-after-pause
+        // (where el.currentTime already matches up to floating-point drift).
+        // We do NOT reload the segment src — only set currentTime within the
+        // already-loaded segment.
+        const measured = resolvedMaxMsRef.current;
+        const { localMs } = globalMsToSegmentLocal(
+          atMs,
+          audioTimeline,
+          measured > 0 ? measured : undefined
+        );
+        const intendedSec = Math.max(0, localMs / 1000);
+        const delta = Number.isFinite(el.currentTime)
+          ? Math.abs(el.currentTime - intendedSec)
+          : Infinity;
+        if (delta > 0.05) {
           cancelWebmFixRef.current?.();
-          const measured = resolvedMaxMsRef.current;
-          const { localMs } = globalMsToSegmentLocal(
-            atMs,
-            audioTimeline,
-            measured > 0 ? measured : undefined
-          );
-          const seekSec = Math.max(0, localMs / 1000);
           console.log(
-            `[avx] wbsid=${whiteboardSessionId ?? "?"} pre_play_infinity_guard currentTime_was=Infinity setting_to=${seekSec}`
+            `[avx] wbsid=${whiteboardSessionId ?? "?"} pre_play_position_sync currentTime_was=${el.currentTime} setting_to=${intendedSec}`
           );
           try {
-            el.currentTime = seekSec;
+            el.currentTime = intendedSec;
           } catch {
             // best-effort; play() will still be called below
           }

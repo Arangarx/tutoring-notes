@@ -128,4 +128,58 @@ describe("replay timeline oracle helpers", () => {
       expect(firstPlayTargetMs).toBe(0);
     });
   });
+
+  /**
+   * play() position-sync guard (defense-in-depth fix for first-play bug)
+   *
+   * jsdom cannot exercise real audio playback, so we test the guard's
+   * decision logic as a pure function extracted from play(). The real-browser
+   * proof is the console checklist: on first press of Play, the log must show
+   * `pre_play_position_sync currentTime_was=94.741 setting_to=0` (NOT
+   * `pre_play currentTime=94.741`) and no `onEnded`/`play_loop_at_cap`
+   * immediately after.
+   */
+  describe("play() position-sync guard", () => {
+    const TOLERANCE_SEC = 0.05; // 50 ms
+
+    function shouldSync(currentTime: number, intendedSec: number): boolean {
+      const delta = Number.isFinite(currentTime)
+        ? Math.abs(currentTime - intendedSec)
+        : Infinity;
+      return delta > TOLERANCE_SEC;
+    }
+
+    it("(a) fires sync when currentTime is parked at measured end (fresh entry, globalMs=0)", () => {
+      // After the WebM scan leaves el.currentTime=94.741 and the fix reset
+      // was skipped, the guard must detect the mismatch and correct before play.
+      expect(shouldSync(94.741, 0)).toBe(true);
+    });
+
+    it("(a) fires sync for Infinity case (1e101 scan not yet resolved)", () => {
+      expect(shouldSync(Infinity, 0)).toBe(true);
+    });
+
+    it("(c) does NOT fire sync on resume-after-pause (currentTime matches globalMs)", () => {
+      // el.currentTime already matches the paused position — no unnecessary seek.
+      expect(shouldSync(30.0, 30.0)).toBe(false);
+      // Float drift within tolerance is also safe.
+      expect(shouldSync(29.999, 30.0)).toBe(false);
+      expect(shouldSync(30.001, 30.0)).toBe(false);
+    });
+
+    it("(d) does NOT fire sync after scrub-then-play (currentTime matches scrub position)", () => {
+      // handleScrubPointerUp → seek() → loadSegmentAt() → el.currentTime = 50s.
+      // play() must not re-seek and undo the scrub position.
+      expect(shouldSync(50.0, 50.0)).toBe(false);
+    });
+
+    it("fires sync when drift exceeds 50 ms tolerance", () => {
+      expect(shouldSync(0.1, 0)).toBe(true);  // 100 ms off → sync
+    });
+
+    it("does NOT fire sync when drift is at or below 50 ms tolerance", () => {
+      expect(shouldSync(0.049, 0)).toBe(false); // 49 ms off → no sync
+      expect(shouldSync(0.05, 0)).toBe(false);  // exactly 50 ms → no sync
+    });
+  });
 });

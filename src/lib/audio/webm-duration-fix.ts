@@ -106,6 +106,10 @@ export function attachWebmDurationFix(
   // Separate from needsFix so onDurationResolved fires even when the
   // caller called cancelPendingFix() to suppress the reset-to-0.
   let hasNotifiedDuration = false;
+  // currentTime captured just before we set el.currentTime = 1e101, so
+  // onDurationChange can restore to the pre-hack position (typically 0 on
+  // fresh entry) rather than hard-coding 0.
+  let savedCurrentTime = 0;
 
   function onLoadedMetadata() {
     loadedOk = true;
@@ -113,6 +117,7 @@ export function attachWebmDurationFix(
     if (!isWebm) return;
     if (!Number.isFinite(audio.duration) || audio.duration === 0) {
       needsFix = true;
+      savedCurrentTime = audio.currentTime;
       try {
         audio.currentTime = 1e101;
       } catch {
@@ -139,15 +144,22 @@ export function attachWebmDurationFix(
       // Don't reset position if audio is actively playing — the play() call
       // already positioned it correctly; resetting would jump the playhead.
       if (!audio.paused && !audio.ended) return;
-      // Don't reset if a seek is in progress — the controller has already
-      // set currentTime to the intended seek target; clobbering it here would
-      // restart audio from 0.
-      if (audio.seeking) return;
+      // NOTE: we intentionally do NOT check audio.seeking here.
+      //
+      // The original guard (`if (audio.seeking) return`) was meant to protect
+      // against clobbering a controller-initiated seek.  But controller seeks
+      // always call cancelPendingFix() first (via applySeek), which sets
+      // needsFix=false — so we'd have already returned above.  The only
+      // scenario where we reach this point with audio.seeking=true is when
+      // Chrome fires durationchange WHILE our own 1e101 hack seek is still
+      // completing.  Skipping the reset in that case is exactly the first-play
+      // bug: el.currentTime stays parked at the measured end (e.g. 94.741s)
+      // and the next play() starts from there, fires onEnded immediately.
       console.log("[avx] webmfix_reset_currentTime");
       try {
-        audio.currentTime = 0;
+        audio.currentTime = savedCurrentTime;
       } catch {
-        // Reset to 0 is best-effort; ignore.
+        // Reset is best-effort; ignore.
       }
     }
   }

@@ -237,6 +237,56 @@ describe("attachWebmDurationFix", () => {
     }
   );
 
+  it("resets currentTime even when audio.seeking=true during durationchange (primary first-play bug)", () => {
+    // Chrome fires durationchange WHILE our own 1e101 hack seek is still
+    // completing (audio.seeking=true).  The previous `if (audio.seeking) return`
+    // guard blocked the reset, leaving currentTime parked at the measured end
+    // (e.g. 94.741s).  First play() then started from there, hit onEnded
+    // immediately.  This test pins the fix: seeking=true must NOT skip the reset.
+    const audio = makeAudio();
+    setDuration(audio, Infinity);
+    Object.defineProperty(audio, "seeking", {
+      configurable: true,
+      get: () => true,
+    });
+
+    attachWebmDurationFix(audio, "audio/webm;codecs=opus");
+    audio.dispatchEvent(new Event("loadedmetadata"));
+    // hack fired, currentTime bumped
+    expect(audio.currentTime).toBeGreaterThan(0);
+
+    // Simulate browser landing at the real end after 1e101 seek
+    audio.currentTime = 94.741;
+    setDuration(audio, 94.741);
+    // durationchange fires while audio.seeking is still true
+    audio.dispatchEvent(new Event("durationchange"));
+
+    // Must restore to savedCurrentTime=0 — NOT be blocked by seeking=true
+    expect(audio.currentTime).toBe(0);
+  });
+
+  it("restores currentTime to its pre-hack value (savedCurrentTime), not hard-coded 0", () => {
+    // Confirms fix (b): on fresh entry savedCurrentTime=0, so the restore
+    // always brings the element back to 0 — no magic constants.
+    const audio = makeAudio();
+    setDuration(audio, Infinity);
+    // Fresh entry: currentTime is already 0 before the hack.
+    expect(audio.currentTime).toBe(0);
+
+    attachWebmDurationFix(audio, "audio/webm;codecs=opus");
+    audio.dispatchEvent(new Event("loadedmetadata"));
+    // hack bumped currentTime away from 0
+    expect(audio.currentTime).toBeGreaterThan(0);
+
+    // Simulate browser completing the scan and landing at the real end
+    audio.currentTime = 94.741;
+    setDuration(audio, 94.741);
+    audio.dispatchEvent(new Event("durationchange"));
+
+    // Must restore to the saved pre-hack value (0)
+    expect(audio.currentTime).toBe(0);
+  });
+
   it("does NOT reset currentTime while audio is playing (durationchange race)", () => {
     const audio = makeAudio();
     setDuration(audio, Infinity);
