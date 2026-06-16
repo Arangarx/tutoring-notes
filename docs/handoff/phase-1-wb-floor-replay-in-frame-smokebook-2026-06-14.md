@@ -1,7 +1,7 @@
 # Phase 1 — WB Review Correct (in-frame) — smoke runbook
 
 **Branch:** `phase1/wb-review-correct`  
-**Tip commit:** `[PENDING]` *(fix(resize): correct viewport resize re-centering — frame-to-frame, live + replay)*  
+**Tip commit:** `[5aa4ce4](https://github.com/Arangarx/tutoring-notes/commit/5aa4ce4)` *(fix(resize): correct viewport resize re-centering — frame-to-frame, live + replay)*  
 **Preview:** [tutoring-notes-git-phase1-wb-rev-46b0a1](https://tutoring-notes-git-phase1-wb-rev-46b0a1-arangarx-5209s-projects.vercel.app)
 
 > **Smoke focus = unified in-frame review surface** (one `TutorNotesSection` reflows prominent ↔ docked with **animated** transition; replay fills main frame inside live WB chrome; persist-once replay; **Hide replay** collapse). Standalone admin/share replay scrubber parity remains **DEFERRED** — regression-check only (D-items).
