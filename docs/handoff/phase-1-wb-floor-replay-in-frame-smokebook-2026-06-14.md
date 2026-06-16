@@ -1,7 +1,7 @@
 # Phase 1 — WB Review Correct (in-frame) — smoke runbook
 
 **Branch:** `phase1/wb-review-correct`  
-**Tip commit:** `[14bc644](https://github.com/Arangarx/tutoring-notes/commit/14bc6443d0a397c01945605790181e461952e5bc)`  
+**Tip commit:** `[675c265](https://github.com/Arangarx/tutoring-notes/commit/675c2658baaaf2590ded7c742450ba520cf2ff21)`  
 **Preview:** [tutoring-notes-git-phase1-wb-rev-46b0a1](https://tutoring-notes-git-phase1-wb-rev-46b0a1-arangarx-5209s-projects.vercel.app)
 
 > **Smoke focus = unified in-frame review surface** (one `TutorNotesSection` reflows prominent ↔ docked with **animated** transition; replay fills main frame inside live WB chrome; persist-once replay; **Hide replay** collapse). Standalone admin/share replay scrubber parity remains **DEFERRED** — regression-check only (D-items).
@@ -17,10 +17,10 @@
 **Ignore this run:** Confirm section content (Phase 2). Notes AI quality. Tutor scratchy audio (B4). Polished blurred-line skeleton (backlogged).
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
 - [ ] SKIP
 
-**Notes: If the thumbnail is supposed to already show final board state this is failing.**
+**Notes: Reset for 5th smoke @ 675c265. Fix B replaced live Excalidraw thumbnail with static exportToCanvas→<img> (no more flash-then-black from API re-init). Fix C replaced hand-rolled scroll math in resize handler with createCameraFitter().fit(). Fix D added mute toggle + WbCustomSlider volume control to scrubber chrome.**
 
 ---
 
@@ -67,10 +67,10 @@
 **Ignore this run:** Sub-250ms jitter.
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Reset for 5th smoke @ 675c265 — Fix A (audio seek) pivoted to port legacy contract: play() no longer re-enters loadSegmentAt; registers one-shot canplay/loadedmetadata retry for both autoplay cases; removed destructive init-effect reset; added src=effectiveSegments[0].url. Jest red-before/green-after confirmed. Real-browser currentTime verify still required (automated harness cannot obtain an authenticated audio session — Andrew audible confirm required).**
 
 ---
 
@@ -115,10 +115,10 @@
 **Ignore this run:** Nothing.
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
 - [ ] SKIP
 
-**Notes: Scrubber showed preserved position, but reset to beginning when I hit play.**
+**Notes: Reset for 5th smoke @ 675c265. The "reset to beginning on Play" was caused by the destructive init-effect re-run (setGlobalMs(0) fired when replayExcaliRestoreReady re-ran). Fixed: init-effect now never zeroes globalMs — matches legacy. And play() no longer re-enters loadSegmentAt which also avoided re-seek.**
 
 ---
 
