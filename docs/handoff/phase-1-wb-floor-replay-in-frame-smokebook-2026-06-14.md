@@ -1,7 +1,7 @@
 # Phase 1 — WB Review Correct (in-frame) — smoke runbook
 
 **Branch:** `phase1/wb-review-correct`  
-**Tip commit:** `[88ef6b0](https://github.com/Arangarx/tutoring-notes/commit/88ef6b0)` *(pending — replay A/V cluster removal)*  
+**Tip commit:** `[4c1275d](https://github.com/Arangarx/tutoring-notes/commit/4c1275d)` *(fix(replay): remove non-functional live A/V cluster from review chrome)*  
 **Preview:** [tutoring-notes-git-phase1-wb-rev-46b0a1](https://tutoring-notes-git-phase1-wb-rev-46b0a1-arangarx-5209s-projects.vercel.app)
 
 > **Smoke focus = unified in-frame review surface** (one `TutorNotesSection` reflows prominent ↔ docked with **animated** transition; replay fills main frame inside live WB chrome; persist-once replay; **Hide replay** collapse). Standalone admin/share replay scrubber parity remains **DEFERRED** — regression-check only (D-items).
