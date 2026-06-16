@@ -1,8 +1,8 @@
 # Phase 1 — WB Review Correct (in-frame) — smoke runbook
 
 **Branch:** `phase1/wb-review-correct`  
-**Tip commit:** `<pending push>`  
-**Preview:** <unverified — confirm after Vercel deploy>
+**Tip commit:** [`90f8d8f`](https://github.com/Arangarx/tutoring-notes/commit/90f8d8fd5285363af46e07103762f24bb19e8ef9)  
+**Preview:** [tutoring-notes-git-phase1-wb-rev-46b0a1](https://tutoring-notes-git-phase1-wb-rev-46b0a1-arangarx-5209s-projects.vercel.app)
 
 > **Smoke focus = unified in-frame review surface** (one `TutorNotesSection` reflows prominent ↔ docked; replay fills main frame; no lossy transition, no dirty confirm, no "Open full replay"). Standalone admin/share replay scrubber parity remains **DEFERRED** — regression-check only (D-items).
 
