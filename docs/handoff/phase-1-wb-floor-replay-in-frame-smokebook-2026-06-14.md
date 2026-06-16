@@ -1,7 +1,7 @@
 # Phase 1 — WB Review Correct (in-frame) — smoke runbook
 
 **Branch:** `phase1/wb-review-correct`  
-**Tip commit:** `[682fc15](https://github.com/Arangarx/tutoring-notes/commit/682fc15)` *(fix: restore tutor camera acquisition; WbTopBarCamControl; tile-body min-height)*  
+**Tip commit:** `[cf1eadc](https://github.com/Arangarx/tutoring-notes/commit/cf1eadc)` *(fix(replay): correct first-play starts-from-end bug — parked currentTime after WebM duration scan)*  
 **Preview:** [tutoring-notes-git-phase1-wb-rev-46b0a1](https://tutoring-notes-git-phase1-wb-rev-46b0a1-arangarx-5209s-projects.vercel.app)
 
 > **Smoke focus = unified in-frame review surface** (one `TutorNotesSection` reflows prominent ↔ docked with **animated** transition; replay fills main frame inside live WB chrome; persist-once replay; **Hide replay** collapse). Standalone admin/share replay scrubber parity remains **DEFERRED** — regression-check only (D-items).
