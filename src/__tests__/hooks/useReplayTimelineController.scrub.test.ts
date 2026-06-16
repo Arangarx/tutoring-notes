@@ -339,6 +339,123 @@ describe("WebM duration-fix race (scrub → durationchange → play)", () => {
   });
 });
 
+describe("pendingPlayRef — no pause() abort on seek-with-play", () => {
+  /**
+   * Verifies the single-source-of-truth play/pause fix.
+   *
+   * Scenario: audio is playing, user scrubs.
+   *  1. handleScrubPointerDown pauses the element → `pause` DOM event fires.
+   *  2. handleScrubPointerUp commits the seek → el.play() is called.
+   *  3. While play() promise is pending, another `pause` DOM event fires
+   *     (stale — fired by the scrub-pause in step 1 that propagated late).
+   *
+   * Without the guard, onPause responds to the stale event, calls loop.pause(),
+   * and fighting play() aborts it (AbortError). With the guard, onPause is
+   * suppressed while pendingPlayRef.current=true.
+   */
+  it("suppresses stale pause DOM event while play() is pending (no abort)", async () => {
+    const audio = document.createElement("audio");
+    document.body.appendChild(audio);
+    let currentTime = 0;
+    let srcAttr = "";
+    let isPaused = true;
+
+    Object.defineProperty(audio, "currentTime", {
+      configurable: true,
+      get: () => currentTime,
+      set: (v: number) => { currentTime = v; },
+    });
+    Object.defineProperty(audio, "src", {
+      configurable: true,
+      get: () => (srcAttr ? new URL(srcAttr, "http://localhost").href : ""),
+      set: (v: string) => { srcAttr = v; },
+    });
+    Object.defineProperty(audio, "paused", {
+      configurable: true,
+      get: () => isPaused,
+    });
+    audio.getAttribute = jest.fn((name: string) =>
+      name === "src" ? srcAttr : null
+    ) as typeof audio.getAttribute;
+    audio.load = jest.fn();
+
+    // play() returns a never-resolving promise to simulate in-flight play.
+    let resolvePlay!: () => void;
+    audio.play = jest.fn(() => new Promise<void>((res) => { resolvePlay = res; }));
+    audio.pause = jest.fn(() => {
+      isPaused = true;
+      audio.dispatchEvent(new Event("pause"));
+    });
+
+    const applySceneAtRef = { current: jest.fn() };
+    const { result, unmount } = renderHook(() => {
+      const ref = useRef(applySceneAtRef.current);
+      const segments = useMemo(
+        () => [{ url: "/api/audio/admin/rec-1", mimeType: "audio/webm", durationSeconds: 10 }],
+        []
+      );
+      return useReplayTimelineController({
+        eventsBlobUrl: "/api/whiteboard/wbs-test/events",
+        audioSegments: segments,
+        applySceneAtRef: ref,
+      });
+    });
+
+    // Set audioRef BEFORE waitFor so the play-loop effect registers event
+    // listeners on the audio element when replayExcaliRestoreReady becomes true.
+    act(() => {
+      result.current.audioRef.current = audio;
+      audio.src = "/api/audio/admin/rec-1";
+    });
+
+    await waitFor(() => {
+      expect(result.current.loadState.kind).toBe("ready");
+      expect(result.current.replayExcaliRestoreReady).toBe(true);
+    });
+
+    // Initiate seek+play directly (mimics the user pressing Play at 3 s).
+    // seek(3000, {play:true}) → setPlaying(true) + startPlay(el) → el.play().
+    // The pending play() promise is in-flight; playing state is now true.
+    isPaused = false;
+    currentTime = 3;
+    act(() => {
+      result.current.seek(3000, { play: true });
+    });
+
+    // playing=true was set by seek; play() promise is unresolved (pendingPlayRef=true).
+    expect(result.current.playing).toBe(true);
+    expect(audio.play).toHaveBeenCalledTimes(1);
+
+    // Stale pause event fires WHILE play() is still in-flight (not resolved).
+    // This simulates the scrub-pause event arriving late — the key race condition.
+    // With the pendingPlayRef guard, onPause returns early and does NOT flip
+    // playing to false or call loop.pause().
+    act(() => {
+      audio.dispatchEvent(new Event("pause"));
+    });
+
+    // playing must remain true — stale pause was suppressed.
+    expect(result.current.playing).toBe(true);
+
+    // Resolve the play promise → pendingPlayRef clears.
+    await act(async () => {
+      resolvePlay();
+      await Promise.resolve();
+    });
+
+    // Simulate the real play DOM event Chrome fires once playback starts.
+    isPaused = false;
+    act(() => {
+      audio.dispatchEvent(new Event("play"));
+    });
+    expect(result.current.playing).toBe(true);
+    expect(currentTime).toBeCloseTo(3, 0);
+
+    unmount();
+    audio.remove();
+  });
+});
+
 describe("FIX 1 — apply re-entrancy guard (no stack overflow at end-of-stream)", () => {
   /**
    * RED-BEFORE / GREEN-AFTER for the recursive-pause bug.

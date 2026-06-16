@@ -113,6 +113,11 @@ export function attachWebmDurationFix(
       // Don't reset position if audio is actively playing — the play() call
       // already positioned it correctly; resetting would jump the playhead.
       if (!audio.paused && !audio.ended) return;
+      // Don't reset if a seek is in progress — the controller has already
+      // set currentTime to the intended seek target; clobbering it here would
+      // restart audio from 0.
+      if (audio.seeking) return;
+      console.log("[avx] webmfix_reset_currentTime");
       try {
         audio.currentTime = 0;
       } catch {

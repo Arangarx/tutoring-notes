@@ -97,6 +97,18 @@ export function useReplayTimelineController(
   const segmentSwappingRef = useRef(false);
   const scrubWasPlayingRef = useRef(false);
   const scrubberMaxRef = useRef(1);
+  /**
+   * Single-source-of-truth play guard.
+   *
+   * Set to `true` immediately before `el.play()` is called; cleared in the
+   * resolved/rejected promise handler.  While true, the `onPause` DOM-event
+   * handler skips its `setPlaying(false)` + `loop.pause()` side-effects — the
+   * element is transitioning from "scrub-paused" to "resumed-playing" and any
+   * `pause` event that arrives during this window is stale (fired by the
+   * scrub-pause, not by a new user action).  Without this guard the two code
+   * paths fight each other, producing the AbortError and resetting currentTime.
+   */
+  const pendingPlayRef = useRef(false);
   const playLoopRef = useRef<ReturnType<typeof createThrottledPlayLoop> | null>(
     null
   );
@@ -256,6 +268,34 @@ export function useReplayTimelineController(
     []
   );
 
+  /** Wrap el.play() with AbortError handling. All play calls go through here. */
+  const startPlay = useCallback(
+    (el: HTMLAudioElement, reason: string) => {
+      console.log(
+        `[avx] wbsid=${whiteboardSessionId ?? "?"} pre_play currentTime=${el.currentTime} reason=${reason}`
+      );
+      pendingPlayRef.current = true;
+      const promise = el.play();
+      if (promise !== undefined) {
+        promise.then(() => {
+          pendingPlayRef.current = false;
+        }).catch((err: unknown) => {
+          pendingPlayRef.current = false;
+          if (err instanceof DOMException && err.name === "AbortError") {
+            console.warn(
+              `[avx] wbsid=${whiteboardSessionId ?? "?"} play_aborted reason=AbortError currentTime=${el.currentTime}`
+            );
+          } else {
+            console.error(
+              `[avx] wbsid=${whiteboardSessionId ?? "?"} play_error reason=${String(err)}`
+            );
+          }
+        });
+      }
+    },
+    [whiteboardSessionId]
+  );
+
   const loadSegmentAt = useCallback(
     (segmentIndex: number, localMs: number, autoplay: boolean) => {
       const el = audioRef.current;
@@ -274,6 +314,9 @@ export function useReplayTimelineController(
         // Cancel any pending WebM duration-fix reset so a durationchange
         // firing after this seek cannot clobber the intended position.
         cancelWebmFixRef.current?.();
+        console.log(
+          `[avx] wbsid=${whiteboardSessionId ?? "?"} seek_set_currentTime target=${seekSec} before=${el.currentTime}`
+        );
         try {
           el.currentTime = seekSec;
         } catch {
@@ -288,19 +331,25 @@ export function useReplayTimelineController(
             el.removeEventListener("loadedmetadata", onReady);
             cancelWebmFixRef.current?.();
             try { el.currentTime = seekSec; } catch { /* best-effort */ }
-            if (autoplay) void el.play();
+            if (autoplay) startPlay(el, "applySeek_retry");
           };
           el.addEventListener("canplay", onReady);
           el.addEventListener("loadedmetadata", onReady);
           return;
         }
+        console.log(
+          `[avx] wbsid=${whiteboardSessionId ?? "?"} seek_after_currentTime value=${el.currentTime}`
+        );
         playLoopRef.current?.seek();
-        if (autoplay) void el.play();
+        if (autoplay) startPlay(el, "applySeek");
       };
 
       if (needsSrcSwap) {
         segmentSwappingRef.current = true;
         setAudioReady(false);
+        console.log(
+          `[avx] wbsid=${whiteboardSessionId ?? "?"} audio_src_set url=${seg.url}`
+        );
         el.src = seg.url;
         const onMeta = () => {
           el.removeEventListener("loadedmetadata", onMeta);
@@ -308,12 +357,15 @@ export function useReplayTimelineController(
           applySeek();
         };
         el.addEventListener("loadedmetadata", onMeta);
+        console.log(
+          `[avx] wbsid=${whiteboardSessionId ?? "?"} audio_load reason=needsSrcSwap`
+        );
         el.load();
       } else {
         applySeek();
       }
     },
-    [audioSrcMatches, effectiveSegments]
+    [audioSrcMatches, effectiveSegments, startPlay, whiteboardSessionId]
   );
 
   const seek = useCallback(
@@ -416,12 +468,19 @@ export function useReplayTimelineController(
   const pause = useCallback(() => {
     if (hasAudio) {
       segmentSwappingRef.current = false;
+      pendingPlayRef.current = false;
       setPlaying(false);
-      audioRef.current?.pause();
+      const el = audioRef.current;
+      if (el) {
+        console.log(
+          `[avx] wbsid=${whiteboardSessionId ?? "?"} audio_pause reason=pause_callback currentTime=${el.currentTime}`
+        );
+        el.pause();
+      }
     } else {
       stopSynth();
     }
-  }, [hasAudio, stopSynth]);
+  }, [hasAudio, stopSynth, whiteboardSessionId]);
 
   const play = useCallback(() => {
     const atMs = globalMsRef.current;
@@ -435,7 +494,8 @@ export function useReplayTimelineController(
       // re-enter loadSegmentAt on an ordinary resume — that would reset
       // currentTime via applySeek and race with the WebM duration-fix.
       setPlaying(true);
-      void audioRef.current?.play();
+      const el = audioRef.current;
+      if (el) startPlay(el, "play_button");
       return;
     }
     const startFrom = atMs >= noAudioMaxMs ? 0 : atMs;
@@ -450,6 +510,7 @@ export function useReplayTimelineController(
     hasAudio,
     noAudioMaxMs,
     seek,
+    startPlay,
     startSynthFrom,
   ]);
 
@@ -554,6 +615,9 @@ export function useReplayTimelineController(
             applySceneAtRef.current(endMs);
             isAtEndRef.current = true;
             setPlaying(false);
+            console.log(
+              `[avx] wbsid=${whiteboardSessionId ?? "?"} audio_pause reason=play_loop_at_cap ms=${ms} cap=${cap}`
+            );
             el.pause();
             loop.pause();
           } else {
@@ -569,13 +633,34 @@ export function useReplayTimelineController(
     playLoopRef.current = loop;
 
     const onPlay = () => {
+      console.log(
+        `[avx] wbsid=${whiteboardSessionId ?? "?"} audio_play_event currentTime=${el.currentTime}`
+      );
+      pendingPlayRef.current = false;
       setPlaying(true);
       loop.play();
     };
     const onPause = () => {
       if (segmentSwappingRef.current) return;
+      // Guard: a play() was called and hasn't resolved yet — this pause event
+      // is stale (fired by the scrub-pause that preceded the play() call).
+      // Responding here would fight the pending play and cause the AbortError.
+      if (pendingPlayRef.current) {
+        console.log(
+          `[avx] wbsid=${whiteboardSessionId ?? "?"} audio_pause suppressed_during_pending_play currentTime=${el.currentTime}`
+        );
+        return;
+      }
+      console.log(
+        `[avx] wbsid=${whiteboardSessionId ?? "?"} audio_pause reason=onPause_handler currentTime=${el.currentTime}`
+      );
       setPlaying(false);
       loop.pause();
+    };
+    const onSeeked = () => {
+      console.log(
+        `[avx] wbsid=${whiteboardSessionId ?? "?"} audio_seeked_event currentTime=${el.currentTime}`
+      );
     };
 
     const onEnded = () => {
@@ -600,6 +685,9 @@ export function useReplayTimelineController(
       }
 
       isAtEndRef.current = true;
+      console.log(
+        `[avx] wbsid=${whiteboardSessionId ?? "?"} audio_pause reason=onEnded currentTime=${el.currentTime}`
+      );
       el.pause();
       const endMs = globalSegmentOffsetMsRef.current;
       setPlaying(false);
@@ -611,6 +699,7 @@ export function useReplayTimelineController(
     el.addEventListener("play", onPlay);
     el.addEventListener("pause", onPause);
     el.addEventListener("ended", onEnded);
+    el.addEventListener("seeked", onSeeked);
 
     return () => {
       playLoopRef.current = null;
@@ -618,6 +707,7 @@ export function useReplayTimelineController(
       el.removeEventListener("play", onPlay);
       el.removeEventListener("pause", onPause);
       el.removeEventListener("ended", onEnded);
+      el.removeEventListener("seeked", onSeeked);
     };
   }, [
     applySceneAtRef,
@@ -627,6 +717,7 @@ export function useReplayTimelineController(
     loadSegmentAt,
     loadState,
     replayExcaliRestoreReady,
+    whiteboardSessionId,
   ]);
 
   // Synth cleanup
@@ -642,10 +733,21 @@ export function useReplayTimelineController(
 
   const handleScrubPointerDown = useCallback(() => {
     if (!hasAudio) return;
-    scrubWasPlayingRef.current = playing;
     const el = audioRef.current;
-    if (el && !el.paused) el.pause();
-  }, [hasAudio, playing]);
+    // Use el.paused as the ground truth — React `playing` state can be stale
+    // (e.g. captured from a previous render), so every scrub would report
+    // wasPlaying=true even on a fresh/paused session.
+    scrubWasPlayingRef.current = !!el && !el.paused;
+    console.log(
+      `[avx] wbsid=${whiteboardSessionId ?? "?"} scrub_pointer_down wasPlaying=${scrubWasPlayingRef.current} el.paused=${el?.paused}`
+    );
+    if (el && !el.paused) {
+      console.log(
+        `[avx] wbsid=${whiteboardSessionId ?? "?"} audio_pause reason=scrub_pointer_down currentTime=${el.currentTime}`
+      );
+      el.pause();
+    }
+  }, [hasAudio, whiteboardSessionId]);
 
   const handleScrubChange = useCallback(
     (ms: number) => {
@@ -654,7 +756,13 @@ export function useReplayTimelineController(
         if (clamped >= scrubberMaxRef.current) {
           isAtEndRef.current = true;
           seek(clamped, { play: false, paint: false });
-          audioRef.current?.pause();
+          const el = audioRef.current;
+          if (el) {
+            console.log(
+              `[avx] wbsid=${whiteboardSessionId ?? "?"} audio_pause reason=scrub_at_max currentTime=${el.currentTime}`
+            );
+            el.pause();
+          }
           setPlaying(false);
           return;
         }
@@ -675,7 +783,7 @@ export function useReplayTimelineController(
         }
       }
     },
-    [applySceneAtRef, hasAudio, playing, seek]
+    [applySceneAtRef, hasAudio, playing, seek, whiteboardSessionId]
   );
 
   const handleScrubPointerUp = useCallback(

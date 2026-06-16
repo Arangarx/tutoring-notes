@@ -47,10 +47,21 @@ function readInitialResolvedTheme(mode: ThemeMode): ResolvedTheme {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [mode, setModeState] = useState<ThemeMode>(() => readStoredMode());
-  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() =>
-    readInitialResolvedTheme(readStoredMode())
-  );
+  // Start with SSR-safe defaults so server and client first renders match
+  // (avoiding React hydration error #418). The useEffect below syncs with
+  // localStorage on mount; the resulting flash is imperceptible because
+  // applyThemeToDocument also updates the <html data-theme> attribute.
+  const [mode, setModeState] = useState<ThemeMode>("system");
+  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("light");
+
+  // Sync with stored preference after hydration.
+  useEffect(() => {
+    const storedMode = readStoredMode();
+    const initialResolved = readInitialResolvedTheme(storedMode);
+    setModeState(storedMode);
+    setResolvedTheme(initialResolved);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const setMode = useCallback((next: ThemeMode) => {
     setModeState(next);
