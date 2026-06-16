@@ -1,8 +1,9 @@
 # Phase 1 — WB Review Correct (in-frame) — smoke runbook
 
 **Branch:** `phase1/wb-review-correct`  
-**Tip commit:** [`fb53b2f`](https://github.com/Arangarx/tutoring-notes/commit/fb53b2f)  
-**Preview:** <unverified — confirm in Vercel dashboard; MCP unavailable at commit time>
+**Tip commit:** `[feb319a](https://github.com/Arangarx/tutoring-notes/commit/feb319a)` (code in `[fb53b2f](https://github.com/Arangarx/tutoring-notes/commit/fb53b2f)`)  
+**Preview (always-works branch alias):** [tutoring-notes-git-phase1-wb-rev-46b0a1](https://tutoring-notes-git-phase1-wb-rev-46b0a1-arangarx-5209s-projects.vercel.app)  
+**Preview (stable, after you repoint):** [preview.usemynk.com](https://preview.usemynk.com)
 
 > **Smoke focus = corrected in-frame two-state review** (End Session → notes-hero; replay looks like live WB minus controls). Standalone admin/share replay scrubber parity remains **DEFERRED** — regression-check only (D-items).
 
@@ -16,11 +17,14 @@
 
 **Ignore this run:** Confirm section content (Phase 2). Notes AI quality. Tutor scratchy audio (B4).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:**  
+**Pass, technically, it's a step in the right direction, but when I was originally talking with AI about it we talked more about it being another tab on the whiteboard that was switched to.  I can see why we went away from that a bit with the full screen wb we landed on but wouldn't this make more sense as an overlay than a full page reload? At least this is better so far. I just wonder if it's really necessary to do what will still feel to the user like they navigated away. Why does this page have a "start whiteboard session" button?  I clicked replay session and it warns about unsaved note changes and if I want to continue to the replay...I was trying to avoid this feel altogether.  They shouldn't have to "leave" notes to watch the replay.  This experience needs to be smoother.**  
+**Skeleton with blurred info lines still not implemented, it shouldn't wait to draw the session notes form till the transcript is finished and notes reduced.  Also, this took forever to transcribe for a 2 minute session with near zero audio, definitely something to watch out for.**  
+**That top header feels.....basic?**
 
 ---
 
@@ -33,10 +37,16 @@
 **Ignore this run:** Laser pointer. Live board tab switching (single static tab).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:**  
+**Why for the love of god are the sliders/scrubbers not consolidated yet.  We had to fix this for opacity why aren't we using the same visual code? This fucking broken scrubber visually drives my ocd batshit insane. :D**  
+**Why is the viewport so tiny? (figured it out, what I thought was the canvas was dead space, the canvas didn't slot in properly)**  
+**And when it went over it had exactly the problem I was trying to avoid, it had to load the replay in, leaving the notes entirely.**  
+**Umm....the canvas didn't slot in where it was supposed to, that explains the weird huge gap.**  
+**On the bright side, it does seem to basically be working.  Strokes are drawing, there is audio.**  
+**So while visually it's not quite there, I will take this as a good step in the right direction at least.**
 
 ---
 
@@ -49,10 +59,10 @@
 **Ignore this run:** Multi-segment boundary hitch (A6-1 deferred).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:** 
 
 ---
 
@@ -65,10 +75,10 @@
 **Ignore this run:** Sub-250ms jitter.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+Notes:  **Sound starts at t=0 regardless of where I drop it and keeps playing even when the scrubber stops because there is audio left.**
 
 ---
 
@@ -81,10 +91,10 @@
 **Ignore this run:** Nothing.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: How do you open the notes drawer?**
 
 ---
 
@@ -97,10 +107,10 @@
 **Ignore this run:** Nothing.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Don't even know how to get drawer open.**
 
 ---
 
@@ -113,10 +123,10 @@
 **Ignore this run:** Nothing.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: If I click open full replay after back to notes it goes back to the old replay page.  This is why I wanted everything to stay in frame in the first place /sigh**
 
 ---
 
@@ -129,10 +139,10 @@
 **Ignore this run:** Nothing.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: We shouldn't even need this guard...wtf are we doing.**
 
 ---
 
