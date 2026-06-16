@@ -12,6 +12,8 @@
 
 **How to use:** Before master cut, every row in **KEEP PRE-MASTER** must PASS (or be explicitly escalated). Rows in **DEFER-SAFE** are tracked post-master follow-ups — not silent drops. Rows in **ALREADY-DEFERRED** were explicitly re-timed before this ledger; status lives in backlog/orchestrator state.
 
+**Post-master priority order:** **MAP-ACC** (map/reduce notes **quality**) is **#1** — start immediately at the master cut. Ship with "notes work, may need editing"; tune the pipeline against Sarah's real-session examples (can't calibrate quality without live feedback).
+
 ---
 
 ## Cross-links
@@ -29,27 +31,26 @@
 
 ---
 
-## OPEN Andrew-confirm borderlines
+## RESOLVED borderlines (Andrew 2026-06-16)
 
-These two items sit on the classification boundary. **Default shown; awaiting Andrew confirm.**
+Both items were OPEN borderlines at ledger creation (`b7b2071`). **Resolved — no longer awaiting input.**
 
-### (a) MAP-ACC — notes **quality**
-
-| Aspect | Detail |
-|---|---|
-| **Pre-master bar** | "Notes exist + pipeline works" — covered by **SSG-1** (per-chunk auto-notes, no monolithic button, ~50-min segment transcribes) |
-| **Phase-3 overlay** | "Notes genuinely **good**" — strategic note from Andrew 2026-06-12 (Experience-Driven Wedge; note-quality = moat, not ship gate) |
-| **DEFAULT** | **Defer quality bar post-master** — pipeline correctness stays pre-master; editorial/AI quality iteration is Phase 3 |
-| **Andrew confirm** | ⏸ Pending — flip to KEEP PRE-MASTER if Andrew wants quality bar before Sarah cut |
-
-### (b) A1 — freedraw ~250ms stroke latency
+### (a) MAP-ACC — notes **quality** → **DEFER post-master (#1 priority)**
 
 | Aspect | Detail |
 |---|---|
-| **Evidence** | [`BACKLOG.md`](../BACKLOG.md) L171, L159 |
-| **Risk** | Laggy ink breaks live tutoring — tutor draws, student sees delayed strokes |
-| **DEFAULT** | **KEEP pre-master** — live-session UX reliability, north-star adjacent |
-| **Andrew confirm** | ⏸ Pending — flip to DEFER-SAFE only if Andrew accepts laggy ink at cut |
+| **Decision** | **DEFER-SAFE** — quality bar moves post-master; pipeline correctness stays pre-master (**SSG-1**) |
+| **Priority** | **#1 post-master follow-up — start immediately at master cut** |
+| **Rationale** | Can't tune map/reduce quality without real-session examples from Sarah; ship "notes work, may need editing" and iterate live |
+
+### (b) A1 — freedraw ~250ms stroke latency → **DEFER (watch)**
+
+| Aspect | Detail |
+|---|---|
+| **Decision** | **DEFER-SAFE** — not a master-cut blocker; **WATCH** |
+| **Rationale** | Andrew 2026-06-16: "doesn't feel like an issue right now, we'll see what happens" |
+| **Revisit if** | Live-tutoring ink lag is reported in pilot |
+| **Unchanged** | A1 visual redesign + theme parity; `@layer` cleanup (`A1-layer`, `A1-sub`) — classifications unchanged |
 
 ---
 
@@ -91,7 +92,6 @@ These two items sit on the classification boundary. **Default shown; awaiting An
 | P2-0..15 | Two-device matrix (student new shell) | P2 plan §6–7 | Planned — awaits P1 + Andrew two-device | Gate A5 validation on unified shell |
 | P2-B1..B4 | 5-axis BLOCKER acceptance items | P2 plan + [`phase-2-student-on-new-shell-5axis-2026-06-16.md`](phase-2-student-on-new-shell-5axis-2026-06-16.md) | Folded into plan @ `80ac571` | E2E bridge, initialData ref, WbAVCluster audit, recording disclosure |
 | TM-09 | Tutor-mobile expectations copy + host gate | [`BACKLOG.md`](../BACKLOG.md) L158 | Backlog — pre-master if mobile tutor path | Sarah may tutor from phone; expectations must be truthful |
-| A1 | Freedraw ~250ms stroke latency | [`BACKLOG.md`](../BACKLOG.md) L171, L159 | **BORDERLINE — default KEEP** | Laggy ink breaks live tutoring; see OPEN borderline (b) |
 
 ---
 
@@ -101,6 +101,8 @@ These two items sit on the classification boundary. **Default shown; awaiting An
 
 | ID | Item | Source doc + section | Current status | Rationale for classification |
 |---|---|---|---|---|
+| MAP-ACC | Notes **quality** (not pipeline existence) | [`BACKLOG.md`](../BACKLOG.md) L831 | **#1 post-master — start at cut** | Andrew 2026-06-16: defer quality bar; SSG-1 covers pipeline; tune with Sarah's real sessions |
+| A1-latency | Freedraw ~250ms stroke latency | [`BACKLOG.md`](../BACKLOG.md) L171, L159 | **WATCH** — defer, not blocker | Andrew 2026-06-16: not felt as issue; revisit if live-tutoring ink lag reported |
 | A1-layer | `@layer base` CSS cleanup | [`BACKLOG.md`](../BACKLOG.md) L172 | Backlog — systemic cascade fix | Visual/readability debt; not data-loss / not live-session blocker |
 | A1-sub | DRY audit (component duplication) | [`BACKLOG.md`](../BACKLOG.md) L172 | Backlog | Mechanical consolidation; no pilot reliability impact |
 | A3a | PDF page-tab indicator | [`RELEASE-ROADMAP.md`](../RELEASE-ROADMAP.md) L280–282 — **MERGED** `c05d939` | Shipped — post-master smoke OK | Polish; PDF tabs identifiable |
@@ -111,7 +113,6 @@ These two items sit on the classification boundary. **Default shown; awaiting An
 | LONG-5 | 60–90 min transcribe re-baseline | [`BACKLOG.md`](../BACKLOG.md) L307–313 — downgraded | Backlog | SSG-1 covers ~50 min; extreme length = post-cut |
 | 2FA-B | Reset-password browser save / generate-offer | [`2fa-remember-device-smokebook-2026-06-13.md`](2fa-remember-device-smokebook-2026-06-13.md) §B; **BL-RESET-GENERATE** | Backlogged @ `adfaefa` | Chrome heuristic investigation; auth works without generate dropdown |
 | 2FA-D | Expired token UI on reset-password | 2FA smokebook §D | Backlog | Edge-case UX; invalid-link hardening shipped |
-| MAP-ACC | Notes **quality** (not pipeline existence) | [`BACKLOG.md`](../BACKLOG.md) L831 | **BORDERLINE — default DEFER** | Phase 3 moat; SSG-1 covers pipeline; see OPEN borderline (a) |
 
 ---
 
@@ -134,3 +135,4 @@ These two items sit on the classification boundary. **Default shown; awaiting An
 | Date | Change |
 |---|---|
 | 2026-06-16 | Initial ledger — Andrew relaxed strict pre-master rule; full inventory classified KEEP / DEFER-SAFE / ALREADY-DEFERRED |
+| 2026-06-16 | Borderlines resolved: MAP-ACC → DEFER-SAFE **#1 post-master** (start at cut); A1 freedraw latency → DEFER-SAFE **WATCH** (moved from KEEP PRE-MASTER) |

@@ -828,7 +828,7 @@ Items from the 2026-06-02 brand review (Andrew + wife) on landing + Features pag
 
 Cross-ref: [`docs/handoff/recording-rearchitecture-design-2026-06-05.md`](handoff/recording-rearchitecture-design-2026-06-05.md). Slice 3 (auto-notes / notes-bridge) ships on `feat/recording-p1-slice3-autonotes`.
 
-- **Map/reduce auto-notes ACCURACY is its own first-class workstream (2026-06-11).** Currently poor quality per Andrew — must be genuinely good before V1 ship. Needs a dedicated design + eval pass (decoupled from audio storage/consolidation plumbing, since the regenerate path proved notes depend only on `TranscriptChunk` / `TranscriptChunkExtraction` rows). Cross-ref: design doc § notes-pipeline contract (regression guard).
+- **Map/reduce auto-notes ACCURACY is its own first-class workstream (2026-06-11).** Currently poor quality per Andrew — must be genuinely good before V1 ship. Needs a dedicated design + eval pass (decoupled from audio storage/consolidation plumbing, since the regenerate path proved notes depend only on `TranscriptChunk` / `TranscriptChunkExtraction` rows). Cross-ref: design doc § notes-pipeline contract (regression guard). **#1 post-master follow-up (start at master cut) — Andrew 2026-06-16:** defer quality bar to post-master; ship "notes work, may need editing" and tune against Sarah's real-session examples. Cross-ref: [`docs/handoff/pre-master-smoke-deferral-ledger-2026-06-16.md`](handoff/pre-master-smoke-deferral-ledger-2026-06-16.md).
 
 ### Slice-3 notes-bridge — deferred review findings (2026-06-07)
 
