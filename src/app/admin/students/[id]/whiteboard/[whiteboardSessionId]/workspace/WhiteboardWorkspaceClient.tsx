@@ -67,6 +67,7 @@ import { useAudioFlowConfirmation } from "@/hooks/useAudioFlowConfirmation";
 import { useLiveAV } from "@/hooks/useLiveAV";
 import { studentMicStreamId } from "@/lib/recording/remote-stream-recorder";
 import { WbTopBarMicControl } from "@/components/whiteboard/chrome/WbTopBarMicControl";
+import { WbTopBarCamControl } from "@/components/whiteboard/chrome/WbTopBarCamControl";
 import { WbThemeToggle } from "@/components/whiteboard/chrome/WbThemeToggle";
 import {
   useWhiteboardRecorder,
@@ -4307,40 +4308,16 @@ export function WhiteboardWorkspaceClient({
             onMicDeviceChange={(deviceId) => void liveAv.setMicDevice(deviceId)}
             disabled={endingBusy}
           />
-          <button
-            type="button"
-            className={`mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__desktop-only${
-              liveAv.hasCamPermission !== "denied" &&
-              (liveAv.videoDevices?.length ?? 1) > 0
-                ? liveAv.isCamMuted
-                  ? " mynk-wb-tb-btn--cam-off"
-                  : " mynk-wb-tb-btn--cam-on"
-                : ""
-            }`}
-            title={
-              liveAv.hasCamPermission === "denied"
-                ? "Camera permission denied"
-                : (liveAv.videoDevices?.length ?? 1) === 0
-                  ? "No camera device found"
-                  : liveAv.isCamMuted
-                    ? "Turn camera on"
-                    : "Turn camera off"
-            }
-            aria-label={
-              liveAv.hasCamPermission === "denied"
-                ? "Camera permission denied"
-                : (liveAv.videoDevices?.length ?? 1) === 0
-                  ? "No camera device found"
-                  : liveAv.isCamMuted
-                    ? "Turn camera on"
-                    : "Turn camera off"
-            }
-            onClick={() => void handleTopBarCam()}
-            disabled={endingBusy || liveAv.hasCamPermission === "denied" || (liveAv.videoDevices?.length ?? 1) === 0}
-            style={liveAv.hasCamPermission === "denied" || (liveAv.videoDevices?.length ?? 1) === 0 ? { opacity: 0.4 } : undefined}
-          >
-            <WbIconCamera size={14} />
-          </button>
+          <WbTopBarCamControl
+            isCamMuted={liveAv.isCamMuted}
+            hasCamPermission={liveAv.hasCamPermission}
+            onToggleCam={() => void handleTopBarCam()}
+            videoDevices={liveAv.videoDevices ?? []}
+            selectedPickerSlot={liveAv.pickedVideoCameraSlot}
+            onPickCameraSlot={(slot) => void liveAv.setVideoCameraBySlot(slot)}
+            isLive={!liveAv.isCamMuted && !!liveAv.localVideoStream}
+            disabled={endingBusy}
+          />
 
           <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
 
@@ -4714,7 +4691,7 @@ export function WhiteboardWorkspaceClient({
             isMicMuted={liveAv.isMicMuted}
             isCamMuted={liveAv.isCamMuted}
             onToggleMic={liveAv.toggleMic}
-            onToggleCam={liveAv.toggleCam}
+            onToggleCam={() => void handleTopBarCam()}
             disabled={endingBusy}
             camDisabled={liveAv.hasCamPermission === "denied" || (liveAv.videoDevices?.length ?? 1) === 0}
             participants={liveAv.participants}

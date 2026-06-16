@@ -302,6 +302,82 @@
 
 ---
 
+---
+
+## Live-video regression (2026-06-16 fix, branch tip updated)
+
+> Re-smoke after tutor LIVE-VIDEO regression fix on `phase1/wb-review-correct`. Cam was never acquired because the cluster button was wired to `toggleCam` (flip only) instead of `handleTopBarCam` (acquire-then-toggle). Also re-introduces tutor camera device picker (`WbTopBarCamControl`). jsdom cannot verify camera — browser-only checks below.
+>
+> **Console filter for acquisition:** open DevTools → Console → filter `avx=` or `[useLiveAV]`. On cam click expect:
+> - `[useLiveAV] avx=<id> cam acquired tracks=1` (requestCam success)
+> - `[useLiveAV] avx=<id> addLocalTrackToAllPeers track=video` (peer send side added)
+>
+> On device switch: `[useLiveAV] avx=<id> setVideoCameraBySlot` followed by `replaceLocalTrackOnAllPeers`.
+
+### LV-1. Tutor enables camera → self-view appears
+
+**Action:** Open a whiteboard session as tutor. Locate the **AV cluster** (top-right draggable tile). Click the **camera button** (camcorder icon). Allow camera access when the browser prompts. Wait up to 3s.
+
+**Expect:** The tutor's own video tile in the cluster changes from initials-placeholder → live camera feed (mirrored, as expected for self-view). No page reload required. Console shows `cam acquired tracks=1`.
+
+**Ignore this run:** Camera picker label (if no label before permission). Remote tile (student not present).
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### LV-2. Student enables camera → tutor sees remote tile
+
+**Action:** With tutor already in the session AND camera enabled (LV-1 passed), open the student join link in a second browser/tab. Student clicks camera button and allows. Wait up to 5s.
+
+**Expect:** A second tile appears in the tutor's AV cluster showing the student's video feed. Audio also flows (tutor can hear student). Console shows `ontrack` event for the remote peer.
+
+**Ignore this run:** Styling of remote tile. Connection latency on cellular.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### LV-3. Tutor switches camera device mid-session → feed swaps without refresh
+
+**Action:** With tutor camera live (LV-1 passed), click the **chevron caret** (▾) next to the camera icon in the top bar. The camera settings popover opens with a device picker. Select a **different camera** (e.g. virtual cam or second physical cam). Wait up to 3s.
+
+**Expect:** Self-view in the AV cluster switches to the new camera feed without page reload or peer disconnect. Student (if present) sees the new feed within ~1s. Console shows `setVideoCameraBySlot` log.
+
+**Ignore this run:** Only one camera available (SKIP if no second device). Audio continuity test (LV-4).
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### LV-4. Mic still works alongside camera
+
+**Action:** After LV-1 (camera enabled), confirm the **mic** still functions: click the mic button in the top bar to toggle mute/unmute. Speak — meter bars should animate. Student (if present) should hear audio.
+
+**Expect:** Mic and camera operate independently. Toggling camera does NOT affect microphone. Audio meter responds to speech.
+
+**Ignore this run:** Recording quality. Remote audio on student side (requires LV-2 setup).
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] SKIP
+
+**Notes:**
+
+---
+
 ## Overall result
 
 - [ ] PASS

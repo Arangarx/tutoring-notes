@@ -513,6 +513,46 @@
   border-radius: 10px;
 }
 
+/* Camera control — SR-04 addendum (mirrors mic-wrap pattern) */
+.mynk-wb-cam-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.mynk-wb-cam-settings-anchor {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.mynk-wb-cam-caret {
+  width: 22px !important;
+  margin-left: -2px;
+}
+
+.mynk-wb-cam-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 260px;
+  max-width: min(360px, 90vw);
+  z-index: 45;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.mynk-wb-cam-popover [data-testid="video-controls"] {
+  margin-bottom: 0;
+  border: none;
+  border-radius: 10px;
+}
+
 /* View menu — VP-02 */
 .mynk-wb-view-menu {
   position: relative;
@@ -665,10 +705,13 @@
   max-width: 100%;
 }
 
+/* A3b — tile video body: unset standalone aspect-ratio so cluster height
+ * drives layout instead. A non-zero min-height prevents collapse to 0 when
+ * the cluster is in manual-resize / viewport-capped mode (no auto-grow). */
 .mynk-wb-av-cluster__tiles-panel > [data-testid^="av-tile-"] > div:first-child {
   flex: 1 1 auto !important;
   aspect-ratio: unset !important;
-  min-height: 0;
+  min-height: 60px;
 }
 
 .mynk-wb-av-cluster__controls {
