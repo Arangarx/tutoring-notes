@@ -87,5 +87,17 @@ describe("WhiteboardReplayInFrame", () => {
     expect(screen.getByTestId("mynk-wb-chrome-replay")).toBeInTheDocument();
     expect(screen.getByTestId("wb-replay-tool-strip")).toBeInTheDocument();
     expect(screen.getByTestId("wb-replay-hide")).toHaveTextContent("Hide replay");
+
+    // Replay records audio + whiteboard only — no live A/V cluster on review surface.
+    expect(screen.queryByTestId("av-controls")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/No live A\/V participants yet/i)
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/Microphone \(disabled during replay\)/i)
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/Camera \(disabled during replay\)/i)
+    ).not.toBeInTheDocument();
   });
 });

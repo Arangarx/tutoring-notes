@@ -2,14 +2,11 @@
 
 import type { ReactNode } from "react";
 import { BoardTabStrip } from "@/components/whiteboard/chrome/BoardTabStrip";
-import { WbAVCluster } from "@/components/whiteboard/chrome/WbAVCluster";
 import { WbThemeToggle } from "@/components/whiteboard/chrome/WbThemeToggle";
 import {
   WbIconArrow,
-  WbIconCamera,
   WbIconEraser,
   WbIconLine,
-  WbIconMic,
   WbIconPencil,
   WbIconRect,
   WbIconRedo,
@@ -19,7 +16,6 @@ import {
   WbIconUndo,
   WbIconWand,
 } from "@/components/whiteboard/chrome/wb-icons";
-import type { WbLayoutMode } from "@/components/whiteboard/chrome/useWbLayoutMode";
 
 function DisabledToolBtn({
   icon,
@@ -73,7 +69,6 @@ const REPLAY_BOARD_TAB = {
 };
 
 export type ReplayReadOnlyChromeSlotsProps = {
-  layoutMode: WbLayoutMode;
   studentName?: string;
   durationLabel?: string;
   onHideReplay?: () => void;
@@ -85,7 +80,6 @@ export type ReplayReadOnlyChromeSlotsProps = {
 
 /** Read-only live chrome slots for in-frame replay (visual reuse only). */
 export function buildReplayReadOnlyChromeSlots({
-  layoutMode,
   studentName,
   durationLabel,
   onHideReplay,
@@ -93,8 +87,6 @@ export function buildReplayReadOnlyChromeSlots({
   timelineStrip,
   nonVisualMounts,
 }: Omit<ReplayReadOnlyChromeSlotsProps, "drawerSlot">) {
-  const noop = () => {};
-
   const topBar = (
     <header
       className="mynk-wb-topbar bg-card border-b border-border"
@@ -134,13 +126,6 @@ export function buildReplayReadOnlyChromeSlots({
 
       <div className="mynk-wb-topbar__zone mynk-wb-topbar__desktop-only">
         <DisabledTbBtn icon={<WbIconShare />} label="Share (disabled during replay)" />
-        <span className="mynk-wb-topbar__sep" aria-hidden />
-        <DisabledTbBtn icon={<WbIconMic size={14} />} label="Microphone (disabled during replay)" />
-        <DisabledTbBtn
-          icon={<WbIconCamera size={14} />}
-          label="Camera (disabled during replay)"
-          className="mynk-wb-tb-btn--cam-off"
-        />
         <span className="mynk-wb-topbar__sep" aria-hidden />
         <DisabledTbBtn icon={<WbIconUndo />} label="Undo (disabled during replay)" />
         <DisabledTbBtn icon={<WbIconRedo />} label="Redo (disabled during replay)" />
@@ -192,16 +177,6 @@ export function buildReplayReadOnlyChromeSlots({
 
   const canvasSlot = (
     <div className="mynk-wb-canvas" data-testid="wb-replay-canvas-mount">
-      <WbAVCluster
-        layoutMode={layoutMode}
-        isMicMuted
-        isCamMuted
-        onToggleMic={noop}
-        onToggleCam={noop}
-        disabled
-        camDisabled
-        participants={[]}
-      />
       {canvas}
     </div>
   );

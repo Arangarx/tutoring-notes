@@ -208,7 +208,6 @@ export function WhiteboardReplayInFrame({
   );
 
   const chromeSlots = buildReplayReadOnlyChromeSlots({
-    layoutMode,
     studentName,
     // Use the controller's scrubberMax (recording timeline total) so the
     // header duration agrees with the scrubber — not the wall-clock session

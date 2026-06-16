@@ -1,7 +1,7 @@
 # Phase 1 — WB Review Correct (in-frame) — smoke runbook
 
 **Branch:** `phase1/wb-review-correct`  
-**Tip commit:** `[b7b8d3e](https://github.com/Arangarx/tutoring-notes/commit/b7b8d3e)` *(fix(replay): correct canvas centering on window resize)*  
+**Tip commit:** `[88ef6b0](https://github.com/Arangarx/tutoring-notes/commit/88ef6b0)` *(pending — replay A/V cluster removal)*  
 **Preview:** [tutoring-notes-git-phase1-wb-rev-46b0a1](https://tutoring-notes-git-phase1-wb-rev-46b0a1-arangarx-5209s-projects.vercel.app)
 
 > **Smoke focus = unified in-frame review surface** (one `TutorNotesSection` reflows prominent ↔ docked with **animated** transition; replay fills main frame inside live WB chrome; persist-once replay; **Hide replay** collapse). Standalone admin/share replay scrubber parity remains **DEFERRED** — regression-check only (D-items).
@@ -28,7 +28,7 @@
 
 **Action:** From item 1 hero, click **Replay session** (with unsaved note edits if you like). Watch the transition — should be a **smooth ~250ms in-place reveal** (notes column narrows, replay pane slides in); **not** an instant hard swap or navigation feel. Scrubber at 0:00. Press **Play** without touching scrubber.
 
-**Expect:** Notes recede to docked panel (`wb-review-notes-docked`) with CSS transition; replay pane fades/slides in (`wb-review-replay-pane--visible`). Replay uses **live whiteboard chrome** read-only; **Excalidraw canvas fills the chrome canvas region** (inside `mynk-wb-canvas`, below top bar, right of tool strip — **no dead-space gap** below chrome). Consolidated **WbCustomSlider** scrubber. Canvas shows **empty or first stroke** — NOT final-board flash. Audio from beginning. **Hide replay** (‹ chevron) on replay chrome top bar — **not** "Back to notes" on session top bar. **No** unsaved-changes confirm.
+**Expect:** Notes recede to docked panel (`wb-review-notes-docked`) with CSS transition; replay pane fades/slides in (`wb-review-replay-pane--visible`). Replay uses **live whiteboard chrome** read-only; **Excalidraw canvas fills the chrome canvas region** (inside `mynk-wb-canvas`, below top bar, right of tool strip — **no dead-space gap** below chrome). **No live A/V cluster** on replay/review (no empty "No live A/V participants" panel, no mic/camera controls — recordings are audio + whiteboard only). Consolidated **WbCustomSlider** scrubber. Canvas shows **empty or first stroke** — NOT final-board flash. Audio from beginning. **Hide replay** (‹ chevron) on replay chrome top bar — **not** "Back to notes" on session top bar. **No** unsaved-changes confirm.
 
 **Ignore this run:** Laser pointer. Live board tab switching (single static tab).
 
@@ -36,7 +36,7 @@
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes: Reset for 8th smoke @ 8559ae9. All prior fixes still in. NEW: replay chrome header now shows recording length (scrubberMax) not wall-clock session duration; will show `--:--` until first metadata load then snap to recording length. FIX 1 seek-collapse fix also in — verify audio starts from beginning, Play after seek starts from seek position. Watch console for `[avx] seek_map` log showing storedTotal/measuredTotal/localMs.**
+**Notes: Reset for 9th smoke. Replay/review chrome no longer mounts the live A/V cluster or disabled mic/camera top-bar buttons (audio+WB-only recordings). jsdom asserts absence; confirm in browser: no empty AV panel on replay, live session LV-* items unchanged. Prior fixes still in.**
 
 ---
 
