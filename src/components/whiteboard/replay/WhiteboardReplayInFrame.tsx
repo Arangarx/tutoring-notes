@@ -21,6 +21,8 @@ export type WhiteboardReplayInFrameProps = {
   durationSeconds?: number | null;
   /** When true, fills parent frame instead of viewport-fixed chrome. */
   embedded?: boolean;
+  /** Collapse in-frame replay back to notes-prominent layout. */
+  onHideReplay?: () => void;
 };
 
 function formatDuration(seconds: number | null | undefined): string {
@@ -42,6 +44,7 @@ export function WhiteboardReplayInFrame({
   studentName,
   durationSeconds,
   embedded = false,
+  onHideReplay,
 }: WhiteboardReplayInFrameProps) {
   const applySceneAtRef = useRef<(timeMs: number) => void>(() => {});
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
@@ -176,6 +179,7 @@ export function WhiteboardReplayInFrame({
     layoutMode,
     studentName,
     durationLabel: formatDuration(durationSeconds),
+    onHideReplay,
     canvas: replayCanvas,
     timelineStrip,
     nonVisualMounts:
@@ -184,7 +188,6 @@ export function WhiteboardReplayInFrame({
           ref={audioRef}
           controls={false}
           preload="metadata"
-          src={effectiveSegments[0]?.url}
           {...(replayAudioMime ? { type: replayAudioMime } : {})}
           data-testid="wb-replay-audio"
           style={{ display: "none" }}
@@ -221,12 +224,14 @@ export function WhiteboardReplayInFrame({
           {...chromeSlots}
         />
       </WbRoleProvider>
-      <div className="mynk-wb-replay-meta muted" style={{ fontSize: 11, padding: "4px 8px" }}>
-        {log.events.length.toLocaleString()} events · log span{" "}
-        {formatDuration(
-          Math.floor(Math.max(log.durationMs, maxEventTimestampMs(log)) / 1000)
-        )}
-      </div>
+      {!embedded && (
+        <div className="mynk-wb-replay-meta muted" style={{ fontSize: 11, padding: "4px 8px" }}>
+          {log.events.length.toLocaleString()} events · log span{" "}
+          {formatDuration(
+            Math.floor(Math.max(log.durationMs, maxEventTimestampMs(log)) / 1000)
+          )}
+        </div>
+      )}
     </div>
   );
 }

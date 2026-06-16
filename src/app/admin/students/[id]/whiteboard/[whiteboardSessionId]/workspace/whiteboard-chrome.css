@@ -2168,6 +2168,7 @@
   display: grid;
   grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.55fr);
   overflow: hidden;
+  transition: grid-template-columns 250ms ease-out;
 }
 
 .wb-session-review-root--replay-active .wb-review-unified-body {
@@ -2180,6 +2181,7 @@
   padding: 16px;
   border-right: 1px solid var(--border);
   background: var(--background);
+  transition: padding 250ms ease-out;
 }
 
 .wb-review-notes-surface--docked {
@@ -2202,18 +2204,47 @@
   min-height: 0;
   overflow: auto;
   padding: 16px;
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 250ms ease-out;
+}
+
+.wb-review-hero-board--receded {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
 }
 
 .wb-review-replay-pane {
-  flex: 1;
-  min-height: 0;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  opacity: 0;
+  transform: translateX(16px);
+  pointer-events: none;
+  transition:
+    opacity 250ms ease-out,
+    transform 250ms ease-out;
 }
 
-.wb-review-replay-pane[hidden] {
-  display: none !important;
+.wb-review-replay-pane--visible {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-review-unified-body,
+  .wb-review-notes-surface,
+  .wb-review-hero-board,
+  .wb-review-replay-pane {
+    transition: none;
+  }
 }
 
 .wb-review-board-thumbnail-placeholder {
@@ -2254,6 +2285,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  height: 100%;
 }
 
 .mynk-wb-replay-root--embedded .mynk-wb-chrome[data-mode="replay"] {
@@ -2262,16 +2294,19 @@
   z-index: 0;
   flex: 1;
   min-height: 0;
-  height: auto;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
-.mynk-wb-replay-root--embedded .mynk-wb-replay-body {
+.mynk-wb-replay-root--embedded .mynk-wb-replay-body,
+.mynk-wb-replay-root--embedded .mynk-wb-live-column,
+.mynk-wb-replay-root--embedded .mynk-wb-replay-column {
   flex: 1;
   min-height: 0;
 }
 
-.mynk-wb-replay-root--embedded .mynk-wb-live-column,
-.mynk-wb-replay-root--embedded .mynk-wb-replay-column {
+.mynk-wb-replay-root--embedded .mynk-wb-body {
   flex: 1;
   min-height: 0;
 }
@@ -2279,8 +2314,44 @@
 .mynk-wb-replay-root--embedded .mynk-wb-canvas {
   flex: 1;
   min-height: 0;
+  position: relative;
   display: flex;
   flex-direction: column;
+}
+
+.mynk-wb-replay-root--embedded .wb-replay-canvas-host {
+  position: absolute;
+  inset: 0;
+  flex: none;
+  width: 100%;
+  height: 100%;
+}
+
+.mynk-wb-replay-root--embedded .wb-replay-canvas-host .excalidraw,
+.mynk-wb-replay-root--embedded .wb-replay-canvas-host .excalidraw-container {
+  width: 100%;
+  height: 100%;
+}
+
+.wb-review-wb-topbar {
+  flex-shrink: 0;
+  z-index: 2;
+}
+
+.wb-review-board-thumbnail {
+  min-height: 200px;
+  height: 280px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--card);
+  position: relative;
+}
+
+.wb-review-board-thumbnail .excalidraw,
+.wb-review-board-thumbnail .excalidraw-container {
+  width: 100%;
+  height: 100%;
 }
 
 .wb-replay-canvas-host {
@@ -2307,15 +2378,7 @@
 }
 
 .wb-review-topbar {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 12px 16px;
-  background: var(--success-soft, var(--info-soft));
-  border-bottom: 1px solid var(--success-border, var(--info-border));
+  display: none;
 }
 
 .wb-review-hero-grid {

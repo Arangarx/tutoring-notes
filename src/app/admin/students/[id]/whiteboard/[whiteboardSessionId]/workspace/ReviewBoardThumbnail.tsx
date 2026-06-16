@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { parseEventLogBySchema } from "@/lib/whiteboard/replay-parse";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { WBEventLog } from "@/lib/whiteboard/event-log";
 import { maxEventTimestampMs } from "@/lib/whiteboard/event-log";
+import { parseEventLogBySchema } from "@/lib/whiteboard/replay-parse";
 import {
   createCameraFitter,
   createScenePainter,
@@ -28,6 +29,7 @@ type Props = {
 
 /**
  * Hero-state final-frame board thumbnail (S1) — no scrubber, no audio.
+ * Paints the last event-log frame (all boards share one log; final t = end state).
  */
 export function ReviewBoardThumbnail({
   eventsProxyUrl,
@@ -35,8 +37,13 @@ export function ReviewBoardThumbnail({
   className,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [ready, setReady] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loadState, setLoadState] = useState<
+    "loading" | "ready" | "empty" | "error"
+  >("loading");
+  const [log, setLog] = useState<WBEventLog | null>(null);
+  const [api, setApi] = useState<ScenePaintApi | null>(null);
+  const lastElementsRef = useRef<readonly unknown[]>([]);
+  const paintedRef = useRef(false);
   const excalidrawTheme = useExcalidrawThemeFromSystem();
 
   const resolveAssetUrl = useMemo(
@@ -53,6 +60,9 @@ export function ReviewBoardThumbnail({
 
   useEffect(() => {
     let cancelled = false;
+    setLoadState("loading");
+    setLog(null);
+    paintedRef.current = false;
     void (async () => {
       try {
         const res = await fetch(eventsProxyUrl, {
@@ -67,20 +77,17 @@ export function ReviewBoardThumbnail({
         if (typeof raw.schemaVersion !== "number") {
           throw new Error("Invalid event log");
         }
-        const log = parseEventLogBySchema(raw);
-        if (log.events.length === 0) {
-          if (!cancelled) setError("empty");
+        const parsed = parseEventLogBySchema(raw);
+        if (parsed.events.length === 0) {
+          if (!cancelled) setLoadState("empty");
           return;
         }
         await preloadReplayRestoreElements();
         if (cancelled) return;
-        setReady(true);
-        // Paint happens when Excalidraw mounts via applyAt in onApi
-        thumbnailLogRef.current = log;
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Could not load board");
-        }
+        setLog(parsed);
+        setLoadState("ready");
+      } catch {
+        if (!cancelled) setLoadState("error");
       }
     })();
     return () => {
@@ -88,14 +95,8 @@ export function ReviewBoardThumbnail({
     };
   }, [eventsProxyUrl]);
 
-  const thumbnailLogRef = useRef<ReturnType<typeof parseEventLogBySchema> | null>(
-    null
-  );
-  const lastElementsRef = useRef<readonly unknown[]>([]);
-
-  const handleApi = (api: ScenePaintApi) => {
-    const log = thumbnailLogRef.current;
-    if (!log) return;
+  const paintFinalFrame = useCallback(() => {
+    if (!api || !log || paintedRef.current) return;
     const totalMs = Math.max(log.durationMs, maxEventTimestampMs(log));
     const painter = createScenePainter({
       log,
@@ -105,6 +106,8 @@ export function ReviewBoardThumbnail({
     });
     const result = painter.applyAt(totalMs);
     lastElementsRef.current = result.paintedElements;
+    paintedRef.current = true;
+
     const container = containerRef.current;
     if (container) {
       const fitter = createCameraFitter({
@@ -112,13 +115,16 @@ export function ReviewBoardThumbnail({
         container,
         getElements: () => lastElementsRef.current,
         zoom: 1,
-        onFit: () => undefined,
       });
       fitter.fit();
     }
-  };
+  }, [api, log]);
 
-  if (error === "empty") {
+  useEffect(() => {
+    paintFinalFrame();
+  }, [paintFinalFrame]);
+
+  if (loadState === "empty") {
     return (
       <div
         className={className}
@@ -140,7 +146,7 @@ export function ReviewBoardThumbnail({
     );
   }
 
-  if (error) {
+  if (loadState === "error") {
     return (
       <div className="muted" style={{ fontSize: 12, padding: 12 }}>
         Board preview unavailable
@@ -148,7 +154,7 @@ export function ReviewBoardThumbnail({
     );
   }
 
-  if (!ready) {
+  if (loadState === "loading") {
     return (
       <div
         className={className}
@@ -161,16 +167,8 @@ export function ReviewBoardThumbnail({
   return (
     <div
       ref={containerRef}
-      className={className}
+      className={`wb-review-board-thumbnail${className ? ` ${className}` : ""}`}
       data-testid="wb-review-board-thumbnail"
-      style={{
-        minHeight: 200,
-        height: 280,
-        border: "1px solid var(--border)",
-        borderRadius: 8,
-        overflow: "hidden",
-        background: "var(--card)",
-      }}
     >
       <ExcalidrawDynamic
         viewModeEnabled
@@ -178,7 +176,7 @@ export function ReviewBoardThumbnail({
         theme={excalidrawTheme}
         name="wb-review-thumbnail"
         UIOptions={{ canvasActions: { saveToActiveFile: false } }}
-        excalidrawAPI={(instance: ScenePaintApi) => handleApi(instance)}
+        excalidrawAPI={(instance: ScenePaintApi) => setApi(instance)}
         initialData={{ elements: [], appState: { currentItemFontFamily: 1 } }}
       />
     </div>

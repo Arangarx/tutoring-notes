@@ -89,13 +89,18 @@ export function useReplayTimelineController(
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const activeSegmentIndexRef = useRef(0);
   const isAtEndRef = useRef(false);
+  const globalMsRef = useRef(0);
   const globalSegmentOffsetMsRef = useRef(0);
   const segmentSwappingRef = useRef(false);
   const hasEverPlayedRef = useRef(false);
   const scrubWasPlayingRef = useRef(false);
   const scrubberMaxRef = useRef(1);
+  const playLoopRef = useRef<ReturnType<typeof createThrottledPlayLoop> | null>(
+    null
+  );
   const synthAnimFrameRef = useRef(0);
   const synthStartElapsedMsRef = useRef(0);
+  const segmentsInitializedRef = useRef(false);
 
   const log = loadState.kind === "ready" ? loadState.log : null;
 
@@ -118,6 +123,7 @@ export function useReplayTimelineController(
     noAudioMaxMs,
   });
   scrubberMaxRef.current = scrubberMax;
+  globalMsRef.current = globalMs;
 
   const activeSegment =
     effectiveSegments[activeSegmentIndex] ?? effectiveSegments[0] ?? null;
@@ -131,10 +137,12 @@ export function useReplayTimelineController(
     let cancelled = false;
     setLoadState({ kind: "loading" });
     setGlobalMs(0);
+    globalMsRef.current = 0;
     setPaintReady(false);
     hasEverPlayedRef.current = false;
     isAtEndRef.current = false;
     globalSegmentOffsetMsRef.current = 0;
+    segmentsInitializedRef.current = false;
     (async () => {
       try {
         const res = await fetch(eventsBlobUrl, {
@@ -218,6 +226,20 @@ export function useReplayTimelineController(
     };
   }, [hasAudio, loadState]);
 
+  const audioSrcMatches = useCallback(
+    (el: HTMLAudioElement, url: string) => {
+      if (!url) return false;
+      if (el.getAttribute("src") === url) return true;
+      try {
+        const resolved = new URL(url, window.location.href).href;
+        return el.src === resolved || el.src.endsWith(url);
+      } catch {
+        return el.src === url;
+      }
+    },
+    []
+  );
+
   const loadSegmentAt = useCallback(
     (segmentIndex: number, localMs: number, autoplay: boolean) => {
       const el = audioRef.current;
@@ -226,11 +248,10 @@ export function useReplayTimelineController(
 
       const needsSrcSwap =
         activeSegmentIndexRef.current !== segmentIndex ||
-        el.getAttribute("src") !== seg.url;
+        !audioSrcMatches(el, seg.url);
 
       activeSegmentIndexRef.current = segmentIndex;
       setActiveSegmentIndex(segmentIndex);
-      setAudioReady(false);
 
       const seekSec = Math.max(0, localMs / 1000);
       const applySeek = () => {
@@ -239,11 +260,13 @@ export function useReplayTimelineController(
         } catch {
           // metadata may not be ready
         }
+        playLoopRef.current?.seek();
         if (autoplay) void el.play();
       };
 
       if (needsSrcSwap) {
         segmentSwappingRef.current = true;
+        setAudioReady(false);
         el.src = seg.url;
         const onMeta = () => {
           el.removeEventListener("loadedmetadata", onMeta);
@@ -256,7 +279,7 @@ export function useReplayTimelineController(
         applySeek();
       }
     },
-    [effectiveSegments]
+    [audioSrcMatches, effectiveSegments]
   );
 
   const seek = useCallback(
@@ -269,19 +292,20 @@ export function useReplayTimelineController(
       const autoplay = opts?.play ?? false;
       const shouldPaint = opts?.paint ?? false;
 
+      globalMsRef.current = clamped;
+      setGlobalMs(clamped);
+
       if (hasAudio) {
         const { segmentIndex, localMs } = globalMsToSegmentLocal(
           clamped,
           audioTimeline
         );
         globalSegmentOffsetMsRef.current = clamped - localMs;
-        setGlobalMs(clamped);
         setPlaying(autoplay);
         applySceneAtRef.current(clamped);
         if (shouldPaint) setPaintReady(true);
         loadSegmentAt(segmentIndex, localMs, autoplay);
       } else {
-        setGlobalMs(clamped);
         setPlaying(autoplay);
         applySceneAtRef.current(clamped);
         if (shouldPaint) setPaintReady(true);
@@ -350,6 +374,7 @@ export function useReplayTimelineController(
   }, [hasAudio, stopSynth]);
 
   const play = useCallback(() => {
+    const atMs = globalMsRef.current;
     if (isAtEndRef.current) {
       hasEverPlayedRef.current = true;
       seek(0, { play: true, paint: false });
@@ -357,22 +382,23 @@ export function useReplayTimelineController(
     }
     if (!hasEverPlayedRef.current) {
       hasEverPlayedRef.current = true;
-      if (globalMs === 0) {
+      if (atMs === 0) {
         seek(0, { play: true, paint: false });
         return;
       }
     }
     if (hasAudio) {
       const { segmentIndex, localMs } = globalMsToSegmentLocal(
-        globalMs,
+        atMs,
         audioTimeline
       );
       loadSegmentAt(segmentIndex, localMs, true);
       setPlaying(true);
       return;
     }
-    const startFrom = globalMs >= noAudioMaxMs ? 0 : globalMs;
+    const startFrom = atMs >= noAudioMaxMs ? 0 : atMs;
     if (startFrom === 0) {
+      globalMsRef.current = 0;
       setGlobalMs(0);
       applySceneAtRef.current(0);
     }
@@ -380,7 +406,6 @@ export function useReplayTimelineController(
   }, [
     applySceneAtRef,
     audioTimeline,
-    globalMs,
     hasAudio,
     loadSegmentAt,
     noAudioMaxMs,
@@ -393,8 +418,23 @@ export function useReplayTimelineController(
     else play();
   }, [pause, play, playing]);
 
-  // Reset on segment list change
+  // Initialize audio element once restore is ready; avoid resetting scrub position.
   useEffect(() => {
+    if (!hasAudio || !replayExcaliRestoreReady) return;
+    const el = audioRef.current;
+    if (!el) return;
+    const first = effectiveSegments[0];
+    if (!first) return;
+
+    if (!segmentsInitializedRef.current) {
+      segmentsInitializedRef.current = true;
+      if (!audioSrcMatches(el, first.url)) {
+        el.src = first.url;
+        setAudioReady(false);
+      }
+      return;
+    }
+
     activeSegmentIndexRef.current = 0;
     setActiveSegmentIndex(0);
     globalSegmentOffsetMsRef.current = 0;
@@ -402,6 +442,7 @@ export function useReplayTimelineController(
     isAtEndRef.current = false;
     hasEverPlayedRef.current = false;
     setPlaying(false);
+    globalMsRef.current = 0;
     setGlobalMs(0);
     setPaintReady(false);
     setResolvedMaxMs(audioTimeline.totalMs);
@@ -410,16 +451,12 @@ export function useReplayTimelineController(
       synthAnimFrameRef.current = 0;
     }
     synthStartElapsedMsRef.current = 0;
-    if (!hasAudio || !replayExcaliRestoreReady) return;
-    const el = audioRef.current;
-    if (!el) return;
-    const first = effectiveSegments[0];
-    if (!first) return;
-    if (el.getAttribute("src") !== first.url) {
+    if (!audioSrcMatches(el, first.url)) {
       el.src = first.url;
       setAudioReady(false);
     }
   }, [
+    audioSrcMatches,
     effectiveSegments,
     hasAudio,
     replayExcaliRestoreReady,
@@ -476,6 +513,7 @@ export function useReplayTimelineController(
         const cap = scrubberMaxRef.current;
         if (ms >= cap) {
           const endMs = cap;
+          globalMsRef.current = endMs;
           setGlobalMs(endMs);
           applySceneAtRef.current(endMs);
           isAtEndRef.current = true;
@@ -484,10 +522,12 @@ export function useReplayTimelineController(
           loop.pause();
           return;
         }
+        globalMsRef.current = ms;
         setGlobalMs(ms);
         applySceneAtRef.current(ms);
       },
     });
+    playLoopRef.current = loop;
 
     const onPlay = () => {
       setPlaying(true);
@@ -534,6 +574,7 @@ export function useReplayTimelineController(
     el.addEventListener("ended", onEnded);
 
     return () => {
+      playLoopRef.current = null;
       loop.dispose();
       el.removeEventListener("play", onPlay);
       el.removeEventListener("pause", onPause);
@@ -586,6 +627,7 @@ export function useReplayTimelineController(
           synthAnimFrameRef.current = 0;
         }
         synthStartElapsedMsRef.current = clamped;
+        globalMsRef.current = clamped;
         setGlobalMs(clamped);
         applySceneAtRef.current(clamped);
         if (playing) setPlaying(false);
@@ -610,6 +652,7 @@ export function useReplayTimelineController(
         seek(clamped, { play: scrubWasPlayingRef.current, paint: false });
       } else {
         synthStartElapsedMsRef.current = clamped;
+        globalMsRef.current = clamped;
         setGlobalMs(clamped);
         applySceneAtRef.current(clamped);
       }

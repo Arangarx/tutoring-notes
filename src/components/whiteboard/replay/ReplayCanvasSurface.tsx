@@ -196,6 +196,52 @@ export function ReplayCanvasSurface({
     if (api) onApiReady?.(api);
   }, [api, onApiReady]);
 
+  /** Preserve viewport center across container resizes. */
+  useEffect(() => {
+    if (!api) return;
+    const container = containerRef.current;
+    if (!container) return;
+
+    const recenterOnViewportCenter = () => {
+      try {
+        const st = api.getAppState?.();
+        if (!st) return;
+        const scrollX = typeof st.scrollX === "number" ? st.scrollX : null;
+        const scrollY = typeof st.scrollY === "number" ? st.scrollY : null;
+        const zoomRaw = (st.zoom as { value?: unknown } | undefined)?.value;
+        const zoom = typeof zoomRaw === "number" && zoomRaw > 0 ? zoomRaw : 1;
+        if (scrollX == null || scrollY == null) return;
+
+        const rect = container.getBoundingClientRect();
+        const cw = rect.width;
+        const ch = rect.height;
+        if (!(cw > 0 && ch > 0)) return;
+
+        const sceneCenterX = (cw / 2 - scrollX) / zoom;
+        const sceneCenterY = (ch / 2 - scrollY) / zoom;
+        const nextScrollX = cw / 2 / zoom - sceneCenterX;
+        const nextScrollY = ch / 2 / zoom - sceneCenterY;
+
+        api.updateScene({
+          elements: lastSceneElementsRef.current as unknown[],
+          appState: {
+            scrollX: nextScrollX,
+            scrollY: nextScrollY,
+            zoom: { value: zoom },
+          },
+        });
+      } catch {
+        // best-effort
+      }
+    };
+
+    const ro = new ResizeObserver(() => {
+      recenterOnViewportCenter();
+    });
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [api, containerRef]);
+
   if (!restoreReady) {
     return (
       <div className="muted" style={{ padding: 24, textAlign: "center" }}>

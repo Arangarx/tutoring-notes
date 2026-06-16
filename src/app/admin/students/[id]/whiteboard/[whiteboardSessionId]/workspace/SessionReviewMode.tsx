@@ -15,7 +15,7 @@ import TutorNotesSection, {
 import { WhiteboardReplayInFrame } from "@/components/whiteboard/replay/WhiteboardReplayInFrame";
 import { ReviewBoardThumbnail } from "./ReviewBoardThumbnail";
 import { ReviewConfirmSlot } from "./ReviewConfirmSlot";
-import { StartWhiteboardSession } from "@/app/admin/students/[id]/whiteboard/StartWhiteboardSession";
+import { ReviewWbTopBar } from "./ReviewWbTopBar";
 import type { ReviewSurfaceState } from "./review-surface-state";
 import {
   loadSessionReviewPayload,
@@ -127,64 +127,6 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
     </div>
   );
 
-  const topBar = (
-    <div className="wb-review-topbar" data-testid="wb-review-topbar">
-      <div>
-        <div style={{ fontWeight: 700, fontSize: 15 }}>
-          Session complete
-          {payload ? ` — ${payload.studentName}` : ""}
-        </div>
-        {payload?.durationSeconds != null && (
-          <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-            {formatDuration(payload.durationSeconds)}
-          </div>
-        )}
-      </div>
-      <div
-        style={{
-          display: "flex",
-          gap: 8,
-          flexWrap: "wrap",
-          alignItems: "center",
-        }}
-      >
-        {noteSaved && (
-          <span
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-              fontSize: 12,
-              color: "var(--success-text, var(--text))",
-              fontWeight: 500,
-            }}
-          >
-            ✓ Notes saved
-          </span>
-        )}
-        {isReplay && (
-          <button
-            type="button"
-            className="btn"
-            style={{ fontSize: 12 }}
-            data-testid="wb-replay-back-to-notes"
-            onClick={returnToHero}
-          >
-            Back to notes
-          </button>
-        )}
-        <details className="wb-review-more-menu" data-testid="wb-review-more-menu">
-          <summary className="btn" style={{ fontSize: 12, listStyle: "none" }}>
-            More
-          </summary>
-          <div className="wb-review-more-menu__panel">
-            <StartWhiteboardSession studentId={studentId} />
-          </div>
-        </details>
-      </div>
-    </div>
-  );
-
   if (loadState.kind === "error") {
     return (
       <div
@@ -215,7 +157,15 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
       className={`wb-session-review-root${isReplay ? " wb-session-review-root--replay-active" : ""}${loadState.kind === "loading" ? " wb-session-review-root--loading" : ""}`}
       data-review-surface={reviewSurface}
     >
-      {topBar}
+      <ReviewWbTopBar
+        studentName={payload?.studentName}
+        durationLabel={
+          payload?.durationSeconds != null
+            ? formatDuration(payload.durationSeconds)
+            : undefined
+        }
+        noteSaved={noteSaved}
+      />
 
       <div className="wb-review-unified-body" data-testid="wb-review-unified-body">
         <aside
@@ -229,51 +179,49 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
         </aside>
 
         <main className="wb-review-main-frame" data-testid="wb-review-main-frame">
-          {!isReplay && (
-            <div
-              className="wb-review-hero-board"
-              data-testid="wb-review-hero-layout"
-            >
-              <div className="wb-review-board-column">
-                {payload ? (
-                  <ReviewBoardThumbnail
-                    eventsProxyUrl={payload.eventsProxyUrl}
-                    whiteboardSessionId={whiteboardSessionId}
-                  />
-                ) : (
-                  <div
-                    data-testid="wb-review-board-thumbnail-loading"
-                    className="wb-review-board-thumbnail-placeholder"
-                  />
-                )}
-                {canReplay ? (
-                  <button
-                    type="button"
-                    className="btn primary"
-                    data-testid="wb-review-enter-replay"
-                    onClick={enterReplay}
-                  >
-                    ▶ Replay session
-                  </button>
-                ) : payload ? (
-                  <div
-                    className="muted"
-                    data-testid="wb-review-no-recording"
-                    style={{ fontSize: 13, padding: "8px 0" }}
-                  >
-                    No recording available.
-                  </div>
-                ) : null}
-              </div>
+          <div
+            className={`wb-review-hero-board${isReplay ? " wb-review-hero-board--receded" : ""}`}
+            data-testid="wb-review-hero-layout"
+            aria-hidden={isReplay}
+          >
+            <div className="wb-review-board-column">
+              {payload ? (
+                <ReviewBoardThumbnail
+                  eventsProxyUrl={payload.eventsProxyUrl}
+                  whiteboardSessionId={whiteboardSessionId}
+                />
+              ) : (
+                <div
+                  data-testid="wb-review-board-thumbnail-loading"
+                  className="wb-review-board-thumbnail-placeholder"
+                />
+              )}
+              {canReplay ? (
+                <button
+                  type="button"
+                  className="btn primary"
+                  data-testid="wb-review-enter-replay"
+                  onClick={enterReplay}
+                >
+                  ▶ Replay session
+                </button>
+              ) : payload ? (
+                <div
+                  className="muted"
+                  data-testid="wb-review-no-recording"
+                  style={{ fontSize: 13, padding: "8px 0" }}
+                >
+                  No recording available.
+                </div>
+              ) : null}
             </div>
-          )}
+          </div>
 
           {hasMountedReplay && payload && (
             <div
-              className="wb-review-replay-pane"
+              className={`wb-review-replay-pane${isReplay ? " wb-review-replay-pane--visible" : ""}`}
               data-testid="wb-replay-persist-wrapper"
               aria-hidden={!isReplay}
-              hidden={!isReplay}
             >
               <WhiteboardReplayInFrame
                 embedded
@@ -282,6 +230,7 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
                 whiteboardSessionId={whiteboardSessionId}
                 studentName={payload.studentName}
                 durationSeconds={payload.durationSeconds}
+                onHideReplay={returnToHero}
               />
             </div>
           )}

@@ -76,7 +76,7 @@ export type ReplayReadOnlyChromeSlotsProps = {
   layoutMode: WbLayoutMode;
   studentName?: string;
   durationLabel?: string;
-  trailingActions?: ReactNode;
+  onHideReplay?: () => void;
   canvas: ReactNode;
   timelineStrip: ReactNode;
   drawerSlot?: ReactNode;
@@ -88,7 +88,7 @@ export function buildReplayReadOnlyChromeSlots({
   layoutMode,
   studentName,
   durationLabel,
-  trailingActions,
+  onHideReplay,
   canvas,
   timelineStrip,
   nonVisualMounts,
@@ -148,11 +148,25 @@ export function buildReplayReadOnlyChromeSlots({
         <WbThemeToggle />
       </div>
 
-      {trailingActions ? (
-        <div className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing">
-          {trailingActions}
-        </div>
-      ) : null}
+      <div className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing">
+        {onHideReplay ? (
+          <button
+            type="button"
+            className="mynk-wb-tb-btn"
+            data-testid="wb-replay-hide"
+            title="Hide replay"
+            onClick={(e) => {
+              e.stopPropagation();
+              onHideReplay();
+            }}
+          >
+            <span aria-hidden style={{ fontSize: 14, lineHeight: 1 }}>
+              ‹
+            </span>
+            Hide replay
+          </button>
+        ) : null}
+      </div>
     </header>
   );
 
