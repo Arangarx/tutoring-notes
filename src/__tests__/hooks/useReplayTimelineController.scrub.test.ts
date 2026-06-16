@@ -338,3 +338,93 @@ describe("WebM duration-fix race (scrub → durationchange → play)", () => {
     cleanup();
   });
 });
+
+describe("FIX 1 — apply re-entrancy guard (no stack overflow at end-of-stream)", () => {
+  /**
+   * RED-BEFORE / GREEN-AFTER for the recursive-pause bug.
+   *
+   * Without isApplyingRef guard:
+   *   loop-apply(ms >= cap)
+   *     → el.pause()          — fires "pause" synchronously (real Chrome behaviour)
+   *     → onPause()           — setPlaying(false) + loop.pause()
+   *     → loop.pause()        — trailing applyOnce(force=true)
+   *     → apply(ms)           — re-enters! → stack overflow
+   *
+   * Also:  apply → loop.pause() directly → applyOnce → apply → … (second cycle)
+   *
+   * With isApplyingRef guard both cycles are broken.
+   */
+  it("does not throw RangeError when audio.pause() fires synchronously inside apply at cap", async () => {
+    const audio = document.createElement("audio");
+    document.body.appendChild(audio);
+    let currentTime = 0;
+    let srcAttr = "";
+    Object.defineProperty(audio, "currentTime", {
+      configurable: true,
+      get: () => currentTime,
+      set: (v: number) => { currentTime = v; },
+    });
+    Object.defineProperty(audio, "src", {
+      configurable: true,
+      get: () => (srcAttr ? new URL(srcAttr, "http://localhost").href : ""),
+      set: (v: string) => { srcAttr = v; },
+    });
+    audio.getAttribute = jest.fn((name: string) =>
+      name === "src" ? srcAttr : null
+    ) as typeof audio.getAttribute;
+    audio.load = jest.fn();
+    audio.play = jest.fn().mockResolvedValue(undefined);
+    // Simulate real-browser behaviour: pause() fires the 'pause' event synchronously.
+    audio.pause = jest.fn(() => {
+      audio.dispatchEvent(new Event("pause"));
+    });
+    // Audio reports as "playing" so onPause fires when pause() is called.
+    Object.defineProperty(audio, "paused", {
+      configurable: true,
+      get: () => false,
+    });
+
+    const applySceneAtRef = { current: jest.fn() };
+    const { result, unmount } = renderHook(() => {
+      const ref = useRef(applySceneAtRef.current);
+      const segments = useMemo(
+        () => [{ url: "/api/audio/admin/rec-1", mimeType: "audio/webm", durationSeconds: 10 }],
+        []
+      );
+      return useReplayTimelineController({
+        eventsBlobUrl: "/api/whiteboard/wbs-test/events",
+        audioSegments: segments,
+        applySceneAtRef: ref,
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.loadState.kind).toBe("ready");
+      expect(result.current.replayExcaliRestoreReady).toBe(true);
+    });
+
+    act(() => {
+      result.current.audioRef.current = audio;
+      audio.src = "/api/audio/admin/rec-1";
+    });
+
+    // Set currentTime to a value far beyond any scrubberMax so every apply()
+    // call immediately hits the ms >= cap branch.
+    currentTime = 99999; // seconds — 99 999 000 ms, far beyond 10 s durationMs
+
+    // Fire the 'play' event: this starts the rAF loop which calls apply().
+    // Without the guard, this would cause a RangeError immediately because
+    // apply → el.pause → onPause → loop.pause → applyOnce → apply → …
+    expect(() => {
+      act(() => {
+        audio.dispatchEvent(new Event("play"));
+      });
+    }).not.toThrow();
+
+    // After the guard kicks in, isAtEnd should be set and playing should be false.
+    expect(result.current.playing).toBe(false);
+
+    unmount();
+    audio.remove();
+  });
+});

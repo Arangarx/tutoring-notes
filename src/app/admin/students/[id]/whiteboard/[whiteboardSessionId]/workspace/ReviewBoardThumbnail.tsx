@@ -16,7 +16,8 @@ import {
   getReplayCachedRestoreElements,
   setReplayCachedRestoreElements,
 } from "@/lib/whiteboard/replay-restore-elements";
-import { EXCALIDRAW_BG_LIGHT_HEX } from "@/styles/token-values";
+import { EXCALIDRAW_BG_DARK_HEX, EXCALIDRAW_BG_LIGHT_HEX } from "@/styles/token-values";
+import { useTheme } from "@/components/ThemeProvider";
 import type { ExportToCanvasFn } from "@/lib/whiteboard/snapshot-png";
 
 type Props = {
@@ -48,6 +49,7 @@ export function ReviewBoardThumbnail({
   const [loadState, setLoadState] = useState<
     "loading" | "ready" | "empty" | "error"
   >("loading");
+  const { resolvedTheme } = useTheme();
 
   useEffect(() => {
     let cancelled = false;
@@ -163,13 +165,14 @@ export function ReviewBoardThumbnail({
         }
         if (cancelled) return;
 
-        // 5. Export to canvas → data URL
+        // 5. Export to canvas → data URL, honoring the active WB theme
+        const isDark = resolvedTheme === "dark";
         const canvas = await exportToCanvas({
           elements: capturedElements as unknown[],
           appState: {
             exportBackground: true,
-            viewBackgroundColor: EXCALIDRAW_BG_LIGHT_HEX,
-            exportWithDarkMode: false,
+            viewBackgroundColor: isDark ? EXCALIDRAW_BG_DARK_HEX : EXCALIDRAW_BG_LIGHT_HEX,
+            exportWithDarkMode: isDark,
           },
           files,
           maxWidthOrHeight: 1200,
@@ -188,7 +191,7 @@ export function ReviewBoardThumbnail({
     return () => {
       cancelled = true;
     };
-  }, [eventsProxyUrl, whiteboardSessionId]);
+  }, [eventsProxyUrl, resolvedTheme, whiteboardSessionId]);
 
   if (loadState === "empty") {
     return (

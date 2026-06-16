@@ -100,6 +100,23 @@ export function useReplayTimelineController(
   const playLoopRef = useRef<ReturnType<typeof createThrottledPlayLoop> | null>(
     null
   );
+  /**
+   * Re-entrancy guard for the audio play-loop's `apply` callback.
+   *
+   * Root cause of FIX 1 (Maximum call stack size exceeded):
+   *   apply(ms >= cap)
+   *     → el.pause()              — fires "pause" event synchronously in Chrome
+   *     → onPause()               — event listener
+   *     → loop.pause()            — trailing applyOnce(force=true)
+   *     → apply(ms)               — back into apply! → infinite recursion
+   *
+   * Additionally, apply itself calls loop.pause() directly, creating a second
+   * cycle:  apply → loop.pause() → applyOnce(force=true) → apply → …
+   *
+   * The guard breaks BOTH cycles: if apply is already on the call stack, the
+   * re-entrant call returns immediately.
+   */
+  const isApplyingRef = useRef(false);
   const synthAnimFrameRef = useRef(0);
   const synthStartElapsedMsRef = useRef(0);
 
@@ -525,21 +542,28 @@ export function useReplayTimelineController(
     const loop = createThrottledPlayLoop({
       getTimeMs: getGlobalTimeMs,
       apply: (ms) => {
-        const cap = scrubberMaxRef.current;
-        if (ms >= cap) {
-          const endMs = cap;
-          globalMsRef.current = endMs;
-          setGlobalMs(endMs);
-          applySceneAtRef.current(endMs);
-          isAtEndRef.current = true;
-          setPlaying(false);
-          el.pause();
-          loop.pause();
-          return;
+        // Re-entrancy guard — see isApplyingRef declaration above.
+        if (isApplyingRef.current) return;
+        isApplyingRef.current = true;
+        try {
+          const cap = scrubberMaxRef.current;
+          if (ms >= cap) {
+            const endMs = cap;
+            globalMsRef.current = endMs;
+            setGlobalMs(endMs);
+            applySceneAtRef.current(endMs);
+            isAtEndRef.current = true;
+            setPlaying(false);
+            el.pause();
+            loop.pause();
+          } else {
+            globalMsRef.current = ms;
+            setGlobalMs(ms);
+            applySceneAtRef.current(ms);
+          }
+        } finally {
+          isApplyingRef.current = false;
         }
-        globalMsRef.current = ms;
-        setGlobalMs(ms);
-        applySceneAtRef.current(ms);
       },
     });
     playLoopRef.current = loop;
@@ -663,15 +687,21 @@ export function useReplayTimelineController(
         isAtEndRef.current = false;
       }
       if (hasAudio) {
+        console.log(
+          `[avx] wbsid=${whiteboardSessionId ?? "?"} action=replay_scrub_seek ms=${clamped} wasPlaying=${scrubWasPlayingRef.current}`
+        );
         seek(clamped, { play: scrubWasPlayingRef.current, paint: false });
       } else {
+        console.log(
+          `[avx] wbsid=${whiteboardSessionId ?? "?"} action=replay_scrub_seek ms=${clamped} hasAudio=false`
+        );
         synthStartElapsedMsRef.current = clamped;
         globalMsRef.current = clamped;
         setGlobalMs(clamped);
         applySceneAtRef.current(clamped);
       }
     },
-    [applySceneAtRef, hasAudio, seek]
+    [applySceneAtRef, hasAudio, seek, whiteboardSessionId]
   );
 
   const timelineState: ReplayTimelineState = {

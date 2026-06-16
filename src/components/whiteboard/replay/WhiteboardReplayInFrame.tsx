@@ -49,11 +49,24 @@ export function WhiteboardReplayInFrame({
   const applySceneAtRef = useRef<(timeMs: number) => void>(() => {});
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const entryPaintDoneRef = useRef(false);
+  /**
+   * Guard for FIX 2: prevents `onHideReplay` from being called before the
+   * replay surface has completed its initial paint cycle.
+   *
+   * Root cause (before FIX 1): the play-loop stack overflow (RangeError) crashed
+   * JavaScript inside a React effect during the first mount, causing React to
+   * recover in a way that rapidly toggled reviewSurface between "replay" and
+   * "hero". FIX 1 breaks the recursion. This ref adds a belt-and-suspenders
+   * guard so that even if some future edge case causes an error during mount,
+   * the "hide" callback cannot fire until the component has settled.
+   */
+  const replaySettledRef = useRef(false);
 
-  // Reset entry-paint gate when the events URL changes (new session loaded
-  // into the same component instance without a full unmount).
+  // Reset both gates when the events URL changes (new session loaded without
+  // a full unmount).
   useEffect(() => {
     entryPaintDoneRef.current = false;
+    replaySettledRef.current = false;
   }, [eventsBlobUrl]);
   const { layoutMode, orientation } = useWbLayoutMode();
 
@@ -96,6 +109,11 @@ export function WhiteboardReplayInFrame({
   // Pause audio before collapsing back to notes-hero so the audio doesn't
   // continue playing when the replay surface is visually hidden.
   const handleHideReplay = useCallback(() => {
+    // Belt-and-suspenders guard: only propagate if the component has settled
+    // past its initial paint cycle (replaySettledRef becomes true after the
+    // entry paint effect runs). This prevents any edge-case crash during mount
+    // from inadvertently triggering the hero↔replay loop (FIX 2).
+    if (!replaySettledRef.current) return;
     pause();
     onHideReplay?.();
   }, [pause, onHideReplay]);
@@ -108,10 +126,12 @@ export function WhiteboardReplayInFrame({
     if (!needsCanvas) {
       setPaintReady(true);
       entryPaintDoneRef.current = true;
+      replaySettledRef.current = true;
       return;
     }
     seek(0, { paint: true, play: false });
     entryPaintDoneRef.current = true;
+    replaySettledRef.current = true;
   }, [
     hasAudio,
     loadState.kind,
