@@ -777,3 +777,365 @@ describe("Bug B — scrub drag writes audio currentTime exactly once (on pointer
     audio.remove();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Fix 1 — resolvedMaxMs / scrubberMax update when WebM duration resolves
+// ---------------------------------------------------------------------------
+describe("Eager WebM duration resolution — resolvedMaxMs / scrubberMax updated on durationchange", () => {
+  /**
+   * RED-BEFORE / GREEN-AFTER
+   *
+   * When durationSeconds is null / 0 in the DB, audioTimeline.totalMs = 0 and
+   * resolvedMaxMs stays 0.  The WebM fix's onDurationChange used to have no
+   * callback to the controller, so even after Chrome scanned the file and
+   * fired durationchange with the real duration (~94741 ms), scrubberMax
+   * remained at the 1 ms fallback.
+   *
+   * Fix: attachWebmDurationFix now accepts onDurationResolved; the controller
+   * passes a callback that calls setResolvedMaxMs with the measured duration.
+   * After durationchange, scrubberMax must be >= the measured duration.
+   */
+  it("updates scrubberMax after durationchange resolves Infinity → finite (storedDuration=0)", async () => {
+    const savedFetch = global.fetch;
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          schemaVersion: 1,
+          startedAt: "2026-01-01T00:00:00.000Z",
+          durationMs: 0,
+          events: [],
+        }),
+    }) as unknown as typeof fetch;
+
+    let mockDuration: number = Infinity;
+    const audio = document.createElement("audio");
+    document.body.appendChild(audio);
+    let currentTime = 0;
+    let srcAttr = "";
+
+    Object.defineProperty(audio, "duration", {
+      configurable: true,
+      get: () => mockDuration,
+    });
+    Object.defineProperty(audio, "currentTime", {
+      configurable: true,
+      get: () => currentTime,
+      set: (v: number) => {
+        currentTime = v;
+      },
+    });
+    Object.defineProperty(audio, "src", {
+      configurable: true,
+      get: () => (srcAttr ? new URL(srcAttr, "http://localhost").href : ""),
+      set: (v: string) => {
+        srcAttr = v;
+      },
+    });
+    audio.getAttribute = jest.fn((name: string) =>
+      name === "src" ? srcAttr : null
+    ) as typeof audio.getAttribute;
+    audio.load = jest.fn();
+    audio.play = jest.fn().mockResolvedValue(undefined);
+    audio.pause = jest.fn();
+    Object.defineProperty(audio, "paused", {
+      configurable: true,
+      get: () => true,
+    });
+
+    const applySceneAtRef = { current: jest.fn() };
+    const { result, unmount } = renderHook(() => {
+      const ref = useRef(applySceneAtRef.current);
+      const segments = useMemo(
+        () => [
+          {
+            url: "/api/audio/admin/rec-1",
+            mimeType: "audio/webm;codecs=opus",
+            durationSeconds: 0,
+          },
+        ],
+        []
+      );
+      return useReplayTimelineController({
+        eventsBlobUrl: "/api/whiteboard/wbs-test/events",
+        audioSegments: segments,
+        applySceneAtRef: ref,
+      });
+    });
+
+    act(() => {
+      result.current.audioRef.current = audio;
+      audio.src = "/api/audio/admin/rec-1";
+    });
+
+    await waitFor(() => {
+      expect(result.current.loadState.kind).toBe("ready");
+      expect(result.current.replayExcaliRestoreReady).toBe(true);
+    });
+
+    // BUG state: storedDuration=0 → scrubberMax collapses to 1 ms.
+    expect(result.current.scrubberMax).toBe(1);
+
+    // WebM fix fires on loadedmetadata (Infinity duration → seek 1e101).
+    act(() => {
+      audio.dispatchEvent(new Event("loadedmetadata"));
+    });
+    // Duration still Infinity → scrubberMax still 1.
+    expect(result.current.scrubberMax).toBe(1);
+
+    // Chrome finishes scanning → durationchange fires with real duration.
+    act(() => {
+      mockDuration = 94.741;
+      audio.dispatchEvent(new Event("durationchange"));
+    });
+
+    // FIX: scrubberMax must now reflect the measured duration (~94741 ms).
+    // BUG (unfixed): scrubberMax stays 1, every scrub maps to localMs=0.
+    await waitFor(() => {
+      expect(result.current.scrubberMax).toBeGreaterThan(90_000);
+    });
+
+    unmount();
+    audio.remove();
+    global.fetch = savedFetch;
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fix 2 — scrub pointer-up maps proportionally after duration resolves
+// ---------------------------------------------------------------------------
+describe("Scrub pointer-up uses resolved duration for proportional mapping (storedTotal=0)", () => {
+  /**
+   * RED-BEFORE / GREEN-AFTER
+   *
+   * When storedTotal=0 AND measuredTotal=0 (not yet resolved), every scrub
+   * collapses to localMs=0 ("always seeks to 0").  After Fix 1 populates
+   * resolvedMaxMsRef, a subsequent scrub should map proportionally into the
+   * real audio duration.
+   */
+  it("seeks to proportional localMs (~half duration) after durationchange resolves (not 0)", async () => {
+    const savedFetch = global.fetch;
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          schemaVersion: 1,
+          startedAt: "2026-01-01T00:00:00.000Z",
+          durationMs: 0,
+          events: [],
+        }),
+    }) as unknown as typeof fetch;
+
+    let mockDuration: number = Infinity;
+    const audio = document.createElement("audio");
+    document.body.appendChild(audio);
+    let currentTime = 0;
+    let srcAttr = "";
+
+    Object.defineProperty(audio, "duration", {
+      configurable: true,
+      get: () => mockDuration,
+    });
+    Object.defineProperty(audio, "currentTime", {
+      configurable: true,
+      get: () => currentTime,
+      set: (v: number) => {
+        currentTime = v;
+      },
+    });
+    Object.defineProperty(audio, "src", {
+      configurable: true,
+      get: () => (srcAttr ? new URL(srcAttr, "http://localhost").href : ""),
+      set: (v: string) => {
+        srcAttr = v;
+      },
+    });
+    audio.getAttribute = jest.fn((name: string) =>
+      name === "src" ? srcAttr : null
+    ) as typeof audio.getAttribute;
+    audio.load = jest.fn();
+    audio.play = jest.fn().mockResolvedValue(undefined);
+    audio.pause = jest.fn();
+    Object.defineProperty(audio, "paused", {
+      configurable: true,
+      get: () => true,
+    });
+
+    const { result, unmount } = renderHook(() => {
+      const ref = useRef(jest.fn());
+      const segments = useMemo(
+        () => [
+          {
+            url: "/api/audio/admin/rec-1",
+            mimeType: "audio/webm;codecs=opus",
+            durationSeconds: 0,
+          },
+        ],
+        []
+      );
+      return useReplayTimelineController({
+        eventsBlobUrl: "/api/whiteboard/wbs-test/events",
+        audioSegments: segments,
+        applySceneAtRef: ref,
+      });
+    });
+
+    act(() => {
+      result.current.audioRef.current = audio;
+      audio.src = "/api/audio/admin/rec-1";
+    });
+
+    await waitFor(() => {
+      expect(result.current.loadState.kind).toBe("ready");
+      expect(result.current.replayExcaliRestoreReady).toBe(true);
+    });
+
+    // Resolve duration via loadedmetadata + durationchange.
+    act(() => {
+      audio.dispatchEvent(new Event("loadedmetadata"));
+      mockDuration = 94.741;
+      audio.dispatchEvent(new Event("durationchange"));
+    });
+
+    await waitFor(() => {
+      expect(result.current.scrubberMax).toBeGreaterThan(90_000);
+    });
+
+    // Scrub to the halfway point of the resolved scrubberMax.
+    const halfMs = Math.round(result.current.scrubberMax / 2);
+    act(() => {
+      result.current.handleScrubPointerDown();
+      result.current.handleScrubChange(halfMs);
+      result.current.handleScrubPointerUp(halfMs);
+    });
+
+    // localMs must be proportional (~half of 94.741 s ≈ 47 s).
+    // BUG (unfixed): currentTime = 0 because measuredTotal was 0 at scrub time.
+    // FIX: resolvedMaxMsRef.current = ~94741 → localMs ≈ 47.37 s.
+    expect(currentTime).toBeGreaterThan(40);
+    expect(currentTime).toBeLessThan(55);
+
+    unmount();
+    audio.remove();
+    global.fetch = savedFetch;
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fix 3 — first play with Infinity currentTime corrects before calling play()
+// ---------------------------------------------------------------------------
+describe("First play with Infinity currentTime does not snap to end", () => {
+  /**
+   * RED-BEFORE / GREEN-AFTER
+   *
+   * Chrome's WebM fix sets el.currentTime = 1e101 which is reported back as
+   * Infinity.  If the user clicks play before durationchange fires, calling
+   * el.play() from Infinity snaps Chrome to the end of the file (observed:
+   * AbortError → audio_seeked_event currentTime=94.741 → onEnded fires).
+   *
+   * Fix: before calling startPlay() in play(), guard !Number.isFinite(el.currentTime)
+   * and set el.currentTime = localMs/1000 (= 0 at fresh entry) first.
+   */
+  it("corrects currentTime to 0 before play() when WebM fix set it to Infinity", async () => {
+    const savedFetch = global.fetch;
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          schemaVersion: 1,
+          startedAt: "2026-01-01T00:00:00.000Z",
+          durationMs: 0,
+          events: [],
+        }),
+    }) as unknown as typeof fetch;
+
+    // Manually start with currentTime=Infinity to simulate the 1e101 hack
+    // result in Chrome (jsdom doesn't clamp 1e101 to Infinity, so we inject
+    // it directly via the getter).
+    let currentTime: number = Infinity;
+    const audio = document.createElement("audio");
+    document.body.appendChild(audio);
+    let srcAttr = "";
+
+    Object.defineProperty(audio, "currentTime", {
+      configurable: true,
+      get: () => currentTime,
+      set: (v: number) => {
+        currentTime = v;
+      },
+    });
+    Object.defineProperty(audio, "src", {
+      configurable: true,
+      get: () => (srcAttr ? new URL(srcAttr, "http://localhost").href : ""),
+      set: (v: string) => {
+        srcAttr = v;
+      },
+    });
+    audio.getAttribute = jest.fn((name: string) =>
+      name === "src" ? srcAttr : null
+    ) as typeof audio.getAttribute;
+    audio.load = jest.fn();
+    audio.play = jest.fn().mockResolvedValue(undefined);
+    audio.pause = jest.fn();
+    Object.defineProperty(audio, "paused", {
+      configurable: true,
+      get: () => true,
+    });
+
+    const applySceneAtRef = { current: jest.fn() };
+    const { result, unmount } = renderHook(() => {
+      const ref = useRef(applySceneAtRef.current);
+      const segments = useMemo(
+        () => [
+          {
+            url: "/api/audio/admin/rec-1",
+            mimeType: "audio/webm;codecs=opus",
+            durationSeconds: 0,
+          },
+        ],
+        []
+      );
+      return useReplayTimelineController({
+        eventsBlobUrl: "/api/whiteboard/wbs-test/events",
+        audioSegments: segments,
+        applySceneAtRef: ref,
+      });
+    });
+
+    act(() => {
+      result.current.audioRef.current = audio;
+      audio.src = "/api/audio/admin/rec-1";
+    });
+
+    await waitFor(() => {
+      expect(result.current.loadState.kind).toBe("ready");
+      expect(result.current.replayExcaliRestoreReady).toBe(true);
+    });
+
+    // currentTime is Infinity (WebM fix in progress).
+    expect(currentTime).toBe(Infinity);
+
+    // User clicks play before durationchange fires.
+    act(() => {
+      result.current.play();
+    });
+
+    // FIX: currentTime must have been corrected to a finite value (0 at fresh entry).
+    // BUG (unfixed): currentTime stays Infinity, el.play() snaps to end.
+    expect(Number.isFinite(currentTime)).toBe(true);
+    expect(currentTime).toBe(0);
+
+    // play() must have been called.
+    expect(audio.play).toHaveBeenCalled();
+
+    // Must NOT be at end.
+    expect(result.current.isAtEnd).toBe(false);
+
+    unmount();
+    audio.remove();
+    global.fetch = savedFetch;
+  });
+});

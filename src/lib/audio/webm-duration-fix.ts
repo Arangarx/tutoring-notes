@@ -63,6 +63,21 @@
 export type AttachWebmDurationFixOptions = {
   onMetadataLoaded?: () => void;
   onLoadFailed?: () => void;
+  /**
+   * Called once when the audio duration resolves to a finite positive value.
+   * For WebM blobs whose duration is initially Infinity, this fires on the
+   * `durationchange` event after Chrome finishes scanning the file — which is
+   * AFTER `onMetadataLoaded`.  Callers that need the real measured duration
+   * (e.g. to update a scrubber range) must listen here, not in
+   * `onMetadataLoaded`, because the duration is still Infinity at metadata
+   * time.
+   *
+   * Fires at most once per `attachWebmDurationFix` call.  If the duration is
+   * already finite when the fix attaches (cache hit), it fires synchronously
+   * from the catch-up block.  Also fires when `cancelPendingFix()` has been
+   * called — cancelling the reset-to-0 does not suppress this notification.
+   */
+  onDurationResolved?: (durationSec: number) => void;
 };
 
 export type AttachWebmDurationFixResult = {
@@ -88,6 +103,9 @@ export function attachWebmDurationFix(
   // existing test surface, but the helper itself is plain DOM.
   let loadedOk = false;
   let needsFix = false;
+  // Separate from needsFix so onDurationResolved fires even when the
+  // caller called cancelPendingFix() to suppress the reset-to-0.
+  let hasNotifiedDuration = false;
 
   function onLoadedMetadata() {
     loadedOk = true;
@@ -107,6 +125,14 @@ export function attachWebmDurationFix(
   }
 
   function onDurationChange() {
+    // Always notify when duration first resolves to a finite positive value,
+    // independent of needsFix state.  This fires even when cancelPendingFix()
+    // was called (e.g. the user scrubbed mid-scan) so the controller can
+    // update resolvedMaxMs / scrubberMax regardless.
+    if (Number.isFinite(audio.duration) && audio.duration > 0 && !hasNotifiedDuration) {
+      hasNotifiedDuration = true;
+      options.onDurationResolved?.(audio.duration);
+    }
     if (!needsFix) return;
     if (Number.isFinite(audio.duration) && audio.duration > 0) {
       needsFix = false;
@@ -176,6 +202,12 @@ export function attachWebmDurationFix(
       // Audio is actively playing — skip the currentTime thrash.
       loadedOk = true;
       options.onMetadataLoaded?.();
+      // If duration is already finite (e.g. second segment with known header),
+      // notify the controller even though we skipped the fix.
+      if (Number.isFinite(audio.duration) && audio.duration > 0 && !hasNotifiedDuration) {
+        hasNotifiedDuration = true;
+        options.onDurationResolved?.(audio.duration);
+      }
     } else {
       onLoadedMetadata();
       if (Number.isFinite(audio.duration) && audio.duration > 0) {

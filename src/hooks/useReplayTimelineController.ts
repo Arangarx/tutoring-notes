@@ -504,7 +504,32 @@ export function useReplayTimelineController(
       // currentTime via applySeek and race with the WebM duration-fix.
       setPlaying(true);
       const el = audioRef.current;
-      if (el) startPlay(el, "play_button");
+      if (el) {
+        // Guard: the WebM fix sets el.currentTime = 1e101, which Chrome
+        // reports as Infinity.  Calling play() from Infinity snaps playback
+        // to the end of the file (observed: AbortError → seeked to 94.7 s →
+        // onEnded fires).  Correct currentTime to the intended position
+        // before calling play() so the user hears from where they are.
+        if (!Number.isFinite(el.currentTime)) {
+          cancelWebmFixRef.current?.();
+          const measured = resolvedMaxMsRef.current;
+          const { localMs } = globalMsToSegmentLocal(
+            atMs,
+            audioTimeline,
+            measured > 0 ? measured : undefined
+          );
+          const seekSec = Math.max(0, localMs / 1000);
+          console.log(
+            `[avx] wbsid=${whiteboardSessionId ?? "?"} pre_play_infinity_guard currentTime_was=Infinity setting_to=${seekSec}`
+          );
+          try {
+            el.currentTime = seekSec;
+          } catch {
+            // best-effort; play() will still be called below
+          }
+        }
+        startPlay(el, "play_button");
+      }
       return;
     }
     const startFrom = atMs >= noAudioMaxMs ? 0 : atMs;
@@ -516,11 +541,13 @@ export function useReplayTimelineController(
     startSynthFrom(startFrom);
   }, [
     applySceneAtRef,
+    audioTimeline,
     hasAudio,
     noAudioMaxMs,
     seek,
     startPlay,
     startSynthFrom,
+    whiteboardSessionId,
   ]);
 
   const togglePlay = useCallback(() => {
@@ -575,13 +602,25 @@ export function useReplayTimelineController(
           setResolvedMaxMs((prev) => Math.max(prev, knownEnd));
         }
       },
+      // Called once when the WebM duration scan completes and the real
+      // measured duration is known.  This is the moment resolvedMaxMs /
+      // scrubberMax can be updated to reflect the actual audio length so
+      // subsequent scrubs map proportionally rather than collapsing to 0.
+      onDurationResolved: (durationSec: number) => {
+        const knownEnd =
+          globalSegmentOffsetMsRef.current + Math.round(durationSec * 1000);
+        console.log(
+          `[avx] wbsid=${whiteboardSessionId ?? "?"} duration_resolved measuredTotal=${knownEnd}`
+        );
+        setResolvedMaxMs((prev) => Math.max(prev, knownEnd));
+      },
     });
     cancelWebmFixRef.current = cancelPendingFix;
     return () => {
       cleanup();
       cancelWebmFixRef.current = null;
     };
-  }, [hasAudio, replayAudioMime, replayExcaliRestoreReady]);
+  }, [hasAudio, replayAudioMime, replayExcaliRestoreReady, whiteboardSessionId]);
 
   // Preload next segments
   useEffect(() => {
@@ -605,7 +644,12 @@ export function useReplayTimelineController(
     if (!el) return;
 
     const getGlobalTimeMs = () => {
-      const localMs = Math.floor(el.currentTime * 1000);
+      const ct = el.currentTime;
+      // Guard: during the WebM fix scan Chrome reports currentTime=Infinity
+      // after we set el.currentTime=1e101.  Don't advance the play clock
+      // while the element is in that state — return the last known position.
+      if (!Number.isFinite(ct)) return globalMsRef.current;
+      const localMs = Math.floor(ct * 1000);
       return globalSegmentOffsetMsRef.current + localMs;
     };
 

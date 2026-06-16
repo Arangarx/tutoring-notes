@@ -274,3 +274,77 @@ describe("attachWebmDurationFix", () => {
     expect(audio.currentTime).toBe(5);
   });
 });
+
+// ---------------------------------------------------------------------------
+// onDurationResolved — notified when measured duration becomes finite
+// ---------------------------------------------------------------------------
+describe("onDurationResolved callback", () => {
+  it("fires when durationchange brings a finite duration (storedDuration=0 / Infinity case)", () => {
+    const onDurationResolved = jest.fn();
+    const audio = makeAudio();
+    setDuration(audio, Infinity);
+    attachWebmDurationFix(audio, "audio/webm;codecs=opus", { onDurationResolved });
+
+    audio.dispatchEvent(new Event("loadedmetadata"));
+    // Duration still Infinity at metadata time — must NOT fire yet.
+    expect(onDurationResolved).not.toHaveBeenCalled();
+
+    setDuration(audio, 94.741);
+    audio.dispatchEvent(new Event("durationchange"));
+
+    expect(onDurationResolved).toHaveBeenCalledTimes(1);
+    expect(onDurationResolved).toHaveBeenCalledWith(94.741);
+  });
+
+  it("fires even when cancelPendingFix was called before durationchange", () => {
+    // Simulates the case where the user scrubs mid-scan (cancelling the
+    // reset-to-0) but the controller still needs to know the real duration.
+    const onDurationResolved = jest.fn();
+    const audio = makeAudio();
+    setDuration(audio, Infinity);
+    const { cancelPendingFix } = attachWebmDurationFix(audio, "audio/webm;codecs=opus", {
+      onDurationResolved,
+    });
+
+    audio.dispatchEvent(new Event("loadedmetadata"));
+    audio.currentTime = 5; // user scrubbed
+    cancelPendingFix(); // player cancels the reset-to-0
+
+    setDuration(audio, 94.741);
+    audio.dispatchEvent(new Event("durationchange"));
+
+    // onDurationResolved must fire despite the cancel.
+    expect(onDurationResolved).toHaveBeenCalledTimes(1);
+    expect(onDurationResolved).toHaveBeenCalledWith(94.741);
+    // And currentTime must NOT have been reset to 0.
+    expect(audio.currentTime).toBe(5);
+  });
+
+  it("fires at most once even if durationchange is dispatched multiple times", () => {
+    const onDurationResolved = jest.fn();
+    const audio = makeAudio();
+    setDuration(audio, Infinity);
+    attachWebmDurationFix(audio, "audio/webm;codecs=opus", { onDurationResolved });
+
+    audio.dispatchEvent(new Event("loadedmetadata"));
+    setDuration(audio, 94.741);
+    audio.dispatchEvent(new Event("durationchange"));
+    audio.dispatchEvent(new Event("durationchange")); // duplicate
+
+    expect(onDurationResolved).toHaveBeenCalledTimes(1);
+  });
+
+  it("fires synchronously from catch-up block when duration already finite at attach", () => {
+    const onDurationResolved = jest.fn();
+    const audio = makeAudio();
+    setDuration(audio, 42);
+    Object.defineProperty(audio, "readyState", {
+      configurable: true,
+      get: () => 2 /* HAVE_CURRENT_DATA */,
+    });
+    attachWebmDurationFix(audio, "audio/webm;codecs=opus", { onDurationResolved });
+
+    expect(onDurationResolved).toHaveBeenCalledTimes(1);
+    expect(onDurationResolved).toHaveBeenCalledWith(42);
+  });
+});
