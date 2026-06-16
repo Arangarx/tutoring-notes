@@ -9,6 +9,7 @@ import {
   type WBEventLog,
 } from "@/lib/whiteboard/event-log";
 import {
+  computeResizeScroll,
   createCameraFitter,
   createScenePainter,
   type ScenePaintApi,
@@ -99,10 +100,28 @@ export function ReplayCanvasSurface({
    * Snapshot of the Excalidraw viewport sampled after each applySceneAt call.
    * Used by the resize handler to preserve the scene-center through container
    * dimension changes (instead of refit-to-bbox which flashes to a different
-   * position). The snapshot is captured BEFORE the debounce fires so it holds
-   * the pre-resize Excalidraw state.
+   * position).
+   *
+   * IMPORTANT: applySceneAt must NOT update this while a resize series is
+   * active (resizeActiveRef.current === true). Excalidraw updates st.width
+   * to the new container dimensions before our ResizeObserver fires, so any
+   * play-loop tick during an active resize would overwrite this with the
+   * post-resize width — making oldW ≈ newW and zeroing out the correction.
+   * The freeze (guarded by resizeActiveRef) prevents that pollution.
    */
   const viewportSnapshotRef = useRef<ViewportSnapshot | null>(null);
+  /**
+   * True while a resize series is in progress (set on the first ResizeObserver
+   * callback, cleared ~100ms after the last one). Prevents applySceneAt from
+   * overwriting viewportSnapshotRef with a mid-resize st.width value.
+   */
+  const resizeActiveRef = useRef(false);
+  /**
+   * Frozen copy of viewportSnapshotRef captured at the START of a resize
+   * series (before any play-loop tick can pollute it). The resize handler
+   * uses this as the stable "old dimensions" reference throughout the series.
+   */
+  const frozenSnapshotRef = useRef<ViewportSnapshot | null>(null);
 
   const jsxGraphWarmedRef = useRef(false);
   useEffect(() => {
@@ -169,35 +188,41 @@ export function ReplayCanvasSurface({
           result.newAssetUrls
         );
       }
-      // Sample viewport state for center-preserving resize. Sampled after each
-      // paint so the ResizeObserver always has a fresh pre-resize snapshot.
-      try {
-        const st = api.getAppState?.();
-        if (st) {
-          const zoomVal =
-            typeof (st.zoom as { value?: unknown })?.value === "number"
-              ? (st.zoom as { value: number }).value
-              : 1;
-          const containerEl = containerRef.current;
-          const rect = containerEl?.getBoundingClientRect();
-          viewportSnapshotRef.current = {
-            scrollX: typeof st.scrollX === "number" ? st.scrollX : 0,
-            scrollY: typeof st.scrollY === "number" ? st.scrollY : 0,
-            zoom: zoomVal,
-            // Prefer Excalidraw's own width/height (already post-layout);
-            // fall back to container rect which is always post-layout.
-            width:
-              typeof st.width === "number" && st.width > 0
-                ? st.width
-                : (rect?.width ?? 0),
-            height:
-              typeof st.height === "number" && st.height > 0
-                ? st.height
-                : (rect?.height ?? 0),
-          };
+      // Sample viewport state for center-preserving resize. Only update when
+      // NOT actively resizing: Excalidraw updates st.width to the new container
+      // dimensions before our ResizeObserver fires, so any play-loop tick
+      // during an active resize would write the post-resize width into the
+      // snapshot — making oldW ≈ newW and zeroing the centering correction.
+      // resizeActiveRef guards this; the freeze is lifted ~100ms after resize ends.
+      if (!resizeActiveRef.current) {
+        try {
+          const st = api.getAppState?.();
+          if (st) {
+            const zoomVal =
+              typeof (st.zoom as { value?: unknown })?.value === "number"
+                ? (st.zoom as { value: number }).value
+                : 1;
+            const containerEl = containerRef.current;
+            const rect = containerEl?.getBoundingClientRect();
+            viewportSnapshotRef.current = {
+              scrollX: typeof st.scrollX === "number" ? st.scrollX : 0,
+              scrollY: typeof st.scrollY === "number" ? st.scrollY : 0,
+              zoom: zoomVal,
+              // Prefer Excalidraw's own width/height (already post-layout);
+              // fall back to container rect which is always post-layout.
+              width:
+                typeof st.width === "number" && st.width > 0
+                  ? st.width
+                  : (rect?.width ?? 0),
+              height:
+                typeof st.height === "number" && st.height > 0
+                  ? st.height
+                  : (rect?.height ?? 0),
+            };
+          }
+        } catch {
+          // best-effort — don't crash the paint path
         }
-      } catch {
-        // best-effort — don't crash the paint path
       }
     },
     [api, containerRef, log, resolveAssetUrl]
@@ -249,30 +274,27 @@ export function ReplayCanvasSurface({
   /**
    * Center-preserving resize handler.
    *
-   * When the container resizes (e.g. the split-pane width changes), keep the
-   * scene point that is currently at the viewport center STILL at the center
-   * of the new viewport. This avoids the bbox-refit flash (which jumps to a
-   * different camera position and then snaps back) observed with the previous
-   * createCameraFitter approach.
+   * BUG HISTORY (2026-06-16): the previous implementation re-captured
+   * viewportSnapshotRef.current on EVERY ResizeObserver callback. But
+   * Excalidraw updates st.width/st.height to the new container dimensions
+   * before our ResizeObserver fires, so the play loop's applySceneAt tick
+   * (running on rAF, which fires AFTER ResizeObserver in each frame) would
+   * write the post-resize width into the snapshot. By the next resize frame
+   * the snapshot had oldW ≈ newW, making the correction ≈ 0 — content drifted
+   * right over multiple resize frames.
    *
-   * Math: given scrollX/scrollY/zoom and old container size (oldW × oldH),
-   * the scene point at viewport center is:
-   *   sceneCenterX = oldW / 2 / zoom - scrollX
-   *   sceneCenterY = oldH / 2 / zoom - scrollY
+   * FIX: freeze the snapshot at the START of each resize series
+   * (resizeActiveRef + frozenSnapshotRef). applySceneAt skips snapshot updates
+   * while resizeActiveRef is true. The frozen pre-resize snapshot is the stable
+   * reference used throughout the entire resize drag.
    *
-   * After resize to (newW × newH), the new scroll that keeps sceneCenterX/Y
-   * at the viewport center is:
-   *   newScrollX = newW / 2 / zoom - sceneCenterX
-   *   newScrollY = newH / 2 / zoom - sceneCenterY
+   * SMOOTHNESS: apply centering on EVERY ResizeObserver callback (continuous),
+   * not just on debounce-end. The debounce only marks the resize series as
+   * finished so the play loop can resume snapshot updates.
    *
-   * The viewportSnapshotRef is updated by applySceneAt on every paint, so it
-   * always holds the pre-resize Excalidraw state (sampled before the
-   * ResizeObserver fires). If no snapshot exists yet (before the first paint),
-   * fall back to the bbox refit so the initial view is still centered.
-   *
-   * Offset-invariance: using st.width/st.height (Excalidraw's internal canvas
-   * dimensions, which already account for any internal insets) rather than the
-   * raw container rect avoids offset contamination (Phase-5 lesson).
+   * Math (see computeResizeScroll in scene-paint.ts):
+   *   sceneCenterX = oldWidth / 2 / zoom - scrollX   (scene point at old center)
+   *   newScrollX   = newWidth / 2 / zoom - sceneCenterX  (keeps it at new center)
    */
   useEffect(() => {
     if (!api) return;
@@ -282,35 +304,40 @@ export function ReplayCanvasSurface({
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
     const refitOnResize = () => {
-      // Capture the snapshot NOW, before the debounce, while viewportSnapshotRef
-      // still holds pre-resize Excalidraw state (applySceneAt hasn't been called
-      // yet after this resize; rAF fires after the current task queue).
-      const snapshot = viewportSnapshotRef.current;
+      // On the first ResizeObserver callback of a resize series, freeze the
+      // pre-resize snapshot before any rAF/play-loop tick can overwrite it
+      // with a post-resize st.width value.
+      if (!resizeActiveRef.current) {
+        resizeActiveRef.current = true;
+        frozenSnapshotRef.current = viewportSnapshotRef.current;
+      }
 
-      if (debounceTimer !== null) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        debounceTimer = null;
-        try {
-          const rect = container.getBoundingClientRect();
-          if (!(rect.width > 0 && rect.height > 0)) return;
-
+      // Apply centering IMMEDIATELY on every callback for smooth tracking.
+      // Uses frozenSnapshotRef so the reference point stays the same across
+      // all callbacks in the resize series.
+      try {
+        const rect = container.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          const snapshot = frozenSnapshotRef.current;
           if (snapshot && snapshot.width > 0 && snapshot.height > 0) {
-            const { scrollX, scrollY, zoom, width: oldW, height: oldH } = snapshot;
-            const sceneCenterX = oldW / 2 / zoom - scrollX;
-            const sceneCenterY = oldH / 2 / zoom - scrollY;
-            const newScrollX = rect.width / 2 / zoom - sceneCenterX;
-            const newScrollY = rect.height / 2 / zoom - sceneCenterY;
+            const newScroll = computeResizeScroll({
+              scrollX: snapshot.scrollX,
+              scrollY: snapshot.scrollY,
+              zoom: snapshot.zoom,
+              oldWidth: snapshot.width,
+              oldHeight: snapshot.height,
+              newWidth: rect.width,
+              newHeight: rect.height,
+            });
             api.updateScene({
-              elements: lastSceneElementsRef.current as readonly unknown[],
               appState: {
-                scrollX: newScrollX,
-                scrollY: newScrollY,
-                zoom: { value: zoom },
+                scrollX: newScroll.scrollX,
+                scrollY: newScroll.scrollY,
+                zoom: { value: snapshot.zoom },
               },
             });
           } else {
-            // No snapshot yet (before the first paint) — fall back to bbox refit
-            // so the initial fit still centers on the drawing.
+            // No snapshot yet (before the first paint) — fall back to bbox refit.
             const fitter = createCameraFitter({
               api: api as ScenePaintApi,
               container,
@@ -320,9 +347,18 @@ export function ReplayCanvasSurface({
             fitter.fit();
             fitter.dispose();
           }
-        } catch {
-          // best-effort
         }
+      } catch {
+        // best-effort
+      }
+
+      // Debounce to detect resize-end and unfreeze, so the play loop can
+      // resume updating viewportSnapshotRef with the post-resize state.
+      if (debounceTimer !== null) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        resizeActiveRef.current = false;
+        // frozenSnapshotRef will be refreshed on the next applySceneAt tick.
       }, 100);
     };
 
@@ -331,6 +367,7 @@ export function ReplayCanvasSurface({
     return () => {
       ro.disconnect();
       if (debounceTimer !== null) clearTimeout(debounceTimer);
+      resizeActiveRef.current = false;
     };
   }, [api, containerRef]);
 

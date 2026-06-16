@@ -24,6 +24,7 @@
 
 import {
   buildSceneAt,
+  computeResizeScroll,
   computeViewportScroll,
   createCameraFitter,
   createScenePainter,
@@ -675,5 +676,165 @@ describe("createCameraFitter", () => {
     fitter.fit();
     fitter.dispose();
     expect(cancelRaf).toHaveBeenCalledWith(99);
+  });
+});
+
+// -----------------------------------------------------------------
+// computeResizeScroll — center-preserving resize math
+// -----------------------------------------------------------------
+//
+// Independent oracle: Excalidraw's coordinate model (confirmed by
+// computeViewportScroll and viewport-align.ts).
+//
+//   scrollX = containerWidth / 2 / zoom - sceneCenterX
+//   → sceneCenterX = containerWidth / 2 / zoom - scrollX
+//
+// Given this, keeping sceneCenterX at the center of a new container:
+//   newScrollX = newWidth / 2 / zoom - sceneCenterX
+//
+// We use this oracle independently — NOT back-derived from the
+// implementation — to satisfy the jsdom blind-spot rule: assert the
+// math, not DOM pixels.
+
+/**
+ * Oracle: scene X coordinate currently at the viewport center.
+ * Derived directly from Excalidraw's published transform, independent
+ * of the computeResizeScroll implementation.
+ */
+function oracleSceneCenterX(
+  scrollX: number,
+  zoom: number,
+  containerWidth: number
+): number {
+  return containerWidth / 2 / zoom - scrollX;
+}
+function oracleSceneCenterY(
+  scrollY: number,
+  zoom: number,
+  containerHeight: number
+): number {
+  return containerHeight / 2 / zoom - scrollY;
+}
+
+describe("computeResizeScroll", () => {
+  const cases = [
+    { label: "800→400 z=1",  oldW: 800, oldH: 600, newW: 400, newH: 300, zoom: 1 },
+    { label: "400→800 z=1",  oldW: 400, oldH: 300, newW: 800, newH: 600, zoom: 1 },
+    { label: "800→1440 z=2", oldW: 800, oldH: 600, newW: 1440, newH: 900, zoom: 2 },
+    { label: "1440→390 z=0.5", oldW: 1440, oldH: 900, newW: 390, newH: 844, zoom: 0.5 },
+    { label: "no-op same size", oldW: 800, oldH: 600, newW: 800, newH: 600, zoom: 1 },
+  ];
+
+  it.each(cases)(
+    "scene center stays at viewport center after resize ($label)",
+    ({ oldW, oldH, newW, newH, zoom }) => {
+      // Arbitrary pre-resize scroll (not at origin, so the test is meaningful).
+      const initialScrollX = 120;
+      const initialScrollY = -45;
+
+      // Oracle: what scene point is currently at the viewport center?
+      const sceneCX = oracleSceneCenterX(initialScrollX, zoom, oldW);
+      const sceneCY = oracleSceneCenterY(initialScrollY, zoom, oldH);
+
+      const result = computeResizeScroll({
+        scrollX: initialScrollX,
+        scrollY: initialScrollY,
+        zoom,
+        oldWidth: oldW,
+        oldHeight: oldH,
+        newWidth: newW,
+        newHeight: newH,
+      });
+
+      // After applying the new scroll, the oracle must still report the SAME
+      // scene center at the new viewport center.
+      const newCX = oracleSceneCenterX(result.scrollX, zoom, newW);
+      const newCY = oracleSceneCenterY(result.scrollY, zoom, newH);
+
+      expect(newCX).toBeCloseTo(sceneCX, 10);
+      expect(newCY).toBeCloseTo(sceneCY, 10);
+    }
+  );
+
+  it("is offset-invariant: varying initial scrollX produces consistent scene center preservation", () => {
+    const zoom = 1.5;
+    const oldW = 800;
+    const oldH = 600;
+    const newW = 500;
+    const newH = 400;
+
+    for (const scrollX of [-300, 0, 42, 400, 800]) {
+      for (const scrollY of [-200, 0, -17, 300]) {
+        const sceneCX = oracleSceneCenterX(scrollX, zoom, oldW);
+        const sceneCY = oracleSceneCenterY(scrollY, zoom, oldH);
+
+        const result = computeResizeScroll({
+          scrollX,
+          scrollY,
+          zoom,
+          oldWidth: oldW,
+          oldHeight: oldH,
+          newWidth: newW,
+          newHeight: newH,
+        });
+
+        expect(oracleSceneCenterX(result.scrollX, zoom, newW)).toBeCloseTo(
+          sceneCX,
+          10
+        );
+        expect(oracleSceneCenterY(result.scrollY, zoom, newH)).toBeCloseTo(
+          sceneCY,
+          10
+        );
+      }
+    }
+  });
+
+  it("demonstrates the stale-snapshot bug: using new width as oldWidth zeroes the correction", () => {
+    // This is the bug that caused rightward drift: applySceneAt was writing
+    // st.width (already updated by Excalidraw's resize handler) into the
+    // snapshot, so by the next ResizeObserver tick oldW = newW and the
+    // formula produced no correction.
+    const scrollX = 300;
+    const scrollY = 200;
+    const zoom = 1;
+    const trueOldW = 800;
+    const trueOldH = 600;
+    const newW = 400;
+    const newH = 300;
+
+    // Scene center with the TRUE pre-resize dimensions.
+    const trueCX = oracleSceneCenterX(scrollX, zoom, trueOldW); // = 100
+    const trueCY = oracleSceneCenterY(scrollY, zoom, trueOldH); // = 100
+
+    // Correct result: uses true old dimensions.
+    const correct = computeResizeScroll({
+      scrollX,
+      scrollY,
+      zoom,
+      oldWidth: trueOldW,
+      oldHeight: trueOldH,
+      newWidth: newW,
+      newHeight: newH,
+    });
+    expect(oracleSceneCenterX(correct.scrollX, zoom, newW)).toBeCloseTo(trueCX, 10);
+
+    // Buggy result: oldWidth was already overwritten to newW (the bug).
+    const buggy = computeResizeScroll({
+      scrollX,
+      scrollY,
+      zoom,
+      oldWidth: newW, // stale — already the post-resize width
+      oldHeight: newH,
+      newWidth: newW,
+      newHeight: newH,
+    });
+    // No correction is applied (scrollX unchanged), content drifts.
+    expect(buggy.scrollX).toBeCloseTo(scrollX, 10);
+    // Scene center under the buggy result is WRONG.
+    expect(oracleSceneCenterX(buggy.scrollX, zoom, newW)).not.toBeCloseTo(
+      trueCX,
+      1
+    );
   });
 });

@@ -556,6 +556,49 @@ export function createThrottledPlayLoop(
 // -----------------------------------------------------------------
 
 /**
+ * Compute the scroll values that keep a given scene center point at the
+ * viewport center after a container resize.
+ *
+ * Excalidraw's coordinate model: to keep scene point (cx, cy) at the
+ * visual center of a container of width W, height H at zoom z:
+ *   scrollX = W / 2 / z - cx
+ *   scrollY = H / 2 / z - cy
+ *
+ * When the container resizes from (oldWidth × oldHeight) to
+ * (newWidth × newHeight) with scroll and zoom unchanged, the scene
+ * point that WAS at the old viewport center is:
+ *   cx = oldWidth / 2 / zoom - scrollX
+ *   cy = oldHeight / 2 / zoom - scrollY
+ *
+ * The new scroll that keeps (cx, cy) at the new viewport center is:
+ *   newScrollX = newWidth / 2 / zoom - cx
+ *   newScrollY = newHeight / 2 / zoom - cy
+ *
+ * This is the correct center-preserving formula for resize; it is
+ * independent of element positions and works at any zoom level.
+ * Used by the replay canvas ResizeObserver and tested in scene-paint.test.ts.
+ */
+export function computeResizeScroll(args: {
+  scrollX: number;
+  scrollY: number;
+  zoom: number;
+  oldWidth: number;
+  oldHeight: number;
+  newWidth: number;
+  newHeight: number;
+}): { scrollX: number; scrollY: number } {
+  const { scrollX, scrollY, zoom, oldWidth, oldHeight, newWidth, newHeight } =
+    args;
+  const z = zoom > 0 ? zoom : 1;
+  const sceneCenterX = oldWidth / 2 / z - scrollX;
+  const sceneCenterY = oldHeight / 2 / z - scrollY;
+  return {
+    scrollX: newWidth / 2 / z - sceneCenterX,
+    scrollY: newHeight / 2 / z - sceneCenterY,
+  };
+}
+
+/**
  * Compute the scroll values that centre `elements` in a container of
  * the given dimensions. Returns `null` when the math is undefined
  * (no elements, zero-area container, all elements coincident).
