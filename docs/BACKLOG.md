@@ -45,6 +45,18 @@ Not in priority order within sections — that comes when items move to a sprint
 
 ---
 
+## P1 replay-in-frame — post-master follow-ups (2026-06-16)
+
+> **Source:** `phase1/wb-review-correct` pre-master smoke session (2026-06-16). Andrew explicitly **deferred all three to post-master** — NOT Sarah ship-blockers. Durable capture so decisions aren't lost.
+
+| Item | Priority | Notes |
+|------|----------|-------|
+| **WB-DRY-VIEWPORT — viewport center-match DRY consolidation** | Low (maintainability) | `computeResizeScroll` in `src/lib/whiteboard/scene-paint.ts` is a second closed-form copy of the center-preserve-at-constant-zoom math that `src/lib/whiteboard/viewport-align.ts` owns (`viewportSceneCenterFromScroll` + `scrollForViewportSceneCenter`). **No active bug** — equivalence locked by test (`src/__tests__/whiteboard/viewport-align.test.ts` "matches computeResizeScroll one-shot"). Risk is drift if one copy changes without the other. **Fix:** make viewport-align the single source of truth; thin `computeResizeScroll` to a one-line delegate (add e.g. `scrollPreservingViewportCenterOnResize` to viewport-align and have `computeResizeScroll` call it). Touches scene-paint → needs `npm run test:wb-sync` before merge. |
+| **WB-REVIEW-TRANSITION — whiteboard review transition animation feels like load-flash** | Medium (polish) | Hero-notes↔docked-notes and hero→replay transitions read as an instant load/flash rather than the intended smooth ~250ms animation; on hero→replay the final-frame thumbnail and "Replay session" button visibly flash/disappear instead of cross-fading. Smokebook item #2 + #5 area. Polish, not functional — first-impression for Sarah, but deferred post-master. |
+| **WB-IMPERSONATION-SESSION — in-progress whiteboard session not recoverable after navigate-away (impersonation)** | Low (admin-only) | **Root cause:** `assertOwnsWhiteboardSession` (`src/lib/whiteboard-scope.ts`) and `canAccessStudentRow` (`src/lib/student-scope.ts`) require `session.adminUserId === scope.adminId` with **no** impersonation/`originalAdminId` bypass — so a session created under a different identity than the currently-impersonated one 404s on "Continue" and appears to vanish. Admin-QA convenience only; does **not** affect normal single-identity tutors (Sarah). **Fix option:** when impersonating, also allow `session.adminUserId === originalAdminId`. Related pre-existing UX gap already tracked as **SSG-2** (10-min resume-gate invisibility). |
+
+---
+
 ## Smoke round 1 — master-cut branch findings (2026-06-11)
 
 > **Canonical triage:** [`docs/handoff/smoke-round-1-findings-2026-06-11.md`](handoff/smoke-round-1-findings-2026-06-11.md) — Andrew's full smoke of 8 overnight branches. BLOCKERs tracked there; non-blocker items below so they aren't lost.
