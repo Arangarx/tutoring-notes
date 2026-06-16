@@ -203,6 +203,7 @@ import { useWbChromeDebugOverlayVisible } from "@/lib/whiteboard/use-wb-chrome-d
 import type { RemoteSceneIngestLogHint } from "@/hooks/useWhiteboardRecorder";
 import {
   adaptWBElementsToExcalidraw,
+  computeResizeScroll,
   restoreAndSanitizeForPaint,
 } from "@/lib/whiteboard/scene-paint";
 import type { PageViewState, WhiteboardBoardDocumentV1 } from "@/lib/whiteboard/board-document-snapshot";
@@ -479,6 +480,17 @@ export function WhiteboardWorkspaceClient({
     null
   );
   const excalidrawAPIRef = useRef<ExcalidrawApiLike | null>(null);
+  /**
+   * Ref for the .mynk-wb-canvas wrapper div, used by the center-preserving
+   * resize ResizeObserver. Additive — no existing logic uses this ref.
+   */
+  const wbCanvasRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * Frame-to-frame container dimensions tracked by the resize ResizeObserver.
+   * See the resize useEffect below (search "Center-preserving viewport resize").
+   */
+  const prevWbWidthRef = useRef<number | null>(null);
+  const prevWbHeightRef = useRef<number | null>(null);
   const followDebugTelemetry = useMemo(() => createWbFollowDebugTelemetry(), []);
   const applyingRemoteToCanvasRef = useRef(false);
   /**
@@ -4160,6 +4172,90 @@ export function WhiteboardWorkspaceClient({
   };
 
   // ---------------------------------------------------------------
+  // Center-preserving viewport resize (additive — does not touch
+  // page-switch, student-follow, recording FSM, or pvs logic).
+  // ---------------------------------------------------------------
+  //
+  // Uses the same frame-to-frame formula as the replay surface:
+  //   scrollX_new = scrollX_old + (newWidth - oldWidth) / (2 * zoom)
+  // scrollX_old is read live from api.getAppState() at resize time so it
+  // always reflects the tutor's current pan (no snapshot race).
+  // prevWbWidthRef tracks the previous observed container width so oldWidth
+  // is independent of Excalidraw's appState.width (which updates before our
+  // observer fires). The viewport change naturally flows through onChange →
+  // scheduleViewportPersist → broadcast, which is the correct behavior
+  // (students following the tutor re-center to match).
+  useEffect(() => {
+    const container = wbCanvasRef.current;
+    if (!container) return;
+
+    prevWbWidthRef.current = null;
+    prevWbHeightRef.current = null;
+
+    const handleResize = () => {
+      const rect = container.getBoundingClientRect();
+      if (!(rect.width > 0 && rect.height > 0)) return;
+
+      const prevW = prevWbWidthRef.current;
+      const prevH = prevWbHeightRef.current;
+
+      if (
+        prevW !== null &&
+        prevH !== null &&
+        prevW > 0 &&
+        prevH > 0 &&
+        (rect.width !== prevW || rect.height !== prevH)
+      ) {
+        const api = excalidrawAPIRef.current as (ExcalidrawApiLike & {
+            updateScene?: (data: { appState?: Record<string, unknown> }) => void;
+          }) | null;
+        try {
+          if (api) {
+            const st = api.getAppState() as {
+              scrollX?: number;
+              scrollY?: number;
+              zoom?: { value?: number };
+            };
+            const z =
+              typeof st.zoom?.value === "number" ? st.zoom.value : 1;
+            const scrollX =
+              typeof st.scrollX === "number" ? st.scrollX : 0;
+            const scrollY =
+              typeof st.scrollY === "number" ? st.scrollY : 0;
+            const newScroll = computeResizeScroll({
+              scrollX,
+              scrollY,
+              zoom: z,
+              oldWidth: prevW,
+              oldHeight: prevH,
+              newWidth: rect.width,
+              newHeight: rect.height,
+            });
+            api.updateScene?.({
+              appState: {
+                scrollX: newScroll.scrollX,
+                scrollY: newScroll.scrollY,
+                zoom: { value: z },
+              },
+            });
+          }
+        } catch {
+          // best-effort — never crash the live board
+        }
+      }
+
+      prevWbWidthRef.current = rect.width;
+      prevWbHeightRef.current = rect.height;
+    };
+
+    // ResizeObserver is a browser API not available in jsdom test environments.
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(handleResize);
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, []); // wbCanvasRef and excalidrawAPIRef are stable refs — no deps needed
+
+  // ---------------------------------------------------------------
   // Render — Mynk whiteboard chrome
   // ---------------------------------------------------------------
 
@@ -4497,6 +4593,7 @@ export function WhiteboardWorkspaceClient({
       }
       canvas={
         <div
+          ref={wbCanvasRef}
           className="mynk-wb-canvas"
           data-testid="tutor-whiteboard-canvas-mount"
           onClick={() => {

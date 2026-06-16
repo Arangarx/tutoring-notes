@@ -60,16 +60,6 @@ export type ReplayCanvasSurfaceProps = {
   gateVisibility?: boolean;
 };
 
-/** Snapshot of Excalidraw viewport state used for center-preserving resize. */
-type ViewportSnapshot = {
-  scrollX: number;
-  scrollY: number;
-  zoom: number;
-  /** Container width at the time of the snapshot (in CSS pixels). */
-  width: number;
-  /** Container height at the time of the snapshot (in CSS pixels). */
-  height: number;
-};
 
 export function ReplayCanvasSurface({
   log,
@@ -97,31 +87,16 @@ export function ReplayCanvasSurface({
   const { resolvedTheme } = useTheme();
   const excalidrawTheme = resolvedTheme === "dark" ? "dark" : "light";
   /**
-   * Snapshot of the Excalidraw viewport sampled after each applySceneAt call.
-   * Used by the resize handler to preserve the scene-center through container
-   * dimension changes (instead of refit-to-bbox which flashes to a different
-   * position).
-   *
-   * IMPORTANT: applySceneAt must NOT update this while a resize series is
-   * active (resizeActiveRef.current === true). Excalidraw updates st.width
-   * to the new container dimensions before our ResizeObserver fires, so any
-   * play-loop tick during an active resize would overwrite this with the
-   * post-resize width — making oldW ≈ newW and zeroing out the correction.
-   * The freeze (guarded by resizeActiveRef) prevents that pollution.
+   * Container dimensions tracked frame-to-frame by the ResizeObserver.
+   * Updated on every ResizeObserver callback (including the initial one at
+   * mount). The resize handler reads these as "old dimensions" for
+   * computeResizeScroll, so the delta is always relative to the PREVIOUS
+   * callback — no snapshot-at-mount race, no frozen-snapshot stale-scroll
+   * bug. scrollX/scrollY are read live from api.getAppState() at resize
+   * time (always post-camera-fit by the time the observer fires).
    */
-  const viewportSnapshotRef = useRef<ViewportSnapshot | null>(null);
-  /**
-   * True while a resize series is in progress (set on the first ResizeObserver
-   * callback, cleared ~100ms after the last one). Prevents applySceneAt from
-   * overwriting viewportSnapshotRef with a mid-resize st.width value.
-   */
-  const resizeActiveRef = useRef(false);
-  /**
-   * Frozen copy of viewportSnapshotRef captured at the START of a resize
-   * series (before any play-loop tick can pollute it). The resize handler
-   * uses this as the stable "old dimensions" reference throughout the series.
-   */
-  const frozenSnapshotRef = useRef<ViewportSnapshot | null>(null);
+  const prevResizeWidthRef = useRef<number | null>(null);
+  const prevResizeHeightRef = useRef<number | null>(null);
 
   const jsxGraphWarmedRef = useRef(false);
   useEffect(() => {
@@ -188,44 +163,8 @@ export function ReplayCanvasSurface({
           result.newAssetUrls
         );
       }
-      // Sample viewport state for center-preserving resize. Only update when
-      // NOT actively resizing: Excalidraw updates st.width to the new container
-      // dimensions before our ResizeObserver fires, so any play-loop tick
-      // during an active resize would write the post-resize width into the
-      // snapshot — making oldW ≈ newW and zeroing the centering correction.
-      // resizeActiveRef guards this; the freeze is lifted ~100ms after resize ends.
-      if (!resizeActiveRef.current) {
-        try {
-          const st = api.getAppState?.();
-          if (st) {
-            const zoomVal =
-              typeof (st.zoom as { value?: unknown })?.value === "number"
-                ? (st.zoom as { value: number }).value
-                : 1;
-            const containerEl = containerRef.current;
-            const rect = containerEl?.getBoundingClientRect();
-            viewportSnapshotRef.current = {
-              scrollX: typeof st.scrollX === "number" ? st.scrollX : 0,
-              scrollY: typeof st.scrollY === "number" ? st.scrollY : 0,
-              zoom: zoomVal,
-              // Prefer Excalidraw's own width/height (already post-layout);
-              // fall back to container rect which is always post-layout.
-              width:
-                typeof st.width === "number" && st.width > 0
-                  ? st.width
-                  : (rect?.width ?? 0),
-              height:
-                typeof st.height === "number" && st.height > 0
-                  ? st.height
-                  : (rect?.height ?? 0),
-            };
-          }
-        } catch {
-          // best-effort — don't crash the paint path
-        }
-      }
     },
-    [api, containerRef, log, resolveAssetUrl]
+    [api, log, resolveAssetUrl]
   );
 
   useEffect(() => {
@@ -272,60 +211,78 @@ export function ReplayCanvasSurface({
   }, [api, onApiReady]);
 
   /**
-   * Center-preserving resize handler.
+   * Center-preserving resize handler — frame-to-frame approach.
    *
-   * BUG HISTORY (2026-06-16): the previous implementation re-captured
-   * viewportSnapshotRef.current on EVERY ResizeObserver callback. But
-   * Excalidraw updates st.width/st.height to the new container dimensions
-   * before our ResizeObserver fires, so the play loop's applySceneAt tick
-   * (running on rAF, which fires AFTER ResizeObserver in each frame) would
-   * write the post-resize width into the snapshot. By the next resize frame
-   * the snapshot had oldW ≈ newW, making the correction ≈ 0 — content drifted
-   * right over multiple resize frames.
+   * ROOT CAUSE OF PRIOR BUG (b7b8d3e / 596d920):
+   * The frozen-snapshot approach captured viewportSnapshotRef in
+   * applySceneAt, which ran BEFORE the camera fitter set the correct
+   * scrollX. So frozenSnapshotRef.scrollX = 0 (Excalidraw's initial
+   * default) instead of the camera-fit value. computeResizeScroll then
+   * computed the scene center as viewport_width/2 (scene origin + half
+   * of full-screen) rather than the actual content center — matching
+   * Andrew's symptom: "positions where center would have been at full screen."
    *
-   * FIX: freeze the snapshot at the START of each resize series
-   * (resizeActiveRef + frozenSnapshotRef). applySceneAt skips snapshot updates
-   * while resizeActiveRef is true. The frozen pre-resize snapshot is the stable
-   * reference used throughout the entire resize drag.
+   * FIX — frame-to-frame:
+   * Track container dimensions in prevResizeWidthRef / prevResizeHeightRef,
+   * updated on EVERY ResizeObserver callback (including the initial one at
+   * mount). On each resize callback:
+   *   - Read scrollX/Y LIVE from api.getAppState() — by the time the
+   *     ResizeObserver fires (asynchronously, next browser frame), all
+   *     useEffects (including the camera fitter) have already run, so
+   *     scrollX is always the correct post-camera-fit value.
+   *   - Use prevResizeWidthRef as oldWidth — independent of Excalidraw's
+   *     appState.width, which Excalidraw updates before our observer fires.
+   *   - Update prevResizeWidth after each callback so subsequent deltas
+   *     are relative to the PREVIOUS callback's size.
    *
-   * SMOOTHNESS: apply centering on EVERY ResizeObserver callback (continuous),
-   * not just on debounce-end. The debounce only marks the resize series as
-   * finished so the play loop can resume snapshot updates.
+   * This is continuous (applies on every ResizeObserver callback, not just
+   * debounce-end) and requires no debouncing, no frozen snapshot, and no
+   * applySceneAt cooperation.
    *
-   * Math (see computeResizeScroll in scene-paint.ts):
-   *   sceneCenterX = oldWidth / 2 / zoom - scrollX   (scene point at old center)
-   *   newScrollX   = newWidth / 2 / zoom - sceneCenterX  (keeps it at new center)
+   * Math: computeResizeScroll in scene-paint.ts (unchanged — the formula
+   * was always correct; only the inputs were wrong).
    */
   useEffect(() => {
     if (!api) return;
     const container = containerRef.current;
     if (!container) return;
 
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    // Reset tracked dimensions on api/container change so the first callback
+    // initializes prevResizeWidthRef without applying a spurious correction.
+    prevResizeWidthRef.current = null;
+    prevResizeHeightRef.current = null;
 
     const refitOnResize = () => {
-      // On the first ResizeObserver callback of a resize series, freeze the
-      // pre-resize snapshot before any rAF/play-loop tick can overwrite it
-      // with a post-resize st.width value.
-      if (!resizeActiveRef.current) {
-        resizeActiveRef.current = true;
-        frozenSnapshotRef.current = viewportSnapshotRef.current;
-      }
+      const rect = container.getBoundingClientRect();
+      if (!(rect.width > 0 && rect.height > 0)) return;
 
-      // Apply centering IMMEDIATELY on every callback for smooth tracking.
-      // Uses frozenSnapshotRef so the reference point stays the same across
-      // all callbacks in the resize series.
-      try {
-        const rect = container.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          const snapshot = frozenSnapshotRef.current;
-          if (snapshot && snapshot.width > 0 && snapshot.height > 0) {
+      const prevW = prevResizeWidthRef.current;
+      const prevH = prevResizeHeightRef.current;
+
+      if (
+        prevW !== null &&
+        prevH !== null &&
+        prevW > 0 &&
+        prevH > 0 &&
+        (rect.width !== prevW || rect.height !== prevH)
+      ) {
+        try {
+          const st = api.getAppState?.();
+          if (st) {
+            const z =
+              typeof (st.zoom as { value?: unknown })?.value === "number"
+                ? (st.zoom as { value: number }).value
+                : 1;
+            const scrollX =
+              typeof st.scrollX === "number" ? st.scrollX : 0;
+            const scrollY =
+              typeof st.scrollY === "number" ? st.scrollY : 0;
             const newScroll = computeResizeScroll({
-              scrollX: snapshot.scrollX,
-              scrollY: snapshot.scrollY,
-              zoom: snapshot.zoom,
-              oldWidth: snapshot.width,
-              oldHeight: snapshot.height,
+              scrollX,
+              scrollY,
+              zoom: z,
+              oldWidth: prevW,
+              oldHeight: prevH,
               newWidth: rect.width,
               newHeight: rect.height,
             });
@@ -333,42 +290,24 @@ export function ReplayCanvasSurface({
               appState: {
                 scrollX: newScroll.scrollX,
                 scrollY: newScroll.scrollY,
-                zoom: { value: snapshot.zoom },
+                zoom: { value: z },
               },
             });
-          } else {
-            // No snapshot yet (before the first paint) — fall back to bbox refit.
-            const fitter = createCameraFitter({
-              api: api as ScenePaintApi,
-              container,
-              getElements: () => lastSceneElementsRef.current,
-              zoom: 1,
-            });
-            fitter.fit();
-            fitter.dispose();
           }
+        } catch {
+          // best-effort — never crash the replay
         }
-      } catch {
-        // best-effort
       }
 
-      // Debounce to detect resize-end and unfreeze, so the play loop can
-      // resume updating viewportSnapshotRef with the post-resize state.
-      if (debounceTimer !== null) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        debounceTimer = null;
-        resizeActiveRef.current = false;
-        // frozenSnapshotRef will be refreshed on the next applySceneAt tick.
-      }, 100);
+      // Update tracked dimensions AFTER applying correction so the next
+      // callback uses the current size as its old reference.
+      prevResizeWidthRef.current = rect.width;
+      prevResizeHeightRef.current = rect.height;
     };
 
     const ro = new ResizeObserver(refitOnResize);
     ro.observe(container);
-    return () => {
-      ro.disconnect();
-      if (debounceTimer !== null) clearTimeout(debounceTimer);
-      resizeActiveRef.current = false;
-    };
+    return () => ro.disconnect();
   }, [api, containerRef]);
 
   if (!restoreReady) {

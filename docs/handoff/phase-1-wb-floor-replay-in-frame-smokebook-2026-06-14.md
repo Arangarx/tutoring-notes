@@ -1,7 +1,7 @@
 # Phase 1 — WB Review Correct (in-frame) — smoke runbook
 
 **Branch:** `phase1/wb-review-correct`  
-**Tip commit:** `[4c1275d](https://github.com/Arangarx/tutoring-notes/commit/4c1275d)` *(fix(replay): remove non-functional live A/V cluster from review chrome)*  
+**Tip commit:** `[PENDING]` *(fix(resize): correct viewport resize re-centering — frame-to-frame, live + replay)*  
 **Preview:** [tutoring-notes-git-phase1-wb-rev-46b0a1](https://tutoring-notes-git-phase1-wb-rev-46b0a1-arangarx-5209s-projects.vercel.app)
 
 > **Smoke focus = unified in-frame review surface** (one `TutorNotesSection` reflows prominent ↔ docked with **animated** transition; replay fills main frame inside live WB chrome; persist-once replay; **Hide replay** collapse). Standalone admin/share replay scrubber parity remains **DEFERRED** — regression-check only (D-items).
@@ -222,11 +222,13 @@
 
 ---
 
-### 14. Window resize — replay recenter (light theme)
+### 14. Window resize — center-pin at constant zoom, live board + replay
 
-**Action:** Enter in-frame replay with visible strokes. Note what's centered in the viewport. Resize browser window narrower then wider (drag resize continuously, not just a single snap). Also try resizing while playback is running.
+**Action:** Run TWO sub-tests:
+1. **Replay** — enter in-frame replay with visible strokes. Note the viewport center content. Resize browser narrower, then wider, continuously. Also resize while playback is running.
+2. **Live board** — open an active tutor session. Pan to a specific feature (e.g., a stroke corner). Resize the browser window narrower then wider (including asymmetric resize: narrower but taller). Confirm the feature stays pinned at center.
 
-**Expect:** Scene stays **centered** throughout the resize drag — no rightward/leftward drift. After each resize, the same scene content that was at viewport center is still at viewport center. No blank gap; no canvas detached from chrome frame. Content should glide toward center as you drag (continuous, not just a snap at resize-end).
+**Expect:** In BOTH surfaces: the scene point at viewport center stays at viewport center throughout the resize (continuous, not just snap-at-resize-end). Zoom is UNCHANGED (no zoom-to-fit). Non-center content slides proportionally. No blank gap; no canvas detached from chrome frame.
 
 **Ignore this run:** Mobile/tablet layouts (desktop Chrome primary).
 
@@ -234,7 +236,7 @@
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes: Tip commit b7b8d3e — freeze-snapshot fix. Root cause was play-loop (applySceneAt rAF) overwriting snapshot.width with post-resize st.width between ResizeObserver frames, making correction ≈ 0. Fix: freeze pre-resize snapshot on first ResizeObserver callback; guard applySceneAt with resizeActiveRef. Centering now continuous (every ResizeObserver tick) not debounce-only.**
+**Notes: Prior fix (b7b8d3e) was wrong — root cause: viewportSnapshotRef captured scrollX BEFORE camera fitter ran (applySceneAt fires first in the same useEffect, then fitter.fit() sets correct scrollX), so frozenSnapshot.scrollX=0 (Excalidraw's initial default) instead of post-camera-fit value. computeResizeScroll then computed scene center as fullScreenWidth/2 ("where center would have been at full screen"). Corrected fix (this commit): frame-to-frame ResizeObserver — track prevWidth/prevHeight refs updated on every callback; read st.scrollX live from api.getAppState() at resize time (always post-camera-fit by then); no frozen snapshot, no applySceneAt cooperation, no debounce. Same formula applied additively to live board (additive-only: new useEffect + wbCanvasRef, no existing logic modified). 8 new tests in scene-paint.test.ts incl. Andrew's grid vectors + RED-BEFORE stale-scrollX pin.**
 
 ---
 

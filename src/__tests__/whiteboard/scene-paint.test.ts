@@ -838,3 +838,184 @@ describe("computeResizeScroll", () => {
     );
   });
 });
+
+// -----------------------------------------------------------------
+// computeResizeScroll — Andrew's grid vector tests
+// -----------------------------------------------------------------
+//
+// Andrew's acceptance model (11×11 grid viewport, mark at center):
+//   resize to 5×5   → mark at 3,3    (center of 5×5)
+//   resize to 21×21 → mark at 11,11  (center of 21×21)
+//   resize to 5×21  → mark at 3,11
+//   resize to 21×11 → mark at 11,6
+//
+// We map these to real pixel sizes at zoom=1. The scene mark is at
+// (sceneCX, sceneCY) = (100, 100). Initial viewport is 1100×1100 px
+// with the mark centered via the camera fit.
+//
+// Independent oracle: same oracleSceneCenterX/Y used above —
+// derived from Excalidraw's published transform, NOT the implementation.
+
+describe("computeResizeScroll — Andrew grid vectors", () => {
+  const z = 1;
+  const initialW = 1100;
+  const initialH = 1100;
+  const sceneCX = 100; // scene point at viewport center
+  const sceneCY = 100;
+
+  // Camera-fit scroll: centers (sceneCX, sceneCY) in the initial viewport.
+  const cameraFitScrollX = initialW / 2 / z - sceneCX; // = 450
+  const cameraFitScrollY = initialH / 2 / z - sceneCY; // = 450
+
+  // Analog of Andrew's grid resizes using real px sizes (zoom=1):
+  //   11→5  ≈ 1100→500    11→21 ≈ 1100→2100
+  const gridCases = [
+    { label: "11×11 → 5×5  (shrink both axes)",   newW: 500,  newH: 500  },
+    { label: "11×11 → 21×21 (grow both axes)",     newW: 2100, newH: 2100 },
+    { label: "11×11 → 5×21  (shrink X, grow Y)",   newW: 500,  newH: 2100 },
+    { label: "11×11 → 21×11 (grow X, no Y change)", newW: 2100, newH: 1100 },
+    { label: "no-op (same size)",                   newW: 1100, newH: 1100 },
+  ];
+
+  it.each(gridCases)(
+    "scene mark stays at viewport center: $label",
+    ({ newW, newH }) => {
+      const result = computeResizeScroll({
+        scrollX: cameraFitScrollX,
+        scrollY: cameraFitScrollY,
+        zoom: z,
+        oldWidth: initialW,
+        oldHeight: initialH,
+        newWidth: newW,
+        newHeight: newH,
+      });
+
+      // Oracle: the mark (sceneCX, sceneCY) must sit at the new viewport center.
+      expect(oracleSceneCenterX(result.scrollX, z, newW)).toBeCloseTo(sceneCX, 10);
+      expect(oracleSceneCenterY(result.scrollY, z, newH)).toBeCloseTo(sceneCY, 10);
+    }
+  );
+
+  it("scroll changes by exactly Δsize/(2*zoom) — non-center point keeps scene-space offset", () => {
+    // The scroll delta equals (newSize - oldSize) / (2 * zoom), per axis.
+    // This means a non-center scene point maintains a constant offset from
+    // the viewport center (zoom is unchanged, so scene coordinates are stable).
+    const newW = 500;
+    const newH = 700;
+    const result = computeResizeScroll({
+      scrollX: cameraFitScrollX,
+      scrollY: cameraFitScrollY,
+      zoom: z,
+      oldWidth: initialW,
+      oldHeight: initialH,
+      newWidth: newW,
+      newHeight: newH,
+    });
+    expect(result.scrollX - cameraFitScrollX).toBeCloseTo(
+      (newW - initialW) / (2 * z),
+      10
+    );
+    expect(result.scrollY - cameraFitScrollY).toBeCloseTo(
+      (newH - initialH) / (2 * z),
+      10
+    );
+  });
+
+  it("frame-to-frame multi-step equals one-shot from origin (math equivalence)", () => {
+    // Verifies the frame-to-frame tracking approach used by the ResizeObserver:
+    // applying each resize delta incrementally from the running state gives
+    // the same final scroll as computing directly from the original state.
+    const steps = [
+      { w: 500,  h: 500  }, // shrink
+      { w: 800,  h: 600  }, // expand
+      { w: 1200, h: 900  }, // expand further
+    ];
+
+    // One-shot from origin directly to the final size:
+    const finalStep = steps[steps.length - 1]!;
+    const oneShot = computeResizeScroll({
+      scrollX: cameraFitScrollX,
+      scrollY: cameraFitScrollY,
+      zoom: z,
+      oldWidth: initialW,
+      oldHeight: initialH,
+      newWidth: finalStep.w,
+      newHeight: finalStep.h,
+    });
+
+    // Frame-to-frame: apply each delta from running state.
+    let curScrollX = cameraFitScrollX;
+    let curScrollY = cameraFitScrollY;
+    let curW = initialW;
+    let curH = initialH;
+    for (const step of steps) {
+      const r = computeResizeScroll({
+        scrollX: curScrollX,
+        scrollY: curScrollY,
+        zoom: z,
+        oldWidth: curW,
+        oldHeight: curH,
+        newWidth: step.w,
+        newHeight: step.h,
+      });
+      curScrollX = r.scrollX;
+      curScrollY = r.scrollY;
+      curW = step.w;
+      curH = step.h;
+    }
+
+    // Both approaches must agree — frame-to-frame is mathematically equivalent.
+    expect(curScrollX).toBeCloseTo(oneShot.scrollX, 10);
+    expect(curScrollY).toBeCloseTo(oneShot.scrollY, 10);
+    // And the scene center is preserved in both.
+    expect(oracleSceneCenterX(curScrollX, z, finalStep.w)).toBeCloseTo(sceneCX, 10);
+    expect(oracleSceneCenterY(curScrollY, z, finalStep.h)).toBeCloseTo(sceneCY, 10);
+  });
+
+  it("RED-BEFORE: stale pre-camera-fit scrollX=0 in snapshot produces wrong center (root cause pin)", () => {
+    // Root cause of b7b8d3e bug: viewportSnapshotRef captured scrollX BEFORE
+    // the camera fitter ran (applySceneAt fires first in the same useEffect,
+    // then fitter.fit() sets the correct scrollX). So frozenSnapshot.scrollX=0
+    // (Excalidraw's initial default) instead of cameraFitScrollX.
+    //
+    // This test is the RED-BEFORE pin: the buggy inputs produce a wrong center
+    // (550 instead of 100), while the correct (post-camera-fit) inputs give 100.
+
+    const newW = 500;
+    const newH = 500;
+
+    // CORRECT (frame-to-frame reads st.scrollX = cameraFitScrollX, which is
+    // the post-camera-fit value by the time the ResizeObserver fires):
+    const correct = computeResizeScroll({
+      scrollX: cameraFitScrollX, // 450 — what st.scrollX actually is
+      scrollY: cameraFitScrollY,
+      zoom: z,
+      oldWidth: initialW,
+      oldHeight: initialH,
+      newWidth: newW,
+      newHeight: newH,
+    });
+    const correctCX = oracleSceneCenterX(correct.scrollX, z, newW);
+
+    // BUGGY (frozen snapshot has scrollX=0, captured before camera fit):
+    const buggy = computeResizeScroll({
+      scrollX: 0,  // stale: Excalidraw's initial scrollX before camera fit
+      scrollY: 0,
+      zoom: z,
+      oldWidth: initialW,
+      oldHeight: initialH,
+      newWidth: newW,
+      newHeight: newH,
+    });
+    const buggyCX = oracleSceneCenterX(buggy.scrollX, z, newW);
+
+    // GREEN: correct path keeps the scene mark at center (100).
+    expect(correctCX).toBeCloseTo(sceneCX, 10);
+
+    // GREEN: buggy path puts scene point 550 at center instead
+    // ("where center would have been at full screen" = initial default origin).
+    expect(buggyCX).not.toBeCloseTo(sceneCX, 1);
+    // scrollX=0 → sceneCX_stale = 1100/2/1 - 0 = 550
+    expect(buggyCX).toBeCloseTo(initialW / 2, 1);
+  });
+});
