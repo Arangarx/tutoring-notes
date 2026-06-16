@@ -545,3 +545,235 @@ describe("FIX 1 — apply re-entrancy guard (no stack overflow at end-of-stream)
     audio.remove();
   });
 });
+
+// ---------------------------------------------------------------------------
+// BUG A — first play with unresolved duration must NOT snap to end
+// ---------------------------------------------------------------------------
+describe("Bug A — first play does not snap to end when resolvedMaxMs=0", () => {
+  /**
+   * RED-BEFORE / GREEN-AFTER
+   *
+   * When audioTimeline.totalMs = 0 (no stored durationSeconds) AND the event
+   * log has durationMs = 0 / no events, computeScrubberMax returns 1 ms
+   * (the minimum fallback). The play loop's apply() callback previously
+   * checked  ms >= cap  unconditionally — so at el.currentTime=0.001 s the
+   * computed globalMs (= Math.floor(0.001*1000) = 1 ms) satisfies 1 >= 1,
+   * immediately firing the end-cap and stopping playback.
+   *
+   * Fix: guard with  resolvedMaxMsRef.current > 0  so the end-cap is skipped
+   * while the audio duration has not yet been measured (onMetadataLoaded).
+   * The onEnded handler independently catches the real end-of-stream.
+   */
+  it("does not fire end-cap when scrubberMax=1ms and resolvedMaxMs=0 (metadata not yet loaded)", async () => {
+    // Return a log with durationMs=0 and no events so totalMs collapses to 1.
+    const savedFetch = global.fetch;
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          schemaVersion: 1,
+          startedAt: "2026-01-01T00:00:00.000Z",
+          durationMs: 0,
+          events: [],
+        }),
+    }) as unknown as typeof fetch;
+
+    const audio = document.createElement("audio");
+    document.body.appendChild(audio);
+    let currentTime = 0;
+    let srcAttr = "";
+
+    Object.defineProperty(audio, "currentTime", {
+      configurable: true,
+      get: () => currentTime,
+      set: (v: number) => {
+        currentTime = v;
+      },
+    });
+    Object.defineProperty(audio, "src", {
+      configurable: true,
+      get: () => (srcAttr ? new URL(srcAttr, "http://localhost").href : ""),
+      set: (v: string) => {
+        srcAttr = v;
+      },
+    });
+    audio.getAttribute = jest.fn((name: string) =>
+      name === "src" ? srcAttr : null
+    ) as typeof audio.getAttribute;
+    audio.load = jest.fn();
+    audio.play = jest.fn().mockResolvedValue(undefined);
+    // pause() fires the 'pause' event synchronously (real-Chrome behaviour).
+    audio.pause = jest.fn(() => {
+      audio.dispatchEvent(new Event("pause"));
+    });
+    Object.defineProperty(audio, "paused", {
+      configurable: true,
+      get: () => true,
+    });
+
+    const applySceneAtRef = { current: jest.fn() };
+    const { result, unmount } = renderHook(() => {
+      const ref = useRef(applySceneAtRef.current);
+      // durationSeconds=0 → audioTimeline.totalMs=0 → resolvedMaxMs starts 0
+      const segments = useMemo(
+        () => [
+          {
+            url: "/api/audio/admin/rec-1",
+            mimeType: "audio/webm",
+            durationSeconds: 0,
+          },
+        ],
+        []
+      );
+      return useReplayTimelineController({
+        eventsBlobUrl: "/api/whiteboard/wbs-test/events",
+        audioSegments: segments,
+        applySceneAtRef: ref,
+      });
+    });
+
+    act(() => {
+      result.current.audioRef.current = audio;
+      audio.src = "/api/audio/admin/rec-1";
+    });
+
+    await waitFor(() => {
+      expect(result.current.loadState.kind).toBe("ready");
+      expect(result.current.replayExcaliRestoreReady).toBe(true);
+    });
+
+    // Confirm the degenerate state: scrubberMax collapses to 1 ms.
+    expect(result.current.scrubberMax).toBe(1);
+
+    // Simulate 1 ms of playback — exactly the value that previously tripped
+    // the end-cap (ms = Math.floor(0.001 * 1000) = 1, 1 >= cap=1 was true).
+    currentTime = 0.001;
+
+    // Fire 'play' DOM event → starts the rAF loop → apply() is called.
+    act(() => {
+      audio.dispatchEvent(new Event("play"));
+    });
+
+    // BUG A (before fix): end-cap fires → playing=false, isAtEnd=true.
+    // FIX (after):  resolvedMaxMsRef.current=0 skips the cap → still playing.
+    expect(result.current.playing).toBe(true);
+    expect(result.current.isAtEnd).toBe(false);
+
+    unmount();
+    audio.remove();
+    global.fetch = savedFetch;
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BUG B — scrub drag must NOT storm audio currentTime on every onChange
+// ---------------------------------------------------------------------------
+describe("Bug B — scrub drag writes audio currentTime exactly once (on pointer-up)", () => {
+  /**
+   * RED-BEFORE / GREEN-AFTER
+   *
+   * Previously handleScrubChange called seek() on every onChange during drag,
+   * which propagated to loadSegmentAt → applySeek → el.currentTime = seekSec.
+   * A three-step drag produced 3 (or 4) currentTime writes, thrashing the
+   * audio decoder and preventing reseeking until pointer-up settled.
+   *
+   * Fix: handleScrubChange for the audio path now only updates UI state
+   * (globalMs + applySceneAtRef).  The single audio seek is committed in
+   * handleScrubPointerUp → seek() → loadSegmentAt → applySeek.
+   */
+  it("writes el.currentTime only once (pointer-up), not on each onChange during drag", async () => {
+    let currentTime = 0;
+    let currentTimeWriteCount = 0;
+    const audio = document.createElement("audio");
+    document.body.appendChild(audio);
+    let srcAttr = "";
+
+    Object.defineProperty(audio, "currentTime", {
+      configurable: true,
+      get: () => currentTime,
+      set: (v: number) => {
+        currentTimeWriteCount++;
+        currentTime = v;
+      },
+    });
+    Object.defineProperty(audio, "src", {
+      configurable: true,
+      get: () => (srcAttr ? new URL(srcAttr, "http://localhost").href : ""),
+      set: (v: string) => {
+        srcAttr = v;
+      },
+    });
+    audio.getAttribute = jest.fn((name: string) =>
+      name === "src" ? srcAttr : null
+    ) as typeof audio.getAttribute;
+    audio.load = jest.fn();
+    audio.play = jest.fn().mockResolvedValue(undefined);
+    audio.pause = jest.fn();
+    Object.defineProperty(audio, "paused", {
+      configurable: true,
+      get: () => true,
+    });
+
+    const applySceneAtRef = { current: jest.fn() };
+    const { result, unmount } = renderHook(() => {
+      const ref = useRef(applySceneAtRef.current);
+      const segments = useMemo(
+        () => [
+          {
+            url: "/api/audio/admin/rec-1",
+            mimeType: "audio/webm",
+            durationSeconds: 10,
+          },
+        ],
+        []
+      );
+      return useReplayTimelineController({
+        eventsBlobUrl: "/api/whiteboard/wbs-test/events",
+        audioSegments: segments,
+        applySceneAtRef: ref,
+      });
+    });
+
+    act(() => {
+      result.current.audioRef.current = audio;
+      audio.src = "/api/audio/admin/rec-1";
+    });
+
+    await waitFor(() => {
+      expect(result.current.loadState.kind).toBe("ready");
+      expect(result.current.replayExcaliRestoreReady).toBe(true);
+    });
+
+    // Reset write count — discard any writes that occurred during setup.
+    currentTimeWriteCount = 0;
+
+    // Simulate a multi-step drag: pointer-down + 3 onChange moves + pointer-up.
+    act(() => {
+      result.current.handleScrubPointerDown();
+      result.current.handleScrubChange(1000); // drag move 1
+      result.current.handleScrubChange(3000); // drag move 2
+      result.current.handleScrubChange(5000); // drag move 3
+      result.current.handleScrubPointerUp(5000); // release → single audio seek
+    });
+
+    // BUG B (before fix): 3–4 currentTime writes (one per onChange + pointer-up).
+    // FIX (after): exactly 1 write — the pointer-up seek.
+    expect(currentTimeWriteCount).toBe(1);
+    expect(currentTime).toBeCloseTo(5, 1); // landed at 5 s
+
+    // Scene preview must have been called on each drag step (visual feedback)
+    // plus once from the pointer-up seek: at minimum 4 calls total.
+    expect(applySceneAtRef.current.mock.calls.length).toBeGreaterThanOrEqual(4);
+
+    // Existing seek-then-play contract still holds: play() resumes from 5 s.
+    act(() => {
+      result.current.play();
+    });
+    expect(currentTime).toBeCloseTo(5, 1);
+    expect(audio.play).toHaveBeenCalled();
+
+    unmount();
+    audio.remove();
+  });
+});

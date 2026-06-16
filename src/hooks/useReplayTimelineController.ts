@@ -617,7 +617,13 @@ export function useReplayTimelineController(
         isApplyingRef.current = true;
         try {
           const cap = scrubberMaxRef.current;
-          if (ms >= cap) {
+          // Guard: if the audio duration hasn't been resolved yet (stored
+          // and measured durations both absent → resolvedMaxMs = 0),
+          // scrubberMax collapses to the 1 ms minimum fallback. Firing
+          // the end-cap in that state would snap playback to "end" after
+          // just 1 ms. Skip until we have a real duration; onEnded handles
+          // the actual end-of-stream independently.
+          if (resolvedMaxMsRef.current > 0 && ms >= cap) {
             const endMs = cap;
             globalMsRef.current = endMs;
             setGlobalMs(endMs);
@@ -764,19 +770,29 @@ export function useReplayTimelineController(
       if (hasAudio) {
         if (clamped >= scrubberMaxRef.current) {
           isAtEndRef.current = true;
-          seek(clamped, { play: false, paint: false });
+          // UI-only update during drag — no audio seek here.
+          // (handleScrubPointerUp issues the single audio seek on release.)
+          globalMsRef.current = clamped;
+          setGlobalMs(clamped);
+          applySceneAtRef.current(clamped);
+          setPlaying(false);
           const el = audioRef.current;
-          if (el) {
+          if (el && !el.paused) {
             console.log(
               `[avx] wbsid=${whiteboardSessionId ?? "?"} audio_pause reason=scrub_at_max currentTime=${el.currentTime}`
             );
             el.pause();
           }
-          setPlaying(false);
           return;
         }
         isAtEndRef.current = false;
-        seek(clamped, { play: false, paint: false });
+        // UI-only update: move scrubber + update scene preview during drag.
+        // Audio currentTime is written exactly once on pointer-up
+        // (handleScrubPointerUp → seek).  Writing it here on every onChange
+        // storms the audio decoder and blocks reseeking until pointer-up.
+        globalMsRef.current = clamped;
+        setGlobalMs(clamped);
+        applySceneAtRef.current(clamped);
       } else {
         if (synthAnimFrameRef.current !== 0) {
           cancelAnimationFrame(synthAnimFrameRef.current);
@@ -792,7 +808,7 @@ export function useReplayTimelineController(
         }
       }
     },
-    [applySceneAtRef, hasAudio, playing, seek, whiteboardSessionId]
+    [applySceneAtRef, hasAudio, playing, whiteboardSessionId]
   );
 
   const handleScrubPointerUp = useCallback(
