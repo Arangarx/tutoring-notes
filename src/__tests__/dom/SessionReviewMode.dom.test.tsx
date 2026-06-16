@@ -105,6 +105,27 @@ describe("SessionReviewMode unified surface", () => {
     expect(screen.queryByTestId("mock-start-new-session")).not.toBeInTheDocument();
   });
 
+  it("pins replay CTA with a flex-constrained thumbnail wrap in hero board column", async () => {
+    render(
+      <SessionReviewMode whiteboardSessionId="wbs-1" studentId="stu-1" />
+    );
+    await screen.findByTestId("wb-review-enter-replay");
+
+    const boardColumn = screen
+      .getByTestId("wb-review-board-thumbnail-wrap")
+      .parentElement;
+    expect(boardColumn).toHaveClass("wb-review-board-column");
+
+    const thumbnailWrap = screen.getByTestId("wb-review-board-thumbnail-wrap");
+    expect(thumbnailWrap).toHaveClass("wb-review-board-thumbnail-wrap");
+
+    const replayCta = screen.getByTestId("wb-review-enter-replay");
+    expect(replayCta).toHaveClass("wb-review-board-cta");
+    expect(thumbnailWrap.compareDocumentPosition(replayCta)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+  });
+
   it("enters replay with animated state class without dirty confirm", async () => {
     render(
       <SessionReviewMode whiteboardSessionId="wbs-1" studentId="stu-1" />

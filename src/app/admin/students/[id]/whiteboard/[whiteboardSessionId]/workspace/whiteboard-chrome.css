@@ -2178,9 +2178,17 @@
   width: 100%;
 }
 
-.wb-review-notes-column,
-.wb-review-board-column {
+.wb-review-notes-column {
   display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.wb-review-board-column {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
   gap: 12px;
   min-width: 0;
 }
@@ -2245,7 +2253,9 @@
 .wb-review-hero-board {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   padding: 16px;
   opacity: 1;
   pointer-events: auto;
@@ -2290,8 +2300,37 @@
   }
 }
 
+.wb-review-board-thumbnail-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.wb-review-board-cta {
+  flex-shrink: 0;
+}
+
+.wb-review-board-thumbnail-placeholder,
+.wb-review-board-thumbnail-empty {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+}
+
 .wb-review-board-thumbnail-placeholder {
-  min-height: 200px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.wb-review-board-thumbnail-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -2392,15 +2431,15 @@
 }
 
 .wb-review-board-thumbnail {
-  min-height: 200px;
-  height: 280px;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
   border: 1px solid var(--border);
   border-radius: 8px;
-  overflow: hidden;
   background: var(--card);
-  position: relative;
-  /* Establish a low stacking context so overlays (theme dropdown) always win. */
-  z-index: 0;
 }
 
 .wb-review-board-thumbnail .excalidraw,

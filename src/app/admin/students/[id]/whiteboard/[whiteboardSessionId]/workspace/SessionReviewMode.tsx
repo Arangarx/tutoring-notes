@@ -193,21 +193,26 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
             aria-hidden={isReplay}
           >
             <div className="wb-review-board-column">
-              {payload ? (
-                <ReviewBoardThumbnail
-                  eventsProxyUrl={payload.eventsProxyUrl}
-                  whiteboardSessionId={whiteboardSessionId}
-                />
-              ) : (
-                <div
-                  data-testid="wb-review-board-thumbnail-loading"
-                  className="wb-review-board-thumbnail-placeholder"
-                />
-              )}
+              <div
+                className="wb-review-board-thumbnail-wrap"
+                data-testid="wb-review-board-thumbnail-wrap"
+              >
+                {payload ? (
+                  <ReviewBoardThumbnail
+                    eventsProxyUrl={payload.eventsProxyUrl}
+                    whiteboardSessionId={whiteboardSessionId}
+                  />
+                ) : (
+                  <div
+                    data-testid="wb-review-board-thumbnail-loading"
+                    className="wb-review-board-thumbnail-placeholder"
+                  />
+                )}
+              </div>
               {canReplay ? (
                 <button
                   type="button"
-                  className="btn primary"
+                  className="btn primary wb-review-board-cta"
                   data-testid="wb-review-enter-replay"
                   onClick={enterReplay}
                 >
@@ -215,7 +220,7 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
                 </button>
               ) : payload ? (
                 <div
-                  className="muted"
+                  className="muted wb-review-board-cta"
                   data-testid="wb-review-no-recording"
                   style={{ fontSize: 13, padding: "8px 0" }}
                 >

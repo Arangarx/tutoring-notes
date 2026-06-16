@@ -220,17 +220,8 @@ export function ReviewBoardThumbnail({
   if (loadState === "empty") {
     return (
       <div
-        className={className}
+        className={`wb-review-board-thumbnail-empty${className ? ` ${className}` : ""}`}
         data-testid="wb-review-board-thumbnail-empty"
-        style={{
-          minHeight: 200,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "var(--card)",
-          border: "1px solid var(--border)",
-          borderRadius: 8,
-        }}
       >
         <span className="muted" style={{ fontSize: 13 }}>
           No board strokes recorded
@@ -250,9 +241,8 @@ export function ReviewBoardThumbnail({
   if (loadState === "loading") {
     return (
       <div
-        className={className}
+        className={`wb-review-board-thumbnail-placeholder${className ? ` ${className}` : ""}`}
         data-testid="wb-review-board-thumbnail-loading"
-        style={{ minHeight: 200, background: "var(--card)" }}
       />
     );
   }
@@ -265,13 +255,6 @@ export function ReviewBoardThumbnail({
       alt="Final whiteboard board state"
       className={`wb-review-board-thumbnail${className ? ` ${className}` : ""}`}
       data-testid="wb-review-board-thumbnail"
-      style={{
-        width: "100%",
-        height: "auto",
-        display: "block",
-        borderRadius: 8,
-        border: "1px solid var(--border)",
-      }}
     />
   );
 }
