@@ -15,6 +15,9 @@ import {
   type ScenePaintApi,
   type ScenePainter,
 } from "@/lib/whiteboard/scene-paint";
+import {
+  replayScrollFromRecordedViewport,
+} from "@/lib/whiteboard/viewport-align";
 import { useTheme } from "@/components/ThemeProvider";
 import { getReplayCachedRestoreElements } from "@/lib/whiteboard/replay-restore-elements";
 import {
@@ -144,9 +147,47 @@ export function ReplayCanvasSurface({
       const painter = scenePainterRef.current;
       if (!painter) return;
       const vp = findLatestViewportAt(log, timeMs);
+      let viewportOverride = vp ?? undefined;
+      if (vp) {
+        const container = containerRef.current;
+        const rect = container?.getBoundingClientRect();
+        if (rect && rect.width > 0 && rect.height > 0) {
+          let offsetLeft = 0;
+          let offsetTop = 0;
+          try {
+            const st = api.getAppState?.();
+            if (st && typeof st === "object") {
+              const o = st as { offsetLeft?: unknown; offsetTop?: unknown };
+              if (typeof o.offsetLeft === "number" && Number.isFinite(o.offsetLeft)) {
+                offsetLeft = o.offsetLeft;
+              }
+              if (typeof o.offsetTop === "number" && Number.isFinite(o.offsetTop)) {
+                offsetTop = o.offsetTop;
+              }
+            }
+          } catch {
+            // best-effort — offsets only affect center-match when non-zero
+          }
+          const aligned = replayScrollFromRecordedViewport(
+            vp,
+            rect.width,
+            rect.height,
+            offsetLeft,
+            offsetTop,
+            { allowLegacyRecordSizeFallback: true }
+          );
+          if (aligned) {
+            viewportOverride = {
+              panX: aligned.scrollX,
+              panY: aligned.scrollY,
+              zoom: aligned.zoom,
+            };
+          }
+        }
+      }
       const result = painter.applyAt(timeMs, {
         preserveScroll: vp ? false : replayCameraReadyRef.current,
-        viewportOverride: vp ?? undefined,
+        viewportOverride,
       });
       lastSceneElementsRef.current = result.paintedElements;
       if (vp && !replayCameraReadyRef.current) {
@@ -164,7 +205,7 @@ export function ReplayCanvasSurface({
         );
       }
     },
-    [api, log, resolveAssetUrl]
+    [api, containerRef, log, resolveAssetUrl]
   );
 
   useEffect(() => {
