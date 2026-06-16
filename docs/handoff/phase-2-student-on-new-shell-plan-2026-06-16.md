@@ -5,7 +5,8 @@
 > **Authored:** 2026-06-16 (planning pass — **no P2 production code in this commit**)  
 > **Parent context:** [`docs/handoff/ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md) P1 replay-in-frame thread; [`docs/handoff/whiteboard-chrome-design-2026-06-07.md`](whiteboard-chrome-design-2026-06-07.md) §4 Phase 2 student-mobile  
 > **Design refs:** [`docs/handoff/whiteboard-session-shell-design-2026-06-08.md`](whiteboard-session-shell-design-2026-06-08.md); [`docs/handoff/whiteboard-chrome-p1.2-visual-design-2026-06-08.md`](whiteboard-chrome-p1.2-visual-design-2026-06-08.md); mobile mock [`docs/brand-previews/whiteboard-mobile-mock-2026-06-10.html`](../brand-previews/whiteboard-mobile-mock-2026-06-10.html)  
-> **Reliability bar:** [`../../agenticPipeline/.cursor/rules/reliability-bar.mdc`](../../agenticPipeline/.cursor/rules/reliability-bar.mdc)
+> **Reliability bar:** [`../../agenticPipeline/.cursor/rules/reliability-bar.mdc`](../../agenticPipeline/.cursor/rules/reliability-bar.mdc)  
+> **Status:** 5-axis reviewed ([`phase-2-student-on-new-shell-5axis-2026-06-16.md`](phase-2-student-on-new-shell-5axis-2026-06-16.md)); 4 blockers folded into acceptance below; **READY TO EXECUTE** on Andrew greenlight.
 
 ---
 
@@ -123,8 +124,8 @@ Route the **anonymous student join** (`/w/[joinToken]#k=…`) through the **same
 Add a **discriminated union** (additive):
 
 ```typescript
-// Tutor branch — unchanged props surface
-type TutorShellProps = { role?: "tutor"; adminUserId: string; … };
+// Tutor branch — unchanged props surface (role required for union narrowing)
+type TutorShellProps = { role: "tutor"; adminUserId: string; … };
 
 // Student branch — new
 type StudentShellProps = {
@@ -194,18 +195,19 @@ Reuse without modification unless a P2 bug forces a surgical fix:
 
 Each step is independently committable; **do not** merge to `master` until §7 passes.
 
-### Step 0 — Hang reproduction spike (before building safeguard)
+### Step 0 — Pre-flight + hang reproduction spike
 
-**Goal:** Determine whether "Loading scene…" occurs on the new student shell at all.
+**Goal:** De-risk runtime crashes and determine whether "Loading scene…" occurs on the new student shell.
 
 | Action | Detail |
 |---|---|
+| **B3 — `WbAVCluster` context audit** | Read `WbAVCluster` and every hook it transitively calls. If any `useContext` throws on missing provider (recording-FSM or tutor-only context), document it. **Before Step 4:** either extract a student-safe variant (`WbAVClusterStudent` accepting `localTile` directly) or make the recording-context read tolerant (`?? null`). DOM smoke: render inside `<WbRoleProvider role="student">` with **no** recording provider — must not hit error boundary. |
 | Scaffold minimal mount | Temporary dev-only branch: mount `ExcalidrawDynamic` with `zenModeEnabled` + empty `initialData` inside a throwaway route or Storybook-style page — **or** land Step 2 canvas mount first without watchdog. |
 | Two-device repro | Tutor on new shell + student on new shell; student hard-refresh 5×; student join cold 5×. |
 | Record | Note whether Excalidraw loading overlay appears in DOM (`[class*="loading"]` or visible "Loading scene" text). |
 | Outcome | Document in smokebook Notes; if **never reproduces**, watchdog is still shipped (§5) but prioritized as belt-and-suspenders. |
 
-**Exit:** Written repro result in smokebook item 0 (PASS = hang confirmed or ruled out).
+**Exit:** B3 audit result written (pass = no crash without recording provider); hang repro in smokebook item 0 (PASS = hang confirmed or ruled out).
 
 ---
 
@@ -217,6 +219,8 @@ Each step is independently committable; **do not** merge to `master` until §7 p
 | [`docs/PLATFORM-ASSUMPTIONS.md`](../PLATFORM-ASSUMPTIONS.md) | Document flag (implementation commit). |
 
 **Exit:** Flag off = byte-identical legacy path; flag on = placeholder shell or "coming soon" only if Step 2 not ready (prefer landing Steps 1+2 together).
+
+**Flag ordering (MAJOR):** `NEXT_PUBLIC_WB_STUDENT_NEW_SHELL` MUST stay **unset** on Preview/Production until Steps **1+2+3** land in the same commit (or 1+3 together). Never enable flag between Step 2 and Step 3 — shell union not yet typed.
 
 ---
 
@@ -241,8 +245,8 @@ Each step is independently committable; **do not** merge to `master` until §7 p
 
 | Slot | Student content |
 |---|---|
-| `topBar` | Tutor name, `WbThemeToggle`, connection pills (`WbStatusPill` or equivalent tokens), session timer, **Leave** (not End) per `showLeaveInsteadOfEnd` |
-| `toolStrip` | Pencil + eraser (+ shapes overflow if parity requires) — hide tutor-only inserts |
+| `topBar` | Tutor name, **recording disclosure** (§B4), `WbThemeToggle`, connection pills (`WbStatusPill` or equivalent tokens), session timer, **Leave** (not End) per `showLeaveInsteadOfEnd` |
+| `toolStrip` | Pencil + eraser only — enforce via `deriveWbCapabilities("student")` (no PDF/image/graph insert; role-capability gate) |
 | `canvas` | `ExcalidrawDynamic` `zenModeEnabled` + §5 `initialData` + safeguard overlay |
 | `propsMobileBar` / `bottomToolbar` | Stroke props (reuse `WbStrokePropsPanel` subset) + undo/redo |
 | `boardTabStrip` | `BoardTabStrip` fed from `pageList` / `selectStudentPage` |
@@ -254,7 +258,17 @@ Each step is independently committable; **do not** merge to `master` until §7 p
 
 **Do not import** recording hooks, `WorkspaceResumeGate`, tutor server actions, or PDF insert handlers.
 
-**Exit:** Flag on → student sees `mynk-wb-chrome` frame; flag off unchanged.
+**B4 — Recording disclosure (static, not consent toggle):** Top bar or persistent chrome banner MUST show copy equivalent to legacy `StudentWhiteboardClient.tsx` L608–610:
+
+> *This session is being recorded by your tutor. What you draw is visible live.*
+
+Visible on mobile and desktop without scrolling. Room-occupancy line (`Waiting for others…` / `Others in this room…`) is optional parity — disclosure line is mandatory.
+
+**E2E sync contract (B1):** Canvas wrapper MUST expose `data-testid="student-whiteboard-canvas-mount"` (same as legacy L925). On `excalidrawAPI` ready: `registerWbE2eSceneBridge("student", api)` (legacy L951). When `NEXT_PUBLIC_WB_E2E_SCENE_HOOK === "1"`: `registerWbE2eSceneMutationHook("student", …)` (legacy L459). **Data durability:** copy-adapt MUST preserve student v2 `broadcastScene` path unchanged (`useStudentWhiteboardCanvas` L715–728) — no format drift.
+
+**Observability:** Register `wjg` in [`AGENTS.md`](../../AGENTS.md) in the **same commit** as the first `[wjg]` line (do not defer to Step 5).
+
+**Exit:** Flag on → student sees `mynk-wb-chrome` frame + disclosure + E2E testids; flag off unchanged.
 
 ---
 
@@ -262,10 +276,13 @@ Each step is independently committable; **do not** merge to `master` until §7 p
 
 | File | Change |
 |---|---|
-| [`WhiteboardSessionShell.tsx`](../../src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardSessionShell.tsx) | Add student union branch; skip resume gate + review. |
+| [`WhiteboardSessionShell.tsx`](../../src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardSessionShell.tsx) | Add student union branch; skip resume gate + review. **Discriminant:** `role: "tutor"` and `role: "student"` both **required** literals (no `role?: "tutor"`). |
+| Tutor workspace page call site | Pass `role="tutor"` explicitly to `WhiteboardSessionShell` (one-line; enables strict union narrowing). |
 | **New** [`src/app/w/[joinToken]/StudentWhiteboardSessionShell.tsx`](../../src/app/w/[joinToken]/StudentWhiteboardSessionShell.tsx) | Thin adapter: maps page.tsx props → `WhiteboardSessionShell` student props. |
 
-**Exit:** Tutor workspace path unchanged (regression: existing `WhiteboardSessionShell.dom.test.tsx` green).
+**Sync isolation / role-capability:** Student branch MUST NOT render `WorkspaceResumeGate` or `SessionReviewMode`. DOM test asserts `WorkspaceResumeGate` testid absent in student tree; tutor regression test still green.
+
+**Exit:** Tutor workspace path unchanged (`WhiteboardSessionShell.dom.test.tsx` green); TypeScript compiles without `as` casts on shell props.
 
 ---
 
@@ -276,7 +293,9 @@ Each step is independently committable; **do not** merge to `master` until §7 p
 | [`wb-role.tsx`](../../src/components/whiteboard/chrome/wb-role.tsx) | `defaultShowLocalVideo: true` for student. |
 | [`StudentLiveWorkspaceClient.tsx`](../../src/app/w/[joinToken]/StudentLiveWorkspaceClient.tsx) | Gate `WbAVCluster` local tile on capability; request cam early enough for self-view. |
 
-**Exit:** DOM test asserts local tile present when `localVideoStream` mocked.
+**B3 exit (from Step 0 audit):** If audit found recording-context dependency, land student-safe `WbAVCluster` variant or tolerant guard **before** wiring cluster here. DOM test: `WbAVCluster` renders inside `WbRoleProvider role="student"` with no recording provider — no error boundary.
+
+**Exit:** DOM test asserts local tile present when `localVideoStream` mocked. **Tutor no-regression:** `deriveWbCapabilities("tutor")` unchanged; smoke item 15 confirms tutor self-view/recording FSM unaffected (see §7).
 
 ---
 
@@ -284,7 +303,13 @@ Each step is independently committable; **do not** merge to `master` until §7 p
 
 Implement per §5; land hook + overlay in `StudentLiveWorkspaceClient`.
 
-**Exit:** Unit test: watchdog clears `isLoading` after timeout; `wjg` lines emitted on join milestones.
+**B2 — `initialData` stable ref:** MUST be module-level const (`STUDENT_EXCALIDRAW_INITIAL_DATA`) or `useMemo(..., [])` — **never** inline literal. Rationale: replay-in-frame unstable `audioSegments` ref precedent ([`phase-1-wb-floor-replay-in-frame-smokebook-2026-06-14.md`](phase-1-wb-floor-replay-in-frame-smokebook-2026-06-14.md)) — remount re-applies empty scene and wipes live strokes.
+
+**Dual-banner (MAJOR):** If `stuckLoading === true`, suppress `student-board-sync-wait-banner`; only one reload CTA visible at a time.
+
+**Observability:** Add `[wjg] … action=session_ended reason=<mapped_reason>` when `joinUnavailableReason` is set (join-timer poll returns not live).
+
+**Exit:** Unit test: watchdog clears `isLoading` after timeout; `wjg` lines on join milestones + `session_ended`; DOM test: same `initialData` object reference across two re-renders with changed external props (`Object.is(a, b) === true`).
 
 ---
 
@@ -304,16 +329,18 @@ Reduces drift between legacy and new paths.
 | Suite | Action |
 |---|---|
 | [`src/__tests__/dom/StudentWhiteboardClient.av-mount.dom.test.tsx`](../../src/__tests__/dom/StudentWhiteboardClient.av-mount.dom.test.tsx) | Keep green (legacy). |
-| **New** `src/__tests__/dom/StudentLiveWorkspaceClient.dom.test.tsx` | AV mount, chrome `data-role="student"`, follow toggle, self-view tile. |
-| **New** `src/__tests__/dom/student-excalidraw-loading-guard.dom.test.tsx` | Watchdog + reload affordance. |
-| [`src/__tests__/dom/WhiteboardSessionShell.dom.test.tsx`](../../src/__tests__/dom/WhiteboardSessionShell.dom.test.tsx) | Add student branch smoke (live only). |
-| Integration | `npm run test:wb-sync` — **mandatory** (touches sync surface). |
+| **New** `src/__tests__/dom/StudentLiveWorkspaceClient.dom.test.tsx` | AV mount, chrome `data-role="student"`, follow toggle, self-view tile, **B4 disclosure** text present, **B2 `initialData` ref stability**, **B3** cluster without recording provider. |
+| **New** `src/__tests__/dom/student-excalidraw-loading-guard.dom.test.tsx` | Watchdog + reload affordance; dual-banner suppression. |
+| [`src/__tests__/dom/WhiteboardSessionShell.dom.test.tsx`](../../src/__tests__/dom/WhiteboardSessionShell.dom.test.tsx) | Student branch smoke (live only); **`WorkspaceResumeGate` absent** in student tree. |
+| Integration — **B1 `test:wb-sync`** | Set `NEXT_PUBLIC_WB_STUDENT_NEW_SHELL=1` in Playwright env (`playwright.config.ts` or `.env.test.local`). Green run MUST exercise **new** `StudentLiveWorkspaceClient` path (`student-whiteboard-canvas-mount` + `registerWbE2eSceneBridge("student")`). Flag-off green alone proves only legacy — **not** a P2 merge gate. |
 
 ---
 
 ### Step 8 — Smokebook + two-device gate
 
 Author [`docs/handoff/phase-2-student-new-shell-smokebook-2026-06-16.md`](phase-2-student-new-shell-smokebook-2026-06-16.md) per [`SMOKEBOOK-TEMPLATE.md`](SMOKEBOOK-TEMPLATE.md); preview URL via Vercel MCP (never guess).
+
+**STATUS doc (MAJOR):** Create [`docs/WHITEBOARD-P2-STATUS.md`](../WHITEBOARD-P2-STATUS.md) per reliability-bar pattern — guardrails, phase table, demo gate; survives session truncation.
 
 **Exit:** Andrew two-device smoke PASS with flag **on**; legacy path spot-checked with flag **off**.
 
@@ -323,9 +350,11 @@ Author [`docs/handoff/phase-2-student-new-shell-smokebook-2026-06-16.md`](phase-
 
 | Action | When |
 |---|---|
-| Flip default / enable flag in Production | Andrew explicit go |
+| Flip default / enable flag in Production | Andrew explicit go **after** item 1–15 PASS + flag-on `test:wb-sync` green |
 | Keep `StudentWhiteboardClient.tsx` in tree | Until one release cycle; then deprecate imports only |
 | Remove flag | Only after Production soak — separate PR |
+
+**Adequacy:** Retire-legacy is NOT "smoke passed once." Requires: (a) two-device smokebook overall PASS, (b) flag-on hermetic relay green, (c) tutor regression item 15 PASS with flag on and off, (d) one release-cycle soak with flag on in Preview before Production flip.
 
 ---
 
@@ -341,7 +370,7 @@ Tutor path uses `zenModeEnabled` + explicit `initialData.appState` ([`Whiteboard
 
 | # | Mechanism | Detail |
 |---|---|---|
-| 1 | **`initialData` on mount** | Pass to `ExcalidrawDynamic`: `{ elements: [], appState: { isLoading: false, viewBackgroundColor: <token> }, scrollToContent: false }` + same stroke defaults as tutor (`currentItemRoughness: 0`, sharp, thin stroke). Use **stable ref** for `initialData` (replay lesson: unstable ref re-applies scene). |
+| 1 | **`initialData` on mount** | Pass to `ExcalidrawDynamic`: `{ elements: [], appState: { isLoading: false, viewBackgroundColor: <token> }, scrollToContent: false }` + same stroke defaults as tutor (`currentItemRoughness: 0`, sharp, thin stroke). **B2 — MUST be module-level const or `useMemo(..., [])`; never inline.** DOM test asserts same object reference across re-renders (replay unstable-ref precedent). |
 | 2 | **~5s watchdog** | After `excalidrawAPI` ready: if `getAppState().isLoading` still true at 5s → `updateScene({ appState: { isLoading: false } })`; set `stuckLoading: true` UI state. |
 | 3 | **Reload affordance** | When `stuckLoading`, show student-visible banner over canvas: "Board is taking too long to load" + **Reload** (`window.location.reload()`) + Dismiss. `data-testid="student-excalidraw-loading-guard"`. |
 | 4 | **`wjg` join-gate logging** | Emit structured `console.info` at milestones: |
@@ -354,70 +383,53 @@ Tutor path uses `zenModeEnabled` + explicit `initialData.appState` ([`Whiteboard
 [wjg] wjg=<joinToken:8> wbsid=<id> action=loading_cleared source=initial|watchdog|remote_scene
 [wjg] wjg=<joinToken:8> wbsid=<id> action=loading_stuck ageMs=5000
 [wjg] wjg=<joinToken:8> wbsid=<id> action=student_reload reason=loading_guard
+[wjg] wjg=<joinToken:8> wbsid=<id> action=session_ended reason=<mapped_reason>
 ```
 
-Register `wjg` in [`AGENTS.md`](../../AGENTS.md) logging registry in implementation commit.
+Register `wjg` in [`AGENTS.md`](../../AGENTS.md) logging registry in the **same commit** as first `[wjg]` emission (Step 2, not deferred).
 
 **Legacy path:** Optionally port guard behind same flag in `StudentWhiteboardClient` for A/B — **defer** unless Step 0 shows hang on legacy only.
 
 ---
 
-## 6. Reliability — 5-axis acceptance scaffold
+## 6. Reliability — 5-axis acceptance (review folded)
 
-> **For adversarial reviewer:** Fill BLOCKER/SHOULD-FIX tags below. **All `[BLOCKER]` items fold into Phase-1 (P2) acceptance** — not follow-up tickets. See [`reliability-bar.mdc`](../../agenticPipeline/.cursor/rules/reliability-bar.mdc).
+> **Review:** [`phase-2-student-on-new-shell-5axis-2026-06-16.md`](phase-2-student-on-new-shell-5axis-2026-06-16.md) — **4 BLOCKERs folded below; not deferred.** See [`reliability-bar.mdc`](../../agenticPipeline/.cursor/rules/reliability-bar.mdc).
 
 **Sarah-trust framing:** If the student board fails to load, loses strokes, or hides the student's face, Sarah keeps Zoom open beside Mynk — P2 is not done.
 
-### Axis 1 — Data durability
+### BLOCKERs (P2 merge gates)
 
-| ID | Acceptance stub | Reviewer notes |
-|---|---|---|
-| P2-A1 | Student refresh mid-session: strokes on **active page** rehydrate from tutor v3 wire; no cross-page bleed. | |
-| P2-A2 | Student tab backgrounded 10 min: reconnect restores board without tutor re-draw. | |
-| P2-A3 | Session ended while student connected: student sees ended copy; no crash loop. | |
+| ID | Acceptance |
+|---|---|
+| **B1** | `npm run test:wb-sync` green with `NEXT_PUBLIC_WB_STUDENT_NEW_SHELL=1` in Playwright env; new path exposes `data-testid="student-whiteboard-canvas-mount"` + `registerWbE2eSceneBridge("student")` (+ mutation hook when E2E hook flag set). |
+| **B2** | `initialData` is module-level const or `useMemo(..., [])`; DOM test: `Object.is` same reference across re-renders. |
+| **B3** | `WbAVCluster` (or student variant) renders without recording-FSM provider; Step 0 audit documented. |
+| **B4** | Static disclosure: *This session is being recorded by your tutor. What you draw is visible live.* (legacy L608–610). |
 
-### Axis 2 — Clock + ordering correctness
+### Axis acceptance (incl. MAJORs)
 
-| ID | Acceptance stub | Reviewer notes |
-|---|---|---|
-| P2-B1 | Session timer on student chrome matches tutor timer (same `join-timer` API + `bothPresentForTimer` gate). | |
-| P2-B2 | Page switch order: student follow does not apply stale tutor page after rapid tutor tab switch. | |
-| P2-B3 | v3 rev monotonicity preserved (`useStudentWhiteboardCanvas` chain). | |
+| ID | Acceptance |
+|---|---|
+| P2-A1 | Student refresh: strokes on active page rehydrate; no cross-page bleed. Student v2 broadcast format unchanged in copy-adapt. |
+| P2-A2 | Tab backgrounded 10 min: reconnect restores board. |
+| P2-A3 | Session ended: ended copy + `wjg action=session_ended`; no crash loop. |
+| P2-B1 | Timer matches tutor (`join-timer` API). |
+| P2-B2 | Rapid tutor page switch: no stale follow apply. |
+| P2-B3 | v3 rev monotonicity preserved. |
+| P2-C1 | Double-tap Leave/Reload: no double-disconnect. |
+| P2-C2 | Follow toggle mid-stroke: no echo loop. |
+| P2-C3 | Permission prompt concurrent clicks idempotent. |
+| P2-D1–D4 | Real hardware: iPhone Safari, Android Chrome, desktop; `100dvh` mobile; offset-invariance (browser, not jsdom). |
+| P2-E1 | `wjg` mount → `loading_cleared` or `loading_stuck` + `session_ended` when applicable. |
+| P2-E2 | `wba author=student` on apply path. |
+| P2-E3 | `avx peer=` on connect/reconnect. |
+| P2-E4 | Stuck join diagnosable from prod logs in &lt;10 min. |
+| **M-sync** | Student shell: `WorkspaceResumeGate` absent (DOM test). |
+| **M-hotload** | Device hotload on student path (smoke 9b). |
+| **M-tutor** | Tutor path unchanged after P2 (smoke 15; flag on + off). |
 
-### Axis 3 — Race conditions on user input
-
-| ID | Acceptance stub | Reviewer notes |
-|---|---|---|
-| P2-C1 | Double-tap Leave / Reload does not double-disconnect sync client. | |
-| P2-C2 | Follow toggle mid-stroke: no echo loop (`studentApplyingRemoteRef` guard). | |
-| P2-C3 | Cam/mic permission prompt: concurrent Allow clicks idempotent. | |
-
-### Axis 4 — Cross-platform parity
-
-| ID | Acceptance stub | Reviewer notes |
-|---|---|---|
-| P2-D1 | **iPhone Safari** — student join + draw + self-view (real hardware). | Mark tested vs assumed. |
-| P2-D2 | **Android Chrome** — same smoke subset. | |
-| P2-D3 | **Desktop Chrome** — tutor + student two-tab. | |
-| P2-D4 | Layout: `100dvh` chrome on mobile; no canvas offset contamination (viewport-align offset-invariance). | jsdom insufficient — real browser. |
-
-### Axis 5 — Observability
-
-| ID | Acceptance stub | Reviewer notes |
-|---|---|---|
-| P2-E1 | Every join attempt logs `wjg` + `wbsid` from mount through `loading_cleared` or `loading_stuck`. | |
-| P2-E2 | Sync apply logs retain `wba author=student` per apply-v2/v3. | |
-| P2-E3 | A/V logs retain `avx peer=` on connect/reconnect. | |
-| P2-E4 | A stuck join is diagnosable from prod logs in &lt;10 min without repro. | |
-
-### Reviewer summary table (fill on review)
-
-| # | Axis | Classification | Title |
-|---|---|---|---|
-| | | | |
-| | | | |
-
-**Verdict:** _PENDING — reviewer sets CLEAN / NOT-CLEAN_
+**Verdict:** CLEAN pending execution — blockers specified; executor may proceed on Andrew greenlight.
 
 ---
 
@@ -428,7 +440,7 @@ Register `wjg` in [`AGENTS.md`](../../AGENTS.md) logging registry in implementat
 | Command | When |
 |---|---|
 | `npx jest` (targeted + regression) | Every commit |
-| **`npm run test:wb-sync`** | **Mandatory** before merge — hermetic relay + real Chromium ([`docs/handoff/whiteboard-regression-net-design-2026-05-30.md`](whiteboard-regression-net-design-2026-05-30.md)). Pre-build relay: `npm run relay:build`. |
+| **`npm run test:wb-sync`** with **`NEXT_PUBLIC_WB_STUDENT_NEW_SHELL=1`** | **Mandatory merge gate** — hermetic relay + real Chromium. Pre-build relay: `npm run relay:build`. Green with flag **off** proves legacy only. |
 | `npx next build` | If CSS/chrome/build surface changes |
 
 **Note:** Pre-existing `sync-client.test.ts › broadcastSignal bypasses the scene throttle` failure is out of scope unless P2 touches that path ([`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md)).
@@ -442,18 +454,21 @@ Author full smokebook from template; minimum items:
 | 0 | Loading scene repro | Step 0 spike — hang yes/no documented |
 | 1 | Flag off legacy | Legacy client unchanged; draw sync works |
 | 2 | Flag on chrome | Student sees `mynk-wb-chrome` `data-role="student"`; tutor sees tutor chrome |
+| 2a | **Recording disclosure (B4)** | Student reads: *This session is being recorded by your tutor. What you draw is visible live.* — no scroll required |
 | 3 | Mutual draw | Stroke on either side appears on other within 2s |
 | 4 | Page isolation | Tutor P1 vs P2: student strokes stay on active page |
 | 5 | PDF / image | Tutor inserts PDF; student hydrates |
 | 6 | Graph embed | Tutor graph visible read-only on student |
 | 7 | Follow toggle | Default on; independent view off; snap works |
-| 8 | Self-view | Student cam on → sees own tile (decision **(e)**) |
+| 8 | Self-view | Student cam on → own tile visible; **mobile portrait ≤428px** tile not dropped by chrome collapse |
 | 9 | A/V | Tutor hears student; student hears tutor |
+| 9b | **Device hotload** | Student plugs in second cam/headset mid-session; `useLiveAV` enumerates new device; call stays up; no refresh (mark tested vs assumed) |
 | 10 | Student refresh | Hard refresh; board restores |
-| 11 | Loading guard | If stuck, reload affordance appears; `wjg` in console |
+| 11 | Loading guard | If stuck, reload affordance appears; only one reload CTA (no dual-banner); `wjg` in console |
 | 12 | Mobile | Phone portrait: bottom bar usable; canvas ≥80% |
 | 13 | Theme | Repeat 2–6 in **light** and **dark** (WB theme toggle) |
-| 14 | Session ended | Tutor ends; student sees ended message |
+| 14 | Session ended | Tutor ends; student sees ended message; `wjg action=session_ended` in console |
+| 15 | **Tutor regression** | Flag on **and** off: tutor recording FSM, page switch, self-view, End Session unchanged — extend-don't-rewrite proof |
 
 ### Flag-gated rollout
 
@@ -468,12 +483,13 @@ Author full smokebook from template; minimum items:
 
 | ID | Question | Default if silent |
 |---|---|---|
-| Q1 | Branch strategy: continue on `phase1/wb-review-correct` vs fork `phase2/wb-student-new-shell` off `v1-redesign`? | Fork dedicated branch before Step 2 code. |
+| Q1 | **Branch strategy:** continue on `phase1/wb-review-correct` vs fork `phase2/wb-student-new-shell` off `v1-redesign`? (Reviewer flagged — affects merge order and Preview env.) | Fork dedicated branch before Step 2 code. |
 | Q2 | Student tool parity: pencil+eraser only, or match tutor shape tools read-only? | Pencil + eraser per chrome design §4. |
 | Q3 | `VideoControls` device picker on student mobile — keep in overflow or omit for P2? | Omit (out of scope device config UI); mic/cam toggles only. |
 | Q4 | Leave button behavior: close tab vs navigate to static "you left" card? | Static card (no auth redirect). |
 | Q5 | Port loading guard to legacy client behind flag for A/B? | Defer unless Step 0 hang is legacy-only. |
 | Q6 | Authenticated learner join route design — still P3+? | Yes; `/w/[joinToken]` remains backup per **(c)**. |
+| Q7 | **`defaultShowLocalVideo` flip:** confirm tutor-side no-regression after student capability change (`deriveWbCapabilities("tutor")` should be unaffected — verify via smoke item 15). | Proceed with flip; smoke 15 is mandatory gate. |
 
 ---
 
@@ -495,3 +511,4 @@ Author full smokebook from template; minimum items:
 | `docs/PLATFORM-ASSUMPTIONS.md` | Flag docs |
 | `AGENTS.md` | `wjg` registry |
 | `docs/handoff/phase-2-student-new-shell-smokebook-2026-06-16.md` | **New** — at Step 8 |
+| `docs/WHITEBOARD-P2-STATUS.md` | **New** — STATUS handoff (Step 8) |
