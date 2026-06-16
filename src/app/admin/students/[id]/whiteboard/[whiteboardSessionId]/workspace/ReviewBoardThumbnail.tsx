@@ -16,7 +16,7 @@ import {
   getReplayCachedRestoreElements,
   setReplayCachedRestoreElements,
 } from "@/lib/whiteboard/replay-restore-elements";
-import { EXCALIDRAW_BG_DARK_HEX, EXCALIDRAW_BG_LIGHT_HEX } from "@/styles/token-values";
+import { EXCALIDRAW_BG_LIGHT_HEX } from "@/styles/token-values";
 import { useTheme } from "@/components/ThemeProvider";
 import type { ExportToCanvasFn } from "@/lib/whiteboard/snapshot-png";
 
@@ -165,14 +165,38 @@ export function ReviewBoardThumbnail({
         }
         if (cancelled) return;
 
-        // 5. Export to canvas → data URL, honoring the active WB theme
+        // 5. Export to canvas → data URL, honoring the active WB theme.
+        //
+        // THEME_FILTER = "invert(93%) hue-rotate(180deg)" is applied to the
+        // export canvas context when exportWithDarkMode=true. This filter
+        // is what Excalidraw uses to simulate dark mode at export time.
+        //
+        // Because elements store CANONICAL Excalidraw ink (#1e293b, near-black)
+        // — WbStrokePropsPanel always stores EXCALIDRAW_STROKE_HEX regardless
+        // of the UI theme — the live dark board relies on this same filter to
+        // invert near-black strokes into near-white at render time.
+        //
+        // viewBackgroundColor must be WHITE (#ffffff) here regardless of theme:
+        //   • Dark mode (exportWithDarkMode=true):  THEME_FILTER inverts white
+        //     → near-black (#121212) background ✓; inverts #1e293b strokes →
+        //     near-white strokes ✓.
+        //   • Light mode (exportWithDarkMode=false): no filter; white background
+        //     + near-black #1e293b strokes → correct light mode ✓.
+        //
+        // The prior "fix" incorrectly passed EXCALIDRAW_BG_DARK_HEX (#121212)
+        // as viewBackgroundColor for dark mode. The THEME_FILTER then inverted
+        // that dark bg to near-white (#dedede), making strokes nearly invisible
+        // against a light background — the exact symptom Andrew reported.
         const isDark = resolvedTheme === "dark";
         const canvas = await exportToCanvas({
           elements: capturedElements as unknown[],
           appState: {
             exportBackground: true,
-            viewBackgroundColor: isDark ? EXCALIDRAW_BG_DARK_HEX : EXCALIDRAW_BG_LIGHT_HEX,
+            // Always white: THEME_FILTER (active when exportWithDarkMode=true)
+            // inverts this to near-black for the dark bg; unchanged for light.
+            viewBackgroundColor: EXCALIDRAW_BG_LIGHT_HEX,
             exportWithDarkMode: isDark,
+            theme: isDark ? "dark" : "light",
           },
           files,
           maxWidthOrHeight: 1200,
