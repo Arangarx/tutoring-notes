@@ -1,7 +1,7 @@
 # Phase 1 — WB Review Correct (in-frame) — smoke runbook
 
 **Branch:** `phase1/wb-review-correct`  
-**Tip commit:** `[cf1eadc](https://github.com/Arangarx/tutoring-notes/commit/cf1eadc)` *(fix(replay): correct first-play starts-from-end bug — parked currentTime after WebM duration scan)*  
+**Tip commit:** `[b7b8d3e](https://github.com/Arangarx/tutoring-notes/commit/b7b8d3e)` *(fix(replay): correct canvas centering on window resize)*  
 **Preview:** [tutoring-notes-git-phase1-wb-rev-46b0a1](https://tutoring-notes-git-phase1-wb-rev-46b0a1-arangarx-5209s-projects.vercel.app)
 
 > **Smoke focus = unified in-frame review surface** (one `TutorNotesSection` reflows prominent ↔ docked with **animated** transition; replay fills main frame inside live WB chrome; persist-once replay; **Hide replay** collapse). Standalone admin/share replay scrubber parity remains **DEFERRED** — regression-check only (D-items).
@@ -224,9 +224,9 @@
 
 ### 14. Window resize — replay recenter (light theme)
 
-**Action:** Enter in-frame replay with visible strokes. Note what's centered in the viewport. Resize browser window narrower, then wider.
+**Action:** Enter in-frame replay with visible strokes. Note what's centered in the viewport. Resize browser window narrower then wider (drag resize continuously, not just a single snap). Also try resizing while playback is running.
 
-**Expect:** After each resize, replay canvas **recenters** so the same scene content stays at viewport center (ResizeObserver + scroll recompute). No blank gap or canvas detached from chrome frame.
+**Expect:** Scene stays **centered** throughout the resize drag — no rightward/leftward drift. After each resize, the same scene content that was at viewport center is still at viewport center. No blank gap; no canvas detached from chrome frame. Content should glide toward center as you drag (continuous, not just a snap at resize-end).
 
 **Ignore this run:** Mobile/tablet layouts (desktop Chrome primary).
 
@@ -234,7 +234,7 @@
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes: Reset for 8th smoke @ 8559ae9. FIX 5: center-preserving resize still in. Verify: no blank gap on resize; no console #418 error on any reload.**
+**Notes: Tip commit b7b8d3e — freeze-snapshot fix. Root cause was play-loop (applySceneAt rAF) overwriting snapshot.width with post-resize st.width between ResizeObserver frames, making correction ≈ 0. Fix: freeze pre-resize snapshot on first ResizeObserver callback; guard applySceneAt with resizeActiveRef. Centering now continuous (every ResizeObserver tick) not debounce-only.**
 
 ---
 
