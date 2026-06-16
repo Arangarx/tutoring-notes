@@ -1,7 +1,7 @@
 # Phase 1 — WB Review Correct (in-frame) — smoke runbook
 
 **Branch:** `phase1/wb-review-correct`  
-**Tip commit:** `[675c265](https://github.com/Arangarx/tutoring-notes/commit/675c2658baaaf2590ded7c742450ba520cf2ff21)`  
+**Tip commit:** `[eb3468e](https://github.com/Arangarx/tutoring-notes/commit/eb3468e1a0be08c939dc53936525ec167382b1b7)`  
 **Preview:** [tutoring-notes-git-phase1-wb-rev-46b0a1](https://tutoring-notes-git-phase1-wb-rev-46b0a1-arangarx-5209s-projects.vercel.app)
 
 > **Smoke focus = unified in-frame review surface** (one `TutorNotesSection` reflows prominent ↔ docked with **animated** transition; replay fills main frame inside live WB chrome; persist-once replay; **Hide replay** collapse). Standalone admin/share replay scrubber parity remains **DEFERRED** — regression-check only (D-items).
@@ -20,7 +20,7 @@
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes: Reset for 5th smoke @ 675c265. Fix B replaced live Excalidraw thumbnail with static exportToCanvas→<img> (no more flash-then-black from API re-init). Fix C replaced hand-rolled scroll math in resize handler with createCameraFitter().fit(). Fix D added mute toggle + WbCustomSlider volume control to scrubber chrome.**
+**Notes: Reset for 6th smoke @ eb3468e. FIX 4 (thumbnail WB theme): thumbnail now honors dark/light WB theme — dark board → dark bg thumbnail; re-exports on toggle. Prior fixes (B/C/D) still in place.**
 
 ---
 
@@ -33,12 +33,10 @@
 **Ignore this run:** Laser pointer. Live board tab switching (single static tab).
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
 - [ ] SKIP
 
-**Notes: Notes recede (it was a very quick animation but I think it did it)**  
-**Canvas still docked beneath wb frame, not in**  
-**Audio starts over at dropped scrubber still regardless of position, Honestly how fucking hard can it be to just move to that position in the audio???  WTF is goign on?**
+**Notes: Reset for 6th smoke @ eb3468e. FIX 1 (recursion guard) removes the RangeError stack overflow that crashed the replay on first paint, and FIX 2 (replaySettledRef) prevents the hero↔replay loop. These were the root cause of item 2 instability. Prior: canvas-nesting + animated-transition already fixed. Verify: smooth animated entry, canvas inside chrome, audio starts from beginning (not t=0 bug).**
 
 ---
 
@@ -70,7 +68,7 @@
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes: Reset for 5th smoke @ 675c265 — Fix A (audio seek) pivoted to port legacy contract: play() no longer re-enters loadSegmentAt; registers one-shot canplay/loadedmetadata retry for both autoplay cases; removed destructive init-effect reset; added src=effectiveSegments[0].url. Jest red-before/green-after confirmed. Real-browser currentTime verify still required (automated harness cannot obtain an authenticated audio session — Andrew audible confirm required).**
+**Notes: Reset for 6th smoke @ eb3468e. FIX 1 (recursion guard) removes the stack overflow that crashed JS before any seek could fire. FIX 3 adds [avx] action=replay_scrub_seek console log — look for it on scrubber drop. Legacy seek contract still in place (Fix A from 5th smoke). Andrew must audible-confirm actual audio position after seek — automated console assert can only verify the seek LOG fires.**
 
 ---
 
@@ -118,7 +116,7 @@
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes: Reset for 5th smoke @ 675c265. The "reset to beginning on Play" was caused by the destructive init-effect re-run (setGlobalMs(0) fired when replayExcaliRestoreReady re-ran). Fixed: init-effect now never zeroes globalMs — matches legacy. And play() no longer re-enters loadSegmentAt which also avoided re-seek.**
+**Notes: Reset for 6th smoke @ eb3468e. FIX 1 removes the recursion crash that was preventing stable hide/return. FIX 2 (replaySettledRef) ensures hide-replay is a no-op until entry paint completes. Prior fix (init-effect never zeroes globalMs) still in place. Verify: hide → return → scrubber shows preserved position; re-enter plays from same point.**
 
 ---
 
@@ -233,10 +231,10 @@
 **Ignore this run:** Mobile/tablet layouts (desktop Chrome primary).
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
 - [ ] SKIP
 
-**Notes: Viewport center does not realign.  Strokes just appear offscreen or partly off screen.**
+**Notes: Reset for 6th smoke @ eb3468e. FIX 5: replaced createCameraFitter.fit() (bbox-refit flash) with center-preserving scroll math. viewportSnapshotRef captured after each applySceneAt; ResizeObserver computes new scrollX/scrollY so the pre-resize scene center stays at viewport center. Fallback to bbox-refit if no snapshot. Verify: no flash, content glides smoothly as window resizes.**
 
 ---
 
@@ -307,4 +305,4 @@
 ## Overall result
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
