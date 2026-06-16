@@ -87,6 +87,10 @@ export function WhiteboardReplayInFrame({
     handleScrubChange,
     handleScrubPointerUp,
     setPaintReady,
+    volume,
+    muted,
+    handleVolumeChange,
+    toggleMute,
   } = controller;
 
   // Pause audio before collapsing back to notes-hero so the audio doesn't
@@ -167,6 +171,10 @@ export function WhiteboardReplayInFrame({
       onScrubPointerDown={handleScrubPointerDown}
       onScrubChange={handleScrubChange}
       onScrubPointerUp={handleScrubPointerUp}
+      volume={volume}
+      muted={muted}
+      onVolumeChange={handleVolumeChange}
+      onToggleMute={toggleMute}
     />
   );
 
@@ -202,6 +210,7 @@ export function WhiteboardReplayInFrame({
           ref={audioRef}
           controls={false}
           preload="metadata"
+          src={effectiveSegments[0]?.url}
           {...(replayAudioMime ? { type: replayAudioMime } : {})}
           data-testid="wb-replay-audio"
           style={{ display: "none" }}

@@ -137,6 +137,122 @@ describe("useReplayTimelineController scrub audio seek", () => {
   });
 });
 
+describe("paused-seek currentTime retry on canplay (Fix A item 2)", () => {
+  /**
+   * RED-BEFORE / GREEN-AFTER for the paused-seek retry.
+   *
+   * When el.currentTime = seekSec throws (readyState < HAVE_METADATA), the
+   * old applySeek catch only registered a canplay retry for autoplay=true.
+   * A paused scrub (autoplay=false) had NO retry, so if canplay fired before
+   * play() was called the position was silently lost.
+   *
+   * Fix: register a one-shot canplay/loadedmetadata listener for BOTH
+   * autoplay cases so the position always sticks.
+   */
+  it("re-applies seek position via one-shot canplay listener when setter throws during paused scrub", async () => {
+    let readyState = 0;
+    let currentTime = 0;
+    const audio2 = document.createElement("audio");
+    document.body.appendChild(audio2);
+
+    Object.defineProperty(audio2, "readyState", {
+      configurable: true,
+      get: () => readyState,
+    });
+    Object.defineProperty(audio2, "currentTime", {
+      configurable: true,
+      get: () => currentTime,
+      set: (v: number) => {
+        if (readyState < 1)
+          throw new DOMException(
+            "Not enough data",
+            "InvalidStateError"
+          );
+        currentTime = v;
+      },
+    });
+    let srcAttr2 = "";
+    Object.defineProperty(audio2, "src", {
+      configurable: true,
+      get: () =>
+        srcAttr2 ? new URL(srcAttr2, "http://localhost").href : "",
+      set: (v: string) => {
+        srcAttr2 = v;
+      },
+    });
+    audio2.getAttribute = jest.fn((name: string) =>
+      name === "src" ? srcAttr2 : null
+    ) as typeof audio2.getAttribute;
+    audio2.load = jest.fn();
+    audio2.play = jest.fn().mockResolvedValue(undefined);
+    audio2.pause = jest.fn();
+    Object.defineProperty(audio2, "paused", {
+      configurable: true,
+      get: () => true,
+    });
+
+    const applySceneAtRef2 = { current: jest.fn() };
+    const { result, unmount } = renderHook(() => {
+      const ref = useRef(applySceneAtRef2.current);
+      const segments = useMemo(
+        () => [
+          {
+            url: "/api/audio/admin/rec-1",
+            mimeType: "audio/webm",
+            durationSeconds: 10,
+          },
+        ],
+        []
+      );
+      return useReplayTimelineController({
+        eventsBlobUrl: "/api/whiteboard/wbs-test/events",
+        audioSegments: segments,
+        applySceneAtRef: ref,
+      });
+    });
+
+    act(() => {
+      result.current.audioRef.current = audio2;
+      audio2.src = "/api/audio/admin/rec-1";
+    });
+
+    await waitFor(() => {
+      expect(result.current.loadState.kind).toBe("ready");
+      expect(result.current.replayExcaliRestoreReady).toBe(true);
+    });
+
+    // Scrub to 5 s while readyState=0 — setter throws, so the position is
+    // NOT applied synchronously.
+    act(() => {
+      result.current.handleScrubPointerDown();
+      result.current.handleScrubChange(5000);
+      result.current.handleScrubPointerUp(5000);
+    });
+    // currentTime still 0 because setter threw
+    expect(currentTime).toBe(0);
+
+    // Browser finishes buffering — canplay fires BEFORE the user presses Play.
+    readyState = 1;
+    act(() => {
+      audio2.dispatchEvent(new Event("canplay"));
+    });
+
+    // After fix: one-shot listener applied seekSec ≈ 5.
+    // Before fix: no listener for autoplay=false → currentTime stays 0 → FAILS.
+    expect(currentTime).toBeCloseTo(5, 1);
+
+    // Play should resume from the scrubbed position.
+    act(() => {
+      result.current.play();
+    });
+    expect(currentTime).toBeCloseTo(5, 1);
+    expect(audio2.play).toHaveBeenCalled();
+
+    unmount();
+    audio2.remove();
+  });
+});
+
 describe("WebM duration-fix race (scrub → durationchange → play)", () => {
   /**
    * Regression test: proves the root cause of the 3rd-repeat audio-reset

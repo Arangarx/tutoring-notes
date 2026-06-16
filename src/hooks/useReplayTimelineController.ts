@@ -85,6 +85,8 @@ export function useReplayTimelineController(
   const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
   const [resolvedMaxMs, setResolvedMaxMs] = useState(audioTimeline.totalMs);
   const [replayExcaliRestoreReady, setReplayExcaliRestoreReady] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [muted, setMuted] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cancelWebmFixRef = useRef<(() => void) | null>(null);
@@ -93,7 +95,6 @@ export function useReplayTimelineController(
   const globalMsRef = useRef(0);
   const globalSegmentOffsetMsRef = useRef(0);
   const segmentSwappingRef = useRef(false);
-  const hasEverPlayedRef = useRef(false);
   const scrubWasPlayingRef = useRef(false);
   const scrubberMaxRef = useRef(1);
   const playLoopRef = useRef<ReturnType<typeof createThrottledPlayLoop> | null>(
@@ -101,7 +102,6 @@ export function useReplayTimelineController(
   );
   const synthAnimFrameRef = useRef(0);
   const synthStartElapsedMsRef = useRef(0);
-  const segmentsInitializedRef = useRef(false);
 
   const log = loadState.kind === "ready" ? loadState.log : null;
 
@@ -140,10 +140,8 @@ export function useReplayTimelineController(
     setGlobalMs(0);
     globalMsRef.current = 0;
     setPaintReady(false);
-    hasEverPlayedRef.current = false;
     isAtEndRef.current = false;
     globalSegmentOffsetMsRef.current = 0;
-    segmentsInitializedRef.current = false;
     (async () => {
       try {
         const res = await fetch(eventsBlobUrl, {
@@ -262,17 +260,22 @@ export function useReplayTimelineController(
         try {
           el.currentTime = seekSec;
         } catch {
-          // If readyState < HAVE_METADATA, wait for canplay before seeking + playing.
-          if (autoplay) {
-            const onCanPlay = () => {
-              el.removeEventListener("canplay", onCanPlay);
-              cancelWebmFixRef.current?.();
-              try { el.currentTime = seekSec; } catch { /* best-effort */ }
-              void el.play();
-            };
-            el.addEventListener("canplay", onCanPlay);
-            return;
-          }
+          // Setter threw (readyState < HAVE_METADATA). Register a one-shot
+          // canplay/loadedmetadata listener to re-apply the position for
+          // BOTH autoplay=false (paused scrub) and autoplay=true.
+          // The old code only registered a retry for autoplay=true, so a
+          // paused scrub whose setter threw silently lost the position —
+          // the audio-led rAF loop would then lock globalMs to 0.
+          const onReady = () => {
+            el.removeEventListener("canplay", onReady);
+            el.removeEventListener("loadedmetadata", onReady);
+            cancelWebmFixRef.current?.();
+            try { el.currentTime = seekSec; } catch { /* best-effort */ }
+            if (autoplay) void el.play();
+          };
+          el.addEventListener("canplay", onReady);
+          el.addEventListener("loadedmetadata", onReady);
+          return;
         }
         playLoopRef.current?.seek();
         if (autoplay) void el.play();
@@ -377,6 +380,22 @@ export function useReplayTimelineController(
     setPlaying(false);
   }, [globalMs]);
 
+  // Sync volume + muted to the audio element whenever they change.
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el || !hasAudio) return;
+    el.volume = Math.max(0, Math.min(1, volume));
+    el.muted = muted;
+  }, [volume, muted, hasAudio]);
+
+  const handleVolumeChange = useCallback((v: number) => {
+    setVolume(Math.max(0, Math.min(1, v)));
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    setMuted((m) => !m);
+  }, []);
+
   const pause = useCallback(() => {
     if (hasAudio) {
       segmentSwappingRef.current = false;
@@ -390,24 +409,16 @@ export function useReplayTimelineController(
   const play = useCallback(() => {
     const atMs = globalMsRef.current;
     if (isAtEndRef.current) {
-      hasEverPlayedRef.current = true;
+      // Legacy pattern: restart whole session from t=0 when at end.
       seek(0, { play: true, paint: false });
       return;
     }
-    if (!hasEverPlayedRef.current) {
-      hasEverPlayedRef.current = true;
-      if (atMs === 0) {
-        seek(0, { play: true, paint: false });
-        return;
-      }
-    }
     if (hasAudio) {
-      const { segmentIndex, localMs } = globalMsToSegmentLocal(
-        atMs,
-        audioTimeline
-      );
-      loadSegmentAt(segmentIndex, localMs, true);
+      // Legacy pattern: trust the scrub-committed currentTime; do NOT
+      // re-enter loadSegmentAt on an ordinary resume — that would reset
+      // currentTime via applySeek and race with the WebM duration-fix.
       setPlaying(true);
+      void audioRef.current?.play();
       return;
     }
     const startFrom = atMs >= noAudioMaxMs ? 0 : atMs;
@@ -419,9 +430,7 @@ export function useReplayTimelineController(
     startSynthFrom(startFrom);
   }, [
     applySceneAtRef,
-    audioTimeline,
     hasAudio,
-    loadSegmentAt,
     noAudioMaxMs,
     seek,
     startSynthFrom,
@@ -432,39 +441,27 @@ export function useReplayTimelineController(
     else play();
   }, [pause, play, playing]);
 
-  // Initialize audio element once restore is ready; avoid resetting scrub position.
+  // Initialize audio element when segments or restore-ready state changes.
+  // Mirrors legacy WhiteboardReplay segment-init effect: resets segment-tracking
+  // refs but NEVER zeroes globalMs / paintReady (scrub position survives).
   useEffect(() => {
-    if (!hasAudio || !replayExcaliRestoreReady) return;
-    const el = audioRef.current;
-    if (!el) return;
-    const first = effectiveSegments[0];
-    if (!first) return;
-
-    if (!segmentsInitializedRef.current) {
-      segmentsInitializedRef.current = true;
-      if (!audioSrcMatches(el, first.url)) {
-        el.src = first.url;
-        setAudioReady(false);
-      }
-      return;
-    }
-
     activeSegmentIndexRef.current = 0;
     setActiveSegmentIndex(0);
     globalSegmentOffsetMsRef.current = 0;
     segmentSwappingRef.current = false;
     isAtEndRef.current = false;
-    hasEverPlayedRef.current = false;
     setPlaying(false);
-    globalMsRef.current = 0;
-    setGlobalMs(0);
-    setPaintReady(false);
     setResolvedMaxMs(audioTimeline.totalMs);
     if (synthAnimFrameRef.current !== 0) {
       cancelAnimationFrame(synthAnimFrameRef.current);
       synthAnimFrameRef.current = 0;
     }
     synthStartElapsedMsRef.current = 0;
+    if (!hasAudio || !replayExcaliRestoreReady) return;
+    const el = audioRef.current;
+    if (!el) return;
+    const first = effectiveSegments[0];
+    if (!first) return;
     if (!audioSrcMatches(el, first.url)) {
       el.src = first.url;
       setAudioReady(false);
@@ -659,7 +656,6 @@ export function useReplayTimelineController(
 
   const handleScrubPointerUp = useCallback(
     (ms: number) => {
-      hasEverPlayedRef.current = true;
       const clamped = Math.max(0, Math.min(ms, scrubberMaxRef.current));
       if (clamped >= scrubberMaxRef.current) {
         isAtEndRef.current = true;
@@ -704,7 +700,6 @@ export function useReplayTimelineController(
     playing,
     paintReady,
     isAtEnd: isAtEndRef.current,
-    hasEverPlayed: hasEverPlayedRef.current,
     activeSegmentIndex,
     resolveAssetUrl,
     seek,
@@ -716,6 +711,10 @@ export function useReplayTimelineController(
     handleScrubPointerUp,
     timelineState,
     setPaintReady,
+    volume,
+    muted,
+    handleVolumeChange,
+    toggleMute,
   };
 }
 
