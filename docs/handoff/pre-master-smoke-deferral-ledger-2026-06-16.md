@@ -12,6 +12,8 @@
 
 **How to use:** Before master cut, every row in **KEEP PRE-MASTER** must PASS (or be explicitly escalated). Rows in **DEFER-SAFE** are tracked post-master follow-ups — not silent drops. Rows in **ALREADY-DEFERRED** were explicitly re-timed before this ledger; status lives in backlog/orchestrator state.
 
+**Row counts:** KEEP PRE-MASTER **33** · DEFER-SAFE **11** · ALREADY-DEFERRED **5** (updated 2026-06-16 — P1-14 moved DEFER-SAFE → KEEP).
+
 **Post-master priority order:** **MAP-ACC** (map/reduce notes **quality**) is **#1** — start immediately at the master cut. Ship with "notes work, may need editing"; tune the pipeline against Sarah's real-session examples (can't calibrate quality without live feedback).
 
 ---
@@ -34,6 +36,8 @@
 ## RESOLVED borderlines (Andrew 2026-06-16)
 
 Both items were OPEN borderlines at ledger creation (`b7b2071`). **Resolved — no longer awaiting input.**
+
+> **Post-creation ledger adjustments (3):** (1) initial inventory; (2) borderlines MAP-ACC + A1-latency (changelog); **(3) P1-14** reclassified DEFER-SAFE → KEEP PRE-MASTER (Andrew 2026-06-16 — show-Sarah centering; see changelog).
 
 ### (a) MAP-ACC — notes **quality** → **DEFER post-master (#1 priority)**
 
@@ -88,6 +92,7 @@ Both items were OPEN borderlines at ledger creation (`b7b2071`). **Resolved — 
 | P1-10 | No-audio session — synthetic clock | smokebook §10 | PASS (prior smoke) | Stroke-only replay must not crash |
 | P1-12 | Both themes — prominent + docked + replay | smokebook §12 | Reset — 8th smoke pending | Theme follow WB toggle in replay |
 | P1-13 | Ended `/workspace` revisit — notes-hero idempotent | smokebook §13 | FAIL — session idempotency | Must not bounce to old preview / wrong session |
+| P1-14 | Window resize — replay recenter | smokebook §14 | FIXED @ [`b7b8d3e`](https://github.com/Arangarx/tutoring-notes/commit/b7b8d3e)/[`596d920`](https://github.com/Arangarx/tutoring-notes/commit/596d920) — awaits Andrew re-smoke | Elevated Andrew 2026-06-16 (show-Sarah centering); was DEFER-SAFE; Excalidraw updates `appState.width` before ResizeObserver → play-loop overwrote centering snapshot → rightward drift; fix: freeze pre-resize snapshot + `computeResizeScroll` |
 | P2-auto | `test:wb-sync` flag-ON | [`phase-2-student-on-new-shell-plan-2026-06-16.md`](phase-2-student-on-new-shell-plan-2026-06-16.md) §6–7 | Planned — READY TO EXECUTE on greenlight | 5-axis B1 BLOCKER — sync with student new shell |
 | P2-0..15 | Two-device matrix (student new shell) | P2 plan §6–7 | Planned — awaits P1 + Andrew two-device | Gate A5 validation on unified shell |
 | P2-B1..B4 | 5-axis BLOCKER acceptance items | P2 plan + [`phase-2-student-on-new-shell-5axis-2026-06-16.md`](phase-2-student-on-new-shell-5axis-2026-06-16.md) | Folded into plan @ `80ac571` | E2E bridge, initialData ref, WbAVCluster audit, recording disclosure |
@@ -109,7 +114,6 @@ Both items were OPEN borderlines at ledger creation (`b7b2071`). **Resolved — 
 | A3b | SR-04a video-tile sizing | [`RELEASE-ROADMAP.md`](../RELEASE-ROADMAP.md) L283–286 — **MERGED** `c05d939` | Shipped — post-master smoke OK | A/V chrome polish |
 | U4/U5 | Toolbar reorder + shape dropdowns | [`BACKLOG.md`](../BACKLOG.md) L154–155 | Backlog | UX polish; not reliability gate |
 | P1-5 | Docked notes while replay playing | smokebook §5 | FAIL — defer UX interpretation | Andrew clarified: audio pauses when replay hidden; docked-while-visible = polish |
-| P1-14 | Window resize — replay recenter | smokebook §14 | Reset — lower priority vs seek | Layout polish; seek/header higher priority |
 | LONG-5 | 60–90 min transcribe re-baseline | [`BACKLOG.md`](../BACKLOG.md) L307–313 — downgraded | Backlog | SSG-1 covers ~50 min; extreme length = post-cut |
 | 2FA-B | Reset-password browser save / generate-offer | [`2fa-remember-device-smokebook-2026-06-13.md`](2fa-remember-device-smokebook-2026-06-13.md) §B; **BL-RESET-GENERATE** | Backlogged @ `adfaefa` | Chrome heuristic investigation; auth works without generate dropdown |
 | 2FA-D | Expired token UI on reset-password | 2FA smokebook §D | Backlog | Edge-case UX; invalid-link hardening shipped |
@@ -136,3 +140,4 @@ Both items were OPEN borderlines at ledger creation (`b7b2071`). **Resolved — 
 |---|---|
 | 2026-06-16 | Initial ledger — Andrew relaxed strict pre-master rule; full inventory classified KEEP / DEFER-SAFE / ALREADY-DEFERRED |
 | 2026-06-16 | Borderlines resolved: MAP-ACC → DEFER-SAFE **#1 post-master** (start at cut); A1 freedraw latency → DEFER-SAFE **WATCH** (moved from KEEP PRE-MASTER) |
+| 2026-06-16 | **Third post-creation adjustment:** P1-14 (replay canvas resize recenter) elevated DEFER-SAFE → KEEP PRE-MASTER — Andrew 2026-06-16: centering correctness is show-Sarah requirement. FIXED @ `b7b8d3e`/`596d920` (root cause: Excalidraw updates `appState.width` before ResizeObserver fires, replay play-loop overwrote centering snapshot with already-resized width → scene drifted right; fix freezes pre-resize snapshot + continuous re-center via `computeResizeScroll`). Awaits Andrew re-smoke (resize → stays centered, no rightward drift). Counts: KEEP +1 (33), DEFER-SAFE −1 (11). |
