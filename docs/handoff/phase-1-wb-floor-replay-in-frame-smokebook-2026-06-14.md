@@ -1,7 +1,7 @@
 # Phase 1 — WB Review Correct (in-frame) — smoke runbook
 
 **Branch:** `phase1/wb-review-correct`  
-**Tip commit:** `[38dcc63](https://github.com/Arangarx/tutoring-notes/commit/38dcc63)`  
+**Tip commit:** `[8559ae9](https://github.com/Arangarx/tutoring-notes/commit/8559ae9)`  
 **Preview:** [tutoring-notes-git-phase1-wb-rev-46b0a1](https://tutoring-notes-git-phase1-wb-rev-46b0a1-arangarx-5209s-projects.vercel.app)
 
 > **Smoke focus = unified in-frame review surface** (one `TutorNotesSection` reflows prominent ↔ docked with **animated** transition; replay fills main frame inside live WB chrome; persist-once replay; **Hide replay** collapse). Standalone admin/share replay scrubber parity remains **DEFERRED** — regression-check only (D-items).
@@ -20,7 +20,7 @@
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes: Reset for 7th smoke @ 38dcc63. FIX 4 (thumbnail WB theme) + all prior fixes still in place. No changes to hero state in this commit.**
+**Notes: Reset for 8th smoke @ 8559ae9. Hero review top bar now shows stored audio recording duration (not wall-clock session duration). If durationSeconds was null/0 in DB, no duration label shown (better than wrong value). FIX 4 + all prior fixes still in.**
 
 ---
 
@@ -36,7 +36,7 @@
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes: Reset for 7th smoke @ 38dcc63. FIX 1 removes the RangeError stack overflow. FIX 2 prevents the hero↔replay loop. FIX 6 fixes the audio-from-t=0 bug on seek. Verify: smooth animated entry, canvas inside chrome, audio starts from beginning, Play after seek starts from seek position (not t=0).**
+**Notes: Reset for 8th smoke @ 8559ae9. All prior fixes still in. NEW: replay chrome header now shows recording length (scrubberMax) not wall-clock session duration; will show `--:--` until first metadata load then snap to recording length. FIX 1 seek-collapse fix also in — verify audio starts from beginning, Play after seek starts from seek position. Watch console for `[avx] seek_map` log showing storedTotal/measuredTotal/localMs.**
 
 ---
 
@@ -68,7 +68,7 @@
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes: Reset for 7th smoke @ 38dcc63. FIX 6 (pendingPlayRef): onPause handler is now suppressed while el.play() promise is in-flight, eliminating the competing-pause AbortError that caused audio to restart from t=0 after seek. scrubWasPlayingRef now uses el.paused (DOM ground truth) so wasPlaying is accurate. startPlay() centralises all el.play() calls + catches AbortError. Look for [avx] seek_set_currentTime, pre_play, audio_pause (reason=...), audio_play_event, audio_seeked_event, webmfix_reset_currentTime in console — these logs will reveal any remaining currentTime reset. Andrew MUST audible-confirm audio starts from the correct position after scrub + play.**
+**Notes: Reset for 8th smoke @ 8559ae9. PRIMARY FIX: seek_map now threads resolvedMaxMs (measured from el.duration) into globalMsToSegmentLocal so that when stored durationSeconds=null/0 the mapping uses the real measured duration instead of collapsing to localMs=0. Look for `[avx] seek_map globalMs=<x> storedTotal=<y> measuredTotal=<z> -> segIdx=<i> localMs=<l>` — if storedTotal=0 and measuredTotal>0 and localMs=0 the fix did NOT take effect; if localMs≈globalMs the fix worked. FIX 6 (pendingPlayRef) still in. Andrew MUST audible-confirm audio starts from the scrubbed position (NOT t=0) after scrub + play.**
 
 ---
 
@@ -116,7 +116,7 @@
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes: Reset for 7th smoke @ 38dcc63. FIX 1 removes the recursion crash. FIX 2 (replaySettledRef) ensures hide-replay is a no-op until entry paint completes. Prior fix (init-effect never zeroes globalMs) still in place. Verify: hide → return → scrubber shows preserved position; re-enter plays from same point.**
+**Notes: Reset for 8th smoke @ 8559ae9. Prior fixes still in. Seek position preservation still expected: hide → return → scrubber shows preserved position; re-enter plays from same point (the seek fix may also improve this since position is now correctly mapped).**
 
 ---
 
@@ -192,15 +192,15 @@
 
 **Action:** Repeat items 1–2 and 5 with **dark** theme, then **light** (toggle via WB top bar theme menu in **both** hero and replay states).
 
-**Expect:** Prominent notes, docked notes, and replay chrome readable in both themes. Theme reachable from hero (not replay-only). No white flash on stroke paint in dark.
+**Expect:** Prominent notes, docked notes, and replay chrome readable in both themes. Theme reachable from hero (not replay-only). No white flash on stroke paint in dark. **NEW (FIX 3):** Replay board (Excalidraw canvas) must follow the WB theme toggle — previously it followed OS `prefers-color-scheme` only; now uses `useTheme().resolvedTheme` same as the live workspace.
 
 **Ignore this run:** Nothing.
 
-- [x] PASS
+- [ ] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Reset for 8th smoke @ 8559ae9. FIX 3: ReplayCanvasSurface now uses useTheme().resolvedTheme (app theme toggle) instead of useExcalidrawThemeFromSystem() (OS only). Toggle WB theme to dark; verify the replay Excalidraw board also goes dark. Toggle back to light; verify board goes light. This surfaces a prior disagreement where the board could be light while the chrome was dark.**
 
 ---
 
@@ -234,7 +234,7 @@
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes: Reset for 7th smoke @ 38dcc63. FIX 5: center-preserving resize in place. FIX 6 also fixes React #418 hydration error (ThemeProvider now uses stable SSR initial state). Verify: no blank gap on resize; no console #418 error on any reload.**
+**Notes: Reset for 8th smoke @ 8559ae9. FIX 5: center-preserving resize still in. Verify: no blank gap on resize; no console #418 error on any reload.**
 
 ---
 
