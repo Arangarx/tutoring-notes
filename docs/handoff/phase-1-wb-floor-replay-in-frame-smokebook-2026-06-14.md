@@ -1,7 +1,7 @@
 # Phase 1 — WB Review Correct (in-frame) — smoke runbook
 
 **Branch:** `phase1/wb-review-correct`  
-**Tip commit:** [`90f8d8f`](https://github.com/Arangarx/tutoring-notes/commit/90f8d8fd5285363af46e07103762f24bb19e8ef9)  
+**Tip commit:** `[90f8d8f](https://github.com/Arangarx/tutoring-notes/commit/90f8d8fd5285363af46e07103762f24bb19e8ef9)`  
 **Preview:** [tutoring-notes-git-phase1-wb-rev-46b0a1](https://tutoring-notes-git-phase1-wb-rev-46b0a1-arangarx-5209s-projects.vercel.app)
 
 > **Smoke focus = unified in-frame review surface** (one `TutorNotesSection` reflows prominent ↔ docked; replay fills main frame; no lossy transition, no dirty confirm, no "Open full replay"). Standalone admin/share replay scrubber parity remains **DEFERRED** — regression-check only (D-items).
@@ -16,11 +16,16 @@
 
 **Ignore this run:** Confirm section content (Phase 2). Notes AI quality. Tutor scratchy audio (B4). Polished blurred-line skeleton (backlogged).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  I'll ask the same question again.  Why is there a start whiteboard session button on the end session screen?  Even if it is now hidden behind "more".**  
+  
+**Should I see something in the little canvas on the right?  Didn't you say this should show what the final WB looks like? Also...how exactly is that supposed to function when there's more than one page?**  
+  
+**So..it still "feels" like a separate page this way not having either the side or top bar from the WB.  There's also no way for me to change theme here or anything.**  
+
 
 ---
 
@@ -33,10 +38,13 @@
 **Ignore this run:** Laser pointer. Live board tab switching (single static tab).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Canvas is still UNDER WB frame, not inside it.**  
+**"Back to notes" copy feels weird here.  IF we keep this layout...shouldn't it be more like "Hide replay" or something...I dunno what makes most sense right now.**  
+**Scrubber finally starts and ends at extremes.**  
+**Audio still completely restarts regardless of where scrubber is dropped.**
 
 ---
 
@@ -49,10 +57,12 @@
 **Ignore this run:** Multi-segment boundary hitch (A6-1 deferred).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  Partial pass.  Audio DOES just stop outright when it hits the end of the scrubber (good) but that doesn't mean it's at the end of the audio right now because audio starts over on scrubber drop.**  
+**Hit play after stop does start scrubber at beginning.**  
+**New requirement: If I resize the window, recenter the replay.  Meaning whatever was "center" in the smaller/larger viewport should move to the center in the larger/smaller viewport.  Make sense?**
 
 ---
 
@@ -65,7 +75,7 @@
 **Ignore this run:** Sub-250ms jitter.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
 **Notes:**
@@ -80,11 +90,11 @@
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Pass, BUT audio keeps going when I "back to notes".  Replay should probably stop if I go to the "just notes" overlay.**
 
 ---
 
@@ -96,7 +106,7 @@
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -112,7 +122,7 @@
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -128,7 +138,7 @@
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -144,7 +154,7 @@
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -177,10 +187,12 @@
 **Ignore this run:** Boundary hitch fix (A6-1 deferred).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: "No board strokes recorded"  This is a weird one because I didn't bring a student in.  With waiting room I guess this becomes a moot issue.  Recording doesn't start without student there...but...hm....yeah I guess I should test with a student since that's probably this test's intention.**  
+  
+Still fail, no strokes recorded, even though strokes are supposed to be a record force start.
 
 ---
 
@@ -192,11 +204,11 @@
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Didn't test absolutely everything but saw enough to be okay with it for now.**
 
 ---
 
@@ -208,7 +220,7 @@
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -224,11 +236,11 @@
 
 **Ignore this run:** Consent-click retirement (Phase 3).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Again, aside from me starting session after session for the sake of testing...why?**
 
 ---
 
@@ -246,7 +258,7 @@
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] SKIP
+- [x] SKIP
 
 **Notes:**
 
@@ -262,7 +274,7 @@
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] SKIP
+- [x] SKIP
 
 **Notes:**
 
@@ -278,7 +290,7 @@
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] SKIP
+- [x] SKIP
 
 **Notes:**
 
@@ -293,4 +305,4 @@
 ## Overall result
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
