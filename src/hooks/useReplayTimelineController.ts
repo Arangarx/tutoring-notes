@@ -387,11 +387,31 @@ export function useReplayTimelineController(
 
       if (hasAudio) {
         const measured = resolvedMaxMsRef.current;
+        const el = audioRef.current;
+        // Secondary fallback: if resolvedMaxMs is still 0 but the audio element
+        // already reports a finite duration (Chrome resolved it via progressive
+        // buffering before onDurationResolved fired), use el.duration directly
+        // and eagerly update resolvedMaxMs for the play-loop and future seeks.
+        const elDurationMs =
+          measured === 0 && el && Number.isFinite(el.duration) && el.duration > 0
+            ? Math.round(el.duration * 1000)
+            : 0;
+        if (elDurationMs > 0) {
+          setResolvedMaxMs((prev) => Math.max(prev, elDurationMs));
+        }
+        const effectiveMeasured = measured > 0 ? measured : elDurationMs;
         const { segmentIndex, localMs } = globalMsToSegmentLocal(
           clamped,
           audioTimeline,
-          measured > 0 ? measured : undefined
+          effectiveMeasured > 0 ? effectiveMeasured : undefined
         );
+        // Log when both stored and measured durations are 0 so the passthrough
+        // path in globalMsToSegmentLocal is visible in prod logs for diagnosis.
+        if (effectiveMeasured === 0 && audioTimeline.totalMs === 0) {
+          console.log(
+            `[avx] wbsid=${whiteboardSessionId ?? "?"} seek_map_fallback elDuration=${el?.duration ?? "n/a"}`
+          );
+        }
         console.log(
           `[avx] wbsid=${whiteboardSessionId ?? "?"} seek_map globalMs=${clamped} storedTotal=${audioTimeline.totalMs} measuredTotal=${measured} -> segIdx=${segmentIndex} localMs=${localMs}`
         );
