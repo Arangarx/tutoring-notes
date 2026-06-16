@@ -53,10 +53,17 @@ export function buildReplayAudioTimeline(
 /**
  * Map a global replay clock (ms) to segment index + offset within segment.
  * Clamps to [0, totalMs]; past-the-end maps to the final segment at its end.
+ *
+ * @param measuredTotalMs - Measured total audio duration (ms) from
+ *   HTMLAudioElement.duration, used as a fallback ONLY for the single-segment
+ *   case when the stored segment duration is 0 (e.g. durationSeconds=null in
+ *   the DB before transcription persists it). Multi-segment sessions are
+ *   unaffected — they use their stored per-segment durations.
  */
 export function globalMsToSegmentLocal(
   globalMs: number,
-  timeline: ReplayAudioTimeline
+  timeline: ReplayAudioTimeline,
+  measuredTotalMs?: number
 ): { segmentIndex: number; localMs: number } {
   const { segmentDurationsMs, segmentStartsMs, totalMs } = timeline;
   if (segmentDurationsMs.length === 0) {
@@ -64,9 +71,14 @@ export function globalMsToSegmentLocal(
   }
   if (segmentDurationsMs.length === 1) {
     const only = segmentDurationsMs[0]!;
+    // When stored duration is 0 (null/unknown), fall back to the measured
+    // audio duration so scrubbing maps proportionally into the real audio
+    // length rather than collapsing every seek to localMs=0.
+    const effective =
+      only > 0 ? only : (measuredTotalMs != null && measuredTotalMs > 0 ? measuredTotalMs : 0);
     return {
       segmentIndex: 0,
-      localMs: Math.max(0, Math.min(globalMs, only > 0 ? only : totalMs)),
+      localMs: Math.max(0, Math.min(globalMs, effective > 0 ? effective : totalMs)),
     };
   }
 

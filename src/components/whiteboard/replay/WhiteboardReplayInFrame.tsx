@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { maxEventTimestampMs } from "@/lib/whiteboard/event-log";
 import { useReplayTimelineController } from "@/hooks/useReplayTimelineController";
 import type { ReplayAudioSegment } from "@/lib/whiteboard/replay-helpers";
+import { formatReplayDurationMs } from "@/lib/whiteboard/replay-helpers";
 import { LiveBoardChrome } from "@/components/whiteboard/chrome/LiveBoardChrome";
 import { useWbLayoutMode } from "@/components/whiteboard/chrome/useWbLayoutMode";
 import { WbRoleProvider } from "@/components/whiteboard/chrome/wb-role";
@@ -25,16 +26,6 @@ export type WhiteboardReplayInFrameProps = {
   onHideReplay?: () => void;
 };
 
-function formatDuration(seconds: number | null | undefined): string {
-  if (seconds == null) return "";
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  return h > 0
-    ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
-    : `${m}:${String(s).padStart(2, "0")}`;
-}
-
 export function WhiteboardReplayInFrame({
   eventsBlobUrl,
   audioSegments,
@@ -42,7 +33,6 @@ export function WhiteboardReplayInFrame({
   audioMimeType,
   whiteboardSessionId,
   studentName,
-  durationSeconds,
   embedded = false,
   onHideReplay,
 }: WhiteboardReplayInFrameProps) {
@@ -220,7 +210,11 @@ export function WhiteboardReplayInFrame({
   const chromeSlots = buildReplayReadOnlyChromeSlots({
     layoutMode,
     studentName,
-    durationLabel: formatDuration(durationSeconds),
+    // Use the controller's scrubberMax (recording timeline total) so the
+    // header duration agrees with the scrubber — not the wall-clock session
+    // duration from the DB which includes idle time (FIX 2).
+    // Hide until we have a real value (scrubberMax starts at 1).
+    durationLabel: scrubberMax > 1 ? formatReplayDurationMs(scrubberMax) : undefined,
     onHideReplay: handleHideReplay,
     canvas: replayCanvas,
     timelineStrip,
@@ -270,9 +264,7 @@ export function WhiteboardReplayInFrame({
       {!embedded && (
         <div className="mynk-wb-replay-meta muted" style={{ fontSize: 11, padding: "4px 8px" }}>
           {log.events.length.toLocaleString()} events · log span{" "}
-          {formatDuration(
-            Math.floor(Math.max(log.durationMs, maxEventTimestampMs(log)) / 1000)
-          )}
+          {formatReplayDurationMs(Math.max(log.durationMs, maxEventTimestampMs(log)))}
         </div>
       )}
     </div>

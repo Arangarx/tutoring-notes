@@ -14,7 +14,7 @@ import {
   type ScenePaintApi,
   type ScenePainter,
 } from "@/lib/whiteboard/scene-paint";
-import { useExcalidrawThemeFromSystem } from "@/hooks/useExcalidrawThemeFromSystem";
+import { useTheme } from "@/components/ThemeProvider";
 import { getReplayCachedRestoreElements } from "@/lib/whiteboard/replay-restore-elements";
 import {
   GraphEmbeddable,
@@ -93,7 +93,8 @@ export function ReplayCanvasSurface({
   const replayCameraReadyRef = useRef(false);
   const registeredAssetUrlsRef = useRef<Set<string>>(new Set());
   const scenePainterRef = useRef<ScenePainter | null>(null);
-  const excalidrawTheme = useExcalidrawThemeFromSystem();
+  const { resolvedTheme } = useTheme();
+  const excalidrawTheme = resolvedTheme === "dark" ? "dark" : "light";
   /**
    * Snapshot of the Excalidraw viewport sampled after each applySceneAt call.
    * Used by the resize handler to preserve the scene-center through container

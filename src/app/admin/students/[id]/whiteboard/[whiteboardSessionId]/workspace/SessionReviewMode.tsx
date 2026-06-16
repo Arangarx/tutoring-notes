@@ -21,6 +21,7 @@ import {
   loadSessionReviewPayload,
   type SessionReviewPayload,
 } from "@/app/admin/students/[id]/whiteboard/notes-actions";
+import { formatReplayDurationMs } from "@/lib/whiteboard/replay-helpers";
 import "./whiteboard-chrome.css";
 
 type Props = {
@@ -159,11 +160,18 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
     >
       <ReviewWbTopBar
         studentName={payload?.studentName}
-        durationLabel={
-          payload?.durationSeconds != null
-            ? formatDuration(payload.durationSeconds)
-            : undefined
-        }
+        durationLabel={(() => {
+          if (!payload) return undefined;
+          // Sum stored per-segment audio durations for the recording length.
+          // Falls back to omitting the label when all durations are unknown
+          // (null/0) — better than showing the wall-clock session duration
+          // which includes idle time and disagrees with the replay scrubber.
+          const storedAudioMs = (payload.audioSegments ?? []).reduce<number>(
+            (sum, s) => sum + Math.round((s.durationSeconds ?? 0) * 1000),
+            0
+          );
+          return storedAudioMs > 0 ? formatReplayDurationMs(storedAudioMs) : undefined;
+        })()}
         noteSaved={noteSaved}
       />
 
@@ -238,13 +246,4 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
       </div>
     </div>
   );
-}
-
-function formatDuration(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  return h > 0
-    ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
-    : `${m}:${String(s).padStart(2, "0")}`;
 }

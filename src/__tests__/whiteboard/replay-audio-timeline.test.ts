@@ -127,6 +127,57 @@ describe("replay-audio-timeline", () => {
       expect(result.segmentIndex).toBe(0);
       expect(result.localMs).toBe(0);
     });
+
+    // ── FIX 1: seek-map with measuredTotalMs fallback ──────────────────────────
+    // Root cause: single-segment session with stored durationSeconds=null → storedMs=0
+    // → every scrub collapsed to localMs=0 (audio reset to t=0 on each scrub).
+    // Fix: pass measuredTotalMs from el.duration so the mapper proportionally
+    // distributes the globalMs into the real audio length.
+    // Red-before: without the measuredTotalMs parameter the test returns localMs=0.
+    // Green-after: with measuredTotalMs=44000 the mapper returns localMs=22000.
+    it("FIX1: single segment stored=0, measuredTotalMs=44000 — maps proportionally (not 0)", () => {
+      const timeline = buildReplayAudioTimeline([null]); // stored duration = null → 0
+      expect(timeline.totalMs).toBe(0);
+      expect(timeline.segmentDurationsMs).toEqual([0]);
+
+      // WITHOUT measuredTotalMs: collapses to 0 (documented pre-fix regression)
+      expect(globalMsToSegmentLocal(22_000, timeline)).toEqual({
+        segmentIndex: 0,
+        localMs: 0,
+      });
+
+      // WITH measuredTotalMs=44000: maps correctly
+      expect(globalMsToSegmentLocal(22_000, timeline, 44_000)).toEqual({
+        segmentIndex: 0,
+        localMs: 22_000,
+      });
+      expect(globalMsToSegmentLocal(0, timeline, 44_000)).toEqual({
+        segmentIndex: 0,
+        localMs: 0,
+      });
+      expect(globalMsToSegmentLocal(44_000, timeline, 44_000)).toEqual({
+        segmentIndex: 0,
+        localMs: 44_000,
+      });
+      // Past end clamps to the measured duration
+      expect(globalMsToSegmentLocal(99_000, timeline, 44_000)).toEqual({
+        segmentIndex: 0,
+        localMs: 44_000,
+      });
+    });
+
+    it("FIX1: measuredTotalMs is ignored when stored duration is already known (non-zero)", () => {
+      // Multi-segment with known stored durations must not be affected by
+      // a measuredTotalMs argument — stored per-segment values take priority.
+      const timeline = buildReplayAudioTimeline([30, 45]); // 30s + 45s = 75s total
+      expect(timeline.totalMs).toBe(75_000);
+      // Passing a different measuredTotalMs should not change the result for
+      // known-duration segments — the fix only applies to the single-segment
+      // case with stored=0.
+      const withMeasured = globalMsToSegmentLocal(35_000, timeline, 99_000);
+      const withoutMeasured = globalMsToSegmentLocal(35_000, timeline);
+      expect(withMeasured).toEqual(withoutMeasured);
+    });
   });
 
   // ----------------------------------------------------------------

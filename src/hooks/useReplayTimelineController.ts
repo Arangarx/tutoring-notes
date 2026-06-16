@@ -154,6 +154,10 @@ export function useReplayTimelineController(
   });
   scrubberMaxRef.current = scrubberMax;
   globalMsRef.current = globalMs;
+  // Ref-tracked so seek() reads the current measured duration without a
+  // stale closure (avoids adding resolvedMaxMs to seek's dep array).
+  const resolvedMaxMsRef = useRef(resolvedMaxMs);
+  resolvedMaxMsRef.current = resolvedMaxMs;
 
   const activeSegment =
     effectiveSegments[activeSegmentIndex] ?? effectiveSegments[0] ?? null;
@@ -382,9 +386,14 @@ export function useReplayTimelineController(
       setGlobalMs(clamped);
 
       if (hasAudio) {
+        const measured = resolvedMaxMsRef.current;
         const { segmentIndex, localMs } = globalMsToSegmentLocal(
           clamped,
-          audioTimeline
+          audioTimeline,
+          measured > 0 ? measured : undefined
+        );
+        console.log(
+          `[avx] wbsid=${whiteboardSessionId ?? "?"} seek_map globalMs=${clamped} storedTotal=${audioTimeline.totalMs} measuredTotal=${measured} -> segIdx=${segmentIndex} localMs=${localMs}`
         );
         globalSegmentOffsetMsRef.current = clamped - localMs;
         setPlaying(autoplay);
@@ -404,7 +413,7 @@ export function useReplayTimelineController(
         }
       }
     },
-    [applySceneAtRef, audioTimeline, hasAudio, loadSegmentAt, totalMs]
+    [applySceneAtRef, audioTimeline, hasAudio, loadSegmentAt, totalMs, whiteboardSessionId]
   );
 
   const startSynthFromRef = useRef<(startMs: number) => void>(() => {});
