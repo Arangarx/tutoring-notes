@@ -1,11 +1,10 @@
 # Phase 1 — WB Review Correct (in-frame) — smoke runbook
 
 **Branch:** `phase1/wb-review-correct`  
-**Tip commit:** `[feb319a](https://github.com/Arangarx/tutoring-notes/commit/feb319a)` (code in `[fb53b2f](https://github.com/Arangarx/tutoring-notes/commit/fb53b2f)`)  
-**Preview (always-works branch alias):** [tutoring-notes-git-phase1-wb-rev-46b0a1](https://tutoring-notes-git-phase1-wb-rev-46b0a1-arangarx-5209s-projects.vercel.app)  
-**Preview (stable, after you repoint):** [preview.usemynk.com](https://preview.usemynk.com)
+**Tip commit:** `<pending push>`  
+**Preview:** <unverified — confirm after Vercel deploy>
 
-> **Smoke focus = corrected in-frame two-state review** (End Session → notes-hero; replay looks like live WB minus controls). Standalone admin/share replay scrubber parity remains **DEFERRED** — regression-check only (D-items).
+> **Smoke focus = unified in-frame review surface** (one `TutorNotesSection` reflows prominent ↔ docked; replay fills main frame; no lossy transition, no dirty confirm, no "Open full replay"). Standalone admin/share replay scrubber parity remains **DEFERRED** — regression-check only (D-items).
 
 ---
 
@@ -13,40 +12,31 @@
 
 **Action:** Tutor on desktop Chrome: start a whiteboard session → record ~30s with strokes and audio → **End session** (stay in workspace). Observe default view. Confirm **no** admin back-link, page `h1`, or `.container` framing — surface should take the full viewport like the live board.
 
-**Expect:** **Notes-hero** full-viewport layout — `TutorNotesSection` editable; confirm slot placeholder (`wb-review-confirm-slot`); board **final-frame** thumbnail in secondary column; **Replay session** CTA; **Start a new whiteboard session** control in the review top bar. No scrubber in hero.
+**Expect:** **Notes-prominent** layout — single `TutorNotesSection` editable (`wb-review-notes-prominent`); confirm slot placeholder (`wb-review-confirm-slot`); board **final-frame** thumbnail (not black) in secondary column; **Replay session** CTA. **No** scrubber in hero. **No** "Open full replay" link. While transcribe+reduce runs, notes form stays visible with inline **Generating notes…** (not blanked). **Start whiteboard session** is under top-bar **More** menu (low prominence), not a competing primary button.
 
-**Ignore this run:** Confirm section content (Phase 2). Notes AI quality. Tutor scratchy audio (B4).
+**Ignore this run:** Confirm section content (Phase 2). Notes AI quality. Tutor scratchy audio (B4). Polished blurred-line skeleton (backlogged).
 
-- [x] PASS
+- [ ] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**  
-**Pass, technically, it's a step in the right direction, but when I was originally talking with AI about it we talked more about it being another tab on the whiteboard that was switched to.  I can see why we went away from that a bit with the full screen wb we landed on but wouldn't this make more sense as an overlay than a full page reload? At least this is better so far. I just wonder if it's really necessary to do what will still feel to the user like they navigated away. Why does this page have a "start whiteboard session" button?  I clicked replay session and it warns about unsaved note changes and if I want to continue to the replay...I was trying to avoid this feel altogether.  They shouldn't have to "leave" notes to watch the replay.  This experience needs to be smoother.**  
-**Skeleton with blurred info lines still not implemented, it shouldn't wait to draw the session notes form till the transcript is finished and notes reduced.  Also, this took forever to transcribe for a 2 minute session with near zero audio, definitely something to watch out for.**  
-**That top header feels.....basic?**
+**Notes:**
 
 ---
 
-### 2. Enter replay — live chrome read-only (light theme)
+### 2. Enter replay — live chrome read-only, notes docked (light theme)
 
-**Action:** From item 1 hero, click **Replay session**. Observe full-viewport in-frame replay. Scrubber at 0:00. Press **Play** without touching scrubber.
+**Action:** From item 1 hero, click **Replay session** (with unsaved note edits if you like). Observe transition — should be **instant** layout reflow, no modal, no dynamic-import flash. Scrubber at 0:00. Press **Play** without touching scrubber.
 
-**Expect:** Replay uses **live whiteboard chrome** visually — Mynk wordmark top bar, **disabled** left tool strip, disabled AV cluster, board tab strip, bottom scrubber. Controls are non-interactive except replay/back/notes/drawer. Canvas shows **empty or first stroke** — NOT final-board flash. Audio from beginning.
+**Expect:** **Same notes surface** recedes to docked panel (`wb-review-notes-docked`) — still visible and editable; **not** a discoverable drawer toggle. Replay uses **live whiteboard chrome** read-only; canvas **fills** the main frame (no dead-space gap). Consolidated **WbCustomSlider** scrubber (same component family as opacity). Canvas shows **empty or first stroke** — NOT final-board flash. Audio from beginning. **No** unsaved-changes confirm. **No** "Open full replay".
 
 **Ignore this run:** Laser pointer. Live board tab switching (single static tab).
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
 - [ ] SKIP
 
-**Notes:**  
-**Why for the love of god are the sliders/scrubbers not consolidated yet.  We had to fix this for opacity why aren't we using the same visual code? This fucking broken scrubber visually drives my ocd batshit insane. :D**  
-**Why is the viewport so tiny? (figured it out, what I thought was the canvas was dead space, the canvas didn't slot in properly)**  
-**And when it went over it had exactly the problem I was trying to avoid, it had to load the replay in, leaving the notes entirely.**  
-**Umm....the canvas didn't slot in where it was supposed to, that explains the weird huge gap.**  
-**On the bright side, it does seem to basically be working.  Strokes are drawing, there is audio.**  
-**So while visually it's not quite there, I will take this as a good step in the right direction at least.**
+**Notes:**
 
 ---
 
@@ -54,15 +44,15 @@
 
 **Action:** Fresh in-frame replay entry. Let play to natural end.
 
-**Expect:** Stops (no loop). Scrubber at 100%. Final stroke state. Press **Play** again → restarts from 0.
+**Expect:** Stops (no loop). Scrubber at 100%. Audio **stops** with scrubber (no orphan audio). Final stroke state. Press **Play** again → restarts from 0.
 
 **Ignore this run:** Multi-segment boundary hitch (A6-1 deferred).
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
 - [ ] SKIP
 
-**Notes:** 
+**Notes:**
 
 ---
 
@@ -70,79 +60,79 @@
 
 **Action:** Pause in-frame replay. Drag scrubber to ~50% → release → **Play**.
 
-**Expect:** Audio and scene resume from ~50%. No corrupted audio during drag.
+**Expect:** Audio `currentTime` and scene resume from ~50%. No audio from t=0 after drop. No corrupted audio during drag.
 
 **Ignore this run:** Sub-250ms jitter.
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
 - [ ] SKIP
 
-Notes:  **Sound starts at t=0 regardless of where I drop it and keeps playing even when the scrubber stops because there is audio left.**
+**Notes:**
 
 ---
 
-### 5. Notes drawer while replay playing (light theme)
+### 5. Docked notes while replay playing (light theme)
 
-**Action:** Enter in-frame replay; press **Play**. Open **Notes** drawer. Type in notes fields for 10s while replay continues.
+**Action:** Enter in-frame replay; press **Play**. Edit notes in the **docked** panel (always visible — no drawer toggle). Type for 10s while replay continues.
 
-**Expect:** Audio **keeps playing**. Drawer does **not** cover scrubber or play/pause. Drawer body scrolls; canvas does not. Close drawer — replay still at correct position.
+**Expect:** Audio **keeps playing**. Docked notes do **not** cover scrubber or play/pause. Notes panel scrolls independently; canvas does not. Edits remain when switching back to prominent notes.
 
 **Ignore this run:** Nothing.
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
 - [ ] SKIP
 
-**Notes: How do you open the notes drawer?**
+**Notes:**
 
 ---
 
-### 6. Drawer↔hero edit survival — BLOCKER-1 (light theme)
+### 6. Prominent↔docked edit survival — single notes instance (light theme)
 
-**Action:** On hero, edit notes without saving. Click **Replay session** — choose **Continue**. Open notes drawer; edit another field. **Back to notes**. Observe hero notes. Re-enter replay; open drawer.
+**Action:** On hero, edit notes without saving. Click **Replay session** (no confirm expected). Edit another field in docked panel. Click **Back to notes**. Re-enter replay.
 
-**Expect:** Confirm dialog when dirty on hero→replay. **Continue** preserves edits. Drawer edits visible in hero (**same text**). Drawer shows same edits on re-enter. **Save** persists all via nsi.
+**Expect:** **No** dirty confirm on hero→replay. **Same text** in prominent and docked modes (one React state). Re-enter replay preserves edits. **Save** persists all via nsi.
 
 **Ignore this run:** Nothing.
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
 - [ ] SKIP
 
-**Notes: Don't even know how to get drawer open.**
+**Notes:**
 
 ---
 
-### 7. Back to notes + replay return — BLOCKER-2 (light theme)
+### 7. Back to notes + replay return — persist-once replay (light theme)
 
 **Action:** While replay playing, click **Back to notes**. Then re-enter replay via **Replay session**.
 
-**Expect:** Returns to hero; notes edits preserved. Re-enter replay: scrubber shows **preserved position (not 0:00)**. No audio leak after back.
+**Expect:** Returns to prominent notes layout; edits preserved. Re-enter replay: scrubber shows **preserved position (not 0:00)**. No audio leak after back. **No** escape to legacy standalone replay page anywhere on this surface.
 
 **Ignore this run:** Nothing.
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
 - [ ] SKIP
 
-**Notes: If I click open full replay after back to notes it goes back to the old replay page.  This is why I wanted everything to stay in frame in the first place /sigh**
+**Notes:**
 
 ---
 
-### 8. Unsaved notes beforeunload guard (light theme)
+### 8. No lossy transition guards (light theme)
 
-**Action:** On hero, edit notes without saving. Attempt to close the browser tab or navigate away from the workspace (do **not** click **Replay session**).
+**Action:** On hero, edit notes. Click **Replay session** — confirm no modal. Attempt browser tab close / navigate away (optional).
 
-**Expect:** Browser `beforeunload` / unsaved-changes guard fires. Staying on page preserves unsaved edits.
+**Expect:** **No** "unsaved changes / continue?" dialog entering replay. **No** `beforeunload` guard (notes auto-save as DRAFT via nsi). Instant client-side prominence switch only.
 
 **Ignore this run:** Nothing.
 
 - [ ] PASS
-- [x] FAIL
+- [ ] FAIL
 - [ ] SKIP
 
-**Notes: We shouldn't even need this guard...wtf are we doing.**
+**Notes:**
 
 ---
 
@@ -150,7 +140,7 @@ Notes:  **Sound starts at t=0 regardless of where I drop it and keeps playing ev
 
 **Action:** End a session with **no audio and no whiteboard strokes** (instant end / no capture). Observe hero board column.
 
-**Expect:** **No recording available.** message instead of Replay CTA. No broken empty replay player.
+**Expect:** **No recording available.** message instead of Replay CTA. Thumbnail shows empty state (not a black frame). No broken empty replay player.
 
 **Ignore this run:** Nothing.
 
@@ -194,11 +184,11 @@ Notes:  **Sound starts at t=0 regardless of where I drop it and keeps playing ev
 
 ---
 
-### 12. Both themes — hero + replay + drawer
+### 12. Both themes — prominent + docked + replay
 
 **Action:** Repeat items 1–2 and 5 with **dark** theme, then **light** (toggle app theme).
 
-**Expect:** Hero and replay chrome readable in both themes. No white flash on stroke paint in dark.
+**Expect:** Prominent notes, docked notes, and replay chrome readable in both themes. No white flash on stroke paint in dark.
 
 **Ignore this run:** Nothing.
 
@@ -226,11 +216,11 @@ Notes:  **Sound starts at t=0 regardless of where I drop it and keeps playing ev
 
 ---
 
-### 14. Start new session from review top bar (light theme)
+### 14. Start new session from review More menu (light theme)
 
-**Action:** On notes-hero (item 1 or 13), click **Start a new whiteboard session** in the review top bar.
+**Action:** On notes-hero (item 1 or 13), open top-bar **More** → **Start whiteboard session**.
 
-**Expect:** Consent/start flow opens; minting a fresh session works. Deliberate affordance — not the default post-end view.
+**Expect:** Consent/start flow opens; minting a fresh session works. Deliberate low-prominence affordance — not competing with review.
 
 **Ignore this run:** Consent-click retirement (Phase 3).
 

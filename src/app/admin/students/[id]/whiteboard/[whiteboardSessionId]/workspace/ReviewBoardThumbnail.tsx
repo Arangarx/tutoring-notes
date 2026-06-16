@@ -103,7 +103,8 @@ export function ReviewBoardThumbnail({
       restoreElements: getReplayCachedRestoreElements() ?? undefined,
       registeredAssetUrls: new Set(),
     });
-    painter.applyAt(totalMs);
+    const result = painter.applyAt(totalMs);
+    lastElementsRef.current = result.paintedElements;
     const container = containerRef.current;
     if (container) {
       const fitter = createCameraFitter({

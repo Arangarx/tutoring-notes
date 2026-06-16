@@ -2126,38 +2126,13 @@
   flex-wrap: wrap;
 }
 
-.mynk-wb-replay-timeline__seek {
+.mynk-wb-replay-timeline__seek-wrap {
   flex: 1;
   min-width: 120px;
 }
 
-.mynk-wb-replay-drawer-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 25;
-  pointer-events: none;
-  background: transparent;
-}
-
-.mynk-wb-replay-drawer {
-  position: fixed;
-  top: 44px;
-  right: 0;
-  bottom: 48px;
-  width: min(360px, 92vw);
-  z-index: 26;
-  display: flex;
-  flex-direction: column;
-  background: var(--card);
-  border-left: 1px solid var(--border);
-  box-shadow: -4px 0 16px color-mix(in srgb, var(--foreground) 8%, transparent);
-  pointer-events: auto;
-}
-
-.mynk-wb-replay-drawer__body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px;
+.mynk-wb-replay-timeline__seek {
+  width: 100%;
 }
 
 .wb-review-notes-column,
@@ -2167,10 +2142,7 @@
   min-width: 0;
 }
 
-.wb-replay-persist-wrapper {
-  /* Mount point only — replay chrome escapes via position:fixed */
-}
-
+/* ── Unified session review surface (prominent ↔ docked notes) ── */
 .wb-session-review-root {
   position: fixed;
   inset: 0;
@@ -2190,12 +2162,148 @@
   font-size: 14px;
 }
 
-.wb-session-review-root:not(.wb-session-review-root--replay-active) .wb-review-hero-layout {
+.wb-review-unified-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.55fr);
+  overflow: hidden;
+}
+
+.wb-session-review-root--replay-active .wb-review-unified-body {
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+}
+
+.wb-review-notes-surface {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  border-right: 1px solid var(--border);
+  background: var(--background);
+}
+
+.wb-review-notes-surface--docked {
+  padding: 8px 10px;
+  border-right: 1px solid var(--border);
+  box-shadow: inset -1px 0 0 color-mix(in srgb, var(--foreground) 4%, transparent);
+}
+
+.wb-review-main-frame {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.wb-review-hero-board {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
+.wb-review-replay-pane {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.wb-review-replay-pane[hidden] {
+  display: none !important;
+}
+
+.wb-review-board-thumbnail-placeholder {
+  min-height: 200px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.wb-review-more-menu {
+  position: relative;
+}
+
+.wb-review-more-menu > summary {
+  cursor: pointer;
+}
+
+.wb-review-more-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.wb-review-more-menu__panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 10;
+  padding: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--foreground) 10%, transparent);
+  white-space: nowrap;
+}
+
+.mynk-wb-replay-root--embedded {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.mynk-wb-replay-root--embedded .mynk-wb-chrome[data-mode="replay"] {
+  position: relative;
+  inset: unset;
+  z-index: 0;
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+.mynk-wb-replay-root--embedded .mynk-wb-replay-body {
+  flex: 1;
+  min-height: 0;
+}
+
+.mynk-wb-replay-root--embedded .mynk-wb-live-column,
+.mynk-wb-replay-root--embedded .mynk-wb-replay-column {
+  flex: 1;
+  min-height: 0;
+}
+
+.mynk-wb-replay-root--embedded .mynk-wb-canvas {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.wb-replay-canvas-host {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.wb-replay-in-frame-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.mynk-wb-replay-meta {
+  flex-shrink: 0;
+}
+
+.wb-replay-persist-wrapper {
+  /* legacy testid mount — unified layout uses .wb-review-replay-pane */
 }
 
 .wb-review-topbar {
@@ -2221,31 +2329,20 @@
   align-items: start;
 }
 
-.wb-replay-loading-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--background);
-  color: var(--muted);
-  font-size: 14px;
-}
-
 @media (max-width: 768px) {
-  .wb-review-hero-grid {
+  .wb-review-unified-body,
+  .wb-session-review-root--replay-active .wb-review-unified-body {
     grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
   }
 
-  .mynk-wb-replay-drawer {
-    left: 0;
-    right: 0;
-    width: 100%;
-    top: auto;
-    bottom: 48px;
-    max-height: 55vh;
-    border-left: none;
-    border-top: 1px solid var(--border);
+  .wb-session-review-root--replay-active .wb-review-notes-surface--docked {
+    max-height: 40vh;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .wb-review-hero-grid {
+    grid-template-columns: 1fr;
   }
 }

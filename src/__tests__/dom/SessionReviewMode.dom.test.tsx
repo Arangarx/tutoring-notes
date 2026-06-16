@@ -18,11 +18,6 @@ jest.mock(
   })
 );
 
-jest.mock("@/components/whiteboard/replay/ReplayNotesDrawer", () => ({
-  ReplayNotesDrawerToggle: () => null,
-  ReplayNotesDrawerPanel: () => null,
-}));
-
 jest.mock("@/app/admin/students/[id]/whiteboard/StartWhiteboardSession", () => ({
   StartWhiteboardSession: ({ studentId }: { studentId: string }) => (
     <button type="button" data-testid="mock-start-new-session">
@@ -85,52 +80,50 @@ beforeEach(() => {
   loadSessionReviewPayload.mockResolvedValue(basePayload);
 });
 
-describe("SessionReviewMode two-state surface", () => {
-  it("defaults to hero with confirm slot and replay CTA", async () => {
+describe("SessionReviewMode unified surface", () => {
+  it("defaults to prominent notes with replay CTA", async () => {
     render(
       <SessionReviewMode whiteboardSessionId="wbs-1" studentId="stu-1" />
     );
     expect(await screen.findByTestId("wb-session-review-mode")).toBeInTheDocument();
-    expect(screen.getByTestId("wb-session-review-mode")).toHaveClass(
-      "wb-session-review-root"
-    );
+    expect(screen.getByTestId("wb-review-notes-prominent")).toBeInTheDocument();
     expect(screen.getByTestId("wb-review-hero-layout")).toBeInTheDocument();
-    expect(screen.getByTestId("wb-review-confirm-slot")).toBeInTheDocument();
-    expect(screen.getByTestId("wb-review-enter-replay")).toBeInTheDocument();
-    expect(screen.getByTestId("mock-start-new-session")).toBeInTheDocument();
+    expect(await screen.findByTestId("wb-review-enter-replay")).toBeInTheDocument();
+    expect(screen.getByTestId("wb-review-more-menu")).toBeInTheDocument();
     expect(screen.queryByTestId("mock-wb-replay-in-frame")).not.toBeInTheDocument();
   });
 
-  it("enters replay on clean hero without dirty confirm", async () => {
+  it("enters replay instantly without dirty confirm and keeps notes mounted", async () => {
     render(
       <SessionReviewMode whiteboardSessionId="wbs-1" studentId="stu-1" />
     );
     await screen.findByTestId("wb-review-enter-replay");
+    fireEvent.change(screen.getByLabelText(/Topics covered/i), {
+      target: { value: "Edited topic" },
+    });
     fireEvent.click(screen.getByTestId("wb-review-enter-replay"));
     await waitFor(() => {
       expect(screen.getByTestId("mock-wb-replay-in-frame")).toBeInTheDocument();
     });
-    const wrapper = screen.getByTestId("wb-replay-persist-wrapper");
-    expect(wrapper).toHaveStyle({ display: "block" });
-    expect(wrapper).toHaveAttribute("aria-hidden", "false");
-    expect(screen.queryByTestId("wb-review-hero-layout")).not.toBeInTheDocument();
+    expect(screen.getByTestId("wb-review-notes-docked")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Topics covered/i)).toHaveValue("Edited topic");
     expect(screen.queryByTestId("wb-review-dirty-confirm")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("wb-review-hero-layout")).not.toBeInTheDocument();
   });
 
-  it("shows dirty confirm before entering replay when notes edited", async () => {
+  it("returns to hero with edits preserved", async () => {
     render(
       <SessionReviewMode whiteboardSessionId="wbs-1" studentId="stu-1" />
     );
-    await screen.findByTestId("tutor-notes-section");
-    const textarea = screen.getByLabelText(/Topics covered/i);
-    fireEvent.change(textarea, { target: { value: "Edited topic" } });
-    fireEvent.click(screen.getByTestId("wb-review-enter-replay"));
-    expect(screen.getByTestId("wb-review-dirty-confirm")).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("wb-review-dirty-continue"));
-    await waitFor(() => {
-      expect(screen.getByTestId("mock-wb-replay-in-frame")).toBeInTheDocument();
+    await screen.findByTestId("wb-review-enter-replay");
+    fireEvent.change(screen.getByLabelText(/Topics covered/i), {
+      target: { value: "Docked edit" },
     });
-    expect(screen.getByTestId("wb-replay-persist-wrapper")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("wb-review-enter-replay"));
+    await screen.findByTestId("mock-wb-replay-in-frame");
+    fireEvent.click(screen.getByTestId("wb-replay-back-to-notes"));
+    expect(screen.getByTestId("wb-review-notes-prominent")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Topics covered/i)).toHaveValue("Docked edit");
   });
 
   it("shows no recording message when no audio and no events", async () => {

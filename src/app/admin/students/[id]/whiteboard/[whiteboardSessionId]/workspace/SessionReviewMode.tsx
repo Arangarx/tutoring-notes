@@ -1,20 +1,20 @@
 "use client";
 
 /**
- * A3 in-shell post-end-session review surface — two-state model (Rev 2/3).
+ * A3 in-shell post-end-session review — unified notes surface (prominent ↔ docked).
  *
- * States: hero (notes-primary default) ↔ replay (full-viewport in-frame player).
- * Lifted notes state (BLOCKER-1); replay persist-once mount (BLOCKER-2).
+ * One TutorNotesSection instance reflows between hero and replay prominence.
+ * Replay mounts once (persist-once) without unmounting notes or lossy transitions.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import dynamic from "next/dynamic";
+import { useCallback, useEffect, useRef, useState } from "react";
 import TutorNotesSection, {
   parseNoteContent,
   type StructuredNoteFields,
 } from "@/components/whiteboard/TutorNotesSection";
-import { ReviewHeroLayout } from "./ReviewHeroLayout";
+import { WhiteboardReplayInFrame } from "@/components/whiteboard/replay/WhiteboardReplayInFrame";
 import { ReviewBoardThumbnail } from "./ReviewBoardThumbnail";
+import { ReviewConfirmSlot } from "./ReviewConfirmSlot";
 import { StartWhiteboardSession } from "@/app/admin/students/[id]/whiteboard/StartWhiteboardSession";
 import type { ReviewSurfaceState } from "./review-surface-state";
 import {
@@ -22,40 +22,6 @@ import {
   type SessionReviewPayload,
 } from "@/app/admin/students/[id]/whiteboard/notes-actions";
 import "./whiteboard-chrome.css";
-
-const WhiteboardReplayInFrame = dynamic(
-  () =>
-    import("@/components/whiteboard/replay/WhiteboardReplayInFrame").then(
-      (m) => ({ default: m.WhiteboardReplayInFrame })
-    ),
-  {
-    ssr: false,
-    loading: () => (
-      <div
-        className="wb-replay-loading-overlay"
-        data-testid="wb-replay-loading"
-      >
-        Loading replay…
-      </div>
-    ),
-  }
-);
-
-const ReplayNotesDrawerPanel = dynamic(
-  () =>
-    import("@/components/whiteboard/replay/ReplayNotesDrawer").then((m) => ({
-      default: m.ReplayNotesDrawerPanel,
-    })),
-  { ssr: false }
-);
-
-const ReplayNotesDrawerToggle = dynamic(
-  () =>
-    import("@/components/whiteboard/replay/ReplayNotesDrawer").then((m) => ({
-      default: m.ReplayNotesDrawerToggle,
-    })),
-  { ssr: false }
-);
 
 type Props = {
   whiteboardSessionId: string;
@@ -71,11 +37,8 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
   const [loadState, setLoadState] = useState<LoadState>({ kind: "loading" });
   const [reviewSurface, setReviewSurface] =
     useState<ReviewSurfaceState>("hero");
-  const [hasEnteredReplay, setHasEnteredReplay] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const drawerToggleRef = useRef<HTMLButtonElement | null>(null);
+  const [hasMountedReplay, setHasMountedReplay] = useState(false);
   const [noteSaved, setNoteSaved] = useState(false);
-  const [dirtyConfirmOpen, setDirtyConfirmOpen] = useState(false);
 
   const initialParsedFieldsRef = useRef<StructuredNoteFields | null>(null);
   const [notesFields, setNotesFields] = useState<StructuredNoteFields>({
@@ -84,12 +47,6 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
     nextSteps: "",
     links: "",
   });
-
-  const isDirty = useMemo(() => {
-    const initial = initialParsedFieldsRef.current;
-    if (!initial) return false;
-    return JSON.stringify(notesFields) !== JSON.stringify(initial);
-  }, [notesFields]);
 
   useEffect(() => {
     let cancelled = false;
@@ -126,24 +83,6 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
     };
   }, [whiteboardSessionId]);
 
-  useEffect(() => {
-    if (!isDirty) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [isDirty]);
-
-  useEffect(() => {
-    if (reviewSurface !== "replay") return;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [reviewSurface]);
-
   const handleNoteSaved = useCallback(() => {
     setNoteSaved(true);
     if (initialParsedFieldsRef.current) {
@@ -152,50 +91,99 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
   }, [notesFields]);
 
   const enterReplay = useCallback(() => {
-    setHasEnteredReplay(true);
+    setHasMountedReplay(true);
     setReviewSurface("replay");
-    setDrawerOpen(false);
     console.log(
       `[nsi] wbsid=${whiteboardSessionId} action=review_surface_replay_enter`
     );
   }, [whiteboardSessionId]);
 
-  const requestEnterReplay = useCallback(() => {
-    if (isDirty) {
-      setDirtyConfirmOpen(true);
-      return;
-    }
-    enterReplay();
-  }, [enterReplay, isDirty]);
-
   const returnToHero = useCallback(() => {
     setReviewSurface("hero");
-    setDrawerOpen(false);
     console.log(
       `[nsi] wbsid=${whiteboardSessionId} action=review_surface_hero_return from=replay`
     );
   }, [whiteboardSessionId]);
 
-  const handleDrawerOpenChange = useCallback(
-    (open: boolean) => {
-      setDrawerOpen(open);
-      console.log(
-        `[nsi] wbsid=${whiteboardSessionId} action=review_notes_drawer_${open ? "open" : "close"} open=${open}`
-      );
-    },
-    [whiteboardSessionId]
+  const isReplay = reviewSurface === "replay";
+  const payload = loadState.kind === "ready" ? loadState.payload : null;
+  const canReplay =
+    payload != null && (payload.hasAudio || payload.eventCount > 0);
+
+  const notesSurface = payload ? (
+    <TutorNotesSection
+      whiteboardSessionId={whiteboardSessionId}
+      studentId={studentId}
+      initialNote={payload.initialNote}
+      hasAudio={payload.hasAudio}
+      fields={notesFields}
+      onFieldsChange={setNotesFields}
+      onSaved={handleNoteSaved}
+      variant={isReplay ? "docked" : "default"}
+    />
+  ) : (
+    <div className="muted" style={{ fontSize: 13, padding: 8 }}>
+      Loading session notes…
+    </div>
   );
 
-  if (loadState.kind === "loading") {
-    return (
-      <div
-        className="wb-session-review-root wb-session-review-root--loading"
-        data-testid="wb-review-loading"
-      >
-        Loading review…
+  const topBar = (
+    <div className="wb-review-topbar" data-testid="wb-review-topbar">
+      <div>
+        <div style={{ fontWeight: 700, fontSize: 15 }}>
+          Session complete
+          {payload ? ` — ${payload.studentName}` : ""}
+        </div>
+        {payload?.durationSeconds != null && (
+          <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+            {formatDuration(payload.durationSeconds)}
+          </div>
+        )}
       </div>
-    );
-  }
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          flexWrap: "wrap",
+          alignItems: "center",
+        }}
+      >
+        {noteSaved && (
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              fontSize: 12,
+              color: "var(--success-text, var(--text))",
+              fontWeight: 500,
+            }}
+          >
+            ✓ Notes saved
+          </span>
+        )}
+        {isReplay && (
+          <button
+            type="button"
+            className="btn"
+            style={{ fontSize: 12 }}
+            data-testid="wb-replay-back-to-notes"
+            onClick={returnToHero}
+          >
+            Back to notes
+          </button>
+        )}
+        <details className="wb-review-more-menu" data-testid="wb-review-more-menu">
+          <summary className="btn" style={{ fontSize: 12, listStyle: "none" }}>
+            More
+          </summary>
+          <div className="wb-review-more-menu__panel">
+            <StartWhiteboardSession studentId={studentId} />
+          </div>
+        </details>
+      </div>
+    </div>
+  );
 
   if (loadState.kind === "error") {
     return (
@@ -216,197 +204,89 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
           }}
         >
           <strong>Could not load review data.</strong> {loadState.message}
-          <div style={{ marginTop: 8 }}>
-            <a
-              href={`/admin/students/${studentId}/whiteboard/${whiteboardSessionId}`}
-              className="btn"
-            >
-              Open full review page
-            </a>
-          </div>
         </div>
       </div>
     );
   }
 
-  const { payload } = loadState;
-  const reviewHref = `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}`;
-  const canReplay = payload.hasAudio || payload.eventCount > 0;
-
-  const topBar = (
-    <div
-      className="wb-review-topbar"
-      data-testid="wb-review-topbar"
-    >
-      <div>
-        <div style={{ fontWeight: 700, fontSize: 15 }}>
-          Session complete — {payload.studentName}
-        </div>
-        {payload.durationSeconds != null && (
-          <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-            {formatDuration(payload.durationSeconds)}
-          </div>
-        )}
-      </div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        {noteSaved && (
-          <span
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-              fontSize: 12,
-              color: "var(--success-text, var(--text))",
-              fontWeight: 500,
-            }}
-          >
-            ✓ Notes saved
-          </span>
-        )}
-        <StartWhiteboardSession studentId={studentId} />
-        <a href={reviewHref} className="btn" style={{ fontSize: 12 }}>
-          Open full replay
-        </a>
-      </div>
-    </div>
-  );
-
   return (
     <div
       data-testid="wb-session-review-mode"
-      className={`wb-session-review-root${reviewSurface === "replay" ? " wb-session-review-root--replay-active" : ""}`}
+      className={`wb-session-review-root${isReplay ? " wb-session-review-root--replay-active" : ""}${loadState.kind === "loading" ? " wb-session-review-root--loading" : ""}`}
+      data-review-surface={reviewSurface}
     >
-      {reviewSurface === "hero" && (
-        <ReviewHeroLayout
-          topBar={topBar}
-          notesColumn={
-            <TutorNotesSection
-              whiteboardSessionId={whiteboardSessionId}
-              studentId={studentId}
-              initialNote={payload.initialNote}
-              hasAudio={payload.hasAudio}
-              fields={notesFields}
-              onFieldsChange={setNotesFields}
-              pollSyncAllowed={!isDirty}
-              onSaved={handleNoteSaved}
-            />
-          }
-          boardColumn={
-            <div style={{ display: "grid", gap: 12 }}>
-              <ReviewBoardThumbnail
-                eventsProxyUrl={payload.eventsProxyUrl}
-                whiteboardSessionId={whiteboardSessionId}
-              />
-              {canReplay ? (
-                <button
-                  type="button"
-                  className="btn primary"
-                  data-testid="wb-review-enter-replay"
-                  onClick={requestEnterReplay}
-                >
-                  ▶ Replay session
-                </button>
-              ) : (
-                <div
-                  className="muted"
-                  data-testid="wb-review-no-recording"
-                  style={{ fontSize: 13, padding: "8px 0" }}
-                >
-                  No recording available.
-                </div>
-              )}
-            </div>
-          }
-        />
-      )}
+      {topBar}
 
-      {dirtyConfirmOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          data-testid="wb-review-dirty-confirm"
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 60,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "color-mix(in srgb, var(--background) 40%, transparent)",
-          }}
+      <div className="wb-review-unified-body" data-testid="wb-review-unified-body">
+        <aside
+          className={`wb-review-notes-surface${isReplay ? " wb-review-notes-surface--docked" : " wb-review-notes-surface--prominent"}`}
+          data-testid={
+            isReplay ? "wb-review-notes-docked" : "wb-review-notes-prominent"
+          }
         >
-          <div className="card" style={{ padding: 20, maxWidth: 400, margin: 16 }}>
-            <p style={{ margin: "0 0 16px", fontSize: 14 }}>
-              You have unsaved note changes. Continue to replay?
-            </p>
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button
-                type="button"
-                className="btn"
-                data-testid="wb-review-dirty-stay"
-                onClick={() => setDirtyConfirmOpen(false)}
-              >
-                Stay
-              </button>
-              <button
-                type="button"
-                className="btn primary"
-                data-testid="wb-review-dirty-continue"
-                onClick={() => {
-                  setDirtyConfirmOpen(false);
-                  enterReplay();
-                }}
-              >
-                Continue
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          {!isReplay && <ReviewConfirmSlot />}
+          {notesSurface}
+        </aside>
 
-      {/* BLOCKER-2: persist-once replay wrapper — never unmount after first enter */}
-      {hasEnteredReplay && (
-        <div
-          className="wb-replay-persist-wrapper"
-          data-testid="wb-replay-persist-wrapper"
-          aria-hidden={reviewSurface !== "replay"}
-          style={{
-            display: reviewSurface === "replay" ? "block" : "none",
-          }}
-        >
-          <WhiteboardReplayInFrame
-            eventsBlobUrl={payload.eventsProxyUrl}
-            audioSegments={payload.audioSegments}
-            whiteboardSessionId={whiteboardSessionId}
-            studentName={payload.studentName}
-            durationSeconds={payload.durationSeconds}
-            reviewHref={reviewHref}
-            onBackToNotes={returnToHero}
-            notesDrawerToggle={
-              <ReplayNotesDrawerToggle
-                open={drawerOpen}
-                onOpenChange={handleDrawerOpenChange}
-                toggleRef={drawerToggleRef}
-              />
-            }
-            drawerSlot={
-              <ReplayNotesDrawerPanel
-                open={drawerOpen}
-                onOpenChange={handleDrawerOpenChange}
+        <main className="wb-review-main-frame" data-testid="wb-review-main-frame">
+          {!isReplay && (
+            <div
+              className="wb-review-hero-board"
+              data-testid="wb-review-hero-layout"
+            >
+              <div className="wb-review-board-column">
+                {payload ? (
+                  <ReviewBoardThumbnail
+                    eventsProxyUrl={payload.eventsProxyUrl}
+                    whiteboardSessionId={whiteboardSessionId}
+                  />
+                ) : (
+                  <div
+                    data-testid="wb-review-board-thumbnail-loading"
+                    className="wb-review-board-thumbnail-placeholder"
+                  />
+                )}
+                {canReplay ? (
+                  <button
+                    type="button"
+                    className="btn primary"
+                    data-testid="wb-review-enter-replay"
+                    onClick={enterReplay}
+                  >
+                    ▶ Replay session
+                  </button>
+                ) : payload ? (
+                  <div
+                    className="muted"
+                    data-testid="wb-review-no-recording"
+                    style={{ fontSize: 13, padding: "8px 0" }}
+                  >
+                    No recording available.
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          )}
+
+          {hasMountedReplay && payload && (
+            <div
+              className="wb-review-replay-pane"
+              data-testid="wb-replay-persist-wrapper"
+              aria-hidden={!isReplay}
+              hidden={!isReplay}
+            >
+              <WhiteboardReplayInFrame
+                embedded
+                eventsBlobUrl={payload.eventsProxyUrl}
+                audioSegments={payload.audioSegments}
                 whiteboardSessionId={whiteboardSessionId}
-                studentId={studentId}
-                initialNote={payload.initialNote}
-                hasAudio={payload.hasAudio}
-                fields={notesFields}
-                onFieldsChange={setNotesFields}
-                isDirty={isDirty}
-                onSaved={handleNoteSaved}
-                toggleRef={drawerToggleRef}
+                studentName={payload.studentName}
+                durationSeconds={payload.durationSeconds}
               />
-            }
-          />
-        </div>
-      )}
+            </div>
+          )}
+        </main>
+      </div>
     </div>
   );
 }

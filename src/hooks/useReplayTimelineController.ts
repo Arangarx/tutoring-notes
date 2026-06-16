@@ -93,6 +93,7 @@ export function useReplayTimelineController(
   const segmentSwappingRef = useRef(false);
   const hasEverPlayedRef = useRef(false);
   const scrubWasPlayingRef = useRef(false);
+  const scrubberMaxRef = useRef(1);
   const synthAnimFrameRef = useRef(0);
   const synthStartElapsedMsRef = useRef(0);
 
@@ -116,6 +117,7 @@ export function useReplayTimelineController(
     log,
     noAudioMaxMs,
   });
+  scrubberMaxRef.current = scrubberMax;
 
   const activeSegment =
     effectiveSegments[activeSegmentIndex] ?? effectiveSegments[0] ?? null;
@@ -355,24 +357,32 @@ export function useReplayTimelineController(
     }
     if (!hasEverPlayedRef.current) {
       hasEverPlayedRef.current = true;
-      seek(0, { play: true, paint: false });
-      return;
+      if (globalMs === 0) {
+        seek(0, { play: true, paint: false });
+        return;
+      }
     }
     if (hasAudio) {
+      const { segmentIndex, localMs } = globalMsToSegmentLocal(
+        globalMs,
+        audioTimeline
+      );
+      loadSegmentAt(segmentIndex, localMs, true);
       setPlaying(true);
-      void audioRef.current?.play();
-    } else {
-      const startFrom = globalMs >= noAudioMaxMs ? 0 : globalMs;
-      if (startFrom === 0) {
-        setGlobalMs(0);
-        applySceneAtRef.current(0);
-      }
-      startSynthFrom(startFrom);
+      return;
     }
+    const startFrom = globalMs >= noAudioMaxMs ? 0 : globalMs;
+    if (startFrom === 0) {
+      setGlobalMs(0);
+      applySceneAtRef.current(0);
+    }
+    startSynthFrom(startFrom);
   }, [
     applySceneAtRef,
+    audioTimeline,
     globalMs,
     hasAudio,
+    loadSegmentAt,
     noAudioMaxMs,
     seek,
     startSynthFrom,
@@ -463,6 +473,17 @@ export function useReplayTimelineController(
     const loop = createThrottledPlayLoop({
       getTimeMs: getGlobalTimeMs,
       apply: (ms) => {
+        const cap = scrubberMaxRef.current;
+        if (ms >= cap) {
+          const endMs = cap;
+          setGlobalMs(endMs);
+          applySceneAtRef.current(endMs);
+          isAtEndRef.current = true;
+          setPlaying(false);
+          el.pause();
+          loop.pause();
+          return;
+        }
         setGlobalMs(ms);
         applySceneAtRef.current(ms);
       },
@@ -548,17 +569,29 @@ export function useReplayTimelineController(
 
   const handleScrubChange = useCallback(
     (ms: number) => {
+      const clamped = Math.max(0, Math.min(ms, scrubberMaxRef.current));
       if (hasAudio) {
-        seek(ms, { play: false, paint: false });
+        if (clamped >= scrubberMaxRef.current) {
+          isAtEndRef.current = true;
+          seek(clamped, { play: false, paint: false });
+          audioRef.current?.pause();
+          setPlaying(false);
+          return;
+        }
+        isAtEndRef.current = false;
+        seek(clamped, { play: false, paint: false });
       } else {
         if (synthAnimFrameRef.current !== 0) {
           cancelAnimationFrame(synthAnimFrameRef.current);
           synthAnimFrameRef.current = 0;
         }
-        synthStartElapsedMsRef.current = ms;
-        setGlobalMs(ms);
-        applySceneAtRef.current(ms);
+        synthStartElapsedMsRef.current = clamped;
+        setGlobalMs(clamped);
+        applySceneAtRef.current(clamped);
         if (playing) setPlaying(false);
+        if (clamped >= scrubberMaxRef.current) {
+          isAtEndRef.current = true;
+        }
       }
     },
     [applySceneAtRef, hasAudio, playing, seek]
@@ -566,12 +599,19 @@ export function useReplayTimelineController(
 
   const handleScrubPointerUp = useCallback(
     (ms: number) => {
-      if (hasAudio) {
-        seek(ms, { play: scrubWasPlayingRef.current, paint: false });
+      hasEverPlayedRef.current = true;
+      const clamped = Math.max(0, Math.min(ms, scrubberMaxRef.current));
+      if (clamped >= scrubberMaxRef.current) {
+        isAtEndRef.current = true;
       } else {
-        synthStartElapsedMsRef.current = ms;
-        setGlobalMs(ms);
-        applySceneAtRef.current(ms);
+        isAtEndRef.current = false;
+      }
+      if (hasAudio) {
+        seek(clamped, { play: scrubWasPlayingRef.current, paint: false });
+      } else {
+        synthStartElapsedMsRef.current = clamped;
+        setGlobalMs(clamped);
+        applySceneAtRef.current(clamped);
       }
     },
     [applySceneAtRef, hasAudio, seek]

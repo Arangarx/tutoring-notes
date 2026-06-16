@@ -799,6 +799,19 @@ Items from the 2026-06-02 brand review (Andrew + wife) on landing + Features pag
 
 ---
 
+---
+
+## Phase 1 in-frame review — follow-ups (2026-06-15)
+
+| Item | Priority | Notes |
+|------|----------|-------|
+| **WB-STYLE-MENU-CLOSE — style-options submenu should close on click-outside** | Low | Currently waits for a stroke to finish before closing the style-options submenu; should dismiss on click-outside like other popovers. Found during Phase 1 in-frame review smoke (2026-06-14). |
+| **WB-NOTES-SKELETON — polished blurred-line skeleton during transcribe+reduce** | Low | Inline "Generating notes…" shipped in unified review surface; replace with polished blurred-line skeleton when worth the polish pass. |
+| **WB-TRANSCRIBE-LATENCY — near-silent / short sessions** | Medium (backend) | A ~2-min near-zero-audio session took very long to transcribe. Backend watch item — recording re-arch / notes pipeline (currently parked). |
+| **WB-REVIEW-HEADER-POLISH — top review header feels basic** | Low | Visual polish pass on the session-review top bar after unified-surface correction lands. |
+
+---
+
 ## Recording re-architecture — Phase 1 follow-ups
 
 Cross-ref: [`docs/handoff/recording-rearchitecture-design-2026-06-05.md`](handoff/recording-rearchitecture-design-2026-06-05.md). Slice 3 (auto-notes / notes-bridge) ships on `feat/recording-p1-slice3-autonotes`.

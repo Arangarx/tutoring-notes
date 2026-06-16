@@ -1,6 +1,7 @@
 "use client";
 
 import { formatReplayDurationMs } from "@/lib/whiteboard/replay-helpers";
+import { WbCustomSlider } from "@/components/whiteboard/chrome/WbCustomSlider";
 
 export type ReplayTimelineScrubberProps = {
   globalMs: number;
@@ -26,6 +27,8 @@ export function ReplayTimelineScrubber({
   onScrubPointerUp,
 }: ReplayTimelineScrubberProps) {
   const clampedValue = Math.min(globalMs, scrubberMax);
+  const maxMs = Math.max(scrubberMax, 1);
+
   return (
     <div
       className="mynk-wb-replay-timeline"
@@ -41,20 +44,21 @@ export function ReplayTimelineScrubber({
         >
           {playing ? "Pause" : "Play"}
         </button>
-        <input
-          type="range"
-          min={0}
-          max={scrubberMax}
-          value={clampedValue}
-          data-testid="wb-replay-global-seek"
-          aria-label="Replay position"
-          className="mynk-wb-replay-timeline__seek"
-          onPointerDown={onScrubPointerDown}
-          onChange={(ev) => onScrubChange(Number(ev.target.value))}
-          onPointerUp={(ev) =>
-            onScrubPointerUp(Number((ev.target as HTMLInputElement).value))
-          }
-        />
+        <div className="mynk-wb-replay-timeline__seek-wrap">
+          <WbCustomSlider
+            value={clampedValue}
+            min={0}
+            max={maxMs}
+            step={Math.max(1, Math.round(maxMs / 1000))}
+            ariaLabel="Replay position"
+            testId="wb-replay-global-seek"
+            thumbTestId="wb-replay-global-seek-thumb"
+            className="mynk-wb-replay-timeline__seek"
+            onPointerDown={onScrubPointerDown}
+            onChange={onScrubChange}
+            onPointerUp={onScrubPointerUp}
+          />
+        </div>
         <span
           className="muted mynk-wb-replay-timeline__elapsed"
           style={{ fontSize: 11 }}

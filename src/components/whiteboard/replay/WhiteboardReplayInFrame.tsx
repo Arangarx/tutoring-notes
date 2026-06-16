@@ -19,10 +19,8 @@ export type WhiteboardReplayInFrameProps = {
   whiteboardSessionId?: string;
   studentName?: string;
   durationSeconds?: number | null;
-  reviewHref?: string;
-  onBackToNotes?: () => void;
-  notesDrawerToggle?: React.ReactNode;
-  drawerSlot?: React.ReactNode;
+  /** When true, fills parent frame instead of viewport-fixed chrome. */
+  embedded?: boolean;
 };
 
 function formatDuration(seconds: number | null | undefined): string {
@@ -43,10 +41,7 @@ export function WhiteboardReplayInFrame({
   whiteboardSessionId,
   studentName,
   durationSeconds,
-  reviewHref,
-  onBackToNotes,
-  notesDrawerToggle,
-  drawerSlot,
+  embedded = false,
 }: WhiteboardReplayInFrameProps) {
   const applySceneAtRef = useRef<(timeMs: number) => void>(() => {});
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
@@ -77,7 +72,6 @@ export function WhiteboardReplayInFrame({
     paintReady,
     resolveAssetUrl,
     seek,
-    pause,
     togglePlay,
     handleScrubPointerDown,
     handleScrubChange,
@@ -85,7 +79,6 @@ export function WhiteboardReplayInFrame({
     setPaintReady,
   } = controller;
 
-  // B2: paint t=0 before reveal on first ready
   useEffect(() => {
     if (loadState.kind !== "ready" || !log) return;
     if (entryPaintDoneRef.current) return;
@@ -110,8 +103,7 @@ export function WhiteboardReplayInFrame({
   if (loadState.kind === "loading") {
     return (
       <div
-        className="card"
-        style={{ padding: 24, textAlign: "center" }}
+        className="wb-replay-in-frame-loading"
         data-testid="wb-replay-in-frame-loading"
       >
         <div className="muted">Loading whiteboard recording…</div>
@@ -147,31 +139,6 @@ export function WhiteboardReplayInFrame({
   const needsReplayExcalCanvas = log.events.length > 0 || hasAudio;
   const multiSegment = effectiveSegments.length > 1;
 
-  const trailingActions = (
-    <>
-      {notesDrawerToggle}
-      {onBackToNotes && (
-        <button
-          type="button"
-          className="btn"
-          style={{ fontSize: 12 }}
-          data-testid="wb-replay-back-to-notes"
-          onClick={() => {
-            pause();
-            onBackToNotes();
-          }}
-        >
-          Back to notes
-        </button>
-      )}
-      {reviewHref && (
-        <a href={reviewHref} className="btn" style={{ fontSize: 12 }}>
-          Open full replay
-        </a>
-      )}
-    </>
-  );
-
   const timelineStrip = (
     <ReplayTimelineScrubber
       globalMs={globalMs}
@@ -197,7 +164,7 @@ export function WhiteboardReplayInFrame({
       applySceneAtRef={applySceneAtRef}
       containerRef={canvasContainerRef}
       gateVisibility
-      style={{ height: "100%", minHeight: 280 }}
+      className="wb-replay-canvas-host"
     />
   ) : (
     <div className="muted" style={{ padding: 24 }}>
@@ -209,7 +176,6 @@ export function WhiteboardReplayInFrame({
     layoutMode,
     studentName,
     durationLabel: formatDuration(durationSeconds),
-    trailingActions,
     canvas: replayCanvas,
     timelineStrip,
     nonVisualMounts:
@@ -227,7 +193,10 @@ export function WhiteboardReplayInFrame({
   });
 
   return (
-    <div data-testid="wb-replay-in-frame" className="mynk-wb-replay-root">
+    <div
+      data-testid="wb-replay-in-frame"
+      className={`mynk-wb-replay-root${embedded ? " mynk-wb-replay-root--embedded" : ""}`}
+    >
       {multiSegment && (
         <div
           className="mynk-wb-replay-multi-segment-chip"
@@ -252,8 +221,7 @@ export function WhiteboardReplayInFrame({
           {...chromeSlots}
         />
       </WbRoleProvider>
-      {drawerSlot}
-      <div className="muted" style={{ fontSize: 11, padding: "4px 8px" }}>
+      <div className="mynk-wb-replay-meta muted" style={{ fontSize: 11, padding: "4px 8px" }}>
         {log.events.length.toLocaleString()} events · log span{" "}
         {formatDuration(
           Math.floor(Math.max(log.durationMs, maxEventTimestampMs(log)) / 1000)

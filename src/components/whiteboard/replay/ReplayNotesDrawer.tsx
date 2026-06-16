@@ -1,5 +1,9 @@
 "use client";
 
+/**
+ * @deprecated Replaced by docked notes in SessionReviewMode unified surface (2026-06-15).
+ * Retained for reference; no longer mounted in the in-frame review flow.
+ */
 import { useCallback, useEffect, useRef } from "react";
 import TutorNotesSection, {
   type StructuredNoteFields,

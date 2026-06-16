@@ -73,8 +73,8 @@ type Props = {
   onFieldsChange?: (fields: StructuredFields) => void;
   /** When false, poll updates do not overwrite fields (S4). Default true. */
   pollSyncAllowed?: boolean;
-  /** Layout variant for drawer vs hero. */
-  variant?: "default" | "drawer";
+  /** Layout variant for hero vs docked replay panel. */
+  variant?: "default" | "drawer" | "docked";
 };
 
 // ---------------------------------------------------------------------------
@@ -334,7 +334,8 @@ export default function TutorNotesSection({
     <div
       className="card"
       style={{
-        padding: variant === "drawer" ? "10px 12px" : "14px 16px",
+        padding:
+          variant === "drawer" || variant === "docked" ? "10px 12px" : "14px 16px",
         display: "grid",
         gap: 12,
       }}
@@ -373,9 +374,15 @@ export default function TutorNotesSection({
         {timedOut && "Note generation timed out."}
       </div>
 
-      {/* Loading state */}
+      {/* Generating — keep form visible; inline status only */}
       {(isActive || (isNotStarted && hasAudio)) && !timedOut && (
-        <SkeletonNotes />
+        <p
+          className="muted"
+          data-testid="tutor-notes-generating"
+          style={{ margin: 0, fontSize: 13 }}
+        >
+          Generating notes…
+        </p>
       )}
 
       {/* Timeout defeat state */}
@@ -396,10 +403,10 @@ export default function TutorNotesSection({
         </div>
       )}
 
-      {/* Done: show editable structured form */}
-      {isDone && (
+      {/* Editable structured form — visible during generation and when done */}
+      {(isActive || isDone) && !timedOut && (
         <div data-testid="tutor-notes-content">
-          {note.found && note.isPartial && (
+          {isDone && note.found && note.isPartial && (
             <div
               style={{
                 display: "inline-flex",
@@ -452,7 +459,7 @@ export default function TutorNotesSection({
             />
           </div>
 
-          {saveError && (
+          {saveError && isDone && (
             <div
               role="alert"
               style={{
@@ -469,7 +476,7 @@ export default function TutorNotesSection({
             </div>
           )}
 
-          {savedInShell && (
+          {savedInShell && isDone && (
             <div
               role="status"
               style={{
@@ -491,34 +498,36 @@ export default function TutorNotesSection({
             </div>
           )}
 
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              marginTop: 12,
-              flexWrap: "wrap",
-            }}
-          >
-            <button
-              type="button"
-              className="btn primary"
-              onClick={handleSave}
-              disabled={saving || deleting || regenerating}
-              data-testid="wb-save-note"
+          {isDone && (
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                marginTop: 12,
+                flexWrap: "wrap",
+              }}
             >
-              {saving ? "Saving…" : "Save to notes"}
-            </button>
-            <button
-              type="button"
-              className="btn"
-              style={{ color: "var(--sign-out)", borderColor: "var(--error-border)" }}
-              onClick={handleDelete}
-              disabled={saving || deleting || regenerating}
-              data-testid="wb-delete-session"
-            >
-              {deleting ? "Deleting…" : "Cancel and delete session data"}
-            </button>
-          </div>
+              <button
+                type="button"
+                className="btn primary"
+                onClick={handleSave}
+                disabled={saving || deleting || regenerating}
+                data-testid="wb-save-note"
+              >
+                {saving ? "Saving…" : "Save to notes"}
+              </button>
+              <button
+                type="button"
+                className="btn"
+                style={{ color: "var(--sign-out)", borderColor: "var(--error-border)" }}
+                onClick={handleDelete}
+                disabled={saving || deleting || regenerating}
+                data-testid="wb-delete-session"
+              >
+                {deleting ? "Deleting…" : "Cancel and delete session data"}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
