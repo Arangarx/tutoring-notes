@@ -1,7 +1,7 @@
 # Phase 1 — WB Review Correct (in-frame) — smoke runbook
 
 **Branch:** `phase1/wb-review-correct`  
-**Tip commit:** `[5aa4ce4](https://github.com/Arangarx/tutoring-notes/commit/5aa4ce4)` *(fix(resize): correct viewport resize re-centering — frame-to-frame, live + replay)*  
+**Tip commit:** `[ed04279](https://github.com/Arangarx/tutoring-notes/commit/ed04279)` *(fix(replay): center-match recorded camera per frame — no Play snap-back)*  
 **Preview:** [tutoring-notes-git-phase1-wb-rev-46b0a1](https://tutoring-notes-git-phase1-wb-rev-46b0a1-arangarx-5209s-projects.vercel.app)
 
 > **Smoke focus = unified in-frame review surface** (one `TutorNotesSection` reflows prominent ↔ docked with **animated** transition; replay fills main frame inside live WB chrome; persist-once replay; **Hide replay** collapse). Standalone admin/share replay scrubber parity remains **DEFERRED** — regression-check only (D-items).
@@ -236,7 +236,7 @@
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes: Prior fix (b7b8d3e) was wrong — root cause: viewportSnapshotRef captured scrollX BEFORE camera fitter ran (applySceneAt fires first in the same useEffect, then fitter.fit() sets correct scrollX), so frozenSnapshot.scrollX=0 (Excalidraw's initial default) instead of post-camera-fit value. computeResizeScroll then computed scene center as fullScreenWidth/2 ("where center would have been at full screen"). Corrected fix (this commit): frame-to-frame ResizeObserver — track prevWidth/prevHeight refs updated on every callback; read st.scrollX live from api.getAppState() at resize time (always post-camera-fit by then); no frozen snapshot, no applySceneAt cooperation, no debounce. Same formula applied additively to live board (additive-only: new useEffect + wbCanvasRef, no existing logic modified). 8 new tests in scene-paint.test.ts incl. Andrew's grid vectors + RED-BEFORE stale-scrollX pin.**
+**Notes: LIVE board confirmed correct by Andrew (verbal). REPLAY was still snapping back: on Play, applySceneAt re-applied raw record-time scrollX/scrollY every tick → overwrote ResizeObserver recenter + mis-centered when replay viewport ≠ record-time viewport. FIX (ed04279): replay now treats the recorded camera as scene-center + zoom and re-derives scroll for the CURRENT replay container every painted frame (replayScrollFromRecordedViewport, same center-match math as live student-follow mode B). Zoom preserved exactly. Recording now auto-captures .mynk-wb-canvas dims on viewport events → exact center for NEW sessions. LEGACY CAVEAT: pre-fix recordings (no stored dims) fall back to window.innerWidth/innerHeight as record-size proxy — approximate (window ≠ canvas region, which is smaller by tool strip + top bar), so legacy replays may be slightly off-center but should NOT snap back on Play. For the definitive center check, record a NEW session on this commit. +6 oracle-based center-match tests in viewport-align.test.ts. Prior live-board fix (5aa4ce4) untouched.**
 
 ---
 
