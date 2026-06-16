@@ -65,11 +65,22 @@ export type AttachWebmDurationFixOptions = {
   onLoadFailed?: () => void;
 };
 
+export type AttachWebmDurationFixResult = {
+  /** Remove all listeners added by the fix. Call from useEffect cleanup. */
+  cleanup: () => void;
+  /**
+   * Cancel any pending durationchange reset-to-0.
+   * Call this when the user (or player code) has intentionally seeked to a
+   * specific position so the fix doesn't clobber it on durationchange.
+   */
+  cancelPendingFix: () => void;
+};
+
 export function attachWebmDurationFix(
   audio: HTMLAudioElement,
   mimeType: string | null | undefined,
   options: AttachWebmDurationFixOptions = {}
-): () => void {
+): AttachWebmDurationFixResult {
   const isWebm = (mimeType ?? "").toLowerCase().includes("webm");
 
   // State lives in closures (not React refs) so this helper is
@@ -98,12 +109,15 @@ export function attachWebmDurationFix(
   function onDurationChange() {
     if (!needsFix) return;
     if (Number.isFinite(audio.duration) && audio.duration > 0) {
+      needsFix = false;
+      // Don't reset position if audio is actively playing — the play() call
+      // already positioned it correctly; resetting would jump the playhead.
+      if (!audio.paused && !audio.ended) return;
       try {
         audio.currentTime = 0;
       } catch {
         // Reset to 0 is best-effort; ignore.
       }
-      needsFix = false;
     }
   }
 
@@ -165,9 +179,14 @@ export function attachWebmDurationFix(
     }
   }
 
-  return () => {
-    audio.removeEventListener("loadedmetadata", onLoadedMetadata);
-    audio.removeEventListener("durationchange", onDurationChange);
-    audio.removeEventListener("error", onError);
+  return {
+    cleanup: () => {
+      audio.removeEventListener("loadedmetadata", onLoadedMetadata);
+      audio.removeEventListener("durationchange", onDurationChange);
+      audio.removeEventListener("error", onError);
+    },
+    cancelPendingFix: () => {
+      needsFix = false;
+    },
   };
 }

@@ -164,6 +164,7 @@ export default function TutorNotesSection({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedInShell, setSavedInShell] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const startTimeRef = useRef<number>(Date.now());
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -293,32 +294,23 @@ export default function TutorNotesSection({
     }
   }, [whiteboardSessionId, fields, onSaved, router, studentId]);
 
-  const handleDelete = useCallback(async () => {
-    if (
-      !window.confirm(
-        "Are you sure you want to delete this session and all related data?"
-      )
-    ) {
-      return;
-    }
-
+  const handleDelete = useCallback(() => {
+    setShowDeleteConfirm(false);
     setDeleting(true);
-    try {
-      const result = await deleteWhiteboardSessionAndDataAction(whiteboardSessionId);
+    // Navigate away immediately (optimistic). Fire delete in background;
+    // cron sweep reconciles any orphaned rows if the delete fails.
+    router.push(`/admin/students/${studentId}`);
+    void deleteWhiteboardSessionAndDataAction(whiteboardSessionId).then((result) => {
       if (!result.ok) {
-        // Log for observability; cron sweep will reconcile orphaned rows.
         console.error(
           `[nsi] wbsid=${whiteboardSessionId} delete_failed err=${result.error} — navigating to student detail`
         );
       }
-    } catch (err: unknown) {
+    }).catch((err: unknown) => {
       console.error(
         `[nsi] wbsid=${whiteboardSessionId} delete_exception err=${err instanceof Error ? err.message : String(err)} — navigating to student detail`
       );
-    }
-    // Always navigate to the student detail regardless of delete outcome.
-    // The cron sweep reconciles any orphaned session data.
-    router.push(`/admin/students/${studentId}`);
+    });
   }, [whiteboardSessionId, router, studentId]);
 
   // -------------------------------------------------------------------------
@@ -520,12 +512,57 @@ export default function TutorNotesSection({
                 type="button"
                 className="btn"
                 style={{ color: "var(--sign-out)", borderColor: "var(--error-border)" }}
-                onClick={handleDelete}
+                onClick={() => setShowDeleteConfirm(true)}
                 disabled={saving || deleting || regenerating}
                 data-testid="wb-delete-session"
               >
                 {deleting ? "Deleting…" : "Cancel and delete session data"}
               </button>
+            </div>
+          )}
+
+          {showDeleteConfirm && (
+            <div
+              role="alertdialog"
+              aria-label="Confirm delete"
+              style={{
+                display: "grid",
+                gap: 8,
+                marginTop: 8,
+                padding: "10px 12px",
+                background: "var(--error-soft)",
+                border: "1px solid var(--error-border)",
+                borderRadius: 6,
+                fontSize: 13,
+              }}
+              data-testid="wb-delete-confirm"
+            >
+              <span style={{ fontWeight: 600, color: "var(--sign-out)" }}>
+                Delete this session and all recording data?
+              </span>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="btn"
+                  style={{
+                    background: "var(--sign-out)",
+                    color: "white",
+                    borderColor: "var(--sign-out)",
+                  }}
+                  onClick={handleDelete}
+                  data-testid="wb-delete-confirm-yes"
+                >
+                  Yes, delete
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  data-testid="wb-delete-confirm-cancel"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           )}
         </div>

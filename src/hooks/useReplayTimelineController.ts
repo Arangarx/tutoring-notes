@@ -87,6 +87,7 @@ export function useReplayTimelineController(
   const [replayExcaliRestoreReady, setReplayExcaliRestoreReady] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const cancelWebmFixRef = useRef<(() => void) | null>(null);
   const activeSegmentIndexRef = useRef(0);
   const isAtEndRef = useRef(false);
   const globalMsRef = useRef(0);
@@ -255,10 +256,23 @@ export function useReplayTimelineController(
 
       const seekSec = Math.max(0, localMs / 1000);
       const applySeek = () => {
+        // Cancel any pending WebM duration-fix reset so a durationchange
+        // firing after this seek cannot clobber the intended position.
+        cancelWebmFixRef.current?.();
         try {
           el.currentTime = seekSec;
         } catch {
-          // metadata may not be ready
+          // If readyState < HAVE_METADATA, wait for canplay before seeking + playing.
+          if (autoplay) {
+            const onCanPlay = () => {
+              el.removeEventListener("canplay", onCanPlay);
+              cancelWebmFixRef.current?.();
+              try { el.currentTime = seekSec; } catch { /* best-effort */ }
+              void el.play();
+            };
+            el.addEventListener("canplay", onCanPlay);
+            return;
+          }
         }
         playLoopRef.current?.seek();
         if (autoplay) void el.play();
@@ -468,7 +482,7 @@ export function useReplayTimelineController(
     if (!hasAudio || !replayExcaliRestoreReady) return;
     const el = audioRef.current;
     if (!el) return;
-    const detach = attachWebmDurationFix(el, replayAudioMime, {
+    const { cleanup, cancelPendingFix } = attachWebmDurationFix(el, replayAudioMime, {
       onMetadataLoaded: () => {
         setAudioReady(true);
         if (Number.isFinite(el.duration) && el.duration > 0) {
@@ -478,7 +492,11 @@ export function useReplayTimelineController(
         }
       },
     });
-    return detach;
+    cancelWebmFixRef.current = cancelPendingFix;
+    return () => {
+      cleanup();
+      cancelWebmFixRef.current = null;
+    };
   }, [hasAudio, replayAudioMime, replayExcaliRestoreReady]);
 
   // Preload next segments

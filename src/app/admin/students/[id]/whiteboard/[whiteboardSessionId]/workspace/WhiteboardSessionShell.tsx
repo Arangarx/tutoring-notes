@@ -72,6 +72,7 @@ export function WhiteboardSessionShell({
   if (mode === "review") {
     return (
       <SessionReviewMode
+        key={whiteboardSessionId}
         whiteboardSessionId={whiteboardSessionId}
         studentId={studentId}
       />

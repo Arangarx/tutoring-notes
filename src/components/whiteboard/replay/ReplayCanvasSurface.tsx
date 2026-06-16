@@ -217,10 +217,14 @@ export function ReplayCanvasSurface({
         const ch = rect.height;
         if (!(cw > 0 && ch > 0)) return;
 
+        // Scene point currently visible at the viewport center:
+        //   scene_x = (viewport_x - scrollX) / zoom
+        // After resize to new (cw, ch), keep that scene point at new center:
+        //   nextScrollX = cw/2 - sceneCenterX * zoom
         const sceneCenterX = (cw / 2 - scrollX) / zoom;
         const sceneCenterY = (ch / 2 - scrollY) / zoom;
-        const nextScrollX = cw / 2 / zoom - sceneCenterX;
-        const nextScrollY = ch / 2 / zoom - sceneCenterY;
+        const nextScrollX = cw / 2 - sceneCenterX * zoom;
+        const nextScrollY = ch / 2 - sceneCenterY * zoom;
 
         api.updateScene({
           elements: lastSceneElementsRef.current as unknown[],
@@ -258,9 +262,6 @@ export function ReplayCanvasSurface({
       data-replay-viewport-metrics=""
       className={className}
       style={{
-        flex: 1,
-        minHeight: 0,
-        position: "relative",
         opacity,
         transition: gateVisibility ? "opacity 0.15s ease" : undefined,
         ...style,
@@ -269,6 +270,7 @@ export function ReplayCanvasSurface({
       <Excalidraw
         viewModeEnabled
         gridModeEnabled={false}
+        zenModeEnabled
         theme={excalidrawTheme}
         validateEmbeddable={validateExcalidrawEmbeddable}
         renderEmbeddable={renderGraphEmbeddable}
@@ -284,7 +286,7 @@ export function ReplayCanvasSurface({
   );
 }
 
-async function registerImageAssets(
+export async function registerImageAssets(
   api: ReplayApi,
   scene: ReadonlyMap<string, WBElement>,
   fetchUrls: string[],

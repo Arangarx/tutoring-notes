@@ -20,6 +20,8 @@ import {
   getReplayCachedRestoreElements,
   preloadReplayRestoreElements,
 } from "@/lib/whiteboard/replay-restore-elements";
+import { registerImageAssets } from "@/components/whiteboard/replay/ReplayCanvasSurface";
+import type { ReplayApi } from "@/lib/whiteboard/replay-helpers";
 
 type Props = {
   eventsProxyUrl: string;
@@ -98,27 +100,66 @@ export function ReviewBoardThumbnail({
   const paintFinalFrame = useCallback(() => {
     if (!api || !log || paintedRef.current) return;
     const totalMs = Math.max(log.durationMs, maxEventTimestampMs(log));
+    const registeredAssetUrls = new Set<string>();
     const painter = createScenePainter({
       log,
       api,
       restoreElements: getReplayCachedRestoreElements() ?? undefined,
-      registeredAssetUrls: new Set(),
+      registeredAssetUrls,
     });
     const result = painter.applyAt(totalMs);
     lastElementsRef.current = result.paintedElements;
-    paintedRef.current = true;
+
+    // Register any image assets the scene references (mirrors ReplayCanvasSurface).
+    if (result.newAssetUrls.length > 0) {
+      const resolvedUrls = resolveAssetUrl
+        ? result.newAssetUrls.map(resolveAssetUrl)
+        : result.newAssetUrls;
+      void registerImageAssets(
+        api as unknown as ReplayApi,
+        result.scene,
+        resolvedUrls,
+        result.newAssetUrls
+      );
+    }
 
     const container = containerRef.current;
-    if (container) {
-      const fitter = createCameraFitter({
-        api,
-        container,
-        getElements: () => lastElementsRef.current,
-        zoom: 1,
+    if (!container || container.clientWidth === 0 || container.clientHeight === 0) {
+      // Container not laid out yet — set up a ResizeObserver to retry.
+      // Do NOT mark paintedRef here so we try again once dimensions arrive.
+      if (!container) return;
+      const ro = new ResizeObserver(() => {
+        if (container.clientWidth > 0 && container.clientHeight > 0) {
+          ro.disconnect();
+          // Re-run fit now that the container has dimensions.
+          const fitter = createCameraFitter({
+            api,
+            container,
+            getElements: () => lastElementsRef.current,
+            zoom: 1,
+            onFit: () => {
+              paintedRef.current = true;
+            },
+          });
+          fitter.fit();
+        }
       });
-      fitter.fit();
+      ro.observe(container);
+      return;
     }
-  }, [api, log]);
+
+    const fitter = createCameraFitter({
+      api,
+      container,
+      getElements: () => lastElementsRef.current,
+      zoom: 1,
+      onFit: () => {
+        // Only mark painted after fit actually succeeds.
+        paintedRef.current = true;
+      },
+    });
+    fitter.fit();
+  }, [api, log, resolveAssetUrl]);
 
   useEffect(() => {
     paintFinalFrame();
@@ -173,6 +214,7 @@ export function ReviewBoardThumbnail({
       <ExcalidrawDynamic
         viewModeEnabled
         gridModeEnabled={false}
+        zenModeEnabled
         theme={excalidrawTheme}
         name="wb-review-thumbnail"
         UIOptions={{ canvasActions: { saveToActiveFile: false } }}

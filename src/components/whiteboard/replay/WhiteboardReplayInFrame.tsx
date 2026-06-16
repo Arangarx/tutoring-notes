@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { maxEventTimestampMs } from "@/lib/whiteboard/event-log";
 import { useReplayTimelineController } from "@/hooks/useReplayTimelineController";
 import type { ReplayAudioSegment } from "@/lib/whiteboard/replay-helpers";
@@ -49,6 +49,12 @@ export function WhiteboardReplayInFrame({
   const applySceneAtRef = useRef<(timeMs: number) => void>(() => {});
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const entryPaintDoneRef = useRef(false);
+
+  // Reset entry-paint gate when the events URL changes (new session loaded
+  // into the same component instance without a full unmount).
+  useEffect(() => {
+    entryPaintDoneRef.current = false;
+  }, [eventsBlobUrl]);
   const { layoutMode, orientation } = useWbLayoutMode();
 
   const controller = useReplayTimelineController({
@@ -75,12 +81,20 @@ export function WhiteboardReplayInFrame({
     paintReady,
     resolveAssetUrl,
     seek,
+    pause,
     togglePlay,
     handleScrubPointerDown,
     handleScrubChange,
     handleScrubPointerUp,
     setPaintReady,
   } = controller;
+
+  // Pause audio before collapsing back to notes-hero so the audio doesn't
+  // continue playing when the replay surface is visually hidden.
+  const handleHideReplay = useCallback(() => {
+    pause();
+    onHideReplay?.();
+  }, [pause, onHideReplay]);
 
   useEffect(() => {
     if (loadState.kind !== "ready" || !log) return;
@@ -179,7 +193,7 @@ export function WhiteboardReplayInFrame({
     layoutMode,
     studentName,
     durationLabel: formatDuration(durationSeconds),
-    onHideReplay,
+    onHideReplay: handleHideReplay,
     canvas: replayCanvas,
     timelineStrip,
     nonVisualMounts:

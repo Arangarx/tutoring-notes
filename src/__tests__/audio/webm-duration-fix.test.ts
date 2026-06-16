@@ -134,7 +134,7 @@ describe("attachWebmDurationFix", () => {
     const onLoadFailed = jest.fn();
     const audio = makeAudio();
     setDuration(audio, Infinity);
-    const detach = attachWebmDurationFix(audio, "audio/webm", {
+    const { cleanup: detach } = attachWebmDurationFix(audio, "audio/webm", {
       onMetadataLoaded,
       onLoadFailed,
     });
@@ -236,4 +236,41 @@ describe("attachWebmDurationFix", () => {
       expect(audio.currentTime).toBe(0);
     }
   );
+
+  it("does NOT reset currentTime while audio is playing (durationchange race)", () => {
+    const audio = makeAudio();
+    setDuration(audio, Infinity);
+    // Simulate playing state
+    Object.defineProperty(audio, "paused", { configurable: true, get: () => false });
+    Object.defineProperty(audio, "ended", { configurable: true, get: () => false });
+
+    attachWebmDurationFix(audio, "audio/webm;codecs=opus");
+    audio.dispatchEvent(new Event("loadedmetadata"));
+    // hack triggers, currentTime set to 1e101
+    const sentinelTime = audio.currentTime;
+    expect(sentinelTime).toBeGreaterThan(0);
+
+    setDuration(audio, 10);
+    // durationchange fires while playing — must NOT reset to 0
+    audio.dispatchEvent(new Event("durationchange"));
+    expect(audio.currentTime).toBe(sentinelTime);
+  });
+
+  it("cancelPendingFix prevents durationchange from resetting currentTime", () => {
+    const audio = makeAudio();
+    setDuration(audio, Infinity);
+
+    const { cancelPendingFix } = attachWebmDurationFix(audio, "audio/webm;codecs=opus");
+    audio.dispatchEvent(new Event("loadedmetadata"));
+    expect(audio.currentTime).toBeGreaterThan(0);
+
+    // Simulate user seeking to 5s
+    audio.currentTime = 5;
+    cancelPendingFix();
+
+    setDuration(audio, 10);
+    audio.dispatchEvent(new Event("durationchange"));
+    // With cancelPendingFix, the reset must be skipped
+    expect(audio.currentTime).toBe(5);
+  });
 });

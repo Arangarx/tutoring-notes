@@ -760,7 +760,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     if (!hasAudio || !replayExcaliRestoreReady) return;
     const el = audioRef.current;
     if (!el) return;
-    const detach = attachWebmDurationFix(el, replayAudioMime, {
+    const { cleanup: detach } = attachWebmDurationFix(el, replayAudioMime, {
       onMetadataLoaded: () => {
         setAudioReady(true);
         // Update resolved max with what we now know about this segment's

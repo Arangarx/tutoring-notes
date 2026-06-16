@@ -2107,7 +2107,7 @@
   flex: 1;
   min-height: 0;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
 }
 
 .mynk-wb-chrome[data-mode="replay"] .mynk-wb-replay-timeline {
@@ -2333,6 +2333,16 @@
   height: 100%;
 }
 
+/* Hide any Excalidraw UI controls that leak through in replay/thumbnail mode. */
+.wb-replay-canvas-host .layer-ui__wrapper,
+.wb-replay-canvas-host .excalidraw .scroll-back-to-content,
+.wb-replay-canvas-host [class*="scroll-back-to-content"],
+.wb-review-board-thumbnail .layer-ui__wrapper,
+.wb-review-board-thumbnail .excalidraw .scroll-back-to-content,
+.wb-review-board-thumbnail [class*="scroll-back-to-content"] {
+  display: none !important;
+}
+
 .wb-review-wb-topbar {
   flex-shrink: 0;
   z-index: 2;
@@ -2346,6 +2356,8 @@
   overflow: hidden;
   background: var(--card);
   position: relative;
+  /* Establish a low stacking context so overlays (theme dropdown) always win. */
+  z-index: 0;
 }
 
 .wb-review-board-thumbnail .excalidraw,
@@ -2359,6 +2371,8 @@
   min-height: 0;
   width: 100%;
   height: 100%;
+  /* Default: creates a stacking/positioning context for Excalidraw children. */
+  position: relative;
 }
 
 .wb-replay-in-frame-loading {
