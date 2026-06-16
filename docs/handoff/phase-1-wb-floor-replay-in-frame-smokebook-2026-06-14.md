@@ -1,7 +1,7 @@
 # Phase 1 — WB Review Correct (in-frame) — smoke runbook
 
 **Branch:** `phase1/wb-review-correct`  
-**Tip commit:** `[eb3468e](https://github.com/Arangarx/tutoring-notes/commit/eb3468e1a0be08c939dc53936525ec167382b1b7)`  
+**Tip commit:** `[38dcc63](https://github.com/Arangarx/tutoring-notes/commit/38dcc63)`  
 **Preview:** [tutoring-notes-git-phase1-wb-rev-46b0a1](https://tutoring-notes-git-phase1-wb-rev-46b0a1-arangarx-5209s-projects.vercel.app)
 
 > **Smoke focus = unified in-frame review surface** (one `TutorNotesSection` reflows prominent ↔ docked with **animated** transition; replay fills main frame inside live WB chrome; persist-once replay; **Hide replay** collapse). Standalone admin/share replay scrubber parity remains **DEFERRED** — regression-check only (D-items).
@@ -20,7 +20,7 @@
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes: Reset for 6th smoke @ eb3468e. FIX 4 (thumbnail WB theme): thumbnail now honors dark/light WB theme — dark board → dark bg thumbnail; re-exports on toggle. Prior fixes (B/C/D) still in place.**
+**Notes: Reset for 7th smoke @ 38dcc63. FIX 4 (thumbnail WB theme) + all prior fixes still in place. No changes to hero state in this commit.**
 
 ---
 
@@ -36,7 +36,7 @@
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes: Reset for 6th smoke @ eb3468e. FIX 1 (recursion guard) removes the RangeError stack overflow that crashed the replay on first paint, and FIX 2 (replaySettledRef) prevents the hero↔replay loop. These were the root cause of item 2 instability. Prior: canvas-nesting + animated-transition already fixed. Verify: smooth animated entry, canvas inside chrome, audio starts from beginning (not t=0 bug).**
+**Notes: Reset for 7th smoke @ 38dcc63. FIX 1 removes the RangeError stack overflow. FIX 2 prevents the hero↔replay loop. FIX 6 fixes the audio-from-t=0 bug on seek. Verify: smooth animated entry, canvas inside chrome, audio starts from beginning, Play after seek starts from seek position (not t=0).**
 
 ---
 
@@ -68,7 +68,7 @@
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes: Reset for 6th smoke @ eb3468e. FIX 1 (recursion guard) removes the stack overflow that crashed JS before any seek could fire. FIX 3 adds [avx] action=replay_scrub_seek console log — look for it on scrubber drop. Legacy seek contract still in place (Fix A from 5th smoke). Andrew must audible-confirm actual audio position after seek — automated console assert can only verify the seek LOG fires.**
+**Notes: Reset for 7th smoke @ 38dcc63. FIX 6 (pendingPlayRef): onPause handler is now suppressed while el.play() promise is in-flight, eliminating the competing-pause AbortError that caused audio to restart from t=0 after seek. scrubWasPlayingRef now uses el.paused (DOM ground truth) so wasPlaying is accurate. startPlay() centralises all el.play() calls + catches AbortError. Look for [avx] seek_set_currentTime, pre_play, audio_pause (reason=...), audio_play_event, audio_seeked_event, webmfix_reset_currentTime in console — these logs will reveal any remaining currentTime reset. Andrew MUST audible-confirm audio starts from the correct position after scrub + play.**
 
 ---
 
@@ -116,7 +116,7 @@
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes: Reset for 6th smoke @ eb3468e. FIX 1 removes the recursion crash that was preventing stable hide/return. FIX 2 (replaySettledRef) ensures hide-replay is a no-op until entry paint completes. Prior fix (init-effect never zeroes globalMs) still in place. Verify: hide → return → scrubber shows preserved position; re-enter plays from same point.**
+**Notes: Reset for 7th smoke @ 38dcc63. FIX 1 removes the recursion crash. FIX 2 (replaySettledRef) ensures hide-replay is a no-op until entry paint completes. Prior fix (init-effect never zeroes globalMs) still in place. Verify: hide → return → scrubber shows preserved position; re-enter plays from same point.**
 
 ---
 
@@ -234,7 +234,7 @@
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes: Reset for 6th smoke @ eb3468e. FIX 5: replaced createCameraFitter.fit() (bbox-refit flash) with center-preserving scroll math. viewportSnapshotRef captured after each applySceneAt; ResizeObserver computes new scrollX/scrollY so the pre-resize scene center stays at viewport center. Fallback to bbox-refit if no snapshot. Verify: no flash, content glides smoothly as window resizes.**
+**Notes: Reset for 7th smoke @ 38dcc63. FIX 5: center-preserving resize in place. FIX 6 also fixes React #418 hydration error (ThemeProvider now uses stable SSR initial state). Verify: no blank gap on resize; no console #418 error on any reload.**
 
 ---
 
