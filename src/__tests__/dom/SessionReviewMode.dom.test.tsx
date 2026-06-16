@@ -105,7 +105,7 @@ describe("SessionReviewMode unified surface", () => {
     expect(screen.queryByTestId("mock-start-new-session")).not.toBeInTheDocument();
   });
 
-  it("pins replay CTA with a flex-constrained thumbnail wrap in hero board column", async () => {
+  it("places replay CTA directly after a shrinkable thumbnail wrap in hero board column", async () => {
     render(
       <SessionReviewMode whiteboardSessionId="wbs-1" studentId="stu-1" />
     );
@@ -121,6 +121,8 @@ describe("SessionReviewMode unified surface", () => {
 
     const replayCta = screen.getByTestId("wb-review-enter-replay");
     expect(replayCta).toHaveClass("wb-review-board-cta");
+    // Wrap must not grow (flex: 0 1 auto) so CTA sits under thumbnail, not screen bottom.
+    expect(thumbnailWrap).not.toHaveStyle({ flex: "1 1 auto" });
     expect(thumbnailWrap.compareDocumentPosition(replayCta)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING
     );
