@@ -65,6 +65,7 @@ Not in priority order within sections — that comes when items move to a sprint
 
 | Item | Priority | Notes |
 |------|----------|-------|
+| **WB / site composition + de-duplication audit (Andrew 2026-06-17 — COMING, not yet scheduled)** | Tech-debt (architecture; not Phase 2 blocker) | Systematic pass to (a) decompose the whiteboard workspace — tutor `WhiteboardWorkspaceClient` (~5,050 LOC monolith) + student `StudentLiveWorkspaceClient` (~1,073 LOC) — into ONE role-parameterized component composed of library components/primitives, eliminating tutor/student duplication; (b) enforce the no-bespoke / compose-to-primitives / no-unjustified-duplication principle (`.cursor/rules/composition-no-duplication.mdc`) across the site — components, primitives, and behind-service code. **Interim debt (sanctioned):** the student may ship as its own page composed of shared components until this audit runs. Originally deferred until WB-in-master; building the student surfaced the coupling. Pairs with **WB-LEGACY-STUDENT-CLIENT-DELETE**. |
 | **WB-LEGACY-STUDENT-CLIENT-DELETE** | Low (cleanup after soak) | Delete orphaned `src/app/w/[joinToken]/StudentWhiteboardClient.tsx` after Andrew confirms new student shell in a **live** two-device session (smokebook PASS). File is intentionally left on disk unreferenced after hard-switch commit for reversibility margin only. |
 
 ---

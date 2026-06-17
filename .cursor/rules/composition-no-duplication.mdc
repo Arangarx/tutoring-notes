@@ -1,0 +1,12 @@
+---
+description: Composition over duplication — no bespoke code; compose from primitives and shared services; unjustified duplication is tracked debt.
+alwaysApply: true
+---
+
+# Composition over duplication — no bespoke code
+
+No bespoke code or components. Every component is a composition of smaller compositions, down to primitives; every primitive and component is reused, not re-implemented. No component, primitive, or behind-the-service (backend/service-layer) code may duplicate another **unless there is a specific, justified reason documented at the point of duplication.**
+
+When a feature seems to need new bespoke UI or logic: first compose it from existing library components/primitives and shared services. Introduce a NEW primitive only when nothing composable already exists.
+
+Duplication taken on for expediency (e.g. an interim separate page that copies an existing flow) is **tracked debt** — log it in `docs/BACKLOG.md` and it must be eliminated by the composition/de-duplication consolidation. "It was faster to copy" is not a justified reason; "the two genuinely diverge for <documented reason>" is.

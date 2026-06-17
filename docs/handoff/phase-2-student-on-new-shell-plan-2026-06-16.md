@@ -13,6 +13,8 @@
 > **Directives:** remove our in-app A/V permission gating (`AVPermissionsPrompt`); auto-enable A/V (browser-native getUserMedia prompts are the only acceptable prompt); the waiting room (P3) owns the consent decision. KEEP the recording-disclosure line (legal) and the student reliability banners (loading-guard / board-wait / material-missing) — those are NOT deltas to remove.
 >
 > **Architecture:** keep `StudentLiveWorkspaceClient` as the mount; compose the full chrome from the EXISTING shared components the tutor uses; gate deltas via `wb-role.tsx`. Do NOT route the student through the tutor engine. The "separate slim student client" design in the sections below is SUPERSEDED.
+>
+> **INTERIM ARCHITECTURE NOTE (Andrew 2026-06-17):** the student MAY ship as its own page for now, PROVIDED it is composed of shared/library components with NO bespoke duplication — not a hand-rolled parallel implementation. This separate-page split is explicitly **INTERIM DEBT** to be eliminated by the coming composition/de-duplication consolidation audit (see `docs/BACKLOG.md`), which will unify tutor + student into one role-parameterized component. Full tutor parity minus D1–D5 (and D6 if applicable) still applies. The earlier "keep `StudentLiveWorkspaceClient` as the mount" note stands ONLY as this interim arrangement, not as the end-state architecture.
 
 > **Branch:** `phase1/wb-review-correct` (execution may continue here or fork `phase2/wb-student-new-shell` off `v1-redesign` at Andrew's cut — do not assume merge order)  
 > **Program:** Experience-Driven Wedge — WB ground floor (Gate A2/A5: two-way sync + student-on-same-board)  
