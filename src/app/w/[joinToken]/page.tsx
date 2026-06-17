@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
-import { StudentWhiteboardClient } from "./StudentWhiteboardClient";
 import { StudentWhiteboardSessionShell } from "./StudentWhiteboardSessionShell";
 /**
  * Student-facing live whiteboard (Excalidraw + E2E sync, same room + key
@@ -18,7 +17,7 @@ import { StudentWhiteboardSessionShell } from "./StudentWhiteboardSessionShell";
  *   - `encryptionKey` (URL fragment) — the AES-GCM key for E2E
  *     encryption against the relay. Fragments are NEVER sent to the
  *     server (HTTP spec). The client extracts it in
- *     `StudentWhiteboardClient` and feeds it to `sync-client`.
+ *     `StudentLiveWorkspaceClient` and feeds it to `sync-client`.
  *
  * Server posture:
  *   - We do NOT run `requireStudentScope` here — the student is not
@@ -116,26 +115,8 @@ export default async function StudentWhiteboardPage({
     );
   }
 
-  const useNewShell = process.env.NEXT_PUBLIC_WB_STUDENT_NEW_SHELL === "1";
-
-  if (useNewShell) {
-    return (
-      <StudentWhiteboardSessionShell
-        whiteboardSessionId={tokenRow.whiteboardSession.id}
-        studentId={tokenRow.whiteboardSession.studentId}
-        joinToken={joinToken}
-        syncUrl={env.WHITEBOARD_SYNC_URL}
-        tutorName={tutorName}
-        initialActiveMs={tokenRow.whiteboardSession.activeMs ?? 0}
-        initialLastActiveAtIso={
-          tokenRow.whiteboardSession.lastActiveAt?.toISOString() ?? null
-        }
-      />
-    );
-  }
-
   return (
-    <StudentWhiteboardClient
+    <StudentWhiteboardSessionShell
       whiteboardSessionId={tokenRow.whiteboardSession.id}
       studentId={tokenRow.whiteboardSession.studentId}
       joinToken={joinToken}

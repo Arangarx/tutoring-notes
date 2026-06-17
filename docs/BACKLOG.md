@@ -61,6 +61,14 @@ Not in priority order within sections — that comes when items move to a sprint
 
 ---
 
+## P2 student shell — post-hard-switch follow-ups (2026-06-17)
+
+| Item | Priority | Notes |
+|------|----------|-------|
+| **WB-LEGACY-STUDENT-CLIENT-DELETE** | Low (cleanup after soak) | Delete orphaned `src/app/w/[joinToken]/StudentWhiteboardClient.tsx` after Andrew confirms new student shell in a **live** two-device session (smokebook PASS). File is intentionally left on disk unreferenced after hard-switch commit for reversibility margin only. |
+
+---
+
 ## Smoke round 1 — master-cut branch findings (2026-06-11)
 
 > **Canonical triage:** [`docs/handoff/smoke-round-1-findings-2026-06-11.md`](handoff/smoke-round-1-findings-2026-06-11.md) — Andrew's full smoke of 8 overnight branches. BLOCKERs tracked there; non-blocker items below so they aren't lost.

@@ -622,15 +622,6 @@
 - **MUST NOT** be set in production until onboarding is complete. Premature activation locks out any parent without an AccountHolder account.
 - **Migration check**: when flipping to `true` in Vercel, confirm in `sal=` logs that no `action=access_denied_redirect` floods appear for active-session parents (would indicate accounts not yet created).
 
-### 10.10a NEXT_PUBLIC_WB_STUDENT_NEW_SHELL — student new chrome flag (P2, 2026-06-16)
-
-- **Assumption**: `NEXT_PUBLIC_WB_STUDENT_NEW_SHELL=1` routes `/w/[joinToken]` through `StudentLiveWorkspaceClient` + unified `WhiteboardSessionShell` (`role="student"`). Unset or `0` keeps legacy `StudentWhiteboardClient` (production default until Andrew two-device smoke PASS).
-- **Where baked in**:
-  - `src/app/w/[joinToken]/page.tsx` — flag gate at render time.
-  - `playwright.config.ts` webServer — set to `1` for `npm run test:wb-sync` (B1 merge gate).
-- **Production**: MUST stay off until retire-legacy gate (smokebook PASS + flag-on relay green + tutor regression item 15).
-- **Preview**: enable on branch under test only (Vercel env var per branch).
-
 ### 10.10 Dev-tools fixture dashboard — VERCEL_ENV gate
 
 - **Assumption**: The `/admin/dev-tools` page and its server actions are enabled only when `VERCEL_ENV !== 'production'`. The gate is checked in two places for defense-in-depth:
