@@ -1653,8 +1653,22 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     const vidTracks = localVideoStream?.getVideoTracks() ?? [];
     for (const t of audTracks) {
       try {
-        mesh.addLocalTrackToAllPeers(t);
-        mesh.replaceLocalTrackOnAllPeers("audio", t);
+        const { addedPeerIds, skippedPeerIds } = mesh.addLocalTrackToAllPeers(t);
+        if (addedPeerIds.size > 0) {
+          // addTrack created new senders on these peers — drive renegotiation
+          // explicitly so the offer is guaranteed to be sent even if the
+          // browser doesn't reliably re-fire onnegotiationneeded while
+          // mid-negotiation.  Do NOT call replaceLocalTrackOnAllPeers here:
+          // replaceTrack(sameTrack) on a freshly-created sender is a no-op
+          // that can interfere with Chrome's pending onnegotiationneeded
+          // evaluation.
+          mesh.triggerRenegotiationOnPeers([...addedPeerIds]);
+        }
+        if (skippedPeerIds.size > 0) {
+          // Sender already existed (hotswap / device-switch path).
+          // replaceTrack performs an in-place track swap with no renegotiation.
+          mesh.replaceLocalTrackOnAllPeers("audio", t);
+        }
       } catch (err) {
         log.warn(
           `track-sync audio mesh sync threw: ${(err as Error)?.message ?? String(err)}`
@@ -1663,8 +1677,19 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     }
     for (const t of vidTracks) {
       try {
-        mesh.addLocalTrackToAllPeers(t);
-        mesh.replaceLocalTrackOnAllPeers("video", t);
+        const { addedPeerIds, skippedPeerIds } = mesh.addLocalTrackToAllPeers(t);
+        if (addedPeerIds.size > 0) {
+          // Late-added video track (student enabled cam after joining).
+          // Trigger explicit renegotiation rather than a replaceTrack no-op.
+          log.log(
+            `event=renegotiation-triggered peers=${[...addedPeerIds].join(",")} reason=late-add-video`
+          );
+          mesh.triggerRenegotiationOnPeers([...addedPeerIds]);
+        }
+        if (skippedPeerIds.size > 0) {
+          // Sender already existed — camera hotswap path.
+          mesh.replaceLocalTrackOnAllPeers("video", t);
+        }
       } catch (err) {
         log.warn(
           `track-sync video mesh sync threw: ${(err as Error)?.message ?? String(err)}`
