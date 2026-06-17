@@ -45,6 +45,24 @@ Not in priority order within sections — that comes when items move to a sprint
 
 ---
 
+## Near-immediate post-master priorities (2026-06-17)
+
+> Andrew reclassified 2026-06-17: items below start at or immediately after master cut — not Sarah ship-blockers, but higher priority than general post-master polish deferrals.
+
+### Full product usage instrumentation — NEAR-IMMEDIATE POST-MASTER (Andrew 2026-06-17)
+
+Reclassified from a pre-master gate → near-immediate post-master follow-up: the app MUST be fully instrumented for usage. **Rationale:** as a solo dev, first-party usage telemetry is the only feasible way to learn what's actually used and where users struggle — without it we're flying blind on the pilot. **Scope:** product usage events across the core flows — session lifecycle (create / join / waiting-room / live / end), whiteboard tool + page usage, notes generation + review, replay, share-link access, auth/login friction — surfaced into something the solo dev can actually query.
+
+**Constraints (do NOT violate when planning/building):**
+
+- **Founding principle (no dark patterns; total honesty + transparency):** instrumentation is for honest product learning; any user-facing engagement claim later derived from it must be evidence-backed with drilldowns (see the Experience-Driven Wedge program).
+- **Align with Wedge Phase 4 (first-party learner-type-keyed instrumentation):** this is the early/tactical version — design the taxonomy so Phase 4 builds on it, not a throwaway.
+- **Minor-data / FERPA / privacy:** usage telemetry on an app with minor students must be privacy-respecting — no PII in event payloads beyond what's necessary, documented retention, and NO third-party analytics egress that conflicts with the consent/legal posture (see `docs/LEGAL-SYNC.md` + the "secret handling — third-party egress" lesson in `AGENTS.md`).
+
+**Open scoping (for the eventual plan):** event taxonomy + IDs (reuse the per-session logging prefixes where possible — `wbsid`, `avx`, `nsi`, `sal`, etc.); sink/storage (Neon table vs a privacy-respecting analytics tool); dashboards/queries; sampling + retention.
+
+---
+
 ## P1 replay-in-frame — post-master follow-ups (2026-06-16)
 
 > **Source:** `phase1/wb-review-correct` pre-master smoke session (2026-06-16). Andrew explicitly **deferred post-master follow-ups below** — NOT Sarah ship-blockers. Durable capture so decisions aren't lost.

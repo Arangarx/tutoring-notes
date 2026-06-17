@@ -1,6 +1,6 @@
 # Release roadmap — solo tutor floor → university pitch readiness
 
-**Last updated:** 2026-06-12
+**Last updated:** 2026-06-17
 
 > Audience: orchestrators, executors, and Andrew sequencing work across
 > the tutoring-notes pilot through Aug 2026. This doc is a **thin
@@ -326,6 +326,18 @@ some urgent because site is already live, just unadvertised):
 9. **Scheduling + external calendar integration** — post-V1, pre-release; not a
    master-cut gate. Full spec: [`docs/BACKLOG.md`](BACKLOG.md) § Scheduling
    proposal. Needs design pass + sequencing within this window.
+
+**Near-immediate post-master follow-ups (Andrew 2026-06-17):** Work that
+starts at or immediately after the `v1-redesign → master` cut — not Gate A
+blockers.
+
+- **Full product usage instrumentation** — previously scoped as a pre-master
+  gate; **reclassified** to near-immediate post-master (Andrew 2026-06-17).
+  The app must be fully instrumented for product usage so a solo dev can
+  query what's actually used and where users struggle. Tactical early slice
+  of Program Phase 4 (first-party, learner-type-keyed instrumentation).
+  Durable spec: [`docs/BACKLOG.md`](BACKLOG.md) § Near-immediate post-master
+  priorities.
 
 **Escape hatch (not building now):** per-email allowlist if a prod fix must
 ship before full reveal. **Accepted cost:** long-lived `v1-redesign` branch
