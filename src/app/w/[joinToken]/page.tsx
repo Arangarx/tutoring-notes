@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { StudentWhiteboardClient } from "./StudentWhiteboardClient";
+import { StudentWhiteboardSessionShell } from "./StudentWhiteboardSessionShell";
 /**
  * Student-facing live whiteboard (Excalidraw + E2E sync, same room + key
  * as the tutor workspace).
@@ -112,6 +113,24 @@ export default async function StudentWhiteboardPage({
           </p>
         </div>
       </div>
+    );
+  }
+
+  const useNewShell = process.env.NEXT_PUBLIC_WB_STUDENT_NEW_SHELL === "1";
+
+  if (useNewShell) {
+    return (
+      <StudentWhiteboardSessionShell
+        whiteboardSessionId={tokenRow.whiteboardSession.id}
+        studentId={tokenRow.whiteboardSession.studentId}
+        joinToken={joinToken}
+        syncUrl={env.WHITEBOARD_SYNC_URL}
+        tutorName={tutorName}
+        initialActiveMs={tokenRow.whiteboardSession.activeMs ?? 0}
+        initialLastActiveAtIso={
+          tokenRow.whiteboardSession.lastActiveAt?.toISOString() ?? null
+        }
+      />
     );
   }
 

@@ -99,6 +99,7 @@ export default async function WhiteboardWorkspacePage({
 
   return (
     <WhiteboardSessionShell
+      role="tutor"
       whiteboardSessionId={detail.id}
       studentId={detail.student.id}
       studentName={detail.student.name}
