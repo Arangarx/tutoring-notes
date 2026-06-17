@@ -390,24 +390,34 @@ export function useReplayTimelineController(
         const el = audioRef.current;
         // Secondary fallback: if resolvedMaxMs is still 0 but the audio element
         // already reports a finite duration (Chrome resolved it via progressive
-        // buffering before onDurationResolved fired), use el.duration directly
-        // and eagerly update resolvedMaxMs for the play-loop and future seeks.
+        // buffering before onDurationResolved fired), eagerly update resolvedMaxMs
+        // for the play-loop and future seeks.
+        //
+        // NOTE: We do NOT use elDurationMs to clamp this seek.  Passing
+        // measured=0 (undefined) to globalMsToSegmentLocal engages the
+        // passthrough in that function, letting the audio element do its own
+        // out-of-range clamping.  Clamping here to a potentially interim
+        // el.duration (e.g. 21s of a 90s recording) snapped the scrub to the
+        // wrong position — the exact regression in the console evidence.
         const elDurationMs =
           measured === 0 && el && Number.isFinite(el.duration) && el.duration > 0
             ? Math.round(el.duration * 1000)
             : 0;
         if (elDurationMs > 0) {
+          // Update the ref immediately so a synchronous play() call in the
+          // same render cycle sees the updated value without waiting for a
+          // re-render to propagate the setResolvedMaxMs state update.
+          resolvedMaxMsRef.current = Math.max(resolvedMaxMsRef.current, elDurationMs);
           setResolvedMaxMs((prev) => Math.max(prev, elDurationMs));
         }
-        const effectiveMeasured = measured > 0 ? measured : elDurationMs;
         const { segmentIndex, localMs } = globalMsToSegmentLocal(
           clamped,
           audioTimeline,
-          effectiveMeasured > 0 ? effectiveMeasured : undefined
+          measured > 0 ? measured : undefined
         );
         // Log when both stored and measured durations are 0 so the passthrough
         // path in globalMsToSegmentLocal is visible in prod logs for diagnosis.
-        if (effectiveMeasured === 0 && audioTimeline.totalMs === 0) {
+        if (measured === 0 && audioTimeline.totalMs === 0) {
           console.log(
             `[avx] wbsid=${whiteboardSessionId ?? "?"} seek_map_fallback elDuration=${el?.duration ?? "n/a"}`
           );
@@ -551,7 +561,19 @@ export function useReplayTimelineController(
         const delta = Number.isFinite(el.currentTime)
           ? Math.abs(el.currentTime - intendedSec)
           : Infinity;
-        if (delta > 0.05) {
+        // Guard: skip position sync if el.currentTime is already at the
+        // controller's globalMs position (within 0.5s).  This handles the
+        // case where resolvedMaxMs was set from a partial el.duration during a
+        // prior scrub (causing intendedSec to be clamped prematurely) while
+        // el.currentTime was placed at the user's intended scrub position via
+        // the seek() passthrough.  Without this guard the sync would move
+        // el.currentTime backwards from the valid scrubbed position to the
+        // clamped intendedSec.
+        const targetSec = atMs / 1000;
+        const alreadyAtTarget =
+          Number.isFinite(el.currentTime) &&
+          Math.abs(el.currentTime - targetSec) <= 0.5;
+        if (delta > 0.05 && !alreadyAtTarget) {
           cancelWebmFixRef.current?.();
           console.log(
             `[avx] wbsid=${whiteboardSessionId ?? "?"} pre_play_position_sync currentTime_was=${el.currentTime} setting_to=${intendedSec}`

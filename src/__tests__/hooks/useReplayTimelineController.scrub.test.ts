@@ -1278,3 +1278,147 @@ describe("First play with Infinity currentTime does not snap to end", () => {
     global.fetch = savedFetch;
   });
 });
+
+// ---------------------------------------------------------------------------
+// LOADED-RECORDING SEEK: storedTotal=0, measuredTotal=0, el.duration=FINITE
+// ---------------------------------------------------------------------------
+describe("Loaded recording seek — storedTotal=0, measuredTotal=0, el.duration=21s finite", () => {
+  /**
+   * RED-BEFORE / GREEN-AFTER
+   *
+   * Hard-refresh a stored recording whose durationSeconds is null in the DB.
+   * Chrome has partially resolved el.duration to a finite value (21s via
+   * progressive download buffering) but onDurationResolved has NOT fired
+   * (resolvedMaxMs remains 0).  The user played to ~21s then scrubs to 53.46s.
+   *
+   * Before fix (seek): effectiveMeasured = elDurationMs = 21000.  seek() passes
+   *   21000 to globalMsToSegmentLocal which clamps localMs = min(53460, 21000) = 21000.
+   *   el.currentTime is set to 21s — not the intended 53.46s. FAILS: expected > 50.
+   *
+   * Before fix (play): play()'s position-sync reads resolvedMaxMsRef=21000,
+   *   computes intendedSec=21s, and moves el.currentTime backwards from 53.46 to 21.
+   *
+   * Fix (seek): when measured=0, always pass undefined to globalMsToSegmentLocal
+   *   (passthrough — let the audio element do its own range-clamping).  Eagerly
+   *   update resolvedMaxMsRef AND queue setResolvedMaxMs from el.duration so the
+   *   play-loop and scrubberMax stay accurate.
+   * Fix (play): add alreadyAtTarget guard — skip position-sync when el.currentTime
+   *   is already within 0.5s of the controller's globalMs target (atMs).  This
+   *   prevents moving el.currentTime backwards from a valid scrubbed position when
+   *   resolvedMaxMs underestimates the true audio length.
+   */
+  it("sets currentTime to scrubbed position (not clamped to el.duration) when storedTotal=0, el.duration=21s finite", async () => {
+    const savedFetch = global.fetch;
+    // durationMs=60000 ensures scrubberMax >= 53460 so the scrub target is valid.
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          schemaVersion: 1,
+          startedAt: "2026-01-01T00:00:00.000Z",
+          durationMs: 60_000,
+          events: [],
+        }),
+    }) as unknown as typeof fetch;
+
+    const audio = document.createElement("audio");
+    document.body.appendChild(audio);
+    let currentTime = 0;
+    let srcAttr = "";
+
+    // el.duration is finite (21s) — Chrome resolved it via progressive
+    // download buffering, but onDurationResolved has NOT fired (resolvedMaxMs=0).
+    // The actual recording may be longer; we only have 21s of metadata so far.
+    Object.defineProperty(audio, "duration", {
+      configurable: true,
+      get: () => 21,
+    });
+    Object.defineProperty(audio, "currentTime", {
+      configurable: true,
+      get: () => currentTime,
+      set: (v: number) => { currentTime = v; },
+    });
+    Object.defineProperty(audio, "src", {
+      configurable: true,
+      get: () => (srcAttr ? new URL(srcAttr, "http://localhost").href : ""),
+      set: (v: string) => { srcAttr = v; },
+    });
+    audio.getAttribute = jest.fn((name: string) =>
+      name === "src" ? srcAttr : null
+    ) as typeof audio.getAttribute;
+    audio.load = jest.fn();
+    audio.play = jest.fn().mockResolvedValue(undefined);
+    audio.pause = jest.fn();
+    Object.defineProperty(audio, "paused", {
+      configurable: true,
+      get: () => true,
+    });
+
+    const { result, unmount } = renderHook(() => {
+      const ref = useRef(jest.fn());
+      // durationSeconds=0 → storedTotal=0 → audioTimeline.totalMs=0
+      const segments = useMemo(
+        () => [
+          {
+            url: "/api/audio/admin/rec-1",
+            mimeType: "audio/webm;codecs=opus",
+            durationSeconds: 0,
+          },
+        ],
+        []
+      );
+      return useReplayTimelineController({
+        eventsBlobUrl: "/api/whiteboard/wbs-test/events",
+        audioSegments: segments,
+        applySceneAtRef: ref,
+      });
+    });
+
+    act(() => {
+      result.current.audioRef.current = audio;
+      audio.src = "/api/audio/admin/rec-1";
+    });
+
+    await waitFor(() => {
+      expect(result.current.loadState.kind).toBe("ready");
+      expect(result.current.replayExcaliRestoreReady).toBe(true);
+    });
+
+    // scrubberMax must be >= 53460 (driven by log.durationMs=60000).
+    expect(result.current.scrubberMax).toBeGreaterThanOrEqual(53460);
+
+    // Simulate: user played the audio to ~21s then paused.
+    // el.duration=21 is the partially-buffered duration reported by Chrome.
+    currentTime = 21.007;
+
+    // User scrubs to ~53.46s.  onDurationResolved has NOT fired (measuredTotal=0)
+    // but el.duration=21 is finite — the exact scenario from the console evidence.
+    const scrubMs = 53460;
+    act(() => {
+      result.current.handleScrubPointerDown();
+      result.current.handleScrubChange(scrubMs);
+      result.current.handleScrubPointerUp(scrubMs);
+    });
+
+    // BEFORE fix: seek() passes elDurationMs=21000 to globalMsToSegmentLocal
+    //             → localMs = min(53460, 21000) = 21000 → el.currentTime = 21s.
+    //             FAILS: expected > 50.
+    // AFTER fix:  passthrough → localMs = 53460 → el.currentTime ≈ 53.46s.
+    expect(currentTime).toBeGreaterThan(50);
+    expect(currentTime).toBeLessThan(60);
+
+    // Play must resume from the scrubbed position.  play()'s position-sync
+    // must NOT move el.currentTime backwards from 53.46s to intendedSec=21s
+    // (the clamped value derived from resolvedMaxMs=21000).
+    act(() => {
+      result.current.play();
+    });
+    expect(currentTime).toBeGreaterThan(50);
+    expect(audio.play).toHaveBeenCalled();
+
+    unmount();
+    audio.remove();
+    global.fetch = savedFetch;
+  });
+});
