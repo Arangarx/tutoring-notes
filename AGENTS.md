@@ -177,6 +177,10 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
 
 Cross-cutting rules from production debugging. Add dated evidence under **Real-world observations** (Model usage protocol) when new ones land.
 
+### Plans are agent scaffolding, not ratified user intent (2026-06-17, P2 student shell)
+
+Andrew writes/approves plans primarily as orchestration scaffolding and does NOT read them in detail; a decision appearing in an approved plan is therefore NOT evidence he endorsed it. The P2 student-shell plan specified a heavily-divergent slim student (pencil+eraser only, in-app `AVPermissionsPrompt`, student-specific top bar) that contradicted Andrew's actual "student == tutor minus a short delta list" intent — and it shipped to smoke before he caught it. The 5-axis review accepted the plan's premise rather than challenging it. **Rules:** (1) Material product/scope/UX decisions must be surfaced to Andrew EXPLICITLY (a direct question or crisp in-chat callout), never buried in a plan and treated as approved-by-silence. (2) When a plan encodes a non-obvious divergence from prior verbal intent, call it out for confirmation rather than assuming the plan ratifies it. (3) Capture verbal design agreements into a durable, executor-facing contract immediately — the prior orchestrator's "5-delta" agreement evaporated because it was never written down, so the plan re-invented a divergent design.
+
 ### Subagent git safety — never discard uncommitted work (2026-06-10, smokebook loss)
 
 - A dispatched subagent, blocked from `git checkout`-ing a branch by the user's **uncommitted** working-tree edits (full smoke notes), ran a `git restore` that **discarded** those notes. A separate fumble created an **accidental local merge** of an in-progress feature branch into the integration branch (`v1-redesign`). No code was lost (feature branch was pushed) but the user's notes were unrecoverable.

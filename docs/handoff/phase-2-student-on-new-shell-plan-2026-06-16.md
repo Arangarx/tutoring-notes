@@ -1,5 +1,19 @@
 # Phase 2 — Student on the new whiteboard shell: Detailed Executable Plan
 
+## ⚠️ SCOPE CORRECTION — Andrew 2026-06-17 — SUPERSEDES the student-divergence spec in this plan
+
+> Canonical student-shell contract (confirmed by Andrew in chat 2026-06-17): the student whiteboard experience is the TUTOR workspace IN FULL (complete chrome + complete toolset), differing ONLY by these deltas:
+> - **D1 End vs Exit** — tutor has "End session"; student has a plain **Exit** button (keep the local leave-card flow).
+> - **D2 Laser color** — student laser wand uses the student color, tutor uses the tutor color; the student HAS the laser tool and broadcasts pointer updates like the tutor.
+> - **D3 Follow-tutor toggle** — student-only, default ON; governs VIEWPORT (pan/zoom) follow ONLY.
+> - **D4 Page authority** — student can NEVER switch/add/delete pages; the page strip is a read-only active-page indicator; pages change only via the tutor's apply. (Unsynced-roam page nav explicitly BACKLOGGED, not built.)
+> - **D5 No share link** — student has no share / copy-join-link control.
+> - **D6 (technical, pending verification)** — asset inserts (PDF/image/graph) may remain tutor-only IF the anonymous student join-token cannot authenticate the upload they require; confirm during implementation.
+>
+> **Directives:** remove our in-app A/V permission gating (`AVPermissionsPrompt`); auto-enable A/V (browser-native getUserMedia prompts are the only acceptable prompt); the waiting room (P3) owns the consent decision. KEEP the recording-disclosure line (legal) and the student reliability banners (loading-guard / board-wait / material-missing) — those are NOT deltas to remove.
+>
+> **Architecture:** keep `StudentLiveWorkspaceClient` as the mount; compose the full chrome from the EXISTING shared components the tutor uses; gate deltas via `wb-role.tsx`. Do NOT route the student through the tutor engine. The "separate slim student client" design in the sections below is SUPERSEDED.
+
 > **Branch:** `phase1/wb-review-correct` (execution may continue here or fork `phase2/wb-student-new-shell` off `v1-redesign` at Andrew's cut — do not assume merge order)  
 > **Program:** Experience-Driven Wedge — WB ground floor (Gate A2/A5: two-way sync + student-on-same-board)  
 > **Authored:** 2026-06-16 (planning pass — **no P2 production code in this commit**)  
