@@ -141,32 +141,14 @@ export function AVTile({
     if (!el) return;
     el.srcObject = participant.videoStream ?? null;
     if (!participant.videoStream) return;
-    // Double-RAF compositor-layer race guard.
+    // Belt-and-suspenders explicit play() after srcObject assignment.
     //
-    // Timeline leading to the black-video symptom:
-    //
-    //   Frame N  — React commit: <video> style flips from display:none →
-    //              display:block. useEffect fires AFTER this paint, then sets
-    //              el.srcObject = videoStream. A single requestAnimationFrame
-    //              is scheduled.
-    //
-    //   Frame N+1 rAF (outer) — fires BEFORE the N+1 paint.  Chrome has not
-    //              yet processed the srcObject change through its GPU video
-    //              pipeline — the decoder-to-compositor-layer routing path is
-    //              not wired until the N+1 PAINT runs. Calling play() here
-    //              (as the previous single-RAF fix did) succeeds logically but
-    //              decoded frames are silently discarded by the unconnected
-    //              compositor. This is why the single-RAF fix left the video
-    //              black, and why a manual resize (which forces a fresh layout/
-    //              paint cycle) was the only thing that made it paint.
-    //
-    //   Frame N+1 PAINT — browser wires the decoder output to the compositor
-    //              layer for this srcObject.
-    //
-    //   Frame N+2 rAF (inner) — fires AFTER the N+1 paint. Compositor is now
-    //              fully connected. Calling play() here routes decoded frames
-    //              through to the layer immediately, so the video paints without
-    //              any manual resize.
+    // Root fix for "black video until manual resize" is the key-remount below
+    // (videoKey): when videoStream arrives, React mounts a fresh <video> that
+    // starts life as display:block, which wires Chrome's compositor immediately.
+    // This double-RAF play() guards against browsers that do not auto-start a
+    // muted autoPlay video without an explicit play() call, and against any
+    // remaining timing edge cases on the freshly-mounted element.
     const stream = participant.videoStream;
     let innerRaf: number | null = null;
     const outerRaf = requestAnimationFrame(() => {
@@ -240,6 +222,20 @@ export function AVTile({
   }, [participant.peerId]);
 
   const isLocalTile = isLocal === true || participant.isLocal === true;
+
+  // Key-remount: when videoStream transitions null → non-null, produce a different
+  // key so React replaces the <video> element with a fresh instance that starts
+  // life as display:block. Chrome only wires the compositor pipeline on freshly
+  // mounted visible video elements; transitioning an existing display:none element
+  // to display:block does NOT trigger that wiring until a subsequent layout event
+  // (e.g. a manual resize). This is the root cause of the "black until resize" bug
+  // (Attempts 1-3 called play() at various timings but kept the same element).
+  //
+  // We key on MediaStream.id (stable per stream object) when available, falling
+  // back to a has-stream boolean for environments without MediaStream.id (jsdom).
+  const videoKey =
+    participant.videoStream?.id ??
+    (participant.videoStream ? "vid-active" : "vid-inactive");
 
   const pill = useMemo(() => {
     if (isLocalTile) return getConnectionStatePill(SELF_STATE, SELF_STATE);
@@ -325,6 +321,7 @@ export function AVTile({
         }}
       >
         <video
+          key={videoKey}
           ref={videoRef}
           autoPlay
           muted

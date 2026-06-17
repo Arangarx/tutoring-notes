@@ -11,15 +11,23 @@ import type { AvParticipant } from "@/hooks/useLiveAV";
 /**
  * Lightweight MediaStream stand-in for jsdom (which doesn't ship
  * MediaStream). Mirrors the shape AVTile reads (`getVideoTracks`,
- * `getAudioTracks`).
+ * `getAudioTracks`, `id`).
+ *
+ * Each call gets a unique `id` (incrementing counter) so that the
+ * key-remount mechanism in AVTile works correctly in tests: different
+ * stream objects produce different keys, matching the real-world
+ * `MediaStream.id` UUID behaviour.
  */
 type FakeTrack = {
   kind: "audio" | "video";
   enabled: boolean;
   readyState: "live" | "ended";
 };
+let _fakeStreamIdCounter = 0;
 function makeFakeStream(tracks: FakeTrack[]): MediaStream {
+  const id = `fake-stream-${++_fakeStreamIdCounter}`;
   return {
+    id,
     getAudioTracks: () => tracks.filter((t) => t.kind === "audio"),
     getVideoTracks: () => tracks.filter((t) => t.kind === "video"),
     getTracks: () => tracks,
@@ -337,15 +345,89 @@ describe("AVTile — remote participant", () => {
     ).toBe("S");
   });
 
-  test("re-render with a new MediaStream re-assigns srcObject", () => {
+  test("re-render with a new MediaStream re-assigns srcObject on the (possibly remounted) element", () => {
     const first = makeRemoteParticipant({ peerId: "p-rer" });
     const { rerender } = render(<AVTile participant={first} />);
-    const video = screen.getByTestId("av-tile-video-p-rer") as HTMLVideoElement;
-    expect(video.srcObject).toBe(first.videoStream);
+    expect(
+      (screen.getByTestId("av-tile-video-p-rer") as HTMLVideoElement).srcObject
+    ).toBe(first.videoStream);
 
     const second = makeRemoteParticipant({ peerId: "p-rer" });
     rerender(<AVTile participant={second} />);
-    expect(video.srcObject).toBe(second.videoStream);
+    // With key-remount (stream identity changes → different key → new element),
+    // we query the current element from the DOM rather than holding a stale ref.
+    expect(
+      (screen.getByTestId("av-tile-video-p-rer") as HTMLVideoElement).srcObject
+    ).toBe(second.videoStream);
+  });
+
+  test("video element is remounted as display:block when remote peer gains a videoStream — key-remount paint fix", () => {
+    // This test verifies the root fix for "black video until manual resize" (4th attempt).
+    //
+    // Mechanism: AVTile keys the <video> element on stream.id. When videoStream goes
+    // null → non-null, the key changes ("vid-inactive" → stream.id), React replaces
+    // the element with a fresh instance that starts life as display:block. Chrome wires
+    // the compositor pipeline on freshly-mounted visible elements; it does NOT do so
+    // when an existing display:none element transitions to display:block.
+    //
+    // Red-before: old element (display:none → display:block) stayed black until resize.
+    // Green-after: new element (starts display:block, never display:none) paints on arrival.
+    const videoPlayMock = jest.fn().mockResolvedValue(undefined);
+    const origPlay = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
+      if (this.tagName === "VIDEO") videoPlayMock();
+      return Promise.resolve();
+    };
+    try {
+      const { rerender } = render(
+        <AVTile
+          participant={makeRemoteParticipant({
+            peerId: "p-remount",
+            audioStream: null,
+            videoStream: null,
+          })}
+        />
+      );
+
+      // Before stream: video element exists but is hidden (display:none)
+      const videoBeforeStream = screen.getByTestId(
+        "av-tile-video-p-remount"
+      ) as HTMLVideoElement;
+      expect(videoBeforeStream.style.display).toBe("none");
+      expect(videoPlayMock).not.toHaveBeenCalled();
+
+      const fakeVideoStream = makeFakeStream([
+        { kind: "video", enabled: true, readyState: "live" },
+      ]);
+      rerender(
+        <AVTile
+          participant={makeRemoteParticipant({
+            peerId: "p-remount",
+            audioStream: null,
+            videoStream: fakeVideoStream,
+          })}
+        />
+      );
+
+      // After stream arrives: a NEW element is mounted (key changed) with display:block
+      const videoAfterStream = screen.getByTestId(
+        "av-tile-video-p-remount"
+      ) as HTMLVideoElement;
+
+      // Verify it is a DIFFERENT DOM node (the remount happened)
+      expect(videoAfterStream).not.toBe(videoBeforeStream);
+
+      // New element must start as display:block — it was never display:none
+      expect(videoAfterStream.style.display).not.toBe("none");
+
+      // srcObject must be set to the new stream on the new element
+      expect(videoAfterStream.srcObject).toBe(fakeVideoStream);
+
+      // play() must have been called (via double-RAF, fired synchronously by mock)
+      expect(videoPlayMock).toHaveBeenCalledTimes(1);
+    } finally {
+      HTMLMediaElement.prototype.play = origPlay;
+    }
   });
 
   test("data-* attributes expose peerId + role + isLocal=false for downstream tests", () => {
@@ -401,25 +483,30 @@ describe("AVTile — remote participant", () => {
 });
 
 /**
- * Red-before / green-after tests for the double-RAF compositor-layer fix.
+ * Tests for the double-RAF belt-and-suspenders play() call.
  *
  * Uses a manual rAF intercept (NOT the auto-flush shim from the "remote
  * participant" describe) so we can prove the exact deferral behaviour.
  *
- * Architecture under test (see AVTile.tsx comment for full explanation):
- *   - Frame N: React commits display:none→block; useEffect sets srcObject;
- *              outer RAF is scheduled.
- *   - Frame N+1 rAF (outer): fires BEFORE the N+1 paint → schedules inner RAF.
- *   - Frame N+1 PAINT: Chrome wires decoder→compositor layer.
- *   - Frame N+2 rAF (inner): fires AFTER N+1 paint → play() is called and
- *              frames route to the now-wired compositor layer.
+ * PRIMARY FIX — key-remount (see "key-remount paint fix" test above):
+ *   When videoStream goes null → non-null, AVTile changes the <video> key
+ *   (via stream.id) so React mounts a fresh element that starts as display:block.
+ *   Chrome wires the compositor pipeline on freshly-mounted visible elements,
+ *   so the video paints on arrival without any layout event.
  *
- * RED-BEFORE (single-RAF or synchronous play): play() called before the N+1
- *   paint → compositor not yet wired → black video until resize.
- * GREEN-AFTER (double-RAF): play() deferred past the N+1 paint → video paints
- *   on stream arrival without any manual resize.
+ * BELT-AND-SUSPENDERS — double-RAF play() (tested here):
+ *   Even on a freshly mounted display:block element, some browsers do not
+ *   auto-start a muted autoPlay video without an explicit play() call. The
+ *   double-RAF defers play() past the current paint cycle so the browser has
+ *   processed the srcObject assignment before play() is invoked.
+ *
+ *   Frame N:   useEffect fires on newly mounted element → srcObject set →
+ *              outer RAF scheduled.
+ *   Frame N+1 rAF (outer): fires BEFORE N+1 paint → schedules inner RAF.
+ *   Frame N+1 PAINT: browser processes srcObject on compositor.
+ *   Frame N+2 rAF (inner): fires AFTER N+1 paint → play() called.
  */
-describe("AVTile — video compositor-race guard (double-RAF deferred play)", () => {
+describe("AVTile — video play() deferral (double-RAF belt-and-suspenders)", () => {
   afterEach(() => cleanup());
 
   test("play() is NOT called synchronously nor after the first (outer) RAF; fires exactly once after the second (inner) RAF", () => {
