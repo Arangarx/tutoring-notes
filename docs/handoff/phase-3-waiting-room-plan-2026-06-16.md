@@ -286,11 +286,15 @@ model SessionParticipant {
 -- 1. Add nullable columns with defaults that preserve current behavior
 ALTER TABLE "WhiteboardSession" ADD COLUMN "sessionPhase" ...;
 ALTER TABLE "WhiteboardSession" ADD COLUMN "sessionMode" ...;
--- 2. Backfill existing rows: treat all historical sessions as already active
+-- 2. Backfill existing rows: treat all historical sessions as already active.
+--    ⚠️ [5-axis BLOCKER 1 folded] USE "sessionPhase" = 'pending' NOT IS NULL.
+--    Prisma fills existing rows with the @default value ('pending') when the
+--    column is added — there are zero NULL rows. IS NULL silently updates nothing,
+--    leaving all pre-migration sessions in pending state and breaking Sarah's workspace.
 UPDATE "WhiteboardSession"
   SET "sessionPhase" = 'active',
       "sessionMode" = 'live'
-  WHERE "sessionPhase" IS NULL;  -- or use DEFAULT + UPDATE all
+  WHERE "sessionPhase" = 'pending';  -- matches ALL pre-migration rows
 -- startedAt: existing rows KEEP their current startedAt (already set)
 -- 3. Partial unique index (BLOCKER-C2) — one non-ended session per student
 CREATE UNIQUE INDEX ... ON "WhiteboardSession" ("studentId") WHERE "endedAt" IS NULL;
@@ -304,6 +308,8 @@ CREATE UNIQUE INDEX ... ON "WhiteboardSession" ("studentId") WHERE "endedAt" IS 
 
 **Exit:** Migration applies cleanly on local test DB; `prisma generate` + `tsc` green.
 
+> **[5-axis BLOCKER 1 folded] Mandatory backfill verification:** Run migration against a staging DB that has existing rows (copy of production Neon branch or equivalent). After migration, `SELECT COUNT(*) FROM "WhiteboardSession" WHERE "sessionPhase" = 'pending'` must return 0 — all pre-migration sessions are active. A test DB with no existing rows will pass even with wrong backfill SQL; the staging verification is non-optional.
+
 ---
 
 #### Step 2 — `createWhiteboardSession` → pending sessions
@@ -316,7 +322,11 @@ CREATE UNIQUE INDEX ... ON "WhiteboardSession" ("studentId") WHERE "endedAt" IS 
 
 **Hard requirement (Pillar 1 partial):** Reject session create when `!student.learnerProfileId` **only after Pillar 3** — OR gate behind interim check in Pillar 1 if Andrew prefers early fail. **Plan default:** enforce in Pillar 3 together with migration (avoid bricking unmigrated test accounts mid-branch).
 
-**Exit:** New sessions land in waiting mode; existing sessions unchanged.
+> **[5-axis BLOCKER 3 folded] Flag-gate the pending create:** `createWhiteboardSession` MUST create `sessionPhase: 'pending'` / `startedAt: null` ONLY when `NEXT_PUBLIC_WB_WAITING_ROOM === '1'`. When the flag is unset, `createWhiteboardSession` uses legacy behavior: `sessionPhase: 'active'`, `startedAt: new Date()`. Similarly, `workspace/page.tsx` `initialMode` computation is flag-gated: flag unset → always `'live'` regardless of `sessionPhase`. This ensures "flag off = legacy straight-to-live" (Step 8 invariant) holds end-to-end, not just in the UI routing layer.
+
+**Exit:** New sessions land in waiting mode (with flag on); existing sessions unchanged. With flag off, new sessions still land straight to live board (legacy behavior verified).
+
+> **[5-axis BLOCKER 3 folded] Regression test:** With `NEXT_PUBLIC_WB_WAITING_ROOM` unset, `createWhiteboardSession` creates `sessionPhase: active` session; `workspace/page.tsx` passes `initialMode: 'live'`; shell renders live board directly. No `WaitingRoomWorkspace` renders in this path.
 
 ---
 
@@ -338,6 +348,8 @@ CREATE UNIQUE INDEX ... ON "WhiteboardSession" ("studentId") WHERE "endedAt" IS 
 
 **Exit:** Unit tests: admit transitions phase; double-admit idempotent; ended session rejected.
 
+> **[5-axis BLOCKER 3 folded] Startup audit also:** Ensure `startedAt` nullable read sites are null-safe before Step 3 ships. `startedAt` moves from `@default(now())` → `DateTime?`. Audit all files that read `session.startedAt` — no `!` non-null assertions, no bare `new Date(session.startedAt)` without null check. Timer and billing display must handle null as "not yet started."
+
 ---
 
 #### Step 4 — Block capture while pending
@@ -349,9 +361,14 @@ CREATE UNIQUE INDEX ... ON "WhiteboardSession" ("studentId") WHERE "endedAt" IS 
 | `endWhiteboardSession` audio path | Already consent-gated; add phase check. |
 | Events.json / recorder | `useWhiteboardRecorder` or upload path: no replay event persistence while `pending`. |
 | `generateNotesFromWhiteboardSessionAction` | Reject when pending. |
-| `active-ping` | Do not accumulate `activeMs` while `pending` (or ignore pings — document choice in §5.3). |
+| `active-ping` | **[5-axis BLOCKER 4 folded]** Read `sessionPhase` from DB before processing any timer field. If `sessionPhase !== 'active'`: skip `bothConnectedAt` stamp, skip `activeMs` accumulation, return current values unchanged. Client-side guard alone is insufficient — server must enforce. |
+| Checkpoint route (`POST /api/whiteboard/[sessionId]/checkpoint`) | Return 400/403 when `sessionPhase !== 'active'` — defense-in-depth for WB event capture during pending. |
 
 **Exit:** Unit tests: pending session → audio register 403; FSM `shouldCaptureWB === false`; after admit → capture follows consent snapshot.
+
+> **[5-axis BLOCKER 4 folded] Timer unit tests:** `active-ping` with `sessionPhase = pending` → `bothConnectedAt` NOT stamped; `activeMs` NOT incremented; DB row unchanged. `active-ping` with `sessionPhase = active` (first positive ping) → `bothConnectedAt` stamped if null. Add both cases to `join-timer-phase.test.ts`.
+
+> **[5-axis BLOCKER 5 folded] Pending-cancel server action:** Add `cancelPendingSession(whiteboardSessionId)` server action to `actions.ts` (add to file touch map). Implementation: (1) `assertOwnsWhiteboardSession`; (2) read `session.eventsBlobUrl` from DB (the placeholder from create — no new upload needed, the recorder was never armed); (3) call `endWhiteboardSession(wbsid, session.eventsBlobUrl, { segments: [] })` — sets `endedAt`, revokes join tokens, registers zero segments; (4) log `[slc] action=session_ended phase=cancelled_from_pending`. Pre-flight: verify `endWhiteboardSession` has no `startedAt !== null` assertion (confirmed from source — it does not). Unit test in `session-phase.test.ts`: `cancelPendingSession` with `startedAt: null, endedAt: null` → `endedAt` set; join tokens revoked; zero `SessionRecording` rows; no throw.
 
 ---
 
@@ -447,6 +464,8 @@ Document in [`PLATFORM-ASSUMPTIONS.md`](../PLATFORM-ASSUMPTIONS.md).
 | Env | Remove `CONSENT_ENFORCEMENT` from docs/smokebooks/PLATFORM-ASSUMPTIONS. |
 
 **Exit:** Without consent record, session create fails with actionable error for tutor.
+
+> **[5-axis BLOCKER 2 folded] `assertConsentFromLiveRecord` must also be updated:** There are **two** functions in `consent-scope.ts` that call `isConsentEnforcementEnabled()`: `assertEffectiveConsent` (L94) and `assertConsentFromLiveRecord` (L283, used by the notes email path). Both must be updated when the flag is deleted. For `assertConsentFromLiveRecord` post-deletion: remove the flag fast-path; the unclaimed-student fast-path (`!learnerProfileId`) becomes `throw ConsentError`; the self-learner fast-path stays. Step 9 exit must include: `rg 'isConsentEnforcementEnabled' src/` returns zero results; `consent-b2.test.ts` tests `assertConsentFromLiveRecord` without the flag.
 
 ---
 
@@ -631,7 +650,7 @@ Author `docs/handoff/phase-3-waiting-room-smokebook-2026-06-16.md` per [`SMOKEBO
 | 12 | Pending cancel | End from waiting; no audio registered; student sees ended |
 | 13 | Parent POST | Change consent on `/account/children/[id]/consent`; next session reflects |
 | 14 | No consent click | Start session without tutor checkbox |
-| 15 | Themes | Repeat 1–9 in **light** and **dark** |
+| 15 | Themes | Repeat 1–14 in **light** and **dark** (per pre-master smoke template: every in-scope item in both themes) |
 | 16 | P2 tutor regression | Tutor live path unchanged with waiting flag off |
 
 ### 7.3 `test:wb-sync` scenarios (flag on)
@@ -644,14 +663,14 @@ Author `docs/handoff/phase-3-waiting-room-smokebook-2026-06-16.md` per [`SMOKEBO
 
 ## 8. Acceptance criteria
 
-### P3 merge gates (pending 5-axis fold-in)
+### P3 merge gates (5-axis BLOCKERs folded)
 
 | ID | Criterion |
 |---|---|
 | P3-G1 | P2 merged; `NEXT_PUBLIC_WB_STUDENT_NEW_SHELL` on in test env |
 | P3-G2 | `sessionPhase` / `sessionMode` migration applied; backfill leaves historical sessions active |
 | P3-G3 | New sessions start `pending`; admit is server-authoritative |
-| P3-G4 | Capture blocked while `pending` (audio + WB replay + notes) |
+| P3-G4 | Capture blocked while `pending` (audio + WB replay + notes + checkpoint route) |
 | P3-G5 | Waiting room UI both roles; synchronized transition |
 | P3-G6 | Timer aligned to admit — not link-open |
 | P3-G7 | `CONSENT_ENFORCEMENT` deleted; enforcement unconditional |
@@ -660,9 +679,13 @@ Author `docs/handoff/phase-3-waiting-room-smokebook-2026-06-16.md` per [`SMOKEBO
 | P3-G10 | `allowWhiteboardRecording` gates replay upload (BLOCKER-D2) |
 | P3-G11 | `slc` + `wtr` registered and emitted (BLOCKER-O1) |
 | P3-G12 | Destructive migration dry-run reviewed; execute only with Andrew go |
-| P3-G13 | `npm run test:wb-sync` green with waiting flag |
+| P3-G13 | `npm run test:wb-sync` green with waiting flag AND student-new-shell flag both set |
 | P3-G14 | Two-device smokebook overall PASS |
-| P3-A* | **TBD** — 5-axis reviewer folds axis-specific BLOCKERs here |
+| **P3-A1** | **[5-axis BLOCKER 1]** Migration backfill verified on staging DB with pre-existing rows — zero sessions have `sessionPhase = 'pending'` post-migration |
+| **P3-A2** | **[5-axis BLOCKER 2]** `assertConsentFromLiveRecord` updated alongside `assertEffectiveConsent` in Step 9; `rg 'isConsentEnforcementEnabled' src/` returns zero hits post-deletion |
+| **P3-A3** | **[5-axis BLOCKER 3]** `NEXT_PUBLIC_WB_WAITING_ROOM` flag gates pending-create in `createWhiteboardSession` AND `initialMode` in `workspace/page.tsx`; flag-off path creates active sessions straight to live board (verified in smoke item 0 + flag-off regression test) |
+| **P3-A4** | **[5-axis BLOCKER 4]** `active-ping` route reads `sessionPhase` before processing timer fields; unit test: pending session ping → no `bothConnectedAt` stamp, no `activeMs` increment |
+| **P3-A5** | **[5-axis BLOCKER 5]** `cancelPendingSession` server action exists, calls `endWhiteboardSession` with placeholder `eventsBlobUrl`, sets `endedAt`, revokes join tokens with zero segments; unit test passes |
 
 **Sarah-trust framing:** If Sarah must keep Zoom open because the waiting room lies about readiness, capture starts early, or consent is unclear — P3 is not done.
 
@@ -681,6 +704,9 @@ Author `docs/handoff/phase-3-waiting-room-smokebook-2026-06-16.md` per [`SMOKEBO
 | **Q7** | **Require learner at create (Pillar 1) vs Pillar 3 only?** Early fail bricks unmigrated accounts on branch. | Enforce at Pillar 3 with migration |
 | **Q8** | **`consentAcknowledged` column:** deprecate in place vs additive migration to nullable? | Keep column; stop writing; audit history |
 | **Q9** | **Authenticated `/join` waiting:** wire `LearnerWaitingRoom` to real session polling in P3, or defer to Phase 4? | Defer authed join; P3 focuses on `/w/[joinToken]` + tutor workspace |
+| **Q10** | **[5-axis new]** `workspace/page.tsx` unclaimed-student error: when `!student.learnerProfileId` post-consent-click-removal (Step 11), use `notFound()` (current: 404 with no context) or redirect to student detail page with an actionable error message? | Redirect to `/admin/students/[id]?error=requires_claim` with tutor-visible message (not bare 404) |
+| **Q11** | **[5-axis new]** §6.4 Neon migration backup: is `pg_dump` / CSV export of affected tables a hard gate in §6.4 execution checklist, or executor discretion? | Hard gate — add `- [ ] Backup confirmed` to §6.4 before Andrew can approve execute |
+| **Q12** | **[5-axis new]** `CONSENT_ENFORCEMENT` env var in Vercel: confirm the env var is deleted from Vercel project settings (production + preview) in the same sprint as Step 9, or is it acceptable to leave it as a harmless dangling var post-code-deletion? | Delete from Vercel env vars in same deploy to keep the environment clean |
 
 ---
 
@@ -690,7 +716,7 @@ Author `docs/handoff/phase-3-waiting-room-smokebook-2026-06-16.md` per [`SMOKEBO
 |---|---|
 | `prisma/schema.prisma` | `SessionPhase`, `SessionMode`, `SessionParticipant`, `startedAt` nullable |
 | `prisma/migrations/*_p3_session_lifecycle/` | Additive migration + backfill |
-| `src/app/admin/students/[id]/whiteboard/actions.ts` | Pending create; admit; consent unconditional |
+| `src/app/admin/students/[id]/whiteboard/actions.ts` | Pending create; admit; consent unconditional; `cancelPendingSession` (new — BLOCKER 5) |
 | `src/app/admin/.../workspace/page.tsx` | Phase-based `initialMode`; drop consent re-check (P3) |
 | `src/app/admin/.../WhiteboardSessionShell.tsx` | `waiting` mode branch |
 | `src/app/admin/.../WaitingRoomWorkspace.tsx` | **New** — tutor waiting |
