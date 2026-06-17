@@ -791,6 +791,7 @@ function StudentLiveWorkspaceInner({
                 <input
                   type="checkbox"
                   checked={!independentView}
+                  aria-label="Follow tutor view"
                   data-testid="wb-student-follow-toggle"
                   onChange={(e) => setIndependentView(!e.target.checked)}
                 />
@@ -986,6 +987,7 @@ function StudentLiveWorkspaceInner({
                 <input
                   type="checkbox"
                   checked={!independentView}
+                  aria-label="Follow tutor view"
                   data-testid="wb-student-follow-toggle-mobile"
                   onChange={(e) => setIndependentView(!e.target.checked)}
                 />
