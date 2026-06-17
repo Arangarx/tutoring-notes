@@ -130,20 +130,22 @@ describe("replay-audio-timeline", () => {
 
     // ── FIX 1: seek-map with measuredTotalMs fallback ──────────────────────────
     // Root cause: single-segment session with stored durationSeconds=null → storedMs=0
-    // → every scrub collapsed to localMs=0 (audio reset to t=0 on each scrub).
-    // Fix: pass measuredTotalMs from el.duration so the mapper proportionally
-    // distributes the globalMs into the real audio length.
-    // Red-before: without the measuredTotalMs parameter the test returns localMs=0.
-    // Green-after: with measuredTotalMs=44000 the mapper returns localMs=22000.
+    // → pre-fix every scrub collapsed to localMs=0 (audio reset to t=0 on each scrub).
+    // Fix (1240c08): when cap=0, pass globalMs through unclamped; when measuredTotalMs
+    // is known, map proportionally into the real audio length.
+    // Andrew-confirmed: first-play at 0:00; scrub on loaded single-segment does NOT jump to 0.
     it("FIX1: single segment stored=0, measuredTotalMs=44000 — maps proportionally (not 0)", () => {
       const timeline = buildReplayAudioTimeline([null]); // stored duration = null → 0
       expect(timeline.totalMs).toBe(0);
       expect(timeline.segmentDurationsMs).toEqual([0]);
 
-      // WITHOUT measuredTotalMs: collapses to 0 (documented pre-fix regression)
+      // WITHOUT measuredTotalMs (metadata not yet resolved): pass globalMs through
+      // unclamped when cap=0 — NOT collapse to 0. Pre-fix Math.min(globalMs, 0)=0
+      // caused scrub→drop→Play to seek audio to t=0; commit 1240c08 fixed that.
+      // First-play at globalMs=0 still maps to localMs=0 (see assertion below).
       expect(globalMsToSegmentLocal(22_000, timeline)).toEqual({
         segmentIndex: 0,
-        localMs: 0,
+        localMs: 22_000,
       });
 
       // WITH measuredTotalMs=44000: maps correctly

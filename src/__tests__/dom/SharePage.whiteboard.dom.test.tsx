@@ -24,6 +24,17 @@ jest.mock("@/app/s/[token]/SeenTracker", () => ({
   SeenTracker: () => null,
 }));
 
+// Production: root layout wraps all routes in <Providers> → <ThemeProvider>.
+// ParentShareShell renders ThemeToggle (useTheme); bare render() lacks the provider.
+jest.mock("@/components/ThemeProvider", () => ({
+  ThemeProvider: ({ children }: { children: React.ReactNode }) => children,
+  useTheme: () => ({
+    mode: "system" as const,
+    resolvedTheme: "light" as const,
+    setMode: jest.fn(),
+  }),
+}));
+
 jest.mock("@/lib/db", () => ({
   db: {
     shareLink: { findUnique: (...a: unknown[]) => mockFindUnique(...a) },
