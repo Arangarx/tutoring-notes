@@ -1096,6 +1096,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     // children) so the End-session button is reachable without a consent step.
     render(
       <WhiteboardSessionShell
+        role="tutor"
         whiteboardSessionId="ws-shell-1"
         studentId="stu-1"
         studentName="Test Student"
