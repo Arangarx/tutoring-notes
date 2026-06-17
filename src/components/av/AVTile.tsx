@@ -141,6 +141,12 @@ export function AVTile({
     if (!el) return;
     el.srcObject = participant.videoStream ?? null;
     if (!participant.videoStream) return;
+    // Mechanism B (part 1): forced synchronous layout flush immediately after
+    // srcObject assignment. Reading offsetHeight forces the browser to compute
+    // layout geometry for this element right now, giving the compositor concrete
+    // pixel dimensions before the deferred play() call. This is the same
+    // technique as reading a layout property to "cancel" a CSS batching optimisation.
+    void el.offsetHeight;
     // Belt-and-suspenders explicit play() after srcObject assignment.
     //
     // Root fix for "black video until manual resize" is the key-remount below
@@ -165,6 +171,39 @@ export function AVTile({
     return () => {
       cancelAnimationFrame(outerRaf);
       if (innerRaf !== null) cancelAnimationFrame(innerRaf);
+    };
+  }, [participant.videoStream]);
+
+  // Mechanism B (part 2): ResizeObserver-driven reflow + play().
+  //
+  // Fires when the video tile's layout box grows from zero to a concrete non-zero
+  // size. This catches the case where srcObject was assigned while the cluster was
+  // still in CSS-flex auto height (no concrete pixel box) — Mechanism A fixes that
+  // via a cluster-level state change, but the observer here is an independent
+  // last-resort: the moment the element gets a real bounding box we force another
+  // layout flush and call play().  One-shot: disconnects after the first non-zero
+  // entry so it does not loop on every subsequent resize.
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el || !participant.videoStream) return;
+    // ResizeObserver is not available in jsdom; guard so tests can run without it.
+    if (typeof ResizeObserver === "undefined") return;
+    const stream = participant.videoStream;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+          ro.disconnect();
+          const cur = videoRef.current;
+          if (!cur || cur.srcObject !== stream) break;
+          void cur.offsetHeight;
+          (cur.play?.() as Promise<void> | undefined)?.catch(() => {});
+          break;
+        }
+      }
+    });
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
     };
   }, [participant.videoStream]);
 

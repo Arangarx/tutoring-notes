@@ -598,6 +598,167 @@ describe("AVTile — video play() deferral (double-RAF belt-and-suspenders)", ()
   });
 });
 
+describe("AVTile — Mechanism B (ResizeObserver-driven play)", () => {
+  afterEach(() => cleanup());
+
+  test("ResizeObserver fires play() on the video element when tile gets a non-zero bounding box", () => {
+    // Simulate the browser calling the ResizeObserver callback after the tile
+    // has been laid out and has concrete pixel dimensions. We mock ResizeObserver
+    // globally for this test, capture the callback, then fire it manually.
+    const videoPlayMock = jest.fn().mockResolvedValue(undefined);
+    const origPlay = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
+      if (this.tagName === "VIDEO") videoPlayMock();
+      return Promise.resolve();
+    };
+
+    type ROCallback = (entries: ResizeObserverEntry[], observer: ResizeObserver) => void;
+    let capturedCallback: ROCallback | null = null;
+    const mockObserve = jest.fn();
+    const mockDisconnect = jest.fn();
+    const OrigRO = (global as Record<string, unknown>).ResizeObserver;
+    (global as Record<string, unknown>).ResizeObserver = class {
+      constructor(cb: ROCallback) { capturedCallback = cb; }
+      observe = mockObserve;
+      disconnect = mockDisconnect;
+    };
+
+    // Suppress rAF so double-RAF play() doesn't fire and interfere with our count.
+    const origRAF = window.requestAnimationFrame;
+    const origCAF = window.cancelAnimationFrame;
+    window.requestAnimationFrame = () => 0;
+    window.cancelAnimationFrame = jest.fn();
+
+    try {
+      const p = makeRemoteParticipant({
+        peerId: "p-ro",
+        audioStream: null,
+        videoStream: makeFakeStream([
+          { kind: "video", enabled: true, readyState: "live" },
+        ]),
+      });
+      render(<AVTile participant={p} />);
+
+      expect(mockObserve).toHaveBeenCalled();
+      expect(capturedCallback).not.toBeNull();
+      expect(videoPlayMock).not.toHaveBeenCalled();
+
+      // Simulate the browser reporting a non-zero bounding box for the tile.
+      act(() => {
+        capturedCallback!(
+          [
+            {
+              contentRect: { width: 160, height: 120, x: 0, y: 0, top: 0, right: 160, bottom: 120, left: 0 },
+              target: document.createElement("video"),
+              borderBoxSize: [],
+              contentBoxSize: [],
+              devicePixelContentBoxSize: [],
+            } as unknown as ResizeObserverEntry,
+          ],
+          {} as ResizeObserver
+        );
+      });
+
+      expect(mockDisconnect).toHaveBeenCalled();
+      expect(videoPlayMock).toHaveBeenCalledTimes(1);
+    } finally {
+      HTMLMediaElement.prototype.play = origPlay;
+      (global as Record<string, unknown>).ResizeObserver = OrigRO;
+      window.requestAnimationFrame = origRAF;
+      window.cancelAnimationFrame = origCAF;
+    }
+  });
+
+  test("ResizeObserver does NOT fire play() when bounding box is still zero", () => {
+    const videoPlayMock = jest.fn().mockResolvedValue(undefined);
+    const origPlay = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
+      if (this.tagName === "VIDEO") videoPlayMock();
+      return Promise.resolve();
+    };
+
+    type ROCallback = (entries: ResizeObserverEntry[], observer: ResizeObserver) => void;
+    let capturedCallback: ROCallback | null = null;
+    const mockDisconnect = jest.fn();
+    const OrigRO = (global as Record<string, unknown>).ResizeObserver;
+    (global as Record<string, unknown>).ResizeObserver = class {
+      constructor(cb: ROCallback) { capturedCallback = cb; }
+      observe = jest.fn();
+      disconnect = mockDisconnect;
+    };
+
+    const origRAF = window.requestAnimationFrame;
+    const origCAF = window.cancelAnimationFrame;
+    window.requestAnimationFrame = () => 0;
+    window.cancelAnimationFrame = jest.fn();
+
+    try {
+      const p = makeRemoteParticipant({
+        peerId: "p-ro-zero",
+        audioStream: null,
+        videoStream: makeFakeStream([
+          { kind: "video", enabled: true, readyState: "live" },
+        ]),
+      });
+      render(<AVTile participant={p} />);
+      expect(capturedCallback).not.toBeNull();
+
+      // Fire with zero dimensions — should NOT call play() or disconnect.
+      act(() => {
+        capturedCallback!(
+          [
+            {
+              contentRect: { width: 0, height: 0, x: 0, y: 0, top: 0, right: 0, bottom: 0, left: 0 },
+              target: document.createElement("video"),
+              borderBoxSize: [],
+              contentBoxSize: [],
+              devicePixelContentBoxSize: [],
+            } as unknown as ResizeObserverEntry,
+          ],
+          {} as ResizeObserver
+        );
+      });
+
+      expect(videoPlayMock).not.toHaveBeenCalled();
+      expect(mockDisconnect).not.toHaveBeenCalled();
+    } finally {
+      HTMLMediaElement.prototype.play = origPlay;
+      (global as Record<string, unknown>).ResizeObserver = OrigRO;
+      window.requestAnimationFrame = origRAF;
+      window.cancelAnimationFrame = origCAF;
+    }
+  });
+
+  test("ResizeObserver is not attached when there is no videoStream", () => {
+    const OrigRO = (global as Record<string, unknown>).ResizeObserver;
+    const mockObserve = jest.fn();
+    (global as Record<string, unknown>).ResizeObserver = class {
+      constructor() {}
+      observe = mockObserve;
+      disconnect = jest.fn();
+    };
+
+    const origRAF = window.requestAnimationFrame;
+    const origCAF = window.cancelAnimationFrame;
+    window.requestAnimationFrame = () => 0;
+    window.cancelAnimationFrame = jest.fn();
+
+    try {
+      const p = makeRemoteParticipant({
+        peerId: "p-ro-nostream",
+        audioStream: null,
+        videoStream: null,
+      });
+      render(<AVTile participant={p} />);
+      expect(mockObserve).not.toHaveBeenCalled();
+    } finally {
+      (global as Record<string, unknown>).ResizeObserver = OrigRO;
+      window.requestAnimationFrame = origRAF;
+      window.cancelAnimationFrame = origCAF;
+    }
+  });
+});
+
 describe("AVTile — local preview tile", () => {
   type LocalProps = Extract<AVTileProps["participant"], { isLocal: true }>;
   function localDescriptor(extra: Partial<LocalProps> = {}): LocalProps {
