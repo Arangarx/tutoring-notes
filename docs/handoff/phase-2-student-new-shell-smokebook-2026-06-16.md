@@ -1,7 +1,7 @@
 # Phase 2 — student on new shell — smoke runbook
 
 **Branch:** `phase2/wb-student-new-shell`
-**Tip commit:** `<set after rework push — parity commit on branch>`
+**Tip commit:** [`b7dbe0c`](https://github.com/Arangarx/tutoring-notes/commit/b7dbe0c38fad24bdc5be202da46554071ede3c3d)
 **Preview:** <unverified — confirm in Vercel dashboard after push; Vercel MCP unavailable in executor environment — fetch `meta.branchAlias` for `githubCommitRef=phase2/wb-student-new-shell`>
 
 > **Scope correction (Andrew 2026-06-17):** student = **full tutor-parity chrome + toolset** minus D1–D5 (+ D6 asset inserts tutor-only). No in-app `AVPermissionsPrompt`; browser-native getUserMedia only. A/V auto-requested on mount. **Exit** (not Leave). Read-only page strip. Student-color laser. Follow toggle preserved. No share link.
