@@ -73,14 +73,21 @@ export function WbAVCluster({
   const isMobileLayout = layoutMode !== "desktop";
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [size, setSize] = useState(DEFAULT_SIZE);
+  /** True only after the tutor drags the resize handle (manual resize wins over auto-shrink). */
   const [userResized, setUserResized] = useState(false);
+  /** Mechanism A paint-reflow lock — distinct from userResized so peer leave can re-enable auto-grow. */
+  const [paintReflowLocked, setPaintReflowLocked] = useState(false);
   const [viewportCap, setViewportCap] = useState(AUTO_GROW_MAX_HEIGHT);
 
   const tileCount =
     (tilesProps.localTile ? 1 : 0) + tilesProps.participants.length;
   const autoClusterHeight = computeAutoClusterHeight(Math.max(tileCount, 1));
   const useAutoGrow =
-    !isMobileLayout && !userResized && tileCount > 0 && autoClusterHeight <= viewportCap;
+    !isMobileLayout &&
+    !userResized &&
+    !paintReflowLocked &&
+    tileCount > 0 &&
+    autoClusterHeight <= viewportCap;
 
   // Mechanism A: number of remote participants that currently have a live videoStream.
   const remoteVideoCount = tilesProps.participants.filter(
@@ -99,9 +106,10 @@ export function WbAVCluster({
   // We reproduce the same transition automatically when a remote videoStream
   // arrives: snapshot displayHeightRef.current (already computed for the current
   // tileCount, so the height is correct and there is no squish) then call
-  // setSize + setUserResized(true) so the next render drops data-auto-grow and
-  // sets an explicit style.height.  Guard: effect only fires when count increases
-  // (once per arrival event); prevRemoteVideoCountRef prevents re-loop.
+  // setSize + setPaintReflowLocked(true) so the next render drops data-auto-grow
+  // and sets an explicit style.height.  On symmetric leave (paint lock only, no
+  // manual drag), clear the lock and restore auto-grow height.
+  // Guard: effect only fires on count change; prevRemoteVideoCountRef prevents re-loop.
   useEffect(() => {
     if (isMobileLayout) return;
     const prev = prevRemoteVideoCountRef.current;
@@ -115,9 +123,14 @@ export function WbAVCluster({
       // and the switch to explicit inline pixels that produces the layout event.
       const h = displayHeightRef.current;
       setSize((s) => ({ width: s.width, height: h }));
-      setUserResized(true);
+      setPaintReflowLocked(true);
+    } else if (remoteVideoCount < prev && paintReflowLocked && !userResized) {
+      setPaintReflowLocked(false);
+      const newTileCount = Math.max(tileCount, 1);
+      const h = computeAutoClusterHeight(newTileCount);
+      setSize((s) => ({ width: s.width, height: h }));
     }
-  }, [isMobileLayout, remoteVideoCount]);
+  }, [isMobileLayout, remoteVideoCount, paintReflowLocked, userResized, tileCount]);
 
   useLayoutEffect(() => {
     if (isMobileLayout) return;
@@ -141,6 +154,7 @@ export function WbAVCluster({
       setSize(DEFAULT_SIZE);
     }
     setUserResized(false);
+    setPaintReflowLocked(false);
   }, [isMobileLayout, layoutMode]);
 
   const onDragPointerDown = useCallback(
@@ -217,7 +231,7 @@ export function WbAVCluster({
   }, []);
 
   // Auto mode: height tracks tileCount each render (shrinks when tiles leave).
-  // userResized freezes size.height on leave — manual drag wins over auto-shrink.
+  // paintReflowLocked holds 2-up height until peer leaves; userResized (manual drag) wins.
   const displayHeight = useAutoGrow
     ? autoClusterHeight
     : !userResized && autoClusterHeight > viewportCap

@@ -19,6 +19,7 @@
 
 import React from "react";
 import { act, render, screen, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { WbAVCluster, type WbAVClusterProps } from "@/components/whiteboard/chrome/WbAVCluster";
 import type { AvParticipant } from "@/hooks/useLiveAV";
@@ -169,5 +170,79 @@ describe("WbAVCluster — Mechanism A (auto-reflow on remote video arrival)", ()
     const cluster = screen.getByTestId("wb-av-cluster") as HTMLElement;
     const heightPx = parseInt(cluster.style.height, 10);
     expect(heightPx).toBe(EXPECTED_2_TILE_HEIGHT);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Mechanism A symmetric leave — cluster shrinks when remote video departs
+// (jsdom verifies state/DOM only; compositor paint needs real-browser smoke)
+// ---------------------------------------------------------------------------
+
+describe("WbAVCluster — shrink on remote video departure (paint-reflow lock release)", () => {
+  const EXPECTED_1_TILE_HEIGHT = 280;
+  const EXPECTED_2_TILE_HEIGHT = 497;
+
+  test("cluster returns to auto-grow and single-tile height when remote peer with video leaves", async () => {
+    const remote = makeRemoteParticipant("peer-leave", true);
+    const { rerender } = render(<WbAVCluster {...makeBaseProps([])} />);
+
+    // Arrival: Mechanism A locks 2-up height (mirror existing arrival tests).
+    await act(async () => {
+      rerender(<WbAVCluster {...makeBaseProps([remote])} />);
+    });
+    const cluster2Up = screen.getByTestId("wb-av-cluster") as HTMLElement;
+    expect(cluster2Up.getAttribute("data-auto-grow")).toBeNull();
+    expect(parseInt(cluster2Up.style.height, 10)).toBe(EXPECTED_2_TILE_HEIGHT);
+
+    // Remote peer disconnects — only local tile remains.
+    await act(async () => {
+      rerender(<WbAVCluster {...makeBaseProps([])} />);
+    });
+
+    const cluster1Up = screen.getByTestId("wb-av-cluster") as HTMLElement;
+    expect(cluster1Up.getAttribute("data-auto-grow")).toBe("true");
+    const heightPx = parseInt(cluster1Up.style.height, 10);
+    expect(heightPx).toBe(EXPECTED_1_TILE_HEIGHT);
+    expect(heightPx).not.toBe(EXPECTED_2_TILE_HEIGHT);
+  });
+
+  test("manual resize is NOT undone when remote peer leaves after tutor dragged resize handle", async () => {
+    const user = userEvent.setup();
+    const remote = makeRemoteParticipant("peer-manual", true);
+    const { container, rerender } = render(<WbAVCluster {...makeBaseProps([])} />);
+
+    const resizeHandle = container.querySelector(
+      ".mynk-wb-av-cluster__resize-handle"
+    ) as HTMLElement;
+    expect(resizeHandle).toBeTruthy();
+    resizeHandle.setPointerCapture = jest.fn();
+    resizeHandle.releasePointerCapture = jest.fn();
+
+    const MANUAL_HEIGHT = EXPECTED_1_TILE_HEIGHT - 30;
+
+    // Manual drag on single-tile cluster (before remote joins).
+    await user.pointer([
+      { keys: "[MouseLeft>]", target: resizeHandle, coords: { clientX: 100, clientY: 100 } },
+      { coords: { clientX: 100, clientY: 70 } },
+      { keys: "[/MouseLeft]" },
+    ]);
+
+    const clusterManual = screen.getByTestId("wb-av-cluster") as HTMLElement;
+    expect(parseInt(clusterManual.style.height, 10)).toBe(MANUAL_HEIGHT);
+    expect(clusterManual.getAttribute("data-auto-grow")).toBeNull();
+
+    // Remote joins (Mechanism A fires but userResized must stay authoritative).
+    await act(async () => {
+      rerender(<WbAVCluster {...makeBaseProps([remote])} />);
+    });
+
+    // Remote leaves — manual height must be preserved, not auto-shrink to 280.
+    await act(async () => {
+      rerender(<WbAVCluster {...makeBaseProps([])} />);
+    });
+
+    const clusterAfterLeave = screen.getByTestId("wb-av-cluster") as HTMLElement;
+    expect(parseInt(clusterAfterLeave.style.height, 10)).toBe(MANUAL_HEIGHT);
+    expect(clusterAfterLeave.getAttribute("data-auto-grow")).toBeNull();
   });
 });
