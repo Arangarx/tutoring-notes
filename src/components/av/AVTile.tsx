@@ -141,32 +141,49 @@ export function AVTile({
     if (!el) return;
     el.srcObject = participant.videoStream ?? null;
     if (!participant.videoStream) return;
-    // Deferred play() via requestAnimationFrame — Chrome compositor-layer race guard.
+    // Double-RAF compositor-layer race guard.
     //
-    // The <video> transitions from display:none (showCamPlaceholder=true while
-    // videoStream=null) to display:block in the SAME React render cycle that
-    // delivers the remote video stream. Chrome creates the video compositing layer
-    // during that render's paint phase (frame N). However, the GPU frame-routing
-    // path — connecting the decoder output to the layer — is not wired until the
-    // NEXT compositing pass (frame N+1). Calling play() at the end of frame N
-    // (in this useEffect, which fires after paint) succeeds logically but decoded
-    // frames are silently discarded because the GPU routing path isn't ready.
-    // Result: video appears black until a manual resize forces a second compositing
-    // pass (frame N+1) that rewires the pipeline.
+    // Timeline leading to the black-video symptom:
     //
-    // Fix: defer play() to requestAnimationFrame so it runs in frame N+1, by which
-    // time the compositing layer is fully connected to the decoder output.
+    //   Frame N  — React commit: <video> style flips from display:none →
+    //              display:block. useEffect fires AFTER this paint, then sets
+    //              el.srcObject = videoStream. A single requestAnimationFrame
+    //              is scheduled.
+    //
+    //   Frame N+1 rAF (outer) — fires BEFORE the N+1 paint.  Chrome has not
+    //              yet processed the srcObject change through its GPU video
+    //              pipeline — the decoder-to-compositor-layer routing path is
+    //              not wired until the N+1 PAINT runs. Calling play() here
+    //              (as the previous single-RAF fix did) succeeds logically but
+    //              decoded frames are silently discarded by the unconnected
+    //              compositor. This is why the single-RAF fix left the video
+    //              black, and why a manual resize (which forces a fresh layout/
+    //              paint cycle) was the only thing that made it paint.
+    //
+    //   Frame N+1 PAINT — browser wires the decoder output to the compositor
+    //              layer for this srcObject.
+    //
+    //   Frame N+2 rAF (inner) — fires AFTER the N+1 paint. Compositor is now
+    //              fully connected. Calling play() here routes decoded frames
+    //              through to the layer immediately, so the video paints without
+    //              any manual resize.
     const stream = participant.videoStream;
-    const rafId = requestAnimationFrame(() => {
-      const cur = videoRef.current;
-      if (!cur || cur.srcObject !== stream) return;
-      const p =
-        typeof cur.play === "function"
-          ? (cur.play() as Promise<void> | undefined)
-          : undefined;
-      p?.catch(() => {});
+    let innerRaf: number | null = null;
+    const outerRaf = requestAnimationFrame(() => {
+      innerRaf = requestAnimationFrame(() => {
+        const cur = videoRef.current;
+        if (!cur || cur.srcObject !== stream) return;
+        const p =
+          typeof cur.play === "function"
+            ? (cur.play() as Promise<void> | undefined)
+            : undefined;
+        p?.catch(() => {});
+      });
     });
-    return () => cancelAnimationFrame(rafId);
+    return () => {
+      cancelAnimationFrame(outerRaf);
+      if (innerRaf !== null) cancelAnimationFrame(innerRaf);
+    };
   }, [participant.videoStream]);
 
   useEffect(() => {

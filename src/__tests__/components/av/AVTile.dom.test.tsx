@@ -401,21 +401,28 @@ describe("AVTile — remote participant", () => {
 });
 
 /**
- * Red-before / green-after test for the rAF-deferred play() fix.
+ * Red-before / green-after tests for the double-RAF compositor-layer fix.
  *
  * Uses a manual rAF intercept (NOT the auto-flush shim from the "remote
- * participant" describe) so we can prove that play() does NOT fire
- * synchronously and only fires after the rAF callback is explicitly invoked.
+ * participant" describe) so we can prove the exact deferral behaviour.
  *
- * RED-BEFORE (old immediate-play code): `expect(videoPlayMock).not.toHaveBeenCalled()`
- *   would FAIL because play() was called directly inside the useEffect.
- * GREEN-AFTER (rAF-deferred fix): assertion PASSES, and a manual rAF dispatch
- *   then calls play() exactly once.
+ * Architecture under test (see AVTile.tsx comment for full explanation):
+ *   - Frame N: React commits display:none→block; useEffect sets srcObject;
+ *              outer RAF is scheduled.
+ *   - Frame N+1 rAF (outer): fires BEFORE the N+1 paint → schedules inner RAF.
+ *   - Frame N+1 PAINT: Chrome wires decoder→compositor layer.
+ *   - Frame N+2 rAF (inner): fires AFTER N+1 paint → play() is called and
+ *              frames route to the now-wired compositor layer.
+ *
+ * RED-BEFORE (single-RAF or synchronous play): play() called before the N+1
+ *   paint → compositor not yet wired → black video until resize.
+ * GREEN-AFTER (double-RAF): play() deferred past the N+1 paint → video paints
+ *   on stream arrival without any manual resize.
  */
-describe("AVTile — video compositor-race guard (rAF-deferred play)", () => {
+describe("AVTile — video compositor-race guard (double-RAF deferred play)", () => {
   afterEach(() => cleanup());
 
-  test("play() is NOT called synchronously; fires exactly once after the rAF callback", () => {
+  test("play() is NOT called synchronously nor after the first (outer) RAF; fires exactly once after the second (inner) RAF", () => {
     const videoPlayMock = jest.fn().mockResolvedValue(undefined);
     const origPlay = HTMLMediaElement.prototype.play;
     HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
@@ -424,10 +431,11 @@ describe("AVTile — video compositor-race guard (rAF-deferred play)", () => {
     };
     const origRAF = window.requestAnimationFrame;
     const origCAF = window.cancelAnimationFrame;
-    let capturedCb: FrameRequestCallback | null = null;
+    const capturedCbs: FrameRequestCallback[] = [];
+    let rafId = 0;
     window.requestAnimationFrame = (cb: FrameRequestCallback): number => {
-      capturedCb = cb;
-      return 1;
+      capturedCbs.push(cb);
+      return ++rafId;
     };
     window.cancelAnimationFrame = jest.fn();
     try {
@@ -440,20 +448,19 @@ describe("AVTile — video compositor-race guard (rAF-deferred play)", () => {
       });
       render(<AVTile participant={p} />);
 
-      // RED-BEFORE: with the old immediate-play() code, play() was called
-      // synchronously inside useEffect, so this assertion would FAIL.
-      // GREEN-AFTER: play() is deferred to rAF — it has NOT fired yet.
+      // Only the outer RAF is scheduled at this point; play() not called.
       expect(videoPlayMock).not.toHaveBeenCalled();
+      expect(capturedCbs).toHaveLength(1); // outer RAF captured
 
-      // Simulate the browser granting the next animation frame (frame N+1),
-      // the exact moment the Chrome compositor finishes wiring the GPU
-      // frame-routing path. This is what manual resize was triggering.
-      expect(capturedCb).not.toBeNull();
-      act(() => {
-        capturedCb!(0);
-      });
+      // Fire the outer RAF (frame N+1 pre-paint). This schedules the inner RAF
+      // but must NOT call play() yet — the N+1 paint hasn't run.
+      act(() => { capturedCbs[0](0); });
+      expect(videoPlayMock).not.toHaveBeenCalled(); // still black — compositor not wired
+      expect(capturedCbs).toHaveLength(2); // inner RAF now captured
 
-      // After the rAF fires, play() must have been called exactly once.
+      // Fire the inner RAF (frame N+2 pre-paint, i.e. after N+1 paint where
+      // Chrome connected the decoder to the compositor layer). NOW play() fires.
+      act(() => { capturedCbs[1](0); });
       expect(videoPlayMock).toHaveBeenCalledTimes(1);
     } finally {
       HTMLMediaElement.prototype.play = origPlay;
@@ -483,9 +490,11 @@ describe("AVTile — video compositor-race guard (rAF-deferred play)", () => {
       const p = makeRemoteParticipant({ peerId: "p-raf-stable", audioStream: null, videoStream: stream });
       const { rerender } = render(<AVTile participant={p} />);
 
-      // rAF scheduled for first stream assignment; fire it.
-      expect(capturedCbs).toHaveLength(1);
-      act(() => { capturedCbs[0](0); });
+      // Double-RAF for first stream assignment: outer + inner, then play().
+      expect(capturedCbs).toHaveLength(1); // outer scheduled
+      act(() => { capturedCbs[0](0); }); // fire outer → inner scheduled
+      expect(capturedCbs).toHaveLength(2);
+      act(() => { capturedCbs[1](0); }); // fire inner → play() called
       expect(videoPlayMock).toHaveBeenCalledTimes(1);
       videoPlayMock.mockClear();
       capturedCbs.length = 0;
