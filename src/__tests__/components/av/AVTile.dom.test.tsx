@@ -3,7 +3,7 @@
  */
 
 import React from "react";
-import { render, cleanup, screen, waitFor } from "@testing-library/react";
+import { act, render, cleanup, screen, waitFor } from "@testing-library/react";
 
 import { AVTile, type AVTileProps } from "@/components/av/AVTile";
 import type { AvParticipant } from "@/hooks/useLiveAV";
@@ -52,6 +52,45 @@ afterEach(() => {
 });
 
 describe("AVTile — remote participant", () => {
+  /**
+   * The video effect now defers play() via requestAnimationFrame so that
+   * Chrome's compositor layer is connected before the play() call (see the
+   * "compositor-layer race" comment in AVTile.tsx). In jsdom, rAF is
+   * implemented as setTimeout(cb, 1000/60), so it doesn't fire automatically
+   * within act(). We shim it to fire synchronously (the callback runs
+   * immediately when scheduled) so that play() lands within the same act()
+   * call and existing synchronous-count assertions continue to work.
+   *
+   * Note: the compositor-race-guard describe below uses its own *non*-
+   * synchronous mock to prove that play() is genuinely deferred.
+   */
+  let _origRAF: typeof window.requestAnimationFrame;
+  let _origCAF: typeof window.cancelAnimationFrame;
+  const _rafPending = new Map<number, FrameRequestCallback>();
+  let _rafIdSeq = 0;
+
+  beforeEach(() => {
+    _rafPending.clear();
+    _rafIdSeq = 0;
+    _origRAF = window.requestAnimationFrame;
+    _origCAF = window.cancelAnimationFrame;
+    window.requestAnimationFrame = (cb: FrameRequestCallback): number => {
+      const id = ++_rafIdSeq;
+      _rafPending.set(id, cb);
+      // Fire synchronously so play() lands inside act()'s effect-flush scope.
+      cb(0);
+      _rafPending.delete(id);
+      return id;
+    };
+    window.cancelAnimationFrame = (id: number) => {
+      _rafPending.delete(id);
+    };
+  });
+
+  afterEach(() => {
+    window.requestAnimationFrame = _origRAF;
+    window.cancelAnimationFrame = _origCAF;
+  });
   test("renders <video muted playsInline> with the participant's videoStream as srcObject", () => {
     const p = makeRemoteParticipant({ peerId: "p-1" });
     render(<AVTile participant={p} />);
@@ -357,6 +396,108 @@ describe("AVTile — remote participant", () => {
     } finally {
       HTMLMediaElement.prototype.play = originalPlay;
       console.warn = originalWarn;
+    }
+  });
+});
+
+/**
+ * Red-before / green-after test for the rAF-deferred play() fix.
+ *
+ * Uses a manual rAF intercept (NOT the auto-flush shim from the "remote
+ * participant" describe) so we can prove that play() does NOT fire
+ * synchronously and only fires after the rAF callback is explicitly invoked.
+ *
+ * RED-BEFORE (old immediate-play code): `expect(videoPlayMock).not.toHaveBeenCalled()`
+ *   would FAIL because play() was called directly inside the useEffect.
+ * GREEN-AFTER (rAF-deferred fix): assertion PASSES, and a manual rAF dispatch
+ *   then calls play() exactly once.
+ */
+describe("AVTile — video compositor-race guard (rAF-deferred play)", () => {
+  afterEach(() => cleanup());
+
+  test("play() is NOT called synchronously; fires exactly once after the rAF callback", () => {
+    const videoPlayMock = jest.fn().mockResolvedValue(undefined);
+    const origPlay = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
+      if (this.tagName === "VIDEO") videoPlayMock();
+      return Promise.resolve();
+    };
+    const origRAF = window.requestAnimationFrame;
+    const origCAF = window.cancelAnimationFrame;
+    let capturedCb: FrameRequestCallback | null = null;
+    window.requestAnimationFrame = (cb: FrameRequestCallback): number => {
+      capturedCb = cb;
+      return 1;
+    };
+    window.cancelAnimationFrame = jest.fn();
+    try {
+      const p = makeRemoteParticipant({
+        peerId: "p-raf-guard",
+        audioStream: null,
+        videoStream: makeFakeStream([
+          { kind: "video", enabled: true, readyState: "live" },
+        ]),
+      });
+      render(<AVTile participant={p} />);
+
+      // RED-BEFORE: with the old immediate-play() code, play() was called
+      // synchronously inside useEffect, so this assertion would FAIL.
+      // GREEN-AFTER: play() is deferred to rAF — it has NOT fired yet.
+      expect(videoPlayMock).not.toHaveBeenCalled();
+
+      // Simulate the browser granting the next animation frame (frame N+1),
+      // the exact moment the Chrome compositor finishes wiring the GPU
+      // frame-routing path. This is what manual resize was triggering.
+      expect(capturedCb).not.toBeNull();
+      act(() => {
+        capturedCb!(0);
+      });
+
+      // After the rAF fires, play() must have been called exactly once.
+      expect(videoPlayMock).toHaveBeenCalledTimes(1);
+    } finally {
+      HTMLMediaElement.prototype.play = origPlay;
+      window.requestAnimationFrame = origRAF;
+      window.cancelAnimationFrame = origCAF;
+    }
+  });
+
+  test("play() is NOT called on rerender when the stream has not changed", () => {
+    const videoPlayMock = jest.fn().mockResolvedValue(undefined);
+    const origPlay = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
+      if (this.tagName === "VIDEO") videoPlayMock();
+      return Promise.resolve();
+    };
+    const origRAF = window.requestAnimationFrame;
+    const origCAF = window.cancelAnimationFrame;
+    const capturedCbs: FrameRequestCallback[] = [];
+    let rafId = 0;
+    window.requestAnimationFrame = (cb: FrameRequestCallback): number => {
+      capturedCbs.push(cb);
+      return ++rafId;
+    };
+    window.cancelAnimationFrame = jest.fn();
+    try {
+      const stream = makeFakeStream([{ kind: "video", enabled: true, readyState: "live" }]);
+      const p = makeRemoteParticipant({ peerId: "p-raf-stable", audioStream: null, videoStream: stream });
+      const { rerender } = render(<AVTile participant={p} />);
+
+      // rAF scheduled for first stream assignment; fire it.
+      expect(capturedCbs).toHaveLength(1);
+      act(() => { capturedCbs[0](0); });
+      expect(videoPlayMock).toHaveBeenCalledTimes(1);
+      videoPlayMock.mockClear();
+      capturedCbs.length = 0;
+
+      // Rerender with the SAME stream object — effect does not re-run.
+      rerender(<AVTile participant={{ ...p, label: "Updated" }} />);
+      expect(capturedCbs).toHaveLength(0);
+      expect(videoPlayMock).not.toHaveBeenCalled();
+    } finally {
+      HTMLMediaElement.prototype.play = origPlay;
+      window.requestAnimationFrame = origRAF;
+      window.cancelAnimationFrame = origCAF;
     }
   });
 });
