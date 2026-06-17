@@ -1,7 +1,7 @@
 # Phase 2 — student on new shell — smoke runbook
 
 **Branch:** `phase2/wb-student-new-shell`
-**Tip commit:** [`e7eec65`](https://github.com/Arangarx/tutoring-notes/commit/e7eec65)
+**Tip commit:** [`bc5f2f3`](https://github.com/Arangarx/tutoring-notes/commit/bc5f2f3)
 **Preview:** [phase2/wb-student-new-shell preview](https://tutoring-notes-git-phase2-wb-stu-9fb9ae-arangarx-5209s-projects.vercel.app)
 
 **Vercel env (required for items 2+):** set `NEXT_PUBLIC_WB_STUDENT_NEW_SHELL=1` on this branch Preview before smoke. Production stays off until retire-legacy gate.
@@ -13,7 +13,7 @@
 | Field | How to fill it |
 |---|---|
 | **Branch** | `phase2/wb-student-new-shell` |
-| **Tip commit** | `e7eec65` at smoke time |
+| **Tip commit** | `bc5f2f3` at smoke time |
 | **Preview** | Fetched via Vercel MCP — `meta.branchAlias` for `githubCommitRef=phase2/wb-student-new-shell` |
 | **Overall result** | PASS only if every in-scope item PASS |
 
