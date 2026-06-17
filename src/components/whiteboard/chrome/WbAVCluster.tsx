@@ -67,6 +67,8 @@ export function WbAVCluster({
     origW: number;
     origH: number;
   } | null>(null);
+  /** Latest rendered cluster height (auto-grow or manual) for resize drag origin. */
+  const displayHeightRef = useRef(DEFAULT_SIZE.height);
 
   const isMobileLayout = layoutMode !== "desktop";
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
@@ -150,7 +152,7 @@ export function WbAVCluster({
         startX: e.clientX,
         startY: e.clientY,
         origW: size.width,
-        origH: size.height,
+        origH: displayHeightRef.current,
       };
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
     },
@@ -184,6 +186,7 @@ export function WbAVCluster({
     : !userResized && autoClusterHeight > viewportCap
       ? viewportCap
       : size.height;
+  displayHeightRef.current = displayHeight;
 
   const style: React.CSSProperties = isMobileLayout
     ? { width: size.width, maxWidth: size.width }

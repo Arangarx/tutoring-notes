@@ -1316,6 +1316,10 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           role: entry.role,
           ...(entry.label !== undefined ? { label: entry.label } : {}),
           audioStream: entry.hasAudioTrack ? entry.audioStream : null,
+          // Null-guard is load-bearing: when a video track is added to an
+          // existing MediaStream, hasVideoTrack flips false→true so
+          // videoStream goes null→stream and AVTile's video effect re-fires.
+          // Exposing entry.videoStream directly would skip that transition.
           videoStream: entry.hasVideoTrack ? entry.videoStream : null,
           peerConnectionState: entry.peerConnectionState,
           iceConnectionState: entry.iceConnectionState,

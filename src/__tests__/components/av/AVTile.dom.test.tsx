@@ -63,6 +63,64 @@ describe("AVTile — remote participant", () => {
     expect(video.srcObject).toBe(p.videoStream);
   });
 
+  test("calls play() on the video element when a videoStream is assigned", () => {
+    const videoPlayMock = jest.fn().mockResolvedValue(undefined);
+    const originalPlay = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
+      if (this.tagName === "VIDEO") videoPlayMock();
+      return Promise.resolve();
+    };
+    try {
+      const p = makeRemoteParticipant({
+        peerId: "p-vplay",
+        audioStream: null,
+        videoStream: makeFakeStream([
+          { kind: "video", enabled: true, readyState: "live" },
+        ]),
+      });
+      render(<AVTile participant={p} />);
+      expect(videoPlayMock).toHaveBeenCalledTimes(1);
+    } finally {
+      HTMLMediaElement.prototype.play = originalPlay;
+    }
+  });
+
+  test("calls play() on the video element when participant gains a videoStream on rerender", () => {
+    const videoPlayMock = jest.fn().mockResolvedValue(undefined);
+    const originalPlay = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
+      if (this.tagName === "VIDEO") videoPlayMock();
+      return Promise.resolve();
+    };
+    try {
+      const { rerender } = render(
+        <AVTile
+          participant={makeRemoteParticipant({
+            peerId: "p-gain",
+            audioStream: null,
+            videoStream: null,
+          })}
+        />
+      );
+      expect(videoPlayMock).not.toHaveBeenCalled();
+
+      rerender(
+        <AVTile
+          participant={makeRemoteParticipant({
+            peerId: "p-gain",
+            audioStream: null,
+            videoStream: makeFakeStream([
+              { kind: "video", enabled: true, readyState: "live" },
+            ]),
+          })}
+        />
+      );
+      expect(videoPlayMock).toHaveBeenCalledTimes(1);
+    } finally {
+      HTMLMediaElement.prototype.play = originalPlay;
+    }
+  });
+
   test("renders <audio autoplay> alongside the video; <audio> srcObject = audioStream", () => {
     const p = makeRemoteParticipant({ peerId: "p-2" });
     render(<AVTile participant={p} />);
@@ -270,6 +328,9 @@ describe("AVTile — remote participant", () => {
     const playMock = jest
       .fn<Promise<void>, []>()
       .mockRejectedValueOnce(
+        Object.assign(new Error("video autoplay aborted"), { name: "AbortError" })
+      )
+      .mockRejectedValueOnce(
         Object.assign(new Error("autoplay blocked"), { name: "NotAllowedError" })
       )
       .mockResolvedValueOnce(undefined);
@@ -292,7 +353,7 @@ describe("AVTile — remote participant", () => {
           screen.queryByTestId("av-tile-audio-unblock-p-block")
         ).toBeNull()
       );
-      expect(playMock).toHaveBeenCalledTimes(2);
+      expect(playMock).toHaveBeenCalledTimes(3);
     } finally {
       HTMLMediaElement.prototype.play = originalPlay;
       console.warn = originalWarn;

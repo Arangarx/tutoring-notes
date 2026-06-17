@@ -140,6 +140,15 @@ export function AVTile({
     const el = videoRef.current;
     if (!el) return;
     el.srcObject = participant.videoStream ?? null;
+    if (!participant.videoStream) return;
+    // Explicit play() after srcObject assignment — muted video autoplay
+    // is allowed, but some browsers still need play() to paint the first
+    // frame without a layout nudge (see audio effect below).
+    const p =
+      typeof el.play === "function"
+        ? (el.play() as Promise<void> | undefined)
+        : undefined;
+    p?.catch(() => {});
   }, [participant.videoStream]);
 
   useEffect(() => {
