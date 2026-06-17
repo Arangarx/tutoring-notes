@@ -705,12 +705,15 @@
   max-width: 100%;
 }
 
-/* A3b — tile video body: unset standalone aspect-ratio so cluster height
- * drives layout instead. A non-zero min-height prevents collapse to 0 when
- * the cluster is in manual-resize / viewport-capped mode (no auto-grow). */
+/* A3b — tile video body fills the tile's column flex context.
+ * aspect-ratio: 4/3 is kept from AVTile's inline style so the video body has
+ * a concrete intrinsic height (width × 0.75) at mount time — the same pattern
+ * that makes the student-side remote video paint on arrival without any resize.
+ * In auto-grow mode the body expands past the intrinsic height via flex-grow;
+ * object-fit: cover on <video> absorbs the ratio mismatch.
+ * min-height prevents collapse to 0 in narrow / viewport-capped mode. */
 .mynk-wb-av-cluster__tiles-panel > [data-testid^="av-tile-"] > div:first-child {
   flex: 1 1 auto !important;
-  aspect-ratio: unset !important;
   min-height: 60px;
 }
 
