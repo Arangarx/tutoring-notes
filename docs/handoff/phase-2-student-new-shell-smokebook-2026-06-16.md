@@ -1,10 +1,8 @@
 # Phase 2 — student on new shell — smoke runbook
 
 **Branch:** `phase2/wb-student-new-shell`
-**Tip commit:** [`bc5f2f3`](https://github.com/Arangarx/tutoring-notes/commit/bc5f2f3)
+**Tip commit:** [`23e1cba`](https://github.com/Arangarx/tutoring-notes/commit/23e1cba39f7d577b1ecb2a7ea3750632abe358c2)
 **Preview:** [phase2/wb-student-new-shell preview](https://tutoring-notes-git-phase2-wb-stu-9fb9ae-arangarx-5209s-projects.vercel.app)
-
-**Vercel env (required for items 2+):** set `NEXT_PUBLIC_WB_STUDENT_NEW_SHELL=1` on this branch Preview before smoke. Production stays off until retire-legacy gate.
 
 ---
 
@@ -13,21 +11,21 @@
 | Field | How to fill it |
 |---|---|
 | **Branch** | `phase2/wb-student-new-shell` |
-| **Tip commit** | `bc5f2f3` at smoke time |
+| **Tip commit** | `23e1cba` at smoke time |
 | **Preview** | Fetched via Vercel MCP — `meta.branchAlias` for `githubCommitRef=phase2/wb-student-new-shell` |
 | **Overall result** | PASS only if every in-scope item PASS |
 
-Run order: top to bottom. Item 13 repeats 2–6 in light and dark.
+Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 
 ---
 
 ### 0. Loading scene repro (Step 0 spike)
 
-**Action:** Tutor on new shell + student on new shell (flag on). Student hard-refresh 5×; cold join 5×. Watch for Excalidraw "Loading scene…" overlay or stuck board.
+**Action:** Tutor on new shell + student on new shell. Student hard-refresh 5×; cold join 5×. Watch for Excalidraw "Loading scene…" overlay or stuck board.
 
 **Expect:** Document in Notes whether hang reproduces on new shell. If never seen, loading guard is belt-and-suspenders only.
 
-**Ignore this run:** Legacy student path (flag off).
+**Ignore this run:** Nothing.
 
 - [ ] PASS
 - [ ] FAIL
@@ -37,29 +35,13 @@ Run order: top to bottom. Item 13 repeats 2–6 in light and dark.
 
 ---
 
-### 1. Flag off — legacy student path
+### 1. Student chrome frame
 
-**Action:** Set Preview `NEXT_PUBLIC_WB_STUDENT_NEW_SHELL=0` (or unset). Open student join link `/w/[token]#k=…`. Draw one stroke; confirm legacy card layout (not `mynk-wb-chrome`).
-
-**Expect:** Legacy `StudentWhiteboardClient` unchanged; mutual draw still works within ~2s.
-
-**Ignore this run:** New-shell chrome styling.
-
-- [ ] PASS
-- [ ] FAIL
-- [ ] SKIP
-
-**Notes:**
-
----
-
-### 2. Flag on — student chrome frame
-
-**Action:** Set Preview `NEXT_PUBLIC_WB_STUDENT_NEW_SHELL=1`. Student opens join link. Inspect DOM: `data-testid="mynk-wb-chrome"` with `data-role="student"`. Tutor on same session sees tutor chrome.
+**Action:** Student opens join link `/w/[token]#k=…`. Inspect DOM: `data-testid="mynk-wb-chrome"` with `data-role="student"`. Tutor on same session sees tutor chrome.
 
 **Expect:** Student sees unified Mynk chrome; tutor chrome unchanged.
 
-**Ignore this run:** Theme parity (item 13).
+**Ignore this run:** Theme parity (item 12).
 
 - [ ] PASS
 - [ ] FAIL
@@ -69,9 +51,9 @@ Run order: top to bottom. Item 13 repeats 2–6 in light and dark.
 
 ---
 
-### 2a. Recording disclosure (B4)
+### 1a. Recording disclosure (B4)
 
-**Action:** Flag on. Student join on desktop and phone portrait. Read top bar without scrolling.
+**Action:** Student join on desktop and phone portrait. Read top bar without scrolling.
 
 **Expect:** Copy visible: *This session is being recorded by your tutor. What you draw is visible live.*
 
@@ -85,9 +67,9 @@ Run order: top to bottom. Item 13 repeats 2–6 in light and dark.
 
 ---
 
-### 3. Mutual draw
+### 2. Mutual draw
 
-**Action:** Flag on. Tutor draws; student draws. Two devices or two browsers.
+**Action:** Tutor draws; student draws. Two devices or two browsers.
 
 **Expect:** Each stroke appears on the other side within ~2s.
 
@@ -101,7 +83,7 @@ Run order: top to bottom. Item 13 repeats 2–6 in light and dark.
 
 ---
 
-### 4. Page isolation
+### 3. Page isolation
 
 **Action:** Tutor on Board 1 vs Board 2. Student strokes on active page only.
 
@@ -117,7 +99,7 @@ Run order: top to bottom. Item 13 repeats 2–6 in light and dark.
 
 ---
 
-### 5. PDF / image hydrate
+### 4. PDF / image hydrate
 
 **Action:** Tutor inserts PDF page. Student waits for hydrate.
 
@@ -133,7 +115,7 @@ Run order: top to bottom. Item 13 repeats 2–6 in light and dark.
 
 ---
 
-### 6. Graph embed read-only
+### 5. Graph embed read-only
 
 **Action:** Tutor inserts graph embed. Student views board.
 
@@ -149,9 +131,9 @@ Run order: top to bottom. Item 13 repeats 2–6 in light and dark.
 
 ---
 
-### 7. Follow toggle
+### 6. Follow toggle
 
-**Action:** Flag on. Default follow ON. Toggle off; pan independently. Click Match view / follow checkbox on.
+**Action:** Default follow ON. Toggle off; pan independently. Click Match view / follow checkbox on.
 
 **Expect:** Default follows tutor viewport; independent view works; snap restores tutor view.
 
@@ -165,7 +147,7 @@ Run order: top to bottom. Item 13 repeats 2–6 in light and dark.
 
 ---
 
-### 8. Self-view ON
+### 7. Self-view ON
 
 **Action:** Student grants camera. Check own tile in `WbAVCluster`. Repeat on mobile portrait ≤428px width.
 
@@ -181,9 +163,9 @@ Run order: top to bottom. Item 13 repeats 2–6 in light and dark.
 
 ---
 
-### 9. A/V bidirectional
+### 8. A/V bidirectional
 
-**Action:** Flag on. Tutor and student mic/cam on. Speak on each side.
+**Action:** Tutor and student mic/cam on. Speak on each side.
 
 **Expect:** Tutor hears student; student hears tutor.
 
@@ -197,7 +179,7 @@ Run order: top to bottom. Item 13 repeats 2–6 in light and dark.
 
 ---
 
-### 9b. Device hotload (student path)
+### 8b. Device hotload (student path)
 
 **Action:** Mid-session, plug in second webcam or headset on student device without refresh.
 
@@ -213,7 +195,7 @@ Run order: top to bottom. Item 13 repeats 2–6 in light and dark.
 
 ---
 
-### 10. Student hard refresh
+### 9. Student hard refresh
 
 **Action:** Mid-session student hard refresh (`Ctrl+Shift+R` / pull-to-refresh).
 
@@ -229,7 +211,7 @@ Run order: top to bottom. Item 13 repeats 2–6 in light and dark.
 
 ---
 
-### 11. Loading guard + dual-banner
+### 10. Loading guard + dual-banner
 
 **Action:** If board stuck loading, confirm single reload CTA. Check console for `[wjg]` lines (`loading_stuck`, `student_reload`).
 
@@ -245,9 +227,9 @@ Run order: top to bottom. Item 13 repeats 2–6 in light and dark.
 
 ---
 
-### 12. Mobile layout
+### 11. Mobile layout
 
-**Action:** Phone portrait. Flag on. Use bottom tool bar; draw; switch board tabs.
+**Action:** Phone portrait. Use bottom tool bar; draw; switch board tabs.
 
 **Expect:** Canvas ≥80% viewport; bottom bar usable; tabs ≤40px strip.
 
@@ -261,13 +243,13 @@ Run order: top to bottom. Item 13 repeats 2–6 in light and dark.
 
 ---
 
-### 13. Theme — light and dark
+### 12. Theme — light and dark
 
-**Action:** Repeat items 2, 2a, 3, 4, 5, 6 in **light**, then **dark** (WB theme toggle on student top bar).
+**Action:** Repeat items 1, 1a, 2, 3, 4, 5 in **light**, then **dark** (WB theme toggle on student top bar).
 
 **Expect:** Both themes pass for each sub-check.
 
-**Ignore this run:** System-only theme on legacy path.
+**Ignore this run:** Nothing.
 
 - [ ] PASS
 - [ ] FAIL
@@ -277,7 +259,7 @@ Run order: top to bottom. Item 13 repeats 2–6 in light and dark.
 
 ---
 
-### 14. Session ended
+### 13. Session ended
 
 **Action:** Tutor ends session. Student page open.
 
@@ -293,9 +275,9 @@ Run order: top to bottom. Item 13 repeats 2–6 in light and dark.
 
 ---
 
-### 15. Tutor regression (extend-don't-rewrite)
+### 14. Tutor regression (extend-don't-rewrite)
 
-**Action:** With flag **on** and **off**, tutor: start session, record FSM, page switch, self-view, End Session.
+**Action:** Tutor: start session, record FSM, page switch, self-view, End Session (while student is on new shell).
 
 **Expect:** Tutor path unchanged vs pre-P2 baseline; no recording FSM regression.
 
@@ -316,7 +298,7 @@ Run order: top to bottom. Item 13 repeats 2–6 in light and dark.
 
 ### 1. Student new shell on integration preview
 
-**Action:** After merge, set flag on integration Preview; repeat items 3, 8, 15.
+**Action:** After merge, repeat items 2, 7, 14 on integration Preview.
 
 **Expect:** Same as feature branch.
 
