@@ -801,10 +801,10 @@ function StudentLiveWorkspaceInner({
                 type="button"
                 className="mynk-wb-tb-btn"
                 data-testid="wb-student-match-view"
-                onClick={() => snapToTutorView()}
-              >
-                Match view
-              </button>
+              onClick={() => snapToTutorView()}
+            >
+              Match tutor&apos;s view
+            </button>
             </div>
           )}
           <WbThemeToggle
