@@ -3,7 +3,7 @@
  */
 
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { StudentLiveWorkspaceClient } from "@/app/w/[joinToken]/StudentLiveWorkspaceClient";
 import { STUDENT_EXCALIDRAW_INITIAL_DATA } from "@/hooks/useExcalidrawLoadingGuard";
 
@@ -48,17 +48,18 @@ jest.mock("@/hooks/useCollaboratorPointers", () => ({
   useCollaboratorPointers: jest.fn(),
 }));
 
+const mockDisconnect = jest.fn();
+
 jest.mock("@/lib/whiteboard/sync-client", () => ({
   createWhiteboardSyncClient: () => ({
-    isConnected: () => false,
+    isConnected: () => true,
     onConnect: (cb: () => void) => {
       cb();
       return () => undefined;
     },
     onDisconnect: () => () => undefined,
     onPeerCountChange: () => () => undefined,
-    onRemoteScene: () => () => undefined,
-    disconnect: jest.fn(),
+    disconnect: mockDisconnect,
   }),
 }));
 
@@ -103,6 +104,7 @@ jest.mock("next/navigation", () => ({
 describe("StudentLiveWorkspaceClient chrome contract", () => {
   beforeEach(() => {
     window.history.replaceState({}, "", "/w/join-token-abc#k=0123456789abcdef0123456789abcdef");
+    mockDisconnect.mockClear();
   });
 
   it("renders student chrome, disclosure, and stable initialData", () => {
@@ -161,5 +163,26 @@ describe("StudentLiveWorkspaceClient chrome contract", () => {
     expect(screen.getByRole("tab", { name: "Board 1" })).toBeDisabled();
     expect(screen.getByTestId("wb-topbar-mic")).toBeInTheDocument();
     expect(screen.getByTestId("wb-topbar-cam")).toBeInTheDocument();
+  });
+
+  it("Exit disconnects sync client (tutor-visible leave path)", () => {
+    render(
+      <StudentLiveWorkspaceClient
+        whiteboardSessionId="wbs-p2"
+        studentId="stu-1"
+        joinToken="join-token-abc"
+        syncUrl="ws://localhost:3002"
+        tutorName="Sarah"
+        initialActiveMs={0}
+        initialLastActiveAtIso={null}
+      />
+    );
+
+    expect(mockDisconnect).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("wb-student-exit"));
+
+    expect(screen.getByRole("status")).toHaveTextContent(/you left the session/i);
+    expect(mockDisconnect).toHaveBeenCalledTimes(1);
   });
 });

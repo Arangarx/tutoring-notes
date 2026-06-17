@@ -295,6 +295,7 @@ function StudentLiveWorkspaceInner({
   useEffect(() => {
     if (!encryptionKey) return;
     if (joinUnavailableReason !== null) return;
+    if (hasLeft) return;
     const client = createWhiteboardSyncClient({
       url: syncUrl,
       roomId: whiteboardSessionId,
@@ -315,12 +316,10 @@ function StudentLiveWorkspaceInner({
       wjgLog("sync_disconnect");
     });
     const offPeers = client.onPeerCountChange((n) => setOtherPeerCount(n));
-    const offRemote = client.onRemoteScene(() => undefined);
     return () => {
       offConnect();
       offDisconnect();
       offPeers();
-      offRemote();
       client.disconnect();
       setSyncClient(null);
       setConnected(false);
@@ -334,6 +333,7 @@ function StudentLiveWorkspaceInner({
     localPeerId,
     syncPresenceLabel,
     wjgLog,
+    hasLeft,
   ]);
 
   const liveAv = useLiveAV({
@@ -1478,7 +1478,10 @@ function StudentLiveWorkspaceInner({
                 type="button"
                 className="mynk-wb-tb-btn mynk-wb-tb-btn--leave"
                 data-testid="wb-student-exit"
-                onClick={() => setHasLeft(true)}
+                onClick={() => {
+                  wjgLog("student_exit");
+                  setHasLeft(true);
+                }}
               >
                 Exit
               </button>
@@ -1709,7 +1712,7 @@ function StudentLiveWorkspaceInner({
           <BoardTabStrip
             pageList={pageList}
             activePageId={studentActivePageId}
-            readOnly
+            readOnly={!capabilities.canSwitchPage}
             testId="wb-student-page-strip"
           />
         </footer>

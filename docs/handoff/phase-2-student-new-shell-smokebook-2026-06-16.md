@@ -2,7 +2,7 @@
 
 **Branch:** `phase2/wb-student-new-shell`
 **Tip commit:** [`b7dbe0c`](https://github.com/Arangarx/tutoring-notes/commit/b7dbe0c38fad24bdc5be202da46554071ede3c3d)
-**Preview:** <unverified — confirm in Vercel dashboard after push; Vercel MCP unavailable in executor environment — fetch `meta.branchAlias` for `githubCommitRef=phase2/wb-student-new-shell`>
+**Preview:** [phase2/wb-student-new-shell @ Vercel](https://tutoring-notes-git-phase2-wb-stu-9fb9ae-arangarx-5209s-projects.vercel.app)
 
 > **Scope correction (Andrew 2026-06-17):** student = **full tutor-parity chrome + toolset** minus D1–D5 (+ D6 asset inserts tutor-only). No in-app `AVPermissionsPrompt`; browser-native getUserMedia only. A/V auto-requested on mount. **Exit** (not Leave). Read-only page strip. Student-color laser. Follow toggle preserved. No share link.
 
@@ -60,6 +60,22 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 **Expect:** Full tutor-parity chrome minus share link, asset inserts, and page add/switch/delete. Exit shows local leave card (no server end-session). No `AVPermissionsPrompt` in DOM.
 
 **Ignore this run:** Tutor-only PDF/image/graph insert buttons (D6).
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### 1b-exit. Exit disconnects tutor presence + A/V
+
+**Action:** Two-device session (tutor + student). Confirm both connected (sync pill + call connected + session timer counting). Student clicks **Exit** (`data-testid="wb-student-exit"`). On **tutor** side, watch presence/timer/A/V cluster — do NOT close the student tab manually.
+
+**Expect:** Student sees local "You left the session" card. Tutor sees student drop from presence (peer count / A/V tile gone), session timer stops accumulating for the departed student, and A/V mesh releases the student peer — same observable path as a real disconnect. Student tab may stay open on the leave card without holding the session open.
+
+**Ignore this run:** Nothing.
 
 - [ ] PASS
 - [ ] FAIL
