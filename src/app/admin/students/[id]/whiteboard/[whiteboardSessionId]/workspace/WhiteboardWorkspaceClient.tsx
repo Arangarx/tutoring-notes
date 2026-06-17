@@ -67,6 +67,7 @@ import { useAudioFlowConfirmation } from "@/hooks/useAudioFlowConfirmation";
 import { useLiveAV } from "@/hooks/useLiveAV";
 import { studentMicStreamId } from "@/lib/recording/remote-stream-recorder";
 import { WbTopBarMicControl } from "@/components/whiteboard/chrome/WbTopBarMicControl";
+import { WbToolBtn } from "@/components/whiteboard/chrome/WbToolBtn";
 import { WbTopBarCamControl } from "@/components/whiteboard/chrome/WbTopBarCamControl";
 import { WbThemeToggle } from "@/components/whiteboard/chrome/WbThemeToggle";
 import {
@@ -4949,56 +4950,6 @@ export function WhiteboardWorkspaceClient({
       ) : null}
     />
     </WbRoleProvider>
-  );
-}
-
-// -------------------------------------------------------------------
-// Tiny presentational helpers — kept inline to avoid a sprawling
-// components/ tree just for this page.
-// -------------------------------------------------------------------
-
-function WbToolBtn({
-  icon,
-  label,
-  active,
-  onClick,
-  disabled,
-  pulldown,
-  onPulldown,
-  accent,
-  collapseControl,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  active: boolean;
-  onClick: () => void;
-  disabled?: boolean;
-  pulldown?: boolean;
-  /** If provided, the pulldown chevron gets its own click handler (split-button). */
-  onPulldown?: () => void;
-  accent?: boolean;
-  collapseControl?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      className={`mynk-wb-tool-btn${active ? " mynk-wb-tool-btn--active" : ""}${accent ? " mynk-wb-tool-btn--accent" : ""}${collapseControl ? " mynk-wb-strip__collapse-btn" : ""}`}
-      title={label}
-      aria-label={label}
-      aria-pressed={active}
-      onClick={onClick}
-      disabled={disabled}
-      style={accent ? { color: "var(--accent-text)" } : undefined}
-    >
-      {icon}
-      {pulldown && (
-        <span
-          className="mynk-wb-pulldown-chevron"
-          onClick={onPulldown ? (e) => { e.stopPropagation(); onPulldown(); } : undefined}
-          aria-label={onPulldown ? "Open shape picker" : undefined}
-        >▾</span>
-      )}
-    </button>
   );
 }
 

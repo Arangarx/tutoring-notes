@@ -9,6 +9,8 @@ export type BoardTabStripProps = {
   pageList: PageStripRow[];
   activePageId: string;
   disabled?: boolean;
+  /** When true, tabs are display-only (student read-only page indicator). */
+  readOnly?: boolean;
   maxPages?: number;
   onSelectPage?: (id: string) => void | Promise<void>;
   onAddPage?: () => void;
@@ -21,6 +23,7 @@ export function BoardTabStrip({
   pageList,
   activePageId,
   disabled,
+  readOnly,
   maxPages = 20,
   onSelectPage,
   onAddPage,
@@ -28,7 +31,8 @@ export function BoardTabStrip({
   testId = "wb-tutor-page-strip",
 }: BoardTabStripProps) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const canDelete = pageList.length > 1 && !!onDeletePage;
+  const canDelete = !readOnly && pageList.length > 1 && !!onDeletePage;
+  const tabDisabled = disabled || readOnly;
 
   return (
     <div className="mynk-wb-board-tabs" data-testid={testId} role="tablist" aria-label="Boards">
@@ -48,8 +52,9 @@ export function BoardTabStrip({
               className={`mynk-wb-board-tab${active ? " mynk-wb-board-tab--active" : ""}`}
               aria-selected={active}
               aria-label={boardLabel}
-              disabled={disabled || active}
+              disabled={tabDisabled || active}
               onClick={() => {
+                if (readOnly) return;
                 if (!active && onSelectPage) void onSelectPage(page.id);
                 setConfirmDeleteId(null);
               }}
@@ -114,7 +119,7 @@ export function BoardTabStrip({
           </div>
         );
       })}
-      {onAddPage && (
+      {!readOnly && onAddPage && (
         <button
           type="button"
           className="mynk-wb-board-tab mynk-wb-board-tab--add"

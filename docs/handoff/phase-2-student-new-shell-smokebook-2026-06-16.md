@@ -1,8 +1,10 @@
 # Phase 2 — student on new shell — smoke runbook
 
 **Branch:** `phase2/wb-student-new-shell`
-**Tip commit:** [`23e1cba`](https://github.com/Arangarx/tutoring-notes/commit/23e1cba39f7d577b1ecb2a7ea3750632abe358c2)
-**Preview:** [phase2/wb-student-new-shell preview](https://tutoring-notes-git-phase2-wb-stu-9fb9ae-arangarx-5209s-projects.vercel.app)
+**Tip commit:** `<set after rework push — parity commit on branch>`
+**Preview:** <unverified — confirm in Vercel dashboard after push; Vercel MCP unavailable in executor environment — fetch `meta.branchAlias` for `githubCommitRef=phase2/wb-student-new-shell`>
+
+> **Scope correction (Andrew 2026-06-17):** student = **full tutor-parity chrome + toolset** minus D1–D5 (+ D6 asset inserts tutor-only). No in-app `AVPermissionsPrompt`; browser-native getUserMedia only. A/V auto-requested on mount. **Exit** (not Leave). Read-only page strip. Student-color laser. Follow toggle preserved. No share link.
 
 ---
 
@@ -11,7 +13,7 @@
 | Field | How to fill it |
 |---|---|
 | **Branch** | `phase2/wb-student-new-shell` |
-| **Tip commit** | `23e1cba` at smoke time |
+| **Tip commit** | HEAD of `phase2/wb-student-new-shell` at smoke time (parity rework) |
 | **Preview** | Fetched via Vercel MCP — `meta.branchAlias` for `githubCommitRef=phase2/wb-student-new-shell` |
 | **Overall result** | PASS only if every in-scope item PASS |
 
@@ -51,7 +53,55 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 
 ---
 
-### 1a. Recording disclosure (B4)
+### 1b. Full student toolset + Exit + no permission prompt
+
+**Action:** Student join on desktop. Confirm left tool strip has select, pencil, eraser, text, laser (wand), shapes, more/overflow, collapse. Top bar: mic/cam + device pickers, undo/redo, view menu (grid), toolbar hide/show, theme toggle. Button reads **Exit** (`data-testid="wb-student-exit"`). No in-app A/V enable card — only browser permission dialogs if needed. A/V should auto-request on load.
+
+**Expect:** Full tutor-parity chrome minus share link, asset inserts, and page add/switch/delete. Exit shows local leave card (no server end-session). No `AVPermissionsPrompt` in DOM.
+
+**Ignore this run:** Tutor-only PDF/image/graph insert buttons (D6).
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### 1c. Read-only page strip
+
+**Action:** Tutor adds/switches boards. Student observes bottom page strip.
+
+**Expect:** Student strip shows active board indicator only — tabs not clickable, no `+` add, no delete. Page changes only when tutor applies.
+
+**Ignore this run:** Nothing.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### 1d. Student laser (D2)
+
+**Action:** Student selects laser wand. Move pointer on board while tutor watches.
+
+**Expect:** Tutor sees student-colored laser pointer trail (distinct from tutor laser color).
+
+**Ignore this run:** Nothing.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### 1e. Recording disclosure (B4)
 
 **Action:** Student join on desktop and phone portrait. Read top bar without scrolling.
 
@@ -71,9 +121,9 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 
 **Action:** Tutor draws; student draws. Two devices or two browsers.
 
-**Expect:** Each stroke appears on the other side within ~2s.
+**Expect:** Each stroke appears on the other side within ~2s. Student may use full toolset (shapes, text, select, eraser).
 
-**Ignore this run:** Shape tools on student (pencil+eraser only).
+**Ignore this run:** Student-initiated asset inserts (D6 tutor-only).
 
 - [ ] PASS
 - [ ] FAIL
@@ -149,11 +199,11 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 
 ### 7. Self-view ON
 
-**Action:** Student grants camera. Check own tile in `WbAVCluster`. Repeat on mobile portrait ≤428px width.
+**Action:** Student grants camera (browser dialog on auto-request). Check own tile in `WbAVCluster`. Top-bar mic/cam device pickers on desktop. Repeat on mobile portrait ≤428px width.
 
-**Expect:** Self-view tile visible when cam granted; not silently dropped on mobile.
+**Expect:** Self-view tile visible when cam granted; top-bar device pickers work on desktop; touch overflow sheet covers mic/cam on mobile.
 
-**Ignore this run:** Device picker UI (P2 omit).
+**Ignore this run:** Recording gain/chime controls (tutor recording graph only).
 
 - [ ] PASS
 - [ ] FAIL
@@ -181,11 +231,11 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 
 ### 8b. Device hotload (student path)
 
-**Action:** Mid-session, plug in second webcam or headset on student device without refresh.
+**Action:** Mid-session, plug in second webcam or headset on student device without refresh. Use top-bar mic/cam pickers.
 
-**Expect:** Call stays up; new device enumerated (mark **tested** vs **assumed** in Notes).
+**Expect:** Call stays up; new device appears in picker (mark **tested** vs **assumed** in Notes).
 
-**Ignore this run:** Video device picker UI.
+**Ignore this run:** Nothing.
 
 - [ ] PASS
 - [ ] FAIL
@@ -229,9 +279,9 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 
 ### 11. Mobile layout
 
-**Action:** Phone portrait. Use bottom tool bar; draw; switch board tabs.
+**Action:** Phone portrait. Use bottom tool bar (full strip); draw with pencil and a shape; confirm page strip is read-only (cannot switch tabs).
 
-**Expect:** Canvas ≥80% viewport; bottom bar usable; tabs ≤40px strip.
+**Expect:** Canvas ≥80% viewport; bottom bar has full tool tier; page strip shows active board only (no tab switch).
 
 **Ignore this run:** Desktop layout.
 
@@ -245,7 +295,7 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 
 ### 12. Theme — light and dark
 
-**Action:** Repeat items 1, 1a, 2, 3, 4, 5 in **light**, then **dark** (WB theme toggle on student top bar).
+**Action:** Repeat items 1, 1b, 1e, 2, 3, 4, 5 in **light**, then **dark** (WB theme toggle on student top bar).
 
 **Expect:** Both themes pass for each sub-check.
 

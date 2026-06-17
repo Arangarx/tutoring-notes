@@ -81,11 +81,14 @@ jest.mock("@/hooks/useLiveAV", () => ({
     error: null,
     videoError: null,
     videoDevices: [{ deviceId: "cam1", label: "Cam" }],
+    pickedVideoCameraSlot: 0,
     requestMic: jest.fn(),
     requestCam: jest.fn(),
     toggleMic: jest.fn(),
     toggleCam: jest.fn(),
     reconnectPeer: jest.fn(),
+    setMicDevice: jest.fn(),
+    setVideoCameraBySlot: jest.fn(),
   }),
 }));
 
@@ -137,7 +140,7 @@ describe("StudentLiveWorkspaceClient chrome contract", () => {
     expect(screen.getByTestId("mock-excalidraw")).toHaveAttribute("data-initial-ref", "true");
   });
 
-  it("WbAVCluster mounts under WbRoleProvider without recording context", () => {
+  it("renders full student chrome: Exit, tool strip, read-only page strip, no AVPermissionsPrompt", () => {
     render(
       <StudentLiveWorkspaceClient
         whiteboardSessionId="wbs-p2"
@@ -149,7 +152,14 @@ describe("StudentLiveWorkspaceClient chrome contract", () => {
         initialLastActiveAtIso={null}
       />
     );
-    expect(screen.getByTestId("wb-student-av-cluster")).toBeInTheDocument();
-    expect(screen.getByTestId("av-tiles-panel")).toBeInTheDocument();
+
+    expect(screen.getByTestId("wb-student-exit")).toHaveTextContent("Exit");
+    expect(screen.queryByTestId("av-permissions-prompt")).not.toBeInTheDocument();
+    expect(screen.getByTestId("wb-student-tool-strip")).toBeInTheDocument();
+    expect(screen.getByLabelText("Pointer wand (K)")).toBeInTheDocument();
+    expect(screen.getByTestId("wb-student-page-strip")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Board 1" })).toBeDisabled();
+    expect(screen.getByTestId("wb-topbar-mic")).toBeInTheDocument();
+    expect(screen.getByTestId("wb-topbar-cam")).toBeInTheDocument();
   });
 });
