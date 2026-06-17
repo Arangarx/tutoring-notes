@@ -473,6 +473,8 @@ export type SessionReviewPayload = {
   endedAtIso: string | null;
   durationSeconds: number | null;
   hasAudio: boolean;
+  /** Whiteboard event count from events.json (NOTE-1 replay gate). */
+  eventCount: number;
   eventsProxyUrl: string;
   snapshotProxyUrl: string | null;
   audioSegments: Array<{
@@ -510,6 +512,7 @@ export async function loadSessionReviewPayload(
           endedAt: true,
           durationSeconds: true,
           snapshotBlobUrl: true,
+          eventsBlobUrl: true,
           student: { select: { id: true, name: true } },
           audioRecordings: {
             select: {
@@ -545,12 +548,30 @@ export async function loadSessionReviewPayload(
     `[nsi] wbsid=${whiteboardSessionId} action=load_review_payload hasAudio=${detail.audioRecordings.length > 0} noteFound=${initialNote.found}`
   );
 
+  let eventCount = 0;
+  if (detail.eventsBlobUrl) {
+    try {
+      const blobRes = await fetch(detail.eventsBlobUrl, { cache: "no-store" });
+      if (blobRes.ok) {
+        const raw = JSON.parse(await blobRes.text()) as {
+          events?: unknown;
+        };
+        if (Array.isArray(raw.events)) {
+          eventCount = raw.events.length;
+        }
+      }
+    } catch {
+      // best-effort — gate defaults to audio-only
+    }
+  }
+
   return {
     studentName: detail.student.name,
     startedAtIso: detail.startedAt.toISOString(),
     endedAtIso: detail.endedAt?.toISOString() ?? null,
     durationSeconds: detail.durationSeconds,
     hasAudio: detail.audioRecordings.length > 0,
+    eventCount,
     eventsProxyUrl: `/api/whiteboard/${whiteboardSessionId}/events`,
     snapshotProxyUrl: detail.snapshotBlobUrl
       ? `/api/whiteboard/${whiteboardSessionId}/snapshot`

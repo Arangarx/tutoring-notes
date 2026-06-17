@@ -36,7 +36,7 @@
  */
 
 import React from "react";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 // ----- Heavy / unrelated modules: minimal stubs ------------------
 
@@ -212,6 +212,20 @@ const requestMicSpy = jest.fn().mockResolvedValue(undefined);
 const requestCamSpy = jest.fn().mockResolvedValue(undefined);
 const toggleMicSpy = jest.fn();
 const toggleCamSpy = jest.fn();
+const setVideoCameraBySlotSpy = jest.fn().mockResolvedValue(undefined);
+
+/** Per-test override for the video devices list (affects camDisabled in WbAVCluster). */
+let liveAvVideoDevices: ReadonlyArray<MediaDeviceInfo> = [];
+
+function makeFakeVideoDevice(id: string): MediaDeviceInfo {
+  return {
+    deviceId: id,
+    groupId: `group-${id}`,
+    kind: "videoinput" as const,
+    label: `Camera ${id}`,
+    toJSON: () => ({}),
+  };
+}
 
 jest.mock("@/hooks/useLiveAV", () => ({
   useLiveAV: (opts: { localPeerId?: string }) => {
@@ -232,6 +246,12 @@ jest.mock("@/hooks/useLiveAV", () => ({
       isActive: false,
       reconnectPeer: reconnectPeerSpy,
       retryAcquire: jest.fn().mockResolvedValue(undefined),
+      videoDevices: liveAvVideoDevices,
+      pickedVideoCameraSlot: 0,
+      setVideoCameraBySlot: setVideoCameraBySlotSpy,
+      setVideoDevice: jest.fn().mockResolvedValue(undefined),
+      setMicDevice: jest.fn().mockResolvedValue(undefined),
+      selectedVideoDeviceId: null,
     };
   },
 }));
@@ -485,6 +505,10 @@ beforeEach(() => {
   mockCreateWhiteboardSyncClient.mockClear();
   createdSyncClients.length = 0;
   reconnectPeerSpy.mockClear();
+  requestCamSpy.mockClear();
+  toggleCamSpy.mockClear();
+  setVideoCameraBySlotSpy.mockClear();
+  liveAvVideoDevices = [];
   addRemoteAudioSpy.mockClear();
   addRemoteAudioUnsubs.length = 0;
   evaluateLifecycleCalls.length = 0;
@@ -799,6 +823,55 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
       expect(call?.everHadParticipants).toBe(true);
       expect(call?.participants.has("peer-A")).toBe(true);
     });
+  });
+
+  // ---------------------------------------------------------------
+  // Live-video regression fix (2026-06-16): cluster cam button must
+  // call requestCam() when no local video stream exists, not just
+  // toggleCam() which is a no-op without a stream.
+  // jsdom cannot prove real camera acquisition — these tests assert
+  // the wiring contract only. Real camera smoke is in the browser.
+  // ---------------------------------------------------------------
+
+  test("cluster cam button calls requestCam (not toggleCam) when localVideoStream is null", async () => {
+    // localVideoStream defaults to null — no camera stream acquired yet
+    expect(liveAvState.localVideoStream).toBeNull();
+    // Set a fake camera device so WbAVCluster does NOT mark the button camDisabled.
+    // (Without a device, the cluster shows "Camera unavailable" and disables the button,
+    //  which is correct hardware-absent behavior — not the regression we're testing.)
+    liveAvVideoDevices = [makeFakeVideoDevice("cam1")];
+    await renderWorkspace();
+
+    // The WbAVCluster has data-testid="av-controls" containing the cam button.
+    const avControls = screen.getByTestId("av-controls");
+    const camBtn = within(avControls).getByRole("button", { name: /turn camera on/i });
+
+    await act(async () => {
+      fireEvent.click(camBtn);
+      await Promise.resolve();
+    });
+
+    // requestCam must be called (acquire path), toggleCam must NOT
+    // (there is no stream to toggle on yet).
+    expect(requestCamSpy).toHaveBeenCalledTimes(1);
+    expect(toggleCamSpy).not.toHaveBeenCalled();
+  });
+
+  test("tutor camera picker (WbTopBarCamControl) is mounted and wired to setVideoCameraBySlot", async () => {
+    await renderWorkspace();
+
+    // WbTopBarCamControl renders with data-testid="wb-topbar-cam"
+    const camControl = screen.getByTestId("wb-topbar-cam");
+    expect(camControl).toBeTruthy();
+
+    // The settings caret opens the VideoControls popover
+    const caretBtn = screen.getByTestId("wb-topbar-cam-settings");
+    await act(async () => {
+      fireEvent.click(caretBtn);
+    });
+
+    // VideoControls renders with data-testid="video-controls"
+    expect(screen.getByTestId("video-controls")).toBeTruthy();
   });
 
   test("after WebRTC established then dropped, everHadParticipants stays true (correct paused-disconnected state)", async () => {

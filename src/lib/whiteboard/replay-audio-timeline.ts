@@ -53,10 +53,17 @@ export function buildReplayAudioTimeline(
 /**
  * Map a global replay clock (ms) to segment index + offset within segment.
  * Clamps to [0, totalMs]; past-the-end maps to the final segment at its end.
+ *
+ * @param measuredTotalMs - Measured total audio duration (ms) from
+ *   HTMLAudioElement.duration, used as a fallback ONLY for the single-segment
+ *   case when the stored segment duration is 0 (e.g. durationSeconds=null in
+ *   the DB before transcription persists it). Multi-segment sessions are
+ *   unaffected — they use their stored per-segment durations.
  */
 export function globalMsToSegmentLocal(
   globalMs: number,
-  timeline: ReplayAudioTimeline
+  timeline: ReplayAudioTimeline,
+  measuredTotalMs?: number
 ): { segmentIndex: number; localMs: number } {
   const { segmentDurationsMs, segmentStartsMs, totalMs } = timeline;
   if (segmentDurationsMs.length === 0) {
@@ -64,9 +71,22 @@ export function globalMsToSegmentLocal(
   }
   if (segmentDurationsMs.length === 1) {
     const only = segmentDurationsMs[0]!;
+    // When stored duration is 0 (null/unknown), fall back to the measured
+    // audio duration so scrubbing maps proportionally into the real audio
+    // length rather than collapsing every seek to localMs=0.
+    const effective =
+      only > 0 ? only : (measuredTotalMs != null && measuredTotalMs > 0 ? measuredTotalMs : 0);
+    // cap: the best duration bound we have from stored or measured sources.
+    const cap = effective > 0 ? effective : totalMs;
     return {
       segmentIndex: 0,
-      localMs: Math.max(0, Math.min(globalMs, only > 0 ? only : totalMs)),
+      // When duration is truly unknown (cap=0 — stored null AND measured not yet
+      // resolved), pass globalMs through unclamped.  The audio element will
+      // clamp out-of-range currentTime to its actual duration, which is always
+      // correct.  Clamping to 0 here (the old Math.min(globalMs, 0) = 0 path)
+      // was the seek-to-0 regression when the WebM end-scan was aborted by the
+      // position-correction in play().
+      localMs: cap > 0 ? Math.max(0, Math.min(globalMs, cap)) : Math.max(0, globalMs),
     };
   }
 

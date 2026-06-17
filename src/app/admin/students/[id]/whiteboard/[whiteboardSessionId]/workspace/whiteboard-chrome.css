@@ -513,6 +513,46 @@
   border-radius: 10px;
 }
 
+/* Camera control — SR-04 addendum (mirrors mic-wrap pattern) */
+.mynk-wb-cam-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.mynk-wb-cam-settings-anchor {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.mynk-wb-cam-caret {
+  width: 22px !important;
+  margin-left: -2px;
+}
+
+.mynk-wb-cam-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 260px;
+  max-width: min(360px, 90vw);
+  z-index: 45;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.mynk-wb-cam-popover [data-testid="video-controls"] {
+  margin-bottom: 0;
+  border: none;
+  border-radius: 10px;
+}
+
 /* View menu — VP-02 */
 .mynk-wb-view-menu {
   position: relative;
@@ -665,10 +705,13 @@
   max-width: 100%;
 }
 
+/* A3b — tile video body: unset standalone aspect-ratio so cluster height
+ * drives layout instead. A non-zero min-height prevents collapse to 0 when
+ * the cluster is in manual-resize / viewport-capped mode (no auto-grow). */
 .mynk-wb-av-cluster__tiles-panel > [data-testid^="av-tile-"] > div:first-child {
   flex: 1 1 auto !important;
   aspect-ratio: unset !important;
-  min-height: 0;
+  min-height: 60px;
 }
 
 .mynk-wb-av-cluster__controls {
@@ -2089,4 +2132,380 @@
 .mynk-wb-slider-custom:hover .mynk-wb-slider-custom__thumb,
 .mynk-wb-slider-custom:focus-visible .mynk-wb-slider-custom__thumb {
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+/* ── In-frame replay mode (Phase 1 wb-replay-in-frame) ── */
+.mynk-wb-chrome[data-mode="replay"] {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--background);
+  overflow: hidden;
+}
+
+.mynk-wb-chrome[data-mode="replay"] .mynk-wb-replay-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+}
+
+.mynk-wb-chrome[data-mode="replay"] .mynk-wb-replay-timeline {
+  height: 48px;
+  flex-shrink: 0;
+  z-index: 20;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+}
+
+.mynk-wb-replay-timeline__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mynk-wb-replay-timeline__seek-wrap {
+  flex: 1;
+  min-width: 120px;
+}
+
+.mynk-wb-replay-timeline__seek {
+  width: 100%;
+}
+
+.wb-review-notes-column {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.wb-review-board-column {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* ── Unified session review surface (prominent ↔ docked notes) ── */
+.wb-session-review-root {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: var(--background);
+  overflow: hidden;
+}
+
+.wb-session-review-root--loading,
+.wb-session-review-root--error {
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.wb-review-unified-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.55fr);
+  overflow: hidden;
+  transition: grid-template-columns 250ms ease-out;
+}
+
+.wb-session-review-root--replay-active .wb-review-unified-body {
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+}
+
+.wb-review-notes-surface {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  border-right: 1px solid var(--border);
+  background: var(--background);
+  transition: padding 250ms ease-out;
+}
+
+.wb-review-notes-surface--docked {
+  padding: 8px 10px;
+  border-right: 1px solid var(--border);
+  box-shadow: inset -1px 0 0 color-mix(in srgb, var(--foreground) 4%, transparent);
+}
+
+.wb-review-main-frame {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.wb-review-hero-board {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px;
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 250ms ease-out;
+}
+
+.wb-review-hero-board--receded {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.wb-review-replay-pane {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateX(16px);
+  pointer-events: none;
+  transition:
+    opacity 250ms ease-out,
+    transform 250ms ease-out;
+}
+
+.wb-review-replay-pane--visible {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-review-unified-body,
+  .wb-review-notes-surface,
+  .wb-review-hero-board,
+  .wb-review-replay-pane {
+    transition: none;
+  }
+}
+
+.wb-review-board-thumbnail-wrap {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.wb-review-board-cta {
+  flex-shrink: 0;
+  align-self: center;
+  width: auto;
+  text-align: center;
+  justify-content: center;
+}
+
+.wb-review-board-thumbnail-placeholder,
+.wb-review-board-thumbnail-empty {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+}
+
+.wb-review-board-thumbnail-placeholder {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.wb-review-board-thumbnail-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.wb-review-more-menu {
+  position: relative;
+}
+
+.wb-review-more-menu > summary {
+  cursor: pointer;
+}
+
+.wb-review-more-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.wb-review-more-menu__panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 10;
+  padding: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--foreground) 10%, transparent);
+  white-space: nowrap;
+}
+
+.mynk-wb-replay-root--embedded {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100%;
+}
+
+.mynk-wb-replay-root--embedded .mynk-wb-chrome[data-mode="replay"] {
+  position: relative;
+  inset: unset;
+  z-index: 0;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.mynk-wb-replay-root--embedded .mynk-wb-replay-body,
+.mynk-wb-replay-root--embedded .mynk-wb-live-column,
+.mynk-wb-replay-root--embedded .mynk-wb-replay-column {
+  flex: 1;
+  min-height: 0;
+}
+
+.mynk-wb-replay-root--embedded .mynk-wb-body {
+  flex: 1;
+  min-height: 0;
+}
+
+.mynk-wb-replay-root--embedded .mynk-wb-canvas {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.mynk-wb-replay-root--embedded .wb-replay-canvas-host {
+  position: absolute;
+  inset: 0;
+  flex: none;
+  width: 100%;
+  height: 100%;
+}
+
+.mynk-wb-replay-root--embedded .wb-replay-canvas-host .excalidraw,
+.mynk-wb-replay-root--embedded .wb-replay-canvas-host .excalidraw-container {
+  width: 100%;
+  height: 100%;
+}
+
+/* Hide any Excalidraw UI controls that leak through in replay/thumbnail mode. */
+.wb-replay-canvas-host .layer-ui__wrapper,
+.wb-replay-canvas-host .excalidraw .scroll-back-to-content,
+.wb-replay-canvas-host [class*="scroll-back-to-content"],
+.wb-review-board-thumbnail .layer-ui__wrapper,
+.wb-review-board-thumbnail .excalidraw .scroll-back-to-content,
+.wb-review-board-thumbnail [class*="scroll-back-to-content"] {
+  display: none !important;
+}
+
+.wb-review-wb-topbar {
+  flex-shrink: 0;
+  z-index: 2;
+}
+
+.wb-review-board-thumbnail {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+}
+
+.wb-review-board-thumbnail .excalidraw,
+.wb-review-board-thumbnail .excalidraw-container {
+  width: 100%;
+  height: 100%;
+}
+
+.wb-replay-canvas-host {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  /* Default: creates a stacking/positioning context for Excalidraw children. */
+  position: relative;
+}
+
+.wb-replay-in-frame-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.mynk-wb-replay-meta {
+  flex-shrink: 0;
+}
+
+.wb-replay-persist-wrapper {
+  /* legacy testid mount — unified layout uses .wb-review-replay-pane */
+}
+
+.wb-review-topbar {
+  display: none;
+}
+
+.wb-review-hero-grid {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.55fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 768px) {
+  .wb-review-unified-body,
+  .wb-session-review-root--replay-active .wb-review-unified-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .wb-session-review-root--replay-active .wb-review-notes-surface--docked {
+    max-height: 40vh;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .wb-review-hero-grid {
+    grid-template-columns: 1fr;
+  }
 }

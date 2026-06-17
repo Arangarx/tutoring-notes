@@ -81,6 +81,10 @@ import {
 } from "@/components/whiteboard/GraphEmbeddable";
 import { GRAPH_EMBED_LINK } from "@/lib/whiteboard/insert-asset";
 import { validateExcalidrawEmbeddable } from "@/lib/whiteboard/validate-embeddable";
+import {
+  getReplayCachedRestoreElements,
+  setReplayCachedRestoreElements,
+} from "@/lib/whiteboard/replay-restore-elements";
 // Note: attachReplayScrubAudioDefer intentionally NOT imported.
 // All audio scrubbing now goes through the custom <input type="range"> that
 // is rendered for both single-segment and multi-segment sessions.  The native
@@ -99,14 +103,6 @@ const Excalidraw = dynamic(
   },
   { ssr: false, loading: () => <PlayerPlaceholder label="Loading whiteboard…" /> }
 );
-
-/**
- * Filled by a preload effect once we know we need replay + Excalidraw.
- * Kept separate from lightweight `replay-parse.ts` so Jest never imports Excali ESM.
- */
-let replayCachedRestoreElements:
-  | (typeof import("@excalidraw/excalidraw"))["restoreElements"]
-  | null = null;
 
 /**
  * Minimal structural type for the bits of `ExcalidrawImperativeAPI`
@@ -480,7 +476,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     }
     let cancelled = false;
     void import("@excalidraw/excalidraw").then((m) => {
-      replayCachedRestoreElements = m.restoreElements;
+      setReplayCachedRestoreElements(m.restoreElements);
       if (!cancelled) setReplayExcaliRestoreReady(true);
     });
     return () => {
@@ -517,7 +513,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     scenePainterRef.current = createScenePainter({
       log: loadState.log,
       api: api as ScenePaintApi,
-      restoreElements: replayCachedRestoreElements ?? undefined,
+      restoreElements: getReplayCachedRestoreElements() ?? undefined,
       registeredAssetUrls: registeredAssetUrlsRef.current,
     });
   }, [api, loadState]);
@@ -764,7 +760,7 @@ export default function WhiteboardReplay(props: WhiteboardReplayProps) {
     if (!hasAudio || !replayExcaliRestoreReady) return;
     const el = audioRef.current;
     if (!el) return;
-    const detach = attachWebmDurationFix(el, replayAudioMime, {
+    const { cleanup: detach } = attachWebmDurationFix(el, replayAudioMime, {
       onMetadataLoaded: () => {
         setAudioReady(true);
         // Update resolved max with what we now know about this segment's

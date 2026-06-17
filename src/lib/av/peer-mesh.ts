@@ -141,12 +141,19 @@ export type PeerMesh = {
    * no-op on the second call (we check `pc.getSenders()` for an
    * existing sender bound to the same track).
    *
-   * Each `pc.addTrack(track)` fires `onnegotiationneeded` on that
-   * PC, which the existing perfect-negotiation handler in
-   * `createPeerEntry` picks up and turns into a fresh offer →
-   * answer → ICE refresh. The peer connection itself is NOT torn
-   * down; remote tracks stay flowing, only the SDP is updated to
-   * include the new media line.
+   * Returns two disjoint sets so the caller can branch correctly:
+   *   - `addedPeerIds`   — peers where `pc.addTrack(track)` was called
+   *     (new sender created). The caller should follow up with
+   *     `triggerRenegotiationOnPeers(addedPeerIds)` rather than
+   *     `replaceLocalTrackOnAllPeers`, which would fire a no-op
+   *     `replaceTrack(sameTrack)` on the freshly-created sender and
+   *     can interfere with Chrome's pending `onnegotiationneeded`
+   *     evaluation.
+   *   - `skippedPeerIds` — peers that already had a sender for this
+   *     track id. These are hotswap candidates: call
+   *     `replaceLocalTrackOnAllPeers` for them as normal.
+   *
+   * Both sets are empty when the mesh is disposed or has no peers.
    *
    * Used by `useLiveAV` to support the "tutor grants mic first, cam
    * second" flow without rebuilding the mesh and dropping every
@@ -156,10 +163,32 @@ export type PeerMesh = {
    * change — which manifested in pilot as "clicking Allow camera
    * mid-session drops son's audio + video for 5+ seconds while the
    * mesh rebuilds".
+   */
+  addLocalTrackToAllPeers: (
+    track: MediaStreamTrack
+  ) => { addedPeerIds: Set<string>; skippedPeerIds: Set<string> };
+  /**
+   * Explicitly trigger renegotiation (a fresh offer → answer cycle)
+   * for the given peer ids, routing through the same
+   * perfect-negotiation machinery (`makingOffer` / `ignoreOffer` /
+   * glare guards) as the browser's `onnegotiationneeded` event.
+   *
+   * If the PC for a peer is currently mid-negotiation
+   * (`signalingState !== "stable"` or `makingOffer === true`), the
+   * offer is deferred via an internal `pendingRenegotiation` flag
+   * and flushed by `onsignalingstatechange` when the PC returns to
+   * `stable`.  This guarantees the offer is sent even if the
+   * browser does not reliably re-fire `onnegotiationneeded` after a
+   * late `addTrack` while mid-negotiation (a known Chrome
+   * inconsistency).
+   *
+   * Safe to call redundantly — if no renegotiation is needed (e.g.
+   * the browser already handled it via `onnegotiationneeded`), the
+   * `makingOffer` guard prevents a duplicate offer.
    *
    * No-op when the mesh is disposed.
    */
-  addLocalTrackToAllPeers: (track: MediaStreamTrack) => void;
+  triggerRenegotiationOnPeers: (peerIds: string[]) => void;
   /**
    * Swap the locally captured track of a given kind on every existing
    * peer connection via {@link RTCRtpSender.replaceTrack}. No SDP
@@ -221,6 +250,14 @@ type PeerEntry = {
   pendingCandidates: RTCIceCandidateInit[];
   /** Marks the entry as closed; further callbacks are silently dropped. */
   closed: boolean;
+  /**
+   * Set by `triggerRenegotiationOnPeers` (or by `onnegotiationneeded` when
+   * the PC is mid-negotiation) to defer an offer until the PC returns to
+   * `stable`. Flushed by `onsignalingstatechange`. This is the belt-and-
+   * suspenders guard for Chrome's unreliable `onnegotiationneeded` re-fire
+   * after a late `addTrack` during an in-flight negotiation.
+   */
+  pendingRenegotiation: boolean;
 };
 
 // -----------------------------------------------------------------
@@ -324,6 +361,38 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
     return entry;
   }
 
+  // ---------------------------------------------------------------
+  // Offer initiation — shared by onnegotiationneeded, restartInternal,
+  // and triggerRenegotiationOnPeers.
+  // ---------------------------------------------------------------
+
+  /**
+   * Initiate a fresh SDP offer for `entry`, respecting the
+   * `makingOffer` guard to prevent concurrent offers.  Caller is
+   * responsible for checking that initiating an offer makes sense
+   * (e.g. the PC is not already in the middle of one).
+   */
+  function initiateOffer(entry: PeerEntry): void {
+    if (entry.closed || entry.makingOffer) return;
+    void (async () => {
+      try {
+        entry.makingOffer = true;
+        const offer = await entry.pc.createOffer();
+        if (entry.closed) return;
+        await entry.pc.setLocalDescription(offer);
+        if (entry.closed) return;
+        log.log(`peer=${entry.remotePeerId} event=offer-send`);
+        signaling.sendOffer(entry.remotePeerId, offer.sdp ?? "");
+      } catch (err) {
+        log.error(
+          `peer=${entry.remotePeerId} event=offer-fail reason=${(err as Error)?.message ?? String(err)}`
+        );
+      } finally {
+        entry.makingOffer = false;
+      }
+    })();
+  }
+
   /**
    * Create the PC, wire up event handlers, attach local tracks.
    * Caller must NOT have an entry for `remotePeerId` already (we
@@ -345,27 +414,45 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
       hasRemoteDescription: false,
       pendingCandidates: [],
       closed: false,
+      pendingRenegotiation: false,
     };
 
     pc.onnegotiationneeded = () => {
       if (entry.closed) return;
-      void (async () => {
-        try {
-          entry.makingOffer = true;
-          const offer = await pc.createOffer();
-          if (entry.closed) return;
-          await pc.setLocalDescription(offer);
-          if (entry.closed) return;
-          log.log(`peer=${remotePeerId} event=offer-send`);
-          signaling.sendOffer(remotePeerId, offer.sdp ?? "");
-        } catch (err) {
-          log.error(
-            `peer=${remotePeerId} event=offer-fail reason=${(err as Error)?.message ?? String(err)}`
-          );
-        } finally {
-          entry.makingOffer = false;
-        }
-      })();
+      if (pc.signalingState === "stable" && !entry.makingOffer) {
+        void initiateOffer(entry);
+      } else {
+        // PC is mid-negotiation — defer until signalingState returns
+        // to stable.  `onsignalingstatechange` will flush the flag.
+        // This handles the Chrome case where onnegotiationneeded fires
+        // while an in-flight negotiation holds the PC in
+        // have-local-offer, causing setLocalDescription to throw
+        // InvalidStateError.  Without deferral the video track's offer
+        // is never sent and the tutor never receives the student's cam.
+        entry.pendingRenegotiation = true;
+        log.log(
+          `peer=${remotePeerId} event=renegotiation-deferred signalingState=${pc.signalingState} makingOffer=${entry.makingOffer}`
+        );
+      }
+    };
+
+    // Flush any pending renegotiation when the PC returns to stable.
+    // Guards against the (cross-browser-unreliable) path where the
+    // browser does NOT re-fire onnegotiationneeded after a late
+    // addTrack returns the PC to stable state.
+    pc.onsignalingstatechange = () => {
+      if (entry.closed) return;
+      if (
+        pc.signalingState === "stable" &&
+        entry.pendingRenegotiation &&
+        !entry.makingOffer
+      ) {
+        entry.pendingRenegotiation = false;
+        log.log(
+          `peer=${remotePeerId} event=renegotiation-flush reason=state-stable`
+        );
+        void initiateOffer(entry);
+      }
     };
 
     pc.onicecandidate = (ev) => {
@@ -837,18 +924,18 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
       restartInternal(entry);
     },
     addLocalTrackToAllPeers: (track: MediaStreamTrack) => {
+      const addedPeerIds = new Set<string>();
+      const skippedPeerIds = new Set<string>();
       if (disposed) {
         log.warn(`addLocalTrackToAllPeers: ignored (disposed) track=${track.id}`);
-        return;
+        return { addedPeerIds, skippedPeerIds };
       }
       if (!track || track.readyState === "ended") {
         log.warn(
           `addLocalTrackToAllPeers: ignored (track ended or null) track=${track?.id ?? "<null>"}`
         );
-        return;
+        return { addedPeerIds, skippedPeerIds };
       }
-      let attachedCount = 0;
-      let skippedAlreadyPresent = 0;
       for (const entry of peers.values()) {
         if (entry.closed) continue;
         // Idempotency guard: if a sender for this exact track
@@ -869,12 +956,12 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
           /* defensive: some PC stubs in tests don't implement getSenders */
         }
         if (already) {
-          skippedAlreadyPresent++;
+          skippedPeerIds.add(entry.remotePeerId);
           continue;
         }
         try {
           entry.pc.addTrack(track);
-          attachedCount++;
+          addedPeerIds.add(entry.remotePeerId);
         } catch (err) {
           log.warn(
             `peer=${entry.remotePeerId} event=addtrack-late-fail kind=${track.kind} reason=${(err as Error)?.message ?? String(err)}`
@@ -882,8 +969,9 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
         }
       }
       log.log(
-        `event=addLocalTrack-fan kind=${track.kind} trackId=${track.id} attached=${attachedCount} skipped=${skippedAlreadyPresent}`
+        `event=addLocalTrack-fan kind=${track.kind} trackId=${track.id} added=${addedPeerIds.size} skipped=${skippedPeerIds.size}`
       );
+      return { addedPeerIds, skippedPeerIds };
     },
     replaceLocalTrackOnAllPeers: (
       kind: "audio" | "video",
@@ -935,6 +1023,29 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
         log.log(
           `event=replaceLocalTrack-fan kind=${kind} replaced=${replaceCount} peersWithNoSender=${skippedNoSender}`
         );
+      }
+    },
+    triggerRenegotiationOnPeers: (peerIds: string[]) => {
+      if (disposed) return;
+      for (const peerId of peerIds) {
+        const entry = lifeOf(peerId);
+        if (!entry) {
+          log.warn(`triggerRenegotiationOnPeers: no entry for peer=${peerId}`);
+          continue;
+        }
+        log.log(
+          `peer=${peerId} event=renegotiation-triggered reason=late-add-video`
+        );
+        if (entry.pc.signalingState === "stable" && !entry.makingOffer) {
+          void initiateOffer(entry);
+        } else {
+          // Defer: PC is mid-negotiation.  onsignalingstatechange will
+          // flush `pendingRenegotiation` when the PC returns to stable.
+          entry.pendingRenegotiation = true;
+          log.log(
+            `peer=${peerId} event=renegotiation-deferred-by-trigger signalingState=${entry.pc.signalingState} makingOffer=${entry.makingOffer}`
+          );
+        }
       }
     },
     onRemoteTrack: (cb) => {

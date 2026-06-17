@@ -172,6 +172,7 @@ type MeshHandles = {
   restart: jest.Mock;
   addLocalTrackToAllPeers: jest.Mock;
   replaceLocalTrackOnAllPeers: jest.Mock;
+  triggerRenegotiationOnPeers: jest.Mock;
   dispose: jest.Mock;
   emitTrack: (
     peerId: string,
@@ -198,8 +199,15 @@ function makeFakeMesh(): MeshHandles {
     peerSet.delete(peerId);
   });
   const restart = jest.fn();
-  const addLocalTrackToAllPeers = jest.fn();
+  // Default: returns empty sets (no active peers). Override with
+  // .mockReturnValue({ addedPeerIds: new Set(['B']), skippedPeerIds: new Set() })
+  // in tests that exercise the add-vs-skip branching logic.
+  const addLocalTrackToAllPeers = jest.fn(() => ({
+    addedPeerIds: new Set<string>(),
+    skippedPeerIds: new Set<string>(),
+  }));
   const replaceLocalTrackOnAllPeers = jest.fn();
+  const triggerRenegotiationOnPeers = jest.fn();
   const dispose = jest.fn(() => {
     disposed = true;
     trackSubs.clear();
@@ -214,6 +222,7 @@ function makeFakeMesh(): MeshHandles {
     restart,
     addLocalTrackToAllPeers,
     replaceLocalTrackOnAllPeers,
+    triggerRenegotiationOnPeers,
     onRemoteTrack: (cb) => {
       trackSubs.add(cb);
       return () => {
@@ -248,6 +257,7 @@ function makeFakeMesh(): MeshHandles {
     restart,
     addLocalTrackToAllPeers,
     replaceLocalTrackOnAllPeers,
+    triggerRenegotiationOnPeers,
     dispose,
     emitTrack: (peerId, track, streams = []) => {
       for (const cb of trackSubs) cb(peerId, track, streams);
@@ -812,15 +822,14 @@ describe("useLiveAV — requestCam", () => {
       (c: unknown[]) => c[0]
     );
     expect(fannedTracks).toContain(video.videoTracks[0]);
-    // Same-path `replaceTrack` as mic switch — wakes RTP senders after add.
-    expect(meshHandles.replaceLocalTrackOnAllPeers).toHaveBeenCalledWith(
-      "audio",
-      audio.audioTracks[0]
-    );
-    expect(meshHandles.replaceLocalTrackOnAllPeers).toHaveBeenCalledWith(
+    // With 0 peers, addLocalTrackToAllPeers returns empty sets, so
+    // neither replaceLocalTrackOnAllPeers nor triggerRenegotiationOnPeers
+    // is called — both are no-ops with no active peers.
+    expect(meshHandles.replaceLocalTrackOnAllPeers).not.toHaveBeenCalledWith(
       "video",
       video.videoTracks[0]
     );
+    expect(meshHandles.triggerRenegotiationOnPeers).not.toHaveBeenCalled();
 
     // Cleanup: unmount triggers exactly one dispose.
     unmount();
@@ -865,14 +874,108 @@ describe("useLiveAV — requestCam", () => {
       (c: unknown[]) => c[0]
     );
     expect(fannedTracks).toContain(audio.audioTracks[0]);
+    // With 0 peers, addLocalTrackToAllPeers returns empty sets, so
+    // neither replaceLocalTrackOnAllPeers nor triggerRenegotiationOnPeers
+    // is called — both are no-ops with no active peers.
+    expect(meshHandles.replaceLocalTrackOnAllPeers).not.toHaveBeenCalledWith(
+      "audio",
+      audio.audioTracks[0]
+    );
+    expect(meshHandles.triggerRenegotiationOnPeers).not.toHaveBeenCalled();
+
+    unmount();
+  });
+
+  // -----------------------------------------------------------------
+  // Add vs. skip branching — verifies the late-add-video renegotiation
+  // fix (the root cause of "tutor never sees student's video").
+  // -----------------------------------------------------------------
+
+  test("late-add path (addedPeerIds non-empty): calls triggerRenegotiationOnPeers, NOT replaceLocalTrackOnAllPeers for video", async () => {
+    const audio = makeFakeStream(1, 0);
+    const video = makeFakeStream(0, 1);
+    const getUM = jest.fn((constraints: MediaStreamConstraints) => {
+      if (constraints.video) {
+        return Promise.resolve(video.stream as unknown as MediaStream);
+      }
+      return Promise.resolve(audio.stream as unknown as MediaStream);
+    });
+    const meshHandles = makeFakeMesh();
+    const sig = makeFakeSignaling();
+    const props = makeBaseProps({
+      _getUserMedia: getUM,
+      _createPeerMesh: meshHandles.factory,
+      _createSignaling: sig.factory,
+    });
+
+    // Configure the mesh to report that video track was ADDED (new sender).
+    meshHandles.addLocalTrackToAllPeers.mockReturnValue({
+      addedPeerIds: new Set(["student-abc"]),
+      skippedPeerIds: new Set<string>(),
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+
+    await act(async () => { await result.current.requestMic(); });
+    meshHandles.addLocalTrackToAllPeers.mockClear();
+    meshHandles.triggerRenegotiationOnPeers.mockClear();
+    meshHandles.replaceLocalTrackOnAllPeers.mockClear();
+
+    await act(async () => { await result.current.requestCam(); });
+
+    // triggerRenegotiationOnPeers must be called for the add path.
+    expect(meshHandles.triggerRenegotiationOnPeers).toHaveBeenCalledWith(["student-abc"]);
+    // replaceLocalTrackOnAllPeers must NOT be called for the add path —
+    // calling replaceTrack(sameTrack) on a freshly-created sender can
+    // interfere with Chrome's pending onnegotiationneeded evaluation.
+    expect(meshHandles.replaceLocalTrackOnAllPeers).not.toHaveBeenCalledWith(
+      "video",
+      video.videoTracks[0]
+    );
+
+    unmount();
+  });
+
+  test("hotswap path (skippedPeerIds non-empty): calls replaceLocalTrackOnAllPeers for video, NOT triggerRenegotiationOnPeers", async () => {
+    const audio = makeFakeStream(1, 0);
+    const video = makeFakeStream(0, 1);
+    const getUM = jest.fn((constraints: MediaStreamConstraints) => {
+      if (constraints.video) {
+        return Promise.resolve(video.stream as unknown as MediaStream);
+      }
+      return Promise.resolve(audio.stream as unknown as MediaStream);
+    });
+    const meshHandles = makeFakeMesh();
+    const sig = makeFakeSignaling();
+    const props = makeBaseProps({
+      _getUserMedia: getUM,
+      _createPeerMesh: meshHandles.factory,
+      _createSignaling: sig.factory,
+    });
+
+    // Configure the mesh to report that video sender already existed (hotswap).
+    meshHandles.addLocalTrackToAllPeers.mockReturnValue({
+      addedPeerIds: new Set<string>(),
+      skippedPeerIds: new Set(["student-abc"]),
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+
+    await act(async () => { await result.current.requestMic(); });
+    meshHandles.addLocalTrackToAllPeers.mockClear();
+    meshHandles.triggerRenegotiationOnPeers.mockClear();
+    meshHandles.replaceLocalTrackOnAllPeers.mockClear();
+
+    await act(async () => { await result.current.requestCam(); });
+
+    // replaceLocalTrackOnAllPeers must be called for the hotswap path.
     expect(meshHandles.replaceLocalTrackOnAllPeers).toHaveBeenCalledWith(
       "video",
       video.videoTracks[0]
     );
-    expect(meshHandles.replaceLocalTrackOnAllPeers).toHaveBeenCalledWith(
-      "audio",
-      audio.audioTracks[0]
-    );
+    // triggerRenegotiationOnPeers must NOT be called — no renegotiation needed
+    // when replacing an existing sender (replaceTrack has no SDP side-effect).
+    expect(meshHandles.triggerRenegotiationOnPeers).not.toHaveBeenCalled();
 
     unmount();
   });
@@ -1357,6 +1460,95 @@ describe("useLiveAV — remote tracks + state", () => {
     expect(result.current.participants[0]?.iceConnectionState).toBe(
       "checking"
     );
+
+    unmount();
+  });
+
+  /**
+   * TRACK-BEFORE-PRESENCE regression test (2026-06-16).
+   *
+   * Reproduces the tutor-side asymmetric-receive bug: on the host
+   * (tutor), peer-mesh can fire ontrack for the student's peerId
+   * BEFORE sync presence has emitted that peerId via onRoomPeersChange.
+   * The pre-fix code dropped the track permanently. The fix buffers the
+   * track and flushes it when the peer's internal entry is first created.
+   *
+   * jsdom cannot exercise real WebRTC. This test validates the
+   * buffer/flush logic path only. The definitive proof is a two-device
+   * LV-2 smoke: student grants cam → tutor sees a second tile with live
+   * video.
+   */
+  test("TRACK-BEFORE-PRESENCE: remote track arriving before sync presence is buffered and flushed when presence arrives", async () => {
+    const sync = makeFakeSyncClient();
+    const meshHandles = makeFakeMesh();
+    const sig = makeFakeSignaling();
+    const props = makeBaseProps({
+      syncClient: sync.sync,
+      _createPeerMesh: meshHandles.factory,
+      _createSignaling: sig.factory,
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await act(async () => {
+      await result.current.requestMic();
+    });
+    await waitFor(() => {
+      expect(result.current.isActive).toBe(true);
+    });
+
+    // At this point: no presence for "student-B" yet.
+    expect(result.current.participants.length).toBe(0);
+
+    // Remote track arrives BEFORE presence — the race scenario.
+    const remoteVideo = new FakeMediaStreamTrack("video");
+    act(() => {
+      meshHandles.emitTrack(
+        "student-B",
+        remoteVideo as unknown as MediaStreamTrack
+      );
+    });
+
+    // Track should still be buffered — no participant entry yet.
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current.participants.length).toBe(0);
+
+    // Now presence arrives — buffer must be drained.
+    act(() => {
+      sync.emitPeers([{ peerId: "student-B", role: "student" }]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.participants.length).toBe(1);
+    });
+
+    // The buffered track must have been flushed onto the participant.
+    const participant = result.current.participants[0]!;
+    expect(participant.peerId).toBe("student-B");
+    expect(participant.videoStream).not.toBeNull();
+    const vs = participant.videoStream as unknown as FakeMediaStream;
+    expect(vs.getVideoTracks().length).toBe(1);
+    expect(vs.getVideoTracks()[0]).toBe(remoteVideo);
+
+    unmount();
+  });
+
+  test("presence-then-track happy path still works (no regression)", async () => {
+    // Normal order: presence first, then track. Must keep working.
+    const { result, unmount, meshHandles } = await withPeer("student-C");
+    const remoteAudio = new FakeMediaStreamTrack("audio");
+    act(() => {
+      meshHandles.emitTrack(
+        "student-C",
+        remoteAudio as unknown as MediaStreamTrack
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.participants[0]?.audioStream).not.toBeNull();
+    });
+    const stream = result.current.participants[0]!
+      .audioStream as unknown as FakeMediaStream;
+    expect(stream.getAudioTracks()[0]).toBe(remoteAudio);
 
     unmount();
   });

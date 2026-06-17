@@ -354,7 +354,13 @@ export type UseWhiteboardRecorderReturn = {
    * pan/zoom) and from page-switch handlers so replay's camera tracks
    * the same cadence as the live pageViewState wire.
    */
-  recordViewport: (panX: number, panY: number, zoom: number) => void;
+  recordViewport: (
+    panX: number,
+    panY: number,
+    zoom: number,
+    viewportWidth?: number,
+    viewportHeight?: number
+  ) => void;
 };
 
 export type ResumeAvailability = {
@@ -372,6 +378,18 @@ type CheckpointPayload = {
   log: WBEventLog;
   boardDocument?: WhiteboardBoardDocumentV1;
 };
+
+function measureTutorCanvasViewport(): {
+  viewportWidth: number;
+  viewportHeight: number;
+} | null {
+  if (typeof document === "undefined") return null;
+  const el = document.querySelector(".mynk-wb-canvas");
+  if (!el) return null;
+  const rect = el.getBoundingClientRect();
+  if (!(rect.width > 0 && rect.height > 0)) return null;
+  return { viewportWidth: rect.width, viewportHeight: rect.height };
+}
 
 function makeRandomClientId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -649,7 +667,13 @@ export function useWhiteboardRecorder(
   >(null);
 
   const recordViewport = useCallback(
-    (panX: number, panY: number, zoom: number) => {
+    (
+      panX: number,
+      panY: number,
+      zoom: number,
+      viewportWidth?: number,
+      viewportHeight?: number
+    ) => {
       if (!recordingActiveRef.current) {
         // Diagnostic only — fires on every pan/zoom that happens before
         // the student joins / solo-rehearsal allows. Confirms whether
@@ -673,12 +697,29 @@ export function useWhiteboardRecorder(
         return;
       }
       lastEmittedViewportRef.current = { panX, panY, zoom };
+      const measured =
+        viewportWidth != null &&
+        viewportHeight != null &&
+        viewportWidth > 0 &&
+        viewportHeight > 0
+          ? { viewportWidth, viewportHeight }
+          : measureTutorCanvasViewport();
       const t = Math.max(0, Math.floor(getAudioMsRef.current()));
-      pushEvent({ t, type: "viewport", panX, panY, zoom });
+      pushEvent({
+        t,
+        type: "viewport",
+        panX,
+        panY,
+        zoom,
+        ...(measured ?? {}),
+      });
       // One log per actual log-append so the smoke session shows
       // whether viewport events are flowing into the events.json.
+      const dimTag = measured
+        ? ` vw=${measured.viewportWidth} vh=${measured.viewportHeight}`
+        : "";
       console.info(
-        `[pvs] action=record-viewport append t=${t} panX=${panX} panY=${panY} zoom=${zoom} totalEvents=${logRef.current.events.length}`
+        `[pvs] action=record-viewport append t=${t} panX=${panX} panY=${panY} zoom=${zoom}${dimTag} totalEvents=${logRef.current.events.length}`
       );
     },
     [pushEvent]

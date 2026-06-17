@@ -238,7 +238,7 @@ describe("WhiteboardReplay timeline-driven viewport events (Phase 5 task 8 tier-
       startedAt: "2026-05-17T19:00:00Z",
       durationMs: 1_000,
       events: [
-        { type: "viewport", t: 0, panX: 999, panY: -777, zoom: 0.5 },
+        { type: "viewport", t: 0, panX: 999, panY: -777, zoom: 0.5, viewportWidth: 800, viewportHeight: 600 },
         {
           type: "snapshot",
           t: 500,

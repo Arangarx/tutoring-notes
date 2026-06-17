@@ -319,3 +319,81 @@ export function resolveStudentScrollForFollow(
     offsets.offsetTop
   );
 }
+
+export type RecordedReplayViewportCamera = {
+  panX: number;
+  panY: number;
+  zoom: number;
+  viewportWidth?: number;
+  viewportHeight?: number;
+};
+
+/**
+ * Best-effort record-time viewport for legacy logs that predate
+ * `viewportWidth`/`viewportHeight` on viewport events. Tutor sessions
+ * are typically recorded from a near-full-window workspace canvas; replay
+ * in-frame is smaller. This is a coarse fallback — prefer stored dims.
+ */
+export function inferLegacyRecordViewportSize(): ViewportSize | null {
+  if (typeof window === "undefined") return null;
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  if (!isPositiveFinite(viewportWidth) || !isPositiveFinite(viewportHeight)) {
+    return null;
+  }
+  return { viewportWidth, viewportHeight };
+}
+
+/**
+ * Replay-only: convert a recorded tutor camera (raw scroll + zoom at record
+ * time) into scroll for the current replay container — same center-match as
+ * student follow mode B. Zoom is preserved exactly; scroll is re-derived so
+ * the scene point that was at the record-time viewport center sits at the
+ * replay viewport center.
+ */
+export function replayScrollFromRecordedViewport(
+  recorded: RecordedReplayViewportCamera,
+  replayViewportWidth: number,
+  replayViewportHeight: number,
+  offsetLeft = 0,
+  offsetTop = 0,
+  options?: { allowLegacyRecordSizeFallback?: boolean }
+): { scrollX: number; scrollY: number; zoom: number } | null {
+  const legacy =
+    options?.allowLegacyRecordSizeFallback === true
+      ? inferLegacyRecordViewportSize()
+      : null;
+  const recordW = recorded.viewportWidth ?? legacy?.viewportWidth;
+  const recordH = recorded.viewportHeight ?? legacy?.viewportHeight;
+  if (!isPositiveFinite(recordW) || !isPositiveFinite(recordH)) {
+    return null;
+  }
+  if (!isPositiveFinite(replayViewportWidth) || !isPositiveFinite(replayViewportHeight)) {
+    return null;
+  }
+  if (!Number.isFinite(recorded.panX) || !Number.isFinite(recorded.panY)) {
+    return null;
+  }
+  if (!Number.isFinite(recorded.zoom) || recorded.zoom <= 0) {
+    return null;
+  }
+
+  const center = viewportSceneCenterFromScroll(
+    recorded.panX,
+    recorded.panY,
+    recorded.zoom,
+    recordW,
+    recordH
+  );
+  return studentScrollFromFollowCenter(
+    {
+      centerSceneX: center.x,
+      centerSceneY: center.y,
+      zoom: recorded.zoom,
+    },
+    replayViewportWidth,
+    replayViewportHeight,
+    offsetLeft,
+    offsetTop
+  );
+}

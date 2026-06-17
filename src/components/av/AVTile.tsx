@@ -140,6 +140,71 @@ export function AVTile({
     const el = videoRef.current;
     if (!el) return;
     el.srcObject = participant.videoStream ?? null;
+    if (!participant.videoStream) return;
+    // Mechanism B (part 1): forced synchronous layout flush immediately after
+    // srcObject assignment. Reading offsetHeight forces the browser to compute
+    // layout geometry for this element right now, giving the compositor concrete
+    // pixel dimensions before the deferred play() call. This is the same
+    // technique as reading a layout property to "cancel" a CSS batching optimisation.
+    void el.offsetHeight;
+    // Belt-and-suspenders explicit play() after srcObject assignment.
+    //
+    // Root fix for "black video until manual resize" is the key-remount below
+    // (videoKey): when videoStream arrives, React mounts a fresh <video> that
+    // starts life as display:block, which wires Chrome's compositor immediately.
+    // This double-RAF play() guards against browsers that do not auto-start a
+    // muted autoPlay video without an explicit play() call, and against any
+    // remaining timing edge cases on the freshly-mounted element.
+    const stream = participant.videoStream;
+    let innerRaf: number | null = null;
+    const outerRaf = requestAnimationFrame(() => {
+      innerRaf = requestAnimationFrame(() => {
+        const cur = videoRef.current;
+        if (!cur || cur.srcObject !== stream) return;
+        const p =
+          typeof cur.play === "function"
+            ? (cur.play() as Promise<void> | undefined)
+            : undefined;
+        p?.catch(() => {});
+      });
+    });
+    return () => {
+      cancelAnimationFrame(outerRaf);
+      if (innerRaf !== null) cancelAnimationFrame(innerRaf);
+    };
+  }, [participant.videoStream]);
+
+  // Mechanism B (part 2): ResizeObserver-driven reflow + play().
+  //
+  // Fires when the video tile's layout box grows from zero to a concrete non-zero
+  // size. This catches the case where srcObject was assigned while the cluster was
+  // still in CSS-flex auto height (no concrete pixel box) — Mechanism A fixes that
+  // via a cluster-level state change, but the observer here is an independent
+  // last-resort: the moment the element gets a real bounding box we force another
+  // layout flush and call play().  One-shot: disconnects after the first non-zero
+  // entry so it does not loop on every subsequent resize.
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el || !participant.videoStream) return;
+    // ResizeObserver is not available in jsdom; guard so tests can run without it.
+    if (typeof ResizeObserver === "undefined") return;
+    const stream = participant.videoStream;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+          ro.disconnect();
+          const cur = videoRef.current;
+          if (!cur || cur.srcObject !== stream) break;
+          void cur.offsetHeight;
+          (cur.play?.() as Promise<void> | undefined)?.catch(() => {});
+          break;
+        }
+      }
+    });
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+    };
   }, [participant.videoStream]);
 
   useEffect(() => {
@@ -196,6 +261,20 @@ export function AVTile({
   }, [participant.peerId]);
 
   const isLocalTile = isLocal === true || participant.isLocal === true;
+
+  // Key-remount: when videoStream transitions null → non-null, produce a different
+  // key so React replaces the <video> element with a fresh instance that starts
+  // life as display:block. Chrome only wires the compositor pipeline on freshly
+  // mounted visible video elements; transitioning an existing display:none element
+  // to display:block does NOT trigger that wiring until a subsequent layout event
+  // (e.g. a manual resize). This is the root cause of the "black until resize" bug
+  // (Attempts 1-3 called play() at various timings but kept the same element).
+  //
+  // We key on MediaStream.id (stable per stream object) when available, falling
+  // back to a has-stream boolean for environments without MediaStream.id (jsdom).
+  const videoKey =
+    participant.videoStream?.id ??
+    (participant.videoStream ? "vid-active" : "vid-inactive");
 
   const pill = useMemo(() => {
     if (isLocalTile) return getConnectionStatePill(SELF_STATE, SELF_STATE);
@@ -281,6 +360,7 @@ export function AVTile({
         }}
       >
         <video
+          key={videoKey}
           ref={videoRef}
           autoPlay
           muted

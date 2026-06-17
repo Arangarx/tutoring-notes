@@ -67,6 +67,8 @@ export function WbAVCluster({
     origW: number;
     origH: number;
   } | null>(null);
+  /** Latest rendered cluster height (auto-grow or manual) for resize drag origin. */
+  const displayHeightRef = useRef(DEFAULT_SIZE.height);
 
   const isMobileLayout = layoutMode !== "desktop";
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
@@ -79,6 +81,43 @@ export function WbAVCluster({
   const autoClusterHeight = computeAutoClusterHeight(Math.max(tileCount, 1));
   const useAutoGrow =
     !isMobileLayout && !userResized && tileCount > 0 && autoClusterHeight <= viewportCap;
+
+  // Mechanism A: number of remote participants that currently have a live videoStream.
+  const remoteVideoCount = tilesProps.participants.filter(
+    (p) => p.videoStream != null
+  ).length;
+  const prevRemoteVideoCountRef = useRef(0);
+
+  // Mechanism A: replicate the reflow the manual drag produces.
+  //
+  // The manual resize causes two things that together paint the video:
+  //   1. setSize/setUserResized → data-auto-grow is removed from the cluster.
+  //   2. The cluster switches from CSS-flex-driven height (auto-grow path) to
+  //      an explicit inline style.height pixel value → browser recomputes layout
+  //      → video element gets a concrete bounding box → compositor wires.
+  //
+  // We reproduce the same transition automatically when a remote videoStream
+  // arrives: snapshot displayHeightRef.current (already computed for the current
+  // tileCount, so the height is correct and there is no squish) then call
+  // setSize + setUserResized(true) so the next render drops data-auto-grow and
+  // sets an explicit style.height.  Guard: effect only fires when count increases
+  // (once per arrival event); prevRemoteVideoCountRef prevents re-loop.
+  useEffect(() => {
+    if (isMobileLayout) return;
+    const prev = prevRemoteVideoCountRef.current;
+    prevRemoteVideoCountRef.current = remoteVideoCount;
+    if (remoteVideoCount > prev && remoteVideoCount > 0) {
+      // displayHeightRef is updated synchronously during each render (line below
+      // displayHeight computation), so it reflects the height for the NEW
+      // tileCount at the moment this effect runs — the same value the auto-grow
+      // path already placed in the inline style. Setting size to this exact height
+      // is a no-op visually; the structural change is the removal of data-auto-grow
+      // and the switch to explicit inline pixels that produces the layout event.
+      const h = displayHeightRef.current;
+      setSize((s) => ({ width: s.width, height: h }));
+      setUserResized(true);
+    }
+  }, [isMobileLayout, remoteVideoCount]);
 
   useLayoutEffect(() => {
     if (isMobileLayout) return;
@@ -150,7 +189,7 @@ export function WbAVCluster({
         startX: e.clientX,
         startY: e.clientY,
         origW: size.width,
-        origH: size.height,
+        origH: displayHeightRef.current,
       };
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
     },
@@ -184,6 +223,7 @@ export function WbAVCluster({
     : !userResized && autoClusterHeight > viewportCap
       ? viewportCap
       : size.height;
+  displayHeightRef.current = displayHeight;
 
   const style: React.CSSProperties = isMobileLayout
     ? { width: size.width, maxWidth: size.width }

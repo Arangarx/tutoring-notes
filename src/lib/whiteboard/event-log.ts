@@ -164,7 +164,23 @@ export type WBEvent =
    * as a normal `viewport` event at the moment of the switch, which
    * is exactly the camera-jump replay needs.
    */
-  | { t: number; type: "viewport"; panX: number; panY: number; zoom: number }
+  | {
+      t: number;
+      type: "viewport";
+      /** Tutor `scrollX` at record time. */
+      panX: number;
+      /** Tutor `scrollY` at record time. */
+      panY: number;
+      zoom: number;
+      /**
+       * Tutor Excalidraw canvas width (CSS px) when this camera was recorded.
+       * Optional for backward compat — replay center-match needs these to
+       * re-derive scroll for a different-sized replay viewport.
+       */
+      viewportWidth?: number;
+      /** Tutor Excalidraw canvas height (CSS px) at record time. */
+      viewportHeight?: number;
+    }
   /**
    * Phase 2 reservation — tutor and student edited a shared text/code
    * document. Carries an opaque `payload` (likely a Yjs update or
@@ -334,15 +350,29 @@ export function reconstructSceneAt(
  * isn't worth the complexity (200ms debounce + page-switch cadence means
  * ~50–200 events even on a long session).
  */
+export type RecordedViewportCamera = {
+  panX: number;
+  panY: number;
+  zoom: number;
+  viewportWidth?: number;
+  viewportHeight?: number;
+};
+
 export function findLatestViewportAt(
   log: WBEventLog,
   untilT: number
-): { panX: number; panY: number; zoom: number } | null {
-  let latest: { panX: number; panY: number; zoom: number } | null = null;
+): RecordedViewportCamera | null {
+  let latest: RecordedViewportCamera | null = null;
   for (const ev of log.events) {
     if (ev.t > untilT) break;
     if (ev.type === "viewport") {
-      latest = { panX: ev.panX, panY: ev.panY, zoom: ev.zoom };
+      latest = {
+        panX: ev.panX,
+        panY: ev.panY,
+        zoom: ev.zoom,
+        viewportWidth: ev.viewportWidth,
+        viewportHeight: ev.viewportHeight,
+      };
     }
   }
   return latest;

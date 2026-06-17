@@ -38,6 +38,19 @@ import {
 } from "@/app/admin/students/[id]/whiteboard/notes-actions";
 
 // ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+type StructuredFields = {
+  topics: string;
+  assessment: string;
+  nextSteps: string;
+  links: string;
+};
+
+export type StructuredNoteFields = StructuredFields;
+
+// ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
@@ -55,17 +68,13 @@ type Props = {
    * When omitted, the original router.push(/notes) behaviour is preserved.
    */
   onSaved?: () => void;
-};
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-type StructuredFields = {
-  topics: string;
-  assessment: string;
-  nextSteps: string;
-  links: string;
+  /** Controlled mode — lifted fields from SessionReviewMode (BLOCKER-1). */
+  fields?: StructuredFields;
+  onFieldsChange?: (fields: StructuredFields) => void;
+  /** When false, poll updates do not overwrite fields (S4). Default true. */
+  pollSyncAllowed?: boolean;
+  /** Layout variant for hero vs docked replay panel. */
+  variant?: "default" | "drawer" | "docked";
 };
 
 // ---------------------------------------------------------------------------
@@ -86,7 +95,7 @@ const SKELETON_TIMEOUT_MS = 5 * 60 * 1_000;
  * Parse TutorNote.content as structured JSON.
  * Falls back gracefully for legacy markdown content (pre-bridge rows).
  */
-function parseNoteContent(content: string | null): StructuredFields {
+export function parseNoteContent(content: string | null): StructuredFields {
   if (!content) return { topics: "", assessment: "", nextSteps: "", links: "" };
   try {
     const parsed = JSON.parse(content) as Record<string, unknown>;
@@ -118,25 +127,44 @@ export default function TutorNotesSection({
   initialNote,
   hasAudio,
   onSaved,
+  fields: controlledFields,
+  onFieldsChange,
+  pollSyncAllowed = true,
+  variant = "default",
 }: Props) {
   const router = useRouter();
+  const isControlled =
+    controlledFields !== undefined && onFieldsChange !== undefined;
 
   const [note, setNote] = useState<TutorNoteStatusResult>(initialNote);
   const [timedOut, setTimedOut] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [regenError, setRegenError] = useState<string | null>(null);
 
-  // Editable form state — initialized from parsed note content when done
-  const [fields, setFields] = useState<StructuredFields>(() =>
+  const [internalFields, setInternalFields] = useState<StructuredFields>(() =>
     initialNote.found && initialNote.content
       ? parseNoteContent(initialNote.content)
       : { topics: "", assessment: "", nextSteps: "", links: "" }
+  );
+
+  const fields = isControlled ? controlledFields! : internalFields;
+
+  const updateFields = useCallback(
+    (updater: (prev: StructuredFields) => StructuredFields) => {
+      if (isControlled) {
+        onFieldsChange!(updater(fields));
+      } else {
+        setInternalFields(updater);
+      }
+    },
+    [fields, isControlled, onFieldsChange]
   );
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedInShell, setSavedInShell] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const startTimeRef = useRef<number>(Date.now());
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -151,12 +179,18 @@ export default function TutorNotesSection({
   const isFailed = note.found && note.status === "failed";
   const isNotStarted = !note.found;
 
-  // Sync fields whenever a fresh note arrives from polling
+  // Sync fields whenever a fresh note arrives from polling (S4 guard)
   useEffect(() => {
+    if (!pollSyncAllowed) return;
     if (note.found && note.content) {
-      setFields(parseNoteContent(note.content));
+      const parsed = parseNoteContent(note.content);
+      if (isControlled) {
+        onFieldsChange?.(parsed);
+      } else {
+        setInternalFields(parsed);
+      }
     }
-  }, [note]);
+  }, [isControlled, note, onFieldsChange, pollSyncAllowed]);
 
   // Poll while active
   const scheduleNextPoll = useCallback(() => {
@@ -260,32 +294,23 @@ export default function TutorNotesSection({
     }
   }, [whiteboardSessionId, fields, onSaved, router, studentId]);
 
-  const handleDelete = useCallback(async () => {
-    if (
-      !window.confirm(
-        "Are you sure you want to delete this session and all related data?"
-      )
-    ) {
-      return;
-    }
-
+  const handleDelete = useCallback(() => {
+    setShowDeleteConfirm(false);
     setDeleting(true);
-    try {
-      const result = await deleteWhiteboardSessionAndDataAction(whiteboardSessionId);
+    // Navigate away immediately (optimistic). Fire delete in background;
+    // cron sweep reconciles any orphaned rows if the delete fails.
+    router.push(`/admin/students/${studentId}`);
+    void deleteWhiteboardSessionAndDataAction(whiteboardSessionId).then((result) => {
       if (!result.ok) {
-        // Log for observability; cron sweep will reconcile orphaned rows.
         console.error(
           `[nsi] wbsid=${whiteboardSessionId} delete_failed err=${result.error} — navigating to student detail`
         );
       }
-    } catch (err: unknown) {
+    }).catch((err: unknown) => {
       console.error(
         `[nsi] wbsid=${whiteboardSessionId} delete_exception err=${err instanceof Error ? err.message : String(err)} — navigating to student detail`
       );
-    }
-    // Always navigate to the student detail regardless of delete outcome.
-    // The cron sweep reconciles any orphaned session data.
-    router.push(`/admin/students/${studentId}`);
+    });
   }, [whiteboardSessionId, router, studentId]);
 
   // -------------------------------------------------------------------------
@@ -300,7 +325,12 @@ export default function TutorNotesSection({
   return (
     <div
       className="card"
-      style={{ padding: "14px 16px", display: "grid", gap: 12 }}
+      style={{
+        padding:
+          variant === "drawer" || variant === "docked" ? "10px 12px" : "14px 16px",
+        display: "grid",
+        gap: 12,
+      }}
       data-testid="tutor-notes-section"
     >
       <div
@@ -336,9 +366,15 @@ export default function TutorNotesSection({
         {timedOut && "Note generation timed out."}
       </div>
 
-      {/* Loading state */}
+      {/* Generating — keep form visible; inline status only */}
       {(isActive || (isNotStarted && hasAudio)) && !timedOut && (
-        <SkeletonNotes />
+        <p
+          className="muted"
+          data-testid="tutor-notes-generating"
+          style={{ margin: 0, fontSize: 13 }}
+        >
+          Generating notes…
+        </p>
       )}
 
       {/* Timeout defeat state */}
@@ -359,10 +395,10 @@ export default function TutorNotesSection({
         </div>
       )}
 
-      {/* Done: show editable structured form */}
-      {isDone && (
+      {/* Editable structured form — visible during generation and when done */}
+      {(isActive || isDone) && !timedOut && (
         <div data-testid="tutor-notes-content">
-          {note.found && note.isPartial && (
+          {isDone && note.found && note.isPartial && (
             <div
               style={{
                 display: "inline-flex",
@@ -388,21 +424,21 @@ export default function TutorNotesSection({
               label="Topics covered"
               id="wb-note-topics"
               value={fields.topics}
-              onChange={(v) => setFields((f) => ({ ...f, topics: v }))}
+              onChange={(v) => updateFields((f) => ({ ...f, topics: v }))}
               placeholder="e.g. Quadratics, factoring, FOIL method"
             />
             <NoteField
               label="Assessment"
               id="wb-note-assessment"
               value={fields.assessment}
-              onChange={(v) => setFields((f) => ({ ...f, assessment: v }))}
+              onChange={(v) => updateFields((f) => ({ ...f, assessment: v }))}
               placeholder="Where the student stands — strengths, struggles, mastery level"
             />
             <NoteField
               label="Plan / Next steps"
               id="wb-note-nextsteps"
               value={fields.nextSteps}
-              onChange={(v) => setFields((f) => ({ ...f, nextSteps: v }))}
+              onChange={(v) => updateFields((f) => ({ ...f, nextSteps: v }))}
               placeholder="What to do next, including any homework"
               hint="Covers both plan and homework"
             />
@@ -410,12 +446,12 @@ export default function TutorNotesSection({
               label="Links"
               id="wb-note-links"
               value={fields.links}
-              onChange={(v) => setFields((f) => ({ ...f, links: v }))}
+              onChange={(v) => updateFields((f) => ({ ...f, links: v }))}
               placeholder="URLs mentioned (one per line)"
             />
           </div>
 
-          {saveError && (
+          {saveError && isDone && (
             <div
               role="alert"
               style={{
@@ -432,7 +468,7 @@ export default function TutorNotesSection({
             </div>
           )}
 
-          {savedInShell && (
+          {savedInShell && isDone && (
             <div
               role="status"
               style={{
@@ -454,34 +490,81 @@ export default function TutorNotesSection({
             </div>
           )}
 
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              marginTop: 12,
-              flexWrap: "wrap",
-            }}
-          >
-            <button
-              type="button"
-              className="btn primary"
-              onClick={handleSave}
-              disabled={saving || deleting || regenerating}
-              data-testid="wb-save-note"
+          {isDone && (
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                marginTop: 12,
+                flexWrap: "wrap",
+              }}
             >
-              {saving ? "Saving…" : "Save to notes"}
-            </button>
-            <button
-              type="button"
-              className="btn"
-              style={{ color: "var(--sign-out)", borderColor: "var(--error-border)" }}
-              onClick={handleDelete}
-              disabled={saving || deleting || regenerating}
-              data-testid="wb-delete-session"
+              <button
+                type="button"
+                className="btn primary"
+                onClick={handleSave}
+                disabled={saving || deleting || regenerating}
+                data-testid="wb-save-note"
+              >
+                {saving ? "Saving…" : "Save to notes"}
+              </button>
+              <button
+                type="button"
+                className="btn"
+                style={{ color: "var(--sign-out)", borderColor: "var(--error-border)" }}
+                onClick={() => setShowDeleteConfirm(true)}
+                disabled={saving || deleting || regenerating}
+                data-testid="wb-delete-session"
+              >
+                {deleting ? "Deleting…" : "Cancel and delete session data"}
+              </button>
+            </div>
+          )}
+
+          {showDeleteConfirm && (
+            <div
+              role="alertdialog"
+              aria-label="Confirm delete"
+              style={{
+                display: "grid",
+                gap: 8,
+                marginTop: 8,
+                padding: "10px 12px",
+                background: "var(--error-soft)",
+                border: "1px solid var(--error-border)",
+                borderRadius: 6,
+                fontSize: 13,
+              }}
+              data-testid="wb-delete-confirm"
             >
-              {deleting ? "Deleting…" : "Cancel and delete session data"}
-            </button>
-          </div>
+              <span style={{ fontWeight: 600, color: "var(--sign-out)" }}>
+                Delete this session and all recording data?
+              </span>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="btn"
+                  style={{
+                    background: "var(--sign-out)",
+                    color: "white",
+                    borderColor: "var(--sign-out)",
+                  }}
+                  onClick={handleDelete}
+                  data-testid="wb-delete-confirm-yes"
+                >
+                  Yes, delete
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  data-testid="wb-delete-confirm-cancel"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

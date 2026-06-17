@@ -235,4 +235,28 @@ describe("viewport events (Phase 5 task 8 — replay tier-c-lite)", () => {
     expect(findLatestViewportAt(log, 2500)).toEqual({ panX: -100, panY: 200, zoom: 0.75 });
     expect(findLatestViewportAt(log, 5000)).toEqual({ panX: 0, panY: 0, zoom: 2 });
   });
+
+  it("findLatestViewportAt forwards optional record-time viewport dimensions", () => {
+    const withDims: WBEventLog = {
+      ...log,
+      events: [
+        {
+          t: 0,
+          type: "viewport",
+          panX: 1,
+          panY: 2,
+          zoom: 1,
+          viewportWidth: 1440,
+          viewportHeight: 900,
+        },
+      ],
+    };
+    expect(findLatestViewportAt(withDims, 0)).toEqual({
+      panX: 1,
+      panY: 2,
+      zoom: 1,
+      viewportWidth: 1440,
+      viewportHeight: 900,
+    });
+  });
 });

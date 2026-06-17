@@ -1,9 +1,11 @@
 import {
   followWireFromTutorAppState,
+  replayScrollFromRecordedViewport,
   studentScrollFromFollowCenter,
   viewportSceneCenterFromScroll,
   viewportCoordsToSceneCoords,
 } from "@/lib/whiteboard/viewport-align";
+import { computeResizeScroll } from "@/lib/whiteboard/scene-paint";
 
 /** Independent oracle: Excalidraw client coords at the visual viewport center. */
 function sceneCenterOracle(
@@ -325,6 +327,174 @@ describe("viewportSceneCenterFromScroll offset invariance", () => {
         48,
         200
       );
+    }
+  );
+});
+
+describe("replayScrollFromRecordedViewport (replay center-match)", () => {
+  const record = {
+    panX: 120,
+    panY: -45,
+    zoom: 1.25,
+    viewportWidth: 1440,
+    viewportHeight: 900,
+  };
+
+  function oracleSceneCenterAtReplayCenter(
+    scrollX: number,
+    scrollY: number,
+    zoom: number,
+    replayW: number,
+    replayH: number,
+    offsetLeft = 0,
+    offsetTop = 0
+  ): { x: number; y: number } {
+    return sceneCenterOracle(
+      scrollX,
+      scrollY,
+      zoom,
+      replayW,
+      replayH,
+      offsetLeft,
+      offsetTop
+    );
+  }
+
+  it("places record-time scene center at replay viewport center when sizes differ", () => {
+    const replayW = 800;
+    const replayH = 520;
+    const recordCenter = viewportSceneCenterFromScroll(
+      record.panX,
+      record.panY,
+      record.zoom,
+      record.viewportWidth,
+      record.viewportHeight
+    );
+    const aligned = replayScrollFromRecordedViewport(
+      record,
+      replayW,
+      replayH
+    );
+    expect(aligned).not.toBeNull();
+    expect(aligned!.zoom).toBe(record.zoom);
+    const replayCenter = oracleSceneCenterAtReplayCenter(
+      aligned!.scrollX,
+      aligned!.scrollY,
+      record.zoom,
+      replayW,
+      replayH
+    );
+    expect(replayCenter.x).toBeCloseTo(recordCenter.x, 10);
+    expect(replayCenter.y).toBeCloseTo(recordCenter.y, 10);
+    expect(aligned!.scrollX).not.toBe(record.panX);
+    expect(aligned!.scrollY).not.toBe(record.panY);
+  });
+
+  it("matches computeResizeScroll one-shot when record and replay sizes differ", () => {
+    const replayW = 640;
+    const replayH = 480;
+    const aligned = replayScrollFromRecordedViewport(
+      record,
+      replayW,
+      replayH
+    );
+    const viaResize = computeResizeScroll({
+      scrollX: record.panX,
+      scrollY: record.panY,
+      zoom: record.zoom,
+      oldWidth: record.viewportWidth,
+      oldHeight: record.viewportHeight,
+      newWidth: replayW,
+      newHeight: replayH,
+    });
+    expect(aligned!.scrollX).toBeCloseTo(viaResize.scrollX, 10);
+    expect(aligned!.scrollY).toBeCloseTo(viaResize.scrollY, 10);
+  });
+
+  it("keeps center after a viewport-size change (resize) without reverting to raw record scroll", () => {
+    const firstReplay = replayScrollFromRecordedViewport(record, 900, 600);
+    expect(firstReplay).not.toBeNull();
+    const resized = replayScrollFromRecordedViewport(record, 500, 700);
+    expect(resized).not.toBeNull();
+    const recordCenter = viewportSceneCenterFromScroll(
+      record.panX,
+      record.panY,
+      record.zoom,
+      record.viewportWidth,
+      record.viewportHeight
+    );
+    const afterResize = oracleSceneCenterAtReplayCenter(
+      resized!.scrollX,
+      resized!.scrollY,
+      record.zoom,
+      500,
+      700
+    );
+    expect(afterResize.x).toBeCloseTo(recordCenter.x, 10);
+    expect(afterResize.y).toBeCloseTo(recordCenter.y, 10);
+    expect(resized!.scrollX).not.toBe(firstReplay!.scrollX);
+    expect(resized!.zoom).toBe(record.zoom);
+  });
+
+  it("is identity on scroll when record and replay sizes match", () => {
+    const aligned = replayScrollFromRecordedViewport(
+      record,
+      record.viewportWidth,
+      record.viewportHeight
+    );
+    expect(aligned!.scrollX).toBeCloseTo(record.panX, 10);
+    expect(aligned!.scrollY).toBeCloseTo(record.panY, 10);
+    expect(aligned!.zoom).toBe(record.zoom);
+  });
+
+  it("returns null when record dimensions are missing and legacy fallback is disabled", () => {
+    expect(
+      replayScrollFromRecordedViewport(
+        { panX: 0, panY: 0, zoom: 1 },
+        800,
+        600,
+        0,
+        0,
+        { allowLegacyRecordSizeFallback: false }
+      )
+    ).toBeNull();
+  });
+
+  const replayOffsetCases = [0, 73, 250, -40] as const;
+
+  it.each(replayOffsetCases)(
+    "offset invariance: replay center matches record center when offsetLeft=%s",
+    (offsetLeft) => {
+      const offsetTop = 88;
+      const replayW = 1024;
+      const replayH = 640;
+      const recordCenter = viewportSceneCenterFromScroll(
+        record.panX,
+        record.panY,
+        record.zoom,
+        record.viewportWidth,
+        record.viewportHeight,
+        offsetLeft,
+        offsetTop
+      );
+      const aligned = replayScrollFromRecordedViewport(
+        record,
+        replayW,
+        replayH,
+        offsetLeft,
+        offsetTop
+      );
+      const replayCenter = oracleSceneCenterAtReplayCenter(
+        aligned!.scrollX,
+        aligned!.scrollY,
+        record.zoom,
+        replayW,
+        replayH,
+        offsetLeft,
+        offsetTop
+      );
+      expect(replayCenter.x).toBeCloseTo(recordCenter.x, 10);
+      expect(replayCenter.y).toBeCloseTo(recordCenter.y, 10);
     }
   );
 });

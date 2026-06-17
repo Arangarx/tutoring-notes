@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useState } from "react";
 import {
   triggerBringForward,
   triggerBringToFront,
@@ -14,6 +14,7 @@ import {
   WB_STROKE_PRESETS,
   WB_STROKE_WIDTHS,
 } from "@/styles/token-values";
+import { WbCustomSlider } from "@/components/whiteboard/chrome/WbCustomSlider";
 import { StrokeWidthIcon } from "@/components/whiteboard/chrome/wb-icons";
 
 export type WbStrokePropsPanelProps = {
@@ -117,144 +118,6 @@ const ROUNDNESS_OPTIONS: { value: "sharp" | "round"; label: string }[] = [
   { value: "round", label: "Round" },
 ];
 
-/**
- * Custom opacity slider — thumb is flush at both 0% and 100%.
- *
- * Native range inputs have browser-specific track padding that prevents exact
- * flush at extremes; this custom component places the thumb at
- *   left = (value/100) * (trackWidth − thumbWidth)
- * guaranteeing flush left at 0 and flush right at 100 in all browsers.
- * Fully keyboard-accessible (role=slider, arrow/Home/End keys).
- */
-const SLIDER_THUMB_PX = 16;
-const SLIDER_THUMB_RADIUS_PX = SLIDER_THUMB_PX / 2;
-
-function WbSlider({
-  value,
-  onChange,
-  onLiveValueChange,
-}: {
-  value: number;
-  onChange: (v: number) => void;
-  /** Fired during pointer drag for live % label; null when drag ends. */
-  onLiveValueChange?: (v: number | null) => void;
-}) {
-  const trackRef = useRef<HTMLDivElement>(null);
-  const dragListenersRef = useRef<{
-    pointerId: number;
-    cleanup: () => void;
-  } | null>(null);
-  const [dragValue, setDragValue] = useState<number | null>(null);
-
-  const displayValue = dragValue ?? value;
-
-  const computeValue = useCallback(
-    (clientX: number): number => {
-      const rect = trackRef.current?.getBoundingClientRect();
-      if (!rect || rect.width <= SLIDER_THUMB_PX) return displayValue;
-      const travel = rect.width - SLIDER_THUMB_PX;
-      const raw = ((clientX - rect.left - SLIDER_THUMB_RADIUS_PX) / travel) * 100;
-      return Math.round(Math.max(0, Math.min(100, raw)));
-    },
-    [displayValue],
-  );
-
-  const endDrag = useCallback(
-    (commitValue: number) => {
-      dragListenersRef.current?.cleanup();
-      dragListenersRef.current = null;
-      setDragValue(null);
-      onLiveValueChange?.(null);
-      onChange(commitValue);
-    },
-    [onChange, onLiveValueChange],
-  );
-
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    const el = e.currentTarget as HTMLElement;
-    try {
-      el.setPointerCapture(e.pointerId);
-    } catch {
-      /* ignore */
-    }
-
-    const next = computeValue(e.clientX);
-    setDragValue(next);
-    onLiveValueChange?.(next);
-
-    const onMove = (ev: PointerEvent) => {
-      if (ev.pointerId !== e.pointerId) return;
-      ev.preventDefault();
-      const v = computeValue(ev.clientX);
-      setDragValue(v);
-      onLiveValueChange?.(v);
-    };
-
-    const onUp = (ev: PointerEvent) => {
-      if (ev.pointerId !== e.pointerId) return;
-      ev.preventDefault();
-      const v = computeValue(ev.clientX);
-      try {
-        el.releasePointerCapture(e.pointerId);
-      } catch {
-        /* ignore */
-      }
-      endDrag(v);
-    };
-
-    const cleanup = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onUp);
-    };
-
-    dragListenersRef.current?.cleanup();
-    dragListenersRef.current = { pointerId: e.pointerId, cleanup };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onUp);
-  };
-
-  return (
-    <div
-      ref={trackRef}
-      role="slider"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={displayValue}
-      aria-label="Stroke opacity"
-      tabIndex={0}
-      className="mynk-wb-slider-custom"
-      data-testid="wb-opacity-slider"
-      onPointerDown={handlePointerDown}
-      onKeyDown={(e) => {
-        if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
-          e.preventDefault();
-          onChange(Math.max(0, value - 1));
-        } else if (e.key === "ArrowRight" || e.key === "ArrowUp") {
-          e.preventDefault();
-          onChange(Math.min(100, value + 1));
-        } else if (e.key === "Home") {
-          e.preventDefault();
-          onChange(0);
-        } else if (e.key === "End") {
-          e.preventDefault();
-          onChange(100);
-        }
-      }}
-    >
-      <div className="mynk-wb-slider-custom__track" />
-      <div
-        className="mynk-wb-slider-custom__thumb"
-        data-testid="wb-opacity-slider-thumb"
-        style={{ left: `calc(${displayValue / 100} * (100% - ${SLIDER_THUMB_PX}px))` }}
-      />
-    </div>
-  );
-}
-
 export function WbStrokePropsPanel({
   strokeColor,
   strokeWidth,
@@ -331,8 +194,11 @@ export function WbStrokePropsPanel({
           <span className="mynk-wb-props-opacity-val">{displayOpacity}%</span>
         </div>
         <div className="mynk-wb-slider-wrap">
-          <WbSlider
+          <WbCustomSlider
             value={opacity}
+            ariaLabel="Stroke opacity"
+            testId="wb-opacity-slider"
+            thumbTestId="wb-opacity-slider-thumb"
             onChange={(v) => onStrokeChange({ opacity: v })}
             onLiveValueChange={setOpacityPreview}
           />
