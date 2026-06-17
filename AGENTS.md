@@ -113,6 +113,10 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   `nsi` (notes-session-integration bridge — DRAFT `SessionNote` auto-creation/update
   at reduce completion, Save/finalize DRAFT→READY, delete-session-and-data; every
   transition writes `[nsi] wbsid=<sessionId> action=<action> ...`),
+  `wjg` (whiteboard join gate lifecycle — student new-shell path; every transition
+  writes `[wjg] wjg=<joinToken:8> wbsid=<id> action=<action> ...` — mount, key_ok,
+  key_missing, sync_connect, sync_disconnect, excalidraw_api_ready, loading_cleared,
+  loading_stuck, student_reload, session_ended),
   `rol` (JWT role-refresh — auth-options jwt callback
   periodic DB re-check; writes `[rol] sub=<id> role_corrected role=<old>-><new>` when
   stale role is corrected, `[rol] sub=<id> refresh=account_deleted fail_closed` when

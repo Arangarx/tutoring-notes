@@ -50,7 +50,7 @@ export function deriveWbCapabilities(role: WbParticipantRole): WbCapabilities {
     canAddPage: false,
     canDeletePage: false,
     showFollowControls: true,
-    defaultShowLocalVideo: false,
+    defaultShowLocalVideo: true,
     timerFormat: "minutes",
     showLeaveInsteadOfEnd: true,
   };
