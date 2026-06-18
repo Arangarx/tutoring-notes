@@ -33,10 +33,11 @@ Fill **Preview** with a markdown link whose URL is the verified Vercel `branchAl
 | **Ignore this run** | Known noise, out-of-scope UI, deferred adjacent work, or env quirks **for this item only**. Write `Nothing.` if there is nothing to ignore — field is always present. |
 | **PASS** (per item) | Checked = test ran and passed. |
 | **FAIL** (per item) | Checked = test ran and failed — primary expectation not met or wholly broken (explain in Notes). |
-| **PARTIAL** (per item) | Checked = test ran and is **partially working** — some sub-checks pass and others fail. **Notes must spell out exactly what worked vs what didn't.** Distinct from FAIL (wholly broken), SKIP (not exercised), and none-checked (not yet run). |
-| **SKIP** (per item) | Checked = test deliberately skipped this run — **reason required in Notes** (e.g. blocked by env, out of scope this pass, dependency not ready). |
-| **None checked** (per item) | Not yet run / missed — **not** the same as a deliberate SKIP. Check exactly one box per item when the run is complete; leave all unchecked if not yet reached. |
-| **Notes** | Freeform observations, screenshots paths, console errors worth filing. SKIP items must state why here. |
+| **PARTIAL** (per item) | Checked = test ran and is **partially working** — some sub-checks pass and others fail. **Notes must spell out exactly what worked vs what didn't.** Distinct from FAIL (wholly broken), N/A with notes (does not apply as written), SKIP (deliberately not run), and none-checked (not yet run). |
+| **N/A with notes** (per item) | Checked = the item **does not apply as written** for this run or configuration (e.g. the feature under test is absent in the current build, or the setup genuinely cannot exercise it). **A Note explaining why is required.** Distinct from **SKIP** (a valid test deliberately not run this pass) and from **leaving all boxes unchecked** (not-yet-run / missed). Example: a smoke item for "Recording Start/Pause" when those controls no longer exist in the UI — N/A with notes, not SKIP and not blank. |
+| **SKIP** (per item) | Checked = test deliberately skipped this run — **reason required in Notes** (e.g. blocked by env, out of scope this pass, dependency not ready). Distinct from N/A with notes (item does not apply as written). |
+| **None checked** (per item) | Not yet run / missed — **not** the same as a deliberate SKIP or N/A with notes. Check exactly one box per item when the run is complete; leave all unchecked if not yet reached. |
+| **Notes** | Freeform observations, screenshots paths, console errors worth filing. SKIP and N/A with notes items must state why here. |
 
 Run order: top to bottom unless a block says otherwise. Re-run **Cross-branch / post-merge** after integration merges.
 
@@ -61,7 +62,7 @@ Cross-ref: Gate A1 both-theme component gate ([`docs/BACKLOG.md`](../BACKLOG.md)
 
 ## Per-test-item block (repeat for every test)
 
-Each numbered item **must** include all fields below **in this order**. Do not combine PASS/FAIL/PARTIAL/SKIP into one line.
+Each numbered item **must** include all fields below **in this order**. Do not combine PASS/FAIL/PARTIAL/N/A with notes/SKIP into one line.
 
 ```markdown
 ### N. <short title>
@@ -75,6 +76,7 @@ Each numbered item **must** include all fields below **in this order**. Do not c
 - [ ] PASS
 - [ ] FAIL
 - [ ] PARTIAL
+- [ ] N/A with notes
 - [ ] SKIP
 
 **Notes:**
@@ -95,6 +97,7 @@ Each numbered item **must** include all fields below **in this order**. Do not c
 - [ ] PASS
 - [ ] FAIL
 - [ ] PARTIAL
+- [ ] N/A with notes
 - [ ] SKIP
 
 **Notes:**
@@ -118,6 +121,7 @@ Each numbered item **must** include all fields below **in this order**. Do not c
 - [ ] PASS
 - [ ] FAIL
 - [ ] PARTIAL
+- [ ] N/A with notes
 - [ ] SKIP
 
 **Notes:**
@@ -150,6 +154,7 @@ Run this section **after** the feature branch merges into the integration branch
 - [ ] PASS
 - [ ] FAIL
 - [ ] PARTIAL
+- [ ] N/A with notes
 - [ ] SKIP
 
 **Notes:**
@@ -165,6 +170,7 @@ Run this section **after** the feature branch merges into the integration branch
 - [ ] PASS
 - [ ] FAIL
 - [ ] PARTIAL
+- [ ] N/A with notes
 - [ ] SKIP
 
 **Notes:**
