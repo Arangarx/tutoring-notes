@@ -1,5 +1,5 @@
 ---
-description: Canonical smokebook/runbook shape — Action/Expect/Ignore/PASS/FAIL/SKIP/Notes per item; preview URLs fetched from Vercel MCP, never guessed.
+description: Canonical smokebook/runbook shape — Action/Expect/Ignore/PASS/FAIL/PARTIAL/SKIP/Notes per item; preview URLs fetched from Vercel MCP, never guessed.
 alwaysApply: true
 ---
 
@@ -10,7 +10,7 @@ Every **smokebook** or **smoke-runbook** produced in this repo (typically under 
 ## Required structure
 
 1. **Header block** — feature name; `Branch:`; `Tip commit:` (linked); `Preview:` (markdown link to real Vercel alias). No overall verdict in the header.
-2. **Per test item** (in order) — `### N. <title>` → `**Action:**` (detailed steps) → `**Expect:**` → `**Ignore this run:**` (always present; `Nothing.` if none) → separate `- [ ] PASS`, `- [ ] FAIL`, and `- [ ] SKIP` → `**Notes:**`. Checkboxes MUST each be on their own line with a blank line before the list and after it, or they won't render. Per-item state is PASS / FAIL / SKIP; none checked = not-yet-run/missed (distinct from SKIP). SKIP requires a reason in Notes.
+2. **Per test item** (in order) — `### N. <title>` → `**Action:**` (detailed steps) → `**Expect:**` → `**Ignore this run:**` (always present; `Nothing.` if none) → separate `- [ ] PASS`, `- [ ] FAIL`, `- [ ] PARTIAL`, and `- [ ] SKIP` → `**Notes:**`. Checkboxes MUST each be on their own line with a blank line before the list and after it, or they won't render. Per-item state is PASS / FAIL / PARTIAL / SKIP; none checked = not-yet-run/missed (distinct from SKIP). **PARTIAL** = partially working — some sub-checks pass and others fail; **Notes must spell out exactly what worked vs what didn't** (distinct from FAIL = wholly broken / primary expectation not met). SKIP requires a reason in Notes.
 
    ```markdown
    **Action:** ...
@@ -19,6 +19,7 @@ Every **smokebook** or **smoke-runbook** produced in this repo (typically under 
 
    - [ ] PASS
    - [ ] FAIL
+   - [ ] PARTIAL
    - [ ] SKIP
 
    **Notes:**

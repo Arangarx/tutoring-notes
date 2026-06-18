@@ -32,7 +32,8 @@ Fill **Preview** with a markdown link whose URL is the verified Vercel `branchAl
 | **Expect** | Observable pass criteria — what you should see/hear/record; not implementation guesses. |
 | **Ignore this run** | Known noise, out-of-scope UI, deferred adjacent work, or env quirks **for this item only**. Write `Nothing.` if there is nothing to ignore — field is always present. |
 | **PASS** (per item) | Checked = test ran and passed. |
-| **FAIL** (per item) | Checked = test ran and failed (explain in Notes). |
+| **FAIL** (per item) | Checked = test ran and failed — primary expectation not met or wholly broken (explain in Notes). |
+| **PARTIAL** (per item) | Checked = test ran and is **partially working** — some sub-checks pass and others fail. **Notes must spell out exactly what worked vs what didn't.** Distinct from FAIL (wholly broken), SKIP (not exercised), and none-checked (not yet run). |
 | **SKIP** (per item) | Checked = test deliberately skipped this run — **reason required in Notes** (e.g. blocked by env, out of scope this pass, dependency not ready). |
 | **None checked** (per item) | Not yet run / missed — **not** the same as a deliberate SKIP. Check exactly one box per item when the run is complete; leave all unchecked if not yet reached. |
 | **Notes** | Freeform observations, screenshots paths, console errors worth filing. SKIP items must state why here. |
@@ -60,7 +61,7 @@ Cross-ref: Gate A1 both-theme component gate ([`docs/BACKLOG.md`](../BACKLOG.md)
 
 ## Per-test-item block (repeat for every test)
 
-Each numbered item **must** include all fields below **in this order**. Do not combine PASS/FAIL/SKIP into one line.
+Each numbered item **must** include all fields below **in this order**. Do not combine PASS/FAIL/PARTIAL/SKIP into one line.
 
 ```markdown
 ### N. <short title>
@@ -73,6 +74,7 @@ Each numbered item **must** include all fields below **in this order**. Do not c
 
 - [ ] PASS
 - [ ] FAIL
+- [ ] PARTIAL
 - [ ] SKIP
 
 **Notes:**
@@ -92,6 +94,7 @@ Each numbered item **must** include all fields below **in this order**. Do not c
 
 - [ ] PASS
 - [ ] FAIL
+- [ ] PARTIAL
 - [ ] SKIP
 
 **Notes:**
@@ -114,6 +117,7 @@ Each numbered item **must** include all fields below **in this order**. Do not c
 
 - [ ] PASS
 - [ ] FAIL
+- [ ] PARTIAL
 - [ ] SKIP
 
 **Notes:**
@@ -145,6 +149,7 @@ Run this section **after** the feature branch merges into the integration branch
 
 - [ ] PASS
 - [ ] FAIL
+- [ ] PARTIAL
 - [ ] SKIP
 
 **Notes:**
@@ -159,6 +164,7 @@ Run this section **after** the feature branch merges into the integration branch
 
 - [ ] PASS
 - [ ] FAIL
+- [ ] PARTIAL
 - [ ] SKIP
 
 **Notes:**
