@@ -1644,17 +1644,29 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       rebuild();
     });
 
-    // Fix (reconnect-recovery wave): subscribe to deliberate-leave signals so we
-    // reset per-peer media state PROACTIVELY — before the next onRoomPeersChange
-    // fires. This transitions the tile to a clean "waiting" state immediately when
-    // the peer sends a leave signal, rather than waiting for the sync server to
-    // propagate the eviction.
+    // Subscribe to deliberate-leave signals to stop stale tracks and prepare the
+    // video stream for reconnect — WITHOUT resetting peerConnectionState /
+    // iceConnectionState and WITHOUT calling rebuild().
+    //
+    // Why no state reset or rebuild():
+    //   iOS emits transient leave signals during brief backgrounding (the
+    //   mesh-build effect cleanup calls mesh.removePeer() which sends a leave,
+    //   then the effect immediately re-adds the peer). Resetting
+    //   peerConnectionState→"new" + iceConnectionState→"new" + rebuild() on
+    //   every leave made every transient iOS reconnect flash as a hard
+    //   "Disconnected" in the UI and removed the peer from reachableParticipants.
+    //
+    //   The onRoomPeersChange rejoin-detected block (addedToMesh=true &&
+    //   !mesh.peers().has(peerId)) already handles the full state reset + rebuild
+    //   on the next presence tick for GENUINE rejoins. For genuine permanent leaves
+    //   the onRoomPeersChange removal path does the teardown. onPeerLeave only
+    //   needs to prepare the media streams so the reconnect path gets a clean slate.
     const unsubLeave = mesh.onPeerLeave((peerId) => {
       if (disposed) return;
       const entry = internal.get(peerId);
       if (!entry) return;
       log.log(
-        `peer=${peerId} event=leave-received action=proactive-stream-reset`
+        `peer=${peerId} event=leave-received action=tracks-cleanup-only`
       );
       cancelEviction(peerId);
       for (const t of entry.audioStream.getTracks()) {
@@ -1666,18 +1678,18 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       for (const t of entry.videoStream.getTracks()) {
         try { t.stop(); } catch { /* ignore */ }
       }
-      // Reset to fresh video stream so videoKey changes when next track arrives.
+      // Reset to fresh video stream so videoKey changes when the next track
+      // arrives (reconnect paint). DO NOT reset peerConnectionState /
+      // iceConnectionState — those stay as-is until onRoomPeersChange
+      // fires the rejoin-detected path or the eviction timer cleans up.
       entry.videoStream = new MediaStream();
       entry.hasAudioTrack = false;
       entry.hasVideoTrack = false;
-      entry.peerConnectionState = "new";
-      entry.iceConnectionState = "new";
       // Keep entry.addedToMesh = true. The onRoomPeersChange rejoin-detected
       // guard will reset it to false and call addPeer on the next presence tick
       // if the peer shows up again (same peerId warm-rejoin). If they rejoin with
       // a new peerId (cold-rejoin / new tab), the old entry will be evicted by
       // onRoomPeersChange when their old peerId leaves presence.
-      rebuild();
     });
 
     return () => {

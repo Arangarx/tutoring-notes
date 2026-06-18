@@ -117,10 +117,12 @@ export type IceConnectionStateHandler = (
 /**
  * Fired when a remote peer explicitly sends a `leave` signal (i.e. a
  * deliberate, graceful disconnect vs an ICE-level timeout). The
- * peer's `RTCPeerConnection` is already closed when this fires.
- * Consumers use this to distinguish deliberate leave from ICE failure
- * and to reset per-peer state (streams, connection pill) proactively
- * rather than waiting for the next `onRoomPeersChange` sync event.
+ * peer's `RTCPeerConnection` is still open when this fires —
+ * `closePeerEntryLocal` runs immediately after the subscriber fan-out.
+ * Consumers use this to stop/drain stale tracks proactively rather than
+ * waiting for the next `onRoomPeersChange` sync event. Do NOT reset
+ * high-level connection-state fields here; the rejoin-detected path in
+ * `onRoomPeersChange` owns that reset for genuine rejoins.
  */
 export type PeerLeaveHandler = (peerId: string) => void;
 
