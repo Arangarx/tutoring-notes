@@ -502,3 +502,130 @@ Check **PASS** only if every in-scope test item is PASS (deliberate per-item SKI
 
 - [ ] PASS
 - [ ] FAIL
+
+---
+
+## Re-smoke round — Fix waves landed (2026-06-18)
+
+**Branch:** `wb-unify-stabilize`
+**Tip commit:** [`c0d80bd`](https://github.com/Arangarx/tutoring-notes/commit/c0d80bd)
+**Preview:** [wb-unify-stabilize branch alias](https://tutoring-notes-git-wb-unify-stabilize-arangarx-5209s-projects.vercel.app) · [preview.usemynk.com](https://preview.usemynk.com) (stable — repoint to this branch first; alias always works)
+
+**Context:** Engine fix wave [`4a07cfa`](https://github.com/Arangarx/tutoring-notes/commit/4a07cfa) + A/V rejoin wave [`e2466e8`](https://github.com/Arangarx/tutoring-notes/commit/e2466e8) / [`c0d80bd`](https://github.com/Arangarx/tutoring-notes/commit/c0d80bd) landed after W1-3 smoke FAILs. Automated merge-boundary gate GREEN (`wb-sync` 13/13 relay invariants, jest 666/666). **This round re-tests only the 4 merge-blockers + a short regression spot-check** — prior W1-3 item results above are **unchanged** (do not re-edit).
+
+**Overall result:**
+
+- [ ] PASS
+- [ ] FAIL
+
+---
+
+## Global "Ignore this run" (Waves 4–5 + W1-3 backlog — do NOT fail this re-smoke on these)
+
+Waves 4–5 (chrome/responsive, laser **colors**, general polish) plus the 11 non-blocking backlog IDs from W1-3 triage — **not** in scope for this re-smoke:
+
+- Chrome layout/overflow, mobile/responsive sizing.
+- Laser pointer **COLORS** being tutor-vs-student distinct (bidirectional visibility is in regression spot-check).
+- General visual polish / theming nits.
+- Notes content quality / MAP-ACC.
+- Replay/review-mode behavior (live-session smoke).
+- **WB-RECORDING-START-PAUSE**, **WB-MIC-MUTED-ACTIVITY**, **WB-IMAGE-IMPORTER**, **WB-STUDENT-BOARD-TABS**, **WB-LASER-ICON-CONTRAST**, **WB-STYLES-PANEL-MOUSEUP**, **WB-STUDENT-CONSOLE-NOISE**, **WB-AV-TILE-SESSION-IDENTITY**, **WB-ENDSESSION-THUMBNAIL-TABS**, **WB-FOLLOW-TUTOR-TOGGLE-STYLE**, **IAC-PARENT-TERMINOLOGY**.
+
+---
+
+### R1. Tutor eraser reliability (was item 12; related item 10)
+
+**Action:** Two real devices, fresh live session. With both sides connected and remote strokes actively syncing, **tutor** draws several pencil strokes while **student** also draws. Tutor selects **eraser** and erases multiple tutor-owned strokes — include at least one erase while a remote stroke is still landing. **What was fixed:** engine wave reconciles from `getSceneElementsIncludingDeleted()` so student stale broadcast cannot resurrect tutor deletes ("flash then reappear").
+
+**Expect:** Eraser removes targeted strokes on the tutor side **reliably** — no "refuse to erase" or tool re-selection required. Erased strokes disappear on student side within ~2s and **stay gone** (no resurrection flash).
+
+**Ignore this run:** Waves 4–5 chrome/polish. Laser distinct colors. The 11 W1-3 backlog IDs (global list above). Student-path eraser polish (tutor reliability is the regression gate).
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### R2. Undo/redo correctness — no cross-role / cross-page pollution (was item 13)
+
+**Action:** **Tutor** draws stroke A → **Undo** via top-bar button → stroke A disappears → **Redo** restores it. While tutor watches, **student** draws stroke B → tutor **Undo** once (must NOT remove B). Then: tutor on **Board 1** draws a mark → switches to **Board 2** → student draws on Board 2 → student clicks **Undo** on Board 2. **What was fixed:** per-page `history.clear()` on **both** student page-switch paths (`runV3Apply` + `selectStudentPage`); tombstone-aware reconcile baseline (same engine wave as R1).
+
+**Expect:** Tutor undo/redo affects **only tutor-local** strokes. Student undo on Board 2 does **not** pull strokes from Board 1 or tutor-owned strokes onto the current page. No "flash delete then reappear" on undo.
+
+**Ignore this run:** Waves 4–5 chrome/polish. Keyboard shortcut variants (button is the gate). The 11 W1-3 backlog IDs.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### R3. Exit → re-join A/V recovery — no ghost / long stall (was item 21)
+
+**Action:** Two-device session with bidirectional video visible. Student clicks **Exit** (`data-testid="wb-student-exit"`) — tutor cluster should shrink (item 20 behavior). Student immediately re-opens the **same join link**. Tutor stays in session. Wait up to 15s — **do not resize the window**. **What was fixed:** A/V wave — `rejoin-detected` resets stale streams/flags before re-adding peer; additive `onPeerLeave` proactive per-peer reset; `cancelEviction` cleanup.
+
+**Expect:** Tutor re-detects student — presence shows connected. Bidirectional video re-establishes without permanent "Waiting for video…" ghost or 30s+ "joining" stall. No hard-refresh required.
+
+**Ignore this run:** Waves 4–5 chrome/polish. Hard-refresh mid-session A/V loss (AV-REFRESH-LOSS backlog). The 11 W1-3 backlog IDs.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### R4. Video paints on reconnect without manual resize (was items 7/8)
+
+**Action:** Two devices, fresh session, both grant camera. **Do not resize the browser window** at any point. Confirm bidirectional video tiles paint on first connect. Then induce a reconnect path: student **Exit** and re-join (same as R3) **or** brief network toggle if easier — observe whether video **repaints** without touching window chrome. **What was fixed:** fresh `MediaStream` wrapper on video-track re-arrival (new `stream.id` → `videoKey` change → `AVTile` remount → paints without resize).
+
+**Expect:** Both directions show live video on first paint. After reconnect, video tiles paint again **without** manual window resize. No permanent black/frozen tiles.
+
+**Ignore this run:** Waves 4–5 chrome/polish. Distinct laser colors. Device hotload picker quirks. The 11 W1-3 backlog IDs.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### R5. Regression spot-check — previously-PASS shared-code paths
+
+**Action:** On the same session (or a quick second fresh session), re-verify four items that **passed** in W1-3 but whose engine/AV apply paths changed: **(a)** cross-page stroke bleed (was item 11 — strokes stay on their board); **(b)** laser bidirectional visibility (was item 14 — both sides see trails; distinct colors NOT required); **(c)** student Exit → tutor A/V cluster shrinks (was item 20); **(d)** no-camera participant shows initials without resize (was item 9).
+
+**Expect:** Same pass criteria as original items 9, 11, 14, 20 — no regressions from the additive engine/AV fixes.
+
+**Ignore this run:** Waves 4–5 chrome/polish. Laser **color** asymmetry (Wave 4). The 11 W1-3 backlog IDs.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+## Overall result (re-smoke round)
+
+Check **PASS** only if every in-scope re-smoke item (R1–R5) is PASS. Check **FAIL** if any in-scope item fails. PARTIAL counts as not PASS unless explicitly accepted in Notes.
+
+- [ ] PASS
+- [ ] FAIL

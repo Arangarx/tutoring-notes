@@ -72,6 +72,16 @@ Not in priority order within sections — that comes when items move to a sprint
 
 ---
 
+## Testing — real integration harness (Andrew 2026-06-18)
+
+> **Strategic:** build comprehensive **real** integration tests that can eventually **replace manual hardware smoke** as the merge gate. **NOT before master is stable enough for a wider audience** — until then, hardware re-smoke stays the gate.
+
+| Item | Priority | Notes |
+|------|----------|-------|
+| **TEST-REAL-INTEGRATION-SUPERSEDES-SMOKE — real-browser integration harness replaces manual smoke** | Strategic (post-master-stable) | **Andrew directive 2026-06-18.** Current automated suite (jest + `npm run test:wb-sync` Playwright relay invariants) is **necessary but NOT sufficient** — the wb-unify regression class (eraser tombstone resurrection, per-page undo isolation, exit→rejoin A/V recovery, paint-on-reconnect) is **hardware-gated** and jsdom/headless relay did not catch them before Andrew's W1-3 smoke. **Goal:** a real integration-test harness (multi-instance Excalidraw + real peer-mesh lifecycle + reconnect scenarios + tombstone/undo oracles) that catches this class **before** Andrew's two-device pass. **Gate:** do **not** start until `master` / pilot line is stable enough for a wider audience — premature investment risks building against moving surfaces. **Until shipped:** manual hardware re-smoke remains the merge boundary for whiteboard/A/V reliability changes. Cross-ref: `wb-unify-stabilize` fix waves @ `4a07cfa`/`c0d80bd`; hard-won lessons in [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) HEAD (tombstone baseline + MediaStream remount). |
+
+---
+
 ## Smoke round 1 — master-cut branch findings (2026-06-11)
 
 > **Canonical triage:** [`docs/handoff/smoke-round-1-findings-2026-06-11.md`](handoff/smoke-round-1-findings-2026-06-11.md) — Andrew's full smoke of 8 overnight branches. BLOCKERs tracked there; non-blocker items below so they aren't lost.
