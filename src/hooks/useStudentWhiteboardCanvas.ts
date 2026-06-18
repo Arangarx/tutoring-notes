@@ -362,7 +362,11 @@ export function useStudentWhiteboardCanvas(
           pageSwitchProgrammaticRef.current === 0 &&
           prefetched.length > 0
         ) {
-          api.updateScene({ elements: prefetched as ReadonlyArray<unknown> });
+          // captureUpdate: "NEVER" — tutor page-switch prefetch must not
+          // enter the student's local undo/redo stack.
+          (api as typeof api & {
+            updateScene: (s: { elements: ReadonlyArray<unknown>; captureUpdate?: string }) => void;
+          }).updateScene({ elements: prefetched as ReadonlyArray<unknown>, captureUpdate: "NEVER" });
         }
       }
       onTutorPageMeta?.(page);
@@ -409,7 +413,11 @@ export function useStudentWhiteboardCanvas(
             activePageIdRef.current === pageId &&
             pageSwitchProgrammaticRef.current === 0;
           if (stillOnTargetWriteTime) {
-            api.updateScene({ elements: merged as ReadonlyArray<unknown> });
+            // captureUpdate: "NEVER" — tutor-origin per-page sync applies must
+            // not enter the student's local undo/redo stack.
+            (api as typeof api & {
+              updateScene: (s: { elements: ReadonlyArray<unknown>; captureUpdate?: string }) => void;
+            }).updateScene({ elements: merged as ReadonlyArray<unknown>, captureUpdate: "NEVER" });
           }
         }
 
@@ -417,7 +425,11 @@ export function useStudentWhiteboardCanvas(
         const toShow = pageDataRef.current[actEnd];
         let liveWrite = 0;
         if (toShow && pageSwitchProgrammaticRef.current === 0) {
-          api.updateScene({ elements: toShow as ReadonlyArray<unknown> });
+          // captureUpdate: "NEVER" — final active-tab re-paint after v3 apply
+          // is tutor-origin data; must not pollute the student's undo stack.
+          (api as typeof api & {
+            updateScene: (s: { elements: ReadonlyArray<unknown>; captureUpdate?: string }) => void;
+          }).updateScene({ elements: toShow as ReadonlyArray<unknown>, captureUpdate: "NEVER" });
           liveWrite = 1;
         }
 
@@ -551,7 +563,11 @@ export function useStudentWhiteboardCanvas(
           [];
         activePageIdRef.current = nextId;
         setActivePageId(nextId);
-        api.updateScene({ elements: next as ReadonlyArray<unknown> });
+        // captureUpdate: "NEVER" — student page-switch element load must not
+        // create a history entry; same rationale as tutor selectTutorPage.
+        (api as typeof api & {
+          updateScene: (s: { elements: ReadonlyArray<unknown>; captureUpdate?: string }) => void;
+        }).updateScene({ elements: next as ReadonlyArray<unknown>, captureUpdate: "NEVER" });
         console.info(
           `[student-apply] ${wbsidTag}wba=${wba} author=student action=page-switch from=${from} to=${nextId}`
         );
