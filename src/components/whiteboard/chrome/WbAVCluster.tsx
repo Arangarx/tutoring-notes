@@ -89,48 +89,42 @@ export function WbAVCluster({
     tileCount > 0 &&
     autoClusterHeight <= viewportCap;
 
-  // Mechanism A: number of remote participants that currently have a live videoStream.
-  const remoteVideoCount = tilesProps.participants.filter(
-    (p) => p.videoStream != null
-  ).length;
-  const prevRemoteVideoCountRef = useRef(0);
+  // Mechanism A: fire on ANY tile count change (video or placeholder/cam-off).
+  //
+  // Root-cause fix for student-no-video, no-cam-initials-blank, tile-flash,
+  // disconnect-no-shrink: the previous implementation keyed on `remoteVideoCount`
+  // (participants with a non-null videoStream). Cam-off participants have
+  // videoStream=null, so their tiles never triggered the reflow → cluster stayed
+  // in flex/auto-grow mode with no concrete pixel box → black/empty tiles until
+  // manual resize. Shrink-on-leave was also broken because cam-off leaves never
+  // decremented remoteVideoCount.
+  //
+  // Keying on `tileCount` (any tile — video OR placeholder) fires the same
+  // reflow that manual drag produces: switch from data-auto-grow (CSS-flex height)
+  // to an explicit inline style.height → browser recomputes layout → compositor
+  // wires regardless of whether the tile holds a <video> or a placeholder <div>.
+  const prevTileCountRef = useRef(0);
 
-  // Mechanism A: replicate the reflow the manual drag produces.
-  //
-  // The manual resize causes two things that together paint the video:
-  //   1. setSize/setUserResized → data-auto-grow is removed from the cluster.
-  //   2. The cluster switches from CSS-flex-driven height (auto-grow path) to
-  //      an explicit inline style.height pixel value → browser recomputes layout
-  //      → video element gets a concrete bounding box → compositor wires.
-  //
-  // We reproduce the same transition automatically when a remote videoStream
-  // arrives: snapshot displayHeightRef.current (already computed for the current
-  // tileCount, so the height is correct and there is no squish) then call
-  // setSize + setPaintReflowLocked(true) so the next render drops data-auto-grow
-  // and sets an explicit style.height.  On symmetric leave (paint lock only, no
-  // manual drag), clear the lock and restore auto-grow height.
-  // Guard: effect only fires on count change; prevRemoteVideoCountRef prevents re-loop.
   useEffect(() => {
     if (isMobileLayout) return;
-    const prev = prevRemoteVideoCountRef.current;
-    prevRemoteVideoCountRef.current = remoteVideoCount;
-    if (remoteVideoCount > prev && remoteVideoCount > 0) {
-      // displayHeightRef is updated synchronously during each render (line below
-      // displayHeight computation), so it reflects the height for the NEW
-      // tileCount at the moment this effect runs — the same value the auto-grow
-      // path already placed in the inline style. Setting size to this exact height
-      // is a no-op visually; the structural change is the removal of data-auto-grow
-      // and the switch to explicit inline pixels that produces the layout event.
+    const prev = prevTileCountRef.current;
+    prevTileCountRef.current = tileCount;
+    if (tileCount > prev && tileCount > 0) {
+      // displayHeightRef is updated synchronously during each render (see below),
+      // so it already reflects the height for the new tileCount. Setting size
+      // to this value is a no-op visually; the structural change is removing
+      // data-auto-grow and switching to explicit inline pixels.
       const h = displayHeightRef.current;
       setSize((s) => ({ width: s.width, height: h }));
       setPaintReflowLocked(true);
-    } else if (remoteVideoCount < prev && paintReflowLocked && !userResized) {
+      console.log(`[avx] WbAVCluster paint-lock tileCount=${tileCount} prev=${prev} h=${h}`);
+    } else if (tileCount < prev && paintReflowLocked && !userResized) {
       setPaintReflowLocked(false);
-      const newTileCount = Math.max(tileCount, 1);
-      const h = computeAutoClusterHeight(newTileCount);
+      const h = computeAutoClusterHeight(Math.max(tileCount, 1));
       setSize((s) => ({ width: s.width, height: h }));
+      console.log(`[avx] WbAVCluster paint-unlock tileCount=${tileCount} prev=${prev} h=${h}`);
     }
-  }, [isMobileLayout, remoteVideoCount, paintReflowLocked, userResized, tileCount]);
+  }, [isMobileLayout, tileCount, paintReflowLocked, userResized]);
 
   useLayoutEffect(() => {
     if (isMobileLayout) return;

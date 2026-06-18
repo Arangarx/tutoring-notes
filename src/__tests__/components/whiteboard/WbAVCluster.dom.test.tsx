@@ -1,20 +1,24 @@
 /**
  * @jest-environment jsdom
  *
- * Mechanism A: WbAVCluster automatically replicates the manual-resize reflow
- * when a remote participant with a videoStream arrives.
+ * Mechanism A (Fix 2.1): WbAVCluster automatically replicates the manual-resize
+ * reflow when ANY tile count changes — including cam-off/placeholder tiles, not
+ * only participants with a live videoStream.
  *
- * The manual resize's effect on paint: the cluster transitions from CSS-flex
- * auto-height (data-auto-grow="true") to explicit inline pixel height
- * (data-auto-grow absent, style.height set to a concrete px value).  That
- * structural change causes the browser to recompute layout, giving the <video>
- * element concrete pixel dimensions — the trigger the compositor needs to wire
- * up and paint the remote video.
+ * Root-cause fix: the previous implementation keyed Mechanism A on remoteVideoCount
+ * (participants with videoStream != null). Cam-off participants always had videoStream
+ * null, so their tiles never triggered the reflow → cluster stayed in flex/auto-grow
+ * mode with no concrete pixel box → black/empty placeholder tiles until manual resize.
+ *
+ * The manual resize effect: cluster transitions from CSS-flex auto-height
+ * (data-auto-grow="true") to explicit inline pixel height (data-auto-grow absent,
+ * style.height set to a concrete px value). That structural change causes the browser
+ * to recompute layout, giving tiles concrete pixel dimensions.
  *
  * jsdom limitation note: jsdom does not run a paint pipeline or a compositor,
- * so these tests can only verify that the DOM/state change (data-auto-grow
- * removal + concrete style.height) happens. Definitive proof that the video
- * paints requires a two-device LV-2 smoke test on real hardware.
+ * so these tests can only verify that the DOM/state change (data-auto-grow removal
+ * + concrete style.height) happens. Definitive proof that video/placeholder tiles
+ * paint correctly requires a two-device hardware smoke test.
  */
 
 import React from "react";
@@ -76,7 +80,7 @@ function makeBaseProps(
 
 afterEach(() => cleanup());
 
-describe("WbAVCluster — Mechanism A (auto-reflow on remote video arrival)", () => {
+describe("WbAVCluster — Mechanism A (auto-reflow on tile count change)", () => {
   test("cluster starts in auto-grow mode (data-auto-grow=true) with only a local tile", () => {
     render(<WbAVCluster {...makeBaseProps([])} />);
     const cluster = screen.getByTestId("wb-av-cluster");
@@ -111,31 +115,42 @@ describe("WbAVCluster — Mechanism A (auto-reflow on remote video arrival)", ()
     expect(h).toMatch(/^\d+px$/);
   });
 
-  test("data-auto-grow is NOT removed when a remote participant arrives WITHOUT a videoStream", async () => {
+  test("Mechanism A fires when a cam-off (no videoStream) participant arrives — placeholder tiles need reflow too", async () => {
     const props = makeBaseProps([]);
     const { rerender } = render(<WbAVCluster {...props} />);
 
-    // Add participant with no video (audio-only or not yet negotiated).
+    // Add participant with no video (cam-off / not yet negotiated).
     const remoteNoVideo = makeRemoteParticipant("peer-2", false);
     await act(async () => {
       rerender(<WbAVCluster {...makeBaseProps([remoteNoVideo])} />);
     });
 
     const cluster = screen.getByTestId("wb-av-cluster");
-    // No videoStream → Mechanism A does not fire → still auto-grow.
-    expect(cluster.getAttribute("data-auto-grow")).toBe("true");
+    // Fix 2.1: Mechanism A now keys on tileCount, NOT remoteVideoCount.
+    // A cam-off participant increases tile count → Mechanism A fires → data-auto-grow removed.
+    // (Old behavior: no videoStream → Mechanism A did NOT fire → cluster stayed auto-grow →
+    //  cam-off/initials placeholder tiles had no concrete pixel box and appeared blank.)
+    expect(cluster.getAttribute("data-auto-grow")).toBeNull();
+    const h = (cluster as HTMLElement).style.height;
+    expect(h).toMatch(/^\d+px$/);
   });
 
-  test("Mechanism A fires when videoStream transitions from null to non-null on existing participant", async () => {
-    const noVideoParticipant = makeRemoteParticipant("peer-3", false);
-    const { rerender } = render(
-      <WbAVCluster {...makeBaseProps([noVideoParticipant])} />
-    );
+  test("Mechanism A fires on participant join; cluster stays locked when cam turns on mid-session", async () => {
+    const { rerender } = render(<WbAVCluster {...makeBaseProps([])} />);
 
-    // Still auto-grow while participant has no video.
+    // Initial state: only local tile, auto-grow active.
     expect(screen.getByTestId("wb-av-cluster").getAttribute("data-auto-grow")).toBe("true");
 
-    // Now the participant gains a videoStream (camera turned on mid-session).
+    // Cam-off participant joins — Fix 2.1: tileCount increase fires Mechanism A.
+    const noVideoParticipant = makeRemoteParticipant("peer-3", false);
+    await act(async () => {
+      rerender(<WbAVCluster {...makeBaseProps([noVideoParticipant])} />);
+    });
+
+    // Mechanism A fired on tile count increase → data-auto-grow removed, even cam-off.
+    expect(screen.getByTestId("wb-av-cluster").getAttribute("data-auto-grow")).toBeNull();
+
+    // Now the same participant enables camera (same participant, tileCount UNCHANGED).
     const withVideoParticipant: AvParticipant = {
       ...noVideoParticipant,
       videoStream: makeFakeStream(true),
@@ -144,6 +159,7 @@ describe("WbAVCluster — Mechanism A (auto-reflow on remote video arrival)", ()
       rerender(<WbAVCluster {...makeBaseProps([withVideoParticipant])} />);
     });
 
+    // Tilecount unchanged (1 remote) → Mechanism A doesn't re-fire; cluster stays locked.
     expect(screen.getByTestId("wb-av-cluster").getAttribute("data-auto-grow")).toBeNull();
   });
 

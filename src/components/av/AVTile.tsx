@@ -45,7 +45,7 @@
  * which is the cheapest update path.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { AvParticipant } from "@/hooks/useLiveAV";
 import {
@@ -123,6 +123,7 @@ export function AVTile({
 }: AVTileProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const tileBodyRef = useRef<HTMLDivElement | null>(null);
   /**
    * True when the browser refused to autoplay the remote audio
    * element. iOS Safari and Chrome Android frequently block
@@ -262,19 +263,30 @@ export function AVTile({
 
   const isLocalTile = isLocal === true || participant.isLocal === true;
 
-  // Key-remount: when videoStream transitions null → non-null, produce a different
-  // key so React replaces the <video> element with a fresh instance that starts
-  // life as display:block. Chrome only wires the compositor pipeline on freshly
-  // mounted visible video elements; transitioning an existing display:none element
-  // to display:block does NOT trigger that wiring until a subsequent layout event
-  // (e.g. a manual resize). This is the root cause of the "black until resize" bug
-  // (Attempts 1-3 called play() at various timings but kept the same element).
+  // Key-remount: when videoStream transitions null → non-null for the FIRST time
+  // (or after a genuine new stream arrives), produce a different key so React
+  // replaces the <video> element with a fresh instance that starts life as
+  // display:block. Chrome only wires the compositor pipeline on freshly mounted
+  // visible video elements; transitioning an existing display:none element to
+  // display:block does NOT trigger that wiring until a subsequent layout event.
   //
-  // We key on MediaStream.id (stable per stream object) when available, falling
-  // back to a has-stream boolean for environments without MediaStream.id (jsdom).
+  // Stabilization (Fix 2.3): during renegotiation a participant's videoStream
+  // briefly goes null → stream (same stream id) as hasVideoTrack flips. Without
+  // stabilization the key changes null→stream→null→stream, producing a visible
+  // flash as the <video> element remounts. We hold the last known non-null stream
+  // id in a ref so a TEMPORARY null transition keeps the same key (no remount)
+  // while a FIRST-TIME null→stream or a genuinely new stream still produces a
+  // different key (triggering the needed compositor-wire remount).
+  const lastVideoStreamIdRef = useRef<string | null>(null);
+  if (participant.videoStream?.id != null) {
+    lastVideoStreamIdRef.current = participant.videoStream.id;
+  }
+  // "vid-inactive" (no prior stream) vs stream id for remount on first arrival;
+  // stays at the last stream id during brief null windows to avoid flash.
   const videoKey =
     participant.videoStream?.id ??
-    (participant.videoStream ? "vid-active" : "vid-inactive");
+    lastVideoStreamIdRef.current ??
+    "vid-inactive";
 
   const pill = useMemo(() => {
     if (isLocalTile) return getConnectionStatePill(SELF_STATE, SELF_STATE);
@@ -332,6 +344,22 @@ export function AVTile({
 
   const pillHidden = shouldHidePill(pill);
 
+  // Mechanism B (part 3 — placeholder reflow): force a layout flush when the tile
+  // is in cam-off/initials/awaiting-video mode and Mechanism A has just given the
+  // cluster a concrete height. Without this, layout batching can leave the
+  // absolute-positioned placeholder <div> with zero computed height until the
+  // next manual resize. Reading offsetHeight from the tile body forces the browser
+  // to compute layout so the placeholder paints correctly.
+  //
+  // NOTE: jsdom blind spot — offsetHeight is always 0 in jsdom; this effect is
+  // only observable in a real browser. The hardware smoke is the gate.
+  useLayoutEffect(() => {
+    if (!showCamPlaceholder) return;
+    const el = tileBodyRef.current;
+    if (!el) return;
+    void el.offsetHeight;
+  }, [showCamPlaceholder]);
+
   return (
     <div
       data-testid={testId ?? `av-tile-${participant.peerId}`}
@@ -351,6 +379,7 @@ export function AVTile({
       }}
     >
       <div
+        ref={tileBodyRef}
         style={{
           position: "relative",
           width: "100%",
