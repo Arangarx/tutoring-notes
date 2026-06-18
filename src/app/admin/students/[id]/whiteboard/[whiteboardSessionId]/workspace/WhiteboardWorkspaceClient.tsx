@@ -4093,12 +4093,13 @@ export function WhiteboardWorkspaceClient({
       return (
         <GraphEmbeddable
           element={element as { id?: string; width?: number; height?: number; customData?: Record<string, unknown> }}
-          excalidrawAPI={excalidrawAPIRef.current}
+          excalidrawAPI={role === "student" ? undefined : excalidrawAPIRef.current}
+          readOnly={role === "student"}
         />
       );
     }
     return undefined;
-  }, []);
+  }, [role]);
 
   const handleExcalidrawLinkOpen = useCallback(
     (
