@@ -4743,12 +4743,29 @@ export function WhiteboardWorkspaceClient({
     );
   }
 
+  // ---------------------------------------------------------------
+  // Student render-time computed values (no hooks; pure derivations)
+  // ---------------------------------------------------------------
+  const studentCallConnected = liveAv.reachableParticipants.length >= 1;
+  const studentBothPresentForTimer = studentConnected && studentCallConnected;
+  const studentLiveTimerMs = computeDisplayActiveMs({
+    nowMs: studentNow,
+    serverActiveMs: studentServerActiveMs,
+    serverLastActiveAtMs: studentServerLastActiveAtMs,
+    clientActiveNow: studentBothPresentForTimer,
+    staleThresholdMs: ACTIVE_PING_STALE_MS,
+  });
+  const studentShowWaitingForOther =
+    studentServerActiveMs === 0 && !studentBothPresentForTimer && studentConnected;
+  const showBoardWaitBanner =
+    boardWaitElapsed && !dismissedBoardWaitNotice && !stuckLoading;
+
   return (
     <WbRoleProvider role={role}>
     <LiveBoardChrome
       layoutMode={layoutMode}
       orientation={orientation}
-      role="tutor"
+      role={role}
       toolbarHidden={toolbarHidden}
       onChromeClick={() => setOpenMenu(null)}
       nonVisualMounts={
@@ -4764,6 +4781,214 @@ export function WhiteboardWorkspaceClient({
       />
       }
       topBar={
+      role === "student" ? (
+      <header
+        className="mynk-wb-topbar bg-card border-b border-border"
+        role="toolbar"
+        aria-label="Session controls"
+        onClick={(e) => e.stopPropagation()}
+        data-testid="wb-student-topbar"
+      >
+        <span className="mynk-wb-wordmark" aria-label="Mynk">
+          Mynk<span className="mynk-wb-wordmark__dot">·</span>
+        </span>
+        <span className="mynk-wb-topbar__sep" aria-hidden />
+        <div className="mynk-wb-topbar__zone mynk-wb-student-title">
+          <span className="mynk-wb-student-tutor-name">{tutorName}</span>
+          <span
+            className="mynk-wb-student-disclosure"
+            data-testid="wb-student-recording-disclosure"
+          >
+            This session is being recorded by your tutor. What you draw is visible
+            live.
+          </span>
+        </div>
+
+        <button
+          type="button"
+          className="mynk-wb-toolbar-toggle"
+          data-testid="wb-student-toolbar-toggle"
+          aria-pressed={toolbarHidden}
+          title={toolbarHidden ? "Show tools" : "Hide tools"}
+          onClick={(e) => {
+            e.stopPropagation();
+            setToolbarHidden((hidden) => !hidden);
+          }}
+        >
+          <span className="mynk-wb-toolbar-toggle__label">
+            {toolbarHidden ? "Show tools" : "Hide tools"}
+          </span>
+          <span className="mynk-wb-toolbar-toggle__chev" aria-hidden>
+            {toolbarHidden ? "▴" : "▾"}
+          </span>
+        </button>
+
+        <div style={{ flex: 1, minWidth: 0 }} />
+
+        <div className="mynk-wb-topbar__zone">
+          <span
+            className={`mynk-wb-status-pill${studentConnected ? " mynk-wb-status-pill--ok" : " mynk-wb-status-pill--warn"}`}
+            data-testid="wb-student-sync-pill"
+          >
+            {studentConnected ? "Connected" : "Joining…"}
+          </span>
+          {studentConnected && liveAv.participants.length > 0 && (
+            <span
+              className={`mynk-wb-status-pill${studentCallConnected ? " mynk-wb-status-pill--ok" : " mynk-wb-status-pill--warn"}`}
+              data-testid="wb-student-call-pill"
+            >
+              {studentCallConnected ? "Call connected" : "Call reconnecting…"}
+            </span>
+          )}
+          <span className="mynk-wb-timer" data-testid="wb-student-timer">
+            {studentShowWaitingForOther
+              ? `${formatTimerMinutesOnly(studentLiveTimerMs)} (waiting)`
+              : formatTimerMinutesOnly(studentLiveTimerMs)}
+          </span>
+        </div>
+
+        {!touchLayout && (
+          <div className="mynk-wb-topbar__zone mynk-wb-student-follow">
+            <label className="mynk-wb-follow-toggle">
+              <input
+                type="checkbox"
+                checked={!independentView}
+                aria-label="Follow tutor view"
+                data-testid="wb-student-follow-toggle"
+                onChange={(e) => setIndependentView(!e.target.checked)}
+              />
+              Follow tutor view
+            </label>
+            <button
+              type="button"
+              className="mynk-wb-tb-btn"
+              data-testid="wb-student-match-view"
+              onClick={() => snapToTutorView()}
+            >
+              Match tutor&apos;s view
+            </button>
+          </div>
+        )}
+
+        <div className="mynk-wb-topbar__zone" onClick={(e) => e.stopPropagation()}>
+          <WbTopBarMicControlLive
+            isMicMuted={liveAv.isMicMuted}
+            hasMicPermission={liveAv.hasMicPermission}
+            hasMicStream={liveAv.localAudioStream !== null}
+            onToggleMute={liveAv.toggleMic}
+            onAcquireMic={handleAcquireMic}
+            onMicDeviceChange={(deviceId) => void liveAv.setMicDevice(deviceId)}
+            disabled={!studentConnected}
+          />
+          <WbTopBarCamControl
+            isCamMuted={liveAv.isCamMuted}
+            hasCamPermission={liveAv.hasCamPermission}
+            onToggleCam={() => void handleTopBarCam()}
+            videoDevices={liveAv.videoDevices ?? []}
+            selectedPickerSlot={liveAv.pickedVideoCameraSlot}
+            onPickCameraSlot={(slot) => void liveAv.setVideoCameraBySlot(slot)}
+            isLive={!liveAv.isCamMuted && !!liveAv.localVideoStream}
+            disabled={!studentConnected}
+          />
+
+          <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
+
+          <button
+            type="button"
+            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__desktop-only"
+            title="Undo (Ctrl+Z)"
+            aria-label="Undo"
+            disabled={!studentConnected}
+            data-testid="wb-student-undo"
+            onClick={() => triggerUndo()}
+          >
+            <WbIconUndo />
+          </button>
+          <button
+            type="button"
+            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__desktop-only"
+            title="Redo (Ctrl+Shift+Z)"
+            aria-label="Redo"
+            disabled={!studentConnected}
+            data-testid="wb-student-redo"
+            onClick={() => triggerRedo()}
+          >
+            <WbIconRedo />
+          </button>
+
+          <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
+
+          <div className="mynk-wb-view-menu mynk-wb-topbar__desktop-only">
+            <button
+              type="button"
+              className="mynk-wb-tb-btn mynk-wb-tb-btn--icon"
+              title="View options"
+              aria-label="View options"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleMenu("view");
+              }}
+            >
+              <WbIconMore size={14} />
+            </button>
+            {viewMenuOpen && (
+              <div
+                className="mynk-wb-view-dropdown"
+                role="menu"
+                aria-label="View options"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <label className="mynk-wb-view-item">
+                  <input
+                    type="checkbox"
+                    checked={gridEnabled}
+                    onChange={(e) => toggleGrid(e.target.checked)}
+                  />
+                  Show canvas grid
+                </label>
+              </div>
+            )}
+          </div>
+
+          <div className="mynk-wb-topbar__desktop-only">
+            <WbThemeToggle
+              open={openMenu === "theme"}
+              onOpenChange={(open) => setOpenMenu(open ? "theme" : null)}
+            />
+          </div>
+        </div>
+
+        <div className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing">
+          {touchLayout && (
+            <button
+              type="button"
+              className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__overflow-btn"
+              title="More session options"
+              aria-label="More session options"
+              aria-expanded={topbarMoreOpen}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleMenu("topbar-more");
+              }}
+              data-testid="wb-student-topbar-overflow"
+            >
+              <WbIconMore size={14} />
+            </button>
+          )}
+          <button
+            type="button"
+            className="mynk-wb-tb-btn mynk-wb-tb-btn--leave"
+            data-testid="wb-student-exit"
+            onClick={() => {
+              wjgLog("student_exit");
+              setHasLeft(true);
+            }}
+          >
+            Exit
+          </button>
+        </div>
+      </header>
+      ) : (
       <header
         className="mynk-wb-topbar bg-card border-b border-border"
         role="toolbar"
@@ -5034,6 +5259,7 @@ export function WhiteboardWorkspaceClient({
           })()}
         </div>
       </header>
+      )
       }
       toolStrip={
         <nav
