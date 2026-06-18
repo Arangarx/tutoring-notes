@@ -483,6 +483,19 @@ CI agent reviewing PRs automatically:
   pass `npm run test:wb-sync` locally before `git merge --no-ff`. Pre-build
   the local relay image once (`npm run relay:build`; requires Docker). Green
   output proves real-browser coverage via the hermetic relay, not jsdom alone.
+  - **Cadence — merge-boundary, not per-wave (Andrew 2026-06-17).** The
+    ~38-min Playwright phase is a **merge gate**, not a per-commit/per-fix-wave
+    gate. On a feature branch that stacks several waves before a single
+    merge, run `test:wb-sync` **once on the final integrated tip** right
+    before `merge --no-ff` — NOT after every wave. Waves that **don't touch**
+    `src/lib/whiteboard/` / `src/components/whiteboard/` / the apply paths
+    (e.g. chrome/responsive-only, polish-only) **skip it entirely**; the jest
+    subset (`npm run test:wb-jest`, ~5s) is the inner-loop gate for those.
+    Rationale: per-wave relay runs were burning ~40 min per fix with no
+    safety gain over a single final run, and the bisect surface (only the
+    sync-touching waves on the branch) stays small. Full all-feature merges
+    into the long-running branch are NOT the right granularity — that's too
+    coarse to bisect; per-feature-branch-merge-boundary is the sweet spot.
 - **Build-surface changes** (fonts, CSS, or build configuration — e.g.
   `src/app/fonts.ts`, `src/styles/*.css`, `eslint.config.*`, `next.config.*`,
   Tailwind/PostCSS config, `package.json` build scripts) MUST pass a real
