@@ -82,6 +82,16 @@ Not in priority order within sections — that comes when items move to a sprint
 
 ---
 
+## Whiteboard — reliability / cost-safety (Andrew 2026-06-18)
+
+> **Incident (2026-06-18):** Andrew left a live whiteboard session open ~16h overnight. Incremental OpenAI cost was **$0** — but only because the session was solo (no student) and prod has `NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT=false`, so recording never armed and no audio segments were produced (`wbsid=e542afff-5764-4f60-ba6c-447e4e82ae2f`, `activeMs=0`, 0 `SessionRecording` rows). The latent billing risk is real for with-student (or solo-record-enabled) sessions where recording stays active.
+
+| Item | Priority | Notes |
+|------|----------|-------|
+| **WB-IDLE-SESSION-GUARD — idle/abandoned live session cost protections** | Medium-high (cost-safety + tutor-trust) | Protective measures so a tutor can't accidentally burn transcription + notes cost by leaving a session open unattended. **Core gap:** whiteboard sessions have **no session-level auto-end** — a session can sit open 24h+ (`endedAt` stays null). **Existing caps:** only the **8h recording hard-stop** (`SESSION_SAFETY_MAX_SECONDS` in `segment-policy.ts`), and only while actively recording; segments roll every ~**50 min** (`SEGMENT_MAX_SECONDS`). **No VAD / silence skip** — when recording is active, silent audio is still billed per audio-minute (`gpt-4o-mini-transcribe` ~$0.003/audio-min, fallback `whisper-1` ~$0.006). An abandoned-but-recording session could bill up to ~8h of audio-minutes (~$1.50–$3) + notes generation for nothing. **Options to evaluate (not all required):** (1) **Session-level idle auto-end / "still there?" heartbeat** — detect inactivity (no pointer/stroke/audio + no reachable participant); after a grace window, prompt; if unacknowledged, gracefully **END** the session (flush + save — never silent discard; honor **SSG-2** / **F1** save-then-end discipline). (2) **Inactivity auto-pause of recording** — pause capture after N minutes of no audio/no interaction (pairs with existing FSM pause path). (3) **VAD / silence-skip** so silent audio isn't transcribed/billed. (4) **Confirm or lower a max session-duration cap** distinct from the 8h recording cap. **Tutor-trust bar:** a tutor would be upset to return and find they'd been billed for an abandoned session. Cross-ref: **WB-RECORDING-START-PAUSE** (missing visible Start/Pause controls — related surface); 8h `SESSION_SAFETY_MAX_SECONDS`; ~50min `segment-policy.ts` rollover; save-then-end (**SSG-2** / **F1**). |
+
+---
+
 ## Smoke round 1 — master-cut branch findings (2026-06-11)
 
 > **Canonical triage:** [`docs/handoff/smoke-round-1-findings-2026-06-11.md`](handoff/smoke-round-1-findings-2026-06-11.md) — Andrew's full smoke of 8 overnight branches. BLOCKERs tracked there; non-blocker items below so they aren't lost.
