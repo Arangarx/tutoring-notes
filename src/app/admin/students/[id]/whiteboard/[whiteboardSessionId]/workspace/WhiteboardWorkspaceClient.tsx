@@ -64,6 +64,7 @@ import {
   type StreamHealth,
 } from "@/lib/recording/lifecycle-machine";
 import { useAudioFlowConfirmation } from "@/hooks/useAudioFlowConfirmation";
+import { useCollaboratorPointers } from "@/hooks/useCollaboratorPointers";
 import { useLiveAV } from "@/hooks/useLiveAV";
 import { studentMicStreamId } from "@/lib/recording/remote-stream-recorder";
 import { WbTopBarMicControl } from "@/components/whiteboard/chrome/WbTopBarMicControl";
@@ -906,6 +907,13 @@ export function WhiteboardWorkspaceClient({
       off2();
     };
   }, [sync]);
+
+  useCollaboratorPointers(
+    sync,
+    excalidrawAPI,
+    applyingRemoteToCanvasRef,
+    activePageIdRef
+  );
 
   // Split "both parties in room" into two layers:
   //
