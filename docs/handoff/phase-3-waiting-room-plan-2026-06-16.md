@@ -204,6 +204,8 @@ type ShellMode = "waiting" | "live" | "review";
 | `live` | `review` | Existing `handleEndSession` ΓåÆ `onSessionEnded` (tutor) |
 | `waiting` | ended | Cancel / End while pending ΓÇö special case: end without capture (┬º5.4) |
 
+> **Waiting room is an OVERLAY, not a separate page (Andrew 2026-06-17):** the `waiting` -> `live` transition MUST be an in-place **overlay dismiss that smoothly REVEALS the already-mounted whiteboard** -- NOT a route change or a separate page that then loads the board. Same flowing-experience model as the notes hero/docked transition (compose its overlay/transition approach -- no bespoke, per `.cursor/rules/composition-no-duplication.mdc`). Implications: (a) the whiteboard workspace mounts with the waiting-room overlay layered on top; admit = fade/dismiss the overlay, NOT navigate; (b) because there is no page transition, **enabling/disabling audio & video happens in the same mounted context** -- A/V toggles never trigger navigation and media/session state persists across the waiting->live reveal (the on-mount A/V acquisition the student shell already does stays put -- win/win); (c) applies to BOTH tutor and student waiting-room experiences. **This refines the Shell contract + Mode transitions above:** prefer a single mounted workspace with a `waiting` overlay layer over swapping `WaitingRoomWorkspace` <-> `WhiteboardWorkspaceClient` as distinct mounted route trees.
+
 ### Logging registry (extend [`AGENTS.md`](../../AGENTS.md) in implementation commit)
 
 | Prefix | Scope | Example |
