@@ -225,9 +225,37 @@ export function StudentWhiteboardClient({
     sessionId: whiteboardSessionId,
   });
 
-  // Phase 4c: sync-reconnect → mesh.restart for every current peer.
-  // Identical pattern to the workspace client; see that file for the
-  // rationale around suppressing the first-mount onConnect.
+  // Track the last known peer set from sync presence so the reconnect paths
+  // below are independent of liveAv.participants (which can be empty after the
+  // 10s peer-eviction timer fires during phone sleep). Stable ref; updated by
+  // the effect below.
+  const lastPresencePeerIdsRef = useRef<ReadonlyArray<string>>([]);
+  // Stable ref for reconnectPeer so the visibilitychange effect below never
+  // needs to re-register (reconnectPeer already has an empty dep array inside
+  // useLiveAV, but closing over a ref avoids any stale-closure concern).
+  const reconnectPeerRef = useRef(liveAv.reconnectPeer);
+  reconnectPeerRef.current = liveAv.reconnectPeer;
+
+  // Keep lastPresencePeerIdsRef in sync with the sync-room peer set.
+  useEffect(() => {
+    if (!syncClient) {
+      lastPresencePeerIdsRef.current = [];
+      return;
+    }
+    const off = syncClient.onRoomPeersChange((peers) => {
+      lastPresencePeerIdsRef.current = peers.map((p) => p.peerId);
+    });
+    return () => {
+      off();
+      lastPresencePeerIdsRef.current = [];
+    };
+  }, [syncClient]);
+
+  // Phase 4c: sync-reconnect → mesh.restart for every presence peer.
+  // Uses lastPresencePeerIdsRef instead of liveAv.participants so reconnect
+  // fires even when the 10s eviction timer has already cleared participants
+  // (Symptom B fix — phone sleep→wake). Identical suppress-first-mount pattern
+  // to the workspace client; see that file for rationale.
   const sawDisconnectSinceLastConnectRef = useRef(false);
   useEffect(() => {
     if (!syncClient) {
@@ -238,17 +266,17 @@ export function StudentWhiteboardClient({
       const shouldRestart = sawDisconnectSinceLastConnectRef.current;
       sawDisconnectSinceLastConnectRef.current = false;
       if (!shouldRestart) return;
-      const current = liveAv.participants;
-      if (current.length === 0) return;
+      const peerIds = lastPresencePeerIdsRef.current;
+      if (peerIds.length === 0) return;
       console.log(
-        `[StudentWhiteboardClient] wbsid=${whiteboardSessionId} avx=${whiteboardSessionId} sync-reconnect peers=${current.length}`
+        `[StudentWhiteboardClient] wbsid=${whiteboardSessionId} avx=${whiteboardSessionId} sync-reconnect peers=${peerIds.length}`
       );
-      for (const p of current) {
+      for (const peerId of peerIds) {
         try {
-          liveAv.reconnectPeer(p.peerId);
+          liveAv.reconnectPeer(peerId);
         } catch (err) {
           console.warn(
-            `[StudentWhiteboardClient] wbsid=${whiteboardSessionId} mesh.restart threw peer=${p.peerId}`,
+            `[StudentWhiteboardClient] wbsid=${whiteboardSessionId} mesh.restart threw peer=${peerId}`,
             err
           );
         }
@@ -262,6 +290,51 @@ export function StudentWhiteboardClient({
       offDisconnect();
     };
   }, [syncClient, liveAv, whiteboardSessionId]);
+
+  // Symptom B fix — foreground-resume ICE restart (phone sleep→wake).
+  // When the device foregrounds, trigger mesh.restart for every peer known
+  // from sync presence regardless of liveAv.participants (which is empty
+  // after eviction). This covers the case where the sync socket stayed
+  // connected during the sleep so onConnect never fires, but WebRTC
+  // degraded. mesh.restart is a graceful no-op for evicted peers
+  // (they are re-added by onRoomPeersChange on the next presence broadcast).
+  useEffect(() => {
+    const triggerReconnect = (label: string) => {
+      const peerIds = lastPresencePeerIdsRef.current;
+      if (peerIds.length === 0) return;
+      console.log(
+        `[StudentWhiteboardClient] wbsid=${whiteboardSessionId} avx=${whiteboardSessionId} visibility-resume trigger=${label} peers=${peerIds.length}`
+      );
+      for (const peerId of peerIds) {
+        try {
+          reconnectPeerRef.current(peerId);
+        } catch (err) {
+          console.warn(
+            `[StudentWhiteboardClient] wbsid=${whiteboardSessionId} visibility-resume mesh.restart threw peer=${peerId}`,
+            err
+          );
+        }
+      }
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") triggerReconnect("visibilitychange");
+    };
+    const onPageShow = (e: PageTransitionEvent) => {
+      // Only fire for bfcache restores (e.persisted=true); a regular page
+      // navigation fires its own mount path.
+      if (e.persisted) triggerReconnect("pageshow");
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pageshow", onPageShow);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pageshow", onPageShow);
+    };
+    // Stable refs only — intentional empty dep array.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // callConnected: at least one remote peer is WebRTC-reachable
   // (peerConnectionState=connected AND iceConnectionState ∈ {connected,completed}).
