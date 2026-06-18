@@ -876,19 +876,23 @@ export function WhiteboardWorkspaceClient({
 
       // Read local at this exact tick:
       //   - If we're STILL on `targetId` and no page-switch swap is
-      //     mid-flight, the live scene IS this page's scene and is the
-      //     freshest source (captures the tutor's in-flight stroke that
-      //     hasn't surfaced through `onChange` yet).
-      //   - Otherwise, the live scene belongs to a different page; reading
-      //     it would mix peer page X's elements with tutor page Y's
-      //     elements (the bilateral leak). Fall back to the bucket, which
-      //     is kept in sync by handleExcalidrawChange + page-switch saves.
+      //     mid-flight, use the live canvas as the freshest source
+      //     (captures tutor's in-flight stroke not yet committed via
+      //     `onChange`). MUST use `getSceneElementsIncludingDeleted` —
+      //     `getSceneElements` returns only non-deleted elements, so
+      //     erased/undone elements (isDeleted:true) are absent from the
+      //     local baseline. When a stale student broadcast then carries
+      //     that element as non-deleted, `reconcileElements` second pass
+      //     adds it back from remote → resurrection on tutor canvas.
+      //   - Off-target: the live scene belongs to a different page; use
+      //     `pageDataRef` (which contains isDeleted:true tombstones via
+      //     the `onChange` → `getElementsIncludingDeleted` path).
       const onTargetReadTime =
         activePageIdRef.current === targetId &&
         pageSwitchProgrammaticRef.current === 0;
       const localForMerge: ReadonlyArray<ExcalidrawLikeElement> =
         onTargetReadTime
-          ? (api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>)
+          ? (((api.getSceneElementsIncludingDeleted?.() ?? api.getSceneElements()) as ReadonlyArray<ExcalidrawLikeElement>))
           : ((pageDataRef.current[targetId] as
               | ReadonlyArray<ExcalidrawLikeElement>
               | undefined) ?? []);
@@ -3925,7 +3929,12 @@ export function WhiteboardWorkspaceClient({
                 const live = excalidrawAPIRef.current;
                 if (live) {
                   syncActivePageElements(patched as ReadonlyArray<ExcalidrawLikeElement>);
-                  live.updateScene({ elements: patched });
+                  // captureUpdate: "NEVER" — asset-URL back-fill is a
+                  // background patch, not a user action; must not pollute
+                  // the student's undo/redo stack.
+                  (live as typeof live & {
+                    updateScene: (s: { elements: ReadonlyArray<unknown>; captureUpdate?: string }) => void;
+                  }).updateScene({ elements: patched, captureUpdate: "NEVER" });
                   studentSyncClient?.broadcastScene(
                     patched as ReadonlyArray<ExcalidrawLikeElement>,
                     getStudentPageBroadcastExtras()
