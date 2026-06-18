@@ -1,7 +1,7 @@
 # WB unification + stabilization (Waves 1-3) — smoke runbook
 
 **Branch:** `wb-unify-stabilize`
-**Tip commit:** [`52a7d0d`](https://github.com/Arangarx/tutoring-notes/commit/52a7d0d)
+**Tip commit:** `[52a7d0d](https://github.com/Arangarx/tutoring-notes/commit/52a7d0d)`
 **Preview:** [wb-unify-stabilize preview](https://tutoring-notes-git-wb-unify-stabilize-arangarx-5209s-projects.vercel.app)
 
 **Context:** Waves 1–3 are stacked on this branch; automated gates GREEN (jest 894/894 whiteboard/AV; `wb-sync` relay 13 Playwright passed / 1 skip / 0 fail — the 12 live-sync invariants survived). The paint/bleed/eraser fixes are jsdom-blind so **this hardware smoke is their real gate**. Waves 4–5 (chrome/responsive, laser COLORS, polish) are **not** in this branch — see the global Ignore list below.
@@ -10,13 +10,15 @@
 
 ## Legend
 
-| Field | How to fill it |
-|---|---|
-| **Branch** | `wb-unify-stabilize` |
-| **Tip commit** | HEAD of `wb-unify-stabilize` at smoke time |
-| **Preview** | Verified Vercel `branchAlias` via MCP — do not guess |
-| **Overall result** | PASS only if every in-scope test item is PASS (deliberate SKIPs called out in Notes). FAIL if any in-scope item fails. |
-| **PARTIAL** | Checked when the item mostly works but has a bounded defect that does not block the Wave 1–3 acceptance bar — explain in Notes. |
+
+| Field              | How to fill it                                                                                                                  |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| **Branch**         | `wb-unify-stabilize`                                                                                                            |
+| **Tip commit**     | HEAD of `wb-unify-stabilize` at smoke time                                                                                      |
+| **Preview**        | Verified Vercel `branchAlias` via MCP — do not guess                                                                            |
+| **Overall result** | PASS only if every in-scope test item is PASS (deliberate SKIPs called out in Notes). FAIL if any in-scope item fails.          |
+| **PARTIAL**        | Checked when the item mostly works but has a bounded defect that does not block the Wave 1–3 acceptance bar — explain in Notes. |
+
 
 Run order: top to bottom. Use **two real devices** (or tutor desktop + student phone) for all A/V and sync items. Open DevTools console on at least one side when noted.
 
@@ -44,12 +46,14 @@ The following are **known-deferred** to Waves 4–5. State them once here; each 
 
 **Ignore this run:** Student-role chrome (items 7+). Chrome overflow / mobile layout (Waves 4–5). Laser distinct colors (Wave 4).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] SKIP
 
-**Notes:**
+**Notes:**  
+**Student doesn't see board 2 tab.  They do see board 2 strokes.  Technically a pass since you said "at least" board 1.**  
+**Not seeing obvious errors, but in student console should I see a constant slew of entries? Is that it polling to stay synced?**
 
 ---
 
@@ -66,7 +70,7 @@ The following are **known-deferred** to Waves 4–5. State them once here; each 
 - [ ] PARTIAL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  Start and Pause are not a thing in the current controls.  I'm actually wondering if they're worth bringing back.**
 
 ---
 
@@ -78,12 +82,12 @@ The following are **known-deferred** to Waves 4–5. State them once here; each 
 
 **Ignore this run:** Student page-strip behavior (item 17). Cross-peer bleed (item 11).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Board 2 appears for tutor but doesn't display to student, but pass because you said to ignore.  Canvas works for both appropriately.**
 
 ---
 
@@ -95,12 +99,14 @@ The following are **known-deferred** to Waves 4–5. State them once here; each 
 
 **Ignore this run:** Student resolution/crop differences on PDF embeds (low severity). Student-initiated insert (tutor-only). Cross-page bleed on the **student** side (item 11).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] SKIP
 
-**Notes:**
+**Notes:**  
+**We have not given student import tools for pdfs/images, etc.**  
+**Actually this is a regression I forgot to mention.  We left out the image importer.  This is not a recent thing I just kept forgetting to bring it up.**
 
 ---
 
@@ -114,10 +120,10 @@ The following are **known-deferred** to Waves 4–5. State them once here; each 
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  If I understood you, when muted it should not indicate it is receiving sound.  Picture shows muted but mic control at top bar shows activity even while muted.**
 
 ---
 
@@ -129,7 +135,7 @@ The following are **known-deferred** to Waves 4–5. State them once here; each 
 
 **Ignore this run:** Replay/review-mode depth, notes quality, waveform accuracy (live-session smoke; MAP-ACC separate). Student `session_ended` UX (covered in prior smokebooks).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] SKIP
@@ -150,12 +156,15 @@ The following are **known-deferred** to Waves 4–5. State them once here; each 
 
 **Ignore this run:** Chrome overflow / controls pushed off-screen (Wave 4). Mobile layout (Wave 4). Theme canvas bg (item 18).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  When I ended the last session edge asked for camera permissions.  After I started a new session, tutor is waiting for student video and student sees self initial and no tutor panel at all.  I will hard refresh and get the camera to tutor for fresh session to complete steps 7+.  Interestingly, now that edge has permission...Tutor can see self, but not student.  Student sees initial of self but no tutor tile.  Student shows disconnected. Okay, eventually Student sees tutor and tutor sees student initials and they show connected.  That's a really long recovery time.  Since you requested true fresh session I'll close edge and start over before doing 7+.**  
+On true fresh session, edge is offering the student the browser recovery even though it should be a completely fresh session.  
+Video loaded at first but at some point (I missed it) the video of tutor disappeared on student side till video frame resize.  
+
 
 ---
 
@@ -169,10 +178,11 @@ The following are **known-deferred** to Waves 4–5. State them once here; each 
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] SKIP
 
-**Notes:**
+**Notes: See notes in 7.**  
+**Testing in same machine, two browsers so bidirectional Video is n/a for now.**
 
 ---
 
@@ -184,7 +194,7 @@ The following are **known-deferred** to Waves 4–5. State them once here; each 
 
 **Ignore this run:** Chrome cluster layout polish (Wave 4). Video quality / codec nits.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] SKIP
@@ -203,10 +213,11 @@ The following are **known-deferred** to Waves 4–5. State them once here; each 
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Tutor size erasing is still not working.  The shape it's meant to delete flashes/fades but does not consistently delete at all.  Can click many times and no guarantee anything erases.  Student side erase works.**  
+**Strokes and shapes working well.**
 
 ---
 
@@ -218,12 +229,13 @@ The following are **known-deferred** to Waves 4–5. State them once here; each 
 
 **Ignore this run:** PDF resolution/crop differences between devices. Chrome/page-tab polish (Wave 4).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] SKIP
 
-**Notes:**
+**Notes:**  
+**Just a notes, styles panel still waiting for mouse-up to close.**
 
 ---
 
@@ -236,11 +248,11 @@ The following are **known-deferred** to Waves 4–5. State them once here; each 
 **Ignore this run:** Eraser on student path (should work; only tutor reliability is the regression gate). Perfect erase under extreme latency.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] SKIP
 
-**Notes:**
+**Notes: See notes in 10.**
 
 ---
 
@@ -253,11 +265,13 @@ The following are **known-deferred** to Waves 4–5. State them once here; each 
 **Ignore this run:** Keyboard shortcut variants (button is the gate). Student-initiated undo (tutor path is the regression focus).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  Stroke meant to undo flashes on delete.  BTW, I'm suspecting a TON of these issues is that student side is taking way too much priority on sync.  I'm guessing anything on the student side is force syncing itself back in so deletes and undos and things don't work.**  
+**Student undo undid some strokes previously done by tutor.**  
+**Undo from student is redoing strokes from other pages into the current page.  This is another regression of something solved previously.  The agent's solution last time was to clear history on page swap.**
 
 ---
 
@@ -271,10 +285,12 @@ The following are **known-deferred** to Waves 4–5. State them once here; each 
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] SKIP
 
-**Notes:**
+**Notes:**  
+**Bidirectional vision now works.  Still don't know why the laser pointer is orange instead of the typical red.  So it's not quite what I imagined though but I guess this might be an acceptable type solution.  Student sees tutor laser, but same orange/coral color (I JUST now realized it's not orange it's our coral color).  Tutor NOW sees student laser, and for student it's coral, for tutor it's blue.**  
+**When highlighted, current laser pointer icons have horrid visibility, there is barely any contrast between the laser icon and the white background.** 
 
 ---
 
@@ -286,7 +302,7 @@ The following are **known-deferred** to Waves 4–5. State them once here; each 
 
 **Ignore this run:** Other shape tools beyond line/arrow. Chrome polish (Wave 4).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] SKIP
@@ -303,12 +319,13 @@ The following are **known-deferred** to Waves 4–5. State them once here; each 
 
 **Ignore this run:** Match-view button size/icons (Wave 4 polish). Preventing student pan while synced (backlog idea).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] SKIP
 
-**Notes:**
+**Notes:**  
+**Odd...now undo redo seem to be working and indepedently...I won't even try to describe what led up to this. Lots of testing steps. It's almost like the history clear and independent undo/redo is suddenly working.  Only thing I can think of that I did differenly was using keyboard shortcuts first.**
 
 ---
 
@@ -322,10 +339,10 @@ The following are **known-deferred** to Waves 4–5. State them once here; each 
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Basically pass, but not 100% verified as still only 1 board tab for student.**
 
 ---
 
@@ -337,7 +354,7 @@ The following are **known-deferred** to Waves 4–5. State them once here; each 
 
 **Ignore this run:** Minor contrast nits (Wave 4 polish). Marketing-site theme on non-WB routes.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] SKIP
@@ -354,7 +371,7 @@ The following are **known-deferred** to Waves 4–5. State them once here; each 
 
 **Ignore this run:** Browser denying permissions (user action). Device hotload / picker duplicates (backlog). Chrome overflow (Wave 4).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] SKIP
@@ -373,7 +390,7 @@ The following are **known-deferred** to Waves 4–5. State them once here; each 
 
 **Ignore this run:** Coral Exit button styling (Wave 4 polish). Student tab left open on leave card (expected).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] SKIP
@@ -391,11 +408,12 @@ The following are **known-deferred** to Waves 4–5. State them once here; each 
 **Ignore this run:** Chrome polish (Wave 4). Hard-refresh mid-session A/V loss (separate AV-REFRESH-LOSS backlog unless reproducing incidentally).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] SKIP
 
-**Notes:**
+**Notes:**  
+**As soon as student begins connecting, student tile pops up on tutor side but says waiting for video.  Student side doesn't show tutor tile at all yet.  I suspect this is going to take a while to recover again.  Student side is not "double" mounting to mic this time.  Been 30+ seconds, student still "joining".  Hard refresh on student side not recovering this time.**
 
 ---
 
@@ -410,9 +428,9 @@ The following are **known-deferred** to Waves 4–5. State them once here; each 
 - [ ] PASS
 - [ ] FAIL
 - [ ] PARTIAL
-- [ ] SKIP
+- [x] SKIP
 
-**Notes:**
+**Notes: N/A for this setup.**
 
 ---
 
@@ -426,10 +444,10 @@ The following are **known-deferred** to Waves 4–5. State them once here; each 
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  This is a pass with Edge.  I have not confirmed with chrome as student.  So I say partial only because I cannot verify receiving end stays stable in chrome in current smoke setup.**
 
 ---
 
@@ -439,7 +457,7 @@ Run this section **after** `merge --no-ff` of `wb-unify-stabilize` → `v1-redes
 
 **Integration branch:** `v1-redesign`
 **Integration tip commit:** `<short-sha after merge>`
-**Integration preview:** [<v1-redesign preview>](https://<branchAlias-from-Vercel-MCP>)
+**Integration preview:** 
 
 **Overall integration result:**
 
