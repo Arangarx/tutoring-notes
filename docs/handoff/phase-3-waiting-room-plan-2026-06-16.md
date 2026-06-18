@@ -1,4 +1,4 @@
-# Phase 3 — Mutual waiting room + retire consent click: Detailed Executable Plan
+﻿# Phase 3 — Mutual waiting room + retire consent click: Detailed Executable Plan
 
 > **Branch:** `phase3/wb-waiting-room` (fork off `v1-redesign` **after** P2 smoke PASS + `merge --no-ff`)  
 > **Program:** Live-session floor — [`live_session_floor`](../../../.cursor/plans/live_session_floor_2e662852.plan.md) P3 (largest / highest-risk floor phase)  
@@ -14,7 +14,7 @@
 
 | Gate | Requirement |
 |---|---|
-| **G1 — P2 landed** | `phase2/wb-student-new-shell` smokebook PASS + `merge --no-ff` into `v1-redesign`. P3 builds on P2's unified shell (`WhiteboardSessionShell` student union, `StudentLiveWorkspaceClient`, `LiveBoardChrome`). |
+| **G1 — wb-unify-stabilize landed** | `wb-unify-stabilize` (Waves 1-3) fix-wave smokebook PASS + `merge --no-ff` into `v1-redesign`. **`StudentLiveWorkspaceClient` was deleted** as part of unification — students now run on the unified `WhiteboardWorkspaceClient` with `role="student"`. P3 builds on this unified surface, not a student-specific shell. |
 | **G2 — Andrew greenlight** | Explicit go before **any** P3 code, **any** shared Neon destructive migration, or deleting `CONSENT_ENFORCEMENT`. |
 | **G3 — 5-axis review** | Independent adversarial review of **this plan** completes; BLOCKERs folded into §8 acceptance before executor dispatch. |
 | **G4 — Destructive DB** | Test-account forward-migration (§6) runs only after dry-run + Andrew confirms inventory row-by-row. Never on production Sarah data paths without explicit keep-list. |
@@ -23,7 +23,7 @@
 
 ## ⛔ HARD CONSTRAINT — extend don't rewrite
 
-**Tutor live engine (`WhiteboardWorkspaceClient.tsx`) is ADDITIVE-ONLY for P3 waiting→live.**
+**`WhiteboardWorkspaceClient.tsx` is ADDITIVE-ONLY for P3 waiting→live.** This now applies to BOTH tutor (`role="tutor"`) and student (`role="student"`) since P2's `StudentLiveWorkspaceClient` was deleted in `wb-unify-stabilize` — students run the same unified client.
 
 P3 adds **waiting mode** around the live subtree; it does **not** rewrite sync, `pageDataRef`, recorder FSM wiring, or v3 wire.
 
@@ -59,6 +59,33 @@ Implement the **mutual waiting room** (tutor + student both present before live 
 | **(c)** | Keep `/w/[joinToken]` hybrid backup path (Andrew 2026-06-14). P3 changes student entry from straight-to-live → waiting-first, not URL retirement. |
 | **(e)** | Student self-view ON default (P2; unchanged in waiting room preview). |
 
+### Consent model (clarified 2026-06-18)
+
+These three points supersede or sharpen any prior ambiguity in the baked-in decisions above. Treat them as binding design invariants.
+
+#### 1. Waiting room HONORS, does not SET, consent
+
+The waiting room renders the learner's **existing** consent toggles read-only from the `SessionConsentSnapshot` frozen at session-create time. It presents **no UI to modify** those toggles. Consent is always set via the parent/guardian consent editor (`/account/children/[id]/consent`) before the session, and takes effect at the next session's snapshot freeze.
+
+> **Future version (out of scope now):** Allowing a parent who is physically present to adjust a toggle live in the waiting room before session start is an interesting possible future iteration — it is explicitly **NOT** Phase 3. Do not add any consent toggle/edit affordance in the waiting room UI.
+
+#### 2. `allowLiveSession = false` ⇒ the session cannot start — gate at the affordance, not the admit click
+
+If `allowLiveSession = false` for the learner, the session must never start. The **preferred UX is to never render the "start session" / "create session" affordance at all** — the absence of the button is the UX, not a post-click rejection. The admit endpoint is defense-in-depth, not the primary gate.
+
+Concretely:
+- `StartWhiteboardSession.tsx` must check `allowLiveSession` from the learner's effective consent and **hide or disable** the session-create action with an explanatory message when false.
+- `WaitingRoomWorkspace.tsx` (tutor) must not render a "Start session" button when the snapshot has `allowLiveSession = false`.
+- The admit endpoint (`startWhiteboardSession`) additionally rejects as a server-side guard.
+
+#### 3. Student consent gates tutor-side recording too
+
+When the tutor enables live/solo-side recording (the `tutorWantsRecording` toggle), this may only proceed if **the learner's consent snapshot includes `allowAudioRecording = true`**. Student consent is a **precondition for tutor-side recording**, not just for student-side capture.
+
+The tutor-side recording toggle must be disabled/hidden when `allowAudioRecording = false` — both the UI gate (Layer 1: `WhiteboardWorkspaceClient` receives `consentSnapshot.allowAudioRecording` and disables the toggle) and the FSM gate (Layer 2: `shouldCaptureWB` / audio register server action rejects when consent absent). The step-9 file-touch already notes passing `consentSnapshot.allowAudioRecording` to disable the toggle; this point makes the design intent explicit: student consent governs tutor-side recording symmetrically.
+
+---
+
 ### In scope
 
 - Additive Prisma migration: `sessionPhase`, `sessionMode`, nullable `startedAt` semantics, `SessionParticipant` model, optional `activeSwapId` (schema only; swap UX deferred).
@@ -89,7 +116,7 @@ Implement the **mutual waiting room** (tutor + student both present before live 
 
 ## 2. Current state
 
-> **Branch note:** Line refs below are `v1-redesign` @ planning time. P2 shell files (`StudentLiveWorkspaceClient`, student union on `WhiteboardSessionShell`) live on `phase2/wb-student-new-shell` @ `93d71ca` until merged — P3 executor rebases onto post-P2 `v1-redesign`.
+> **Branch note:** Line refs below are `v1-redesign` @ planning time. ~~P2 shell files (`StudentLiveWorkspaceClient`, student union on `WhiteboardSessionShell`) live on `phase2/wb-student-new-shell` @ `93d71ca` until merged~~. **Superseded:** `StudentLiveWorkspaceClient` was deleted in `wb-unify-stabilize`; see updated P2/wb-unify-stabilize foundation table below. P3 executor bases off post-unify `v1-redesign`.
 
 ### Session lifecycle (no waiting room today)
 
@@ -129,13 +156,17 @@ Implement the **mutual waiting room** (tutor + student both present before live 
 | Workspace integration | [`WhiteboardWorkspaceClient.tsx`](../../src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceClient.tsx) ~L1680 | `tutorWantsRecording` drives FSM; recording can arm on workspace mount. |
 | End session | [`RECORDER-LIFECYCLE.md`](../RECORDER-LIFECYCLE.md) | Pillar 3 atomic sequence unchanged; P3 adds **precondition** that admit happened before arming. |
 
-### P2 foundation (post-merge)
+### P2 / wb-unify-stabilize foundation (post-merge)
 
-| Piece | Location | Behavior today (P2 branch) |
+> **⚠️ Superseded by wb-unify-stabilize (2026-06-18):** The P2 `phase2/wb-student-new-shell` plan assumed a separate `StudentLiveWorkspaceClient`. That shell was **deleted** during `wb-unify-stabilize` Waves 1-3. The table below reflects the **post-unification** state that P3 actually builds on — not the original P2 plan.
+
+| Piece | Location | Behavior today (post-unify) |
 |---|---|---|
-| Student shell | `phase2` → `StudentLiveWorkspaceClient.tsx` | `LiveBoardChrome`, `useLiveAV`, `useStudentWhiteboardCanvas`, straight-to-**live**. |
-| Shell union | `phase2` → `WhiteboardSessionShell.tsx` L46–62 | `role: "student"` \| `"tutor"` discriminated union. |
-| Flag | `NEXT_PUBLIC_WB_STUDENT_NEW_SHELL` | Gates new vs legacy student client. |
+| Unified student+tutor shell | `WhiteboardWorkspaceClient.tsx` | Single client, `role: "student" \| "tutor"` prop. `StudentLiveWorkspaceClient` **deleted**. |
+| Shell union | `WhiteboardSessionShell.tsx` | `role: "student" \| "tutor"` discriminated union; both roles use `WhiteboardWorkspaceClient`. |
+| Flag | `NEXT_PUBLIC_WB_STUDENT_NEW_SHELL` | Effectively retired — both tutor and student now run the same unified client; flag gates are moot post-unify. Confirm removal status in merge commit. |
+
+**Overlay model (Andrew hard requirement):** The waiting room is an **OVERLAY** that disappears to smoothly **reveal** the whiteboard underneath — NOT a separate page that navigates away and then loads the board. This means `WhiteboardWorkspaceClient` (and its board engine) can be mounted beneath the waiting room overlay from the start; the waiting room chrome sits on top and is removed on admit without a page transition. Enabling/disabling A/V in the waiting room must require **no page transition**.
 
 ### Gap summary
 
@@ -177,7 +208,8 @@ POST startWhiteboardSession / admit
   capture      = per snapshot toggles
         │
         ▼
-  shell mode = live  →  WhiteboardWorkspaceClient / StudentLiveWorkspaceClient
+  shell mode = live  →  WhiteboardWorkspaceClient (role="tutor" or role="student")
+                        [StudentLiveWorkspaceClient was deleted in wb-unify-stabilize]
 ```
 
 ### Shell contract (three modes)
@@ -188,11 +220,13 @@ type ShellMode = "waiting" | "live" | "review";
 // Tutor: server passes initialMode from sessionPhase + endedAt
 // Student: join page passes "waiting" until join-timer/admit poll says active
 
-// WhiteboardSessionShell (additive):
-//   waiting → WaitingRoomWorkspace (role=tutor|student)
-//   live    → existing P2 paths
+// WhiteboardSessionShell (additive) — both roles use WhiteboardWorkspaceClient:
+//   waiting → WaitingRoomOverlay rendered on top of (but not instead of) the board
+//   live    → WaitingRoomOverlay removed; WhiteboardWorkspaceClient revealed
 //   review  → SessionReviewMode (tutor only)
 ```
+
+> **Overlay implementation note (Andrew 2026-06-18):** The waiting room is an **overlay**, not a route swap. `WhiteboardWorkspaceClient` (the board engine) may be mounted beneath it from the start so that the transition to live is a smooth reveal — no page navigation, no remount. The overlay disappears on admit, revealing the already-ready board. A/V device toggling in the waiting room must work without any page transition.
 
 ### Mode transitions
 
@@ -381,7 +415,7 @@ CREATE UNIQUE INDEX ... ON "WhiteboardSession" ("studentId") WHERE "endedAt" IS 
 | File | Role |
 |---|---|
 | `src/app/admin/.../workspace/WaitingRoomWorkspace.tsx` | Tutor waiting: `useLiveAV` preview, consent panel from snapshot, in-person declaration, student presence pill, **Start session** → calls admit action. |
-| `src/app/w/[joinToken]/StudentWaitingRoomWorkspace.tsx` | Student waiting: same chrome frame as P2 but **no Excalidraw**; A/V preview; disclosure; poll admit. |
+| `src/app/w/[joinToken]/StudentWaitingRoomWorkspace.tsx` | Student waiting overlay rendered above (not instead of) the unified `WhiteboardWorkspaceClient role="student"`; A/V preview; disclosure; poll admit. Board engine may mount beneath the overlay for smooth reveal on admit. |
 | `src/components/whiteboard/chrome/WbWaitingRoomChrome.tsx` | Layout per shell mock `page-waiting` — reuse `LiveBoardChrome` tokens without tool strip. |
 
 **Extend [`WhiteboardSessionShell.tsx`](../../src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardSessionShell.tsx):**
@@ -389,7 +423,7 @@ CREATE UNIQUE INDEX ... ON "WhiteboardSession" ("studentId") WHERE "endedAt" IS 
 ```typescript
 type ShellMode = "waiting" | "live" | "review";
 // tutor: if mode==="waiting" → WaitingRoomWorkspace
-// student (P2 union): if waiting → StudentWaitingRoomWorkspace
+// student (unified WhiteboardWorkspaceClient role="student"): if waiting → WaitingRoomOverlay above board engine; StudentLiveWorkspaceClient was deleted in wb-unify-stabilize
 ```
 
 **`useLiveAV` reuse:** Request mic/cam in waiting room per [`useLiveAV.ts`](../../src/hooks/useLiveAV.ts) contract (inert until `requestMic`/`requestCam`). Do **not** mount peer mesh for board sync until `live` unless presence requires lightweight sync connection — document in STATUS.
@@ -513,6 +547,9 @@ Run **after** Step 9–11 code is on Preview; **not** in same deploy as first pr
 | Pillar 3 — Atomic end | Unchanged; pending cancel/end uses shortened path (no segments expected). |
 | Admit race | Server transaction sets `sessionPhase`; clients poll — no client-only admit. |
 | Double Start click | Admit endpoint idempotent. |
+| **Consent correctness — no start affordance when `allowLiveSession=false`** | The "create / start session" button must **not render** when the learner's effective consent has `allowLiveSession=false`. The admit endpoint is a server-side backstop; missing the button in the first place is the primary correctness gate. Smoke item required. |
+| **Student consent gates tutor recording** | `tutorWantsRecording` may only arm if `consentSnapshot.allowAudioRecording=true`. Both the UI toggle and the FSM/server action enforce this. A tutor must not be able to start recording when student consent is absent, even if the tutor manually enables the toggle. |
+| **Waiting room is read-only for consent** | No consent toggle/edit affordance is rendered in the waiting room. If an executor adds any input that modifies a `ConsentRecord` from within the waiting room, treat it as a scope error and escalate. |
 
 ### 5.2 Waiting → live race matrix
 
@@ -667,7 +704,7 @@ Author `docs/handoff/phase-3-waiting-room-smokebook-2026-06-16.md` per [`SMOKEBO
 
 | ID | Criterion |
 |---|---|
-| P3-G1 | P2 merged; `NEXT_PUBLIC_WB_STUDENT_NEW_SHELL` on in test env |
+| P3-G1 | ~~P2 merged; NEXT_PUBLIC_WB_STUDENT_NEW_SHELL on in test env~~ **Superseded by P3-G1-update** — wb-unify-stabilize merged; unified WhiteboardWorkspaceClient with role prop confirmed |
 | P3-G2 | `sessionPhase` / `sessionMode` migration applied; backfill leaves historical sessions active |
 | P3-G3 | New sessions start `pending`; admit is server-authoritative |
 | P3-G4 | Capture blocked while `pending` (audio + WB replay + notes + checkpoint route) |
@@ -686,6 +723,12 @@ Author `docs/handoff/phase-3-waiting-room-smokebook-2026-06-16.md` per [`SMOKEBO
 | **P3-A3** | **[5-axis BLOCKER 3]** `NEXT_PUBLIC_WB_WAITING_ROOM` flag gates pending-create in `createWhiteboardSession` AND `initialMode` in `workspace/page.tsx`; flag-off path creates active sessions straight to live board (verified in smoke item 0 + flag-off regression test) |
 | **P3-A4** | **[5-axis BLOCKER 4]** `active-ping` route reads `sessionPhase` before processing timer fields; unit test: pending session ping → no `bothConnectedAt` stamp, no `activeMs` increment |
 | **P3-A5** | **[5-axis BLOCKER 5]** `cancelPendingSession` server action exists, calls `endWhiteboardSession` with placeholder `eventsBlobUrl`, sets `endedAt`, revokes join tokens with zero segments; unit test passes |
+
+|| **P3-A6** | **[consent model 2026-06-18]** When `allowLiveSession=false` for a learner, no "create session" affordance renders in `StartWhiteboardSession.tsx` AND no "Start session" button renders in `WaitingRoomWorkspace.tsx`; post-click server rejection is defense-in-depth only |
+|| **P3-A7** | **[consent model 2026-06-18]** `tutorWantsRecording` toggle in `WhiteboardWorkspaceClient` is disabled/hidden when `consentSnapshot.allowAudioRecording=false`; audio register server action rejects when consent absent — student consent gates tutor-side recording, not just student-side capture |
+|| **P3-A8** | **[consent model 2026-06-18]** Waiting room renders consent fields read-only only; no UI path exists to write a `ConsentRecord` from within the waiting room |
+|| **P3-A9** | **[unification 2026-06-18]** `StudentLiveWorkspaceClient` references do not exist in P3 code; both tutor and student paths use `WhiteboardWorkspaceClient` with `role` prop; waiting-room to live transition is an overlay reveal with no page navigation |
+|| **P3-G1-update** | **[unification 2026-06-18 — updates P3-G1]** `wb-unify-stabilize` (Waves 1-3) merged into `v1-redesign`; `WhiteboardWorkspaceClient` unified role-based client confirmed in place; `StudentLiveWorkspaceClient` confirmed deleted |
 
 **Sarah-trust framing:** If Sarah must keep Zoom open because the waiting room lies about readiness, capture starts early, or consent is unclear — P3 is not done.
 
@@ -721,7 +764,7 @@ Author `docs/handoff/phase-3-waiting-room-smokebook-2026-06-16.md` per [`SMOKEBO
 | `src/app/admin/.../WhiteboardSessionShell.tsx` | `waiting` mode branch |
 | `src/app/admin/.../WaitingRoomWorkspace.tsx` | **New** — tutor waiting |
 | `src/app/w/[joinToken]/page.tsx` | Waiting entry; remove early `bothConnectedAt` |
-| `src/app/w/[joinToken]/StudentWaitingRoomWorkspace.tsx` | **New** — student waiting |
+| `src/app/w/[joinToken]/StudentWaitingRoomWorkspace.tsx` | **New** — student waiting overlay rendered above (not instead of) the unified `WhiteboardWorkspaceClient role="student"`; no separate student shell since wb-unify-stabilize deleted `StudentLiveWorkspaceClient` |
 | `src/components/whiteboard/chrome/WbWaitingRoomChrome.tsx` | **New** — layout |
 | `src/lib/consent-scope.ts` | Delete flag; hard enforcement |
 | `src/lib/session-participant-scope.ts` | Real implementation |
@@ -765,7 +808,7 @@ Pillar 3: delete CONSENT_ENFORCEMENT + parent POST + WB replay gate
 2. **Timer realignment** — `bothConnectedAt` / `activeMs` / `join-timer` triple consistency across tutor + student + server.
 3. **Unconditional consent + destructive migration** — wrong row in §6.2 deletes Sarah data; dry-run discipline is the control.
 4. **Block-capture-while-pending** — every capture path (audio register, WB replay events, notes, end-session segments) must be enumerated; one leak = COPPA failure.
-5. **P2 integration** — waiting mode must not regress P2 student shell (`StudentLiveWorkspaceClient` mounts only after admit).
+5. **wb-unify-stabilize integration** — waiting mode must not regress the unified student path (`WhiteboardWorkspaceClient role="student"` mounts only after admit; `StudentLiveWorkspaceClient` was deleted in wb-unify-stabilize).
 
 ---
 
