@@ -1377,6 +1377,19 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       peerId: string,
       track: MediaStreamTrack
     ): void {
+      // Fix: when a video track re-arrives after the previous track ended
+      // (hasVideoTrack=false), create a FRESH MediaStream so entry.videoStream.id
+      // changes. This causes videoKey in AVTile to change from the last known id
+      // → React remounts the <video> element → compositor re-wires on the fresh
+      // element → video paints without a manual resize. Applies equally on first
+      // arrival ("vid-inactive" → new id) and on reconnect (old id → new id).
+      // Audio uses null→same-stream srcObject reassignment which works without remount.
+      if (track.kind === "video" && !entry.hasVideoTrack) {
+        entry.videoStream = new MediaStream();
+        log.log(
+          `peer=${peerId} event=video-stream-refresh reason=track-rearrive hasVideoTrack=false`
+        );
+      }
       const targetStream =
         track.kind === "audio" ? entry.audioStream : entry.videoStream;
       try {
@@ -1425,11 +1438,46 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         // reconnected faster than the eviction timer), reset addedToMesh so we
         // force a fresh RTCPeerConnection for the rejoining peer. Without this,
         // addPeer is a no-op for the rejoining peer → tutor shows "Disconnected".
+        //
+        // Fix (reconnect-recovery wave): also reset stale tracks + connection
+        // state so the reconnect path gets a clean slate:
+        //   1. Cancel any pending eviction timer — the peer is rejoining.
+        //   2. Stop + drain old tracks from both streams. Old tracks are from the
+        //      now-closed PC; leaving them attached means new tracks get added to
+        //      a stream already populated with ended tracks.
+        //   3. Reset has*Track and connection-state flags so rebuild() presents
+        //      a clean "waiting" state while the new PC negotiates.
+        // The fresh MediaStream for video is created lazily in applyRemoteTrack
+        // when the first new video track arrives, changing videoKey in AVTile and
+        // triggering a <video> remount → compositor re-wiring → paint-on-reconnect.
         if (entry.addedToMesh && !mesh.peers().has(p.peerId)) {
-          log.log(
-            `peer=${p.peerId} event=rejoin-detected action=reset-mesh-entry role=${p.role}`
-          );
+          cancelEviction(p.peerId);
+          for (const t of entry.audioStream.getTracks()) {
+            try { t.stop(); } catch { /* ignore */ }
+          }
+          // Drain tracks from the old stream (removeTrack so the stream is clean
+          // for the next audio track arrival; audio does NOT get a new stream object
+          // because the null→same-stream srcObject reassignment works for <audio>).
+          for (const t of [...entry.audioStream.getTracks()]) {
+            try { entry.audioStream.removeTrack(t); } catch { /* ignore */ }
+          }
+          for (const t of entry.videoStream.getTracks()) {
+            try { t.stop(); } catch { /* ignore */ }
+          }
+          // Replace the video stream with a fresh object. applyRemoteTrack will
+          // also create a new stream on first video-track arrival (hasVideoTrack=false),
+          // but resetting here ensures the old stream id is no longer in play even
+          // before the first new track arrives, avoiding a late "ended" handler
+          // updating the wrong stream reference.
+          entry.videoStream = new MediaStream();
+          entry.hasAudioTrack = false;
+          entry.hasVideoTrack = false;
+          entry.peerConnectionState = "new";
+          entry.iceConnectionState = "new";
           entry.addedToMesh = false;
+          log.log(
+            `peer=${p.peerId} event=rejoin-detected action=reset-streams-and-eviction role=${p.role}`
+          );
         }
         if (!entry.addedToMesh) {
           entry.addedToMesh = true;
@@ -1458,6 +1506,9 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       }
       for (const [peerId, entry] of [...internal.entries()]) {
         if (incoming.has(peerId)) continue;
+        // Cancel any pending eviction timer before removing the entry so the
+        // timer callback doesn't fire on an already-deleted internal entry.
+        cancelEviction(peerId);
         try {
           mesh.removePeer(peerId);
           log.log(`removePeer peer=${peerId}`);
@@ -1593,6 +1644,42 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       rebuild();
     });
 
+    // Fix (reconnect-recovery wave): subscribe to deliberate-leave signals so we
+    // reset per-peer media state PROACTIVELY — before the next onRoomPeersChange
+    // fires. This transitions the tile to a clean "waiting" state immediately when
+    // the peer sends a leave signal, rather than waiting for the sync server to
+    // propagate the eviction.
+    const unsubLeave = mesh.onPeerLeave((peerId) => {
+      if (disposed) return;
+      const entry = internal.get(peerId);
+      if (!entry) return;
+      log.log(
+        `peer=${peerId} event=leave-received action=proactive-stream-reset`
+      );
+      cancelEviction(peerId);
+      for (const t of entry.audioStream.getTracks()) {
+        try { t.stop(); } catch { /* ignore */ }
+      }
+      for (const t of [...entry.audioStream.getTracks()]) {
+        try { entry.audioStream.removeTrack(t); } catch { /* ignore */ }
+      }
+      for (const t of entry.videoStream.getTracks()) {
+        try { t.stop(); } catch { /* ignore */ }
+      }
+      // Reset to fresh video stream so videoKey changes when next track arrives.
+      entry.videoStream = new MediaStream();
+      entry.hasAudioTrack = false;
+      entry.hasVideoTrack = false;
+      entry.peerConnectionState = "new";
+      entry.iceConnectionState = "new";
+      // Keep entry.addedToMesh = true. The onRoomPeersChange rejoin-detected
+      // guard will reset it to false and call addPeer on the next presence tick
+      // if the peer shows up again (same peerId warm-rejoin). If they rejoin with
+      // a new peerId (cold-rejoin / new tab), the old entry will be evicted by
+      // onRoomPeersChange when their old peerId leaves presence.
+      rebuild();
+    });
+
     return () => {
       disposed = true;
       // Cancel all stale-peer eviction timers before tearing down.
@@ -1602,6 +1689,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       unsubTrack();
       unsubPc();
       unsubIce();
+      unsubLeave();
       // Fix 2.4 — graceful leave: send leave signals to all connected peers before
       // disposing the mesh. mesh.dispose() calls closePeerEntryLocal() which closes
       // the RTCPeerConnection but does NOT call signaling.sendLeave(). Without this,
