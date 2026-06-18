@@ -5586,12 +5586,13 @@ export function WhiteboardWorkspaceClient({
       >
         <BoardTabStrip
           pageList={pageList}
-          activePageId={activePageId}
+          activePageId={role === "student" ? (studentActivePageIdRef.current ?? activePageId) : activePageId}
           disabled={endingBusy}
+          readOnly={role === "student"}
           maxPages={20}
-          onSelectPage={(id) => void selectTutorPage(id)}
-          onAddPage={addTutorPage}
-          onDeletePage={removeTutorPage}
+          onSelectPage={role === "student" ? undefined : (id) => void selectTutorPage(id)}
+          onAddPage={role === "student" ? undefined : addTutorPage}
+          onDeletePage={role === "student" ? undefined : removeTutorPage}
         />
       </footer>
       }
