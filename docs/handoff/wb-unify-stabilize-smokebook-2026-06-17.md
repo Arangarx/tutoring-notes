@@ -165,7 +165,6 @@ The following are **known-deferred** to Waves 4–5. State them once here; each 
 On true fresh session, edge is offering the student the browser recovery even though it should be a completely fresh session.  
 Video loaded at first but at some point (I missed it) the video of tutor disappeared on student side till video frame resize.  
 
-
 ---
 
 ### 8. Bidirectional video paints without manual resize (Wave 2 fix 2.1)
@@ -508,10 +507,10 @@ Check **PASS** only if every in-scope test item is PASS (deliberate per-item SKI
 ## Re-smoke round — Fix waves landed (2026-06-18)
 
 **Branch:** `wb-unify-stabilize`
-**Tip commit:** [`c0d80bd`](https://github.com/Arangarx/tutoring-notes/commit/c0d80bd)
+**Tip commit:** `[c0d80bd](https://github.com/Arangarx/tutoring-notes/commit/c0d80bd)`
 **Preview:** [wb-unify-stabilize branch alias](https://tutoring-notes-git-wb-unify-stabilize-arangarx-5209s-projects.vercel.app) · [preview.usemynk.com](https://preview.usemynk.com) (stable — repoint to this branch first; alias always works)
 
-**Context:** Engine fix wave [`4a07cfa`](https://github.com/Arangarx/tutoring-notes/commit/4a07cfa) + A/V rejoin wave [`e2466e8`](https://github.com/Arangarx/tutoring-notes/commit/e2466e8) / [`c0d80bd`](https://github.com/Arangarx/tutoring-notes/commit/c0d80bd) landed after W1-3 smoke FAILs. Automated merge-boundary gate GREEN (`wb-sync` 13/13 relay invariants, jest 666/666). **This round re-tests only the 4 merge-blockers + a short regression spot-check** — prior W1-3 item results above are **unchanged** (do not re-edit).
+**Context:** Engine fix wave `[4a07cfa](https://github.com/Arangarx/tutoring-notes/commit/4a07cfa)` + A/V rejoin wave `[e2466e8](https://github.com/Arangarx/tutoring-notes/commit/e2466e8)` / `[c0d80bd](https://github.com/Arangarx/tutoring-notes/commit/c0d80bd)` landed after W1-3 smoke FAILs. Automated merge-boundary gate GREEN (`wb-sync` 13/13 relay invariants, jest 666/666). **This round re-tests only the 4 merge-blockers + a short regression spot-check** — prior W1-3 item results above are **unchanged** (do not re-edit).
 
 **Overall result:**
 
@@ -541,13 +540,13 @@ Waves 4–5 (chrome/responsive, laser **colors**, general polish) plus the 11 no
 
 **Ignore this run:** Waves 4–5 chrome/polish. Laser distinct colors. The 11 W1-3 backlog IDs (global list above). Student-path eraser polish (tutor reliability is the regression gate).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A
 - [ ] SKIP
 
-**Notes:**
+**Notes:** 
 
 ---
 
@@ -559,13 +558,13 @@ Waves 4–5 (chrome/responsive, laser **colors**, general polish) plus the 11 no
 
 **Ignore this run:** Waves 4–5 chrome/polish. Keyboard shortcut variants (button is the gate). The 11 W1-3 backlog IDs.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A
 - [ ] SKIP
 
-**Notes:**
+**Notes:** 
 
 ---
 
@@ -580,10 +579,10 @@ Waves 4–5 (chrome/responsive, laser **colors**, general polish) plus the 11 no
 - [ ] PASS
 - [ ] FAIL
 - [ ] PARTIAL
-- [ ] N/A
+- [x] N/A
 - [ ] SKIP
 
-**Notes:**
+**Notes: Bi directional video is not visible on phone as student and right now we don't have two PC cameras for testing bidirectionality.**
 
 ---
 
