@@ -5294,14 +5294,13 @@ export function WhiteboardWorkspaceClient({
         <div
           ref={wbCanvasRef}
           className="mynk-wb-canvas"
-          data-testid="tutor-whiteboard-canvas-mount"
+          data-testid={role === "student" ? "student-whiteboard-canvas-mount" : "tutor-whiteboard-canvas-mount"}
           onClick={() => {
             setOpenMenu(null);
           }}
           onContextMenuCapture={(event) => {
             // Right-click during multi-point line/arrow drawing finalizes the
-            // stroke (same as Esc). StudentWhiteboardClient is bare Excalidraw —
-            // mirror there later if needed.
+            // stroke (same as Esc). Applies to both tutor and student roles.
             const api = excalidrawAPIRef.current;
             if (!api) return;
             const st = api.getAppState() as { multiElement?: unknown };
