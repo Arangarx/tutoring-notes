@@ -68,7 +68,15 @@ export function WbTopBarMicControlLive({
     return () => document.removeEventListener("mousedown", onDoc);
   }, [popoverOpen]);
 
-  const micUnavailable = hasMicPermission === "denied" || devices.length === 0;
+  // Fix 2.7: don't treat devices.length === 0 as unavailable while permission
+  // is still unknown/prompt (enumeration hasn't run yet). Treating the
+  // pre-enumerate empty list as "no mic found" caused the button to flash
+  // disabled during async enumerateDevices, producing visible churn on mount.
+  // Only report "unavailable" when permission is confirmed denied OR when
+  // permission is confirmed granted but enumeration found zero audioinputs.
+  const micUnavailable =
+    hasMicPermission === "denied" ||
+    (hasMicPermission === "granted" && devices.length === 0);
 
   const btnTitle =
     hasMicPermission === "denied"

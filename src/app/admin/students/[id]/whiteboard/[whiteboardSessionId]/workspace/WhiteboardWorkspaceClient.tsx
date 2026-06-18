@@ -1562,15 +1562,20 @@ export function WhiteboardWorkspaceClient({
     swapMicDevice: role === "tutor" ? workspaceAudio.swapMicDevice : undefined,
   });
 
-  // Student A/V auto-request on mount (role="student" only; tutor uses explicit UI)
+  // Student A/V auto-request (role="student" only; tutor uses explicit UI).
+  // Fix 2.5: gate on studentSyncClient being ready so cam/mic acquisition does
+  // not race the mesh attach on cold start. Serialize mic → cam (mic first)
+  // to avoid concurrent getUserMedia calls on iOS/mobile.
   useEffect(() => {
     if (role !== "student") return;
+    if (!studentSyncClient) return;  // wait for sync client before acquiring media
     if (hasAutoRequestedAvRef.current) return;
     hasAutoRequestedAvRef.current = true;
-    void liveAv.requestCam();
-    void liveAv.requestMic();
+    // Serialize: mic first so the mesh can be built (hasEverHadLocalMedia latches
+    // on first stream), then cam once mic is settled.
+    void liveAv.requestMic().then(() => void liveAv.requestCam());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [role, studentSyncClient]);
 
   useEffect(() => {
     if (role !== "student") return;
