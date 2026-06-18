@@ -25,19 +25,11 @@ jest.mock(
 jest.mock(
   "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceClient",
   () => ({
-    WhiteboardWorkspaceClient: () => (
-      <div data-testid="mock-live-workspace-client">Live</div>
+    WhiteboardWorkspaceClient: ({ role }: { role?: string }) => (
+      <div data-testid="mock-live-workspace-client" data-role={role ?? "tutor"}>Live</div>
     ),
   })
 );
-
-jest.mock("@/app/w/[joinToken]/StudentLiveWorkspaceClient", () => ({
-  StudentLiveWorkspaceClient: () => (
-    <div data-testid="mock-student-live-workspace" data-role="student">
-      Student live
-    </div>
-  ),
-}));
 
 const tutorBaseProps = {
   role: "tutor" as const,
@@ -74,7 +66,7 @@ describe("WhiteboardSessionShell ended-session routing", () => {
 });
 
 describe("WhiteboardSessionShell student branch", () => {
-  it("mounts StudentLiveWorkspaceClient without WorkspaceResumeGate", () => {
+  it("mounts WhiteboardWorkspaceClient with role=student, no WorkspaceResumeGate", () => {
     render(
       <WhiteboardSessionShell
         role="student"
@@ -87,7 +79,9 @@ describe("WhiteboardSessionShell student branch", () => {
         initialLastActiveAtIso={null}
       />
     );
-    expect(screen.getByTestId("mock-student-live-workspace")).toBeInTheDocument();
+    const el = screen.getByTestId("mock-live-workspace-client");
+    expect(el).toBeInTheDocument();
+    expect(el).toHaveAttribute("data-role", "student");
     expect(screen.queryByTestId("mock-resume-gate")).not.toBeInTheDocument();
     expect(screen.queryByTestId("wb-session-review-mode")).not.toBeInTheDocument();
   });

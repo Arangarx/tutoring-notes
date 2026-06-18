@@ -231,10 +231,13 @@ import {
 type Props = {
   whiteboardSessionId: string;
   studentId: string;
-  studentName: string;
-  adminUserId: string;
-  startedAtIso: string;
-  bothConnectedAtIso: string | null;
+  /** Student display name — required for tutor role, not used for student role. */
+  studentName?: string;
+  /** Admin user ID — required for tutor role, not used for student role. */
+  adminUserId?: string;
+  /** Session start ISO — required for tutor role, not used for student role. */
+  startedAtIso?: string;
+  bothConnectedAtIso?: string | null;
   /** Server-truth accumulated billable ms at SSR time. */
   initialActiveMs: number;
   /** Server-stamped wall-clock of the most recent positive heartbeat (ISO), or null if paused. */
@@ -246,8 +249,9 @@ type Props = {
    * the right initial position for each student so she's not unticking
    * Start every time for students who declined recording. The tutor
    * can still flip mid-session — this is the initial state only.
+   * Not required for student role.
    */
-  initialUserWantsRecording: boolean;
+  initialUserWantsRecording?: boolean;
   /**
    * A3 in-shell review: called in place of router.replace/refresh once
    * the atomic end-session pipeline completes. The shell's handler sets
@@ -387,14 +391,14 @@ function formatDuration(ms: number): string {
 export function WhiteboardWorkspaceClient({
   whiteboardSessionId,
   studentId,
-  studentName,
-  adminUserId,
-  startedAtIso,
-  bothConnectedAtIso,
+  studentName = "",
+  adminUserId = "",
+  startedAtIso = "",
+  bothConnectedAtIso = null,
   initialActiveMs,
   initialLastActiveAtIso,
   syncUrl,
-  initialUserWantsRecording,
+  initialUserWantsRecording = false,
   onSessionEnded,
   role = "tutor",
   joinToken,
@@ -912,6 +916,7 @@ export function WhiteboardWorkspaceClient({
   );
 
   useEffect(() => {
+    if (role !== "tutor") return;
     if (!syncUrl || !encryptionKey) return;
     const client = createWhiteboardSyncClient({
       url: syncUrl,
@@ -935,6 +940,7 @@ export function WhiteboardWorkspaceClient({
       setSyncReady(false);
     };
   }, [
+    role,
     encryptionKey,
     syncUrl,
     whiteboardSessionId,
@@ -5265,7 +5271,11 @@ export function WhiteboardWorkspaceClient({
         <nav
           className={`mynk-wb-strip bg-card border-r border-border${stripCollapsed ? " mynk-wb-strip--collapsed" : ""}`}
           aria-label={stripCollapsed ? "Drawing tools (collapsed)" : "Drawing tools"}
-          data-testid={stripCollapsed ? "wb-tool-strip-collapsed" : "wb-tool-strip"}
+          data-testid={
+            role === "student"
+              ? (stripCollapsed ? "wb-student-tool-strip-collapsed" : "wb-student-tool-strip")
+              : (stripCollapsed ? "wb-tool-strip-collapsed" : "wb-tool-strip")
+          }
           onClick={(e) => e.stopPropagation()}
         >
           <div className="mynk-wb-strip__tools">
@@ -5592,6 +5602,7 @@ export function WhiteboardWorkspaceClient({
           onSelectPage={role === "student" ? undefined : (id) => void selectTutorPage(id)}
           onAddPage={role === "student" ? undefined : addTutorPage}
           onDeletePage={role === "student" ? undefined : removeTutorPage}
+          testId={role === "student" ? "wb-student-page-strip" : undefined}
         />
       </footer>
       }

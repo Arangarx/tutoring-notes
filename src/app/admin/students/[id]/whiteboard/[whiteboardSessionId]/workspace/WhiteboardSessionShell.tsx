@@ -11,7 +11,6 @@ import { useCallback, useState } from "react";
 import { WhiteboardWorkspaceClient } from "./WhiteboardWorkspaceClient";
 import { WorkspaceResumeGate } from "./WorkspaceResumeGate";
 import { SessionReviewMode } from "./SessionReviewMode";
-import { StudentLiveWorkspaceClient } from "@/app/w/[joinToken]/StudentLiveWorkspaceClient";
 
 type ShellMode = "live" | "review";
 
@@ -50,7 +49,8 @@ export type WhiteboardSessionShellProps =
 export function WhiteboardSessionShell(props: WhiteboardSessionShellProps) {
   if (props.role === "student") {
     return (
-      <StudentLiveWorkspaceClient
+      <WhiteboardWorkspaceClient
+        role="student"
         whiteboardSessionId={props.whiteboardSessionId}
         studentId={props.studentId}
         joinToken={props.joinToken}
