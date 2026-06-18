@@ -81,6 +81,7 @@ jest.mock("next/navigation", () => ({
     replace: mockRouterReplace,
     refresh: mockRouterRefresh,
   }),
+  useParams: () => ({}),
 }));
 
 const mockUpload = jest.fn(() =>

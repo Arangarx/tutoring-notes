@@ -90,6 +90,7 @@ jest.mock("next/navigation", () => ({
     replace: jest.fn(),
     refresh: jest.fn(),
   }),
+  useParams: () => ({}),
 }));
 
 // ----- Sync-client mock: lets us spy on the peerId we pass in -----

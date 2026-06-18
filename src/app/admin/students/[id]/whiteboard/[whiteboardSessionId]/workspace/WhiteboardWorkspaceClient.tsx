@@ -43,7 +43,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWindowScrollToTopOnMount } from "@/hooks/useWindowScrollToTopOnMount";
 import { useTheme } from "@/components/ThemeProvider";
 import { useSyncTombstonedElementIds } from "@/hooks/useSyncTombstonedElementIds";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import {
   createWhiteboardSyncClient,
   type WhiteboardSyncClient,
@@ -66,8 +66,11 @@ import {
 import { useAudioFlowConfirmation } from "@/hooks/useAudioFlowConfirmation";
 import { useCollaboratorPointers } from "@/hooks/useCollaboratorPointers";
 import { useLiveAV } from "@/hooks/useLiveAV";
+import { useStudentWhiteboardCanvas } from "@/hooks/useStudentWhiteboardCanvas";
+import { useExcalidrawLoadingGuard, excalidrawBoardBgHex } from "@/hooks/useExcalidrawLoadingGuard";
 import { studentMicStreamId } from "@/lib/recording/remote-stream-recorder";
 import { WbTopBarMicControl } from "@/components/whiteboard/chrome/WbTopBarMicControl";
+import { WbTopBarMicControlLive } from "@/components/whiteboard/chrome/WbTopBarMicControlLive";
 import { WbToolBtn } from "@/components/whiteboard/chrome/WbToolBtn";
 import { WbTopBarCamControl } from "@/components/whiteboard/chrome/WbTopBarCamControl";
 import { WbThemeToggle } from "@/components/whiteboard/chrome/WbThemeToggle";
@@ -185,6 +188,11 @@ import {
   type BinaryFileFromExcalidraw,
 } from "@/lib/whiteboard/ensure-native-image-asset-urls-for-sync";
 import { hydrateRemoteImageFilesForScene } from "@/lib/whiteboard/hydrate-remote-files";
+import type { HydrateRemoteImageFilesResult } from "@/lib/whiteboard/hydrate-remote-files";
+import {
+  joinUnavailableCopy,
+  type JoinUnavailableReason,
+} from "@/lib/whiteboard/join-unavailable-copy";
 import { resolveWhiteboardAssetReadUrl } from "@/lib/whiteboard/resolve-asset-read-url";
 import type {
   WhiteboardWireBroadcastExtras,
@@ -342,6 +350,19 @@ function useAudioMsClock(active: boolean): () => number {
   }, []);
 }
 
+/**
+ * Student-only: reads the encryption key from the URL fragment.
+ * The key is never sent to the server (HTTP spec: fragments stay client-side).
+ */
+function readStudentKeyFromHash(): string | null {
+  if (typeof window === "undefined") return null;
+  const hash = window.location.hash;
+  if (!hash || hash.length < 2) return null;
+  const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
+  const k = params.get("k");
+  return k && k.length >= 16 ? k : null;
+}
+
 /** Session timer — minutes only per design spec (Sarah rounds to 5/15 min). */
 function formatTimerMinutesOnly(ms: number): string {
   const totalMin = Math.floor(Math.max(0, ms) / 60000);
@@ -376,6 +397,8 @@ export function WhiteboardWorkspaceClient({
   initialUserWantsRecording,
   onSessionEnded,
   role = "tutor",
+  joinToken,
+  tutorName = "your tutor",
 }: Props) {
   const router = useRouter();
   // TU-12: Excalidraw theme follows app-selected theme (not OS-only)
@@ -475,8 +498,10 @@ export function WhiteboardWorkspaceClient({
   // component instance. HMR remounts produce a new id along with a
   // new sync-client; both layers agree.
   const localPeerId = useMemo(
-    () => getOrCreateLocalPeerId(whiteboardSessionId, "tutor"),
-    [whiteboardSessionId]
+    () => getOrCreateLocalPeerId(whiteboardSessionId, role),
+    // role is stable per-mount (prop default "tutor"); including for completeness.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [whiteboardSessionId, role]
   );
   // Display label for the tutor's own presence frame. Server-side
   // doesn't pass the tutor's display name through props today; fall
@@ -583,6 +608,65 @@ export function WhiteboardWorkspaceClient({
    */
   const tutorResyncOnNewRemotePeerRef = useRef<() => void | Promise<void>>(
     () => undefined
+  );
+
+  // ---------------------------------------------------------------
+  // Student-role state (dead branch for role="tutor")
+  // All state vars are always declared (rules of hooks); gated in effects.
+  // ---------------------------------------------------------------
+  const params = useParams<{ joinToken: string }>();
+  const pathJoinToken =
+    (role === "student"
+      ? typeof params?.joinToken === "string"
+        ? params.joinToken
+        : (joinToken ?? "")
+      : (joinToken ?? ""));
+  const studentWjgId = pathJoinToken.slice(0, 8);
+
+  const [studentEncryptionKey, setStudentEncryptionKey] = useState<string | null>(null);
+  const [studentKeyMissing, setStudentKeyMissing] = useState(false);
+  const [hasLeft, setHasLeft] = useState(false);
+  const [joinUnavailableReason, setJoinUnavailableReason] =
+    useState<JoinUnavailableReason | null>(null);
+  const [studentSyncClient, setStudentSyncClient] =
+    useState<WhiteboardSyncClient | null>(null);
+  const [studentConnected, setStudentConnected] = useState(false);
+  const [studentOtherPeerCount, setStudentOtherPeerCount] = useState(0);
+  const hasAutoRequestedAvRef = useRef(false);
+
+  // Student server-side timer state (mirrors tutor's timer for student chrome)
+  const [studentServerActiveMs, setStudentServerActiveMs] = useState(
+    role === "student" ? Math.max(0, initialActiveMs) : 0
+  );
+  const [studentServerLastActiveAtMs, setStudentServerLastActiveAtMs] =
+    useState<number | null>(
+      role === "student" && initialLastActiveAtIso
+        ? new Date(initialLastActiveAtIso).getTime()
+        : null
+    );
+  const [studentNow, setStudentNow] = useState(() => Date.now());
+  const [independentView, setIndependentView] = useState(false);
+  const [boardWaitElapsed, setBoardWaitElapsed] = useState(false);
+  const [dismissedBoardWaitNotice, setDismissedBoardWaitNotice] = useState(false);
+  const [studentMaterialNotice, setStudentMaterialNotice] = useState<"none" | "load" | "missing">("none");
+  const [dismissedStudentMaterialNotice, setDismissedStudentMaterialNotice] = useState(false);
+  const studentNativeImageFileIdToAssetUrlRef = useRef(new Map<string, string>());
+  const studentNativeImageUploadInFlightRef = useRef(new Set<string>());
+
+  // wjg logger (student join-gate lifecycle — only emits for role="student")
+  const wjgLog = useCallback(
+    (action: string, extra?: Record<string, string | number>) => {
+      if (role !== "student") return;
+      const tail = extra
+        ? ` ${Object.entries(extra)
+            .map(([k, v]) => `${k}=${v}`)
+            .join(" ")}`
+        : "";
+      console.info(
+        `[wjg] wjg=${studentWjgId} wbsid=${whiteboardSessionId} action=${action}${tail}`
+      );
+    },
+    [role, studentWjgId, whiteboardSessionId]
   );
 
   const [pageList, setPageList] = useState<PageStripRow[]>(() => [
@@ -859,6 +943,139 @@ export function WhiteboardWorkspaceClient({
   ]);
 
   // ---------------------------------------------------------------
+  // Student sync client lifecycle (role="student" only)
+  // ---------------------------------------------------------------
+
+  // Step 1: read encryption key from URL hash (student-only; tutor uses useEncryptionKeyInHash)
+  useEffect(() => {
+    if (role !== "student") return;
+    const k = readStudentKeyFromHash();
+    if (!k) {
+      setStudentKeyMissing(true);
+      wjgLog("key_missing");
+      return;
+    }
+    setStudentEncryptionKey(k);
+    wjgLog("key_ok");
+  }, [role, wjgLog]);
+
+  useEffect(() => {
+    if (role !== "student") return;
+    wjgLog("mount", { role: "student" });
+  }, [role, wjgLog]);
+
+  // Step 2: create sync client once key + conditions are met
+  useEffect(() => {
+    if (role !== "student") return;
+    if (!studentEncryptionKey) return;
+    if (joinUnavailableReason !== null) return;
+    if (hasLeft) return;
+    if (!syncUrl) return;
+    const syncPresenceLabel = `Student · ${localPeerId.replace(/-/g, "").slice(0, 6)}`;
+    const client = createWhiteboardSyncClient({
+      url: syncUrl,
+      roomId: whiteboardSessionId,
+      encryptionKeyBase64Url: studentEncryptionKey,
+      role: "student",
+      peerId: localPeerId,
+      localPeerLabel: syncPresenceLabel,
+    });
+    setStudentSyncClient(client);
+    setStudentConnected(client.isConnected());
+    wjgLog("sync_connect");
+    const offConnect = client.onConnect(() => {
+      setStudentConnected(true);
+      wjgLog("sync_connect");
+    });
+    const offDisconnect = client.onDisconnect(() => {
+      setStudentConnected(false);
+      wjgLog("sync_disconnect");
+    });
+    const offPeers = client.onPeerCountChange((n) => setStudentOtherPeerCount(n));
+    return () => {
+      offConnect();
+      offDisconnect();
+      offPeers();
+      client.disconnect();
+      setStudentSyncClient(null);
+      setStudentConnected(false);
+      wjgLog("sync_disconnect");
+    };
+  }, [
+    role,
+    studentEncryptionKey,
+    syncUrl,
+    whiteboardSessionId,
+    localPeerId,
+    joinUnavailableReason,
+    hasLeft,
+    wjgLog,
+  ]);
+
+  // Student clock tick (drives student timer display)
+  useEffect(() => {
+    if (role !== "student") return;
+    const id = setInterval(() => setStudentNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [role]);
+
+  // Student join-timer poll
+  useEffect(() => {
+    if (role !== "student") return;
+    if (!pathJoinToken) return;
+    if (joinUnavailableReason !== null) return;
+    const refresh = async () => {
+      try {
+        const res = await fetch(
+          `/api/whiteboard/${encodeURIComponent(whiteboardSessionId)}/join-timer?token=${encodeURIComponent(pathJoinToken)}`,
+          { cache: "no-store", credentials: "same-origin" }
+        );
+        if (!res.ok) {
+          if (res.status === 404) {
+            setJoinUnavailableReason((prev) => prev ?? "link_invalid");
+          }
+          return;
+        }
+        const data = (await res.json()) as {
+          live?: boolean;
+          reason?: string;
+          activeMs?: number;
+          lastActiveAt?: string | null;
+        };
+        if (data.live === false) {
+          const r = data.reason;
+          const mapped: JoinUnavailableReason =
+            r === "token_expired"
+              ? "token_expired"
+              : r === "token_revoked"
+                ? "token_revoked"
+                : r === "session_ended"
+                  ? "session_ended"
+                  : "link_invalid";
+          setJoinUnavailableReason(mapped);
+          wjgLog("session_ended", { reason: mapped });
+          return;
+        }
+        const treatAsLive =
+          data.live === true ||
+          (data.live === undefined && typeof data.activeMs === "number");
+        if (!treatAsLive) return;
+        if (typeof data.activeMs === "number") setStudentServerActiveMs(data.activeMs);
+        if (data.lastActiveAt !== undefined) {
+          setStudentServerLastActiveAtMs(
+            data.lastActiveAt ? new Date(data.lastActiveAt).getTime() : null
+          );
+        }
+      } catch {
+        //
+      }
+    };
+    void refresh();
+    const t = setInterval(() => void refresh(), 3_500);
+    return () => clearInterval(t);
+  }, [role, pathJoinToken, whiteboardSessionId, joinUnavailableReason, wjgLog]);
+
+  // ---------------------------------------------------------------
   // Recording lifecycle (audio + whiteboard composed)
   // ---------------------------------------------------------------
   //
@@ -917,15 +1134,83 @@ export function WhiteboardWorkspaceClient({
       off2();
     };
   }, [sync]);
+  // ---------------------------------------------------------------
+  // Student canvas sync + loading guard (role="student")
+  // Hooks called unconditionally; gated via arguments per rules-of-hooks.
+  // ---------------------------------------------------------------
 
-  useCollaboratorPointers(
-    sync,
-    excalidrawAPI,
-    applyingRemoteToCanvasRef,
-    activePageIdRef
+  const onStudentRemoteHydrateResult = useCallback(
+    (result: HydrateRemoteImageFilesResult) => {
+      if (result.fetchFailed.length > 0) {
+        setStudentMaterialNotice("load");
+        setDismissedStudentMaterialNotice(false);
+        return;
+      }
+      if (result.missingAssetUrlFileIds.length > 0) {
+        setStudentMaterialNotice((prev) => (prev === "load" ? "load" : "missing"));
+        setDismissedStudentMaterialNotice(false);
+      }
+    },
+    []
   );
 
-  // Split "both parties in room" into two layers:
+  // Loading guard (student). wjgLog is a no-op for role="tutor" so safe to call always.
+  const {
+    initialData: studentInitialData,
+    stuckLoading,
+    showLoadingGuardBanner,
+    dismissStuckLoading,
+    reloadFromGuard,
+    markLoadingCleared,
+  } = useExcalidrawLoadingGuard({ excalidrawAPI, wjgLog });
+
+  const {
+    onCanvasChange: studentOnCanvasChange,
+    syncActivePageElements,
+    snapToTutorView,
+    getPageBroadcastExtras: getStudentPageBroadcastExtras,
+    pageList: studentPageList,
+    activePageId: studentActivePageId,
+    activePageIdRef: studentActivePageIdRef,
+    applyingRemoteRef: studentApplyingRemoteRef,
+    tutorStreamReady,
+  } = useStudentWhiteboardCanvas(
+    // For role="tutor", null keeps this hook inert (mutually exclusive with recorder sync-ingest)
+    role === "student" ? studentSyncClient : null,
+    excalidrawAPI,
+    role === "student" ? onStudentRemoteHydrateResult : undefined,
+    role === "student"
+      ? {
+          joinToken: pathJoinToken,
+          whiteboardSessionId,
+          followTutorView: !independentView,
+          followDebugTelemetry,
+        }
+      : undefined
+  );
+
+  // Board-wait banner: student connected but no tutor stream after 8s
+  useEffect(() => {
+    if (role !== "student") return;
+    if (!studentConnected || studentOtherPeerCount < 1) {
+      setBoardWaitElapsed(false);
+      return;
+    }
+    if (tutorStreamReady) {
+      setBoardWaitElapsed(false);
+      return;
+    }
+    const t = window.setTimeout(() => setBoardWaitElapsed(true), 8000);
+    return () => clearTimeout(t);
+  }, [role, studentConnected, studentOtherPeerCount, tutorStreamReady]);
+
+  // Gate laser pointer origin by role (tutor uses tutor refs; student uses student refs)
+  useCollaboratorPointers(
+    role === "student" ? studentSyncClient : sync,
+    excalidrawAPI,
+    role === "student" ? studentApplyingRemoteRef : applyingRemoteToCanvasRef,
+    role === "student" ? studentActivePageIdRef : activePageIdRef
+  );
   //
   //   bothPartiesInRoomSync  — sync-socket presence only (peerCount ≥ 1).
   //                            Drives: board-syncing UX, split-brain
@@ -1262,12 +1547,59 @@ export function WhiteboardWorkspaceClient({
   // send. The hook clones the stream so live-AV mute stays independent
   // of the recording's own track.
   const liveAv = useLiveAV({
-    syncClient: sync,
+    syncClient: role === "student" ? studentSyncClient : sync,
     localPeerId,
     sessionId: whiteboardSessionId,
-    externalAudioStream: workspaceAudio.localMicStream,
-    swapMicDevice: workspaceAudio.swapMicDevice,
+    // externalAudioStream: tutor shares the recording mic to avoid two getUserMedia calls.
+    // Student does not record, so no external stream needed.
+    externalAudioStream: role === "tutor" ? workspaceAudio.localMicStream : undefined,
+    swapMicDevice: role === "tutor" ? workspaceAudio.swapMicDevice : undefined,
   });
+
+  // Student A/V auto-request on mount (role="student" only; tutor uses explicit UI)
+  useEffect(() => {
+    if (role !== "student") return;
+    if (hasAutoRequestedAvRef.current) return;
+    hasAutoRequestedAvRef.current = true;
+    void liveAv.requestCam();
+    void liveAv.requestMic();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (role !== "student") return;
+    if (liveAv.hasCamPermission !== "granted") return;
+    if (liveAv.localVideoStream) return;
+    void liveAv.requestCam();
+  }, [role, liveAv.hasCamPermission, liveAv.localVideoStream, liveAv]);
+
+  // Student reconnect: replay ICE for all peers after sync reconnect
+  const sawStudentDisconnectRef = useRef(false);
+  useEffect(() => {
+    if (role !== "student" || !studentSyncClient) {
+      sawStudentDisconnectRef.current = false;
+      return;
+    }
+    const offConnect = studentSyncClient.onConnect(() => {
+      const shouldRestart = sawStudentDisconnectRef.current;
+      sawStudentDisconnectRef.current = false;
+      if (!shouldRestart) return;
+      for (const p of liveAv.participants) {
+        try {
+          liveAv.reconnectPeer(p.peerId);
+        } catch {
+          //
+        }
+      }
+    });
+    const offDisconnect = studentSyncClient.onDisconnect(() => {
+      sawStudentDisconnectRef.current = true;
+    });
+    return () => {
+      offConnect();
+      offDisconnect();
+    };
+  }, [role, studentSyncClient, liveAv]);
 
   // Fix 2 (A4 adversarial item): latch everBothPresentRef on first WebRTC
   // reachability rather than sync-join. This prevents the false
@@ -2216,14 +2548,25 @@ export function WhiteboardWorkspaceClient({
     });
   }, [scheduleDocumentBroadcast]);
 
+  useEffect(() => {
+    if (process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK !== "1") return;
+    if (role !== "student") return;
+    registerWbE2eSceneMutationHook("student", () => {
+      const api = excalidrawAPIRef.current;
+      if (!api) return;
+      studentOnCanvasChange(api.getSceneElements());
+    });
+  }, [role, studentOnCanvasChange]);
+
   const recorder = useWhiteboardRecorder({
     whiteboardSessionId,
     adminUserId,
     studentId,
     startedAtIso,
     getAudioMs,
-    recordingActive,
-    sync,
+    // Student role: recording is never active; sync-ingest is off (student uses useStudentWhiteboardCanvas)
+    recordingActive: role === "student" ? false : recordingActive,
+    sync: role === "student" ? null : sync,
     applyRemoteToCanvas,
     getScenePageIdForBroadcast: () => activePageIdRef.current,
     getWireBroadcastExtras: syncUrl ? getWireBroadcastExtras : undefined,
@@ -3404,7 +3747,10 @@ export function WhiteboardWorkspaceClient({
       pointer: { x: number; y: number; tool: "pointer" | "laser" };
       button: "down" | "up";
     }) => {
-      if (!sync || !syncUrl) return;
+      // Role-discriminated: tutor uses tutor sync client + page ref; student uses student client.
+      const effectiveSync = role === "student" ? studentSyncClient : sync;
+      if (!effectiveSync) return;
+      if (role === "tutor" && !syncUrl) return;
       if (activeToolTypeRef.current !== "laser") return;
       if (payload.pointer.tool !== "laser") return;
 
@@ -3414,13 +3760,16 @@ export function WhiteboardWorkspaceClient({
 
       const emit = () => {
         lastPointerEmitRef.current = Date.now();
-        sync.broadcastPointer({
-          pageId: activePageIdRef.current,
+        effectiveSync.broadcastPointer({
+          pageId:
+            role === "student"
+              ? studentActivePageIdRef.current
+              : activePageIdRef.current,
           x: payload.pointer.x,
           y: payload.pointer.y,
           tool: "laser",
           button: payload.button,
-          color: laserColorForRole("tutor"),
+          color: laserColorForRole(role),
         });
       };
 
@@ -3439,7 +3788,7 @@ export function WhiteboardWorkspaceClient({
         }
       }
     },
-    [sync, syncUrl]
+    [role, sync, syncUrl, studentSyncClient, studentActivePageIdRef]
   );
 
   // ---------------------------------------------------------------
@@ -3467,6 +3816,52 @@ export function WhiteboardWorkspaceClient({
       _appState?: unknown,
       files?: Readonly<Record<string, BinaryFileFromExcalidraw>>
     ) => {
+      // ---- Student path (role="student"): student canvas sync ----
+      if (role === "student") {
+        if (studentApplyingRemoteRef.current) return;
+        studentOnCanvasChange(elements, _appState, files);
+        markLoadingCleared("remote_scene");
+        if (!pathJoinToken) return;
+        const api = excalidrawAPIRef.current;
+        if (api) {
+          const onChangePageId = studentActivePageIdRef.current;
+          void (async () => {
+            try {
+              const getFiles = (): Record<string, BinaryFileFromExcalidraw> => {
+                const raw = api.getFiles?.();
+                return raw && typeof raw === "object"
+                  ? (raw as Record<string, BinaryFileFromExcalidraw>)
+                  : {};
+              };
+              const patched = await ensureNativeImageAssetUrlsForSync({
+                elements,
+                files: files as Record<string, BinaryFileFromExcalidraw> | undefined,
+                getFiles,
+                whiteboardSessionId,
+                studentId,
+                joinToken: pathJoinToken,
+                fileIdToAssetUrl: studentNativeImageFileIdToAssetUrlRef.current,
+                inFlight: studentNativeImageUploadInFlightRef.current,
+              });
+              if (patched) {
+                const live = excalidrawAPIRef.current;
+                if (live) {
+                  syncActivePageElements(patched as ReadonlyArray<ExcalidrawLikeElement>);
+                  live.updateScene({ elements: patched });
+                  studentSyncClient?.broadcastScene(
+                    patched as ReadonlyArray<ExcalidrawLikeElement>,
+                    getStudentPageBroadcastExtras()
+                  );
+                }
+              }
+            } catch {
+              //
+            }
+          })();
+        }
+        return;
+      }
+      // ---- Tutor path (role="tutor"): unchanged engine logic ----
       if (applyingRemoteToCanvasRef.current) return;
       if (pageSwitchProgrammaticRef.current > 0) return;
       const els = elements as ReadonlyArray<ExcalidrawLikeElement>;
@@ -3583,11 +3978,20 @@ export function WhiteboardWorkspaceClient({
       buildBoardDocumentForCheckpoint,
       flushDocumentBroadcastNow,
       flushThrottledFrameNow,
+      markLoadingCleared,
       markWbActivity,
       onLocalElementSnapshot,
+      pathJoinToken,
       recorderOnCanvasChange,
+      role,
       scheduleDocumentBroadcast,
       scheduleViewportPersist,
+      studentActivePageIdRef,
+      studentApplyingRemoteRef,
+      studentOnCanvasChange,
+      studentSyncClient,
+      syncActivePageElements,
+      getStudentPageBroadcastExtras,
       studentId,
       sync,
       syncUrl,
