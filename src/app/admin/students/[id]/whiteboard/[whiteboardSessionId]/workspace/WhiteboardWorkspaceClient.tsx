@@ -5530,7 +5530,7 @@ export function WhiteboardWorkspaceClient({
               const like = api as ExcalidrawApiLike;
               excalidrawAPIRef.current = like;
               setExcalidrawAPI(like);
-              registerWbE2eSceneBridge("tutor", like);
+              registerWbE2eSceneBridge(role, like);
             }}
             theme={excalidrawTheme}
             UIOptions={{
