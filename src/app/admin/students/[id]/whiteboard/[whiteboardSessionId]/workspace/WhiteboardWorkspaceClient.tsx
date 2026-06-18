@@ -137,7 +137,7 @@ import {
   useWbLayoutMode,
 } from "@/components/whiteboard/chrome/useWbLayoutMode";
 import { LiveBoardChrome } from "@/components/whiteboard/chrome/LiveBoardChrome";
-import { WbRoleProvider } from "@/components/whiteboard/chrome/wb-role";
+import { WbRoleProvider, type WbParticipantRole } from "@/components/whiteboard/chrome/wb-role";
 import {
   shapeIconFor,
   WbIconCamera,
@@ -250,6 +250,15 @@ type Props = {
    * don't use the shell wrapper).
    */
   onSessionEnded?: () => void;
+  /**
+   * Participant role for chrome capabilities (Wave 1b+ student routing).
+   * Defaults to tutor — current callers unchanged.
+   */
+  role?: WbParticipantRole;
+  /** Student join token — reserved for Wave 1b+ student routing. */
+  joinToken?: string;
+  /** Tutor display name for student chrome — reserved for Wave 1b+. */
+  tutorName?: string;
 };
 
 // Phase 4d Commit 6: stable empty Set so the FSM's
@@ -366,6 +375,7 @@ export function WhiteboardWorkspaceClient({
   syncUrl,
   initialUserWantsRecording,
   onSessionEnded,
+  role = "tutor",
 }: Props) {
   const router = useRouter();
   // TU-12: Excalidraw theme follows app-selected theme (not OS-only)
@@ -4280,7 +4290,7 @@ export function WhiteboardWorkspaceClient({
   });
 
   return (
-    <WbRoleProvider role="tutor">
+    <WbRoleProvider role={role}>
     <LiveBoardChrome
       layoutMode={layoutMode}
       orientation={orientation}
