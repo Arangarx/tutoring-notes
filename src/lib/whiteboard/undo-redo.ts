@@ -56,6 +56,16 @@ function dispatchShortcut(
   if (!target) {
     return { ok: false, reason: "excalidraw-container-not-found" };
   }
+  // When clicking a toolbar button (undo/redo), focus moves to the button
+  // and away from the Excalidraw canvas. Excalidraw 0.18 checks whether
+  // the focused element is within its component before processing keyboard
+  // shortcuts, so we must transfer focus back to the canvas before
+  // dispatching the synthetic event. tabIndex=-1 makes it programmatically
+  // focusable without inserting it into the tab order.
+  if (!target.hasAttribute("tabindex")) {
+    target.setAttribute("tabindex", "-1");
+  }
+  target.focus({ preventScroll: true });
   // We dispatch on the container itself; Excalidraw's listener is on
   // window in some versions and on the wrapper in others. Bubbling
   // up from the wrapper covers both.
