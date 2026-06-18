@@ -4693,6 +4693,56 @@ export function WhiteboardWorkspaceClient({
     boardSyncing,
   });
 
+  // ---------------------------------------------------------------
+  // Student early-return gates (Slice 5: join gate states)
+  // Must be AFTER all hooks; conditional returns are only allowed here.
+  // ---------------------------------------------------------------
+  if (role === "student" && hasLeft) {
+    return (
+      <WbRoleProvider role={role}>
+        <div className="container" style={{ maxWidth: 720, padding: 24 }}>
+          <div className="card" role="status">
+            <h1 style={{ marginTop: 0 }}>You left the session</h1>
+            <p style={{ marginBottom: 0 }}>
+              You can close this tab. If you need to rejoin, ask {tutorName} for
+              the link again.
+            </p>
+          </div>
+        </div>
+      </WbRoleProvider>
+    );
+  }
+
+  if (role === "student" && studentKeyMissing) {
+    return (
+      <WbRoleProvider role={role}>
+        <div className="container" style={{ maxWidth: 720, padding: 24 }}>
+          <div className="card">
+            <h1 style={{ marginTop: 0 }}>Whiteboard link is incomplete</h1>
+            <p>
+              This link is missing the encryption key. Please ask {tutorName} for
+              a fresh link.
+            </p>
+          </div>
+        </div>
+      </WbRoleProvider>
+    );
+  }
+
+  if (role === "student" && joinUnavailableReason) {
+    const { title, body } = joinUnavailableCopy(joinUnavailableReason, tutorName);
+    return (
+      <WbRoleProvider role={role}>
+        <div className="container" style={{ maxWidth: 720, padding: 24 }}>
+          <div className="card" role="status">
+            <h1 style={{ marginTop: 0 }}>{title}</h1>
+            <p style={{ marginBottom: 0 }}>{body}</p>
+          </div>
+        </div>
+      </WbRoleProvider>
+    );
+  }
+
   return (
     <WbRoleProvider role={role}>
     <LiveBoardChrome
