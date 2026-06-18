@@ -696,6 +696,15 @@ export function WhiteboardWorkspaceClient({
   useEffect(() => {
     activePageIdRef.current = activePageId;
   }, [activePageId]);
+  /**
+   * Monotonically-incrementing counter bumped on every committed board switch
+   * (selectTutorPage atomic swap + addTutorPage). Guards the onChange async
+   * image-URL back-fill path against the A→B→A page-id collision: two switches
+   * that land back on the same pageId would pass the `activePageIdRef ===
+   * onChangePageId` check but carry a stale generation number, preventing them
+   * from writing old-page elements into the newly-active same-named page.
+   */
+  const boardGenerationRef = useRef(0);
   /** In-memory per-tab scene (Excalidraw only shows one at a time). */
   const pageDataRef = useRef<Record<string, ReadonlyArray<ExcalidrawLikeElement>>>(
     Object.create(null)
@@ -721,6 +730,14 @@ export function WhiteboardWorkspaceClient({
   // â”€â”€â”€ Mynk chrome UI state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [activeToolType, setActiveToolType] = useState<string>("selection");
   const activeToolTypeRef = useRef<string>("selection");
+  /**
+   * True while a pointer is pressed on the Excalidraw canvas. Used to defer
+   * remote `updateScene` calls when the eraser is active — a mid-gesture
+   * scene replace can corrupt Excalidraw's `elementsPendingErasure` appState,
+   * causing the eraser to silently fail. Buffer the update in `pageDataRef`
+   * and skip the live canvas write; the correct scene surfaces on pointer-up.
+   */
+  const isCanvasPointerDownRef = useRef(false);
   const [stripCollapsed, setStripCollapsed] = useState(false);
   const [moreStylesOpen, setMoreStylesOpen] = useState(false);
   const [selectedShapeTool, setSelectedShapeTool] =
@@ -891,10 +908,27 @@ export function WhiteboardWorkspaceClient({
       const stillOnTargetWriteTime =
         activePageIdRef.current === targetId &&
         pageSwitchProgrammaticRef.current === 0;
-      if (stillOnTargetWriteTime) {
+      // Defer the live canvas write when the eraser tool is active and a
+      // pointer gesture is in flight. A mid-gesture `updateScene` can corrupt
+      // Excalidraw's internal `elementsPendingErasure` appState, causing the
+      // erase to silently fail. The merged data is already buffered in
+      // `pageDataRef[targetId]`; the correct scene surfaces on the next
+      // onChange (pointer-up) which flushes the completed erase.
+      const eraserActive =
+        role === "tutor" &&
+        activeToolTypeRef.current === "eraser" &&
+        isCanvasPointerDownRef.current;
+      if (stillOnTargetWriteTime && !eraserActive) {
         applyingRemoteToCanvasRef.current = true;
         try {
-          api.updateScene({ elements: merged as ReadonlyArray<unknown> });
+          // captureUpdate: "NEVER" — remote-origin scene merges must not
+          // enter the local undo/redo stack. Without this, pressing undo
+          // replays a student stroke rather than the tutor's own action,
+          // and the eraser can appear to "undo" itself on the next remote
+          // apply (the remote re-adds elements the eraser just deleted).
+          (api as typeof api & {
+            updateScene: (s: { elements: ReadonlyArray<unknown>; captureUpdate?: string }) => void;
+          }).updateScene({ elements: merged as ReadonlyArray<unknown>, captureUpdate: "NEVER" });
         } finally {
           applyingRemoteToCanvasRef.current = false;
         }
@@ -907,12 +941,13 @@ export function WhiteboardWorkspaceClient({
         );
         return { recordScene: merged };
       }
+      const skipReason = eraserActive ? "eraser-deferred" : "off-target";
       console.info(
-        `[tutor-apply] wbsid=${whiteboardSessionId} wba=${applyId} author=student action=apply-v2-complete page=${targetId} mergedCount=${merged.length} writeToCanvas=false`
+        `[tutor-apply] wbsid=${whiteboardSessionId} wba=${applyId} author=student action=apply-v2-complete page=${targetId} mergedCount=${merged.length} writeToCanvas=false reason=${skipReason}`
       );
       return { record: "skip" };
     },
-    [markWbActivity, shouldDropRemoteElement, whiteboardSessionId]
+    [markWbActivity, role, shouldDropRemoteElement, whiteboardSessionId]
   );
 
   useEffect(() => {
@@ -2709,6 +2744,10 @@ export function WhiteboardWorkspaceClient({
         // between them, so a parallel selectTutorPage cannot read a
         // stale (activePageIdRef = new, scene = old) state.
         activePageIdRef.current = nextId;
+        // Bump generation so the onChange async image-URL back-fill
+        // rejects stale patched elements from a previous page (the
+        // A→B→A same-pageId collision guard).
+        boardGenerationRef.current += 1;
         const vsNext = pageListRef.current.find((p) => p.id === nextId)?.viewState;
         // captureUpdate: "NEVER" — board-switch element replacement must never
         // be recorded in Excalidraw's undo/redo stack. Without this, undo on
@@ -2856,6 +2895,7 @@ export function WhiteboardWorkspaceClient({
       };
       try {
         activePageIdRef.current = newId;
+        boardGenerationRef.current += 1;
         // captureUpdate: "NEVER" — same reason as selectTutorPage: the new-board
         // element wipe must not create a history entry, and history must be
         // cleared so undo cannot reach across boards.
@@ -2998,11 +3038,26 @@ export function WhiteboardWorkspaceClient({
           );
         }
         // 7. Navigate to first imported page IF tutor still on anchor.
+        // Hold the bleed guard from entry through the full tail of
+        // selectTutorPage (including its 2×rAF+timeout release) so any
+        // remote apply arriving between commitPdfBatch steps and
+        // selectTutorPage's own guard increment cannot write to the
+        // live scene mid-switch. selectTutorPage adds its own +1 on
+        // top; total is 2 during hydrate, drops to 1 after selectTutorPage
+        // inner release, then to 0 after our outer release.
+        pageSwitchProgrammaticRef.current += 1;
         flushThrottledFrameNow();
+        const releasePdfBatchGuard = () => {
+          pageSwitchProgrammaticRef.current = Math.max(
+            0,
+            pageSwitchProgrammaticRef.current - 1
+          );
+        };
         if (activePageIdRef.current === anchorActivePageId) {
-          void selectTutorPage(firstPageId);
+          void selectTutorPage(firstPageId).finally(releasePdfBatchGuard);
         } else {
           flushDocumentBroadcastNow();
+          releasePdfBatchGuard();
         }
       },
     }),
@@ -3808,8 +3863,14 @@ export function WhiteboardWorkspaceClient({
 
   // PR-01 Option E: pointer-up flush — ensures last stroke segment is never dropped
   // when the throttled frame and document broadcast are deferred. Guards respected.
+  // Also tracks pointer-down/up so applyRemoteToCanvas can defer canvas writes
+  // while an eraser gesture is in progress (prevents mid-gesture scene clobber).
   useEffect(() => {
+    const handlePointerDown = () => {
+      isCanvasPointerDownRef.current = true;
+    };
     const handlePointerUp = () => {
+      isCanvasPointerDownRef.current = false;
       if (applyingRemoteToCanvasRef.current) return;
       if (pageSwitchProgrammaticRef.current > 0) return;
       flushThrottledFrameNow();
@@ -3817,8 +3878,14 @@ export function WhiteboardWorkspaceClient({
         flushDocumentBroadcastNow();
       }
     };
+    window.addEventListener("pointerdown", handlePointerDown);
     window.addEventListener("pointerup", handlePointerUp);
-    return () => window.removeEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+    };
   }, [flushThrottledFrameNow, flushDocumentBroadcastNow, sync, syncUrl]);
 
   const handleExcalidrawChange = useCallback(
@@ -3939,6 +4006,10 @@ export function WhiteboardWorkspaceClient({
         // we must NOT write the (page A) patched elements into
         // (page B)'s pageDataRef — that's how Page 1 â†” Page 9 leaked.
         const onChangePageId = activePageIdRef.current;
+        // boardGenerationRef guards the A→B→A same-pageId collision:
+        // two page switches back to the same id would pass the
+        // activePageIdRef check but carry a stale generation number.
+        const onChangeGeneration = boardGenerationRef.current;
         void (async () => {
           try {
             const getFiles = (): Record<string, BinaryFileFromExcalidraw> => {
@@ -3965,7 +4036,10 @@ export function WhiteboardWorkspaceClient({
               // hot-swap the live scene if we're still ON that page.
               pageDataRef.current[onChangePageId] =
                 patched as ReadonlyArray<ExcalidrawLikeElement>;
-              if (activePageIdRef.current === onChangePageId) {
+              if (
+                activePageIdRef.current === onChangePageId &&
+                boardGenerationRef.current === onChangeGeneration
+              ) {
                 excalidrawAPIRef.current.updateScene({ elements: patched });
                 recorderOnCanvasChange(
                   patched as ReadonlyArray<ExcalidrawLikeElement>
