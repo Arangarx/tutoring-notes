@@ -1419,6 +1419,18 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       for (const p of peers) {
         incoming.add(p.peerId);
         const entry = ensureEntry(p.peerId, p.role, p.label);
+        // Graceful-leave rejoin detection (Fix 2.4): if addedToMesh is true but
+        // the peer is no longer present in the mesh (they sent a leave signal
+        // while the sync socket kept them in the roster briefly, or they
+        // reconnected faster than the eviction timer), reset addedToMesh so we
+        // force a fresh RTCPeerConnection for the rejoining peer. Without this,
+        // addPeer is a no-op for the rejoining peer → tutor shows "Disconnected".
+        if (entry.addedToMesh && !mesh.peers().has(p.peerId)) {
+          log.log(
+            `peer=${p.peerId} event=rejoin-detected action=reset-mesh-entry role=${p.role}`
+          );
+          entry.addedToMesh = false;
+        }
         if (!entry.addedToMesh) {
           entry.addedToMesh = true;
           try {
@@ -1590,6 +1602,20 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       unsubTrack();
       unsubPc();
       unsubIce();
+      // Fix 2.4 — graceful leave: send leave signals to all connected peers before
+      // disposing the mesh. mesh.dispose() calls closePeerEntryLocal() which closes
+      // the RTCPeerConnection but does NOT call signaling.sendLeave(). Without this,
+      // the remote peer retains a stale participant entry until the 10s eviction
+      // timer fires. mesh.removePeer() sends the leave signal then closes locally;
+      // the subsequent mesh.dispose() sees an empty peer map and is a safe no-op.
+      for (const peerId of Array.from(mesh.peers())) {
+        try {
+          mesh.removePeer(peerId);
+          log.log(`peer=${peerId} event=leave-on-cleanup`);
+        } catch {
+          // removePeer is idempotent; ignore errors
+        }
+      }
       try {
         mesh.dispose();
       } catch (err) {
