@@ -865,6 +865,7 @@ export function useWhiteboardRecorder(
   useEffect(() => {
     if (typeof document === "undefined") return;
     const onVis = () => {
+      if (!recordingActiveRef.current) return;
       const t = Math.max(0, Math.floor(getAudioMsRef.current()));
       if (document.hidden) {
         pushEvent({ t, type: "tab-hidden" });

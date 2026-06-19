@@ -5504,7 +5504,7 @@ export function WhiteboardWorkspaceClient({
                 Checkpoint save failed: {recorder.checkpointError}. Still recording in memory; retrying.
               </Banner>
             )}
-            {recorder.resumePrompt && (
+            {role === "tutor" && recorder.resumePrompt && (
               <Banner tone="info">
                 <strong>Browser recovery (IndexedDB):</strong> a whiteboard
                 event draft from{" "}
