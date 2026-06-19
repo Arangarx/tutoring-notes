@@ -2526,19 +2526,29 @@
 }
 
 .mynk-wb-student-title {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  max-width: min(420px, 40vw);
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: min(360px, 38vw);
+  overflow: hidden;
 }
 
 .mynk-wb-student-tutor-name {
+  flex-shrink: 0;
   font-size: 13px;
   font-weight: 600;
   color: var(--foreground);
 }
 
 .mynk-wb-student-disclosure {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 11px;
   line-height: 1.35;
   color: var(--muted-foreground);
@@ -2601,6 +2611,47 @@
 .mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-pagestrip,
 .mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-pagestrip {
   max-height: 40px;
+}
+
+/* Wave 4 — student top bar touch compaction (overflow sheet carries the rest) */
+.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-student-disclosure,
+.mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-student-disclosure,
+.mynk-wb-chrome[data-role="student"][data-layout="phone-landscape"] .mynk-wb-student-disclosure {
+  display: none;
+}
+
+.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-student-title,
+.mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-student-title,
+.mynk-wb-chrome[data-role="student"][data-layout="phone-landscape"] .mynk-wb-student-title {
+  max-width: min(120px, 30vw);
+}
+
+.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-student-tutor-name,
+.mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-student-tutor-name,
+.mynk-wb-chrome[data-role="student"][data-layout="phone-landscape"] .mynk-wb-student-tutor-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+
+.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-student-status-zone,
+.mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-student-status-zone,
+.mynk-wb-chrome[data-role="student"][data-layout="phone-landscape"] .mynk-wb-student-status-zone {
+  display: none;
+}
+
+.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-student-av-zone,
+.mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-student-av-zone,
+.mynk-wb-chrome[data-role="student"][data-layout="phone-landscape"] .mynk-wb-student-av-zone {
+  display: none;
+}
+
+.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-topbar__zone--student-lead,
+.mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-topbar__zone--student-lead,
+.mynk-wb-chrome[data-role="student"][data-layout="phone-landscape"] .mynk-wb-topbar__zone--student-lead {
+  display: none;
 }
 
 .mynk-wb-bottom-toolbar--desktop-undo {
