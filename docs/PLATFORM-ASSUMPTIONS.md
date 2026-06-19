@@ -439,7 +439,13 @@
 
 ## 8. Browser support
 
-### 8.1 iOS Safari MediaRecorder quirks
+### 8.0 Pilot device matrix (recalibrated 2026-06-18)
+
+- **Tutor (Sarah, pilot):** primary device assumed **Windows desktop** running **Chromium/Blink** (same engine as Andrew's dev env). **Zero tutor-side WebKit risk** for the pilot norm (desktop tutor + mobile student).
+- **Student (test-student / Andrew's wife):** **mobile-web generally** — currently validated on **Android / Chrome-Blink** via wb-unify hardware smoke. **iOS Safari / WebKit student coverage = ZERO** — a real gap; see [`BACKLOG.md`](BACKLOG.md) **WB-STUDENT-MOBILE-VALIDATION**.
+- **Implication:** iOS-specific quirks below (§8.1+) still matter for **student-side** mobile-web and for any future tutor-on-iOS scenario, but are **not** the primary pilot tutor risk vector.
+
+### 8.1 iOS Safari / mobile-web MediaRecorder quirks
 
 - **Assumption**: iOS Safari requires `audio/mp4` mimeType (not `audio/webm`). `MediaRecorder.isTypeSupported` is checked at recording-start.
 - **Where baked in**: `src/lib/recording/...` (mime selection logic).
@@ -454,7 +460,7 @@
 
 ### 8.3 Browser autoplay policies (AVTile "Tap to hear")
 
-- **Assumption**: Modern browsers block autoplay of audio without user gesture. Phase 4d Commit 10 added "Tap to hear" overlay for autoplay-blocked remote audio. Asymmetric on iOS (per 2026-05-15 smoke).
+- **Assumption**: Modern browsers block autoplay of audio without user gesture. Phase 4d Commit 10 added "Tap to hear" overlay for autoplay-blocked remote audio. Asymmetric on mobile-web (per 2026-05-15 smoke); **student-side** iOS untested, Android covered in wb-unify pass.
 - **Where baked in**: `src/components/av/AVTile.tsx`.
 
 ### 8.4 sessionStorage limits

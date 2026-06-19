@@ -112,6 +112,15 @@ Reclassified from a pre-master gate → near-immediate post-master follow-up: th
 
 ---
 
+## WB A/V UX (2026-06-18)
+
+| Item | Priority | Notes |
+|------|----------|-------|
+| **WB-STUDENT-MOBILE-VALIDATION — student mobile-web (Android + iOS) validation** | Medium | Student surface runs on mobile browsers; **Android covered** via test-student (wb-unify re-smoke). **iOS coverage = ZERO** — validate student WB/A/V on iOS Safari (WebKit). Strengthens the iOS test-device purchase case. **Tutor side is desktop Chromium = not at risk** (Sarah assumed Windows desktop). |
+| **WB-CAPTURE-PAUSED-INDICATOR — show 'student capture paused' when mobile student screen-locks** | Low-medium (UX) | When a mobile student locks their screen, capture suspends and the tutor sees a misleading **frozen last frame**. Show an explicit paused/suspended state on the tutor's tile instead. Born from Android screen-off re-verify 2026-06-18 (screen-off froze tutor's view of student; audio one-way; recovered on wake). Not a blocker. |
+
+---
+
 ## P2 student shell — post-hard-switch follow-ups (2026-06-17)
 
 | Item | Priority | Notes |

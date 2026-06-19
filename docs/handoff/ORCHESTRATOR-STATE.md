@@ -6,19 +6,19 @@
 
 ---
 
-## ⏩ HEAD — 2026-06-18 wb-unify-stabilize: fix waves + gate GREEN, awaiting Andrew re-smoke
+## ⏩ HEAD — 2026-06-18 wb-unify-stabilize MERGED → `v1-redesign` @ `f66aa4b`
 
-> Milestone restructure (fix waves complete + merge-boundary gate green, pre-merge). Next full restructure owed after `merge --no-ff` `wb-unify-stabilize` → `v1-redesign`.
+> Post-merge milestone restructure. Integration base is now `v1-redesign` @ [`f66aa4b`](https://github.com/Arangarx/tutoring-notes/commit/f66aa4b). Next thread = **Waves 4–5** chrome/polish (non-merge-gating) + W1-3 backlog burndown.
 
 | Field | Value |
 |---|---|
-| **Last action completed (2026-06-18)** | **Fix waves + merge-boundary gate GREEN** on `wb-unify-stabilize` @ [`c0d80bd`](https://github.com/Arangarx/tutoring-notes/commit/c0d80bd). **Engine fix wave** [`4a07cfa`](https://github.com/Arangarx/tutoring-notes/commit/4a07cfa): Andrew's "force-sync" hypothesis **CONFIRMED** — tutor `applyRemoteToCanvas` reconciled from `getSceneElements()` (non-deleted only), so erased `isDeleted:true` tombstones were absent and student stale broadcast resurrected them ("flash then reappear"); fix = `getSceneElementsIncludingDeleted()` baseline. Plus student per-page `history.clear()` on **both** page-switch paths (`runV3Apply` + `selectStudentPage`); `captureUpdate:"NEVER"` gap closed in student image-backfill. jest 666/666. **A/V rejoin wave** [`e2466e8`](https://github.com/Arangarx/tutoring-notes/commit/e2466e8) + [`c0d80bd`](https://github.com/Arangarx/tutoring-notes/commit/c0d80bd): exit→rejoin recovery + paint-on-reconnect — root cause = `applyRemoteTrack` reused same `MediaStream` object on reconnect (same `.id` → same `videoKey` → no `<video>` remount → black/frozen until manual resize); fix = fresh `MediaStream` on video-track re-arrival, `rejoin-detected` stale-stream reset, additive `onPeerLeave` in `peer-mesh.ts`, `cancelEviction` cleanup. jest 155/155 AV+wb. **`wb-sync` relay gate @ `c0d80bd`:** PASS — 13/13 Playwright relay invariants (1 pre-skipped PDF-viewport), jest 666/666. All fixes **purely ADDITIVE**; no tripwires hit. Prior: Andrew's W1-3 hardware smoke @ [`39daece`](https://github.com/Arangarx/tutoring-notes/commit/39daece) — 4 merge-blockers failed (eraser, undo/redo, exit→rejoin, video-until-resize). |
-| **Next action(s)** | (1) **Andrew hardware re-smoke** the 4 fixed items on verified preview — see [`wb-unify-stabilize-smokebook-2026-06-17.md`](wb-unify-stabilize-smokebook-2026-06-17.md) § *Re-smoke round — Fix waves landed (2026-06-18)*. Preview pair: [branch alias](https://tutoring-notes-git-wb-unify-stabilize-arangarx-5209s-projects.vercel.app) + [preview.usemynk.com](https://preview.usemynk.com) (repoint stable preview to this branch). Hardware-gated: resurrection/eraser, undo across pages, exit→rejoin, paint-on-reconnect. (2) On **re-smoke PASS** → **`merge --no-ff` `wb-unify-stabilize` → `v1-redesign`**. (3) **Waves 4-5** (chrome/responsive, laser colors, polish) post-merge. (4) `docs/phase3-consent-model` @ `4f9dbcd` → merge to `v1-redesign` when convenient (no rush). |
-| **Open Andrew-confirms** | **Re-smoke PASS** of fix-wave result (eraser / undo-redo / exit→rejoin / paint-on-reconnect + regression spot-check) → merge to `v1-redesign`. |
-| **In-flight subagents** | **None.** |
-| **Uncommitted / unmerged** | **`wb-unify-stabilize` @ `c0d80bd`** — smokeable, fix waves + gate green, awaiting Andrew re-smoke → merge to `v1-redesign`. **`docs/phase3-consent-model` @ `4f9dbcd`** (pushed) — Phase-3 waiting-room consent-model + unification planning doc; awaits `merge --no-ff` into `v1-redesign` (no rush). **`phase1/wb-reliability-floor` @ `d63ac22`** — awaits DESKTOP smoke. NOTE: `phase2/wb-student-new-shell` superseded by the unify-stabilize thread. |
+| **Last action completed (2026-06-18)** | **`merge --no-ff` `wb-unify-stabilize` → `v1-redesign`** @ [`f66aa4b`](https://github.com/Arangarx/tutoring-notes/commit/f66aa4b) (pushed). Unifies student into role-aware `WhiteboardWorkspaceClient` (deleted `StudentLiveWorkspaceClient`). **Merge-gating re-smoke bugs FIXED + Android-validated:** **Engine** [`4a07cfa`](https://github.com/Arangarx/tutoring-notes/commit/4a07cfa) — tombstone-resurrection eraser/undo (`getSceneElementsIncludingDeleted()` baseline), student per-page `history.clear()`, `captureUpdate:NEVER` image-backfill gap. **A/V rejoin/paint** [`c0d80bd`](https://github.com/Arangarx/tutoring-notes/commit/c0d80bd), [`e2466e8`](https://github.com/Arangarx/tutoring-notes/commit/e2466e8) — fresh `MediaStream` on track re-arrival, `rejoin-detected` stale-stream reset, additive `onPeerLeave`. **A/V mobile-backgrounding** [`01105fc`](https://github.com/Arangarx/tutoring-notes/commit/01105fc), [`ae249f7`](https://github.com/Arangarx/tutoring-notes/commit/ae249f7) — removed spurious `peerConnectionState` reset + `rebuild()` from `onPeerLeave`; wake-recovery reconnect on `visibilitychange`/`pageshow` (validated Android student / Chrome-Blink, not iOS). **Student false-recovery leak** [`d8b15f7`](https://github.com/Arangarx/tutoring-notes/commit/d8b15f7) — tutor-only recovery banner + `recordingActiveRef` guard. Gates: `wb-sync` relay invariants green @ `ae249f7`; jest green on recorder/AV/wb suites. Waves 1–3 + fix waves = **done**; Waves 4–5 deliberately **not** merge-gating. |
+| **Next action(s)** | (1) **Waves 4–5** chrome/polish thread on `v1-redesign` — see [`wb-unify-stabilization-plan-2026-06-17.md`](wb-unify-stabilization-plan-2026-06-17.md) § Waves 4–5 + W1-3 backlog IDs in [`BACKLOG.md`](../BACKLOG.md) § wb-unify W1-3 smoke triage. (2) **`docs/phase3-consent-model` @ `4f9dbcd`** → merge to `v1-redesign` when convenient — **may conflict** with P3 smokebook notes folded into `v1-redesign` @ merge (see lesson below). (3) `phase1/wb-reliability-floor` @ `d63ac22` — awaits DESKTOP smoke. (4) Gate A→A6 + Ship-to-Sarah gate burndown per table below. |
+| **Open Andrew-confirms** | **Sarah primary device** — assumed Windows desktop (Chromium); verify on next call ([`SARAH-CALL-PREP.md`](../SARAH-CALL-PREP.md)). **Ship-to-Sarah gate** (notes path, end/continue save discipline, single-segment seek) — still open. **iOS student WB/A/V** — zero real-device coverage; Android test-student only ([`BACKLOG.md`](../BACKLOG.md) **WB-STUDENT-MOBILE-VALIDATION**). |
+| **In-flight subagents** | **None** (post-merge docs batch completing). |
+| **Uncommitted / unmerged** | **None** on `v1-redesign` after post-merge docs commit. **`docs/phase3-consent-model` @ `4f9dbcd`** (pushed) — awaits `merge --no-ff` into `v1-redesign`; **conflict risk** on P3 handoff docs (Andrew 2026-06-17 notes landed on feature side during wb-unify merge; 5-axis blockers on `v1-redesign` side — union-merge required). **`phase1/wb-reliability-floor` @ `d63ac22`** — awaits DESKTOP smoke. `phase2/wb-student-new-shell` **superseded + absorbed** by wb-unify merge. |
 | **P1 replay-in-frame (MERGED 2026-06-16 — thread CLOSED)** | **MERGED** `phase1/wb-review-correct` → `v1-redesign` @ [`f68053c`](https://github.com/Arangarx/tutoring-notes/commit/f68053c). In-frame unified review + replay timeline scrubber + full A/V fix chain. Video-paint **RESOLVED** — bandaid @ [`1cc268d`](https://github.com/Arangarx/tutoring-notes/commit/1cc268d) (= [`3b996ae`](https://github.com/Arangarx/tutoring-notes/commit/3b996ae) AV code). Pre-merge: build green, wb-sync green, jest 659/659 @ [`6440ea7`](https://github.com/Arangarx/tutoring-notes/commit/6440ea7). Smokebook [`phase-1-wb-floor-replay-in-frame-smokebook-2026-06-14.md`](phase-1-wb-floor-replay-in-frame-smokebook-2026-06-14.md) — Andrew actively entering results (**do NOT edit**). Branch preserved for cleanup. |
-| **P2 student-on-new-shell (AWAITS SMOKE 2026-06-17)** | Parity rework @ [`b7dbe0c`](https://github.com/Arangarx/tutoring-notes/commit/b7dbe0c) + N-fixes (Exit disconnect, capability-driven page strip, dead subscriber rm). Smokebook [`phase-2-student-new-shell-smokebook-2026-06-16.md`](phase-2-student-new-shell-smokebook-2026-06-16.md). **On smoke PASS → `merge --no-ff` into `v1-redesign`.** |
+| **P2 student-on-new-shell (SUPERSEDED → MERGED via wb-unify 2026-06-18)** | Absorbed into **`wb-unify-stabilize` → `v1-redesign` @ `f66aa4b`**. Student shell is now role-gated `WhiteboardWorkspaceClient`; legacy smokebook [`phase-2-student-new-shell-smokebook-2026-06-16.md`](phase-2-student-new-shell-smokebook-2026-06-16.md) retained for audit only. Active smokebook: [`wb-unify-stabilize-smokebook-2026-06-17.md`](wb-unify-stabilize-smokebook-2026-06-17.md). |
 | **Ship-to-Sarah gate (CONFIRMED by Andrew 2026-06-16)** | Andrew wants to swap Sarah off `master` ("old & busted") onto the `v1-redesign`/`phase1` line **once waiting room → WB → end session is stable for tutor AND student — backend data pipeline INCLUDED** (per-segment flush + per-chunk transcription reliably producing notes, not just UI flow). Triggered by Sarah's 2026-06-16 prod chat (3 bugs; capture [`sarah-pilot-feedback-2026-06-16-orchestrator-report.md`](sarah-pilot-feedback-2026-06-16-orchestrator-report.md) @ [`931e8f7`](https://github.com/Arangarx/tutoring-notes/commit/931e8f7); BACKLOG SSG-1/2/3 + F1 elevated). **Confirmed gate items:** **(1)** notes — legacy monolithic "Generate notes from session" path GONE from new surface (the button she clicked), per-chunk auto-notes the only path, verify up-to-50-min-segment transcribes clean; exact "too large to split" error structurally avoided (residual >25MB-per-segment risk = backlog SSG-1). **(2)** End/Continue on **student-detail open-sessions list** never silently deletes recording — save-then-end or explicit "Discard" label+behavior (SSG-2 / F1; `endStaleWhiteboardSession` currently stamps `endedAt` w/o flush). **(3)** single-segment seek (her actual case) works at EVERY review entry point she'd use — incl. not landing on the unfixed legacy standalone `WhiteboardReplay` (fix-for-single-seg or route to in-frame). **Multi-segment (>50-min) seek EXPLICITLY DEFERRED by Andrew → backlog SSG-3 only.** Items 1–3 fold into P2/P3 + a targeted backend pass; NOT separate threads. **Pre-master smoke deferral (Andrew 2026-06-16): relaxed strict "smoke-all-before-master" — some items OK post-master, but data-loss/security/backup-recorder items stay PRE-MASTER (not deferred).** Durable ledger [`pre-master-smoke-deferral-ledger-2026-06-16.md`](pre-master-smoke-deferral-ledger-2026-06-16.md) @ [`b7b2071`](https://github.com/Arangarx/tutoring-notes/commit/b7b2071) (35 keep / 11 defer-safe / 5 already-deferred). **Borderlines RESOLVED (Andrew 2026-06-16):** (a) MAP-ACC notes *quality* → DEFER post-master but it's the **#1 post-master follow-up — start immediately at cut** so Sarah generates feedback + real examples to tune against; (b) A1 freedraw latency → DEFER ("doesn't feel like an issue right now, we'll see") — watch, not a blocker. |
 | **Live-A/V tutor video regression (RESOLVED 2026-06-16)** | **CLOSED — bandaid shipped @ [`1cc268d`](https://github.com/Arangarx/tutoring-notes/commit/1cc268d)** (merged @ `f68053c`). [`caaabf2`](https://github.com/Arangarx/tutoring-notes/commit/caaabf2) CSS-only fix failed on-device; Mechanisms A+B from [`3b996ae`](https://github.com/Arangarx/tutoring-notes/commit/3b996ae) restored. LV-1 + LV-2 satisfied (byte-identical to Andrew-confirmed checkpoint). Real fix → **WB-AV-VIDEO-PAINT-REAL-FIX** backlog. |
 
@@ -38,6 +38,10 @@
 
 **Hard-won lesson — reused MediaStream id blocks video remount on reconnect (2026-06-18, wb-unify A/V fix):** On peer reconnect, `applyRemoteTrack` reused the same `MediaStream` object. React keyed `<video>` on `stream.id` → same id → no remount → black/frozen tile until a manual window resize forced layout. **Rule:** on video-track re-arrival after disconnect/rejoin, wrap tracks in a **fresh** `MediaStream` so `videoKey` changes and `AVTile` remounts; proactively reset stale streams on `onPeerLeave` / `rejoin-detected` before re-adding the peer.
 
+**Hard-won lesson — mobile backgrounding must not trigger full mesh rebuild (2026-06-18, wb-unify A/V fix):** `onPeerLeave` reset `peerConnectionState` and called `rebuild()` on transient mobile disconnects (screen-off / backgrounding) — false "foregrounded disconnects" that tore down healthy peers. **Rule:** deliberate leave vs transient suspend are different events; do not full-rebuild the mesh on backgrounding churn. Complement with wake-recovery reconnect on `visibilitychange`/`pageshow`. Validated on **Android** student (Chrome-Blink); iOS student path still **untested**.
+
+**Hard-won lesson — doc-heavy merges into `v1-redesign` produce add/add conflicts (2026-06-18, merge `f66aa4b`):** Long-running `v1-redesign` accrues docs-only commits while feature branches accrue their own handoff docs (smokebook, plan, STATE, BACKLOG) → merge hits **add/add** conflicts on the same paths. **Rule:** resolve by **union**, never blind `--theirs`/`--ours` — preserve Andrew's hand-entered smoke notes AND folded 5-axis blockers. Evidence @ `f66aa4b`: P2 smokebook had notes only on feature side; P3 had 5-axis blockers on `v1-redesign` + Andrew's 2026-06-17 notes on feature side — **both** required.
+
 **Hard-won lesson — flag-gated feature + test-injected flag = synthetic green (2026-06-17, P2 student shell):** The new student shell passed every gate incl. `test:wb-sync`, yet on Andrew's smoke students still hit the LEGACY page. Root cause: the real route `/w/[joinToken]/page.tsx` gated the new shell on `NEXT_PUBLIC_WB_STUDENT_NEW_SHELL` (unset on Preview/prod), and `test:wb-sync` only reached the new path because Playwright's `webServer` injected the flag — so green proved the shell works WHEN flagged, never that the **default route** was wired. **Rules:** (1) a test that injects a feature flag does NOT prove the production default — add an assertion against the route's **flag-unset** behavior, or verify the entry-point file directly. (2) Orchestrator: treat "executor says the gate passed" with suspicion for **headline-route wiring** — open the page/route the user actually hits and confirm it renders the new thing; green alone is necessary, not sufficient. (3) For one-way migrations, prefer a **hard switch over a flag** (Andrew's call) — a flag you never intend to turn off is just an un-exercised legacy path waiting to ship by default.
 
 **Product decisions (Andrew 2026-06-14):** **(1) Live WB stays SINGLE-TAB by default** — no auto-opening the fullscreen board in a separate tab; the WB tab is the live recorder (audio + sync + upload outbox); separate tab raises accidental-close risk and — critically on iOS Safari (Sarah) — background-tab suspension wedges the AudioContext/recorder (the 1b wedge failure mode). Separate-tab = possible FUTURE desktop-only opt-in, never a mobile default (BL-WB-SEPARATE-TAB-OPTIN). **(2) WB wordmark → student detail page** — while a session is LIVE the wordmark is a guarded leave-session action (confirm / route via end-session), not free nav (BL-WB-WORDMARK-NAV).
@@ -49,16 +53,17 @@
 ## Branch layering
 
 ```
-master  ←  v1-redesign  (active base @ f68053c; P1 merged, P2 in flight)
+master  ←  v1-redesign  (active base @ f66aa4b; P1 + wb-unify merged)
           (Gate A +
            re-smoke
            held)
 
-v1-design-system — MERGED into v1-redesign @ 36727ea
-                     (branch still exists as ancestor / historical)
+wb-unify-stabilize — MERGED into v1-redesign @ f66aa4b
+v1-design-system   — MERGED into v1-redesign @ 36727ea
+                     (branch refs still exist as ancestors / historical)
 ```
 
-- **`v1-redesign`:** **Active working base again** (Andrew confirmed off `v1-design-system` smoke, pivoting strategy). Smoke round 1 **8/8 merged** @ [`27ac5db`](https://github.com/Arangarx/tutoring-notes/commit/27ac5db); full design-system epic merged @ [`36727ea`](https://github.com/Arangarx/tutoring-notes/commit/36727ea). **Not yet merged to `master`** — held for full Gate A + comprehensive re-smoke.
+- **`v1-redesign`:** **Active integration base** @ [`f66aa4b`](https://github.com/Arangarx/tutoring-notes/commit/f66aa4b) — P1 replay-in-frame + **wb-unify-stabilize** (Waves 1–3 + fix waves) merged. Smoke round 1 **8/8** @ [`27ac5db`](https://github.com/Arangarx/tutoring-notes/commit/27ac5db); design-system epic @ [`36727ea`](https://github.com/Arangarx/tutoring-notes/commit/36727ea). **Not yet merged to `master`** — held for Gate A + comprehensive re-smoke + Ship-to-Sarah gate.
 - **`v1-design-system`:** Historical — fully merged into `v1-redesign` @ [`36727ea`](https://github.com/Arangarx/tutoring-notes/commit/36727ea). Branch ref still exists locally/remotely as ancestor; no longer the active overnight layer. Branched off `v1-redesign` @ [`1456581`](https://github.com/Arangarx/tutoring-notes/commit/1456581).
 
 **Decisions ledger + sub-pass tracker:** [`docs/handoff/v1-redesign-STATUS.md`](v1-redesign-STATUS.md) — do not duplicate the full ledger here.
@@ -73,9 +78,24 @@ Pre-public pilot with one tutor (Sarah). North Star from [`AGENTS.md`](../../AGE
 
 ## Current Wave focus
 
-**Active:** `wb-unify-stabilize` @ [`c0d80bd`](https://github.com/Arangarx/tutoring-notes/commit/c0d80bd) — Waves 1-3 unification + stabilization **fix waves complete + gate green**; **awaiting Andrew hardware re-smoke** → `merge --no-ff` into `v1-redesign`.  
-**Integration base:** `v1-redesign` @ [`f68053c`](https://github.com/Arangarx/tutoring-notes/commit/f68053c) — P1 replay-in-frame **merged**; student shell work **superseded** by unify-stabilize thread.  
-**Imminent post-merge:** Waves 4-5 (chrome/responsive, laser colors, polish); `phase1/wb-reliability-floor` desktop smoke → merge; Gate A→A6 → `v1-redesign → master` cut.
+**Active:** **`v1-redesign` @ `f66aa4b`** — **Waves 4–5** wb-unify chrome/polish (next thread; **not** merge-gating). Plan: [`wb-unify-stabilization-plan-2026-06-17.md`](wb-unify-stabilization-plan-2026-06-17.md).
+
+**Just closed:** `wb-unify-stabilize` Waves 1–3 + fix waves — merged @ [`f66aa4b`](https://github.com/Arangarx/tutoring-notes/commit/f66aa4b).
+
+**Integration base:** `v1-redesign` @ [`f66aa4b`](https://github.com/Arangarx/tutoring-notes/commit/f66aa4b).
+
+**Parallel:** `phase1/wb-reliability-floor` desktop smoke; `docs/phase3-consent-model` merge (conflict-aware); Gate A→A6 + Ship-to-Sarah gate → `v1-redesign → master` cut.
+
+### Waves 4–5 scope (next thread — from unify plan)
+
+| Wave | Scope |
+|---|---|
+| **4 — Chrome / responsive + residual wiring** | Role-distinct **local** laser colors (tutor vs student CSS/`laserColor`); responsive layout — verify inherited tutor responsive covers student desktop+mobile; fix residual overflow; mobile rearrange parity (smoke item 11). **Gate:** desktop + mobile student smoke. |
+| **5 — Polish** | Coral Exit button + exit icon; smaller "Match tutor's view" button + better sync iconography; design Q (a) highlight non-clickable student board tab?; design Q (b) student graph-expression entry on embeds?; **WB-STUDENT-VIEW-LOCK-WHEN-SYNCED** — block pan/zoom while synced (vs move-then-snap-back). |
+
+Plus **W1-3 backlog burndown** (11 IDs in [`BACKLOG.md`](../BACKLOG.md) § wb-unify W1-3 smoke triage) — image importer, student board tabs, mic-muted activity, etc.
+
+**Deferred / re-verify opportunistically:** student canvas stuck on "Loading scene…" (intermittent; [`BACKLOG.md`](../BACKLOG.md) — re-verify when join path is touched).
 
 ---
 
@@ -83,7 +103,10 @@ Pre-public pilot with one tutor (Sarah). North Star from [`AGENTS.md`](../../AGE
 
 | Commit | Summary |
 |---|---|
-| [`f68053c`](https://github.com/Arangarx/tutoring-notes/commit/f68053c) | **Merge tip** — `phase1/wb-review-correct` into `v1-redesign` (P1 replay-in-frame; build + wb-sync + jest 659/659 green, pushed) |
+| [`f66aa4b`](https://github.com/Arangarx/tutoring-notes/commit/f66aa4b) | **Merge tip** — `wb-unify-stabilize` into `v1-redesign` (Waves 1–3 + fix waves; role-unified student shell) |
+| [`ae249f7`](https://github.com/Arangarx/tutoring-notes/commit/ae249f7) | Wake-recovery reconnect on student `visibilitychange`/`pageshow` (Android-validated) |
+| [`4a07cfa`](https://github.com/Arangarx/tutoring-notes/commit/4a07cfa) | Engine: tombstone baseline, per-page `history.clear()`, `captureUpdate:NEVER` gap |
+| [`f68053c`](https://github.com/Arangarx/tutoring-notes/commit/f68053c) | `phase1/wb-review-correct` into `v1-redesign` (P1 replay-in-frame) |
 | [`36727ea`](https://github.com/Arangarx/tutoring-notes/commit/36727ea) | `v1-design-system` epic into `v1-redesign` (119 files, build green) |
 | [`17ae7dd`](https://github.com/Arangarx/tutoring-notes/commit/17ae7dd) | Delete student button parity — box at rest (post-merge smoke fix) |
 | [`25e3050`](https://github.com/Arangarx/tutoring-notes/commit/25e3050) | Systemic `label {}` → `@layer base` (CheckboxField + shadcn Label app-wide) |
@@ -148,23 +171,24 @@ Canonized in [`recording-rearchitecture-design-2026-06-05.md`](recording-rearchi
 |---|---|
 | **Recording consolidation slice** | Fix path B implementing I1–I5/M1–M6 matrix |
 | **Map/reduce auto-notes ACCURACY** | Currently poor — own design+eval pass |
-| **Student-WB migration steps 3–9** | P2 **in flight** on `phase2/wb-student-new-shell`; (c) KEEP hybrid + (e) self-view ON **resolved** @ [`71b2c3e`](https://github.com/Arangarx/tutoring-notes/commit/71b2c3e); real 2-device smoke owed post-impl |
+| **Student-WB migration steps 3–9** | **Absorbed** by wb-unify merge @ `f66aa4b`; (c) KEEP hybrid + (e) self-view ON **resolved** @ [`71b2c3e`](https://github.com/Arangarx/tutoring-notes/commit/71b2c3e) |
 | **Learner-swap design** | Learner-scoped tokens, per-learner privacy/consent + notes finalization |
 | **VIDEO recording + replay** | Top post-smoke build candidate — designed, not built |
 | **A6-1 replay player (R1/R2)** | Multi-segment regression — dedicated fix thread |
-| **Live AV (X1)** | Tutor remote-video paint **resolved** @ P1 merge (bandaid); student-shell A/V validation in P2 |
+| **Live AV (X1)** | Tutor remote-video paint **resolved** @ P1 merge (bandaid); student A/V validated Android via wb-unify; **iOS student = zero coverage** |
 
 ---
 
-## Queued dispatches (post design-system merge)
+## Queued dispatches (post wb-unify merge)
 
-1. **P2 student-on-new-shell** — executor in flight on `phase2/wb-student-new-shell`
-2. Gate A→A6 burndown → comprehensive pre-master smoke (both themes) → `v1-redesign → master` cut
-3. Foundation follow-up for deferred library gaps (morning doc § library-gap follow-up)
-4. Functional wiring: waiting room (A2), parent consent-edit (B2 Step 6), scheduler + Google OAuth
-5. Consent v2 thread (BL-A/BL-B) when prioritized
-6. Recording consolidation slice (fix path B)
-7. Map/reduce accuracy workstream
+1. **Waves 4–5** wb-unify chrome/polish on `v1-redesign` (laser colors, responsive, Exit/Match-view polish, view-lock)
+2. **W1-3 backlog burndown** — 11 IDs from wb-unify smoke triage ([`BACKLOG.md`](../BACKLOG.md))
+3. **`docs/phase3-consent-model` @ `4f9dbcd`** → merge to `v1-redesign` (union-merge handoff docs; may conflict with P3 notes folded @ `f66aa4b`)
+4. Gate A→A6 burndown → comprehensive pre-master smoke (both themes) → `v1-redesign → master` cut
+5. Ship-to-Sarah gate items (notes path, end/continue, single-segment seek)
+6. Foundation follow-up for deferred library gaps
+7. Functional wiring: waiting room (A2), parent consent-edit (B2 Step 6), scheduler + Google OAuth
+8. Recording consolidation slice (fix path B); Map/reduce accuracy workstream
 
 ---
 
@@ -345,7 +369,7 @@ Recording Q1/Q5/Q6/Q7/Q8, cost Q8, pricing-floor, Vercel-lock OK — see [`recor
 | **v1 design-system overnight (X2)** | **IN FLIGHT** — `v1-design-system` branch, Groups A–G fan-out |
 | **Identity / access** | Parent-create-learner + B1 + B2 **merged**; IAC-13 disconnect build open |
 | **Replay player (A6-1)** | R1/R2 multi-segment regression — dedicated fix thread |
-| **Live AV (X1)** | Tutor remote-video paint **resolved** @ P1 merge (bandaid); student-shell A/V validation in P2 |
+| **Live AV (X1)** | Tutor remote-video paint **resolved** @ P1 merge (bandaid); student A/V validated Android via wb-unify; **iOS student = zero coverage** |
 | **Phase 2 authed session chrome** | Notes page inside parent/child shell — post-overnight |
 | **Sarah forward-migration** | `feature/sarah-forward-migration-q6` parked |
 | **Master / pilot** | Sarah on `tutoring-notes.vercel.app` |
