@@ -91,6 +91,7 @@ type FakeSyncClient = {
   flushPendingBroadcast: jest.Mock;
   __triggerConnect: () => void;
   __triggerDisconnect: () => void;
+  __triggerRoomPeers: (peers: Array<{ peerId: string; role: string }>) => void;
   __getPeerId: () => string | undefined;
 };
 
@@ -100,6 +101,7 @@ const mockCreateWhiteboardSyncClient = jest.fn(
   (opts: { peerId?: string }): FakeSyncClient => {
     const connectCbs: Array<() => void> = [];
     const disconnectCbs: Array<() => void> = [];
+    const roomPeersCbs: Array<(peers: ReadonlyArray<{ peerId: string; role: string }>) => void> = [];
     let connected = false;
     const client: FakeSyncClient = {
       isConnected: () => connected,
@@ -120,7 +122,15 @@ const mockCreateWhiteboardSyncClient = jest.fn(
         };
       }),
       onPeerCountChange: jest.fn(() => () => {}),
-      onRoomPeersChange: jest.fn(() => () => {}),
+      onRoomPeersChange: jest.fn(
+        (cb: (peers: ReadonlyArray<{ peerId: string; role: string }>) => void) => {
+          roomPeersCbs.push(cb);
+          return () => {
+            const i = roomPeersCbs.indexOf(cb);
+            if (i >= 0) roomPeersCbs.splice(i, 1);
+          };
+        }
+      ),
       onRemotePointer: jest.fn(() => () => {}),
       broadcastScene: jest.fn(),
       broadcastDocument: jest.fn(),
@@ -133,6 +143,9 @@ const mockCreateWhiteboardSyncClient = jest.fn(
       __triggerDisconnect: () => {
         connected = false;
         for (const cb of [...disconnectCbs]) cb();
+      },
+      __triggerRoomPeers: (peers) => {
+        for (const cb of [...roomPeersCbs]) cb(peers);
       },
       __getPeerId: () => opts.peerId,
     };
@@ -362,6 +375,17 @@ describe("StudentWhiteboardClient Γåö live A/V mount", () => {
     };
     await renderStudent();
     const client = createdSyncClients[0];
+
+    // Populate lastPresencePeerIdsRef via onRoomPeersChange so the
+    // sync-reconnect handler has peer IDs to reconnect (fix B: the handler
+    // now drives off sync presence rather than liveAv.participants so it
+    // works even when the 10s eviction timer has cleared participants).
+    act(() => {
+      client.__triggerRoomPeers([
+        { peerId: "peer-tutor", role: "tutor" },
+        { peerId: "peer-other-student", role: "student" },
+      ]);
+    });
 
     act(() => {
       client.__triggerConnect();

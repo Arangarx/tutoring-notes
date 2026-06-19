@@ -412,8 +412,9 @@ export async function waitForTutorStudentConnected(
 
 export async function ensureStudentFollowsTutor(page: Page): Promise<void> {
   const checkbox = page.getByRole("checkbox", {
-    name: /keep pan.*zoom synced/i,
+    name: /(?:keep pan.*zoom synced|follow tutor)/i,
   });
+  await expect(checkbox).toBeVisible({ timeout: 90_000 });
   if (!(await checkbox.isChecked())) {
     await checkbox.check();
   }
@@ -424,8 +425,9 @@ export async function setStudentFollowTutor(
   enabled: boolean
 ): Promise<void> {
   const checkbox = page.getByRole("checkbox", {
-    name: /keep pan.*zoom synced/i,
+    name: /(?:keep pan.*zoom synced|follow tutor)/i,
   });
+  await expect(checkbox).toBeVisible({ timeout: 90_000 });
   const checked = await checkbox.isChecked();
   if (enabled && !checked) await checkbox.check();
   if (!enabled && checked) await checkbox.uncheck();

@@ -2509,3 +2509,114 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── P2 student role — mobile-first chrome (data-role="student") ── */
+.mynk-wb-chrome[data-role="student"] {
+  height: 100dvh;
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-live-column {
+  flex: 1;
+  min-height: 0;
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-canvas {
+  flex: 1;
+  min-height: 0;
+}
+
+.mynk-wb-student-title {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  max-width: min(420px, 40vw);
+}
+
+.mynk-wb-student-tutor-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.mynk-wb-student-disclosure {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted-foreground);
+}
+
+.mynk-wb-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.mynk-wb-status-pill--ok {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.mynk-wb-status-pill--warn {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.mynk-wb-follow-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.mynk-wb-canvas-banner {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  z-index: 25;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--info-soft);
+  border: 1px solid var(--info-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.mynk-wb-canvas-banner--warn {
+  background: var(--warning-soft);
+  border-color: var(--warning-border);
+}
+
+.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-student-follow,
+.mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-student-follow {
+  display: none;
+}
+
+.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-pagestrip,
+.mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-pagestrip {
+  max-height: 40px;
+}
+
+.mynk-wb-bottom-toolbar--desktop-undo {
+  display: flex;
+  gap: 4px;
+  padding: 4px 8px;
+  border-top: 1px solid var(--border);
+}
+
+.mynk-wb-props-mobile-popover {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  padding: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  z-index: 35;
+}

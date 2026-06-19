@@ -766,7 +766,7 @@ test.describe("whiteboard live-sync regression", () => {
     try {
       await expect(
         peersDefault.studentPage.getByRole("checkbox", {
-          name: /keep pan.*zoom synced/i,
+          name: /(?:keep pan.*zoom synced|follow tutor)/i,
         })
       ).toBeChecked();
     } finally {
@@ -776,7 +776,7 @@ test.describe("whiteboard live-sync regression", () => {
     const peers = await openTutorAndStudent(browser, session);
     try {
       const checkbox = peers.studentPage.getByRole("checkbox", {
-        name: /keep pan.*zoom synced/i,
+        name: /(?:keep pan.*zoom synced|follow tutor)/i,
       });
       await expect(checkbox).toBeChecked();
 

@@ -47,6 +47,13 @@ import {
  */
 export type ExcalidrawApiLike = {
   getSceneElements: () => ReadonlyArray<unknown>;
+  /**
+   * Returns ALL elements including `isDeleted: true` tombstones.
+   * Available in Excalidraw 0.18.x (`ExcalidrawImperativeAPI`).
+   * Used as the reconcile baseline so deleted local elements are not
+   * resurrected by a peer's stale non-deleted copy.
+   */
+  getSceneElementsIncludingDeleted?: () => ReadonlyArray<unknown>;
   /** Excalidraw `BinaryFiles` map (keyed by file id) — used to back-fill `assetUrl` for native image inserts. */
   getFiles?: () => Readonly<Record<string, unknown>>;
   getAppState: () => {

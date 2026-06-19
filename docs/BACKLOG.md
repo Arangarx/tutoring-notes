@@ -112,6 +112,37 @@ Reclassified from a pre-master gate → near-immediate post-master follow-up: th
 
 ---
 
+## P2 student shell — post-hard-switch follow-ups (2026-06-17)
+
+| Item | Priority | Notes |
+|------|----------|-------|
+| **WB / site composition + de-duplication audit (Andrew 2026-06-17 — COMING, not yet scheduled)** | Tech-debt (architecture; not Phase 2 blocker) | Systematic pass to (a) decompose the whiteboard workspace — tutor `WhiteboardWorkspaceClient` (~5,050 LOC monolith) + student `StudentLiveWorkspaceClient` (~1,073 LOC) — into ONE role-parameterized component composed of library components/primitives, eliminating tutor/student duplication; (b) enforce the no-bespoke / compose-to-primitives / no-unjustified-duplication principle (`.cursor/rules/composition-no-duplication.mdc`) across the site — components, primitives, and behind-service code. **Interim debt (sanctioned):** the student may ship as its own page composed of shared components until this audit runs. Originally deferred until WB-in-master; building the student surfaced the coupling. Pairs with **WB-LEGACY-STUDENT-CLIENT-DELETE**. |
+| **WB-LEGACY-STUDENT-CLIENT-DELETE** | Low (cleanup after soak) | Delete orphaned `src/app/w/[joinToken]/StudentWhiteboardClient.tsx` after Andrew confirms new student shell in a **live** two-device session (smokebook PASS). File is intentionally left on disk unreferenced after hard-switch commit for reversibility margin only. |
+| **Consent consolidation (Andrew 2026-06-17)** | P3 design | **Consent consolidation (Andrew 2026-06-17):** the P3 waiting room is the SINGLE consent surface for BOTH tutor and student. Interim (pre-P3): student A/V auto-enables with NO new in-app consent dialog — only the browser permission dialog + the existing recording-disclosure line. When P3 lands: the waiting room owns consent AND the EXISTING tutor consent dialog is REMOVED (do not keep two consent surfaces). (Resolves M1 from the parity adversarial review as proceed-as-is.) |
+| **WB-D6 — student asset inserts (PDF/image/graph)** | P2 interim / post-consolidation | Student asset inserts (PDF/image/graph) are **tutor-only** for the interim. Closing requires wiring the student `joinToken` into the insert upload path AND deciding whether students may ever add pages (PDF insert adds pages — conflicts with D4 `canSwitchPage:false`; likely keep no). Tie to **WB / site composition + de-duplication audit** + **WB-LEGACY-STUDENT-CLIENT-DELETE**. |
+
+---
+
+## Testing — real integration harness (Andrew 2026-06-18)
+
+> **Strategic:** build comprehensive **real** integration tests that can eventually **replace manual hardware smoke** as the merge gate. **NOT before master is stable enough for a wider audience** — until then, hardware re-smoke stays the gate.
+
+| Item | Priority | Notes |
+|------|----------|-------|
+| **TEST-REAL-INTEGRATION-SUPERSEDES-SMOKE — real-browser integration harness replaces manual smoke** | Strategic (post-master-stable) | **Andrew directive 2026-06-18.** Current automated suite (jest + `npm run test:wb-sync` Playwright relay invariants) is **necessary but NOT sufficient** — the wb-unify regression class (eraser tombstone resurrection, per-page undo isolation, exit→rejoin A/V recovery, paint-on-reconnect) is **hardware-gated** and jsdom/headless relay did not catch them before Andrew's W1-3 smoke. **Goal:** a real integration-test harness (multi-instance Excalidraw + real peer-mesh lifecycle + reconnect scenarios + tombstone/undo oracles) that catches this class **before** Andrew's two-device pass. **Gate:** do **not** start until `master` / pilot line is stable enough for a wider audience — premature investment risks building against moving surfaces. **Until shipped:** manual hardware re-smoke remains the merge boundary for whiteboard/A/V reliability changes. Cross-ref: `wb-unify-stabilize` fix waves @ `4a07cfa`/`c0d80bd`; hard-won lessons in [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) HEAD (tombstone baseline + MediaStream remount). |
+
+---
+
+## Whiteboard — reliability / cost-safety (Andrew 2026-06-18)
+
+> **Incident (2026-06-18):** Andrew left a live whiteboard session open ~16h overnight. Incremental OpenAI cost was **$0** — but only because the session was solo (no student) and prod has `NEXT_PUBLIC_WB_RECORD_SOLO_UNTIL_STUDENT=false`, so recording never armed and no audio segments were produced (`wbsid=e542afff-5764-4f60-ba6c-447e4e82ae2f`, `activeMs=0`, 0 `SessionRecording` rows). The latent billing risk is real for with-student (or solo-record-enabled) sessions where recording stays active.
+
+| Item | Priority | Notes |
+|------|----------|-------|
+| **WB-IDLE-SESSION-GUARD — idle/abandoned live session cost protections** | Medium-high (cost-safety + tutor-trust) | Protective measures so a tutor can't accidentally burn transcription + notes cost by leaving a session open unattended. **Core gap:** whiteboard sessions have **no session-level auto-end** — a session can sit open 24h+ (`endedAt` stays null). **Existing caps:** only the **8h recording hard-stop** (`SESSION_SAFETY_MAX_SECONDS` in `segment-policy.ts`), and only while actively recording; segments roll every ~**50 min** (`SEGMENT_MAX_SECONDS`). **No VAD / silence skip** — when recording is active, silent audio is still billed per audio-minute (`gpt-4o-mini-transcribe` ~$0.003/audio-min, fallback `whisper-1` ~$0.006). An abandoned-but-recording session could bill up to ~8h of audio-minutes (~$1.50–$3) + notes generation for nothing. **Options to evaluate (not all required):** (1) **Session-level idle auto-end / "still there?" heartbeat** — detect inactivity (no pointer/stroke/audio + no reachable participant); after a grace window, prompt; if unacknowledged, gracefully **END** the session (flush + save — never silent discard; honor **SSG-2** / **F1** save-then-end discipline). (2) **Inactivity auto-pause of recording** — pause capture after N minutes of no audio/no interaction (pairs with existing FSM pause path). (3) **VAD / silence-skip** so silent audio isn't transcribed/billed. (4) **Confirm or lower a max session-duration cap** distinct from the 8h recording cap. **Tutor-trust bar:** a tutor would be upset to return and find they'd been billed for an abandoned session. Cross-ref: **WB-RECORDING-START-PAUSE** (missing visible Start/Pause controls — related surface); 8h `SESSION_SAFETY_MAX_SECONDS`; ~50min `segment-policy.ts` rollover; save-then-end (**SSG-2** / **F1**). |
+
+---
+
 ## Smoke round 1 — master-cut branch findings (2026-06-11)
 
 > **Canonical triage:** [`docs/handoff/smoke-round-1-findings-2026-06-11.md`](handoff/smoke-round-1-findings-2026-06-11.md) — Andrew's full smoke of 8 overnight branches. BLOCKERs tracked there; non-blocker items below so they aren't lost.

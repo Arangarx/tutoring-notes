@@ -181,6 +181,7 @@ type MeshHandles = {
   ) => void;
   emitPcState: (peerId: string, state: RTCPeerConnectionState) => void;
   emitIceState: (peerId: string, state: RTCIceConnectionState) => void;
+  emitLeave: (peerId: string) => void;
   isDisposed: () => boolean;
 };
 
@@ -215,6 +216,8 @@ function makeFakeMesh(): MeshHandles {
     iceSubs.clear();
   });
 
+  const leaveSubs = new Set<(peerId: string) => void>();
+
   const mesh: PeerMesh = {
     addPeer,
     removePeer,
@@ -239,6 +242,12 @@ function makeFakeMesh(): MeshHandles {
       iceSubs.add(cb);
       return () => {
         iceSubs.delete(cb);
+      };
+    },
+    onPeerLeave: (cb) => {
+      leaveSubs.add(cb);
+      return () => {
+        leaveSubs.delete(cb);
       };
     },
     isDisposed: () => disposed,
@@ -267,6 +276,9 @@ function makeFakeMesh(): MeshHandles {
     },
     emitIceState: (peerId, state) => {
       for (const cb of iceSubs) cb(peerId, state);
+    },
+    emitLeave: (peerId: string) => {
+      for (const cb of leaveSubs) cb(peerId);
     },
     isDisposed: () => disposed,
   };

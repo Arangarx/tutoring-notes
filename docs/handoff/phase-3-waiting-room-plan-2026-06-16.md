@@ -107,6 +107,8 @@ Implement the **mutual waiting room** (tutor + student both present before live 
 
 ### Consent (implemented but dormant)
 
+> **Consent consolidation (Andrew 2026-06-17):** the P3 waiting room is the SINGLE consent surface for BOTH tutor and student. Interim (pre-P3): student A/V auto-enables with NO new in-app consent dialog — only the browser permission dialog + the existing recording-disclosure line. When P3 lands: the waiting room owns consent AND the EXISTING tutor consent dialog is REMOVED (do not keep two consent surfaces). (Resolves M1 from the parity adversarial review as proceed-as-is.)
+
 | Piece | Location | Behavior today |
 |---|---|---|
 | Flag | [`consent-scope.ts`](../../src/lib/consent-scope.ts) L56–59 | `isConsentEnforcementEnabled()` reads `CONSENT_ENFORCEMENT`; **default OFF**. |
@@ -201,6 +203,8 @@ type ShellMode = "waiting" | "live" | "review";
 | `waiting` | `live` | Server admit success + client poll observes `sessionPhase === "active"` |
 | `live` | `review` | Existing `handleEndSession` → `onSessionEnded` (tutor) |
 | `waiting` | ended | Cancel / End while pending — special case: end without capture (§5.4) |
+
+> **Waiting room is an OVERLAY, not a separate page (Andrew 2026-06-17):** the `waiting` -> `live` transition MUST be an in-place **overlay dismiss that smoothly REVEALS the already-mounted whiteboard** -- NOT a route change or a separate page that then loads the board. Same flowing-experience model as the notes hero/docked transition (compose its overlay/transition approach -- no bespoke, per `.cursor/rules/composition-no-duplication.mdc`). Implications: (a) the whiteboard workspace mounts with the waiting-room overlay layered on top; admit = fade/dismiss the overlay, NOT navigate; (b) because there is no page transition, **enabling/disabling audio & video happens in the same mounted context** -- A/V toggles never trigger navigation and media/session state persists across the waiting->live reveal (the on-mount A/V acquisition the student shell already does stays put -- win/win); (c) applies to BOTH tutor and student waiting-room experiences. **This refines the Shell contract + Mode transitions above:** prefer a single mounted workspace with a `waiting` overlay layer over swapping `WaitingRoomWorkspace` <-> `WhiteboardWorkspaceClient` as distinct mounted route trees.
 
 ### Logging registry (extend [`AGENTS.md`](../../AGENTS.md) in implementation commit)
 

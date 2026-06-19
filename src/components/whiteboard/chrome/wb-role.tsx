@@ -19,6 +19,7 @@ export interface WbCapabilities {
   canBroadcastLaser: boolean;
   canAddPage: boolean;
   canDeletePage: boolean;
+  canSwitchPage: boolean;
   showFollowControls: boolean;
   defaultShowLocalVideo: boolean;
   timerFormat: WbTimerFormat;
@@ -35,6 +36,7 @@ export function deriveWbCapabilities(role: WbParticipantRole): WbCapabilities {
       canBroadcastLaser: true,
       canAddPage: true,
       canDeletePage: true,
+      canSwitchPage: true,
       showFollowControls: false,
       defaultShowLocalVideo: true,
       timerFormat: "minutes",
@@ -46,11 +48,12 @@ export function deriveWbCapabilities(role: WbParticipantRole): WbCapabilities {
     canEndSession: false,
     canShareLink: false,
     canInsertAssets: false,
-    canBroadcastLaser: false,
+    canBroadcastLaser: true,
     canAddPage: false,
     canDeletePage: false,
+    canSwitchPage: false,
     showFollowControls: true,
-    defaultShowLocalVideo: false,
+    defaultShowLocalVideo: true,
     timerFormat: "minutes",
     showLeaveInsteadOfEnd: true,
   };

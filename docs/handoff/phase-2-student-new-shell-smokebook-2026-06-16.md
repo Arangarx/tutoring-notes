@@ -1,7 +1,7 @@
 # Phase 2 — student on new shell — smoke runbook
 
 **Branch:** `phase2/wb-student-new-shell`
-**Tip commit:** [`b7dbe0c`](https://github.com/Arangarx/tutoring-notes/commit/b7dbe0c38fad24bdc5be202da46554071ede3c3d)
+**Tip commit:** `[b7dbe0c](https://github.com/Arangarx/tutoring-notes/commit/b7dbe0c38fad24bdc5be202da46554071ede3c3d)`
 **Preview:** [phase2/wb-student-new-shell @ Vercel](https://tutoring-notes-git-phase2-wb-stu-9fb9ae-arangarx-5209s-projects.vercel.app)
 
 > **Scope correction (Andrew 2026-06-17):** student = **full tutor-parity chrome + toolset** minus D1–D5 (+ D6 asset inserts tutor-only). No in-app `AVPermissionsPrompt`; browser-native getUserMedia only. A/V auto-requested on mount. **Exit** (not Leave). Read-only page strip. Student-color laser. Follow toggle preserved. No share link.
@@ -10,12 +10,14 @@
 
 ## Legend
 
-| Field | How to fill it |
-|---|---|
-| **Branch** | `phase2/wb-student-new-shell` |
-| **Tip commit** | HEAD of `phase2/wb-student-new-shell` at smoke time (parity rework) |
-| **Preview** | Fetched via Vercel MCP — `meta.branchAlias` for `githubCommitRef=phase2/wb-student-new-shell` |
-| **Overall result** | PASS only if every in-scope item PASS |
+
+| Field              | How to fill it                                                                                |
+| ------------------ | --------------------------------------------------------------------------------------------- |
+| **Branch**         | `phase2/wb-student-new-shell`                                                                 |
+| **Tip commit**     | HEAD of `phase2/wb-student-new-shell` at smoke time (parity rework)                           |
+| **Preview**        | Fetched via Vercel MCP — `meta.branchAlias` for `githubCommitRef=phase2/wb-student-new-shell` |
+| **Overall result** | PASS only if every in-scope item PASS                                                         |
+
 
 Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 
@@ -29,11 +31,21 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  No canvas loading message on any refresh/load**  
+**Student on new page is not seeing video of either person.**  
+**Student top bar has everything pushed off especially with the message there about it being recorded.**  
+**Student is missing some options display, no "more styles" section in styles.  No other shapes drop down just the line button itself.**  
+**Tutor laser pointer is orangish instead of red for tutor.**  
+**Student laser point is same color. Tutor doesn't see**  
+**Actually after several cold starts (didn't notice if after refresh) her video does show up on tutor side, but student still can't see either one**  
+**The video tile(s) is/are flashing briefly before disappearing**  
+My wife (acting as student) stepped away to use the restroom and it shows as connected on her side but on my side (tutor) it shows her as disconnected.  
+  
+
 
 ---
 
@@ -45,11 +57,12 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 
 **Ignore this run:** Theme parity (item 12).
 
-- [ ] PASS
-- [ ] FAIL
+- [x] PASS
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Not sure how to test this on phone.**  
+**Passes on tutor side on desktop.**
 
 ---
 
@@ -61,11 +74,20 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 
 **Ignore this run:** Tutor-only PDF/image/graph insert buttons (D6).
 
-- [ ] PASS
-- [ ] FAIL
+- [x] PASS
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:**  
+**Can't see anything past the pill to the right of "Connected" pill on mobile.  Just noticed you're asking for desktop.  Is that just to confirm things at least exist?**  
+**Tutor can't see student laser pointer.**  
+**Styles display (of current selections) not visible at all on desktop (it was incomplete but at least showed on phone)**  
+**Small screen for student loses stuff, even on desktop unless it is fullscreen it starts losing stuff.**  
+**I liked the coral exit button with the exit symbol more than just the word "Exit"  At least maybe a coral button even if it's with text?**  
+Student undo/redo not doing anything  
+rest are present and appear to be working (other than graphics inserts which I guess you decided don't work well with auth)  
+  
+
 
 ---
 
@@ -77,11 +99,11 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: After student rejoins, tutor side still shows disconnected and "waiting for video" instead of initials.**
 
 ---
 
@@ -93,11 +115,12 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Should it even highlight the board tab for student if it's not clickable?**  
+**Tutor undo/redo is not working (tested while it thinks student is disconnected even though they aren't)**
 
 ---
 
@@ -110,10 +133,10 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 **Ignore this run:** Nothing.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Both sides use same color laser pointer instead of having different colors.  Neither has it in the original red.  Student sees tutor, tutor does not see student.**
 
 ---
 
@@ -125,7 +148,7 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 
 **Ignore this run:** Consent toggle (P3).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -141,11 +164,11 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 
 **Ignore this run:** Student-initiated asset inserts (D6 tutor-only).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Pass on desktop, fail on mobile.  Lots of tools missing mobile side, and most of top bar off screen.**
 
 ---
 
@@ -157,7 +180,7 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -174,10 +197,11 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 **Ignore this run:** Student-initiated insert (out of scope).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Student sees pdfs so that's good.  Her resolution is different so she sees a different amount of the pdf, not sure anything to be done about that.**  
+**However, major regression, there is cross bleed AGAIN. Strokes from Board 2 showed up on Board 3 (pdf page 1) after it was imported.  I didn't notice if it was immediate or after I came back to the page but it bled  This has been solved TWICE.  Why is the data separation not being honored :(  This is getting stupid.**
 
 ---
 
@@ -189,11 +213,11 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  I kinda wonder if the student shouldn't be able to enter expressions.  Wouldn't the tutor sometimes want them to graph something themselves?** 
 
 ---
 
@@ -205,11 +229,12 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  Student snaps back, but let's backlog making it so the student can't move their view in the first place if their views are synced.  Right now from a student perspective when they don't know what is happening it feels like a broken feature because they are moving/zooming and snapping back.**  
+**I think the match tutor's view button could be much smaller.  We need to maybe see if we can find icons that convey the stay synced vs one tiem sync without taking so much space.**
 
 ---
 
@@ -222,10 +247,10 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 **Ignore this run:** Recording gain/chime controls (tutor recording graph only).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes: Have no camera to confirm on other desktop, but no video shows on student side in these tests.**  
 
 ---
 
@@ -238,10 +263,11 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 **Ignore this run:** Nothing.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  Slightly longer session seems to cause problems on my wife's old phone.  Hopefully it's just her old phone but it's something to watch out for, her chrome started wigging out/freezing.**  
+**Retested with new session -> Audio goes both ways.  Video is still only on tutor side.**
 
 ---
 
@@ -253,11 +279,14 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
-- [ ] FAIL
+- [x] PASS
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:**  
+**desktop mic and camera selector dropsdowns are still terrible colors**  
+**hotload seems to have worked on the student side, as soon as we plugged in the camera it tried to show camera on her side and she was able to switch to the camera mic.  It doesn't appear to have unloaded the unplugged mic, but that's probably "less" of an immediate concern, though it is something we need to cover.  We should probably do what teams does and ask the user if they want to switch devices when a new thing is plugged in.**  
+**On student desktop she plugged in the web cam I normally have on my desktop.  Her mic dropdown has like 4 entries for the same brio mic but she doesn't appear to be sending any audio.  So camera transition from no camera seems okay, can't test from camera to camera.  Audio seems to pick up the new device but isn't hooking up correctly and possibly showing too many options.  This is not a new bug apparently, I looked on my desktop and it shows 3 entries for brio as well.  She selects the one as student I normally do and it doesn't send sound.**
 
 ---
 
@@ -270,10 +299,11 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 **Ignore this run:** Nothing.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  Board strokes stay, neither camera nor mic from web cam stayed recognized. She lost all A/V as student.**  
+**I plugged the webcam back into my PC.  Bother are still in list (never left) but it doesn't hook back up.**
 
 ---
 
@@ -303,9 +333,9 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] SKIP
+- [x] SKIP
 
-**Notes:**
+**Notes: So much not working, not going to go to this right now, but mobile should rearrange in basically the same way that tutor does.**
 
 ---
 
@@ -318,10 +348,10 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 **Ignore this run:** Nothing.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  Student switches to light mode, good.  Student switches back to dark mode, but their background of the canvas stayed white.  Stroke switched, background did not.**
 
 ---
 
@@ -333,7 +363,7 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
@@ -349,11 +379,11 @@ Run order: top to bottom. Item 12 repeats 1–5 in light and dark.
 
 **Ignore this run:** Student-only chrome items.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] SKIP
 
-**Notes:**
+**Notes:  I didn't exhaustively test, but looks good.**
 
 ---
 

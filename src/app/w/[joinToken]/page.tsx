@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
-import { StudentWhiteboardClient } from "./StudentWhiteboardClient";
+import { StudentWhiteboardSessionShell } from "./StudentWhiteboardSessionShell";
 /**
  * Student-facing live whiteboard (Excalidraw + E2E sync, same room + key
  * as the tutor workspace).
@@ -17,7 +17,7 @@ import { StudentWhiteboardClient } from "./StudentWhiteboardClient";
  *   - `encryptionKey` (URL fragment) — the AES-GCM key for E2E
  *     encryption against the relay. Fragments are NEVER sent to the
  *     server (HTTP spec). The client extracts it in
- *     `StudentWhiteboardClient` and feeds it to `sync-client`.
+ *     `StudentLiveWorkspaceClient` and feeds it to `sync-client`.
  *
  * Server posture:
  *   - We do NOT run `requireStudentScope` here — the student is not
@@ -116,7 +116,7 @@ export default async function StudentWhiteboardPage({
   }
 
   return (
-    <StudentWhiteboardClient
+    <StudentWhiteboardSessionShell
       whiteboardSessionId={tokenRow.whiteboardSession.id}
       studentId={tokenRow.whiteboardSession.studentId}
       joinToken={joinToken}

@@ -90,6 +90,7 @@ jest.mock("next/navigation", () => ({
     replace: jest.fn(),
     refresh: jest.fn(),
   }),
+  useParams: () => ({}),
 }));
 
 // ----- Sync-client mock: lets us spy on the peerId we pass in -----
@@ -102,6 +103,7 @@ type FakeSyncClient = {
   onDisconnect: jest.Mock;
   onPeerCountChange: jest.Mock;
   onRoomPeersChange: jest.Mock;
+  onRemotePointer: jest.Mock;
   broadcastScene: jest.Mock;
   broadcastDocument: jest.Mock;
   flushPendingBroadcast: jest.Mock;
@@ -146,6 +148,7 @@ const mockCreateWhiteboardSyncClient = jest.fn(
         };
       }),
       onRoomPeersChange: jest.fn(() => () => {}),
+      onRemotePointer: jest.fn(() => () => {}),
       broadcastScene: jest.fn(),
       broadcastDocument: jest.fn(),
       flushPendingBroadcast: jest.fn(),

@@ -114,6 +114,18 @@ export type IceConnectionStateHandler = (
   iceConnectionState: RTCIceConnectionState
 ) => void;
 
+/**
+ * Fired when a remote peer explicitly sends a `leave` signal (i.e. a
+ * deliberate, graceful disconnect vs an ICE-level timeout). The
+ * peer's `RTCPeerConnection` is still open when this fires —
+ * `closePeerEntryLocal` runs immediately after the subscriber fan-out.
+ * Consumers use this to stop/drain stale tracks proactively rather than
+ * waiting for the next `onRoomPeersChange` sync event. Do NOT reset
+ * high-level connection-state fields here; the rejoin-detected path in
+ * `onRoomPeersChange` owns that reset for genuine rejoins.
+ */
+export type PeerLeaveHandler = (peerId: string) => void;
+
 export type PeerMesh = {
   /**
    * Create a `RTCPeerConnection` for `peerId` and attach local
@@ -216,6 +228,18 @@ export type PeerMesh = {
    * but not failed) distinctly from `connectionState`.
    */
   onIceConnectionStateChange: (cb: IceConnectionStateHandler) => () => void;
+  /**
+   * Subscribe to deliberate-leave signals from remote peers. Fires
+   * when the remote side sends a `leave` envelope (graceful exit),
+   * as opposed to an ICE-level disconnect. The peer's PC is already
+   * closed when this fires. Distinct from `onPeerConnectionStateChange`
+   * (which doesn't fire on close because handlers are nulled first).
+   *
+   * Use this to reset per-peer media state proactively (before
+   * `onRoomPeersChange` fires on the next sync tick) so tiles
+   * transition to a clean "waiting" state immediately on leave.
+   */
+  onPeerLeave: (cb: PeerLeaveHandler) => () => void;
   /** True iff `dispose()` has been called. */
   isDisposed: () => boolean;
   /**
@@ -322,6 +346,7 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
   const trackSubs = new Set<RemoteTrackHandler>();
   const connStateSubs = new Set<PeerConnectionStateHandler>();
   const iceStateSubs = new Set<IceConnectionStateHandler>();
+  const leaveSubs = new Set<PeerLeaveHandler>();
   let disposed = false;
 
   /**
@@ -709,6 +734,9 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
       }
       if (payload.type === "leave") {
         log.log(`peer=${remotePeerId} event=remote-leave`);
+        // Notify subscribers BEFORE closing locally so they can reset
+        // per-peer media state (streams, connection pill) proactively.
+        fan(leaveSubs, remotePeerId);
         // Don't send a `leave` back — the remote already left. Just
         // close locally.
         closePeerEntryLocal(entry);
@@ -1066,6 +1094,12 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
         iceStateSubs.delete(cb);
       };
     },
+    onPeerLeave: (cb) => {
+      leaveSubs.add(cb);
+      return () => {
+        leaveSubs.delete(cb);
+      };
+    },
     isDisposed: () => disposed,
     dispose: () => {
       if (disposed) return;
@@ -1089,6 +1123,7 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
       trackSubs.clear();
       connStateSubs.clear();
       iceStateSubs.clear();
+      leaveSubs.clear();
       log.log(`event=dispose`);
     },
   };

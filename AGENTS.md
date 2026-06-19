@@ -113,6 +113,10 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   `nsi` (notes-session-integration bridge — DRAFT `SessionNote` auto-creation/update
   at reduce completion, Save/finalize DRAFT→READY, delete-session-and-data; every
   transition writes `[nsi] wbsid=<sessionId> action=<action> ...`),
+  `wjg` (whiteboard join gate lifecycle — student new-shell path; every transition
+  writes `[wjg] wjg=<joinToken:8> wbsid=<id> action=<action> ...` — mount, key_ok,
+  key_missing, sync_connect, sync_disconnect, excalidraw_api_ready, loading_cleared,
+  loading_stuck, student_reload, session_ended),
   `rol` (JWT role-refresh — auth-options jwt callback
   periodic DB re-check; writes `[rol] sub=<id> role_corrected role=<old>-><new>` when
   stale role is corrected, `[rol] sub=<id> refresh=account_deleted fail_closed` when
@@ -168,10 +172,19 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
 - **Orchestrator state checkpoints — zero-catch-up fresh chats.** Canonical living bootstrap: [`docs/handoff/ORCHESTRATOR-STATE.md`](docs/handoff/ORCHESTRATOR-STATE.md) (stable filename, updated in place; `git log -p` on that file = audit trail). Every fresh orchestrator chat reads it first (also enforced in [`.cursor/rules/orchestrator-discipline.mdc`](.cursor/rules/orchestrator-discipline.mdc)). **Lightweight head** (Last action / Next action / Open confirms / in-flight / uncommitted) — Opus keeps current inline on every turn that materially changes state. **Heavy full restructure** — dispatch Composer 2.5 at milestones (after `merge --no-ff` to master, after closing a multi-day thread or long-standing bug, before a new major Wave/Phase/SEC thread, session wind-down if material changed); use [`docs/handoff/orchestrator-state-template.md`](docs/handoff/orchestrator-state-template.md). Dated `docs/handoff/orchestrator-state-<YYYY-MM-DD>-<HHMM>.md` files are **legacy snapshots** (retained, not the live source). On truncation/slowdown, refresh `ORCHESTRATOR-STATE.md` rather than spawning a new dated file.
 - **Chat output links use workspace-relative paths only.** Cursor's chat UI clickably resolves paths like `docs/BACKLOG.md` and `src/lib/ai.ts` but renders absolute paths (`c:/Users/...`, `/Users/...`) and `file://` URIs as plain unclickable text, breaking Andrew's workflow. Same rule applies inside any `docs/handoff/*.md` since those files are designed to be `@`-referenced in fresh chats. When citing a file, always use the workspace-relative form.
 - **Windows PowerShell: multi-line commit messages via temp file, not `-m`.** PowerShell 5.x (the default on Win10/11 without an explicit pwsh install — Andrew's setup) mangles multi-line strings, Unicode escape sequences (`\u2014`), and backtick-escaped characters when passed to `git commit -m "..."`. Safe pattern: Write the message to `.git/COMMIT_MSG_DRAFT.txt`, then `git commit -F .git/COMMIT_MSG_DRAFT.txt`, then delete the temp file in a **sequential** subsequent call (NOT a parallel tool call — a parallel `Delete` races the `commit` and the file vanishes before git reads it; this has bitten us).
+- **Composition over duplication — no bespoke code.** See [`.cursor/rules/composition-no-duplication.mdc`](.cursor/rules/composition-no-duplication.mdc) (standing architectural standard; `alwaysApply`).
 
 ## Hard-won lessons
 
 Cross-cutting rules from production debugging. Add dated evidence under **Real-world observations** (Model usage protocol) when new ones land.
+
+### Plans are agent scaffolding, not ratified user intent (2026-06-17, P2 student shell)
+
+Andrew writes/approves plans primarily as orchestration scaffolding and does NOT read them in detail; a decision appearing in an approved plan is therefore NOT evidence he endorsed it. The P2 student-shell plan specified a heavily-divergent slim student (pencil+eraser only, in-app `AVPermissionsPrompt`, student-specific top bar) that contradicted Andrew's actual "student == tutor minus a short delta list" intent — and it shipped to smoke before he caught it. The 5-axis review accepted the plan's premise rather than challenging it. **Rules:** (1) Material product/scope/UX decisions must be surfaced to Andrew EXPLICITLY (a direct question or crisp in-chat callout), never buried in a plan and treated as approved-by-silence. (2) When a plan encodes a non-obvious divergence from prior verbal intent, call it out for confirmation rather than assuming the plan ratifies it. (3) Capture verbal design agreements into a durable, executor-facing contract immediately — the prior orchestrator's "5-delta" agreement evaporated because it was never written down, so the plan re-invented a divergent design.
+
+### A missed or un-acted prompt is NOT consent (2026-06-17)
+
+Andrew's attention is split and he frequently does not see passive prompts — a `SwitchMode` ask, an `AskQuestion` he scrolls past, an inline "say the word and I'll…". **Inaction, a rejected/ignored mode switch, or silence is NOT agreement and NOT a preference signal** — it usually just means he didn't see it. **Rules:** (1) never infer intent or "proceed" from the absence of a click/response; (2) for any material decision, put it in front of him explicitly and wait for an affirmative answer — if a passive prompt goes unanswered, re-surface it directly rather than assuming a default; (3) a `SwitchMode`/`AskQuestion` rejection means "not that, or didn't see it," never "I considered the status quo and chose it."
 
 ### Subagent git safety — never discard uncommitted work (2026-06-10, smokebook loss)
 
