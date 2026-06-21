@@ -459,7 +459,7 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 **Ignore this run:** Desktop-wide (uses sidebar props, no sheet — expected).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -478,12 +478,14 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 **Ignore this run:** Phone layouts; tutor role; exact px thresholds.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes:**  
+**Student compaction is even worse, even at full screen now it's only the connected pill, the more dots, and exit on the right.**  
+**Even worse, the more button doesn't even work till it's small enough to start popping up on the bottom.**
 
 ---
 
@@ -496,12 +498,12 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 **Ignore this run:** Left placement (intended); sync latency (separate non-chrome issue).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes: Scroll is fixed again on left bar, but if the height of landscape becomes small enough to scroll, it doesn't scroll enough to see the "more" dots on the left bar.**
 
 ---
 
@@ -514,12 +516,12 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 **Ignore this run:** Tutor role; touch (in overflow).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes: top bar is so compacted now that it never shows.**
 
 ---
 
