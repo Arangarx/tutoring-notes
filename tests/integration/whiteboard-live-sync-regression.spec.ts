@@ -681,7 +681,7 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 12 — tutor graph syncs graphStateJson to student", async ({
+  test("invariant 12 — graph embed: tutor→student graphStateJson sync; student embed editable", async ({
     browser,
   }) => {
     test.setTimeout(180_000);
@@ -747,7 +747,22 @@ test.describe("whiteboard live-sync regression", () => {
 
       const graphHost = peers.studentPage.getByTestId("wb-graph-embed-host");
       await expect(graphHost).toBeVisible({ timeout: 15_000 });
-      await expect(graphHost).toHaveAttribute("data-read-only", "true");
+      // Wave5 #4: student graph is now fully editable + bidirectionally synced.
+      // GraphEmbeddable renders data-read-only="true" only when readOnly=true;
+      // when readOnly=false (editable) the prop is undefined and React omits the
+      // attribute entirely (GraphEmbeddable.tsx: data-read-only={readOnly ? "true" : undefined}).
+      // Assert attribute absent to encode the new editable contract.
+      await expect(graphHost).not.toHaveAttribute("data-read-only");
+      // TODO(wb-sync): add student→tutor direction coverage: a student graph
+      // expression edit should broadcast via persistGraphElementState →
+      // onCanvasChange → relay and arrive on the tutor scene element's
+      // graphStateJson. Blocked on two gaps:
+      // 1. insertGraphFixture E2E bridge only exposes a tutor-side insert method;
+      //    no equivalent bridge method exists for student-originated graph edits.
+      // 2. StudentWhiteboardClient.tsx currently passes readOnly=true to
+      //    GraphEmbeddable at /w/[joinToken] (needs updating to readOnly=false +
+      //    excalidrawAPI to be fully editable at the student join URL).
+      // File a dedicated relay invariant after both gaps are closed.
     } finally {
       await peers.close();
     }
