@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { maxEventTimestampMs } from "@/lib/whiteboard/event-log";
 import { parseEventLogBySchema } from "@/lib/whiteboard/replay-parse";
 import {
@@ -19,6 +19,11 @@ import {
 import { EXCALIDRAW_BG_LIGHT_HEX } from "@/styles/token-values";
 import { useTheme } from "@/components/ThemeProvider";
 import type { ExportToCanvasFn } from "@/lib/whiteboard/snapshot-png";
+import { ExcalidrawDynamic } from "@/components/whiteboard/ExcalidrawDynamic";
+import { GraphEmbeddable, warmJsxGraphModule } from "@/components/whiteboard/GraphEmbeddable";
+import { GRAPH_EMBED_LINK } from "@/lib/whiteboard/insert-asset";
+import { validateExcalidrawEmbeddable } from "@/lib/whiteboard/validate-embeddable";
+import { excalidrawBoardBgHex } from "@/hooks/useExcalidrawLoadingGuard";
 
 type Props = {
   eventsProxyUrl: string;
@@ -26,19 +31,124 @@ type Props = {
   className?: string;
 };
 
+/** Checks whether any element in the scene is a graph embed. */
+function hasGraphEmbeds(elements: readonly unknown[]): boolean {
+  return elements.some((el) => {
+    const e = el as { link?: string; customData?: { wbType?: string } };
+    return e.link === GRAPH_EMBED_LINK || e.customData?.wbType === "graph";
+  });
+}
+
 /**
- * Hero-state final-frame board thumbnail (S1) — static PNG export.
+ * Live view-mode Excalidraw used as the thumbnail when the session
+ * contains graph embeds. Renders the final scene with renderEmbeddable so
+ * JSXGraph boards display correctly instead of raw "mynk://graph" text.
+ * Uses opacity gating (same as ReplayCanvasSurface) to prevent flash.
+ */
+function ReviewBoardLive({
+  elements,
+  isDark,
+  className,
+}: {
+  elements: readonly unknown[];
+  isDark: boolean;
+  className?: string;
+}) {
+  const apiRef = useRef<{
+    updateScene: (data: { elements: ReadonlyArray<unknown>; appState?: Record<string, unknown> }) => void;
+    scrollToContent: (elements?: readonly unknown[], opts?: Record<string, unknown>) => void;
+  } | null>(null);
+  const [paintReady, setPaintReady] = useState(false);
+
+  // Warm JSXGraph on mount.
+  useEffect(() => {
+    warmJsxGraphModule();
+  }, []);
+
+  const handleApi = useCallback(
+    (api: unknown) => {
+      const typedApi = api as typeof apiRef.current;
+      apiRef.current = typedApi;
+      if (!typedApi || elements.length === 0) {
+        setPaintReady(true);
+        return;
+      }
+      // Apply the final scene immediately and scroll to fit.
+      typedApi.updateScene({ elements });
+      try {
+        typedApi.scrollToContent(elements, { fitToContent: true, animate: false });
+      } catch {
+        // scrollToContent is best-effort
+      }
+      setPaintReady(true);
+    },
+    // elements is stable (derived from the parent's once-per-session fetch)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
+  const renderGraphEmbeddable = useCallback((element: unknown) => {
+    const el = element as { link?: string; customData?: { wbType?: string } };
+    if (el.link === GRAPH_EMBED_LINK || el.customData?.wbType === "graph") {
+      return (
+        <GraphEmbeddable
+          element={element as { id?: string; width?: number; height?: number; customData?: Record<string, unknown> }}
+          readOnly
+        />
+      );
+    }
+    return null;
+  }, []);
+
+  const excalidrawTheme = isDark ? "dark" : "light";
+  const bgHex = excalidrawBoardBgHex(excalidrawTheme);
+
+  return (
+    <div
+      className={`wb-review-board-thumbnail${className ? ` ${className}` : ""}`}
+      data-testid="wb-review-board-thumbnail"
+      style={{ opacity: paintReady ? 1 : 0, transition: "opacity 0.15s ease" }}
+    >
+      <ExcalidrawDynamic
+        viewModeEnabled
+        gridModeEnabled={false}
+        zenModeEnabled
+        theme={excalidrawTheme}
+        validateEmbeddable={validateExcalidrawEmbeddable}
+        renderEmbeddable={renderGraphEmbeddable}
+        name="whiteboard-review-thumbnail"
+        UIOptions={{ canvasActions: { saveToActiveFile: false } }}
+        excalidrawAPI={handleApi}
+        initialData={{
+          elements: elements as unknown[],
+          appState: {
+            currentItemFontFamily: 1,
+            viewBackgroundColor: bgHex,
+          },
+        }}
+      />
+    </div>
+  );
+}
+
+/**
+ * Hero-state final-frame board thumbnail (S1).
  *
- * Instead of mounting a live Excalidraw (which caused flash-then-black when
- * Excalidraw re-initialised its API and the one-shot `paintedRef` blocked
- * the repaint), we:
- *   1. Fetch + parse the event log.
- *   2. Build the final scene via `createScenePainter().applyAt(totalMs)`.
- *   3. Export to a canvas via `exportToCanvas` from @excalidraw/excalidraw.
- *   4. Render the canvas as a static `<img>`.
+ * Two render paths depending on whether the session contains graph embeds:
  *
- * No live Excalidraw runtime → no API re-init flash, no hamburger menu.
- * Empty session still shows the empty-state message.
+ *   A) No graph embeds → static PNG (exportToCanvas).
+ *      Original approach: avoids live Excalidraw flash-then-black. Fast.
+ *
+ *   B) Graph embeds present (link="mynk://graph") → live viewModeEnabled
+ *      Excalidraw with renderEmbeddable (Wave5 #5 fix).
+ *      exportToCanvas renders embeddable elements as their raw link text
+ *      ("mynk://graph") — unacceptable. A live Excalidraw calls the custom
+ *      renderEmbeddable callback, which returns <GraphEmbeddable readOnly>
+ *      so the actual JSXGraph board is drawn instead.
+ *      Opacity is gated to 0 until the Excalidraw API fires (same flash
+ *      prevention as ReplayCanvasSurface).
+ *
+ * Empty sessions still show the empty-state message.
  */
 export function ReviewBoardThumbnail({
   eventsProxyUrl,
@@ -47,14 +157,17 @@ export function ReviewBoardThumbnail({
 }: Props) {
   const [imgSrc, setImgSrc] = useState<string | null>(null);
   const [loadState, setLoadState] = useState<
-    "loading" | "ready" | "empty" | "error"
+    "loading" | "ready" | "empty" | "error" | "ready-live"
   >("loading");
+  const [liveElements, setLiveElements] = useState<readonly unknown[]>([]);
+  const [liveIsDark, setLiveIsDark] = useState(false);
   const { resolvedTheme } = useTheme();
 
   useEffect(() => {
     let cancelled = false;
     setLoadState("loading");
     setImgSrc(null);
+    setLiveElements([]);
 
     void (async () => {
       try {
@@ -127,6 +240,19 @@ export function ReviewBoardThumbnail({
           return;
         }
 
+        // Wave5 #5: if the scene contains graph embeds, switch to the live
+        // Excalidraw path so renderEmbeddable renders the actual JSXGraph board.
+        // exportToCanvas cannot call custom renderEmbeddable — it renders the
+        // embed link text ("mynk://graph") directly, which is confusing UX.
+        const isDark = resolvedTheme === "dark";
+        if (hasGraphEmbeds(capturedElements)) {
+          if (cancelled) return;
+          setLiveElements(capturedElements);
+          setLiveIsDark(isDark);
+          setLoadState("ready-live");
+          return;
+        }
+
         // 4. Fetch image assets and build files map for exportToCanvas
         const files: Record<string, {
           id: string;
@@ -187,7 +313,6 @@ export function ReviewBoardThumbnail({
         // as viewBackgroundColor for dark mode. The THEME_FILTER then inverted
         // that dark bg to near-white (#dedede), making strokes nearly invisible
         // against a light background — the exact symptom Andrew reported.
-        const isDark = resolvedTheme === "dark";
         const canvas = await exportToCanvas({
           elements: capturedElements as unknown[],
           appState: {
@@ -243,6 +368,17 @@ export function ReviewBoardThumbnail({
       <div
         className={`wb-review-board-thumbnail-placeholder${className ? ` ${className}` : ""}`}
         data-testid="wb-review-board-thumbnail-loading"
+      />
+    );
+  }
+
+  // Live path — session has graph embeds; render them via Excalidraw+renderEmbeddable.
+  if (loadState === "ready-live") {
+    return (
+      <ReviewBoardLive
+        elements={liveElements}
+        isDark={liveIsDark}
+        className={className}
       />
     );
   }
