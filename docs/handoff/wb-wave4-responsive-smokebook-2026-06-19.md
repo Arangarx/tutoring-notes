@@ -443,6 +443,86 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 ---
 
+## Round 4 — post-fix re-smoke (branch wb-wave4-responsive @ d07568d)
+
+**Preview:** Same branch alias — [wb-wave4-responsive preview](https://tutoring-notes-git-wb-wave4-responsive-arangarx-5209s-projects.vercel.app) — now serving commit `[d07568d](https://github.com/Arangarx/tutoring-notes/commit/d07568d)`. Re-verify the four items below (the round-3 FAIL/PARTIAL items); round-1/round-2/round-3 results above stay authoritative for everything else. These are mostly geometry/layout checks that automated tests cannot verify — hardware or DevTools device-mode judgement is the gate.
+
+**Tip:** To faithfully reproduce phone-landscape, the window must be **SHORT** (height < 500px), not just narrow — a tall narrow desktop window stays in `desktop` mode; DevTools device-mode is more faithful than dragging the window.
+
+---
+
+### R4-1. Action/styles sheet "×" closes on desktop mouse (was R3-5)
+
+**Action:** On a **DESKTOP** browser, shrink to phone-landscape dims (short height <500px, e.g. DevTools 844×390) so the bottom/styles action sheet appears; open **Styles**; click the **×** with the mouse. Also tap-close on a real phone to confirm no regression.
+
+**Expect:** **×** closes the sheet on mouse click **AND** on touch tap; swipe-down-to-dismiss still works on touch.
+
+**Ignore this run:** Desktop-wide (uses sidebar props, no sheet — expected).
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### R4-2. Student desktop compaction — recovers on widen, no snap (was R3-1)
+
+**Action:** Student desktop ~1280px; shrink toward ~half width, then **WIDEN** back to full.
+
+**Expect:** Compaction steps back **DOWN** as you widen and fully returns to all-inline (`none`) when wide again; controls stay inline while real room remains; Exit does not jitter/snap when resize settles.
+
+**Ignore this run:** Phone layouts; tutor role; exact px thresholds.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### R4-3. Phone-landscape left rail — More reachable (was R3-3)
+
+**Action:** Tutor (and student) at phone-landscape ~844×390 (short height).
+
+**Expect:** Left vertical tool rail shows all tier-1 tools; if they exceed height the rail **SCROLLS** (visible thin scrollbar) so **More** is reachable; consistent across reloads.
+
+**Ignore this run:** Left placement (intended); sync latency (separate non-chrome issue).
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### R4-4. Follow-tutor toggle vertically centered (was R3-4)
+
+**Action:** Student desktop; inspect the Follow/Match chip in the top bar — check **BOTH** uppercase and lowercase label glyphs.
+
+**Expect:** Pill aligns vertically with sibling chrome (not high); text + checkbox optically vertically centered for uppercase too.
+
+**Ignore this run:** Tutor role; touch (in overflow).
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
 ## Overall result
 
 - [ ] PASS
