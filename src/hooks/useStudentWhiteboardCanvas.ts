@@ -72,6 +72,13 @@ export function useStudentWhiteboardCanvas(
   const wbsid = options?.whiteboardSessionId ?? "";
   const wbsidTag = wbsid ? `wbsid=${wbsid} ` : "";
   const followTutorView = options?.followTutorView === true;
+  const followTutorViewRef = useRef(followTutorView);
+  useEffect(() => {
+    followTutorViewRef.current = followTutorView;
+    if (!followTutorView) {
+      followLockedViewportRef.current = null;
+    }
+  }, [followTutorView]);
   const onTutorPageMeta = options?.onTutorPageMeta;
   const followDebugTelemetry = options?.followDebugTelemetry;
 
@@ -89,6 +96,13 @@ export function useStudentWhiteboardCanvas(
   const pageSwitchProgrammaticRef = useRef(0);
   const wbaCounterRef = useRef(0);
   const lastTutorFollowRef = useRef<WhiteboardWireFollow | null>(null);
+  /** While follow is ON, tutor-applied scroll/zoom — user pan/zoom reverts to this. */
+  const followLockedViewportRef = useRef<{
+    scrollX: number;
+    scrollY: number;
+    zoom: number;
+  } | null>(null);
+  const viewportRevertInProgressRef = useRef(false);
   const loadedRemoteFileIdsRef = useRef(new Set<string>());
   const giveUpFileIdsRef = useRef(new Set<string>());
   const warnDedupeRef = useRef(new Set<string>());
@@ -170,6 +184,9 @@ export function useStudentWhiteboardCanvas(
           console.info(
             `[student-apply] ${wbsidTag}pvs=${logCtx.pageId} wba=${logCtx.wba} action=viewport-align-applied panX=${scrollX} panY=${scrollY} zoom=${zoom} source=${logCtx.source}`
           );
+          if (followTutorViewRef.current) {
+            followLockedViewportRef.current = { scrollX, scrollY, zoom };
+          }
           if (followDebugTelemetry) {
             const studentSize = readViewportSizeFromAppState(api.getAppState());
             const st = api.getAppState() as {
@@ -732,10 +749,61 @@ export function useStudentWhiteboardCanvas(
   const onCanvasChange = useCallback(
     (
       elements: ReadonlyArray<unknown>,
-      _appState?: unknown,
+      appState?: unknown,
       _files?: Readonly<Record<string, unknown>>
     ) => {
       if (applyingRemoteRef.current) return;
+
+      const api = excalidrawApiRef.current;
+      if (
+        followTutorViewRef.current &&
+        api &&
+        appState &&
+        !viewportRevertInProgressRef.current
+      ) {
+        const locked = followLockedViewportRef.current;
+        if (locked) {
+          const st = appState as {
+            scrollX?: unknown;
+            scrollY?: unknown;
+            zoom?: { value?: unknown };
+          };
+          const sx = st.scrollX;
+          const sy = st.scrollY;
+          const z = st.zoom?.value;
+          const viewportChanged =
+            typeof sx === "number" &&
+            typeof sy === "number" &&
+            typeof z === "number" &&
+            (Math.abs(sx - locked.scrollX) > 0.01 ||
+              Math.abs(sy - locked.scrollY) > 0.01 ||
+              Math.abs(z - locked.zoom) > 0.0001);
+          if (viewportChanged) {
+            viewportRevertInProgressRef.current = true;
+            try {
+              (
+                api as ExcalidrawApiLike & {
+                  updateScene: (s: {
+                    appState?: Record<string, unknown>;
+                    captureUpdate?: string;
+                  }) => void;
+                }
+              ).updateScene({
+                appState: {
+                  scrollX: locked.scrollX,
+                  scrollY: locked.scrollY,
+                  zoom: { value: locked.zoom },
+                },
+                captureUpdate: "NEVER",
+              });
+            } finally {
+              viewportRevertInProgressRef.current = false;
+            }
+            return;
+          }
+        }
+      }
+
       pageDataRef.current[activePageIdRef.current] = elements as ExcalidrawLikeElement[];
       onLocalElementSnapshot(elements);
       if (!sync) return;

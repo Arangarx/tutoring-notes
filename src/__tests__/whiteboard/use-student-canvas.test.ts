@@ -738,6 +738,87 @@ describe("useStudentWhiteboardCanvas", () => {
 
       expect(appStateViewportCalls(updateScene)).toHaveLength(1);
     });
+
+    it("with follow ON, user pan/zoom reverts immediately (view lock)", async () => {
+      const { sync, emitRemote } = makeMockSync();
+      const { api, updateScene } = makeApi({
+        elements: [],
+        appState: { ...studentViewport },
+      });
+      const { result } = renderHook(() =>
+        useStudentWhiteboardCanvas(sync, api, undefined, {
+          joinToken: "jt",
+          followTutorView: true,
+        })
+      );
+
+      const follow = tutorFollowWire(100, 50, 1.25, 1200, 900);
+
+      await act(async () => {
+        emitRemote("tutor", [], {
+          document: { rev: 1, pages: { p1: [] } },
+          page: { activePageId: "p1", pageList: [{ id: "p1", title: "P" }] },
+          follow,
+        });
+      });
+      await flushAsyncWork();
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 60));
+      });
+
+      const vpCallsBeforeUserPan = appStateViewportCalls(updateScene);
+      expect(vpCallsBeforeUserPan.length).toBeGreaterThan(0);
+      const locked = vpCallsBeforeUserPan[vpCallsBeforeUserPan.length - 1]![0] as {
+        appState: { scrollX: number; scrollY: number; zoom: { value: number } };
+      };
+
+      act(() => {
+        result.current.onCanvasChange([], {
+          ...studentViewport,
+          scrollX: locked.appState.scrollX + 50,
+          scrollY: locked.appState.scrollY + 30,
+          zoom: { value: locked.appState.zoom.value + 0.5 },
+        });
+      });
+
+      const revertCalls = appStateViewportCalls(updateScene).slice(
+        vpCallsBeforeUserPan.length
+      );
+      expect(revertCalls).toHaveLength(1);
+      const revert = revertCalls[0]![0] as {
+        appState: { scrollX: number; scrollY: number; zoom: { value: number } };
+        captureUpdate?: string;
+      };
+      expect(revert.captureUpdate).toBe("NEVER");
+      expect(revert.appState.scrollX).toBeCloseTo(locked.appState.scrollX, 5);
+      expect(revert.appState.scrollY).toBeCloseTo(locked.appState.scrollY, 5);
+      expect(revert.appState.zoom.value).toBeCloseTo(locked.appState.zoom.value, 5);
+    });
+
+    it("with follow OFF, user pan/zoom is not reverted", async () => {
+      const { sync } = makeMockSync();
+      const { api, updateScene } = makeApi({
+        elements: [],
+        appState: { ...studentViewport },
+      });
+      const { result } = renderHook(() =>
+        useStudentWhiteboardCanvas(sync, api, undefined, {
+          joinToken: "jt",
+          followTutorView: false,
+        })
+      );
+
+      act(() => {
+        result.current.onCanvasChange([], {
+          ...studentViewport,
+          scrollX: 99,
+          scrollY: 88,
+          zoom: { value: 2 },
+        });
+      });
+
+      expect(appStateViewportCalls(updateScene)).toHaveLength(0);
+    });
   });
 
   it("snapToTutorView center-aligns when tutor viewport size is on follow wire", async () => {
