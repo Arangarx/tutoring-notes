@@ -443,9 +443,9 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 ---
 
-## Round 4 — post-fix re-smoke (branch wb-wave4-responsive @ d07568d)
+## Round 4 — post-fix re-smoke (branch wb-wave4-responsive @ f73b52d)
 
-**Preview:** Same branch alias — [wb-wave4-responsive preview](https://tutoring-notes-git-wb-wave4-responsive-arangarx-5209s-projects.vercel.app) — now serving commit `[d07568d](https://github.com/Arangarx/tutoring-notes/commit/d07568d)`. Re-verify the four items below (the round-3 FAIL/PARTIAL items); round-1/round-2/round-3 results above stay authoritative for everything else. These are mostly geometry/layout checks that automated tests cannot verify — hardware or DevTools device-mode judgement is the gate.
+**Preview:** Same branch alias — [wb-wave4-responsive preview](https://tutoring-notes-git-wb-wave4-responsive-arangarx-5209s-projects.vercel.app) — now serving commit `[f73b52d](https://github.com/Arangarx/tutoring-notes/commit/f73b52d)`. Re-verify the four items below (the round-3 FAIL/PARTIAL items); round-1/round-2/round-3 results above stay authoritative for everything else. These are mostly geometry/layout checks that automated tests cannot verify — hardware or DevTools device-mode judgement is the gate. **Note:** `f73b52d` fixes a regression `d07568d` introduced where the phone-landscape left rail collapsed to a tiny 52px scroll pane (base `.mynk-wb-bottom-toolbar` height not overridden) — R4-3 specifically validates the rail is now full-height.
 
 **Tip:** To faithfully reproduce phone-landscape, the window must be **SHORT** (height < 500px), not just narrow — a tall narrow desktop window stays in `desktop` mode; DevTools device-mode is more faithful than dragging the window.
 
