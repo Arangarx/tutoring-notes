@@ -1,8 +1,8 @@
 # Wave 5 — whiteboard chrome visual polish — smoke runbook
 
 **Branch:** `wb-wave5-polish`
-**Tip commit:** `<pending — update after push>`
-**Preview:** <unverified — confirm in Vercel dashboard>
+**Tip commit:** [`3415f3a`](https://github.com/Arangarx/tutoring-notes/commit/3415f3a3e8875af0d91f67f344614050519ca93f)
+**Preview:** [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-arangarx-5209s-projects.vercel.app)
 
 **Context:** Wave 5 chrome polish on the unified whiteboard shell. Five scoped items: coral student Exit, smaller/iconic follow/match controls, overflow sheet alignment + scroll affordance, top-bar overflow dropdown opens downward, grid toggle as icon (shared). Tutor baseline CSS from `5d56f49` must remain untouched except intentional shared-control changes (#4, #5).
 
