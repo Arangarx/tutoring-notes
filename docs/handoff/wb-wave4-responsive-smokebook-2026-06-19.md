@@ -75,7 +75,7 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 **Expect:** Top bar fits without off-screen controls — overflow button reachable. Bottom bar shows Select · Pencil · Eraser · Shapes · Styles · Wand · More. Props/styles sheet opens and is usable. Canvas remains drawable. `data-layout="narrow"` or `tablet-portrait`.
 
-**Ignore this run:** Phone-landscape left-rail quirk (item 4). Student role.
+**Ignore this run:** Phone-landscape left tool rail (item 4 — intended layout). Student role.
 
 - [ ] PASS
 - [ ] FAIL
@@ -93,11 +93,11 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 ### 4. Tutor landscape — left tool rail + props chip
 
-**Action:** Rotate to **phone landscape** (≈844×390). Reload tutor workspace. Confirm **tier-1 tools on slim left rail** (bottom toolbar rendered vertically on the left — known acceptable quirk). Confirm **Colors & styles** compact chip overlays top-left of canvas (`data-testid` props mobile bar). Open overflow **⋯** from top bar; confirm Share copy, theme, inserts reachable. Draw and switch tools.
+**Action:** Rotate to **phone landscape** (≈844×390). Reload tutor workspace. Confirm **tier-1 tools on the slim left vertical rail** — this is the **intended** landscape layout (bottom toolbar rendered vertically on the left). Confirm **Colors & styles** compact chip overlays top-left of canvas (`data-testid` props mobile bar). Open overflow **⋯** from top bar; confirm Share copy, theme, inserts reachable. Scroll the left rail if needed; draw and switch tools.
 
-**Expect:** Tools reachable on left rail; canvas not obscured by chrome. Props chip visible and opens sheet on tap. Top bar not clipped. `data-layout="phone-landscape"`.
+**Expect:** Left tool rail present and tools reachable (scroll if needed); canvas not obscured by chrome. Props chip visible and opens sheet on tap. Top bar not clipped. `data-layout="phone-landscape"`.
 
-**Ignore this run:** Exact pixel position of option bar on left (match prior tutor behavior; do not fail for left placement alone).
+**Ignore this run:** Left-rail placement on the left edge (intended design — **do not fail** for vertical rail on the left). Fail only if tools are off-screen/unreachable, **More** cannot be scrolled into view, or the layout over-compacts top-bar controls despite available width.
 
 - [ ] PASS
 - [ ] FAIL
@@ -194,11 +194,11 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 ### 9. Student landscape — left rail tools + props chip
 
-**Action:** Student join in **phone landscape**. Confirm left vertical tool rail (same quirk as tutor). Props chip top-left opens styles sheet. Top bar: overflow + Exit reachable. Draw and change stroke color via sheet.
+**Action:** Student join in **phone landscape** (≈844×390). Confirm **left vertical tool rail** — same **intended** landscape layout as tutor. Scroll the rail if needed. Props chip top-left opens styles sheet. Top bar: overflow + Exit reachable. Draw and change stroke color via sheet.
 
-**Expect:** Parity with tutor landscape layout. Tools not missing. Top bar not clipped.
+**Expect:** Parity with tutor landscape layout. Left rail present; tools reachable (scroll if needed). Top bar not clipped.
 
-**Ignore this run:** Left-rail placement (known acceptable).
+**Ignore this run:** Left-rail placement on the left edge (intended design — **do not fail** for vertical rail on the left). Fail only if tools are off-screen/unreachable, **More** cannot be scrolled into view, or the layout over-compacts top-bar controls despite available width.
 
 - [ ] PASS
 - [ ] FAIL
@@ -221,6 +221,120 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 **Ignore this run:** Desktop layout (toggle hidden on desktop).
 
 - [x] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+## Round 2 — post-fix re-smoke (branch wb-wave4-responsive @ 17dc8d4)
+
+**Preview:** Same branch alias — [wb-wave4-responsive preview](https://tutoring-notes-git-wb-wave4-responsive-arangarx-5209s-projects.vercel.app) — now serving commit [`17dc8d4`](https://github.com/Arangarx/tutoring-notes/commit/17dc8d4). Re-verify only the six fixes below; round-1 results above stay authoritative for everything else.
+
+---
+
+### R2-1. Mobile styles sheet — "more styles" present (tutor + student, portrait + landscape)
+
+**Action:** On the **Preview** URL @ `17dc8d4`, run **four passes**: **tutor** and **student** separately, each at **phone portrait** (≈390×844) and **phone landscape** (≈844×390). Select pencil. **Portrait:** tap **Styles** on the bottom tool bar (`data-testid="wb-bottom-toolbar"`). **Landscape:** tap the **Colors & styles** compact chip (`data-testid` props mobile bar). Scroll the sheet if needed.
+
+**Expect:** The styles/props sheet shows **roughness**, **edge sharpness**, **z-order** (send back / backward / forward / front), and **delete selected** — all visible without hunting below the fold on every pass.
+
+**Ignore this run:** Desktop props panel (round-1 item 6 PASS). Hand/pan tool re-add deferred ([`WB-HAND-TOOL-MISSING`](../BACKLOG.md)). Items already PASS in round 1 with no code change.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### R2-2. Mobile shapes — selector + affordance (tutor + student, portrait + landscape)
+
+**Action:** Same four passes as R2-1 (tutor + student × portrait + landscape). Locate **Shapes** on the bottom bar (portrait) or left rail (landscape). Observe the button chrome for a **▾ / caret** affordance. Tap to open the shapes sheet; confirm **all** shape types listed (match desktop set — rectangle, diamond, ellipse, arrow, line, etc.). Pick a non-default shape (e.g. diamond). Tap **Shapes** again with a short tap (no long-press) — confirm it selects the current shape without reopening the sheet.
+
+**Expect:** Shapes button shows a visible **▾/caret** affordance indicating more options. Sheet lists **all** shape types (same set as desktop). Main tap on the button selects the current shape; sheet opens on the explicit expand gesture.
+
+**Ignore this run:** Desktop shapes pulldown (round-1 item 6 PASS). Device hotplug / rotation mid-gesture out of scope.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### R2-3. Phone-landscape no over-compaction (tutor + student)
+
+**Action:** **Tutor** then **student** at **phone landscape** (≈844×390). Reload each workspace. Scan the **top bar** left-to-right: **tutor** — Share, mic/cam, undo/redo, theme should remain **inline** when width allows (not dumped to overflow while space remains). **Student** — mic/cam, undo/redo, theme inline similarly. Scroll the **left tool rail**; confirm **More** is reachable on-screen. Left vertical rail should be present (intended layout).
+
+**Expect:** Landscape top bar **uses available width** — Share (tutor), mic/cam, undo/redo, and theme stay inline rather than over-compacting into overflow when room exists. Left tool rail scrolls so **More** is on-screen and tappable. Left rail on the left edge is **intended** — not a defect.
+
+**Ignore this run:** Left-rail placement on the left (intended — fail only for unreachable tools or over-compaction). Phone portrait (round-1 items 3/7). Exact pixel spacing nits.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### R2-4. Student desktop — single connection pill
+
+**Action:** Open the student join link at **desktop** width (≥1100px, window need not be fullscreen). Read the top-bar **connection status** area left-to-right. Join or resume a live session with A/V if needed to observe state transitions.
+
+**Expect:** Exactly **one** connection-status pill — no duplicate **"Connected"** plus **"call connected"** (or similar double pill). Pill text shows **Joining…**, **Call reconnecting…**, or **Connected** appropriately for session state.
+
+**Ignore this run:** Tutor role (different top bar). Mobile portrait/landscape where status lives in overflow (round-1 items 7/9). Transient reconnect flapping — note in Notes, do not fail on one blip.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### R2-5. Student desktop — progressive compaction (no off-screen overflow)
+
+**Action:** Student join at **desktop** width (start ~1280px). Slowly shrink the browser window toward **~half width** (≈550–650px). Watch top-bar controls throughout; confirm **Exit** stays reachable at every width.
+
+**Expect:** Controls **contract progressively** as width decreases — overflow **⋯** appears by **≤980px** and absorbs displaced items. No controls run **off-screen** horizontally at any width. **Exit** always reachable (inline or via overflow).
+
+**Ignore this run:** Phone portrait/landscape (separate round-1 items). Tutor role. Fullscreen-only layouts.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### R2-6. Follow-tutor-view toggle inline + styled
+
+**Action:** **Student desktop** (≥1100px): locate the **Follow tutor view / Match tutor's view** toggle in the top bar — confirm it sits **inline** with other chrome controls and uses chip-consistent styling (not an out-of-line raw checkbox). **Student phone portrait** (≈390×844): open top-bar overflow **⋯**; confirm the toggle lives in the overflow sheet (not required inline on touch).
+
+**Expect:** **Desktop** — toggle is **inline** in the top bar, styled consistently with other chrome chips (not out-of-line). **Touch** — toggle remains in overflow, not cluttering the compact top bar.
+
+**Ignore this run:** Tutor role (no follow toggle). Round-1 items already PASS where unchanged. Minor label copy differences.
+
+- [ ] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes

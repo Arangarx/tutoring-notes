@@ -112,6 +112,16 @@ Reclassified from a pre-master gate → near-immediate post-master follow-up: th
 
 ---
 
+## Wave 4 responsive chrome smoke triage (2026-06-20)
+
+> **Source:** Andrew hardware smoke of `wb-wave4-responsive` round 1 @ [`docs/handoff/wb-wave4-responsive-smokebook-2026-06-19.md`](handoff/wb-wave4-responsive-smokebook-2026-06-19.md). Round-2 re-smoke targets six fixes on branch `wb-wave4-responsive` @ `17dc8d4`.
+
+| Item | Priority | Notes |
+|------|----------|-------|
+| **WB-HAND-TOOL-MISSING — pan/hand tool absent from WB toolset** | Low | The Excalidraw hand/pan tool has been absent from the WB tool strip/menus for a long time; re-add it somewhere (left strip "more" or shapes-adjacent) "just in case" a user wants explicit pan. Surfaced in Wave 4 round-1 smoke (item 2), 2026-06-20. |
+
+---
+
 ## WB A/V UX (2026-06-18)
 
 | Item | Priority | Notes |
