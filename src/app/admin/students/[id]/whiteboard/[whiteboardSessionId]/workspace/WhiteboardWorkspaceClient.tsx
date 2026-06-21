@@ -140,7 +140,6 @@ import {
   useWbLayoutMode,
 } from "@/components/whiteboard/chrome/useWbLayoutMode";
 import { LiveBoardChrome } from "@/components/whiteboard/chrome/LiveBoardChrome";
-import type { StudentTopbarCompactLevel } from "@/components/whiteboard/chrome/LiveBoardChrome";
 import { WbRoleProvider, type WbParticipantRole } from "@/components/whiteboard/chrome/wb-role";
 import {
   shapeIconFor,
@@ -788,9 +787,6 @@ export function WhiteboardWorkspaceClient({
   const { layoutMode, orientation } = useWbLayoutMode();
   const touchLayout = isTouchLayout(layoutMode);
   const [toolbarHidden, setToolbarHidden] = useState(false);
-  const [studentTopbarCompact, setStudentTopbarCompact] =
-    useState<StudentTopbarCompactLevel>("none");
-  const studentTopbarCompactIdxRef = useRef(0);
   // Stroke props — tracked from Excalidraw onChange (appState).
   // Always initialize to EXCALIDRAW_STROKE_HEX (#1e293b) in both themes.
   // Excalidraw's dark-mode canvas filter (invert+hue-rotate) automatically
@@ -4421,104 +4417,6 @@ export function WhiteboardWorkspaceClient({
   const studentShowWaitingForOther =
     studentServerActiveMs === 0 && !studentBothPresentForTimer && studentConnected;
 
-  // Student desktop top bar: clip-driven compaction with hysteresis (Wave 4 round 3).
-  // Replaces fixed @media breakpoints that over-compacted ~half-width windows.
-  useEffect(() => {
-    if (role !== "student" || touchLayout) {
-      studentTopbarCompactIdxRef.current = 0;
-      setStudentTopbarCompact("none");
-      return;
-    }
-
-    const topbar = studentTopbarRef.current;
-    if (!topbar || typeof ResizeObserver === "undefined") return;
-
-    const chromeRoot = topbar.closest<HTMLElement>(".mynk-wb-chrome");
-
-    const LEVELS: StudentTopbarCompactLevel[] = [
-      "none",
-      "no-disclosure",
-      "no-follow",
-      "no-av-desktop",
-      "no-timer",
-      "overflow",
-    ];
-    const OVERFLOW_SLOT_PX = 36;
-    const disclosureLevelIdx = LEVELS.indexOf("no-disclosure");
-
-    let rafId = 0;
-
-    const trailingClipped = (reserveOverflowSlot: boolean) => {
-      const barRect = topbar.getBoundingClientRect();
-      const trailing = topbar.querySelector<HTMLElement>(
-        ".mynk-wb-topbar__zone--trailing"
-      );
-      if (!trailing) return false;
-      const slotReserve = reserveOverflowSlot ? OVERFLOW_SLOT_PX : 0;
-      return trailing.getBoundingClientRect().right > barRect.right - slotReserve + 1;
-    };
-
-    const applyLevelIdxSync = (idx: number) => {
-      const clamped = Math.max(0, Math.min(idx, LEVELS.length - 1));
-      chromeRoot?.setAttribute(
-        "data-student-topbar-compact",
-        LEVELS[clamped]!
-      );
-      return clamped;
-    };
-
-    /** Least-compaction level that fits — binary search to limit DOM thrash. */
-    const computeMinFitLevelIdx = () => {
-      let lo = 0;
-      let hi = LEVELS.length - 1;
-      let best = hi;
-      while (lo <= hi) {
-        const mid = Math.floor((lo + hi) / 2);
-        applyLevelIdxSync(mid);
-        const reserveSlot = mid >= disclosureLevelIdx;
-        if (!trailingClipped(reserveSlot)) {
-          best = mid;
-          hi = mid - 1;
-        } else {
-          lo = mid + 1;
-        }
-      }
-      return best;
-    };
-
-    const commitLevelIdx = (idx: number) => {
-      const clamped = applyLevelIdxSync(idx);
-      if (clamped !== studentTopbarCompactIdxRef.current) {
-        studentTopbarCompactIdxRef.current = clamped;
-        setStudentTopbarCompact(LEVELS[clamped]!);
-      }
-    };
-
-    const reconcile = () => {
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        const targetIdx = computeMinFitLevelIdx();
-        commitLevelIdx(targetIdx);
-      });
-    };
-
-    const ro = new ResizeObserver(reconcile);
-    ro.observe(topbar);
-    reconcile();
-    return () => {
-      ro.disconnect();
-      cancelAnimationFrame(rafId);
-    };
-  }, [
-    role,
-    touchLayout,
-    studentConnectionPillLabel,
-    studentLiveTimerMs,
-    studentShowWaitingForOther,
-    toolbarHidden,
-    independentView,
-  ]);
-
   const renderTopBarOverflowItems = () => {
     const undoRedoDisabled = role === "student" ? !studentConnected : endingBusy;
     const camDisabled =
@@ -5055,7 +4953,6 @@ export function WhiteboardWorkspaceClient({
       orientation={orientation}
       role={role}
       toolbarHidden={toolbarHidden}
-      studentTopbarCompact={studentTopbarCompact}
       onChromeClick={() => setOpenMenu(null)}
       nonVisualMounts={
       <WhiteboardWorkspaceAudioBridge

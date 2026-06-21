@@ -1649,7 +1649,7 @@
   min-height: 0;
   max-height: 100%;
   align-self: stretch;
-  padding: 6px 0;
+  padding: 6px 0 14px;
   gap: 2px;
   border-top: none;
   border-right: 1px solid var(--border);
@@ -2742,76 +2742,36 @@
   overflow: visible;
 }
 
-.mynk-wb-chrome[data-role="student"][data-layout="desktop"]:not([data-student-topbar-compact="none"])
-  .mynk-wb-student-overflow-slot {
-  width: 36px;
+.mynk-wb-chrome[data-role="student"][data-layout="desktop"] .mynk-wb-topbar__zone--student-lead {
+  flex-shrink: 1;
+  min-width: 0;
 }
 
-/* Student overflow — hidden on wide desktop; clip-driven on narrow desktop */
+/* Student overflow — hidden on wide desktop */
 .mynk-wb-chrome[data-role="student"][data-layout="desktop"] .mynk-wb-student-topbar-overflow-btn {
   display: none;
 }
 
-.mynk-wb-chrome[data-role="student"][data-layout="desktop"][data-student-topbar-compact="overflow"]
-  .mynk-wb-student-topbar-overflow-btn {
-  display: inline-flex;
-}
+/* Narrow desktop — disclosure + theme in overflow sheet; core controls stay inline */
+@media (max-width: 740px) {
+  .mynk-wb-chrome[data-role="student"][data-layout="desktop"] .mynk-wb-student-disclosure {
+    display: none;
+  }
 
-/* Wave 4 round 3 — student desktop clip-driven compaction (JS sets data-student-topbar-compact) */
-.mynk-wb-chrome[data-role="student"][data-layout="desktop"][data-student-topbar-compact="no-disclosure"]
-  .mynk-wb-student-disclosure,
-.mynk-wb-chrome[data-role="student"][data-layout="desktop"][data-student-topbar-compact="no-follow"]
-  .mynk-wb-student-disclosure,
-.mynk-wb-chrome[data-role="student"][data-layout="desktop"][data-student-topbar-compact="no-av-desktop"]
-  .mynk-wb-student-disclosure,
-.mynk-wb-chrome[data-role="student"][data-layout="desktop"][data-student-topbar-compact="no-timer"]
-  .mynk-wb-student-disclosure,
-.mynk-wb-chrome[data-role="student"][data-layout="desktop"][data-student-topbar-compact="overflow"]
-  .mynk-wb-student-disclosure {
-  display: none;
-}
+  .mynk-wb-chrome[data-role="student"][data-layout="desktop"] .mynk-wb-student-overflow-slot {
+    width: auto;
+    overflow: visible;
+  }
 
-.mynk-wb-chrome[data-role="student"][data-layout="desktop"][data-student-topbar-compact="no-follow"]
-  .mynk-wb-student-follow,
-.mynk-wb-chrome[data-role="student"][data-layout="desktop"][data-student-topbar-compact="no-av-desktop"]
-  .mynk-wb-student-follow,
-.mynk-wb-chrome[data-role="student"][data-layout="desktop"][data-student-topbar-compact="no-timer"]
-  .mynk-wb-student-follow,
-.mynk-wb-chrome[data-role="student"][data-layout="desktop"][data-student-topbar-compact="overflow"]
-  .mynk-wb-student-follow {
-  display: none;
-}
+  .mynk-wb-chrome[data-role="student"][data-layout="desktop"] .mynk-wb-student-topbar-overflow-btn {
+    display: inline-flex;
+  }
 
-.mynk-wb-chrome[data-role="student"][data-layout="desktop"][data-student-topbar-compact="no-av-desktop"]
-  .mynk-wb-student-av-zone .mynk-wb-topbar__desktop-only,
-.mynk-wb-chrome[data-role="student"][data-layout="desktop"][data-student-topbar-compact="no-timer"]
-  .mynk-wb-student-av-zone .mynk-wb-topbar__desktop-only,
-.mynk-wb-chrome[data-role="student"][data-layout="desktop"][data-student-topbar-compact="overflow"]
-  .mynk-wb-student-av-zone .mynk-wb-topbar__desktop-only {
-  display: none;
-}
-
-.mynk-wb-chrome[data-role="student"][data-layout="desktop"][data-student-topbar-compact="no-timer"]
-  .mynk-wb-student-status-zone .mynk-wb-timer,
-.mynk-wb-chrome[data-role="student"][data-layout="desktop"][data-student-topbar-compact="overflow"]
-  .mynk-wb-student-status-zone .mynk-wb-timer {
-  display: none;
-}
-
-.mynk-wb-chrome[data-role="student"][data-layout="desktop"][data-student-topbar-compact="no-disclosure"]
-  .mynk-wb-student-title,
-.mynk-wb-chrome[data-role="student"][data-layout="desktop"][data-student-topbar-compact="no-follow"]
-  .mynk-wb-student-title,
-.mynk-wb-chrome[data-role="student"][data-layout="desktop"][data-student-topbar-compact="no-av-desktop"]
-  .mynk-wb-student-title {
-  max-width: min(240px, 28vw);
-}
-
-.mynk-wb-chrome[data-role="student"][data-layout="desktop"][data-student-topbar-compact="no-timer"]
-  .mynk-wb-student-title,
-.mynk-wb-chrome[data-role="student"][data-layout="desktop"][data-student-topbar-compact="overflow"]
-  .mynk-wb-student-title {
-  max-width: min(160px, 24vw);
+  .mynk-wb-chrome[data-role="student"][data-layout="desktop"]
+    .mynk-wb-student-av-zone
+    > .mynk-wb-topbar__desktop-only:last-of-type {
+    display: none;
+  }
 }
 
 /* Phone landscape — use horizontal top-bar room (student) */
