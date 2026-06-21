@@ -348,6 +348,102 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 ---
 
+## Round 3 — post-fix re-smoke (branch wb-wave4-responsive @ 3814234)
+
+**Preview:** Same branch alias — [wb-wave4-responsive preview](https://tutoring-notes-git-wb-wave4-responsive-arangarx-5209s-projects.vercel.app) — now serving commit `[3814234](https://github.com/Arangarx/tutoring-notes/commit/3814234)`. Re-verify the items below; round-1/round-2 PASS items above stay authoritative unless these fixes touched them. Round 3 reworked the student compaction logic (now clip-driven, not fixed breakpoints), so R3-1 also implicitly re-checks the round-2 single-pill / styles-present results didn't regress.
+
+---
+
+### R3-1. Student top-bar compaction — generous + smooth (desktop)
+
+**Action:** Student join at desktop ~1280px. Slowly shrink the browser window toward ~half width and back.
+
+**Expect:** Controls stay **INLINE** while real room remains (NOT collapsing to overflow with lots of empty bar). Contraction is smooth — **Exit does NOT jump/jitter** as you resize. Overflow **⋯** only appears when controls genuinely approach clipping. Exit always reachable.
+
+**Ignore this run:** Phone layouts. Tutor role. Exact px where **⋯** appears (judge by "is there obviously free bar space when it compacts?").
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### R3-2. Student phone-portrait — core controls inline (not stripped)
+
+**Action:** Student join at phone portrait (~390×844).
+
+**Expect:** Top bar shows the round-1 accepted set (wordmark/tutor name, connection pill, timer, mic/cam inline) plus Hide/Show tools, overflow **⋯**, Exit — NOT collapsed down to just {hide/show, More, Exit}. Disclosure/follow/undo/theme live in overflow.
+
+**Ignore this run:** Desktop. Landscape.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### R3-3. Tutor phone-landscape — left rail shows all tools consistently
+
+**Action:** Tutor at phone landscape (~844×390). Reload a few times / try across scales.
+
+**Expect:** Left vertical tool rail (intended) consistently shows ALL tier-1 tools. If they exceed viewport height the rail scrolls reliably so **More** is always reachable — NOT inconsistently cutting off after laser.
+
+**Ignore this run:** Left placement (intended). Top-bar items (covered earlier).
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### R3-4. Follow-tutor toggle — vertically centered (student desktop)
+
+**Action:** Student desktop. Inspect the Follow/Match toggle chip in the top bar.
+
+**Expect:** The pill aligns vertically with sibling chrome (not sitting high) and its inner text + checkbox are vertically centered.
+
+**Ignore this run:** Tutor role. Touch (toggle in overflow).
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### R3-5. Mobile styles sheet — more-styles collapsed toggle + reachable
+
+**Action:** Tutor + student, phone portrait + landscape, pencil selected, open Styles sheet.
+
+**Expect:** "More styles ▾" is a clearly-labeled **COLLAPSED** toggle by default (matching desktop). Tapping it reveals roughness/edge-sharpness/z-order/delete. In landscape the sheet is not over-tall and content is reachable (scroll cue if needed).
+
+**Ignore this run:** Hand tool (backlogged). Touch line-end (backlogged WB-LINE-END-TOUCH).
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
 ## Overall result
 
 - [ ] PASS
