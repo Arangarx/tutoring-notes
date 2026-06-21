@@ -4104,7 +4104,8 @@ export function WhiteboardWorkspaceClient({
         <GraphEmbeddable
           element={element as { id?: string; width?: number; height?: number; customData?: Record<string, unknown> }}
           excalidrawAPI={role === "student" ? undefined : excalidrawAPIRef.current}
-          readOnly={role === "student"}
+          readOnly={false}
+          syncFromBoard={role === "student"}
         />
       );
     }

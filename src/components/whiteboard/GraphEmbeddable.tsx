@@ -62,8 +62,13 @@ type JxgBoard = {
 type Props = {
   element: EmbeddableElementLike;
   excalidrawAPI?: GraphPersistApiLike | null;
-  /** Student / replay view: display synced state only — no edits or persist. */
+  /** Replay / strict read-only: no edits, no controls, tutor sync replots board state. */
   readOnly?: boolean;
+  /**
+   * Student local mode: interactive controls without persisting to the board.
+   * When true, re-plots from element `graphStateJson` when tutor sync updates it.
+   */
+  syncFromBoard?: boolean;
 };
 
 const JSXGRAPH_CSS_ID = "mynk-jsxgraph-css";
@@ -218,6 +223,7 @@ export function GraphEmbeddable({
   element,
   excalidrawAPI,
   readOnly = false,
+  syncFromBoard = false,
 }: Props) {
   const { resolvedTheme } = useTheme();
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -549,9 +555,9 @@ export function GraphEmbeddable({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: element.id only
   }, [element.id, readOnly, scheduleBboxPersist]);
 
-  /** Student read-only: re-plot when tutor sync pushes new graphStateJson. */
+  /** Tutor sync / replay: re-plot when board element graphStateJson changes. */
   useLayoutEffect(() => {
-    if (!readOnly) return;
+    if (!readOnly && !syncFromBoard) return;
     const board = boardRef.current;
     if (!board) return;
 
@@ -572,7 +578,7 @@ export function GraphEmbeddable({
     } catch {
       // ignore during teardown
     }
-  }, [readOnly, graphStateJsonRaw]);
+  }, [readOnly, syncFromBoard, graphStateJsonRaw]);
 
   const handleAddExpression = () => {
     if (readOnly) return;
