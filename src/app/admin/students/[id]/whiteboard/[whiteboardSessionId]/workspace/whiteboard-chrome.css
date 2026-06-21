@@ -1623,9 +1623,11 @@
   grid-template-columns: 44px 1fr;
   grid-template-rows: minmax(0, 1fr);
   position: relative;
+  flex: 1 1 0;
   min-height: 0;
   height: calc(100dvh - 44px);
   max-height: calc(100dvh - 44px);
+  overflow: hidden;
 }
 
 .mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-body {
@@ -1642,9 +1644,8 @@
   align-items: center;
   justify-content: flex-start;
   width: 44px;
-  height: 100%;
   min-height: 0;
-  max-height: calc(100dvh - 44px);
+  max-height: 100%;
   align-self: stretch;
   padding: 6px 0;
   gap: 2px;
@@ -1652,10 +1653,11 @@
   border-right: 1px solid var(--border);
   background: var(--card);
   z-index: 20;
-  overflow-y: auto;
+  overflow-y: scroll;
   overflow-x: hidden;
   overscroll-behavior: contain;
   scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--foreground) 35%, transparent) transparent;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -2606,8 +2608,16 @@
 }
 
 .mynk-wb-follow-toggle.mynk-wb-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
   border-radius: 999px;
   font-weight: 600;
+  line-height: 1;
+  box-sizing: border-box;
 }
 
 .mynk-wb-follow-toggle input {
@@ -2615,8 +2625,8 @@
   width: 14px;
   height: 14px;
   flex-shrink: 0;
+  align-self: center;
   accent-color: var(--accent);
-  vertical-align: middle;
 }
 
 .mynk-wb-follow-toggle__label {

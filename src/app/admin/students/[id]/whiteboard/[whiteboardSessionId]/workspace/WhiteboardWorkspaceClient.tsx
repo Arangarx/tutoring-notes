@@ -4443,7 +4443,6 @@ export function WhiteboardWorkspaceClient({
       "no-timer",
       "overflow",
     ];
-    const HYSTERESIS_PX = 32;
     const OVERFLOW_SLOT_PX = 36;
     const disclosureLevelIdx = LEVELS.indexOf("no-disclosure");
 
@@ -4468,38 +4467,38 @@ export function WhiteboardWorkspaceClient({
       return clamped;
     };
 
+    /** Least-compaction level that fits — binary search to limit DOM thrash. */
+    const computeMinFitLevelIdx = () => {
+      let lo = 0;
+      let hi = LEVELS.length - 1;
+      let best = hi;
+      while (lo <= hi) {
+        const mid = Math.floor((lo + hi) / 2);
+        applyLevelIdxSync(mid);
+        const reserveSlot = mid >= disclosureLevelIdx;
+        if (!trailingClipped(reserveSlot)) {
+          best = mid;
+          hi = mid - 1;
+        } else {
+          lo = mid + 1;
+        }
+      }
+      return best;
+    };
+
+    const commitLevelIdx = (idx: number) => {
+      const clamped = applyLevelIdxSync(idx);
+      if (clamped !== studentTopbarCompactIdxRef.current) {
+        studentTopbarCompactIdxRef.current = clamped;
+        setStudentTopbarCompact(LEVELS[clamped]!);
+      }
+    };
+
     const reconcile = () => {
       cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
-        let idx = studentTopbarCompactIdxRef.current;
-
-        while (idx < LEVELS.length - 1) {
-          applyLevelIdxSync(idx);
-          const reserveSlot = idx >= disclosureLevelIdx;
-          if (!trailingClipped(reserveSlot)) break;
-          idx += 1;
-        }
-        idx = applyLevelIdxSync(idx);
-
-        while (idx > 0) {
-          const tryIdx = idx - 1;
-          applyLevelIdxSync(tryIdx);
-          const reserveSlot = tryIdx >= disclosureLevelIdx;
-          const trailing = topbar.querySelector<HTMLElement>(
-            ".mynk-wb-topbar__zone--trailing"
-          );
-          const barRect = topbar.getBoundingClientRect();
-          const trailingRight = trailing?.getBoundingClientRect().right ?? 0;
-          const slack = barRect.right - trailingRight;
-          if (slack < HYSTERESIS_PX && trailingClipped(reserveSlot)) {
-            applyLevelIdxSync(idx);
-            break;
-          }
-          idx = tryIdx;
-        }
-
-        studentTopbarCompactIdxRef.current = idx;
-        setStudentTopbarCompact(LEVELS[idx]!);
+        const targetIdx = computeMinFitLevelIdx();
+        commitLevelIdx(targetIdx);
       });
     };
 

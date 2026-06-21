@@ -87,6 +87,8 @@ export function WbActionSheet({
           className="mynk-wb-action-sheet__close"
           aria-label="Dismiss"
           onClick={onDismiss}
+          onPointerDown={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
         >
           ×
         </button>
