@@ -86,7 +86,6 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 **Notes:  There is no "more styles" section with all the other options in the styles sheet.**  
 **Shouldn't there be some sort of indicator on the shapes button that it let's you select more options?**  
 
-
 ---
 
 ## Tutor — phone landscape (≈844×390)
@@ -130,7 +129,6 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 **Notes: Still double connected pill (call connected after connected).**  
 **Follow tutor view checkbox still not inline**  
 **If student shrinks desktop screen to about half the screen controls start running off the screen instead of contracting.**  
-
 
 ---
 
@@ -232,7 +230,7 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 ## Round 2 — post-fix re-smoke (branch wb-wave4-responsive @ 17dc8d4)
 
-**Preview:** Same branch alias — [wb-wave4-responsive preview](https://tutoring-notes-git-wb-wave4-responsive-arangarx-5209s-projects.vercel.app) — now serving commit [`17dc8d4`](https://github.com/Arangarx/tutoring-notes/commit/17dc8d4). Re-verify only the six fixes below; round-1 results above stay authoritative for everything else.
+**Preview:** Same branch alias — [wb-wave4-responsive preview](https://tutoring-notes-git-wb-wave4-responsive-arangarx-5209s-projects.vercel.app) — now serving commit `[17dc8d4](https://github.com/Arangarx/tutoring-notes/commit/17dc8d4)`. Re-verify only the six fixes below; round-1 results above stay authoritative for everything else.
 
 ---
 
@@ -242,15 +240,19 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 **Expect:** The styles/props sheet shows **roughness**, **edge sharpness**, **z-order** (send back / backward / forward / front), and **delete selected** — all visible without hunting below the fold on every pass.
 
-**Ignore this run:** Desktop props panel (round-1 item 6 PASS). Hand/pan tool re-add deferred ([`WB-HAND-TOOL-MISSING`](../BACKLOG.md)). Items already PASS in round 1 with no code change.
+**Ignore this run:** Desktop props panel (round-1 item 6 PASS). Hand/pan tool re-add deferred (`[WB-HAND-TOOL-MISSING](../BACKLOG.md)`). Items already PASS in round 1 with no code change.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes:**  
+**The more styles section is there, but open by default.**  
+**It's not particularly obvious that there is more to scroll to in landscape.**  
+**No easy way to end multi segment line with touch controls.  I swtiched to eraser and it's still trying to make more line segments.**  
+
 
 ---
 
@@ -262,7 +264,7 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 **Ignore this run:** Desktop shapes pulldown (round-1 item 6 PASS). Device hotplug / rotation mid-gesture out of scope.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -282,11 +284,12 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes: Student is over compacting in phone-portrait.  There is just hide/show tools, more, and exit**  
+**Tutor landscape is not consistent in showing whole left bar, sometimes it cuts off after laster, sometimes it shows all and then has a tiny bit of space to spare.  Not sure if it's kus of scale or what.**
 
 ---
 
@@ -298,7 +301,7 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 **Ignore this run:** Tutor role (different top bar). Mobile portrait/landscape where status lives in overflow (round-1 items 7/9). Transient reconnect flapping — note in Notes, do not fail on one blip.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -310,19 +313,20 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 ### R2-5. Student desktop — progressive compaction (no off-screen overflow)
 
-**Action:** Student join at **desktop** width (start ~1280px). Slowly shrink the browser window toward **~half width** (≈550–650px). Watch top-bar controls throughout; confirm **Exit** stays reachable at every width.
+**Action:** Student join at **desktop** width (start ~~1280px). Slowly shrink the browser window toward **~~half width** (≈550–650px). Watch top-bar controls throughout; confirm **Exit** stays reachable at every width.
 
 **Expect:** Controls **contract progressively** as width decreases — overflow **⋯** appears by **≤980px** and absorbs displaced items. No controls run **off-screen** horizontally at any width. **Exit** always reachable (inline or via overflow).
 
 **Ignore this run:** Phone portrait/landscape (separate round-1 items). Tutor role. Fullscreen-only layouts.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes: Exit does keep itself on screen but not smoothly.  It keeps jumping back to correct itself.  Also, top bar is quickly overcompacting.  Once student view is like just under half ish width, everythign compacts to under more even though there is a ton of bar left.**  
+**Tutor clicked on my last link and joined "a" session but I'm not sure which one.  Both my phone and desktop tutor sessions don't show anyone connected, so I'm not seven sure what he's connected to with a 10m timer.**
 
 ---
 
@@ -336,11 +340,11 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes:  Better alignment on follow, but still not centered.  The pill the checkbox is in is still a little high, and the text inside is not vertically centered.**
 
 ---
 
