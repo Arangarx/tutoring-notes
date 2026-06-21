@@ -4976,21 +4976,34 @@ export function WhiteboardWorkspaceClient({
         onClick={(e) => e.stopPropagation()}
         data-testid="wb-student-topbar"
       >
-        <div className="mynk-wb-topbar__zone mynk-wb-topbar__zone--student-lead">
-          <span className="mynk-wb-wordmark" aria-label="Mynk">
-            Mynk<span className="mynk-wb-wordmark__dot">·</span>
+        <span className="mynk-wb-wordmark" aria-label="Mynk">
+          Mynk<span className="mynk-wb-wordmark__dot">·</span>
+        </span>
+        {tutorName && (
+          <span className="mynk-wb-student-tutor-name">{tutorName}</span>
+        )}
+        <span className="mynk-wb-topbar__sep" aria-hidden />
+
+        {/* Zone 2: Connected pill + timer + disclosure (disclosure hides on touch via desktop-only) */}
+        <div className="mynk-wb-topbar__zone">
+          <span
+            className={`mynk-wb-status-pill${studentConnectionPillOk ? " mynk-wb-status-pill--ok" : " mynk-wb-status-pill--warn"}`}
+            data-testid="wb-student-sync-pill"
+          >
+            {studentConnectionPillLabel}
           </span>
-          <span className="mynk-wb-topbar__sep" aria-hidden />
-          <div className="mynk-wb-topbar__zone mynk-wb-student-title">
-            <span className="mynk-wb-student-tutor-name">{tutorName}</span>
-            <span
-              className="mynk-wb-student-disclosure"
-              data-testid="wb-student-recording-disclosure"
-            >
-              This session is being recorded by your tutor. What you draw is visible
-              live.
-            </span>
-          </div>
+          <span className="mynk-wb-timer" data-testid="wb-student-timer">
+            {studentShowWaitingForOther
+              ? `${formatTimerMinutesOnly(studentLiveTimerMs)} (waiting)`
+              : formatTimerMinutesOnly(studentLiveTimerMs)}
+          </span>
+          <span
+            className="mynk-wb-student-disclosure mynk-wb-topbar__desktop-only"
+            data-testid="wb-student-recording-disclosure"
+          >
+            This session is being recorded by your tutor. What you draw is visible
+            live.
+          </span>
         </div>
 
         <button
@@ -5014,22 +5027,9 @@ export function WhiteboardWorkspaceClient({
 
         <div style={{ flex: 1, minWidth: 0 }} />
 
-        <div className="mynk-wb-topbar__zone mynk-wb-student-status-zone">
-          <span
-            className={`mynk-wb-status-pill${studentConnectionPillOk ? " mynk-wb-status-pill--ok" : " mynk-wb-status-pill--warn"}`}
-            data-testid="wb-student-sync-pill"
-          >
-            {studentConnectionPillLabel}
-          </span>
-          <span className="mynk-wb-timer" data-testid="wb-student-timer">
-            {studentShowWaitingForOther
-              ? `${formatTimerMinutesOnly(studentLiveTimerMs)} (waiting)`
-              : formatTimerMinutesOnly(studentLiveTimerMs)}
-          </span>
-        </div>
-
-        {!touchLayout && (
-          <div className="mynk-wb-topbar__zone mynk-wb-student-follow">
+        <div className="mynk-wb-topbar__zone" onClick={(e) => e.stopPropagation()}>
+          {/* Follow toggle — desktop-only (overflow sheet on touch via renderTopBarOverflowItems) */}
+          <div className="mynk-wb-student-follow mynk-wb-topbar__desktop-only">
             <label className="mynk-wb-follow-toggle mynk-wb-chip">
               <input
                 type="checkbox"
@@ -5049,9 +5049,9 @@ export function WhiteboardWorkspaceClient({
               Match view
             </button>
           </div>
-        )}
 
-        <div className="mynk-wb-topbar__zone mynk-wb-student-av-zone" onClick={(e) => e.stopPropagation()}>
+          <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
+
           <WbTopBarMicControlLive
             isMicMuted={liveAv.isMicMuted}
             hasMicPermission={liveAv.hasMicPermission}
@@ -5140,22 +5140,20 @@ export function WhiteboardWorkspaceClient({
         </div>
 
         <div className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing">
-          <span className="mynk-wb-student-overflow-slot">
-            <button
-              type="button"
-              className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__overflow-btn mynk-wb-student-topbar-overflow-btn"
-              title="More session options"
-              aria-label="More session options"
-              aria-expanded={topbarMoreOpen}
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleMenu("topbar-more");
-              }}
-              data-testid="wb-student-topbar-overflow"
-            >
-              <WbIconMore size={14} />
-            </button>
-          </span>
+          <button
+            type="button"
+            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__overflow-btn"
+            title="More session options"
+            aria-label="More session options"
+            aria-expanded={topbarMoreOpen}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleMenu("topbar-more");
+            }}
+            data-testid="wb-student-topbar-overflow"
+          >
+            <WbIconMore size={14} />
+          </button>
           <button
             type="button"
             className="mynk-wb-tb-btn mynk-wb-tb-btn--leave"

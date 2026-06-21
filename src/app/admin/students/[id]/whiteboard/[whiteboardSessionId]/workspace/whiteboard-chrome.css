@@ -1063,9 +1063,9 @@
   opacity: 1;
 }
 
-/* Shapes split-button — always show ▾ affordance (touch + desktop) */
-.mynk-wb-shapes-menu .mynk-wb-pulldown-chevron {
-  display: block;
+[data-layout="narrow"] .mynk-wb-pulldown-chevron,
+[data-layout="tablet-portrait"] .mynk-wb-pulldown-chevron {
+  display: none;
 }
 
 /* ΓöÇΓöÇ Board tab strip — SR-14 ΓöÇΓöÇ */
@@ -1473,18 +1473,15 @@
 }
 
 .mynk-wb-chrome[data-layout="narrow"] .mynk-wb-topbar__desktop-only,
-.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-topbar__desktop-only {
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-topbar__desktop-only,
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-topbar__desktop-only {
   display: none;
 }
 
 .mynk-wb-chrome[data-layout="narrow"] .mynk-wb-topbar__overflow-btn,
-.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-topbar__overflow-btn {
-  display: inline-flex;
-}
-
-/* Phone landscape has ~844px width — keep inline top-bar controls visible */
+.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-topbar__overflow-btn,
 .mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-topbar__overflow-btn {
-  display: none;
+  display: inline-flex;
 }
 
 .mynk-wb-topbar-overflow-inserts {
@@ -1621,13 +1618,9 @@
 .mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-live-column {
   display: grid;
   grid-template-columns: 44px 1fr;
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: 1fr;
   position: relative;
-  flex: 1 1 0;
   min-height: 0;
-  height: calc(100dvh - 44px);
-  max-height: calc(100dvh - 44px);
-  overflow: hidden;
 }
 
 .mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-body {
@@ -1644,23 +1637,15 @@
   align-items: center;
   justify-content: flex-start;
   width: 44px;
-  /* Override base bottom-bar 52px — rail must fill the live-column grid row */
-  height: 100%;
+  height: auto;
   min-height: 0;
-  max-height: 100%;
   align-self: stretch;
-  padding: 6px 0 14px;
+  padding: 6px 0;
   gap: 2px;
   border-top: none;
   border-right: 1px solid var(--border);
   background: var(--card);
   z-index: 20;
-  overflow-y: auto;
-  overflow-x: hidden;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--foreground) 35%, transparent) transparent;
-  -webkit-overflow-scrolling: touch;
 }
 
 .mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-bottom-toolbar .mynk-wb-tool-btn {
@@ -2540,19 +2525,13 @@
   min-height: 0;
 }
 
-.mynk-wb-student-title {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  max-width: min(360px, 38vw);
-  overflow: hidden;
-}
-
 .mynk-wb-student-tutor-name {
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 13px;
   font-weight: 600;
   color: var(--foreground);
@@ -2677,118 +2656,9 @@
   border-color: var(--warning-border);
 }
 
-.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-student-follow,
-.mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-student-follow {
-  display: none;
-}
-
 .mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-pagestrip,
 .mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-pagestrip {
   max-height: 40px;
-}
-
-/* Wave 4 — student top bar touch compaction (overflow sheet carries the rest) */
-.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-student-disclosure,
-.mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-student-disclosure,
-.mynk-wb-chrome[data-role="student"][data-layout="phone-landscape"] .mynk-wb-student-disclosure {
-  display: none;
-}
-
-.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-student-title,
-.mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-student-title,
-.mynk-wb-chrome[data-role="student"][data-layout="phone-landscape"] .mynk-wb-student-title {
-  max-width: min(120px, 30vw);
-}
-
-.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-student-tutor-name,
-.mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-student-tutor-name,
-.mynk-wb-chrome[data-role="student"][data-layout="phone-landscape"] .mynk-wb-student-tutor-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-  flex: 1;
-}
-
-.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-student-status-zone,
-.mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-student-status-zone {
-  display: flex;
-}
-
-.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-student-av-zone,
-.mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-student-av-zone {
-  display: flex;
-}
-
-.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-topbar__zone--student-lead,
-.mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-topbar__zone--student-lead {
-  display: flex;
-}
-
-/* Student overflow slot — reserved width prevents Exit jitter when overflow toggles */
-.mynk-wb-student-overflow-slot {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 0;
-  flex-shrink: 0;
-  overflow: hidden;
-}
-
-.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-student-overflow-slot,
-.mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-student-overflow-slot,
-.mynk-wb-chrome[data-role="student"][data-layout="phone-landscape"] .mynk-wb-student-overflow-slot {
-  width: auto;
-  overflow: visible;
-}
-
-.mynk-wb-chrome[data-role="student"][data-layout="desktop"] .mynk-wb-topbar__zone--student-lead {
-  flex-shrink: 1;
-  min-width: 0;
-}
-
-/* Student overflow — hidden on wide desktop */
-.mynk-wb-chrome[data-role="student"][data-layout="desktop"] .mynk-wb-student-topbar-overflow-btn {
-  display: none;
-}
-
-/* Narrow desktop — disclosure + theme in overflow sheet; core controls stay inline */
-@media (max-width: 740px) {
-  .mynk-wb-chrome[data-role="student"][data-layout="desktop"] .mynk-wb-student-disclosure {
-    display: none;
-  }
-
-  .mynk-wb-chrome[data-role="student"][data-layout="desktop"] .mynk-wb-student-overflow-slot {
-    width: auto;
-    overflow: visible;
-  }
-
-  .mynk-wb-chrome[data-role="student"][data-layout="desktop"] .mynk-wb-student-topbar-overflow-btn {
-    display: inline-flex;
-  }
-
-  .mynk-wb-chrome[data-role="student"][data-layout="desktop"]
-    .mynk-wb-student-av-zone
-    > .mynk-wb-topbar__desktop-only:last-of-type {
-    display: none;
-  }
-}
-
-/* Phone landscape — use horizontal top-bar room (student) */
-.mynk-wb-chrome[data-role="student"][data-layout="phone-landscape"] .mynk-wb-topbar__zone--student-lead {
-  display: flex;
-}
-
-.mynk-wb-chrome[data-role="student"][data-layout="phone-landscape"] .mynk-wb-student-status-zone {
-  display: flex;
-}
-
-.mynk-wb-chrome[data-role="student"][data-layout="phone-landscape"] .mynk-wb-student-av-zone {
-  display: flex;
-}
-
-.mynk-wb-chrome[data-role="student"][data-layout="phone-landscape"] .mynk-wb-student-topbar-overflow-btn {
-  display: none;
 }
 
 .mynk-wb-bottom-toolbar--desktop-undo {
