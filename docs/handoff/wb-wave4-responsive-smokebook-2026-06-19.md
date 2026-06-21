@@ -525,6 +525,68 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 ---
 
+## Round 5 — post-fix re-smoke (branch wb-wave4-responsive @ c88ba36)
+
+**Preview:** Same branch alias — [wb-wave4-responsive preview](https://tutoring-notes-git-wb-wave4-responsive-arangarx-5209s-projects.vercel.app) — now serving commit [`c88ba36`](https://github.com/Arangarx/tutoring-notes/commit/c88ba36). The bespoke JS top-bar compaction engine was **REMOVED** (it caused the R4-2/R4-4 cascade); student desktop is now plain inline controls from JSX + simple CSS. R4-1 (sheet × on mouse) already PASS — not re-listed. Re-verify the three items below. These are geometry/layout checks that automated tests cannot verify — hardware or DevTools device-mode judgement is the gate.
+
+**Tip:** To faithfully reproduce phone-landscape, the window must be **SHORT** (height < 500px), not just narrow — a tall narrow desktop window stays in `desktop` mode; DevTools device-mode is more faithful than dragging the window.
+
+---
+
+### R5-1. Student desktop top bar — all controls inline at full width (compaction removed)
+
+**Action:** Student join at full desktop width (~1280px+). Read the top bar left-to-right. Then shrink toward ~half/three-quarter width and watch.
+
+**Expect:** At FULL width ALL controls are inline (tutor name, recording disclosure, connection pill, timer, mic/cam, undo/redo, theme, follow toggle, Exit) — NOT collapsed to just {pill, ⋯, Exit}; the ⋯ overflow (when it appears at narrow widths) WORKS on click; as you narrow, the bar contracts sanely (disclosure ellipsis, then disclosure/theme move to ⋯ below ~740px) and never loses Exit off-screen.
+
+**Ignore this run:** Pixel-perfect contraction at awkward narrow widths (polish deferred to component pass — see backlog `WB-STUDENT-TOPBAR-CONTRACTION`); phone layouts; tutor role.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### R5-2. Follow-tutor toggle vertically centered (student desktop)
+
+**Action:** Student desktop full width (so the bar isn't compacted and the toggle is visible). Inspect the Follow/Match chip — uppercase AND lowercase glyphs.
+
+**Expect:** Pill aligns vertically with sibling chrome; text + checkbox optically centered. (This couldn't be evaluated in R4 because the bar over-compacted and hid it.)
+
+**Ignore this run:** Tutor role; touch (overflow).
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### R5-3. Phone-landscape left rail — More reachable via scroll (short height)
+
+**Action:** Tutor (and student) at phone-landscape, SHORT height (~844×360 so the rail must scroll). Scroll the left rail to the bottom.
+
+**Expect:** The rail scrolls far enough that the **More** button is FULLY visible/tappable (round 4 clipped it); thin scrollbar visible; all tier-1 tools reachable.
+
+**Ignore this run:** Left placement (intended); sync latency.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
 ## Overall result
 
 - [ ] PASS

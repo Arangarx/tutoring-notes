@@ -119,6 +119,7 @@ Reclassified from a pre-master gate → near-immediate post-master follow-up: th
 | Item | Priority | Notes |
 |------|----------|-------|
 | **WB-HAND-TOOL-MISSING — pan/hand tool absent from WB toolset** | Low | The Excalidraw hand/pan tool has been absent from the WB tool strip/menus for a long time; re-add it somewhere (left strip "more" or shapes-adjacent) "just in case" a user wants explicit pan. Surfaced in Wave 4 round-1 smoke (item 2), 2026-06-20. |
+| **WB-STUDENT-TOPBAR-CONTRACTION — polished progressive student top-bar contraction at narrow desktop** | Low (defer to component pass) | The student desktop top bar has more controls than the tutor's (recording disclosure, connection pill, follow toggle). At narrow desktop widths the current handling is intentionally simple (ellipsis + one `@media (max-width:740px)` moving disclosure/theme to the ⋯ overflow) after a bespoke ResizeObserver compaction engine was removed for repeatedly regressing (Wave 4 rounds 2-4, jsdom-blind). A *polished* progressive/priority-based contraction should be built properly during the **real WB component pass** (tested, composed components — not bespoke per-surface CSS/JS). Full-width correctness is already met. (Wave 4 round-4 smoke, 2026-06-20.) |
 
 ---
 
