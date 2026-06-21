@@ -115,13 +115,20 @@
   align-items: center;
   padding: 8px 0;
   gap: 2px;
-  /* overflow: visible — shapes flyout, more-popover, and props panel
-     all open to the RIGHT of the strip; overflow-x:hidden clips them.
-     The tool count is small enough that y-scroll is not needed. */
-  overflow: visible;
+  /* Wave5 #2: overflow-y:auto makes the rail scrollable on short viewports so
+     the More button at the bottom is always reachable. overflow-x:hidden
+     prevents a horizontal scrollbar; flyouts (shapes/more popovers) that extend
+     to the right of the 48px rail may be partially clipped only when the
+     viewport is very short and the user has scrolled — acceptable vs the More
+     button being completely unreachable. min-height:0 lets the flex body
+     constrain the strip height correctly. */
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-height: 0;
   position: relative;
   /* Raised from z-10 to match topbar stacking context level (z-30). */
   z-index: 30;
+  scrollbar-width: none;  /* keep the rail slim on Firefox */
 }
 
 .mynk-wb-strip::-webkit-scrollbar {
@@ -2818,4 +2825,25 @@
 .mynk-wb-chrome[data-role="student"] .mynk-wb-follow-toggle--synced {
   border-color: var(--accent);
   background: var(--accent-soft);
+}
+
+/* Wave5 #1 — follow-toggle pill vertical centering in the 44px topbar.
+ * The pill (height:28px) sits inside a chain of flex containers all with
+ * align-items:center. Belt-and-suspenders: force align-self:center and
+ * vertical-align:middle on the <label> (inline-flex) to clear browser
+ * baseline-alignment quirks that can push it high in the bar. */
+.mynk-wb-chrome[data-role="student"] .mynk-wb-student-follow {
+  align-self: center;
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-follow-toggle {
+  align-self: center;
+  vertical-align: middle;
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-follow-toggle input[type="checkbox"] {
+  position: relative;
+  top: 0;
+  vertical-align: middle;
+  margin: 0;
 }
