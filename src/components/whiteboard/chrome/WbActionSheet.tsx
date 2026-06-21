@@ -93,7 +93,7 @@ export function WbActionSheet({
           ×
         </button>
       </div>
-      <div className="mynk-wb-action-sheet__body">{children}</div>
+      <div className="mynk-wb-action-sheet__body mynk-wb-action-sheet__body--scroll-affordance">{children}</div>
     </div>
   );
 }

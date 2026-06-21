@@ -147,6 +147,9 @@ import {
   WbIconCollapse,
   WbIconEndSession,
   WbIconEraser,
+  WbIconFollowSync,
+  WbIconGrid,
+  WbIconMatchView,
   WbIconMore,
   WbIconPencil,
   WbIconRedo,
@@ -748,7 +751,6 @@ export function WhiteboardWorkspaceClient({
   // Opening any menu closes all others; outside-click/Esc handled per-menu.
   const [openMenu, setOpenMenu] = useState<
     | "share"
-    | "view"
     | "shapes"
     | "more"
     | "props"
@@ -757,7 +759,6 @@ export function WhiteboardWorkspaceClient({
     | null
   >(null);
   const shareMenuOpen = openMenu === "share";
-  const viewMenuOpen = openMenu === "view";
   const shapesDropdownOpen = openMenu === "shapes";
   const morePopoverOpen = openMenu === "more";
   const propsCompactOpen = openMenu === "props";
@@ -766,7 +767,6 @@ export function WhiteboardWorkspaceClient({
   const toggleMenu = (
     menu:
       | "share"
-      | "view"
       | "shapes"
       | "more"
       | "props"
@@ -779,8 +779,7 @@ export function WhiteboardWorkspaceClient({
   const touchSheetOpen =
     openMenu === "props" ||
     openMenu === "shapes" ||
-    openMenu === "more" ||
-    openMenu === "topbar-more";
+    openMenu === "more";
   const [gridEnabled, setGridEnabled] = useState(false);
   const [roughness, setRoughness] = useState(0);
   const [roundness, setRoundness] = useState<"sharp" | "round">("sharp");
@@ -4417,6 +4416,70 @@ export function WhiteboardWorkspaceClient({
   const studentShowWaitingForOther =
     studentServerActiveMs === 0 && !studentBothPresentForTimer && studentConnected;
 
+  const renderGridToggleButton = (extraClassName = "mynk-wb-topbar__desktop-only") => (
+    <button
+      type="button"
+      className={`mynk-wb-tb-btn mynk-wb-tb-btn--icon${gridEnabled ? " mynk-wb-tb-btn--grid-on" : ""}${extraClassName ? ` ${extraClassName}` : ""}`}
+      title={gridEnabled ? "Hide canvas grid" : "Show canvas grid"}
+      aria-label={gridEnabled ? "Hide canvas grid" : "Show canvas grid"}
+      aria-pressed={gridEnabled}
+      data-testid="wb-grid-toggle"
+      onClick={(e) => {
+        e.stopPropagation();
+        toggleGrid(!gridEnabled);
+      }}
+    >
+      <WbIconGrid size={14} />
+    </button>
+  );
+
+  const renderGridOverflowMenuItem = () => (
+    <button
+      type="button"
+      className={`mynk-wb-menu-item${gridEnabled ? " mynk-wb-menu-item--active" : ""}`}
+      aria-pressed={gridEnabled}
+      data-testid="wb-overflow-grid-toggle"
+      onClick={() => toggleGrid(!gridEnabled)}
+    >
+      <span className="mynk-wb-menu-item__icon" aria-hidden>
+        <WbIconGrid size={14} />
+      </span>
+      <span>{gridEnabled ? "Hide canvas grid" : "Show canvas grid"}</span>
+    </button>
+  );
+
+  const renderTopbarOverflowControl = (testId: string) => (
+    <div className="mynk-wb-topbar-overflow-wrap" onClick={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__overflow-btn"
+        title="More session options"
+        aria-label="More session options"
+        aria-expanded={topbarMoreOpen}
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleMenu("topbar-more");
+        }}
+        data-testid={testId}
+      >
+        <WbIconMore size={14} />
+      </button>
+      {topbarMoreOpen && (
+        <div
+          className="mynk-wb-topbar-overflow-dropdown"
+          role="dialog"
+          aria-label="More session options"
+          data-testid="wb-topbar-overflow-dropdown"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="mynk-wb-topbar-overflow-dropdown__scroll">
+            {renderTopBarOverflowItems()}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   const renderTopBarOverflowItems = () => {
     const undoRedoDisabled = role === "student" ? !studentConnected : endingBusy;
     const camDisabled =
@@ -4460,7 +4523,10 @@ export function WhiteboardWorkspaceClient({
               checked={!independentView}
               onChange={(e) => setIndependentView(!e.target.checked)}
             />
-            Follow tutor view
+            <span className="mynk-wb-menu-item__icon" aria-hidden>
+              <WbIconFollowSync size={14} />
+            </span>
+            <span>Follow tutor view</span>
           </label>
           <button
             type="button"
@@ -4469,6 +4535,9 @@ export function WhiteboardWorkspaceClient({
             onClick={() => snapToTutorView()}
             data-testid="wb-overflow-match-view"
           >
+            <span className="mynk-wb-menu-item__icon" aria-hidden>
+              <WbIconMatchView size={14} />
+            </span>
             <span>Match tutor&apos;s view</span>
           </button>
           <div className="mynk-wb-popover-sep" />
@@ -4545,7 +4614,10 @@ export function WhiteboardWorkspaceClient({
               checked={!independentView}
               onChange={(e) => setIndependentView(!e.target.checked)}
             />
-            Follow tutor view
+            <span className="mynk-wb-menu-item__icon" aria-hidden>
+              <WbIconFollowSync size={14} />
+            </span>
+            <span>Follow tutor view</span>
           </label>
           <button
             type="button"
@@ -4554,19 +4626,15 @@ export function WhiteboardWorkspaceClient({
             onClick={() => snapToTutorView()}
             data-testid="wb-overflow-match-view"
           >
+            <span className="mynk-wb-menu-item__icon" aria-hidden>
+              <WbIconMatchView size={14} />
+            </span>
             <span>Match tutor&apos;s view</span>
           </button>
         </>
       )}
       <div className="mynk-wb-popover-sep" />
-      <label className="mynk-wb-view-item mynk-wb-menu-item">
-        <input
-          type="checkbox"
-          checked={gridEnabled}
-          onChange={(e) => toggleGrid(e.target.checked)}
-        />
-        Show canvas grid
-      </label>
+      {renderGridOverflowMenuItem()}
       <div className="mynk-wb-popover-sep" />
       <div className="mynk-wb-topbar-overflow-theme" role="group" aria-label="Theme">
         {(
@@ -5030,7 +5098,9 @@ export function WhiteboardWorkspaceClient({
         <div className="mynk-wb-topbar__zone" onClick={(e) => e.stopPropagation()}>
           {/* Follow toggle — desktop-only (overflow sheet on touch via renderTopBarOverflowItems) */}
           <div className="mynk-wb-student-follow mynk-wb-topbar__desktop-only">
-            <label className="mynk-wb-follow-toggle mynk-wb-chip">
+            <label
+              className={`mynk-wb-follow-toggle mynk-wb-chip${!independentView ? " mynk-wb-follow-toggle--synced" : ""}`}
+            >
               <input
                 type="checkbox"
                 checked={!independentView}
@@ -5038,15 +5108,21 @@ export function WhiteboardWorkspaceClient({
                 data-testid="wb-student-follow-toggle"
                 onChange={(e) => setIndependentView(!e.target.checked)}
               />
+              <span className="mynk-wb-menu-item__icon" aria-hidden>
+                <WbIconFollowSync size={12} />
+              </span>
               <span className="mynk-wb-follow-toggle__label">Follow tutor view</span>
             </label>
             <button
               type="button"
-              className="mynk-wb-tb-btn mynk-wb-tb-btn--compact"
+              className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-tb-btn--match-view"
               data-testid="wb-student-match-view"
+              aria-label="Match tutor's view"
+              title="Match tutor's view"
+              disabled={!studentConnected}
               onClick={() => snapToTutorView()}
             >
-              Match view
+              <WbIconMatchView size={14} />
             </button>
           </div>
 
@@ -5099,37 +5175,7 @@ export function WhiteboardWorkspaceClient({
 
           <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
 
-          <div className="mynk-wb-view-menu mynk-wb-topbar__desktop-only">
-            <button
-              type="button"
-              className="mynk-wb-tb-btn mynk-wb-tb-btn--icon"
-              title="View options"
-              aria-label="View options"
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleMenu("view");
-              }}
-            >
-              <WbIconMore size={14} />
-            </button>
-            {viewMenuOpen && (
-              <div
-                className="mynk-wb-view-dropdown"
-                role="menu"
-                aria-label="View options"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <label className="mynk-wb-view-item">
-                  <input
-                    type="checkbox"
-                    checked={gridEnabled}
-                    onChange={(e) => toggleGrid(e.target.checked)}
-                  />
-                  Show canvas grid
-                </label>
-              </div>
-            )}
-          </div>
+          {renderGridToggleButton()}
 
           <div className="mynk-wb-topbar__desktop-only">
             <WbThemeToggle
@@ -5140,30 +5186,20 @@ export function WhiteboardWorkspaceClient({
         </div>
 
         <div className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing">
+          {renderTopbarOverflowControl("wb-student-topbar-overflow")}
           <button
             type="button"
-            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__overflow-btn"
-            title="More session options"
-            aria-label="More session options"
-            aria-expanded={topbarMoreOpen}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleMenu("topbar-more");
-            }}
-            data-testid="wb-student-topbar-overflow"
-          >
-            <WbIconMore size={14} />
-          </button>
-          <button
-            type="button"
-            className="mynk-wb-tb-btn mynk-wb-tb-btn--leave"
+            className="mynk-wb-tb-btn mynk-wb-tb-btn--exit"
             data-testid="wb-student-exit"
+            aria-label="Exit"
+            title="Exit"
             onClick={() => {
               wjgLog("student_exit");
               setHasLeft(true);
             }}
           >
-            Exit
+            <WbIconEndSession size={14} />
+            <span className="mynk-wb-sr-only">Exit</span>
           </button>
         </div>
       </header>
@@ -5349,37 +5385,7 @@ export function WhiteboardWorkspaceClient({
 
           <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
 
-          <div className="mynk-wb-view-menu mynk-wb-topbar__desktop-only">
-            <button
-              type="button"
-              className="mynk-wb-tb-btn mynk-wb-tb-btn--icon"
-              title="View options"
-              aria-label="View options"
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleMenu("view");
-              }}
-            >
-              <WbIconMore size={14} />
-            </button>
-            {viewMenuOpen && (
-              <div
-                className="mynk-wb-view-dropdown"
-                role="menu"
-                aria-label="View options"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <label className="mynk-wb-view-item">
-                  <input
-                    type="checkbox"
-                    checked={gridEnabled}
-                    onChange={(e) => toggleGrid(e.target.checked)}
-                  />
-                  Show canvas grid
-                </label>
-              </div>
-            )}
-          </div>
+          {renderGridToggleButton()}
 
           <div className="mynk-wb-topbar__desktop-only">
             <WbThemeToggle
@@ -5390,21 +5396,7 @@ export function WhiteboardWorkspaceClient({
         </div>
 
         <div className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing">
-          <button
-            type="button"
-            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__overflow-btn"
-            title="More session options"
-            aria-label="More session options"
-            aria-expanded={topbarMoreOpen}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleMenu("topbar-more");
-            }}
-            data-testid="wb-topbar-overflow"
-          >
-            <WbIconMore size={14} />
-          </button>
-
+          {renderTopbarOverflowControl("wb-topbar-overflow")}
           {(() => {
             const endSessionLabel =
               endingState === "finalizing"
@@ -5886,14 +5878,6 @@ export function WhiteboardWorkspaceClient({
               testId="wb-more-sheet"
             >
               <div className="mynk-wb-action-sheet__menu-list">{renderOverflowMenuItems(true)}</div>
-            </WbActionSheet>
-            <WbActionSheet
-              open={openMenu === "topbar-more"}
-              onDismiss={dismissTouchSheets}
-              ariaLabel="More session options"
-              testId="wb-topbar-more-sheet"
-            >
-              {renderTopBarOverflowItems()}
             </WbActionSheet>
           </>
         </WbChromeErrorBoundary>

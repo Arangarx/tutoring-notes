@@ -331,7 +331,7 @@ describe("WhiteboardWorkspaceClient role=student chrome contract (Wave 1b)", () 
   it("renders full student chrome: Exit, tool strip, read-only page strip, no AVPermissionsPrompt", () => {
     render(<WhiteboardWorkspaceClient {...studentProps} />);
 
-    expect(screen.getByTestId("wb-student-exit")).toHaveTextContent("Exit");
+    expect(screen.getByTestId("wb-student-exit")).toHaveAttribute("aria-label", "Exit");
     expect(screen.queryByTestId("av-permissions-prompt")).not.toBeInTheDocument();
     expect(screen.getByTestId("wb-student-tool-strip")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Pointer wand (K)" })[0]).toBeInTheDocument();

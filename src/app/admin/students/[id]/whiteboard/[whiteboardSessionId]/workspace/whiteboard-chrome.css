@@ -2678,3 +2678,129 @@
   border: 1px solid var(--border);
   z-index: 35;
 }
+
+/* ── Wave 5 polish — shared grid icon toggle (both roles) ── */
+.mynk-wb-tb-btn--grid-on {
+  background: var(--accent-soft);
+  color: var(--foreground);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.mynk-wb-tb-btn--grid-on:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-soft) 70%, var(--accent) 30%);
+  color: var(--foreground);
+}
+
+/* Top-bar overflow ⋯ — dropdown below trigger (replaces bottom sheet) */
+.mynk-wb-topbar-overflow-wrap {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.mynk-wb-topbar-overflow-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 50;
+  min-width: 220px;
+  max-width: min(320px, calc(100vw - 16px));
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.mynk-wb-topbar-overflow-dropdown__scroll {
+  max-height: min(60dvh, 400px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+}
+
+.mynk-wb-topbar-overflow-dropdown__scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.mynk-wb-topbar-overflow-dropdown__scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.mynk-wb-topbar-overflow-dropdown .mynk-wb-menu-item,
+.mynk-wb-topbar-overflow-dropdown .mynk-wb-view-item.mynk-wb-menu-item {
+  justify-content: flex-start;
+}
+
+.mynk-wb-topbar-overflow-dropdown .mynk-wb-menu-item--active,
+.mynk-wb-action-sheet__menu-list .mynk-wb-menu-item--active {
+  background: var(--accent-soft);
+}
+
+.mynk-wb-menu-item__icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+/* Overflow / action-sheet menu lists — consistent left alignment */
+.mynk-wb-action-sheet__menu-list .mynk-wb-menu-item,
+.mynk-wb-action-sheet__menu-list .mynk-wb-view-item.mynk-wb-menu-item {
+  justify-content: flex-start;
+}
+
+.mynk-wb-action-sheet__body--scroll-affordance {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.mynk-wb-action-sheet__body--scroll-affordance::-webkit-scrollbar {
+  width: 6px;
+}
+
+.mynk-wb-action-sheet__body--scroll-affordance::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+/* Wave 5 — student-only exit + follow/match polish */
+.mynk-wb-chrome[data-role="student"] .mynk-wb-tb-btn--exit {
+  background: var(--accent);
+  color: var(--accent-on);
+  font-weight: 600;
+  gap: 4px;
+  padding: 0 10px;
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-tb-btn--exit:hover:not(:disabled) {
+  background: var(--accent-strong);
+  color: var(--accent-on);
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-tb-btn--match-view {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-tb-btn--match-view:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-follow-toggle--synced {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
