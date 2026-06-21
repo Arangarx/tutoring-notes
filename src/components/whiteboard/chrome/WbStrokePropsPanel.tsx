@@ -215,6 +215,7 @@ export function WbStrokePropsPanel({
           onMoreStylesToggle();
         }}
         aria-expanded={moreStylesOpen}
+        data-testid="wb-more-styles-btn"
       >
         {moreStylesOpen ? "▴ Less styles" : "▾ More styles"}
       </button>

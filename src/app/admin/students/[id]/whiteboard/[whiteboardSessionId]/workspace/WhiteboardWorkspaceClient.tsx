@@ -784,6 +784,13 @@ export function WhiteboardWorkspaceClient({
   const [roundness, setRoundness] = useState<"sharp" | "round">("sharp");
   const { layoutMode, orientation } = useWbLayoutMode();
   const touchLayout = isTouchLayout(layoutMode);
+  // Touch props sheet: expand "more styles" when the sheet opens so roughness /
+  // z-order / delete are reachable without an extra hunt below the fold.
+  useEffect(() => {
+    if (touchLayout && openMenu === "props") {
+      setMoreStylesOpen(true);
+    }
+  }, [touchLayout, openMenu]);
   const [toolbarHidden, setToolbarHidden] = useState(false);
   // Stroke props — tracked from Excalidraw onChange (appState).
   // Always initialize to EXCALIDRAW_STROKE_HEX (#1e293b) in both themes.
@@ -4394,6 +4401,27 @@ export function WhiteboardWorkspaceClient({
     </>
   );
 
+  // Student render-time computed values (used by top bar + overflow helpers)
+  const studentCallConnected = liveAv.reachableParticipants.length >= 1;
+  const studentConnectionPillLabel = !studentConnected
+    ? "Joining…"
+    : liveAv.participants.length > 0 && !studentCallConnected
+      ? "Call reconnecting…"
+      : "Connected";
+  const studentConnectionPillOk =
+    studentConnected &&
+    (liveAv.participants.length === 0 || studentCallConnected);
+  const studentBothPresentForTimer = studentConnected && studentCallConnected;
+  const studentLiveTimerMs = computeDisplayActiveMs({
+    nowMs: studentNow,
+    serverActiveMs: studentServerActiveMs,
+    serverLastActiveAtMs: studentServerLastActiveAtMs,
+    clientActiveNow: studentBothPresentForTimer,
+    staleThresholdMs: ACTIVE_PING_STALE_MS,
+  });
+  const studentShowWaitingForOther =
+    studentServerActiveMs === 0 && !studentBothPresentForTimer && studentConnected;
+
   const renderTopBarOverflowItems = () => {
     const undoRedoDisabled = role === "student" ? !studentConnected : endingBusy;
     const camDisabled =
@@ -4415,15 +4443,39 @@ export function WhiteboardWorkspaceClient({
           </p>
           <div className="mynk-wb-popover-sep" />
           <p className="mynk-wb-info-note" style={{ margin: "0 0 8px" }}>
-            {studentConnected ? "Connected" : "Joining…"}
-            {studentConnected && liveAv.participants.length > 0
-              ? ` · ${studentCallConnected ? "Call connected" : "Call reconnecting…"}`
-              : ""}
+            {studentConnectionPillLabel}
             {" · "}
             {studentShowWaitingForOther
               ? `${formatTimerMinutesOnly(studentLiveTimerMs)} (waiting)`
               : formatTimerMinutesOnly(studentLiveTimerMs)}
           </p>
+          <div className="mynk-wb-popover-sep" />
+        </>
+      )}
+      {role === "student" && !touchLayout && (
+        <>
+          <p className="mynk-wb-info-note" style={{ margin: "0 0 8px" }}>
+            This session is being recorded by your tutor. What you draw is visible
+            live.
+          </p>
+          <div className="mynk-wb-popover-sep" />
+          <label className="mynk-wb-view-item mynk-wb-menu-item">
+            <input
+              type="checkbox"
+              checked={!independentView}
+              onChange={(e) => setIndependentView(!e.target.checked)}
+            />
+            Follow tutor view
+          </label>
+          <button
+            type="button"
+            className="mynk-wb-menu-item"
+            disabled={!studentConnected}
+            onClick={() => snapToTutorView()}
+            data-testid="wb-overflow-match-view"
+          >
+            <span>Match tutor&apos;s view</span>
+          </button>
           <div className="mynk-wb-popover-sep" />
         </>
       )}
@@ -4635,16 +4687,14 @@ export function WhiteboardWorkspaceClient({
         label="Shapes"
         active={WB_SHAPE_TOOLS.some((s) => s.type === activeToolType)}
         onClick={() => {
-          const shapeActive = WB_SHAPE_TOOLS.some((s) => s.type === activeToolType);
-          // Narrow/tablet: when a shape is already active, primary tap opens the picker.
-          if (touchLayout && shapeActive) {
-            toggleMenu("shapes");
-            return;
-          }
-          selectTool(selectedShapeTool);
+          selectTool(
+            WB_SHAPE_TOOLS.some((s) => s.type === activeToolType)
+              ? activeToolType
+              : selectedShapeTool
+          );
         }}
-        pulldown={!touchLayout}
-        onPulldown={touchLayout ? undefined : () => toggleMenu("shapes")}
+        pulldown
+        onPulldown={() => toggleMenu("shapes")}
       />
       {!touchLayout && shapesDropdownOpen && (
         <div className="mynk-wb-shapes-dropdown" role="menu">
@@ -4896,20 +4946,6 @@ export function WhiteboardWorkspaceClient({
     );
   }
 
-  // ---------------------------------------------------------------
-  // Student render-time computed values (no hooks; pure derivations)
-  // ---------------------------------------------------------------
-  const studentCallConnected = liveAv.reachableParticipants.length >= 1;
-  const studentBothPresentForTimer = studentConnected && studentCallConnected;
-  const studentLiveTimerMs = computeDisplayActiveMs({
-    nowMs: studentNow,
-    serverActiveMs: studentServerActiveMs,
-    serverLastActiveAtMs: studentServerLastActiveAtMs,
-    clientActiveNow: studentBothPresentForTimer,
-    staleThresholdMs: ACTIVE_PING_STALE_MS,
-  });
-  const studentShowWaitingForOther =
-    studentServerActiveMs === 0 && !studentBothPresentForTimer && studentConnected;
   const showBoardWaitBanner =
     boardWaitElapsed && !dismissedBoardWaitNotice && !stuckLoading;
   const chromeLocalTileLabel = role === "student" ? "You" : localPeerLabel;
@@ -4984,19 +5020,11 @@ export function WhiteboardWorkspaceClient({
 
         <div className="mynk-wb-topbar__zone mynk-wb-student-status-zone">
           <span
-            className={`mynk-wb-status-pill${studentConnected ? " mynk-wb-status-pill--ok" : " mynk-wb-status-pill--warn"}`}
+            className={`mynk-wb-status-pill${studentConnectionPillOk ? " mynk-wb-status-pill--ok" : " mynk-wb-status-pill--warn"}`}
             data-testid="wb-student-sync-pill"
           >
-            {studentConnected ? "Connected" : "Joining…"}
+            {studentConnectionPillLabel}
           </span>
-          {studentConnected && liveAv.participants.length > 0 && (
-            <span
-              className={`mynk-wb-status-pill${studentCallConnected ? " mynk-wb-status-pill--ok" : " mynk-wb-status-pill--warn"}`}
-              data-testid="wb-student-call-pill"
-            >
-              {studentCallConnected ? "Call connected" : "Call reconnecting…"}
-            </span>
-          )}
           <span className="mynk-wb-timer" data-testid="wb-student-timer">
             {studentShowWaitingForOther
               ? `${formatTimerMinutesOnly(studentLiveTimerMs)} (waiting)`
@@ -5006,7 +5034,7 @@ export function WhiteboardWorkspaceClient({
 
         {!touchLayout && (
           <div className="mynk-wb-topbar__zone mynk-wb-student-follow">
-            <label className="mynk-wb-follow-toggle">
+            <label className="mynk-wb-follow-toggle mynk-wb-chip">
               <input
                 type="checkbox"
                 checked={!independentView}
@@ -5014,15 +5042,15 @@ export function WhiteboardWorkspaceClient({
                 data-testid="wb-student-follow-toggle"
                 onChange={(e) => setIndependentView(!e.target.checked)}
               />
-              Follow tutor view
+              <span className="mynk-wb-follow-toggle__label">Follow tutor view</span>
             </label>
             <button
               type="button"
-              className="mynk-wb-tb-btn"
+              className="mynk-wb-tb-btn mynk-wb-tb-btn--compact"
               data-testid="wb-student-match-view"
               onClick={() => snapToTutorView()}
             >
-              Match tutor&apos;s view
+              Match view
             </button>
           </div>
         )}
@@ -5116,22 +5144,20 @@ export function WhiteboardWorkspaceClient({
         </div>
 
         <div className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing">
-          {touchLayout && (
-            <button
-              type="button"
-              className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__overflow-btn"
-              title="More session options"
-              aria-label="More session options"
-              aria-expanded={topbarMoreOpen}
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleMenu("topbar-more");
-              }}
-              data-testid="wb-student-topbar-overflow"
-            >
-              <WbIconMore size={14} />
-            </button>
-          )}
+          <button
+            type="button"
+            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__overflow-btn mynk-wb-student-topbar-overflow-btn"
+            title="More session options"
+            aria-label="More session options"
+            aria-expanded={topbarMoreOpen}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleMenu("topbar-more");
+            }}
+            data-testid="wb-student-topbar-overflow"
+          >
+            <WbIconMore size={14} />
+          </button>
           <button
             type="button"
             className="mynk-wb-tb-btn mynk-wb-tb-btn--leave"
