@@ -41,20 +41,38 @@ export function BoardTabStrip({
         const isPdf = page.isPdf ?? isPdfBoardSection(page.section);
         const active = page.id === activePageId;
         const confirming = confirmDeleteId === page.id;
+        const tabClassName = `mynk-wb-board-tab${active ? " mynk-wb-board-tab--active" : ""}${readOnly && !active ? " mynk-wb-board-tab--read-only-inactive" : ""}${readOnly && active ? " mynk-wb-board-tab--read-only-active" : ""}`;
         return (
           <div
             key={page.id}
-            className={`mynk-wb-board-tab-wrap${active ? " mynk-wb-board-tab-wrap--active" : ""}${!canDelete ? " mynk-wb-board-tab-wrap--no-delete" : ""}`}
+            className={`mynk-wb-board-tab-wrap${active ? " mynk-wb-board-tab-wrap--active" : ""}${!canDelete ? " mynk-wb-board-tab-wrap--no-delete" : ""}${readOnly ? " mynk-wb-board-tab-wrap--read-only" : ""}`}
           >
+            {readOnly ? (
+              <span
+                role="tab"
+                className={tabClassName}
+                aria-selected={active}
+                aria-current={active ? "page" : undefined}
+                aria-label={boardLabel}
+                aria-disabled="true"
+              >
+                {active && <span className="mynk-wb-board-tab__dot" aria-hidden />}
+                {isPdf && (
+                  <span className="mynk-wb-board-tab__pdf-icon" aria-hidden>
+                    <WbIconPdf size={12} />
+                  </span>
+                )}
+                {boardLabel}
+              </span>
+            ) : (
             <button
               type="button"
               role="tab"
-              className={`mynk-wb-board-tab${active ? " mynk-wb-board-tab--active" : ""}`}
+              className={tabClassName}
               aria-selected={active}
               aria-label={boardLabel}
               disabled={tabDisabled || active}
               onClick={() => {
-                if (readOnly) return;
                 if (!active && onSelectPage) void onSelectPage(page.id);
                 setConfirmDeleteId(null);
               }}
@@ -67,6 +85,7 @@ export function BoardTabStrip({
               )}
               {boardLabel}
             </button>
+            )}
             {canDelete && (
               confirming ? (
                 <>

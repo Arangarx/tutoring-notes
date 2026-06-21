@@ -1217,6 +1217,21 @@
   border-color: var(--accent);
 }
 
+/* Student read-only board tabs — active highlight without disabled-button styling */
+.mynk-wb-chrome[data-role="student"] .mynk-wb-board-tab-wrap--read-only {
+  cursor: default;
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-board-tab--read-only-active,
+.mynk-wb-chrome[data-role="student"] .mynk-wb-board-tab--read-only-inactive {
+  cursor: default;
+  pointer-events: none;
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-board-tab--read-only-inactive {
+  opacity: 0.65;
+}
+
 /* Ghost viewport label — VP-01 (bounds rendering deferred) */
 .mynk-wb-ghost-label {
   position: absolute;

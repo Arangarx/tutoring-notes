@@ -12,13 +12,17 @@ const pages = [
 ];
 
 describe("BoardTabStrip", () => {
-  it("readOnly renders display-only tabs (student canSwitchPage:false path)", () => {
+  it("readOnly renders display-only tabs with active highlight (student indicator)", () => {
     render(
       <BoardTabStrip pageList={pages} activePageId="p1" readOnly testId="wb-student-page-strip" />
     );
 
-    expect(screen.getByRole("tab", { name: "Board 1" })).toBeDisabled();
-    expect(screen.getByRole("tab", { name: "Board 2" })).toBeDisabled();
+    const active = screen.getByRole("tab", { name: "Board 1" });
+    const inactive = screen.getByRole("tab", { name: "Board 2" });
+    expect(active).toHaveAttribute("aria-current", "page");
+    expect(active).toHaveAttribute("aria-selected", "true");
+    expect(inactive).not.toHaveAttribute("aria-current");
+    expect(inactive).toHaveAttribute("aria-selected", "false");
     expect(screen.queryByRole("button", { name: "Add board" })).not.toBeInTheDocument();
   });
 
