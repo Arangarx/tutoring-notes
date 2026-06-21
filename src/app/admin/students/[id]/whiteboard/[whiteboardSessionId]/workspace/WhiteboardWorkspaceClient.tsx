@@ -786,6 +786,13 @@ export function WhiteboardWorkspaceClient({
   const { layoutMode, orientation } = useWbLayoutMode();
   const touchLayout = isTouchLayout(layoutMode);
   const [toolbarHidden, setToolbarHidden] = useState(false);
+  // Wave5 #3 — freeze fix: when the layout switches (window resized past the
+  // inline/touch breakpoint) close any open menu so the ⋯ overflow dropdown
+  // cannot stay open after its trigger is CSS-hidden. An open dropdown while the
+  // trigger is not rendered caused a listener/render loop that froze the page.
+  useEffect(() => {
+    setOpenMenu(null);
+  }, [layoutMode]);
   // Stroke props — tracked from Excalidraw onChange (appState).
   // Always initialize to EXCALIDRAW_STROKE_HEX (#1e293b) in both themes.
   // Excalidraw's dark-mode canvas filter (invert+hue-rotate) automatically
@@ -4101,9 +4108,19 @@ export function WhiteboardWorkspaceClient({
     };
     if (el.link === GRAPH_EMBED_LINK || el.customData?.wbType === "graph") {
       return (
+        // Wave5 #4 — bidirectional graph sync for student.
+        // excalidrawAPIRef.current is always passed (tutor and student).
+        // Student persists graph edits to their own Excalidraw scene, which
+        // onCanvasChange broadcasts to the tutor (same as stroke changes).
+        // syncFromBoard stays true for student: tutor-origin graph updates
+        // (via element.customData.graphStateJson on incoming v3 scenes) are
+        // re-plotted by the GraphEmbeddable syncFromBoard useLayoutEffect,
+        // giving tutor→student sync. Student→tutor is last-write-wins (same
+        // model as strokes). Slice-2 local-only mode (excalidrawAPI=undefined)
+        // is removed; both roles now use the same bidirectional persist path.
         <GraphEmbeddable
           element={element as { id?: string; width?: number; height?: number; customData?: Record<string, unknown> }}
-          excalidrawAPI={role === "student" ? undefined : excalidrawAPIRef.current}
+          excalidrawAPI={excalidrawAPIRef.current}
           readOnly={false}
           syncFromBoard={role === "student"}
         />
