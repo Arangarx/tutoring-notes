@@ -527,7 +527,7 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 ## Round 5 — post-fix re-smoke (branch wb-wave4-responsive @ c88ba36)
 
-**Preview:** Same branch alias — [wb-wave4-responsive preview](https://tutoring-notes-git-wb-wave4-responsive-arangarx-5209s-projects.vercel.app) — now serving commit [`c88ba36`](https://github.com/Arangarx/tutoring-notes/commit/c88ba36). The bespoke JS top-bar compaction engine was **REMOVED** (it caused the R4-2/R4-4 cascade); student desktop is now plain inline controls from JSX + simple CSS. R4-1 (sheet × on mouse) already PASS — not re-listed. Re-verify the three items below. These are geometry/layout checks that automated tests cannot verify — hardware or DevTools device-mode judgement is the gate.
+**Preview:** Same branch alias — [wb-wave4-responsive preview](https://tutoring-notes-git-wb-wave4-responsive-arangarx-5209s-projects.vercel.app) — now serving commit `[c88ba36](https://github.com/Arangarx/tutoring-notes/commit/c88ba36)`. The bespoke JS top-bar compaction engine was **REMOVED** (it caused the R4-2/R4-4 cascade); student desktop is now plain inline controls from JSX + simple CSS. R4-1 (sheet × on mouse) already PASS — not re-listed. Re-verify the three items below. These are geometry/layout checks that automated tests cannot verify — hardware or DevTools device-mode judgement is the gate.
 
 **Tip:** To faithfully reproduce phone-landscape, the window must be **SHORT** (height < 500px), not just narrow — a tall narrow desktop window stays in `desktop` mode; DevTools device-mode is more faithful than dragging the window.
 
@@ -589,7 +589,7 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 ## Round 6 — post-rework re-smoke (branch wb-wave4-responsive @ 64108cf)
 
-**Preview:** Same branch alias — [wb-wave4-responsive preview](https://tutoring-notes-git-wb-wave4-responsive-arangarx-5209s-projects.vercel.app) — now serving commit [`64108cf`](https://github.com/Arangarx/tutoring-notes/commit/64108cf). This is the **clean rework**, not a patch — the student top bar was rebuilt to reuse the tutor's chrome with only documented deltas, and all shared tutor CSS was restored to the `5d56f49` baseline. Earlier round results (R1..R5) are **historical** — this round supersedes them for the student top bar. Geometry is the only remaining unknown (hardware/DevTools gates it); tutor-baseline-restored and student-reuses-tutor-code are provable and already verified by diff/code.
+**Preview:** Same branch alias — [wb-wave4-responsive preview](https://tutoring-notes-git-wb-wave4-responsive-arangarx-5209s-projects.vercel.app) — now serving commit `[64108cf](https://github.com/Arangarx/tutoring-notes/commit/64108cf)`. This is the **clean rework**, not a patch — the student top bar was rebuilt to reuse the tutor's chrome with only documented deltas, and all shared tutor CSS was restored to the `5d56f49` baseline. Earlier round results (R1..R5) are **historical** — this round supersedes them for the student top bar. Geometry is the only remaining unknown (hardware/DevTools gates it); tutor-baseline-restored and student-reuses-tutor-code are provable and already verified by diff/code.
 
 **Tip:** To faithfully reproduce phone-landscape, the window must be **SHORT** (height < 500px), not just narrow — a tall narrow desktop window stays in `desktop` mode; DevTools device-mode is more faithful than dragging the window.
 
@@ -597,7 +597,7 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 ### R6-1. TUTOR — no regression at all three sizes (baseline restored)
 
-**Action:** As tutor, check desktop (>=1280), phone-portrait (~390x844), phone-landscape (~844x390 short height). This is the "did restoring shared CSS to baseline keep the tutor exactly as known-good" check.
+**Action:** As tutor, check desktop (>=1280), phone-portrait (~~390x844), phone-landscape (~~844x390 short height). This is the "did restoring shared CSS to baseline keep the tutor exactly as known-good" check.
 
 **Expect:** Tutor chrome at every size behaves exactly as it did before the Wave 4 work began — full top bar + left strip on desktop; bottom toolbar + overflow on portrait; left rail + inline controls on landscape. No new clipping, no missing tools.
 
@@ -605,11 +605,11 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes:  I'm fairly certain the top bar didn't over compact that much previously in landscape.  I can't speak to the bar on the left, it wasn't done before we started on the student side.  However in landscape still doesn't consistently show whole left bar.  Only visible down to laser.  At this point I'm debating on whether to fix the over compaction later.**
 
 ---
 
@@ -623,11 +623,16 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes: Follow tutor view hasn't moved since last time.**  
+**Can we make the exit button coral like the tutor's**  
+**This applies to both layouts when there is room.  My wife is asking if it's really necessary to have just the "show grid" in the top "more" section.  I kinda wonder if it shouldn't just be an icon of a grid that toggles in both views.**  
+**Wife says it's weird that "Match tutor's view" text is left aligned when the other stuff is on the right.  I think it would be weird for the text to all right align for buttons but maybe we should center those? I dunno.**  
+**She also says she would expect the more options from the top to pop down from the top, not pop up from the bottom.**  
+
 
 ---
 
@@ -639,7 +644,7 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 **Ignore this run:** Desktop; landscape.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -657,7 +662,7 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 **Ignore this run:** Left placement (intended); sync latency.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -676,7 +681,7 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 **Ignore this run:** Tutor role.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
