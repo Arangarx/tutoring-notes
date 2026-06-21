@@ -587,6 +587,104 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 ---
 
+## Round 6 — post-rework re-smoke (branch wb-wave4-responsive @ 64108cf)
+
+**Preview:** Same branch alias — [wb-wave4-responsive preview](https://tutoring-notes-git-wb-wave4-responsive-arangarx-5209s-projects.vercel.app) — now serving commit [`64108cf`](https://github.com/Arangarx/tutoring-notes/commit/64108cf). This is the **clean rework**, not a patch — the student top bar was rebuilt to reuse the tutor's chrome with only documented deltas, and all shared tutor CSS was restored to the `5d56f49` baseline. Earlier round results (R1..R5) are **historical** — this round supersedes them for the student top bar. Geometry is the only remaining unknown (hardware/DevTools gates it); tutor-baseline-restored and student-reuses-tutor-code are provable and already verified by diff/code.
+
+**Tip:** To faithfully reproduce phone-landscape, the window must be **SHORT** (height < 500px), not just narrow — a tall narrow desktop window stays in `desktop` mode; DevTools device-mode is more faithful than dragging the window.
+
+---
+
+### R6-1. TUTOR — no regression at all three sizes (baseline restored)
+
+**Action:** As tutor, check desktop (>=1280), phone-portrait (~390x844), phone-landscape (~844x390 short height). This is the "did restoring shared CSS to baseline keep the tutor exactly as known-good" check.
+
+**Expect:** Tutor chrome at every size behaves exactly as it did before the Wave 4 work began — full top bar + left strip on desktop; bottom toolbar + overflow on portrait; left rail + inline controls on landscape. No new clipping, no missing tools.
+
+**Ignore this run:** Pre-existing tutor polish nits already noted in round-1 (styles-sheet depth, shapes affordance) — only fail for NEW regressions vs the original known-good tutor.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### R6-2. STUDENT desktop — parity with tutor + deltas, inline at full width
+
+**Action:** Student join at full desktop width; read the top bar; then narrow toward half width and watch.
+
+**Expect:** At full width all controls inline (tutor name, Connected pill, timer, recording disclosure, follow toggle, mic/cam, undo/redo, view, theme, Exit) — NOT collapsed to {pill, ⋯, Exit}; as you narrow, it contracts using the SAME ⋯ overflow the tutor uses (desktop-only items move to overflow), never loses Exit; deltas correct (Exit not End-session, Connected not LIVE, no Share/inserts). The ⋯ works on click.
+
+**Ignore this run:** Tutor role; phone layouts.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### R6-3. STUDENT phone-portrait — matches tutor portrait behavior + deltas
+
+**Action:** Student at phone-portrait.
+
+**Expect:** Same bottom-toolbar + top-bar overflow behavior as the tutor at portrait; Hide-tools, ⋯ overflow, Exit reachable; recording disclosure + follow toggle live in the overflow sheet (not crammed inline); styles/shapes sheets work.
+
+**Ignore this run:** Desktop; landscape.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### R6-4. STUDENT phone-landscape — matches tutor landscape behavior + deltas
+
+**Action:** Student at phone-landscape (short height ~844x390).
+
+**Expect:** Same as tutor landscape (now baseline-restored) — left vertical tool rail with all tier-1 tools reachable, inline top-bar controls per baseline, ⋯ overflow + Exit reachable; deltas present. Since the rail is back to the tutor's baseline behavior, More should be reachable the way it was for the tutor originally.
+
+**Ignore this run:** Left placement (intended); sync latency.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### R6-5. STUDENT — delta styling details
+
+**Action:** Student desktop full width.
+
+**Expect:** Follow-tutor toggle pill is vertically centered and consistent with chrome; recording disclosure truncates with ellipsis when space is tight rather than pushing controls off-screen; Connected pill styled consistently.
+
+**Ignore this run:** Tutor role.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
 ## Overall result
 
 - [ ] PASS
