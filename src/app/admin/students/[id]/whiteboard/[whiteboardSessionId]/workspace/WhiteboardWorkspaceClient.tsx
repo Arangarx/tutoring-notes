@@ -140,6 +140,7 @@ import {
   useWbLayoutMode,
 } from "@/components/whiteboard/chrome/useWbLayoutMode";
 import { LiveBoardChrome } from "@/components/whiteboard/chrome/LiveBoardChrome";
+import type { StudentTopbarCompactLevel } from "@/components/whiteboard/chrome/LiveBoardChrome";
 import { WbRoleProvider, type WbParticipantRole } from "@/components/whiteboard/chrome/wb-role";
 import {
   shapeIconFor,
@@ -526,6 +527,8 @@ export function WhiteboardWorkspaceClient({
    * resize ResizeObserver. Additive — no existing logic uses this ref.
    */
   const wbCanvasRef = useRef<HTMLDivElement | null>(null);
+  /** Student desktop top bar — clip-driven compaction (Wave 4 round 3). */
+  const studentTopbarRef = useRef<HTMLElement | null>(null);
   /**
    * Frame-to-frame container dimensions tracked by the resize ResizeObserver.
    * See the resize useEffect below (search "Center-preserving viewport resize").
@@ -784,14 +787,10 @@ export function WhiteboardWorkspaceClient({
   const [roundness, setRoundness] = useState<"sharp" | "round">("sharp");
   const { layoutMode, orientation } = useWbLayoutMode();
   const touchLayout = isTouchLayout(layoutMode);
-  // Touch props sheet: expand "more styles" when the sheet opens so roughness /
-  // z-order / delete are reachable without an extra hunt below the fold.
-  useEffect(() => {
-    if (touchLayout && openMenu === "props") {
-      setMoreStylesOpen(true);
-    }
-  }, [touchLayout, openMenu]);
   const [toolbarHidden, setToolbarHidden] = useState(false);
+  const [studentTopbarCompact, setStudentTopbarCompact] =
+    useState<StudentTopbarCompactLevel>("none");
+  const studentTopbarCompactIdxRef = useRef(0);
   // Stroke props — tracked from Excalidraw onChange (appState).
   // Always initialize to EXCALIDRAW_STROKE_HEX (#1e293b) in both themes.
   // Excalidraw's dark-mode canvas filter (invert+hue-rotate) automatically
@@ -4422,6 +4421,105 @@ export function WhiteboardWorkspaceClient({
   const studentShowWaitingForOther =
     studentServerActiveMs === 0 && !studentBothPresentForTimer && studentConnected;
 
+  // Student desktop top bar: clip-driven compaction with hysteresis (Wave 4 round 3).
+  // Replaces fixed @media breakpoints that over-compacted ~half-width windows.
+  useEffect(() => {
+    if (role !== "student" || touchLayout) {
+      studentTopbarCompactIdxRef.current = 0;
+      setStudentTopbarCompact("none");
+      return;
+    }
+
+    const topbar = studentTopbarRef.current;
+    if (!topbar || typeof ResizeObserver === "undefined") return;
+
+    const chromeRoot = topbar.closest<HTMLElement>(".mynk-wb-chrome");
+
+    const LEVELS: StudentTopbarCompactLevel[] = [
+      "none",
+      "no-disclosure",
+      "no-follow",
+      "no-av-desktop",
+      "no-timer",
+      "overflow",
+    ];
+    const HYSTERESIS_PX = 32;
+    const OVERFLOW_SLOT_PX = 36;
+    const disclosureLevelIdx = LEVELS.indexOf("no-disclosure");
+
+    let rafId = 0;
+
+    const trailingClipped = (reserveOverflowSlot: boolean) => {
+      const barRect = topbar.getBoundingClientRect();
+      const trailing = topbar.querySelector<HTMLElement>(
+        ".mynk-wb-topbar__zone--trailing"
+      );
+      if (!trailing) return false;
+      const slotReserve = reserveOverflowSlot ? OVERFLOW_SLOT_PX : 0;
+      return trailing.getBoundingClientRect().right > barRect.right - slotReserve + 1;
+    };
+
+    const applyLevelIdxSync = (idx: number) => {
+      const clamped = Math.max(0, Math.min(idx, LEVELS.length - 1));
+      chromeRoot?.setAttribute(
+        "data-student-topbar-compact",
+        LEVELS[clamped]!
+      );
+      return clamped;
+    };
+
+    const reconcile = () => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        let idx = studentTopbarCompactIdxRef.current;
+
+        while (idx < LEVELS.length - 1) {
+          applyLevelIdxSync(idx);
+          const reserveSlot = idx >= disclosureLevelIdx;
+          if (!trailingClipped(reserveSlot)) break;
+          idx += 1;
+        }
+        idx = applyLevelIdxSync(idx);
+
+        while (idx > 0) {
+          const tryIdx = idx - 1;
+          applyLevelIdxSync(tryIdx);
+          const reserveSlot = tryIdx >= disclosureLevelIdx;
+          const trailing = topbar.querySelector<HTMLElement>(
+            ".mynk-wb-topbar__zone--trailing"
+          );
+          const barRect = topbar.getBoundingClientRect();
+          const trailingRight = trailing?.getBoundingClientRect().right ?? 0;
+          const slack = barRect.right - trailingRight;
+          if (slack < HYSTERESIS_PX && trailingClipped(reserveSlot)) {
+            applyLevelIdxSync(idx);
+            break;
+          }
+          idx = tryIdx;
+        }
+
+        studentTopbarCompactIdxRef.current = idx;
+        setStudentTopbarCompact(LEVELS[idx]!);
+      });
+    };
+
+    const ro = new ResizeObserver(reconcile);
+    ro.observe(topbar);
+    reconcile();
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(rafId);
+    };
+  }, [
+    role,
+    touchLayout,
+    studentConnectionPillLabel,
+    studentLiveTimerMs,
+    studentShowWaitingForOther,
+    toolbarHidden,
+    independentView,
+  ]);
+
   const renderTopBarOverflowItems = () => {
     const undoRedoDisabled = role === "student" ? !studentConnected : endingBusy;
     const camDisabled =
@@ -4958,6 +5056,7 @@ export function WhiteboardWorkspaceClient({
       orientation={orientation}
       role={role}
       toolbarHidden={toolbarHidden}
+      studentTopbarCompact={studentTopbarCompact}
       onChromeClick={() => setOpenMenu(null)}
       nonVisualMounts={
       <WhiteboardWorkspaceAudioBridge
@@ -4974,6 +5073,7 @@ export function WhiteboardWorkspaceClient({
       topBar={
       role === "student" ? (
       <header
+        ref={studentTopbarRef}
         className="mynk-wb-topbar bg-card border-b border-border"
         role="toolbar"
         aria-label="Session controls"
@@ -5144,20 +5244,22 @@ export function WhiteboardWorkspaceClient({
         </div>
 
         <div className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing">
-          <button
-            type="button"
-            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__overflow-btn mynk-wb-student-topbar-overflow-btn"
-            title="More session options"
-            aria-label="More session options"
-            aria-expanded={topbarMoreOpen}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleMenu("topbar-more");
-            }}
-            data-testid="wb-student-topbar-overflow"
-          >
-            <WbIconMore size={14} />
-          </button>
+          <span className="mynk-wb-student-overflow-slot">
+            <button
+              type="button"
+              className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__overflow-btn mynk-wb-student-topbar-overflow-btn"
+              title="More session options"
+              aria-label="More session options"
+              aria-expanded={topbarMoreOpen}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleMenu("topbar-more");
+              }}
+              data-testid="wb-student-topbar-overflow"
+            >
+              <WbIconMore size={14} />
+            </button>
+          </span>
           <button
             type="button"
             className="mynk-wb-tb-btn mynk-wb-tb-btn--leave"

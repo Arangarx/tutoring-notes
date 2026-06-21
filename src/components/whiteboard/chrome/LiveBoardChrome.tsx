@@ -19,11 +19,21 @@ export interface LiveBoardChromeSlots {
 
 export type WbChromeMode = "live" | "replay";
 
+export type StudentTopbarCompactLevel =
+  | "none"
+  | "no-disclosure"
+  | "no-follow"
+  | "no-av-desktop"
+  | "no-timer"
+  | "overflow";
+
 export interface LiveBoardChromeProps extends LiveBoardChromeSlots {
   layoutMode: WbLayoutMode;
   orientation: WbOrientation;
   role: WbParticipantRole;
   toolbarHidden: boolean;
+  /** Student desktop: clip-driven compaction level (Wave 4 round 3). */
+  studentTopbarCompact?: StudentTopbarCompactLevel;
   /** When `"replay"`, sets `data-mode` and replay-specific body class names. */
   chromeMode?: WbChromeMode;
   onChromeClick?: () => void;
@@ -39,6 +49,7 @@ export function LiveBoardChrome({
   orientation,
   role,
   toolbarHidden,
+  studentTopbarCompact = "none",
   chromeMode = "live",
   onChromeClick,
   nonVisualMounts,
@@ -59,6 +70,9 @@ export function LiveBoardChrome({
       data-orientation={orientation}
       data-role={role}
       data-toolbar-hidden={toolbarHidden ? "true" : "false"}
+      data-student-topbar-compact={
+        role === "student" ? studentTopbarCompact : undefined
+      }
       onClick={onChromeClick}
     >
       {nonVisualMounts}
