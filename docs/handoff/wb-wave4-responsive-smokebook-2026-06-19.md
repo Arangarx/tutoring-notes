@@ -1,7 +1,7 @@
 # WB Wave 4 — responsive chrome parity — smoke runbook
 
 **Branch:** `wb-wave4-responsive`
-**Tip commit:** [`bff6a9b`](https://github.com/Arangarx/tutoring-notes/commit/bff6a9b734a3edf02a18911c8d38242b53525869)
+**Tip commit:** `[bff6a9b](https://github.com/Arangarx/tutoring-notes/commit/bff6a9b734a3edf02a18911c8d38242b53525869)`
 **Preview:** [wb-wave4-responsive preview](https://tutoring-notes-git-wb-wave4-responsive-arangarx-5209s-projects.vercel.app)
 
 **Context:** Restores tutor-known-good responsive behavior post-unification and brings the student role to parity at **desktop**, **phone portrait**, and **phone landscape**. Baseline reference: tutor chrome on `5d56f49` (last commit before wb-unify coding). Shared `data-layout` rules are role-agnostic; student-only top-bar compaction uses `data-role="student"` CSS + overflow sheet.
@@ -12,10 +12,12 @@
 
 ## Legend
 
-| Field | How to fill it |
-|---|---|
-| **Overall result** | PASS only if every in-scope item is PASS. FAIL if any in-scope item fails. |
-| **PARTIAL** | Some sub-checks pass and others fail — spell out exactly what worked vs didn't in Notes. |
+
+| Field              | How to fill it                                                                           |
+| ------------------ | ---------------------------------------------------------------------------------------- |
+| **Overall result** | PASS only if every in-scope item is PASS. FAIL if any in-scope item fails.               |
+| **PARTIAL**        | Some sub-checks pass and others fail — spell out exactly what worked vs didn't in Notes. |
+
 
 Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration to `v1-redesign`.
 
@@ -37,7 +39,7 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 **Ignore this run:** Student role. Laser distinct colors (deferred polish). Notes/review mode.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -57,11 +59,11 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes: There actually hasn't been a hand tool for a long time.  We should probably have it somewhere just in case.  Right now it's roughness, edge sharpness, and z-order in "more styles"**
 
 ---
 
@@ -77,11 +79,13 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes:  There is no "more styles" section with all the other options in the styles sheet.**  
+**Shouldn't there be some sort of indicator on the shapes button that it let's you select more options?**  
+
 
 ---
 
@@ -97,11 +101,13 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes: No "other shapes" selector.**  
+**Why is so much compacted in landscape? There is room in the top bar in landscape.**  
+**Not sure what you're saying is a known acceptable quirk.  The bar is supposed to be on the left in landscape.  This same test even says to look for it.**
 
 ---
 
@@ -117,11 +123,14 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes: Still double connected pill (call connected after connected).**  
+**Follow tutor view checkbox still not inline**  
+**If student shrinks desktop screen to about half the screen controls start running off the screen instead of contracting.**  
+
 
 ---
 
@@ -133,7 +142,7 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 **Ignore this run:** Mobile layouts (items 7–8).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -155,11 +164,11 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes: No "more styles" button.**
 
 ---
 
@@ -171,7 +180,7 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 **Ignore this run:** Tutor page admin controls.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -193,11 +202,11 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes: Same as with tutor in landscape, no "more" in left strip, probably off screen.**
 
 ---
 
@@ -211,7 +220,7 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 **Ignore this run:** Desktop layout (toggle hidden on desktop).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
