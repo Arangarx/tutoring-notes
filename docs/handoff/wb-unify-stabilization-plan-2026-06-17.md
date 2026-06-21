@@ -182,9 +182,9 @@ Fixes student-no-video, no-cam-initials-blank, tile-flash, disconnect-no-shrink 
 |---|---|
 | Exit button | Coral Exit button + exit icon (Andrew preference over plain "Exit"). |
 | Match-view button | Smaller "Match tutor's view" button + better stay-synced vs one-time-sync iconography. |
-| Design Q (a) | Highlight the non-clickable student board tab? — resolve + record decision. |
-| Design Q (b) | Allow student graph-expression entry on embeds? — resolve + record decision. |
-| View lock | Implement **WB-STUDENT-VIEW-LOCK-WHEN-SYNCED** — student cannot move view while synced (vs current move-then-snap-back). |
+| Design Q (a) | **RESOLVED** — highlight active tab read-only (Andrew 2026-06-21). |
+| Design Q (b) | **RESOLVED** — interactive graph embeds for students, local-to-student scope (Andrew 2026-06-21). |
+| View lock | Implement **WB-STUDENT-VIEW-LOCK-WHEN-SYNCED** — student cannot move view while synced (vs current move-then-snap-back). **Done @ slice 2.** |
 
 ---
 

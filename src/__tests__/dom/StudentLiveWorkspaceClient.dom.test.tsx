@@ -336,7 +336,9 @@ describe("WhiteboardWorkspaceClient role=student chrome contract (Wave 1b)", () 
     expect(screen.getByTestId("wb-student-tool-strip")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Pointer wand (K)" })[0]).toBeInTheDocument();
     expect(screen.getByTestId("wb-student-page-strip")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Board 1" })).toBeDisabled();
+    const activeBoardTab = screen.getByRole("tab", { name: "Board 1" });
+    expect(activeBoardTab).toHaveAttribute("aria-current", "page");
+    expect(activeBoardTab).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByTestId("wb-topbar-mic")).toBeInTheDocument();
     expect(screen.getByTestId("wb-topbar-cam")).toBeInTheDocument();
   });

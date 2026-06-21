@@ -1,7 +1,7 @@
 # Wave 5 — whiteboard chrome visual polish — smoke runbook
 
 **Branch:** `wb-wave5-polish`
-**Tip commit:** [`3415f3a`](https://github.com/Arangarx/tutoring-notes/commit/3415f3a3e8875af0d91f67f344614050519ca93f)
+**Tip commit:** [`d268b79`](https://github.com/Arangarx/tutoring-notes/commit/d268b79) _(update after docs commit)_
 **Preview:** [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-arangarx-5209s-projects.vercel.app)
 
 **Context:** Wave 5 chrome polish on the unified whiteboard shell. Five scoped items: coral student Exit, smaller/iconic follow/match controls, overflow sheet alignment + scroll affordance, top-bar overflow dropdown opens downward, grid toggle as icon (shared). Tutor baseline CSS from `5d56f49` must remain untouched except intentional shared-control changes (#4, #5).
@@ -85,6 +85,60 @@
 **Action:** **Tutor desktop:** locate grid icon toggle in top bar (`data-testid="wb-grid-toggle"`) — replaces old "View options" ⋯ submenu. Click to toggle canvas grid on/off; confirm icon shows active state when grid enabled. **Student desktop:** same grid icon toggle. **Both roles touch:** open top-bar overflow **⋯**; confirm grid row is an icon+label menu item (`data-testid="wb-overflow-grid-toggle"`), not a lone checkbox label. Toggle grid; confirm Excalidraw grid appears/disappears.
 
 **Expect:** Grid is an icon control on desktop for both roles. Overflow uses icon+label row. Tutor top bar otherwise unchanged (Share, mic, End session, etc.).
+
+**Ignore this run:** Nothing.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### 6. Student active board tab highlight (read-only)
+
+**Action:** Join a live session as **student** with **2+ boards** (tutor adds a second board). Confirm bottom board tab strip (`data-testid="wb-student-page-strip"`) shows all boards but tabs are **not clickable**. Confirm the **currently active board tab** has the same visual active treatment as tutor (accent underline, bold label, dot indicator) via `aria-current="page"` on the active tab. Tutor switches boards — confirm student's active highlight **updates** to match tutor's page without student clicking.
+
+**Expect:** Active tab clearly highlighted as read-only indicator. Inactive tabs muted. No page switch on student click. Tutor tab strip unchanged (still interactive).
+
+**Ignore this run:** View-lock and graph-entry items (separate smoke items).
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### 7. View lock while synced (desktop + phone)
+
+**Action:** **Student desktop** and **phone portrait + landscape:** with **Follow tutor view ON** (synced), attempt to **pan and pinch/zoom** the canvas. Confirm the view **does not move** (no move-then-snap-back jank). Toggle follow **OFF** (independent view) — confirm pan/zoom works freely. Toggle follow back ON — confirm view re-syncs and pan/zoom locks again. Use **Match tutor's view** once while in independent mode — confirm it snaps and re-locks.
+
+**Expect:** While synced, student viewport is locked. While independent, free pan/zoom. Tutor viewport behavior unchanged.
+
+**Ignore this run:** Graph embed entry (separate item).
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### 8. Student graph expression entry (local)
+
+**Action:** Tutor inserts a **graph embed** on the board. **Student** opens the session (desktop or phone). Tap the graph embed — confirm **expression panel** is available (ƒ Expressions toggle, add field). Enter a local expression (e.g. `x^2`) and plot it on **student screen only**. Tutor's graph should **not** update from student entry. Tutor adds/changes an expression on their side — confirm student graph **updates from tutor sync** (tutor state wins over stale local edits).
+
+**Expect:** Student can interact with graph embed locally. No broadcast of student graph edits to tutor/board. Tutor-origin graph state still syncs to student.
 
 **Ignore this run:** Nothing.
 
