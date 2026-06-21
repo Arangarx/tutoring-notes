@@ -253,7 +253,6 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 **It's not particularly obvious that there is more to scroll to in landscape.**  
 **No easy way to end multi segment line with touch controls.  I swtiched to eraser and it's still trying to make more line segments.**  
 
-
 ---
 
 ### R2-2. Mobile shapes — selector + affordance (tutor + student, portrait + landscape)
@@ -364,11 +363,11 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes:  At least on desktop, compaction doesn't recover when the screen goes wide again.  Shrinking is a bit smoother.  Exit moves in a bit then goes back when she stops.**
 
 ---
 
@@ -380,7 +379,7 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 **Ignore this run:** Desktop. Landscape.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -399,12 +398,12 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 **Ignore this run:** Left placement (intended). Top-bar items (covered earlier).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes: Left bar "more" is not showing right now.  Also, syncing is is sometimes way delayed. Dunno what caused it, once it caught up the delay didn't seem horrible.**
 
 ---
 
@@ -417,12 +416,12 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 **Ignore this run:** Tutor role. Touch (toggle in overflow).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes: Pill is still a little high and the text is still not vertically centered in pill if you just by the uppercase letters.  Lowercase letters are technically centered.  I'm guessing all this bullshit is still global css bullshit overriding components.**
 
 ---
 
@@ -436,11 +435,11 @@ Run order: top to bottom. Re-run **Cross-branch / post-merge** after integration
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes: She shrunk desktop to phone landscape orientation.  x on styles does not close. Works on phone but not on desktop when small.**
 
 ---
 
