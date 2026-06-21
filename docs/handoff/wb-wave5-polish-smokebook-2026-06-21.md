@@ -120,7 +120,9 @@
 
 **Action:** **Student desktop** and **phone portrait + landscape:** with **Follow tutor view ON** (synced), attempt to **pan and pinch/zoom** the canvas. Confirm the view **does not move** (no move-then-snap-back jank). Toggle follow **OFF** (independent view) — confirm pan/zoom works freely. Toggle follow back ON — confirm view re-syncs and pan/zoom locks again. Use **Match tutor's view** once while in independent mode — confirm it snaps and re-locks.
 
-**Expect:** While synced, student viewport is locked. While independent, free pan/zoom. Tutor viewport behavior unchanged.
+**7a. Extreme-pan regression (view-lock sync bug, 2026-06-21 fix):** While **Follow tutor view is ON**, have the tutor **zoom way out** (e.g. 25–50% zoom) then **pan far in all four directions** — well past the quadrant boundaries, to the far edges of the infinite canvas. **Student must keep following continuously with no cutoff** — viewport must track the tutor the entire distance. Previously, the student stopped following once the tutor's old center left the top-left quadrant (clamped appState fighting the stale view-lock). Repeat on **desktop** and **phone** (portrait + landscape). Tutor viewport must be unchanged by this test.
+
+**Expect:** While synced, student viewport is locked. While independent, free pan/zoom. Tutor viewport behavior unchanged. At extreme pan/zoom the student follows all the way — no premature cutoff.
 
 **Ignore this run:** Graph embed entry (separate item).
 

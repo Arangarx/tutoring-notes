@@ -103,6 +103,16 @@ export function useStudentWhiteboardCanvas(
     zoom: number;
   } | null>(null);
   const viewportRevertInProgressRef = useRef(false);
+  /**
+   * Set to `true` in `applyViewportToCanvas` (before the rAF is scheduled)
+   * and cleared only after `onApplied` or `onHold` fires.  This keeps
+   * `onCanvasChange` suppressed for the full duration of a tutor viewport
+   * apply — including the window after `runV3Apply`'s `finally` block
+   * prematurely clears `applyingRemoteRef` but before the rAF has written
+   * the new appState.  Without this guard, the stale lock at the previous
+   * position triggers a spurious revert during the rAF write.
+   */
+  const tutorViewportApplyRef = useRef(false);
   const loadedRemoteFileIdsRef = useRef(new Set<string>());
   const giveUpFileIdsRef = useRef(new Set<string>());
   const warnDedupeRef = useRef(new Set<string>());
@@ -168,8 +178,12 @@ export function useStudentWhiteboardCanvas(
       logCtx: { wba: string; pageId: string; source: string }
     ) => {
       applyingRemoteRef.current = true;
+      // Mark the full rAF-apply window so onCanvasChange stays suppressed even
+      // after runV3Apply's finally block prematurely clears applyingRemoteRef.
+      tutorViewportApplyRef.current = true;
       const releaseApplyingRemote = () => {
         applyingRemoteRef.current = false;
+        tutorViewportApplyRef.current = false;
       };
       applyViewportAligned(api, follow, {
         wbsid: wbsid || undefined,
@@ -185,7 +199,21 @@ export function useStudentWhiteboardCanvas(
             `[student-apply] ${wbsidTag}pvs=${logCtx.pageId} wba=${logCtx.wba} action=viewport-align-applied panX=${scrollX} panY=${scrollY} zoom=${zoom} source=${logCtx.source}`
           );
           if (followTutorViewRef.current) {
-            followLockedViewportRef.current = { scrollX, scrollY, zoom };
+            // Read actual post-apply appState — Excalidraw may clamp scroll at
+            // extreme pan/zoom, so the actual state can differ from the requested
+            // (scrollX/Y) values passed to updateScene.  Locking to the actual
+            // state prevents a spurious revert the next time onChange fires with
+            // the clamped values.
+            const actual = api.getAppState() as {
+              scrollX?: number;
+              scrollY?: number;
+              zoom?: { value?: number };
+            };
+            followLockedViewportRef.current = {
+              scrollX: typeof actual.scrollX === "number" ? actual.scrollX : scrollX,
+              scrollY: typeof actual.scrollY === "number" ? actual.scrollY : scrollY,
+              zoom: typeof actual.zoom?.value === "number" ? actual.zoom.value : zoom,
+            };
           }
           if (followDebugTelemetry) {
             const studentSize = readViewportSizeFromAppState(api.getAppState());
@@ -752,7 +780,9 @@ export function useStudentWhiteboardCanvas(
       appState?: unknown,
       _files?: Readonly<Record<string, unknown>>
     ) => {
-      if (applyingRemoteRef.current) return;
+      // tutorViewportApplyRef covers the rAF window between runV3Apply's finally
+      // (which prematurely clears applyingRemoteRef) and onApplied firing.
+      if (applyingRemoteRef.current || tutorViewportApplyRef.current) return;
 
       const api = excalidrawApiRef.current;
       if (
@@ -836,6 +866,7 @@ export function useStudentWhiteboardCanvas(
     activePageId,
     activePageIdRef,
     applyingRemoteRef,
+    tutorViewportApplyRef,
     pageSwitchProgrammaticRef,
     selectStudentPage,
     tutorStreamReady,

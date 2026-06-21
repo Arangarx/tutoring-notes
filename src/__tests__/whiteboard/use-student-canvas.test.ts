@@ -260,23 +260,29 @@ function makeApi(opts: {
   appState?: Record<string, unknown>;
 }) {
   let scene = opts.elements ?? [];
-  const updateScene = jest.fn((patch: { elements?: unknown; appState?: unknown }) => {
+  // Track appState so getAppState() reflects patches applied via updateScene,
+  // matching real Excalidraw behaviour (the view-lock fix reads getAppState()
+  // in onApplied to get the actual post-clamp state).
+  let currentAppState: Record<string, unknown> = opts.appState ?? {
+    scrollX: 0,
+    scrollY: 0,
+    zoom: { value: 1 },
+    width: 800,
+    height: 600,
+  };
+  const updateScene = jest.fn((patch: { elements?: unknown; appState?: Record<string, unknown>; captureUpdate?: string }) => {
     if (patch.elements) {
       scene = patch.elements as ExcalidrawLikeElement[];
+    }
+    if (patch.appState) {
+      currentAppState = { ...currentAppState, ...patch.appState };
     }
   });
   const api = {
     updateScene,
     addFiles: jest.fn(),
     getSceneElements: () => scene,
-    getAppState: () =>
-      opts.appState ?? {
-        scrollX: 0,
-        scrollY: 0,
-        zoom: { value: 1 },
-        width: 800,
-        height: 600,
-      },
+    getAppState: () => currentAppState,
   } as unknown as ExcalidrawApiLike;
   return { api, updateScene, getScene: () => scene, setScene: (els: ExcalidrawLikeElement[]) => {
     scene = els;
@@ -1028,6 +1034,180 @@ describe("useStudentWhiteboardCanvas", () => {
     expect(last.appState.zoom.value).toBeCloseTo(1.25, 5);
     expect(last.appState.scrollX).toBeCloseTo(expected.scrollX, 5);
     expect(last.appState.scrollY).toBeCloseTo(expected.scrollY, 5);
+  });
+
+  // -----------------------------------------------------------------------
+  // Sync regression: Wave-5 view-lock fighting tutor-origin viewport applies
+  // Reproduces the "can only follow so far" bug reported 2026-06-21.
+  // Two independent mechanisms are tested:
+  //   (A) tutorViewportApplyRef guards onCanvasChange during the rAF window
+  //       after runV3Apply's finally prematurely clears applyingRemoteRef.
+  //   (B) View-lock is set from actual post-clamp appState, not requested
+  //       scroll, so onChange with clamped values never triggers a revert.
+  // -----------------------------------------------------------------------
+  describe("view-lock sync regression (Wave-5 fix)", () => {
+    it("(A) onCanvasChange during rAF window does not revert tutor apply", async () => {
+      // The race: runV3Apply's finally clears applyingRemoteRef BEFORE the
+      // rAF fires.  Without tutorViewportApplyRef, a follow-mode onChange
+      // that arrives in this window compares against the stale lock (position
+      // A) and reverts back, so the student never follows past A.
+      //
+      // This test validates the fix: after flushing the v3 chain (runV3Apply
+      // complete, finally run) but BEFORE the rAF fires (no 60ms wait yet),
+      // onCanvasChange with the NEW scroll values is a no-op because
+      // tutorViewportApplyRef is still true.
+
+      const { sync, emitRemote } = makeMockSync();
+      const { api, updateScene } = makeApi({
+        elements: [],
+        appState: { ...studentViewport },
+      });
+      const { result } = renderHook(() =>
+        useStudentWhiteboardCanvas(sync, api, undefined, {
+          joinToken: "jt",
+          followTutorView: true,
+        })
+      );
+
+      // Step 1: establish lock at position A.
+      const followA = tutorFollowWire(100, 50, 1.25, 1200, 900);
+      await act(async () => {
+        emitRemote("tutor", [], {
+          document: { rev: 1, pages: { p1: [] } },
+          page: { activePageId: "p1", pageList: [{ id: "p1", title: "P" }] },
+          follow: followA,
+        });
+      });
+      await flushAsyncWork();
+      // Fire rAF for A — onApplied sets lock, releases guard.
+      await act(async () => { await new Promise((r) => setTimeout(r, 60)); });
+
+      const vpAfterA = appStateViewportCalls(updateScene);
+      expect(vpAfterA.length).toBeGreaterThan(0);
+
+      // Step 2: send v3-rev2 with position B (significantly different).
+      const followB = tutorFollowWire(500, 300, 0.5, 1200, 900);
+      await act(async () => {
+        emitRemote("tutor", [], {
+          document: { rev: 2, pages: { p1: [] } },
+          page: { activePageId: "p1", pageList: [{ id: "p1", title: "P" }] },
+          follow: followB,
+        });
+      });
+      // Flush promises only — runV3Apply's try/finally completes, applyingRemoteRef
+      // is cleared, but the rAF for B has NOT fired yet (needs the 60ms wait).
+      // tutorViewportApplyRef is still true (set in applyViewportToCanvas before
+      // applyViewportAligned scheduled the rAF).
+      await flushAsyncWork();
+
+      // Step 3: simulate Excalidraw calling onChange with position B's scroll
+      // values (as it would after the rAF writes the new appState).  This is
+      // the exact scenario that caused the original revert bug.
+      const posB = studentScrollFromFollowCenter(followB, studentViewport.width, studentViewport.height);
+      const callsBefore = updateScene.mock.calls.length;
+      act(() => {
+        result.current.onCanvasChange([], {
+          ...studentViewport,
+          scrollX: posB.scrollX,
+          scrollY: posB.scrollY,
+          zoom: { value: posB.zoom },
+        });
+      });
+
+      // With the fix: tutorViewportApplyRef blocks the revert → no appState
+      // updateScene calls.  Without the fix: revert to stale lock A fires.
+      const afterCalls = updateScene.mock.calls.slice(callsBefore);
+      const revertCalls = afterCalls.filter(
+        (c) => (c[0] as { appState?: unknown }).appState
+      );
+      expect(revertCalls).toHaveLength(0);
+    });
+
+    it("(B) view-lock uses actual post-clamp appState, not requested scroll", async () => {
+      // Excalidraw clamps scroll internally at extreme pan/zoom.  If the lock
+      // is set from the requested (unclamped) scroll, subsequent onChange events
+      // with the actual (clamped) scroll look like a student pan → revert loop.
+      // This test simulates the clamp with a mock that caps scroll at ±100.
+
+      const { sync, emitRemote } = makeMockSync();
+
+      const CLAMP = 100;
+      let clampedScrollX = 0;
+      let clampedScrollY = 0;
+      const updateSceneMock = jest.fn(
+        (patch: { elements?: unknown; appState?: { scrollX?: number; scrollY?: number } }) => {
+          if (patch.appState) {
+            const reqX = patch.appState.scrollX ?? clampedScrollX;
+            const reqY = patch.appState.scrollY ?? clampedScrollY;
+            clampedScrollX = Math.max(Math.min(reqX, CLAMP), -CLAMP);
+            clampedScrollY = Math.max(Math.min(reqY, CLAMP), -CLAMP);
+          }
+        }
+      );
+      const clampApi = {
+        updateScene: updateSceneMock,
+        addFiles: jest.fn(),
+        getSceneElements: () => [] as ExcalidrawLikeElement[],
+        getAppState: () => ({
+          scrollX: clampedScrollX,
+          scrollY: clampedScrollY,
+          zoom: { value: 1 },
+          width: 800,
+          height: 600,
+        }),
+      } as unknown as ExcalidrawApiLike;
+
+      const { result } = renderHook(() =>
+        useStudentWhiteboardCanvas(sync, clampApi, undefined, {
+          joinToken: "jt",
+          followTutorView: true,
+        })
+      );
+
+      // Tutor at scrollX=900, student center = (600-900)/1 = -300 (scene).
+      // Student scroll for that center: 800/2/1 - (-300) = 700 → clamped to 100.
+      // Oracle: studentScrollFromFollowCenter verifies the student scroll exceeds
+      // CLAMP, confirming the clamping scenario is exercised.
+      const follow = tutorFollowWire(900, 900, 1, 1200, 900);
+      const computedScroll = studentScrollFromFollowCenter(follow, 800, 600);
+      expect(computedScroll.scrollX).toBeGreaterThan(CLAMP);
+
+      await act(async () => {
+        emitRemote("tutor", [], {
+          document: { rev: 1, pages: { p1: [] } },
+          page: { activePageId: "p1", pageList: [{ id: "p1", title: "P" }] },
+          follow,
+        });
+      });
+      await flushAsyncWork();
+      // Fire the rAF — onApplied reads actual (clamped) appState for the lock.
+      await act(async () => { await new Promise((r) => setTimeout(r, 60)); });
+
+      // At this point clampedScrollX = 100 (clamped from 700), and the lock
+      // should be set from getAppState() (actual = 100), not from the requested
+      // scroll (700).
+
+      // Simulate onChange with the actual clamped values (what real Excalidraw
+      // would report after updateScene clips the scroll internally).
+      const callsBefore = updateSceneMock.mock.calls.length;
+      act(() => {
+        result.current.onCanvasChange([], {
+          scrollX: clampedScrollX,  // actual value = 100
+          scrollY: clampedScrollY,
+          zoom: { value: 1 },
+          width: 800,
+          height: 600,
+        });
+      });
+
+      // With the fix: lock = actual (100) = onChange scroll (100) → no revert.
+      // Without the fix: lock = requested (700) ≠ 100 → revert fires.
+      const newCalls = updateSceneMock.mock.calls.slice(callsBefore);
+      const revertCalls = newCalls.filter(
+        (c) => (c[0] as { appState?: unknown }).appState
+      );
+      expect(revertCalls).toHaveLength(0);
+    });
   });
 
   it("hydrates tutor image binaries when v3 elements carry assetUrl", async () => {
