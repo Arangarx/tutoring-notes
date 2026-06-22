@@ -741,3 +741,64 @@ export function sceneCenterDistance(
 ): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
+
+export type ViewportScrollZoom = Pick<
+  ViewportSnapshot,
+  "scrollX" | "scrollY" | "zoom"
+>;
+
+/** Scene-unit distance between two viewport scroll positions (ignores zoom). */
+export function viewportScrollDistance(
+  a: ViewportScrollZoom,
+  b: ViewportScrollZoom
+): number {
+  return Math.hypot(a.scrollX - b.scrollX, a.scrollY - b.scrollY);
+}
+
+export function tutorSnapshotAtScrollZoom(
+  base: ViewportSnapshot,
+  scrollZoom: ViewportScrollZoom
+): ViewportSnapshot {
+  return { ...base, ...scrollZoom };
+}
+
+/**
+ * Apply a rapid sequence of tutor viewport changes (pan + zoom) with minimal
+ * inter-step delay to mimic continuous gesture cadence, not stop-then-wait.
+ */
+export async function driveTutorViewportStream(
+  tutorPage: Page,
+  steps: ViewportScrollZoom[],
+  interStepMs = 8
+): Promise<void> {
+  for (const step of steps) {
+    await setViewportOnRole(
+      tutorPage,
+      "tutor",
+      step.scrollX,
+      step.scrollY,
+      step.zoom
+    );
+    if (interStepMs > 0) {
+      await tutorPage.waitForTimeout(interStepMs);
+    }
+  }
+}
+
+/** Build evenly spaced pan+zoom steps from a tutor baseline (for stream tests). */
+export function buildPanZoomViewportSteps(
+  base: ViewportSnapshot,
+  count: number,
+  panDeltaPerStep = { x: 38, y: 24 },
+  zoomFactorPerStep = 0.035
+): ViewportScrollZoom[] {
+  const steps: ViewportScrollZoom[] = [];
+  for (let i = 1; i <= count; i++) {
+    steps.push({
+      scrollX: base.scrollX + i * panDeltaPerStep.x,
+      scrollY: base.scrollY + i * panDeltaPerStep.y,
+      zoom: base.zoom * (1 + i * zoomFactorPerStep),
+    });
+  }
+  return steps;
+}

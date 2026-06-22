@@ -31,6 +31,10 @@ import {
   waitForWbE2eBridge,
   waitForTutorStudentConnected,
   markerCenterOffsetFromViewportCenter,
+  buildPanZoomViewportSteps,
+  driveTutorViewportStream,
+  tutorSnapshotAtScrollZoom,
+  viewportScrollDistance,
   WB_MOVE_PROPAGATION_TOLERANCE_SCENE,
   WB_VIEWPORT_CENTER_PASS_TOLERANCE_PX,
   WB_ZOOM_INVARIANT_CENTER_TOLERANCE_SCENE,
@@ -326,6 +330,85 @@ test.describe("whiteboard live-sync regression", () => {
         8,
         12_000
       );
+    } finally {
+      await peers.close();
+    }
+  });
+
+  test("invariant 13 — continuous tutor pan/zoom: student tracks live, not only on stop", async ({
+    browser,
+  }) => {
+    /**
+     * Closes the gap left by invariants 5/6: those apply a single one-shot
+     * setViewport and assert the end state. The Wave-5 view-lock bug
+     * (d1f770e / pre-c4fff44) reverted the student to a stale follow-lock on
+     * every Excalidraw onChange during tutor-driven applies, so continuous
+     * tutor pan/zoom only caught up when the tutor stopped.
+     *
+     * Oracle: expectedAlignedStudentScroll → followWireFromTutorAppState +
+     * studentScrollFromFollowCenter (viewport-align.ts, vendored Excalidraw
+     * transforms) — independent of useStudentWhiteboardCanvas view-lock logic.
+     */
+    test.setTimeout(180_000);
+    const session = await seedWbLiveSyncSession();
+    const peers = await openTutorAndStudent(browser, session);
+    try {
+      const tutorStart = await readViewportSnapshot(peers.tutorPage, "tutor");
+      const studentDims = await readViewportSnapshot(peers.studentPage, "student");
+      const initialOracle = expectedAlignedStudentScroll(tutorStart, studentDims);
+
+      const STEP_COUNT = 12;
+      const MID_CHECK = 4;
+      const steps = buildPanZoomViewportSteps(tutorStart, STEP_COUNT);
+      const firstStepOracle = expectedAlignedStudentScroll(
+        tutorSnapshotAtScrollZoom(tutorStart, steps[0]!),
+        studentDims
+      );
+
+      const partialSteps = steps.slice(0, MID_CHECK);
+      await driveTutorViewportStream(peers.tutorPage, partialSteps, 8);
+
+      // Mid-stream sample: relay throttle (~50 ms) + apply rAF need a short settle.
+      await peers.studentPage.waitForTimeout(600);
+      const tutorMid = await readViewportSnapshot(peers.tutorPage, "tutor");
+      const studentMid = await readViewportSnapshot(peers.studentPage, "student");
+      const midOracle = expectedAlignedStudentScroll(tutorMid, studentMid);
+      const distMidToOracle = viewportScrollDistance(studentMid, midOracle);
+      const distMidToFirstLock = viewportScrollDistance(studentMid, firstStepOracle);
+      const distMidToInitial = viewportScrollDistance(studentMid, initialOracle);
+
+      // Intermediate: student must track toward the current tutor position, not
+      // remain on the first follow-lock (pre-fix signature) or the pre-stream pose.
+      expect(distMidToOracle).toBeLessThan(12);
+      expect(distMidToFirstLock).toBeGreaterThan(20);
+      expect(distMidToInitial).toBeGreaterThan(20);
+
+      const restSteps = steps.slice(MID_CHECK);
+      await driveTutorViewportStream(peers.tutorPage, restSteps, 8);
+
+      const tutorFinal = await readViewportSnapshot(peers.tutorPage, "tutor");
+      const studentVp = await readViewportSnapshot(peers.studentPage, "student");
+      const finalOracle = expectedAlignedStudentScroll(tutorFinal, studentVp);
+
+      await waitForViewportAligned(
+        peers.studentPage,
+        "student",
+        finalOracle.scrollX,
+        finalOracle.scrollY,
+        8,
+        12_000
+      );
+
+      const studentFinal = await readViewportSnapshot(peers.studentPage, "student");
+      expect(studentFinal.scrollX).toBeCloseTo(finalOracle.scrollX, 0);
+      expect(studentFinal.scrollY).toBeCloseTo(finalOracle.scrollY, 0);
+      expect(studentFinal.zoom).toBeCloseTo(finalOracle.zoom, 2);
+
+      // Decisive stale-revert guard: final pose must match last tutor viewport,
+      // not the first follow-lock where pre-c4fff44 code got stuck mid-stream.
+      expect(viewportScrollDistance(studentFinal, finalOracle)).toBeLessThanOrEqual(8);
+      expect(viewportScrollDistance(studentFinal, firstStepOracle)).toBeGreaterThan(25);
+      expect(viewportScrollDistance(studentFinal, initialOracle)).toBeGreaterThan(25);
     } finally {
       await peers.close();
     }
