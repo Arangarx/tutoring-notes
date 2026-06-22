@@ -23,8 +23,66 @@ import {
   hasFollowSceneCenter,
   viewportSceneCenterFromScroll,
   readViewportSizeFromAppState,
+  resolveStudentScrollForFollow,
 } from "@/lib/whiteboard/viewport-align";
 import type { WbFollowDebugTelemetry } from "@/lib/whiteboard/wb-follow-debug-telemetry";
+
+/** Trailing window after the last wheel/pointer/touch on the canvas. */
+const STUDENT_VIEWPORT_GESTURE_TRAIL_MS = 300;
+
+function tutorViewportSizeFromFollow(
+  follow: WhiteboardWireFollow & {
+    centerSceneX: number;
+    centerSceneY: number;
+  }
+): { width: number; height: number } | null {
+  const sx = follow.scrollX;
+  const sy = follow.scrollY;
+  if (typeof sx !== "number" || typeof sy !== "number") return null;
+  const width = 2 * follow.zoom * (follow.centerSceneX + sx);
+  const height = 2 * follow.zoom * (follow.centerSceneY + sy);
+  if (
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    return null;
+  }
+  return { width, height };
+}
+
+/** Derive scene-center follow from pageViewState pan/zoom + cached tutor dims. */
+function followFromPageViewState(
+  cached: WhiteboardWireFollow & {
+    centerSceneX: number;
+    centerSceneY: number;
+  },
+  panX: number,
+  panY: number,
+  zoom: number
+): WhiteboardWireFollow {
+  const dims = tutorViewportSizeFromFollow(cached);
+  if (dims) {
+    const center = viewportSceneCenterFromScroll(
+      panX,
+      panY,
+      zoom,
+      dims.width,
+      dims.height
+    );
+    return {
+      centerSceneX: center.x,
+      centerSceneY: center.y,
+      zoom,
+    };
+  }
+  return {
+    centerSceneX: cached.centerSceneX,
+    centerSceneY: cached.centerSceneY,
+    zoom,
+  };
+}
 
 function wireRowViewState(
   p: WhiteboardWirePage["pageList"][number]
@@ -113,6 +171,18 @@ export function useStudentWhiteboardCanvas(
    * position triggers a spurious revert during the rAF write.
    */
   const tutorViewportApplyRef = useRef(false);
+  /**
+   * True while the student is wheeling/panning on the canvas (plus a short
+   * trailing window). View-lock revert runs only when this is set — tutor
+   * follow applies never set it, so they are not misclassified as student pans.
+   */
+  const studentGestureActiveRef = useRef(false);
+  const studentGestureTrailTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  const studentPointerDownRef = useRef(false);
+  const [followViewLockContainer, setFollowViewLockContainer] =
+    useState<HTMLElement | null>(null);
   const loadedRemoteFileIdsRef = useRef(new Set<string>());
   const giveUpFileIdsRef = useRef(new Set<string>());
   const warnDedupeRef = useRef(new Set<string>());
@@ -171,6 +241,65 @@ export function useStudentWhiteboardCanvas(
     details: WhiteboardWireRemoteDetails;
   } | null>(null);
 
+  const markStudentViewportGesture = useCallback(() => {
+    studentGestureActiveRef.current = true;
+    if (studentGestureTrailTimerRef.current) {
+      clearTimeout(studentGestureTrailTimerRef.current);
+    }
+    studentGestureTrailTimerRef.current = setTimeout(() => {
+      studentGestureActiveRef.current = false;
+      studentGestureTrailTimerRef.current = null;
+    }, STUDENT_VIEWPORT_GESTURE_TRAIL_MS);
+  }, []);
+
+  const followViewLockContainerRef = useCallback((node: HTMLElement | null) => {
+    setFollowViewLockContainer(node);
+  }, []);
+
+  useEffect(() => {
+    if (!followTutorView || !followViewLockContainer) return;
+    const node = followViewLockContainer;
+    const passive = { passive: true } as const;
+    const onWheel = () => {
+      markStudentViewportGesture();
+    };
+    const onPointerDown = () => {
+      studentPointerDownRef.current = true;
+      markStudentViewportGesture();
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      if (studentPointerDownRef.current && e.buttons !== 0) {
+        markStudentViewportGesture();
+      }
+    };
+    const onPointerUp = () => {
+      studentPointerDownRef.current = false;
+    };
+    const onTouchStart = () => {
+      markStudentViewportGesture();
+    };
+    node.addEventListener("wheel", onWheel, passive);
+    node.addEventListener("pointerdown", onPointerDown, passive);
+    node.addEventListener("pointermove", onPointerMove, passive);
+    node.addEventListener("pointerup", onPointerUp, passive);
+    node.addEventListener("pointercancel", onPointerUp, passive);
+    node.addEventListener("touchstart", onTouchStart, passive);
+    return () => {
+      node.removeEventListener("wheel", onWheel);
+      node.removeEventListener("pointerdown", onPointerDown);
+      node.removeEventListener("pointermove", onPointerMove);
+      node.removeEventListener("pointerup", onPointerUp);
+      node.removeEventListener("pointercancel", onPointerUp);
+      node.removeEventListener("touchstart", onTouchStart);
+      if (studentGestureTrailTimerRef.current) {
+        clearTimeout(studentGestureTrailTimerRef.current);
+        studentGestureTrailTimerRef.current = null;
+      }
+      studentGestureActiveRef.current = false;
+      studentPointerDownRef.current = false;
+    };
+  }, [followTutorView, followViewLockContainer, markStudentViewportGesture]);
+
   const applyViewportToCanvas = useCallback(
     (
       api: ExcalidrawApiLike,
@@ -181,6 +310,12 @@ export function useStudentWhiteboardCanvas(
       // Mark the full rAF-apply window so onCanvasChange stays suppressed even
       // after runV3Apply's finally block prematurely clears applyingRemoteRef.
       tutorViewportApplyRef.current = true;
+      if (followTutorViewRef.current) {
+        const predicted = resolveStudentScrollForFollow(api, follow);
+        if (predicted) {
+          followLockedViewportRef.current = { ...predicted };
+        }
+      }
       const releaseApplyingRemote = () => {
         applyingRemoteRef.current = false;
         tutorViewportApplyRef.current = false;
@@ -752,11 +887,7 @@ export function useStudentWhiteboardCanvas(
       const wba = nextApplyId(wbaCounterRef);
       applyViewportToCanvas(
         api,
-        {
-          centerSceneX: cached.centerSceneX,
-          centerSceneY: cached.centerSceneY,
-          zoom: msg.zoom,
-        },
+        followFromPageViewState(cached, msg.panX, msg.panY, msg.zoom),
         {
           wba,
           pageId: msg.pageId,
@@ -809,27 +940,36 @@ export function useStudentWhiteboardCanvas(
               Math.abs(sy - locked.scrollY) > 0.01 ||
               Math.abs(z - locked.zoom) > 0.0001);
           if (viewportChanged) {
-            viewportRevertInProgressRef.current = true;
-            try {
-              (
-                api as ExcalidrawApiLike & {
-                  updateScene: (s: {
-                    appState?: Record<string, unknown>;
-                    captureUpdate?: string;
-                  }) => void;
-                }
-              ).updateScene({
-                appState: {
-                  scrollX: locked.scrollX,
-                  scrollY: locked.scrollY,
-                  zoom: { value: locked.zoom },
-                },
-                captureUpdate: "NEVER",
-              });
-            } finally {
-              viewportRevertInProgressRef.current = false;
+            if (studentGestureActiveRef.current) {
+              viewportRevertInProgressRef.current = true;
+              try {
+                (
+                  api as ExcalidrawApiLike & {
+                    updateScene: (s: {
+                      appState?: Record<string, unknown>;
+                      captureUpdate?: string;
+                    }) => void;
+                  }
+                ).updateScene({
+                  appState: {
+                    scrollX: locked.scrollX,
+                    scrollY: locked.scrollY,
+                    zoom: { value: locked.zoom },
+                  },
+                  captureUpdate: "NEVER",
+                });
+              } finally {
+                viewportRevertInProgressRef.current = false;
+              }
+              return;
             }
-            return;
+            // Tutor-driven onChange (no student gesture): advance lock so a
+            // stale lock never reverts a follow apply that landed async.
+            followLockedViewportRef.current = {
+              scrollX: sx,
+              scrollY: sy,
+              zoom: z,
+            };
           }
         }
       }
@@ -870,5 +1010,8 @@ export function useStudentWhiteboardCanvas(
     pageSwitchProgrammaticRef,
     selectStudentPage,
     tutorStreamReady,
+    followViewLockContainerRef,
+    /** Test / harness: simulate a student wheel/pan gesture on the canvas. */
+    markStudentViewportGesture,
   };
 }

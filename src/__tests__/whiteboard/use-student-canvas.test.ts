@@ -779,6 +779,7 @@ describe("useStudentWhiteboardCanvas", () => {
       };
 
       act(() => {
+        result.current.markStudentViewportGesture();
         result.current.onCanvasChange([], {
           ...studentViewport,
           scrollX: locked.appState.scrollX + 50,
@@ -1039,11 +1040,15 @@ describe("useStudentWhiteboardCanvas", () => {
   // -----------------------------------------------------------------------
   // Sync regression: Wave-5 view-lock fighting tutor-origin viewport applies
   // Reproduces the "can only follow so far" bug reported 2026-06-21.
-  // Two independent mechanisms are tested:
+  // Mechanisms tested:
   //   (A) tutorViewportApplyRef guards onCanvasChange during the rAF window
   //       after runV3Apply's finally prematurely clears applyingRemoteRef.
   //   (B) View-lock is set from actual post-clamp appState, not requested
   //       scroll, so onChange with clamped values never triggers a revert.
+  //   (C) A stream of tutor viewport applies with NO student gesture must not
+  //       revert — final viewport equals the last tutor position (gesture-gated
+  //       view-lock; continuous Excalidraw onChange cadence is hardware-only).
+  //   (D) A student gesture while synced still triggers view-lock revert.
   // -----------------------------------------------------------------------
   describe("view-lock sync regression (Wave-5 fix)", () => {
     it("(A) onCanvasChange during rAF window does not revert tutor apply", async () => {
@@ -1121,6 +1126,134 @@ describe("useStudentWhiteboardCanvas", () => {
         (c) => (c[0] as { appState?: unknown }).appState
       );
       expect(revertCalls).toHaveLength(0);
+    });
+
+    it("(C) consecutive tutor applies without student gesture do not revert", async () => {
+      // Independent oracle: studentScrollFromFollowCenter for each wire position.
+      // jsdom cannot reproduce Excalidraw's async onChange cadence during live
+      // pan — this test asserts gesture-gated classification only.
+      const follows = [
+        tutorFollowWire(100, 50, 1.25, 1200, 900),
+        tutorFollowWire(200, 120, 1.1, 1200, 900),
+        tutorFollowWire(350, 200, 0.9, 1200, 900),
+        tutorFollowWire(500, 300, 0.75, 1200, 900),
+        tutorFollowWire(620, 410, 0.6, 1200, 900),
+      ];
+
+      const { sync, emitRemote } = makeMockSync();
+      const { api, updateScene } = makeApi({
+        elements: [],
+        appState: { ...studentViewport },
+      });
+      const { result } = renderHook(() =>
+        useStudentWhiteboardCanvas(sync, api, undefined, {
+          joinToken: "jt",
+          followTutorView: true,
+        })
+      );
+
+      for (let i = 0; i < follows.length; i++) {
+        const follow = follows[i]!;
+        await act(async () => {
+          emitRemote("tutor", [], {
+            document: { rev: i + 1, pages: { p1: [] } },
+            page: { activePageId: "p1", pageList: [{ id: "p1", title: "P" }] },
+            follow,
+          });
+        });
+        await flushAsyncWork();
+        await act(async () => {
+          await new Promise((r) => setTimeout(r, 60));
+        });
+
+        const expected = studentScrollFromFollowCenter(
+          follow,
+          studentViewport.width,
+          studentViewport.height
+        );
+        const callsBeforeOnChange = updateScene.mock.calls.length;
+        act(() => {
+          result.current.onCanvasChange([], {
+            ...studentViewport,
+            scrollX: expected.scrollX,
+            scrollY: expected.scrollY,
+            zoom: { value: expected.zoom },
+          });
+        });
+        const revertCalls = updateScene.mock.calls
+          .slice(callsBeforeOnChange)
+          .filter((c) => (c[0] as { appState?: unknown }).appState);
+        expect(revertCalls).toHaveLength(0);
+      }
+
+      const lastFollow = follows[follows.length - 1]!;
+      const oracle = studentScrollFromFollowCenter(
+        lastFollow,
+        studentViewport.width,
+        studentViewport.height
+      );
+      const st = api.getAppState() as {
+        scrollX: number;
+        scrollY: number;
+        zoom: { value: number };
+      };
+      expect(st.scrollX).toBeCloseTo(oracle.scrollX, 5);
+      expect(st.scrollY).toBeCloseTo(oracle.scrollY, 5);
+      expect(st.zoom.value).toBeCloseTo(oracle.zoom, 5);
+    });
+
+    it("(D) student gesture while synced still triggers view-lock revert", async () => {
+      const { sync, emitRemote } = makeMockSync();
+      const { api, updateScene } = makeApi({
+        elements: [],
+        appState: { ...studentViewport },
+      });
+      const { result } = renderHook(() =>
+        useStudentWhiteboardCanvas(sync, api, undefined, {
+          joinToken: "jt",
+          followTutorView: true,
+        })
+      );
+
+      const follow = tutorFollowWire(100, 50, 1.25, 1200, 900);
+      await act(async () => {
+        emitRemote("tutor", [], {
+          document: { rev: 1, pages: { p1: [] } },
+          page: { activePageId: "p1", pageList: [{ id: "p1", title: "P" }] },
+          follow,
+        });
+      });
+      await flushAsyncWork();
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 60));
+      });
+
+      const vpCalls = appStateViewportCalls(updateScene);
+      const locked = vpCalls[vpCalls.length - 1]![0] as {
+        appState: { scrollX: number; scrollY: number; zoom: { value: number } };
+      };
+
+      const callsBefore = updateScene.mock.calls.length;
+      act(() => {
+        result.current.markStudentViewportGesture();
+        result.current.onCanvasChange([], {
+          ...studentViewport,
+          scrollX: locked.appState.scrollX + 80,
+          scrollY: locked.appState.scrollY + 40,
+          zoom: { value: locked.appState.zoom.value + 0.25 },
+        });
+      });
+
+      const revertCalls = updateScene.mock.calls
+        .slice(callsBefore)
+        .filter((c) => (c[0] as { appState?: unknown }).appState);
+      expect(revertCalls).toHaveLength(1);
+      const revert = revertCalls[0]![0] as {
+        appState: { scrollX: number; scrollY: number; zoom: { value: number } };
+      };
+      expect(revert.appState.scrollX).toBeCloseTo(locked.appState.scrollX, 5);
+      expect(revert.appState.scrollY).toBeCloseTo(locked.appState.scrollY, 5);
+      expect(revert.appState.zoom.value).toBeCloseTo(locked.appState.zoom.value, 5);
     });
 
     it("(B) view-lock uses actual post-clamp appState, not requested scroll", async () => {

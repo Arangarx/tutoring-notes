@@ -1227,6 +1227,7 @@ export function WhiteboardWorkspaceClient({
     activePageIdRef: studentActivePageIdRef,
     applyingRemoteRef: studentApplyingRemoteRef,
     tutorStreamReady,
+    followViewLockContainerRef,
   } = useStudentWhiteboardCanvas(
     // For role="tutor", null keeps this hook inert (mutually exclusive with recorder sync-ingest)
     role === "student" ? studentSyncClient : null,
@@ -1240,6 +1241,16 @@ export function WhiteboardWorkspaceClient({
           followDebugTelemetry,
         }
       : undefined
+  );
+
+  const setWbCanvasRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      wbCanvasRef.current = node;
+      if (role === "student") {
+        followViewLockContainerRef(node);
+      }
+    },
+    [followViewLockContainerRef, role]
   );
 
   // Board-wait banner: student connected but no tutor stream after 8s
@@ -5485,7 +5496,7 @@ export function WhiteboardWorkspaceClient({
       }
       canvas={
         <div
-          ref={wbCanvasRef}
+          ref={setWbCanvasRef}
           className="mynk-wb-canvas"
           data-testid={role === "student" ? "student-whiteboard-canvas-mount" : "tutor-whiteboard-canvas-mount"}
           onClick={() => {

@@ -463,6 +463,7 @@ export function StudentWhiteboardClient({
     applyingRemoteRef: studentApplyingRemoteRef,
     selectStudentPage,
     tutorStreamReady,
+    followViewLockContainerRef,
   } = useStudentWhiteboardCanvas(
     syncClient,
     excalidrawAPI,
@@ -978,6 +979,7 @@ export function StudentWhiteboardClient({
         }}
       >
         <div
+          ref={followViewLockContainerRef}
           style={{
             flex: 1,
             minHeight: 360,
