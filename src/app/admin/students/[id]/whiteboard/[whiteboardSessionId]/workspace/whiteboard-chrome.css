@@ -115,15 +115,16 @@
   align-items: center;
   padding: 8px 0;
   gap: 2px;
-  /* Wave5 #2: overflow-y:auto makes the rail scrollable on short viewports so
-     the More button at the bottom is always reachable. overflow-x:hidden
-     prevents a horizontal scrollbar; flyouts (shapes/more popovers) that extend
-     to the right of the 48px rail may be partially clipped only when the
-     viewport is very short and the user has scrolled — acceptable vs the More
-     button being completely unreachable. min-height:0 lets the flex body
-     constrain the strip height correctly. */
-  overflow-x: hidden;
+  /* Wave5 #2: overflow-y:auto scrolls the rail on short viewports so the More
+     button stays reachable. Right-opening flyouts (PP-06 props panel, shapes
+     pulldown, more popover) use position:absolute; left:100% — overflow-x:hidden
+     (14a72f9) clipped them to zero width on desktop. overflow-x:clip +
+     overflow-clip-margin paints flyouts in a 280px band to the right of the rail
+     without a horizontal scrollbar. min-height:0 lets the flex body constrain
+     height. Fallback below for engines without overflow-clip-margin. */
+  overflow-x: clip;
   overflow-y: auto;
+  overflow-clip-margin: 0 280px 0 0;
   min-height: 0;
   position: relative;
   /* Raised from z-10 to match topbar stacking context level (z-30). */
@@ -133,6 +134,13 @@
 
 .mynk-wb-strip::-webkit-scrollbar {
   display: none;
+}
+
+/* Engines without overflow-clip-margin: prefer flyouts over rail scroll. */
+@supports not (overflow-clip-margin: 1px) {
+  .mynk-wb-strip {
+    overflow: visible;
+  }
 }
 
 .mynk-wb-strip--collapsed {
