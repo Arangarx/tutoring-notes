@@ -35,6 +35,7 @@ import {
   driveTutorViewportStream,
   tutorSnapshotAtScrollZoom,
   viewportScrollDistance,
+  type ViewportScrollZoom,
   WB_MOVE_PROPAGATION_TOLERANCE_SCENE,
   WB_VIEWPORT_CENTER_PASS_TOLERANCE_PX,
   WB_ZOOM_INVARIANT_CENTER_TOLERANCE_SCENE,
@@ -335,6 +336,24 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
+  // TEMP INV13 DIAG — remove after triage
+  function formatInv13Vp(v: ViewportScrollZoom): string {
+    return `{scrollX:${v.scrollX},scrollY:${v.scrollY},zoom:${v.zoom}}`;
+  }
+
+  function logInv13Diag(
+    tag: string,
+    student: ViewportScrollZoom,
+    oracle: ViewportScrollZoom,
+    firstStepOracle: ViewportScrollZoom,
+    initialOracle: ViewportScrollZoom,
+    tutorTarget?: ViewportScrollZoom
+  ): void {
+    console.log(
+      `[INV13-DIAG] ${tag} student=${formatInv13Vp(student)} oracle=${formatInv13Vp(oracle)} firstStepOracle=${formatInv13Vp(firstStepOracle)} initialPose=${formatInv13Vp(initialOracle)} distToOracle=${viewportScrollDistance(student, oracle).toFixed(2)} distToFirstStep=${viewportScrollDistance(student, firstStepOracle).toFixed(2)} distToInitial=${viewportScrollDistance(student, initialOracle).toFixed(2)}${tutorTarget ? ` tutorTarget=${formatInv13Vp(tutorTarget)}` : ""}`
+    );
+  }
+
   test("invariant 13 — continuous tutor pan/zoom: student tracks live, not only on stop", async ({
     browser,
   }) => {
@@ -377,6 +396,16 @@ test.describe("whiteboard live-sync regression", () => {
       const distMidToFirstLock = viewportScrollDistance(studentMid, firstStepOracle);
       const distMidToInitial = viewportScrollDistance(studentMid, initialOracle);
 
+      // TEMP INV13 DIAG — remove after triage
+      logInv13Diag(
+        "MID",
+        studentMid,
+        midOracle,
+        firstStepOracle,
+        initialOracle,
+        tutorMid
+      );
+
       // Intermediate: student must track toward the current tutor position, not
       // remain on the first follow-lock (pre-fix signature) or the pre-stream pose.
       expect(distMidToOracle).toBeLessThan(12);
@@ -390,14 +419,51 @@ test.describe("whiteboard live-sync regression", () => {
       const studentVp = await readViewportSnapshot(peers.studentPage, "student");
       const finalOracle = expectedAlignedStudentScroll(tutorFinal, studentVp);
 
-      await waitForViewportAligned(
+      // TEMP INV13 DIAG — remove after triage
+      const studentPreFinalWait = await readViewportSnapshot(
         peers.studentPage,
-        "student",
-        finalOracle.scrollX,
-        finalOracle.scrollY,
-        8,
-        12_000
+        "student"
       );
+      logInv13Diag(
+        "FINAL-PRE",
+        studentPreFinalWait,
+        finalOracle,
+        firstStepOracle,
+        initialOracle,
+        tutorFinal
+      );
+
+      try {
+        await waitForViewportAligned(
+          peers.studentPage,
+          "student",
+          finalOracle.scrollX,
+          finalOracle.scrollY,
+          8,
+          6_000 // TEMP INV13 DIAG — was 12_000; restore after triage
+        );
+      } catch (err) {
+        const studentOnTimeout = await readViewportSnapshot(
+          peers.studentPage,
+          "student"
+        );
+        logInv13Diag(
+          "FINAL-TIMEOUT",
+          studentOnTimeout,
+          finalOracle,
+          firstStepOracle,
+          initialOracle,
+          tutorFinal
+        );
+        for (let i = 0; i < 8; i++) {
+          await peers.studentPage.waitForTimeout(500);
+          const polled = await readViewportSnapshot(peers.studentPage, "student");
+          console.log(
+            `[INV13-DIAG] FINAL-POLL-${i} t=${(i + 1) * 500}ms student=${formatInv13Vp(polled)} distToOracle=${viewportScrollDistance(polled, finalOracle).toFixed(2)} distToFirstStep=${viewportScrollDistance(polled, firstStepOracle).toFixed(2)}`
+          );
+        }
+        throw err;
+      }
 
       const studentFinal = await readViewportSnapshot(peers.studentPage, "student");
       expect(studentFinal.scrollX).toBeCloseTo(finalOracle.scrollX, 0);
