@@ -115,16 +115,15 @@
   align-items: center;
   padding: 8px 0;
   gap: 2px;
-  /* Wave5 #2: overflow-y:auto scrolls the rail on short viewports so the More
+  /* overflow-y:auto scrolls the rail on short viewports so the collapse
      button stays reachable. Right-opening flyouts (PP-06 props panel, shapes
-     pulldown, more popover) use position:absolute; left:100% — overflow-x:hidden
-     (14a72f9) clipped them to zero width on desktop. overflow-x:clip +
-     overflow-clip-margin paints flyouts in a 280px band to the right of the rail
-     without a horizontal scrollbar. min-height:0 lets the flex body constrain
-     height. Fallback below for engines without overflow-clip-margin. */
-  overflow-x: clip;
+     pulldown, more popover) use createPortal + position:fixed so they escape
+     this overflow container entirely — no overflow-clip-margin trickery
+     needed. overflow-x:hidden hides any stray horizontal overflow from
+     collapsed-state transitions. min-height:0 lets the flex body constrain
+     height. */
+  overflow-x: hidden;
   overflow-y: auto;
-  overflow-clip-margin: 0 280px 0 0;
   min-height: 0;
   position: relative;
   /* Raised from z-10 to match topbar stacking context level (z-30). */
@@ -134,13 +133,6 @@
 
 .mynk-wb-strip::-webkit-scrollbar {
   display: none;
-}
-
-/* Engines without overflow-clip-margin: prefer flyouts over rail scroll. */
-@supports not (overflow-clip-margin: 1px) {
-  .mynk-wb-strip {
-    overflow: visible;
-  }
 }
 
 .mynk-wb-strip--collapsed {

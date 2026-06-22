@@ -749,4 +749,149 @@ test.describe("wb chrome — interactive controls", () => {
 
     await context.close();
   });
+
+  /**
+   * PP-06 flyout visual-unclip gate (2026-06-22, wb-wave5-polish fix).
+   *
+   * ROOT CAUSE HISTORY:
+   *   Wave 5 commit 14a72f9 added overflow-x:hidden to .mynk-wb-strip so the
+   *   rail could scroll vertically on short viewports. This clipped the right-
+   *   opening flyouts to zero width. Commit 06ce763 tried
+   *   overflow-clip-margin: 0 280px 0 0 (4-value) — INVALID; the browser drops
+   *   the whole declaration, leaving effective clip-margin: 0 → flyout invisible.
+   *
+   * MECHANISM:
+   *   overflow-clip-margin accepts a SINGLE <length> only. The correct value is
+   *   overflow-clip-margin: 280px — this extends the clip edge 280 px to the
+   *   right of the 48px strip, allowing the 260px-wide panel to paint.
+   *
+   * RED on broken code: elementFromPoint at the panel's centre returns a canvas
+   *   element (panel paint is clipped at the strip right edge; canvas shows through).
+   * GREEN after fix:    elementFromPoint at the panel's centre returns an element
+   *   contained within [data-testid="wb-props-panel"].
+   *
+   * Run: npm run test:integration -- tests/integration/wb-chrome-interactions.spec.ts
+   */
+  test("PP-06 props flyout is visually unclipped — elementFromPoint hit + viewport bounds (regression gate)", async ({ browser }) => {
+    const session = await seedWbLiveSyncSession();
+    const context = await browser.newContext({
+      storageState: "tests/integration/.auth/tutor.json",
+      viewport: { width: 1280, height: 900 },
+    });
+    const page = await context.newPage();
+    await loadTutorBoard(page, session);
+
+    // Activate pencil — shows the PP-06 props chrome in the left rail.
+    await page.getByRole("button", { name: "Pencil (P)" }).click();
+
+    const trigger = page.getByTestId("wb-props-compact-trigger");
+    await expect(trigger).toBeVisible({ timeout: 5_000 });
+    await trigger.click();
+
+    const panel = page.getByTestId("wb-props-panel");
+    // Basic DOM visibility (was already passing; doesn't catch overflow clipping).
+    await expect(panel).toBeVisible({ timeout: 3_000 });
+
+    // --- KEY ASSERTION: visual unclip ---
+    // The panel is position:absolute; left:100% relative to its containing
+    // block (~36px wide), so its left edge is ~46px from the viewport left
+    // and its right edge ~306px. The strip right edge is 48px.
+    //
+    // BROKEN (clip-margin:0):  panel clipped at x=48; at x=176 only the
+    //   canvas paints → elementFromPoint returns canvas element → NOT the panel.
+    // FIXED  (clip-margin:280px): panel visible out to 328px; at x=176 the
+    //   panel element is the top-most rendered surface → IS the panel.
+
+    const panelBox = await panel.boundingBox();
+    expect(panelBox, "panel must have a non-zero bounding box").not.toBeNull();
+    expect(panelBox!.width).toBeGreaterThan(50);
+    expect(panelBox!.height).toBeGreaterThan(50);
+
+    const cx = panelBox!.x + panelBox!.width / 2;
+    const cy = panelBox!.y + panelBox!.height / 2;
+
+    // cx must be well to the right of the strip (48px wide) — confirms the
+    // panel is positioned outside the strip's layout box.
+    const strip = page.getByTestId("wb-tool-strip");
+    const stripBox = await strip.boundingBox();
+    expect(stripBox).not.toBeNull();
+    expect(cx).toBeGreaterThan(stripBox!.x + stripBox!.width);
+
+    // Panel must not extend past the viewport right edge.
+    expect(panelBox!.x + panelBox!.width).toBeLessThanOrEqual(1280 + 1);
+
+    // The REAL visual check: elementFromPoint at the panel's painted centre
+    // must resolve to an element inside [data-testid="wb-props-panel"].
+    // When overflow:clip clips the panel, the canvas renders behind it at
+    // this coordinate and closest('…') returns null.
+    const panelIsTopMost = await page.evaluate(
+      ([x, y]) => {
+        const el = document.elementFromPoint(x as number, y as number);
+        if (!el) return false;
+        return (el as Element).closest('[data-testid="wb-props-panel"]') !== null;
+      },
+      [cx, cy]
+    );
+    expect(
+      panelIsTopMost,
+      `elementFromPoint(${Math.round(cx)}, ${Math.round(cy)}) must resolve to an element inside wb-props-panel — ` +
+        "if it resolves to a canvas element the flyout is being overflow-clipped"
+    ).toBe(true);
+
+    // --- Screenshot proof ---
+    const path = require("node:path");
+    const fs = require("node:fs");
+    const assetsDir = path.join(process.cwd(), "docs", "handoff", "assets");
+    fs.mkdirSync(assetsDir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const shotPath = path.join(assetsDir, `wb-props-flyout-open-${stamp}.png`);
+    await page.screenshot({ path: shotPath });
+    test.info().attach("props-flyout-screenshot", {
+      body: shotPath,
+      contentType: "text/plain",
+    });
+    console.log(`[screenshot] saved: ${shotPath}`);
+
+    await context.close();
+  });
+
+  /**
+   * Constraint B: left-rail collapse button remains reachable on a short viewport.
+   *
+   * .mynk-wb-strip uses overflow-y:auto to scroll the rail on constrained heights.
+   * This test verifies the collapse button can be scrolled into view even when
+   * the viewport is too short to show all tools without scrolling.
+   *
+   * GREEN = button is reachable via scroll (overflow-y:auto working).
+   * RED   = overflow-y reverted to visible → strip doesn't scroll →
+   *         scrollIntoViewIfNeeded has no ancestor scroll container → button
+   *         remains outside the fixed chrome → bounding-box y exceeds viewport.
+   */
+  test("Left rail collapse button is reachable at short viewport height (constraint B)", async ({ browser }) => {
+    const session = await seedWbLiveSyncSession();
+    const context = await browser.newContext({
+      storageState: "tests/integration/.auth/tutor.json",
+      viewport: { width: 1280, height: 500 },
+    });
+    const page = await context.newPage();
+    await loadTutorBoard(page, session);
+
+    const collapseBtn = page.getByRole("button", { name: /Collapse tools/ });
+    // Element must be in the DOM (not removed by layout).
+    await expect(collapseBtn).toBeAttached({ timeout: 10_000 });
+
+    // Scroll the rail so the collapse button comes into view.
+    // If overflow-y:auto is intact, the strip scrolls and the button is reachable.
+    await collapseBtn.scrollIntoViewIfNeeded();
+
+    const box = await collapseBtn.boundingBox();
+    expect(box, "collapse button must have a bounding box after scroll").not.toBeNull();
+    // Must be within the 500px viewport.
+    expect(
+      box!.y + box!.height,
+      "collapse button bottom must be ≤ viewport height (500px)"
+    ).toBeLessThanOrEqual(500);
+
+    await context.close();
+  });
 });

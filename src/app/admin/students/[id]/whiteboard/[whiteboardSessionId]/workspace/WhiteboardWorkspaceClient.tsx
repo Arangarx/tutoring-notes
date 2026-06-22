@@ -40,6 +40,7 @@
 
 import { copyTextToClipboard } from "@/lib/copy-text-to-clipboard";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useWindowScrollToTopOnMount } from "@/hooks/useWindowScrollToTopOnMount";
 import { useTheme } from "@/components/ThemeProvider";
 import { useSyncTombstonedElementIds } from "@/hooks/useSyncTombstonedElementIds";
@@ -773,6 +774,11 @@ export function WhiteboardWorkspaceClient({
       | "theme"
       | "topbar-more"
   ) => setOpenMenu((p) => (p === menu ? null : menu));
+  // Anchor positions for rail flyouts rendered as position:fixed portals.
+  // Captured in onClickCapture before the toggle fires; batched together.
+  const [propsFlyoutAnchor, setPropsFlyoutAnchor] = useState<{ top: number; left: number } | null>(null);
+  const [shapesFlyoutAnchor, setShapesFlyoutAnchor] = useState<{ top: number; left: number } | null>(null);
+  const [moreFlyoutAnchor, setMoreFlyoutAnchor] = useState<{ top: number; left: number } | null>(null);
   const dismissTouchSheets = useCallback(() => {
     setOpenMenu(null);
   }, []);
@@ -4263,6 +4269,15 @@ export function WhiteboardWorkspaceClient({
       className={`mynk-wb-props-sidebar mynk-wb-props-compact${propsCompactOpen ? " mynk-wb-props-compact--open" : ""}`}
       data-testid="wb-props-popover"
       onPointerDown={(e) => e.stopPropagation()}
+      onClickCapture={(e) => {
+        // Capture the trigger button's viewport rect before the toggle fires
+        // so the portal panel can be positioned via position:fixed.
+        const btn = (e.target as Element).closest(".mynk-wb-props-compact__summary");
+        if (btn) {
+          const rect = btn.getBoundingClientRect();
+          setPropsFlyoutAnchor({ top: rect.top, left: rect.right + 4 });
+        }
+      }}
     >
       <button
         type="button"
@@ -4305,28 +4320,40 @@ export function WhiteboardWorkspaceClient({
           <SharpnessIcon type={roundness} />
         </span>
       </button>
-      <div
-        className="mynk-wb-props-compact__panel"
-        role="dialog"
-        aria-label="Stroke properties"
-        data-testid="wb-props-panel"
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <WbStrokePropsPanel
-          strokeColor={strokeColor}
-          strokeWidth={strokeWidth}
-          opacity={opacity}
-          roughness={roughness}
-          roundness={roundness}
-          moreStylesOpen={moreStylesOpen}
-          inkHex={excalidrawTheme === "dark" ? EXCALIDRAW_STROKE_DARK_HEX : EXCALIDRAW_STROKE_HEX}
-          onStrokeChange={updateStrokeStyle}
-          onMoreStylesToggle={() => setMoreStylesOpen((p) => !p)}
-          onRoughnessChange={(r) => updateStrokeStyle({ roughness: r })}
-          onRoundnessChange={updateRoundness}
-        />
-      </div>
+      {/* Panel is portaled to document.body as position:fixed so it escapes
+          the rail's overflow:hidden without any overflow-clip-margin tricks. */}
+      {propsCompactOpen && propsFlyoutAnchor && createPortal(
+        <div
+          className="mynk-wb-props-compact__panel"
+          role="dialog"
+          aria-label="Stroke properties"
+          data-testid="wb-props-panel"
+          style={{
+            display: "block",
+            position: "fixed",
+            left: propsFlyoutAnchor.left,
+            top: propsFlyoutAnchor.top,
+            zIndex: 200,
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <WbStrokePropsPanel
+            strokeColor={strokeColor}
+            strokeWidth={strokeWidth}
+            opacity={opacity}
+            roughness={roughness}
+            roundness={roundness}
+            moreStylesOpen={moreStylesOpen}
+            inkHex={excalidrawTheme === "dark" ? EXCALIDRAW_STROKE_DARK_HEX : EXCALIDRAW_STROKE_HEX}
+            onStrokeChange={updateStrokeStyle}
+            onMoreStylesToggle={() => setMoreStylesOpen((p) => !p)}
+            onRoughnessChange={(r) => updateStrokeStyle({ roughness: r })}
+            onRoundnessChange={updateRoundness}
+          />
+        </div>,
+        document.body
+      )}
     </div>
   );
 
@@ -4719,7 +4746,16 @@ export function WhiteboardWorkspaceClient({
 
   const renderMoreOverflowMenu = (iconSize = 16) => (
     <>
-      <div className="mynk-wb-more-menu">
+      <div
+        className="mynk-wb-more-menu"
+        onClickCapture={(e) => {
+          const btn = (e.target as Element).closest(".mynk-wb-tool-btn");
+          if (btn) {
+            const rect = btn.getBoundingClientRect();
+            setMoreFlyoutAnchor({ top: rect.top, left: rect.right + 4 });
+          }
+        }}
+      >
         <WbToolBtn
           icon={<WbIconMore size={iconSize} />}
           label="More — z-order, delete, hand"
@@ -4728,18 +4764,25 @@ export function WhiteboardWorkspaceClient({
             toggleMenu("more");
           }}
         />
-        {!touchLayout && morePopoverOpen && (
-          <div
-            className="mynk-wb-more-popover"
-            role="dialog"
-            aria-label="More drawing options"
-            data-testid="wb-more-popover"
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            {renderOverflowMenuItems(false)}
-          </div>
-        )}
       </div>
+      {!touchLayout && morePopoverOpen && moreFlyoutAnchor && createPortal(
+        <div
+          className="mynk-wb-more-popover"
+          role="dialog"
+          aria-label="More drawing options"
+          data-testid="wb-more-popover"
+          style={{
+            position: "fixed",
+            left: moreFlyoutAnchor.left,
+            top: moreFlyoutAnchor.top,
+            zIndex: 200,
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          {renderOverflowMenuItems(false)}
+        </div>,
+        document.body
+      )}
     </>
   );
 
@@ -4768,7 +4811,16 @@ export function WhiteboardWorkspaceClient({
   );
 
   const renderShapesMenu = (iconSize: number) => (
-    <div className="mynk-wb-shapes-menu">
+    <div
+      className="mynk-wb-shapes-menu"
+      onClickCapture={(e) => {
+        const btn = (e.target as Element).closest(".mynk-wb-tool-btn");
+        if (btn) {
+          const rect = btn.getBoundingClientRect();
+          setShapesFlyoutAnchor({ top: rect.top, left: rect.right + 4 });
+        }
+      }}
+    >
       <WbToolBtn
         icon={shapeIconFor(
           WB_SHAPE_TOOLS.some((s) => s.type === activeToolType)
@@ -4788,8 +4840,18 @@ export function WhiteboardWorkspaceClient({
         pulldown
         onPulldown={() => toggleMenu("shapes")}
       />
-      {!touchLayout && shapesDropdownOpen && (
-        <div className="mynk-wb-shapes-dropdown" role="menu">
+      {!touchLayout && shapesDropdownOpen && shapesFlyoutAnchor && createPortal(
+        <div
+          className="mynk-wb-shapes-dropdown"
+          role="menu"
+          style={{
+            position: "fixed",
+            left: shapesFlyoutAnchor.left,
+            top: shapesFlyoutAnchor.top,
+            zIndex: 200,
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
           {WB_SHAPE_TOOLS.map(({ type, label, Icon }) => (
             <button
               key={type}
@@ -4809,7 +4871,8 @@ export function WhiteboardWorkspaceClient({
               {label}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
