@@ -33,9 +33,9 @@ import {
   markerCenterOffsetFromViewportCenter,
   buildPanZoomViewportSteps,
   driveTutorViewportStream,
+  driveTutorViewportTrailingEmit,
   tutorSnapshotAtScrollZoom,
   viewportScrollDistance,
-  type ViewportScrollZoom,
   WB_MOVE_PROPAGATION_TOLERANCE_SCENE,
   WB_VIEWPORT_CENTER_PASS_TOLERANCE_PX,
   WB_ZOOM_INVARIANT_CENTER_TOLERANCE_SCENE,
@@ -336,24 +336,6 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  // TEMP INV13 DIAG — remove after triage
-  function formatInv13Vp(v: ViewportScrollZoom): string {
-    return `{scrollX:${v.scrollX},scrollY:${v.scrollY},zoom:${v.zoom}}`;
-  }
-
-  function logInv13Diag(
-    tag: string,
-    student: ViewportScrollZoom,
-    oracle: ViewportScrollZoom,
-    firstStepOracle: ViewportScrollZoom,
-    initialOracle: ViewportScrollZoom,
-    tutorTarget?: ViewportScrollZoom
-  ): void {
-    console.log(
-      `[INV13-DIAG] ${tag} student=${formatInv13Vp(student)} oracle=${formatInv13Vp(oracle)} firstStepOracle=${formatInv13Vp(firstStepOracle)} initialPose=${formatInv13Vp(initialOracle)} distToOracle=${viewportScrollDistance(student, oracle).toFixed(2)} distToFirstStep=${viewportScrollDistance(student, firstStepOracle).toFixed(2)} distToInitial=${viewportScrollDistance(student, initialOracle).toFixed(2)}${tutorTarget ? ` tutorTarget=${formatInv13Vp(tutorTarget)}` : ""}`
-    );
-  }
-
   test("invariant 13 — continuous tutor pan/zoom: student tracks live, not only on stop", async ({
     browser,
   }) => {
@@ -396,85 +378,44 @@ test.describe("whiteboard live-sync regression", () => {
       const distMidToFirstLock = viewportScrollDistance(studentMid, firstStepOracle);
       const distMidToInitial = viewportScrollDistance(studentMid, initialOracle);
 
-      // TEMP INV13 DIAG — remove after triage
-      logInv13Diag(
-        "MID",
-        studentMid,
-        midOracle,
-        firstStepOracle,
-        initialOracle,
-        tutorMid
-      );
-
-      // Intermediate: student must track toward the current tutor position, not
-      // remain on the first follow-lock (pre-fix signature) or the pre-stream pose.
-      expect(distMidToOracle).toBeLessThan(12);
-      expect(distMidToFirstLock).toBeGreaterThan(20);
-      expect(distMidToInitial).toBeGreaterThan(20);
+      // Primary guard (decisive for pre-c4fff44 stale-lock): mid-gesture the
+      // student must track the live tutor oracle, not the first-frame lock or
+      // the pre-stream pose. Pre-fix: distMidToOracle huge, distMidToFirstLock ≈ 0.
+      expect(distMidToOracle).toBeLessThanOrEqual(12);
+      expect(distMidToFirstLock).toBeGreaterThan(80);
+      expect(distMidToInitial).toBeGreaterThan(80);
 
       const restSteps = steps.slice(MID_CHECK);
       await driveTutorViewportStream(peers.tutorPage, restSteps, 8);
+
+      const finalTutorTarget = steps[steps.length - 1]!;
+      // Trailing emit: burst ends with v3 throttle one frame short; one more
+      // setViewport after the throttle window delivers the final follow frame
+      // (real usage also gets scheduleViewportPersist on gesture release).
+      await driveTutorViewportTrailingEmit(peers.tutorPage, finalTutorTarget);
 
       const tutorFinal = await readViewportSnapshot(peers.tutorPage, "tutor");
       const studentVp = await readViewportSnapshot(peers.studentPage, "student");
       const finalOracle = expectedAlignedStudentScroll(tutorFinal, studentVp);
 
-      // TEMP INV13 DIAG — remove after triage
-      const studentPreFinalWait = await readViewportSnapshot(
+      await waitForViewportAligned(
         peers.studentPage,
-        "student"
+        "student",
+        finalOracle.scrollX,
+        finalOracle.scrollY,
+        8,
+        12_000
       );
-      logInv13Diag(
-        "FINAL-PRE",
-        studentPreFinalWait,
-        finalOracle,
-        firstStepOracle,
-        initialOracle,
-        tutorFinal
-      );
-
-      try {
-        await waitForViewportAligned(
-          peers.studentPage,
-          "student",
-          finalOracle.scrollX,
-          finalOracle.scrollY,
-          8,
-          6_000 // TEMP INV13 DIAG — was 12_000; restore after triage
-        );
-      } catch (err) {
-        const studentOnTimeout = await readViewportSnapshot(
-          peers.studentPage,
-          "student"
-        );
-        logInv13Diag(
-          "FINAL-TIMEOUT",
-          studentOnTimeout,
-          finalOracle,
-          firstStepOracle,
-          initialOracle,
-          tutorFinal
-        );
-        for (let i = 0; i < 8; i++) {
-          await peers.studentPage.waitForTimeout(500);
-          const polled = await readViewportSnapshot(peers.studentPage, "student");
-          console.log(
-            `[INV13-DIAG] FINAL-POLL-${i} t=${(i + 1) * 500}ms student=${formatInv13Vp(polled)} distToOracle=${viewportScrollDistance(polled, finalOracle).toFixed(2)} distToFirstStep=${viewportScrollDistance(polled, firstStepOracle).toFixed(2)}`
-          );
-        }
-        throw err;
-      }
 
       const studentFinal = await readViewportSnapshot(peers.studentPage, "student");
       expect(studentFinal.scrollX).toBeCloseTo(finalOracle.scrollX, 0);
       expect(studentFinal.scrollY).toBeCloseTo(finalOracle.scrollY, 0);
       expect(studentFinal.zoom).toBeCloseTo(finalOracle.zoom, 2);
 
-      // Decisive stale-revert guard: final pose must match last tutor viewport,
-      // not the first follow-lock where pre-c4fff44 code got stuck mid-stream.
+      // Final pose must match last tutor viewport, not the stale first lock.
       expect(viewportScrollDistance(studentFinal, finalOracle)).toBeLessThanOrEqual(8);
-      expect(viewportScrollDistance(studentFinal, firstStepOracle)).toBeGreaterThan(25);
-      expect(viewportScrollDistance(studentFinal, initialOracle)).toBeGreaterThan(25);
+      expect(viewportScrollDistance(studentFinal, firstStepOracle)).toBeGreaterThan(100);
+      expect(viewportScrollDistance(studentFinal, initialOracle)).toBeGreaterThan(100);
     } finally {
       await peers.close();
     }

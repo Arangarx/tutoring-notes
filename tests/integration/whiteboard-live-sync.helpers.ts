@@ -785,11 +785,46 @@ export async function driveTutorViewportStream(
   }
 }
 
+/** Pan delta per step in `buildPanZoomViewportSteps` (scene units). */
+export const PAN_ZOOM_STEP_DELTA = { x: 38, y: 24 } as const;
+
+/** Scene-unit distance of one pan step — used for one-frame lag tolerances. */
+export const ONE_PAN_ZOOM_STEP_SCENE_DISTANCE = Math.hypot(
+  PAN_ZOOM_STEP_DELTA.x,
+  PAN_ZOOM_STEP_DELTA.y
+);
+
+/**
+ * After a rapid viewport stream, v3 document broadcast uses arm-if-null
+ * throttle (50 ms). The last `setViewport` in the burst may not arm a fresh
+ * emit (timer already pending), leaving the student one throttle-frame short.
+ * Real wheel/drag gestures also fire `scheduleViewportPersist` on release;
+ * the E2E bridge does not. Pausing past the throttle window then issuing one
+ * more `setViewport` at the final target mimics gesture stop without calling
+ * `flushDocumentBroadcastNow` (which would mask the live-sync bug).
+ */
+export async function driveTutorViewportTrailingEmit(
+  tutorPage: Page,
+  final: ViewportScrollZoom,
+  throttleMs = 60
+): Promise<void> {
+  await tutorPage.waitForTimeout(throttleMs);
+  await setViewportOnRole(
+    tutorPage,
+    "tutor",
+    final.scrollX,
+    final.scrollY,
+    final.zoom
+  );
+  // Allow throttle emit + relay delivery + student apply.
+  await tutorPage.waitForTimeout(throttleMs + 50);
+}
+
 /** Build evenly spaced pan+zoom steps from a tutor baseline (for stream tests). */
 export function buildPanZoomViewportSteps(
   base: ViewportSnapshot,
   count: number,
-  panDeltaPerStep = { x: 38, y: 24 },
+  panDeltaPerStep = PAN_ZOOM_STEP_DELTA,
   zoomFactorPerStep = 0.035
 ): ViewportScrollZoom[] {
   const steps: ViewportScrollZoom[] = [];
