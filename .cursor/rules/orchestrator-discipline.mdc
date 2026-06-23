@@ -11,7 +11,7 @@ alwaysApply: true
 
 ## Swap chats early (~60–70% context) — durable state is what makes it safe
 
-Don't run a chat until it truncates or slows. **Cursor flags ~60–70% context capacity as the swap point** — hallucination and quality drift can begin in that band, well before any hard limit. When the chat reaches it (Andrew can see the indicator; you should also proactively suggest swapping at a natural milestone or when a session has run long), the move is: **start a FRESH chat, `@`-reference the previous chat AND `docs/handoff/ORCHESTRATOR-STATE.md`, and continue.** A fresh chat re-bills less context per turn too — so early swaps cut cost *and* protect quality.
+Don't run a chat until it truncates or slows. **Cursor flags ~60–70% context capacity as the swap point** — hallucination and quality drift can begin in that band, well before any hard limit. The number is a *threshold, not a hard cutoff*: swap at the **first reasonable break point after** crossing it (a finished dispatch, a merge, a closed sub-thread) — don't interrupt mid-task to hit an exact percent, but don't let it drift far past either. When you reach that break (Andrew can see the indicator; you should also proactively suggest swapping at a natural milestone or when a session has run long), the move is: **start a FRESH chat, `@`-reference the previous chat AND `docs/handoff/ORCHESTRATOR-STATE.md`, and continue.** A fresh chat re-bills less context per turn too — so early swaps cut cost *and* protect quality.
 
 This is a **hard dependency on doc diligence**, not a nicety: a swap is only clean if `ORCHESTRATOR-STATE.md` is current at the moment of the swap. Therefore:
 
