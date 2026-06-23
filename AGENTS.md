@@ -399,6 +399,27 @@ lever lives.
   burndown (6-agent fan-out + merge-train + smokebook) was a known loop;
   the only genuine Opus-grade call was grouping agents for file-
   disjointness, which Sonnet would also handle.
+- **Default conductor is Composer 2.5; escalate UP by tripwire (2026-06-23).**
+  Andrew now conducts from Composer 2.5 by default and escalates to
+  Sonnet/Opus only on a tripwire.   **First response to a tripwire is a plan-mode "step back"** (read-only,
+  still on Composer 2.5) — re-think and write a concrete plan; that alone
+  often clears the tripwire. Only if the step-back confirms it's genuinely
+  above-tier do you escalate the model. Because **Composer cannot dispatch
+  Anthropic models**, escalation = **STOP and recommend Andrew switch
+  this chat's model up** (not "dispatch up"). Use plan mode liberally in
+  general — including for small/narrow problems — not only at tripwires. The self-detectable
+  tripwire checklist + STOP-and-switch handoff protocol is the
+  authoritative, always-applied source:
+  [`.cursor/rules/orchestrator-discipline.mdc`](.cursor/rules/orchestrator-discipline.mdc)
+  § "DEFAULT CONDUCTOR IS COMPOSER 2.5 — escalate UP by tripwire".
+  Tripwires in brief: 2nd failed attempt at the same bug; changing a
+  fragile/load-bearing surface (recorder FSM, outbox, end-session,
+  live-A/V, WB sync/viewport, auth boundary, migration); multiple viable
+  approaches with real trade-offs; concurrency/ordering/geometry or
+  >3-area cross-cut; scope explosion; you're guessing; 5-axis review not
+  done; strategic call. Escalate to the **cheapest** tier that clears it
+  (Sonnet default; Opus only for new architectural pillars / designs that
+  already cost a recovery cycle / multi-day high-blast-radius).
 
 **Proven patterns** — combine tiers when it pays off:
 
