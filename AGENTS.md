@@ -372,9 +372,16 @@ lever lives.
 - **The cost mechanic:** subagents are cheap; the expensive line item is
   the *standing Opus orchestration chat*. Every turn re-bills the entire
   accumulated context at Opus rates, and reasoning-effort multiplies it.
-  Two levers: (a) what **tier conducts**, (b) **context hygiene** — a
-  fresh chat bootstrapped from `ORCHESTRATOR-STATE.md` is far cheaper
-  than letting one chat balloon; restart fresh after big milestones.
+    Two levers: (a) what **tier conducts**, (b) **context hygiene** — a
+    fresh chat bootstrapped from `ORCHESTRATOR-STATE.md` is far cheaper
+    than letting one chat balloon; restart fresh after big milestones.
+    **Swap early — at ~60–70% context (Cursor's flagged threshold), not
+    at truncation:** quality/hallucination drift can begin in that band.
+    Start a fresh chat, `@`-reference the previous chat +
+    `ORCHESTRATOR-STATE.md`, continue. This depends on the state doc being
+    continuously current so the chat is always swap-ready. See
+    [`.cursor/rules/orchestrator-discipline.mdc`](.cursor/rules/orchestrator-discipline.mdc)
+    § "Swap chats early".
 - **The judgment-vs-loop heuristic:** ask of the orchestration session —
   *"Am I mostly making NEW judgment calls (sequencing, design trade-offs,
   is-this-grouping-safe, when-to-merge/defer/escalate), or mostly running
