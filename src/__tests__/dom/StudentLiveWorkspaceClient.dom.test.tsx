@@ -252,6 +252,7 @@ jest.mock("@/hooks/useLiveAV", () => ({
     requestMic: jest.fn().mockResolvedValue(undefined),
     requestCam: jest.fn().mockResolvedValue(undefined),
     reconnectPeer: jest.fn(),
+    leaveAllPeers: jest.fn(),
     retryAcquire: jest.fn().mockResolvedValue(undefined),
     videoDevices: [{ deviceId: "cam1", label: "Cam", kind: "videoinput", groupId: "", toJSON: () => ({}) }],
     pickedVideoCameraSlot: 0,

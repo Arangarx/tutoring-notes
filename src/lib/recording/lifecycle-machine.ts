@@ -587,6 +587,8 @@ export function derivePresentation(
     participants: ReadonlySet<string>;
     everHadParticipants: boolean;
     syncEnabled: boolean;
+    /** True when sync roster reports ≥1 student peer (relay), even if WebRTC is dead. */
+    syncRosterHasStudent?: boolean;
     pausedReason?: PausedReason;
     armedReason?: ArmedReason;
   }
@@ -684,6 +686,20 @@ export function derivePresentation(
         bannerMessage:
           "We're offline — recording is paused. We'll resume automatically when the connection comes back.",
         pillLabel: "Auto-paused (offline)",
+        pillColor: "amber",
+      };
+    }
+    if (
+      pausedReason === "all_participants_disconnected" &&
+      ctx.syncRosterHasStudent
+    ) {
+      return {
+        recordingActive: false,
+        autoPaused: true,
+        awaitingStart: false,
+        bannerMessage:
+          "Audio/video not connected — recording paused until the call connects.",
+        pillLabel: "Auto-paused (A/V reconnecting)",
         pillColor: "amber",
       };
     }

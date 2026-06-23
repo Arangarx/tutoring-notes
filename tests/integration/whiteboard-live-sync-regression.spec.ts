@@ -35,6 +35,8 @@ import {
   driveTutorViewportStream,
   tutorSnapshotAtScrollZoom,
   viewportScrollDistance,
+  addGraphExpressionViaUI,
+  waitForGraphExpressions,
   WB_MOVE_PROPAGATION_TOLERANCE_SCENE,
   WB_VIEWPORT_CENTER_PASS_TOLERANCE_PX,
   WB_ZOOM_INVARIANT_CENTER_TOLERANCE_SCENE,
@@ -830,16 +832,81 @@ test.describe("whiteboard live-sync regression", () => {
       // attribute entirely (GraphEmbeddable.tsx: data-read-only={readOnly ? "true" : undefined}).
       // Assert attribute absent to encode the new editable contract.
       await expect(graphHost).not.toHaveAttribute("data-read-only");
-      // TODO(wb-sync): add student→tutor direction coverage: a student graph
-      // expression edit should broadcast via persistGraphElementState →
-      // onCanvasChange → relay and arrive on the tutor scene element's
-      // graphStateJson. Blocked on two gaps:
-      // 1. insertGraphFixture E2E bridge only exposes a tutor-side insert method;
-      //    no equivalent bridge method exists for student-originated graph edits.
-      // 2. StudentWhiteboardClient.tsx currently passes readOnly=true to
-      //    GraphEmbeddable at /w/[joinToken] (needs updating to readOnly=false +
-      //    excalidrawAPI to be fully editable at the student join URL).
-      // File a dedicated relay invariant after both gaps are closed.
+    } finally {
+      await peers.close();
+    }
+  });
+
+  test("invariant 12b — graph UI persist: tutor types expression via UI + syncs to student", async ({
+    browser,
+  }) => {
+    test.setTimeout(180_000);
+    const session = await seedWbLiveSyncSession();
+    const peers = await openTutorAndStudent(browser, session);
+    try {
+      const graphId = await insertGraphOnRole(peers.tutorPage, "tutor", session, []);
+      expect(graphId).toBeTruthy();
+      await waitForElementOnPeer(peers.studentPage, "student", graphId, 30_000);
+
+      await addGraphExpressionViaUI(peers.tutorPage, "x^2");
+      await waitForGraphExpressions(peers.tutorPage, "tutor", graphId, ["x^2"]);
+      const tutorAfterPlot = await readGraphElementState(
+        peers.tutorPage,
+        "tutor",
+        graphId
+      );
+      expect(tutorAfterPlot?.graphStateJson).toContain("x^2");
+
+      await waitForGraphExpressions(peers.studentPage, "student", graphId, ["x^2"]);
+      const studentAfterTutor = await readGraphElementState(
+        peers.studentPage,
+        "student",
+        graphId
+      );
+      expect(studentAfterTutor?.graphStateJson).toContain("x^2");
+    } finally {
+      await peers.close();
+    }
+  });
+
+  test("invariant 12c — recording banner must not claim student left while sync roster present", async ({
+    browser,
+  }) => {
+    test.setTimeout(180_000);
+    const session = await seedWbLiveSyncSession();
+    const peers = await openTutorAndStudent(browser, session);
+    try {
+      await expect(peers.tutorPage.getByTestId("wb-sync-pill")).toHaveText(
+        /student connected/i,
+        { timeout: 90_000 }
+      );
+      const banner = peers.tutorPage.getByTestId("wb-recording-autopause-banner");
+      if (await banner.isVisible()) {
+        await expect(banner).not.toContainText(/student disconnected/i);
+      }
+    } finally {
+      await peers.close();
+    }
+  });
+
+  test("invariant 12d — student follow-toggle vertically aligned with match button (Wave 5 #9)", async ({
+    browser,
+  }) => {
+    test.setTimeout(120_000);
+    const session = await seedWbLiveSyncSession();
+    const peers = await openTutorAndStudent(browser, session);
+    try {
+      const follow = peers.studentPage.getByTestId("wb-student-follow-toggle");
+      const match = peers.studentPage.getByTestId("wb-student-match-view");
+      await expect(follow).toBeVisible({ timeout: 30_000 });
+      await expect(match).toBeVisible();
+      const followBox = await follow.boundingBox();
+      const matchBox = await match.boundingBox();
+      expect(followBox).not.toBeNull();
+      expect(matchBox).not.toBeNull();
+      const followMid = followBox!.y + followBox!.height / 2;
+      const matchMid = matchBox!.y + matchBox!.height / 2;
+      expect(Math.abs(followMid - matchMid)).toBeLessThan(4);
     } finally {
       await peers.close();
     }

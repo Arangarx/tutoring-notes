@@ -811,3 +811,109 @@ export function buildPanZoomViewportSteps(
   }
   return steps;
 }
+
+/** Open tutor + student relay session (shared harness entry). */
+export async function openTutorAndStudent(
+  browser: import("@playwright/test").Browser,
+  session: WbLiveSyncSession,
+  options?: { ensureFollow?: boolean }
+) {
+  const ensureFollow = options?.ensureFollow !== false;
+
+  const tutorContext = await browser.newContext({
+    storageState: "tests/integration/.auth/tutor.json",
+    viewport: { width: 1280, height: 1200 },
+  });
+  const studentContext = await browser.newContext({
+    viewport: { width: 1280, height: 640 },
+  });
+
+  const tutorPage = await tutorContext.newPage();
+  await tutorPage.goto(
+    `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+    { waitUntil: "domcontentloaded" }
+  );
+  await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
+    timeout: 90_000,
+  });
+  await waitForWbE2eBridge(tutorPage, "tutor");
+
+  const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
+  const studentPage = await studentContext.newPage();
+  await studentPage.goto(`/w/${session.joinToken}#k=${encryptionKey}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await expect(studentPage.getByTestId("student-whiteboard-canvas-mount")).toBeVisible({
+    timeout: 90_000,
+  });
+  await waitForWbE2eBridge(studentPage, "student");
+
+  if (ensureFollow) {
+    await ensureStudentFollowsTutor(studentPage);
+  }
+  await waitForTutorStudentConnected(tutorPage);
+
+  return {
+    tutorContext,
+    studentContext,
+    tutorPage,
+    studentPage,
+    async close() {
+      await tutorContext.close();
+      await studentContext.close();
+    },
+  };
+}
+
+/** Type an expression into the GraphEmbeddable UI (not the E2E fixture shortcut). */
+export async function addGraphExpressionViaUI(
+  page: Page,
+  expression: string
+): Promise<void> {
+  const host = page.getByTestId("wb-graph-embed-host").first();
+  await expect(host).toBeVisible({ timeout: 30_000 });
+  await host.scrollIntoViewIfNeeded();
+  const panel = page.getByTestId("wb-graph-expr-panel");
+  if (!(await panel.isVisible())) {
+    await page.getByTestId("wb-graph-expr-toggle").click();
+  }
+  const input = page.getByTestId("wb-graph-expr-new");
+  await input.click();
+  await input.fill(expression);
+  await input.press("Enter");
+  await expect(input).toHaveValue("", { timeout: 5_000 });
+}
+
+export async function countGraphCurvePaths(page: Page): Promise<number> {
+  return page.locator(".wb-graph-board-host .jxgbox svg path").count();
+}
+
+export async function waitForGraphExpressions(
+  page: Page,
+  role: "tutor" | "student",
+  graphId: string,
+  expressions: string[],
+  timeoutMs = 30_000
+): Promise<void> {
+  await page.waitForFunction(
+    ({ r, id, expected }) => {
+      const bridge = (
+        window as Window & {
+          __TN_WB_E2E__?: Record<
+            string,
+            {
+              graphElementState: (eid: string) => {
+                expressions: string[];
+              } | null;
+            }
+          >;
+        }
+      ).__TN_WB_E2E__?.[r];
+      const st = bridge?.graphElementState?.(id);
+      if (!st) return false;
+      return expected.every((expr) => st.expressions.includes(expr));
+    },
+    { r: role, id: graphId, expected: expressions },
+    { timeout: timeoutMs }
+  );
+}

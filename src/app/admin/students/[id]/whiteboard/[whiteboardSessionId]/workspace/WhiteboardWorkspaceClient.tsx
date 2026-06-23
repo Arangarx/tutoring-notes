@@ -1274,6 +1274,13 @@ export function WhiteboardWorkspaceClient({
     return () => clearTimeout(t);
   }, [role, studentConnected, studentOtherPeerCount, tutorStreamReady]);
 
+  useEffect(() => {
+    if (role !== "student") return;
+    if (studentConnected && studentOtherPeerCount >= 1) {
+      markLoadingCleared("remote_scene");
+    }
+  }, [role, studentConnected, studentOtherPeerCount, markLoadingCleared]);
+
   // Gate laser pointer origin by role (tutor uses tutor refs; student uses student refs)
   useCollaboratorPointers(
     role === "student" ? studentSyncClient : sync,
@@ -1911,6 +1918,32 @@ export function WhiteboardWorkspaceClient({
     };
   }, [sync, liveAv, whiteboardSessionId]);
 
+  // Tutor: when sync roster gains a student (0→≥1), restart mesh for stale PCs
+  // (e.g. student exit→rejoin with same sessionStorage peerId).
+  const prevSyncPeerCountRef = useRef(0);
+  useEffect(() => {
+    if (role !== "tutor") return;
+    const prev = prevSyncPeerCountRef.current;
+    prevSyncPeerCountRef.current = peerCount;
+    if (prev !== 0 || peerCount < 1) return;
+    const current = liveAv.participants;
+    if (current.length === 0) return;
+    console.log(
+      `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} avx=${whiteboardSessionId}` +
+        ` event=sync-roster-rejoin peers=${current.length}`
+    );
+    for (const p of current) {
+      try {
+        liveAv.reconnectPeer(p.peerId);
+      } catch (err) {
+        console.warn(
+          `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} sync-roster-rejoin threw peer=${p.peerId}`,
+          err
+        );
+      }
+    }
+  }, [role, peerCount, liveAv, whiteboardSessionId]);
+
   const lifecycleInputStreams = useMemo<
     ReadonlyMap<string, StreamHealth>
   >(() => {
@@ -2120,6 +2153,7 @@ export function WhiteboardWorkspaceClient({
     participants: lifecycleParticipants,
     everHadParticipants: everBothPresentRef.current,
     syncEnabled: !!syncUrl,
+    syncRosterHasStudent: bothPartiesInRoomSync,
   });
   const recordingActive = presence.recordingActive;
 
@@ -4125,26 +4159,19 @@ export function WhiteboardWorkspaceClient({
     };
     if (el.link === GRAPH_EMBED_LINK || el.customData?.wbType === "graph") {
       return (
-        // Wave5 #4 — bidirectional graph sync for student.
-        // excalidrawAPIRef.current is always passed (tutor and student).
-        // Student persists graph edits to their own Excalidraw scene, which
-        // onCanvasChange broadcasts to the tutor (same as stroke changes).
-        // syncFromBoard stays true for student: tutor-origin graph updates
-        // (via element.customData.graphStateJson on incoming v3 scenes) are
-        // re-plotted by the GraphEmbeddable syncFromBoard useLayoutEffect,
-        // giving tutor→student sync. Student→tutor is last-write-wins (same
-        // model as strokes). Slice-2 local-only mode (excalidrawAPI=undefined)
-        // is removed; both roles now use the same bidirectional persist path.
+        // Wave5 #4 — bidirectional graph sync for tutor and student.
+        // excalidrawAPI state (not ref) so GraphEmbeddable mounts with a live API
+        // and persistGraphElementState can write graphStateJson back to the scene.
         <GraphEmbeddable
           element={element as { id?: string; width?: number; height?: number; customData?: Record<string, unknown> }}
-          excalidrawAPI={excalidrawAPIRef.current}
+          excalidrawAPI={excalidrawAPI}
           readOnly={false}
-          syncFromBoard={role === "student"}
+          syncFromBoard
         />
       );
     }
     return undefined;
-  }, [role]);
+  }, [excalidrawAPI]);
 
   const handleExcalidrawLinkOpen = useCallback(
     (
@@ -5061,10 +5088,18 @@ export function WhiteboardWorkspaceClient({
         <div className="container" style={{ maxWidth: 720, padding: 24 }}>
           <div className="card" role="status">
             <h1 style={{ marginTop: 0 }}>You left the session</h1>
-            <p style={{ marginBottom: 0 }}>
+            <p>
               You can close this tab. If you need to rejoin, ask {tutorName} for
               the link again.
             </p>
+            <button
+              type="button"
+              className="btn btn-primary"
+              data-testid="wb-student-rejoin"
+              onClick={() => setHasLeft(false)}
+            >
+              Rejoin session
+            </button>
           </div>
         </div>
       </WbRoleProvider>
@@ -5287,6 +5322,15 @@ export function WhiteboardWorkspaceClient({
             title="Exit"
             onClick={() => {
               wjgLog("student_exit");
+              liveAv.leaveAllPeers();
+              try {
+                studentSyncClient?.disconnect();
+              } catch (err) {
+                console.warn(
+                  `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} student_exit disconnect failed`,
+                  err
+                );
+              }
               setHasLeft(true);
             }}
           >

@@ -347,6 +347,11 @@ export type UseLiveAVReturn = {
    */
   reconnectPeer: (peerId: string) => void;
   /**
+   * Send leave signals for every peer in the mesh while sync is still up.
+   * Used on student Exit before sync disconnect so the tutor drops stale PCs.
+   */
+  leaveAllPeers: () => void;
+  /**
    * Retry the failed `getUserMedia` calls. If `error` is set,
    * re-runs `requestMic()`. If `videoError` is set, re-runs
    * `requestCam()`. No-op when neither error is set. Resolves once
@@ -2245,6 +2250,27 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const leaveAllPeers = useCallback(() => {
+    const mesh = meshRef.current;
+    if (!mesh || mesh.isDisposed()) {
+      log.warn("leaveAllPeers ignored — no mesh");
+      return;
+    }
+    for (const peerId of Array.from(mesh.peers())) {
+      try {
+        mesh.removePeer(peerId);
+        log.log(`peer=${peerId} event=leave-explicit`);
+      } catch (err) {
+        log.warn(
+          `leaveAllPeers removePeer threw peer=${peerId} err=${
+            (err as Error)?.message ?? String(err)
+          }`
+        );
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Refs for retryAcquire to keep its identity stable.
   const requestMicRef = useRef(requestMic);
   requestMicRef.current = requestMic;
@@ -2296,6 +2322,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     error,
     videoError,
     reconnectPeer,
+    leaveAllPeers,
     retryAcquire,
     videoDevices,
     selectedVideoDeviceId,
