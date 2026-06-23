@@ -1,7 +1,7 @@
 # Wave 5 — whiteboard chrome visual polish — smoke runbook
 
 **Branch:** `wb-wave5-polish`
-**Tip commit:** [`be9d429`](https://github.com/Arangarx/tutoring-notes/commit/be9d429)
+**Tip commit:** `[be9d429](https://github.com/Arangarx/tutoring-notes/commit/be9d429)`
 **Preview:** [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-arangarx-5209s-projects.vercel.app)
 
 **Context:** Wave 5 chrome polish on the unified whiteboard shell. Five scoped items: coral student Exit, smaller/iconic follow/match controls, overflow sheet alignment + scroll affordance, top-bar overflow dropdown opens downward, grid toggle as icon (shared). Tutor baseline CSS from `5d56f49` must remain untouched except intentional shared-control changes (#4, #5).
@@ -16,13 +16,18 @@
 
 **Ignore this run:** View-lock-while-synced behavior (out of scope).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes:**  
+**Fresh sessions still offering reloads on canvas.**  
+**Follow tutor view pill STILL not vertically centered in top bar.**  
+She exited and then used the same link to join again (same session).  I see her video tile but show her as disconnected.  
+Strange on this second fresh session, she's stuck in waiting still.  
+Halting smoke.
 
 ---
 
@@ -237,7 +242,7 @@ Toggle the follow control on/off to confirm active styling (coral/accent highlig
 
 ### 12. Student graph entry bidirectional sync (new item — replaces item 8 expectation)
 
-_See updated item 8 above for the full bidirectional sync test. This item is a checklist reminder for the specific round-2 fix (enabling student→tutor broadcast)._
+*See updated item 8 above for the full bidirectional sync test. This item is a checklist reminder for the specific round-2 fix (enabling student→tutor broadcast).*
 
 **Action:** Quick verify of the fix direction: **student** enters an expression in the graph embed. Confirm the **tutor's graph** updates. Then confirm the prior direction (tutor → student) still works.
 
@@ -279,7 +284,7 @@ _See updated item 8 above for the full bidirectional sync test. This item is a c
 
 ## Cross-branch / post-merge
 
-_Not applicable until Wave 5 merges to integration branch._
+*Not applicable until Wave 5 merges to integration branch.*
 
 ---
 
