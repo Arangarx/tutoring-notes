@@ -6,7 +6,10 @@ import { parseEventLogBySchema } from "@/lib/whiteboard/replay-parse";
 import {
   createScenePainter,
   type ScenePaintApi,
+  adaptWBElementsToExcalidraw,
+  restoreAndSanitizeForPaint,
 } from "@/lib/whiteboard/scene-paint";
+import type { WBElement } from "@/lib/whiteboard/event-log";
 import { resolveWhiteboardAssetReadUrl } from "@/lib/whiteboard/resolve-asset-read-url";
 import {
   credentialsForReplayFetch,
@@ -34,9 +37,79 @@ type Props = {
 /** Checks whether any element in the scene is a graph embed. */
 function hasGraphEmbeds(elements: readonly unknown[]): boolean {
   return elements.some((el) => {
-    const e = el as { link?: string; customData?: { wbType?: string } };
-    return e.link === GRAPH_EMBED_LINK || e.customData?.wbType === "graph";
+    const e = el as {
+      type?: string;
+      link?: string;
+      graphStateJson?: string;
+      customData?: { wbType?: string; graphStateJson?: string };
+    };
+    return (
+      e.type === "graph" ||
+      e.link === GRAPH_EMBED_LINK ||
+      e.customData?.wbType === "graph" ||
+      typeof e.graphStateJson === "string" ||
+      typeof e.customData?.graphStateJson === "string"
+    );
   });
+}
+
+function sceneMapHasGraph(scene: ReadonlyMap<string, WBElement>): boolean {
+  for (const el of scene.values()) {
+    if (el.type === "graph" || typeof el.graphStateJson === "string") {
+      return true;
+    }
+  }
+  return false;
+}
+
+type GraphEmbeddableElement = {
+  id?: string;
+  width?: number;
+  height?: number;
+  customData?: Record<string, unknown>;
+};
+
+function findGraphEmbeddableElement(
+  elements: readonly unknown[]
+): GraphEmbeddableElement | null {
+  for (const raw of elements) {
+    const el = raw as {
+      type?: string;
+      link?: string;
+      customData?: { wbType?: string; graphStateJson?: string };
+    };
+    if (
+      el.type === "embeddable" &&
+      (el.link === GRAPH_EMBED_LINK ||
+        el.customData?.wbType === "graph" ||
+        typeof el.customData?.graphStateJson === "string")
+    ) {
+      return raw as GraphEmbeddableElement;
+    }
+  }
+  return null;
+}
+
+/** Read-only graph hero thumbnail — bypasses Excalidraw renderEmbeddable (view-mode quirk). */
+function ReviewGraphOnlyThumbnail({
+  element,
+  className,
+}: {
+  element: GraphEmbeddableElement;
+  className?: string;
+}) {
+  useEffect(() => {
+    warmJsxGraphModule();
+  }, []);
+
+  return (
+    <div
+      className={`wb-review-board-thumbnail wb-review-board-thumbnail--graph${className ? ` ${className}` : ""}`}
+      data-testid="wb-review-board-thumbnail"
+    >
+      <GraphEmbeddable element={element} readOnly />
+    </div>
+  );
 }
 
 /**
@@ -58,6 +131,8 @@ function ReviewBoardLive({
     updateScene: (data: { elements: ReadonlyArray<unknown>; appState?: Record<string, unknown> }) => void;
     scrollToContent: (elements?: readonly unknown[], opts?: Record<string, unknown>) => void;
   } | null>(null);
+  const elementsRef = useRef(elements);
+  elementsRef.current = elements;
   const [paintReady, setPaintReady] = useState(false);
 
   // Warm JSXGraph on mount.
@@ -65,27 +140,41 @@ function ReviewBoardLive({
     warmJsxGraphModule();
   }, []);
 
+  const applySceneToApi = useCallback((typedApi: NonNullable<typeof apiRef.current>) => {
+    const sceneElements = elementsRef.current;
+    if (sceneElements.length === 0) {
+      setPaintReady(true);
+      return;
+    }
+    typedApi.updateScene({ elements: sceneElements });
+    try {
+      typedApi.scrollToContent(sceneElements, { fitToContent: true, animate: false });
+    } catch {
+      // scrollToContent is best-effort
+    }
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setPaintReady(true));
+    });
+  }, []);
+
   const handleApi = useCallback(
     (api: unknown) => {
       const typedApi = api as typeof apiRef.current;
       apiRef.current = typedApi;
-      if (!typedApi || elements.length === 0) {
+      if (!typedApi) {
         setPaintReady(true);
         return;
       }
-      // Apply the final scene immediately and scroll to fit.
-      typedApi.updateScene({ elements });
-      try {
-        typedApi.scrollToContent(elements, { fitToContent: true, animate: false });
-      } catch {
-        // scrollToContent is best-effort
-      }
-      setPaintReady(true);
+      applySceneToApi(typedApi);
     },
-    // elements is stable (derived from the parent's once-per-session fetch)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
+    [applySceneToApi]
   );
+
+  useEffect(() => {
+    const typedApi = apiRef.current;
+    if (!typedApi) return;
+    applySceneToApi(typedApi);
+  }, [applySceneToApi, elements]);
 
   const renderGraphEmbeddable = useCallback((element: unknown) => {
     const el = element as { link?: string; customData?: { wbType?: string } };
@@ -120,7 +209,7 @@ function ReviewBoardLive({
         UIOptions={{ canvasActions: { saveToActiveFile: false } }}
         excalidrawAPI={handleApi}
         initialData={{
-          elements: elements as unknown[],
+          elements: [],
           appState: {
             currentItemFontFamily: 1,
             viewBackgroundColor: bgHex,
@@ -245,9 +334,19 @@ export function ReviewBoardThumbnail({
         // exportToCanvas cannot call custom renderEmbeddable — it renders the
         // embed link text ("mynk://graph") directly, which is confusing UX.
         const isDark = resolvedTheme === "dark";
-        if (hasGraphEmbeds(capturedElements)) {
+        const graphPresent =
+          hasGraphEmbeds(capturedElements) || sceneMapHasGraph(result.scene);
+        if (graphPresent) {
           if (cancelled) return;
-          setLiveElements(capturedElements);
+          let liveEls = capturedElements;
+          if (!hasGraphEmbeds(capturedElements) && sceneMapHasGraph(result.scene)) {
+            const { rough } = adaptWBElementsToExcalidraw(result.scene.values());
+            liveEls = restoreAndSanitizeForPaint(
+              rough,
+              getReplayCachedRestoreElements() ?? undefined
+            );
+          }
+          setLiveElements(liveEls);
           setLiveIsDark(isDark);
           setLoadState("ready-live");
           return;
@@ -372,8 +471,14 @@ export function ReviewBoardThumbnail({
     );
   }
 
-  // Live path — session has graph embeds; render them via Excalidraw+renderEmbeddable.
+  // Live path — session has graph embeds; render JSXGraph directly (reliable in hero thumbnail).
   if (loadState === "ready-live") {
+    const graphElement = findGraphEmbeddableElement(liveElements);
+    if (graphElement) {
+      return (
+        <ReviewGraphOnlyThumbnail element={graphElement} className={className} />
+      );
+    }
     return (
       <ReviewBoardLive
         elements={liveElements}

@@ -2641,32 +2641,6 @@ export function WhiteboardWorkspaceClient({
     });
   scheduleDocumentBroadcastRef.current = scheduleDocumentBroadcast;
 
-  useEffect(() => {
-    if (process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK !== "1") return;
-    registerWbE2eSceneMutationHook("tutor", () => {
-      const api = excalidrawAPIRef.current;
-      if (!api) return;
-      pageDataRef.current[activePageIdRef.current] = [
-        ...(api.getSceneElements() as ExcalidrawLikeElement[]),
-      ];
-      // Drive the REAL production cadence: a tutor scene change schedules a
-      // throttled/debounced document broadcast exactly as `handleExcalidrawChange`
-      // does on every onChange. NO manual `flushDocumentBroadcastNow()` — that
-      // force-flush is the page-swap equivalent that masked the live-sync bug.
-      scheduleDocumentBroadcast();
-    });
-  }, [scheduleDocumentBroadcast]);
-
-  useEffect(() => {
-    if (process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK !== "1") return;
-    if (role !== "student") return;
-    registerWbE2eSceneMutationHook("student", () => {
-      const api = excalidrawAPIRef.current;
-      if (!api) return;
-      studentOnCanvasChange(api.getSceneElements());
-    });
-  }, [role, studentOnCanvasChange]);
-
   const recorder = useWhiteboardRecorder({
     whiteboardSessionId,
     adminUserId,
@@ -2694,6 +2668,29 @@ export function WhiteboardWorkspaceClient({
     flushThrottledFrameNow();
     flushDocumentBroadcastNow();
   };
+
+  useEffect(() => {
+    if (process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK !== "1") return;
+    if (role === "student") {
+      registerWbE2eSceneMutationHook("student", () => {
+        const api = excalidrawAPIRef.current;
+        if (!api) return;
+        studentOnCanvasChange(api.getSceneElements());
+      });
+      return;
+    }
+    registerWbE2eSceneMutationHook("tutor", () => {
+      const api = excalidrawAPIRef.current;
+      if (!api) return;
+      pageDataRef.current[activePageIdRef.current] = [
+        ...(api.getSceneElements() as ExcalidrawLikeElement[]),
+      ];
+      scheduleDocumentBroadcast();
+      recorderOnCanvasChange(
+        api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>
+      );
+    });
+  }, [role, scheduleDocumentBroadcast, recorderOnCanvasChange, studentOnCanvasChange]);
 
   // Phase 5 task 8 — anchor replay's camera at t≈0 by emitting one
   // viewport event when recording becomes active. Without this, replay's
@@ -4152,6 +4149,16 @@ export function WhiteboardWorkspaceClient({
     ]
   );
 
+  const handleGraphPersisted = useCallback(() => {
+    const api = excalidrawAPIRef.current;
+    if (!api) return;
+    if (role === "student") {
+      studentOnCanvasChange(api.getSceneElements());
+    } else if (sync && syncUrl) {
+      scheduleDocumentBroadcast();
+    }
+  }, [role, scheduleDocumentBroadcast, studentOnCanvasChange, sync, syncUrl]);
+
   const renderGraphEmbeddable = useCallback((element: unknown) => {
     const el = element as {
       link?: string;
@@ -4165,13 +4172,15 @@ export function WhiteboardWorkspaceClient({
         <GraphEmbeddable
           element={element as { id?: string; width?: number; height?: number; customData?: Record<string, unknown> }}
           excalidrawAPI={excalidrawAPI}
+          excalidrawAPIRef={excalidrawAPIRef}
           readOnly={false}
           syncFromBoard
+          onAfterPersist={handleGraphPersisted}
         />
       );
     }
     return undefined;
-  }, [excalidrawAPI]);
+  }, [excalidrawAPI, handleGraphPersisted]);
 
   const handleExcalidrawLinkOpen = useCallback(
     (

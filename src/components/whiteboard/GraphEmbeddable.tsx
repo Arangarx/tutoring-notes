@@ -5,7 +5,14 @@
  * embeddable via the `renderEmbeddable` prop (tutor workspace).
  */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { useTheme } from "@/components/ThemeProvider";
 import {
   addGraphExpression,
@@ -62,13 +69,17 @@ type JxgBoard = {
 type Props = {
   element: EmbeddableElementLike;
   excalidrawAPI?: GraphPersistApiLike | null;
+  /** Prefer ref when state may lag behind the imperative API (live workspace). */
+  excalidrawAPIRef?: RefObject<GraphPersistApiLike | null>;
   /** Replay / strict read-only: no edits, no controls, tutor sync replots board state. */
   readOnly?: boolean;
   /**
-   * Student local mode: interactive controls without persisting to the board.
-   * When true, re-plots from element `graphStateJson` when tutor sync updates it.
+   * Live workspace: re-plots from element `graphStateJson` when peer sync updates it.
+   * With `excalidrawAPI` (or ref), local edits also persist back to the board.
    */
   syncFromBoard?: boolean;
+  /** Fired after graphStateJson is written to the Excalidraw scene (live sync path). */
+  onAfterPersist?: () => void;
 };
 
 const JSXGRAPH_CSS_ID = "mynk-jsxgraph-css";
@@ -222,8 +233,10 @@ function stopEmbedDragCapture(event: React.SyntheticEvent): void {
 export function GraphEmbeddable({
   element,
   excalidrawAPI,
+  excalidrawAPIRef,
   readOnly = false,
   syncFromBoard = false,
+  onAfterPersist,
 }: Props) {
   const { resolvedTheme } = useTheme();
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -261,14 +274,16 @@ export function GraphEmbeddable({
     (state: GraphState) => {
       if (readOnly) return;
       graphStateRef.current = state;
-      if (!excalidrawAPI || !elementId) return;
-      persistGraphElementState({
-        excalidrawAPI,
+      const api = excalidrawAPIRef?.current ?? excalidrawAPI;
+      if (!api || !elementId) return;
+      const changed = persistGraphElementState({
+        excalidrawAPI: api,
         elementId,
         graphState: state,
       });
+      if (changed) onAfterPersist?.();
     },
-    [excalidrawAPI, elementId, readOnly]
+    [excalidrawAPI, excalidrawAPIRef, elementId, onAfterPersist, readOnly]
   );
 
   const replot = useCallback(

@@ -2474,6 +2474,22 @@
   height: 100%;
 }
 
+/* Graph-only hero thumbnail (ReviewGraphOnlyThumbnail) — div, not img; needs explicit box. */
+.wb-review-board-thumbnail--graph {
+  width: min(100%, 720px);
+  aspect-ratio: 4 / 3;
+  min-height: 240px;
+  max-height: min(56vh, 540px);
+  position: relative;
+  overflow: hidden;
+}
+
+.wb-review-board-thumbnail--graph .wb-graph-root {
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+}
+
 .wb-replay-canvas-host {
   flex: 1;
   min-height: 0;

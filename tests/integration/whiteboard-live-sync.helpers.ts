@@ -525,7 +525,7 @@ export async function clickBoardPageTab(
   pageTitle: string
 ): Promise<void> {
   const strip = page.getByTestId(
-    side === "tutor" ? "wb-tutor-page-strip" : "student-board-pages-strip"
+    side === "tutor" ? "wb-tutor-page-strip" : "wb-student-page-strip"
   );
   // Use evaluate(el.click()) rather than Playwright's coordinate-based .click()
   // because the Next.js dev-tools "N" button sits at bottom-left in dev mode
@@ -886,6 +886,45 @@ export async function addGraphExpressionViaUI(
 
 export async function countGraphCurvePaths(page: Page): Promise<number> {
   return page.locator(".wb-graph-board-host .jxgbox svg path").count();
+}
+
+/** Relational layout oracle — child vertically centered in parent (equal top/bottom inset). */
+export async function assertEqualVerticalInsetInParent(
+  page: Page,
+  childTestId: string,
+  parentTestId: string,
+  tolerancePx = 4
+): Promise<void> {
+  const child = page.getByTestId(childTestId);
+  const parent = page.getByTestId(parentTestId);
+  await expect(child).toBeVisible();
+  const childBox = await child.boundingBox();
+  const parentBox = await parent.boundingBox();
+  expect(childBox, `${childTestId} bounding box`).not.toBeNull();
+  expect(parentBox, `${parentTestId} bounding box`).not.toBeNull();
+  const topInset = childBox!.y - parentBox!.y;
+  const bottomInset =
+    parentBox!.y + parentBox!.height - (childBox!.y + childBox!.height);
+  expect(
+    Math.abs(topInset - bottomInset),
+    `${childTestId} equal vertical inset in ${parentTestId}`
+  ).toBeLessThanOrEqual(tolerancePx);
+}
+
+/** Left edges of overflow dropdown menu rows — consistent left alignment oracle. */
+export async function readOverflowMenuItemLeftEdges(
+  page: Page
+): Promise<number[]> {
+  const items = page.locator(
+    '[data-testid="wb-topbar-overflow-dropdown"] .mynk-wb-menu-item'
+  );
+  const count = await items.count();
+  const edges: number[] = [];
+  for (let i = 0; i < count; i++) {
+    const box = await items.nth(i).boundingBox();
+    if (box) edges.push(box.x);
+  }
+  return edges;
 }
 
 export async function waitForGraphExpressions(

@@ -133,6 +133,7 @@ export default defineConfig({
       testMatch: [
         "**/integration/whiteboard-live-sync-regression.spec.ts",
         "**/integration/wb-student-exit-rejoin.spec.ts",
+        "**/integration/wb-wave5-polish.spec.ts",
       ],
     },
   ],

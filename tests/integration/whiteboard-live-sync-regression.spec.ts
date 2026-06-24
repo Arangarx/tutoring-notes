@@ -36,6 +36,7 @@ import {
   tutorSnapshotAtScrollZoom,
   viewportScrollDistance,
   addGraphExpressionViaUI,
+  assertEqualVerticalInsetInParent,
   waitForGraphExpressions,
   WB_MOVE_PROPAGATION_TOLERANCE_SCENE,
   WB_VIEWPORT_CENTER_PASS_TOLERANCE_PX,
@@ -870,6 +871,38 @@ test.describe("whiteboard live-sync regression", { tag: [TAG.WB_SYNC] }, () => {
     }
   });
 
+  test("invariant 12e — graph UI persist: student types expression via UI + syncs to tutor", { tag: [TAG.WB_GRAPH] }, async ({
+    browser,
+  }) => {
+    test.setTimeout(180_000);
+    const session = await seedWbLiveSyncSession();
+    const peers = await openTutorAndStudent(browser, session);
+    try {
+      const graphId = await insertGraphOnRole(peers.tutorPage, "tutor", session, []);
+      expect(graphId).toBeTruthy();
+      await waitForElementOnPeer(peers.studentPage, "student", graphId, 30_000);
+
+      await addGraphExpressionViaUI(peers.studentPage, "x^2");
+      await waitForGraphExpressions(peers.studentPage, "student", graphId, ["x^2"]);
+      const studentAfterPlot = await readGraphElementState(
+        peers.studentPage,
+        "student",
+        graphId
+      );
+      expect(studentAfterPlot?.graphStateJson).toContain("x^2");
+
+      await waitForGraphExpressions(peers.tutorPage, "tutor", graphId, ["x^2"]);
+      const tutorAfterStudent = await readGraphElementState(
+        peers.tutorPage,
+        "tutor",
+        graphId
+      );
+      expect(tutorAfterStudent?.graphStateJson).toContain("x^2");
+    } finally {
+      await peers.close();
+    }
+  });
+
   test("invariant 12c — recording banner must not claim student left while sync roster present", { tag: [TAG.WB_RECORDING] }, async ({
     browser,
   }) => {
@@ -890,16 +923,21 @@ test.describe("whiteboard live-sync regression", { tag: [TAG.WB_SYNC] }, () => {
     }
   });
 
-  test("invariant 12d — student follow-toggle vertically aligned with match button (Wave 5 #9)", { tag: [TAG.WB_CHROME] }, async ({
+  test("invariant 12d — student follow-toggle equal vertical inset in top bar (Wave 5 #9)", { tag: [TAG.WB_CHROME] }, async ({
     browser,
   }) => {
     test.setTimeout(120_000);
     const session = await seedWbLiveSyncSession();
     const peers = await openTutorAndStudent(browser, session);
     try {
+      await assertEqualVerticalInsetInParent(
+        peers.studentPage,
+        "wb-student-follow-toggle",
+        "wb-student-topbar",
+        4
+      );
       const follow = peers.studentPage.getByTestId("wb-student-follow-toggle");
       const match = peers.studentPage.getByTestId("wb-student-match-view");
-      await expect(follow).toBeVisible({ timeout: 30_000 });
       await expect(match).toBeVisible();
       const followBox = await follow.boundingBox();
       const matchBox = await match.boundingBox();
