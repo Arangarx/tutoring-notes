@@ -341,6 +341,12 @@ export type UseLiveAVReturn = {
    */
   requestCam: () => Promise<void>;
   /**
+   * Single `getUserMedia` for audio + video. Prefer on student join so the
+   * mesh's first offer includes both tracks (avoids mobile late-add-video
+   * renegotiation races where the tutor can miss student video).
+   */
+  requestMicAndCam: () => Promise<void>;
+  /**
    * True while EITHER `requestMic()` or `requestCam()` is in flight.
    */
   isAcquiring: boolean;
@@ -795,6 +801,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   isCamMutedRef.current = isCamMuted;
   const micInFlightRef = useRef<Promise<void> | null>(null);
   const camInFlightRef = useRef<Promise<void> | null>(null);
+  const avBundleInFlightRef = useRef<Promise<void> | null>(null);
   const deviceAcquireMutexRef = useRef<Promise<void>>(Promise.resolve());
   const acquiringCountRef = useRef<number>(0);
   // Tracks whether the hook is unmounted to suppress late state
@@ -1129,6 +1136,117 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- log + resolveGetUserMedia stable per session
     [videoConstraints, refreshVideoDevices]
   );
+
+  const requestMicAndCam = useCallback(async (): Promise<void> => {
+    if (externalAudioStream) {
+      if (!localVideoStreamRef.current) await requestCam();
+      return;
+    }
+    if (localAudioStreamRef.current && localVideoStreamRef.current) return;
+    if (avBundleInFlightRef.current) return avBundleInFlightRef.current;
+
+    const getUM = resolveGetUserMedia();
+    if (!getUM) {
+      const noUM: AvAcquireError = {
+        type: "browser-unsupported",
+        message:
+          "Your browser does not expose `navigator.mediaDevices.getUserMedia`. Use the latest Chrome, Safari, or Firefox.",
+        raw: null,
+      };
+      if (!unmountedRef.current) {
+        setError(noUM);
+        setVideoError(noUM);
+      }
+      return;
+    }
+
+    startAcquiring();
+    if (!unmountedRef.current) {
+      setError(null);
+      setVideoError(null);
+    }
+    log.log("requestMicAndCam start");
+
+    const inFlight = chainDeviceAcquire(deviceAcquireMutexRef, async () => {
+      try {
+        const videoForBundle: MediaTrackConstraints | boolean =
+          videoConstraints === true
+            ? { facingMode: { ideal: "user" } }
+            : videoConstraints;
+        const stream = await getUM({
+          audio: audioConstraints,
+          video: videoForBundle,
+        });
+        if (unmountedRef.current) {
+          for (const t of stream.getTracks()) {
+            try {
+              t.stop();
+            } catch {
+              /* ignore */
+            }
+          }
+          return;
+        }
+        const audioStream = new MediaStream(stream.getAudioTracks());
+        const videoStream = new MediaStream(stream.getVideoTracks());
+        if (isMicMutedRef.current) {
+          for (const t of audioStream.getAudioTracks()) t.enabled = false;
+        }
+        localAudioStreamRef.current = audioStream;
+        localVideoStreamRef.current = videoStream;
+        setLocalAudioStream(audioStream);
+        setLocalVideoStream(videoStream);
+        setHasEverHadLocalMedia(true);
+        setHasMicPermission("granted");
+        setHasCamPermission("granted");
+        setIsCamMuted(false);
+        log.log(
+          `requestMicAndCam acquired audio=${audioStream.getAudioTracks().length} video=${videoStream.getVideoTracks().length}`
+        );
+        const at = audioStream.getAudioTracks()[0];
+        const gstA = at?.getSettings?.();
+        if (gstA?.deviceId) {
+          setSelectedMicDeviceId(gstA.deviceId);
+          selectedMicDeviceIdRef.current = gstA.deviceId;
+        }
+        if (gstA?.groupId) {
+          pinnedMicEnumerateGroupRef.current = gstA.groupId;
+        }
+        const vt = videoStream.getVideoTracks()[0];
+        const gstV = vt?.getSettings?.();
+        if (gstV?.deviceId) {
+          selectedVideoDeviceIdRef.current = gstV.deviceId;
+          setSelectedVideoDeviceId(gstV.deviceId);
+          saveStoredVideoDeviceId(gstV.deviceId);
+        }
+        if (gstV?.groupId) {
+          saveStoredVideoGroupId(gstV.groupId);
+          pinnedVideoEnumerateGroupRef.current = gstV.groupId;
+        }
+        await refreshVideoDevices();
+      } catch (err) {
+        if (unmountedRef.current) return;
+        const classifiedMic = classifyMediaError(err, "mic");
+        const classifiedCam = classifyMediaError(err, "cam");
+        log.warn(
+          `requestMicAndCam failed err=${(err as Error)?.message ?? String(err)}`
+        );
+        setError(classifiedMic);
+        setVideoError(classifiedCam);
+        if (classifiedMic.type === "permission-denied") {
+          setHasMicPermission("denied");
+        }
+        if (classifiedCam.type === "permission-denied") {
+          setHasCamPermission("denied");
+        }
+      } finally {
+        endAcquiring();
+        avBundleInFlightRef.current = null;
+      }
+    });
+    avBundleInFlightRef.current = inFlight;
+    return inFlight;
+  }, [audioConstraints, externalAudioStream, refreshVideoDevices, requestCam, videoConstraints]);
 
   // ---------------------------------------------------------------
   // Effect: query Permissions API on mount (best-effort)
@@ -2667,6 +2785,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     hasCamPermission,
     requestMic,
     requestCam,
+    requestMicAndCam,
     isAcquiring,
     isActive,
     error,

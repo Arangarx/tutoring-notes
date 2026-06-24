@@ -737,6 +737,26 @@ describe("useLiveAV — requestCam", () => {
     unmount();
   });
 
+  test("requestMicAndCam: single getUserMedia populates audio + video streams", async () => {
+    const both = makeFakeStream(1, 1);
+    const getUM = jest.fn(
+      async () => both.stream as unknown as MediaStream
+    );
+    const props = makeBaseProps({ _getUserMedia: getUM });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await act(async () => {
+      await result.current.requestMicAndCam();
+    });
+    expect(getUM).toHaveBeenCalledTimes(1);
+    expect(result.current.localAudioStream).not.toBeNull();
+    expect(result.current.localVideoStream).not.toBeNull();
+    expect(result.current.isCamMuted).toBe(false);
+    expect(result.current.isAcquiring).toBe(false);
+
+    unmount();
+  });
+
   test("requestCam idempotent: 2nd call after success no-ops", async () => {
     const video = makeFakeStream(0, 1);
     const getUM = jest.fn(

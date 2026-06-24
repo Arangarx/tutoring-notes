@@ -1650,6 +1650,10 @@ export function WhiteboardWorkspaceClient({
 
     const bootstrapAv = () => {
       void (async () => {
+        if (!liveAv.localAudioStream && !liveAv.localVideoStream) {
+          await liveAv.requestMicAndCam();
+          return;
+        }
         if (!liveAv.localAudioStream) {
           await liveAv.requestMic();
         }
@@ -4640,6 +4644,24 @@ export function WhiteboardWorkspaceClient({
               : formatTimerMinutesOnly(studentLiveTimerMs)}
           </p>
           <div className="mynk-wb-popover-sep" />
+          {layoutMode === "narrow" && (
+            <>
+              <button
+                type="button"
+                className="mynk-wb-menu-item"
+                data-testid="wb-overflow-toolbar-toggle"
+                onClick={() => {
+                  setToolbarHidden((hidden) => !hidden);
+                  setOpenMenu(null);
+                }}
+              >
+                <span>
+                  {toolbarHidden ? "Show tools" : "Hide tools"}
+                </span>
+              </button>
+              <div className="mynk-wb-popover-sep" />
+            </>
+          )}
         </>
       )}
       {role === "student" && !touchLayout && (
@@ -5234,6 +5256,51 @@ export function WhiteboardWorkspaceClient({
         onClick={(e) => e.stopPropagation()}
         data-testid="wb-student-topbar"
       >
+        {layoutMode === "narrow" ? (
+          <>
+            <span className="mynk-wb-wordmark" aria-label="Mynk">
+              Mynk<span className="mynk-wb-wordmark__dot">·</span>
+            </span>
+            <div className="mynk-wb-topbar__zone">
+              <span
+                className={`mynk-wb-status-pill${studentConnectionPillOk ? " mynk-wb-status-pill--ok" : " mynk-wb-status-pill--warn"}`}
+                data-testid="wb-student-sync-pill"
+              >
+                {studentConnectionPillLabel}
+              </span>
+            </div>
+            <div
+              className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {renderTopbarOverflowControl("wb-student-topbar-overflow")}
+              <button
+                type="button"
+                className="mynk-wb-tb-btn mynk-wb-tb-btn--exit"
+                data-testid="wb-student-exit"
+                aria-label="Exit"
+                title="Exit"
+                onClick={() => {
+                  wjgLog("student_exit");
+                  liveAv.leaveAllPeers();
+                  try {
+                    studentSyncClient?.disconnect();
+                  } catch (err) {
+                    console.warn(
+                      `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} student_exit disconnect failed`,
+                      err
+                    );
+                  }
+                  setHasLeft(true);
+                }}
+              >
+                <WbIconEndSession size={14} />
+                <span className="mynk-wb-sr-only">Exit</span>
+              </button>
+            </div>
+          </>
+        ) : (
+        <>
         <span className="mynk-wb-wordmark" aria-label="Mynk">
           Mynk<span className="mynk-wb-wordmark__dot">·</span>
         </span>
@@ -5406,6 +5473,8 @@ export function WhiteboardWorkspaceClient({
             <span className="mynk-wb-sr-only">Exit</span>
           </button>
         </div>
+        </>
+        )}
       </header>
       ) : (
       <header

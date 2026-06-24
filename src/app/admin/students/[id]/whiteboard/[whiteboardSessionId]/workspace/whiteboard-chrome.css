@@ -2913,6 +2913,12 @@
   color: var(--text-strong);
 }
 
+/* Student phone portrait — minimal top bar: wordmark + pill + overflow + exit. */
+.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-wordmark {
+  padding: 0 4px;
+  font-size: 14px;
+}
+
 /* Student touch top bar — keep overflow + exit on-screen (timer/tutor in sheet). */
 .mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-student-tutor-name,
 .mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-student-tutor-name,

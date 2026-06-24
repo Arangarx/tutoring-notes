@@ -523,6 +523,12 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
         timeout: 5_000,
       });
       await expect(peers.studentPage.getByTestId("wb-overflow-cam")).toBeVisible();
+      await expect(
+        peers.studentPage.getByTestId("wb-overflow-toolbar-toggle")
+      ).toBeVisible();
+      await expect(
+        peers.studentPage.getByTestId("wb-student-toolbar-toggle")
+      ).not.toBeVisible();
 
       const avCluster = peers.studentPage.getByTestId("wb-student-av-row");
       await expect(avCluster).toBeVisible({ timeout: 30_000 });
