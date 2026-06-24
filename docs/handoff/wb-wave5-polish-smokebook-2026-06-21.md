@@ -1,7 +1,7 @@
 # Wave 5 — whiteboard chrome visual polish — smoke runbook
 
 **Branch:** `wb-wave5-polish`
-**Tip commit:** [`646fd6b`](https://github.com/Arangarx/tutoring-notes/commit/646fd6b5ee96ad49ebf82390daf87200baee817c)
+**Tip commit:** `[646fd6b](https://github.com/Arangarx/tutoring-notes/commit/646fd6b5ee96ad49ebf82390daf87200baee817c)`
 **Preview:** [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-arangarx-5209s-projects.vercel.app)
 
 **Context:** Wave 5 chrome polish on the unified whiteboard shell. Items 1–13 = original Wave 5 scope + round-2 hardware follow-ups. **Round-3:** AV mic/cam back on **self-tile overlay** (not cluster footer), student top-bar **mic level meter**, loading-guard race fix, student `[pvs]` console quieting, dark-theme native device-picker contrast, dual consent gates + cam acquire stability (`646fd6b`). Items 19–20 = **required** live A/V hardware matrix (see below).
@@ -14,11 +14,13 @@
 
 Live A/V items **must not** be pass/failed on **one machine, two browsers** (dual USB webcams on the same PC). That setup causes device contention, picker snap-back, and UI freezes — false negatives unrelated to tutor+student on real hardware.
 
-| Setup | Use for |
-|-------|---------|
-| **Tutor desktop + student phone** (second physical device) | **Required** — phone form factor (audio + tutor video on student) |
-| **Tutor desktop + student desktop** (second physical PC) | **Required** — desktop student (mic/cam pickers, send, meter item 15) |
-| **Same machine, two browsers** | Whiteboard/sync only — mark items **14–20** **N/A with notes** `same-machine A/V invalid` |
+
+| Setup                                                      | Use for                                                                                   |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **Tutor desktop + student phone** (second physical device) | **Required** — phone form factor (audio + tutor video on student)                         |
+| **Tutor desktop + student desktop** (second physical PC)   | **Required** — desktop student (mic/cam pickers, send, meter item 15)                     |
+| **Same machine, two browsers**                             | Whiteboard/sync only — mark items **14–20** **N/A with notes** `same-machine A/V invalid` |
+
 
 **Product notes (not failures):** Student does **not** hear self on the student tile (by design). Console: filter `[useLiveAV]` for `set-video-slot`, `cam acquire failed`, `set-mic-device`.
 
@@ -42,7 +44,6 @@ Live A/V items **must not** be pass/failed on **one machine, two browsers** (dua
 
 **Notes:**
 
-
 ---
 
 ### 2. Smaller Match tutor's view + follow/match iconography (student)
@@ -60,7 +61,6 @@ Live A/V items **must not** be pass/failed on **one machine, two browsers** (dua
 - [ ] SKIP
 
 **Notes:**
-
 
 ---
 
@@ -80,7 +80,6 @@ Live A/V items **must not** be pass/failed on **one machine, two browsers** (dua
 
 **Notes:**
 
-
 ---
 
 ### 4. Overflow ⋯ menu drops down (tutor + student)
@@ -98,7 +97,6 @@ Live A/V items **must not** be pass/failed on **one machine, two browsers** (dua
 - [ ] SKIP
 
 **Notes:**
-
 
 ---
 
@@ -118,7 +116,6 @@ Live A/V items **must not** be pass/failed on **one machine, two browsers** (dua
 
 **Notes:**
 
-
 ---
 
 ### 6. Student active board tab highlight (read-only)
@@ -136,7 +133,6 @@ Live A/V items **must not** be pass/failed on **one machine, two browsers** (dua
 - [ ] SKIP
 
 **Notes:**
-
 
 ---
 
@@ -157,7 +153,6 @@ Live A/V items **must not** be pass/failed on **one machine, two browsers** (dua
 - [ ] SKIP
 
 **Notes:**
-
 
 ---
 
@@ -182,7 +177,6 @@ Live A/V items **must not** be pass/failed on **one machine, two browsers** (dua
 - [ ] SKIP
 
 **Notes:**
-
 
 ---
 
@@ -210,7 +204,6 @@ Toggle the follow control on/off to confirm active styling (coral/accent highlig
 
 **Notes:**
 
-
 ---
 
 ### 10. Left tool-rail "More" reachable on short window (tutor + student)
@@ -233,7 +226,6 @@ Toggle the follow control on/off to confirm active styling (coral/accent highlig
 - [ ] SKIP
 
 **Notes:**
-
 
 ---
 
@@ -259,7 +251,6 @@ Toggle the follow control on/off to confirm active styling (coral/accent highlig
 
 **Notes:**
 
-
 ---
 
 ### 12. Student graph entry bidirectional sync (new item — replaces item 8 expectation)
@@ -279,7 +270,6 @@ Toggle the follow control on/off to confirm active styling (coral/accent highlig
 - [ ] SKIP
 
 **Notes:**
-
 
 ---
 
@@ -303,7 +293,6 @@ Toggle the follow control on/off to confirm active styling (coral/accent highlig
 
 **Notes:**
 
-
 ---
 
 ## Round-3 fix batch (2026-06-23 pilot / AV follow-ups)
@@ -325,14 +314,13 @@ Items 14–20 from hardware pilot feedback (student PC audio, UX confusion, cons
 
 **Ignore this run:** Waiting room / no A/V session. Same-machine two-browser only → **N/A with notes** per A/V smoke environments.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Notes:**
-
 
 ---
 
@@ -349,13 +337,12 @@ Items 14–20 from hardware pilot feedback (student PC audio, UX confusion, cons
 **Ignore this run:** Phone/narrow layout (student top-bar mic is desktop-only; use tile overlay mic on touch).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
-
+**Notes: Bars not there at all.**
 
 ---
 
@@ -372,14 +359,14 @@ Items 14–20 from hardware pilot feedback (student PC audio, UX confusion, cons
 
 **Ignore this run:** `[automated: wb-student-exit-rejoin.spec.ts]` — mark N/A if only re-spot-checking subjective feel.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
-
+**Notes: actually it has stayed reliably connected from the vm (when no refresh involved), hopefully it's not coincidence.**  
+**I was actually surprised the student rejoin actually worked >.> but it did**
 
 ---
 
@@ -397,12 +384,11 @@ Items 14–20 from hardware pilot feedback (student PC audio, UX confusion, cons
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
-
+**Notes: I don't see pvs spam, but I do see [student-apply] spam**
 
 ---
 
@@ -415,13 +401,12 @@ Items 14–20 from hardware pilot feedback (student PC audio, UX confusion, cons
 **Ignore this run:** `[automated: wb-wave5-polish.spec.ts › native select — mic/cam device pickers readable on dark theme]` — N/A unless spot-checking on real hardware after deploy.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Notes:**
-
 
 ---
 
@@ -439,13 +424,22 @@ Items 14–20 from hardware pilot feedback (student PC audio, UX confusion, cons
 **Ignore this run:** No phone available. Same-machine two-browser → **N/A with notes** `same-machine A/V invalid`.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes: **  
+**Lots of regressions on phone:**
 
+**Nothing visible to the right of sync pill**  
+**Not a regression but still not working on phone -> Sees neither self nor tutor (tutor sees self and student camera)**  
+**I had to open up the phone pulldown menu to turn auto-rotate on to get into landscape, which I think caused the student side to disconnect**  
+**No audio control on phone (tested in landscape to see more button)  Did we regress or forget that? How does a student mute themselves?**  
+**Student audio is not connecting on phone, tutor sees "Audio/video not connected -- recording paused until the call connects."**  
+**A while later the video tiles popped back up (the new camera tile and the old one)**  
+**Student video tile disappeared on tutor side**  
+**In all this I'm not hearing any audio from student.**
 
 ---
 
@@ -460,28 +454,27 @@ Items 14–20 from hardware pilot feedback (student PC audio, UX confusion, cons
 
 **In session — student desktop:**
 
-3. Mic **▾** — switch devices by **slot label** when duplicates exist (e.g. Brio 100 vs 101); selection must **stick** after pick (no snap-back).
-4. Cam **▾** — same; tutor video on student should update when tutor toggles cam.
-5. **Item 15 meter bars** move when speaking on correct mic; mic **on** on self-tile overlay.
+1. Mic **▾** — switch devices by **slot label** when duplicates exist (e.g. Brio 100 vs 101); selection must **stick** after pick (no snap-back).
+2. Cam **▾** — same; tutor video on student should update when tutor toggles cam.
+3. **Item 15 meter bars** move when speaking on correct mic; mic **on** on self-tile overlay.
 
 **In session — tutor:**
 
-6. Console once at join: `mixdown-attach` or `track received` — `kind=audio` for student peer.
-7. **Hear** student on student remote tile.
-8. Compare to item 19 phone pass — if phone PASS and desktop FAIL with flat bars → desktop picker/send bug (Wave A/B), not signaling.
+1. Console once at join: `mixdown-attach` or `track received` — `kind=audio` for student peer.
+2. **Hear** student on student remote tile.
+3. Compare to item 19 phone pass — if phone PASS and desktop FAIL with flat bars → desktop picker/send bug (Wave A/B), not signaling.
 
 **Expect:** Picker changes stick; Windows meter + Mynk bars move → tutor hears student. Cam switch does not freeze UI. Bars move but tutor silent + `mixdown-attach` present → file inbound bug.
 
 **Ignore this run:** No second desktop available. Same-machine two-browser → **N/A with notes** `same-machine A/V invalid`.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
-
+**Notes: Admittadly I'm mostly passing this from previous tries, these pickers are still a bit wonky.  At some point we have to see if there is something we can do to limit it to the best option from a single device.**
 
 ---
 
