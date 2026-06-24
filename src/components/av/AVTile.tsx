@@ -59,6 +59,7 @@ import {
   getInitialsFromLabel,
 } from "@/components/av/initials-from-label";
 import { WbIconCamera, WbIconMic } from "@/components/whiteboard/chrome/wb-icons";
+import { afterToggleRefreshHover } from "@/lib/refresh-hover-under-pointer";
 
 /**
  * Subset of `AvParticipant` the tile actually reads. The host passes
@@ -521,7 +522,9 @@ export function AVTile({
               aria-label={localMicMuted ? "Unmute your microphone" : "Mute your microphone"}
               aria-pressed={!localMicMuted}
               disabled={localMediaControls.disabled}
-              onClick={localMediaControls.onToggleMic}
+              onClick={(e) =>
+                afterToggleRefreshHover(e.currentTarget, localMediaControls.onToggleMic)
+              }
               data-testid="av-controls-toggle-mic"
             >
               <WbIconMic size={13} />
@@ -547,7 +550,9 @@ export function AVTile({
               }
               aria-pressed={!localCamMuted}
               disabled={localMediaControls.disabled || localMediaControls.camDisabled}
-              onClick={localMediaControls.onToggleCam}
+              onClick={(e) =>
+                afterToggleRefreshHover(e.currentTarget, localMediaControls.onToggleCam)
+              }
               data-testid="av-controls-toggle-cam"
             >
               <WbIconCamera size={13} />

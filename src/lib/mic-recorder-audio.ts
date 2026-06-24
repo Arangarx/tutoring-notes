@@ -28,6 +28,9 @@ export type MicLevelMonitor = {
 /**
  * Lightweight analyser tap for live-A/V mic metering (student top bar).
  * Does NOT stop tracks on dispose — the stream is owned by `useLiveAV`.
+ *
+ * **Unsafe on student publish streams** — use only on dedicated meter
+ * taps, not the track wired to RTCPeerConnection (see LIVE-AV.md).
  */
 export async function createMicLevelMonitor(
   micStream: MediaStream

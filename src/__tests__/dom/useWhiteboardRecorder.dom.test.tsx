@@ -464,6 +464,40 @@ describe("useWhiteboardRecorder", () => {
     expect(result.current.resumePrompt).toBeNull();
   });
 
+  test("new session URL does not offer cross-session IndexedDB recovery", async () => {
+    const OLD_SESSION = "wb-session-old";
+    await saveCheckpoint({
+      kind: "whiteboard",
+      ownerKey: whiteboardOwnerKey(ADMIN, STUDENT, OLD_SESSION),
+      sessionId: OLD_SESSION,
+      adminUserId: ADMIN,
+      studentId: STUDENT,
+      startedAt: "2026-06-24T11:32:45.000Z",
+      schemaVersion: 1,
+      payload: {
+        log: {
+          schemaVersion: 1,
+          startedAt: "2026-06-24T11:32:45.000Z",
+          durationMs: 1_807_000,
+          events: [{ t: 0, type: "snapshot", elements: [] }],
+        },
+      },
+    });
+
+    const bag: Bag = { now: 0 };
+    const { result } = renderHook(() =>
+      useWhiteboardRecorder(
+        defaultProps(bag, { whiteboardSessionId: "wb-session-fresh" })
+      )
+    );
+
+    await act(async () => {
+      await flushIDB();
+    });
+
+    expect(result.current.resumePrompt).toBeNull();
+  });
+
   test("markPersisted clears the IDB checkpoint", async () => {
     jest.useFakeTimers();
     const bag: Bag = { now: 0 };

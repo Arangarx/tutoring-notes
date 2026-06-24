@@ -5280,7 +5280,6 @@ export function WhiteboardWorkspaceClient({
             isMicMuted={liveAv.isMicMuted}
             hasMicPermission={liveAv.hasMicPermission}
             hasMicStream={liveAv.localAudioStream !== null}
-            micStream={liveAv.localAudioStream}
             onToggleMute={liveAv.toggleMic}
             onAcquireMic={handleAcquireMic}
             onMicDeviceChange={(deviceId) => void liveAv.setMicDevice(deviceId)}
@@ -5889,7 +5888,7 @@ export function WhiteboardWorkspaceClient({
             onToggleMic={liveAv.toggleMic}
             onToggleCam={() => void handleTopBarCam()}
             disabled={role === "student" ? !studentConnected : endingBusy}
-            camDisabled={liveAv.hasCamPermission === "denied" || (liveAv.videoDevices?.length ?? 1) === 0}
+            camDisabled={liveAv.hasCamPermission === "denied"}
             participants={liveAv.participants}
             localTile={{
               peerId: localPeerId,

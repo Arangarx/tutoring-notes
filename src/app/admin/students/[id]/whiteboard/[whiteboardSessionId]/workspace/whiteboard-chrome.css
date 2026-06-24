@@ -377,13 +377,13 @@
   flex-shrink: 0;
 }
 
-.mynk-wb-tb-btn:hover:not(:disabled):not(.mynk-wb-tb-btn--primary):not(.mynk-wb-tb-btn--copied) {
+.mynk-wb-tb-btn:hover:not(:disabled):not(.mynk-wb-tb-btn--primary):not(.mynk-wb-tb-btn--copied):not(.mynk-wb-tb-btn--mic-on):not(.mynk-wb-tb-btn--mic-off):not(.mynk-wb-tb-btn--cam-on):not(.mynk-wb-tb-btn--cam-off) {
   background: color-mix(in srgb, var(--surface-3) 75%, var(--foreground) 25%);
   color: var(--foreground);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 50%, var(--foreground) 50%);
 }
 
-.mynk-wb-tb-btn:hover:not(:disabled):not(.mynk-wb-tb-btn--primary):not(.mynk-wb-tb-btn--copied) svg {
+.mynk-wb-tb-btn:hover:not(:disabled):not(.mynk-wb-tb-btn--primary):not(.mynk-wb-tb-btn--copied):not(.mynk-wb-tb-btn--mic-on):not(.mynk-wb-tb-btn--mic-off):not(.mynk-wb-tb-btn--cam-on):not(.mynk-wb-tb-btn--cam-off) svg {
   filter: brightness(1.12);
 }
 
@@ -771,14 +771,18 @@
 }
 
 .mynk-wb-tb-btn--cam-on:hover:not(:disabled),
-.mynk-wb-tb-btn--mic-on:hover:not(:disabled) {
+.mynk-wb-tb-btn--mic-on:hover:not(:disabled),
+.mynk-wb-tb-btn--cam-on:active:not(:disabled),
+.mynk-wb-tb-btn--mic-on:active:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 18%, var(--surface-3));
   color: var(--foreground);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, var(--border));
 }
 
 .mynk-wb-tb-btn--cam-off:hover:not(:disabled),
-.mynk-wb-tb-btn--mic-off:hover:not(:disabled) {
+.mynk-wb-tb-btn--mic-off:hover:not(:disabled),
+.mynk-wb-tb-btn--cam-off:active:not(:disabled),
+.mynk-wb-tb-btn--mic-off:active:not(:disabled) {
   background: color-mix(in srgb, var(--destructive) 11%, var(--surface-2));
   color: color-mix(in srgb, var(--destructive) 90%, var(--foreground));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--destructive) 22%, var(--border));

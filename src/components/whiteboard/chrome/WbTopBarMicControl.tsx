@@ -5,6 +5,7 @@ import type { UseAudioRecorderReturn } from "@/hooks/useAudioRecorder";
 import MicControls from "@/components/recording/MicControls";
 import { WbInlineMicMeter } from "@/components/whiteboard/chrome/WbInlineMicMeter";
 import { WbIconMic } from "@/components/whiteboard/chrome/wb-icons";
+import { afterToggleRefreshHover } from "@/lib/refresh-hover-under-pointer";
 
 type Props = {
   audio: UseAudioRecorderReturn;
@@ -91,7 +92,7 @@ export function WbTopBarMicControl({
         type="button"
         className={`mynk-wb-tb-btn${isMicMuted ? " mynk-wb-tb-btn--mic-off" : " mynk-wb-tb-btn--mic-on"}`}
         title={isMicMuted ? "Unmute microphone" : "Microphone — click to mute"}
-        onClick={() => void handleMainClick()}
+        onClick={(e) => afterToggleRefreshHover(e.currentTarget, handleMainClick)}
         disabled={disabled}
         data-testid="wb-topbar-mic-toggle"
       >

@@ -52,10 +52,10 @@
  *
  *   7. **Resume from crash**: on mount we call
  *      `findCheckpoint("whiteboard", ownerKey)` for THIS session id
- *      AND a fallback `findLatestCheckpointForOwner` keyed on
- *      tutor+student so a brand-new session id can recover from a
- *      session id that crashed without ever ending. The workspace
- *      component decides whether to actually surface the prompt.
+ *      only. A brand-new session URL must start with a blank board —
+ *      cross-session recovery is via that session's own URL, not by
+ *      importing another session's IndexedDB row. Stale rows for ended
+ *      sessions are garbage-collected silently on mount.
  *
  *   8. **wbsid logging**: every console line is tagged
  *      `[useWhiteboardRecorder] wbsid=<sessionId> ...` to mirror the
@@ -365,12 +365,12 @@ export type UseWhiteboardRecorderReturn = {
 
 export type ResumeAvailability = {
   /** Where the checkpoint was found ("this-session" = exact id match). */
-  source: "this-session" | "latest-for-owner";
+  source: "this-session";
   /** ISO 8601 wall-clock of the original startedAt. */
   startedAt: string;
   /** Approximate "minutes recorded" for the prompt copy. */
   durationMs: number;
-  /** Underlying sessionId of the checkpoint (may differ from the live one). */
+  /** Underlying sessionId of the checkpoint (this session). */
   sessionId: string;
 };
 
@@ -1030,16 +1030,19 @@ export function useWhiteboardRecorder(
           });
           return;
         }
-        // Fallback — a brand-new session url for a tutor + student
-        // who has an unfinalised checkpoint elsewhere. The workspace
-        // can decide whether to surface this (it's a softer prompt).
+        // Cross-session hygiene only — never prompt on a new session URL.
+        // Orphan checkpoints for ended sessions are cleared; unfinalised
+        // work is recovered by reopening THAT session's workspace URL.
         const latest = await findLatestCheckpointForOwner<CheckpointPayload>(
           "whiteboard",
           adminUserId,
           studentId
         );
         if (cancelled) return;
-        if (latest) {
+        if (
+          latest &&
+          latest.sessionId !== whiteboardSessionId
+        ) {
           const serverEnded = await fetchSessionEndedOnServer(latest.sessionId);
           if (cancelled) return;
           if (serverEnded) {
@@ -1047,19 +1050,7 @@ export function useWhiteboardRecorder(
               "whiteboard",
               whiteboardOwnerKey(adminUserId, studentId, latest.sessionId)
             );
-            return;
           }
-          cachedResumeRef.current = {
-            log: latest.payload.log,
-            sessionId: latest.sessionId,
-            boardDocument: latest.payload.boardDocument,
-          };
-          setResumePrompt({
-            source: "latest-for-owner",
-            startedAt: latest.startedAt,
-            durationMs: latest.payload.log.durationMs,
-            sessionId: latest.sessionId,
-          });
         }
       } finally {
         if (!cancelled) {
@@ -1088,8 +1079,7 @@ export function useWhiteboardRecorder(
     setResumePrompt(null);
     if (cached) {
       // Best-effort: clear the offered checkpoint so we don't keep
-      // re-prompting on every page load. Use the cached sessionId
-      // (may differ from this session's id in the latest-for-owner case).
+      // re-prompting on every page load.
       await clearCheckpoint(
         "whiteboard",
         whiteboardOwnerKey(adminUserId, studentId, cached.sessionId)

@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import VideoControls from "@/components/av/VideoControls";
 import { WbIconCamera } from "@/components/whiteboard/chrome/wb-icons";
+import { afterToggleRefreshHover } from "@/lib/refresh-hover-under-pointer";
 
 type Props = {
   /**
@@ -66,12 +67,11 @@ export function WbTopBarCamControl({
     return () => document.removeEventListener("mousedown", onDoc);
   }, [popoverOpen]);
 
-  const camUnavailable =
-    hasCamPermission === "denied" || videoDevices.length === 0;
+  const camUnavailable = hasCamPermission === "denied";
 
   const btnTitle = hasCamPermission === "denied"
     ? "Camera permission denied"
-    : videoDevices.length === 0
+    : hasCamPermission === "granted" && videoDevices.length === 0
       ? "No camera device found"
       : isCamMuted
         ? "Turn camera on"
@@ -99,7 +99,7 @@ export function WbTopBarCamControl({
         className={`mynk-wb-tb-btn mynk-wb-tb-btn--icon${camStateClass}`}
         title={btnTitle}
         aria-label={btnTitle}
-        onClick={onToggleCam}
+        onClick={(e) => afterToggleRefreshHover(e.currentTarget, onToggleCam)}
         disabled={disabled || camUnavailable}
         style={camUnavailable ? { opacity: 0.4 } : undefined}
       >

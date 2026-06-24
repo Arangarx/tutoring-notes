@@ -4,8 +4,12 @@ import { useEffect, useState } from "react";
 import { createMicLevelMonitor } from "@/lib/mic-recorder-audio";
 
 /**
- * Live mic input level (0–1) for inline top-bar metering on paths that do
- * not use `useAudioRecorder` (student `useLiveAV` mic stream).
+ * Live mic input level (0–1) for inline top-bar metering on paths that
+ * do not use `useAudioRecorder`.
+ *
+ * **Do not** pass a `useLiveAV` publish stream here — Web Audio
+ * `createMediaStreamSource` on the same hardware track can silence WebRTC
+ * (see LIVE-AV.md / `showInlineMeter` on WbTopBarMicControlLive).
  */
 export function useMicInputLevel(micStream: MediaStream | null): number {
   const [level, setLevel] = useState(0);

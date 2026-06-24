@@ -10,12 +10,21 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { WbInlineMicMeter } from "@/components/whiteboard/chrome/WbInlineMicMeter";
 import { WbIconMic } from "@/components/whiteboard/chrome/wb-icons";
 import { useMicInputLevel } from "@/hooks/useMicInputLevel";
+import { afterToggleRefreshHover } from "@/lib/refresh-hover-under-pointer";
 
 type Props = {
   isMicMuted: boolean;
   hasMicPermission: "unknown" | "prompt" | "granted" | "denied";
   hasMicStream: boolean;
-  /** Live mic stream from `useLiveAV.localAudioStream` — drives inline meter. */
+  /**
+   * When true, tap the live mic stream for the inline 3-bar meter.
+   * Must stay false on student `useLiveAV` publish streams — a Web Audio
+   * `MediaStreamSource` on the same track Chrome sends over WebRTC can
+   * silence the peer connection (same class of bug as track cloning;
+   * see LIVE-AV.md).
+   */
+  showInlineMeter?: boolean;
+  /** Only read when `showInlineMeter` is true. */
   micStream?: MediaStream | null;
   onToggleMute: () => void;
   onAcquireMic: () => void | Promise<void>;
@@ -27,6 +36,7 @@ export function WbTopBarMicControlLive({
   isMicMuted,
   hasMicPermission,
   hasMicStream,
+  showInlineMeter = false,
   micStream = null,
   onToggleMute,
   onAcquireMic,
@@ -38,11 +48,13 @@ export function WbTopBarMicControlLive({
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const wrapRef = useRef<HTMLDivElement>(null);
   const meterLevel = useMicInputLevel(
-    hasMicStream && !isMicMuted ? micStream : null
+    showInlineMeter && hasMicStream && !isMicMuted ? micStream : null
   );
 
   useEffect(() => {
-    if (hasMicPermission !== "granted") return;
+    // Re-enumerate after permission OR first successful acquire — labels
+    // stay blank until getUserMedia has run at least once on many browsers.
+    if (hasMicPermission !== "granted" && !hasMicStream) return;
     let cancelled = false;
     const refresh = async () => {
       try {
@@ -63,7 +75,7 @@ export function WbTopBarMicControlLive({
       cancelled = true;
       navigator.mediaDevices?.removeEventListener("devicechange", refresh);
     };
-  }, [hasMicPermission, selectedDeviceId]);
+  }, [hasMicPermission, hasMicStream, selectedDeviceId]);
 
   useEffect(() => {
     if (!popoverOpen) return;
@@ -76,20 +88,14 @@ export function WbTopBarMicControlLive({
     return () => document.removeEventListener("mousedown", onDoc);
   }, [popoverOpen]);
 
-  // Fix 2.7: don't treat devices.length === 0 as unavailable while permission
-  // is still unknown/prompt (enumeration hasn't run yet). Treating the
-  // pre-enumerate empty list as "no mic found" caused the button to flash
-  // disabled during async enumerateDevices, producing visible churn on mount.
-  // Only report "unavailable" when permission is confirmed denied OR when
-  // permission is confirmed granted but enumeration found zero audioinputs.
-  const micUnavailable =
-    hasMicPermission === "denied" ||
-    (hasMicPermission === "granted" && devices.length === 0);
+  // Only hard-disable when permission is denied. An empty pre-enumerate
+  // device list (common before the first getUserMedia) must not block acquire.
+  const micUnavailable = hasMicPermission === "denied";
 
   const btnTitle =
     hasMicPermission === "denied"
       ? "Microphone permission denied"
-      : devices.length === 0
+      : hasMicPermission === "granted" && devices.length === 0
         ? "No microphone found"
         : isMicMuted
           ? "Unmute microphone"
@@ -119,12 +125,12 @@ export function WbTopBarMicControlLive({
         className={`mynk-wb-tb-btn${micStateClass}`}
         title={btnTitle}
         aria-label={btnTitle}
-        onClick={() => void handleMainClick()}
+        onClick={(e) => afterToggleRefreshHover(e.currentTarget, handleMainClick)}
         disabled={disabled || micUnavailable}
         data-testid="wb-topbar-mic-toggle"
       >
         <WbIconMic />
-        <WbInlineMicMeter level={meterLevel} />
+        {showInlineMeter ? <WbInlineMicMeter level={meterLevel} /> : null}
       </button>
       <div className="mynk-wb-mic-settings-anchor" ref={wrapRef}>
         <button
