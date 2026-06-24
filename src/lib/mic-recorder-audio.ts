@@ -7,7 +7,7 @@
 /** Map analyser time-domain RMS into the 0–1 meter range (tutor + student). */
 export function readAnalyserRmsLevel(
   analyser: AnalyserNode,
-  data: Float32Array
+  data: Float32Array<ArrayBuffer>
 ): number {
   analyser.getFloatTimeDomainData(data);
   let sum = 0;
