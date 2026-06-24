@@ -41,6 +41,7 @@ import {
   WB_VIEWPORT_CENTER_PASS_TOLERANCE_PX,
   WB_ZOOM_INVARIANT_CENTER_TOLERANCE_SCENE,
 } from "./whiteboard-live-sync.helpers";
+import { TAG } from "../test-tags";
 
 /**
  * Real-browser whiteboard live-sync regression net (hermetic local relay).
@@ -49,9 +50,9 @@ import {
  * via Playwright webServer). Assertions use `window.__TN_WB_E2E__` and
  * independent oracles from `viewport-align.ts` ΓÇö not production HUD formulas.
  *
- * Gate: `npm run test:wb-sync`
+ * Gate: `npm run test:wb-sync` (full) or `npm run test:wb-affected:run` (tagged subset)
  */
-test.describe("whiteboard live-sync regression", () => {
+test.describe("whiteboard live-sync regression", { tag: [TAG.WB_SYNC] }, () => {
   async function openTutorAndStudent(
     browser: Browser,
     session: Awaited<ReturnType<typeof seedWbLiveSyncSession>>,
@@ -107,7 +108,7 @@ test.describe("whiteboard live-sync regression", () => {
     };
   }
 
-  test("invariant 1 ΓÇö tutor stroke renders on student live (no page switch)", async ({
+  test("invariant 1 ΓÇö tutor stroke renders on student live (no page switch)", { tag: [TAG.WB_STROKES] }, async ({
     browser,
   }) => {
     test.setTimeout(180_000);
@@ -151,7 +152,7 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 1b ΓÇö tutor stroke continuation grows live on student", async ({
+  test("invariant 1b ΓÇö tutor stroke continuation grows live on student", { tag: [TAG.WB_STROKES] }, async ({
     browser,
   }) => {
     test.setTimeout(180_000);
@@ -180,7 +181,7 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 2 ΓÇö student stroke renders on tutor live", async ({ browser }) => {
+  test("invariant 2 ΓÇö student stroke renders on tutor live", { tag: [TAG.WB_STROKES] }, async ({ browser }) => {
     test.setTimeout(180_000);
     const session = await seedWbLiveSyncSession();
     const peers = await openTutorAndStudent(browser, session);
@@ -201,7 +202,7 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 3 ΓÇö live object MOVE propagation", async ({ browser }) => {
+  test("invariant 3 ΓÇö live object MOVE propagation", { tag: [TAG.WB_STROKES] }, async ({ browser }) => {
     test.setTimeout(180_000);
     const session = await seedWbLiveSyncSession();
     const peers = await openTutorAndStudent(browser, session);
@@ -267,7 +268,7 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 4 ΓÇö viewport center-align when student canvas is shorter", async ({
+  test("invariant 4 ΓÇö viewport center-align when student canvas is shorter", { tag: [TAG.WB_VIEWPORT] }, async ({
     browser,
   }) => {
     test.setTimeout(180_000);
@@ -308,7 +309,7 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 5 ΓÇö pan follow (student scroll matches follow oracle)", async ({
+  test("invariant 5 ΓÇö pan follow (student scroll matches follow oracle)", { tag: [TAG.WB_VIEWPORT] }, async ({
     browser,
   }) => {
     test.setTimeout(180_000);
@@ -337,7 +338,7 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 13 — continuous tutor pan/zoom: student tracks live, not only on stop", async ({
+  test("invariant 13 — continuous tutor pan/zoom: student tracks live, not only on stop", { tag: [TAG.WB_VIEWPORT] }, async ({
     browser,
   }) => {
     /**
@@ -410,7 +411,7 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 6 ΓÇö zoom does not move viewport scene center", async ({
+  test("invariant 6 ΓÇö zoom does not move viewport scene center", { tag: [TAG.WB_VIEWPORT] }, async ({
     browser,
   }) => {
     test.setTimeout(180_000);
@@ -466,7 +467,7 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 7 ΓÇö student sees real image element (not placeholder)", async ({
+  test("invariant 7 ΓÇö student sees real image element (not placeholder)", { tag: [TAG.WB_ASSETS] }, async ({
     browser,
   }) => {
     test.setTimeout(180_000);
@@ -531,7 +532,7 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 8 ΓÇö PDF page opens centered+fit on student viewport", async ({
+  test("invariant 8 ΓÇö PDF page opens centered+fit on student viewport", { tag: [TAG.WB_ASSETS] }, async ({
     browser,
   }) => {
     // QUARANTINED: pdfjs-dist does not load in headless Playwright ΓÇö gate/env prerequisite, not prod PDF centering.
@@ -630,7 +631,7 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 11 ΓÇö idle-tutor welcome push: student receives existing scene on join without tutor redrawing", async ({
+  test("invariant 11 ΓÇö idle-tutor welcome push: student receives existing scene on join without tutor redrawing", { tag: [TAG.WB_PRESENCE] }, async ({
     browser,
   }) => {
     /**
@@ -702,7 +703,7 @@ test.describe("whiteboard live-sync regression", () => {
     await studentContext.close();
   });
 
-  test("invariant 9 ΓÇö page isolation (strokes do not bleed across tabs)", async ({
+  test("invariant 9 ΓÇö page isolation (strokes do not bleed across tabs)", { tag: [TAG.WB_STROKES] }, async ({
     browser,
   }) => {
     test.setTimeout(180_000);
@@ -760,7 +761,7 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 12 — graph embed: tutor→student graphStateJson sync; student embed editable", async ({
+  test("invariant 12 — graph embed: tutor→student graphStateJson sync; student embed editable", { tag: [TAG.WB_GRAPH] }, async ({
     browser,
   }) => {
     test.setTimeout(180_000);
@@ -837,7 +838,7 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 12b — graph UI persist: tutor types expression via UI + syncs to student", async ({
+  test("invariant 12b — graph UI persist: tutor types expression via UI + syncs to student", { tag: [TAG.WB_GRAPH] }, async ({
     browser,
   }) => {
     test.setTimeout(180_000);
@@ -869,7 +870,7 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 12c — recording banner must not claim student left while sync roster present", async ({
+  test("invariant 12c — recording banner must not claim student left while sync roster present", { tag: [TAG.WB_RECORDING] }, async ({
     browser,
   }) => {
     test.setTimeout(180_000);
@@ -889,7 +890,7 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 12d — student follow-toggle vertically aligned with match button (Wave 5 #9)", async ({
+  test("invariant 12d — student follow-toggle vertically aligned with match button (Wave 5 #9)", { tag: [TAG.WB_CHROME] }, async ({
     browser,
   }) => {
     test.setTimeout(120_000);
@@ -912,7 +913,7 @@ test.describe("whiteboard live-sync regression", () => {
     }
   });
 
-  test("invariant 10 ΓÇö follow gating (sync ON/OFF/snap/default)", async ({
+  test("invariant 10 ΓÇö follow gating (sync ON/OFF/snap/default)", { tag: [TAG.WB_VIEWPORT] }, async ({
     browser,
   }) => {
     test.setTimeout(180_000);

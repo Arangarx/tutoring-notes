@@ -174,6 +174,7 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
 - **Windows PowerShell: multi-line commit messages via temp file, not `-m`.** PowerShell 5.x (the default on Win10/11 without an explicit pwsh install — Andrew's setup) mangles multi-line strings, Unicode escape sequences (`\u2014`), and backtick-escaped characters when passed to `git commit -m "..."`. Safe pattern: Write the message to `.git/COMMIT_MSG_DRAFT.txt`, then `git commit -F .git/COMMIT_MSG_DRAFT.txt`, then delete the temp file in a **sequential** subsequent call (NOT a parallel tool call — a parallel `Delete` races the `commit` and the file vanishes before git reads it; this has bitten us).
 - **Composition over duplication — no bespoke code.** See [`.cursor/rules/composition-no-duplication.mdc`](.cursor/rules/composition-no-duplication.mdc) (standing architectural standard; `alwaysApply`).
 - **Playwright on every fix — no second smoke for the same bug.** Any behavioral, visual, chrome, sync, or multi-peer regression fix ships a Playwright test in the **same branch** (enrolled in `wb-regression` when applicable). Jest/jsdom does not substitute. Narrow environment-only gaps need an explicit `PLAYWRIGHT-GAP` + backlog entry — never silent omission. See [`.cursor/rules/playwright-on-fix.mdc`](.cursor/rules/playwright-on-fix.mdc) (`alwaysApply`).
+- **Selective test execution by tag.** Tagged Playwright suites + `npm run test:wb-affected` for diff-scoped runs on small branches; **full** `test:wb-sync` required before **`master`**. See [`.cursor/rules/test-selection.mdc`](.cursor/rules/test-selection.mdc) and [`tests/test-tags.ts`](tests/test-tags.ts).
 
 ## Hard-won lessons
 
@@ -493,23 +494,27 @@ CI agent reviewing PRs automatically:
   forbidden** — branch + commit + push + smoke + merge is the
   discipline; only the PR step is dropped.
 - **Whiteboard sync changes** (any file touching `src/lib/whiteboard/`,
-  `src/components/whiteboard/`, or `tests/integration/whiteboard*`) MUST
-  pass `npm run test:wb-sync` locally before `git merge --no-ff`. Pre-build
-  the local relay image once (`npm run relay:build`; requires Docker). Green
-  output proves real-browser coverage via the hermetic relay, not jsdom alone.
+  `src/components/whiteboard/`, or `tests/integration/whiteboard*`) need
+  real-browser coverage via the hermetic relay — not jsdom alone. Pre-build
+  the local relay image once (`npm run relay:build`; requires Docker).
+  - **Tagged selective gate (default inner loop, 2026-06-23).** Playwright
+    wb-regression tests carry domain tags (`@wb-graph`, `@wb-strokes`, … —
+    [`tests/test-tags.ts`](tests/test-tags.ts)). On commits and small merges,
+    run **`npm run test:wb-affected:run -- --base origin/<parent>`** (dry-run:
+    `npm run test:wb-affected`) so only adjacent/affected tags execute. Err on
+    caution — broad touches (e.g. `WhiteboardWorkspaceClient`) warrant extra
+    tags or full suite. Explicit: `npm run test:wb-playwright:tags -- @wb-graph`.
+  - **Merge to `v1-redesign` / long integration branches:** `test:wb-sync`
+    **once on the final integrated tip** before `merge --no-ff` when the branch
+    touched sync/whiteboard surfaces (existing cadence). Large stacked waves on
+    the integration branch use the full suite; per-wave relay runs are not required.
+  - **Merge to `master`:** **always full** — `npm run test:wb-sync` +
+    `npm run test:regression` + `npx next build`. No selective gate.
   - **Cadence — merge-boundary, not per-wave (Andrew 2026-06-17).** The
     ~38-min Playwright phase is a **merge gate**, not a per-commit/per-fix-wave
-    gate. On a feature branch that stacks several waves before a single
-    merge, run `test:wb-sync` **once on the final integrated tip** right
-    before `merge --no-ff` — NOT after every wave. Waves that **don't touch**
-    `src/lib/whiteboard/` / `src/components/whiteboard/` / the apply paths
-    (e.g. chrome/responsive-only, polish-only) **skip it entirely**; the jest
-    subset (`npm run test:wb-jest`, ~5s) is the inner-loop gate for those.
-    Rationale: per-wave relay runs were burning ~40 min per fix with no
-    safety gain over a single final run, and the bisect surface (only the
-    sync-touching waves on the branch) stays small. Full all-feature merges
-    into the long-running branch are NOT the right granularity — that's too
-    coarse to bisect; per-feature-branch-merge-boundary is the sweet spot.
+    gate. Waves that **don't touch** whiteboard/sync apply paths (e.g.
+    chrome/responsive-only) may use **`test:wb-affected`** only; the jest
+    subset (`npm run test:wb-jest`, ~5s) is the minimum inner-loop gate.
 - **Build-surface changes** (fonts, CSS, or build configuration — e.g.
   `src/app/fonts.ts`, `src/styles/*.css`, `eslint.config.*`, `next.config.*`,
   Tailwind/PostCSS config, `package.json` build scripts) MUST pass a real

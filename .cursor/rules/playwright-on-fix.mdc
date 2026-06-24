@@ -12,6 +12,7 @@ Andrew should **never** have to hardware-smoke the same regression twice. If a b
 Any change that fixes user-observable **behavior**, **visual/layout**, **chrome interaction**, **sync/lifecycle copy**, or **multi-peer flows** MUST include a Playwright test in the same commit series.
 
 - **Location:** `tests/integration/*.spec.ts` (preferred — tutor+student relay harness).
+- **Tags:** add domain tag(s) from [`tests/test-tags.ts`](../../tests/test-tags.ts) on each new test — enables selective `npm run test:wb-affected` (see [`.cursor/rules/test-selection.mdc`](test-selection.mdc)).
 - **Merge gate enrollment:** add the spec (or new tests) to the `wb-regression` project in `playwright.config.ts` when the fix touches whiteboard, sync, chrome, recording UI, or live session flows.
 - **Visual baselines:** layout/chrome-only fixes may use `tests/visual/` when a screenshot oracle is the right guard.
 

@@ -37,7 +37,7 @@ Yes, dispatching has its own meta-cost (writing the scope blob + reviewing the r
 
 **Smokebook dispatches:** any prompt that asks a subagent to produce a smokebook MUST reference [`docs/handoff/SMOKEBOOK-TEMPLATE.md`](../../docs/handoff/SMOKEBOOK-TEMPLATE.md) + the fetch-don't-guess preview URL rule ([`.cursor/rules/smokebook-template.mdc`](smokebook-template.mdc)); supply the verified Vercel `branchAlias` when already known.
 
-**Bugfix dispatches:** any prompt that fixes a user-observable behavioral/visual/sync/chrome bug MUST reference [`.cursor/rules/playwright-on-fix.mdc`](playwright-on-fix.mdc) — **one named Playwright test per bug** in the same branch, enrolled in `wb-regression` when applicable. Orchestrator blocks merge if the fix list has no test mapping (or an explicit documented `PLAYWRIGHT-GAP`).
+**Bugfix dispatches:** any prompt that fixes a user-observable behavioral/visual/sync/chrome bug MUST reference [`.cursor/rules/playwright-on-fix.mdc`](playwright-on-fix.mdc) — **one named Playwright test per bug** in the same branch, enrolled in `wb-regression` when applicable, with domain **tags** from [`tests/test-tags.ts`](../../tests/test-tags.ts). Run gate via [`test-selection.mdc`](test-selection.mdc) (`test:wb-affected` inner loop; full `test:wb-sync` before `master`). Orchestrator blocks merge if the fix list has no test mapping (or an explicit documented `PLAYWRIGHT-GAP`).
 
 ## What in-chat tool calls in an Opus chat ARE for
 

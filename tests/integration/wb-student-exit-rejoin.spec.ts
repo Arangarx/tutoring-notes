@@ -4,14 +4,15 @@ import {
   seedWbLiveSyncSession,
   waitForTutorStudentConnected,
 } from "./whiteboard-live-sync.helpers";
+import { TAG } from "../test-tags";
 
 /**
  * Student Exit → same-link rejoin must recover tutor presence + student connected state.
  *
  * Run: npm run test:wb-playwright -- tests/integration/wb-student-exit-rejoin.spec.ts
  */
-test.describe("student exit and rejoin", () => {
-  test("fresh join — no student excalidraw reload guard while connected", async ({
+test.describe("student exit and rejoin", { tag: [TAG.WB_PRESENCE, TAG.WB_AV] }, () => {
+  test("fresh join — no student excalidraw reload guard while connected", { tag: [TAG.WB_CHROME] }, async ({
     browser,
   }) => {
     test.setTimeout(120_000);
