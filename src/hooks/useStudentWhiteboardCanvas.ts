@@ -330,9 +330,11 @@ export function useStudentWhiteboardCanvas(
           );
         },
         onApplied: (scrollX, scrollY, zoom) => {
-          console.info(
-            `[student-apply] ${wbsidTag}pvs=${logCtx.pageId} wba=${logCtx.wba} action=viewport-align-applied panX=${scrollX} panY=${scrollY} zoom=${zoom} source=${logCtx.source}`
-          );
+          if (process.env.NODE_ENV !== "production") {
+            console.info(
+              `[student-apply] ${wbsidTag}pvs=${logCtx.pageId} wba=${logCtx.wba} action=viewport-align-applied panX=${scrollX} panY=${scrollY} zoom=${zoom} source=${logCtx.source}`
+            );
+          }
           if (followTutorViewRef.current) {
             // Read actual post-apply appState — Excalidraw may clamp scroll at
             // extreme pan/zoom, so the actual state can differ from the requested

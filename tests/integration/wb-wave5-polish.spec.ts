@@ -478,10 +478,10 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     await loadTutorBoard(page, session);
 
     await page.getByTestId("wb-topbar-mic-settings").click();
-    await expect(page.getByTestId("mic-device-select")).toBeVisible({
+    await expect(page.getByTestId("audio-device-select")).toBeVisible({
       timeout: 10_000,
     });
-    await assertNativeSelectReadable(page, "mic-device-select");
+    await assertNativeSelectReadable(page, "audio-device-select");
 
     await page.keyboard.press("Escape");
     const camCaret = page.getByTestId("wb-topbar-cam-settings");
@@ -494,6 +494,45 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     }
 
     await context.close();
+  });
+
+  test("item 19 — student phone: overflow mic + topbar controls visible", async ({
+    browser,
+  }) => {
+    test.setTimeout(180_000);
+    const session = await seedWbLiveSyncSession();
+    const peers = await openTutorAndStudent(browser, session);
+    try {
+      await peers.studentPage.setViewportSize({ width: 390, height: 844 });
+      await waitForTutorStudentConnected(peers.tutorPage);
+
+      const overflow = peers.studentPage.getByTestId("wb-student-topbar-overflow");
+      const exit = peers.studentPage.getByTestId("wb-student-exit");
+      await expect(overflow).toBeVisible({ timeout: 30_000 });
+      await expect(exit).toBeVisible();
+
+      const overflowBox = await overflow.boundingBox();
+      const exitBox = await exit.boundingBox();
+      expect(overflowBox).not.toBeNull();
+      expect(exitBox).not.toBeNull();
+      expect(overflowBox!.x + overflowBox!.width).toBeLessThanOrEqual(390);
+      expect(exitBox!.x + exitBox!.width).toBeLessThanOrEqual(390);
+
+      await overflow.click();
+      await expect(peers.studentPage.getByTestId("wb-overflow-mic")).toBeVisible({
+        timeout: 5_000,
+      });
+      await expect(peers.studentPage.getByTestId("wb-overflow-cam")).toBeVisible();
+
+      const avCluster = peers.studentPage.getByTestId("wb-student-av-row");
+      await expect(avCluster).toBeVisible({ timeout: 30_000 });
+      const clusterBox = await avCluster.boundingBox();
+      expect(clusterBox).not.toBeNull();
+      expect(clusterBox!.height).toBeGreaterThan(40);
+      expect(clusterBox!.width).toBeGreaterThan(80);
+    } finally {
+      await peers.close();
+    }
   });
 
   test("item 13 — review thumbnail renders JSXGraph board, not mynk://graph text", { tag: [TAG.WB_GRAPH] }, async ({

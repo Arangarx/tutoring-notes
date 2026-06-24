@@ -251,18 +251,20 @@ export function applyViewportAligned(
         );
         const tag = options.wbsid ? `wbsid=${options.wbsid} ` : "";
         const page = options.pageId ? ` pvs=${options.pageId}` : "";
-        console.info(
-          `[student-apply] ${tag}wba=${options.wba} action=viewport-follow` +
-            ` tutorCenter=${formatCenterLog(
-              tutorFollow.centerSceneX,
-              tutorFollow.centerSceneY,
-              tutorFollow.zoom
-            )} studentCenter=${formatCenterLog(
-              studentCenter.x,
-              studentCenter.y,
-              zoom
-            )}${page}`
-        );
+        if (process.env.NODE_ENV !== "production") {
+          console.info(
+            `[student-apply] ${tag}wba=${options.wba} action=viewport-follow` +
+              ` tutorCenter=${formatCenterLog(
+                tutorFollow.centerSceneX,
+                tutorFollow.centerSceneY,
+                tutorFollow.zoom
+              )} studentCenter=${formatCenterLog(
+                studentCenter.x,
+                studentCenter.y,
+                zoom
+              )}${page}`
+          );
+        }
       }
     }
   };

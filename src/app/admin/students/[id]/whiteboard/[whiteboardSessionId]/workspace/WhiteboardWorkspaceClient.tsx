@@ -151,6 +151,7 @@ import {
   WbIconFollowSync,
   WbIconGrid,
   WbIconMatchView,
+  WbIconMic,
   WbIconMore,
   WbIconPencil,
   WbIconRedo,
@@ -4300,6 +4301,14 @@ export function WhiteboardWorkspaceClient({
     liveAv.toggleCam();
   }, [liveAv]);
 
+  const handleTopBarMic = useCallback(async () => {
+    if (!liveAv.localAudioStream) {
+      await liveAv.requestMic();
+      return;
+    }
+    liveAv.toggleMic();
+  }, [liveAv]);
+
   // Camera-on-by-default: auto-enable the camera when the browser
   // Permissions API confirms it was already granted (e.g. on a
   // subsequent session in the same browser). Runs at most once per
@@ -4601,9 +4610,13 @@ export function WhiteboardWorkspaceClient({
 
   const renderTopBarOverflowItems = () => {
     const undoRedoDisabled = role === "student" ? !studentConnected : endingBusy;
+    const micDisabled =
+      role === "student"
+        ? studentAvPickerDisabled || liveAv.hasMicPermission === "denied"
+        : endingBusy || liveAv.hasMicPermission === "denied";
     const camDisabled =
       role === "student"
-        ? !studentConnected ||
+        ? studentAvPickerDisabled ||
           liveAv.hasCamPermission === "denied" ||
           (liveAv.videoDevices?.length ?? 1) === 0
         : endingBusy ||
@@ -4709,6 +4722,20 @@ export function WhiteboardWorkspaceClient({
       >
         <WbIconRedo />
         <span>Redo</span>
+      </button>
+      <button
+        type="button"
+        className="mynk-wb-menu-item"
+        disabled={micDisabled}
+        onClick={() => {
+          void handleTopBarMic();
+        }}
+        data-testid="wb-overflow-mic"
+      >
+        <WbIconMic size={14} />
+        <span>
+          {liveAv.isMicMuted ? "Turn microphone on" : "Turn microphone off"}
+        </span>
       </button>
       <button
         type="button"

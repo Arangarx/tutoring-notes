@@ -29,6 +29,8 @@ const PER_TILE_BODY_HEIGHT = DEFAULT_SIZE.height - CLUSTER_CHROME_HEIGHT;
 const AUTO_GROW_MAX_HEIGHT = 560;
 const CLUSTER_TOP_INSET = 16;
 const CLUSTER_BOTTOM_MARGIN = 16;
+/** Mobile pip has no drag handle — only tiles-panel padding (4+4). */
+const MOBILE_CLUSTER_CHROME_HEIGHT = 8;
 
 /** 18 + N×262 + (N−1)×4 — symmetric grow/shrink; no highwater state. */
 function computeAutoClusterHeight(tileCount: number): number {
@@ -36,6 +38,21 @@ function computeAutoClusterHeight(tileCount: number): number {
   const tilesBody =
     tileCount * PER_TILE_BODY_HEIGHT + Math.max(0, tileCount - 1) * TILE_GAP;
   return CLUSTER_CHROME_HEIGHT + tilesBody;
+}
+
+function mobilePerTileBody(layoutMode: WbLayoutMode): number {
+  if (layoutMode === "tablet-portrait") return 96;
+  return 72;
+}
+
+function computeMobileClusterHeight(
+  tileCount: number,
+  layoutMode: WbLayoutMode
+): number {
+  const tiles = Math.max(tileCount, 1);
+  const perTile = mobilePerTileBody(layoutMode);
+  const tilesBody = tiles * perTile + Math.max(0, tiles - 1) * TILE_GAP;
+  return MOBILE_CLUSTER_CHROME_HEIGHT + tilesBody;
 }
 
 function computeViewportCap(posY: number | null): number {
@@ -136,19 +153,22 @@ export function WbAVCluster({
   useEffect(() => {
     if (isMobileLayout) {
       setPos(null);
-      setSize({
-        width:
-          layoutMode === "narrow" || layoutMode === "phone-landscape"
-            ? 120
-            : 180,
-        height: 200,
-      });
+      const width =
+        layoutMode === "narrow" || layoutMode === "phone-landscape" ? 120 : 180;
+      const height = computeMobileClusterHeight(tileCount, layoutMode);
+      setSize({ width, height });
     } else {
       setSize(DEFAULT_SIZE);
     }
     setUserResized(false);
     setPaintReflowLocked(false);
-  }, [isMobileLayout, layoutMode]);
+  }, [isMobileLayout, layoutMode, tileCount]);
+
+  useEffect(() => {
+    if (!isMobileLayout) return;
+    const height = computeMobileClusterHeight(tileCount, layoutMode);
+    setSize((s) => (s.height === height ? s : { ...s, height }));
+  }, [isMobileLayout, tileCount, layoutMode]);
 
   const onDragPointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -232,8 +252,18 @@ export function WbAVCluster({
       : size.height;
   displayHeightRef.current = displayHeight;
 
+  const mobileTileBody = mobilePerTileBody(layoutMode);
+  const mobileHeight = isMobileLayout
+    ? computeMobileClusterHeight(Math.max(tileCount, 1), layoutMode)
+    : 0;
+
   const style: React.CSSProperties = isMobileLayout
-    ? { width: size.width, maxWidth: size.width }
+    ? {
+        width: size.width,
+        maxWidth: size.width,
+        height: mobileHeight,
+        ["--wb-av-tile-target-h" as string]: `${mobileTileBody}px`,
+      }
     : {
         width: size.width,
         height: displayHeight,

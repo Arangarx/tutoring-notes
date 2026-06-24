@@ -2878,21 +2878,27 @@
  * inherited light --text stays light-on-dark → unreadable options (Andrew
  * 2026-06-24 smoke). Force color-scheme + explicit option colors. */
 :root:not([data-theme="light"]) .mynk-wb-chrome .mynk-wb-native-select,
-[data-theme="dark"] .mynk-wb-chrome .mynk-wb-native-select {
+[data-theme="dark"] .mynk-wb-chrome .mynk-wb-native-select,
+:root:not([data-theme="light"]) .mynk-wb-mic-popover .mynk-wb-native-select,
+:root:not([data-theme="light"]) .mynk-wb-cam-popover .mynk-wb-native-select {
   color-scheme: dark;
-  background-color: var(--surface-2);
-  color: var(--text-strong);
-  border: 1px solid var(--border-default);
+  background-color: #142f3e;
+  color: #f0ede4;
+  border: 1px solid #1c3548;
 }
 
 :root:not([data-theme="light"]) .mynk-wb-chrome .mynk-wb-native-select option,
-[data-theme="dark"] .mynk-wb-chrome .mynk-wb-native-select option {
-  background-color: var(--surface-elevated);
-  color: var(--text-strong);
+[data-theme="dark"] .mynk-wb-chrome .mynk-wb-native-select option,
+:root:not([data-theme="light"]) .mynk-wb-mic-popover .mynk-wb-native-select option,
+:root:not([data-theme="light"]) .mynk-wb-cam-popover .mynk-wb-native-select option {
+  background-color: #1c3548;
+  color: #f0ede4;
 }
 
 :root[data-theme="light"] .mynk-wb-chrome .mynk-wb-native-select,
-.mynk-wb-chrome[data-theme="light"] .mynk-wb-native-select {
+.mynk-wb-chrome[data-theme="light"] .mynk-wb-native-select,
+:root[data-theme="light"] .mynk-wb-mic-popover .mynk-wb-native-select,
+:root[data-theme="light"] .mynk-wb-cam-popover .mynk-wb-native-select {
   color-scheme: light;
   background-color: var(--surface-input);
   color: var(--text-strong);
@@ -2900,7 +2906,19 @@
 }
 
 :root[data-theme="light"] .mynk-wb-chrome .mynk-wb-native-select option,
-.mynk-wb-chrome[data-theme="light"] .mynk-wb-native-select option {
+.mynk-wb-chrome[data-theme="light"] .mynk-wb-native-select option,
+:root[data-theme="light"] .mynk-wb-mic-popover .mynk-wb-native-select option,
+:root[data-theme="light"] .mynk-wb-cam-popover .mynk-wb-native-select option {
   background-color: var(--surface-1);
   color: var(--text-strong);
+}
+
+/* Student touch top bar — keep overflow + exit on-screen (timer/tutor in sheet). */
+.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-student-tutor-name,
+.mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-student-tutor-name,
+.mynk-wb-chrome[data-role="student"][data-layout="phone-landscape"] .mynk-wb-student-tutor-name,
+.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-timer,
+.mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-timer,
+.mynk-wb-chrome[data-role="student"][data-layout="phone-landscape"] .mynk-wb-timer {
+  display: none;
 }
