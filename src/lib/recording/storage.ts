@@ -80,6 +80,14 @@ export function loadStoredVideoDeviceId(): string {
 export function saveStoredVideoDeviceId(id: string): void {
   const s = getStorage();
   if (!s) return;
+  if (!id) {
+    try {
+      s.removeItem(STORAGE_VIDEO_DEVICE_KEY);
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
   try {
     s.setItem(STORAGE_VIDEO_DEVICE_KEY, id);
   } catch {

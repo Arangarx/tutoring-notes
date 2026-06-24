@@ -210,6 +210,10 @@ let liveAvState: LiveAvState = {
   videoError: null,
 };
 let receivedLocalPeerId: string | undefined;
+let receivedLiveAvOpts: {
+  externalAudioStream?: MediaStream | null;
+  swapMicDevice?: unknown;
+} | undefined;
 const reconnectPeerSpy = jest.fn();
 const requestMicSpy = jest.fn().mockResolvedValue(undefined);
 const requestCamSpy = jest.fn().mockResolvedValue(undefined);
@@ -231,8 +235,16 @@ function makeFakeVideoDevice(id: string): MediaDeviceInfo {
 }
 
 jest.mock("@/hooks/useLiveAV", () => ({
-  useLiveAV: (opts: { localPeerId?: string }) => {
+  useLiveAV: (opts: {
+    localPeerId?: string;
+    externalAudioStream?: MediaStream | null;
+    swapMicDevice?: unknown;
+  }) => {
     receivedLocalPeerId = opts.localPeerId;
+    receivedLiveAvOpts = {
+      externalAudioStream: opts.externalAudioStream,
+      swapMicDevice: opts.swapMicDevice,
+    };
     return {
       ...liveAvState,
       // Compute reachableParticipants from the mock participants state
@@ -486,7 +498,9 @@ const baseProps = {
   initialUserWantsRecording: false,
 };
 
-async function renderWorkspace() {
+async function renderWorkspace(
+  overrides: Partial<typeof baseProps & { role: "tutor" | "student" }> = {}
+) {
   const mod = await import(
     "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceClient"
   );
@@ -497,7 +511,9 @@ async function renderWorkspace() {
     "",
     "#k=test-integration-key-16chars-min"
   );
-  const utils = render(<mod.WhiteboardWorkspaceClient {...baseProps} />);
+  const utils = render(
+    <mod.WhiteboardWorkspaceClient {...baseProps} {...overrides} />
+  );
   // Flush the sync-client mount effect.
   await act(async () => {
     await Promise.resolve();
@@ -517,6 +533,7 @@ beforeEach(() => {
   addRemoteAudioUnsubs.length = 0;
   evaluateLifecycleCalls.length = 0;
   receivedLocalPeerId = undefined;
+  receivedLiveAvOpts = undefined;
   liveAvState = {
     participants: [],
     localAudioStream: null,
@@ -593,6 +610,31 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
     const attachedStreams = addRemoteAudioSpy.mock.calls.map((c) => c[0]);
     expect(attachedStreams).toContain(streamA);
     expect(attachedStreams).toContain(streamB);
+  });
+
+  test("student role: publish path only — no externalAudioStream from recorder and no addRemoteAudio mixdown", async () => {
+    const tutorStream = makeFakeAudioStream("stream-tutor-remote");
+    liveAvState = {
+      ...liveAvState,
+      localAudioStream: makeFakeAudioStream("student-local"),
+      hasMicPermission: "granted",
+      participants: [
+        makeParticipant("peer-tutor", {
+          role: "tutor",
+          label: "Sarah",
+          audioStream: tutorStream,
+        }),
+      ],
+    };
+
+    await renderWorkspace({
+      role: "student",
+      joinToken: "join-tok-1",
+    });
+
+    expect(receivedLiveAvOpts?.externalAudioStream).toBeUndefined();
+    expect(receivedLiveAvOpts?.swapMicDevice).toBeUndefined();
+    expect(addRemoteAudioSpy).not.toHaveBeenCalled();
   });
 
   test("FSM inputStreams reflects participant peerConnectionState (connected→ok, connecting→degraded, failed→failed)", async () => {

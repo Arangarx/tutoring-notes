@@ -1622,20 +1622,16 @@ export function WhiteboardWorkspaceClient({
   // so workspace mount alone does NOT prompt the tutor for camera
   // access. This is a 4b realignment contract.
   //
-  // externalAudioStream: we pass the recording's mic stream here so
-  // useLiveAV doesn't call getUserMedia a second time. Two simultaneous
-  // acquisitions from the same hardware mic trigger Chrome's shared
-  // audio-processing pipeline in a way that can suppress the source
-  // signal in BOTH streams via echo-cancellation cross-talk, causing the
-  // tutor's voice to be missing from both the recording and the WebRTC
-  // send. The hook clones the stream so live-AV mute stays independent
-  // of the recording's own track.
+  // externalAudioStream: tutor passes the recorder's publishStream so
+  // useLiveAV doesn't call getUserMedia a second time (see LIVE-AV.md
+  // invariant 8). Student stays undefined today (raw getUserMedia via
+  // requestMic); future mic unification may wire a publish-ONLY graph
+  // here — never recordingDest / MediaRecorder (invariant 13: live
+  // send gated by allowLiveSession, persistence by allowAudioRecording).
   const liveAv = useLiveAV({
     syncClient: role === "student" ? studentSyncClient : sync,
     localPeerId,
     sessionId: whiteboardSessionId,
-    // externalAudioStream: tutor shares the recording mic to avoid two getUserMedia calls.
-    // Student does not record, so no external stream needed.
     externalAudioStream: role === "tutor" ? workspaceAudio.localMicStream : undefined,
     swapMicDevice: role === "tutor" ? workspaceAudio.swapMicDevice : undefined,
   });
@@ -2221,6 +2217,9 @@ export function WhiteboardWorkspaceClient({
   const workspaceAudioAddRemoteAudio = workspaceAudio.addRemoteAudio;
   const workspaceAudioLocalMicStream = workspaceAudio.localMicStream;
   useEffect(() => {
+    // Tutor-only: student device never mixes into recordingDest (B2 gate
+    // allowAudioRecording is enforced server-side + here on tutor host).
+    if (role !== "tutor") return;
     const subs = remoteAudioSubsRef.current;
     if (!workspaceAudioLocalMicStream) {
       // Graph not ready (mic not acquired yet) or graph just got
@@ -2266,6 +2265,7 @@ export function WhiteboardWorkspaceClient({
       subs.delete(stream);
     }
   }, [
+    role,
     liveAv.participants,
     workspaceAudioAddRemoteAudio,
     workspaceAudioLocalMicStream,
@@ -2287,6 +2287,7 @@ export function WhiteboardWorkspaceClient({
   // recording mixdown is affected.
   const workspaceAudioSetRemoteGain = workspaceAudio.setRemoteRecordingGain;
   useEffect(() => {
+    if (role !== "tutor") return;
     if (!workspaceAudioLocalMicStream) return;
     for (const p of liveAv.participants) {
       if (!p.audioStream) continue;
@@ -2301,6 +2302,7 @@ export function WhiteboardWorkspaceClient({
       }
     }
   }, [
+    role,
     liveAv.participants,
     mutedPeerIdsInRecording,
     workspaceAudioSetRemoteGain,

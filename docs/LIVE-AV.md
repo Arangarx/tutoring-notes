@@ -265,6 +265,27 @@ fix for a real pilot-blocking bug.
     stays on one mixdown graph. A sub-50ms audible glitch on mic swap is
     acceptable; dropping remote peers or freezing the UI is not.
 
+13. **Two independent B2 consent gates for student audio — do NOT
+    collapse when unifying mic plumbing** (Andrew 2026-06-23). Parent
+    privacy toggles are separate permissions in `SessionConsentSnapshot`:
+
+    | Toggle | What it gates | Where enforced |
+    |---|---|---|
+    | `allowLiveSession` | Student may participate in live sessions (join + WebRTC mic **send**) | `createWhiteboardSession` (flag ON); future learner join handler |
+    | `allowAudioRecording` | Tutor may **persist** student audio (mixdown + segment registration) | Tutor `addRemoteAudio` reconcile (tutor-only); `assertEffectiveConsent` on `registerWhiteboardSessionAudioSegment` / `endWhiteboardSession` |
+
+    **Mic-unification contract:** student mic may move onto a
+    **publish-only** Web Audio graph (same fan-out pattern as tutor's
+    `publishStream`) fed into `useLiveAV.externalAudioStream`. It must
+    **never** connect to `recordingDest`, `MediaRecorder`, or
+    `addRemoteAudio` on the student device. Tutor live mute
+    (`toggleMic` on publish track) and tutor recording mute
+    (`setRemoteGain(..., 0)` / `mutedPeerIdsInRecording`) stay
+    independent. Turning `allowAudioRecording` off must not block live
+    send; turning `allowLiveSession` off must not be the only recording
+    gate — server-side `allowAudioRecording` remains authoritative for
+    persistence.
+
 ---
 
 ## Cheat sheet — common questions

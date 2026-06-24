@@ -925,32 +925,80 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
       const inFlight = (async () => {
         try {
-          const storedVid = loadStoredVideoDeviceId();
-          const storedGrp = loadStoredVideoGroupId();
-          let effectiveVideo: MediaTrackConstraints | boolean = videoConstraints;
-          if (videoConstraints === true) {
-            effectiveVideo = storedVid
-              ? {
-                  deviceId: { exact: storedVid },
-                  ...(storedGrp ? { groupId: { ideal: storedGrp } } : {}),
-                }
-              : true;
-          } else if (
-            typeof videoConstraints === "object" &&
-            videoConstraints !== null &&
-            storedVid &&
-            !(videoConstraints as MediaTrackConstraints).deviceId
-          ) {
-            effectiveVideo = {
-              ...(videoConstraints as MediaTrackConstraints),
-              deviceId: { exact: storedVid },
-              ...(storedGrp ? { groupId: { ideal: storedGrp } } : {}),
-            };
+          await refreshVideoDevices();
+          const siblings = videoDevicesRef.current;
+          let stream: MediaStream | null = null;
+
+          // Prefer the same multi-attempt picker path as setVideoCameraBySlot
+          // (duplicate Brio rows, facingMode, groupId). requestCam used to
+          // always hit `deviceId: { exact: storedVid }` from localStorage,
+          // which fails silently when the id is stale or the device is busy.
+          if (siblings.length > 0) {
+            const slot = Math.min(
+              Math.max(0, pickedVideoCameraSlotRef.current),
+              siblings.length - 1
+            );
+            try {
+              const picked = await getUserMediaVideoForEnumerateEntry(
+                getUM,
+                siblings[slot]!,
+                siblings,
+                null,
+                slot
+              );
+              stream = picked.stream;
+              log.log(`requestCam acquired via picker slot=${slot}`);
+            } catch (slotErr) {
+              log.warn(
+                `requestCam picker slot=${slot} failed: ${
+                  (slotErr as Error)?.message ?? String(slotErr)
+                }`
+              );
+            }
           }
-          const stream = await getUM({
-            audio: false,
-            video: effectiveVideo,
-          });
+
+          if (!stream) {
+            const storedVid = loadStoredVideoDeviceId();
+            const storedGrp = loadStoredVideoGroupId();
+            let effectiveVideo: MediaTrackConstraints | boolean =
+              videoConstraints;
+            if (videoConstraints === true) {
+              effectiveVideo = storedVid
+                ? {
+                    deviceId: { exact: storedVid },
+                    ...(storedGrp ? { groupId: { ideal: storedGrp } } : {}),
+                  }
+                : true;
+            } else if (
+              typeof videoConstraints === "object" &&
+              videoConstraints !== null &&
+              storedVid &&
+              !(videoConstraints as MediaTrackConstraints).deviceId
+            ) {
+              effectiveVideo = {
+                ...(videoConstraints as MediaTrackConstraints),
+                deviceId: { exact: storedVid },
+                ...(storedGrp ? { groupId: { ideal: storedGrp } } : {}),
+              };
+            }
+            try {
+              stream = await getUM({
+                audio: false,
+                video: effectiveVideo,
+              });
+            } catch (storedErr) {
+              if (storedVid && videoConstraints === true) {
+                saveStoredVideoDeviceId("");
+                saveStoredVideoGroupId("");
+                log.warn(
+                  `requestCam stored deviceId failed — cleared stale id and retrying default`
+                );
+                stream = await getUM({ audio: false, video: true });
+              } else {
+                throw storedErr;
+              }
+            }
+          }
           if (unmountedRef.current) {
             for (const t of stream.getTracks()) {
               try {
@@ -2111,6 +2159,12 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     const id = selectedVideoDeviceId;
     if (!localVideoStream || !id || videoDevices.length === 0) return;
     if (videoDevices.some((d) => d.deviceId === id)) return;
+    // While the track is still live, do NOT yank it because enumerate
+    // lagged or duplicate-OEM rows hid the active deviceId — that
+    // produced "light on → UI never cam-on → light off" on multi-cam
+    // Windows setups. Real unplug ends the track (readyState "ended").
+    const track = localVideoStream.getVideoTracks()[0];
+    if (track?.readyState === "live") return;
     log.warn(
       `camera device id missing after enumerate (likely unplugged) id=${id}`
     );
