@@ -69,13 +69,26 @@ export async function getUserMediaAudioForEnumerateEntry(
   getUM: (c: MediaStreamConstraints) => Promise<MediaStream>,
   entry: MediaDeviceInfo,
   allAudioinputs: MediaDeviceInfo[],
-  priorFingerprint: string | null
+  priorFingerprint: string | null,
+  opts?: { userPickedSlot?: boolean }
 ): Promise<{ stream: MediaStream; fingerprint: string }> {
-  const dupIds = mediaInputsHaveDuplicateIds(allAudioinputs);
   const requireDifferent =
-    priorFingerprint !== null && allAudioinputs.length > 1;
+    !opts?.userPickedSlot &&
+    priorFingerprint !== null &&
+    allAudioinputs.length > 1;
 
   const attempts: Array<MediaTrackConstraints | boolean> = [];
+
+  // User picked a specific enumerate row — try groupId pairing first.
+  if (entry.groupId) {
+    attempts.push({ groupId: { exact: entry.groupId } });
+  }
+  if (entry.deviceId && entry.groupId) {
+    attempts.push({
+      deviceId: { exact: entry.deviceId },
+      groupId: { exact: entry.groupId },
+    });
+  }
 
   const baseIdeal: MediaTrackConstraints = {};
   if (entry.deviceId) baseIdeal.deviceId = { ideal: entry.deviceId };

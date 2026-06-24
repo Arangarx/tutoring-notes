@@ -642,7 +642,9 @@ export function WhiteboardWorkspaceClient({
     useState<WhiteboardSyncClient | null>(null);
   const [studentConnected, setStudentConnected] = useState(false);
   const [studentOtherPeerCount, setStudentOtherPeerCount] = useState(0);
-  const hasAutoRequestedAvRef = useRef(false);
+  /** Student mic/cam pickers stay enabled while sync connects — only block after leave / bad link. */
+  const studentAvPickerDisabled =
+    hasLeft || joinUnavailableReason !== null;
 
   // Student server-side timer state (mirrors tutor's timer for student chrome)
   const [studentServerActiveMs, setStudentServerActiveMs] = useState(
@@ -1638,27 +1640,36 @@ export function WhiteboardWorkspaceClient({
       role === "tutor" ? workspaceAudio.swapMicDeviceBySlot : undefined,
   });
 
-  // Student A/V auto-request (role="student" only; tutor uses explicit UI).
-  // Fix 2.5: gate on studentSyncClient being ready so cam/mic acquisition does
-  // not race the mesh attach on cold start. Serialize mic → cam (mic first)
-  // to avoid concurrent getUserMedia calls on iOS/mobile.
+  // Student A/V bootstrap: run when sync connects (and on refresh reconnect), not
+  // only when the client object exists — pickers must work before sync is up.
   useEffect(() => {
     if (role !== "student") return;
-    if (!studentSyncClient) return;  // wait for sync client before acquiring media
-    if (hasAutoRequestedAvRef.current) return;
-    hasAutoRequestedAvRef.current = true;
-    // Serialize: mic first so the mesh can be built (hasEverHadLocalMedia latches
-    // on first stream), then cam once mic is settled.
-    void liveAv.requestMic().then(() => void liveAv.requestCam());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role, studentSyncClient]);
+    if (!studentSyncClient) return;
+    if (joinUnavailableReason !== null || hasLeft) return;
 
-  useEffect(() => {
-    if (role !== "student") return;
-    if (liveAv.hasCamPermission !== "granted") return;
-    if (liveAv.localVideoStream) return;
-    void liveAv.requestCam();
-  }, [role, liveAv.hasCamPermission, liveAv.localVideoStream, liveAv]);
+    const bootstrapAv = () => {
+      void (async () => {
+        if (!liveAv.localAudioStream) {
+          await liveAv.requestMic();
+        }
+        if (!liveAv.localVideoStream) {
+          await liveAv.requestCam();
+        }
+      })();
+    };
+
+    if (studentSyncClient.isConnected()) {
+      bootstrapAv();
+    }
+
+    const offConnect = studentSyncClient.onConnect(() => {
+      bootstrapAv();
+    });
+    return () => {
+      offConnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role, studentSyncClient, joinUnavailableReason, hasLeft]);
 
   // Student reconnect: replay ICE for all peers after sync reconnect
   const sawStudentDisconnectRef = useRef(false);
@@ -5291,7 +5302,7 @@ export function WhiteboardWorkspaceClient({
             onAcquireMic={handleAcquireMic}
             onPickMicSlot={(slot) => void liveAv.setMicDeviceBySlot(slot)}
             onRefreshDevices={() => void liveAv.refreshAudioDeviceList()}
-            disabled={!studentConnected}
+            disabled={studentAvPickerDisabled}
           />
           <WbTopBarCamControl
             isCamMuted={liveAv.isCamMuted}
@@ -5302,7 +5313,7 @@ export function WhiteboardWorkspaceClient({
             onPickCameraSlot={(slot) => void liveAv.setVideoCameraBySlot(slot)}
             isLive={liveAv.localVideoStream !== null}
             onRefreshDevices={() => void liveAv.refreshVideoDeviceList()}
-            disabled={!studentConnected}
+            disabled={studentAvPickerDisabled}
           />
 
           <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
@@ -5897,7 +5908,7 @@ export function WhiteboardWorkspaceClient({
             isCamMuted={liveAv.isCamMuted}
             onToggleMic={liveAv.toggleMic}
             onToggleCam={() => void handleTopBarCam()}
-            disabled={role === "student" ? !studentConnected : endingBusy}
+            disabled={role === "student" ? studentAvPickerDisabled : endingBusy}
             camDisabled={liveAv.hasCamPermission === "denied"}
             participants={liveAv.participants}
             localTile={{

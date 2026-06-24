@@ -77,6 +77,19 @@ import {
   getUserMediaAudioForEnumerateEntry,
 } from "@/lib/av/enumerate-device-acquire";
 
+/** Serialize every `getUserMedia` call — concurrent mic+cam swaps freeze on Windows. */
+function chainDeviceAcquire<T>(
+  tail: { current: Promise<void> },
+  work: () => Promise<T>
+): Promise<T> {
+  const next = tail.current.then(work, work);
+  tail.current = next.then(
+    () => undefined,
+    () => undefined
+  );
+  return next;
+}
+
 // -----------------------------------------------------------------
 // Public types
 // -----------------------------------------------------------------
@@ -782,6 +795,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   isCamMutedRef.current = isCamMuted;
   const micInFlightRef = useRef<Promise<void> | null>(null);
   const camInFlightRef = useRef<Promise<void> | null>(null);
+  const deviceAcquireMutexRef = useRef<Promise<void>>(Promise.resolve());
   const acquiringCountRef = useRef<number>(0);
   // Tracks whether the hook is unmounted to suppress late state
   // setters from in-flight acquisition promises.
@@ -893,7 +907,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         }`
       );
 
-      const inFlight = (async () => {
+      const inFlight = chainDeviceAcquire(deviceAcquireMutexRef, async () => {
         try {
           const stream = await getUM({
             audio: audioConstraints,
@@ -945,7 +959,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           endAcquiring();
           micInFlightRef.current = null;
         }
-      })();
+      });
       micInFlightRef.current = inFlight;
       return inFlight;
     },
@@ -980,7 +994,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         }`
       );
 
-      const inFlight = (async () => {
+      const inFlight = chainDeviceAcquire(deviceAcquireMutexRef, async () => {
         try {
           await refreshVideoDevices();
           const siblings = videoDevicesRef.current;
@@ -1108,7 +1122,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           endAcquiring();
           camInFlightRef.current = null;
         }
-      })();
+      });
       camInFlightRef.current = inFlight;
       return inFlight;
     },
@@ -2006,6 +2020,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         return;
       }
 
+      return chainDeviceAcquire(deviceAcquireMutexRef, async () => {
       startAcquiring();
       try {
         const siblings = videoDevicesRef.current;
@@ -2092,6 +2107,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       } finally {
         endAcquiring();
       }
+      });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- log stable per session
     [log, refreshVideoDevices]
@@ -2263,6 +2279,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         return;
       }
 
+      return chainDeviceAcquire(deviceAcquireMutexRef, async () => {
       if (swapMicFromRecorder || swapMicBySlotFromRecorder) {
         if (!externalAudioStream) {
           log.warn(
@@ -2353,23 +2370,19 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
       startAcquiring();
       if (!unmountedRef.current) setError(null);
+      const prevStream = localAudioStreamRef.current;
       try {
         const siblings = audioDevicesRef.current;
         const priorFp = curTrack
           ? fingerprintMediaTrackSettings(gs ?? {})
           : null;
-        const hadAudio =
-          !!localAudioStreamRef.current?.getAudioTracks().length;
-
-        if (hadAudio) {
-          disposeAvStreamTracks(localAudioStreamRef.current);
-        }
 
         const { stream } = await getUserMediaAudioForEnumerateEntry(
           getUM,
           entry,
           siblings,
-          priorFp
+          priorFp,
+          { userPickedSlot: true }
         );
         const newTrack = stream.getAudioTracks()[0];
         if (!newTrack) {
@@ -2381,8 +2394,6 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
               raw: null,
             };
             setError(empty);
-            localAudioStreamRef.current = null;
-            setLocalAudioStream(null);
           }
           return;
         }
@@ -2412,12 +2423,15 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         if (mesh && !mesh.isDisposed()) {
           mesh.replaceLocalTrackOnAllPeers("audio", newTrack);
         }
-        await refreshVideoDevices();
+        if (prevStream && prevStream !== ms) {
+          disposeAvStreamTracks(prevStream);
+        }
+        void refreshVideoDevices();
         log.log(
           `event=set-mic-slot slot=${slotIndex} deviceId=${devIdPersist.length > 0 ? devIdPersist : "<empty>"}`
         );
       } catch (err) {
-        if (!unmountedRef.current) {
+        if (!unmountedRef.current && !prevStream) {
           localAudioStreamRef.current = null;
           setLocalAudioStream(null);
         }
@@ -2432,6 +2446,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       } finally {
         endAcquiring();
       }
+      });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- log stable per session
     [

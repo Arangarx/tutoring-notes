@@ -586,6 +586,9 @@ describe("useLiveAV — requestMic", () => {
       p1 = result.current.requestMic();
       p2 = result.current.requestMic();
     });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(getUM).toHaveBeenCalledTimes(1);
     expect(result.current.isAcquiring).toBe(true);
 
@@ -710,43 +713,26 @@ describe("useLiveAV — requestCam", () => {
     unmount();
   });
 
-  test("requestMic + requestCam in parallel: both resolve, isAcquiring true during", async () => {
-    let resolveAudio: (s: MediaStream) => void = () => undefined;
-    let resolveVideo: (s: MediaStream) => void = () => undefined;
+  test("requestMic then requestCam: device mutex serializes getUserMedia", async () => {
+    const audio = makeFakeStream(1, 0);
+    const video = makeFakeStream(0, 1);
     const getUM = jest.fn((constraints: MediaStreamConstraints) => {
       if (constraints.video) {
-        return new Promise<MediaStream>((r) => {
-          resolveVideo = r;
-        });
+        return Promise.resolve(video.stream as unknown as MediaStream);
       }
-      return new Promise<MediaStream>((r) => {
-        resolveAudio = r;
-      });
+      return Promise.resolve(audio.stream as unknown as MediaStream);
     });
     const props = makeBaseProps({ _getUserMedia: getUM });
 
     const { result, unmount } = renderHook(() => useLiveAV(props));
-    let micP: Promise<void> | undefined;
-    let camP: Promise<void> | undefined;
-    act(() => {
-      micP = result.current.requestMic();
-      camP = result.current.requestCam();
-    });
-    expect(result.current.isAcquiring).toBe(true);
-
     await act(async () => {
-      resolveAudio(makeFakeStream(1, 0).stream as unknown as MediaStream);
-      await micP;
+      await result.current.requestMic();
+      await result.current.requestCam();
     });
-    expect(result.current.isAcquiring).toBe(true); // cam still in flight
     expect(result.current.localAudioStream).not.toBeNull();
-
-    await act(async () => {
-      resolveVideo(makeFakeStream(0, 1).stream as unknown as MediaStream);
-      await camP;
-    });
-    expect(result.current.isAcquiring).toBe(false);
     expect(result.current.localVideoStream).not.toBeNull();
+    expect(result.current.isAcquiring).toBe(false);
+    expect(getUM).toHaveBeenCalledTimes(2);
 
     unmount();
   });

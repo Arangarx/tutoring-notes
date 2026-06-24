@@ -1123,7 +1123,8 @@ export function useAudioRecorder({
         navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices),
         entry,
         devicesRef.current,
-        priorFp
+        priorFp,
+        { userPickedSlot: true }
       ));
     } catch (err) {
       const name = err instanceof Error ? (err as DOMException).name : "";
