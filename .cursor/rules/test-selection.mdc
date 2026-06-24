@@ -54,4 +54,4 @@ Path → tag mapping lives in [`scripts/wb-test-select.cjs`](../../scripts/wb-te
 - [ ] Diff scanned — list tags that will run (or full suite if merge tier requires it).
 - [ ] Each new Playwright test has domain tag(s).
 - [ ] Handoff states **tags run** vs **full suite** and merge target branch.
-- [ ] Andrew's smokebook = **new** UX only — not re-proofing tagged regressions.
+- [ ] Andrew's smokebook = **new** UX + hardware judgment only — not re-proofing tagged regressions ([`smoke-when-done.mdc`](smoke-when-done.mdc)).

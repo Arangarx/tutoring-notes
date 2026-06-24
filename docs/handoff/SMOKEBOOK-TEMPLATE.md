@@ -20,6 +20,25 @@ Fill **Preview** with a markdown link whose URL is the verified Vercel `branchAl
 
 ---
 
+## When Andrew runs this (mandatory policy)
+
+Smokebooks are **not** mid-wave bug hunts. See [`.cursor/rules/smoke-when-done.mdc`](../../.cursor/rules/smoke-when-done.mdc).
+
+| Phase | Who |
+|-------|-----|
+| Spec → implementation → Playwright per acceptance item → automated gates green | **Agents** |
+| **One** hardware smoke when feature is **DONE** | **Andrew** |
+
+**Smokebook items must be:**
+
+- **New surface** or **subjective UX** (feel, polish, tutor judgment)
+- **Hardware / external-env** only Playwright cannot hermeticize (`PLAYWRIGHT-GAP` backlog items)
+- Annotated in **Notes** when Playwright already covers the behavior: `[automated: <spec-file> › <test title>]` → Andrew marks **N/A with notes** unless `[human-only: <reason>]`
+
+**Do not** ask Andrew to smoke per-fix commits, re-prove regressions that have Playwright tests, or use smoke as the first net for behavior agents could have caught in relay tests.
+
+---
+
 ## Legend
 
 | Field | How to fill it |

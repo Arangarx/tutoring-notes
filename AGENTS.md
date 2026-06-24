@@ -175,6 +175,7 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
 - **Composition over duplication — no bespoke code.** See [`.cursor/rules/composition-no-duplication.mdc`](.cursor/rules/composition-no-duplication.mdc) (standing architectural standard; `alwaysApply`).
 - **Playwright on every fix — no second smoke for the same bug.** Any behavioral, visual, chrome, sync, or multi-peer regression fix ships a Playwright test in the **same branch** (enrolled in `wb-regression` when applicable). Jest/jsdom does not substitute. Narrow environment-only gaps need an explicit `PLAYWRIGHT-GAP` + backlog entry — never silent omission. See [`.cursor/rules/playwright-on-fix.mdc`](.cursor/rules/playwright-on-fix.mdc) (`alwaysApply`).
 - **Selective test execution by tag.** Tagged Playwright suites + `npm run test:wb-affected` for diff-scoped runs on small branches; **full** `test:wb-sync` required before **`master`**. See [`.cursor/rules/test-selection.mdc`](.cursor/rules/test-selection.mdc) and [`tests/test-tags.ts`](tests/test-tags.ts).
+- **Andrew smokes once when DONE.** Agents complete Playwright + gates before requesting hardware smoke. See [`.cursor/rules/smoke-when-done.mdc`](.cursor/rules/smoke-when-done.mdc).
 
 ## Hard-won lessons
 
@@ -481,8 +482,10 @@ the always-applied authority on this.
 While the pilot is solo (just Andrew + Sarah) and there's no adversarial
 CI agent reviewing PRs automatically:
 
+- **Andrew smokes once — when the feature is DONE** ([`.cursor/rules/smoke-when-done.mdc`](.cursor/rules/smoke-when-done.mdc)). Agents own spec → implementation → **Playwright per acceptance item** → automated gates green. Andrew enters for **hardware quirks + human judgment only** — not regression re-proof. **Do not request Andrew smoke mid-wave or per-fix.**
 - Executors deliver a **smokeable branch** with the Vercel Preview URL +
-  a smoke checklist + a clear final report. Smokebooks MUST follow
+  a smoke checklist + a clear final report **after the DONE checklist passes**.
+  Smokebooks MUST follow
   [`docs/handoff/SMOKEBOOK-TEMPLATE.md`](docs/handoff/SMOKEBOOK-TEMPLATE.md)
   (enforced by [`.cursor/rules/smokebook-template.mdc`](.cursor/rules/smokebook-template.mdc)).
   They do NOT open PRs.

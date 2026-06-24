@@ -48,6 +48,6 @@ Before calling a fix wave done:
 
 - [ ] Each bug in the fix list maps to **one Playwright test** (`file` → `test("…")` title).
 - [ ] New specs are in `wb-regression` (or visual project) so `npm run test:wb-playwright` / `test:wb-sync` runs them.
-- [ ] Handoff names the tests — Andrew's smokebook validates **new** surface area only, not re-proof of old regressions.
+- [ ] Handoff names the tests — Andrew's smokebook validates **new** surface area only, not re-proof of old regressions (see [`.cursor/rules/smoke-when-done.mdc`](smoke-when-done.mdc)).
 
 **Rule of thumb:** If Andrew already smoked it and it broke again, we failed this rule.

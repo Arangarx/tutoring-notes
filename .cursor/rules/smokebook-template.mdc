@@ -7,6 +7,8 @@ alwaysApply: true
 
 Every **smokebook** or **smoke-runbook** produced in this repo (typically under `docs/handoff/`, or feature-scoped `docs/*SMOKE*.md`) **MUST** follow [`docs/handoff/SMOKEBOOK-TEMPLATE.md`](../../docs/handoff/SMOKEBOOK-TEMPLATE.md).
 
+**When Andrew runs it:** only when the feature is **DONE** ([`smoke-when-done.mdc`](smoke-when-done.mdc)). Agents complete Playwright coverage + automated gates first. Smokebooks target **new UX + hardware/human judgment** — not regression re-proof.
+
 ## Required structure
 
 1. **Header block** — feature name; `Branch:`; `Tip commit:` (linked); `Preview:` (markdown link to real Vercel alias). No overall verdict in the header.
@@ -52,7 +54,8 @@ Only if the MCP is unavailable: placeholder `Preview: <unverified — confirm in
 
 Any dispatch prompt that asks a subagent to **produce a smokebook** MUST:
 
-- Reference this template and the fetch-don't-guess preview rule.
+- Reference this template, [`smoke-when-done.mdc`](smoke-when-done.mdc) (Andrew smokes **once** when DONE), and the fetch-don't-guess preview rule.
 - Include the **verified** `branchAlias` URL when the orchestrator already fetched it (or dispatch a read-only MCP lookup first).
+- Scope items to **human judgment / hardware** — cite `[automated: <file> › <test>]` in Notes for anything Playwright already covers.
 
 See also [`.cursor/rules/orchestrator-discipline.mdc`](orchestrator-discipline.mdc) and [`AGENTS.md`](../../AGENTS.md) § Merging convention.
