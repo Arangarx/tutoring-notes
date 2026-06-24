@@ -13,6 +13,8 @@ type Props = {
   onToggleMute: () => void;
   onAcquireMic: () => void | Promise<void>;
   onMicDeviceChange?: (deviceId: string) => void | Promise<void>;
+  /** Slot-aware mic pick — preferred when wired to `useLiveAV.setMicDeviceBySlot`. */
+  onPickMicSlot?: (slotIndex: number) => void | Promise<void>;
   disabled?: boolean;
 };
 
@@ -26,6 +28,7 @@ export function WbTopBarMicControl({
   onToggleMute,
   onAcquireMic,
   onMicDeviceChange,
+  onPickMicSlot,
   disabled,
 }: Props) {
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -68,8 +71,17 @@ export function WbTopBarMicControl({
   const micControls = {
     meterBarRef: audio.meterBarRef,
     devices: audio.devices,
-    selectedDeviceId: audio.selectedDeviceId,
-    onDeviceChange: onMicDeviceChange ?? audio.handleDeviceChange,
+    selectedPickerSlot: audio.pickedMicSlot,
+    onPickMicSlot: (slot: number) => {
+      if (onPickMicSlot) {
+        void onPickMicSlot(slot);
+      } else if (onMicDeviceChange) {
+        const id = audio.devices[slot]?.deviceId;
+        if (id) void onMicDeviceChange(id);
+      } else {
+        void audio.handleMicSlotChange(slot);
+      }
+    },
     gainLinear: audio.gainLinear,
     onGainChange: audio.setGainLinear,
     isLive: audio.isLive,

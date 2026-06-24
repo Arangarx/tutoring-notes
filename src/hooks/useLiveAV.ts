@@ -71,6 +71,11 @@ import {
   type SignalingOptions,
 } from "@/lib/av/signaling";
 import type { WhiteboardSyncClient } from "@/lib/whiteboard/sync-client";
+import {
+  disposeStreamTracks as disposeAvStreamTracks,
+  fingerprintMediaTrackSettings,
+  getUserMediaAudioForEnumerateEntry,
+} from "@/lib/av/enumerate-device-acquire";
 
 // -----------------------------------------------------------------
 // Public types
@@ -215,6 +220,11 @@ export type UseLiveAVOptions = {
    * refreshes WebRTC via {@link PeerMesh.replaceLocalTrackOnAllPeers}.
    */
   swapMicDevice?: (deviceId: string) => Promise<void>;
+  /**
+   * Tutor workspace: slot-aware mic swap through the recorder graph
+   * (duplicate `deviceId` rows). Preferred over {@link swapMicDevice}.
+   */
+  swapMicDeviceBySlot?: (slotIndex: number) => Promise<void>;
   /** Test-only override of `navigator.mediaDevices.getUserMedia`. */
   _getUserMedia?: (
     constraints: MediaStreamConstraints
@@ -385,6 +395,28 @@ export type UseLiveAVReturn = {
    * track, updates peers via `replaceTrack`, and persists the choice.
    */
   setVideoDevice: (deviceId: string) => Promise<void>;
+  /**
+   * Audio inputs (labels populate after mic permission). Updates on
+   * successful `requestMic()` and on `devicechange`.
+   */
+  audioDevices: ReadonlyArray<MediaDeviceInfo>;
+  /** Re-run `enumerateDevices` for audio inputs. */
+  refreshAudioDeviceList: () => Promise<void>;
+  /** Device id from the active local audio track; null before mic grant. */
+  selectedMicDeviceId: string | null;
+  /**
+   * Index into {@link audioDevices} for the mic picker UI. Enumeration order
+   * can change on hotplug; pairing with slots fixes OEMs that duplicate `deviceId`.
+   */
+  pickedMicSlot: number;
+  /**
+   * Switch microphone using an enumerate slot (preferred). Matches duplicate-
+   * `deviceId` OEM rows when combined with {@link audioDevices}.
+   */
+  setMicDeviceBySlot: (
+    slotIndex: number,
+    opts?: { force?: boolean }
+  ) => Promise<void>;
   /**
    * Switch microphone hardware. With `swapMicDevice` from the workspace,
    * delegates to the recorder; otherwise uses a self-acquired stream swap.
@@ -679,6 +711,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     videoConstraints = true,
     externalAudioStream,
     swapMicDevice: swapMicFromRecorder,
+    swapMicDeviceBySlot: swapMicBySlotFromRecorder,
     _getUserMedia,
     _createPeerMesh,
     _createSignaling,
@@ -733,6 +766,11 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     string | null
   >(null);
   const [pickedVideoCameraSlot, setPickedVideoCameraSlot] = useState(0);
+  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedMicDeviceId, setSelectedMicDeviceId] = useState<
+    string | null
+  >(null);
+  const [pickedMicSlot, setPickedMicSlot] = useState(0);
 
   // Refs for things consumed by ref-stable callbacks.
   const localAudioStreamRef = useRef<MediaStream | null>(null);
@@ -758,10 +796,17 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   const pickedVideoCameraSlotRef = useRef(0);
   /** Disambiguates duplicate OEM `deviceId` rows via last-known `MediaDeviceInfo.groupId`. */
   const pinnedVideoEnumerateGroupRef = useRef("");
+  const audioDevicesRef = useRef<MediaDeviceInfo[]>([]);
+  const selectedMicDeviceIdRef = useRef<string | null>(null);
+  const pickedMicSlotRef = useRef(0);
+  const pinnedMicEnumerateGroupRef = useRef("");
 
   videoDevicesRef.current = videoDevices;
   selectedVideoDeviceIdRef.current = selectedVideoDeviceId;
   pickedVideoCameraSlotRef.current = pickedVideoCameraSlot;
+  audioDevicesRef.current = audioDevices;
+  selectedMicDeviceIdRef.current = selectedMicDeviceId;
+  pickedMicSlotRef.current = pickedMicSlot;
 
   // ---------------------------------------------------------------
   // Acquisition controls (idempotent)
@@ -805,13 +850,16 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     try {
       const all = await navigator.mediaDevices.enumerateDevices();
       const videoinputs = all.filter((d) => d.kind === "videoinput");
+      const audioinputs = all.filter((d) => d.kind === "audioinput");
       if (!unmountedRef.current) {
         videoDevicesRef.current = videoinputs;
+        audioDevicesRef.current = audioinputs;
         setVideoDevices(videoinputs);
+        setAudioDevices(audioinputs);
       }
     } catch (err) {
       log.warn(
-        `video enumerateDevices failed: ${(err as Error)?.message ?? String(err)}`
+        `enumerateDevices failed: ${(err as Error)?.message ?? String(err)}`
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- log from opts is stable for session
@@ -871,6 +919,15 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           log.log(
             `mic acquired tracks=${stream.getAudioTracks().length} muted=${isMicMutedRef.current}`
           );
+          const gst = stream.getAudioTracks()[0]?.getSettings?.();
+          const devId = gst?.deviceId;
+          if (devId) {
+            setSelectedMicDeviceId(devId);
+            selectedMicDeviceIdRef.current = devId;
+          }
+          if (gst?.groupId) {
+            pinnedMicEnumerateGroupRef.current = gst.groupId;
+          }
           await refreshVideoDevices();
         } catch (err) {
           if (unmountedRef.current) return;
@@ -1190,6 +1247,25 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       )
     );
   }, [videoDevices, selectedVideoDeviceId]);
+
+  // ---------------------------------------------------------------
+  // Effect: keep mic picker slot aligned with enumerated order +
+  // `pinnedMicEnumerateGroupRef` when OEM rows share a `deviceId`.
+  // ---------------------------------------------------------------
+  useEffect(() => {
+    if (audioDevices.length === 0) {
+      setPickedMicSlot(0);
+      return;
+    }
+    setPickedMicSlot((prev) =>
+      reconcilePickerSlotAfterEnumerate(
+        selectedMicDeviceId,
+        audioDevices,
+        prev,
+        pinnedMicEnumerateGroupRef.current
+      )
+    );
+  }, [audioDevices, selectedMicDeviceId]);
 
   // ---------------------------------------------------------------
   // Effect: track unmount (suppresses late state setters)
@@ -2176,8 +2252,205 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     setVideoCameraBySlot,
   ]);
 
+  const setMicDeviceBySlot = useCallback(
+    async (
+      slotIndex: number,
+      opts?: { force?: boolean }
+    ): Promise<void> => {
+      const entry = audioDevicesRef.current[slotIndex];
+      if (!entry) {
+        log.warn(`event=set-mic-slot ignored invalid_slot=${slotIndex}`);
+        return;
+      }
+
+      if (swapMicFromRecorder || swapMicBySlotFromRecorder) {
+        if (!externalAudioStream) {
+          log.warn(
+            "setMicDeviceBySlot: swap path set without externalAudioStream — ignoring"
+          );
+          return;
+        }
+        const curTrack = localAudioStreamRef.current?.getAudioTracks()[0];
+        const gs = curTrack?.getSettings?.() ?? {};
+        const sameLens =
+          !!curTrack &&
+          gs.deviceId === entry.deviceId &&
+          (!entry.groupId || !gs.groupId || gs.groupId === entry.groupId);
+        if (
+          !opts?.force &&
+          pickedMicSlotRef.current === slotIndex &&
+          sameLens
+        ) {
+          log.log(`event=set-mic-slot no-op slot=${slotIndex}`);
+          return;
+        }
+        startAcquiring();
+        if (!unmountedRef.current) setError(null);
+        try {
+          if (swapMicBySlotFromRecorder) {
+            await swapMicBySlotFromRecorder(slotIndex);
+          } else if (swapMicFromRecorder && entry.deviceId) {
+            await swapMicFromRecorder(entry.deviceId);
+          }
+          const mesh = meshRef.current;
+          const t = localAudioStreamRef.current?.getAudioTracks()[0];
+          if (mesh && t && !mesh.isDisposed()) {
+            try {
+              mesh.replaceLocalTrackOnAllPeers("audio", t);
+            } catch (err) {
+              log.warn(
+                `setMicDeviceBySlot replaceTrack threw: ${
+                  (err as Error)?.message ?? String(err)
+                }`
+              );
+            }
+          }
+          setPickedMicSlot(slotIndex);
+          pinnedMicEnumerateGroupRef.current = entry.groupId ?? "";
+          if (entry.deviceId) {
+            setSelectedMicDeviceId(entry.deviceId);
+          }
+          await refreshVideoDevices();
+          log.log(
+            `event=set-mic-slot slot=${slotIndex} deviceId=${entry.deviceId || "<empty>"} path=recorder`
+          );
+        } catch (err) {
+          if (!unmountedRef.current) {
+            setError(classifyMediaError(err, "mic"));
+          }
+        } finally {
+          endAcquiring();
+        }
+        return;
+      }
+
+      const getUM = resolveGetUserMedia();
+      if (!getUM) {
+        const noUM: AvAcquireError = {
+          type: "browser-unsupported",
+          message:
+            "Your browser does not expose `navigator.mediaDevices.getUserMedia`.",
+          raw: null,
+        };
+        if (!unmountedRef.current) setError(noUM);
+        return;
+      }
+
+      const curTrack = localAudioStreamRef.current?.getAudioTracks()[0];
+      const gs = curTrack?.getSettings?.() ?? {};
+      const sameLens =
+        !!curTrack &&
+        gs.deviceId === entry.deviceId &&
+        (!entry.groupId || !gs.groupId || gs.groupId === entry.groupId);
+      if (
+        !opts?.force &&
+        pickedMicSlotRef.current === slotIndex &&
+        sameLens
+      ) {
+        log.log(`event=set-mic-slot no-op slot=${slotIndex}`);
+        return;
+      }
+
+      startAcquiring();
+      if (!unmountedRef.current) setError(null);
+      try {
+        const siblings = audioDevicesRef.current;
+        const priorFp = curTrack
+          ? fingerprintMediaTrackSettings(gs ?? {})
+          : null;
+        const hadAudio =
+          !!localAudioStreamRef.current?.getAudioTracks().length;
+
+        if (hadAudio) {
+          disposeAvStreamTracks(localAudioStreamRef.current);
+        }
+
+        const { stream } = await getUserMediaAudioForEnumerateEntry(
+          getUM,
+          entry,
+          siblings,
+          priorFp
+        );
+        const newTrack = stream.getAudioTracks()[0];
+        if (!newTrack) {
+          disposeAvStreamTracks(stream);
+          if (!unmountedRef.current) {
+            const empty: AvAcquireError = {
+              type: "no-device",
+              message: "No audio track from the selected microphone.",
+              raw: null,
+            };
+            setError(empty);
+            localAudioStreamRef.current = null;
+            setLocalAudioStream(null);
+          }
+          return;
+        }
+        if (unmountedRef.current) {
+          disposeAvStreamTracks(stream);
+          return;
+        }
+        if (isMicMutedRef.current) newTrack.enabled = false;
+        const ms = new MediaStream([newTrack]);
+        localAudioStreamRef.current = ms;
+        setLocalAudioStream(ms);
+        setError(null);
+
+        const gst = newTrack.getSettings?.();
+        const devIdPersist = gst?.deviceId ?? entry.deviceId;
+        pinnedMicEnumerateGroupRef.current =
+          gst?.groupId ?? entry.groupId ?? "";
+        selectedMicDeviceIdRef.current =
+          devIdPersist.length > 0 ? devIdPersist : null;
+        if (devIdPersist) {
+          setSelectedMicDeviceId(devIdPersist);
+        }
+
+        setPickedMicSlot(slotIndex);
+
+        const mesh = meshRef.current;
+        if (mesh && !mesh.isDisposed()) {
+          mesh.replaceLocalTrackOnAllPeers("audio", newTrack);
+        }
+        await refreshVideoDevices();
+        log.log(
+          `event=set-mic-slot slot=${slotIndex} deviceId=${devIdPersist.length > 0 ? devIdPersist : "<empty>"}`
+        );
+      } catch (err) {
+        if (!unmountedRef.current) {
+          localAudioStreamRef.current = null;
+          setLocalAudioStream(null);
+        }
+        if (unmountedRef.current) return;
+        const classified = classifyMediaError(err, "mic");
+        log.warn(
+          `setMicDeviceBySlot failed type=${classified.type} err=${
+            (err as Error)?.message ?? String(err)
+          }`
+        );
+        setError(classified);
+      } finally {
+        endAcquiring();
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- log stable per session
+    [
+      externalAudioStream,
+      swapMicFromRecorder,
+      swapMicBySlotFromRecorder,
+      log,
+      refreshVideoDevices,
+    ]
+  );
+
   const setMicDevice = useCallback(
     async (deviceId: string): Promise<void> => {
+      const slots = audioDevicesRef.current;
+      const slotIdx = slots.findIndex((d) => d.deviceId === deviceId);
+      if (slotIdx >= 0) {
+        return setMicDeviceBySlot(slotIdx, { force: true });
+      }
+
       if (swapMicFromRecorder) {
         if (!externalAudioStream) {
           log.warn(
@@ -2259,7 +2532,12 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- log + integration refs stable per session
-    [externalAudioStream, swapMicFromRecorder, log]
+    [
+      externalAudioStream,
+      swapMicFromRecorder,
+      log,
+      setMicDeviceBySlot,
+    ]
   );
 
   const toggleMic = useCallback(() => {
@@ -2387,6 +2665,11 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     pickedVideoCameraSlot,
     setVideoCameraBySlot,
     setVideoDevice,
+    audioDevices,
+    refreshAudioDeviceList: refreshVideoDevices,
+    selectedMicDeviceId,
+    pickedMicSlot,
+    setMicDeviceBySlot,
     setMicDevice,
   };
 }

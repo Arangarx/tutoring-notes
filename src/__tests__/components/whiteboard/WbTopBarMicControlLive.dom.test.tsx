@@ -12,6 +12,8 @@ jest.mock("@/hooks/useMicInputLevel", () => ({
   useMicInputLevel: () => 0.6,
 }));
 
+const defaultDevices = [] as MediaDeviceInfo[];
+
 describe("WbTopBarMicControlLive", () => {
   test("renders inline 3-bar mic meter on the toggle button (parity with tutor top bar)", () => {
     render(
@@ -19,11 +21,13 @@ describe("WbTopBarMicControlLive", () => {
         isMicMuted={false}
         hasMicPermission="granted"
         hasMicStream
+        audioDevices={defaultDevices}
+        selectedPickerSlot={0}
         showInlineMeter
         micStream={null}
         onToggleMute={jest.fn()}
         onAcquireMic={jest.fn()}
-        onMicDeviceChange={jest.fn()}
+        onPickMicSlot={jest.fn()}
       />
     );
 
@@ -38,9 +42,11 @@ describe("WbTopBarMicControlLive", () => {
         isMicMuted={false}
         hasMicPermission="granted"
         hasMicStream={false}
+        audioDevices={defaultDevices}
+        selectedPickerSlot={0}
         onToggleMute={jest.fn()}
         onAcquireMic={jest.fn()}
-        onMicDeviceChange={jest.fn()}
+        onPickMicSlot={jest.fn()}
       />
     );
 
@@ -56,15 +62,17 @@ describe("WbTopBarMicControlLive", () => {
         isMicMuted={false}
         hasMicPermission="prompt"
         hasMicStream={false}
+        audioDevices={defaultDevices}
+        selectedPickerSlot={0}
         isAcquiring
         onToggleMute={jest.fn()}
         onAcquireMic={jest.fn()}
-        onMicDeviceChange={jest.fn()}
+        onPickMicSlot={jest.fn()}
       />
     );
 
     await user.click(screen.getByTestId("wb-topbar-mic-settings"));
-    const select = screen.getByTestId("wb-topbar-mic-device-select");
-    expect(select).toHaveTextContent("(starting microphone…)");
+    const select = screen.getByTestId("audio-device-select");
+    expect(select).toHaveTextContent("(allow microphone access to choose)");
   });
 });

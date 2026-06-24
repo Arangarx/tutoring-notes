@@ -33,8 +33,9 @@ export type MicControlsProps = {
   /** Reference to the meter fill <div> so we can update its width/colour without re-rendering. */
   meterBarRef: React.RefObject<HTMLDivElement | null>;
   devices: MediaDeviceInfo[];
-  selectedDeviceId: string;
-  onDeviceChange: (deviceId: string) => void;
+  /** Index into {@link devices} — unique per enumerated row / label. */
+  selectedPickerSlot: number;
+  onPickMicSlot: (slotIndex: number) => void;
   gainLinear: number;
   onGainChange: (gain: number) => void;
   /** True when mic is hot (graph running) — controls are enabled, meter is live. */
@@ -56,8 +57,8 @@ export type MicControlsProps = {
 export default function MicControls({
   meterBarRef,
   devices,
-  selectedDeviceId,
-  onDeviceChange,
+  selectedPickerSlot,
+  onPickMicSlot,
   gainLinear,
   onGainChange,
   isLive,
@@ -74,6 +75,11 @@ export default function MicControls({
   const gainPct = ((gainLinear - GAIN_MIN) / (GAIN_MAX - GAIN_MIN)) * 100;
   const chimeVolPct =
     ((chimeVolume - CHIME_VOL_MIN) / (CHIME_VOL_MAX - CHIME_VOL_MIN)) * 100;
+  const safeSlot =
+    devices.length === 0
+      ? 0
+      : Math.min(Math.max(0, selectedPickerSlot), devices.length - 1);
+  const selectedLabel = devices[safeSlot]?.label ?? "";
 
   return (
     <div
@@ -105,12 +111,13 @@ export default function MicControls({
           data-testid="mic-device-select"
           className="mynk-wb-native-select"
           aria-label="Microphone device"
-          value={selectedDeviceId}
+          value={devices.length === 0 ? "" : String(safeSlot)}
           disabled={pickerDisabled}
-          onChange={(e) => onDeviceChange(e.target.value)}
-          title={
-            devices.find((d) => d.deviceId === selectedDeviceId)?.label || undefined
-          }
+          onChange={(e) => {
+            const idx = Number(e.target.value);
+            if (Number.isFinite(idx)) onPickMicSlot(idx);
+          }}
+          title={selectedLabel || undefined}
           style={{
             flex: 1,
             // `min-width: 0` lets a flex item shrink below its content size —
@@ -136,7 +143,10 @@ export default function MicControls({
             </option>
           ) : (
             devices.map((d, i) => (
-              <option key={d.deviceId || `default-${i}`} value={d.deviceId}>
+              <option
+                key={`${d.groupId}|${d.deviceId}|${i}`}
+                value={String(i)}
+              >
                 {d.label || `Microphone ${i + 1}`}
               </option>
             ))

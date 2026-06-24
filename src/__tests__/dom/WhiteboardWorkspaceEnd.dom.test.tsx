@@ -351,6 +351,7 @@ jest.mock("@/hooks/useAudioRecorder", () => {
       addRemoteAudio: () => () => {},
       devices: [],
       selectedDeviceId: "",
+      pickedMicSlot: 0,
       gainLinear: 1,
       setGainLinear: jest.fn(),
       chimeEnabled: false,

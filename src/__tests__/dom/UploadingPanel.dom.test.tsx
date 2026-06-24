@@ -11,8 +11,8 @@ function micControlsFixture(): MicControlsProps {
   return {
     meterBarRef: createRef<HTMLDivElement>(),
     devices: [],
-    selectedDeviceId: "",
-    onDeviceChange: () => {},
+    selectedPickerSlot: 0,
+    onPickMicSlot: () => {},
     gainLinear: 1,
     onGainChange: () => {},
     isLive: true,

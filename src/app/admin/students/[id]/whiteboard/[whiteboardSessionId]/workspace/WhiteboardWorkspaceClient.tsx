@@ -1634,6 +1634,8 @@ export function WhiteboardWorkspaceClient({
     sessionId: whiteboardSessionId,
     externalAudioStream: role === "tutor" ? workspaceAudio.localMicStream : undefined,
     swapMicDevice: role === "tutor" ? workspaceAudio.swapMicDevice : undefined,
+    swapMicDeviceBySlot:
+      role === "tutor" ? workspaceAudio.swapMicDeviceBySlot : undefined,
   });
 
   // Student A/V auto-request (role="student" only; tutor uses explicit UI).
@@ -5282,14 +5284,13 @@ export function WhiteboardWorkspaceClient({
             isMicMuted={liveAv.isMicMuted}
             hasMicPermission={liveAv.hasMicPermission}
             hasMicStream={liveAv.localAudioStream !== null}
-            activeMicDeviceId={
-              liveAv.localAudioStream?.getAudioTracks()[0]?.getSettings?.()
-                ?.deviceId ?? null
-            }
+            audioDevices={liveAv.audioDevices ?? []}
+            selectedPickerSlot={liveAv.pickedMicSlot}
             isAcquiring={liveAv.isAcquiring}
             onToggleMute={liveAv.toggleMic}
             onAcquireMic={handleAcquireMic}
-            onMicDeviceChange={(deviceId) => void liveAv.setMicDevice(deviceId)}
+            onPickMicSlot={(slot) => void liveAv.setMicDeviceBySlot(slot)}
+            onRefreshDevices={() => void liveAv.refreshAudioDeviceList()}
             disabled={!studentConnected}
           />
           <WbTopBarCamControl
@@ -5479,7 +5480,7 @@ export function WhiteboardWorkspaceClient({
             isMicMuted={liveAv.isMicMuted}
             onToggleMute={liveAv.toggleMic}
             onAcquireMic={handleAcquireMic}
-            onMicDeviceChange={(deviceId) => void liveAv.setMicDevice(deviceId)}
+            onPickMicSlot={(slot) => void liveAv.setMicDeviceBySlot(slot)}
             disabled={endingBusy}
           />
           <WbTopBarCamControl

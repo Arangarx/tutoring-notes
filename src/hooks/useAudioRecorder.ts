@@ -82,6 +82,11 @@ import {
   draftRowKey,
   getOrCreateRecordingDraftStore,
 } from "@/lib/recording/recording-draft-store";
+import {
+  fingerprintMediaTrackSettings,
+  getUserMediaAudioForEnumerateEntry,
+  reconcilePickerSlotAfterEnumerate,
+} from "@/lib/av/enumerate-device-acquire";
 
 /** Draft checkpoint interval (W1 Surface 1) — matches design cadence. */
 const DRAFT_CHECKPOINT_INTERVAL_MS = 30_000;
@@ -204,6 +209,8 @@ export type UseAudioRecorderReturn = {
   // Mic + prefs
   devices: MediaDeviceInfo[];
   selectedDeviceId: string;
+  /** Index into {@link devices} for slot-based picker (duplicate `deviceId` rows). */
+  pickedMicSlot: number;
   gainLinear: number;
   setGainLinear: (n: number) => void;
   chimeEnabled: boolean;
@@ -230,6 +237,7 @@ export type UseAudioRecorderReturn = {
   // Actions
   handleStartRecording: () => Promise<void> | void;
   handleDeviceChange: (deviceId: string) => Promise<void>;
+  handleMicSlotChange: (slotIndex: number) => Promise<void>;
   pauseRecording: () => void;
   resumeRecording: () => void;
   stopAndUpload: (mode?: "final" | "rollover") => void;
@@ -259,6 +267,8 @@ export type UseAudioRecorderReturn = {
   flushPendingUploads: () => Promise<void>;
   /** Hot-swap the mic while the Web Audio graph is live (workspace + live A/V). */
   swapMicDevice: (deviceId: string) => Promise<void>;
+  /** Slot-aware hot-swap — preferred when enumerate rows duplicate `deviceId`. */
+  swapMicDeviceBySlot: (slotIndex: number) => Promise<void>;
 };
 
 /** Decide bar colour by level — green/yellow/red zones for visible feedback. */
@@ -284,6 +294,7 @@ export function useAudioRecorder({
 
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
+  const [pickedMicSlot, setPickedMicSlot] = useState(0);
   const [gainLinear, setGainLinear] = useState<number>(GAIN_DEFAULT);
   // SSR-safe defaults; the real localStorage values are read in the mount
   // effect below. Reading localStorage from the useState initializer would
@@ -305,6 +316,9 @@ export function useAudioRecorder({
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const graphRef = useRef<MicAudioGraph | null>(null);
+  const devicesRef = useRef<MediaDeviceInfo[]>([]);
+  const pinnedMicEnumerateGroupRef = useRef("");
+  devicesRef.current = devices;
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedRef = useRef(initialElapsedSeconds);
   const rafRef = useRef<number | null>(null);
@@ -944,6 +958,9 @@ export function useAudioRecorder({
       saveStoredDeviceId(settings.deviceId);
       setSelectedDeviceId(settings.deviceId);
     }
+    if (settings?.groupId) {
+      pinnedMicEnumerateGroupRef.current = settings.groupId;
+    }
 
     // Enumerate AFTER permission so labels populate (browsers redact labels otherwise).
     try {
@@ -1070,6 +1087,111 @@ export function useAudioRecorder({
     }
   }
 
+  async function swapMicDeviceBySlot(slotIndex: number): Promise<void> {
+    const entry = devicesRef.current[slotIndex];
+    if (!entry) {
+      setError(
+        "That microphone is not available. Pick a different device or reconnect the USB mic."
+      );
+      throw new Error("invalid mic slot");
+    }
+
+    const graph = graphRef.current;
+    if (!graph?.swapLocalMicSource) {
+      if (!streamRef.current) {
+        await acquireMic({
+          deviceId: entry.deviceId || undefined,
+          forRecording: false,
+        });
+        setPickedMicSlot(slotIndex);
+        return;
+      }
+      setError(
+        "Cannot switch microphone — audio processing is unavailable in this browser."
+      );
+      throw new Error("mic graph swap unavailable");
+    }
+
+    const curTrack = streamRef.current?.getAudioTracks()[0];
+    const priorFp = curTrack
+      ? fingerprintMediaTrackSettings(curTrack.getSettings?.() ?? {})
+      : null;
+
+    let newStream: MediaStream;
+    try {
+      ({ stream: newStream } = await getUserMediaAudioForEnumerateEntry(
+        navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices),
+        entry,
+        devicesRef.current,
+        priorFp
+      ));
+    } catch (err) {
+      const name = err instanceof Error ? (err as DOMException).name : "";
+      console.error(
+        "[useAudioRecorder] swapMicDeviceBySlot getUserMedia failed:",
+        err
+      );
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        setError(
+          "Microphone access denied. Check browser permissions and try again."
+        );
+      } else if (name === "NotReadableError" || name === "TrackStartError") {
+        setError(
+          "Microphone is in use by another app. Close that app or pick a different device."
+        );
+      } else if (
+        name === "OverconstrainedError" ||
+        name === "ConstraintNotSatisfiedError"
+      ) {
+        setError(
+          "That microphone is not available. Pick a different device or reconnect the USB mic."
+        );
+      } else {
+        setError(
+          `Could not switch microphone (${name || "unknown"}). Try again.`
+        );
+      }
+      throw err;
+    }
+
+    try {
+      graph.swapLocalMicSource(newStream);
+      const prev = streamRef.current;
+      if (prev) {
+        for (const t of prev.getTracks()) {
+          try {
+            t.stop();
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+      streamRef.current = newStream;
+
+      const audioTrack = newStream.getAudioTracks?.()[0];
+      const settings = audioTrack?.getSettings?.();
+      if (settings?.deviceId) {
+        saveStoredDeviceId(settings.deviceId);
+        setSelectedDeviceId(settings.deviceId);
+      }
+      pinnedMicEnumerateGroupRef.current =
+        settings?.groupId ?? entry.groupId ?? "";
+      setPickedMicSlot(slotIndex);
+
+      setLocalMicStream(graph.publishStream);
+      setError(null);
+    } catch (err) {
+      for (const t of newStream.getTracks()) {
+        try {
+          t.stop();
+        } catch {
+          /* ignore */
+        }
+      }
+      throw err;
+    }
+  }
+
   function startMediaRecorder(opts?: { continuation?: boolean }) {
     const continuation = opts?.continuation ?? false;
     const stream = streamRef.current;
@@ -1163,7 +1285,40 @@ export function useAudioRecorder({
     }
   }
 
+  async function handleMicSlotChange(slotIndex: number) {
+    if (recordState === "recording" || recordState === "paused") {
+      try {
+        await swapMicDeviceBySlot(slotIndex);
+      } catch {
+        /* swapMicDeviceBySlot surfaces setError */
+      }
+      return;
+    }
+    const entry = devicesRef.current[slotIndex];
+    if (entry?.deviceId) {
+      setSelectedDeviceId(entry.deviceId);
+      saveStoredDeviceId(entry.deviceId);
+    }
+    setPickedMicSlot(slotIndex);
+    if (entry?.groupId) {
+      pinnedMicEnumerateGroupRef.current = entry.groupId;
+    }
+    if (recordState === "ready") {
+      await acquireMic({
+        deviceId: entry?.deviceId || undefined,
+        forRecording: false,
+      });
+    }
+  }
+
   async function handleDeviceChange(newDeviceId: string) {
+    const slotIdx = devicesRef.current.findIndex(
+      (d) => d.deviceId === newDeviceId
+    );
+    if (slotIdx >= 0) {
+      await handleMicSlotChange(slotIdx);
+      return;
+    }
     if (recordState === "recording" || recordState === "paused") {
       try {
         await swapMicDevice(newDeviceId);
@@ -1407,6 +1562,21 @@ export function useAudioRecorder({
     []
   );
 
+  useEffect(() => {
+    if (devices.length === 0) {
+      setPickedMicSlot(0);
+      return;
+    }
+    setPickedMicSlot((prev) =>
+      reconcilePickerSlotAfterEnumerate(
+        selectedDeviceId || null,
+        devices,
+        prev,
+        pinnedMicEnumerateGroupRef.current
+      )
+    );
+  }, [devices, selectedDeviceId]);
+
   return {
     state: recordState,
     uploadMode,
@@ -1418,6 +1588,7 @@ export function useAudioRecorder({
     setRemoteRecordingGain,
     devices,
     selectedDeviceId,
+    pickedMicSlot,
     gainLinear,
     setGainLinear,
     chimeEnabled,
@@ -1432,12 +1603,14 @@ export function useAudioRecorder({
     meterBarRef,
     handleStartRecording,
     handleDeviceChange,
+    handleMicSlotChange,
     pauseRecording,
     resumeRecording,
     stopAndUpload,
     handleReset,
     flushPendingUploads,
     swapMicDevice,
+    swapMicDeviceBySlot,
   };
 }
 
