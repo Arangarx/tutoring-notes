@@ -1,0 +1,52 @@
+---
+description: Every behavioral/visual bug fix ships a Playwright regression test in the same branch — no second Andrew smoke for the same regression.
+alwaysApply: true
+---
+
+# Playwright on every fix — no second smoke for the same bug
+
+Andrew should **never** have to hardware-smoke the same regression twice. If a bug was fixed, a Playwright test must exist that **fails on the pre-fix commit and passes on the fix** — in the **same branch**, not a follow-up.
+
+## Hard gate
+
+Any change that fixes user-observable **behavior**, **visual/layout**, **chrome interaction**, **sync/lifecycle copy**, or **multi-peer flows** MUST include a Playwright test in the same commit series.
+
+- **Location:** `tests/integration/*.spec.ts` (preferred — tutor+student relay harness).
+- **Merge gate enrollment:** add the spec (or new tests) to the `wb-regression` project in `playwright.config.ts` when the fix touches whiteboard, sync, chrome, recording UI, or live session flows.
+- **Visual baselines:** layout/chrome-only fixes may use `tests/visual/` when a screenshot oracle is the right guard.
+
+## What counts as coverage
+
+| Fix type | Playwright oracle (examples) |
+|---|---|
+| Sync / graph / strokes | Relay invariant, E2E bridge + `waitFor*` on peer state |
+| Banner / pill copy | `toHaveText` / `not.toContainText` on `data-testid` |
+| Chrome clickability | Click control → assert DOM/state change |
+| Alignment / sizing | `boundingBox()` midline compare (tolerance ≤ few px) |
+| Exit / rejoin / presence | Two-browser harness; assert pills, not waiting |
+
+Use an **independent oracle** (library transform, peer count, graphStateJson) — not constants back-derived from the buggy implementation.
+
+## Jest is not enough
+
+`jest` / jsdom **do not** satisfy this rule for layout, coordinates, flyout clipping, real render cadence, or Excalidraw embed behavior. Jest may supplement; it does not replace Playwright for these surfaces.
+
+## Narrow exceptions (rare — must be explicit)
+
+Some failures only reproduce on **real external environments** with no hermetic stand-in (e.g. Teams desktop WebRTC, iOS Safari background suspension, device-only GPU quirks).
+
+When Playwright truly cannot approximate the failure:
+
+1. Add the **closest surrogate** test that catches the wiring/class of bug (split-brain banner when sync roster present ≠ Teams ICE).
+2. If no surrogate is credible: `test.describe.skip` with a `// PLAYWRIGHT-GAP:` comment naming the gap + a **`docs/BACKLOG.md`** entry.
+3. **Silent omission is forbidden** — orchestrator blocks merge without a named test OR a documented gap.
+
+## Orchestrator + executor checklist
+
+Before calling a fix wave done:
+
+- [ ] Each bug in the fix list maps to **one Playwright test** (`file` → `test("…")` title).
+- [ ] New specs are in `wb-regression` (or visual project) so `npm run test:wb-playwright` / `test:wb-sync` runs them.
+- [ ] Handoff names the tests — Andrew's smokebook validates **new** surface area only, not re-proof of old regressions.
+
+**Rule of thumb:** If Andrew already smoked it and it broke again, we failed this rule.
