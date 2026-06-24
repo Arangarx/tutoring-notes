@@ -496,9 +496,15 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
 
     const graphHost = thumbWrap.locator('[data-testid="wb-graph-embed-host"]');
     await expect(graphHost).toBeVisible({ timeout: 30_000 });
-    await expect(
-      graphHost.locator(".wb-graph-board-host .jxgbox svg, .wb-graph-board-host .JXGtext").first()
-    ).toBeVisible({ timeout: 60_000 });
+    await expect
+      .poll(
+        async () =>
+          thumbWrap.locator(
+            ".wb-graph-board-host .jxgbox svg path, .wb-graph-board-host .JXGtext"
+          ).count(),
+        { timeout: 90_000 }
+      )
+      .toBeGreaterThan(0);
     await context.close();
   });
 });

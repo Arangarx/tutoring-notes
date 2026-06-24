@@ -106,6 +106,7 @@ function ReviewGraphOnlyThumbnail({
     <div
       className={`wb-review-board-thumbnail wb-review-board-thumbnail--graph${className ? ` ${className}` : ""}`}
       data-testid="wb-review-board-thumbnail"
+      style={{ minHeight: 320, width: "100%", maxWidth: 720 }}
     >
       <GraphEmbeddable element={element} readOnly />
     </div>
