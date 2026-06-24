@@ -721,30 +721,33 @@
   min-height: 60px;
 }
 
-.mynk-wb-av-cluster__controls {
+/* Local-tile mic/cam overlay — on self preview only (SR-04 UX). */
+.mynk-wb-av-tile-local-controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
   display: flex;
+  justify-content: center;
   gap: 4px;
   padding: 6px 8px;
-  border-top: 1px solid var(--border);
-  justify-content: center;
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--surface-tile-solid) 92%, transparent),
+    color-mix(in srgb, var(--surface-tile-solid) 55%, transparent) 55%,
+    transparent
+  );
+  pointer-events: auto;
 }
 
-.mynk-wb-av-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  background: transparent;
-  color: var(--foreground);
-  transition: background 0.12s;
+.mynk-wb-av-tile-local-controls .mynk-wb-tb-btn--icon {
+  width: 28px;
+  height: 28px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
 }
 
-/* AV on/off — panel cluster + top-bar mic/camera (subtle accent, not stark inverse). */
-.mynk-wb-av-btn--on,
+/* AV on/off — top-bar mic/camera + local-tile overlay (same tb-btn modifiers). */
 .mynk-wb-tb-btn--cam-on,
 .mynk-wb-tb-btn--mic-on {
   background: color-mix(in srgb, var(--accent) 14%, var(--surface-2));
@@ -753,7 +756,6 @@
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
-.mynk-wb-av-btn--off,
 .mynk-wb-tb-btn--cam-off,
 .mynk-wb-tb-btn--mic-off {
   color: color-mix(in srgb, var(--destructive) 85%, var(--text-muted));
@@ -780,16 +782,6 @@
   background: color-mix(in srgb, var(--destructive) 11%, var(--surface-2));
   color: color-mix(in srgb, var(--destructive) 90%, var(--foreground));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--destructive) 22%, var(--border));
-}
-
-.mynk-wb-av-btn--on:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 20%, var(--surface-2));
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-}
-
-.mynk-wb-av-btn--off:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--destructive) 11%, var(--surface-2));
-  border-color: color-mix(in srgb, var(--destructive) 35%, var(--border));
 }
 
 .mynk-wb-av-cluster__resize-handle {
@@ -2875,4 +2867,36 @@
   top: 0;
   vertical-align: middle;
   margin: 0;
+}
+
+/* Native <select> in WB chrome (mic/cam device pickers).
+ * Windows Chrome paints the open list with a light system surface while
+ * inherited light --text stays light-on-dark → unreadable options (Andrew
+ * 2026-06-24 smoke). Force color-scheme + explicit option colors. */
+:root:not([data-theme="light"]) .mynk-wb-chrome .mynk-wb-native-select,
+[data-theme="dark"] .mynk-wb-chrome .mynk-wb-native-select {
+  color-scheme: dark;
+  background-color: var(--surface-2);
+  color: var(--text-strong);
+  border: 1px solid var(--border-default);
+}
+
+:root:not([data-theme="light"]) .mynk-wb-chrome .mynk-wb-native-select option,
+[data-theme="dark"] .mynk-wb-chrome .mynk-wb-native-select option {
+  background-color: var(--surface-elevated);
+  color: var(--text-strong);
+}
+
+:root[data-theme="light"] .mynk-wb-chrome .mynk-wb-native-select,
+.mynk-wb-chrome[data-theme="light"] .mynk-wb-native-select {
+  color-scheme: light;
+  background-color: var(--surface-input);
+  color: var(--text-strong);
+  border: 1px solid var(--border-default);
+}
+
+:root[data-theme="light"] .mynk-wb-chrome .mynk-wb-native-select option,
+.mynk-wb-chrome[data-theme="light"] .mynk-wb-native-select option {
+  background-color: var(--surface-1);
+  color: var(--text-strong);
 }

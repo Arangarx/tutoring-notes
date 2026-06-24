@@ -845,9 +845,9 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
     liveAvVideoDevices = [makeFakeVideoDevice("cam1")];
     await renderWorkspace();
 
-    // The WbAVCluster has data-testid="av-controls" containing the cam button.
+    // Mic/cam controls overlay the local preview tile (data-testid="av-controls").
     const avControls = screen.getByTestId("av-controls");
-    const camBtn = within(avControls).getByRole("button", { name: /turn camera on/i });
+    const camBtn = within(avControls).getByRole("button", { name: /turn your camera on/i });
 
     await act(async () => {
       fireEvent.click(camBtn);

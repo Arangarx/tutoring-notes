@@ -675,13 +675,6 @@ export function useWhiteboardRecorder(
       viewportHeight?: number
     ) => {
       if (!recordingActiveRef.current) {
-        // Diagnostic only — fires on every pan/zoom that happens before
-        // the student joins / solo-rehearsal allows. Confirms whether
-        // the workspace's recordViewport call site reached the recorder
-        // (smoke debugging for replay-viewport-empty cases).
-        console.info(
-          `[pvs] action=record-viewport skip=recording-inactive panX=${panX} panY=${panY} zoom=${zoom}`
-        );
         return;
       }
       if (!Number.isFinite(panX) || !Number.isFinite(panY)) return;

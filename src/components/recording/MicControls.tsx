@@ -103,6 +103,7 @@ export default function MicControls({
         </span>
         <select
           data-testid="mic-device-select"
+          className="mynk-wb-native-select"
           aria-label="Microphone device"
           value={selectedDeviceId}
           disabled={pickerDisabled}

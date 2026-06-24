@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { AVTilesPanel, type AVTilesPanelProps } from "@/components/av/AVTilesPanel";
-import { WbIconCamera, WbIconMic } from "@/components/whiteboard/chrome/wb-icons";
 import type { WbLayoutMode } from "@/components/whiteboard/chrome/useWbLayoutMode";
 
 export type WbAVClusterProps = AVTilesPanelProps & {
@@ -21,8 +20,8 @@ const DEFAULT_SIZE = { width: 240, height: 280 };
 const MIN_SIZE = { width: 160, height: 180 };
 const MAX_SIZE = { width: 400, height: 480 };
 
-/** Chrome overhead: drag handle + tiles padding + controls row (matches whiteboard-chrome.css). */
-const CLUSTER_CHROME_HEIGHT = 14 + 8 + 45;
+/** Chrome overhead: drag handle + tiles padding (controls live on local tile). */
+const CLUSTER_CHROME_HEIGHT = 14 + 4;
 const TILE_GAP = 4;
 /** Video body height for one tile at the default cluster size (280 − chrome). */
 const PER_TILE_BODY_HEIGHT = DEFAULT_SIZE.height - CLUSTER_CHROME_HEIGHT;
@@ -31,7 +30,7 @@ const AUTO_GROW_MAX_HEIGHT = 560;
 const CLUSTER_TOP_INSET = 16;
 const CLUSTER_BOTTOM_MARGIN = 16;
 
-/** 67 + N×213 + (N−1)×4 — symmetric grow/shrink; no highwater state. */
+/** 18 + N×262 + (N−1)×4 — symmetric grow/shrink; no highwater state. */
 function computeAutoClusterHeight(tileCount: number): number {
   if (tileCount <= 0) return DEFAULT_SIZE.height;
   const tilesBody =
@@ -271,29 +270,13 @@ export function WbAVCluster({
           {...tilesProps}
           testId="av-tiles-panel"
           className="mynk-wb-av-cluster__tiles-panel"
+          localMediaControls={{
+            onToggleMic,
+            onToggleCam,
+            disabled,
+            camDisabled,
+          }}
         />
-      </div>
-      <div className="mynk-wb-av-cluster__controls" data-testid="av-controls">
-        <button
-          type="button"
-          className={`mynk-wb-av-btn${!isMicMuted ? " mynk-wb-av-btn--on" : " mynk-wb-av-btn--off"}`}
-          title={isMicMuted ? "Unmute microphone" : "Mute microphone"}
-          aria-label={isMicMuted ? "Unmute microphone" : "Mute microphone"}
-          disabled={disabled}
-          onClick={onToggleMic}
-        >
-          <WbIconMic size={13} />
-        </button>
-        <button
-          type="button"
-          className={`mynk-wb-av-btn${!isCamMuted ? " mynk-wb-av-btn--on" : " mynk-wb-av-btn--off"}`}
-          title={camDisabled ? "Camera unavailable" : isCamMuted ? "Turn camera on" : "Turn camera off"}
-          aria-label={camDisabled ? "Camera unavailable" : isCamMuted ? "Turn camera on" : "Turn camera off"}
-          disabled={disabled || camDisabled}
-          onClick={onToggleCam}
-        >
-          <WbIconCamera size={13} />
-        </button>
       </div>
       {!isMobileLayout && (
         <div

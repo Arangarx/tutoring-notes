@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { UseAudioRecorderReturn } from "@/hooks/useAudioRecorder";
 import MicControls from "@/components/recording/MicControls";
+import { WbInlineMicMeter } from "@/components/whiteboard/chrome/WbInlineMicMeter";
 import { WbIconMic } from "@/components/whiteboard/chrome/wb-icons";
 
 type Props = {
@@ -13,25 +14,6 @@ type Props = {
   onMicDeviceChange?: (deviceId: string) => void | Promise<void>;
   disabled?: boolean;
 };
-
-/** Three-bar inline meter — matches session shell mock top-bar mic button. */
-function WbInlineMicMeter({ level }: { level: number }) {
-  const bars = [
-    { min: 0.05, h: "b1" },
-    { min: 0.25, h: "b2" },
-    { min: 0.55, h: "b3" },
-  ] as const;
-  return (
-    <div className="mynk-wb-mic-meter" aria-hidden>
-      {bars.map(({ min, h }) => (
-        <div
-          key={h}
-          className={`mynk-wb-mic-bar mynk-wb-mic-bar--${h}${level >= min ? " mynk-wb-mic-bar--active" : ""}`}
-        />
-      ))}
-    </div>
-  );
-}
 
 /**
  * Top-bar mic control: inline icon + 3-bar meter; device/boost/level/chime in popover.

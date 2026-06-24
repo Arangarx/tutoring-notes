@@ -4,6 +4,62 @@
  * (e.g. tests with a stub MediaStream).
  */
 
+/** Map analyser time-domain RMS into the 0–1 meter range (tutor + student). */
+export function readAnalyserRmsLevel(
+  analyser: AnalyserNode,
+  data: Float32Array
+): number {
+  analyser.getFloatTimeDomainData(data);
+  let sum = 0;
+  for (let i = 0; i < data.length; i++) {
+    const v = data[i] ?? 0;
+    sum += v * v;
+  }
+  const rms = Math.sqrt(sum / data.length);
+  // Map typical speech RMS (~0.01–0.2) into a visible 0–1 range.
+  return Math.min(1, rms * 4.5);
+}
+
+export type MicLevelMonitor = {
+  getLevel: () => number;
+  dispose: () => void;
+};
+
+/**
+ * Lightweight analyser tap for live-A/V mic metering (student top bar).
+ * Does NOT stop tracks on dispose — the stream is owned by `useLiveAV`.
+ */
+export async function createMicLevelMonitor(
+  micStream: MediaStream
+): Promise<MicLevelMonitor | null> {
+  try {
+    const audioContext = new AudioContext();
+    await audioContext.resume();
+    const source = audioContext.createMediaStreamSource(micStream);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.65;
+    source.connect(analyser);
+    const data = new Float32Array(analyser.fftSize);
+    let disposed = false;
+    return {
+      getLevel: () => readAnalyserRmsLevel(analyser, data),
+      dispose: () => {
+        if (disposed) return;
+        disposed = true;
+        try {
+          source.disconnect();
+        } catch {
+          /* ignore */
+        }
+        void audioContext.close();
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
 export type CreateMicAudioGraphOptions = {
   /** Same id as live-A/V `avx=` for correlating logs (`whiteboardSessionId`). */
   sessionId?: string;
@@ -181,17 +237,7 @@ export async function createMicAudioGraph(
         }
         void audioContext.close();
       },
-      getLevel: () => {
-        analyser.getFloatTimeDomainData(data);
-        let sum = 0;
-        for (let i = 0; i < data.length; i++) {
-          const v = data[i] ?? 0;
-          sum += v * v;
-        }
-        const rms = Math.sqrt(sum / data.length);
-        // Map typical speech RMS (~0.01–0.2) into a visible 0–1 range.
-        return Math.min(1, rms * 4.5);
-      },
+      getLevel: () => readAnalyserRmsLevel(analyser, data),
       setGain: (g: number) => {
         gainNode.gain.value = Math.max(0, g);
       },

@@ -793,11 +793,21 @@ describe("AVTile — local preview tile", () => {
     expect(screen.getByTestId("av-tile-state-self").textContent).toMatch(/You/);
   });
 
-  test("local mic-muted overlay appears when localMicMuted=true", () => {
+  test("local mic-off control when localMicMuted=true and localMediaControls set", () => {
     render(
-      <AVTile participant={localDescriptor()} isLocal localMicMuted />
+      <AVTile
+        participant={localDescriptor()}
+        isLocal
+        localMicMuted
+        localMediaControls={{
+          onToggleMic: jest.fn(),
+          onToggleCam: jest.fn(),
+        }}
+      />
     );
-    expect(screen.getByTestId("av-tile-local-mic-muted-self")).toBeTruthy();
+    const micBtn = screen.getByTestId("av-controls-toggle-mic");
+    expect(micBtn.className).toContain("mynk-wb-tb-btn--mic-off");
+    expect(micBtn.getAttribute("aria-pressed")).toBe("false");
   });
 
   test("local cam placeholder appears when localCamMuted=true (even if stream has tracks)", () => {

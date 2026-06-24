@@ -58,6 +58,7 @@ import {
   getDeterministicColorFromPeerId,
   getInitialsFromLabel,
 } from "@/components/av/initials-from-label";
+import { WbIconCamera, WbIconMic } from "@/components/whiteboard/chrome/wb-icons";
 
 /**
  * Subset of `AvParticipant` the tile actually reads. The host passes
@@ -75,6 +76,14 @@ export type AVTileParticipant =
       videoStream: MediaStream | null;
       isLocal: true;
     };
+
+/** Mic/cam toggles overlaid on the local preview tile (self only). */
+export type AVTileLocalMediaControls = {
+  onToggleMic: () => void;
+  onToggleCam: () => void;
+  disabled?: boolean;
+  camDisabled?: boolean;
+};
 
 export type AVTileProps = {
   participant: AVTileParticipant;
@@ -106,6 +115,12 @@ export type AVTileProps = {
    * tests can grab a specific tile when multiple are rendered.
    */
   testId?: string;
+  /**
+   * When set on the local tile, renders mic/cam toggles as an overlay
+   * on the self preview (not a shared cluster footer — avoids "controls
+   * for the other person" confusion).
+   */
+  localMediaControls?: AVTileLocalMediaControls;
 };
 
 /**
@@ -120,6 +135,7 @@ export function AVTile({
   localCamMuted,
   onReconnect,
   testId,
+  localMediaControls,
 }: AVTileProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -491,23 +507,52 @@ export function AVTile({
             Tap to hear audio
           </button>
         )}
-        {isLocalTile && localMicMuted === true && (
-          <span
-            data-testid={`av-tile-local-mic-muted-${participant.peerId}`}
-            style={{
-              position: "absolute",
-              top: 6,
-              right: 6,
-              padding: "2px 6px",
-              fontSize: 10,
-              fontWeight: 600,
-              borderRadius: 4,
-              background: "var(--error)",
-              color: "white",
-            }}
+        {isLocalTile && localMediaControls && (
+          <div
+            className="mynk-wb-av-tile-local-controls"
+            data-testid="av-controls"
           >
-            Muted
-          </span>
+            <button
+              type="button"
+              className={`mynk-wb-tb-btn mynk-wb-tb-btn--icon${
+                localMicMuted ? " mynk-wb-tb-btn--mic-off" : " mynk-wb-tb-btn--mic-on"
+              }`}
+              title={localMicMuted ? "Unmute your microphone" : "Mute your microphone"}
+              aria-label={localMicMuted ? "Unmute your microphone" : "Mute your microphone"}
+              aria-pressed={!localMicMuted}
+              disabled={localMediaControls.disabled}
+              onClick={localMediaControls.onToggleMic}
+              data-testid="av-controls-toggle-mic"
+            >
+              <WbIconMic size={13} />
+            </button>
+            <button
+              type="button"
+              className={`mynk-wb-tb-btn mynk-wb-tb-btn--icon${
+                localCamMuted ? " mynk-wb-tb-btn--cam-off" : " mynk-wb-tb-btn--cam-on"
+              }`}
+              title={
+                localMediaControls.camDisabled
+                  ? "Camera unavailable"
+                  : localCamMuted
+                    ? "Turn your camera on"
+                    : "Turn your camera off"
+              }
+              aria-label={
+                localMediaControls.camDisabled
+                  ? "Camera unavailable"
+                  : localCamMuted
+                    ? "Turn your camera on"
+                    : "Turn your camera off"
+              }
+              aria-pressed={!localCamMuted}
+              disabled={localMediaControls.disabled || localMediaControls.camDisabled}
+              onClick={localMediaControls.onToggleCam}
+              data-testid="av-controls-toggle-cam"
+            >
+              <WbIconCamera size={13} />
+            </button>
+          </div>
         )}
       </div>
       <div

@@ -67,6 +67,10 @@ export function useExcalidrawLoadingGuard({
     if (!excalidrawAPI) return;
     wjgLog("excalidraw_api_ready");
 
+    // Sync/scene may have cleared loading before the API ref landed — do not
+    // start a watchdog that would false-positive "Board is taking too long".
+    if (clearedRef.current) return;
+
     const api = excalidrawAPI as WbChromeApiExt;
     const appState = api.getAppState?.() as { isLoading?: boolean } | undefined;
     const isLoading = appState?.isLoading;
@@ -76,6 +80,7 @@ export function useExcalidrawLoadingGuard({
     }
 
     watchdogRef.current = setTimeout(() => {
+      if (clearedRef.current) return;
       const stillAppState = api.getAppState?.() as { isLoading?: boolean } | undefined;
       const stillLoading = stillAppState?.isLoading;
       if (stillLoading !== true) {

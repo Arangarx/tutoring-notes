@@ -1281,6 +1281,13 @@ export function WhiteboardWorkspaceClient({
     }
   }, [role, studentConnected, studentOtherPeerCount, markLoadingCleared]);
 
+  useEffect(() => {
+    if (role !== "student") return;
+    if (tutorStreamReady) {
+      markLoadingCleared("remote_scene");
+    }
+  }, [role, tutorStreamReady, markLoadingCleared]);
+
   // Gate laser pointer origin by role (tutor uses tutor refs; student uses student refs)
   useCollaboratorPointers(
     role === "student" ? studentSyncClient : sync,
@@ -2512,9 +2519,11 @@ export function WhiteboardWorkspaceClient({
           : source === "page-switch-preflush"
             ? "page-switch"
             : "visibility";
-      console.info(
-        `[pvs] pvs=${pid} action=flush source=${srcTag} panX=${vs.panX} panY=${vs.panY} zoom=${vs.zoom}`
-      );
+      if (role !== "student") {
+        console.info(
+          `[pvs] pvs=${pid} action=flush source=${srcTag} panX=${vs.panX} panY=${vs.panY} zoom=${vs.zoom}`
+        );
+      }
       if (sync && syncUrl) {
         sync.broadcastPageViewState({
           pageId: pid,
@@ -2522,22 +2531,25 @@ export function WhiteboardWorkspaceClient({
           panY: vs.panY,
           zoom: vs.zoom,
         });
-        console.info(
-          `[pvs] pvs=${pid} action=wire-emit source=${srcTag} panX=${vs.panX} panY=${vs.panY} zoom=${vs.zoom}`
-        );
+        if (role !== "student") {
+          console.info(
+            `[pvs] pvs=${pid} action=wire-emit source=${srcTag} panX=${vs.panX} panY=${vs.panY} zoom=${vs.zoom}`
+          );
+        }
         // v3 document carries `follow` + per-row viewState; pageViewState alone
         // is not enough for first-time origin-aligned follow on the student.
         scheduleDocumentBroadcastRef.current();
       }
-      // Phase 5 task 8 (replay tier-c-lite): also append to the event log
-      // so replay's camera tracks the same cadence as live. No-op when
-      // recording isn't active (gated inside recorder.recordViewport).
-      recorderRecordViewportRef.current?.(vs.panX, vs.panY, vs.zoom);
+      // Replay viewport log is tutor-only (student recordingActive is always false).
+      if (role !== "student") {
+        recorderRecordViewportRef.current?.(vs.panX, vs.panY, vs.zoom);
+      }
       flushSessionBoardDocumentNow();
     },
     [
       clearViewportPersistTimer,
       flushSessionBoardDocumentNow,
+      role,
       sync,
       syncUrl,
     ]
@@ -5268,6 +5280,7 @@ export function WhiteboardWorkspaceClient({
             isMicMuted={liveAv.isMicMuted}
             hasMicPermission={liveAv.hasMicPermission}
             hasMicStream={liveAv.localAudioStream !== null}
+            micStream={liveAv.localAudioStream}
             onToggleMute={liveAv.toggleMic}
             onAcquireMic={handleAcquireMic}
             onMicDeviceChange={(deviceId) => void liveAv.setMicDevice(deviceId)}

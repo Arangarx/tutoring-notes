@@ -7,12 +7,16 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { WbInlineMicMeter } from "@/components/whiteboard/chrome/WbInlineMicMeter";
 import { WbIconMic } from "@/components/whiteboard/chrome/wb-icons";
+import { useMicInputLevel } from "@/hooks/useMicInputLevel";
 
 type Props = {
   isMicMuted: boolean;
   hasMicPermission: "unknown" | "prompt" | "granted" | "denied";
   hasMicStream: boolean;
+  /** Live mic stream from `useLiveAV.localAudioStream` — drives inline meter. */
+  micStream?: MediaStream | null;
   onToggleMute: () => void;
   onAcquireMic: () => void | Promise<void>;
   onMicDeviceChange: (deviceId: string) => void | Promise<void>;
@@ -23,6 +27,7 @@ export function WbTopBarMicControlLive({
   isMicMuted,
   hasMicPermission,
   hasMicStream,
+  micStream = null,
   onToggleMute,
   onAcquireMic,
   onMicDeviceChange,
@@ -32,6 +37,9 @@ export function WbTopBarMicControlLive({
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const wrapRef = useRef<HTMLDivElement>(null);
+  const meterLevel = useMicInputLevel(
+    hasMicStream && !isMicMuted ? micStream : null
+  );
 
   useEffect(() => {
     if (hasMicPermission !== "granted") return;
@@ -116,6 +124,7 @@ export function WbTopBarMicControlLive({
         data-testid="wb-topbar-mic-toggle"
       >
         <WbIconMic />
+        <WbInlineMicMeter level={meterLevel} />
       </button>
       <div className="mynk-wb-mic-settings-anchor" ref={wrapRef}>
         <button
@@ -145,6 +154,7 @@ export function WbTopBarMicControlLive({
                 Microphone
               </span>
               <select
+                className="mynk-wb-native-select"
                 value={selectedDeviceId}
                 disabled={disabled || devices.length === 0}
                 onChange={(e) => {

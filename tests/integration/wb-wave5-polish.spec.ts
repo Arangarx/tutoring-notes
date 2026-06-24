@@ -65,6 +65,55 @@ async function readGridEnabled(page: Page, role: "tutor" | "student"): Promise<b
   }, role);
 }
 
+/** Parse rgb()/rgba() for contrast oracle (native select option list). */
+function rgbTriplet(css: string): [number, number, number] | null {
+  const m = css.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+  if (!m) return null;
+  return [Number(m[1]), Number(m[2]), Number(m[3])];
+}
+
+function avgChannel(triplet: [number, number, number]): number {
+  return (triplet[0] + triplet[1] + triplet[2]) / 3;
+}
+
+async function assertNativeSelectReadable(page: Page, selectTestId: string) {
+  const styles = await page.evaluate((testId) => {
+    const sel = document.querySelector(`[data-testid="${testId}"]`);
+    const opt = sel?.querySelector("option");
+    if (!sel || !opt) return null;
+    const sc = getComputedStyle(sel);
+    const oc = getComputedStyle(opt);
+    return {
+      colorScheme: sc.colorScheme,
+      selectColor: sc.color,
+      selectBg: sc.backgroundColor,
+      optionColor: oc.color,
+      optionBg: oc.backgroundColor,
+    };
+  }, selectTestId);
+  expect(styles).not.toBeNull();
+  expect(styles!.colorScheme).toMatch(/dark/i);
+
+  const optColor = rgbTriplet(styles!.optionColor);
+  const optBg = rgbTriplet(styles!.optionBg);
+  expect(optColor).not.toBeNull();
+  expect(optBg).not.toBeNull();
+
+  const bgLight = avgChannel(optBg!) > 180;
+  const textLight = avgChannel(optColor!) > 180;
+  expect(bgLight && textLight).toBe(false);
+
+  const selColor = rgbTriplet(styles!.selectColor);
+  const selBg = rgbTriplet(styles!.selectBg);
+  expect(selColor).not.toBeNull();
+  expect(selBg).not.toBeNull();
+  const closedBgLight = avgChannel(selBg!) > 180;
+  const closedTextLight = avgChannel(selColor!) > 180;
+  if (closedBgLight) {
+    expect(closedTextLight).toBe(false);
+  }
+}
+
 /**
  * Wave 5 polish smokebook — Playwright coverage for items 1–6, 7, 10, 11, 13.
  * Items 8/12 (12e) and 9 (12d) live in whiteboard-live-sync-regression.spec.ts.
@@ -411,6 +460,39 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
       "aria-pressed",
       "true"
     );
+    await context.close();
+  });
+
+  test("native select — mic/cam device pickers readable on dark theme (regression)", async ({
+    browser,
+  }) => {
+    test.setTimeout(120_000);
+    const session = await seedWbLiveSyncSession();
+    const context = await browser.newContext({
+      storageState: "tests/integration/.auth/tutor.json",
+      viewport: { width: 1280, height: 900 },
+      permissions: ["microphone", "camera"],
+      colorScheme: "dark",
+    });
+    const page = await context.newPage();
+    await loadTutorBoard(page, session);
+
+    await page.getByTestId("wb-topbar-mic-settings").click();
+    await expect(page.getByTestId("mic-device-select")).toBeVisible({
+      timeout: 10_000,
+    });
+    await assertNativeSelectReadable(page, "mic-device-select");
+
+    await page.keyboard.press("Escape");
+    const camCaret = page.getByTestId("wb-topbar-cam-settings");
+    if (await camCaret.isVisible()) {
+      await camCaret.click();
+      const videoSelect = page.getByTestId("video-device-select");
+      if (await videoSelect.isVisible()) {
+        await assertNativeSelectReadable(page, "video-device-select");
+      }
+    }
+
     await context.close();
   });
 
