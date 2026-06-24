@@ -16,6 +16,9 @@ type Props = {
   isMicMuted: boolean;
   hasMicPermission: "unknown" | "prompt" | "granted" | "denied";
   hasMicStream: boolean;
+  /** Active track device id — keeps the picker aligned after acquire. */
+  activeMicDeviceId?: string | null;
+  isAcquiring?: boolean;
   /**
    * When true, tap the live mic stream for the inline 3-bar meter.
    * Must stay false on student `useLiveAV` publish streams — a Web Audio
@@ -36,6 +39,8 @@ export function WbTopBarMicControlLive({
   isMicMuted,
   hasMicPermission,
   hasMicStream,
+  activeMicDeviceId = null,
+  isAcquiring = false,
   showInlineMeter = false,
   micStream = null,
   onToggleMute,
@@ -51,31 +56,36 @@ export function WbTopBarMicControlLive({
     showInlineMeter && hasMicStream && !isMicMuted ? micStream : null
   );
 
-  useEffect(() => {
-    // Re-enumerate after permission OR first successful acquire — labels
-    // stay blank until getUserMedia has run at least once on many browsers.
-    if (hasMicPermission !== "granted" && !hasMicStream) return;
-    let cancelled = false;
-    const refresh = async () => {
-      try {
-        const all = await navigator.mediaDevices.enumerateDevices();
-        if (cancelled) return;
-        const mics = all.filter((d) => d.kind === "audioinput");
-        setDevices(mics);
-        if (!selectedDeviceId && mics[0]?.deviceId) {
-          setSelectedDeviceId(mics[0].deviceId);
-        }
-      } catch {
-        //
+  const refreshMicDevices = useCallback(async () => {
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.enumerateDevices) {
+      return;
+    }
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      const mics = all.filter((d) => d.kind === "audioinput");
+      setDevices(mics);
+      const preferred = activeMicDeviceId || mics[0]?.deviceId || "";
+      if (preferred) {
+        setSelectedDeviceId(preferred);
       }
-    };
-    void refresh();
-    navigator.mediaDevices?.addEventListener("devicechange", refresh);
+    } catch {
+      //
+    }
+  }, [activeMicDeviceId]);
+
+  useEffect(() => {
+    if (hasMicPermission !== "granted" && !hasMicStream) return;
+    void refreshMicDevices();
+    navigator.mediaDevices?.addEventListener("devicechange", refreshMicDevices);
     return () => {
-      cancelled = true;
-      navigator.mediaDevices?.removeEventListener("devicechange", refresh);
+      navigator.mediaDevices?.removeEventListener("devicechange", refreshMicDevices);
     };
-  }, [hasMicPermission, hasMicStream, selectedDeviceId]);
+  }, [hasMicPermission, hasMicStream, refreshMicDevices]);
+
+  useEffect(() => {
+    if (!popoverOpen) return;
+    void refreshMicDevices();
+  }, [popoverOpen, refreshMicDevices]);
 
   useEffect(() => {
     if (!popoverOpen) return;
@@ -88,14 +98,19 @@ export function WbTopBarMicControlLive({
     return () => document.removeEventListener("mousedown", onDoc);
   }, [popoverOpen]);
 
-  // Only hard-disable when permission is denied. An empty pre-enumerate
-  // device list (common before the first getUserMedia) must not block acquire.
   const micUnavailable = hasMicPermission === "denied";
+
+  const micPickerPlaceholder = (() => {
+    if (hasMicPermission === "denied") return "(microphone permission denied)";
+    if (isAcquiring) return "(starting microphone…)";
+    if (hasMicStream) return "(default microphone)";
+    return "(allow microphone access to choose)";
+  })();
 
   const btnTitle =
     hasMicPermission === "denied"
       ? "Microphone permission denied"
-      : hasMicPermission === "granted" && devices.length === 0
+      : hasMicPermission === "granted" && devices.length === 0 && hasMicStream
         ? "No microphone found"
         : isMicMuted
           ? "Unmute microphone"
@@ -161,20 +176,25 @@ export function WbTopBarMicControlLive({
               </span>
               <select
                 className="mynk-wb-native-select"
-                value={selectedDeviceId}
-                disabled={disabled || devices.length === 0}
+                value={devices.length === 0 ? "" : selectedDeviceId}
+                disabled={disabled || (devices.length === 0 && !hasMicStream)}
                 onChange={(e) => {
                   const id = e.target.value;
+                  if (!id) return;
                   setSelectedDeviceId(id);
                   void onMicDeviceChange(id);
                 }}
                 data-testid="wb-topbar-mic-device-select"
               >
-                {devices.map((d, i) => (
-                  <option key={d.deviceId || `mic-${i}`} value={d.deviceId}>
-                    {d.label || `Microphone ${i + 1}`}
-                  </option>
-                ))}
+                {devices.length === 0 ? (
+                  <option value="">{micPickerPlaceholder}</option>
+                ) : (
+                  devices.map((d, i) => (
+                    <option key={d.deviceId || `mic-${i}`} value={d.deviceId}>
+                      {d.label || `Microphone ${i + 1}`}
+                    </option>
+                  ))
+                )}
               </select>
             </label>
           </div>

@@ -4,6 +4,7 @@
 
 import React from "react";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { WbTopBarMicControlLive } from "@/components/whiteboard/chrome/WbTopBarMicControlLive";
 
@@ -46,5 +47,24 @@ describe("WbTopBarMicControlLive", () => {
     const toggle = screen.getByTestId("wb-topbar-mic-toggle");
     expect(toggle.querySelector(".mynk-wb-mic-meter")).toBeNull();
     expect(toggle).not.toBeDisabled();
+  });
+
+  test("mic picker shows placeholder when enumerate list is still empty", async () => {
+    const user = userEvent.setup();
+    render(
+      <WbTopBarMicControlLive
+        isMicMuted={false}
+        hasMicPermission="prompt"
+        hasMicStream={false}
+        isAcquiring
+        onToggleMute={jest.fn()}
+        onAcquireMic={jest.fn()}
+        onMicDeviceChange={jest.fn()}
+      />
+    );
+
+    await user.click(screen.getByTestId("wb-topbar-mic-settings"));
+    const select = screen.getByTestId("wb-topbar-mic-device-select");
+    expect(select).toHaveTextContent("(starting microphone…)");
   });
 });

@@ -5280,6 +5280,11 @@ export function WhiteboardWorkspaceClient({
             isMicMuted={liveAv.isMicMuted}
             hasMicPermission={liveAv.hasMicPermission}
             hasMicStream={liveAv.localAudioStream !== null}
+            activeMicDeviceId={
+              liveAv.localAudioStream?.getAudioTracks()[0]?.getSettings?.()
+                ?.deviceId ?? null
+            }
+            isAcquiring={liveAv.isAcquiring}
             onToggleMute={liveAv.toggleMic}
             onAcquireMic={handleAcquireMic}
             onMicDeviceChange={(deviceId) => void liveAv.setMicDevice(deviceId)}
@@ -5292,7 +5297,8 @@ export function WhiteboardWorkspaceClient({
             videoDevices={liveAv.videoDevices ?? []}
             selectedPickerSlot={liveAv.pickedVideoCameraSlot}
             onPickCameraSlot={(slot) => void liveAv.setVideoCameraBySlot(slot)}
-            isLive={!liveAv.isCamMuted && !!liveAv.localVideoStream}
+            isLive={liveAv.localVideoStream !== null}
+            onRefreshDevices={() => void liveAv.refreshVideoDeviceList()}
             disabled={!studentConnected}
           />
 
@@ -5481,7 +5487,8 @@ export function WhiteboardWorkspaceClient({
             videoDevices={liveAv.videoDevices ?? []}
             selectedPickerSlot={liveAv.pickedVideoCameraSlot}
             onPickCameraSlot={(slot) => void liveAv.setVideoCameraBySlot(slot)}
-            isLive={!liveAv.isCamMuted && !!liveAv.localVideoStream}
+            isLive={liveAv.localVideoStream !== null}
+            onRefreshDevices={() => void liveAv.refreshVideoDeviceList()}
             disabled={endingBusy}
           />
 

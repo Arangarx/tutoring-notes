@@ -33,8 +33,10 @@ type Props = {
   selectedPickerSlot: number;
   /** Wired to liveAv.setVideoCameraBySlot — hot-swaps via replaceTrack, no mesh rebuild. */
   onPickCameraSlot: (slotIndex: number) => void;
-  /** True when the camera stream is live (used to populate picker labels). */
+  /** True when a camera stream has been acquired (picker labels + default row). */
   isLive: boolean;
+  /** Re-enumerate camera inputs when the settings popover opens. */
+  onRefreshDevices?: () => void | Promise<void>;
   disabled?: boolean;
 };
 
@@ -51,6 +53,7 @@ export function WbTopBarCamControl({
   selectedPickerSlot,
   onPickCameraSlot,
   isLive,
+  onRefreshDevices,
   disabled = false,
 }: Props) {
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -66,6 +69,11 @@ export function WbTopBarCamControl({
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, [popoverOpen]);
+
+  useEffect(() => {
+    if (!popoverOpen) return;
+    void onRefreshDevices?.();
+  }, [popoverOpen, onRefreshDevices]);
 
   const camUnavailable = hasCamPermission === "denied";
 

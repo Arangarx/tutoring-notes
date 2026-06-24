@@ -363,6 +363,8 @@ export type UseLiveAVReturn = {
    * successful `requestCam()` and on `devicechange`.
    */
   videoDevices: ReadonlyArray<MediaDeviceInfo>;
+  /** Re-run `enumerateDevices` for camera inputs (labels refresh after mic/cam grant). */
+  refreshVideoDeviceList: () => Promise<void>;
   /** Device id from the active local video track; null before camera grant. */
   selectedVideoDeviceId: string | null;
   /**
@@ -869,6 +871,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           log.log(
             `mic acquired tracks=${stream.getAudioTracks().length} muted=${isMicMutedRef.current}`
           );
+          await refreshVideoDevices();
         } catch (err) {
           if (unmountedRef.current) return;
           const classified = classifyMediaError(err, "mic");
@@ -890,7 +893,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       return inFlight;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- log + resolveGetUserMedia stable per session
-    [audioConstraints, externalAudioStream]
+    [audioConstraints, externalAudioStream, refreshVideoDevices]
   );
 
   const requestCam = useCallback(
@@ -2325,6 +2328,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     leaveAllPeers,
     retryAcquire,
     videoDevices,
+    refreshVideoDeviceList: refreshVideoDevices,
     selectedVideoDeviceId,
     pickedVideoCameraSlot,
     setVideoCameraBySlot,
