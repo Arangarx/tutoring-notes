@@ -14,7 +14,7 @@ Any change that fixes user-observable **behavior**, **visual/layout**, **chrome 
 - **Location:** `tests/integration/*.spec.ts` (preferred — tutor+student relay harness).
 - **Tags:** add domain tag(s) from [`tests/test-tags.ts`](../../tests/test-tags.ts) on each new test — enables selective `npm run test:wb-affected` (see [`.cursor/rules/test-selection.mdc`](test-selection.mdc)).
 - **Merge gate enrollment:** add the spec (or new tests) to the `wb-regression` project in `playwright.config.ts` when the fix touches whiteboard, sync, chrome, recording UI, or live session flows.
-- **Visual baselines:** layout/chrome-only fixes may use `tests/visual/` when a screenshot oracle is the right guard.
+- **Visual baselines:** full-page `toHaveScreenshot` only when Andrew **explicitly** requires pixel-perfect lock ([`visual-layout-oracles.mdc`](visual-layout-oracles.mdc)). Default layout gate = **semantic** Playwright asserts (centering, alignment, visibility).
 
 ## What counts as coverage
 
@@ -23,7 +23,7 @@ Any change that fixes user-observable **behavior**, **visual/layout**, **chrome 
 | Sync / graph / strokes | Relay invariant, E2E bridge + `waitFor*` on peer state |
 | Banner / pill copy | `toHaveText` / `not.toContainText` on `data-testid` |
 | Chrome clickability | Click control → assert DOM/state change |
-| Alignment / sizing | `boundingBox()` midline compare (tolerance ≤ few px) |
+| Alignment / sizing | **Relational** `boundingBox()` — equal inset in parent, midline ≈ midline, not absolute `y === N`. See [`visual-layout-oracles.mdc`](visual-layout-oracles.mdc). |
 | Exit / rejoin / presence | Two-browser harness; assert pills, not waiting |
 
 Use an **independent oracle** (library transform, peer count, graphStateJson) — not constants back-derived from the buggy implementation.
