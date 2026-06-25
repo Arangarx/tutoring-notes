@@ -101,7 +101,7 @@ describe("useExcalidrawLoadingGuard", () => {
     });
 
     expect(screen.getByTestId("banner")).toHaveTextContent("false");
-    expect(updateScene).not.toHaveBeenCalled();
+    expect(updateScene).toHaveBeenCalledWith({ appState: { isLoading: false } });
     expect(wjgLog).not.toHaveBeenCalledWith("loading_stuck", expect.anything());
   });
 

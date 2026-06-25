@@ -1169,14 +1169,37 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
     const inFlight = chainDeviceAcquire(deviceAcquireMutexRef, async () => {
       try {
-        const videoForBundle: MediaTrackConstraints | boolean =
+        const touchPrimary =
+          typeof window !== "undefined" &&
+          window.matchMedia("(hover: none), (pointer: coarse)").matches;
+        let videoForBundle: MediaTrackConstraints | boolean =
           videoConstraints === true
-            ? { facingMode: { ideal: "user" } }
+            ? touchPrimary
+              ? { facingMode: { ideal: "user" } }
+              : true
             : videoConstraints;
-        const stream = await getUM({
-          audio: audioConstraints,
-          video: videoForBundle,
-        });
+        let stream: MediaStream;
+        try {
+          stream = await getUM({
+            audio: audioConstraints,
+            video: videoForBundle,
+          });
+        } catch (firstErr) {
+          if (videoForBundle !== true && videoConstraints === true) {
+            log.warn(
+              `requestMicAndCam facingMode bundle failed — retrying video:true err=${
+                (firstErr as Error)?.message ?? String(firstErr)
+              }`
+            );
+            videoForBundle = true;
+            stream = await getUM({
+              audio: audioConstraints,
+              video: videoForBundle,
+            });
+          } else {
+            throw firstErr;
+          }
+        }
         if (unmountedRef.current) {
           for (const t of stream.getTracks()) {
             try {
@@ -1191,6 +1214,9 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         const videoStream = new MediaStream(stream.getVideoTracks());
         if (isMicMutedRef.current) {
           for (const t of audioStream.getAudioTracks()) t.enabled = false;
+        }
+        for (const t of videoStream.getVideoTracks()) {
+          t.enabled = true;
         }
         localAudioStreamRef.current = audioStream;
         localVideoStreamRef.current = videoStream;

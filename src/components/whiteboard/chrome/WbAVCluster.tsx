@@ -97,6 +97,10 @@ export function WbAVCluster({
 
   const tileCount =
     (tilesProps.localTile ? 1 : 0) + tilesProps.participants.length;
+  /** Fires when a remote peer's video stream id appears/changes (late cam-on). */
+  const remoteVideoSignature = tilesProps.participants
+    .map((p) => `${p.peerId}:${p.videoStream?.id ?? "none"}`)
+    .join("|");
   const autoClusterHeight = computeAutoClusterHeight(Math.max(tileCount, 1));
   const useAutoGrow =
     !isMobileLayout &&
@@ -120,27 +124,54 @@ export function WbAVCluster({
   // to an explicit inline style.height → browser recomputes layout → compositor
   // wires regardless of whether the tile holds a <video> or a placeholder <div>.
   const prevTileCountRef = useRef(0);
+  const prevRemoteVideoSigRef = useRef("");
+  const mechanismAInitializedRef = useRef(false);
 
-  useEffect(() => {
-    if (isMobileLayout) return;
-    const prev = prevTileCountRef.current;
-    prevTileCountRef.current = tileCount;
-    if (tileCount > prev && tileCount > 0) {
-      // displayHeightRef is updated synchronously during each render (see below),
-      // so it already reflects the height for the new tileCount. Setting size
-      // to this value is a no-op visually; the structural change is removing
-      // data-auto-grow and switching to explicit inline pixels.
+  const triggerPaintReflow = useCallback(
+    (reason: string) => {
       const h = displayHeightRef.current;
       setSize((s) => ({ width: s.width, height: h }));
       setPaintReflowLocked(true);
-      console.log(`[avx] WbAVCluster paint-lock tileCount=${tileCount} prev=${prev} h=${h}`);
+      console.log(`[avx] WbAVCluster paint-lock reason=${reason} tileCount=${tileCount} h=${h}`);
+    },
+    [tileCount]
+  );
+
+  useEffect(() => {
+    if (isMobileLayout) return;
+    if (!mechanismAInitializedRef.current) {
+      mechanismAInitializedRef.current = true;
+      prevTileCountRef.current = tileCount;
+      prevRemoteVideoSigRef.current = remoteVideoSignature;
+      return;
+    }
+    const prev = prevTileCountRef.current;
+    const prevSig = prevRemoteVideoSigRef.current;
+    prevTileCountRef.current = tileCount;
+    prevRemoteVideoSigRef.current = remoteVideoSignature;
+
+    if (tileCount > prev && tileCount > 0) {
+      triggerPaintReflow(`tile-add:${prev}->${tileCount}`);
+    } else if (
+      remoteVideoSignature !== prevSig &&
+      remoteVideoSignature.includes(":") &&
+      !remoteVideoSignature.endsWith(":none")
+    ) {
+      triggerPaintReflow(`remote-video:${prevSig}->${remoteVideoSignature}`);
     } else if (tileCount < prev && paintReflowLocked && !userResized) {
       setPaintReflowLocked(false);
       const h = computeAutoClusterHeight(Math.max(tileCount, 1));
       setSize((s) => ({ width: s.width, height: h }));
       console.log(`[avx] WbAVCluster paint-unlock tileCount=${tileCount} prev=${prev} h=${h}`);
     }
-  }, [isMobileLayout, tileCount, paintReflowLocked, userResized]);
+  }, [
+    isMobileLayout,
+    tileCount,
+    remoteVideoSignature,
+    paintReflowLocked,
+    userResized,
+    triggerPaintReflow,
+  ]);
 
   useLayoutEffect(() => {
     if (isMobileLayout) return;
@@ -157,12 +188,14 @@ export function WbAVCluster({
         layoutMode === "narrow" || layoutMode === "phone-landscape" ? 120 : 180;
       const height = computeMobileClusterHeight(tileCount, layoutMode);
       setSize({ width, height });
-    } else {
-      setSize(DEFAULT_SIZE);
+      setUserResized(false);
+      setPaintReflowLocked(false);
+      return;
     }
+    setSize(DEFAULT_SIZE);
     setUserResized(false);
     setPaintReflowLocked(false);
-  }, [isMobileLayout, layoutMode, tileCount]);
+  }, [isMobileLayout, layoutMode]);
 
   useEffect(() => {
     if (!isMobileLayout) return;

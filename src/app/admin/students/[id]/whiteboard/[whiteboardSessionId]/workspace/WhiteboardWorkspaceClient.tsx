@@ -138,6 +138,7 @@ import {
 } from "@/components/whiteboard/chrome/WbStrokePropsPanel";
 import {
   isTouchLayout,
+  isTouchPrimaryDevice,
   useWbLayoutMode,
 } from "@/components/whiteboard/chrome/useWbLayoutMode";
 import { LiveBoardChrome } from "@/components/whiteboard/chrome/LiveBoardChrome";
@@ -1651,7 +1652,15 @@ export function WhiteboardWorkspaceClient({
     const bootstrapAv = () => {
       void (async () => {
         if (!liveAv.localAudioStream && !liveAv.localVideoStream) {
-          await liveAv.requestMicAndCam();
+          // Bundled GUM is for touch only (facingMode + single negotiation).
+          // Desktop webcams fail OverconstrainedError on facingMode:user and
+          // break mic+cam entirely (Andrew 2026-06-24 wife desktop smoke).
+          if (isTouchPrimaryDevice()) {
+            await liveAv.requestMicAndCam();
+          } else {
+            await liveAv.requestMic();
+            await liveAv.requestCam();
+          }
           return;
         }
         if (!liveAv.localAudioStream) {
@@ -5268,7 +5277,13 @@ export function WhiteboardWorkspaceClient({
               >
                 {studentConnectionPillLabel}
               </span>
+              <span className="mynk-wb-timer" data-testid="wb-student-timer">
+                {studentShowWaitingForOther
+                  ? `${formatTimerMinutesOnly(studentLiveTimerMs)} (waiting)`
+                  : formatTimerMinutesOnly(studentLiveTimerMs)}
+              </span>
             </div>
+            <div className="mynk-wb-topbar__spacer" aria-hidden />
             <div
               className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing"
               onClick={(e) => e.stopPropagation()}

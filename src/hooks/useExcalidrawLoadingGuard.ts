@@ -52,26 +52,41 @@ export function useExcalidrawLoadingGuard({
 
   const markLoadingCleared = useCallback(
     (source: "initial" | "watchdog" | "remote_scene") => {
-      if (clearedRef.current) return;
+      const api = excalidrawAPI as WbChromeApiExt | null;
+      const forceSpinnerOff = () => {
+        api?.updateScene?.({ appState: { isLoading: false } });
+        setStuckLoading(false);
+      };
+
+      if (clearedRef.current) {
+        forceSpinnerOff();
+        return;
+      }
       clearedRef.current = true;
       wjgLog("loading_cleared", { source });
       if (watchdogRef.current) {
         clearTimeout(watchdogRef.current);
         watchdogRef.current = null;
       }
+      forceSpinnerOff();
     },
-    [wjgLog]
+    [excalidrawAPI, wjgLog]
   );
 
   useEffect(() => {
     if (!excalidrawAPI) return;
     wjgLog("excalidraw_api_ready");
 
-    // Sync/scene may have cleared loading before the API ref landed — do not
-    // start a watchdog that would false-positive "Board is taking too long".
-    if (clearedRef.current) return;
-
     const api = excalidrawAPI as WbChromeApiExt;
+
+    // Sync/scene may have cleared loading before the API ref landed — still
+    // dismiss Excalidraw's isLoading spinner (Andrew 2026-06-24 phone smoke).
+    if (clearedRef.current) {
+      api.updateScene?.({ appState: { isLoading: false } });
+      setStuckLoading(false);
+      return;
+    }
+
     const appState = api.getAppState?.() as { isLoading?: boolean } | undefined;
     const isLoading = appState?.isLoading;
     if (isLoading === false) {

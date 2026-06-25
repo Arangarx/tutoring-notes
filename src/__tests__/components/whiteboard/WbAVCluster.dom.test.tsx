@@ -159,7 +159,7 @@ describe("WbAVCluster — Mechanism A (auto-reflow on tile count change)", () =>
       rerender(<WbAVCluster {...makeBaseProps([withVideoParticipant])} />);
     });
 
-    // Tilecount unchanged (1 remote) → Mechanism A doesn't re-fire; cluster stays locked.
+    // Tilecount unchanged but videoStream id appeared → Mechanism A re-fires for paint.
     expect(screen.getByTestId("wb-av-cluster").getAttribute("data-auto-grow")).toBeNull();
   });
 

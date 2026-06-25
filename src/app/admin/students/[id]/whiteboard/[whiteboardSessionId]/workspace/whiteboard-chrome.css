@@ -1657,6 +1657,7 @@
   width: 44px;
   height: auto;
   min-height: 0;
+  max-height: 100%;
   align-self: stretch;
   padding: 6px 0;
   gap: 2px;
@@ -1664,6 +1665,14 @@
   border-right: 1px solid var(--border);
   background: var(--card);
   z-index: 20;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-bottom-toolbar::-webkit-scrollbar {
+  display: none;
 }
 
 .mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-bottom-toolbar .mynk-wb-tool-btn {
@@ -2913,18 +2922,25 @@
   color: var(--text-strong);
 }
 
-/* Student phone portrait — minimal top bar: wordmark + pill + overflow + exit. */
+/* Student phone portrait — minimal top bar: wordmark + pill + timer + ⋯ + exit. */
 .mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-wordmark {
   padding: 0 4px;
   font-size: 14px;
 }
 
-/* Student touch top bar — keep overflow + exit on-screen (timer/tutor in sheet). */
-.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-student-tutor-name,
+.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-topbar__spacer {
+  flex: 1;
+  min-width: 8px;
+}
+
+/* Student touch top bar — hide timer/tutor in sheet except narrow keeps inline timer. */
 .mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-student-tutor-name,
 .mynk-wb-chrome[data-role="student"][data-layout="phone-landscape"] .mynk-wb-student-tutor-name,
-.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-timer,
 .mynk-wb-chrome[data-role="student"][data-layout="tablet-portrait"] .mynk-wb-timer,
 .mynk-wb-chrome[data-role="student"][data-layout="phone-landscape"] .mynk-wb-timer {
+  display: none;
+}
+
+.mynk-wb-chrome[data-role="student"][data-layout="narrow"] .mynk-wb-student-tutor-name {
   display: none;
 }
