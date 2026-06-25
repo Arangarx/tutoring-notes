@@ -410,27 +410,53 @@ export async function waitForTutorStudentConnected(
   );
 }
 
-export async function ensureStudentFollowsTutor(page: Page): Promise<void> {
-  const checkbox = page.getByRole("checkbox", {
+async function locateStudentFollowCheckbox(page: Page) {
+  const layout = await page
+    .locator(".mynk-wb-chrome")
+    .getAttribute("data-layout");
+  const followInOverflow =
+    layout === "narrow" ||
+    layout === "tablet-portrait" ||
+    layout === "phone-landscape";
+  if (followInOverflow) {
+    const dropdown = page.getByTestId("wb-topbar-overflow-dropdown");
+    if (!(await dropdown.isVisible())) {
+      await page.getByTestId("wb-student-topbar-overflow").click();
+      await expect(dropdown).toBeVisible({ timeout: 5_000 });
+    }
+  }
+  return page.getByRole("checkbox", {
     name: /(?:keep pan.*zoom synced|follow tutor)/i,
   });
+}
+
+async function closeStudentOverflowIfOpen(page: Page): Promise<void> {
+  const dropdown = page.getByTestId("wb-topbar-overflow-dropdown");
+  if (await dropdown.isVisible()) {
+    await page.keyboard.press("Escape");
+    await expect(dropdown).not.toBeVisible({ timeout: 3_000 });
+  }
+}
+
+export async function ensureStudentFollowsTutor(page: Page): Promise<void> {
+  const checkbox = await locateStudentFollowCheckbox(page);
   await expect(checkbox).toBeVisible({ timeout: 90_000 });
   if (!(await checkbox.isChecked())) {
     await checkbox.check();
   }
+  await closeStudentOverflowIfOpen(page);
 }
 
 export async function setStudentFollowTutor(
   page: Page,
   enabled: boolean
 ): Promise<void> {
-  const checkbox = page.getByRole("checkbox", {
-    name: /(?:keep pan.*zoom synced|follow tutor)/i,
-  });
+  const checkbox = await locateStudentFollowCheckbox(page);
   await expect(checkbox).toBeVisible({ timeout: 90_000 });
   const checked = await checkbox.isChecked();
   if (enabled && !checked) await checkbox.check();
   if (!enabled && checked) await checkbox.uncheck();
+  await closeStudentOverflowIfOpen(page);
 }
 
 export type ViewportSnapshot = {
@@ -812,20 +838,102 @@ export function buildPanZoomViewportSteps(
   return steps;
 }
 
+export type WbViewportSize = { width: number; height: number };
+
+export type ViewportRect = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  width: number;
+  height: number;
+  viewportWidth: number;
+  viewportHeight: number;
+};
+
+/**
+ * Layout viewport rect for a testid control. Stricter than Playwright
+ * `toBeVisible()` — off-screen elements with overflow:visible still pass
+ * toBeVisible but fail here.
+ */
+export async function readControlViewportRect(
+  page: Page,
+  testId: string
+): Promise<ViewportRect> {
+  const locator = page.getByTestId(testId);
+  await expect(locator).toBeVisible();
+  return locator.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return {
+      left: r.left,
+      top: r.top,
+      right: r.right,
+      bottom: r.bottom,
+      width: r.width,
+      height: r.height,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+    };
+  });
+}
+
+/**
+ * Control must be fully inside the layout viewport (tappable without scroll).
+ * Use for top-bar chrome — catches horizontal clip regressions on phone.
+ */
+export async function assertControlFullyInViewport(
+  page: Page,
+  testId: string,
+  opts?: { timeoutMs?: number }
+): Promise<void> {
+  const locator = page.getByTestId(testId);
+  await expect(locator).toBeVisible({ timeout: opts?.timeoutMs ?? 30_000 });
+  const rect = await readControlViewportRect(page, testId);
+  expect(rect.width, `${testId} width`).toBeGreaterThan(0);
+  expect(rect.height, `${testId} height`).toBeGreaterThan(0);
+  expect(rect.left, `${testId} left edge`).toBeGreaterThanOrEqual(0);
+  expect(rect.top, `${testId} top edge`).toBeGreaterThanOrEqual(0);
+  expect(rect.right, `${testId} right edge`).toBeLessThanOrEqual(
+    rect.viewportWidth
+  );
+  expect(rect.bottom, `${testId} bottom edge`).toBeLessThanOrEqual(
+    rect.viewportHeight
+  );
+}
+
+/** Student narrow layout: pill + ⋯ + Exit on-screen; inline toolbar toggle hidden. */
+export async function assertStudentPortraitTopBarControls(
+  page: Page
+): Promise<void> {
+  await expect(page.locator(".mynk-wb-chrome")).toHaveAttribute(
+    "data-layout",
+    "narrow",
+    { timeout: 10_000 }
+  );
+  await assertControlFullyInViewport(page, "wb-student-sync-pill");
+  await assertControlFullyInViewport(page, "wb-student-topbar-overflow");
+  await assertControlFullyInViewport(page, "wb-student-exit");
+  await expect(page.getByTestId("wb-student-toolbar-toggle")).not.toBeVisible();
+}
+
 /** Open tutor + student relay session (shared harness entry). */
 export async function openTutorAndStudent(
   browser: import("@playwright/test").Browser,
   session: WbLiveSyncSession,
-  options?: { ensureFollow?: boolean }
+  options?: { ensureFollow?: boolean; studentViewport?: WbViewportSize }
 ) {
   const ensureFollow = options?.ensureFollow !== false;
+  const studentViewport = options?.studentViewport ?? {
+    width: 1280,
+    height: 640,
+  };
 
   const tutorContext = await browser.newContext({
     storageState: "tests/integration/.auth/tutor.json",
     viewport: { width: 1280, height: 1200 },
   });
   const studentContext = await browser.newContext({
-    viewport: { width: 1280, height: 640 },
+    viewport: studentViewport,
   });
 
   const tutorPage = await tutorContext.newPage();

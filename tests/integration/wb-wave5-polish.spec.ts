@@ -2,7 +2,9 @@ import { test, expect, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { readLocalEnv } from "../utils/read-dotenv";
 import {
+  assertControlFullyInViewport,
   assertEqualVerticalInsetInParent,
+  assertStudentPortraitTopBarControls,
   clickBoardPageTab,
   drawTestStrokeOnRole,
   expectedAlignedStudentScroll,
@@ -17,6 +19,7 @@ import {
   waitForViewportAligned,
   waitForWbE2eBridge,
   addGraphExpressionViaUI,
+  type WbViewportSize,
 } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
 
@@ -205,6 +208,9 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
         studentPage.getByTestId("student-whiteboard-canvas-mount")
       ).toBeVisible({ timeout: 90_000 });
       await waitForWbE2eBridge(studentPage, "student");
+      await waitForTutorStudentConnected(tutorPage);
+
+      await assertStudentPortraitTopBarControls(studentPage);
 
       await studentPage.getByTestId("wb-student-topbar-overflow").click();
       const edges = await readOverflowMenuItemLeftEdges(studentPage);
@@ -233,9 +239,15 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     await assertDropdownOpensBelowTrigger(tutorPage, "wb-topbar-overflow");
     await tutorContext.close();
 
-    const peers = await openTutorAndStudent(browser, session);
+    const peers = await openTutorAndStudent(browser, session, {
+      studentViewport: { width: 844, height: 390 },
+    });
     try {
-      await peers.studentPage.setViewportSize({ width: 844, height: 390 });
+      await assertControlFullyInViewport(
+        peers.studentPage,
+        "wb-student-topbar-overflow"
+      );
+      await assertControlFullyInViewport(peers.studentPage, "wb-student-exit");
       await assertDropdownOpensBelowTrigger(
         peers.studentPage,
         "wb-student-topbar-overflow"
@@ -496,50 +508,48 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     await context.close();
   });
 
-  test("item 19 — student phone: overflow mic + topbar controls visible", async ({
-    browser,
-  }) => {
-    test.setTimeout(180_000);
-    const session = await seedWbLiveSyncSession();
-    const peers = await openTutorAndStudent(browser, session);
-    try {
-      await peers.studentPage.setViewportSize({ width: 390, height: 844 });
-      await waitForTutorStudentConnected(peers.tutorPage);
+  const STUDENT_PORTRAIT_VIEWPORTS: ReadonlyArray<
+    WbViewportSize & { label: string }
+  > = [
+    { label: "390x844", width: 390, height: 844 },
+    { label: "320x568", width: 320, height: 568 },
+  ];
 
-      const overflow = peers.studentPage.getByTestId("wb-student-topbar-overflow");
-      const exit = peers.studentPage.getByTestId("wb-student-exit");
-      await expect(overflow).toBeVisible({ timeout: 30_000 });
-      await expect(exit).toBeVisible();
-
-      const overflowBox = await overflow.boundingBox();
-      const exitBox = await exit.boundingBox();
-      expect(overflowBox).not.toBeNull();
-      expect(exitBox).not.toBeNull();
-      expect(overflowBox!.x + overflowBox!.width).toBeLessThanOrEqual(390);
-      expect(exitBox!.x + exitBox!.width).toBeLessThanOrEqual(390);
-
-      await overflow.click();
-      await expect(peers.studentPage.getByTestId("wb-overflow-mic")).toBeVisible({
-        timeout: 5_000,
+  for (const viewport of STUDENT_PORTRAIT_VIEWPORTS) {
+    test(`item 19 — student phone portrait topbar (${viewport.label})`, async ({
+      browser,
+    }) => {
+      test.setTimeout(180_000);
+      const session = await seedWbLiveSyncSession();
+      const peers = await openTutorAndStudent(browser, session, {
+        studentViewport: { width: viewport.width, height: viewport.height },
+        ensureFollow: false,
       });
-      await expect(peers.studentPage.getByTestId("wb-overflow-cam")).toBeVisible();
-      await expect(
-        peers.studentPage.getByTestId("wb-overflow-toolbar-toggle")
-      ).toBeVisible();
-      await expect(
-        peers.studentPage.getByTestId("wb-student-toolbar-toggle")
-      ).not.toBeVisible();
+      try {
+        await assertStudentPortraitTopBarControls(peers.studentPage);
 
-      const avCluster = peers.studentPage.getByTestId("wb-student-av-row");
-      await expect(avCluster).toBeVisible({ timeout: 30_000 });
-      const clusterBox = await avCluster.boundingBox();
-      expect(clusterBox).not.toBeNull();
-      expect(clusterBox!.height).toBeGreaterThan(40);
-      expect(clusterBox!.width).toBeGreaterThan(80);
-    } finally {
-      await peers.close();
-    }
-  });
+        const overflow = peers.studentPage.getByTestId(
+          "wb-student-topbar-overflow"
+        );
+        await overflow.click();
+        await expect(
+          peers.studentPage.getByTestId("wb-overflow-mic")
+        ).toBeVisible({ timeout: 5_000 });
+        await expect(
+          peers.studentPage.getByTestId("wb-overflow-cam")
+        ).toBeVisible();
+        await expect(
+          peers.studentPage.getByTestId("wb-overflow-toolbar-toggle")
+        ).toBeVisible();
+
+        const avCluster = peers.studentPage.getByTestId("wb-student-av-row");
+        await expect(avCluster).toBeVisible({ timeout: 30_000 });
+        await assertControlFullyInViewport(peers.studentPage, "wb-student-av-row");
+      } finally {
+        await peers.close();
+      }
+    });
+  }
 
   test("item 13 — review thumbnail renders JSXGraph board, not mynk://graph text", { tag: [TAG.WB_GRAPH] }, async ({
     browser,
