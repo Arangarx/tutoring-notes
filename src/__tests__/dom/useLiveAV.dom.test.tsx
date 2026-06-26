@@ -1950,3 +1950,226 @@ describe("useLiveAV — teardown", () => {
     expect(videoTrack.stopped).toBe(true);
   });
 });
+
+// -----------------------------------------------------------------
+// Device enumeration single-flight + never-downgrade (invariant 14)
+//
+// wb-wave5-polish reliability floor: every `enumerateDevices()` call
+// must run THROUGH the `chainDeviceAcquire` mutex (never concurrently
+// with a getUserMedia acquire — the Windows "no webcam / wrong
+// dropdown" corruption), rapid out-of-band callers must coalesce, and
+// a transient/pre-permission EMPTY enumerate must NEVER overwrite a
+// known-good device list. See docs/LIVE-AV.md invariant 14.
+//
+// The true on-hardware concurrent-acquire corruption is a
+// Windows-only failure that the Playwright fake-device harness cannot
+// reproduce (PLAYWRIGHT-GAP, docs/BACKLOG.md). These jsdom tests prove
+// the fix MECHANISM (single-flight, mutex-serialization, never-
+// downgrade), which is the logic that prevents the race.
+// -----------------------------------------------------------------
+
+describe("useLiveAV — device enumeration single-flight + never-downgrade (invariant 14)", () => {
+  type MutableNavigator = { mediaDevices?: unknown };
+  let hadMediaDevices = false;
+  let priorMediaDevices: unknown;
+
+  function installEnumerateStub(
+    impl: () => Promise<MediaDeviceInfo[]>
+  ): jest.Mock<Promise<MediaDeviceInfo[]>, []> {
+    const nav = navigator as unknown as MutableNavigator;
+    hadMediaDevices = "mediaDevices" in nav;
+    priorMediaDevices = nav.mediaDevices;
+    const enumerateDevices = jest.fn(impl);
+    nav.mediaDevices = {
+      enumerateDevices,
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+    };
+    return enumerateDevices;
+  }
+
+  afterEach(() => {
+    const nav = navigator as unknown as MutableNavigator;
+    if (hadMediaDevices) {
+      nav.mediaDevices = priorMediaDevices;
+    } else {
+      delete nav.mediaDevices;
+    }
+  });
+
+  const dev = (
+    deviceId: string,
+    kind: "videoinput" | "audioinput",
+    label: string
+  ): MediaDeviceInfo =>
+    ({
+      deviceId,
+      kind,
+      label,
+      groupId: `${deviceId}-grp`,
+      toJSON() {
+        return this;
+      },
+    }) as unknown as MediaDeviceInfo;
+
+  async function settle(): Promise<void> {
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  }
+
+  test("coalesces a synchronous burst of refresh calls into ONE enumerate (single-flight)", async () => {
+    const enumerateDevices = installEnumerateStub(async () => []);
+    const props = makeBaseProps();
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+
+    // Let the mount enumerate fire + settle so the coalescing ref clears.
+    await settle();
+    enumerateDevices.mockClear();
+
+    // Three rapid out-of-band callers in the same tick → coalesced to one.
+    await act(async () => {
+      void result.current.refreshVideoDeviceList();
+      void result.current.refreshVideoDeviceList();
+      void result.current.refreshAudioDeviceList();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(enumerateDevices).toHaveBeenCalledTimes(1);
+
+    // After it settles, a fresh call enumerates again (ref cleared).
+    await act(async () => {
+      void result.current.refreshVideoDeviceList();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(enumerateDevices).toHaveBeenCalledTimes(2);
+
+    unmount();
+  });
+
+  test("a transient EMPTY enumerate does not overwrite a known-good device list (never-downgrade)", async () => {
+    let nextResult: MediaDeviceInfo[] = [
+      dev("cam1", "videoinput", "Cam 1"),
+      dev("mic1", "audioinput", "Mic 1"),
+    ];
+    installEnumerateStub(async () => nextResult);
+    const props = makeBaseProps();
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+
+    // Mount enumerate populates the good list.
+    await settle();
+    await waitFor(() => {
+      expect(result.current.videoDevices.length).toBe(1);
+      expect(result.current.audioDevices.length).toBe(1);
+    });
+
+    // A transient empty enumerate (pre-permission / Windows race) must
+    // NOT wipe the populated picker.
+    nextResult = [];
+    await act(async () => {
+      void result.current.refreshVideoDeviceList();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.videoDevices.length).toBe(1);
+    expect(result.current.videoDevices[0]?.deviceId).toBe("cam1");
+    expect(result.current.audioDevices.length).toBe(1);
+    expect(result.current.audioDevices[0]?.deviceId).toBe("mic1");
+
+    unmount();
+  });
+
+  test("never-downgrade is per-kind: a camera-only enumerate cannot wipe the mic list", async () => {
+    let nextResult: MediaDeviceInfo[] = [
+      dev("cam1", "videoinput", "Cam 1"),
+      dev("mic1", "audioinput", "Mic 1"),
+    ];
+    installEnumerateStub(async () => nextResult);
+    const props = makeBaseProps();
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+
+    await settle();
+    await waitFor(() => {
+      expect(result.current.audioDevices.length).toBe(1);
+    });
+
+    // Enumerate returns cameras but momentarily no mics — the mic list
+    // must survive (a camera plug/unplug can't empty the mic dropdown).
+    nextResult = [dev("cam1", "videoinput", "Cam 1")];
+    await act(async () => {
+      void result.current.refreshVideoDeviceList();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.videoDevices.length).toBe(1);
+    expect(result.current.audioDevices.length).toBe(1);
+    expect(result.current.audioDevices[0]?.deviceId).toBe("mic1");
+
+    unmount();
+  });
+
+  test("an out-of-band enumerate does NOT run concurrently with an in-flight getUserMedia acquire (mutex-serialized)", async () => {
+    let acquireInFlight = false;
+    let ranDuringAcquire = false;
+    const enumerateDevices = installEnumerateStub(async () => {
+      if (acquireInFlight) ranDuringAcquire = true;
+      return [];
+    });
+
+    let resolveGUM: (s: MediaStream) => void = () => undefined;
+    const getUM = jest.fn(
+      () =>
+        new Promise<MediaStream>((resolve) => {
+          resolveGUM = resolve;
+        })
+    );
+
+    const props = makeBaseProps({ _getUserMedia: getUM });
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+
+    // Settle the mount enumerate, then start counting fresh.
+    await settle();
+    enumerateDevices.mockClear();
+
+    // Start a mic acquire that stays pending (holds the device mutex).
+    let micPromise: Promise<void> | undefined;
+    act(() => {
+      acquireInFlight = true;
+      micPromise = result.current.requestMic();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // Fire an out-of-band enumerate WHILE the acquire is in flight.
+    await act(async () => {
+      void result.current.refreshVideoDeviceList();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // It must be queued behind the acquire — not executed yet. Pre-fix,
+    // refreshVideoDevices called enumerateDevices() directly and it would
+    // have run concurrently here (the Windows-corruption race).
+    expect(enumerateDevices).not.toHaveBeenCalled();
+    expect(ranDuringAcquire).toBe(false);
+
+    // Complete the acquire — the queued enumerate may now run, and only
+    // after the acquire released the mutex.
+    await act(async () => {
+      acquireInFlight = false;
+      resolveGUM(makeFakeStream(1).stream as unknown as MediaStream);
+      await micPromise;
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(ranDuringAcquire).toBe(false);
+
+    unmount();
+  });
+});

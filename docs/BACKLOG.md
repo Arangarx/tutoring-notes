@@ -33,6 +33,16 @@ Not in priority order within sections — that comes when items move to a sprint
 
 ---
 
+## Whiteboard A/V reliability floor — PLAYWRIGHT-GAPs (wb-wave5-polish, 2026-06-26)
+
+> Per [`.cursor/rules/playwright-on-fix.mdc`](../.cursor/rules/playwright-on-fix.mdc) narrow exception: some A/V failure classes only reproduce on **real hardware** because Playwright runs Chromium with `--use-fake-device-for-media-stream` (fake media always "works") and jsdom mocks WebRTC. Each fix below ships the closest reproducible surrogate (jest mechanism test and/or `@wb-av` Playwright surrogate); the **on-hardware** failure is tracked here so the gap is named, never silent.
+
+| Item | Priority | Notes |
+|------|----------|-------|
+| **WB-AV-GAP-1 — enumerate×acquire concurrency corruption is Windows-hardware-only** | Tracked gap | The "no webcam / wrong dropdown" corruption (concurrent `enumerateDevices()` + `getUserMedia()` on Windows) cannot be reproduced by Playwright fake devices — fake enumeration never corrupts. The Part 1A enumerate-mutex fix (route every enumerate through `chainDeviceAcquire`, coalesce, never-downgrade) is proven at the **jsdom mechanism level**: `src/__tests__/dom/useLiveAV.dom.test.tsx` › "device enumeration single-flight + never-downgrade (invariant 14)" (single-flight coalescing, per-kind never-downgrade, mutex-serialization vs in-flight acquire). **Hardware oracle:** Sarah/internal Windows multi-cam smoke — device picker stays populated + correct across layout changes and rapid re-open. Invariant 14 (`docs/LIVE-AV.md`). The broader `@wb-av` Playwright surrogate (resize→mesh intact; pick→swap; device options present) is tracked as the `p1a-tests` step of the reliability-floor plan. |
+
+---
+
 ## Ship-to-Sarah gate — pilot feedback 2026-06-16
 
 > **Strategic trigger (Andrew):** swap Sarah off `master`/prod onto the `v1-redesign` / Phase 1 line once waiting room → whiteboard → end session is stable both sides (P2 + P3). **Proposed gate checklist** (pending Andrew confirmation) in [`docs/handoff/sarah-pilot-feedback-2026-06-16-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-06-16-orchestrator-report.md) §2. Rows below are the **durable BACKLOG hooks** for bugs she hit on prod 2026-06-16.

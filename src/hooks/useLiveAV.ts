@@ -803,6 +803,11 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   const camInFlightRef = useRef<Promise<void> | null>(null);
   const avBundleInFlightRef = useRef<Promise<void> | null>(null);
   const deviceAcquireMutexRef = useRef<Promise<void>>(Promise.resolve());
+  // Coalesces out-of-band enumerate requests (mount / devicechange /
+  // focus / popover-open) into a single trailing run through the device
+  // mutex — see invariant 14 (LIVE-AV.md). A burst of devicechange events
+  // collapses to one enumerate instead of N racing the acquire pipeline.
+  const enumerateInFlightRef = useRef<Promise<void> | null>(null);
   const acquiringCountRef = useRef<number>(0);
   // Tracks whether the hook is unmounted to suppress late state
   // setters from in-flight acquisition promises.
@@ -861,7 +866,15 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     return null;
   }
 
-  const refreshVideoDevices = useCallback(async () => {
+  // Raw `enumerateDevices` + state commit. MUST run serialized with
+  // getUserMedia acquisition — on Windows a concurrent enumerate + acquire
+  // corrupts the camera list ("no webcam / wrong dropdown"). Call this
+  // ONLY from inside the `deviceAcquireMutexRef` chain (the acquire paths,
+  // which are already serialized) or via `refreshVideoDevices` below (which
+  // wraps it in the mutex). Calling it directly from outside the mutex
+  // reintroduces the race; calling `refreshVideoDevices` from INSIDE the
+  // mutex would deadlock. See invariant 14 (LIVE-AV.md).
+  const enumerateDevicesCore = useCallback(async () => {
     if (
       typeof navigator === "undefined" ||
       !navigator.mediaDevices?.enumerateDevices
@@ -872,10 +885,18 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       const all = await navigator.mediaDevices.enumerateDevices();
       const videoinputs = all.filter((d) => d.kind === "videoinput");
       const audioinputs = all.filter((d) => d.kind === "audioinput");
-      if (!unmountedRef.current) {
+      if (unmountedRef.current) return;
+      // Never let a pre-permission / transient EMPTY enumerate overwrite a
+      // known-good non-empty list (the regression that emptied the picker).
+      // Guarded per-kind so a camera unplug can't wipe the mic list and
+      // vice-versa. Post-acquire enumerate (labels populated) is always
+      // authoritative because it returns a non-empty list.
+      if (videoinputs.length > 0 || videoDevicesRef.current.length === 0) {
         videoDevicesRef.current = videoinputs;
-        audioDevicesRef.current = audioinputs;
         setVideoDevices(videoinputs);
+      }
+      if (audioinputs.length > 0 || audioDevicesRef.current.length === 0) {
+        audioDevicesRef.current = audioinputs;
         setAudioDevices(audioinputs);
       }
     } catch (err) {
@@ -885,6 +906,29 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- log from opts is stable for session
   }, [log]);
+
+  // Out-of-band enumerate entry point (mount / devicechange / focus /
+  // device-picker open). Runs `enumerateDevicesCore` THROUGH the device
+  // mutex so it never overlaps an in-flight acquire, and coalesces a burst
+  // of callers into one trailing run. Invariant 14 (LIVE-AV.md).
+  const refreshVideoDevices = useCallback((): Promise<void> => {
+    if (enumerateInFlightRef.current) return enumerateInFlightRef.current;
+    const p = chainDeviceAcquire(deviceAcquireMutexRef, enumerateDevicesCore);
+    enumerateInFlightRef.current = p;
+    void p.then(
+      () => {
+        if (enumerateInFlightRef.current === p) {
+          enumerateInFlightRef.current = null;
+        }
+      },
+      () => {
+        if (enumerateInFlightRef.current === p) {
+          enumerateInFlightRef.current = null;
+        }
+      }
+    );
+    return p;
+  }, [enumerateDevicesCore]);
 
   const requestMic = useCallback(
     async (): Promise<void> => {
@@ -949,7 +993,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           if (gst?.groupId) {
             pinnedMicEnumerateGroupRef.current = gst.groupId;
           }
-          await refreshVideoDevices();
+          await enumerateDevicesCore();
         } catch (err) {
           if (unmountedRef.current) return;
           const classified = classifyMediaError(err, "mic");
@@ -971,7 +1015,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       return inFlight;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- log + resolveGetUserMedia stable per session
-    [audioConstraints, externalAudioStream, refreshVideoDevices]
+    [audioConstraints, externalAudioStream, enumerateDevicesCore]
   );
 
   const requestCam = useCallback(
@@ -1003,7 +1047,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
       const inFlight = chainDeviceAcquire(deviceAcquireMutexRef, async () => {
         try {
-          await refreshVideoDevices();
+          await enumerateDevicesCore();
           const siblings = videoDevicesRef.current;
           let stream: MediaStream | null = null;
 
@@ -1112,7 +1156,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           } else {
             pinnedVideoEnumerateGroupRef.current = "";
           }
-          await refreshVideoDevices();
+          await enumerateDevicesCore();
         } catch (err) {
           if (unmountedRef.current) return;
           const classified = classifyMediaError(err, "cam");
@@ -1134,7 +1178,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       return inFlight;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- log + resolveGetUserMedia stable per session
-    [videoConstraints, refreshVideoDevices]
+    [videoConstraints, enumerateDevicesCore]
   );
 
   const requestMicAndCam = useCallback(async (): Promise<void> => {
@@ -1249,7 +1293,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           saveStoredVideoGroupId(gstV.groupId);
           pinnedVideoEnumerateGroupRef.current = gstV.groupId;
         }
-        await refreshVideoDevices();
+        await enumerateDevicesCore();
       } catch (err) {
         if (unmountedRef.current) return;
         const classifiedMic = classifyMediaError(err, "mic");
@@ -1272,7 +1316,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     });
     avBundleInFlightRef.current = inFlight;
     return inFlight;
-  }, [audioConstraints, externalAudioStream, refreshVideoDevices, requestCam, videoConstraints]);
+  }, [audioConstraints, externalAudioStream, enumerateDevicesCore, requestCam, videoConstraints]);
 
   // ---------------------------------------------------------------
   // Effect: query Permissions API on mount (best-effort)
@@ -2231,7 +2275,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         if (mesh && !mesh.isDisposed()) {
           mesh.replaceLocalTrackOnAllPeers("video", newTrack);
         }
-        await refreshVideoDevices();
+        await enumerateDevicesCore();
         log.log(
           `event=set-video-slot slot=${slotIndex} deviceId=${devIdPersist.length > 0 ? devIdPersist : "<empty>"}`
         );
@@ -2254,7 +2298,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- log stable per session
-    [log, refreshVideoDevices]
+    [log, enumerateDevicesCore]
   );
 
   const setVideoDevice = useCallback(
@@ -2471,7 +2515,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           if (entry.deviceId) {
             setSelectedMicDeviceId(entry.deviceId);
           }
-          await refreshVideoDevices();
+          await enumerateDevicesCore();
           log.log(
             `event=set-mic-slot slot=${slotIndex} deviceId=${entry.deviceId || "<empty>"} path=recorder`
           );
@@ -2570,7 +2614,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         if (prevStream && prevStream !== ms) {
           disposeAvStreamTracks(prevStream);
         }
-        void refreshVideoDevices();
+        void enumerateDevicesCore();
         log.log(
           `event=set-mic-slot slot=${slotIndex} deviceId=${devIdPersist.length > 0 ? devIdPersist : "<empty>"}`
         );
@@ -2598,7 +2642,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       swapMicFromRecorder,
       swapMicBySlotFromRecorder,
       log,
-      refreshVideoDevices,
+      enumerateDevicesCore,
     ]
   );
 
