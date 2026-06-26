@@ -1902,7 +1902,18 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     // from the internal map so the FSM sees an empty participants set
     // and pauses recording. This catches the split-brain case where
     // the sync socket is alive but the WebRTC media path died.
-    const PEER_EVICTION_TIMEOUT_MS = 10_000;
+    //
+    // 6s (was 10s — invariant 3 / reliability floor, 2026-06-26): when
+    // the *remote* peer's socket blips (phone rotate / mobile network),
+    // the tutor's own sync does NOT disconnect, so the tutor recovers
+    // only via peer-mesh ICE-restart (3s) → renegotiation watchdog (3s)
+    // → this eviction + rebuild. 10s held a dead PC too long ("slow
+    // tutor recovery"). 6s drops it sooner while still leaving the 3s
+    // ICE-restart a full attempt (+ ~3s to reconnect) before we give up,
+    // and stays under the 8s reachable-loss recording-pause debounce so a
+    // genuine recovery within the window never pauses recording. Going
+    // lower risks evicting a PC that was about to recover via ICE restart.
+    const PEER_EVICTION_TIMEOUT_MS = 6_000;
     const evictionTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
     function scheduleEviction(peerId: string, reason: string): void {

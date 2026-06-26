@@ -1832,6 +1832,97 @@ describe("useLiveAV — mute control + reconnect", () => {
   });
 });
 
+// =================================================================
+// Stale-peer eviction timing — 6s window (invariant 3, docs/LIVE-AV.md;
+// reliability floor "slow tutor recovery" fix, 2026-06-26)
+//
+// When a peer's PC stays disconnected/failed for PEER_EVICTION_TIMEOUT_MS
+// the hook drops it from the internal map (mesh.removePeer + rebuild) so
+// the FSM pauses recording instead of capturing tutor-only audio. The
+// window was shortened 10s → 6s so the tutor stops holding a dead PC for
+// the remote peer's blip; a recovery before the window must NOT evict.
+// =================================================================
+describe("useLiveAV — stale-peer eviction timing (6s, invariant 3)", () => {
+  async function activeWithPeer(peerId = "student-B"): Promise<{
+    result: ReturnType<
+      typeof renderHook<ReturnType<typeof useLiveAV>, unknown>
+    >["result"];
+    unmount: () => void;
+    meshHandles: MeshHandles;
+  }> {
+    const sync = makeFakeSyncClient();
+    const meshHandles = makeFakeMesh();
+    const sig = makeFakeSignaling();
+    const props = makeBaseProps({
+      syncClient: sync.sync,
+      _createPeerMesh: meshHandles.factory,
+      _createSignaling: sig.factory,
+    });
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await act(async () => {
+      await result.current.requestMic();
+    });
+    await waitFor(() => {
+      expect(result.current.isActive).toBe(true);
+    });
+    act(() => {
+      sync.emitPeers([{ peerId, role: "student" }]);
+    });
+    await waitFor(() => {
+      expect(result.current.participants.length).toBe(1);
+    });
+    return { result, unmount, meshHandles };
+  }
+
+  test("evicts a peer that stays disconnected past the 6s window", async () => {
+    const { unmount, meshHandles } = await activeWithPeer("student-B");
+    jest.useFakeTimers();
+    try {
+      act(() => {
+        meshHandles.emitPcState("student-B", "disconnected");
+      });
+      // Just before 6s: the 3s ICE-restart + ~3s reconnect window — NOT yet evicted.
+      act(() => {
+        jest.advanceTimersByTime(5_999);
+      });
+      expect(meshHandles.removePeer).not.toHaveBeenCalledWith("student-B");
+      // Cross the 6s threshold — the dead PC is evicted.
+      act(() => {
+        jest.advanceTimersByTime(2);
+      });
+      expect(meshHandles.removePeer).toHaveBeenCalledWith("student-B");
+    } finally {
+      jest.useRealTimers();
+      unmount();
+    }
+  });
+
+  test("does NOT evict a peer that recovers (connected) before the 6s window", async () => {
+    const { unmount, meshHandles } = await activeWithPeer("student-B");
+    jest.useFakeTimers();
+    try {
+      act(() => {
+        meshHandles.emitPcState("student-B", "disconnected");
+      });
+      act(() => {
+        jest.advanceTimersByTime(3_000);
+      });
+      // ICE-restart recovers the peer before eviction fires.
+      act(() => {
+        meshHandles.emitPcState("student-B", "connected");
+      });
+      // Advance well past the old 10s window — eviction must have been cancelled.
+      act(() => {
+        jest.advanceTimersByTime(10_000);
+      });
+      expect(meshHandles.removePeer).not.toHaveBeenCalledWith("student-B");
+    } finally {
+      jest.useRealTimers();
+      unmount();
+    }
+  });
+});
+
 describe("useLiveAV — teardown", () => {
   test("unmount disposes mesh + signaling and stops local + remote tracks", async () => {
     const { stream: localStream, audioTracks: localAud } = makeFakeStream(1);
