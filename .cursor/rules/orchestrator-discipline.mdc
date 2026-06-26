@@ -13,6 +13,21 @@ If you are an **Opus orchestrator chat** in this repo, your **default verb is di
 
 **Conductor tier is selectable.** The model conducting this chat is not fixed at Opus — use the judgment-vs-loop heuristic in [`AGENTS.md`](../../AGENTS.md) § Model usage protocol ("Conductor tier — orchestration itself is tierable"). Opus-conductor is for **new-judgment episodes** (phase planning, novel architecture, strategic calls); pure known-loop burndown (dispatch → merge → smoke → repeat) can be conducted by Sonnet or Composer 2.5.
 
+## Hard model rules (apply to EVERY dispatch, always)
+
+These are unconditional and override any convenience default:
+
+- **`composer-2.5-fast` is FORBIDDEN.** It is ~6× the cost of `composer-2.5` for latency-only benefit and buys us nothing on this codebase. Composer work is **`composer-2.5` only**, every time.
+- **Every dispatch sets `model` explicitly, plus its options.** Never rely on model inheritance/defaults (including on `resume` — see AGENTS.md § Model usage protocol, where inheritance is documented as unreliable). If a dispatch does not name its model, that is a bug.
+
+## Effort-scoped override — Whiteboard reliability floor (the Sarah merge)
+
+> **Scope:** the `wb-wave5-polish` whiteboard-reliability-floor effort (plan: `whiteboard_reliability_floor_9ba650d1`). This is a **deliberate, scoped override** of the "dispatch aggressively to Composer" default above, justified by the stakes (the Sarah merge — the live commercial session experience) and Composer's mixed track record on this exact A/V/recording code.
+
+- **Execution tier = Opus by default for this effort.** If there is ANY doubt that a lower tier will execute correctly, the work stays on Opus (this inverts the usual "capability doubt is not a reason to keep it on Opus" rule — *for this effort only*).
+- **Composer 2.5 is used ONLY for unambiguously mechanical, zero-correctness-doubt, test-gated tasks** — e.g. deleting confirmed-dead files, pure CSS file splits verified by before/after visual diff, boilerplate scaffolding. Anything touching A/V transport, the recording lifecycle, effect-dependency wiring, or layout/enumeration coupling is Opus.
+- The hard model rules above (no `-fast`; explicit `model`+options) still apply to those mechanical dispatches.
+
 ## The dispatch test (resolves the gray zone)
 
 For any action you're about to take in-chat, ask one question: **does this require Opus-grade *judgment*, or just *hands*?**

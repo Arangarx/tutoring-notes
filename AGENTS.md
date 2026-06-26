@@ -289,6 +289,28 @@ lesson).
   `npm run test:wb-sync`) against the shared services at once —
   serialize those regardless of worktree isolation.
 
+**`composer-2.5-fast` is FORBIDDEN (hard rule).** It is ~6× the cost
+of `composer-2.5` for a latency-only benefit that buys us nothing on
+this codebase. All Composer dispatches use **`composer-2.5`** — never
+`-fast`. Codified alongside the explicit-model rule below and in
+[.cursor/rules/orchestrator-discipline.mdc](.cursor/rules/orchestrator-discipline.mdc)
+§ Hard model rules.
+
+**Effort-scoped override — Whiteboard reliability floor (the Sarah
+merge, `wb-wave5-polish`).** For the whiteboard-reliability-floor
+effort (plan `whiteboard_reliability_floor_9ba650d1`), execution tier
+is **Opus by default** — a deliberate, scoped inversion of the
+"dispatch aggressively to Composer" default below, justified by the
+stakes (the live commercial session experience) and Composer's mixed
+track record on this exact A/V/recording code. Drop to `composer-2.5`
+**only** for unambiguously mechanical, zero-correctness-doubt,
+test-gated tasks (delete confirmed-dead files, pure CSS file splits
+verified by visual diff, boilerplate scaffolding). Anything touching
+A/V transport, the recording lifecycle, effect-dependency wiring, or
+layout/enumeration coupling stays on Opus. Full statement in
+[.cursor/rules/orchestrator-discipline.mdc](.cursor/rules/orchestrator-discipline.mdc)
+§ Effort-scoped override.
+
 **ALWAYS specify `model` explicitly on EVERY dispatch — including
 `resume`.** Observed 2026-05-29 (Andrew caught it): a `Task` `resume`
 + `interrupt` call with `model` omitted ran on the **parent** chat's
