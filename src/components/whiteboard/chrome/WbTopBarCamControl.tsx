@@ -66,8 +66,8 @@ export function WbTopBarCamControl({
         setPopoverOpen(false);
       }
     };
-    document.addEventListener("click", onDoc, true);
-    return () => document.removeEventListener("click", onDoc, true);
+    document.addEventListener("click", onDoc);
+    return () => document.removeEventListener("click", onDoc);
   }, [popoverOpen]);
 
   useEffect(() => {
