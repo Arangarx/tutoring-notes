@@ -52,23 +52,16 @@ export function useExcalidrawLoadingGuard({
 
   const markLoadingCleared = useCallback(
     (source: "initial" | "watchdog" | "remote_scene") => {
-      const api = excalidrawAPI as WbChromeApiExt | null;
-      const forceSpinnerOff = () => {
-        api?.updateScene?.({ appState: { isLoading: false } });
-        setStuckLoading(false);
-      };
-
-      if (clearedRef.current) {
-        forceSpinnerOff();
-        return;
-      }
+      if (clearedRef.current) return;
       clearedRef.current = true;
       wjgLog("loading_cleared", { source });
       if (watchdogRef.current) {
         clearTimeout(watchdogRef.current);
         watchdogRef.current = null;
       }
-      forceSpinnerOff();
+      const api = excalidrawAPI as WbChromeApiExt | null;
+      api?.updateScene?.({ appState: { isLoading: false } });
+      setStuckLoading(false);
     },
     [excalidrawAPI, wjgLog]
   );
