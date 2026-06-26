@@ -1387,6 +1387,12 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     };
   }, [refreshVideoDevices]);
 
+  // Re-enumerate after first mic grant — pre-permission lists are often empty.
+  useEffect(() => {
+    if (!localAudioStream) return;
+    void refreshVideoDevices();
+  }, [localAudioStream, refreshVideoDevices]);
+
   // ---------------------------------------------------------------
   // Effect: keep camera picker slot aligned with enumerated order +
   // `pinnedVideoEnumerateGroupRef` when OEM rows share a `deviceId`.

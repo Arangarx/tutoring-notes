@@ -136,9 +136,9 @@ export function WbTopBarMicControlLive({
 
     };
 
-    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("click", onDoc, true);
 
-    return () => document.removeEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("click", onDoc, true);
 
   }, [popoverOpen]);
 

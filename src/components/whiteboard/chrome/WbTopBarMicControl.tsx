@@ -56,8 +56,8 @@ export function WbTopBarMicControl({
         setPopoverOpen(false);
       }
     };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    document.addEventListener("click", onDoc, true);
+    return () => document.removeEventListener("click", onDoc, true);
   }, [popoverOpen]);
 
   const handleMainClick = useCallback(async () => {

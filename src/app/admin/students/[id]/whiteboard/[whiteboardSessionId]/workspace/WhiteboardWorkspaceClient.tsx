@@ -67,6 +67,8 @@ import {
 import { useAudioFlowConfirmation } from "@/hooks/useAudioFlowConfirmation";
 import { useCollaboratorPointers } from "@/hooks/useCollaboratorPointers";
 import { useLiveAV } from "@/hooks/useLiveAV";
+import AudioControls from "@/components/av/AudioControls";
+import VideoControls from "@/components/av/VideoControls";
 import { useStudentWhiteboardCanvas } from "@/hooks/useStudentWhiteboardCanvas";
 import { useExcalidrawLoadingGuard, excalidrawBoardBgHex } from "@/hooks/useExcalidrawLoadingGuard";
 import { studentMicStreamId } from "@/lib/recording/remote-stream-recorder";
@@ -1684,6 +1686,15 @@ export function WhiteboardWorkspaceClient({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role, studentSyncClient, joinUnavailableReason, hasLeft]);
+
+  // Refresh device lists when student opens overflow (touch has no top-bar ▾ popover).
+  useEffect(() => {
+    if (role !== "student") return;
+    if (openMenu !== "topbar-more" && openMenu !== "more") return;
+    void liveAv.refreshAudioDeviceList();
+    void liveAv.refreshVideoDeviceList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role, openMenu]);
 
   // Student reconnect: replay ICE for all peers after sync reconnect
   const sawStudentDisconnectRef = useRef(false);
@@ -4671,6 +4682,30 @@ export function WhiteboardWorkspaceClient({
               <div className="mynk-wb-popover-sep" />
             </>
           )}
+          <div
+            className="mynk-wb-overflow-av-pickers"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <AudioControls
+              devices={liveAv.audioDevices ?? []}
+              selectedPickerSlot={liveAv.pickedMicSlot}
+              onPickMicSlot={(slot) =>
+                void liveAv.setMicDeviceBySlot(slot, { force: true })
+              }
+              isLive={liveAv.localAudioStream !== null}
+              disabled={studentAvPickerDisabled}
+            />
+            <VideoControls
+              devices={liveAv.videoDevices ?? []}
+              selectedPickerSlot={liveAv.pickedVideoCameraSlot}
+              onPickCameraSlot={(slot) =>
+                void liveAv.setVideoCameraBySlot(slot, { force: true })
+              }
+              isLive={liveAv.localVideoStream !== null}
+              disabled={studentAvPickerDisabled}
+            />
+          </div>
+          <div className="mynk-wb-popover-sep" />
         </>
       )}
       {role === "student" && !touchLayout && (
@@ -5409,7 +5444,9 @@ export function WhiteboardWorkspaceClient({
             isAcquiring={liveAv.isAcquiring}
             onToggleMute={liveAv.toggleMic}
             onAcquireMic={handleAcquireMic}
-            onPickMicSlot={(slot) => void liveAv.setMicDeviceBySlot(slot)}
+            onPickMicSlot={(slot) =>
+              void liveAv.setMicDeviceBySlot(slot, { force: true })
+            }
             onRefreshDevices={() => void liveAv.refreshAudioDeviceList()}
             disabled={studentAvPickerDisabled}
           />
@@ -5602,7 +5639,9 @@ export function WhiteboardWorkspaceClient({
             isMicMuted={liveAv.isMicMuted}
             onToggleMute={liveAv.toggleMic}
             onAcquireMic={handleAcquireMic}
-            onPickMicSlot={(slot) => void liveAv.setMicDeviceBySlot(slot)}
+            onPickMicSlot={(slot) =>
+              void liveAv.setMicDeviceBySlot(slot, { force: true })
+            }
             disabled={endingBusy}
           />
           <WbTopBarCamControl
