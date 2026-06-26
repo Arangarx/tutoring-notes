@@ -360,6 +360,23 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
   const disconnectRestartTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const ICE_DISCONNECT_RESTART_DELAY_MS = 3_000;
 
+  /**
+   * Per-peer renegotiation watchdog timers (invariant 15, docs/LIVE-AV.md).
+   * When an offer is deferred (`pendingRenegotiation = true`) because the PC
+   * is mid-negotiation, the ONLY flush path is `onsignalingstatechange` →
+   * `stable`. If the PC never returns to stable (a lost answer / wedged PC,
+   * amplified by dual-device join), the deferred offer — which carries the
+   * student's late-added audio m-line — is never sent and the tutor never
+   * hears the student. The watchdog forces resolution after
+   * RENEGOTIATION_WATCHDOG_MS: a fresh offer if the PC is stable-but-unflushed,
+   * or an ICE restart if the PC is still wedged.
+   */
+  const renegotiationWatchdogTimers = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
+  const RENEGOTIATION_WATCHDOG_MS = 3_000;
+
   // ---------------------------------------------------------------
   // Internal helpers
   // ---------------------------------------------------------------
@@ -419,6 +436,55 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
   }
 
   /**
+   * Cancel a peer's renegotiation watchdog (invariant 15). Called when the
+   * deferred renegotiation flushes normally, and on peer close/dispose.
+   */
+  function clearRenegotiationWatchdog(remotePeerId: string): void {
+    const timer = renegotiationWatchdogTimers.get(remotePeerId);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      renegotiationWatchdogTimers.delete(remotePeerId);
+    }
+  }
+
+  /**
+   * Arm the renegotiation watchdog for a peer whose offer was just deferred
+   * (invariant 15). Idempotent — a burst of defers keeps the single armed
+   * timer. The flush path (`onsignalingstatechange` → stable) cancels it;
+   * if it fires, the deferred renegotiation never flushed, so force it.
+   */
+  function armRenegotiationWatchdog(entry: PeerEntry): void {
+    if (entry.closed) return;
+    if (renegotiationWatchdogTimers.has(entry.remotePeerId)) return;
+    renegotiationWatchdogTimers.set(
+      entry.remotePeerId,
+      setTimeout(() => {
+        renegotiationWatchdogTimers.delete(entry.remotePeerId);
+        if (entry.closed || !entry.pendingRenegotiation) return;
+        if (entry.pc.signalingState === "stable" && !entry.makingOffer) {
+          // PC is stable but the flush never fired (missed
+          // signalingstatechange) — send the deferred offer now.
+          entry.pendingRenegotiation = false;
+          log.log(
+            `peer=${entry.remotePeerId} event=renegotiation-watchdog-fire reason=stable-unflushed`
+          );
+          initiateOffer(entry);
+        } else {
+          // PC is still wedged in a non-stable state past the timeout —
+          // an ICE restart resets negotiation and recovers the audio path
+          // (the restart offer regenerates SDP from current senders, so it
+          // carries the late-added audio m-line).
+          entry.pendingRenegotiation = false;
+          log.log(
+            `peer=${entry.remotePeerId} event=renegotiation-watchdog-fire reason=wedged signalingState=${entry.pc.signalingState}`
+          );
+          restartInternal(entry);
+        }
+      }, RENEGOTIATION_WATCHDOG_MS)
+    );
+  }
+
+  /**
    * Create the PC, wire up event handlers, attach local tracks.
    * Caller must NOT have an entry for `remotePeerId` already (we
    * check via the closed flag).
@@ -455,6 +521,7 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
         // InvalidStateError.  Without deferral the video track's offer
         // is never sent and the tutor never receives the student's cam.
         entry.pendingRenegotiation = true;
+        armRenegotiationWatchdog(entry);
         log.log(
           `peer=${remotePeerId} event=renegotiation-deferred signalingState=${pc.signalingState} makingOffer=${entry.makingOffer}`
         );
@@ -473,6 +540,7 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
         !entry.makingOffer
       ) {
         entry.pendingRenegotiation = false;
+        clearRenegotiationWatchdog(remotePeerId);
         log.log(
           `peer=${remotePeerId} event=renegotiation-flush reason=state-stable`
         );
@@ -870,6 +938,9 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
       clearTimeout(dTimer);
       disconnectRestartTimers.delete(entry.remotePeerId);
     }
+    // Cancel any armed renegotiation watchdog so it doesn't fire on a
+    // closed entry (invariant 15).
+    clearRenegotiationWatchdog(entry.remotePeerId);
     try {
       // Detach event handlers FIRST so no late callback fires once
       // we close the PC.
@@ -1070,6 +1141,7 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
           // Defer: PC is mid-negotiation.  onsignalingstatechange will
           // flush `pendingRenegotiation` when the PC returns to stable.
           entry.pendingRenegotiation = true;
+          armRenegotiationWatchdog(entry);
           log.log(
             `peer=${peerId} event=renegotiation-deferred-by-trigger signalingState=${entry.pc.signalingState} makingOffer=${entry.makingOffer}`
           );
@@ -1109,6 +1181,9 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
       // clearing the whole map here is the belt-and-suspenders path).
       for (const timer of disconnectRestartTimers.values()) clearTimeout(timer);
       disconnectRestartTimers.clear();
+      for (const timer of renegotiationWatchdogTimers.values())
+        clearTimeout(timer);
+      renegotiationWatchdogTimers.clear();
       try {
         unsubscribeFromSignaling();
       } catch (err) {
