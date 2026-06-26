@@ -1,0 +1,76 @@
+---
+description: A/V + layout + CSS reliability invariants for the whiteboard live-session stack — enumerate-through-mutex, layout-never-enumerates, stable-callback effect deps, CSS scoped under .mynk-wb-chrome.
+globs: src/hooks/useLiveAV.ts,src/lib/av/**,src/components/av/**,src/components/whiteboard/**,src/app/admin/students/**/whiteboard/**
+alwaysApply: false
+---
+
+# Whiteboard A/V + layout + CSS reliability invariants
+
+**Binding (2026-06-26, `wb-wave5-polish` whiteboard reliability floor — the Sarah merge).**
+These are the load-bearing rules that keep live A/V reliable. They are the **target contract**
+this effort enforces; the Part 1A/1B fixes land the enforcement and a named Playwright/jest test
+guards each one. **Do not regress without proof of an equivalent-or-better outcome.** Companion
+contracts: [`docs/LIVE-AV.md`](../../docs/LIVE-AV.md) (the numbered invariant list),
+[`.cursor/rules/whiteboard-engine-protection.mdc`](whiteboard-engine-protection.mdc) (extend, don't
+rewrite the engine).
+
+## A/V invariants
+
+1. **Enumeration is single-flighted through the device-acquire mutex.** Every
+   `navigator.mediaDevices.enumerateDevices()` call (mount, focus, `devicechange`, popover/menu open,
+   device-pick) routes through the existing `chainDeviceAcquire` getUserMedia mutex in
+   [`useLiveAV.ts`](../../src/hooks/useLiveAV.ts) and coalesces rapid calls. Enumeration **never** runs
+   concurrently with acquisition. On Windows, concurrent enumerate+acquire corrupts the camera list
+   ("no webcam / wrong dropdown"). **Post-acquire enumeration is authoritative; a pre-permission empty
+   list must NEVER overwrite a known-good list.**
+
+2. **A first offer carries the local mic m-line; a renegotiation watchdog backstops stalls.** The mic
+   track attaches before the first SDP offer so the peer's audio m-line exists from the start. A
+   `pendingRenegotiation` that never flushes (PC stuck non-`stable`) is forced through with a re-offer /
+   ICE restart by a watchdog in [`peer-mesh.ts`](../../src/lib/av/peer-mesh.ts). This is the root of
+   "tutor can't hear student." Evidence-first: confirm via `[peer-mesh]`/`[avx]` logs that the offer
+   carries `kind=audio` and the tutor fires `event=remote-track kind=audio` before/after any change.
+
+3. **Reconnect is symmetric.** Both tutor and student proactively `reconnectPeer` on sync-reconnect;
+   stale-peer eviction is short. The tutor path must not recover slower than the student path.
+
+4. **Preserve every existing LIVE-AV.md numbered invariant** — especially the `hasEverHadLocalMedia`
+   latch (#2), `externalAudioStream` single-acquisition (#8), single audio mixdown (#6), publishStream
+   = tutor-mic-only (#7), the two independent B2 consent gates (#13). Read LIVE-AV.md before touching
+   `useLiveAV.ts`, `peer-mesh.ts`, or `mic-recorder-audio.ts`.
+
+## Layout ↔ A/V firewall
+
+5. **A layout change must NEVER trigger device enumeration.** `layoutMode` changes must not call
+   `refresh*DeviceList` (directly or transitively — e.g. by closing a menu that re-fires a
+   device-enumeration effect). Enumeration happens **only** on an explicit user device-UI interaction,
+   mutexed + debounced (invariant 1). Layout poking A/V is the regression engine that produced the
+   webcam/dropdown corruption.
+
+6. **Effects depend on stable primitives + stable callbacks, never whole hook objects.** An effect that
+   depends on the entire `liveAv` object re-runs on every A/V state change → teardown/rebuild churn.
+   Thread stable primitive inputs and `useCallback`-stable handlers into the reconcile effects (the
+   coordinator extraction in Part 1B makes this structural).
+
+## CSS / chrome
+
+7. **Whiteboard chrome CSS is scoped under `.mynk-wb-chrome`.** No bare-global `[data-layout]` or
+   element selectors that leak outside the whiteboard. Kill `!important` reach-ins into `AVTile` /
+   Excalidraw — tile/cluster sizing lives in `AVTile` / `AVTilesPanel`, not the global monolith.
+
+8. **Chrome we touch becomes a `src/components/whiteboard/chrome/` library component with co-located
+   styles — appearance + behavior preserving.** No new inline JSX in the god component; no new rules in
+   the global CSS monolith. This is the incremental down-payment on `WB-COMPONENTS-PASS` (tracked in
+   [`docs/BACKLOG.md`](../../docs/BACKLOG.md)); the full shadcn-primitive migration stays tracked, not
+   this branch. **No visual refresh** — verify with before/after visual diff.
+
+## Test discipline
+
+- **A named semantic Playwright test per fix** ([`playwright-on-fix.mdc`](playwright-on-fix.mdc)) —
+  fails before, passes after, in the same branch; `@wb-av` tag for A/V. jsdom/jest **cannot** prove
+  device-switch, audio-send, or layout×A/V coupling (fake media always "works") — use jest only for the
+  pure single-flight/mutex/firewall logic and document a `PLAYWRIGHT-GAP` + backlog entry for
+  hardware-only paths.
+- **Semantic oracles, not pixels** ([`visual-layout-oracles.mdc`](visual-layout-oracles.mdc)): assert
+  the device options are present, the mesh survives a resize, the tutor has an audio receiver — via
+  relational `boundingBox`/state asserts, not whole-layout screenshots.

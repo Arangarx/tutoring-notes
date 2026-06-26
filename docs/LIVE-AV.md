@@ -286,6 +286,50 @@ fix for a real pilot-blocking bug.
     gate — server-side `allowAudioRecording` remains authoritative for
     persistence.
 
+14. **Enumeration is single-flighted through the device-acquire mutex**
+    (`wb-wave5-polish` reliability floor, 2026-06-26). Every
+    `enumerateDevices()` call (mount, focus, `devicechange`, popover/menu
+    open, device-pick) routes through the `chainDeviceAcquire`
+    getUserMedia mutex and coalesces rapid calls — enumeration NEVER runs
+    concurrently with acquisition. On Windows, concurrent enumerate +
+    acquire corrupts the camera list ("no webcam / wrong dropdown";
+    `39bb16e`→`42c0ee8` fixed one caller, the rest are closed by Part
+    1A). **Post-acquire enumeration is authoritative; a pre-permission
+    empty list must never overwrite a known-good list.** Guard: jest
+    single-flight fakes + `@wb-av` Playwright surrogate (pick → swap).
+
+15. **First offer carries the local mic m-line + renegotiation watchdog**
+    (`wb-wave5-polish` reliability floor, 2026-06-26). The mic track
+    attaches before the first SDP offer so the audio m-line exists from
+    the start; a `pendingRenegotiation` that never flushes (PC stuck
+    non-`stable`, amplified by dual-device join) is forced through by a
+    watchdog re-offer / ICE restart in `peer-mesh.ts`. This is the root
+    of "tutor can't hear student." Evidence-first: `[peer-mesh]` logs
+    must show the student offer carrying `kind=audio` and the tutor
+    firing `event=remote-track kind=audio`. Guard: peer-mesh unit
+    (audio-in-first-offer, watchdog re-offer) + `@wb-av` surrogate
+    (join → tutor audio receiver).
+
+16. **Layout ↔ A/V firewall — a layout change never enumerates**
+    (`wb-wave5-polish` reliability floor, 2026-06-26). `layoutMode`
+    changes must NOT call `refresh*DeviceList` directly or transitively
+    (e.g. by closing a menu that re-fires a device-enumeration effect —
+    the original regression engine). Enumeration happens only on explicit
+    device-UI interaction (invariant 14). Companion: reconcile effects
+    depend on **stable primitives + stable callbacks**, never the whole
+    `liveAv` object (extends invariant 2 beyond the mesh-build effect;
+    structural via the Part 1B coordinator extraction). Guard: jest
+    (layout-mode change → NO enumerate) + `@wb-av` surrogate (resize
+    across breakpoints → mesh intact).
+
+> Invariants 14-16 are the **target contract** of the `wb-wave5-polish`
+> whiteboard reliability floor. Each is enforced by a fix commit on that
+> branch with a red-before/green-after test; until a given fix lands, the
+> invariant is the spec the fix must satisfy. See
+> [`.cursor/rules/whiteboard-av-reliability.mdc`](../.cursor/rules/whiteboard-av-reliability.mdc)
+> for the agent-facing version (incl. the CSS-scoped-under-`.mynk-wb-chrome`
+> rule, codified in Part 1C).
+
 ---
 
 ## Cheat sheet — common questions
