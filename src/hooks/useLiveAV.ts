@@ -104,6 +104,19 @@ export type AvParticipant = {
   role: "tutor" | "student";
   label?: string;
   /**
+   * identity-peerid workstream: session-scoped identity token
+   * (student-only, optional). Absent for tutor and legacy peers.
+   * Carried from the remote peer's presence broadcast — enables
+   * dual-device dedup at the consumer layer.
+   */
+  identityKey?: string;
+  /**
+   * identity-peerid workstream: epoch ms when the remote client
+   * minted its session. Used for "newest wins" tiebreaking in
+   * dual-device detection. Absent for tutor and legacy peers.
+   */
+  joinedAt?: number;
+  /**
    * Live remote audio stream — null until at least one audio track
    * lands on the underlying RTCPeerConnection. Wire into
    * `<audio autoplay srcObject={p.audioStream} />` or pipe through
@@ -1634,6 +1647,10 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     type Internal = {
       role: "tutor" | "student";
       label?: string;
+      /** identity-peerid: session-scoped identity token (student-only, optional). */
+      identityKey?: string;
+      /** identity-peerid: epoch ms when this peer minted its session (optional). */
+      joinedAt?: number;
       audioStream: MediaStream;
       hasAudioTrack: boolean;
       videoStream: MediaStream;
@@ -1660,6 +1677,8 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           peerId,
           role: entry.role,
           ...(entry.label !== undefined ? { label: entry.label } : {}),
+          ...(entry.identityKey !== undefined ? { identityKey: entry.identityKey } : {}),
+          ...(entry.joinedAt !== undefined ? { joinedAt: entry.joinedAt } : {}),
           audioStream: entry.hasAudioTrack ? entry.audioStream : null,
           // Null-guard is load-bearing: when a video track is added to an
           // existing MediaStream, hasVideoTrack flips false→true so
@@ -1694,13 +1713,17 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     function ensureEntry(
       peerId: string,
       role: "tutor" | "student",
-      label?: string
+      label?: string,
+      identityKey?: string,
+      joinedAt?: number
     ): Internal {
       let entry = internal.get(peerId);
       if (!entry) {
         entry = {
           role,
           label,
+          identityKey,
+          joinedAt,
           audioStream: new MediaStream(),
           hasAudioTrack: false,
           videoStream: new MediaStream(),
@@ -1713,6 +1736,8 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       } else {
         entry.role = role;
         entry.label = label;
+        entry.identityKey = identityKey;
+        entry.joinedAt = joinedAt;
       }
       return entry;
     }
@@ -1776,7 +1801,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       const incoming = new Set<string>();
       for (const p of peers) {
         incoming.add(p.peerId);
-        const entry = ensureEntry(p.peerId, p.role, p.label);
+        const entry = ensureEntry(p.peerId, p.role, p.label, p.identityKey, p.joinedAt);
         // Graceful-leave rejoin detection (Fix 2.4): if addedToMesh is true but
         // the peer is no longer present in the mesh (they sent a leave signal
         // while the sync socket kept them in the roster briefly, or they

@@ -51,6 +51,14 @@ export type StudentWhiteboardSessionShellProps = ShellBaseProps & {
   initialLastActiveAtIso: string | null;
   /** Session phase at SSR time — allows the client to start in PENDING state. */
   initialSessionPhase?: "PENDING" | "ACTIVE";
+  /**
+   * identity-peerid workstream: session-scoped opaque identity token
+   * (authenticated /join/[sessionId] path only). Computed server-side as
+   * sha256(learnerProfileId:sessionId)[:12hex]. Enables identity-derived
+   * peerId and dual-device takeover detection. Absent on the legacy
+   * /w/[joinToken] path (unauthenticated).
+   */
+  identityKey?: string;
 };
 
 export type WhiteboardSessionShellProps =
@@ -70,6 +78,7 @@ export function WhiteboardSessionShell(props: WhiteboardSessionShellProps) {
         initialActiveMs={props.initialActiveMs}
         initialLastActiveAtIso={props.initialLastActiveAtIso}
         initialSessionPhase={props.initialSessionPhase}
+        identityKey={props.identityKey}
       />
     );
   }

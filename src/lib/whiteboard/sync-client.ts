@@ -271,6 +271,21 @@ export type WhiteboardWirePresence = {
    * separate "label changed" event.
    */
   label?: string;
+  /**
+   * identity-peerid workstream: opaque session-scoped identity token
+   * (student-only). sha256(learnerProfileId:sessionId)[:12hex] — same
+   * learner → same identityKey within a session; not correlatable across
+   * sessions. Enables dual-device detection without exposing the raw
+   * learnerProfileId to the relay. Tutor/legacy peers omit this field.
+   */
+  identityKey?: string;
+  /**
+   * Epoch ms when this client minted its session. Used as the "newest
+   * wins" tiebreaker in dual-device takeover detection: the client that
+   * finds another peer with the same identityKey but a strictly newer
+   * joinedAt self-bumps. Tutor/legacy peers omit this field.
+   */
+  joinedAt?: number;
 };
 
 /**
@@ -327,6 +342,18 @@ export type RoomPeer = {
   peerId: string;
   role: "tutor" | "student";
   label?: string;
+  /**
+   * identity-peerid workstream: session-scoped identity token for
+   * dual-device detection (student-only, optional). Absent for tutor
+   * and for legacy student clients that haven't been updated.
+   */
+  identityKey?: string;
+  /**
+   * Epoch ms when the remote client minted its session instance. Used
+   * to determine which device is "newest" in a dual-device conflict.
+   * Absent for tutor and legacy peers.
+   */
+  joinedAt?: number;
 };
 
 // -----------------------------------------------------------------
@@ -384,6 +411,18 @@ export type WhiteboardSyncClientOptions = {
    * back to role-derived defaults at the UI layer.
    */
   localPeerLabel?: string;
+  /**
+   * identity-peerid workstream: session-scoped identity key for this
+   * client (student-only). Included in every presence broadcast so
+   * peers can detect dual-device conflicts. Tutor callers omit.
+   */
+  localIdentityKey?: string;
+  /**
+   * Epoch ms when this client session was minted (for dual-device
+   * "newest wins" tiebreaking). Included in every presence broadcast.
+   * Tutor callers omit.
+   */
+  localJoinedAt?: number;
   /**
    * Phase 4b — override the 5-second grace window applied before a
    * peer is dropped from the room-peer map after a `room-user-change`
@@ -731,6 +770,15 @@ function validateWirePresence(parsed: unknown): WhiteboardWirePresence {
   } else if (typeof p.label !== "undefined") {
     throw new Error("[sync-client] presence envelope: bad label");
   }
+  // identity-peerid workstream: optional identity fields — drop silently
+  // if malformed (older senders don't include them; strict validation would
+  // reject their presence frames which would break backward compatibility).
+  if (typeof p.identityKey === "string" && p.identityKey.length > 0) {
+    out.identityKey = p.identityKey;
+  }
+  if (typeof p.joinedAt === "number" && Number.isFinite(p.joinedAt) && p.joinedAt > 0) {
+    out.joinedAt = p.joinedAt;
+  }
   return out;
 }
 
@@ -975,6 +1023,8 @@ export function createWhiteboardSyncClient(
     _logger,
     onNewRemotePeer,
     localPeerLabel,
+    localIdentityKey,
+    localJoinedAt,
     presencePruneGraceMs = PRESENCE_PRUNE_GRACE_MS_DEFAULT,
   } = opts;
   const peerId = opts.peerId ?? makeRandomPeerId();
@@ -1230,6 +1280,8 @@ export function createWhiteboardSyncClient(
       if (entry.peerId === peerId) continue; // exclude self
       const peer: RoomPeer = { peerId: entry.peerId, role: entry.role };
       if (entry.label !== undefined) peer.label = entry.label;
+      if (entry.identityKey !== undefined) peer.identityKey = entry.identityKey;
+      if (entry.joinedAt !== undefined) peer.joinedAt = entry.joinedAt;
       out.push(peer);
     }
     out.sort((a, b) =>
@@ -1246,7 +1298,13 @@ export function createWhiteboardSyncClient(
     for (let i = 0; i < a.length; i++) {
       const x = a[i]!;
       const y = b[i]!;
-      if (x.peerId !== y.peerId || x.role !== y.role || x.label !== y.label) {
+      if (
+        x.peerId !== y.peerId ||
+        x.role !== y.role ||
+        x.label !== y.label ||
+        x.identityKey !== y.identityKey ||
+        x.joinedAt !== y.joinedAt
+      ) {
         return false;
       }
     }
@@ -1279,17 +1337,23 @@ export function createWhiteboardSyncClient(
       peerId: msg.peerId,
       role: msg.role,
       ...(msg.label !== undefined ? { label: msg.label } : {}),
+      ...(msg.identityKey !== undefined ? { identityKey: msg.identityKey } : {}),
+      ...(msg.joinedAt !== undefined ? { joinedAt: msg.joinedAt } : {}),
       lastSeenMs: Date.now(),
     };
     presenceMap.set(msg.peerId, next);
     if (
       !existing ||
       existing.role !== next.role ||
-      existing.label !== next.label
+      existing.label !== next.label ||
+      existing.identityKey !== next.identityKey ||
+      existing.joinedAt !== next.joinedAt
     ) {
       log.log(
         `kind=presence recv peerId=${msg.peerId} role=${msg.role}${
           msg.label ? ` label=${msg.label}` : ""
+        }${msg.identityKey ? ` identityKey=${msg.identityKey}` : ""}${
+          msg.joinedAt ? ` joinedAt=${msg.joinedAt}` : ""
         } total=${presenceMap.size}`
       );
       fireRoomPeersIfChanged();
@@ -1305,10 +1369,14 @@ export function createWhiteboardSyncClient(
       peerId,
       role,
       ...(localPeerLabel !== undefined ? { label: localPeerLabel } : {}),
+      ...(localIdentityKey !== undefined ? { identityKey: localIdentityKey } : {}),
+      ...(localJoinedAt !== undefined ? { joinedAt: localJoinedAt } : {}),
     };
     log.log(
       `kind=presence send peerId=${peerId} role=${role}${
         localPeerLabel ? ` label=${localPeerLabel}` : ""
+      }${localIdentityKey ? ` identityKey=${localIdentityKey}` : ""}${
+        localJoinedAt ? ` joinedAt=${localJoinedAt}` : ""
       }`
     );
     void encryptAndEmitImmediate(msg);

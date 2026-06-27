@@ -89,7 +89,10 @@ import {
 import { generateSessionSnapshotPng } from "@/lib/whiteboard/snapshot-png";
 import { resolveParticipantLabel } from "@/lib/whiteboard/participant-label";
 import { deriveSyncPillState } from "@/lib/whiteboard/sync-pill-presentation";
-import { getOrCreateLocalPeerId } from "@/lib/whiteboard/local-peer-id";
+import {
+  getOrCreateLocalPeerId,
+  parseStudentPeerId,
+} from "@/lib/whiteboard/local-peer-id";
 import {
   endWhiteboardSession,
   enqueueChunkTranscriptionAction,
@@ -293,6 +296,14 @@ type Props = {
   joinToken?: string;
   /** Tutor display name for student chrome — reserved for Wave 1b+. */
   tutorName?: string;
+  /**
+   * identity-peerid workstream: session-scoped opaque identity token
+   * (student path only). sha256(learnerProfileId:sessionId)[:12hex].
+   * When provided, the student peerId is derived as
+   * `student-<identityKey>-<deviceId>` (stable per browser, detectable
+   * across devices for dual-device takeover). Tutor callers omit.
+   */
+  identityKey?: string;
 };
 
 // Phase 4d Commit 6: stable empty Set so the FSM's
@@ -428,6 +439,7 @@ export function WhiteboardWorkspaceClient({
   initialSessionPhase = "ACTIVE",
   sessionMode: _sessionMode,
   activatedAt: _activatedAt,
+  identityKey,
 }: Props) {
   const router = useRouter();
   // TU-12: Excalidraw theme follows app-selected theme (not OS-only)
@@ -527,11 +539,16 @@ export function WhiteboardWorkspaceClient({
   // component instance. HMR remounts produce a new id along with a
   // new sync-client; both layers agree.
   const localPeerId = useMemo(
-    () => getOrCreateLocalPeerId(whiteboardSessionId, role),
-    // role is stable per-mount (prop default "tutor"); including for completeness.
+    () => getOrCreateLocalPeerId(whiteboardSessionId, role, identityKey),
+    // role and identityKey are stable per-mount; including for completeness.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [whiteboardSessionId, role]
+    [whiteboardSessionId, role, identityKey]
   );
+  // Epoch ms when this client minted its session — used as the "newest wins"
+  // tiebreaker in dual-device takeover detection (identity-peerid workstream).
+  // Minted once per component mount; changes on page reload (new timestamp).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const localJoinedAt = useMemo(() => Date.now(), []);
   // Display label for the tutor's own presence frame. Server-side
   // doesn't pass the tutor's display name through props today; fall
   // back to "Tutor" so we don't block hook usage on the label being
@@ -663,6 +680,13 @@ export function WhiteboardWorkspaceClient({
     useState<WhiteboardSyncClient | null>(null);
   const [studentConnected, setStudentConnected] = useState(false);
   const [studentOtherPeerCount, setStudentOtherPeerCount] = useState(0);
+  /**
+   * identity-peerid workstream: becomes true when another device in the room
+   * is detected as the "newer" session for the same learner identity. When
+   * true, the student sees a "you joined on another device" takeover screen
+   * and sync/A/V is torn down.
+   */
+  const [deviceSuperseded, setDeviceSuperseded] = useState(false);
   /** Student mic/cam pickers stay enabled while sync connects — only block after leave / bad link. */
   const studentAvPickerDisabled =
     hasLeft || joinUnavailableReason !== null;
@@ -1061,6 +1085,10 @@ export function WhiteboardWorkspaceClient({
       role: "student",
       peerId: localPeerId,
       localPeerLabel: syncPresenceLabel,
+      // identity-peerid workstream: broadcast identity fields so peers can
+      // detect dual-device conflicts (tutor sees one tile; older device self-bumps).
+      ...(identityKey !== undefined ? { localIdentityKey: identityKey } : {}),
+      localJoinedAt,
     });
     setStudentSyncClient(client);
     setStudentConnected(client.isConnected());
@@ -1093,6 +1121,46 @@ export function WhiteboardWorkspaceClient({
     hasLeft,
     wjgLog,
   ]);
+
+  // identity-peerid workstream: dual-device takeover detection.
+  // Subscribe to room peer changes and detect when another device with the
+  // same identityKey has a strictly newer joinedAt (or lexicographically
+  // greater peerId as a tiebreak). When true, this device is stale —
+  // disconnect sync/A/V and show the "you joined on another device" screen.
+  //
+  // Invariant: same peerId = same device (sessionStorage-backed OR
+  // localStorage-derived deterministic id) = reload = NOT a takeover.
+  // Only a DIFFERENT peerId with same identityKey triggers takeover.
+  useEffect(() => {
+    if (role !== "student" || !studentSyncClient) return;
+    const myParsed = parseStudentPeerId(localPeerId);
+    if (!myParsed) return; // Not identity-derived — no identity features, skip.
+
+    const unsub = studentSyncClient.onRoomPeersChange((peers) => {
+      for (const peer of peers) {
+        if (peer.role !== "student") continue;
+        if (peer.peerId === localPeerId) continue; // skip self (shouldn't appear; guard)
+        if (!peer.identityKey || peer.identityKey !== myParsed.identityKey) continue;
+        // Same identityKey, different peerId = different device, same learner.
+        const peerJoinedAt = peer.joinedAt ?? 0;
+        const isNewerDevice =
+          peerJoinedAt > localJoinedAt ||
+          (peerJoinedAt === localJoinedAt && peer.peerId > localPeerId);
+        if (isNewerDevice) {
+          console.log(
+            `[wjg] wjg=${localPeerId.slice(-8)} wbsid=${whiteboardSessionId} action=device_superseded by=${peer.peerId} theirJoinedAt=${peerJoinedAt} myJoinedAt=${localJoinedAt}`
+          );
+          setDeviceSuperseded(true);
+          // Disconnect from sync to stop competing for presence.
+          // The A/V mesh (useLiveAV) will naturally quiesce once sync is torn
+          // down (no more onRoomPeersChange callbacks for new peer additions).
+          studentSyncClient.disconnect();
+          return; // No need to check other peers.
+        }
+      }
+    });
+    return unsub;
+  }, [role, studentSyncClient, localPeerId, localJoinedAt, whiteboardSessionId]);
 
   // Student clock tick (drives student timer display)
   useEffect(() => {
@@ -5329,6 +5397,32 @@ export function WhiteboardWorkspaceClient({
               onClick={() => setHasLeft(false)}
             >
               Rejoin session
+            </button>
+          </div>
+        </div>
+      </WbRoleProvider>
+    );
+  }
+
+  // identity-peerid workstream: takeover screen — another device (same learner,
+  // newer joinedAt) has taken over. Show a gentle explanation and let the
+  // learner rejoin by reloading (which mints a new joinedAt, making THIS
+  // device the newest one and completing the takeover cycle).
+  if (role === "student" && deviceSuperseded) {
+    return (
+      <WbRoleProvider role={role}>
+        <div className="container" style={{ maxWidth: 720, padding: 24 }}>
+          <div className="card">
+            <h1 style={{ marginTop: 0 }}>You joined on another device</h1>
+            <p>
+              It looks like you opened this session on a different device or browser.
+              Only one connection is active at a time — your other device is now live.
+            </p>
+            <button
+              className="button button--primary"
+              onClick={() => window.location.reload()}
+            >
+              Rejoin on this device
             </button>
           </div>
         </div>

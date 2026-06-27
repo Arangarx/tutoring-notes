@@ -17,6 +17,7 @@
 
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { createHash } from "crypto";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { getLearnerSessionFromHeaders } from "@/lib/server-session";
@@ -54,6 +55,18 @@ export default async function JoinSessionPage({
   // AUTH BOUNDARY: participant gate (BLOCKER).
   // assertIsSessionParticipant calls notFound() on mismatch or leftAt set.
   await assertIsSessionParticipant(learnerSession.learnerProfileId, sessionId);
+
+  // identity-peerid workstream: compute a session-scoped identity key.
+  // sha256(learnerProfileId:sessionId)[:12hex] — opaque, not reversible
+  // to the raw learnerProfileId. Stable for the same learner within a
+  // session (enables dual-device detection) but NOT correlatable across
+  // sessions (different sessionId → different salt → different hash).
+  // The relay only ever sees the encrypted presence envelope; this value
+  // never reaches our own server in plain text after this computation.
+  const identityKey = createHash("sha256")
+    .update(`${learnerSession.learnerProfileId}:${sessionId}`)
+    .digest("hex")
+    .slice(0, 12);
 
   const session = await db.whiteboardSession.findUnique({
     where: { id: sessionId },
@@ -120,6 +133,7 @@ export default async function JoinSessionPage({
         initialSessionPhase={
           (session.sessionPhase as "PENDING" | "ACTIVE" | undefined) ?? "ACTIVE"
         }
+        identityKey={identityKey}
       />
     </JoinHashRestorer>
   );
