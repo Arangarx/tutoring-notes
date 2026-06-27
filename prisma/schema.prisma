@@ -69,6 +69,16 @@ enum TutorApprovalStatus {
   APPROVED
 }
 
+enum SessionPhase {
+  PENDING
+  ACTIVE
+}
+
+enum SessionMode {
+  LIVE
+  IN_PERSON
+}
+
 model Student {
   id                      String              @id @default(uuid())
   name                    String
@@ -285,6 +295,11 @@ model WhiteboardSession {
   endedAt         DateTime?
   durationSeconds Int?
 
+  sessionPhase SessionPhase @default(PENDING)
+  sessionMode  SessionMode  @default(LIVE)
+  /// When tutor clicked Start (PENDING→ACTIVE); null while pending.
+  activatedAt  DateTime?
+
   /**
    * Guardrail #4 — tutor checked the consent box before starting.
    * Server-action enforces this on create, the workspace page
@@ -374,12 +389,26 @@ model WhiteboardSession {
   /// B2: frozen consent snapshot at session start (legal record).
   consentSnapshot SessionConsentSnapshot?
 
+  sessionParticipants SessionParticipant[]
+
   createdAt  DateTime    @default(now())
   costEvents CostEvent[]
 
   @@index([adminUserId])
   @@index([studentId])
   @@index([noteId])
+}
+
+model SessionParticipant {
+  id                  String            @id @default(uuid())
+  whiteboardSessionId String
+  whiteboardSession   WhiteboardSession @relation(fields: [whiteboardSessionId], references: [id], onDelete: Cascade)
+  learnerProfileId    String
+  learnerProfile      LearnerProfile    @relation(fields: [learnerProfileId], references: [id], onDelete: Cascade)
+  joinedAt            DateTime          @default(now())
+  leftAt              DateTime?
+
+  @@unique([whiteboardSessionId, learnerProfileId])
 }
 
 /**
@@ -870,6 +899,7 @@ model LearnerProfile {
   consentRecords  ConsentRecord[]
   /// B2: optional child-narrowing restrictions (defaults all-false = no restrictions).
   consentRestriction ConsentRestriction?
+  sessionParticipants SessionParticipant[]
 
   @@index([accountHolderId])
 }
