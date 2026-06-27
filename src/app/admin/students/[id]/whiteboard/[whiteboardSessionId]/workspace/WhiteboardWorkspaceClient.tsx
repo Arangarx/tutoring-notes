@@ -69,6 +69,7 @@ import { useCollaboratorPointers } from "@/hooks/useCollaboratorPointers";
 import { useLiveAV } from "@/hooks/useLiveAV";
 import AudioControls from "@/components/av/AudioControls";
 import VideoControls from "@/components/av/VideoControls";
+import { AVTilesPanel } from "@/components/av/AVTilesPanel";
 import { useStudentWhiteboardCanvas } from "@/hooks/useStudentWhiteboardCanvas";
 import { useExcalidrawLoadingGuard, excalidrawBoardBgHex } from "@/hooks/useExcalidrawLoadingGuard";
 import { studentMicStreamId } from "@/lib/recording/remote-stream-recorder";
@@ -149,6 +150,10 @@ import {
 } from "@/components/whiteboard/chrome/useWbLayoutMode";
 import { LiveBoardChrome } from "@/components/whiteboard/chrome/LiveBoardChrome";
 import { WbRoleProvider, type WbParticipantRole } from "@/components/whiteboard/chrome/wb-role";
+import {
+  WaitingRoomOverlay,
+  type WtrSessionMode,
+} from "@/components/whiteboard/chrome/WaitingRoomOverlay";
 import {
   shapeIconFor,
   WbIconCamera,
@@ -437,7 +442,7 @@ export function WhiteboardWorkspaceClient({
   joinToken,
   tutorName = "your tutor",
   initialSessionPhase = "ACTIVE",
-  sessionMode: _sessionMode,
+  sessionMode: initialSessionMode,
   activatedAt: _activatedAt,
   identityKey,
 }: Props) {
@@ -1325,6 +1330,16 @@ export function WhiteboardWorkspaceClient({
   );
   const phaseActive = sessionPhase === "ACTIVE";
 
+  // Waiting-room mode — LIVE (remote) or IN_PERSON (student beside tutor).
+  // Initialized from the prop (DB value at SSR time); tutor can toggle
+  // before clicking Start. Persisted to DB at activation time.
+  const [sessionMode, setSessionMode] = useState<WtrSessionMode>(
+    initialSessionMode === "IN_PERSON" ? "IN_PERSON" : "LIVE"
+  );
+
+  // True while startWhiteboardSession is in-flight (prevents double-tap).
+  const [isStarting, setIsStarting] = useState(false);
+
   const sync = syncReady ? syncClientRef.current : null;
 
   // Peer count (= number of OTHER peers; >=1 means a student joined).
@@ -2002,6 +2017,32 @@ export function WhiteboardWorkspaceClient({
       }
     };
   }, [tutorSyncConnected, liveAv.reachableParticipants.length]);
+
+  // -----------------------------------------------------------------------
+  // Waiting-room telemetry (wtr prefix)
+  // -----------------------------------------------------------------------
+  // Log overlay_shown once on mount when phase is PENDING.
+  const wtrShownLoggedRef = useRef(false);
+  useEffect(() => {
+    if (phaseActive) return;
+    if (wtrShownLoggedRef.current) return;
+    wtrShownLoggedRef.current = true;
+    console.info(
+      `[wtr] wbsid=${whiteboardSessionId} role=${role} action=waiting_shown`
+    );
+  }, [phaseActive, whiteboardSessionId, role]);
+
+  // Log student_connected when bothPartiesInRoom first becomes true while PENDING.
+  const wtrStudentConnectedLoggedRef = useRef(false);
+  useEffect(() => {
+    if (phaseActive) return;
+    if (!bothPartiesInRoom) return;
+    if (wtrStudentConnectedLoggedRef.current) return;
+    wtrStudentConnectedLoggedRef.current = true;
+    console.info(
+      `[wtr] wbsid=${whiteboardSessionId} role=${role} action=student_connected`
+    );
+  }, [phaseActive, bothPartiesInRoom, whiteboardSessionId, role]);
 
   // -----------------------------------------------------------------
   // Diagnostic: AV mount phases — surfaces the gap between
@@ -3593,15 +3634,26 @@ export function WhiteboardWorkspaceClient({
   }, [endingState, whiteboardSessionId]);
 
   // Tutor Start affordance — transitions the session from PENDING to ACTIVE.
-  // Minimal: flips phase locally and persists to server. A later workstream
-  // moves this call into the waiting-room overlay with A/V-readiness gating.
-  const activateSessionLive = useCallback(async () => {
+  // Called from the WaitingRoomOverlay Start button with the chosen mode.
+  const activateSessionLive = useCallback(async (mode: WtrSessionMode) => {
+    if (isStarting) return;
+    setIsStarting(true);
     console.info(
       `[slc] wbsid=${whiteboardSessionId} action=session_activate_clicked phase=pending->active`
     );
-    await startWhiteboardSession(whiteboardSessionId);
-    setSessionPhase("ACTIVE");
-  }, [whiteboardSessionId]);
+    console.info(
+      `[wtr] wbsid=${whiteboardSessionId} role=${role} action=start_clicked mode=${mode.toLowerCase()}`
+    );
+    try {
+      await startWhiteboardSession(whiteboardSessionId, mode);
+      setSessionPhase("ACTIVE");
+      console.info(
+        `[wtr] wbsid=${whiteboardSessionId} role=${role} action=live_entered mode=${mode.toLowerCase()}`
+      );
+    } finally {
+      setIsStarting(false);
+    }
+  }, [whiteboardSessionId, role, isStarting]);
 
   const handleEndSession = useCallback(async () => {
     setEndingState("finalizing");
@@ -5465,6 +5517,86 @@ export function WhiteboardWorkspaceClient({
   const chromeLocalTileLabel = role === "student" ? "You" : localPeerLabel;
   const chromePageList = role === "student" ? studentPageList : pageList;
 
+  // ── Waiting-room overlay props ──────────────────────────────────────────
+  // studentConnected uses bothPartiesInRoom (sync present AND ≥1 WebRTC-
+  // reachable peer) — the same split-brain guard used for billing.
+  const overlayStudentConnected = bothPartiesInRoom;
+  // LIVE: gate on student connected. IN_PERSON: always startable.
+  const overlayCantStart =
+    sessionMode === "LIVE" ? !overlayStudentConnected : false;
+  const overlayCanStart = !overlayCantStart;
+
+  // Pre-built mic control node for the overlay — role-specific component.
+  // These are the same wired instances as the top bar controls; no new A/V
+  // coupling needed in the overlay component.
+  const overlayMicNode =
+    role === "student" ? (
+      <WbTopBarMicControlLive
+        isMicMuted={liveAv.isMicMuted}
+        hasMicPermission={liveAv.hasMicPermission}
+        hasMicStream={liveAv.localAudioStream !== null}
+        audioDevices={liveAv.audioDevices ?? []}
+        selectedPickerSlot={liveAv.pickedMicSlot}
+        isAcquiring={liveAv.isAcquiring}
+        onToggleMute={liveAv.toggleMic}
+        onAcquireMic={handleAcquireMic}
+        onPickMicSlot={(slot) =>
+          void liveAv.setMicDeviceBySlot(slot, { force: true })
+        }
+        onRefreshDevices={() => void liveAv.refreshAudioDeviceList()}
+        disabled={false}
+      />
+    ) : (
+      <WbTopBarMicControl
+        audio={workspaceAudio}
+        isMicMuted={liveAv.isMicMuted}
+        onToggleMute={liveAv.toggleMic}
+        onAcquireMic={handleAcquireMic}
+        onPickMicSlot={(slot) =>
+          void liveAv.setMicDeviceBySlot(slot, { force: true })
+        }
+        disabled={false}
+      />
+    );
+
+  const overlayAVTilesNode = (
+    <AVTilesPanel
+      participants={liveAv.participants}
+      localTile={{
+        peerId: localPeerId,
+        role,
+        label: chromeLocalTileLabel,
+        audioStream: liveAv.localAudioStream,
+        videoStream: liveAv.localVideoStream,
+        isMicMuted: liveAv.isMicMuted,
+        isCamMuted: liveAv.isCamMuted,
+      }}
+      onReconnect={liveAv.reconnectPeer}
+      resolveLabel={(participant) =>
+        resolveParticipantLabel(participant, {
+          studentName,
+          totalRemotePeers: liveAv.participants.length,
+        })
+      }
+      testId="wb-waiting-room-av-tiles"
+    />
+  );
+
+  const overlayCamNode = (
+    <WbTopBarCamControl
+      isCamMuted={liveAv.isCamMuted}
+      hasCamPermission={liveAv.hasCamPermission}
+      onToggleCam={() => void handleTopBarCam()}
+      videoDevices={liveAv.videoDevices ?? []}
+      selectedPickerSlot={liveAv.pickedVideoCameraSlot}
+      onPickCameraSlot={(slot) => void liveAv.setVideoCameraBySlot(slot)}
+      isLive={liveAv.localVideoStream !== null}
+      onRefreshDevices={() => void liveAv.refreshVideoDeviceList()}
+      disabled={false}
+    />
+  );
+  // ────────────────────────────────────────────────────────────────────────
+
   return (
     <WbRoleProvider role={role}>
     <LiveBoardChrome
@@ -5923,17 +6055,6 @@ export function WhiteboardWorkspaceClient({
 
         <div className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing">
           {renderTopbarOverflowControl("wb-topbar-overflow")}
-          {role === "tutor" && !phaseActive && (
-            <button
-              type="button"
-              className="mynk-wb-tb-btn mynk-wb-tb-btn--primary"
-              onClick={() => { void activateSessionLive(); }}
-              data-testid="wb-start-session"
-              aria-label="Start session"
-            >
-              Start session
-            </button>
-          )}
           {(() => {
             const endSessionLabel =
               endingState === "finalizing"
@@ -6420,6 +6541,25 @@ export function WhiteboardWorkspaceClient({
         </WbChromeErrorBoundary>
       ) : null}
     />
+    {/* Waiting-room overlay — rendered OVER the board; board stays mounted so
+        A/V mesh is continuous. Dismissed when phaseActive flips to true
+        (tutor clicks Start → activateSessionLive sets sessionPhase=ACTIVE). */}
+    {!phaseActive && (
+      <WaitingRoomOverlay
+        role={role}
+        sessionMode={sessionMode}
+        studentConnected={overlayStudentConnected}
+        tutorName={tutorName}
+        studentLabel={studentName || "your student"}
+        canStart={overlayCanStart}
+        isStarting={isStarting}
+        onStart={() => void activateSessionLive(sessionMode)}
+        onSessionModeChange={(m) => setSessionMode(m)}
+        micControlNode={overlayMicNode}
+        camControlNode={overlayCamNode}
+        avTilesNode={overlayAVTilesNode}
+      />
+    )}
     </WbRoleProvider>
   );
 }

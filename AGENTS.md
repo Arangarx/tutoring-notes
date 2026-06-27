@@ -117,6 +117,12 @@ and `docs/WHITEBOARD-STATUS.md` are the working example of this pattern.
   writes `[wjg] wjg=<joinToken:8> wbsid=<id> action=<action> ...` — mount, key_ok,
   key_missing, sync_connect, sync_disconnect, excalidraw_api_ready, loading_cleared,
   loading_stuck, student_reload, session_ended),
+  `wtr` (waiting room — PENDING-phase overlay lifecycle; writes
+  `[wtr] wbsid=<id> role=<tutor|student> action=<action>` for:
+  `waiting_shown` (overlay first shown), `student_connected` (bothPartiesInRoom
+  flips true while PENDING), `start_clicked mode=<live|in_person>` (tutor
+  taps Start), `live_entered mode=<live|in_person>` (overlay dismissed, phase
+  flips to ACTIVE)),
   `slc` (session lifecycle — `createWhiteboardSession` /
   `startWhiteboardSession` / `endWhiteboardSession`; every transition writes
   `[slc] wbsid=<id> action=session_created|session_started|session_ended ...`),

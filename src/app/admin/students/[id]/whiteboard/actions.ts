@@ -267,9 +267,16 @@ export type StartWhiteboardSessionResult = {
 /**
  * Transition a whiteboard session from PENDING → ACTIVE when the tutor
  * clicks Start. Idempotent: already-active or ended sessions are no-ops.
+ *
+ * @param sessionMode Optional mode to persist at activation time (LIVE or
+ *   IN_PERSON). When provided, it is written to the DB alongside the phase
+ *   flip so the server-truth mode reflects the tutor's choice at Start time.
+ *   Omitting leaves the DB default (LIVE) unchanged — safe for callers that
+ *   predate this parameter.
  */
 export async function startWhiteboardSession(
-  whiteboardSessionId: string
+  whiteboardSessionId: string,
+  sessionMode?: "LIVE" | "IN_PERSON"
 ): Promise<StartWhiteboardSessionResult> {
   const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
 
@@ -285,6 +292,7 @@ export async function startWhiteboardSession(
         data: {
           sessionPhase: "ACTIVE",
           activatedAt: new Date(),
+          ...(sessionMode ? { sessionMode } : {}),
         },
       }),
     { label: "startWhiteboardSession" }
