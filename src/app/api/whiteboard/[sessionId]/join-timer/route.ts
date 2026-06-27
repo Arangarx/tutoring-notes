@@ -1,21 +1,28 @@
 import { NextResponse } from "next/server";
 import { db, withDbRetry } from "@/lib/db";
+import { getLearnerSession } from "@/lib/learner-session";
+import { verifyIsSessionParticipant } from "@/lib/session-participant-scope";
 
 /**
- * Read-only live timer for the anonymous student join page.
+ * Read-only live timer for the student join page.
  *
  * GET /api/whiteboard/[sessionId]/join-timer?token=<joinToken>
+ * GET /api/whiteboard/[sessionId]/join-timer  (learner-session cookie auth)
  *
- * Auth: the join token in the query string. Same gate as `GET /w/[token]`.
- * The logged-in timer-anchor route is tutor-only; this exists so the
- * student can display the same billable clock without a session cookie.
+ * Auth (two branches, both gate on same session):
+ *   - Token branch: `?token=<joinToken>` query parameter (legacy anonymous path
+ *     and /w/[joinToken] redirect bridge). Validates the join token is live,
+ *     not revoked, and belongs to this session.
+ *   - Learner-session branch: `mynk_learner_session` cookie. Validates the
+ *     learner has an active SessionParticipant row for this session. Used by
+ *     the authenticated /join/[sessionId] path. No `?token=` required.
  *
- * **Session end / revoke:** when the tutor finishes the room, join tokens
- * are revoked and/or `WhiteboardSession.endedAt` is set. Returning **404**
- * made the student's poll silently ignore failures — tabs stayed “live”.
- * Closed states now respond with **`200`** and `{ live: false, reason }`
- * so the SPA can disconnect sync + show tutor-ended copy **without**
- * weakening the gate for genuinely unknown tokens (still **404**).
+ * Response includes `sessionPhase` ("PENDING"|"ACTIVE") in the live:true body
+ * so the student client can detect the PENDING→ACTIVE transition.
+ *
+ * **Session end / revoke:** closed states respond with 200 + `{ live: false,
+ * reason }` so the SPA can disconnect sync + show tutor-ended copy without
+ * weakening the gate for genuinely unknown tokens (still 404).
  */
 export async function GET(
   req: Request,
@@ -24,86 +31,122 @@ export async function GET(
   const { sessionId } = await ctx.params;
   const url = new URL(req.url);
   const token = url.searchParams.get("token");
-  if (!token) {
+
+  // -------------------------------------------------------------------------
+  // Token branch (legacy + /w redirect bridge)
+  // -------------------------------------------------------------------------
+  if (token) {
+    const now = new Date();
+    const tokenRow = await withDbRetry(
+      () =>
+        db.whiteboardJoinToken.findUnique({
+          where: { token },
+          select: {
+            whiteboardSessionId: true,
+            expiresAt: true,
+            revokedAt: true,
+            whiteboardSession: { select: { id: true, endedAt: true } },
+          },
+        }),
+      { label: "joinTimer.findToken" }
+    );
+
+    if (!tokenRow) {
+      return NextResponse.json({ error: "Not found." }, { status: 404 });
+    }
+    if (tokenRow.whiteboardSessionId !== sessionId) {
+      return NextResponse.json({ error: "Not found." }, { status: 404 });
+    }
+
+    const sessionEnded = Boolean(tokenRow.whiteboardSession?.endedAt);
+    const tokenExpired = tokenRow.expiresAt.getTime() <= now.getTime();
+    const tokenRevoked = Boolean(tokenRow.revokedAt);
+
+    if (tokenExpired) {
+      return NextResponse.json(
+        { live: false as const, reason: "token_expired" as const },
+        { status: 200, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+    if (sessionEnded) {
+      return NextResponse.json(
+        { live: false as const, reason: "session_ended" as const },
+        { status: 200, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+    if (tokenRevoked) {
+      return NextResponse.json(
+        { live: false as const, reason: "token_revoked" as const },
+        { status: 200, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    const row = await withDbRetry(
+      () =>
+        db.whiteboardSession.findUnique({
+          where: { id: sessionId },
+          select: { activeMs: true, lastActiveAt: true, sessionPhase: true },
+        }),
+      { label: "joinTimer.findSession" }
+    );
+
     return NextResponse.json(
-      { error: "Query parameter 'token' is required." },
+      {
+        live: true as const,
+        activeMs: row?.activeMs ?? 0,
+        lastActiveAt: row?.lastActiveAt?.toISOString() ?? null,
+        sessionPhase: (row?.sessionPhase as "PENDING" | "ACTIVE" | undefined) ?? "ACTIVE",
+      },
+      { headers: { "Cache-Control": "no-store" } }
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Learner-session branch (/join/[sessionId] authenticated path)
+  // -------------------------------------------------------------------------
+  const learnerSession = await getLearnerSession(req);
+  if (!learnerSession) {
+    return NextResponse.json(
+      { error: "Missing authentication. Provide ?token= or a learner session cookie." },
       { status: 400 }
     );
   }
 
-  const now = new Date();
-  const tokenRow = await withDbRetry(
-    () =>
-      db.whiteboardJoinToken.findUnique({
-        where: { token },
-        select: {
-          whiteboardSessionId: true,
-          expiresAt: true,
-          revokedAt: true,
-          whiteboardSession: { select: { id: true, endedAt: true } },
-        },
-      }),
-    { label: "joinTimer.findToken" }
+  const isParticipant = await verifyIsSessionParticipant(
+    learnerSession.learnerProfileId,
+    sessionId
   );
-
-  if (!tokenRow) {
+  if (!isParticipant) {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
-  }
-  if (tokenRow.whiteboardSessionId !== sessionId) {
-    return NextResponse.json({ error: "Not found." }, { status: 404 });
-  }
-
-  const sessionEnded = Boolean(tokenRow.whiteboardSession?.endedAt);
-  const tokenExpired = tokenRow.expiresAt.getTime() <= now.getTime();
-  const tokenRevoked = Boolean(tokenRow.revokedAt);
-
-  if (tokenExpired) {
-    return NextResponse.json(
-      { live: false as const, reason: "token_expired" as const },
-      {
-        status: 200,
-        headers: { "Cache-Control": "no-store" },
-      }
-    );
-  }
-  if (sessionEnded) {
-    return NextResponse.json(
-      { live: false as const, reason: "session_ended" as const },
-      {
-        status: 200,
-        headers: { "Cache-Control": "no-store" },
-      }
-    );
-  }
-  if (tokenRevoked) {
-    return NextResponse.json(
-      { live: false as const, reason: "token_revoked" as const },
-      {
-        status: 200,
-        headers: { "Cache-Control": "no-store" },
-      }
-    );
   }
 
   const row = await withDbRetry(
     () =>
       db.whiteboardSession.findUnique({
         where: { id: sessionId },
-        select: { activeMs: true, lastActiveAt: true },
+        select: { activeMs: true, lastActiveAt: true, sessionPhase: true, endedAt: true },
       }),
-    { label: "joinTimer.findSession" }
+    { label: "joinTimer.findSessionLearner" }
   );
+
+  if (!row) {
+    return NextResponse.json({ error: "Not found." }, { status: 404 });
+  }
+
+  if (row.endedAt) {
+    return NextResponse.json(
+      { live: false as const, reason: "session_ended" as const },
+      { status: 200, headers: { "Cache-Control": "no-store" } }
+    );
+  }
 
   return NextResponse.json(
     {
       live: true as const,
-      activeMs: row?.activeMs ?? 0,
-      lastActiveAt: row?.lastActiveAt?.toISOString() ?? null,
+      activeMs: row.activeMs ?? 0,
+      lastActiveAt: row.lastActiveAt?.toISOString() ?? null,
+      sessionPhase: (row.sessionPhase as "PENDING" | "ACTIVE" | undefined) ?? "ACTIVE",
     },
-    {
-      headers: {
-        "Cache-Control": "no-store",
-      },
-    }
+    { headers: { "Cache-Control": "no-store" } }
   );
 }

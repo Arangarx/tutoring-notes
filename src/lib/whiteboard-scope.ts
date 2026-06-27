@@ -16,6 +16,7 @@
 import { notFound } from "next/navigation";
 import { db, withDbRetry } from "@/lib/db";
 import { canAccessStudentRow, requireStudentScope } from "@/lib/student-scope";
+import { verifyIsSessionParticipant } from "@/lib/session-participant-scope";
 
 export type AuthorisedWhiteboardSession = {
   id: string;
@@ -109,4 +110,43 @@ export async function assertJoinTokenAllowsWhiteboardAssetUpload(
     throw new Error("Invalid upload path for this session.");
   }
   return { studentId: row.whiteboardSession.studentId };
+}
+
+/**
+ * Validates learner-session auth for `whiteboard-asset` uploads from /join pages.
+ *
+ * Parallel to `assertJoinTokenAllowsWhiteboardAssetUpload` but authorized by
+ * an active SessionParticipant row rather than a join token. Used by the
+ * `/api/upload/blob` route when the student is on the authenticated /join path
+ * and sends no joinToken in the client payload.
+ *
+ * Applies the same path-namespace safety check to prevent a participant from
+ * uploading into another session's namespace.
+ */
+export async function assertLearnerSessionAllowsWhiteboardAssetUpload(
+  learnerProfileId: string,
+  whiteboardSessionId: string,
+  pathname: string
+): Promise<{ studentId: string }> {
+  if (!(await verifyIsSessionParticipant(learnerProfileId, whiteboardSessionId))) {
+    throw new Error("Learner is not an active participant in this session.");
+  }
+
+  const session = await withDbRetry(
+    () =>
+      db.whiteboardSession.findUnique({
+        where: { id: whiteboardSessionId },
+        select: { id: true, studentId: true, endedAt: true },
+      }),
+    { label: "assertLearnerSessionAllowsWhiteboardAssetUpload" }
+  );
+
+  if (!session) throw new Error("Session not found.");
+  if (session.endedAt) throw new Error("This whiteboard session has ended.");
+
+  const expected = `whiteboard-sessions/${session.studentId}/${whiteboardSessionId}/`;
+  if (!pathname.startsWith(expected)) {
+    throw new Error("Invalid upload path for this session.");
+  }
+  return { studentId: session.studentId };
 }

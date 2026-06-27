@@ -39,11 +39,18 @@ export type TutorWhiteboardSessionShellProps = ShellBaseProps & {
 
 export type StudentWhiteboardSessionShellProps = ShellBaseProps & {
   role: "student";
-  joinToken: string;
+  /**
+   * Join token for the legacy /w/[joinToken] path.
+   * Omit (or pass undefined) when the student joins via the authenticated
+   * /join/[sessionId] path — learner-session cookie auth is used instead.
+   */
+  joinToken?: string;
   syncUrl: string;
   tutorName: string;
   initialActiveMs: number;
   initialLastActiveAtIso: string | null;
+  /** Session phase at SSR time — allows the client to start in PENDING state. */
+  initialSessionPhase?: "PENDING" | "ACTIVE";
 };
 
 export type WhiteboardSessionShellProps =
@@ -62,6 +69,7 @@ export function WhiteboardSessionShell(props: WhiteboardSessionShellProps) {
         tutorName={props.tutorName}
         initialActiveMs={props.initialActiveMs}
         initialLastActiveAtIso={props.initialLastActiveAtIso}
+        initialSessionPhase={props.initialSessionPhase}
       />
     );
   }

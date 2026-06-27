@@ -1101,7 +1101,7 @@ export function WhiteboardWorkspaceClient({
     return () => clearInterval(id);
   }, [role]);
 
-  // Student join-timer poll
+  // Student join-timer poll — token path (legacy /w/[joinToken] and redirect bridge)
   useEffect(() => {
     if (role !== "student") return;
     if (!pathJoinToken) return;
@@ -1123,6 +1123,7 @@ export function WhiteboardWorkspaceClient({
           reason?: string;
           activeMs?: number;
           lastActiveAt?: string | null;
+          sessionPhase?: string;
         };
         if (data.live === false) {
           const r = data.reason;
@@ -1147,6 +1148,65 @@ export function WhiteboardWorkspaceClient({
           setStudentServerLastActiveAtMs(
             data.lastActiveAt ? new Date(data.lastActiveAt).getTime() : null
           );
+        }
+        // PENDING→ACTIVE transition: update local phase when the server reports ACTIVE.
+        if (data.sessionPhase === "ACTIVE") {
+          setSessionPhase((prev) => (prev === "PENDING" ? "ACTIVE" : prev));
+        }
+      } catch {
+        //
+      }
+    };
+    void refresh();
+    const t = setInterval(() => void refresh(), 3_500);
+    return () => clearInterval(t);
+  }, [role, pathJoinToken, whiteboardSessionId, joinUnavailableReason, wjgLog]);
+
+  // Student join-timer poll — learner-session path (/join/[sessionId], no join token)
+  useEffect(() => {
+    if (role !== "student") return;
+    if (pathJoinToken) return; // token path handles this case
+    if (joinUnavailableReason !== null) return;
+    const refresh = async () => {
+      try {
+        const res = await fetch(
+          `/api/whiteboard/${encodeURIComponent(whiteboardSessionId)}/join-timer`,
+          { cache: "no-store", credentials: "same-origin" }
+        );
+        if (!res.ok) {
+          if (res.status === 404) {
+            setJoinUnavailableReason((prev) => prev ?? "link_invalid");
+          }
+          return;
+        }
+        const data = (await res.json()) as {
+          live?: boolean;
+          reason?: string;
+          activeMs?: number;
+          lastActiveAt?: string | null;
+          sessionPhase?: string;
+        };
+        if (data.live === false) {
+          const r = data.reason;
+          const mapped: JoinUnavailableReason =
+            r === "session_ended" ? "session_ended" : "link_invalid";
+          setJoinUnavailableReason(mapped);
+          wjgLog("session_ended", { reason: mapped });
+          return;
+        }
+        const treatAsLive =
+          data.live === true ||
+          (data.live === undefined && typeof data.activeMs === "number");
+        if (!treatAsLive) return;
+        if (typeof data.activeMs === "number") setStudentServerActiveMs(data.activeMs);
+        if (data.lastActiveAt !== undefined) {
+          setStudentServerLastActiveAtMs(
+            data.lastActiveAt ? new Date(data.lastActiveAt).getTime() : null
+          );
+        }
+        // PENDING→ACTIVE transition: update local phase when the server reports ACTIVE.
+        if (data.sessionPhase === "ACTIVE") {
+          setSessionPhase((prev) => (prev === "PENDING" ? "ACTIVE" : prev));
         }
       } catch {
         //
@@ -3407,13 +3467,15 @@ export function WhiteboardWorkspaceClient({
     setCopyState("copying");
     setCopyError(null);
     try {
-      const { token } = await issueJoinToken(whiteboardSessionId);
+      // Full retirement: authenticated /join path always. No join token needed
+      // in the link — the student's learner session is the auth credential.
+      // issueJoinToken is no longer called here; existing tokens remain valid
+      // for the /w/[joinToken] redirect bridge (old in-flight links).
       const origin =
         typeof window !== "undefined" ? window.location.origin : "";
-      const link = `${origin}/w/${token}#k=${encryptionKey}`;
-      // Clipboard API often fails after the `await issueJoinToken` above (user
-      // activation / document focus). `copyTextToClipboard` falls back to
-      // execCommand + prompt so we do not show a false error when copy works.
+      const link = `${origin}/join/${whiteboardSessionId}#k=${encryptionKey}`;
+      // Clipboard API can fail silently on some browsers. `copyTextToClipboard`
+      // falls back to execCommand + prompt so we do not show a false error.
       await copyTextToClipboard(link);
       setCopyState("copied");
       setTimeout(() => setCopyState("idle"), 3000);

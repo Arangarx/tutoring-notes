@@ -4,8 +4,10 @@ import { BLOB_MAX_BYTES } from "@/lib/audio-constants";
 import { assertOwnsStudent, requireStudentScope } from "@/lib/student-scope";
 import {
   assertJoinTokenAllowsWhiteboardAssetUpload,
+  assertLearnerSessionAllowsWhiteboardAssetUpload,
   assertOwnsWhiteboardSession,
 } from "@/lib/whiteboard-scope";
+import { getLearnerSession } from "@/lib/learner-session";
 import { createActionCorrelationId } from "@/lib/action-correlation";
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
 
@@ -178,6 +180,7 @@ export async function POST(request: Request): Promise<Response> {
           payload?.joinToken &&
           typeof payload.joinToken === "string"
         ) {
+          // Token auth: legacy anonymous /w/[joinToken] path (kept for in-flight old links).
           const { studentId } = await assertJoinTokenAllowsWhiteboardAssetUpload(
             payload.joinToken,
             whiteboardSessionId,
@@ -187,6 +190,34 @@ export async function POST(request: Request): Promise<Response> {
           console.log(
             `[uploadBlob.route] rid=${rid} kind=${kind} wbsid=${whiteboardSessionId} studentId=${studentIdForToken} joinToken=1 assetTag=${payload?.assetTag ?? "-"} pathname=${pathname}`
           );
+        } else if (kind === "whiteboard-asset") {
+          // Learner-session auth: authenticated /join/[sessionId] path.
+          // If a learner session is present, authorize via participant gate.
+          // Otherwise fall through to tutor ownership check.
+          const learnerSession = await getLearnerSession(request);
+          if (learnerSession) {
+            const { studentId } = await assertLearnerSessionAllowsWhiteboardAssetUpload(
+              learnerSession.learnerProfileId,
+              whiteboardSessionId,
+              pathname
+            );
+            studentIdForToken = studentId;
+            console.log(
+              `[uploadBlob.route] rid=${rid} kind=${kind} wbsid=${whiteboardSessionId} studentId=${studentIdForToken} learnerSession=1 assetTag=${payload?.assetTag ?? "-"} pathname=${pathname}`
+            );
+          } else {
+            // Tutor auth (no learner session, no joinToken).
+            if (payload?.joinToken) {
+              throw new Error("joinToken is only valid for whiteboard-asset uploads.");
+            }
+            const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
+            studentIdForToken = session.studentId;
+            // B1 cost gate: WAITLISTED tutors cannot upload whiteboard blobs.
+            await assertTutorApproved(session.adminUserId);
+            console.log(
+              `[uploadBlob.route] rid=${rid} kind=${kind} wbsid=${whiteboardSessionId} studentId=${studentIdForToken} assetTag=${payload?.assetTag ?? "-"} pathname=${pathname}`
+            );
+          }
         } else {
           if (payload?.joinToken) {
             throw new Error("joinToken is only valid for whiteboard-asset uploads.");

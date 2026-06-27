@@ -581,7 +581,13 @@ export function useStudentWhiteboardCanvas(
                         kind: "student",
                         joinToken,
                       })
-                  : undefined,
+                  : wbsid.length > 0
+                    ? (u) =>
+                        resolveWhiteboardAssetReadUrl(u, {
+                          kind: "session-authed-student",
+                          whiteboardSessionId: wbsid,
+                        })
+                    : undefined,
             }
           );
           onHydrateResult?.(hydrate);

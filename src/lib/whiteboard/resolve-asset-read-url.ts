@@ -21,6 +21,7 @@ export function resolveWhiteboardAssetReadUrl(
   raw: string,
   ctx:
     | { kind: "student"; joinToken: string }
+    | { kind: "session-authed-student"; whiteboardSessionId: string }
     | { kind: "tutor"; whiteboardSessionId: string }
 ): string {
   if (typeof window === "undefined") return raw;
@@ -29,6 +30,11 @@ export function resolveWhiteboardAssetReadUrl(
   const u = encodeURIComponent(raw);
   if (ctx.kind === "student") {
     return `${origin}/api/w/${encodeURIComponent(ctx.joinToken)}/wb-asset?u=${u}`;
+  }
+  if (ctx.kind === "session-authed-student") {
+    // Learner-session-authed path (/join/[sessionId]): no join token needed,
+    // cookie auth via /api/sessions/[sessionId]/wb-asset.
+    return `${origin}/api/sessions/${encodeURIComponent(ctx.whiteboardSessionId)}/wb-asset?u=${u}`;
   }
   return `${origin}/api/whiteboard/${encodeURIComponent(ctx.whiteboardSessionId)}/tutor-asset?u=${u}`;
 }
