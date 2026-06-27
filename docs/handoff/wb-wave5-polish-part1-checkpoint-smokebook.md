@@ -18,11 +18,18 @@ This smokebook covers **only** the hardware/human-judgment A/V reliability items
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes: Window seems to stay in "desktop" mode properly now, however when it gets thin enough some elements go off screen instead of compacting to more button.  I think the current setup is doing a good job using the whole bar instead of compacting too soon, but once buttons leave the viewport they should compact to more button.  And End Session should probably always stay on screen.**  
+**Partial - was fail because student machine was not picking up the webcam, but eventually the mic was selectable.**
+
+**So both audio and video are bidirectional now, but it took the student side a bit to pick up the camera.  Still a win though as it is eventually working, the detection just wasn't as fast as I'd expect.**  
+
+**ooh and you made the left bar properly scrollable at very thin resolution.  we may need to come up with a better system later, but this is a win.**  
+
+**Overall, I'd say this one is a major win, just worried about the time it took for the webcam to be selectable.**
 
 ---
 
@@ -34,13 +41,13 @@ This smokebook covers **only** the hardware/human-judgment A/V reliability items
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes:  Don't know about all the other bits but I can hear the student.**
 
 ---
 
@@ -52,13 +59,15 @@ This smokebook covers **only** the hardware/human-judgment A/V reliability items
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes:**  
+**Student recovery was very snappy, but they have to re-pick mic. Better than before though.**  
+**Both cases recover snappily.  I haven't tested this time, but I get a banner asking if I want to recover audio or discard it...I think we should always just keep it, no?**
 
 ---
 
@@ -80,5 +89,5 @@ These are Playwright-locked and regression re-proof — **not** to be smoked. If
 
 Check **PASS** only if every in-scope test item is PASS (deliberate per-item SKIPs must be called out in Notes). Check **FAIL** if any in-scope item fails. Leave both unchecked until the run is complete. Overall verdict is PASS/FAIL only — no overall SKIP.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
