@@ -930,6 +930,288 @@ test.describe("/w/ retirement — redirect bridge", { tag: [TAG.WB_PRESENCE] }, 
 });
 
 // ---------------------------------------------------------------------------
+// P3-A: Dead-end /join retirement — honest no-session message
+// ---------------------------------------------------------------------------
+
+test.describe("Dead-end /join retirement", { tag: [TAG.WB_PRESENCE] }, () => {
+  test("/join (no sessionId) shows honest no-session message — not old fake waiting room", async ({
+    browser,
+  }) => {
+    test.setTimeout(30_000);
+    // Use a seeded pending session to get a valid learner credential.
+    const session = await seedWbPendingLiveSyncSession();
+
+    const ctx = await browser.newContext();
+    try {
+      await loginLearnerInContext(ctx, session.learnerHandle, session.learnerPin);
+      const page = await ctx.newPage();
+      await page.goto("/join", { waitUntil: "domcontentloaded" });
+
+      // Honest no-session message must be visible.
+      const msg = page.getByTestId("join-no-session-message");
+      await expect(msg).toBeVisible({ timeout: 10_000 });
+      await expect(msg).toContainText("No active session");
+
+      // Must NOT contain the retired passive "let you in" promise.
+      await expect(page.getByText(/let you in/i)).not.toBeVisible();
+      // Must NOT contain the old "Your tutor will let you in" dead-end copy.
+      await expect(
+        page.getByText(/your tutor will let you in/i)
+      ).not.toBeVisible();
+      // Must NOT render fake device preview (no camera placeholder buttons).
+      await expect(page.getByText(/camera preview/i)).not.toBeVisible();
+    } finally {
+      await ctx.close();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P3-B: Student overlay convergence — mutual presence + chip-toggle controls
+// ---------------------------------------------------------------------------
+
+test.describe(
+  "Student overlay convergence — mutual presence copy + chip-toggle A/V",
+  { tag: [TAG.WB_PRESENCE, TAG.WB_CHROME] },
+  () => {
+    test(
+      "student /join/<sessionId>#k= lands directly on wb-waiting-overlay with mutual-presence copy",
+      async ({ browser }) => {
+        test.setTimeout(180_000);
+        const session = await seedWbPendingLiveSyncSession();
+
+        const tutorCtx = await browser.newContext({
+          storageState: "tests/integration/.auth/tutor.json",
+          viewport: { width: 1280, height: 900 },
+          permissions: ["microphone"],
+        });
+        const studentCtx = await browser.newContext({
+          viewport: { width: 1280, height: 800 },
+          permissions: ["microphone"],
+        });
+        try {
+          await loginLearnerInContext(
+            studentCtx,
+            session.learnerHandle,
+            session.learnerPin
+          );
+
+          const tutorPage = await tutorCtx.newPage();
+          await tutorPage.goto(
+            `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            tutorPage.getByTestId("tutor-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+          await waitForWbE2eBridge(tutorPage, "tutor");
+
+          const encryptionKey = await tutorPage.evaluate(() => {
+            const m = window.location.hash.match(/[#&]k=([^&]+)/);
+            return m?.[1] ? decodeURIComponent(m[1]) : "";
+          });
+
+          const studentPage = await studentCtx.newPage();
+          await studentPage.goto(
+            `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            studentPage.getByTestId("student-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+
+          // Student lands directly on the mutual overlay — no intermediate gate.
+          const overlay = studentPage.getByTestId("wb-waiting-overlay");
+          await expect(overlay).toBeVisible({ timeout: 10_000 });
+          await expect(overlay).toHaveAttribute("data-role", "student");
+
+          // Must NOT contain the retired passive "will let you in" copy.
+          await expect(overlay).not.toContainText(/will let you in/i);
+          await expect(overlay).not.toContainText(/waiting to be let in/i);
+          // Must NOT contain the old redundant passive block copy.
+          await expect(overlay).not.toContainText(
+            /waiting for .* to start the session/i
+          );
+
+          // Student heading shows mutual-presence framing (connected or connecting).
+          const heading = studentPage.getByTestId(
+            "wb-waiting-overlay-student-heading"
+          );
+          await expect(heading).toBeVisible();
+          // Either "You're in — <name> will start" (connected) or "Connecting…"
+          await expect(heading).toContainText(
+            /You're in|Connecting/i,
+            { timeout: 30_000 }
+          );
+        } finally {
+          await tutorCtx.close();
+          await studentCtx.close();
+        }
+      }
+    );
+
+    test(
+      "waiting-room A/V controls render as stateful chip-toggles (checkbox role + persistent state label)",
+      async ({ browser }) => {
+        test.setTimeout(180_000);
+        const session = await seedWbPendingLiveSyncSession();
+
+        const tutorCtx = await browser.newContext({
+          storageState: "tests/integration/.auth/tutor.json",
+          viewport: { width: 1280, height: 900 },
+          permissions: ["microphone"],
+        });
+        const studentCtx = await browser.newContext({
+          viewport: { width: 1280, height: 800 },
+          permissions: ["microphone"],
+        });
+        try {
+          await loginLearnerInContext(
+            studentCtx,
+            session.learnerHandle,
+            session.learnerPin
+          );
+
+          const tutorPage = await tutorCtx.newPage();
+          await tutorPage.goto(
+            `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            tutorPage.getByTestId("tutor-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+          await waitForWbE2eBridge(tutorPage, "tutor");
+
+          const encryptionKey = await tutorPage.evaluate(() => {
+            const m = window.location.hash.match(/[#&]k=([^&]+)/);
+            return m?.[1] ? decodeURIComponent(m[1]) : "";
+          });
+
+          const studentPage = await studentCtx.newPage();
+          await studentPage.goto(
+            `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            studentPage.getByTestId("student-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+          await expect(
+            studentPage.getByTestId("wb-waiting-overlay")
+          ).toBeVisible({ timeout: 10_000 });
+
+          // ── Mic chip-toggle (semantic oracle: chip paradigm, not action button) ──
+          const micChip = studentPage.getByTestId("wb-overlay-mic-chip");
+          await expect(micChip).toBeVisible({ timeout: 10_000 });
+
+          // Must contain a checkbox role (stateful toggle, not a plain action button).
+          const micCheckbox = micChip.getByRole("checkbox");
+          await expect(micCheckbox).toBeVisible();
+
+          // Must show a persistent text state label ("Mic on" or "Mic off").
+          const micLabel = studentPage.getByTestId("wb-overlay-mic-chip-label");
+          await expect(micLabel).toBeVisible();
+          const micLabelText = await micLabel.textContent();
+          expect(["Mic on", "Mic off"]).toContain(micLabelText?.trim());
+
+          // ── Cam chip-toggle ──
+          const camChip = studentPage.getByTestId("wb-overlay-cam-chip");
+          await expect(camChip).toBeVisible({ timeout: 10_000 });
+
+          const camCheckbox = camChip.getByRole("checkbox");
+          await expect(camCheckbox).toBeVisible();
+
+          const camLabel = studentPage.getByTestId("wb-overlay-cam-chip-label");
+          await expect(camLabel).toBeVisible();
+          const camLabelText = await camLabel.textContent();
+          expect(["Camera on", "Camera off"]).toContain(camLabelText?.trim());
+
+          // ── Toggle oracle: clicking the chip flips the state label ──
+          // Record the initial mic state then click to toggle.
+          const micBefore = await micLabel.textContent();
+          await micChip.click();
+          // After toggle, label must change to the other state.
+          await expect(micLabel).not.toHaveText(micBefore ?? "", { timeout: 10_000 });
+          const micAfter = await micLabel.textContent();
+          expect(["Mic on", "Mic off"]).toContain(micAfter?.trim());
+          expect(micAfter?.trim()).not.toBe(micBefore?.trim());
+        } finally {
+          await tutorCtx.close();
+          await studentCtx.close();
+        }
+      }
+    );
+
+    test(
+      "student local AV tile is present in the waiting-room overlay during PENDING",
+      async ({ browser }) => {
+        test.setTimeout(180_000);
+        const session = await seedWbPendingLiveSyncSession();
+
+        const tutorCtx = await browser.newContext({
+          storageState: "tests/integration/.auth/tutor.json",
+          viewport: { width: 1280, height: 900 },
+          permissions: ["microphone"],
+        });
+        const studentCtx = await browser.newContext({
+          viewport: { width: 1280, height: 800 },
+          // Grant both mic and camera so the A/V bootstrap can acquire both.
+          permissions: ["microphone", "camera"],
+        });
+        try {
+          await loginLearnerInContext(
+            studentCtx,
+            session.learnerHandle,
+            session.learnerPin
+          );
+
+          const tutorPage = await tutorCtx.newPage();
+          await tutorPage.goto(
+            `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            tutorPage.getByTestId("tutor-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+          await waitForWbE2eBridge(tutorPage, "tutor");
+
+          const encryptionKey = await tutorPage.evaluate(() => {
+            const m = window.location.hash.match(/[#&]k=([^&]+)/);
+            return m?.[1] ? decodeURIComponent(m[1]) : "";
+          });
+
+          const studentPage = await studentCtx.newPage();
+          await studentPage.goto(
+            `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            studentPage.getByTestId("student-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+          await expect(
+            studentPage.getByTestId("wb-waiting-overlay")
+          ).toBeVisible({ timeout: 10_000 });
+
+          // The AVTilesPanel for the overlay must be present and contain a local tile.
+          // localTile is always passed to AVTilesPanel — the tile renders even before
+          // the video stream arrives (shows a placeholder / muted state).
+          const tilesPanel = studentPage.getByTestId("wb-waiting-room-av-tiles");
+          await expect(tilesPanel).toBeVisible({ timeout: 10_000 });
+
+          // At least one av-tile- element must exist (the local self-tile).
+          // Note: data-testid^="av-tile-" matches both the tile root AND its child
+          // sub-elements; asserting .first() is visible confirms the tile rendered.
+          const localTiles = tilesPanel.locator('[data-testid^="av-tile-"]');
+          await expect(localTiles.first()).toBeVisible({ timeout: 15_000 });
+        } finally {
+          await tutorCtx.close();
+          await studentCtx.close();
+        }
+      }
+    );
+  }
+);
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 

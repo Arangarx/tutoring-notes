@@ -5526,37 +5526,47 @@ export function WhiteboardWorkspaceClient({
     sessionMode === "LIVE" ? !overlayStudentConnected : false;
   const overlayCanStart = !overlayCantStart;
 
-  // Pre-built mic control node for the overlay — role-specific component.
-  // These are the same wired instances as the top bar controls; no new A/V
-  // coupling needed in the overlay component.
+  // Pre-built mic control node for the overlay — role-specific chip-toggle.
+  // Reuses the `mynk-wb-follow-toggle mynk-wb-chip` pattern (same CSS class
+  // as the follow-toggle, no new styles) wired to the same state + handlers
+  // as the top-bar compact icon controls. The top-bar controls are unchanged.
   const overlayMicNode =
     role === "student" ? (
-      <WbTopBarMicControlLive
-        isMicMuted={liveAv.isMicMuted}
-        hasMicPermission={liveAv.hasMicPermission}
-        hasMicStream={liveAv.localAudioStream !== null}
-        audioDevices={liveAv.audioDevices ?? []}
-        selectedPickerSlot={liveAv.pickedMicSlot}
-        isAcquiring={liveAv.isAcquiring}
-        onToggleMute={liveAv.toggleMic}
-        onAcquireMic={handleAcquireMic}
-        onPickMicSlot={(slot) =>
-          void liveAv.setMicDeviceBySlot(slot, { force: true })
-        }
-        onRefreshDevices={() => void liveAv.refreshAudioDeviceList()}
-        disabled={false}
-      />
+      <label
+        className={`mynk-wb-follow-toggle mynk-wb-chip${!liveAv.isMicMuted && liveAv.localAudioStream !== null ? " mynk-wb-chip--active" : ""}`}
+        data-testid="wb-overlay-mic-chip"
+      >
+        <input
+          type="checkbox"
+          checked={!liveAv.isMicMuted && liveAv.localAudioStream !== null}
+          aria-label={liveAv.isMicMuted || liveAv.localAudioStream === null ? "Mic off" : "Mic on"}
+          onChange={() => void handleTopBarMic()}
+        />
+        <span className="mynk-wb-menu-item__icon" aria-hidden="true">
+          <WbIconMic size={12} />
+        </span>
+        <span className="mynk-wb-follow-toggle__label" data-testid="wb-overlay-mic-chip-label">
+          {liveAv.isMicMuted || liveAv.localAudioStream === null ? "Mic off" : "Mic on"}
+        </span>
+      </label>
     ) : (
-      <WbTopBarMicControl
-        audio={workspaceAudio}
-        isMicMuted={liveAv.isMicMuted}
-        onToggleMute={liveAv.toggleMic}
-        onAcquireMic={handleAcquireMic}
-        onPickMicSlot={(slot) =>
-          void liveAv.setMicDeviceBySlot(slot, { force: true })
-        }
-        disabled={false}
-      />
+      <label
+        className={`mynk-wb-follow-toggle mynk-wb-chip${!liveAv.isMicMuted && liveAv.localAudioStream !== null ? " mynk-wb-chip--active" : ""}`}
+        data-testid="wb-overlay-mic-chip"
+      >
+        <input
+          type="checkbox"
+          checked={!liveAv.isMicMuted && liveAv.localAudioStream !== null}
+          aria-label={liveAv.isMicMuted || liveAv.localAudioStream === null ? "Mic off" : "Mic on"}
+          onChange={() => void handleTopBarMic()}
+        />
+        <span className="mynk-wb-menu-item__icon" aria-hidden="true">
+          <WbIconMic size={12} />
+        </span>
+        <span className="mynk-wb-follow-toggle__label" data-testid="wb-overlay-mic-chip-label">
+          {liveAv.isMicMuted || liveAv.localAudioStream === null ? "Mic off" : "Mic on"}
+        </span>
+      </label>
     );
 
   const overlayAVTilesNode = (
@@ -5583,17 +5593,23 @@ export function WhiteboardWorkspaceClient({
   );
 
   const overlayCamNode = (
-    <WbTopBarCamControl
-      isCamMuted={liveAv.isCamMuted}
-      hasCamPermission={liveAv.hasCamPermission}
-      onToggleCam={() => void handleTopBarCam()}
-      videoDevices={liveAv.videoDevices ?? []}
-      selectedPickerSlot={liveAv.pickedVideoCameraSlot}
-      onPickCameraSlot={(slot) => void liveAv.setVideoCameraBySlot(slot)}
-      isLive={liveAv.localVideoStream !== null}
-      onRefreshDevices={() => void liveAv.refreshVideoDeviceList()}
-      disabled={false}
-    />
+    <label
+      className={`mynk-wb-follow-toggle mynk-wb-chip${liveAv.localVideoStream !== null && !liveAv.isCamMuted ? " mynk-wb-chip--active" : ""}`}
+      data-testid="wb-overlay-cam-chip"
+    >
+      <input
+        type="checkbox"
+        checked={liveAv.localVideoStream !== null && !liveAv.isCamMuted}
+        aria-label={liveAv.localVideoStream === null || liveAv.isCamMuted ? "Camera off" : "Camera on"}
+        onChange={() => void handleTopBarCam()}
+      />
+      <span className="mynk-wb-menu-item__icon" aria-hidden="true">
+        <WbIconCamera size={12} />
+      </span>
+      <span className="mynk-wb-follow-toggle__label" data-testid="wb-overlay-cam-chip-label">
+        {liveAv.localVideoStream === null || liveAv.isCamMuted ? "Camera off" : "Camera on"}
+      </span>
+    </label>
   );
   // ────────────────────────────────────────────────────────────────────────
 

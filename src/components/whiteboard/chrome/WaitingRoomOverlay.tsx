@@ -139,10 +139,10 @@ export function WaitingRoomOverlay({
           {isTutor ? (
             <h2 className="mynk-wtr-title">Ready to start?</h2>
           ) : (
-            <h2 className="mynk-wtr-title mynk-wtr-title--student">
+            <h2 className="mynk-wtr-title mynk-wtr-title--student" data-testid="wb-waiting-overlay-student-heading">
               {studentConnected
-                ? `Connected — waiting for ${tutorName} to start`
-                : `Connecting…`}
+                ? `You're in\u2014${tutorName} will start the session shortly`
+                : `Connecting\u2026`}
             </h2>
           )}
         </div>
@@ -234,15 +234,6 @@ export function WaitingRoomOverlay({
           </>
         )}
 
-        {!isTutor && (
-          <div className="mynk-wtr-student-wait">
-            <p className="mynk-wtr-wait-msg" aria-live="polite">
-              {studentConnected
-                ? `Waiting for ${tutorName} to start the session\u2026`
-                : `Connecting\u2026`}
-            </p>
-          </div>
-        )}
       </div>
     </div>
   );
