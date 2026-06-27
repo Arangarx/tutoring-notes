@@ -725,6 +725,71 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     }
   });
 
+  test("item 22 — student narrow top bar: no horizontal overflow, controls don't overlap", { tag: [TAG.WB_PRESENCE] }, async ({
+    browser,
+  }) => {
+    test.setTimeout(180_000);
+    const session = await seedWbLiveSyncSession();
+    // Tightest supported narrow width (matches item 19's 320×568 stress case).
+    // Smokebook bug class: cramped/overlapping top-bar controls at narrow width.
+    // Containment is already asserted by assertStudentPortraitTopBarControls;
+    // this adds the spacing oracle: the header must not horizontally overflow
+    // and the leading pill / trailing overflow + exit must not overlap.
+    const peers = await openTutorAndStudent(browser, session, {
+      ensureFollow: false,
+      studentViewport: { width: 320, height: 568 },
+    });
+    try {
+      const page = peers.studentPage;
+      await assertStudentPortraitTopBarControls(page);
+
+      const header = page.locator(".mynk-wb-topbar");
+      // No clipped/overflowing content: scrollWidth must fit clientWidth.
+      const overflow = await header.evaluate((el) => ({
+        scrollWidth: el.scrollWidth,
+        clientWidth: el.clientWidth,
+      }));
+      expect(
+        overflow.scrollWidth,
+        "student narrow top bar overflows horizontally (content clipped)"
+      ).toBeLessThanOrEqual(overflow.clientWidth + 1);
+
+      // Trailing controls + leading pill must not overlap each other.
+      const ids = [
+        "wb-student-sync-pill",
+        "wb-student-topbar-overflow",
+        "wb-student-exit",
+      ];
+      const boxes = await Promise.all(
+        ids.map(async (id) => ({
+          id,
+          box: await page.getByTestId(id).boundingBox(),
+        }))
+      );
+      for (const b of boxes) {
+        expect(b.box, `${b.id} bounding box`).not.toBeNull();
+      }
+      const overlaps = (
+        a: { x: number; y: number; width: number; height: number },
+        b: { x: number; y: number; width: number; height: number }
+      ) =>
+        a.x < b.x + b.width &&
+        b.x < a.x + a.width &&
+        a.y < b.y + b.height &&
+        b.y < a.y + a.height;
+      for (let i = 0; i < boxes.length; i++) {
+        for (let j = i + 1; j < boxes.length; j++) {
+          expect(
+            overlaps(boxes[i].box!, boxes[j].box!),
+            `${boxes[i].id} overlaps ${boxes[j].id}`
+          ).toBe(false);
+        }
+      }
+    } finally {
+      await peers.close();
+    }
+  });
+
   test("item 13 — review thumbnail renders JSXGraph board, not mynk://graph text", { tag: [TAG.WB_GRAPH] }, async ({
     browser,
   }) => {
