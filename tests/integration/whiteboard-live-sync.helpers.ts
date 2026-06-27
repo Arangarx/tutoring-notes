@@ -920,7 +920,20 @@ export async function assertStudentPortraitTopBarControls(
 export async function openTutorAndStudent(
   browser: import("@playwright/test").Browser,
   session: WbLiveSyncSession,
-  options?: { ensureFollow?: boolean; studentViewport?: WbViewportSize }
+  options?: {
+    ensureFollow?: boolean;
+    studentViewport?: WbViewportSize;
+    /**
+     * Emulate a touch-primary student device (pointer:coarse). Needed when a
+     * test exercises touch-only chrome (e.g. the top-bar overflow `⋯`, which is
+     * `display:none` on desktop/non-touch layouts — see useWbLayoutMode
+     * `isTouchPrimaryDevice`). `isMobile` additionally drives the mobile
+     * visual-viewport so width/height-based layout breakpoints match a real
+     * phone. Both default off — existing callers are unaffected.
+     */
+    studentHasTouch?: boolean;
+    studentIsMobile?: boolean;
+  }
 ) {
   const ensureFollow = options?.ensureFollow !== false;
   const studentViewport = options?.studentViewport ?? {
@@ -934,6 +947,8 @@ export async function openTutorAndStudent(
   });
   const studentContext = await browser.newContext({
     viewport: studentViewport,
+    ...(options?.studentHasTouch ? { hasTouch: true } : {}),
+    ...(options?.studentIsMobile ? { isMobile: true } : {}),
   });
 
   const tutorPage = await tutorContext.newPage();

@@ -230,9 +230,17 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     test.setTimeout(180_000);
     const session = await seedWbLiveSyncSession();
 
+    // The top-bar overflow `⋯` is touch-only chrome — `display:none` on
+    // desktop/non-touch layouts (useWbLayoutMode `isTouchPrimaryDevice`; CSS
+    // `.mynk-wb-topbar__overflow-btn` only `inline-flex` for narrow/tablet/
+    // phone-landscape). After the half-width-desktop fix (Andrew 2026-06-24),
+    // a resized *desktop* window at 844×390 stays desktop chrome with NO
+    // overflow — so this test must emulate a real touch device. `hasTouch`
+    // alone yields pointer:coarse in Chromium → phone-landscape layout.
     const tutorContext = await browser.newContext({
       storageState: "tests/integration/.auth/tutor.json",
       viewport: { width: 844, height: 390 },
+      hasTouch: true,
     });
     const tutorPage = await tutorContext.newPage();
     await loadTutorBoard(tutorPage, session);
@@ -241,6 +249,12 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
 
     const peers = await openTutorAndStudent(browser, session, {
       studentViewport: { width: 844, height: 390 },
+      studentHasTouch: true,
+      // This test asserts only overflow-dropdown geometry; follow state is
+      // irrelevant. Skip ensureStudentFollowsTutor — on a compact student the
+      // follow checkbox exists both inline and inside the overflow dropdown, so
+      // the helper's role/name locator is ambiguous (strict-mode violation).
+      ensureFollow: false,
     });
     try {
       await assertControlFullyInViewport(
@@ -452,9 +466,16 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
   }) => {
     test.setTimeout(120_000);
     const session = await seedWbLiveSyncSession();
+    // Touch context: the overflow `⋯` only exists on touch layouts (see item 4).
+    // 850×900 + touch → tablet-portrait (overflow shown). Widening to 1280×900
+    // crosses to desktop layout → the layout-change effect fires
+    // setOpenMenu(null) and the overflow button hides, so the open dropdown must
+    // close. `hasTouch` keeps pointer:coarse across the resize so the only thing
+    // that changes is the width-driven layout mode.
     const context = await browser.newContext({
       storageState: "tests/integration/.auth/tutor.json",
       viewport: { width: 850, height: 900 },
+      hasTouch: true,
     });
     const page = await context.newPage();
     await loadTutorBoard(page, session);
@@ -490,10 +511,14 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     await loadTutorBoard(page, session);
 
     await page.getByTestId("wb-topbar-mic-settings").click();
-    await expect(page.getByTestId("audio-device-select")).toBeVisible({
+    // Tutor mic popover renders <MicControls/> → native <select
+    // data-testid="mic-device-select"> (NOT "audio-device-select", which never
+    // existed on this surface — stale selector from before the mic-popover
+    // refactor; corrected 2026-06-26, Part 1 checkpoint).
+    await expect(page.getByTestId("mic-device-select")).toBeVisible({
       timeout: 10_000,
     });
-    await assertNativeSelectReadable(page, "audio-device-select");
+    await assertNativeSelectReadable(page, "mic-device-select");
 
     await page.keyboard.press("Escape");
     const camCaret = page.getByTestId("wb-topbar-cam-settings");
