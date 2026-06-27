@@ -66,6 +66,12 @@ Smokebook [`docs/handoff/wb-wave5-polish-part1-checkpoint-smokebook.md`](handoff
 | **WB-P1SMOKE-3 — student must re-pick mic after rejoin (device selection not persisted)** | P3 (UX; from item 3) | Drop/rejoin recovery is snappy (PASS), but the student has to **re-select their mic** after rejoining — device choice isn't persisted across the rejoin. "Better than before though." Persist last-chosen mic/cam (per session or per profile) and re-apply on rejoin. Playwright: rejoin → assert prior device slot reselected (or jest mechanism if hardware-bound). |
 | **WB-P1SMOKE-4 — recording-recovery prompt: always auto-keep on reload (DECIDED — Andrew 2026-06-26)** | P3 (do with SSG-2/end-session thread) | **DECISION (Andrew): Option A — remove the reload keep/discard prompt; always auto-recover** the captured audio (the `dft` IndexedDB recording-draft checkpoint), since it lines up with the session timer and reload-time is when the user has least context to choose. **Caveat to preserve:** auto-keep ≠ unremovable — discarding a genuinely-throwaway session (**F1**) must still be possible via the **explicit end/delete path**, just not the reload prompt. Aligns with **SSG-2** (no silent data loss). Implement alongside the end-session/save-clarity surface (SSG-2/F1), not in isolation. |
 
+### Plan #1 — test-health (wb-wave5-polish, 2026-06-27)
+
+| Item | Priority | Notes |
+|------|----------|-------|
+| **WB-FLAKE-JOIN-STALECOOKIE — `/join` stale-cookie fragment test flaky on first attempt** | Low (test-infra) | `tests/integration/wb-session-lifecycle.spec.ts:221` ("stale learner cookie + `/join/[sessionId]#k=KEY` → `JoinAuthGate` saves key to sessionStorage → `returnTo` includes session path") **timed out once** on the final-verification run (`page.waitForURL` 15s exceeded — stayed on `/join…#k=…` instead of redirecting to `/students/login`), then **passed in 1.2s on retry #1**. Almost certainly a **`next dev` on-demand cold-compile flake**: the first hit to the `/join/[sessionId]` route under 5 parallel workers triggers route compilation, occasionally exceeding the 15s nav timeout; the retry hits an already-compiled route. Not a product bug (the no-cookie + auth BLOCKER fragment tests pass first-try). **Fix when convenient:** warm the `/join` route before the assertion (a throwaway nav in `beforeAll`/setup) or bump the first-navigation timeout for this spec. Do NOT mask by widening the global retry tolerance. |
+
 ---
 
 ## Ship-to-Sarah gate — pilot feedback 2026-06-16

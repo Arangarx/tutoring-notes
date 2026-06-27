@@ -6,24 +6,27 @@
 
 ---
 
-## ⏩ HEAD — 2026-06-23 Wave 5 **DONE (agent gates)** on `wb-wave5-polish` — pending Andrew single hardware smoke
+## ⏩ HEAD — 2026-06-27 **Plan #1 DONE & COMMITTED** on `wb-wave5-polish` — checkpoint green; Andrew Plan #1 smoke + Plan #2 next
 
-> **Wave 5 agent DONE checklist:** All 13 smokebook items mapped to **wb-regression** Playwright @ [`5882a16`](https://github.com/Arangarx/tutoring-notes/commit/5882a16). **New:** `tests/integration/wb-wave5-polish.spec.ts` (items 1–7, 10, 11, 13). **Extended:** invariants **12d** (equal vertical inset + midline), **12e** (student→tutor graph UI persist); **12b/12c** + `wb-student-exit-rejoin.spec.ts` cover items 8/12 + rejoin/banner. **Product fixes:** `ReviewBoardThumbnail` graph detection/rebuild + opacity poll oracle; E2E tutor scene hook → `recorderOnCanvasChange`; `GraphEmbeddable.onAfterPersist`. **Gates:** `test:wb-affected:run --base origin/v1-redesign` green (29 passed, 1 flaky inv.7 retry); **`test:wb-sync` green @ serial workers** (672 jest + 26 Playwright passed / 4 flaky retry / 1 PDF skip). Default parallel workers can crash dev server (2 hard fails) — serial re-run exit 0. **Next:** Andrew **one** hardware smoke per [`smoke-when-done.mdc`](../../.cursor/rules/smoke-when-done.mdc).
+> **Plan #1 (session lifecycle + authenticated join + waiting-room overlay) — IMPLEMENTED & COMMITTED @ [`6b05e05`](https://github.com/Arangarx/tutoring-notes/commit/6b05e05)** (10 commits `9c5ae20`→`6b05e05`; branch pushed; **NOT merged** — per plan, no merge until final end-to-end Sarah gate). Scope: additive schema (`SessionPhase`/`SessionMode`/`activatedAt` + `SessionParticipant`); lifecycle server actions + **`slc`** logging; capture/billing timer gated on `sessionPhase=ACTIVE`; authenticated **`/join`** + anonymous **`/w` retired** (learner-only gate, `JoinAuthGate` + `JoinHashRestorer`, `/w`→`/join` redirect bridge); identity-derived student `peerId` + dual-device takeover; mutual **waiting-room overlay** (Part 2B — A/V continuous, LIVE Start gated on `bothPartiesInRoom`, IN_PERSON always startable) + **`wtr`** logging; harness migrated to authed `/join` + tutor Start; **`tests/integration/wb-session-lifecycle.spec.ts`** (15 tests, `@wb-presence`/`@wb-sync`, wb-regression enrolled); checkpoint BLOCKER fix @ [`3b216e8`](https://github.com/Arangarx/tutoring-notes/commit/3b216e8) (middleware no longer server-redirects `/join/*` — was dropping `#k=` fragment). **`consentAcknowledged` deliberately untouched** — Plan #2. **New log prefixes:** `slc`, `wtr` (registered in [`AGENTS.md`](../../AGENTS.md)). **Checkpoint gates:** `next build` PASS; jest **715/715**; Playwright wb-regression **39 passed / 1 quarantine-skip / 0 failed** @ 5-worker parallel (invariant-7 Blob failure triaged transient/environmental). **Final verification @ `6b05e05` CONFIRMED GREEN:** `next build` PASS (Edge middleware bundles the new `isPlaywrightHarnessActive` import — 57.6 kB, no Edge-runtime errors); targeted re-confirm `@wb-presence` 15 passed (1 flaky→green on retry, tracked WB-FLAKE-JOIN-STALECOOKIE) + invariant 7 passed. **Preview:** [wb-wave5-polish branch alias](https://tutoring-notes-git-wb-wave5-polish-arangarx-5209s-projects.vercel.app). **Hardware smokebook:** [`plan1-lifecycle-authed-join-smokebook.md`](plan1-lifecycle-authed-join-smokebook.md) @ [`5a0461d`](https://github.com/Arangarx/tutoring-notes/commit/5a0461d).
+
+> **Wave 5 polish (pre-Plan #1 baseline on same branch):** All 13 smokebook items mapped to **wb-regression** Playwright @ [`5882a16`](https://github.com/Arangarx/tutoring-notes/commit/5882a16). Wave 5 hardware regressions (styles flyout clip @ `06ce763`, viewport-follow gesture gate @ `c4fff44`) fixed earlier on branch. Wave 5 Andrew smoke still open on [`wb-wave5-polish-smokebook-2026-06-21.md`](wb-wave5-polish-smokebook-2026-06-21.md) — distinct from Plan #1 smoke.
 
 > **CONDUCTOR PROCESS CHANGE (2026-06-23, codified on `v1-redesign` @ [`31be11a`](https://github.com/Arangarx/tutoring-notes/commit/31be11a)):** Andrew now **conducts from Composer 2.5 by default** to control cost; Opus/Sonnet are on-call episodes. New discipline in `.cursor/rules/orchestrator-discipline.mdc` (always-applied): **(1)** a Composer chat **can't dispatch Anthropic** → when it hits a tripwire it must **STOP and recommend Andrew switch the chat model up** (default Sonnet; Opus only for the heavy class); **(2)** the **first** response to a tripwire is a **plan-mode "step back"** (read-only, still Composer 2.5) — escalate the model only if the step-back confirms it's above-tier; use plan mode liberally incl. small problems; **(3) swap chats early** at the first natural break after **~60–70% context** (`@`-ref the prior chat + this doc) — which makes keeping this head continuously current a hard dependency. 8 self-detectable tripwires + STOP-and-switch handoff in the rule.
 
 > **2026-06-22 hardware smoke surfaced 2 regressions in landed Wave 5 code — both fixed on `wb-wave5-polish`:** **(1) Desktop "styles" pop-out invisible** — Wave 5 left-rail-scroll fix `14a72f9` set `overflow-x:hidden` on `.mynk-wb-strip`, clipping the PP-06 props flyout (+ shapes/more) that open right via `left:100%`; fixed `06ce763` (`overflow-x:clip` + `overflow-clip-margin` keeps vertical scroll AND lets flyouts paint). **(2) Student viewport-follow laggy/intermittent** ("catches up only when tutor stops moving") — Wave 5 view-lock `d1f770e` reverted student viewport on ANY `onCanvasChange` delta, mis-classifying tutor-driven follow applies as student pans → reverted to stale `followLockedViewportRef`; `01ca16d` only covered the single-apply rAF window, not a continuous ~50ms v3 stream. Fixed `c4fff44`: view-lock revert now gated on REAL student gesture (passive wheel/pointer/touch listeners + 300ms trailing `studentGestureActiveRef`); tutor applies advance the lock instead of reverting; also fixed `onRemotePageViewState` stop-path that ignored `panX/panY` (applied zoom only). New unit tests (C: stream-of-applies-no-revert; D: gesture-still-reverts), jest 25/25. **wb-sync re-PASS @ `c4fff44`** (13/13 + 1 PDF skip). **⚠️ jsdom CANNOT prove the follow fix** — Andrew must re-smoke continuous tutor pan/zoom follow on hardware. **HARNESS GAP (backlog candidate):** relay invariants 5/6 use one-shot programmatic viewport jumps, never a continuous wheel/drag gesture with view-lock ON — which is exactly why this regression passed the gate. Add a continuous-gesture follow invariant.
 
-> Integration base is `v1-redesign` @ [`a166f6c`](https://github.com/Arangarx/tutoring-notes/commit/a166f6c). Wave 4 done. **Wave 5 = LAST wave of the unify/stabilization plan (polish only — NOT "WB finished"; W1-3 backlog + Gate A5/A6 sync+replay + reliability-floor smoke + consent merge all still open after it).** Wave 5 = 2 slices on `wb-wave5-polish`, **BOTH DONE @ `c79573a`** (pushed), awaiting Andrew Wave-5 hardware smoke (smokebook items 1–8). **Slice 1 (visual polish, `3415f3a`/`f5de77e`):** coral student Exit + icon, follow/match icons, ⋯ overflow drops down + scroll affordance, grid icon toggle, More-sheet alignment. **Slice 2 (behavioral, `4356c6f`/`d1f770e`/`d268b79`):** student active-tab highlight (read-only), view-lock-while-synced (revert pan/zoom in `useStudentWhiteboardCanvas`, no more snap-back), graph embeds interactive **local-to-student** (`GraphEmbeddable` `syncFromBoard` prop; edits never hit board/sync — investigated, no sync wiring needed). **Andrew design decisions (2026-06-21) RESOLVED:** (a) student tabs → highlight active read-only; (b) graph embeds → interactive for students (local scope). Gates green: tsc, eslint, slice suites; `next build` 41/41. **⚠️ Full jest = 2380/2391 — 11 FAILURES in auth/2FA/impersonation/password-reset (executor says pre-existing, unrelated to WB; VERIFY they fail on `v1-redesign` base before merge).** **PRE-MERGE GATE: `test:wb-sync` IS REQUIRED** — branch touches `src/components/whiteboard/` (GraphEmbeddable, BoardTabStrip, WbActionSheet, wb-icons) + sync-adjacent student-canvas viewport hook (path-based trigger per merge convention; not the narrow `src/lib/whiteboard/`-only reading). Run wb-sync + verify the 11 failures are pre-existing, THEN `merge --no-ff` to `v1-redesign`. **Deferred from Wave 5:** tutor phone-landscape over-compaction (R6-1) → needs proper tutor-responsive/component pass (editing tutor baseline CSS = the regression-prone surface; not a bespoke tweak). Sequencing answer to Andrew: Wave 5 → backlog burndown + consent merge + reliability-floor smoke → **A5/A6 sync+replay** → waiting-room wiring (#7, visual shell already merged) → master cut / ship-to-Sarah.
+> Integration base is `v1-redesign`. **Active feature branch:** `wb-wave5-polish` @ [`6b05e05`](https://github.com/Arangarx/tutoring-notes/commit/6b05e05) — Wave 5 polish + **Plan #1 (lifecycle + authed join + waiting room) DONE & COMMITTED**; **NOT merged** until final Sarah end-to-end gate. **Next major thread:** Plan #2 consent enforcement. **Residual (Plan #1):** dual-device takeover uses `joinedAt` epoch — cross-device clock skew could rarely mis-resolve (acceptable for pilot).
 
 | Field | Value |
 |---|---|
-| **Last action completed (2026-06-21)** | **`merge --no-ff` `wb-wave4-responsive` → `v1-redesign`** @ [`a166f6c`](https://github.com/Arangarx/tutoring-notes/commit/a166f6c) (pushed `c37f08f..a166f6c`). **Wave 4 = student responsive parity.** After rounds 1-5 of bespoke-patch attempts kept regressing (global-CSS churn / jsdom-blind), the **student top bar was REBUILT @ `64108cf`** to REUSE the tutor's exact chrome zone structure + same `desktop-only`/overflow-⋯ responsive mechanism, layering in only **6 documented deltas** (Exit, Connected pill, recording disclosure, follow-tutor toggle, no Share/inserts, tutor name); ALL tutor-affecting shared CSS reverted to `5d56f49` baseline; bespoke student override pile + the ResizeObserver/JS compaction engine removed. **Round-6 hardware smoke (Andrew):** student desktop no longer collapses; **R6-3 phone-portrait PASS, R6-4 phone-landscape PASS**; tutor not regressed by these changes; remaining items = polish only (→ Wave 5). Gates: tsc/eslint/jest clean; **`npx next build` PASS** (41/41 routes) [`79c5579d`](79c5579d-94ef-4ef6-a388-78d58323534f); **wb-sync N/A** (chrome-only, no `src/lib/whiteboard/` touched). Merge conflict = smokebook add/add → kept `v1-redesign` side (424-line version w/ Andrew R1-R6 notes; branch side was 137-line stub). Waves 1–4 + fix waves = **done**. |
-| **Next action(s)** | Andrew **single** Wave 5 hardware smoke on `wb-wave5-polish` (new UX + hardware judgment only — Playwright covers all 13 items). Then `merge --no-ff` → `v1-redesign` if PASS. |
-| **Open Andrew-confirms** | **Sarah primary device** — assumed Windows desktop (Chromium); verify on next call ([`SARAH-CALL-PREP.md`](../SARAH-CALL-PREP.md)). **Ship-to-Sarah gate** (notes path, end/continue save discipline, single-segment seek) — still open. **iOS student WB/A/V** — zero real-device coverage; Android test-student only ([`BACKLOG.md`](../BACKLOG.md) **WB-STUDENT-MOBILE-VALIDATION**). |
-| **In-flight subagents** | **None.** |
-| **Wave 5 status** | **Agent DONE** @ `5882a16` — all 13 smokebook items in wb-regression; affected + wb-sync (serial) green. Awaiting Andrew single smoke. |
-| **Uncommitted / unmerged** | **`wb-wave5-polish`** pushed @ `5882a16`; merge to `v1-redesign` after Andrew smoke PASS. |
+| **Last action completed (2026-06-27)** | **Plan #1 — session lifecycle + authenticated join + waiting-room overlay — DONE & COMMITTED** on `wb-wave5-polish` @ [`6b05e05`](https://github.com/Arangarx/tutoring-notes/commit/6b05e05) (pushed). Ten-commit chain: schema [`9c5ae20`](https://github.com/Arangarx/tutoring-notes/commit/9c5ae20) → lifecycle actions [`9e1b199`](https://github.com/Arangarx/tutoring-notes/commit/9e1b199) → phase-gated capture/timer [`4ec1220`](https://github.com/Arangarx/tutoring-notes/commit/4ec1220) → authed `/join` + `/w` retire [`a3d9b71`](https://github.com/Arangarx/tutoring-notes/commit/a3d9b71) → identity peerId + dual-device [`e73b011`](https://github.com/Arangarx/tutoring-notes/commit/e73b011) → waiting-room overlay [`72d180e`](https://github.com/Arangarx/tutoring-notes/commit/72d180e) → harness + lifecycle specs [`29af802`](https://github.com/Arangarx/tutoring-notes/commit/29af802) → smokebook [`5a0461d`](https://github.com/Arangarx/tutoring-notes/commit/5a0461d) → `/join` middleware fix [`3b216e8`](https://github.com/Arangarx/tutoring-notes/commit/3b216e8) → parallel Playwright rate-limit bypass [`6b05e05`](https://github.com/Arangarx/tutoring-notes/commit/6b05e05). Checkpoint: build PASS, jest 715/715, wb-regression 39 passed / 1 quarantine-skip / 0 failed @ 5-worker parallel. Plan: `.cursor/plans/live_session_lifecycle_and_authed_join_85ab15e4.plan.md`. |
+| **Next action(s)** | **(1)** Andrew **Plan #1 hardware smoke** when agent DONE checklist passes — [`plan1-lifecycle-authed-join-smokebook.md`](plan1-lifecycle-authed-join-smokebook.md) (new UX + real-device judgment only; Playwright covers regressions). **(2)** **Plan #2 — consent enforcement:** wire `allowLiveSession`/`allowAudioRecording`/`allowNoteSending`, delete `CONSENT_ENFORCEMENT` flag, remove tutor consent click, in_person consent-projection teeth (`consentAcknowledged` left for Plan #2). **(3)** Checkpoint CLOSED — final `next build` + targeted gate re-confirm GREEN @ `6b05e05`. **NO merge** to `v1-redesign`/`master` until final end-to-end Sarah gate (per Plan #1 sequencing). |
+| **Open Andrew-confirms** | **Plan #1 hardware smoke** — [`plan1-lifecycle-authed-join-smokebook.md`](plan1-lifecycle-authed-join-smokebook.md). **OPERATIONAL PREREQUISITE for prod:** anonymous `/w` fully retired → Sarah's pilot families must be **CLAIMED + credentialed** (learner logins) before prod ship — separate tracked step. **Sarah primary device** — assumed Windows desktop (Chromium); verify on next call ([`SARAH-CALL-PREP.md`](../SARAH-CALL-PREP.md)). **Ship-to-Sarah gate** (notes path, end/continue save discipline, single-segment seek) — still open. **iOS student WB/A/V** — zero real-device coverage ([`BACKLOG.md`](../BACKLOG.md) **WB-STUDENT-MOBILE-VALIDATION**). **Wave 5 hardware smoke** ([`wb-wave5-polish-smokebook-2026-06-21.md`](wb-wave5-polish-smokebook-2026-06-21.md)) — still open separately from Plan #1. |
+| **In-flight subagents** | **None.** Final checkpoint re-confirm completed GREEN @ `6b05e05`. |
+| **Plan #1 status** | **Agent DONE & COMMITTED** @ `6b05e05` — all workstreams 1–8 + checkpoint BLOCKER fix + parallel-harness bypass. Awaiting Andrew Plan #1 smoke. |
+| **Wave 5 status** | **Agent DONE** @ `5882a16` (pre-Plan #1 baseline on same branch) — wb-regression mapped; Wave 5 Andrew smoke still open. |
+| **Uncommitted / unmerged** | **`wb-wave5-polish`** pushed @ `6b05e05`; **NOT merged** — per Plan #1, no merge until final Sarah end-to-end gate. Integration base remains `v1-redesign`. |
 | **P1 replay-in-frame (MERGED 2026-06-16 — thread CLOSED)** | **MERGED** `phase1/wb-review-correct` → `v1-redesign` @ [`f68053c`](https://github.com/Arangarx/tutoring-notes/commit/f68053c). In-frame unified review + replay timeline scrubber + full A/V fix chain. Video-paint **RESOLVED** — bandaid @ [`1cc268d`](https://github.com/Arangarx/tutoring-notes/commit/1cc268d) (= [`3b996ae`](https://github.com/Arangarx/tutoring-notes/commit/3b996ae) AV code). Pre-merge: build green, wb-sync green, jest 659/659 @ [`6440ea7`](https://github.com/Arangarx/tutoring-notes/commit/6440ea7). Smokebook [`phase-1-wb-floor-replay-in-frame-smokebook-2026-06-14.md`](phase-1-wb-floor-replay-in-frame-smokebook-2026-06-14.md) — Andrew actively entering results (**do NOT edit**). Branch preserved for cleanup. |
 | **P2 student-on-new-shell (SUPERSEDED → MERGED via wb-unify 2026-06-18)** | Absorbed into **`wb-unify-stabilize` → `v1-redesign` @ `f66aa4b`**. Student shell is now role-gated `WhiteboardWorkspaceClient`; legacy smokebook [`phase-2-student-new-shell-smokebook-2026-06-16.md`](phase-2-student-new-shell-smokebook-2026-06-16.md) retained for audit only. Active smokebook: [`wb-unify-stabilize-smokebook-2026-06-17.md`](wb-unify-stabilize-smokebook-2026-06-17.md). |
 | **Ship-to-Sarah gate (CONFIRMED by Andrew 2026-06-16)** | Andrew wants to swap Sarah off `master` ("old & busted") onto the `v1-redesign`/`phase1` line **once waiting room → WB → end session is stable for tutor AND student — backend data pipeline INCLUDED** (per-segment flush + per-chunk transcription reliably producing notes, not just UI flow). Triggered by Sarah's 2026-06-16 prod chat (3 bugs; capture [`sarah-pilot-feedback-2026-06-16-orchestrator-report.md`](sarah-pilot-feedback-2026-06-16-orchestrator-report.md) @ [`931e8f7`](https://github.com/Arangarx/tutoring-notes/commit/931e8f7); BACKLOG SSG-1/2/3 + F1 elevated). **Confirmed gate items:** **(1)** notes — legacy monolithic "Generate notes from session" path GONE from new surface (the button she clicked), per-chunk auto-notes the only path, verify up-to-50-min-segment transcribes clean; exact "too large to split" error structurally avoided (residual >25MB-per-segment risk = backlog SSG-1). **(2)** End/Continue on **student-detail open-sessions list** never silently deletes recording — save-then-end or explicit "Discard" label+behavior (SSG-2 / F1; `endStaleWhiteboardSession` currently stamps `endedAt` w/o flush). **(3)** single-segment seek (her actual case) works at EVERY review entry point she'd use — incl. not landing on the unfixed legacy standalone `WhiteboardReplay` (fix-for-single-seg or route to in-frame). **Multi-segment (>50-min) seek EXPLICITLY DEFERRED by Andrew → backlog SSG-3 only.** Items 1–3 fold into P2/P3 + a targeted backend pass; NOT separate threads. **Pre-master smoke deferral (Andrew 2026-06-16): relaxed strict "smoke-all-before-master" — some items OK post-master, but data-loss/security/backup-recorder items stay PRE-MASTER (not deferred).** Durable ledger [`pre-master-smoke-deferral-ledger-2026-06-16.md`](pre-master-smoke-deferral-ledger-2026-06-16.md) @ [`b7b2071`](https://github.com/Arangarx/tutoring-notes/commit/b7b2071) (35 keep / 11 defer-safe / 5 already-deferred). **Borderlines RESOLVED (Andrew 2026-06-16):** (a) MAP-ACC notes *quality* → DEFER post-master but it's the **#1 post-master follow-up — start immediately at cut** so Sarah generates feedback + real examples to tune against; (b) A1 freedraw latency → DEFER ("doesn't feel like an issue right now, we'll see") — watch, not a blocker. |
@@ -60,18 +63,13 @@
 ## Branch layering
 
 ```
-master  ←  v1-redesign  (active base @ f66aa4b; P1 + wb-unify merged)
-          (Gate A +
-           re-smoke
-           held)
-
-wb-unify-stabilize — MERGED into v1-redesign @ f66aa4b
-v1-design-system   — MERGED into v1-redesign @ 36727ea
-                     (branch refs still exist as ancestors / historical)
+master  ←  v1-redesign  (integration base; Gate A + re-smoke held)
+          ↑
+          wb-wave5-polish  (active @ 6b05e05 — Wave 5 + Plan #1; NOT merged)
 ```
 
-- **`v1-redesign`:** **Active integration base** @ [`f66aa4b`](https://github.com/Arangarx/tutoring-notes/commit/f66aa4b) — P1 replay-in-frame + **wb-unify-stabilize** (Waves 1–3 + fix waves) merged. Smoke round 1 **8/8** @ [`27ac5db`](https://github.com/Arangarx/tutoring-notes/commit/27ac5db); design-system epic @ [`36727ea`](https://github.com/Arangarx/tutoring-notes/commit/36727ea). **Not yet merged to `master`** — held for Gate A + comprehensive re-smoke + Ship-to-Sarah gate.
-- **`v1-design-system`:** Historical — fully merged into `v1-redesign` @ [`36727ea`](https://github.com/Arangarx/tutoring-notes/commit/36727ea). Branch ref still exists locally/remotely as ancestor; no longer the active overnight layer. Branched off `v1-redesign` @ [`1456581`](https://github.com/Arangarx/tutoring-notes/commit/1456581).
+- **`wb-wave5-polish`:** **Active feature branch** @ [`6b05e05`](https://github.com/Arangarx/tutoring-notes/commit/6b05e05) — Wave 5 polish + **Plan #1 (session lifecycle + authed join + waiting room) DONE & COMMITTED**. Pushed to `origin/wb-wave5-polish`. **NOT merged** to `v1-redesign` — per Plan #1 sequencing, no merge until final end-to-end Sarah gate.
+- **`v1-redesign`:** **Integration base** — P1 replay-in-frame + **wb-unify-stabilize** (Waves 1–4) merged. **Not yet merged to `master`** — held for Gate A + comprehensive re-smoke + Ship-to-Sarah gate.
 
 **Decisions ledger + sub-pass tracker:** [`docs/handoff/v1-redesign-STATUS.md`](v1-redesign-STATUS.md) — do not duplicate the full ledger here.
 
@@ -85,28 +83,48 @@ Pre-public pilot with one tutor (Sarah). North Star from [`AGENTS.md`](../../AGE
 
 ## Current Wave focus
 
-**Active:** **`v1-redesign` @ `f66aa4b`** — **Waves 4–5** wb-unify chrome/polish (next thread; **not** merge-gating). Plan: [`wb-unify-stabilization-plan-2026-06-17.md`](wb-unify-stabilization-plan-2026-06-17.md).
+**Active branch:** **`wb-wave5-polish` @ `6b05e05`** — Plan #1 **DONE & COMMITTED**; **Plan #2 (consent enforcement) is the next major thread.**
 
-**Just closed:** `wb-unify-stabilize` Waves 1–3 + fix waves — merged @ [`f66aa4b`](https://github.com/Arangarx/tutoring-notes/commit/f66aa4b).
+**Just closed:** **Plan #1** — session lifecycle + authenticated join + waiting-room overlay (`.cursor/plans/live_session_lifecycle_and_authed_join_85ab15e4.plan.md`). Ten commits `9c5ae20`→`6b05e05`; smokebook [`plan1-lifecycle-authed-join-smokebook.md`](plan1-lifecycle-authed-join-smokebook.md).
 
-**Integration base:** `v1-redesign` @ [`f66aa4b`](https://github.com/Arangarx/tutoring-notes/commit/f66aa4b).
+**Integration base:** `v1-redesign` (unchanged — `wb-wave5-polish` not merged yet).
 
-**Parallel:** `phase1/wb-reliability-floor` desktop smoke; `docs/phase3-consent-model` merge (conflict-aware); Gate A→A6 + Ship-to-Sarah gate → `v1-redesign → master` cut.
+**Parallel / still open:** Wave 5 Andrew hardware smoke ([`wb-wave5-polish-smokebook-2026-06-21.md`](wb-wave5-polish-smokebook-2026-06-21.md)); Ship-to-Sarah gate; pilot-family credentialing prerequisite before prod (anonymous `/w` retired).
 
-### Waves 4–5 scope (next thread — from unify plan)
+### Plan #1 — CLOSED (agent) @ `6b05e05` (2026-06-27)
 
-| Wave | Scope |
-|---|---|
-| **4 — Chrome / responsive + residual wiring** | Role-distinct **local** laser colors (tutor vs student CSS/`laserColor`); responsive layout — verify inherited tutor responsive covers student desktop+mobile; fix residual overflow; mobile rearrange parity (smoke item 11). **Gate:** desktop + mobile student smoke. |
-| **5 — Polish** | Coral Exit button + exit icon; smaller "Match tutor's view" button + better sync iconography; design Q (a) highlight non-clickable student board tab?; design Q (b) student graph-expression entry on embeds?; **WB-STUDENT-VIEW-LOCK-WHEN-SYNCED** — block pan/zoom while synced (vs move-then-snap-back). |
+| Workstream | Commit | Summary |
+|---|---|---|
+| 1 — Schema | [`9c5ae20`](https://github.com/Arangarx/tutoring-notes/commit/9c5ae20) | `SessionPhase`/`SessionMode`/`activatedAt` + `SessionParticipant` (additive; `activatedAt` new instead of repurposing `startedAt`) |
+| 2 — Lifecycle actions | [`9e1b199`](https://github.com/Arangarx/tutoring-notes/commit/9e1b199) | `createWhiteboardSession`→PENDING + participant; idempotent `startWhiteboardSession` PENDING→ACTIVE; `endWhiteboardSession` sets `leftAt`; **`slc`** logging; `consentAcknowledged` untouched |
+| 3 — Phase-gated capture | [`4ec1220`](https://github.com/Arangarx/tutoring-notes/commit/4ec1220) | Capture + billing timer gated on `sessionPhase=ACTIVE`; `initialSessionPhase` defaults ACTIVE for back-compat |
+| 4+5 — Authed join | [`a3d9b71`](https://github.com/Arangarx/tutoring-notes/commit/a3d9b71) | Authenticated `/join`; anonymous `/w` retired; learner-only gate; `JoinAuthGate` + `JoinHashRestorer`; `/w`→`/join` redirect; tutor copy-link→`/join`; E2E key stays client-only |
+| 6 — Identity peerId | [`e73b011`](https://github.com/Arangarx/tutoring-notes/commit/e73b011) | `identityKey = sha256(learnerProfileId:sessionId)[:12]`; dual-device takeover (newest wins) |
+| 7 — Waiting room | [`72d180e`](https://github.com/Arangarx/tutoring-notes/commit/72d180e) | Mutual overlay over mounted shell; A/V continuous; LIVE Start gated on `bothPartiesInRoom`; IN_PERSON always startable; **`wtr`** logging |
+| 8 — Tests | [`29af802`](https://github.com/Arangarx/tutoring-notes/commit/29af802) | Harness → authed `/join` + tutor Start; `wb-session-lifecycle.spec.ts` (15 tests); `learner.json` stored-state |
+| Smokebook | [`5a0461d`](https://github.com/Arangarx/tutoring-notes/commit/5a0461d) | Hardware/human smokebook + verified preview alias |
+| Checkpoint fix | [`3b216e8`](https://github.com/Arangarx/tutoring-notes/commit/3b216e8) | Middleware no longer server-redirects `/join/*` (was bypassing `JoinAuthGate`, dropping `#k=`) |
+| Harness bypass | [`6b05e05`](https://github.com/Arangarx/tutoring-notes/commit/6b05e05) | Test-only learner-login rate-limit bypass for 5-worker parallel Playwright |
 
-Plus **W1-3 backlog burndown** (11 IDs in [`BACKLOG.md`](../BACKLOG.md) § wb-unify W1-3 smoke triage) — image importer, student board tabs, mic-muted activity, etc.
+**Residual:** dual-device takeover uses `joinedAt` epoch — cross-device clock skew could rarely mis-resolve (acceptable for pilot).
 
-**Deferred / re-verify opportunistically:** student canvas stuck on "Loading scene…" (intermittent; [`BACKLOG.md`](../BACKLOG.md) — re-verify when join path is touched).
+### Plan #2 — NEXT (consent enforcement)
+
+Wire `allowLiveSession` / `allowAudioRecording` / `allowNoteSending`; delete `CONSENT_ENFORCEMENT` flag; remove tutor consent click; in_person consent-projection teeth. `consentAcknowledged` deliberately deferred from Plan #1.
+
+### Wave 5 (same branch, pre-Plan #1 baseline)
+
+Wave 5 polish **agent DONE** @ `5882a16` — 13 smokebook items in wb-regression. Andrew Wave 5 hardware smoke still open.
 
 ---
 
-## Latest committed state (`v1-redesign`)
+## Latest committed state
+
+### `wb-wave5-polish` (active) @ [`6b05e05`](https://github.com/Arangarx/tutoring-notes/commit/6b05e05)
+
+Plan #1 tip — test-only learner-login rate-limit bypass for parallel Playwright. Full Plan #1 chain above. Checkpoint: build PASS, jest 715/715, wb-regression 39 passed / 1 quarantine-skip / 0 failed @ 5-worker parallel.
+
+### `v1-redesign` (integration base)
 
 | Commit | Summary |
 |---|---|
@@ -186,16 +204,18 @@ Canonized in [`recording-rearchitecture-design-2026-06-05.md`](recording-rearchi
 
 ---
 
-## Queued dispatches (post wb-unify merge)
+## Queued dispatches (post Plan #1)
 
-1. **Waves 4–5** wb-unify chrome/polish on `v1-redesign` (laser colors, responsive, Exit/Match-view polish, view-lock)
-2. **W1-3 backlog burndown** — 11 IDs from wb-unify smoke triage ([`BACKLOG.md`](../BACKLOG.md))
-3. **`docs/phase3-consent-model` @ `4f9dbcd`** → merge to `v1-redesign` (union-merge handoff docs; may conflict with P3 notes folded @ `f66aa4b`)
-4. Gate A→A6 burndown → comprehensive pre-master smoke (both themes) → `v1-redesign → master` cut
-5. Ship-to-Sarah gate items (notes path, end/continue, single-segment seek)
-6. Foundation follow-up for deferred library gaps
-7. Functional wiring: waiting room (A2), parent consent-edit (B2 Step 6), scheduler + Google OAuth
-8. Recording consolidation slice (fix path B); Map/reduce accuracy workstream
+1. **Plan #2 — consent enforcement** on `wb-wave5-polish` (wire allow flags, delete `CONSENT_ENFORCEMENT`, remove tutor consent click, in_person projection)
+2. **Andrew Plan #1 hardware smoke** — [`plan1-lifecycle-authed-join-smokebook.md`](plan1-lifecycle-authed-join-smokebook.md) (when agent DONE confirmed)
+3. **Pilot-family credentialing** — CLAIMED + learner logins for Sarah's families before prod (anonymous `/w` retired)
+4. Andrew **Wave 5 hardware smoke** (separate smokebook — still open)
+5. **W1-3 backlog burndown** — 11 IDs from wb-unify smoke triage ([`BACKLOG.md`](../BACKLOG.md))
+6. **`docs/phase3-consent-model` @ `4f9dbcd`** → merge to `v1-redesign` (conflict-aware)
+7. Gate A→A6 burndown → comprehensive pre-master smoke (both themes) → `v1-redesign → master` cut
+8. Ship-to-Sarah gate items (notes path, end/continue, single-segment seek)
+9. Final Sarah end-to-end gate → **`merge --no-ff` `wb-wave5-polish` → `v1-redesign`**
+10. Recording consolidation slice (fix path B); Map/reduce accuracy workstream
 
 ---
 
@@ -284,7 +304,7 @@ Deferred TODOs (not in overnight scope): REJECTED status, revocation UI, approva
 |---|---|
 | **Branch discipline** | ✅ Each target on separate branch + smokebook/findings doc |
 | **Merge gate** | ✅ Andrew smoke → fixes on branch → `merge --no-ff` to `v1-redesign` (8/8 complete) |
-| **Not built overnight (smoke wave)** | VIDEO recording + replay; A2 waiting room; B2 Step 6 parent consent management UI; laser bidirectional; A6 multi-segment player regression fix |
+| **Not built overnight (smoke wave)** | VIDEO recording + replay; B2 Step 6 parent consent management UI; laser bidirectional; A6 multi-segment player regression fix. **Waiting room functional wiring → Plan #1 @ `72d180e` on `wb-wave5-polish` (not yet merged to `v1-redesign`).** |
 
 **Component reuse standard (ratified 2026-06-11):** [`V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) §2.12, [`.cursor/rules/component-reuse.mdc`](../../.cursor/rules/component-reuse.mdc), `BACKLOG.md` audit. `feat/component-dry-mechanical` is the mechanical pass — smoke for no visual drift.
 
@@ -299,7 +319,7 @@ Deferred TODOs (not in overnight scope): REJECTED status, revocation UI, approva
 | # | Gate | Status (post smoke-round-1 merge) |
 |---|---|---|
 | A1 | Visual redesign + chrome + theme + component reuse | **MERGED** @ `36727ea` — full design-system epic on `v1-redesign`; systemic `@layer base` cleanup still in BACKLOG (Gate A1) |
-| A2 | Waiting room | **Visual shell merged** (Group E); admit/presence/`getUserMedia` wiring deferred to live-AV thread |
+| A2 | Waiting room | **FUNCTIONAL on `wb-wave5-polish`** — Plan #1 mutual overlay + Start gating wired (`72d180e`); visual shell was merged earlier (Group E). Not yet on `v1-redesign` until branch merge. |
 | A3 | Pass-2 in-context end-session | **MERGED** @ `5922c6f` — Phase A functional (E1 fixed); Phase B polish deferred |
 | A3a | PDF page-tab indicator | **MERGED** to `v1-redesign` @ `c05d939` |
 | A3b | SR-04a video-tile sizing | **MERGED** to `v1-redesign` @ `c05d939` |
@@ -373,7 +393,8 @@ Recording Q1/Q5/Q6/Q7/Q8, cost Q8, pricing-floor, Vercel-lock OK — see [`recor
 
 | Thread | Status |
 |---|---|
-| **v1 design-system overnight (X2)** | **IN FLIGHT** — `v1-design-system` branch, Groups A–G fan-out |
+| **v1 design-system overnight (X2)** | **MERGED** @ `36727ea` — historical |
+| **Plan #1 lifecycle + authed join** | **DONE & COMMITTED** @ `6b05e05` on `wb-wave5-polish` — awaiting Andrew smoke + Plan #2 |
 | **Identity / access** | Parent-create-learner + B1 + B2 **merged**; IAC-13 disconnect build open |
 | **Replay player (A6-1)** | R1/R2 multi-segment regression — dedicated fix thread |
 | **Live AV (X1)** | Tutor remote-video paint **resolved** @ P1 merge (bandaid); student A/V validated Android via wb-unify; **iOS student = zero coverage** |
@@ -395,7 +416,7 @@ Recording Q1/Q5/Q6/Q7/Q8, cost Q8, pricing-floor, Vercel-lock OK — see [`recor
 |---|---|
 | Two-way calendar sync (webhooks/subscriptions)? | **Unresolved** — see [`scheduling-requirements-2026-06-11.md`](scheduling-requirements-2026-06-11.md) |
 | Learner-swap design (d) | Awaiting Andrew |
-| Student URL keep vs retire (c) | **RESOLVED** — KEEP hybrid @ [`71b2c3e`](https://github.com/Arangarx/tutoring-notes/commit/71b2c3e) |
+| Student URL keep vs retire (c) | **RESOLVED Plan #1** — anonymous `/w` **retired**; authenticated `/join` only @ [`a3d9b71`](https://github.com/Arangarx/tutoring-notes/commit/a3d9b71); `/w`→`/join` redirect bridge for old links |
 | Student camera default (e) | **RESOLVED** — self-view ON @ [`71b2c3e`](https://github.com/Arangarx/tutoring-notes/commit/71b2c3e) |
 | Map/reduce auto-notes accuracy | Poor today — needs design+eval pass |
 
@@ -416,16 +437,15 @@ Recording Q1/Q5/Q6/Q7/Q8, cost Q8, pricing-floor, Vercel-lock OK — see [`recor
 Fresh orchestrator — read in order:
 
 1. [`AGENTS.md`](../../AGENTS.md)
-2. [`docs/handoff/ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md) (this file) — **HEAD + merge status + open threads**
-3. [`docs/handoff/overnight-v1-design-system-handoff-2026-06-11.md`](overnight-v1-design-system-handoff-2026-06-11.md) — **most current re: overnight run**
-4. [`docs/handoff/scheduling-requirements-2026-06-11.md`](scheduling-requirements-2026-06-11.md) — Group F scheduler requirements (visual-only tonight)
-5. [`docs/V1-COMPONENT-LIBRARY.md`](../V1-COMPONENT-LIBRARY.md) — frozen library catalog
+2. [`docs/handoff/ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md) (this file) — **HEAD + Plan #1 status + merge status**
+3. `.cursor/plans/live_session_lifecycle_and_authed_join_85ab15e4.plan.md` — **Plan #1 spec (DONE)**
+4. [`docs/handoff/plan1-lifecycle-authed-join-smokebook.md`](plan1-lifecycle-authed-join-smokebook.md) — Plan #1 Andrew smoke (when requested)
+5. [`docs/RECORDER-LIFECYCLE.md`](../RECORDER-LIFECYCLE.md) — before touching `handleEndSession` / lifecycle actions
 6. [`docs/handoff/v1-redesign-STATUS.md`](v1-redesign-STATUS.md) — V1 epic ledger
-7. [`docs/RECORDER-LIFECYCLE.md`](../RECORDER-LIFECYCLE.md) — before touching `handleEndSession`
-8. [`docs/handoff/b2-consent-design-2026-06-11.md`](b2-consent-design-2026-06-11.md) — B2 consent design (merged on `v1-redesign`)
-9. [`docs/RELEASE-ROADMAP.md`](../RELEASE-ROADMAP.md)
-10. [`docs/BACKLOG.md`](../BACKLOG.md)
-11. [`docs/PLATFORM-ASSUMPTIONS.md`](../PLATFORM-ASSUMPTIONS.md)
+7. [`docs/handoff/b2-consent-design-2026-06-11.md`](b2-consent-design-2026-06-11.md) — B2 consent design (**Plan #2 entry point**)
+8. [`docs/RELEASE-ROADMAP.md`](../RELEASE-ROADMAP.md)
+9. [`docs/BACKLOG.md`](../BACKLOG.md)
+10. [`docs/PLATFORM-ASSUMPTIONS.md`](../PLATFORM-ASSUMPTIONS.md)
 
 ---
 
