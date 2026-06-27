@@ -615,6 +615,116 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     }
   });
 
+  test("item 21 — phone-landscape left rail: Shapes + More reachable and not clipped (tutor)", async ({
+    browser,
+  }) => {
+    test.setTimeout(120_000);
+    const session = await seedWbLiveSyncSession();
+
+    // Phone landscape (≈844×390) with a real coarse pointer (hasTouch alone
+    // yields pointer:coarse in Chromium without the isMobile visual-viewport
+    // split). The historical smokebook bug: the slim left rail / its Shapes &
+    // More sheets were unusable. Oracle = containment + reachability AFTER the
+    // slide-up transition settles, NOT absolute coords (visual-layout-oracles).
+    // NOTE: action sheets animate via `transform: translateY(100%→0)` over
+    // 0.25s; measuring before the transition settles reads the closed (off-
+    // screen) position — hence the explicit settle below.
+    const ctx = await browser.newContext({
+      storageState: "tests/integration/.auth/tutor.json",
+      viewport: { width: 844, height: 390 },
+      hasTouch: true,
+    });
+    try {
+      const page = await ctx.newPage();
+      await loadTutorBoard(page, session);
+
+      // Positive control + sanity: really a coarse-pointer phone-landscape layout.
+      const coarse = await page.evaluate(
+        () => window.matchMedia("(hover: none), (pointer: coarse)").matches
+      );
+      expect(
+        coarse,
+        "context did not emulate a coarse pointer — test setup issue"
+      ).toBe(true);
+      await expect(page.getByTestId("mynk-wb-chrome")).toHaveAttribute(
+        "data-layout",
+        "phone-landscape",
+        { timeout: 5_000 }
+      );
+
+      const innerH = await page.evaluate(() => window.innerHeight);
+      const innerW = await page.evaluate(() => window.innerWidth);
+      const within = (
+        box: { x: number; y: number; width: number; height: number } | null
+      ) => {
+        expect(box).not.toBeNull();
+        expect(box!.x).toBeGreaterThanOrEqual(-1);
+        expect(box!.y).toBeGreaterThanOrEqual(-1);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(innerW + 1);
+        expect(box!.y + box!.height).toBeLessThanOrEqual(innerH + 1);
+      };
+
+      const rail = page.getByTestId("wb-bottom-toolbar");
+      await expect(rail).toBeVisible();
+
+      const shapes = rail.getByRole("button", { name: "Shapes" });
+      const more = rail.getByRole("button", { name: /More — z-order/i });
+      await expect(shapes).toBeVisible();
+      await expect(more).toBeVisible();
+
+      // Each rail control is fully inside the viewport (rail is scrollable).
+      await shapes.scrollIntoViewIfNeeded();
+      within(await shapes.boundingBox());
+      await more.scrollIntoViewIfNeeded();
+      within(await more.boundingBox());
+
+      // Open a sheet, wait for the slide-up to settle (bottom anchored to the
+      // viewport bottom), then assert it is fully within the viewport — its
+      // scrollable body keeps all items reachable on the short landscape height.
+      const assertSheetReachable = async (testId: string) => {
+        const sheet = page.getByTestId(testId);
+        // These sheets are always in the DOM (display:flex) and toggle open via
+        // the `--open` class (closed = translateY(100%) off-screen), so the open
+        // signal is the class, not Playwright visibility.
+        await expect(sheet).toHaveClass(/mynk-wb-action-sheet--open/, {
+          timeout: 5_000,
+        });
+        await expect
+          .poll(
+            async () => {
+              const box = await sheet.boundingBox();
+              return box ? Math.round(box.y + box.height) : Number.MAX_SAFE_INTEGER;
+            },
+            { timeout: 5_000, message: `${testId} never settled within viewport` }
+          )
+          .toBeLessThanOrEqual(innerH + 1);
+        within(await sheet.boundingBox());
+        // Body is the scroll container so overflowing items stay reachable.
+        const bodyOverflow = await sheet
+          .locator(".mynk-wb-action-sheet__body")
+          .evaluate((el) => getComputedStyle(el).overflowY);
+        expect(["auto", "scroll"]).toContain(bodyOverflow);
+      };
+
+      await shapes.click();
+      await assertSheetReachable("wb-shapes-sheet");
+      // Touch sheets dismiss via the × button (not Escape).
+      await page
+        .getByTestId("wb-shapes-sheet")
+        .getByRole("button", { name: "Dismiss" })
+        .click();
+      await expect(page.getByTestId("wb-shapes-sheet")).not.toHaveClass(
+        /mynk-wb-action-sheet--open/,
+        { timeout: 5_000 }
+      );
+
+      await more.click();
+      await assertSheetReachable("wb-more-sheet");
+    } finally {
+      await ctx.close();
+    }
+  });
+
   test("item 13 — review thumbnail renders JSXGraph board, not mynk://graph text", { tag: [TAG.WB_GRAPH] }, async ({
     browser,
   }) => {
