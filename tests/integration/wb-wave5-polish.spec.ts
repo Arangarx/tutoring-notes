@@ -551,6 +551,70 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     });
   }
 
+  test("item 20 — half-width desktop stays desktop chrome; touch at same width flips (layout firewall)", async ({
+    browser,
+  }) => {
+    test.setTimeout(120_000);
+    const session = await seedWbLiveSyncSession();
+
+    // --- Non-touch desktop: resizing a desktop window down to half-width must
+    // NOT flip to a touch/phone layout (Andrew 2026-06-24 smoke: half-screen on
+    // a monitor flipped to mobile chrome). detectLayoutMode keeps "desktop" for
+    // mouse/fine-pointer down to the 400px emergency floor.
+    const desktopCtx = await browser.newContext({
+      storageState: "tests/integration/.auth/tutor.json",
+      viewport: { width: 1280, height: 900 },
+    });
+    try {
+      const desktopPage = await desktopCtx.newPage();
+      await loadTutorBoard(desktopPage, session);
+      const chrome = desktopPage.getByTestId("mynk-wb-chrome");
+      await expect(chrome).toHaveAttribute("data-layout", "desktop");
+
+      // Half-screen on a 1280 monitor ≈ 700px. Must stay desktop.
+      await desktopPage.setViewportSize({ width: 700, height: 900 });
+      await expect(chrome).toHaveAttribute("data-layout", "desktop", {
+        timeout: 5_000,
+      });
+    } finally {
+      await desktopCtx.close();
+    }
+
+    // --- Touch device at the SAME 700px width: the input capability (coarse
+    // pointer / no hover), not the width, is what flips to compact chrome. At
+    // 700px (< 768) that is "narrow". This is the contrast that proves the fix
+    // keys off input capability, not viewport width alone.
+    const touchCtx = await browser.newContext({
+      storageState: "tests/integration/.auth/tutor.json",
+      viewport: { width: 700, height: 900 },
+      hasTouch: true,
+      isMobile: true,
+    });
+    try {
+      const touchPage = await touchCtx.newPage();
+      await loadTutorBoard(touchPage, session);
+
+      // Positive control: the context really emulates a coarse-pointer device.
+      // Without this a setup regression (no touch emulation) would silently make
+      // the touch case behave like desktop and false-green the firewall claim.
+      const coarse = await touchPage.evaluate(
+        () => window.matchMedia("(hover: none), (pointer: coarse)").matches
+      );
+      expect(
+        coarse,
+        "touch context did not emulate a coarse pointer — test setup issue"
+      ).toBe(true);
+
+      await expect(touchPage.getByTestId("mynk-wb-chrome")).toHaveAttribute(
+        "data-layout",
+        "narrow",
+        { timeout: 5_000 }
+      );
+    } finally {
+      await touchCtx.close();
+    }
+  });
+
   test("item 13 — review thumbnail renders JSXGraph board, not mynk://graph text", { tag: [TAG.WB_GRAPH] }, async ({
     browser,
   }) => {
