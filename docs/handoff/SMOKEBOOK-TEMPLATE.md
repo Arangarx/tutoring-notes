@@ -33,7 +33,7 @@ Smokebooks are **not** mid-wave bug hunts. See [`.cursor/rules/smoke-when-done.m
 
 - **New surface** or **subjective UX** (feel, polish, tutor judgment)
 - **Hardware / external-env** only Playwright cannot hermeticize (`PLAYWRIGHT-GAP` backlog items)
-- Annotated in **Notes** when Playwright already covers the behavior: `[automated: <spec-file> › <test title>]` → Andrew marks **N/A with notes** unless `[human-only: <reason>]`
+- Annotated in the optional agent-authored **Coverage** line when Playwright already covers the behavior: `[automated: <spec-file> › <test title>]` → Andrew marks **N/A with notes** unless `[human-only: <reason>]` (**Notes** is Andrew's field — agents leave it blank)
 
 **Do not** ask Andrew to smoke per-fix commits, re-prove regressions that have Playwright tests, or use smoke as the first net for behavior agents could have caught in relay tests.
 
@@ -56,7 +56,8 @@ Smokebooks are **not** mid-wave bug hunts. See [`.cursor/rules/smoke-when-done.m
 | **N/A with notes** (per item) | Checked = the item **does not apply as written** for this run or configuration (e.g. the feature under test is absent in the current build, or the setup genuinely cannot exercise it). **A Note explaining why is required.** Distinct from **SKIP** (a valid test deliberately not run this pass) and from **leaving all boxes unchecked** (not-yet-run / missed). Example: a smoke item for "Recording Start/Pause" when those controls no longer exist in the UI — N/A with notes, not SKIP and not blank. |
 | **SKIP** (per item) | Checked = test deliberately skipped this run — **reason required in Notes** (e.g. blocked by env, out of scope this pass, dependency not ready). Distinct from N/A with notes (item does not apply as written). |
 | **None checked** (per item) | Not yet run / missed — **not** the same as a deliberate SKIP or N/A with notes. Check exactly one box per item when the run is complete; leave all unchecked if not yet reached. |
-| **Notes** | Freeform observations, screenshots paths, console errors worth filing. SKIP and N/A with notes items must state why here. |
+| **Coverage** | **Agent-authored only** (optional — omit the field entirely if nothing applies). `[automated: <spec-file> › <test title>]` and/or `[human-only: <reason>]` citations for Playwright overlap or human-only justification. Never put smoke results or pass/fail commentary here. |
+| **Notes** | **Andrew's field — agents leave it blank.** Freeform observations he types during the run: screenshots paths, console errors worth filing, what worked vs didn't for PARTIAL, and why for SKIP / N/A with notes. |
 
 Run order: top to bottom unless a block says otherwise. Re-run **Cross-branch / post-merge** after integration merges.
 
@@ -81,7 +82,7 @@ Cross-ref: Gate A1 both-theme component gate ([`docs/BACKLOG.md`](../BACKLOG.md)
 
 ## Per-test-item block (repeat for every test)
 
-Each numbered item **must** include all fields below **in this order**. Do not combine PASS/FAIL/PARTIAL/N/A with notes/SKIP into one line.
+Each numbered item **must** include all required fields below **in this order** (`**Coverage:**` is optional — omit when no citation applies). Do not combine PASS/FAIL/PARTIAL/N/A with notes/SKIP into one line.
 
 ```markdown
 ### N. <short title>
@@ -97,6 +98,8 @@ Each numbered item **must** include all fields below **in this order**. Do not c
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
+
+**Coverage:** <optional — agent-authored `[automated: <spec-file> › <test title>]` and/or `[human-only: <reason>]`; omit field if nothing applies>
 
 **Notes:**
 
@@ -118,6 +121,8 @@ Each numbered item **must** include all fields below **in this order**. Do not c
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
+
+**Coverage:** `[automated: tests/integration/example.spec.ts › theme toggle applies immediately]` — `[human-only: subjective feel of menu dismiss on Escape]`
 
 **Notes:**
 
@@ -142,6 +147,8 @@ Each numbered item **must** include all fields below **in this order**. Do not c
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
+
+**Coverage:** <agent: `[automated:…]` / `[human-only:…]`, or omit>
 
 **Notes:**
 
@@ -176,6 +183,8 @@ Run this section **after** the feature branch merges into the integration branch
 - [ ] N/A with notes
 - [ ] SKIP
 
+**Coverage:** <agent: `[automated:…]` / `[human-only:…]`, or omit>
+
 **Notes:**
 
 ### 2. <add integration-specific checks>
@@ -191,6 +200,8 @@ Run this section **after** the feature branch merges into the integration branch
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
+
+**Coverage:** <agent: `[automated:…]` / `[human-only:…]`, or omit>
 
 **Notes:**
 

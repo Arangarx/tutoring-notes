@@ -30,7 +30,7 @@ Until all five pass: **do not ask Andrew to smoke.**
 
 **Include:** novel UX, feel, hardware-only paths, visual polish judgment, cross-device layout, pilot-realistic flows Playwright cannot hermeticize.
 
-**Exclude / mark explicitly:** anything already covered by Playwright — tag items in Notes as `[automated: <spec> › <test title>]` and treat as **N/A with notes** ("covered by Playwright gate") unless a **human-only** reason exists (e.g. "Teams desktop WebRTC feel").
+**Exclude / mark explicitly:** anything already covered by Playwright — cite in the optional agent-authored **Coverage** line as `[automated: <spec> › <test title>]` and treat as **N/A with notes** ("covered by Playwright gate") unless a **human-only** reason exists (e.g. "Teams desktop WebRTC feel"). **Notes is Andrew's field; agents author Coverage, never Notes.**
 
 **Forbidden smokebook patterns:**
 

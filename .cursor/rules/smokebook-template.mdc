@@ -1,5 +1,5 @@
 ---
-description: Canonical smokebook/runbook shape — Action/Expect/Ignore/PASS/FAIL/PARTIAL/N/A with notes/SKIP/Notes per item; preview URLs fetched from Vercel MCP, never guessed.
+description: Canonical smokebook/runbook shape — Action/Expect/Ignore/PASS/FAIL/PARTIAL/N/A with notes/SKIP/Coverage/Notes per item; preview URLs fetched from Vercel MCP, never guessed.
 alwaysApply: true
 ---
 
@@ -12,7 +12,7 @@ Every **smokebook** or **smoke-runbook** produced in this repo (typically under 
 ## Required structure
 
 1. **Header block** — feature name; `Branch:`; `Tip commit:` (linked); `Preview:` (markdown link to real Vercel alias). No overall verdict in the header.
-2. **Per test item** (in order) — `### N. <title>` → `**Action:**` (detailed steps) → `**Expect:**` → `**Ignore this run:**` (always present; `Nothing.` if none) → separate `- [ ] PASS`, `- [ ] FAIL`, `- [ ] PARTIAL`, `- [ ] N/A with notes`, and `- [ ] SKIP` → `**Notes:**`. Checkboxes MUST each be on their own line with a blank line before the list and after it, or they won't render. Per-item state is PASS / FAIL / PARTIAL / N/A with notes / SKIP; none checked = not-yet-run/missed (distinct from SKIP and N/A with notes). **PARTIAL** = partially working — some sub-checks pass and others fail; **Notes must spell out exactly what worked vs what didn't** (distinct from FAIL = wholly broken / primary expectation not met). **N/A with notes** = item does not apply as written for this run/configuration (feature absent or setup cannot exercise it); **Note explaining why is required** (distinct from SKIP = valid test deliberately not run). SKIP requires a reason in Notes.
+2. **Per test item** (in order) — `### N. <title>` → `**Action:**` (detailed steps) → `**Expect:**` → `**Ignore this run:**` (always present; `Nothing.` if none) → separate `- [ ] PASS`, `- [ ] FAIL`, `- [ ] PARTIAL`, `- [ ] N/A with notes`, and `- [ ] SKIP` → optional agent-authored `**Coverage:**` (`[automated: <spec> › <test title>]` and/or `[human-only: <reason>]`; omit field if nothing applies) → `**Notes:**` (**Andrew-only — agents leave blank**). Checkboxes MUST each be on their own line with a blank line before the list and after it, or they won't render. Per-item state is PASS / FAIL / PARTIAL / N/A with notes / SKIP; none checked = not-yet-run/missed (distinct from SKIP and N/A with notes). **PARTIAL** = partially working — some sub-checks pass and others fail; **Andrew's Notes must spell out exactly what worked vs what didn't** (distinct from FAIL = wholly broken / primary expectation not met). **N/A with notes** = item does not apply as written for this run/configuration (feature absent or setup cannot exercise it); **Andrew's Note explaining why is required** (distinct from SKIP = valid test deliberately not run). SKIP requires a reason in Andrew's Notes.
 
    ```markdown
    **Action:** ...
@@ -24,6 +24,8 @@ Every **smokebook** or **smoke-runbook** produced in this repo (typically under 
    - [ ] PARTIAL
    - [ ] N/A with notes
    - [ ] SKIP
+
+   **Coverage:** ...
 
    **Notes:**
    ```
@@ -56,6 +58,6 @@ Any dispatch prompt that asks a subagent to **produce a smokebook** MUST:
 
 - Reference this template, [`smoke-when-done.mdc`](smoke-when-done.mdc) (Andrew smokes **once** when DONE), and the fetch-don't-guess preview rule.
 - Include the **verified** `branchAlias` URL when the orchestrator already fetched it (or dispatch a read-only MCP lookup first).
-- Scope items to **human judgment / hardware** — cite `[automated: <file> › <test>]` in Notes for anything Playwright already covers.
+- Scope items to **human judgment / hardware** — cite `[automated: <file> › <test>]` in **Coverage** (not Notes) for anything Playwright already covers; **Notes is Andrew-only — agents leave it blank**.
 
 See also [`.cursor/rules/orchestrator-discipline.mdc`](orchestrator-discipline.mdc) and [`AGENTS.md`](../../AGENTS.md) § Merging convention.
