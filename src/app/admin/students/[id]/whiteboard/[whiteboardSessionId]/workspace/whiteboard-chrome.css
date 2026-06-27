@@ -1502,6 +1502,94 @@
   display: inline-flex;
 }
 
+/*
+ * Narrow-desktop compaction — viewport @media only; does NOT change data-layout
+ * mode (non-touch windows stay data-layout="desktop" per useWbLayoutMode).
+ * Reveal the existing overflow ⋯ and progressively hide inline controls that
+ * have equivalents in renderTopBarOverflowItems — lowest priority first so the
+ * full bar is used until controls would clip.
+ */
+.mynk-wb-chrome[data-layout="desktop"] [data-testid="wb-end-session"] {
+  flex-shrink: 0;
+}
+
+@media (max-width: 1100px) {
+  .mynk-wb-chrome[data-layout="desktop"] .mynk-wb-topbar__overflow-btn {
+    display: inline-flex;
+  }
+
+  .mynk-wb-chrome[data-layout="desktop"]
+    .mynk-wb-topbar__zone:has([data-testid="wb-theme-toggle"]) {
+    display: none;
+  }
+
+  .mynk-wb-chrome[data-layout="desktop"] .mynk-wb-topbar__sep.mynk-wb-topbar__desktop-only {
+    display: none;
+  }
+}
+
+@media (max-width: 1000px) {
+  .mynk-wb-chrome[data-layout="desktop"] [data-testid="wb-grid-toggle"] {
+    display: none;
+  }
+}
+
+@media (max-width: 920px) {
+  .mynk-wb-chrome[data-layout="desktop"] .mynk-wb-topbar__inserts {
+    display: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .mynk-wb-chrome[data-layout="desktop"] [data-testid="wb-undo"],
+  .mynk-wb-chrome[data-layout="desktop"] [data-testid="wb-redo"] {
+    display: none;
+  }
+}
+
+@media (max-width: 800px) {
+  .mynk-wb-chrome[data-layout="desktop"] .mynk-wb-share-wrap {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .mynk-wb-chrome[data-layout="desktop"] [data-testid="wb-topbar-cam"] {
+    display: none;
+  }
+}
+
+@media (max-width: 660px) {
+  .mynk-wb-chrome[data-layout="desktop"] [data-testid="wb-topbar-mic"] {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .mynk-wb-chrome[data-layout="desktop"] .mynk-wb-toolbar-toggle {
+    padding: 0 8px;
+    max-width: 96px;
+  }
+
+  .mynk-wb-chrome[data-layout="desktop"] .mynk-wb-toolbar-toggle__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .mynk-wb-chrome[data-layout="desktop"] .mynk-wb-wordmark {
+    font-size: 14px;
+    padding: 0 4px;
+  }
+
+  .mynk-wb-chrome[data-layout="desktop"] .mynk-wb-timer {
+    padding: 0 4px;
+    font-size: 13px;
+  }
+}
+
 .mynk-wb-topbar-overflow-inserts {
   display: flex;
   flex-wrap: wrap;

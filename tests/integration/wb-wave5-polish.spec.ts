@@ -908,4 +908,72 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
       .toBeGreaterThan(0);
     await context.close();
   });
+
+  test("item 23 — narrow-desktop top bar: controls compact to overflow, End Session always visible, no clip", async ({
+    browser,
+  }) => {
+    test.setTimeout(120_000);
+    const session = await seedWbLiveSyncSession();
+    const widths = [1280, 900, 640, 460] as const;
+
+    const context = await browser.newContext({
+      storageState: "tests/integration/.auth/tutor.json",
+      viewport: { width: 1280, height: 900 },
+      permissions: ["microphone"],
+    });
+    try {
+      const page = await context.newPage();
+      await loadTutorBoard(page, session);
+      const chrome = page.getByTestId("mynk-wb-chrome");
+      await expect(chrome).toHaveAttribute("data-layout", "desktop");
+
+      for (const width of widths) {
+        if (width !== 1280) {
+          await page.setViewportSize({ width, height: 900 });
+          await page.waitForTimeout(200);
+        }
+        await expect(chrome).toHaveAttribute("data-layout", "desktop", {
+          timeout: 5_000,
+        });
+
+        const header = page.locator(".mynk-wb-topbar");
+        const overflow = await header.evaluate((el) => ({
+          scrollWidth: el.scrollWidth,
+          clientWidth: el.clientWidth,
+        }));
+        expect(
+          overflow.scrollWidth,
+          `top bar overflows horizontally at ${width}px`
+        ).toBeLessThanOrEqual(overflow.clientWidth + 2);
+
+        await assertControlFullyInViewport(page, "wb-end-session");
+
+        const overflowBtn = page.getByTestId("wb-topbar-overflow");
+        if (width >= 1100) {
+          await expect(overflowBtn).not.toBeVisible();
+          await expect(page.getByTestId("wb-theme-toggle")).toBeVisible();
+        } else {
+          await expect(overflowBtn).toBeVisible();
+          await overflowBtn.scrollIntoViewIfNeeded();
+          await overflowBtn.click();
+          await expect(overflowBtn).toHaveAttribute("aria-expanded", "true", {
+            timeout: 5_000,
+          });
+          const dropdown = page.getByTestId("wb-topbar-overflow-dropdown");
+          await expect(dropdown).toBeVisible({ timeout: 5_000 });
+          const triggerBox = await overflowBtn.boundingBox();
+          const dropdownBox = await dropdown.boundingBox();
+          expect(triggerBox).not.toBeNull();
+          expect(dropdownBox).not.toBeNull();
+          expect(dropdownBox!.y).toBeGreaterThanOrEqual(
+            triggerBox!.y + triggerBox!.height - 2
+          );
+          await overflowBtn.click();
+          await expect(dropdown).not.toBeVisible({ timeout: 3_000 });
+        }
+      }
+    } finally {
+      await context.close();
+    }
+  });
 });

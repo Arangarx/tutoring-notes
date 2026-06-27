@@ -5277,7 +5277,10 @@ export function WhiteboardWorkspaceClient({
       orientation={orientation}
       role={role}
       toolbarHidden={toolbarHidden}
-      onChromeClick={() => setOpenMenu(null)}
+      onChromeClick={(e) => {
+        if ((e.target as HTMLElement).closest?.(".mynk-wb-topbar")) return;
+        setOpenMenu(null);
+      }}
       nonVisualMounts={
       <WhiteboardWorkspaceAudioBridge
         ref={audioBridgeRef}
