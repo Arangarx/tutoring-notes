@@ -95,6 +95,7 @@ import {
   enqueueChunkTranscriptionAction,
   issueJoinToken,
   revokeJoinTokensForSession,
+  startWhiteboardSession,
 } from "@/app/admin/students/[id]/whiteboard/actions";
 import {
   kickSessionChunksAction,
@@ -261,6 +262,19 @@ type Props = {
    */
   initialUserWantsRecording?: boolean;
   /**
+   * Session phase from DB at SSR time.
+   * PENDING = tutor has not clicked Start (waiting room — A/V mesh
+   * is live but capture + billing timer are inert).
+   * ACTIVE  = tutor has clicked Start (capture + billing timer run).
+   * Defaults to ACTIVE so callers that predate this field (tests,
+   * student shell) behave exactly as before.
+   */
+  initialSessionPhase?: "PENDING" | "ACTIVE";
+  /** Session mode (LIVE | IN_PERSON) — passed through for future use. */
+  sessionMode?: string;
+  /** ISO timestamp of PENDING→ACTIVE flip, or null. */
+  activatedAt?: string | null;
+  /**
    * A3 in-shell review: called in place of router.replace/refresh once
    * the atomic end-session pipeline completes. The shell's handler sets
    * mode="review", unmounting this client subtree (which fires all the
@@ -411,6 +425,9 @@ export function WhiteboardWorkspaceClient({
   role = "tutor",
   joinToken,
   tutorName = "your tutor",
+  initialSessionPhase = "ACTIVE",
+  sessionMode: _sessionMode,
+  activatedAt: _activatedAt,
 }: Props) {
   const router = useRouter();
   // TU-12: Excalidraw theme follows app-selected theme (not OS-only)
@@ -1169,6 +1186,16 @@ export function WhiteboardWorkspaceClient({
   const [userWantsRecording, setUserWantsRecording] = useState(
     initialUserWantsRecording
   );
+
+  // Session phase gate — PENDING = waiting room (A/V mesh live, but
+  // capture + billing timer inert); ACTIVE = tutor has clicked Start.
+  // Tutor flips PENDING→ACTIVE via activateSessionLive (below).
+  // Default is ACTIVE so all pre-phase callers (tests, student path)
+  // are unaffected.
+  const [sessionPhase, setSessionPhase] = useState<"PENDING" | "ACTIVE">(
+    initialSessionPhase
+  );
+  const phaseActive = sessionPhase === "ACTIVE";
 
   const sync = syncReady ? syncClientRef.current : null;
 
@@ -2177,7 +2204,7 @@ export function WhiteboardWorkspaceClient({
     gateTimeoutFired;
 
   const lifecycle = evaluateLifecycle({
-    tutorWantsRecording: userWantsRecording,
+    tutorWantsRecording: userWantsRecording && phaseActive,
     participants: lifecycleParticipants,
     everHadParticipants: everBothPresentRef.current,
     soloEnabled: allowRecordSoloUntilStudentJoin,
@@ -3258,14 +3285,15 @@ export function WhiteboardWorkspaceClient({
   // ~10s heartbeat while it stays true.
   useEffect(() => {
     if (!syncUrl) return; // tutor-solo mode — no billable timer
-    void pingActive(bothPartiesInRoom);
-    if (!bothPartiesInRoom) return;
+    const billingActive = bothPartiesInRoom && phaseActive;
+    void pingActive(billingActive);
+    if (!billingActive) return;
     const HEARTBEAT_MS = 10_000;
     const id = setInterval(() => {
       void pingActive(true);
     }, HEARTBEAT_MS);
     return () => clearInterval(id);
-  }, [bothPartiesInRoom, pingActive, syncUrl]);
+  }, [bothPartiesInRoom, phaseActive, pingActive, syncUrl]);
 
   // Best-effort "I'm leaving" beacon. sendBeacon is the only way to
   // get a reliable POST off during pagehide on most browsers; we fall
@@ -3433,6 +3461,17 @@ export function WhiteboardWorkspaceClient({
       setFinalizingOutboxState(next.state);
     });
   }, [endingState, whiteboardSessionId]);
+
+  // Tutor Start affordance — transitions the session from PENDING to ACTIVE.
+  // Minimal: flips phase locally and persists to server. A later workstream
+  // moves this call into the waiting-room overlay with A/V-readiness gating.
+  const activateSessionLive = useCallback(async () => {
+    console.info(
+      `[slc] wbsid=${whiteboardSessionId} action=session_activate_clicked phase=pending->active`
+    );
+    await startWhiteboardSession(whiteboardSessionId);
+    setSessionPhase("ACTIVE");
+  }, [whiteboardSessionId]);
 
   const handleEndSession = useCallback(async () => {
     setEndingState("finalizing");
@@ -5728,6 +5767,17 @@ export function WhiteboardWorkspaceClient({
 
         <div className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing">
           {renderTopbarOverflowControl("wb-topbar-overflow")}
+          {role === "tutor" && !phaseActive && (
+            <button
+              type="button"
+              className="mynk-wb-tb-btn mynk-wb-tb-btn--primary"
+              onClick={() => { void activateSessionLive(); }}
+              data-testid="wb-start-session"
+              aria-label="Start session"
+            >
+              Start session
+            </button>
+          )}
           {(() => {
             const endSessionLabel =
               endingState === "finalizing"

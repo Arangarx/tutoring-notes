@@ -83,6 +83,7 @@ jest.mock("@/app/admin/students/[id]/whiteboard/actions", () => ({
   endStaleWhiteboardSession: jest.fn(() =>
     Promise.resolve({ endedAt: "2026-06-17T00:00:00Z" })
   ),
+  startWhiteboardSession: jest.fn(() => Promise.resolve({ ok: true, phase: "active" })),
 }));
 jest.mock("@/app/admin/students/[id]/whiteboard/notes-actions", () => ({
   kickSessionChunksAction: jest.fn(() => Promise.resolve({ kicked: 0 })),

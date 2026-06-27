@@ -439,6 +439,7 @@ jest.mock("@/app/admin/students/[id]/whiteboard/actions", () => ({
     .mockResolvedValue({ endedAt: "2026-05-10T00:00:00Z" }),
   issueJoinToken: jest.fn().mockResolvedValue({ token: "tok" }),
   revokeJoinTokensForSession: jest.fn().mockResolvedValue(undefined),
+  startWhiteboardSession: jest.fn().mockResolvedValue({ ok: true, phase: "active" }),
 }));
 
 // notes-actions imports next/cache (revalidatePath) which requires TextEncoder

@@ -126,6 +126,7 @@ jest.mock("@/app/admin/students/[id]/whiteboard/actions", () => ({
   endStaleWhiteboardSession: jest.fn(() =>
     Promise.resolve({ endedAt: "2026-05-10T00:00:00Z" })
   ),
+  startWhiteboardSession: jest.fn(() => Promise.resolve({ ok: true, phase: "active" })),
 }));
 
 // notes-actions imports next/cache (revalidatePath) which requires TextEncoder

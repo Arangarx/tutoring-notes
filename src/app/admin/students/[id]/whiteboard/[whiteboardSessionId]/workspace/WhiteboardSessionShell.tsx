@@ -31,6 +31,10 @@ export type TutorWhiteboardSessionShellProps = ShellBaseProps & {
   initialUserWantsRecording: boolean;
   syncEnabled: boolean;
   initialMode?: ShellMode;
+  /** Session phase: PENDING (waiting room) or ACTIVE (tutor has clicked Start). */
+  initialSessionPhase?: "PENDING" | "ACTIVE";
+  sessionMode?: string;
+  activatedAt?: string | null;
 };
 
 export type StudentWhiteboardSessionShellProps = ShellBaseProps & {
@@ -78,6 +82,9 @@ function TutorWhiteboardSessionShell({
   initialUserWantsRecording,
   syncEnabled,
   initialMode = "live",
+  initialSessionPhase,
+  sessionMode,
+  activatedAt,
 }: TutorWhiteboardSessionShellProps) {
   const [mode, setMode] = useState<ShellMode>(initialMode);
 
@@ -115,6 +122,9 @@ function TutorWhiteboardSessionShell({
         syncUrl={syncUrl}
         initialUserWantsRecording={initialUserWantsRecording}
         onSessionEnded={handleSessionEnded}
+        initialSessionPhase={initialSessionPhase}
+        sessionMode={sessionMode}
+        activatedAt={activatedAt}
       />
     </WorkspaceResumeGate>
   );

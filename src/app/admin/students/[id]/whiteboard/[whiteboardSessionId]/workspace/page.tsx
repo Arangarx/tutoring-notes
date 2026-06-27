@@ -86,6 +86,9 @@ export default async function WhiteboardWorkspacePage({
           activeMs: true,
           lastActiveAt: true,
           eventsBlobUrl: true,
+          sessionPhase: true,
+          sessionMode: true,
+          activatedAt: true,
           student: {
             select: { id: true, name: true, recordingDefaultEnabled: true },
           },
@@ -110,6 +113,9 @@ export default async function WhiteboardWorkspacePage({
       initialLastActiveAtIso={detail.lastActiveAt?.toISOString() ?? null}
       syncUrl={syncEnabled ? env.WHITEBOARD_SYNC_URL! : null}
       initialUserWantsRecording={detail.student.recordingDefaultEnabled}
+      initialSessionPhase={detail.sessionPhase}
+      sessionMode={detail.sessionMode}
+      activatedAt={detail.activatedAt?.toISOString() ?? null}
       syncEnabled={syncEnabled}
       initialMode={detail.endedAt ? "review" : "live"}
     />
