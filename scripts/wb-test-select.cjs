@@ -74,6 +74,10 @@ const PATH_RULES = [
     tags: [TAG.WB_PRESENCE, TAG.WB_AV],
   },
   {
+    re: /tests\/integration\/wb-av-mesh/i,
+    tags: [TAG.WB_AV, TAG.WB_PRESENCE],
+  },
+  {
     re: /tests\/integration\/wb-chrome/i,
     tags: [TAG.WB_CHROME],
   },

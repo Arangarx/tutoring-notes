@@ -134,6 +134,7 @@ export default defineConfig({
         "**/integration/whiteboard-live-sync-regression.spec.ts",
         "**/integration/wb-student-exit-rejoin.spec.ts",
         "**/integration/wb-wave5-polish.spec.ts",
+        "**/integration/wb-av-mesh.spec.ts",
       ],
     },
   ],

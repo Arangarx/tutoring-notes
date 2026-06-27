@@ -50,7 +50,7 @@
  * Tests: `src/__tests__/dom/useLiveAV.dom.test.tsx`.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   loadStoredVideoDeviceId,
@@ -738,15 +738,26 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   } = opts;
 
   const sid = sessionId ?? "?";
-  const log =
-    opts.log ?? {
-      log: (msg: string, ...rest: unknown[]) =>
-        console.log(`[useLiveAV] avx=${sid} ${msg}`, ...rest),
-      warn: (msg: string, ...rest: unknown[]) =>
-        console.warn(`[useLiveAV] avx=${sid} ${msg}`, ...rest),
-      error: (msg: string, ...rest: unknown[]) =>
-        console.error(`[useLiveAV] avx=${sid} ${msg}`, ...rest),
-    };
+  // Stable per session. A fresh object literal here every render (the prior
+  // `opts.log ?? {…}` form) churned `log`'s identity → `enumerateDevicesCore`
+  // (deps [log]) → `refreshVideoDevices` → the mount/devicechange/focus effect
+  // re-ran on EVERY render and re-enumerated. During a re-render burst (e.g. a
+  // layout resize) that became an enumerate storm — the invariant-5 firewall
+  // violation + the root of the Windows enumerate×acquire corruption. Memoizing
+  // also makes the pervasive `// log stable per session` deps actually true.
+  const optsLog = opts.log;
+  const log = useMemo<NonNullable<UseLiveAVOptions["log"]>>(
+    () =>
+      optsLog ?? {
+        log: (msg: string, ...rest: unknown[]) =>
+          console.log(`[useLiveAV] avx=${sid} ${msg}`, ...rest),
+        warn: (msg: string, ...rest: unknown[]) =>
+          console.warn(`[useLiveAV] avx=${sid} ${msg}`, ...rest),
+        error: (msg: string, ...rest: unknown[]) =>
+          console.error(`[useLiveAV] avx=${sid} ${msg}`, ...rest),
+      },
+    [optsLog, sid]
+  );
 
   const [localAudioStream, setLocalAudioStream] =
     useState<MediaStream | null>(null);
