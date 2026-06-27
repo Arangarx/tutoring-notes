@@ -22,6 +22,7 @@ import {
   seedWbLiveSyncSession,
   seedWbPendingLiveSyncSession,
   loginLearnerInContext,
+  readEncryptionKeyFromHash,
   startSessionAsTutor,
   waitForWbE2eBridge,
   waitForTutorStudentConnected,
@@ -222,25 +223,21 @@ test.describe("Fragment preservation — #k= survives stale-session /join/ hit",
   }) => {
     test.setTimeout(60_000);
     /**
-     * Architecture note (observed 2026-06-27):
+     * Architecture note:
      *
-     * The middleware does a cookie-PRESENCE check (not validity). A request with
-     * no learner cookie at all is redirected SERVER-SIDE to /students/login before
-     * the page renders — JoinAuthGate never runs and the fragment is NOT preserved
-     * by sessionStorage (the server cannot see the #fragment).
+     * JoinAuthGate runs whenever the /join/[sessionId] page renders and
+     * getLearnerSessionFromHeaders() returns null. This happens in two cases:
+     *   1. No learner cookie at all — middleware passes through (by design; a
+     *      server redirect would destroy the #k= fragment). Page renders → JoinAuthGate.
+     *   2. Stale/invalid cookie — middleware sees the cookie and passes through;
+     *      server-side session lookup fails → JoinAuthGate.
      *
-     * JoinAuthGate runs ONLY when a cookie IS present but the SERVER-SIDE session
-     * lookup fails (e.g. stale/expired/invalid token). In that case the middleware
-     * allows the request through, the page renders, JoinAuthGate saves the fragment
-     * to sessionStorage, then redirects client-side to login.
+     * In both cases JoinAuthGate saves window.location.hash to sessionStorage,
+     * then client-redirects to /students/login. JoinHashRestorer restores the
+     * hash on the authenticated return visit before the board key-read effect fires.
      *
-     * For the no-cookie path, the `returnTo` param in the server redirect points to
-     * the PATH only (/join/<id>), not the fragment. The fragment is recoverable
-     * from sessionStorage only via the JoinAuthGate (stale-cookie) path.
-     *
-     * PLAYWRIGHT-GAP (no-cookie path): The middleware server-side redirect loses
-     * the fragment. This is a product limitation tracked in docs/BACKLOG.md.
-     * This test covers the recoverable stale-cookie path.
+     * This test covers the stale-cookie path. The no-cookie path (with the full
+     * login + board-mount oracle) is covered by the adjacent test.
      */
     const session = await seedWbLiveSyncSession();
     const fakeKey = "pw-test-fake-encryption-key-abc123";
@@ -296,34 +293,98 @@ test.describe("Fragment preservation — #k= survives stale-session /join/ hit",
     }
   });
 
-  test("no-cookie path: middleware redirects server-side, returnTo includes /join/ path", async ({
+  test("no-cookie /join#k= preserves the key through login (middleware does not strip)", async ({
     browser,
   }) => {
-    test.setTimeout(30_000);
-    // Verify the fallback behavior: no cookie → server redirect → returnTo has /join/<id>.
-    // Fragment is NOT preserved in this path (PLAYWRIGHT-GAP, see above).
-    const session = await seedWbLiveSyncSession();
+    test.setTimeout(180_000);
+    // This test would FAIL on the pre-fix middleware: the server redirect in middleware
+    // bypassed JoinAuthGate entirely, so the #k= fragment was never saved to
+    // sessionStorage — the board could not decrypt after the student logged in.
+    //
+    // After the fix: middleware passes /join/* through → page renders → JoinAuthGate
+    // saves window.location.hash to sessionStorage → client-redirects to /students/login.
+    // loginLearnerInContext() authenticates via API (no page navigation) so sessionStorage
+    // is intact. A subsequent goto(/join/<id>) lands the authenticated student on the
+    // board; JoinHashRestorer reads the saved hash and restores it before the board
+    // key-read effect fires. bridge-ready is the independent oracle: bridge ready ⟹
+    // key survived the login round-trip and the board decrypted successfully.
 
-    const ctx = await browser.newContext();
+    const session = await seedWbLiveSyncSession(); // ACTIVE phase — board must mount
+
+    // Open tutor workspace to obtain the real E2E encryption key from the URL hash.
+    const tutorCtx = await browser.newContext({
+      storageState: "tests/integration/.auth/tutor.json",
+      viewport: { width: 1280, height: 900 },
+    });
+    let encryptionKey: string;
     try {
-      const page = await ctx.newPage();
-      const resp = await page.goto(
-        `/join/${session.whiteboardSessionId}#k=some-key`,
+      const tutorPage = await tutorCtx.newPage();
+      await tutorPage.goto(
+        `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
         { waitUntil: "domcontentloaded" }
       );
-      // The middleware or page should have redirected to /students/login.
-      await page.waitForURL(
-        (url) => url.pathname === "/students/login",
-        { timeout: 10_000 }
-      );
-      // returnTo must point back to the join path (URL-encoded in the query string).
-      // e.g. ...?returnTo=%2Fjoin%2F<sessionId>...
-      expect(decodeURIComponent(page.url())).toContain(
-        `/join/${session.whiteboardSessionId}`
-      );
-      void resp; // unused; checked via URL assertion
+      await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
+        timeout: 90_000,
+      });
+      await waitForWbE2eBridge(tutorPage, "tutor");
+      encryptionKey = await readEncryptionKeyFromHash(tutorPage);
     } finally {
-      await ctx.close();
+      await tutorCtx.close();
+    }
+
+    // Student context with NO learner cookie — do NOT load .auth/learner.json.
+    const studentCtx = await browser.newContext({
+      viewport: { width: 1280, height: 800 },
+    });
+    try {
+      const studentPage = await studentCtx.newPage();
+
+      // 1. Navigate to /join/<id>#k=<key> with no auth.
+      //    Middleware (post-fix) passes through; the page renders JoinAuthGate.
+      await studentPage.goto(
+        `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+        { waitUntil: "domcontentloaded" }
+      );
+
+      // 2. JoinAuthGate saves hash and client-redirects to /students/login.
+      await studentPage.waitForURL(
+        (url) => url.pathname === "/students/login",
+        { timeout: 15_000 }
+      );
+      expect(studentPage.url()).toContain(
+        encodeURIComponent(`/join/${session.whiteboardSessionId}`)
+      );
+
+      // 3. Intermediate oracle: hash is in sessionStorage on this tab.
+      //    sessionStorage persists across client-side navigations within the same tab.
+      const storedHash = await studentPage.evaluate(
+        (sessionId) => sessionStorage.getItem(`mynk_join_hash_${sessionId}`),
+        session.whiteboardSessionId
+      );
+      expect(storedHash).toBe(`#k=${encryptionKey}`);
+
+      // 4. Authenticate (API POST — sets mynk_learner_session cookie in the context
+      //    without triggering a page navigation, so sessionStorage is preserved).
+      await loginLearnerInContext(studentCtx, session.learnerHandle, session.learnerPin);
+
+      // 5. Navigate back to /join/<id> without the hash — JoinHashRestorer will read
+      //    the hash from sessionStorage (step 3) and restore it to window.location.hash
+      //    before the board key-read effect fires.
+      await studentPage.goto(
+        `/join/${session.whiteboardSessionId}`,
+        { waitUntil: "domcontentloaded" }
+      );
+
+      // 6. Board mounts (ACTIVE session, SessionParticipant row seeded).
+      await expect(studentPage.getByTestId("student-whiteboard-canvas-mount")).toBeVisible({
+        timeout: 90_000,
+      });
+
+      // 7. Bridge ready — independent oracle: board is decrypted and interactive.
+      //    This only succeeds if the key was restored from sessionStorage correctly.
+      await waitForWbE2eBridge(studentPage, "student");
+    } finally {
+      await studentCtx.close();
     }
   });
 });

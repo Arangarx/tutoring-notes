@@ -259,16 +259,29 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  // --- Learner (child) route protection (cookie-presence only) ---
-  if (pathname.startsWith("/join/") && !isPublicLearnerPath(pathname)) {
-    const learnerCookie = req.cookies.get("mynk_learner_session");
-    if (!learnerCookie) {
-      const loginUrl = req.nextUrl.clone();
-      loginUrl.pathname = "/students/login";
-      loginUrl.searchParams.set("returnTo", pathname);
-      return addSecurityHeaders(NextResponse.redirect(loginUrl), pathname);
-    }
-  }
+  // --- /join/* intentionally NOT redirected here — page is the authoritative gate ---
+  //
+  // DO NOT add a server-side redirect for unauthenticated /join/[sessionId] requests.
+  //
+  // The whiteboard E2E encryption key lives ONLY in the URL fragment (#k=<key>).
+  // HTTP spec: fragments are never sent to the server, so middleware and server
+  // components NEVER see the #k= value. A middleware redirect to /students/login
+  // before the page renders destroys the key permanently — the student arrives at
+  // login with no way to recover it, and the board cannot decrypt after auth.
+  //
+  // The correct path: middleware passes /join/* through → /join/[sessionId]/page.tsx
+  // renders → getLearnerSessionFromHeaders() returns null → the page returns
+  // <JoinAuthGate />, a CLIENT component that:
+  //   1. Reads window.location.hash and saves it to sessionStorage keyed by sessionId.
+  //   2. Calls router.replace("/students/login?returnTo=/join/<id>") — client-side,
+  //      so sessionStorage (same tab) is intact when the student returns after login.
+  // JoinHashRestorer restores the hash from sessionStorage on the authenticated
+  // return visit before the board key-read effect fires.
+  //
+  // Security: /join/[sessionId]/page.tsx is the real gate — it calls
+  // getLearnerSessionFromHeaders() and assertIsSessionParticipant(), both of which
+  // call notFound() on any mismatch. Middleware is not needed as a security layer
+  // here; see the /s/* block below for the same "page is authoritative" pattern.
 
   // --- Notes share page protection (NOTES_AUTH_WALL flag — cookie-presence only) ---
   //
@@ -305,11 +318,6 @@ function isPublicAccountPath(pathname: string): boolean {
   ];
   // /claim/* and /verify-email are at the root, not under /account/
   return publicPaths.some((p) => pathname === p || pathname.startsWith(p + "?"));
-}
-
-// Paths that are publicly accessible under /join/* without a learner cookie.
-function isPublicLearnerPath(pathname: string): boolean {
-  return pathname === "/students/login" || pathname.startsWith("/students/login?");
 }
 
 export const config = {
