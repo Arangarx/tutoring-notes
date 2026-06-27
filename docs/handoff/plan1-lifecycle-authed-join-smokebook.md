@@ -2,10 +2,10 @@
 
 **Feature:** Plan #1 — Session lifecycle + authenticated join + waiting-room overlay  
 **Branch:** `wb-wave5-polish`  
-**Tip commit:** [`29af802`](https://github.com/Arangarx/tutoring-notes/commit/29af802b3b22aa4c52ff55af280751e65c200238)  
+**Tip commit:** `[29af802](https://github.com/Arangarx/tutoring-notes/commit/29af802b3b22aa4c52ff55af280751e65c200238)`  
 **Preview:** [Plan #1 preview](https://tutoring-notes-git-wb-wave5-polish-arangarx-5209s-projects.vercel.app)
 
-Smoke when Plan #1 is **DONE** — Playwright gates green on `wb-session-lifecycle.spec.ts`. This runbook is **new UX + hardware/human judgment only**; do not re-prove behaviors already hermeticized in relay tests unless a `[human-only: …]` reason applies. See [`.cursor/rules/smoke-when-done.mdc`](../../.cursor/rules/smoke-when-done.mdc).
+Smoke when Plan #1 is **DONE** — Playwright gates green on `wb-session-lifecycle.spec.ts`. This runbook is **new UX + hardware/human judgment only**; do not re-prove behaviors already hermeticized in relay tests unless a `[human-only: …]` reason applies. See `[.cursor/rules/smoke-when-done.mdc](../../.cursor/rules/smoke-when-done.mdc)`.
 
 ---
 
@@ -17,11 +17,13 @@ Smoke when Plan #1 is **DONE** — Playwright gates green on `wb-session-lifecyc
 
 ## Hardware environments
 
-| Setup | Use for |
-| --- | --- |
-| **Tutor desktop + student phone** (second physical device) | Items 1–3, 5 — real login on mobile, A/V feel, takeover timing |
-| **Tutor desktop + student desktop** (second physical PC) | Items 1–3, 5 — desktop learner login, device pickers |
-| **Same machine, two browsers** | **Invalid for items 2–3 and 5** — mark **N/A with notes** `same-machine A/V invalid`; item 1 login/key check is still weak on one machine (prefer two real devices) |
+
+| Setup                                                      | Use for                                                                                                                                                             |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Tutor desktop + student phone** (second physical device) | Items 1–3, 5 — real login on mobile, A/V feel, takeover timing                                                                                                      |
+| **Tutor desktop + student desktop** (second physical PC)   | Items 1–3, 5 — desktop learner login, device pickers                                                                                                                |
+| **Same machine, two browsers**                             | **Invalid for items 2–3 and 5** — mark **N/A with notes** `same-machine A/V invalid`; item 1 login/key check is still weak on one machine (prefer two real devices) |
+
 
 Use the **Preview** URL above for all items unless noted.
 
@@ -29,18 +31,20 @@ Use the **Preview** URL above for all items unless noted.
 
 ## Automated coverage (do not re-prove unless human-only reason)
 
-Playwright: [`tests/integration/wb-session-lifecycle.spec.ts`](../../tests/integration/wb-session-lifecycle.spec.ts) (`@wb-presence`, `@wb-sync`, `@wb-chrome`, `@wb-av`).
+Playwright: `[tests/integration/wb-session-lifecycle.spec.ts](../../tests/integration/wb-session-lifecycle.spec.ts)` (`@wb-presence`, `@wb-sync`, `@wb-chrome`, `@wb-av`).
 
-| Area | Covered tests (hermetic relay) |
-| --- | --- |
-| **Auth BLOCKERs** | `learner A cannot access learner B's session → 404`; `unauthenticated hit to /join/[sessionId] redirects to learner login`; `learner with no SessionParticipant row → 404`; `tutor (NextAuth) session at /join/[sessionId] redirects to learner login` |
-| **Fragment preservation** | `stale learner cookie + /join/[sessionId]#k=KEY → JoinAuthGate saves key…`; `no-cookie path: middleware redirects server-side, returnTo includes /join/ path` |
-| **Phase-gated capture + timer** | `recording does NOT start and billing timer does NOT accrue while PENDING`; `recording starts and timer accrues after tutor Start (PENDING → ACTIVE)` |
-| **Waiting overlay + Start gating** | `overlay visible for tutor while PENDING; Start disabled until student connects in LIVE mode`; `overlay visible for student while PENDING; dismisses when tutor clicks Start`; `IN_PERSON mode — Start is always enabled (no student required)` |
-| **Dual-device takeover** | `second student device with same learner joins → older device shows takeover message` |
-| **`/w` retirement redirect** | `/w/[token]#k=KEY redirects to /join/[sessionId]#k=KEY (client bridge)`; `/w/[token]#k=KEY → after learner auth, lands on /join/[sessionId] board` |
 
-**Known Playwright gap (not a smoke failure by itself):** the no-cookie middleware redirect path does not preserve `#k=` in the fragment ([`wb-session-lifecycle.spec.ts`](../../tests/integration/wb-session-lifecycle.spec.ts) architecture note + `docs/BACKLOG.md`). Item 1's human check focuses on the **real cross-device login** path where the student opens a tutor-copied link with `#k=` and ends up on a working board after login.
+| Area                               | Covered tests (hermetic relay)                                                                                                                                                                                                                         |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Auth BLOCKERs**                  | `learner A cannot access learner B's session → 404`; `unauthenticated hit to /join/[sessionId] redirects to learner login`; `learner with no SessionParticipant row → 404`; `tutor (NextAuth) session at /join/[sessionId] redirects to learner login` |
+| **Fragment preservation**          | `stale learner cookie + /join/[sessionId]#k=KEY → JoinAuthGate saves key…`; `no-cookie path: middleware redirects server-side, returnTo includes /join/ path`                                                                                          |
+| **Phase-gated capture + timer**    | `recording does NOT start and billing timer does NOT accrue while PENDING`; `recording starts and timer accrues after tutor Start (PENDING → ACTIVE)`                                                                                                  |
+| **Waiting overlay + Start gating** | `overlay visible for tutor while PENDING; Start disabled until student connects in LIVE mode`; `overlay visible for student while PENDING; dismisses when tutor clicks Start`; `IN_PERSON mode — Start is always enabled (no student required)`        |
+| **Dual-device takeover**           | `second student device with same learner joins → older device shows takeover message`                                                                                                                                                                  |
+| `**/w` retirement redirect**       | `/w/[token]#k=KEY redirects to /join/[sessionId]#k=KEY (client bridge)`; `/w/[token]#k=KEY → after learner auth, lands on /join/[sessionId] board`                                                                                                     |
+
+
+**Known Playwright gap (not a smoke failure by itself):** the no-cookie middleware redirect path does not preserve `#k=` in the fragment (`[wb-session-lifecycle.spec.ts](../../tests/integration/wb-session-lifecycle.spec.ts)` architecture note + `docs/BACKLOG.md`). Item 1's human check focuses on the **real cross-device login** path where the student opens a tutor-copied link with `#k=` and ends up on a working board after login.
 
 ---
 
@@ -54,14 +58,16 @@ Playwright: [`tests/integration/wb-session-lifecycle.spec.ts`](../../tests/integ
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**  
+**Coverage (agent context — your notes go below):**  
 `[automated: wb-session-lifecycle.spec.ts › Fragment preservation — #k= survives stale-session /join/ hit]` — JoinAuthGate + sessionStorage path.  
 `[automated: wb-session-lifecycle.spec.ts › Auth BLOCKERs — /join/ participant gate]` — participant gate + login redirect.  
 `[human-only: real second device + real learner login UX + confirm board key survived after login]`
+
+**Notes: Does not go directly to waiting room, lands on the consent confirm dialog that is not supposed to be there anymore.**
 
 ---
 
@@ -79,9 +85,11 @@ Playwright: [`tests/integration/wb-session-lifecycle.spec.ts`](../../tests/integ
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**  
+**Coverage (agent context — your notes go below):**  
 `[human-only: real cameras/mics, subjective A/V quality, device-picker feel on real hardware]`  
-Optional cross-ref prior A/V smoke: [`wb-wave5-polish-part1-checkpoint-smokebook.md`](wb-wave5-polish-part1-checkpoint-smokebook.md) — distinct surface (waiting-room overlay vs in-session chrome).
+Optional cross-ref prior A/V smoke: `[wb-wave5-polish-part1-checkpoint-smokebook.md](wb-wave5-polish-part1-checkpoint-smokebook.md)` — distinct surface (waiting-room overlay vs in-session chrome).
+
+**Notes:**
 
 ---
 
@@ -99,11 +107,13 @@ Optional cross-ref prior A/V smoke: [`wb-wave5-polish-part1-checkpoint-smokebook
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**  
+**Coverage (agent context — your notes go below):**  
 `[automated: wb-session-lifecycle.spec.ts › overlay visible for tutor while PENDING; Start disabled until student connects in LIVE mode]`  
 `[automated: wb-session-lifecycle.spec.ts › overlay visible for student while PENDING; dismisses when tutor clicks Start]`  
 `[automated: wb-session-lifecycle.spec.ts › Phase-gated capture + timer]` — timer/capture inert in PENDING, accrues after Start.  
 `[human-only: real WebRTC reachability timing, watching the transition on two real devices, subjective smoothness]`
+
+**Notes:**
 
 ---
 
@@ -121,9 +131,11 @@ Optional cross-ref prior A/V smoke: [`wb-wave5-polish-part1-checkpoint-smokebook
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**  
+**Coverage (agent context — your notes go below):**  
 `[automated: wb-session-lifecycle.spec.ts › IN_PERSON mode — Start is always enabled (no student required)]` — behavior with mode **pre-seeded**; Playwright does not click the mode toggle (pointer-interception note in spec).  
 `[human-only: mode toggle affordance, discoverability, tutor comprehension of IN_PERSON vs LIVE]`
+
+**Notes:**
 
 ---
 
@@ -141,9 +153,11 @@ Optional cross-ref prior A/V smoke: [`wb-wave5-polish-part1-checkpoint-smokebook
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**  
+**Coverage (agent context — your notes go below):**  
 `[automated: wb-session-lifecycle.spec.ts › second student device with same learner joins → older device shows takeover message]`  
 `[human-only: real-device timing, message clarity, tutor single-tile feel]`
+
+**Notes:**
 
 ---
 
@@ -161,10 +175,12 @@ Optional cross-ref prior A/V smoke: [`wb-wave5-polish-part1-checkpoint-smokebook
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**  
+**Coverage (agent context — your notes go below):**  
 `[automated: wb-session-lifecycle.spec.ts › /w/[token]#k=KEY redirects to /join/[sessionId]#k=KEY (client bridge)]`  
 `[automated: wb-session-lifecycle.spec.ts › /w/[token]#k=KEY → after learner auth, lands on /join/[sessionId] board]`  
 `[human-only: real in-the-wild old link from prior shares, prod-like paste-from-messages flow]`
+
+**Notes:**
 
 ---
 
@@ -182,9 +198,11 @@ Optional cross-ref prior A/V smoke: [`wb-wave5-polish-part1-checkpoint-smokebook
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**  
+**Coverage (agent context — your notes go below):**  
 `[human-only: subjective theme polish on new waiting-room surface — per-branch smoke, both themes]`  
 No dedicated Playwright theme lock for this overlay yet; layout visibility oracles in lifecycle spec do not assert light/dark contrast.
+
+**Notes:**
 
 ---
 
