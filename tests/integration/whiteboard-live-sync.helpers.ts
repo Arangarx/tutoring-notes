@@ -5,7 +5,9 @@ import { PrismaClient } from "@prisma/client";
 import {
   seedTestAdmin,
   seedTestStudent,
+  seedTestLearner,
   seedOpenWhiteboardSession,
+  TEST_LEARNER,
 } from "../visual/helpers";
 import {
   followWireFromTutorAppState,
@@ -26,21 +28,40 @@ export type WbLiveSyncSession = {
   adminUserId: string;
   studentId: string;
   whiteboardSessionId: string;
+  /** Legacy /w/ join token — kept for backward-compat; /w/ now redirects to /join/. */
   joinToken: string;
+  /** LearnerProfile id for the claimed student — needed for SessionParticipant insert. */
+  learnerProfileId: string;
+  /** Full login handle for /api/auth/learner/login (e.g. "pwstudent@pwfamily"). */
+  learnerHandle: string;
+  /** PIN for /api/auth/learner/login. */
+  learnerPin: string;
 };
 
-export async function seedWbLiveSyncSession(): Promise<WbLiveSyncSession> {
+export async function seedWbLiveSyncSession(opts?: {
+  /** Create session in PENDING phase (needed for waiting-room tests). Default: ACTIVE. */
+  sessionPhase?: "PENDING" | "ACTIVE";
+  /** Session mode at creation. Default: LIVE. */
+  sessionMode?: "LIVE" | "IN_PERSON";
+}): Promise<WbLiveSyncSession> {
   const adminUserId = await seedTestAdmin();
   const { studentId } = await seedTestStudent(adminUserId);
+
+  // Claim the student (link to a LearnerProfile) so the authenticated /join/ path works.
+  const { learnerProfileId } = await seedTestLearner(adminUserId, studentId);
+
   const whiteboardSessionId = await seedOpenWhiteboardSession({
     adminUserId,
     studentId,
+    sessionPhase: opts?.sessionPhase ?? "ACTIVE",
+    sessionMode: opts?.sessionMode ?? "LIVE",
   });
 
   const prisma = new PrismaClient();
   let joinToken: string;
   try {
-    const row = await prisma.whiteboardJoinToken.create({
+    // Legacy join token (kept for /w/ redirect tests; /w/ now client-redirects to /join/).
+    const tokenRow = await prisma.whiteboardJoinToken.create({
       data: {
         whiteboardSessionId,
         token: `pw-wb-live-${whiteboardSessionId.slice(0, 8)}-${Date.now()}`,
@@ -48,12 +69,42 @@ export async function seedWbLiveSyncSession(): Promise<WbLiveSyncSession> {
       },
       select: { token: true },
     });
-    joinToken = row.token;
+    joinToken = tokenRow.token;
+
+    // SessionParticipant row — required for assertIsSessionParticipant in /join/ page.
+    await prisma.sessionParticipant.upsert({
+      where: {
+        whiteboardSessionId_learnerProfileId: {
+          whiteboardSessionId,
+          learnerProfileId,
+        },
+      },
+      create: { whiteboardSessionId, learnerProfileId },
+      update: { leftAt: null },
+    });
   } finally {
     await prisma.$disconnect();
   }
 
-  return { adminUserId, studentId, whiteboardSessionId, joinToken };
+  return {
+    adminUserId,
+    studentId,
+    whiteboardSessionId,
+    joinToken,
+    learnerProfileId,
+    learnerHandle: TEST_LEARNER.handle,
+    learnerPin: TEST_LEARNER.pin,
+  };
+}
+
+/**
+ * Seed a PENDING-phase session for waiting-room / Start-gating tests.
+ * Shorthand for `seedWbLiveSyncSession({ sessionPhase: 'PENDING' })`.
+ */
+export async function seedWbPendingLiveSyncSession(opts?: {
+  sessionMode?: "LIVE" | "IN_PERSON";
+}): Promise<WbLiveSyncSession> {
+  return seedWbLiveSyncSession({ sessionPhase: "PENDING", sessionMode: opts?.sessionMode });
 }
 
 export async function waitForWbE2eBridge(
@@ -916,6 +967,53 @@ export async function assertStudentPortraitTopBarControls(
   await expect(page.getByTestId("wb-student-toolbar-toggle")).not.toBeVisible();
 }
 
+/**
+ * Click the tutor's "Start session" button in the waiting-room overlay and wait
+ * for the overlay to dismiss (phase transitions PENDING → ACTIVE).
+ *
+ * Prerequisite: the tutor page must already have the canvas mounted and the
+ * overlay visible. For LIVE mode the button is only enabled once the student
+ * is sync-present AND WebRTC-reachable (bothPartiesInRoom). Wait for it to
+ * become enabled before clicking.
+ */
+export async function startSessionAsTutor(
+  tutorPage: Page,
+  timeoutMs = 90_000
+): Promise<void> {
+  const startBtn = tutorPage.getByTestId("wb-start-session");
+  await expect(startBtn).toBeEnabled({ timeout: timeoutMs });
+  await startBtn.click();
+  // Overlay dismisses when phaseActive flips to true client-side.
+  await expect(tutorPage.getByTestId("wb-waiting-overlay")).not.toBeVisible({
+    timeout: 30_000,
+  });
+}
+
+/**
+ * Authenticate the learner in a browser context via /api/auth/learner/login.
+ *
+ * The context.request shares cookies with pages in the same context, so the
+ * mynk_learner_session HttpOnly cookie is available to subsequent page.goto()
+ * calls without any extra work.
+ */
+export async function loginLearnerInContext(
+  context: import("@playwright/test").BrowserContext,
+  learnerHandle: string,
+  learnerPin: string
+): Promise<void> {
+  const resp = await context.request.post("/api/auth/learner/login", {
+    data: { username: learnerHandle, pin: learnerPin },
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!resp.ok()) {
+    const body = await resp.text().catch(() => "<no body>");
+    throw new Error(
+      `Learner login failed (${resp.status()}): ${body}\n` +
+        "Ensure LEARNER_SESSION_HMAC_SECRET is set in the test environment."
+    );
+  }
+}
+
 /** Open tutor + student relay session (shared harness entry). */
 export async function openTutorAndStudent(
   browser: import("@playwright/test").Browser,
@@ -933,6 +1031,13 @@ export async function openTutorAndStudent(
      */
     studentHasTouch?: boolean;
     studentIsMobile?: boolean;
+    /**
+     * When true (default false): after both parties connect in a PENDING session,
+     * click the tutor's "Start session" button and wait for the overlay to dismiss.
+     * Set to true for tests that need an ACTIVE session but seed a PENDING one.
+     * Not needed for ACTIVE sessions (seedWbLiveSyncSession default).
+     */
+    autoStart?: boolean;
   }
 ) {
   const ensureFollow = options?.ensureFollow !== false;
@@ -945,11 +1050,44 @@ export async function openTutorAndStudent(
     storageState: "tests/integration/.auth/tutor.json",
     viewport: { width: 1280, height: 1200 },
   });
+
+  // Load the pre-created learner session storage state (set by integration-setup /
+  // auth.setup.ts). This avoids calling /api/auth/learner/login per-test, which
+  // would exhaust the middleware's 30 req/min API rate limit when many tests run
+  // sequentially from the same IP (127.0.0.1 in local dev / CI).
+  //
+  // Falls back to a fresh loginLearnerInContext() call when the stored state file
+  // is absent (e.g. first run before integration-setup completes) — loginLearner
+  // is still available for tests that need it with non-standard learner identities.
+  //
+  // Playwright runs from the repo root (process.cwd() = workspace root), so the
+  // path is stable regardless of which spec file calls this helper.
+  const learnerAuthFile = path.join(
+    process.cwd(),
+    "tests",
+    "integration",
+    ".auth",
+    "learner.json"
+  );
+  const learnerStorageState = fs.existsSync(learnerAuthFile)
+    ? learnerAuthFile
+    : undefined;
+
   const studentContext = await browser.newContext({
     viewport: studentViewport,
     ...(options?.studentHasTouch ? { hasTouch: true } : {}),
     ...(options?.studentIsMobile ? { isMobile: true } : {}),
+    ...(learnerStorageState ? { storageState: learnerStorageState } : {}),
   });
+
+  // If no pre-created learner state is available, fall back to a fresh login.
+  if (!learnerStorageState) {
+    await loginLearnerInContext(
+      studentContext,
+      session.learnerHandle,
+      session.learnerPin
+    );
+  }
 
   const tutorPage = await tutorContext.newPage();
   await tutorPage.goto(
@@ -961,11 +1099,14 @@ export async function openTutorAndStudent(
   });
   await waitForWbE2eBridge(tutorPage, "tutor");
 
+  // Read the encryption key from the tutor's URL fragment and navigate the
+  // student to the authenticated /join/[sessionId]#k=<key> path (workstream 1).
   const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
   const studentPage = await studentContext.newPage();
-  await studentPage.goto(`/w/${session.joinToken}#k=${encryptionKey}`, {
-    waitUntil: "domcontentloaded",
-  });
+  await studentPage.goto(
+    `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+    { waitUntil: "domcontentloaded" }
+  );
   await expect(studentPage.getByTestId("student-whiteboard-canvas-mount")).toBeVisible({
     timeout: 90_000,
   });
@@ -975,6 +1116,14 @@ export async function openTutorAndStudent(
     await ensureStudentFollowsTutor(studentPage);
   }
   await waitForTutorStudentConnected(tutorPage);
+
+  if (options?.autoStart) {
+    await startSessionAsTutor(tutorPage);
+    // Student overlay also dismisses when the join-timer poll reports ACTIVE.
+    await expect(studentPage.getByTestId("wb-waiting-overlay")).not.toBeVisible({
+      timeout: 30_000,
+    });
+  }
 
   return {
     tutorContext,

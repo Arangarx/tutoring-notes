@@ -1,4 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
+import fs from "node:fs";
+import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { readLocalEnv } from "../utils/read-dotenv";
 import {
@@ -8,6 +10,7 @@ import {
   clickBoardPageTab,
   drawTestStrokeOnRole,
   expectedAlignedStudentScroll,
+  loginLearnerInContext,
   openTutorAndStudent,
   readOverflowMenuItemLeftEdges,
   readViewportSnapshot,
@@ -186,9 +189,17 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
   }) => {
     test.setTimeout(180_000);
     const session = await seedWbLiveSyncSession();
+    // Use pre-created learner storage state (avoids rate-limiting /api/auth/learner/login
+    // when many tests run sequentially; falls back to a fresh login if file is absent).
+    const learnerAuthFile = path.join(process.cwd(), "tests", "integration", ".auth", "learner.json");
+    const learnerOpts = fs.existsSync(learnerAuthFile) ? { storageState: learnerAuthFile } : {};
     const studentContext = await browser.newContext({
       viewport: { width: 390, height: 844 },
+      ...learnerOpts,
     });
+    if (!fs.existsSync(learnerAuthFile)) {
+      await loginLearnerInContext(studentContext, session.learnerHandle, session.learnerPin);
+    }
     const tutorContext = await browser.newContext({
       storageState: "tests/integration/.auth/tutor.json",
       viewport: { width: 1280, height: 900 },
@@ -201,9 +212,11 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
         const m = window.location.hash.match(/[#&]k=([^&]+)/);
         return m?.[1] ? decodeURIComponent(m[1]) : "";
       });
-      await studentPage.goto(`/w/${session.joinToken}#k=${encryptionKey}`, {
-        waitUntil: "domcontentloaded",
-      });
+      // Use authenticated /join/[sessionId] path (workstream 1 — /w/ is retired).
+      await studentPage.goto(
+        `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+        { waitUntil: "domcontentloaded" }
+      );
       await expect(
         studentPage.getByTestId("student-whiteboard-canvas-mount")
       ).toBeVisible({ timeout: 90_000 });
@@ -417,6 +430,10 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     test.setTimeout(180_000);
     const session = await seedWbLiveSyncSession();
 
+    // Resolve learner storage state once (avoids per-test rate-limiting).
+    const _learnerAuthFile10 = path.join(process.cwd(), "tests", "integration", ".auth", "learner.json");
+    const _learnerOpts10 = fs.existsSync(_learnerAuthFile10) ? { storageState: _learnerAuthFile10 } : {};
+
     for (const role of ["tutor", "student"] as const) {
       const viewport = { width: 1280, height: 500 };
       const context =
@@ -425,7 +442,7 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
               storageState: "tests/integration/.auth/tutor.json",
               viewport,
             })
-          : await browser.newContext({ viewport });
+          : await browser.newContext({ viewport, ..._learnerOpts10 });
       const page = await context.newPage();
       if (role === "tutor") {
         await loadTutorBoard(page, session);
@@ -440,9 +457,14 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
           const m = window.location.hash.match(/[#&]k=([^&]+)/);
           return m?.[1] ? decodeURIComponent(m[1]) : "";
         });
-        await page.goto(`/w/${session.joinToken}#k=${key}`, {
-          waitUntil: "domcontentloaded",
-        });
+        // Fall back to fresh login if no stored state is available.
+        if (!fs.existsSync(_learnerAuthFile10)) {
+          await loginLearnerInContext(context, session.learnerHandle, session.learnerPin);
+        }
+        await page.goto(
+          `/join/${session.whiteboardSessionId}#k=${key}`,
+          { waitUntil: "domcontentloaded" }
+        );
         await expect(
           page.getByTestId("student-whiteboard-canvas-mount")
         ).toBeVisible({ timeout: 90_000 });

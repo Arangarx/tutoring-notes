@@ -1,4 +1,5 @@
 import { test, expect, type Browser } from "@playwright/test";
+import fs from "node:fs";
 import path from "node:path";
 import { readLocalEnv } from "../utils/read-dotenv";
 import {
@@ -10,6 +11,7 @@ import {
   growStrokeOnRole,
   insertGraphOnRole,
   insertPngFixtureOnRole,
+  loginLearnerInContext,
   moveElementOnRole,
   placeMarkerAtViewportCenter,
   readAppStateCenterXY,
@@ -63,14 +65,37 @@ test.describe("whiteboard live-sync regression", { tag: [TAG.WB_SYNC] }, () => {
 
     // Tutor viewport is taller to satisfy invariant-4's precondition:
     // Mynk chrome (44px topbar + board tabs + banners) consumes flex height;
-    // 1200px ΓåÆ enough Excalidraw canvas vs student viewport (~458px).
+    // 1200px → enough Excalidraw canvas vs student viewport (~458px).
     const tutorContext = await browser.newContext({
       storageState: "tests/integration/.auth/tutor.json",
       viewport: { width: 1280, height: 1200 },
     });
+    // Load pre-created learner storage state to avoid hitting the 30 req/min API
+    // rate limit when many tests run sequentially from the same IP.
+    const learnerAuthFile = path.join(
+      process.cwd(),
+      "tests",
+      "integration",
+      ".auth",
+      "learner.json"
+    );
+    const learnerStorageState = fs.existsSync(learnerAuthFile)
+      ? learnerAuthFile
+      : undefined;
+
     const studentContext = await browser.newContext({
       viewport: { width: 1280, height: 640 },
+      ...(learnerStorageState ? { storageState: learnerStorageState } : {}),
     });
+
+    // Fall back to fresh login if stored state is absent (e.g. first run).
+    if (!learnerStorageState) {
+      await loginLearnerInContext(
+        studentContext,
+        session.learnerHandle,
+        session.learnerPin
+      );
+    }
 
     const tutorPage = await tutorContext.newPage();
     await tutorPage.goto(
@@ -84,9 +109,11 @@ test.describe("whiteboard live-sync regression", { tag: [TAG.WB_SYNC] }, () => {
 
     const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
     const studentPage = await studentContext.newPage();
-    await studentPage.goto(`/w/${session.joinToken}#k=${encryptionKey}`, {
-      waitUntil: "domcontentloaded",
-    });
+    // Authenticated /join/ path (workstream 1 — /w/ retired).
+    await studentPage.goto(
+      `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+      { waitUntil: "domcontentloaded" }
+    );
     await expect(studentPage.getByTestId("student-whiteboard-canvas-mount")).toBeVisible({
       timeout: 90_000,
     });
@@ -675,11 +702,23 @@ test.describe("whiteboard live-sync regression", { tag: [TAG.WB_SYNC] }, () => {
 
     // --- Step 2: student joins AFTER stroke is on board ---
     const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
+    const learnerAuthFile11 = path.join(
+      process.cwd(),
+      "tests",
+      "integration",
+      ".auth",
+      "learner.json"
+    );
     const studentContext = await browser.newContext({
       viewport: { width: 1280, height: 640 },
+      ...(fs.existsSync(learnerAuthFile11) ? { storageState: learnerAuthFile11 } : {}),
     });
+    if (!fs.existsSync(learnerAuthFile11)) {
+      await loginLearnerInContext(studentContext, session.learnerHandle, session.learnerPin);
+    }
     const studentPage = await studentContext.newPage();
-    await studentPage.goto(`/w/${session.joinToken}#k=${encryptionKey}`, {
+    // Authenticated /join/ path (workstream 1 — /w/ retired).
+    await studentPage.goto(`/join/${session.whiteboardSessionId}#k=${encryptionKey}`, {
       waitUntil: "domcontentloaded",
     });
     await expect(studentPage.getByTestId("student-whiteboard-canvas-mount")).toBeVisible({
