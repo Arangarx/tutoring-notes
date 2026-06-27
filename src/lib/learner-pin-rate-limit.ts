@@ -42,6 +42,7 @@
 
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
+import { isPlaywrightHarnessActive } from "@/lib/playwright-harness";
 import { rateLimit } from "@/lib/rate-limit";
 
 // ---------------------------------------------------------------------------
@@ -98,12 +99,20 @@ export async function checkLearnerPinCooldown(
   ip: string
 ): Promise<LearnerPinCooldownResult> {
   // Per-IP overflow guard (in-memory; lower severity — see BACKLOG [SECURITY])
-  const ipBucket = rateLimit(`learner_ip:${ip}`, 30, 60_000);
-  if (!ipBucket.allowed) {
-    return {
-      inCooldown: true,
-      retryAfterSeconds: Math.ceil(ipBucket.retryAfterMs / 1000),
-    };
+  // TEST-ONLY bypass: when isPlaywrightHarnessActive() (WB_E2E_HARNESS=1 locally),
+  // skip the in-memory per-IP check. 5 parallel Playwright workers all share
+  // 127.0.0.1 and exhaust the 30 req/min bucket when tests exercise the learner
+  // login endpoint directly. isPlaywrightHarnessActive() also requires !VERCEL so
+  // the bypass stays inert on Vercel even if WB_E2E_HARNESS were misconfigured.
+  // Neon-backed credential rate limits (LearnerLoginThrottle) still apply.
+  if (!isPlaywrightHarnessActive()) {
+    const ipBucket = rateLimit(`learner_ip:${ip}`, 30, 60_000);
+    if (!ipBucket.allowed) {
+      return {
+        inCooldown: true,
+        retryAfterSeconds: Math.ceil(ipBucket.retryAfterMs / 1000),
+      };
+    }
   }
 
   const scopeKey = `soft:${credKey}`;
