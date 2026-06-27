@@ -141,7 +141,7 @@ Surface agents **CONSUME** the frozen library and may **not** edit it (log gaps 
 
 Auth pages (`/login`, `/signup`, `/account/*` auth, claim flow) already **V1** — minor polish only.
 
-**Whiteboard fence (do NOT touch in visual pass):** `src/lib/whiteboard/**`, `useLiveAV.ts`, `WhiteboardWorkspaceClient.tsx`, `StudentWhiteboardClient.tsx`, recording components, etc. Safe chrome boundary: `src/components/whiteboard/chrome/**` only (Group G exception).
+**Whiteboard fence (do NOT touch in visual pass):** `src/lib/whiteboard/**`, `useLiveAV.ts`, `WhiteboardWorkspaceClient.tsx`, recording components, etc. Safe chrome boundary: `src/components/whiteboard/chrome/**` only (Group G exception). (Legacy `StudentWhiteboardClient.tsx` retired 2026-06-26, Part 1D — student now uses the unified `WhiteboardWorkspaceClient` via `role="student"`.)
 
 ---
 

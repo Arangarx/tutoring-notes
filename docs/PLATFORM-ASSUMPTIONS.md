@@ -310,7 +310,7 @@
   - `src/components/whiteboard/GraphEmbeddable.tsx` + `src/lib/whiteboard/graph-state.ts` + `graph-persist.ts`
   - `src/lib/whiteboard/insert-asset.ts:GRAPH_EMBED_LINK` + `insertGraphOnCanvas`
   - `src/lib/whiteboard/validate-embeddable.ts` (sentinel-only allowlist)
-  - Tutor + student `renderEmbeddable` wiring (`WhiteboardWorkspaceClient`, `StudentWhiteboardClient`)
+  - Tutor + student `renderEmbeddable` wiring (`WhiteboardWorkspaceClient`, role-parameterized for both — the student route renders the same component via `WhiteboardSessionShell role="student"`)
   - `frame-src 'self'` only — Desmos origins removed from CSP (2026-06-10 Phase 2b)
 - **Legacy read**: Old pilot sessions may still contain Desmos iframe embeds in the event log (`type: "desmos"`). `excalidraw-adapter.ts` maps them for replay without throwing; they no longer render live (CSP blocks external iframes) — acceptable per pilot scope.
 - **What breaks if violated**: graph insert shows "Empty Web Embed" if `link`/`validateEmbeddable` drift; student board shows stale graph if `renderEmbeddable` or `graphStateJson` re-hydrate path is removed.

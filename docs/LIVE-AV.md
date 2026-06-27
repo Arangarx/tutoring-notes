@@ -70,7 +70,7 @@ See companion docs:
 | **Audio graph + mixdown** | `src/lib/mic-recorder-audio.ts` | Web Audio fan-out: mic → gain → (recordingDest + publishDest). `addRemoteAudio(stream)` sums remote audio into recordingDest only via per-stream `GainNode`. `setRemoteGain(stream, gain)` for per-peer recording-mute. |
 | **Audio recorder hook** | `src/hooks/useAudioRecorder.ts` | Owns the audio graph + MediaRecorder. Exposes `localMicStream` (the publishStream), `addRemoteAudio`, `setRemoteRecordingGain`. |
 | **Tutor workspace integration** | `src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceClient.tsx` | Hosts both hooks. Reconcile effects for: per-participant `addRemoteAudio` attach/detach; `mutedPeerIdsInRecording` → per-peer gain; sync-reconnect → `mesh.restart`; FSM input wiring. |
-| **Student workspace integration** | `src/app/w/[joinToken]/StudentWhiteboardClient.tsx` | Lighter — no per-peer moderation; no audio mixdown (students don't record). |
+| **Student workspace integration** | unified shell: `/w/[joinToken]/page.tsx` → `StudentWhiteboardSessionShell` → `WhiteboardSessionShell` (`role="student"`) → `WhiteboardWorkspaceClient` | Same component as the tutor, role-parameterized. Student is lighter by config — no per-peer moderation; no audio mixdown (students don't record). (Legacy parallel `StudentWhiteboardClient.tsx` was retired 2026-06-26 — Part 1D.) |
 | **Per-route bindings** | `src/middleware.ts` | Site-wide `Permissions-Policy: camera=*, microphone=*, ...`. See 4c hotfix #2 invariant below. |
 
 ---
@@ -85,7 +85,7 @@ hears her voice":
 ```text
 wife clicks join link
   ↓
-StudentWhiteboardClient mounts
+unified shell mounts (role="student": /w/[joinToken] → StudentWhiteboardSessionShell → WhiteboardWorkspaceClient)
   ↓
 syncClient connects to WHITEBOARD_SYNC_URL (encrypted with key from URL hash)
   ↓

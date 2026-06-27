@@ -3,7 +3,8 @@
  *
  * Student poll must receive a structured `{ live: false, reason }` when
  * the tutor ends (or revokes/expired) rather than silently treat 404 like
- * a generic failure — `StudentWhiteboardClient` hinges on this contract.
+ * a generic failure — the unified student join path (WhiteboardWorkspaceClient
+ * via /w/[joinToken] → WhiteboardSessionShell role="student") hinges on this contract.
  */
 
 const findUniqueMock = jest.fn();
