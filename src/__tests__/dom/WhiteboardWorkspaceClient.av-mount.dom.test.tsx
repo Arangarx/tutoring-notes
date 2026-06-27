@@ -504,7 +504,9 @@ const baseProps = {
 };
 
 async function renderWorkspace(
-  overrides: Partial<typeof baseProps & { role: "tutor" | "student" }> = {}
+  overrides: Partial<
+    typeof baseProps & { role: "tutor" | "student"; joinToken: string }
+  > = {}
 ) {
   const mod = await import(
     "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceClient"
