@@ -6558,6 +6558,9 @@ export function WhiteboardWorkspaceClient({
         micControlNode={overlayMicNode}
         camControlNode={overlayCamNode}
         avTilesNode={overlayAVTilesNode}
+        onCopyStudentLink={role === "tutor" ? handleCopyStudentLink : undefined}
+        copyStudentLinkState={copyState}
+        copyStudentLinkDisabled={!syncUrl || copyState === "copying"}
       />
     )}
     </WbRoleProvider>

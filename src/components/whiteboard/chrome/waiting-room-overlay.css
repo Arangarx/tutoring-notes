@@ -139,6 +139,34 @@
   line-height: 1.5;
 }
 
+/* ── Copy student link (tutor, PENDING) ── */
+.mynk-wtr-copy-link-btn {
+  width: 100%;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  background: transparent;
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.mynk-wtr-copy-link-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.mynk-wtr-copy-link-btn:not(:disabled):hover {
+  background: var(--muted);
+}
+
+.mynk-wtr-copy-link-btn--copied {
+  border-color: var(--accent, var(--primary));
+  color: var(--accent, var(--primary));
+}
+
 /* ── Start CTA ── */
 .mynk-wtr-cta {
   display: flex;

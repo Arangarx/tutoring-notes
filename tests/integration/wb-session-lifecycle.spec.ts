@@ -630,6 +630,71 @@ test.describe("Waiting-room overlay + Start gating", { tag: [TAG.WB_CHROME, TAG.
     }
   });
 
+  test(
+    "tutor waiting room — copy student link yields /join URL on clipboard",
+    { tag: [TAG.WB_PRESENCE, TAG.WB_CHROME] },
+    async ({ browser }) => {
+      test.setTimeout(120_000);
+      const session = await seedWbPendingLiveSyncSession();
+
+      const tutorCtx = await browser.newContext({
+        storageState: "tests/integration/.auth/tutor.json",
+        viewport: { width: 1280, height: 900 },
+        permissions: ["microphone", "clipboard-read", "clipboard-write"],
+      });
+      const studentCtx = await browser.newContext({
+        viewport: { width: 1280, height: 800 },
+        permissions: ["microphone"],
+      });
+      try {
+        await loginLearnerInContext(studentCtx, session.learnerHandle, session.learnerPin);
+
+        const tutorPage = await tutorCtx.newPage();
+        await tutorPage.goto(
+          `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+          { waitUntil: "domcontentloaded" }
+        );
+        await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
+          timeout: 90_000,
+        });
+        await expect(tutorPage.getByTestId("wb-waiting-overlay")).toBeVisible({
+          timeout: 10_000,
+        });
+
+        const copyBtn = tutorPage.getByTestId("wb-waiting-copy-student-link");
+        await expect(copyBtn).toBeVisible();
+        await waitForWbE2eBridge(tutorPage, "tutor");
+        await expect(copyBtn).toBeEnabled({ timeout: 15_000 });
+
+        const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
+        await copyBtn.click();
+        await expect(copyBtn).toContainText("Copied!", { timeout: 5_000 });
+
+        const clipboardText = await tutorPage.evaluate(() => navigator.clipboard.readText());
+        const origin = new URL(tutorPage.url()).origin;
+        expect(clipboardText).toBe(
+          `${origin}/join/${session.whiteboardSessionId}#k=${encryptionKey}`
+        );
+
+        const studentPage = await studentCtx.newPage();
+        await studentPage.goto(
+          `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+          { waitUntil: "domcontentloaded" }
+        );
+        await expect(studentPage.getByTestId("student-whiteboard-canvas-mount")).toBeVisible({
+          timeout: 90_000,
+        });
+        await expect(studentPage.getByTestId("wb-waiting-overlay")).toBeVisible({
+          timeout: 10_000,
+        });
+        await expect(studentPage.getByTestId("wb-waiting-copy-student-link")).toHaveCount(0);
+      } finally {
+        await tutorCtx.close();
+        await studentCtx.close();
+      }
+    }
+  );
+
   test("IN_PERSON mode — Start is always enabled (no student required)", async ({
     browser,
   }) => {

@@ -24,6 +24,8 @@ import type { ReactNode } from "react";
 
 export type WtrSessionMode = "LIVE" | "IN_PERSON";
 
+export type WtrCopyStudentLinkState = "idle" | "copying" | "copied" | "error";
+
 export type WaitingRoomOverlayProps = {
   /** Participant role — drives tutor vs student copy + affordances. */
   role: "tutor" | "student";
@@ -68,6 +70,15 @@ export type WaitingRoomOverlayProps = {
    * Already wired in the workspace.
    */
   avTilesNode: ReactNode;
+  /**
+   * Tutor-only: copies the authenticated /join/ student link (workspace handler).
+   * Omitted for student role — control is not rendered.
+   */
+  onCopyStudentLink?: () => void | Promise<void>;
+  /** Mirrors workspace `copyState` for label + disabled feedback. */
+  copyStudentLinkState?: WtrCopyStudentLinkState;
+  /** True when sync URL / key preconditions block copy (workspace-owned). */
+  copyStudentLinkDisabled?: boolean;
 };
 
 /**
@@ -90,9 +101,21 @@ export function WaitingRoomOverlay({
   micControlNode,
   camControlNode,
   avTilesNode,
+  onCopyStudentLink,
+  copyStudentLinkState = "idle",
+  copyStudentLinkDisabled = false,
 }: WaitingRoomOverlayProps) {
   const isTutor = role === "tutor";
   const inPerson = sessionMode === "IN_PERSON";
+
+  const copyLinkLabel =
+    copyStudentLinkState === "copying"
+      ? "Copying…"
+      : copyStudentLinkState === "copied"
+        ? "Copied!"
+        : copyStudentLinkState === "error"
+          ? "Copy failed — try again"
+          : "Copy student link";
 
   const startHintText = !canStart
     ? inPerson
@@ -172,6 +195,19 @@ export function WaitingRoomOverlay({
                 </p>
               )}
             </div>
+
+            {onCopyStudentLink && (
+              <button
+                type="button"
+                className={`mynk-wtr-copy-link-btn${copyStudentLinkState === "copied" ? " mynk-wtr-copy-link-btn--copied" : ""}`}
+                onClick={() => { void onCopyStudentLink(); }}
+                disabled={copyStudentLinkDisabled || copyStudentLinkState === "copying"}
+                data-testid="wb-waiting-copy-student-link"
+                aria-label={copyLinkLabel}
+              >
+                {copyLinkLabel}
+              </button>
+            )}
 
             {/* ── start CTA ── */}
             <div className="mynk-wtr-cta">
