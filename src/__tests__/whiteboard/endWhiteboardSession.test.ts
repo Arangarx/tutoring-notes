@@ -27,9 +27,11 @@
 const txWhiteboardUpdateMock = jest.fn();
 const txWhiteboardFindUniqueMock = jest.fn();
 const txTokenUpdateManyMock = jest.fn();
+const txSessionParticipantUpdateManyMock = jest.fn();
 const txSessionRecordingFindManyMock = jest.fn();
 const txSessionRecordingAggregateMock = jest.fn();
 const txSessionRecordingCreateManyMock = jest.fn();
+const dbWhiteboardFindUniqueMock = jest.fn();
 const dbTransactionMock = jest.fn(async (fn: (tx: unknown) => unknown) =>
   fn({
     whiteboardSession: {
@@ -38,6 +40,9 @@ const dbTransactionMock = jest.fn(async (fn: (tx: unknown) => unknown) =>
     },
     whiteboardJoinToken: {
       updateMany: txTokenUpdateManyMock,
+    },
+    sessionParticipant: {
+      updateMany: txSessionParticipantUpdateManyMock,
     },
     sessionRecording: {
       findMany: txSessionRecordingFindManyMock,
@@ -50,6 +55,9 @@ const dbTransactionMock = jest.fn(async (fn: (tx: unknown) => unknown) =>
 jest.mock("@/lib/db", () => ({
   __esModule: true,
   db: {
+    whiteboardSession: {
+      findUnique: (...args: unknown[]) => dbWhiteboardFindUniqueMock(...args),
+    },
     $transaction: (fn: (tx: unknown) => unknown) => dbTransactionMock(fn),
   },
   withDbRetry: <T,>(fn: () => Promise<T>) => fn(),
@@ -103,6 +111,7 @@ function setupActiveSession(opts: { startedAtAgoMs?: number } = {}) {
     eventsBlobUrl: "placeholder",
     consentAcknowledged: true,
   });
+  dbWhiteboardFindUniqueMock.mockResolvedValue({ sessionPhase: "ACTIVE" });
   txWhiteboardFindUniqueMock.mockResolvedValue({ startedAt });
   txWhiteboardUpdateMock.mockImplementation(
     async (args: { data: { endedAt: Date } }) => ({
@@ -112,6 +121,7 @@ function setupActiveSession(opts: { startedAtAgoMs?: number } = {}) {
     })
   );
   txTokenUpdateManyMock.mockResolvedValue({ count: 2 });
+  txSessionParticipantUpdateManyMock.mockResolvedValue({ count: 1 });
   txSessionRecordingFindManyMock.mockResolvedValue([]);
   txSessionRecordingAggregateMock.mockResolvedValue({ _max: { orderIndex: null } });
   txSessionRecordingCreateManyMock.mockResolvedValue({ count: 0 });
@@ -122,9 +132,11 @@ beforeEach(() => {
   txWhiteboardUpdateMock.mockReset();
   txWhiteboardFindUniqueMock.mockReset();
   txTokenUpdateManyMock.mockReset();
+  txSessionParticipantUpdateManyMock.mockReset();
   txSessionRecordingFindManyMock.mockReset();
   txSessionRecordingAggregateMock.mockReset();
   txSessionRecordingCreateManyMock.mockReset();
+  dbWhiteboardFindUniqueMock.mockReset();
   dbTransactionMock.mockClear();
   assertOwnsWhiteboardSessionMock.mockReset();
   revalidatePathMock.mockReset();
@@ -147,6 +159,12 @@ describe("endWhiteboardSession — events-only end (no segments)", () => {
       expect.objectContaining({
         where: { whiteboardSessionId: "wb_42", revokedAt: null },
         data: { revokedAt: expect.any(Date) },
+      })
+    );
+    expect(txSessionParticipantUpdateManyMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { whiteboardSessionId: "wb_42", leftAt: null },
+        data: { leftAt: expect.any(Date) },
       })
     );
     expect(txSessionRecordingCreateManyMock).not.toHaveBeenCalled();

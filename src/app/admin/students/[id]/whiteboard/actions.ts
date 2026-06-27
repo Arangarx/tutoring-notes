@@ -219,6 +219,17 @@ export async function createWhiteboardSession(
             learnerProfileId,
             scope.adminId
           );
+          if (learnerProfileId) {
+            await tx.sessionParticipant.createMany({
+              data: [
+                {
+                  whiteboardSessionId: row.id,
+                  learnerProfileId,
+                },
+              ],
+              skipDuplicates: true,
+            });
+          }
           return row;
         }),
       { label: "createWhiteboardSession" }
@@ -233,6 +244,9 @@ export async function createWhiteboardSession(
     );
   }
 
+  console.info(
+    `[slc] wbsid=${session.id} action=session_created phase=pending claimed=${learnerProfileId ? "yes" : "no"}`
+  );
   console.log(
     `[createWhiteboardSession] rid=${rid} wbsid=${session.id} studentId=${studentId} adminUserId=${scope.adminId} created`
   );
@@ -243,6 +257,50 @@ export async function createWhiteboardSession(
   redirect(
     `/admin/students/${studentId}/whiteboard/${session.id}/workspace`
   );
+}
+
+export type StartWhiteboardSessionResult = {
+  ok: true;
+  phase: "active";
+};
+
+/**
+ * Transition a whiteboard session from PENDING → ACTIVE when the tutor
+ * clicks Start. Idempotent: already-active or ended sessions are no-ops.
+ */
+export async function startWhiteboardSession(
+  whiteboardSessionId: string
+): Promise<StartWhiteboardSessionResult> {
+  const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
+
+  const result = await withDbRetry(
+    () =>
+      db.whiteboardSession.updateMany({
+        where: {
+          id: whiteboardSessionId,
+          adminUserId: session.adminUserId,
+          sessionPhase: "PENDING",
+          endedAt: null,
+        },
+        data: {
+          sessionPhase: "ACTIVE",
+          activatedAt: new Date(),
+        },
+      }),
+    { label: "startWhiteboardSession" }
+  );
+
+  if (result.count > 0) {
+    console.info(
+      `[slc] wbsid=${whiteboardSessionId} action=session_started phase=active`
+    );
+  } else {
+    console.info(
+      `[slc] wbsid=${whiteboardSessionId} action=session_start_noop`
+    );
+  }
+
+  return { ok: true, phase: "active" };
 }
 
 // -------------------------------------------------------------------
@@ -574,10 +632,28 @@ export async function endWhiteboardSession(
     throw new Error("This whiteboard session has already ended.");
   }
 
+  const phaseRow = await withDbRetry(
+    () =>
+      db.whiteboardSession.findUnique({
+        where: { id: whiteboardSessionId },
+        select: { sessionPhase: true },
+      }),
+    { label: "endWhiteboardSession.phase" }
+  );
+  const priorPhase = phaseRow?.sessionPhase ?? "PENDING";
+
+  // Pending cleanup: recorder may never have mounted — keep the placeholder
+  // events.json URL when the client passes no final blob URL.
+  const resolvedEventsBlobUrl =
+    priorPhase === "PENDING" &&
+    (typeof finalEventsBlobUrl !== "string" || !finalEventsBlobUrl.trim())
+      ? session.eventsBlobUrl
+      : finalEventsBlobUrl;
+
   // Crude URL sanity — the recorder constructs blob URLs via the
   // `/api/upload/blob` route which only serves whitelisted hosts;
   // a malformed value here would break replay later, so reject it now.
-  if (!/^https?:\/\//i.test(finalEventsBlobUrl)) {
+  if (!/^https?:\/\//i.test(resolvedEventsBlobUrl)) {
     throw new Error("Final events URL must be an absolute http(s) URL.");
   }
 
@@ -635,11 +711,16 @@ export async function endWhiteboardSession(
             where: { id: whiteboardSessionId },
             data: {
               endedAt: now,
-              eventsBlobUrl: finalEventsBlobUrl,
+              eventsBlobUrl: resolvedEventsBlobUrl,
               snapshotBlobUrl: opts?.snapshotBlobUrl ?? undefined,
               durationSeconds,
             },
             select: { id: true, endedAt: true, durationSeconds: true },
+          });
+
+          await tx.sessionParticipant.updateMany({
+            where: { whiteboardSessionId, leftAt: null },
+            data: { leftAt: now },
           });
 
           // Atomic multi-track segment registration. Order matters:
@@ -720,6 +801,9 @@ export async function endWhiteboardSession(
     throw new Error("Could not finalize the whiteboard session. Please try again.");
   }
 
+  console.info(
+    `[slc] wbsid=${whiteboardSessionId} action=session_ended phase=${priorPhase.toLowerCase()}`
+  );
   console.log(
     `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} endedAt=${updated.endedAt?.toISOString()} duration=${updated.durationSeconds}s segmentsInPayload=${segments.length} newSegments=${registeredSegments}`
   );
@@ -801,6 +885,16 @@ export async function endStaleWhiteboardSession(
     throw new Error("This whiteboard session has already ended.");
   }
 
+  const phaseRow = await withDbRetry(
+    () =>
+      db.whiteboardSession.findUnique({
+        where: { id: whiteboardSessionId },
+        select: { sessionPhase: true },
+      }),
+    { label: "endStaleWhiteboardSession.phase" }
+  );
+  const priorPhase = phaseRow?.sessionPhase ?? "PENDING";
+
   const now = new Date();
   let updated;
   try {
@@ -825,6 +919,10 @@ export async function endStaleWhiteboardSession(
             },
             select: { id: true, endedAt: true, durationSeconds: true },
           });
+          await tx.sessionParticipant.updateMany({
+            where: { whiteboardSessionId, leftAt: null },
+            data: { leftAt: now },
+          });
           await tx.whiteboardJoinToken.updateMany({
             where: {
               whiteboardSessionId,
@@ -844,6 +942,9 @@ export async function endStaleWhiteboardSession(
     throw new Error("Could not end the whiteboard session. Please try again.");
   }
 
+  console.info(
+    `[slc] wbsid=${whiteboardSessionId} action=session_ended phase=${priorPhase.toLowerCase()}`
+  );
   console.log(
     `[endStaleWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} endedAt=${updated.endedAt?.toISOString()} duration=${updated.durationSeconds}s`
   );

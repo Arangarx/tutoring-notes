@@ -41,6 +41,7 @@ jest.mock("@vercel/blob", () => ({
 const dbCreateMock = jest.fn();
 const dbStudentFindUniqueMock = jest.fn();
 const dbConsentRecordFindFirstMock = jest.fn();
+const dbSessionParticipantCreateManyMock = jest.fn();
 // Minimal $transaction: just invokes the callback with a proxy tx object
 const dbTransactionMock = jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
   const tx = {
@@ -48,6 +49,9 @@ const dbTransactionMock = jest.fn(async (fn: (tx: unknown) => Promise<unknown>) 
     consentRecord: { findFirst: (...args: unknown[]) => dbConsentRecordFindFirstMock(...args) },
     consentRestriction: { findUnique: jest.fn().mockResolvedValue(null) },
     sessionConsentSnapshot: { create: jest.fn().mockResolvedValue({}) },
+    sessionParticipant: {
+      createMany: (...args: unknown[]) => dbSessionParticipantCreateManyMock(...args),
+    },
   };
   return fn(tx);
 });
@@ -103,6 +107,8 @@ beforeEach(() => {
   dbTransactionMock.mockClear();
   dbStudentFindUniqueMock.mockReset();
   dbConsentRecordFindFirstMock.mockReset();
+  dbSessionParticipantCreateManyMock.mockReset();
+  dbSessionParticipantCreateManyMock.mockResolvedValue({ count: 0 });
   requireStudentScopeMock.mockReset();
   assertOwnsStudentMock.mockClear();
   redirectMock.mockClear();
@@ -193,6 +199,54 @@ describe("createWhiteboardSession - consent enforcement", () => {
     expect(redirectMock).toHaveBeenCalledWith(
       "/admin/students/student-1/whiteboard/wb-session-xyz/workspace"
     );
+  });
+
+  test("claimed student: creates SessionParticipant row in the same transaction", async () => {
+    requireStudentScopeMock.mockResolvedValue({
+      kind: "admin",
+      adminId: "admin-1",
+      email: "tutor@example.com",
+    });
+    dbStudentFindUniqueMock.mockResolvedValue({ learnerProfileId: "lp-1" });
+    putMock.mockResolvedValue({
+      url: "https://blob.example.com/x.json",
+      pathname: "x",
+      contentType: "application/json",
+      contentDisposition: "",
+      downloadUrl: "x",
+    } as Awaited<ReturnType<typeof put>>);
+    dbCreateMock.mockResolvedValue({ id: "wb-claimed", studentId: "student-1" });
+
+    await expect(
+      createWhiteboardSession("student-1", fdWith("true"))
+    ).rejects.toThrow(/NEXT_REDIRECT/);
+
+    expect(dbSessionParticipantCreateManyMock).toHaveBeenCalledWith({
+      data: [{ whiteboardSessionId: "wb-claimed", learnerProfileId: "lp-1" }],
+      skipDuplicates: true,
+    });
+  });
+
+  test("unclaimed student: skips SessionParticipant row", async () => {
+    requireStudentScopeMock.mockResolvedValue({
+      kind: "admin",
+      adminId: "admin-1",
+      email: "tutor@example.com",
+    });
+    putMock.mockResolvedValue({
+      url: "https://blob.example.com/x.json",
+      pathname: "x",
+      contentType: "application/json",
+      contentDisposition: "",
+      downloadUrl: "x",
+    } as Awaited<ReturnType<typeof put>>);
+    dbCreateMock.mockResolvedValue({ id: "wb-unclaimed", studentId: "student-1" });
+
+    await expect(
+      createWhiteboardSession("student-1", fdWith("true"))
+    ).rejects.toThrow(/NEXT_REDIRECT/);
+
+    expect(dbSessionParticipantCreateManyMock).not.toHaveBeenCalled();
   });
 
   test("accepts both 'true' and 'on' (browser checkbox default value)", async () => {
