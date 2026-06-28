@@ -85,6 +85,23 @@
   display: flex !important;
 }
 
+/* ── Device pickers — always reachable in-overlay (not overflow-menu only) ── */
+.mynk-wtr-device-pickers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+/* Compact picker cards so phone-portrait overlay does not push pickers below fold. */
+.mynk-wtr-device-pickers [data-testid="audio-controls"],
+.mynk-wtr-device-pickers [data-testid="video-controls"] {
+  margin-bottom: 0;
+  padding: 8px 10px;
+  gap: 8px;
+}
+
 /* ── Mode toggle ── */
 .mynk-wtr-mode-toggle-wrap {
   display: flex;

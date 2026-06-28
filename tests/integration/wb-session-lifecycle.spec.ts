@@ -1621,6 +1621,85 @@ test.describe(
         }
       }
     );
+
+    test(
+      "student device pickers stay visible and contained in overlay at phone-portrait width",
+      async ({ browser }) => {
+        test.setTimeout(180_000);
+        const session = await seedWbPendingLiveSyncSession();
+
+        const tutorCtx = await browser.newContext({
+          storageState: "tests/integration/.auth/tutor.json",
+          viewport: { width: 1280, height: 900 },
+          permissions: ["microphone", "camera"],
+        });
+        const studentCtx = await browser.newContext({
+          viewport: { width: 390, height: 844 },
+          permissions: ["microphone", "camera"],
+        });
+        try {
+          await loginLearnerInContext(
+            studentCtx,
+            session.learnerHandle,
+            session.learnerPin
+          );
+
+          const tutorPage = await tutorCtx.newPage();
+          await tutorPage.goto(
+            `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            tutorPage.getByTestId("tutor-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+          await waitForWbE2eBridge(tutorPage, "tutor");
+          const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
+
+          const studentPage = await studentCtx.newPage();
+          await studentPage.goto(
+            `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            studentPage.getByTestId("student-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+
+          const overlay = studentPage.getByTestId("wb-waiting-overlay");
+          await expect(overlay).toBeVisible({ timeout: 10_000 });
+
+          const devicePickers = overlay.getByTestId(
+            "wb-waiting-overlay-device-pickers"
+          );
+          await expect(devicePickers).toBeVisible({ timeout: 10_000 });
+
+          const micSelect = devicePickers.getByTestId("audio-device-select");
+          const camSelect = devicePickers.getByTestId("video-device-select");
+          await expect(micSelect).toBeVisible();
+          await expect(camSelect).toBeVisible();
+
+          // Relational oracle: pickers are inside the overlay, not clipped.
+          const overlayBox = await overlay.boundingBox();
+          const micBox = await micSelect.boundingBox();
+          const camBox = await camSelect.boundingBox();
+          expect(overlayBox).not.toBeNull();
+          expect(micBox).not.toBeNull();
+          expect(camBox).not.toBeNull();
+          if (overlayBox && micBox && camBox) {
+            expect(micBox.y).toBeGreaterThanOrEqual(overlayBox.y);
+            expect(micBox.y + micBox.height).toBeLessThanOrEqual(
+              overlayBox.y + overlayBox.height + 4
+            );
+            expect(camBox.y).toBeGreaterThanOrEqual(overlayBox.y);
+            expect(camBox.y + camBox.height).toBeLessThanOrEqual(
+              overlayBox.y + overlayBox.height + 4
+            );
+          }
+        } finally {
+          await tutorCtx.close();
+          await studentCtx.close();
+        }
+      }
+    );
   }
 );
 
