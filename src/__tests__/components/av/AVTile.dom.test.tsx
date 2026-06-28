@@ -331,6 +331,27 @@ describe("AVTile — remote participant", () => {
     expect(screen.queryByTestId("av-tile-initials-p-wait")).toBeNull();
   });
 
+  test("disabled remote video track shows initials (muted cam), not a black video frame", () => {
+    const p = makeRemoteParticipant({
+      peerId: "p-muted-vid",
+      label: "Alex Kim",
+      videoStream: makeFakeStream([
+        { kind: "video", enabled: false, readyState: "live" },
+      ]),
+      peerConnectionState: "connected",
+    });
+    render(<AVTile participant={p} />);
+    const placeholder = screen.getByTestId("av-tile-cam-placeholder-p-muted-vid");
+    expect(placeholder.getAttribute("data-placeholder-kind")).toBe("initials");
+    expect(screen.getByTestId("av-tile-initials-p-muted-vid")).toHaveTextContent(
+      "AK"
+    );
+    expect(
+      (screen.getByTestId("av-tile-video-p-muted-vid") as HTMLVideoElement).style
+        .display
+    ).toBe("none");
+  });
+
   test("Phase 4d: cam-off placeholder for a connected peer with no label falls back to the role initial", () => {
     const p = makeRemoteParticipant({
       peerId: "p-noname",

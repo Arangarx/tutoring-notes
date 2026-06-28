@@ -1806,6 +1806,109 @@ test.describe(
 );
 
 // ---------------------------------------------------------------------------
+// Plan #1 waiting-room smoke polish (Andrew 2026-06-28)
+// ---------------------------------------------------------------------------
+
+test.describe(
+  "Plan #1 waiting-room smoke polish",
+  { tag: [TAG.WB_CHROME, TAG.WB_AV, TAG.WB_PRESENCE] },
+  () => {
+    test(
+      "remote off-camera tile shows initials in both directions when peer mutes camera",
+      async ({ browser }) => {
+        test.setTimeout(300_000);
+        const session = await seedWbPendingLiveSyncSession();
+
+        const tutorCtx = await browser.newContext({
+          storageState: "tests/integration/.auth/tutor.json",
+          viewport: { width: 1280, height: 900 },
+          permissions: ["microphone", "camera"],
+        });
+        const studentCtx = await browser.newContext({
+          viewport: { width: 1280, height: 800 },
+          permissions: ["microphone", "camera"],
+        });
+        try {
+          await loginLearnerInContext(
+            studentCtx,
+            session.learnerHandle,
+            session.learnerPin
+          );
+
+          const tutorPage = await tutorCtx.newPage();
+          await tutorPage.goto(
+            `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            tutorPage.getByTestId("tutor-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+          await waitForWbE2eBridge(tutorPage, "tutor");
+
+          const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
+
+          const studentPage = await studentCtx.newPage();
+          await studentPage.goto(
+            `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            studentPage.getByTestId("student-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+          await waitForWbE2eBridge(studentPage, "student");
+
+          const studentTiles = studentPage.getByTestId("wb-waiting-room-av-tiles");
+          const tutorTiles = tutorPage.getByTestId("wb-waiting-room-av-tiles");
+          await assertRemoteTilePresent(studentTiles, 120_000);
+          await assertRemoteTilePresent(tutorTiles, 120_000);
+
+          // Tutor cam off → student sees tutor initials (not black tile).
+          const tutorCamChip = tutorPage.getByTestId("wb-overlay-cam-chip");
+          const tutorCamLabel = tutorPage.getByTestId("wb-overlay-cam-chip-label");
+          if ((await tutorCamLabel.textContent())?.trim() === "Camera on") {
+            await tutorCamChip.click();
+          }
+          await expect(tutorCamLabel).toHaveText("Camera off", { timeout: 10_000 });
+
+          const studentRemoteTile = studentTiles.locator('[data-is-local="false"]').first();
+          await expect(studentRemoteTile).toBeVisible({ timeout: 10_000 });
+          await expect(
+            studentRemoteTile.locator('[data-placeholder-kind="initials"]')
+          ).toBeVisible({ timeout: 10_000 });
+          await expect(
+            studentRemoteTile.locator('[data-testid^="av-tile-initials-"]')
+          ).toBeVisible();
+
+          // Student cam off → tutor sees student initials.
+          const studentCamChip = studentPage.getByTestId("wb-overlay-cam-chip");
+          const studentCamLabel = studentPage.getByTestId(
+            "wb-overlay-cam-chip-label"
+          );
+          if ((await studentCamLabel.textContent())?.trim() === "Camera on") {
+            await studentCamChip.click();
+          }
+          await expect(studentCamLabel).toHaveText("Camera off", {
+            timeout: 10_000,
+          });
+
+          const tutorRemoteTile = tutorTiles.locator('[data-is-local="false"]').first();
+          await expect(tutorRemoteTile).toBeVisible({ timeout: 10_000 });
+          await expect(
+            tutorRemoteTile.locator('[data-placeholder-kind="initials"]')
+          ).toBeVisible({ timeout: 10_000 });
+          await expect(
+            tutorRemoteTile.locator('[data-testid^="av-tile-initials-"]')
+          ).toBeVisible();
+        } finally {
+          await tutorCtx.close();
+          await studentCtx.close();
+        }
+      }
+    );
+  }
+);
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
