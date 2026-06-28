@@ -116,7 +116,7 @@ export function WbTopBarMicControlLive({
 
   const meterLevel = useMicInputLevel(
 
-    showInlineMeter && hasMicStream && !isMicMuted ? micStream : null
+    showInlineMeter && hasMicStream ? micStream : null
 
   );
 

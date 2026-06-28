@@ -36,6 +36,28 @@ describe("WbTopBarMicControlLive", () => {
     expect(toggle.querySelectorAll(".mynk-wb-mic-bar--active").length).toBeGreaterThan(0);
   });
 
+  test("inline meter still receives micStream when muted (local activity cue)", () => {
+    const fakeStream = { id: "meter-stream" } as MediaStream;
+    render(
+      <WbTopBarMicControlLive
+        isMicMuted
+        hasMicPermission="granted"
+        hasMicStream
+        audioDevices={defaultDevices}
+        selectedPickerSlot={0}
+        showInlineMeter
+        micStream={fakeStream}
+        onToggleMute={jest.fn()}
+        onAcquireMic={jest.fn()}
+        onPickMicSlot={jest.fn()}
+      />
+    );
+
+    const toggle = screen.getByTestId("wb-topbar-mic-toggle");
+    expect(toggle.querySelector(".mynk-wb-mic-meter")).toBeTruthy();
+    expect(toggle.className).toContain("mynk-wb-tb-btn--mic-off");
+  });
+
   test("student path: no inline meter by default; mic stays enabled before enumerate", () => {
     render(
       <WbTopBarMicControlLive

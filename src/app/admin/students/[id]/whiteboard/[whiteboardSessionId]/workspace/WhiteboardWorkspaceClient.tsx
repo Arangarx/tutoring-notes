@@ -5511,13 +5511,13 @@ export function WhiteboardWorkspaceClient({
   // publish stream (Web Audio on the WebRTC track can silence the peer).
   const overlayMicMeterStream = useMemo(() => {
     const track = liveAv.localAudioStream?.getAudioTracks()[0];
-    if (!track || liveAv.isMicMuted) return null;
+    if (!track) return null;
     try {
       return new MediaStream([track.clone()]);
     } catch {
       return null;
     }
-  }, [liveAv.localAudioStream, liveAv.isMicMuted]);
+  }, [liveAv.localAudioStream]);
 
   // ---------------------------------------------------------------
   // Student early-return gates (Slice 5: join gate states)
