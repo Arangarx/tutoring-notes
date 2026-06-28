@@ -8,16 +8,24 @@ export const JOIN_HASH_STORAGE_PREFIX = "mynk_join_hash_";
 
 /**
  * Client component rendered when the student hits /join/[sessionId] without
- * a learner session.
+ * a valid session (neither learner session nor account-holder self-learner session).
  *
  * A server redirect cannot preserve the #k= fragment (fragments are not sent
  * to the server per HTTP spec). This component:
  *   1. Saves window.location.hash to sessionStorage before navigating.
- *   2. Redirects to /students/login?returnTo=/join/<sessionId>.
+ *   2. Redirects to the correct login for this session's learner type:
+ *      - isSelfLearner=true  → /account/login (email+password)  [WB-JOIN-ADULT-LEARNER]
+ *      - isSelfLearner=false → /students/login (child PIN login)
  *
  * JoinHashRestorer restores the fragment after successful login.
  */
-export function JoinAuthGate({ sessionId }: { sessionId: string }) {
+export function JoinAuthGate({
+  sessionId,
+  isSelfLearner,
+}: {
+  sessionId: string;
+  isSelfLearner: boolean;
+}) {
   const router = useRouter();
 
   useEffect(() => {
@@ -25,10 +33,11 @@ export function JoinAuthGate({ sessionId }: { sessionId: string }) {
     if (hash && hash.length > 1) {
       sessionStorage.setItem(JOIN_HASH_STORAGE_PREFIX + sessionId, hash);
     }
-    router.replace(
-      "/students/login?returnTo=" + encodeURIComponent("/join/" + sessionId)
-    );
-  }, [sessionId, router]);
+    const loginPath = isSelfLearner
+      ? `/account/login?returnTo=${encodeURIComponent("/join/" + sessionId)}`
+      : `/students/login?returnTo=${encodeURIComponent("/join/" + sessionId)}`;
+    router.replace(loginPath);
+  }, [sessionId, isSelfLearner, router]);
 
   return (
     <main className="flex min-h-[100dvh] items-center justify-center">

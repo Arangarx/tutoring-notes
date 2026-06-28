@@ -3,8 +3,10 @@ import { NextResponse } from "next/server";
 import { db, withDbRetry } from "@/lib/db";
 import { env } from "@/lib/env";
 import { getLearnerSession } from "@/lib/learner-session";
+import { getAccountHolderSession } from "@/lib/account-holder-session";
 import { verifyIsSessionParticipant } from "@/lib/session-participant-scope";
 import { isBlobUrlForSession } from "@/lib/whiteboard/blob-asset-in-scope";
+import { resolveAhJoinLearnerProfileId } from "@/lib/join-scope";
 
 /**
  * Learner-session-authed Vercel Blob read proxy for whiteboard assets.
@@ -47,15 +49,31 @@ export async function GET(
     return new NextResponse("Invalid u parameter.", { status: 400 });
   }
 
-  // Auth: learner-session required.
+  // Auth: learner session OR account-holder session for a self-learner
+  // (WB-JOIN-ADULT-LEARNER). Fail closed on any auth gap.
+  let effectiveLearnerProfileId: string | null = null;
+
   const learnerSession = await getLearnerSession(request);
-  if (!learnerSession) {
+  if (learnerSession) {
+    effectiveLearnerProfileId = learnerSession.learnerProfileId;
+  } else {
+    const ahSession = await getAccountHolderSession(request);
+    if (ahSession) {
+      const resolved = await resolveAhJoinLearnerProfileId(
+        sessionId,
+        ahSession.accountHolderId
+      );
+      if (resolved) effectiveLearnerProfileId = resolved.learnerProfileId;
+    }
+  }
+
+  if (!effectiveLearnerProfileId) {
     return new NextResponse("Unauthorized.", { status: 401 });
   }
 
   // Participant gate: learner must be an active participant.
   const isParticipant = await verifyIsSessionParticipant(
-    learnerSession.learnerProfileId,
+    effectiveLearnerProfileId,
     sessionId
   );
   if (!isParticipant) {

@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { db, withDbRetry } from "@/lib/db";
 import { getLearnerSession } from "@/lib/learner-session";
+import { getAccountHolderSession } from "@/lib/account-holder-session";
 import { verifyIsSessionParticipant } from "@/lib/session-participant-scope";
+import { resolveAhJoinLearnerProfileId } from "@/lib/join-scope";
 
 /**
  * Read-only live timer for the student join page.
@@ -104,16 +106,35 @@ export async function GET(
   // -------------------------------------------------------------------------
   // Learner-session branch (/join/[sessionId] authenticated path)
   // -------------------------------------------------------------------------
+
+  // Resolve which learnerProfileId has access: learner session OR account-holder
+  // session for a self-learner (WB-JOIN-ADULT-LEARNER).
+  let effectiveLearnerProfileId: string | null = null;
+
   const learnerSession = await getLearnerSession(req);
-  if (!learnerSession) {
+  if (learnerSession) {
+    effectiveLearnerProfileId = learnerSession.learnerProfileId;
+  } else {
+    // Account-holder self-learner path.
+    const ahSession = await getAccountHolderSession(req);
+    if (ahSession) {
+      const resolved = await resolveAhJoinLearnerProfileId(
+        sessionId,
+        ahSession.accountHolderId
+      );
+      if (resolved) effectiveLearnerProfileId = resolved.learnerProfileId;
+    }
+  }
+
+  if (!effectiveLearnerProfileId) {
     return NextResponse.json(
-      { error: "Missing authentication. Provide ?token= or a learner session cookie." },
+      { error: "Missing authentication. Provide ?token= or a valid session cookie." },
       { status: 400 }
     );
   }
 
   const isParticipant = await verifyIsSessionParticipant(
-    learnerSession.learnerProfileId,
+    effectiveLearnerProfileId,
     sessionId
   );
   if (!isParticipant) {
