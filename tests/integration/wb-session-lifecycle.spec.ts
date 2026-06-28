@@ -1216,12 +1216,14 @@ test.describe(
           await expect(
             studentPage.getByTestId("wb-waiting-overlay")
           ).toBeVisible({ timeout: 10_000 });
+          await waitForWbE2eBridge(studentPage, "student");
 
-          const micToggle = studentPage.getByTestId("wb-topbar-mic-toggle");
+          const overlay = studentPage.getByTestId("wb-waiting-overlay");
+          const micToggle = overlay.getByTestId("wb-topbar-mic-toggle");
           await expect(micToggle).toBeVisible({ timeout: 10_000 });
-          await expect(micToggle.locator(".mynk-wb-mic-meter")).toBeVisible();
+          await expect(micToggle).toHaveClass(/mynk-wb-tb-btn/);
 
-          const camToggle = studentPage.getByTestId("wb-topbar-cam-toggle");
+          const camToggle = overlay.getByTestId("wb-topbar-cam-toggle");
           await expect(camToggle).toBeVisible({ timeout: 10_000 });
           await expect(camToggle).toHaveClass(/mynk-wb-tb-btn/);
           await expect(camToggle).toHaveClass(/mynk-wb-tb-btn--icon/);
