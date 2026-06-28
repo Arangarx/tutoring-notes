@@ -2072,6 +2072,65 @@ test.describe(
         }
       }
     );
+
+    test(
+      "waiting-room overlay theme toggle is visible and changes document theme",
+      async ({ browser }) => {
+        test.setTimeout(120_000);
+        const session = await seedWbPendingLiveSyncSession();
+
+        const tutorCtx = await browser.newContext({
+          storageState: "tests/integration/.auth/tutor.json",
+          viewport: { width: 1280, height: 900 },
+          permissions: ["microphone", "camera"],
+        });
+        try {
+          const tutorPage = await tutorCtx.newPage();
+          await tutorPage.goto(
+            `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            tutorPage.getByTestId("tutor-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+          await expect(
+            tutorPage.getByTestId("wb-waiting-overlay")
+          ).toBeVisible({ timeout: 10_000 });
+
+          const themeWrap = tutorPage.getByTestId("wb-waiting-overlay-theme");
+          await expect(themeWrap).toBeVisible();
+          const themeBtn = themeWrap.getByTestId("wb-theme-toggle");
+          await expect(themeBtn).toBeVisible();
+
+          const before = await tutorPage.evaluate(() =>
+            document.documentElement.getAttribute("data-theme")
+          );
+
+          await themeBtn.click();
+          const lightOption = tutorPage.getByRole("menuitemradio", {
+            name: /^light$/i,
+          });
+          const darkOption = tutorPage.getByRole("menuitemradio", {
+            name: /^dark$/i,
+          });
+          if (before === "dark") {
+            await lightOption.click();
+          } else {
+            await darkOption.click();
+          }
+
+          await expect
+            .poll(async () =>
+              tutorPage.evaluate(() =>
+                document.documentElement.getAttribute("data-theme")
+              )
+            )
+            .not.toBe(before);
+        } finally {
+          await tutorCtx.close();
+        }
+      }
+    );
   }
 );
 

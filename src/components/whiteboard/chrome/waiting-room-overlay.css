@@ -41,7 +41,16 @@
 
 /* ── Header ── */
 .mynk-wtr-header {
+  position: relative;
   text-align: center;
+}
+
+.mynk-wtr-theme {
+  position: absolute;
+  right: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
 }
 
 .mynk-wtr-title {

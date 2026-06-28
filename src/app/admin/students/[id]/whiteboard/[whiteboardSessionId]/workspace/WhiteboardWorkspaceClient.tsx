@@ -6697,6 +6697,7 @@ export function WhiteboardWorkspaceClient({
         onCopyStudentLink={role === "tutor" ? handleCopyStudentLink : undefined}
         copyStudentLinkState={copyState}
         copyStudentLinkDisabled={!syncUrl || copyState === "copying"}
+        themeToggleNode={<WbThemeToggle />}
       />
     )}
     </WbRoleProvider>
