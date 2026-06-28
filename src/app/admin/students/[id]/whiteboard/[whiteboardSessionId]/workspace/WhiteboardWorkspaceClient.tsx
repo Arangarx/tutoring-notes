@@ -5507,6 +5507,18 @@ export function WhiteboardWorkspaceClient({
     boardSyncing,
   });
 
+  // Cloned mic stream for inline metering on the student overlay — never tap the
+  // publish stream (Web Audio on the WebRTC track can silence the peer).
+  const overlayMicMeterStream = useMemo(() => {
+    const track = liveAv.localAudioStream?.getAudioTracks()[0];
+    if (!track || liveAv.isMicMuted) return null;
+    try {
+      return new MediaStream([track.clone()]);
+    } catch {
+      return null;
+    }
+  }, [liveAv.localAudioStream, liveAv.isMicMuted]);
+
   // ---------------------------------------------------------------
   // Student early-return gates (Slice 5: join gate states)
   // Must be AFTER all hooks; conditional returns are only allowed here.
@@ -5611,18 +5623,6 @@ export function WhiteboardWorkspaceClient({
   const overlayCantStart =
     sessionMode === "LIVE" ? !overlayStudentConnected : false;
   const overlayCanStart = !overlayCantStart;
-
-  // Cloned mic stream for inline metering on the student overlay — never tap the
-  // publish stream (Web Audio on the WebRTC track can silence the peer).
-  const overlayMicMeterStream = useMemo(() => {
-    const track = liveAv.localAudioStream?.getAudioTracks()[0];
-    if (!track || liveAv.isMicMuted) return null;
-    try {
-      return new MediaStream([track.clone()]);
-    } catch {
-      return null;
-    }
-  }, [liveAv.localAudioStream, liveAv.isMicMuted]);
 
   // Pre-built mic control for the overlay — reuse top-bar components so the
   // inline volume meter matches tutor parity (Plan #1 smoke finding 2).
