@@ -2030,6 +2030,48 @@ test.describe(
         }
       }
     );
+
+    test(
+      "top-bar overflow menu opens and lists session controls",
+      async ({ browser }) => {
+        test.setTimeout(120_000);
+        const session = await seedWbLiveSyncSession();
+
+        const tutorCtx = await browser.newContext({
+          storageState: "tests/integration/.auth/tutor.json",
+          viewport: { width: 390, height: 844 },
+          permissions: ["microphone", "camera"],
+        });
+        try {
+          const tutorPage = await tutorCtx.newPage();
+          await tutorPage.goto(
+            `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            tutorPage.getByTestId("tutor-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+          await expect(
+            tutorPage.getByTestId("wb-waiting-overlay")
+          ).not.toBeVisible();
+
+          await tutorPage.getByTestId("wb-topbar-overflow").click();
+          const dropdown = tutorPage.getByTestId("wb-topbar-overflow-dropdown");
+          await expect(dropdown).toBeVisible({ timeout: 5_000 });
+          await expect(
+            dropdown.getByTestId("wb-overflow-undo")
+          ).toBeVisible();
+          await expect(
+            dropdown.getByTestId("wb-overflow-redo")
+          ).toBeVisible();
+          await expect(
+            dropdown.getByTestId("wb-overflow-mic")
+          ).toBeVisible();
+        } finally {
+          await tutorCtx.close();
+        }
+      }
+    );
   }
 );
 

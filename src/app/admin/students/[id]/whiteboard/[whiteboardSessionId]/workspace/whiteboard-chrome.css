@@ -2847,7 +2847,10 @@
   max-height: min(60dvh, 400px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
   mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
@@ -2865,6 +2868,24 @@
 .mynk-wb-topbar-overflow-dropdown .mynk-wb-menu-item,
 .mynk-wb-topbar-overflow-dropdown .mynk-wb-view-item.mynk-wb-menu-item {
   justify-content: flex-start;
+  padding: 4px 8px;
+}
+
+.mynk-wb-topbar-overflow-dropdown .mynk-wb-popover-sep {
+  margin: 2px 0;
+}
+
+.mynk-wb-overflow-av-pickers {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mynk-wb-overflow-av-pickers [data-testid="audio-controls"],
+.mynk-wb-overflow-av-pickers [data-testid="video-controls"] {
+  margin-bottom: 0;
+  padding: 8px 10px;
+  gap: 8px;
 }
 
 .mynk-wb-topbar-overflow-dropdown .mynk-wb-menu-item--active,
