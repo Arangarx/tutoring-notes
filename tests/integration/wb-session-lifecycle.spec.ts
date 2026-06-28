@@ -1212,6 +1212,317 @@ test.describe(
 );
 
 // ---------------------------------------------------------------------------
+// P4-A: Remote-tile util + Bug 1 — post-login-redirect key survival
+// ---------------------------------------------------------------------------
+
+/**
+ * Shared utility: assert that the wb-waiting-room-av-tiles panel contains at
+ * least one REMOTE peer tile (data-participant-count ≥ 1).
+ *
+ * Oracle: the AVTilesPanel sets `data-participant-count` to the number of
+ * remote peers. Count ≥ 1 ⟹ a peer was added via WebRTC (which requires
+ * matching encryption keys for signaling). This is the canonical "false-
+ * confidence gap" closer — a local-only tile check passes even when A/V
+ * signaling is broken.
+ */
+async function assertRemoteTilePresent(
+  tilesPanel: import("@playwright/test").Locator,
+  timeoutMs = 45_000
+): Promise<void> {
+  await expect(tilesPanel).toHaveAttribute(
+    "data-participant-count",
+    /^[1-9][0-9]*$/,
+    { timeout: timeoutMs }
+  );
+}
+
+test.describe(
+  "Bug 1 — post-login-redirect key survival (sessionStorage fallback)",
+  { tag: [TAG.WB_PRESENCE, TAG.WB_AV, TAG.WB_SYNC] },
+  () => {
+    test(
+      "student with no hash but sessionStorage-seeded key connects to tutor (remote A/V tile appears)",
+      async ({ browser }) => {
+        // Verifies that the encryption-key sessionStorage fallback (Bug 1 fix)
+        // allows the student to join after the post-login-redirect path strips
+        // the URL hash. Oracle: a remote tile in the waiting-room overlay ⟹
+        // WebRTC signaling succeeded ⟹ same encryption key on both sides.
+        //
+        // Setup mirrors the real post-login-redirect path:
+        //   1. Student lands at /join/<id>#k=<key> while not logged in.
+        //   2. JoinAuthGate saves the hash to sessionStorage and redirects.
+        //   3. Student logs in (API, no page-nav → sessionStorage intact).
+        //   4. Student returns to /join/<id> WITHOUT the hash.
+        //   5. Student key-read effect reads sessionStorage → key found.
+        test.setTimeout(300_000);
+        const session = await seedWbPendingLiveSyncSession();
+
+        const tutorCtx = await browser.newContext({
+          storageState: "tests/integration/.auth/tutor.json",
+          viewport: { width: 1280, height: 900 },
+          permissions: ["microphone", "camera"],
+        });
+        // Student context with NO pre-auth (no .auth/learner.json).
+        const studentCtx = await browser.newContext({
+          viewport: { width: 1280, height: 800 },
+          permissions: ["microphone", "camera"],
+        });
+        try {
+          // -- Tutor opens workspace and waits for bridge + key --
+          const tutorPage = await tutorCtx.newPage();
+          await tutorPage.goto(
+            `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
+            timeout: 90_000,
+          });
+          await waitForWbE2eBridge(tutorPage, "tutor");
+          const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
+
+          // -- Student: simulate post-login-redirect path --
+          const studentPage = await studentCtx.newPage();
+
+          // Step 1: navigate with hash while unauthenticated.
+          // Page renders → JoinAuthGate fires → saves hash → redirects to login.
+          await studentPage.goto(
+            `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await studentPage.waitForURL(
+            (url) => url.pathname === "/students/login",
+            { timeout: 15_000 }
+          );
+
+          // Intermediate oracle: hash was saved to sessionStorage.
+          const storedHash = await studentPage.evaluate(
+            (sid) => sessionStorage.getItem(`mynk_join_hash_${sid}`),
+            session.whiteboardSessionId
+          );
+          expect(storedHash).toBe(`#k=${encryptionKey}`);
+
+          // Step 2: authenticate without a page navigation (sessionStorage intact).
+          await loginLearnerInContext(studentCtx, session.learnerHandle, session.learnerPin);
+
+          // Step 3: navigate to /join/<id> WITHOUT the hash.
+          // The student key-read effect must recover the key from sessionStorage.
+          await studentPage.goto(
+            `/join/${session.whiteboardSessionId}`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(studentPage.getByTestId("student-whiteboard-canvas-mount")).toBeVisible({
+            timeout: 90_000,
+          });
+
+          // Oracle: remote tile for tutor appears in the student's overlay tiles panel.
+          // This only succeeds if WebRTC signaling worked → same key on both sides.
+          const overlayTiles = studentPage.getByTestId("wb-waiting-room-av-tiles");
+          await expect(overlayTiles).toBeVisible({ timeout: 30_000 });
+          await assertRemoteTilePresent(overlayTiles);
+        } finally {
+          await tutorCtx.close();
+          await studentCtx.close();
+        }
+      }
+    );
+  }
+);
+
+// ---------------------------------------------------------------------------
+// P4-B: Bug 2 — student heading transitions from "Connecting…" to "You're in"
+// ---------------------------------------------------------------------------
+
+test.describe(
+  "Bug 2 — student overlay heading transitions once tutor connects via A/V",
+  { tag: [TAG.WB_PRESENCE, TAG.WB_AV] },
+  () => {
+    test(
+      "student overlay heading shows 'You're in' (not 'Connecting…') after remote tutor tile appears",
+      async ({ browser }) => {
+        // Verifies Bug 2 fix: bothPartiesInRoom is now computed from
+        // studentConnected (not tutorSyncConnected which is always false for
+        // students). Once the student's sync socket is connected AND ≥1
+        // WebRTC-reachable peer is present, the overlay heading must change
+        // from "Connecting…" to "You're in — <tutor> will start the session".
+        test.setTimeout(300_000);
+        const session = await seedWbPendingLiveSyncSession();
+
+        const tutorCtx = await browser.newContext({
+          storageState: "tests/integration/.auth/tutor.json",
+          viewport: { width: 1280, height: 900 },
+          permissions: ["microphone", "camera"],
+        });
+        const studentCtx = await browser.newContext({
+          viewport: { width: 1280, height: 800 },
+          permissions: ["microphone", "camera"],
+        });
+        try {
+          await loginLearnerInContext(studentCtx, session.learnerHandle, session.learnerPin);
+
+          const tutorPage = await tutorCtx.newPage();
+          await tutorPage.goto(
+            `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
+            timeout: 90_000,
+          });
+          await waitForWbE2eBridge(tutorPage, "tutor");
+
+          const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
+          const studentPage = await studentCtx.newPage();
+          await studentPage.goto(
+            `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(studentPage.getByTestId("student-whiteboard-canvas-mount")).toBeVisible({
+            timeout: 90_000,
+          });
+
+          // Student overlay must be visible.
+          const overlay = studentPage.getByTestId("wb-waiting-overlay");
+          await expect(overlay).toBeVisible({ timeout: 10_000 });
+
+          // Oracle A: remote tile appears (WebRTC connected → same key, mesh up).
+          const overlayTiles = studentPage.getByTestId("wb-waiting-room-av-tiles");
+          await assertRemoteTilePresent(overlayTiles, 120_000);
+
+          // Oracle B: heading transitions from "Connecting…" to "You're in…".
+          // Relational assert: once remote tile is present, bothPartiesInRoom
+          // must be true → heading must show the connected copy.
+          const heading = studentPage.getByTestId("wb-waiting-overlay-student-heading");
+          await expect(heading).toContainText(/You're in/i, { timeout: 30_000 });
+          await expect(heading).not.toContainText(/Connecting/i);
+        } finally {
+          await tutorCtx.close();
+          await studentCtx.close();
+        }
+      }
+    );
+  }
+);
+
+// ---------------------------------------------------------------------------
+// P4-C: Bug 3 — device pickers present in waiting-room overlay (both roles)
+// ---------------------------------------------------------------------------
+
+test.describe(
+  "Bug 3 — device pickers (mic + camera selects) present in waiting-room overlay",
+  { tag: [TAG.WB_CHROME, TAG.WB_AV] },
+  () => {
+    test(
+      "tutor waiting-room overlay contains mic and camera device pickers",
+      async ({ browser }) => {
+        // Verifies Bug 3 fix: AudioControls (audio-device-select) and
+        // VideoControls (video-device-select) are rendered in the overlay for
+        // the tutor role. Semantic oracle: picker elements are present and
+        // interactable (not just in the top-bar overflow, which is hidden by
+        // the overlay during PENDING).
+        test.setTimeout(120_000);
+        const session = await seedWbPendingLiveSyncSession();
+
+        const tutorCtx = await browser.newContext({
+          storageState: "tests/integration/.auth/tutor.json",
+          viewport: { width: 1280, height: 900 },
+          permissions: ["microphone", "camera"],
+        });
+        try {
+          const tutorPage = await tutorCtx.newPage();
+          await tutorPage.goto(
+            `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
+            timeout: 90_000,
+          });
+          await expect(tutorPage.getByTestId("wb-waiting-overlay")).toBeVisible({
+            timeout: 10_000,
+          });
+
+          // Device pickers container is rendered inside the overlay.
+          const devicePickers = tutorPage.getByTestId(
+            "wb-waiting-overlay-device-pickers"
+          );
+          await expect(devicePickers).toBeVisible({ timeout: 10_000 });
+
+          // Mic picker (AudioControls) is present + interactable.
+          const micSelect = devicePickers.getByTestId("audio-device-select");
+          await expect(micSelect).toBeVisible({ timeout: 5_000 });
+          await expect(micSelect).not.toBeDisabled();
+
+          // Camera picker (VideoControls) is present + interactable.
+          const camSelect = devicePickers.getByTestId("video-device-select");
+          await expect(camSelect).toBeVisible({ timeout: 5_000 });
+        } finally {
+          await tutorCtx.close();
+        }
+      }
+    );
+
+    test(
+      "student waiting-room overlay contains mic and camera device pickers",
+      async ({ browser }) => {
+        test.setTimeout(180_000);
+        const session = await seedWbPendingLiveSyncSession();
+
+        const tutorCtx = await browser.newContext({
+          storageState: "tests/integration/.auth/tutor.json",
+          viewport: { width: 1280, height: 900 },
+          permissions: ["microphone", "camera"],
+        });
+        const studentCtx = await browser.newContext({
+          viewport: { width: 1280, height: 800 },
+          permissions: ["microphone", "camera"],
+        });
+        try {
+          await loginLearnerInContext(studentCtx, session.learnerHandle, session.learnerPin);
+
+          const tutorPage = await tutorCtx.newPage();
+          await tutorPage.goto(
+            `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
+            timeout: 90_000,
+          });
+          await waitForWbE2eBridge(tutorPage, "tutor");
+          const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
+
+          const studentPage = await studentCtx.newPage();
+          await studentPage.goto(
+            `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(studentPage.getByTestId("student-whiteboard-canvas-mount")).toBeVisible({
+            timeout: 90_000,
+          });
+          await expect(studentPage.getByTestId("wb-waiting-overlay")).toBeVisible({
+            timeout: 10_000,
+          });
+
+          // Device pickers container is rendered inside the student overlay.
+          const devicePickers = studentPage.getByTestId(
+            "wb-waiting-overlay-device-pickers"
+          );
+          await expect(devicePickers).toBeVisible({ timeout: 10_000 });
+
+          // Mic picker present in student overlay.
+          const micSelect = devicePickers.getByTestId("audio-device-select");
+          await expect(micSelect).toBeVisible({ timeout: 5_000 });
+
+          // Camera picker present in student overlay.
+          const camSelect = devicePickers.getByTestId("video-device-select");
+          await expect(camSelect).toBeVisible({ timeout: 5_000 });
+        } finally {
+          await tutorCtx.close();
+          await studentCtx.close();
+        }
+      }
+    );
+  }
+);
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
