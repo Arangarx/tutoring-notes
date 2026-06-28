@@ -1668,6 +1668,12 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       Array<MediaStreamTrack>
     >();
 
+    function hasActiveVideoTracks(stream: MediaStream): boolean {
+      return stream
+        .getVideoTracks()
+        .some((t) => t.enabled && !t.muted && t.readyState !== "ended");
+    }
+
     function rebuild() {
       if (disposed) return;
       const out: AvParticipant[] = [];
@@ -1684,7 +1690,12 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           // existing MediaStream, hasVideoTrack flips false→true so
           // videoStream goes null→stream and AVTile's video effect re-fires.
           // Exposing entry.videoStream directly would skip that transition.
-          videoStream: entry.hasVideoTrack ? entry.videoStream : null,
+          // Also hide the stream when every video track is disabled/muted so
+          // remote cam-off renders initials instead of a black <video> frame.
+          videoStream:
+            entry.hasVideoTrack && hasActiveVideoTracks(entry.videoStream)
+              ? entry.videoStream
+              : null,
           peerConnectionState: entry.peerConnectionState,
           iceConnectionState: entry.iceConnectionState,
         };
@@ -1775,6 +1786,13 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       if (track.kind === "audio") entry.hasAudioTrack = true;
       else entry.hasVideoTrack = true;
       log.log(`track received peer=${peerId} kind=${track.kind}`);
+      if (track.kind === "video") {
+        const onVideoPresentationChange = () => {
+          if (!disposed) rebuild();
+        };
+        track.addEventListener("mute", onVideoPresentationChange);
+        track.addEventListener("unmute", onVideoPresentationChange);
+      }
       track.addEventListener("ended", () => {
         if (disposed) return;
         try {

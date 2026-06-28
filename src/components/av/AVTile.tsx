@@ -331,7 +331,7 @@ export function AVTile({
     !!participant.videoStream &&
     participant.videoStream
       .getVideoTracks()
-      .some((t) => t.enabled && t.readyState !== "ended");
+      .some((t) => t.enabled && !t.muted && t.readyState !== "ended");
   const showCamPlaceholder =
     !hasActiveVideoTrack || (isLocalTile && localCamMuted === true);
 

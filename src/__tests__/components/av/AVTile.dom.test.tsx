@@ -21,16 +21,21 @@ import type { AvParticipant } from "@/hooks/useLiveAV";
 type FakeTrack = {
   kind: "audio" | "video";
   enabled: boolean;
+  muted?: boolean;
   readyState: "live" | "ended";
 };
 let _fakeStreamIdCounter = 0;
 function makeFakeStream(tracks: FakeTrack[]): MediaStream {
   const id = `fake-stream-${++_fakeStreamIdCounter}`;
+  const withMuted = tracks.map((t) => ({
+    ...t,
+    muted: t.muted ?? false,
+  }));
   return {
     id,
-    getAudioTracks: () => tracks.filter((t) => t.kind === "audio"),
-    getVideoTracks: () => tracks.filter((t) => t.kind === "video"),
-    getTracks: () => tracks,
+    getAudioTracks: () => withMuted.filter((t) => t.kind === "audio"),
+    getVideoTracks: () => withMuted.filter((t) => t.kind === "video"),
+    getTracks: () => withMuted,
     addTrack: jest.fn(),
     removeTrack: jest.fn(),
   } as unknown as MediaStream;
@@ -350,6 +355,21 @@ describe("AVTile — remote participant", () => {
       (screen.getByTestId("av-tile-video-p-muted-vid") as HTMLVideoElement).style
         .display
     ).toBe("none");
+  });
+
+  test("muted remote video track shows initials (black-frame cam-off)", () => {
+    const p = makeRemoteParticipant({
+      peerId: "p-muted-frame",
+      label: "Sam Lee",
+      videoStream: makeFakeStream([
+        { kind: "video", enabled: true, muted: true, readyState: "live" },
+      ]),
+      peerConnectionState: "connected",
+    });
+    render(<AVTile participant={p} />);
+    expect(
+      screen.getByTestId("av-tile-cam-placeholder-p-muted-frame")
+    ).toHaveAttribute("data-placeholder-kind", "initials");
   });
 
   test("Phase 4d: cam-off placeholder for a connected peer with no label falls back to the role initial", () => {
