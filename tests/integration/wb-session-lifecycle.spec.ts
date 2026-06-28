@@ -2213,6 +2213,148 @@ test.describe(
 );
 
 // ---------------------------------------------------------------------------
+// Waiting-room overlay — no redundant in-dropdown mic picker (Andrew 2026-06-28)
+// ---------------------------------------------------------------------------
+
+test.describe(
+  "Waiting-room overlay mic picker dedup",
+  { tag: [TAG.WB_CHROME, TAG.WB_PRESENCE] },
+  () => {
+    test(
+      "student waiting-room: on-page mic picker present, mic settings dropdown has no device picker",
+      async ({ browser }) => {
+        test.setTimeout(180_000);
+        const session = await seedWbPendingLiveSyncSession();
+
+        const tutorCtx = await browser.newContext({
+          storageState: "tests/integration/.auth/tutor.json",
+          viewport: { width: 1280, height: 900 },
+          permissions: ["microphone", "camera"],
+        });
+        const studentCtx = await browser.newContext({
+          viewport: { width: 1280, height: 800 },
+          permissions: ["microphone", "camera"],
+        });
+        try {
+          await loginLearnerInContext(
+            studentCtx,
+            session.learnerHandle,
+            session.learnerPin
+          );
+
+          const tutorPage = await tutorCtx.newPage();
+          await tutorPage.goto(
+            `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            tutorPage.getByTestId("tutor-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+          await waitForWbE2eBridge(tutorPage, "tutor");
+          const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
+
+          const studentPage = await studentCtx.newPage();
+          await studentPage.goto(
+            `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            studentPage.getByTestId("student-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+
+          const overlay = studentPage.getByTestId("wb-waiting-overlay");
+          await expect(overlay).toBeVisible({ timeout: 10_000 });
+
+          // On-page picker remains (narrow-width reachability).
+          const devicePickers = overlay.getByTestId(
+            "wb-waiting-overlay-device-pickers"
+          );
+          await expect(devicePickers).toBeVisible({ timeout: 10_000 });
+          await expect(
+            devicePickers.getByTestId("audio-device-select")
+          ).toBeVisible({ timeout: 5_000 });
+
+          // Overlay mic control has no in-dropdown device picker (settings caret hidden).
+          await expect(
+            overlay.getByTestId("wb-topbar-mic-settings")
+          ).toHaveCount(0);
+          await expect(overlay.getByTestId("audio-device-select")).toHaveCount(
+            1
+          );
+        } finally {
+          await tutorCtx.close();
+          await studentCtx.close();
+        }
+      }
+    );
+
+    test(
+      "student live board: mic settings dropdown still contains device picker after Start",
+      async ({ browser }) => {
+        test.setTimeout(180_000);
+        const session = await seedWbPendingLiveSyncSession();
+
+        const tutorCtx = await browser.newContext({
+          storageState: "tests/integration/.auth/tutor.json",
+          viewport: { width: 1280, height: 900 },
+          permissions: ["microphone", "camera"],
+        });
+        const studentCtx = await browser.newContext({
+          viewport: { width: 1280, height: 800 },
+          permissions: ["microphone", "camera"],
+        });
+        try {
+          await loginLearnerInContext(
+            studentCtx,
+            session.learnerHandle,
+            session.learnerPin
+          );
+
+          const tutorPage = await tutorCtx.newPage();
+          await tutorPage.goto(
+            `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            tutorPage.getByTestId("tutor-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+          await waitForWbE2eBridge(tutorPage, "tutor");
+          const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
+
+          const studentPage = await studentCtx.newPage();
+          await studentPage.goto(
+            `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            studentPage.getByTestId("student-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+          await waitForWbE2eBridge(studentPage, "student");
+          await waitForTutorStudentConnected(tutorPage);
+
+          await startSessionAsTutor(tutorPage);
+          await expect(
+            studentPage.getByTestId("wb-waiting-overlay")
+          ).not.toBeVisible({ timeout: 30_000 });
+
+          const micSettings = studentPage.getByTestId("wb-topbar-mic-settings");
+          await expect(micSettings).toBeVisible({ timeout: 10_000 });
+          await micSettings.click();
+
+          const dropdownPicker = studentPage
+            .getByTestId("wb-topbar-mic")
+            .getByTestId("audio-device-select");
+          await expect(dropdownPicker).toBeVisible({ timeout: 5_000 });
+        } finally {
+          await tutorCtx.close();
+          await studentCtx.close();
+        }
+      }
+    );
+  }
+);
+
+// ---------------------------------------------------------------------------
 // P2-G: WB-JOIN-ADULT-LEARNER — adult self-learner join access
 // ---------------------------------------------------------------------------
 

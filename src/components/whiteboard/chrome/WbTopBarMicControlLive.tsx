@@ -74,6 +74,9 @@ type Props = {
 
   onRefreshDevices?: () => void | Promise<void>;
 
+  /** When false, hide the in-dropdown device picker (e.g. waiting-room overlay on-page pickers). Default true. */
+  showDevicePickerInDropdown?: boolean;
+
   disabled?: boolean;
 
 };
@@ -105,6 +108,8 @@ export function WbTopBarMicControlLive({
   onPickMicSlot,
 
   onRefreshDevices,
+
+  showDevicePickerInDropdown = true,
 
   disabled = false,
 
@@ -238,69 +243,71 @@ export function WbTopBarMicControlLive({
 
       </button>
 
-      <div className="mynk-wb-mic-settings-anchor" ref={wrapRef}>
+      {showDevicePickerInDropdown ? (
+        <div className="mynk-wb-mic-settings-anchor" ref={wrapRef}>
 
-        <button
+          <button
 
-          type="button"
+            type="button"
 
-          className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-mic-caret"
+            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-mic-caret"
 
-          title="Microphone settings"
-
-          aria-label="Microphone settings"
-
-          aria-expanded={popoverOpen}
-
-          disabled={disabled}
-
-          onClick={(e) => {
-
-            e.stopPropagation();
-
-            setPopoverOpen((p) => !p);
-
-          }}
-
-          data-testid="wb-topbar-mic-settings"
-
-        >
-
-          <span className="mynk-wb-share-chevron">▾</span>
-
-        </button>
-
-
-
-        {popoverOpen && (
-
-          <div
-
-            className="mynk-wb-mic-popover"
-
-            role="dialog"
+            title="Microphone settings"
 
             aria-label="Microphone settings"
 
+            aria-expanded={popoverOpen}
+
+            disabled={disabled}
+
+            onClick={(e) => {
+
+              e.stopPropagation();
+
+              setPopoverOpen((p) => !p);
+
+            }}
+
+            data-testid="wb-topbar-mic-settings"
+
           >
 
-            <AudioControls
+            <span className="mynk-wb-share-chevron">▾</span>
 
-              devices={audioDevices}
+          </button>
 
-              selectedPickerSlot={selectedPickerSlot}
 
-              onPickMicSlot={onPickMicSlot}
 
-              isLive={hasMicStream}
-              disabled={disabled}
-            />
+          {popoverOpen && (
 
-          </div>
+            <div
 
-        )}
+              className="mynk-wb-mic-popover"
 
-      </div>
+              role="dialog"
+
+              aria-label="Microphone settings"
+
+            >
+
+              <AudioControls
+
+                devices={audioDevices}
+
+                selectedPickerSlot={selectedPickerSlot}
+
+                onPickMicSlot={onPickMicSlot}
+
+                isLive={hasMicStream}
+                disabled={disabled}
+              />
+
+            </div>
+
+          )}
+
+        </div>
+      ) : null}
 
     </div>
 

@@ -97,4 +97,24 @@ describe("WbTopBarMicControlLive", () => {
     const select = screen.getByTestId("audio-device-select");
     expect(select).toHaveTextContent("(allow microphone access to choose)");
   });
+
+  test("showDevicePickerInDropdown=false hides settings caret (on-page picker owns device UI)", () => {
+    render(
+      <WbTopBarMicControlLive
+        isMicMuted={false}
+        hasMicPermission="granted"
+        hasMicStream
+        audioDevices={defaultDevices}
+        selectedPickerSlot={0}
+        showDevicePickerInDropdown={false}
+        onToggleMute={jest.fn()}
+        onAcquireMic={jest.fn()}
+        onPickMicSlot={jest.fn()}
+      />
+    );
+
+    expect(screen.queryByTestId("wb-topbar-mic-settings")).toBeNull();
+    expect(screen.queryByTestId("audio-device-select")).toBeNull();
+    expect(screen.getByTestId("wb-topbar-mic-toggle")).toBeTruthy();
+  });
 });

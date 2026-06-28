@@ -5638,6 +5638,7 @@ export function WhiteboardWorkspaceClient({
         isAcquiring={liveAv.isAcquiring}
         showInlineMeter
         micStream={overlayMicMeterStream}
+        showDevicePickerInDropdown={false}
         onToggleMute={liveAv.toggleMic}
         onAcquireMic={handleAcquireMic}
         onPickMicSlot={(slot) =>
