@@ -2675,3 +2675,243 @@ describe("sync-client pointer envelope (B9 laser sync)", () => {
     client.disconnect();
   });
 });
+
+// -----------------------------------------------------------------
+// Dual-device takeover bug — Fix 1/2/3 unit coverage
+// Bug: device A disconnects → tutor marks ALL peers pendingPrune →
+// device B (healthy) evicted after 5s → tutor drops to zero students.
+// -----------------------------------------------------------------
+
+describe("dual-device takeover prune bug — fixes 1-3 (wb-wave5-polish)", () => {
+  /**
+   * Fix 1 — leaving:true frame immediately removes exactly that peer,
+   * leaving ALL other healthy peers untouched.
+   */
+  test("inbound leaving:true frame removes only that peer — healthy peers are untouched", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const peersCb = jest.fn<void, [ReadonlyArray<RoomPeer>]>();
+    const timer = makeControllableTimer();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      presencePruneGraceMs: 50,
+      _setTimeoutFn: timer.setTimeoutFn,
+      _clearTimeoutFn: timer.clearTimeoutFn,
+      _ioFactory: factory,
+    });
+    client.onRoomPeersChange(peersCb);
+
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+
+    // Two students present.
+    await injectPresence(sock, aes, { v: 1, kind: "presence", peerId: "device-A", role: "student" });
+    await injectPresence(sock, aes, { v: 1, kind: "presence", peerId: "device-B", role: "student" });
+    await realTick(15);
+    await flushMicrotasks(15);
+    expect(peersCb).toHaveBeenLastCalledWith([
+      { peerId: "device-A", role: "student" },
+      { peerId: "device-B", role: "student" },
+    ]);
+
+    // Device A sends an explicit leave frame.
+    await injectPresence(sock, aes, {
+      v: 1,
+      kind: "presence",
+      peerId: "device-A",
+      role: "student",
+      leaving: true,
+    });
+    await realTick(15);
+    await flushMicrotasks(15);
+
+    // Device A is immediately removed; device B is intact. No prune timer needed.
+    expect(peersCb).toHaveBeenLastCalledWith([{ peerId: "device-B", role: "student" }]);
+    // No pending prune timer — leave frame bypasses the grace window.
+    expect(timer.pendingCount()).toBe(0);
+
+    client.disconnect();
+  });
+
+  /**
+   * Fix 2 — room-user-change count-GREW cancels the stale prune wave
+   * from the prior shrink so a returning peer can't evict healthy ones.
+   */
+  test("room-user-change grow after shrink cancels the pending prune — no false eviction", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const peersCb = jest.fn<void, [ReadonlyArray<RoomPeer>]>();
+    const timer = makeControllableTimer();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      presencePruneGraceMs: 50,
+      _setTimeoutFn: timer.setTimeoutFn,
+      _clearTimeoutFn: timer.clearTimeoutFn,
+      _ioFactory: factory,
+    });
+    client.onRoomPeersChange(peersCb);
+
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+
+    // Device B joins and announces presence.
+    sock.inject("room-user-change", ["tutor-sock", "dev-b-sock"]);
+    await injectPresence(sock, aes, { v: 1, kind: "presence", peerId: "device-B", role: "student" });
+    await realTick(15);
+    await flushMicrotasks(15);
+    expect(peersCb).toHaveBeenLastCalledWith([{ peerId: "device-B", role: "student" }]);
+
+    // Room shrinks (some socket dropped).
+    sock.inject("room-user-change", ["tutor-sock"]);
+    await flushMicrotasks(5);
+    // A prune timer is now pending — device B is marked pendingPrune.
+    expect(timer.pendingCount()).toBe(1);
+
+    // Room grows again (device A rejoins, or a new connection appears).
+    sock.inject("room-user-change", ["tutor-sock", "dev-a-sock"]);
+    await flushMicrotasks(5);
+    // Fix 2: the prune timer must have been cancelled on the count-grew event.
+    expect(timer.pendingCount()).toBe(0);
+
+    // Firing timers now would be a no-op (prune was cancelled).
+    timer.fireAll();
+    await realTick(5);
+    await flushMicrotasks(10);
+
+    // Device B is STILL present in the map — it was never evicted.
+    expect(peersCb.mock.calls.at(-1)![0]).toEqual([{ peerId: "device-B", role: "student" }]);
+
+    client.disconnect();
+  });
+
+  /**
+   * Fix 1 + 3 combined: device A disconnects (no leave frame — crash path),
+   * relay fires shrink. Device B's heartbeat re-announces before the grace
+   * fires and rescues itself from pendingPrune.
+   */
+  test("crash disconnect (no leave frame): device B heartbeat rescues it before prune fires", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const peersCb = jest.fn<void, [ReadonlyArray<RoomPeer>]>();
+    const timer = makeControllableTimer();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-xyz",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-T",
+      presencePruneGraceMs: 50,
+      _setTimeoutFn: timer.setTimeoutFn,
+      _clearTimeoutFn: timer.clearTimeoutFn,
+      _ioFactory: factory,
+    });
+    client.onRoomPeersChange(peersCb);
+
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+
+    // Both devices connected.
+    sock.inject("room-user-change", ["tutor-sock", "dev-a-sock", "dev-b-sock"]);
+    await injectPresence(sock, aes, { v: 1, kind: "presence", peerId: "device-A", role: "student" });
+    await injectPresence(sock, aes, { v: 1, kind: "presence", peerId: "device-B", role: "student" });
+    await realTick(15);
+    await flushMicrotasks(15);
+
+    // Device A crash-disconnects — no leave frame sent.
+    // Relay fires a shrink; both A and B get marked pendingPrune.
+    sock.inject("room-user-change", ["tutor-sock", "dev-b-sock"]);
+    await flushMicrotasks(5);
+    expect(timer.pendingCount()).toBe(1);
+
+    // B's heartbeat re-announces before the grace window fires.
+    await injectPresence(sock, aes, { v: 1, kind: "presence", peerId: "device-B", role: "student" });
+    await realTick(10);
+    await flushMicrotasks(10);
+
+    // Fire the grace timer — A (no re-announce) is evicted, B (re-announced) is kept.
+    timer.fireAll();
+    await realTick(5);
+    await flushMicrotasks(10);
+
+    // CRITICAL: tutor retains device B, never dropped to zero.
+    expect(peersCb.mock.calls.at(-1)![0]).toEqual([{ peerId: "device-B", role: "student" }]);
+
+    client.disconnect();
+  });
+
+  /**
+   * Fix 1 — disconnect() emits a leave frame before closing the socket.
+   * Uses FakeSocket so the async crypto completes and the emit is captured.
+   */
+  test("disconnect() emits a leave presence frame (best-effort clean departure)", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-leave",
+      encryptionKeyBase64Url: k,
+      role: "student",
+      peerId: "student-X",
+      _ioFactory: factory,
+    });
+
+    // Wait for connect + key import to complete.
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    const sock = sockets[0]!;
+    const emitsAtStart = sock.emitted.length;
+
+    client.disconnect();
+
+    // Let the async leave-frame crypto resolve and the emit chain run.
+    await flushMicrotasks(20);
+    await realTick(10);
+    await flushMicrotasks(20);
+
+    // Find a leave presence frame in the server-broadcasts emitted after disconnect().
+    const newBroadcasts = sock.emitted
+      .slice(emitsAtStart)
+      .filter((e) => e.event === "server-broadcast");
+
+    let foundLeave = false;
+    for (const e of newBroadcasts) {
+      try {
+        const msg = await _testing.decryptMessage(
+          aes,
+          e.args[1] as ArrayBuffer,
+          e.args[2] as ArrayBuffer
+        );
+        const p = msg as Partial<WhiteboardWirePresence>;
+        if (p.kind === "presence" && p.leaving === true && p.peerId === "student-X") {
+          foundLeave = true;
+          break;
+        }
+      } catch {
+        // skip non-presence frames
+      }
+    }
+
+    expect(foundLeave).toBe(true);
+    // Socket should now be disconnected (FakeSocket tracks this).
+    expect(sock.disconnected).toBe(true);
+  });
+});

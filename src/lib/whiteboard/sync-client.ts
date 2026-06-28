@@ -286,6 +286,14 @@ export type WhiteboardWirePresence = {
    * joinedAt self-bumps. Tutor/legacy peers omit this field.
    */
   joinedAt?: number;
+  /**
+   * When `true`, the sender is intentionally leaving the room. Receivers
+   * remove this peer immediately from presenceMap without waiting for the
+   * prune grace window. Crash-disconnects do NOT send this field (no
+   * opportunity to broadcast before the socket closes), which is why the
+   * heartbeat + cancel-on-grow fixes are also required.
+   */
+  leaving?: true;
 };
 
 /**
@@ -779,6 +787,9 @@ function validateWirePresence(parsed: unknown): WhiteboardWirePresence {
   if (typeof p.joinedAt === "number" && Number.isFinite(p.joinedAt) && p.joinedAt > 0) {
     out.joinedAt = p.joinedAt;
   }
+  if (p.leaving === true) {
+    out.leaving = true;
+  }
   return out;
 }
 
@@ -1009,6 +1020,14 @@ const DEFAULT_BROADCAST_INTERVAL_MS = 50;
  * stable peer set across brief network blips.
  */
 const PRESENCE_PRUNE_GRACE_MS_DEFAULT = 5_000;
+/**
+ * How often a connected peer re-broadcasts its presence heartbeat.
+ * Must be strictly less than `presencePruneGraceMs` so a healthy peer
+ * that was wrongly marked `pendingPrune` (e.g. because a different peer
+ * disconnected and triggered a blanket count-shrink) re-announces and
+ * removes itself from the prune set before the grace window fires.
+ */
+const PRESENCE_HEARTBEAT_MS = 2_000;
 
 export function createWhiteboardSyncClient(
   opts: WhiteboardSyncClientOptions
@@ -1273,6 +1292,10 @@ export function createWhiteboardSyncClient(
   let pruneTimer: unknown = null;
   let lastRoomMemberCount = 0;
   let lastRoomPeersSnapshot: ReadonlyArray<RoomPeer> = [];
+  // Belt-and-suspenders heartbeat: re-announces every PRESENCE_HEARTBEAT_MS
+  // so a healthy peer marked `pendingPrune` by another peer's disconnect
+  // rescues itself before the grace window evicts it.
+  let presenceHeartbeatInterval: ReturnType<typeof globalThis.setInterval> | null = null;
 
   function getRoomPeersSnapshot(): ReadonlyArray<RoomPeer> {
     const out: RoomPeer[] = [];
@@ -1331,6 +1354,19 @@ export function createWhiteboardSyncClient(
     // already drops self-echoes upstream. Defensive guard here so a
     // refactor that bypasses the upstream check still stays clean.
     if (msg.peerId === peerId) return;
+    // Explicit clean departure — remove immediately, no grace window.
+    // The CRITICAL INVARIANT: only THIS peer is removed; healthy peers
+    // that happen to share the room are never touched by a leave frame.
+    if (msg.leaving) {
+      pendingPrune.delete(msg.peerId);
+      if (presenceMap.delete(msg.peerId)) {
+        log.log(
+          `kind=presence leaving recv peerId=${msg.peerId} immediate-remove remaining=${presenceMap.size}`
+        );
+        fireRoomPeersIfChanged();
+      }
+      return;
+    }
     pendingPrune.delete(msg.peerId);
     const existing = presenceMap.get(msg.peerId);
     const next: RoomPeerEntry = {
@@ -1382,12 +1418,51 @@ export function createWhiteboardSyncClient(
     void encryptAndEmitImmediate(msg);
   }
 
+  /**
+   * Best-effort leave frame. Call BEFORE disposing the socket so the
+   * async crypto has a chance to emit before the socket closes. Uses
+   * captured references so it still works after `socket = null`.
+   *
+   * On crash-disconnect (tab kill, network drop) this is never called;
+   * the heartbeat + cancel-on-grow fixes cover that path.
+   */
+  function broadcastLeaveAsync(capSocket: typeof socket, capAesKey: CryptoKey): Promise<void> {
+    const msg: WhiteboardWirePresence = {
+      v: 1,
+      kind: "presence",
+      peerId,
+      role,
+      leaving: true,
+    };
+    log.log(`kind=presence leaving send peerId=${peerId} role=${role}`);
+    return (async () => {
+      try {
+        const { data, iv } = await encryptMessage(capAesKey, msg);
+        capSocket?.emit("server-broadcast", roomId, data, iv);
+      } catch {
+        /* best-effort — never throw from a leave frame */
+      }
+    })();
+  }
+
   function schedulePruneIfShrunk(currentMemberCount: number): void {
     // currentMemberCount includes self. Grew (or stayed the same) →
     // nothing to prune; new entries are added by inbound presence
     // frames, not by member count alone.
     if (currentMemberCount >= lastRoomMemberCount) {
       lastRoomMemberCount = currentMemberCount;
+      // Cancel any pending prune from a prior shrink. A prior room-user-change
+      // may have blanket-marked ALL remote peers as pendingPrune. If the
+      // room count has now recovered (a new or returning peer joined), that
+      // stale wave must not fire — it would evict healthy peers that are still
+      // connected (e.g. device B after device A briefly reconnects/rejoins).
+      if (pruneTimer !== null) {
+        clearPruneTimer();
+        pendingPrune.clear();
+        log.log(
+          `presence prune cancelled on non-shrink remaining=${presenceMap.size}`
+        );
+      }
       return;
     }
     lastRoomMemberCount = currentMemberCount;
@@ -1677,12 +1752,29 @@ export function createWhiteboardSyncClient(
     if (lastBroadcastPayload && aesKey) {
       void encryptAndEmit(lastBroadcastPayload);
     }
+    // Belt-and-suspenders heartbeat: re-announce every PRESENCE_HEARTBEAT_MS
+    // so a healthy peer that another peer's disconnect wrongly added to
+    // pendingPrune re-rescues itself before the grace window fires.
+    // PRESENCE_HEARTBEAT_MS < presencePruneGraceMs guarantees at least one
+    // re-announcement within any grace window.
+    if (presenceHeartbeatInterval !== null) {
+      globalThis.clearInterval(presenceHeartbeatInterval);
+    }
+    presenceHeartbeatInterval = globalThis.setInterval(() => {
+      if (!disposed) broadcastPresence();
+    }, PRESENCE_HEARTBEAT_MS);
   });
 
   socket.on("disconnect", (reason: string) => {
     if (disposed) return;
     connected = false;
     log.warn(`disconnected reason=${reason}`);
+    // Stop the presence heartbeat on disconnect — no point sending presence
+    // while the socket is down. The connect handler restarts it on reconnect.
+    if (presenceHeartbeatInterval !== null) {
+      globalThis.clearInterval(presenceHeartbeatInterval);
+      presenceHeartbeatInterval = null;
+    }
     // Clear any pending welcome retry so it doesn't fire after the student
     // (or tutor) has disconnected.
     clearWelcomeRetryTimer();
@@ -2148,6 +2240,11 @@ export function createWhiteboardSyncClient(
         clearTimeout(broadcastTimer);
         broadcastTimer = null;
       }
+      // Stop the heartbeat immediately so it can't fire during cleanup.
+      if (presenceHeartbeatInterval !== null) {
+        globalThis.clearInterval(presenceHeartbeatInterval);
+        presenceHeartbeatInterval = null;
+      }
       clearWelcomeRetryTimer();
       welcomeRetryCount = 0;
       clearPruneTimer();
@@ -2165,14 +2262,27 @@ export function createWhiteboardSyncClient(
       disconnectSubs.clear();
       peerCountSubs.clear();
       roomPeersSubs.clear();
+      // Best-effort leave frame: capture socket and key references, then fire
+      // the async crypto. We call removeAllListeners + disconnect synchronously
+      // so the existing lifecycle contract is preserved (callers can rely on
+      // the socket being torn down before the next event loop tick). The leave
+      // frame's socket.emit runs in the first microtask after disconnect() returns
+      // and emits on the captured socket reference — socket.io may or may not
+      // flush it before the transport closes, so this is truly best-effort.
+      // The heartbeat + cancel-on-grow fixes are the load-bearing guarantees.
+      const capSocket = socket;
+      const capAesKey = aesKey;
+      socket = null;
+      connected = false;
       try {
-        socket?.removeAllListeners();
-        socket?.disconnect();
+        capSocket?.removeAllListeners();
+        capSocket?.disconnect();
       } catch (err) {
         log.warn("disconnect cleanup error:", (err as Error)?.message ?? String(err));
       }
-      socket = null;
-      connected = false;
+      if (capAesKey && capSocket) {
+        void broadcastLeaveAsync(capSocket, capAesKey);
+      }
     },
   };
 }

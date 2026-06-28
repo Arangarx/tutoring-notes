@@ -830,6 +830,122 @@ test.describe("Dual-device takeover", { tag: [TAG.WB_PRESENCE] }, () => {
       await student2Ctx.close();
     }
   });
+
+  test(
+    "after device A is superseded and closes, tutor retains device B — never drops to zero students",
+    { tag: [TAG.WB_PRESENCE, TAG.WB_AV, TAG.WB_SYNC] },
+    async ({ browser }) => {
+      // Regression oracle for the dual-device prune bug (wb-wave5-polish Plan #1 smoke FAIL):
+      //
+      // Pre-fix behaviour (FAIL path):
+      //   1. Device A socket closes → relay fires room-user-change shrink.
+      //   2. Tutor sync-client marks ALL remote peers (including healthy device B)
+      //      as pendingPrune.
+      //   3. After ~5s grace, device B is evicted → tutor shows "Waiting for student".
+      //
+      // Post-fix behaviour (PASS path):
+      //   Fix 1: device A's clean close emits a leave:true frame → only A removed,
+      //          B never marked pendingPrune.
+      //   Fix 3: device B's 2s heartbeat re-announces before the 5s grace window
+      //          fires, rescuing B even if the leave frame was missed (crash path).
+      //
+      // We wait 8s (> 5s prune grace) after closing device A's tab and then assert
+      // the tutor sync pill still shows "Student connected" (i.e. device B alive).
+      test.setTimeout(180_000);
+      const session = await seedWbLiveSyncSession();
+
+      const tutorCtx = await browser.newContext({
+        storageState: "tests/integration/.auth/tutor.json",
+        viewport: { width: 1280, height: 900 },
+        permissions: ["microphone"],
+      });
+      // Both student contexts share the same learner (same identity key).
+      const student1Ctx = await browser.newContext({
+        viewport: { width: 1280, height: 800 },
+        permissions: ["microphone"],
+      });
+      const student2Ctx = await browser.newContext({
+        viewport: { width: 1280, height: 800 },
+        permissions: ["microphone"],
+      });
+
+      try {
+        await loginLearnerInContext(student1Ctx, session.learnerHandle, session.learnerPin);
+        await loginLearnerInContext(student2Ctx, session.learnerHandle, session.learnerPin);
+
+        const tutorPage = await tutorCtx.newPage();
+        await tutorPage.goto(
+          `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+          { waitUntil: "domcontentloaded" }
+        );
+        await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
+          timeout: 90_000,
+        });
+        await waitForWbE2eBridge(tutorPage, "tutor");
+
+        const encryptionKey = await tutorPage.evaluate(() => {
+          const m = window.location.hash.match(/[#&]k=([^&]+)/);
+          return m?.[1] ? decodeURIComponent(m[1]) : "";
+        });
+
+        // Device A joins first; tutor sees it.
+        const student1Page = await student1Ctx.newPage();
+        await student1Page.goto(
+          `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+          { waitUntil: "domcontentloaded" }
+        );
+        await expect(student1Page.getByTestId("student-whiteboard-canvas-mount")).toBeVisible({
+          timeout: 90_000,
+        });
+        await waitForWbE2eBridge(student1Page, "student");
+        await waitForTutorStudentConnected(tutorPage);
+
+        // Device B joins (same identity = supersedes A).
+        const student2Page = await student2Ctx.newPage();
+        await student2Page.goto(
+          `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+          { waitUntil: "domcontentloaded" }
+        );
+        await expect(student2Page.getByTestId("student-whiteboard-canvas-mount")).toBeVisible({
+          timeout: 90_000,
+        });
+        await waitForWbE2eBridge(student2Page, "student");
+
+        // Device A must show the takeover screen before we close it.
+        await expect(
+          student1Page.getByRole("heading", { name: /another device/i })
+        ).toBeVisible({ timeout: 60_000 });
+
+        // Simulate device A closing its tab (user closes the superseded browser).
+        // This is a socket disconnect without a leave frame — the crash-path that
+        // Fix 3 (heartbeat) must cover, even when Fix 1 (leave frame) can't fire.
+        await student1Page.close();
+
+        // CRITICAL INVARIANT: wait well past the 5s prune grace window.
+        // Pre-fix: after ~5s, device B would be evicted and the tutor would
+        // flip from "Student connected" to "Awaiting student" (pill hidden).
+        // Post-fix: device B's 2s heartbeat keeps it alive; pill stays green.
+        await tutorPage.waitForTimeout(8_000);
+
+        // Assert the tutor still sees a student — never dropped to zero.
+        // "Student connected" text must still be present; if it changed to
+        // "Awaiting student", this assertion fails (the pre-fix regression).
+        await expect(tutorPage.getByTestId("wb-sync-pill")).toHaveText(
+          /student connected/i,
+          { timeout: 3_000 }
+        );
+
+        // Device B must still be on the board (it was never evicted).
+        await expect(student2Page.getByTestId("student-whiteboard-canvas-mount")).toBeVisible({
+          timeout: 5_000,
+        });
+      } finally {
+        await tutorCtx.close();
+        await student1Ctx.close();
+        await student2Ctx.close();
+      }
+    }
+  );
 });
 
 // ---------------------------------------------------------------------------
