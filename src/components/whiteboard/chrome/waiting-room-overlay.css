@@ -151,6 +151,10 @@
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.12s, border-color 0.12s, color 0.12s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .mynk-wtr-copy-link-btn:disabled {
@@ -202,5 +206,38 @@
 
 .mynk-wtr-start-btn:not(:disabled):hover {
   opacity: 0.9;
+}
+
+/* ── Device-picker select coloring (co-located, self-sufficient) ──────────────
+ * The WaitingRoomOverlay is rendered OUTSIDE .mynk-wb-chrome, so the global
+ * whiteboard-chrome.css select/option rules don't reach it. These rules
+ * replicate the same correct coloring, scoped to the overlay. Windows Chrome
+ * paints the open dropdown with a light system surface while inherited text
+ * stays light-on-dark → unreadable options in dark mode.
+ * Mirror of whiteboard-chrome.css §"Native <select> in WB chrome". */
+:root:not([data-theme="light"]) .mynk-wtr-overlay .mynk-wb-native-select,
+[data-theme="dark"] .mynk-wtr-overlay .mynk-wb-native-select {
+  color-scheme: dark;
+  background-color: #142f3e;
+  color: #f0ede4;
+  border: 1px solid #1c3548;
+}
+
+:root:not([data-theme="light"]) .mynk-wtr-overlay .mynk-wb-native-select option,
+[data-theme="dark"] .mynk-wtr-overlay .mynk-wb-native-select option {
+  background-color: #1c3548;
+  color: #f0ede4;
+}
+
+:root[data-theme="light"] .mynk-wtr-overlay .mynk-wb-native-select {
+  color-scheme: light;
+  background-color: var(--surface-input);
+  color: var(--text-strong);
+  border: 1px solid var(--border-default);
+}
+
+:root[data-theme="light"] .mynk-wtr-overlay .mynk-wb-native-select option {
+  background-color: var(--surface-1);
+  color: var(--text-strong);
 }
 
