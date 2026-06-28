@@ -2011,6 +2011,7 @@ test.describe(
           await expect(
             tutorPage.getByTestId("tutor-whiteboard-canvas-mount")
           ).toBeVisible({ timeout: 90_000 });
+          await waitForWbE2eBridge(tutorPage, "tutor");
           const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
 
           const studentPage = await studentCtx.newPage();
