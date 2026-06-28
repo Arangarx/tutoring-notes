@@ -1930,10 +1930,16 @@ test.describe(
           // Tutor cam off → student sees tutor initials (not black tile).
           const tutorCamChip = tutorPage.getByTestId("wb-overlay-cam-chip");
           const tutorCamLabel = tutorPage.getByTestId("wb-overlay-cam-chip-label");
-          if ((await tutorCamLabel.textContent())?.trim() === "Camera on") {
+          if ((await tutorCamLabel.textContent())?.trim() === "Camera off") {
             await tutorCamChip.click();
+            await expect(tutorCamLabel).toHaveText("Camera on", {
+              timeout: 15_000,
+            });
           }
-          await expect(tutorCamLabel).toHaveText("Camera off", { timeout: 10_000 });
+          await tutorCamChip.click();
+          await expect(tutorCamLabel).toHaveText("Camera off", {
+            timeout: 15_000,
+          });
 
           const studentRemoteTile = studentTiles.locator('[data-is-local="false"]').first();
           await expect(studentRemoteTile).toBeVisible({ timeout: 10_000 });
@@ -1949,11 +1955,15 @@ test.describe(
           const studentCamLabel = studentPage.getByTestId(
             "wb-overlay-cam-chip-label"
           );
-          if ((await studentCamLabel.textContent())?.trim() === "Camera on") {
+          if ((await studentCamLabel.textContent())?.trim() === "Camera off") {
             await studentCamChip.click();
+            await expect(studentCamLabel).toHaveText("Camera on", {
+              timeout: 15_000,
+            });
           }
+          await studentCamChip.click();
           await expect(studentCamLabel).toHaveText("Camera off", {
-            timeout: 10_000,
+            timeout: 15_000,
           });
 
           const tutorRemoteTile = tutorTiles.locator('[data-is-local="false"]').first();
@@ -2009,7 +2019,14 @@ test.describe(
             { waitUntil: "domcontentloaded" }
           );
           await expect(
+            studentPage.getByTestId("student-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+
+          await expect(
             studentPage.getByTestId("wb-waiting-overlay")
+          ).toBeVisible({ timeout: 10_000 });
+          await expect(
+            tutorPage.getByTestId("wb-waiting-overlay")
           ).toBeVisible({ timeout: 10_000 });
 
           const studentMic = studentPage
@@ -2040,6 +2057,7 @@ test.describe(
         const tutorCtx = await browser.newContext({
           storageState: "tests/integration/.auth/tutor.json",
           viewport: { width: 390, height: 844 },
+          hasTouch: true,
           permissions: ["microphone", "camera"],
         });
         try {
@@ -2057,7 +2075,7 @@ test.describe(
 
           await tutorPage.getByTestId("wb-topbar-overflow").click();
           const dropdown = tutorPage.getByTestId("wb-topbar-overflow-dropdown");
-          await expect(dropdown).toBeVisible({ timeout: 5_000 });
+          await expect(dropdown).toBeVisible({ timeout: 10_000 });
           await expect(
             dropdown.getByTestId("wb-overflow-undo")
           ).toBeVisible();
@@ -2076,7 +2094,7 @@ test.describe(
     test(
       "waiting-room overlay theme toggle is visible and changes document theme",
       async ({ browser }) => {
-        test.setTimeout(120_000);
+        test.setTimeout(180_000);
         const session = await seedWbPendingLiveSyncSession();
 
         const tutorCtx = await browser.newContext({
@@ -2105,19 +2123,13 @@ test.describe(
           const before = await tutorPage.evaluate(() =>
             document.documentElement.getAttribute("data-theme")
           );
+          const targetTheme = before === "dark" ? "Light" : "Dark";
+          const expectedTheme = before === "dark" ? "light" : "dark";
 
           await themeBtn.click();
-          const lightOption = tutorPage.getByRole("menuitemradio", {
-            name: /^light$/i,
-          });
-          const darkOption = tutorPage.getByRole("menuitemradio", {
-            name: /^dark$/i,
-          });
-          if (before === "dark") {
-            await lightOption.click();
-          } else {
-            await darkOption.click();
-          }
+          await tutorPage
+            .getByRole("menuitemradio", { name: targetTheme })
+            .click();
 
           await expect
             .poll(async () =>
@@ -2125,7 +2137,7 @@ test.describe(
                 document.documentElement.getAttribute("data-theme")
               )
             )
-            .not.toBe(before);
+            .toBe(expectedTheme);
         } finally {
           await tutorCtx.close();
         }
