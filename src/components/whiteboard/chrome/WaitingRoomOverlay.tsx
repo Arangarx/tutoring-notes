@@ -21,6 +21,7 @@
 
 import "./waiting-room-overlay.css";
 import type { ReactNode } from "react";
+import { WbIconShare } from "./wb-icons";
 
 export type WtrSessionMode = "LIVE" | "IN_PERSON";
 
@@ -230,6 +231,7 @@ export function WaitingRoomOverlay({
                 data-testid="wb-waiting-copy-student-link"
                 aria-label={copyLinkLabel}
               >
+                <WbIconShare />
                 {copyLinkLabel}
               </button>
             )}
