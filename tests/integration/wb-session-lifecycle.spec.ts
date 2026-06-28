@@ -2497,6 +2497,104 @@ test.describe(
 );
 
 // ---------------------------------------------------------------------------
+// P2-A-ext: stale-cookie fallthrough (@wb-presence)
+//
+// Covers the join-page fix: a stale non-participant learner cookie must not
+// block a valid account-holder session from reaching its self-learner session.
+// ---------------------------------------------------------------------------
+
+test.describe(
+  "stale non-participant learner cookie fallthrough",
+  { tag: [TAG.WB_PRESENCE] },
+  () => {
+    test(
+      "stale learner cookie (non-participant) + valid AH session → whiteboard renders (no 404)",
+      async ({ browser }) => {
+        test.setTimeout(90_000);
+
+        // Seed a CHILD session — this also seeds TEST_LEARNER credentials in the DB
+        // so we can log in as a learner and get a stale cookie for that profile.
+        const childSession = await seedWbLiveSyncSession();
+
+        // Seed a SELF-LEARNER session — separate admin/student/profile.
+        // TEST_LEARNER is NOT a SessionParticipant of this session (different studentId).
+        const selfSession = await seedSelfLearnerWbSession();
+
+        const ctx = await browser.newContext();
+        try {
+          // Step 1: log in as the child learner → acquires mynk_learner_session
+          // for TEST_LEARNER profile (NOT a participant of selfSession).
+          await loginLearnerInContext(
+            ctx,
+            childSession.learnerHandle,
+            childSession.learnerPin
+          );
+
+          // Step 2: also log in as the self-learner AH (adds mynk_ah_session).
+          await loginAccountHolderInContext(
+            ctx,
+            selfSession.ahEmail,
+            selfSession.ahPassword
+          );
+
+          const page = await ctx.newPage();
+          // Navigate with a dummy key fragment — we only test auth passes.
+          await page.goto(
+            `/join/${selfSession.whiteboardSessionId}#k=TESTKEY`,
+            { waitUntil: "domcontentloaded" }
+          );
+
+          // Must NOT 404 or redirect to login.
+          expect(page.url()).not.toContain("/account/login");
+          expect(page.url()).not.toContain("/students/login");
+          // Student whiteboard shell must be visible — AH path authorised.
+          await expect(
+            page.getByTestId("student-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 60_000 });
+        } finally {
+          await ctx.close();
+        }
+      }
+    );
+
+    test(
+      "stale learner cookie (non-participant) + NO AH session → 404 (fail closed)",
+      async ({ browser }) => {
+        test.setTimeout(30_000);
+
+        // Seed a CHILD session to get TEST_LEARNER credentials.
+        const childSession = await seedWbLiveSyncSession();
+
+        // Seed a SELF-LEARNER session. TEST_LEARNER is NOT a participant.
+        const selfSession = await seedSelfLearnerWbSession();
+
+        const ctx = await browser.newContext();
+        try {
+          // Log in only as the child learner — no AH session.
+          await loginLearnerInContext(
+            ctx,
+            childSession.learnerHandle,
+            childSession.learnerPin
+          );
+
+          const page = await ctx.newPage();
+          const response = await page.goto(
+            `/join/${selfSession.whiteboardSessionId}`,
+            { waitUntil: "domcontentloaded" }
+          );
+
+          // Authenticated learner who is not a participant + no AH path
+          // → fail closed → 404 (not the board, not a login redirect).
+          expect(response?.status()).toBe(404);
+        } finally {
+          await ctx.close();
+        }
+      }
+    );
+  }
+);
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 

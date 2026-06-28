@@ -26,7 +26,10 @@ import {
   getLearnerSessionFromHeaders,
   getAccountHolderSessionFromHeaders,
 } from "@/lib/server-session";
-import { assertIsSessionParticipant } from "@/lib/session-participant-scope";
+import {
+  assertIsSessionParticipant,
+  verifyIsSessionParticipant,
+} from "@/lib/session-participant-scope";
 import { WhiteboardSessionShell } from "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardSessionShell";
 import { JoinAuthGate } from "./JoinAuthGate";
 import { JoinHashRestorer } from "./JoinHashRestorer";
@@ -97,11 +100,34 @@ export default async function JoinSessionPage({
 
   // Path A: standard learner session (mynk_learner_session).
   // Accepts child_pin_required AND account_holder_session learners.
+  //
+  // Non-fatal participant check: if the learner cookie exists but the profile is NOT
+  // a participant of this session (e.g. stale cookie from a prior PIN-login attempt
+  // on the wrong child), fall through to Path B rather than 404-ing immediately.
+  // The old `assertIsSessionParticipant` (throwing) would 404 before Path B ran,
+  // blocking a legitimate AH session that owns the self-learner profile.
+  // [WB-ADULT-JOIN-ENABLEMENT — stale-cookie fallback]
   const learnerSession = await getLearnerSessionFromHeaders();
+  let learnerCookieNotParticipant = false;
   if (learnerSession) {
-    // assertIsSessionParticipant calls notFound() on mismatch or leftAt set.
-    await assertIsSessionParticipant(learnerSession.learnerProfileId, sessionId);
-    effectiveLearnerProfileId = learnerSession.learnerProfileId;
+    const isParticipant = await verifyIsSessionParticipant(
+      learnerSession.learnerProfileId,
+      sessionId
+    );
+    if (isParticipant) {
+      console.info(
+        `[lpr] lpr=${learnerSession.learnerProfileId} action=session_join_granted sessionId=${sessionId}`
+      );
+      effectiveLearnerProfileId = learnerSession.learnerProfileId;
+    } else {
+      // Non-participant learner cookie — fall through to Path B.
+      learnerCookieNotParticipant = true;
+      console.info(
+        `[wjg] wjg=${sessionId.slice(0, 8)} wbsid=${sessionId}` +
+          ` action=learner_cookie_fallthrough reason=not_participant` +
+          ` lpr=${learnerSession.learnerProfileId}`
+      );
+    }
   }
 
   // Path B: account-holder session (mynk_ah_session) — self-learner ONLY.
@@ -150,9 +176,22 @@ export default async function JoinSessionPage({
   }
 
   // -------------------------------------------------------------------------
-  // No valid session: render client gate with correct login target.
+  // No valid session: fail closed.
+  //
+  // If a learner cookie was present but not a participant AND Path B also failed
+  // to authorise → the user is authenticated but unauthorised for this session
+  // → 404 (fail closed; do not reveal the session exists to a non-participant).
+  //
+  // If no cookie at all → render JoinAuthGate so they can log in.
   // -------------------------------------------------------------------------
   if (!effectiveLearnerProfileId) {
+    if (learnerCookieNotParticipant) {
+      console.error(
+        `[wjg] wjg=${sessionId.slice(0, 8)} wbsid=${sessionId}` +
+          ` action=join_denied_both_paths reason=not_participant`
+      );
+      notFound();
+    }
     return <JoinAuthGate sessionId={sessionId} isSelfLearner={isSelfLearner} />;
   }
 
