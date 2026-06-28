@@ -2,28 +2,16 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useId, useState } from "react";
+import { Suspense } from "react";
 
-import { AuthFieldError } from "@/components/auth/AuthFieldError";
 import { AuthShell } from "@/components/auth/AuthShell";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { useRetryAfterCountdown } from "@/hooks/useRetryAfterCountdown";
-import { parseRetryAfterSeconds } from "@/lib/auth-client";
+import { AccountHolderLoginForm } from "@/components/auth/AccountHolderLoginForm";
 
 function AccountLoginForm() {
   const searchParams = useSearchParams();
   const returnTo = searchParams.get("returnTo") ?? "/account/dashboard";
   const notice = searchParams.get("notice");
   const source = searchParams.get("source");
-
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const { retryAfterSec, isRateLimited, startCountdown } = useRetryAfterCountdown();
-  const [busy, setBusy] = useState(false);
-  const formErrorId = useId();
 
   const noticeMessage =
     notice === "verify_email_expired"
@@ -43,51 +31,6 @@ function AccountLoginForm() {
         : source === "session_expired"
           ? "Your session expired \u2014 please sign in again."
           : null;
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (isRateLimited) return;
-
-    setBusy(true);
-    setError(null);
-
-    try {
-      const res = await fetch("/api/auth/account-holder/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (res.status === 429) {
-        startCountdown(parseRetryAfterSeconds(res));
-        setError("too_many_requests");
-        return;
-      }
-
-      const data = (await res.json()) as { next?: string; error?: string };
-
-      if (!res.ok) {
-        if (data.error === "email_not_verified") {
-          setError("email_not_verified");
-        } else {
-          setError("credentials");
-        }
-        setPassword(""); // clear field — prevents browser save-password heuristic on failure
-        return;
-      }
-
-      // next: "dashboard" | "2fa_required" (Phase 6)
-      if (data.next === "2fa_required") {
-        window.location.href = "/account/2fa/verify";
-      } else {
-        window.location.href = returnTo.startsWith("/") ? returnTo : "/account/dashboard";
-      }
-    } catch {
-      setError("network");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <AuthShell
@@ -113,87 +56,7 @@ function AccountLoginForm() {
         </p>
       ) : null}
 
-      <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-        <div className="space-y-2">
-          <Label htmlFor="ah-login-email">Email</Label>
-          <Input
-            id="ah-login-email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="min-h-11"
-            aria-invalid={error === "credentials" ? true : undefined}
-            aria-describedby={error ? formErrorId : undefined}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="ah-login-password">Password</Label>
-          <Input
-            id="ah-login-password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="min-h-11"
-            aria-invalid={error === "credentials" ? true : undefined}
-            aria-describedby={error ? formErrorId : undefined}
-          />
-          <p className="text-sm">
-            <Link
-              href="/account/forgot-password"
-              className="text-brand underline-offset-2 hover:underline"
-            >
-              Forgot your password?
-            </Link>
-          </p>
-        </div>
-
-        {error === "credentials" ? (
-          <AuthFieldError id={formErrorId}>
-            Email or password is incorrect.{" "}
-            <Link
-              href="/account/forgot-password"
-              className="underline underline-offset-2 hover:text-destructive/80"
-            >
-              Reset your password
-            </Link>{" "}
-            if you&apos;ve forgotten it.
-          </AuthFieldError>
-        ) : null}
-        {error === "email_not_verified" ? (
-          <AuthFieldError
-            id={formErrorId}
-            message="Please verify your email first. Check your inbox for a confirmation link."
-          />
-        ) : null}
-        {error === "too_many_requests" ? (
-          <AuthFieldError
-            id={formErrorId}
-            message={`Too many attempts — please wait${retryAfterSec ? ` ${retryAfterSec} second${retryAfterSec !== 1 ? "s" : ""}` : " a minute"} and try again.`}
-          />
-        ) : null}
-        {error === "network" ? (
-          <AuthFieldError
-            id={formErrorId}
-            message="Couldn't reach Mynk. Check your connection and try again."
-          />
-        ) : null}
-
-        <Button
-          type="submit"
-          disabled={busy || isRateLimited}
-          aria-busy={busy}
-          className="min-h-11 w-full text-base"
-        >
-          {busy ? "Signing in…" : "Sign in"}
-        </Button>
-      </form>
+      <AccountHolderLoginForm returnTo={returnTo} />
     </AuthShell>
   );
 }
@@ -203,7 +66,7 @@ export default function AccountLoginPage() {
     <Suspense
       fallback={
         <AuthShell title="Sign in to your account">
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <p className="text-sm text-muted-foreground">Loading\u2026</p>
         </AuthShell>
       }
     >

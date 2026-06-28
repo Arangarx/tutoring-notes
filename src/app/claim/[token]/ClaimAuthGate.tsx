@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
+import { AccountHolderLoginForm } from "@/components/auth/AccountHolderLoginForm";
 import { AuthFieldError } from "@/components/auth/AuthFieldError";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -231,6 +232,13 @@ function ClaimSignupForm({
   );
 }
 
+/**
+ * Login panel for the claim flow.
+ *
+ * Delegates to AccountHolderLoginForm (the canonical shared form) so error-code
+ * mapping — including email_not_verified → verify-email message — is identical
+ * to /account/login. [composition-over-duplication — WB-ADULT-JOIN-ENABLEMENT B2]
+ */
 function ClaimLoginForm({
   rawToken,
   studentName,
@@ -240,136 +248,14 @@ function ClaimLoginForm({
   studentName: string;
   onBack: () => void;
 }) {
-  const fid = useId();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [retryAfterSec, setRetryAfterSec] = useState<number | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-
-    try {
-      // Step 1: login
-      const loginRes = await fetch("/api/auth/account-holder/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (loginRes.status === 429) {
-        const ra = parseInt(loginRes.headers.get("Retry-After") ?? "60", 10);
-        setRetryAfterSec(isNaN(ra) ? 60 : ra);
-        setError("too_many_requests");
-        return;
-      }
-
-      const loginData = (await loginRes.json()) as { next?: string; error?: string };
-
-      if (!loginRes.ok) {
-        setError(loginData.error === "invalid_credentials" ? "invalid_credentials" : "server");
-        return;
-      }
-
-      if (loginData.next === "2fa_required") {
-        window.location.href = `/account/2fa/verify?returnTo=${encodeURIComponent(`/claim/${rawToken}`)}`;
-        return;
-      }
-
-      // Step 2: complete claim -- page will reload and show the interstitial or setup
-      window.location.href = `/claim/${rawToken}`;
-    } catch {
-      setError("network");
-    } finally {
-      setBusy(false);
-    }
-  }
-
+  const claimReturnTo = `/claim/${rawToken}`;
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-1">
-        <Label htmlFor={`${fid}-email`}>Email</Label>
-        <Input
-          id={`${fid}-email`}
-          name="email"
-          type="email"
-          autoComplete="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          disabled={busy}
-          aria-required="true"
-        />
-      </div>
-      <div className="space-y-1">
-        <Label htmlFor={`${fid}-password`}>Password</Label>
-        <Input
-          id={`${fid}-password`}
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          disabled={busy}
-          aria-required="true"
-        />
-      </div>
-
-      {error === "invalid_credentials" && (
-        <AuthFieldError id={`${fid}-err`}>
-          Email or password is incorrect.{" "}
-          <a
-            href={`/account/forgot-password?returnTo=${encodeURIComponent(`/claim/${rawToken}`)}`}
-            className="underline underline-offset-2 hover:text-destructive/80"
-          >
-            Reset your password
-          </a>{" "}
-          if you&apos;ve forgotten it.
-        </AuthFieldError>
-      )}
-      {error === "too_many_requests" && (
-        <AuthFieldError
-          id={`${fid}-err`}
-          message={`Too many attempts — please wait${retryAfterSec ? ` ${retryAfterSec} second${retryAfterSec !== 1 ? "s" : ""}` : " a minute"} and try again.`}
-        />
-      )}
-      {(error === "server" || error === "network") && (
-        <AuthFieldError
-          id={`${fid}-err`}
-          message="Something went wrong. Please try again."
-        />
-      )}
-
-      <div className="flex flex-col gap-2">
-        <Button
-          type="submit"
-          disabled={busy}
-          aria-busy={busy}
-          className="min-h-11 w-full text-base"
-        >
-          {busy ? "Signing in..." : `Sign in to connect ${studentName}`}
-        </Button>
-        <button
-          type="button"
-          onClick={onBack}
-          className="text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-        >
-          Back
-        </button>
-      </div>
-
-      <p className="text-center text-xs text-muted-foreground">
-        <a
-          href={`/account/forgot-password?returnTo=${encodeURIComponent(`/claim/${rawToken}`)}`}
-          className="underline-offset-2 hover:underline"
-        >
-          Forgot your password?
-        </a>
-      </p>
-    </form>
+    <AccountHolderLoginForm
+      returnTo={claimReturnTo}
+      forgotPasswordReturnTo={claimReturnTo}
+      twoFaReturnTo={claimReturnTo}
+      submitLabel={`Sign in to connect ${studentName}`}
+      onBack={onBack}
+    />
   );
 }
