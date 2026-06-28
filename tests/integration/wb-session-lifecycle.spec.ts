@@ -1169,7 +1169,7 @@ test.describe(
     );
 
     test(
-      "waiting-room A/V controls render as stateful chip-toggles (checkbox role + persistent state label)",
+      "waiting-room A/V controls use live top-bar mic/cam button styling",
       async ({ browser }) => {
         test.setTimeout(180_000);
         const session = await seedWbPendingLiveSyncSession();
@@ -1181,7 +1181,7 @@ test.describe(
         });
         const studentCtx = await browser.newContext({
           viewport: { width: 1280, height: 800 },
-          permissions: ["microphone"],
+          permissions: ["microphone", "camera"],
         });
         try {
           await loginLearnerInContext(
@@ -1217,27 +1217,19 @@ test.describe(
             studentPage.getByTestId("wb-waiting-overlay")
           ).toBeVisible({ timeout: 10_000 });
 
-          // ── Mic control (top-bar component reused in overlay — inline meter) ──
           const micToggle = studentPage.getByTestId("wb-topbar-mic-toggle");
           await expect(micToggle).toBeVisible({ timeout: 10_000 });
           await expect(micToggle.locator(".mynk-wb-mic-meter")).toBeVisible();
 
-          // ── Cam chip-toggle ──
-          const camChip = studentPage.getByTestId("wb-overlay-cam-chip");
-          await expect(camChip).toBeVisible({ timeout: 10_000 });
+          const camToggle = studentPage.getByTestId("wb-topbar-cam-toggle");
+          await expect(camToggle).toBeVisible({ timeout: 10_000 });
+          await expect(camToggle).toHaveClass(/mynk-wb-tb-btn/);
+          await expect(camToggle).toHaveClass(/mynk-wb-tb-btn--icon/);
 
-          const camCheckbox = camChip.getByRole("checkbox");
-          await expect(camCheckbox).toBeVisible();
-
-          const camLabel = studentPage.getByTestId("wb-overlay-cam-chip-label");
-          await expect(camLabel).toBeVisible();
-          const camLabelText = await camLabel.textContent();
-          expect(["Camera on", "Camera off"]).toContain(camLabelText?.trim());
-
-          // ── Toggle oracle: clicking cam chip flips the state label ──
-          const camBefore = await camLabel.textContent();
-          await camChip.click();
-          await expect(camLabel).not.toHaveText(camBefore ?? "", { timeout: 10_000 });
+          await camToggle.click();
+          await expect(camToggle).toHaveClass(/mynk-wb-tb-btn--cam-off/, {
+            timeout: 10_000,
+          });
         } finally {
           await tutorCtx.close();
           await studentCtx.close();
@@ -1423,6 +1415,82 @@ test.describe(
           const overlayTiles = studentPage.getByTestId("wb-waiting-room-av-tiles");
           await expect(overlayTiles).toBeVisible({ timeout: 30_000 });
           await assertRemoteTilePresent(overlayTiles);
+        } finally {
+          await tutorCtx.close();
+          await studentCtx.close();
+        }
+      }
+    );
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Fix 2a — remote cam-off renders initials via presence camOn (not track mute)
+// ---------------------------------------------------------------------------
+
+test.describe(
+  "Remote cam-off tile shows initials via presence camOn signal",
+  { tag: [TAG.WB_PRESENCE, TAG.WB_AV, TAG.WB_CHROME] },
+  () => {
+    test(
+      "tutor waiting-room remote tile shows initials after student turns camera off",
+      async ({ browser }) => {
+        // PLAYWRIGHT-GAP: inbound WebRTC video track enabled/muted does not
+        // propagate to the receiver; this test asserts the presence-signaled
+        // camOn=false path (hermetic via sync relay), not raw track mute.
+        test.setTimeout(300_000);
+        const session = await seedWbPendingLiveSyncSession();
+
+        const tutorCtx = await browser.newContext({
+          storageState: "tests/integration/.auth/tutor.json",
+          viewport: { width: 1280, height: 900 },
+          permissions: ["microphone", "camera"],
+        });
+        const studentCtx = await browser.newContext({
+          viewport: { width: 1280, height: 800 },
+          permissions: ["microphone", "camera"],
+        });
+        try {
+          const tutorPage = await tutorCtx.newPage();
+          await tutorPage.goto(
+            `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            tutorPage.getByTestId("tutor-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+          await waitForWbE2eBridge(tutorPage, "tutor");
+          const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
+
+          await loginLearnerInContext(
+            studentCtx,
+            session.learnerHandle,
+            session.learnerPin
+          );
+          const studentPage = await studentCtx.newPage();
+          await studentPage.goto(
+            `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            studentPage.getByTestId("student-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+
+          const tutorTiles = tutorPage.getByTestId("wb-waiting-room-av-tiles");
+          await assertRemoteTilePresent(tutorTiles, 120_000);
+
+          const remoteTile = tutorTiles.locator('[data-is-local="false"]').first();
+          await expect(remoteTile).toBeVisible();
+
+          await studentPage.getByTestId("wb-topbar-cam-toggle").click();
+          await expect(studentPage.getByTestId("wb-topbar-cam-toggle")).toHaveClass(
+            /mynk-wb-tb-btn--cam-off/,
+            { timeout: 10_000 }
+          );
+
+          await expect(
+            remoteTile.locator('[data-placeholder-kind="initials"]')
+          ).toBeVisible({ timeout: 30_000 });
         } finally {
           await tutorCtx.close();
           await studentCtx.close();

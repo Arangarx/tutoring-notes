@@ -78,6 +78,7 @@ import { WbTopBarMicControl } from "@/components/whiteboard/chrome/WbTopBarMicCo
 import { WbTopBarMicControlLive } from "@/components/whiteboard/chrome/WbTopBarMicControlLive";
 import { WbToolBtn } from "@/components/whiteboard/chrome/WbToolBtn";
 import { WbTopBarCamControl } from "@/components/whiteboard/chrome/WbTopBarCamControl";
+import { WbTopBarCamControlLive } from "@/components/whiteboard/chrome/WbTopBarCamControlLive";
 import { WbThemeToggle } from "@/components/whiteboard/chrome/WbThemeToggle";
 import {
   useWhiteboardRecorder,
@@ -5684,23 +5685,14 @@ export function WhiteboardWorkspaceClient({
   );
 
   const overlayCamNode = (
-    <label
-      className={`mynk-wb-follow-toggle mynk-wb-chip${liveAv.localVideoStream !== null && !liveAv.isCamMuted ? " mynk-wb-chip--active" : ""}`}
-      data-testid="wb-overlay-cam-chip"
-    >
-      <input
-        type="checkbox"
-        checked={liveAv.localVideoStream !== null && !liveAv.isCamMuted}
-        aria-label={liveAv.localVideoStream === null || liveAv.isCamMuted ? "Camera off" : "Camera on"}
-        onChange={() => void handleTopBarCam()}
-      />
-      <span className="mynk-wb-menu-item__icon" aria-hidden="true">
-        <WbIconCamera size={12} />
-      </span>
-      <span className="mynk-wb-follow-toggle__label" data-testid="wb-overlay-cam-chip-label">
-        {liveAv.localVideoStream === null || liveAv.isCamMuted ? "Camera off" : "Camera on"}
-      </span>
-    </label>
+    <WbTopBarCamControlLive
+      isCamMuted={liveAv.isCamMuted}
+      hasCamPermission={liveAv.hasCamPermission}
+      hasCamStream={liveAv.localVideoStream !== null}
+      onToggleCam={() => void handleTopBarCam()}
+      onAcquireCam={() => void handleTopBarCam()}
+      disabled={role === "student" ? studentAvPickerDisabled : endingBusy}
+    />
   );
 
   // Device pickers (AudioControls / VideoControls) surfaced in the overlay.
