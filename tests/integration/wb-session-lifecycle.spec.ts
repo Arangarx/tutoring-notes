@@ -21,7 +21,9 @@ import bcrypt from "bcryptjs";
 import {
   seedWbLiveSyncSession,
   seedWbPendingLiveSyncSession,
+  seedSelfLearnerWbSession,
   loginLearnerInContext,
+  loginAccountHolderInContext,
   readEncryptionKeyFromHash,
   startSessionAsTutor,
   waitForWbE2eBridge,
@@ -2134,6 +2136,148 @@ test.describe(
             .toBe(expectedTheme);
         } finally {
           await tutorCtx.close();
+        }
+      }
+    );
+  }
+);
+
+// ---------------------------------------------------------------------------
+// P2-G: WB-JOIN-ADULT-LEARNER — adult self-learner join access
+// ---------------------------------------------------------------------------
+
+test.describe(
+  "WB-JOIN-ADULT-LEARNER — adult self-learner /join/ auth",
+  { tag: [TAG.WB_PRESENCE, TAG.WB_SYNC] },
+  () => {
+    // -----------------------------------------------------------------------
+    // G1. DENIAL (REQUIRED): AH session MUST be denied for a child
+    //     (non-self) learner session. This ensures widening self-learner
+    //     access does NOT leak to child accounts.
+    //
+    // Strategy: seed a self-learner AH (who has a known password), then
+    // attempt to access a *child* session. isSelfLearner=false → 404.
+    // -----------------------------------------------------------------------
+    test(
+      "account-holder session denied for child (non-self) learner session → 404",
+      async ({ browser }) => {
+        test.setTimeout(30_000);
+
+        // Seed a CHILD learner session (isSelfLearner=false by default in seedWbLiveSyncSession).
+        const childSession = await seedWbLiveSyncSession();
+
+        // Seed a self-learner AH with a known password so we can log in as AH.
+        // We use a separate session here just for the accountHolder; we discard its
+        // whiteboardSessionId. The test only needs a valid AH cookie.
+        const selfSession = await seedSelfLearnerWbSession();
+
+        const ahCtx = await browser.newContext();
+        try {
+          // Log in as the self-learner account holder.
+          await loginAccountHolderInContext(
+            ahCtx,
+            selfSession.ahEmail,
+            selfSession.ahPassword
+          );
+          const page = await ahCtx.newPage();
+          // Attempt to access the CHILD learner session via AH session.
+          // The page must deny this: child sessions are never joinable via AH.
+          const response = await page.goto(
+            `/join/${childSession.whiteboardSessionId}`,
+            { waitUntil: "domcontentloaded" }
+          );
+          // 404: isSelfLearner=false → AH path is hard-denied.
+          expect(response?.status()).toBe(404);
+        } finally {
+          await ahCtx.close();
+        }
+      }
+    );
+
+    // -----------------------------------------------------------------------
+    // G2. REDIRECT direction — child session → /students/login (PIN login).
+    // -----------------------------------------------------------------------
+    test(
+      "unauthenticated hit to child-learner /join/[sessionId] redirects to PIN login",
+      async ({ browser }) => {
+        test.setTimeout(30_000);
+        const session = await seedWbLiveSyncSession();
+        const ctx = await browser.newContext();
+        try {
+          const page = await ctx.newPage();
+          await page.goto(`/join/${session.whiteboardSessionId}`, {
+            waitUntil: "domcontentloaded",
+          });
+          // JoinAuthGate must redirect child session → /students/login.
+          await page.waitForURL(
+            (url) => url.pathname === "/students/login",
+            { timeout: 15_000 }
+          );
+          expect(page.url()).toContain("/students/login");
+        } finally {
+          await ctx.close();
+        }
+      }
+    );
+
+    // -----------------------------------------------------------------------
+    // G3. REDIRECT direction — self-learner session → /account/login.
+    // -----------------------------------------------------------------------
+    test(
+      "unauthenticated hit to self-learner /join/[sessionId] redirects to account login",
+      async ({ browser }) => {
+        test.setTimeout(30_000);
+        const session = await seedSelfLearnerWbSession();
+        const ctx = await browser.newContext();
+        try {
+          const page = await ctx.newPage();
+          await page.goto(`/join/${session.whiteboardSessionId}`, {
+            waitUntil: "domcontentloaded",
+          });
+          // JoinAuthGate must redirect self-learner session → /account/login.
+          await page.waitForURL(
+            (url) => url.pathname === "/account/login",
+            { timeout: 15_000 }
+          );
+          expect(page.url()).toContain("/account/login");
+        } finally {
+          await ctx.close();
+        }
+      }
+    );
+
+    // -----------------------------------------------------------------------
+    // G4. ALLOW path — AH session reaches /join/[sessionId] for a self-learner.
+    // Verifies the page renders the whiteboard shell (not login / 404).
+    // -----------------------------------------------------------------------
+    test(
+      "account-holder session accesses self-learner /join/[sessionId] → whiteboard renders",
+      async ({ browser }) => {
+        test.setTimeout(90_000);
+        const session = await seedSelfLearnerWbSession();
+        const ahCtx = await browser.newContext();
+        try {
+          await loginAccountHolderInContext(
+            ahCtx,
+            session.ahEmail,
+            session.ahPassword
+          );
+          const page = await ahCtx.newPage();
+          // Navigate to /join/<sessionId> with an encryption key in the fragment.
+          // Key content doesn't matter for this gate test — we only verify auth passes.
+          await page.goto(
+            `/join/${session.whiteboardSessionId}#k=TESTKEY`,
+            { waitUntil: "domcontentloaded" }
+          );
+          // Must NOT redirect to login.
+          expect(page.url()).not.toContain("/account/login");
+          expect(page.url()).not.toContain("/students/login");
+          // Student canvas mount must be visible — whiteboard shell rendered.
+          await expect(
+            page.getByTestId("student-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 60_000 });
+        } finally {
+          await ahCtx.close();
         }
       }
     );

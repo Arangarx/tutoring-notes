@@ -253,6 +253,95 @@ export async function seedTestLearner(
 }
 
 /**
+ * Test self-learner credentials — an adult who IS the account holder.
+ *
+ * [WB-JOIN-ADULT-LEARNER]: used by tests that exercise account-holder-session
+ * join access (the authenticated adult self-learner path).
+ *
+ * Separate email + password so it can authenticate via /api/auth/account-holder/login.
+ * LearnerProfile is seeded with isSelfLearner=true + accessMode=account_holder_session.
+ */
+export const TEST_SELF_LEARNER = {
+  email: "playwright-self-learner@test.local",
+  password: "SelfLearnerPw!789",
+  displayName: "Playwright Self-Learner",
+} as const;
+
+/**
+ * Seed the test self-learner identity (AccountHolder + LearnerProfile with
+ * isSelfLearner=true) and link it to the given student row.
+ *
+ * Idempotent — safe to call at global setup time and per-test.
+ * Returns { learnerProfileId, accountHolderId } for participant row creation.
+ *
+ * [WB-JOIN-ADULT-LEARNER]
+ */
+export async function seedSelfLearner(
+  studentId: string
+): Promise<{ learnerProfileId: string; accountHolderId: string }> {
+  assertLocalDatabaseUrlForHarness();
+  const prisma = new PrismaClient();
+  try {
+    const passwordHash = await bcrypt.hash(TEST_SELF_LEARNER.password, 10);
+
+    // AccountHolder — upsert by unique email.
+    const accountHolder = await prisma.accountHolder.upsert({
+      where: { email: TEST_SELF_LEARNER.email },
+      create: {
+        email: TEST_SELF_LEARNER.email,
+        displayName: TEST_SELF_LEARNER.displayName,
+        passwordHash,
+        emailVerifiedAt: new Date("2026-01-01"),
+        isSelfLearner: true,
+      },
+      update: {
+        passwordHash,
+        emailVerifiedAt: new Date("2026-01-01"),
+        isSelfLearner: true,
+      },
+      select: { id: true },
+    });
+
+    // LearnerProfile — find via accountHolderId unique constraint or create.
+    const existingProfile = await prisma.learnerProfile.findFirst({
+      where: { accountHolderId: accountHolder.id, isSelfLearner: true },
+      select: { id: true },
+    });
+
+    let learnerProfileId: string;
+    if (existingProfile) {
+      learnerProfileId = existingProfile.id;
+      // Keep isSelfLearner flag + accessMode current (idempotent).
+      await prisma.learnerProfile.update({
+        where: { id: learnerProfileId },
+        data: { isSelfLearner: true, accessMode: "account_holder_session", tombstonedAt: null },
+      });
+    } else {
+      const profile = await prisma.learnerProfile.create({
+        data: {
+          accountHolderId: accountHolder.id,
+          displayName: TEST_SELF_LEARNER.displayName,
+          accessMode: "account_holder_session",
+          isSelfLearner: true,
+        },
+        select: { id: true },
+      });
+      learnerProfileId = profile.id;
+    }
+
+    // Link student to the self-learner profile (idempotent).
+    await prisma.student.update({
+      where: { id: studentId },
+      data: { learnerProfileId },
+    });
+
+    return { learnerProfileId, accountHolderId: accountHolder.id };
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+/**
  * Log in as the test admin via the login form.
  * Navigates to /login, fills credentials, submits, waits for redirect to /admin.
  */
