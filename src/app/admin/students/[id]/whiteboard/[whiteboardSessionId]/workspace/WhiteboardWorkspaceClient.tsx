@@ -5612,50 +5612,54 @@ export function WhiteboardWorkspaceClient({
     sessionMode === "LIVE" ? !overlayStudentConnected : false;
   const overlayCanStart = !overlayCantStart;
 
-  // Pre-built mic control node for the overlay — role-specific chip-toggle.
-  // Reuses the `mynk-wb-follow-toggle mynk-wb-chip` pattern (same CSS class
-  // as the follow-toggle, no new styles) wired to the same state + handlers
-  // as the top-bar compact icon controls. The top-bar controls are unchanged.
+  // Cloned mic stream for inline metering on the student overlay — never tap the
+  // publish stream (Web Audio on the WebRTC track can silence the peer).
+  const overlayMicMeterStream = useMemo(() => {
+    const track = liveAv.localAudioStream?.getAudioTracks()[0];
+    if (!track || liveAv.isMicMuted) return null;
+    try {
+      return new MediaStream([track.clone()]);
+    } catch {
+      return null;
+    }
+  }, [liveAv.localAudioStream, liveAv.isMicMuted]);
+
+  // Pre-built mic control for the overlay — reuse top-bar components so the
+  // inline volume meter matches tutor parity (Plan #1 smoke finding 2).
   const overlayMicNode =
     role === "student" ? (
-      <label
-        className={`mynk-wb-follow-toggle mynk-wb-chip${!liveAv.isMicMuted && liveAv.localAudioStream !== null ? " mynk-wb-chip--active" : ""}`}
-        data-testid="wb-overlay-mic-chip"
-      >
-        <input
-          type="checkbox"
-          checked={!liveAv.isMicMuted && liveAv.localAudioStream !== null}
-          aria-label={liveAv.isMicMuted || liveAv.localAudioStream === null ? "Mic off" : "Mic on"}
-          onChange={() => void handleTopBarMic()}
-        />
-        <span className="mynk-wb-menu-item__icon" aria-hidden="true">
-          <WbIconMic size={12} />
-        </span>
-        <span className="mynk-wb-follow-toggle__label" data-testid="wb-overlay-mic-chip-label">
-          {liveAv.isMicMuted || liveAv.localAudioStream === null ? "Mic off" : "Mic on"}
-        </span>
-      </label>
+      <WbTopBarMicControlLive
+        isMicMuted={liveAv.isMicMuted}
+        hasMicPermission={liveAv.hasMicPermission}
+        hasMicStream={liveAv.localAudioStream !== null}
+        audioDevices={liveAv.audioDevices ?? []}
+        selectedPickerSlot={liveAv.pickedMicSlot}
+        isAcquiring={liveAv.isAcquiring}
+        showInlineMeter
+        micStream={overlayMicMeterStream}
+        onToggleMute={liveAv.toggleMic}
+        onAcquireMic={handleAcquireMic}
+        onPickMicSlot={(slot) =>
+          void liveAv.setMicDeviceBySlot(slot, { force: true })
+        }
+        onRefreshDevices={() => void liveAv.refreshAudioDeviceList()}
+        disabled={studentAvPickerDisabled}
+      />
     ) : (
-      <label
-        className={`mynk-wb-follow-toggle mynk-wb-chip${!liveAv.isMicMuted && liveAv.localAudioStream !== null ? " mynk-wb-chip--active" : ""}`}
-        data-testid="wb-overlay-mic-chip"
-      >
-        <input
-          type="checkbox"
-          checked={!liveAv.isMicMuted && liveAv.localAudioStream !== null}
-          aria-label={liveAv.isMicMuted || liveAv.localAudioStream === null ? "Mic off" : "Mic on"}
-          onChange={() => void handleTopBarMic()}
-        />
-        <span className="mynk-wb-menu-item__icon" aria-hidden="true">
-          <WbIconMic size={12} />
-        </span>
-        <span className="mynk-wb-follow-toggle__label" data-testid="wb-overlay-mic-chip-label">
-          {liveAv.isMicMuted || liveAv.localAudioStream === null ? "Mic off" : "Mic on"}
-        </span>
-      </label>
+      <WbTopBarMicControl
+        audio={workspaceAudio}
+        isMicMuted={liveAv.isMicMuted}
+        onToggleMute={liveAv.toggleMic}
+        onAcquireMic={handleAcquireMic}
+        onPickMicSlot={(slot) =>
+          void liveAv.setMicDeviceBySlot(slot, { force: true })
+        }
+        disabled={endingBusy}
+      />
     );
 
-  const overlayAVTilesNode = (
+  // Pre-built cam control node for the overlay — chip-toggle pattern (same CSS
+  // as follow-toggle). Top-bar cam controls are unchanged.
     <AVTilesPanel
       participants={liveAv.participants}
       localTile={{

@@ -1215,19 +1215,10 @@ test.describe(
             studentPage.getByTestId("wb-waiting-overlay")
           ).toBeVisible({ timeout: 10_000 });
 
-          // ── Mic chip-toggle (semantic oracle: chip paradigm, not action button) ──
-          const micChip = studentPage.getByTestId("wb-overlay-mic-chip");
-          await expect(micChip).toBeVisible({ timeout: 10_000 });
-
-          // Must contain a checkbox role (stateful toggle, not a plain action button).
-          const micCheckbox = micChip.getByRole("checkbox");
-          await expect(micCheckbox).toBeVisible();
-
-          // Must show a persistent text state label ("Mic on" or "Mic off").
-          const micLabel = studentPage.getByTestId("wb-overlay-mic-chip-label");
-          await expect(micLabel).toBeVisible();
-          const micLabelText = await micLabel.textContent();
-          expect(["Mic on", "Mic off"]).toContain(micLabelText?.trim());
+          // ── Mic control (top-bar component reused in overlay — inline meter) ──
+          const micToggle = studentPage.getByTestId("wb-topbar-mic-toggle");
+          await expect(micToggle).toBeVisible({ timeout: 10_000 });
+          await expect(micToggle.locator(".mynk-wb-mic-meter")).toBeVisible();
 
           // ── Cam chip-toggle ──
           const camChip = studentPage.getByTestId("wb-overlay-cam-chip");
@@ -1241,15 +1232,10 @@ test.describe(
           const camLabelText = await camLabel.textContent();
           expect(["Camera on", "Camera off"]).toContain(camLabelText?.trim());
 
-          // ── Toggle oracle: clicking the chip flips the state label ──
-          // Record the initial mic state then click to toggle.
-          const micBefore = await micLabel.textContent();
-          await micChip.click();
-          // After toggle, label must change to the other state.
-          await expect(micLabel).not.toHaveText(micBefore ?? "", { timeout: 10_000 });
-          const micAfter = await micLabel.textContent();
-          expect(["Mic on", "Mic off"]).toContain(micAfter?.trim());
-          expect(micAfter?.trim()).not.toBe(micBefore?.trim());
+          // ── Toggle oracle: clicking cam chip flips the state label ──
+          const camBefore = await camLabel.textContent();
+          await camChip.click();
+          await expect(camLabel).not.toHaveText(camBefore ?? "", { timeout: 10_000 });
         } finally {
           await tutorCtx.close();
           await studentCtx.close();
@@ -1901,6 +1887,66 @@ test.describe(
           ).toBeVisible();
         } finally {
           await tutorCtx.close();
+          await studentCtx.close();
+        }
+      }
+    );
+
+    test(
+      "student waiting-room mic control shows inline volume meter (parity with tutor)",
+      async ({ browser }) => {
+        test.setTimeout(180_000);
+        const session = await seedWbPendingLiveSyncSession();
+
+        const studentCtx = await browser.newContext({
+          viewport: { width: 390, height: 844 },
+          permissions: ["microphone", "camera"],
+        });
+        try {
+          await loginLearnerInContext(
+            studentCtx,
+            session.learnerHandle,
+            session.learnerPin
+          );
+
+          const tutorCtx = await browser.newContext({
+            storageState: "tests/integration/.auth/tutor.json",
+            viewport: { width: 1280, height: 900 },
+            permissions: ["microphone", "camera"],
+          });
+          const tutorPage = await tutorCtx.newPage();
+          await tutorPage.goto(
+            `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            tutorPage.getByTestId("tutor-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+          const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
+
+          const studentPage = await studentCtx.newPage();
+          await studentPage.goto(
+            `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            studentPage.getByTestId("wb-waiting-overlay")
+          ).toBeVisible({ timeout: 10_000 });
+
+          const studentMic = studentPage
+            .getByTestId("wb-waiting-overlay")
+            .getByTestId("wb-topbar-mic-toggle");
+          await expect(studentMic).toBeVisible({ timeout: 10_000 });
+          await expect(studentMic.locator(".mynk-wb-mic-meter")).toBeVisible();
+
+          const tutorMic = tutorPage
+            .getByTestId("wb-waiting-overlay")
+            .getByTestId("wb-topbar-mic-toggle");
+          await expect(tutorMic).toBeVisible({ timeout: 10_000 });
+          await expect(tutorMic.locator(".mynk-wb-mic-meter")).toBeVisible();
+
+          await tutorCtx.close();
+        } finally {
           await studentCtx.close();
         }
       }
