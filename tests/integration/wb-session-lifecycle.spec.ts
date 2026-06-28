@@ -1951,9 +1951,13 @@ test.describe(
   { tag: [TAG.WB_CHROME, TAG.WB_AV, TAG.WB_PRESENCE] },
   () => {
     test(
-      "cam-off tiles show initials in waiting-room overlay (local preview + remote peer)",
+      "cam-off local preview tiles show initials in waiting-room overlay",
       async ({ browser }) => {
-        test.setTimeout(300_000);
+        // Hermetic local-preview oracle only. Remote cam-off initials are covered
+        // by fix-2a presence camOn path ("tutor waiting-room remote tile shows
+        // initials after student turns camera off"); relay cannot propagate inbound
+        // track mute to the receiver.
+        test.setTimeout(180_000);
         const session = await seedWbPendingLiveSyncSession();
 
         const tutorCtx = await browser.newContext({
@@ -1996,47 +2000,42 @@ test.describe(
 
           const studentTiles = studentPage.getByTestId("wb-waiting-room-av-tiles");
           const tutorTiles = tutorPage.getByTestId("wb-waiting-room-av-tiles");
-          await assertRemoteTilePresent(studentTiles, 120_000);
-          await assertRemoteTilePresent(tutorTiles, 120_000);
+          await expect(studentTiles).toBeVisible({ timeout: 15_000 });
+          await expect(tutorTiles).toBeVisible({ timeout: 15_000 });
+          await expect(
+            tutorTiles.locator('[data-is-local="true"]')
+          ).toBeVisible({ timeout: 15_000 });
+          await expect(
+            studentTiles.locator('[data-is-local="true"]')
+          ).toBeVisible({ timeout: 15_000 });
 
           // Local oracle: own cam-off shows initials (not a black frame).
-          const tutorCamChip = tutorPage.getByTestId("wb-overlay-cam-chip");
-          const tutorCamLabel = tutorPage.getByTestId("wb-overlay-cam-chip-label");
-          if ((await tutorCamLabel.textContent())?.trim() === "Camera off") {
-            await tutorCamChip.click();
-            await expect(tutorCamLabel).toHaveText("Camera on", {
-              timeout: 15_000,
+          async function assertLocalCamOffShowsInitials(
+            page: import("@playwright/test").Page,
+            tiles: import("@playwright/test").Locator
+          ) {
+            const overlay = page.getByTestId("wb-waiting-overlay");
+            const camToggle = overlay.getByTestId("wb-topbar-cam-toggle");
+            await expect(camToggle).toBeVisible({ timeout: 15_000 });
+            if (await camToggle.evaluate((el) => el.classList.contains("mynk-wb-tb-btn--cam-off"))) {
+              await camToggle.click();
+              await expect(camToggle).not.toHaveClass(/mynk-wb-tb-btn--cam-off/, {
+                timeout: 10_000,
+              });
+            }
+            await camToggle.click();
+            await expect(camToggle).toHaveClass(/mynk-wb-tb-btn--cam-off/, {
+              timeout: 10_000,
             });
+            await expect(
+              tiles
+                .locator('[data-is-local="true"]')
+                .locator('[data-placeholder-kind="initials"]')
+            ).toBeVisible({ timeout: 15_000 });
           }
-          await tutorCamChip.click();
-          await expect(tutorCamLabel).toHaveText("Camera off", {
-            timeout: 15_000,
-          });
-          await expect(
-            tutorTiles
-              .locator('[data-is-local="true"]')
-              .locator('[data-placeholder-kind="initials"]')
-          ).toBeVisible({ timeout: 15_000 });
 
-          const studentCamChip = studentPage.getByTestId("wb-overlay-cam-chip");
-          const studentCamLabel = studentPage.getByTestId(
-            "wb-overlay-cam-chip-label"
-          );
-          if ((await studentCamLabel.textContent())?.trim() === "Camera off") {
-            await studentCamChip.click();
-            await expect(studentCamLabel).toHaveText("Camera on", {
-              timeout: 15_000,
-            });
-          }
-          await studentCamChip.click();
-          await expect(studentCamLabel).toHaveText("Camera off", {
-            timeout: 15_000,
-          });
-          await expect(
-            studentTiles
-              .locator('[data-is-local="true"]')
-              .locator('[data-placeholder-kind="initials"]')
-          ).toBeVisible({ timeout: 15_000 });
+          await assertLocalCamOffShowsInitials(tutorPage, tutorTiles);
+          await assertLocalCamOffShowsInitials(studentPage, studentTiles);
         } finally {
           await tutorCtx.close();
           await studentCtx.close();
