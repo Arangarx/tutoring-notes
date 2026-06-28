@@ -155,7 +155,7 @@ Probably need volume boost controls here (at some point maybe individual volume 
 **Ignore this run:** Different learners on two devices (wrong test — that's auth BLOCKER 404).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
@@ -164,7 +164,10 @@ Probably need volume boost controls here (at some point maybe individual volume 
 `[automated: wb-session-lifecycle.spec.ts › second student device with same learner joins → older device shows takeover message]`  
 `[human-only: real-device timing, message clarity, tutor single-tile feel]`
 
-**Notes:**
+**Notes:**  
+**In setting up to test this. Positive note, when I sent a share link from live session, she went to the live session and not a waiting room.**  
+**In addition to the spacing fix noted above, the student still does not have the same volume indicator on the button as the tutor, and also if the audio and video are compacted to the "more" student no longer has a way to change devices.**  
+**Student joined for dual session test in phone, but it let her in to the board before the "switch device" prompt and I saw two instances of the student as tutor for a second till she clicked the button.  But after she clicked the button, BOTH student instances disappeared from the tutor view and shows audio/video disconnected.  STudent is sitting on phone alone in a session.**
 
 ---
 
@@ -180,14 +183,15 @@ Probably need volume boost controls here (at some point maybe individual volume 
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
-- [ ] SKIP
+- [x] SKIP
 
 **Coverage (agent context — your notes go below):**  
 `[automated: wb-session-lifecycle.spec.ts › /w/[token]#k=KEY redirects to /join/[sessionId]#k=KEY (client bridge)]`  
 `[automated: wb-session-lifecycle.spec.ts › /w/[token]#k=KEY → after learner auth, lands on /join/[sessionId] board]`  
 `[human-only: real in-the-wild old link from prior shares, prod-like paste-from-messages flow]`
 
-**Notes:**
+**Notes:**  
+**Don't really care if legacy links work.**
 
 ---
 
@@ -199,7 +203,7 @@ Probably need volume boost controls here (at some point maybe individual volume 
 
 **Ignore this run:** Non-waiting-room surfaces (board tools, marketing pages). System theme follow-OS unless you explicitly want to spot-check System.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -209,7 +213,8 @@ Probably need volume boost controls here (at some point maybe individual volume 
 `[human-only: subjective theme polish on new waiting-room surface — per-branch smoke, both themes]`  
 No dedicated Playwright theme lock for this overlay yet; layout visibility oracles in lifecycle spec do not assert light/dark contrast.
 
-**Notes:**
+**Notes:**  
+**No way to change theme in waiting room, so I have to remember to change it before going in.**
 
 ---
 
@@ -218,4 +223,4 @@ No dedicated Playwright theme lock for this overlay yet; layout visibility oracl
 Check **PASS** only if every in-scope test item is PASS (deliberate per-item SKIPs must be called out in Notes). Check **FAIL** if any in-scope item fails. Leave both unchecked until the run is complete. Overall verdict is PASS/FAIL only — no overall SKIP.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
