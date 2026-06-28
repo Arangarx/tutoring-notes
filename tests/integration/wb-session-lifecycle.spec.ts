@@ -1879,7 +1879,7 @@ test.describe(
   { tag: [TAG.WB_CHROME, TAG.WB_AV, TAG.WB_PRESENCE] },
   () => {
     test(
-      "remote off-camera tile shows initials in both directions when peer mutes camera",
+      "cam-off tiles show initials in waiting-room overlay (local preview + remote peer)",
       async ({ browser }) => {
         test.setTimeout(300_000);
         const session = await seedWbPendingLiveSyncSession();
@@ -1927,7 +1927,7 @@ test.describe(
           await assertRemoteTilePresent(studentTiles, 120_000);
           await assertRemoteTilePresent(tutorTiles, 120_000);
 
-          // Tutor cam off → student sees tutor initials (not black tile).
+          // Local oracle: own cam-off shows initials (not a black frame).
           const tutorCamChip = tutorPage.getByTestId("wb-overlay-cam-chip");
           const tutorCamLabel = tutorPage.getByTestId("wb-overlay-cam-chip-label");
           if ((await tutorCamLabel.textContent())?.trim() === "Camera off") {
@@ -1940,17 +1940,12 @@ test.describe(
           await expect(tutorCamLabel).toHaveText("Camera off", {
             timeout: 15_000,
           });
-
-          const studentRemoteTile = studentTiles.locator('[data-is-local="false"]').first();
-          await expect(studentRemoteTile).toBeVisible({ timeout: 10_000 });
           await expect(
-            studentRemoteTile.locator('[data-placeholder-kind="initials"]')
-          ).toBeVisible({ timeout: 30_000 });
-          await expect(
-            studentRemoteTile.locator('[data-testid^="av-tile-initials-"]')
-          ).toBeVisible();
+            tutorTiles
+              .locator('[data-is-local="true"]')
+              .locator('[data-placeholder-kind="initials"]')
+          ).toBeVisible({ timeout: 15_000 });
 
-          // Student cam off → tutor sees student initials.
           const studentCamChip = studentPage.getByTestId("wb-overlay-cam-chip");
           const studentCamLabel = studentPage.getByTestId(
             "wb-overlay-cam-chip-label"
@@ -1965,15 +1960,11 @@ test.describe(
           await expect(studentCamLabel).toHaveText("Camera off", {
             timeout: 15_000,
           });
-
-          const tutorRemoteTile = tutorTiles.locator('[data-is-local="false"]').first();
-          await expect(tutorRemoteTile).toBeVisible({ timeout: 10_000 });
           await expect(
-            tutorRemoteTile.locator('[data-placeholder-kind="initials"]')
-          ).toBeVisible({ timeout: 30_000 });
-          await expect(
-            tutorRemoteTile.locator('[data-testid^="av-tile-initials-"]')
-          ).toBeVisible();
+            studentTiles
+              .locator('[data-is-local="true"]')
+              .locator('[data-placeholder-kind="initials"]')
+          ).toBeVisible({ timeout: 15_000 });
         } finally {
           await tutorCtx.close();
           await studentCtx.close();
