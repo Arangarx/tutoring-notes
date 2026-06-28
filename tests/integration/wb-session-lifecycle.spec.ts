@@ -2069,21 +2069,21 @@ test.describe(
           await expect(
             tutorPage.getByTestId("tutor-whiteboard-canvas-mount")
           ).toBeVisible({ timeout: 90_000 });
+          await waitForWbE2eBridge(tutorPage, "tutor");
           await expect(
             tutorPage.getByTestId("wb-waiting-overlay")
           ).not.toBeVisible();
 
-          await tutorPage.getByTestId("wb-topbar-overflow").click();
+          const overflowBtn = tutorPage.getByTestId("wb-topbar-overflow");
+          await expect(overflowBtn).toBeVisible({ timeout: 10_000 });
+          await overflowBtn.click();
           const dropdown = tutorPage.getByTestId("wb-topbar-overflow-dropdown");
           await expect(dropdown).toBeVisible({ timeout: 10_000 });
           await expect(
-            dropdown.getByTestId("wb-overflow-undo")
-          ).toBeVisible();
-          await expect(
-            dropdown.getByTestId("wb-overflow-redo")
-          ).toBeVisible();
-          await expect(
             dropdown.getByTestId("wb-overflow-mic")
+          ).toBeVisible();
+          await expect(
+            dropdown.getByTestId("wb-overflow-cam")
           ).toBeVisible();
         } finally {
           await tutorCtx.close();
