@@ -107,6 +107,7 @@ type FakeSyncClient = {
   broadcastScene: jest.Mock;
   broadcastDocument: jest.Mock;
   flushPendingBroadcast: jest.Mock;
+  setLocalAvMediaState: jest.Mock;
   // Test-only helpers
   __triggerConnect: () => void;
   __triggerDisconnect: () => void;
@@ -148,6 +149,7 @@ const mockCreateWhiteboardSyncClient = jest.fn(
         };
       }),
       onRoomPeersChange: jest.fn(() => () => {}),
+      setLocalAvMediaState: jest.fn(),
       onRemotePointer: jest.fn(() => () => {}),
       broadcastScene: jest.fn(),
       broadcastDocument: jest.fn(),

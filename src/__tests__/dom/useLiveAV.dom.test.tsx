@@ -155,6 +155,7 @@ function makeFakeSyncClient(): {
         subs.delete(cb);
       };
     },
+    setLocalAvMediaState: () => undefined,
     disconnect: () => undefined,
   } as unknown as WhiteboardSyncClient;
   function emitPeers(peers: ReadonlyArray<RoomPeer>) {

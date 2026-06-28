@@ -248,9 +248,11 @@ export type WhiteboardWireSignal = {
 //     scene-level data races up; presence is the "I exist with id X"
 //     announcement that lets the mesh start `addPeer` calls.
 //
-// Presence is intentionally minimal: no media-state, no mute flags,
-// no cursor positions. Those would belong in a future "live-state"
-// envelope on a faster cadence; presence is identity-only.
+// Presence carries stable identity plus coarse A/V on/off flags
+// (`camOn` / `micOn`) so remote tiles can render cam-off initials
+// without relying on inbound WebRTC track `enabled`/`muted` (which
+// does not propagate reliably to the receiver). Cursor positions and
+// finer-grained live state belong in other envelopes.
 
 /**
  * Wire envelope announcing a participant's stable identity in the
@@ -294,6 +296,15 @@ export type WhiteboardWirePresence = {
    * heartbeat + cancel-on-grow fixes are also required.
    */
   leaving?: true;
+  /**
+   * Presence-signaled camera on/off. Omitted by legacy senders; receivers
+   * fall back to inbound track heuristics when absent.
+   */
+  camOn?: boolean;
+  /**
+   * Presence-signaled microphone on/off. Omitted by legacy senders.
+   */
+  micOn?: boolean;
 };
 
 /**
@@ -362,6 +373,10 @@ export type RoomPeer = {
    * Absent for tutor and legacy peers.
    */
   joinedAt?: number;
+  /** Presence-signaled camera on/off (see {@link WhiteboardWirePresence.camOn}). */
+  camOn?: boolean;
+  /** Presence-signaled microphone on/off (see {@link WhiteboardWirePresence.micOn}). */
+  micOn?: boolean;
 };
 
 // -----------------------------------------------------------------
@@ -581,6 +596,15 @@ export type WhiteboardSyncClient = {
   onRoomPeersChange: (
     cb: (peers: ReadonlyArray<RoomPeer>) => void
   ) => () => void;
+  /**
+   * Update local coarse A/V on/off flags carried on every presence
+   * broadcast. Call when the user toggles mic/cam so remote tiles can
+   * render cam-off initials without relying on inbound track state.
+   */
+  setLocalAvMediaState: (state: {
+    camOn?: boolean;
+    micOn?: boolean;
+  }) => void;
   /** Tear down the WS, drop subscriptions. Idempotent. */
   disconnect: () => void;
 };
@@ -789,6 +813,12 @@ function validateWirePresence(parsed: unknown): WhiteboardWirePresence {
   }
   if (p.leaving === true) {
     out.leaving = true;
+  }
+  if (typeof p.camOn === "boolean") {
+    out.camOn = p.camOn;
+  }
+  if (typeof p.micOn === "boolean") {
+    out.micOn = p.micOn;
   }
   return out;
 }
@@ -1296,6 +1326,8 @@ export function createWhiteboardSyncClient(
   // so a healthy peer marked `pendingPrune` by another peer's disconnect
   // rescues itself before the grace window evicts it.
   let presenceHeartbeatInterval: ReturnType<typeof globalThis.setInterval> | null = null;
+  let localCamOn: boolean | undefined;
+  let localMicOn: boolean | undefined;
 
   function getRoomPeersSnapshot(): ReadonlyArray<RoomPeer> {
     const out: RoomPeer[] = [];
@@ -1305,6 +1337,8 @@ export function createWhiteboardSyncClient(
       if (entry.label !== undefined) peer.label = entry.label;
       if (entry.identityKey !== undefined) peer.identityKey = entry.identityKey;
       if (entry.joinedAt !== undefined) peer.joinedAt = entry.joinedAt;
+      if (entry.camOn !== undefined) peer.camOn = entry.camOn;
+      if (entry.micOn !== undefined) peer.micOn = entry.micOn;
       out.push(peer);
     }
     out.sort((a, b) =>
@@ -1326,7 +1360,9 @@ export function createWhiteboardSyncClient(
         x.role !== y.role ||
         x.label !== y.label ||
         x.identityKey !== y.identityKey ||
-        x.joinedAt !== y.joinedAt
+        x.joinedAt !== y.joinedAt ||
+        x.camOn !== y.camOn ||
+        x.micOn !== y.micOn
       ) {
         return false;
       }
@@ -1375,6 +1411,8 @@ export function createWhiteboardSyncClient(
       ...(msg.label !== undefined ? { label: msg.label } : {}),
       ...(msg.identityKey !== undefined ? { identityKey: msg.identityKey } : {}),
       ...(msg.joinedAt !== undefined ? { joinedAt: msg.joinedAt } : {}),
+      ...(msg.camOn !== undefined ? { camOn: msg.camOn } : {}),
+      ...(msg.micOn !== undefined ? { micOn: msg.micOn } : {}),
       lastSeenMs: Date.now(),
     };
     presenceMap.set(msg.peerId, next);
@@ -1383,13 +1421,17 @@ export function createWhiteboardSyncClient(
       existing.role !== next.role ||
       existing.label !== next.label ||
       existing.identityKey !== next.identityKey ||
-      existing.joinedAt !== next.joinedAt
+      existing.joinedAt !== next.joinedAt ||
+      existing.camOn !== next.camOn ||
+      existing.micOn !== next.micOn
     ) {
       log.log(
         `kind=presence recv peerId=${msg.peerId} role=${msg.role}${
           msg.label ? ` label=${msg.label}` : ""
         }${msg.identityKey ? ` identityKey=${msg.identityKey}` : ""}${
           msg.joinedAt ? ` joinedAt=${msg.joinedAt}` : ""
+        }${msg.camOn !== undefined ? ` camOn=${msg.camOn}` : ""}${
+          msg.micOn !== undefined ? ` micOn=${msg.micOn}` : ""
         } total=${presenceMap.size}`
       );
       fireRoomPeersIfChanged();
@@ -1407,12 +1449,16 @@ export function createWhiteboardSyncClient(
       ...(localPeerLabel !== undefined ? { label: localPeerLabel } : {}),
       ...(localIdentityKey !== undefined ? { identityKey: localIdentityKey } : {}),
       ...(localJoinedAt !== undefined ? { joinedAt: localJoinedAt } : {}),
+      ...(localCamOn !== undefined ? { camOn: localCamOn } : {}),
+      ...(localMicOn !== undefined ? { micOn: localMicOn } : {}),
     };
     log.log(
       `kind=presence send peerId=${peerId} role=${role}${
         localPeerLabel ? ` label=${localPeerLabel}` : ""
       }${localIdentityKey ? ` identityKey=${localIdentityKey}` : ""}${
         localJoinedAt ? ` joinedAt=${localJoinedAt}` : ""
+      }${localCamOn !== undefined ? ` camOn=${localCamOn}` : ""}${
+        localMicOn !== undefined ? ` micOn=${localMicOn}` : ""
       }`
     );
     void encryptAndEmitImmediate(msg);
@@ -2232,6 +2278,18 @@ export function createWhiteboardSyncClient(
       return () => {
         roomPeersSubs.delete(cb);
       };
+    },
+    setLocalAvMediaState: (state) => {
+      let changed = false;
+      if (state.camOn !== undefined && state.camOn !== localCamOn) {
+        localCamOn = state.camOn;
+        changed = true;
+      }
+      if (state.micOn !== undefined && state.micOn !== localMicOn) {
+        localMicOn = state.micOn;
+        changed = true;
+      }
+      if (changed) broadcastPresence();
     },
     disconnect: () => {
       if (disposed) return;

@@ -2092,6 +2092,80 @@ describe("sync-client presence envelope (Phase 4b)", () => {
     client.disconnect();
   });
 
+  test("camOn/micOn on presence frames surface via onRoomPeersChange", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const peersCb = jest.fn<void, [ReadonlyArray<RoomPeer>]>();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-av-media",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+    client.onRoomPeersChange(peersCb);
+
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    await injectPresence(sock, aes, {
+      v: 1,
+      kind: "presence",
+      peerId: "student-B",
+      role: "student",
+      camOn: true,
+      micOn: false,
+    });
+    await realTick(15);
+    await flushMicrotasks(15);
+    expect(peersCb).toHaveBeenCalledTimes(1);
+    expect(peersCb.mock.calls[0]![0]).toEqual([
+      expect.objectContaining({
+        peerId: "student-B",
+        camOn: true,
+        micOn: false,
+      }),
+    ]);
+
+    client.disconnect();
+  });
+
+  test("setLocalAvMediaState rebroadcasts camOn/micOn on presence send", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-av-local",
+      encryptionKeyBase64Url: k,
+      role: "student",
+      peerId: "student-A",
+      _ioFactory: factory,
+    });
+
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const baseCount = (await readEmittedPresence(sock, aes)).length;
+
+    client.setLocalAvMediaState({ camOn: false, micOn: true });
+    await realTick(15);
+    await flushMicrotasks(15);
+
+    const frames = await readEmittedPresence(sock, aes);
+    expect(frames.length).toBeGreaterThan(baseCount);
+    const withMedia = frames.filter(
+      (f) => f.peerId === "student-A" && f.camOn === false && f.micOn === true
+    );
+    expect(withMedia.length).toBeGreaterThan(0);
+
+    client.disconnect();
+  });
+
   test("label change fires onRoomPeersChange with the new label", async () => {
     const { factory, sockets } = fakeIoFactory();
     const k = generateEncryptionKeyBase64Url();

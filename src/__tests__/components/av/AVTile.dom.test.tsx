@@ -357,6 +357,29 @@ describe("AVTile — remote participant", () => {
     ).toBe("none");
   });
 
+  test("presence-signaled camOn=false shows initials even when inbound video track looks active", () => {
+    const p = makeRemoteParticipant({
+      peerId: "p-presence-cam-off",
+      label: "Jamie Fox",
+      camOn: false,
+      videoStream: makeFakeStream([
+        { kind: "video", enabled: true, muted: false, readyState: "live" },
+      ]),
+      peerConnectionState: "connected",
+    });
+    render(<AVTile participant={p} />);
+    expect(
+      screen.getByTestId("av-tile-cam-placeholder-p-presence-cam-off")
+    ).toHaveAttribute("data-placeholder-kind", "initials");
+    expect(
+      screen.getByTestId("av-tile-initials-p-presence-cam-off")
+    ).toHaveTextContent("JF");
+    expect(
+      (screen.getByTestId("av-tile-video-p-presence-cam-off") as HTMLVideoElement)
+        .style.display
+    ).toBe("none");
+  });
+
   test("muted remote video track shows initials (black-frame cam-off)", () => {
     const p = makeRemoteParticipant({
       peerId: "p-muted-frame",
