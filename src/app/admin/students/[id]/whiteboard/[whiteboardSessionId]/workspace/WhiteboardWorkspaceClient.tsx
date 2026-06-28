@@ -1557,6 +1557,16 @@ export function WhiteboardWorkspaceClient({
   // ref declaration here keeps the render-order constraints visible.
   const everBothPresentRef = useRef(false);
 
+  // Start-button latch: once the student achieves real A/V reachability
+  // (bothPartiesInRoom), keep Start enabled even if ICE briefly flaps.
+  // Without this, a transient ICE drop re-disables the button while the
+  // student is genuinely present — "dead Start button" on real hardware.
+  // Written synchronously in the render body (idempotent latch — only
+  // ever set to true, never cleared) so no separate effect is needed.
+  // The write appears below in the overlay-props section where
+  // bothPartiesInRoom and phaseActive are both in scope.
+  const studentHasConnectedOnceRef = useRef(false);
+
   // UI-honesty: "Student connected — syncing board…" for a brief window
   // after a student joins. The relay socket being up does NOT mean the
   // student has received and applied the welcome push yet. After 5 s the
@@ -3712,6 +3722,13 @@ export function WhiteboardWorkspaceClient({
       console.info(
         `[wtr] wbsid=${whiteboardSessionId} role=${role} action=live_entered mode=${mode.toLowerCase()}`
       );
+    } catch (err) {
+      // Log the failure so a future hardware repro is debuggable.
+      // The button re-enables via the finally block — no stuck state.
+      console.error(
+        `[wtr] wbsid=${whiteboardSessionId} role=${role} action=start_failed mode=${mode.toLowerCase()}`,
+        err
+      );
     } finally {
       setIsStarting(false);
     }
@@ -5580,10 +5597,17 @@ export function WhiteboardWorkspaceClient({
   const chromePageList = role === "student" ? studentPageList : pageList;
 
   // ── Waiting-room overlay props ──────────────────────────────────────────
-  // studentConnected uses bothPartiesInRoom (sync present AND ≥1 WebRTC-
-  // reachable peer) — the same split-brain guard used for billing.
-  const overlayStudentConnected = bothPartiesInRoom;
-  // LIVE: gate on student connected. IN_PERSON: always startable.
+  // Latch: once student achieved real A/V reachability, keep Start enabled
+  // even if ICE briefly flaps (prevents "dead Start button" on hardware).
+  // Writing the ref here in render is safe — it is idempotent (true-only),
+  // and the re-render is already triggered by bothPartiesInRoom state change.
+  if (!phaseActive && bothPartiesInRoom) {
+    studentHasConnectedOnceRef.current = true;
+  }
+  // LIVE: gate on latch (not instantaneous reachability) to survive ICE flaps.
+  const overlayStudentConnected =
+    studentHasConnectedOnceRef.current || bothPartiesInRoom;
+  // LIVE: gate on student connected (latched). IN_PERSON: always startable.
   const overlayCantStart =
     sessionMode === "LIVE" ? !overlayStudentConnected : false;
   const overlayCanStart = !overlayCantStart;

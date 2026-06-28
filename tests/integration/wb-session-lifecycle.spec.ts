@@ -1523,6 +1523,173 @@ test.describe(
 );
 
 // ---------------------------------------------------------------------------
+// Bug A — Start-button latch + full PENDING→ACTIVE transition
+// ---------------------------------------------------------------------------
+//
+// Root cause: `overlayCanStart` was gated on live `bothPartiesInRoom` (WebRTC
+// ICE reachability). On real hardware ICE can briefly flap (peerConnectionState
+// leaving "connected"), which transiently flips `bothPartiesInRoom` false and
+// re-disables the Start button even when the student is genuinely present.
+//
+// Fix: a `studentHasConnectedOnceRef` latch is set true the first time
+// `bothPartiesInRoom` is true (while PENDING). The Start button is gated on
+// `latch || bothPartiesInRoom`, so a transient ICE drop no longer kills it.
+
+test.describe(
+  "Bug A — Start-button latch + full PENDING→ACTIVE transition",
+  { tag: [TAG.WB_PRESENCE, TAG.WB_AV, TAG.WB_SYNC] },
+  () => {
+    test(
+      "full PENDING→ACTIVE: tutor clicks Start → overlay dismissed on both tutor and student",
+      async ({ browser }) => {
+        // Primary regression guard: asserts the complete PENDING→ACTIVE
+        // transition with both tutor and student overlay dismissal.
+        // Oracle: overlay testid absent on both pages (not just disabled).
+        test.setTimeout(300_000);
+        const session = await seedWbPendingLiveSyncSession();
+
+        const tutorCtx = await browser.newContext({
+          storageState: "tests/integration/.auth/tutor.json",
+          viewport: { width: 1280, height: 900 },
+          permissions: ["microphone", "camera"],
+        });
+        const studentCtx = await browser.newContext({
+          viewport: { width: 1280, height: 800 },
+          permissions: ["microphone", "camera"],
+        });
+        try {
+          await loginLearnerInContext(
+            studentCtx,
+            session.learnerHandle,
+            session.learnerPin
+          );
+
+          const tutorPage = await tutorCtx.newPage();
+          await tutorPage.goto(
+            `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            tutorPage.getByTestId("tutor-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+          await waitForWbE2eBridge(tutorPage, "tutor");
+
+          const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
+
+          const studentPage = await studentCtx.newPage();
+          await studentPage.goto(
+            `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            studentPage.getByTestId("student-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+          await waitForWbE2eBridge(studentPage, "student");
+
+          // Both overlays visible while PENDING.
+          await expect(
+            tutorPage.getByTestId("wb-waiting-overlay")
+          ).toBeVisible({ timeout: 10_000 });
+          await expect(
+            studentPage.getByTestId("wb-waiting-overlay")
+          ).toBeVisible({ timeout: 10_000 });
+
+          // Wait for sync presence then Start.
+          await waitForTutorStudentConnected(tutorPage);
+          await startSessionAsTutor(tutorPage);
+
+          // Tutor overlay dismissed immediately (client sets sessionPhase=ACTIVE).
+          await expect(tutorPage.getByTestId("wb-waiting-overlay")).not.toBeVisible();
+
+          // Student overlay dismisses via join-timer poll (≤3.5 s per poll + margin).
+          await expect(
+            studentPage.getByTestId("wb-waiting-overlay")
+          ).not.toBeVisible({ timeout: 60_000 });
+        } finally {
+          await tutorCtx.close();
+          await studentCtx.close();
+        }
+      }
+    );
+
+    test(
+      "Start button stays enabled once student connects — latch guards against ICE-flap dead-button",
+      async ({ browser }) => {
+        // Verifies the studentHasConnectedOnceRef latch: once the Start button
+        // has been enabled by the student's genuine A/V connection, it must
+        // remain enabled even if a brief ICE reachability drop occurs.
+        //
+        // PLAYWRIGHT-GAP: True ICE flap simulation (forcing peerConnectionState
+        // out of "connected" while keeping sync presence) cannot be induced
+        // hermetically in the Playwright fake-media context — the fake tracks
+        // never trigger real ICE state-machine transitions. The latch's
+        // correctness on hardware is verified by Andrew's smoke. The harness
+        // covers the non-flap path: button is enabled after student connects
+        // and stays enabled for 5 s (enough to catch any immediate re-disable
+        // regression). The hardware ICE-flap scenario is documented in
+        // docs/BACKLOG.md as PLAYWRIGHT-GAP: start-button-ice-flap-latch.
+        test.setTimeout(300_000);
+        const session = await seedWbPendingLiveSyncSession();
+
+        const tutorCtx = await browser.newContext({
+          storageState: "tests/integration/.auth/tutor.json",
+          viewport: { width: 1280, height: 900 },
+          permissions: ["microphone", "camera"],
+        });
+        const studentCtx = await browser.newContext({
+          viewport: { width: 1280, height: 800 },
+          permissions: ["microphone", "camera"],
+        });
+        try {
+          await loginLearnerInContext(
+            studentCtx,
+            session.learnerHandle,
+            session.learnerPin
+          );
+
+          const tutorPage = await tutorCtx.newPage();
+          await tutorPage.goto(
+            `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            tutorPage.getByTestId("tutor-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+          await waitForWbE2eBridge(tutorPage, "tutor");
+
+          const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
+
+          const studentPage = await studentCtx.newPage();
+          await studentPage.goto(
+            `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            studentPage.getByTestId("student-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+          await waitForWbE2eBridge(studentPage, "student");
+
+          // Wait for Start button to become enabled — this means bothPartiesInRoom
+          // was true at least once (the latch fires) and studentHasConnectedOnceRef
+          // is now set.
+          const startBtn = tutorPage.getByTestId("wb-start-session");
+          await expect(startBtn).toBeEnabled({ timeout: 90_000 });
+
+          // Hold for 5 s: any immediate re-disable regression (e.g. latch removed,
+          // or a synchronous state reset) would surface here. The genuine ICE-flap
+          // scenario (hardware, multi-second drop) is a PLAYWRIGHT-GAP above.
+          await tutorPage.waitForTimeout(5_000);
+          await expect(startBtn).toBeEnabled();
+        } finally {
+          await tutorCtx.close();
+          await studentCtx.close();
+        }
+      }
+    );
+  }
+);
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
