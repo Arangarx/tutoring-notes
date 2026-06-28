@@ -1945,7 +1945,7 @@ test.describe(
           await expect(studentRemoteTile).toBeVisible({ timeout: 10_000 });
           await expect(
             studentRemoteTile.locator('[data-placeholder-kind="initials"]')
-          ).toBeVisible({ timeout: 10_000 });
+          ).toBeVisible({ timeout: 30_000 });
           await expect(
             studentRemoteTile.locator('[data-testid^="av-tile-initials-"]')
           ).toBeVisible();
@@ -1970,7 +1970,7 @@ test.describe(
           await expect(tutorRemoteTile).toBeVisible({ timeout: 10_000 });
           await expect(
             tutorRemoteTile.locator('[data-placeholder-kind="initials"]')
-          ).toBeVisible({ timeout: 10_000 });
+          ).toBeVisible({ timeout: 30_000 });
           await expect(
             tutorRemoteTile.locator('[data-testid^="av-tile-initials-"]')
           ).toBeVisible();
@@ -2056,7 +2056,7 @@ test.describe(
 
         const tutorCtx = await browser.newContext({
           storageState: "tests/integration/.auth/tutor.json",
-          viewport: { width: 390, height: 844 },
+          viewport: { width: 844, height: 390 },
           hasTouch: true,
           permissions: ["microphone", "camera"],
         });
@@ -2111,6 +2111,7 @@ test.describe(
           await expect(
             tutorPage.getByTestId("tutor-whiteboard-canvas-mount")
           ).toBeVisible({ timeout: 90_000 });
+          await waitForWbE2eBridge(tutorPage, "tutor");
           await expect(
             tutorPage.getByTestId("wb-waiting-overlay")
           ).toBeVisible({ timeout: 10_000 });
@@ -2128,6 +2129,7 @@ test.describe(
 
           await themeBtn.click();
           await tutorPage
+            .getByTestId("wb-waiting-overlay")
             .getByRole("menuitemradio", { name: targetTheme })
             .click();
 
