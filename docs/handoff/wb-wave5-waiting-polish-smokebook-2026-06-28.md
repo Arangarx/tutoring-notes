@@ -1,7 +1,7 @@
 # Waiting-room parity/polish + adult self-learner join (overnight batch on top of Plan #1) — smoke runbook
 
 **Branch:** `wb-wave5-waiting-polish`
-**Tip commit:** [`f06fbba`](https://github.com/Arangarx/tutoring-notes/commit/f06fbba)
+**Tip commit:** `[f06fbba](https://github.com/Arangarx/tutoring-notes/commit/f06fbba)`
 **Preview:** [waiting-room polish + adult join preview](https://tutoring-notes-git-wb-wave5-wait-a507fa-arangarx-5209s-projects.vercel.app)
 
 This smoke covers ONLY the delta added since Andrew's round-4 smoke @ `43c7478`. The waiting-room A/V, Start latch, dropdown coloring, and link icon were already smoked PASS — do not re-prove them here.
@@ -18,13 +18,25 @@ This smoke covers ONLY the delta added since Andrew's round-4 smoke @ `43c7478`.
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Coverage:** `[automated: tests/integration/wb-session-lifecycle.spec.ts › after device A is superseded and closes, tutor retains device B]` — `[human-only: real dual-device takeover timing and presence on hardware]`
 
-**Notes:**
+**Notes:**  
+**Student has volume indicator but the bars don't light up like for tutor unless the mic is on.  Tutor they indicate sound whether muted or not.  Student there is no lighting up of the bars when muted.**  
+
+**Also, Now that you've changed the mic indicator to be like the live board, we should probably make the camera match?  It's a bit weird to have two different styles now.**
+
+**It's also a little weird to have the mic selector twice.  I'm torn though because I like having it right there on the page in the waiting room, but it's also in the mic drop down.  Maybe it's okay because it's only duplicated when they open the dropdown.**  
+  
+**We've been doing this test from the waiting room.  It still shows both student devices at the same time with second device audio coming through before the first device session ends and brings it back down to two.**  
+  
+**However, student is correctly joining my same waiting room even when there are multiple instances of them for a second.  It's not joining a different session now.**  
+
+
+It still doesn't go to her working mic by default.
 
 ---
 
@@ -37,14 +49,14 @@ This smoke covers ONLY the delta added since Andrew's round-4 smoke @ `43c7478`.
 **Ignore this run:** Exact avatar color/size styling.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Coverage:** `[human-only: remote track-mute / off-camera tile rendering on real hardware — relay cannot propagate remote mute]`
 
-**Notes:**
+**Notes: Still black on the other end.**
 
 ---
 
@@ -57,12 +69,18 @@ This smoke covers ONLY the delta added since Andrew's round-4 smoke @ `43c7478`.
 **Ignore this run:** Exact meter styling (bar width, color, animation curve).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Notes:**
+
+**Visually the buttons are the same now, but only when on, when mic is off student has no speaking indicator.**
+
+**Also, since the student ONLY has the mic picker from the dropdown next to the mic toggle, it truly is redundant to have it on the student view since the main view has a picker.**
+
+**Either my wife missed it or it stopped letting her change, but every time she changes her mic it bounces back to the same one.  Again, don't know if it was doing this the whole test or not.**
 
 ---
 
@@ -74,7 +92,7 @@ This smoke covers ONLY the delta added since Andrew's round-4 smoke @ `43c7478`.
 
 **Ignore this run:** Minor wrapping/spacing nits.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -92,13 +110,15 @@ This smoke covers ONLY the delta added since Andrew's round-4 smoke @ `43c7478`.
 
 **Ignore this run:** This is a subjective polish check — minor spacing differences are not a FAIL unless clearly broken.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Notes:**
+
+**Wife asked if font of session recording notice in top bar "more" menu is purposely a different font from everything else.**
 
 ---
 
@@ -110,13 +130,15 @@ This smoke covers ONLY the delta added since Andrew's round-4 smoke @ `43c7478`.
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Notes:**
+
+**This is not a nitpick of this page specifically.  I've been wondering if there's a better icon for "system" that also indicates that it's a theme picker, the sun and moon kinda give the right vibe, but when I see a computer icon there, I don't really know what that will convey to most people.**
 
 ---
 
@@ -129,7 +151,7 @@ This smoke covers ONLY the delta added since Andrew's round-4 smoke @ `43c7478`.
 **Ignore this run:** The "Parent sign in" label wording is a separate pending decision — ignore the label text itself this run.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
@@ -137,6 +159,20 @@ This smoke covers ONLY the delta added since Andrew's round-4 smoke @ `43c7478`.
 **Coverage:** `[automated: tests/integration/wb-session-lifecycle.spec.ts › WB-JOIN-ADULT-LEARNER G1-G4]` — `[human-only: real account-holder login flow and redirect on hardware]`
 
 **Notes:**
+
+**I know it's not part of this section but we need to note, that a "parent" account doesn't have a way to toggle itself to a self learner after account creation.**
+
+**We're trying to sign her up for a self learner account to test this and after she created the account when logging in she just gets "something went wrong" instead of "Please verify your email first" that you get when you sign in from the normal login.  I'm beyond annoyed that no matter how many times I told agents to make things the same fucking component so we don't have divergences like this it still happened all over.**
+
+When self-learner attaches to a claim, it's probably okay that it asks the consent questions, but I don't think they really need the learner name and pin, that's just for child learners, adult/self-learners sign in with their normal email.
+
+self-learner when they click the link from the tutor for the session get a 404 page.
+
+child learner link from tutor went to child login.  So they both go the the right pages, but the parent/self learner 404's on sign in.
+
+As an aside she signed in with the wrong child on a link and got a 404 (which is probably right?)
+
+
 
 ---
 
@@ -149,12 +185,18 @@ This smoke covers ONLY the delta added since Andrew's round-4 smoke @ `43c7478`.
 **Ignore this run:** Items already smoked PASS at round-4 (waiting-room A/V, Start latch, dropdown coloring, link icon) — this is a "didn't regress" sanity pass only.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Notes:**
+
+**Live board has severely regressed for student.  When she goes horizontally thin on desktop it doesn't compact at all everything pushes off screen.  Student has no way to change devices when screen is thin even with more button because "more" just has toggles.**
+
+**Live board doesn't have voice activity indicator for student still.**
+
+**Voice activity indicator for tutor stuck at 2 bars.**
 
 ---
 
@@ -163,4 +205,4 @@ This smoke covers ONLY the delta added since Andrew's round-4 smoke @ `43c7478`.
 Check **PASS** only if every in-scope test item is PASS (deliberate per-item SKIPs must be called out in Notes). Check **FAIL** if any in-scope item fails. Leave both unchecked until the run is complete.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
