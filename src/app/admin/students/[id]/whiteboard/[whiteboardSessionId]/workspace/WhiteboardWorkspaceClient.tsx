@@ -54,6 +54,7 @@ import {
   clearEncryptionKeyForSession,
   useEncryptionKeyInHash,
 } from "@/lib/whiteboard/encryption-key";
+import { JOIN_HASH_STORAGE_PREFIX } from "@/app/join/[sessionId]/JoinAuthGate";
 import {
   ACTIVE_PING_STALE_MS,
   computeDisplayActiveMs,
@@ -466,7 +467,14 @@ export function WhiteboardWorkspaceClient({
   // Encryption key + sync client lifecycle
   // ---------------------------------------------------------------
 
-  const encryptionKey = useEncryptionKeyInHash(whiteboardSessionId);
+  // Tutor-only: mint/persist the encryption key in localStorage + URL hash.
+  // Students have their own key-read path (readStudentKeyFromHash /
+  // sessionStorage fallback below). When enabled=false the hook is a
+  // complete no-op — it must NOT mint a fresh key for students on the
+  // post-login-redirect path (which has an empty hash + empty localStorage).
+  const encryptionKey = useEncryptionKeyInHash(whiteboardSessionId, {
+    enabled: role !== "student",
+  });
   const syncClientRef = useRef<WhiteboardSyncClient | null>(null);
   const [syncReady, setSyncReady] = useState(false);
 
@@ -1057,10 +1065,53 @@ export function WhiteboardWorkspaceClient({
   // Student sync client lifecycle (role="student" only)
   // ---------------------------------------------------------------
 
-  // Step 1: read encryption key from URL hash (student-only; tutor uses useEncryptionKeyInHash)
+  // Step 1: read encryption key (student-only; tutor uses useEncryptionKeyInHash above).
+  //
+  // Primary: URL hash (#k=…). This is the happy path — student arrived
+  // with the link the tutor shared.
+  //
+  // Fallback: sessionStorage[JOIN_HASH_STORAGE_PREFIX + whiteboardSessionId].
+  // JoinAuthGate saves the hash here before redirecting to /students/login
+  // so that the post-login-redirect path (where the browser strips the
+  // fragment) can still recover the key. React runs child effects before
+  // parent effects, so this effect fires BEFORE JoinHashRestorer (parent)
+  // can restore the hash — we must read sessionStorage ourselves here.
   useEffect(() => {
     if (role !== "student") return;
-    const k = readStudentKeyFromHash();
+
+    // --- primary: URL hash ---
+    let k = readStudentKeyFromHash();
+    let keySource: "hash" | "sessionStorage" | "missing" = "missing";
+    if (k) {
+      keySource = "hash";
+    } else {
+      // --- fallback: sessionStorage (post-login-redirect path) ---
+      try {
+        const stored = sessionStorage.getItem(
+          JOIN_HASH_STORAGE_PREFIX + whiteboardSessionId
+        );
+        if (stored) {
+          const ssParams = new URLSearchParams(
+            stored.startsWith("#") ? stored.slice(1) : stored
+          );
+          const fromSs = ssParams.get("k");
+          if (fromSs && fromSs.length >= 16) {
+            k = fromSs;
+            keySource = "sessionStorage";
+            // Consume the entry so a subsequent refresh doesn't re-read it.
+            sessionStorage.removeItem(JOIN_HASH_STORAGE_PREFIX + whiteboardSessionId);
+            // Restore the hash so that any code that reads window.location.hash
+            // later (including JoinHashRestorer, which will find a non-empty hash
+            // and skip) sees the canonical key.
+            window.location.hash = stored.startsWith("#") ? stored.slice(1) : stored;
+          }
+        }
+      } catch {
+        /* sessionStorage unavailable — stay on missing path */
+      }
+    }
+
+    wjgLog("key_read", { key_source: keySource });
     if (!k) {
       setStudentKeyMissing(true);
       wjgLog("key_missing");
@@ -1068,7 +1119,7 @@ export function WhiteboardWorkspaceClient({
     }
     setStudentEncryptionKey(k);
     wjgLog("key_ok");
-  }, [role, wjgLog]);
+  }, [role, wjgLog, whiteboardSessionId]);
 
   useEffect(() => {
     if (role !== "student") return;
@@ -1994,8 +2045,19 @@ export function WhiteboardWorkspaceClient({
   }, [reachablePeerIdsKey]);
 
   // bothPartiesInRoom — WebRTC-reachable gate (split-brain fix).
+  //
+  // Sync-connected signal is role-specific:
+  //   - Tutor: tutorSyncConnected (own socket via the tutor-sync client).
+  //   - Student: studentConnected (own socket via the student-sync client).
+  // For role="student", tutorSyncConnected is ALWAYS false (the tutor-sync
+  // client is null for students) — using it would permanently lock the
+  // student overlay on "Connecting…". The student's own sync connection
+  // is the correct "I'm in the room" signal.
   useEffect(() => {
-    const nowReachable = tutorSyncConnected && liveAv.reachableParticipants.length >= 1;
+    const syncConnectedForRole =
+      role === "tutor" ? tutorSyncConnected : studentConnected;
+    const nowReachable =
+      syncConnectedForRole && liveAv.reachableParticipants.length >= 1;
     if (nowReachable) {
       if (reachableLossTimerRef.current !== null) {
         clearTimeout(reachableLossTimerRef.current);
@@ -2016,7 +2078,7 @@ export function WhiteboardWorkspaceClient({
         reachableLossTimerRef.current = null;
       }
     };
-  }, [tutorSyncConnected, liveAv.reachableParticipants.length]);
+  }, [role, tutorSyncConnected, studentConnected, liveAv.reachableParticipants.length]);
 
   // -----------------------------------------------------------------------
   // Waiting-room telemetry (wtr prefix)
@@ -5611,6 +5673,34 @@ export function WhiteboardWorkspaceClient({
       </span>
     </label>
   );
+
+  // Device pickers (AudioControls / VideoControls) surfaced in the overlay.
+  // Reuses the same wired-up components from the top-bar overflow menu — no
+  // new bespoke pickers, no new A/V coupling. Switching device here calls
+  // the same setMicDeviceBySlot / setVideoCameraBySlot handlers that the
+  // overflow menu uses, so the active track changes immediately.
+  const overlayMicPickerNode = (
+    <AudioControls
+      devices={liveAv.audioDevices ?? []}
+      selectedPickerSlot={liveAv.pickedMicSlot}
+      onPickMicSlot={(slot) =>
+        void liveAv.setMicDeviceBySlot(slot, { force: true })
+      }
+      isLive={liveAv.localAudioStream !== null}
+      disabled={studentAvPickerDisabled}
+    />
+  );
+  const overlayCamPickerNode = (
+    <VideoControls
+      devices={liveAv.videoDevices ?? []}
+      selectedPickerSlot={liveAv.pickedVideoCameraSlot}
+      onPickCameraSlot={(slot) =>
+        void liveAv.setVideoCameraBySlot(slot, { force: true })
+      }
+      isLive={liveAv.localVideoStream !== null}
+      disabled={studentAvPickerDisabled}
+    />
+  );
   // ────────────────────────────────────────────────────────────────────────
 
   return (
@@ -6573,6 +6663,8 @@ export function WhiteboardWorkspaceClient({
         onSessionModeChange={(m) => setSessionMode(m)}
         micControlNode={overlayMicNode}
         camControlNode={overlayCamNode}
+        micPickerNode={overlayMicPickerNode}
+        camPickerNode={overlayCamPickerNode}
         avTilesNode={overlayAVTilesNode}
         onCopyStudentLink={role === "tutor" ? handleCopyStudentLink : undefined}
         copyStudentLinkState={copyState}
