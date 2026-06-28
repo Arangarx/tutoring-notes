@@ -66,6 +66,18 @@ export type WaitingRoomOverlayProps = {
    */
   camControlNode: ReactNode;
   /**
+   * Optional mic device picker (AudioControls) shown below the chip-toggle.
+   * Reuses the existing AudioControls component already wired in the workspace.
+   * When omitted, only the chip-toggle is shown.
+   */
+  micPickerNode?: ReactNode;
+  /**
+   * Optional camera device picker (VideoControls) shown below the chip-toggle.
+   * Reuses the existing VideoControls component already wired in the workspace.
+   * When omitted, only the chip-toggle is shown.
+   */
+  camPickerNode?: ReactNode;
+  /**
    * Pre-built A/V tiles panel node (AVTilesPanel with localTile + participants).
    * Already wired in the workspace.
    */
@@ -100,6 +112,8 @@ export function WaitingRoomOverlay({
   onSessionModeChange,
   micControlNode,
   camControlNode,
+  micPickerNode,
+  camPickerNode,
   avTilesNode,
   onCopyStudentLink,
   copyStudentLinkState = "idle",
@@ -152,11 +166,22 @@ export function WaitingRoomOverlay({
           {avTilesNode}
         </div>
 
-        {/* ── A/V controls row ── */}
+        {/* ── A/V controls row (chip-toggles) ── */}
         <div className="mynk-wtr-av-controls">
           {micControlNode}
           {camControlNode}
         </div>
+
+        {/* ── Device pickers (mic + camera selects) ── */}
+        {(micPickerNode ?? camPickerNode) && (
+          <div
+            className="mynk-wtr-device-pickers"
+            data-testid="wb-waiting-overlay-device-pickers"
+          >
+            {micPickerNode}
+            {camPickerNode}
+          </div>
+        )}
 
         {isTutor && (
           <>
