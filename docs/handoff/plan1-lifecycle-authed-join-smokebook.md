@@ -56,9 +56,9 @@ Playwright: `[tests/integration/wb-session-lifecycle.spec.ts](../../tests/integr
 
 **Ignore this run:** Auth BLOCKER negatives (wrong learner 404, tutor-at-`/join` redirect, no-participant 404) — covered by Playwright. Unclaimed student / missing learner credential (prerequisite failure, not Plan #1 bug).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
-- [x] PARTIAL
+- [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
@@ -67,7 +67,9 @@ Playwright: `[tests/integration/wb-session-lifecycle.spec.ts](../../tests/integr
 `[automated: wb-session-lifecycle.spec.ts › Auth BLOCKERs — /join/ participant gate]` — participant gate + login redirect.  
 `[human-only: real second device + real learner login UX + confirm board key survived after login]`
 
-**Notes: Does not go directly to waiting room, lands on the consent confirm dialog that is not supposed to be there anymore.**
+**Notes: **  
+This smoke run is desktop to desktop.  
+Visual change: Need less space between options in top bar "more" menu.  Make it spaced more like left bar "more" menu.
 
 ---
 
@@ -79,7 +81,7 @@ Playwright: `[tests/integration/wb-session-lifecycle.spec.ts](../../tests/integr
 
 **Ignore this run:** Phase-gated recording pill / billing timer not running yet in PENDING — correct behavior; `[automated: wb-session-lifecycle.spec.ts › Phase-gated capture + timer]`. Overlay visibility alone on tutor/student — `[automated: wb-session-lifecycle.spec.ts › Waiting-room overlay + Start gating]`.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -89,7 +91,11 @@ Playwright: `[tests/integration/wb-session-lifecycle.spec.ts](../../tests/integr
 `[human-only: real cameras/mics, subjective A/V quality, device-picker feel on real hardware]`  
 Optional cross-ref prior A/V smoke: `[wb-wave5-polish-part1-checkpoint-smokebook.md](wb-wave5-polish-part1-checkpoint-smokebook.md)` — distinct surface (waiting-room overlay vs in-session chrome).
 
-**Notes:**
+**Notes:**  
+**On tutor side when video is shut off, student just sees black, not initials.**  
+Same with student, when video off they see initials, but tutor just sees black.  
+Probably need volume boost controls here (at some point maybe individual volume controls for each other stream than your own, just backlog this)  
+
 
 ---
 
@@ -101,7 +107,7 @@ Optional cross-ref prior A/V smoke: `[wb-wave5-polish-part1-checkpoint-smokebook
 
 **Ignore this run:** Solo tutor with no student (IN_PERSON — item 4). Harness-only recording pill quirks in CI.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -125,7 +131,7 @@ Optional cross-ref prior A/V smoke: `[wb-wave5-polish-part1-checkpoint-smokebook
 
 **Ignore this run:** Consent projection / student consent flags (Plan #2). Student-side IN_PERSON (N/A — no remote student).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -135,7 +141,8 @@ Optional cross-ref prior A/V smoke: `[wb-wave5-polish-part1-checkpoint-smokebook
 `[automated: wb-session-lifecycle.spec.ts › IN_PERSON mode — Start is always enabled (no student required)]` — behavior with mode **pre-seeded**; Playwright does not click the mode toggle (pointer-interception note in spec).  
 `[human-only: mode toggle affordance, discoverability, tutor comprehension of IN_PERSON vs LIVE]`
 
-**Notes:**
+**Notes:**  
+**I personally think the mode was discoverable, but that's also because I expect it, we'll see what more feedback we get with usage.**
 
 ---
 
