@@ -5660,6 +5660,7 @@ export function WhiteboardWorkspaceClient({
 
   // Pre-built cam control node for the overlay — chip-toggle pattern (same CSS
   // as follow-toggle). Top-bar cam controls are unchanged.
+  const overlayAVTilesNode = (
     <AVTilesPanel
       participants={liveAv.participants}
       localTile={{
