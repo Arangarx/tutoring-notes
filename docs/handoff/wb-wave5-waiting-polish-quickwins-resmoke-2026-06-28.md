@@ -1,7 +1,7 @@
 # Quick-wins re-smoke — waiting-room A/V parity + adult-join auth (delta on top of round-5) — smoke runbook
 
 **Branch:** `wb-wave5-waiting-polish`
-**Tip commit:** [`575f876`](https://github.com/Arangarx/tutoring-notes/commit/575f876)
+**Tip commit:** `[575f876](https://github.com/Arangarx/tutoring-notes/commit/575f876)`
 **Preview:** [quick-wins re-smoke preview](https://tutoring-notes-git-wb-wave5-wait-a507fa-arangarx-5209s-projects.vercel.app)
 
 Re-smoke covers ONLY the 6 quick-win fixes below — Andrew's round-5 FAIL/PARTIAL items that we fixed today. Do NOT re-prove already-passing round-5 items. The live-board student-chrome regression, mic-device persistence, and tutor-meter-stuck-at-2-bars are deliberately OUT of scope (tracked as Thread A); parent→self-learner toggle, claim name/PIN gating, and signup convergence are Thread B.
@@ -16,15 +16,16 @@ Re-smoke covers ONLY the 6 quick-win fixes below — Andrew's round-5 FAIL/PARTI
 
 **Ignore this run:** Avatar color/size styling.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Coverage:** `[human-only: remote track-mute rendering on real hardware — relay cannot propagate remote mute]`
 
-**Notes:**
+**Notes:**  
+**I initially passed this but in the second session we started for testing, I am seeing initials for the student even though their camera is on and student sees self. Turning their camera off and on does not fix it.**
 
 ---
 
@@ -36,7 +37,7 @@ Re-smoke covers ONLY the 6 quick-win fixes below — Andrew's round-5 FAIL/PARTI
 
 **Ignore this run:** Exact meter styling (bar width, color, animation curve).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -54,7 +55,7 @@ Re-smoke covers ONLY the 6 quick-win fixes below — Andrew's round-5 FAIL/PARTI
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -74,25 +75,28 @@ Re-smoke covers ONLY the 6 quick-win fixes below — Andrew's round-5 FAIL/PARTI
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Coverage:** `[automated: tests/integration/wb-session-lifecycle.spec.ts › Waiting-room overlay mic picker dedup]`
 
-**Notes:**
+**Notes:**  
+**Student doesn't have carot anymore because all they had in it was the mic picker, this is expected.**  
+**Student can't start the session, that's only on tutor side, this is expected.**  
+**Regression: Start Session is not starting the session. (I will start a fresh one to see if we get in to finish this test)**
 
 ---
 
 ### 5. Adult self-learner login shows the correct verify-email message (7b — round-5 item 7 note "something went wrong instead of Please verify your email first")
 
-**Action:** Create/sign up a **self-learner** account but **do not** verify the email. Attempt to log in via the **claim-flow** login form (adult self-learner session link → account-holder login). Separately, attempt to log in via **`/account/login`** with the same unverified credentials.
+**Action:** Create/sign up a **self-learner** account but **do not** verify the email. Attempt to log in via the **claim-flow** login form (adult self-learner session link → account-holder login). Separately, attempt to log in via `**/account/login`** with the same unverified credentials.
 
 **Expect:** **Both** login surfaces show **"Please verify your email first"** — identical message, because both now use the shared `AccountHolderLoginForm`.
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -113,7 +117,7 @@ Re-smoke covers ONLY the 6 quick-win fixes below — Andrew's round-5 FAIL/PARTI
 **Ignore this run:** Nothing.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
@@ -122,6 +126,10 @@ Re-smoke covers ONLY the 6 quick-win fixes below — Andrew's round-5 FAIL/PARTI
 
 **Notes:**
 
+**I grabbed the verification link for student and gave it to my son (testing student) who replaced the branch specific url with preview.usemynk.com, but strangely it gave him a message "That verification link has already been used -- your account is active. Sign in below." even though this is absolutely the first time he's gone to that link.**
+
+**Still broken: I had him as student use an incorrect pin for the child's session.  Then I started a new session for the self learner, and he pasted the link into the same tab of the browser, and got the 404 "Page not found"**
+
 ---
 
 ## Overall result
@@ -129,4 +137,4 @@ Re-smoke covers ONLY the 6 quick-win fixes below — Andrew's round-5 FAIL/PARTI
 Check **PASS** only if every in-scope test item is PASS (deliberate per-item SKIPs must be called out in Notes). Check **FAIL** if any in-scope item fails. Leave both unchecked until the run is complete.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
