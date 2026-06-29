@@ -6,6 +6,8 @@ import {
   readSceneElementIds,
   clickBoardPageTab,
   waitForElementOnPeer,
+  openTutorAndStudent,
+  assertControlFullyInViewport,
 } from "./whiteboard-live-sync.helpers";
 
 /**
@@ -893,5 +895,167 @@ test.describe("wb chrome — interactive controls", () => {
     ).toBeLessThanOrEqual(500);
 
     await context.close();
+  });
+});
+
+/**
+ * WB-LIVEBOARD-STUDENT-CHROME regressions (2026-06-29)
+ *
+ * 8a — student narrow-desktop compaction: recording-disclosure must be hidden
+ *       at <1100px so the bar doesn't overflow (regression gate).
+ * 8b — device pickers reachable in overflow for non-touch narrow-desktop student.
+ * 8c — student live-board mic button must include the inline volume-meter DOM node.
+ * 8d — meter calibration unit-tested (calibrateMicLevel); Playwright-GAP for live
+ *       animation (requires real microphone input — see PLAYWRIGHT-GAP below).
+ */
+test.describe("WB-LIVEBOARD-STUDENT-CHROME @wb-chrome @wb-viewport @wb-av @wb-presence", () => {
+  /**
+   * 8a — student narrow-desktop compaction.
+   *
+   * The recording-disclosure (long text) must not be visible when the viewport
+   * is narrower than 1100px (non-touch desktop), so the top bar doesn't
+   * overflow. The exit button and overflow button must remain reachable.
+   *
+   * RED before fix: disclosure text always visible → bar overflows → exit btn
+   * pushed off-screen.
+   * GREEN after fix: disclosure hidden at <1100px, bar fits in 700px viewport.
+   */
+  test("8a: student top bar compacts at narrow desktop — exit + overflow reachable, no horizontal overflow @wb-chrome @wb-viewport", async ({ browser }) => {
+    const session = await seedWbLiveSyncSession();
+    const pages = await openTutorAndStudent(browser, session, {
+      // Non-touch 700px-wide desktop: exactly the regression viewport.
+      studentViewport: { width: 700, height: 700 },
+      studentHasTouch: false,
+    });
+    const { studentPage } = pages;
+
+    try {
+      // Student is in live board (ACTIVE session). Wait for canvas.
+      await expect(
+        studentPage.getByTestId("student-whiteboard-canvas-mount")
+      ).toBeVisible({ timeout: 90_000 });
+
+      // data-layout must be "desktop" (non-touch window even at 700px).
+      const chrome = studentPage.locator(".mynk-wb-chrome");
+      await expect(chrome).toHaveAttribute("data-layout", "desktop", { timeout: 10_000 });
+
+      // Top bar must not cause horizontal scroll — bar width ≤ viewport width.
+      const topbar = studentPage.getByTestId("wb-student-topbar");
+      const topbarBox = await topbar.boundingBox();
+      expect(topbarBox, "student topbar must have a bounding box").not.toBeNull();
+      // bar right edge must not exceed viewport (relational: width ≤ innerWidth)
+      const viewportWidth = await studentPage.evaluate(() => window.innerWidth);
+      expect(
+        topbarBox!.x + topbarBox!.width,
+        "student topbar right edge must be within viewport (no horizontal overflow)"
+      ).toBeLessThanOrEqual(viewportWidth + 1);
+
+      // Exit button and overflow button must both be fully within viewport.
+      await assertControlFullyInViewport(studentPage, "wb-student-exit");
+      await assertControlFullyInViewport(studentPage, "wb-student-topbar-overflow");
+
+      // The disclosure text must be hidden (display:none) at this narrow viewport.
+      const disclosure = studentPage.getByTestId("wb-student-recording-disclosure");
+      await expect(disclosure).not.toBeVisible();
+    } finally {
+      await pages.close();
+    }
+  });
+
+  /**
+   * 8b — device pickers reachable in overflow at narrow desktop.
+   *
+   * The student overflow (⋯) menu must contain mic + cam device pickers even
+   * when data-layout="desktop" (non-touch). Previously they were only included
+   * for touchLayout, leaving a narrow-desktop student with no way to switch
+   * devices.
+   *
+   * RED before fix: overflow menu opens but only shows follow/match-view — no
+   *   AudioControls / VideoControls.
+   * GREEN after fix: overflow menu contains wb-student-overflow-av-pickers.
+   */
+  test("8b: student overflow menu includes device pickers at narrow desktop @wb-chrome", async ({ browser }) => {
+    const session = await seedWbLiveSyncSession();
+    const pages = await openTutorAndStudent(browser, session, {
+      studentViewport: { width: 700, height: 700 },
+      studentHasTouch: false,
+    });
+    const { studentPage } = pages;
+
+    try {
+      await expect(
+        studentPage.getByTestId("student-whiteboard-canvas-mount")
+      ).toBeVisible({ timeout: 90_000 });
+
+      // Ensure desktop layout.
+      await expect(studentPage.locator(".mynk-wb-chrome")).toHaveAttribute(
+        "data-layout",
+        "desktop",
+        { timeout: 10_000 }
+      );
+
+      // Open the overflow (⋯) menu.
+      const overflowBtn = studentPage.getByTestId("wb-student-topbar-overflow");
+      await expect(overflowBtn).toBeVisible();
+      await overflowBtn.click();
+
+      // The AV pickers container must be present in the open dropdown.
+      const avPickers = studentPage.getByTestId("wb-student-overflow-av-pickers");
+      await expect(avPickers).toBeVisible({ timeout: 3_000 });
+    } finally {
+      await pages.close();
+    }
+  });
+
+  /**
+   * 8c — student live-board mic inline meter presence.
+   *
+   * The student's WbTopBarMicControlLive on the LIVE board (not the waiting-room
+   * overlay) must render the .mynk-wb-mic-meter DOM element (showInlineMeter prop
+   * wired). This fails before the fix (null render) and passes after.
+   *
+   * NOTE: meter bar activity (bar-1/2/3 lit) requires a real microphone stream —
+   * verified via unit test (calibrateMicLevel in src/__tests__/mic-recorder-audio.test.ts)
+   * and smoke. This Playwright test validates the DOM structure only.
+   *
+   * // PLAYWRIGHT-GAP: live bar animation (bar-1/2/3 lighting in response to
+   * // real mic input) cannot be hermetically driven in Playwright without
+   * // injecting a synthetic audio track. The calibration is covered by the
+   * // calibrateMicLevel unit test. Hardware smoke verifies bar animation.
+   * // See docs/BACKLOG.md WB-LIVEBOARD-STUDENT-CHROME 8d.
+   */
+  test("8c: student live-board mic control contains inline meter DOM node @wb-chrome @wb-av @wb-presence", async ({ browser }) => {
+    const session = await seedWbLiveSyncSession();
+    const pages = await openTutorAndStudent(browser, session, {
+      // Wide viewport so the mic control is inline-visible (not hidden by 660px rule).
+      studentViewport: { width: 1280, height: 700 },
+      studentHasTouch: false,
+    });
+    const { studentPage } = pages;
+
+    try {
+      await expect(
+        studentPage.getByTestId("student-whiteboard-canvas-mount")
+      ).toBeVisible({ timeout: 90_000 });
+
+      // desktop layout confirmed.
+      await expect(studentPage.locator(".mynk-wb-chrome")).toHaveAttribute(
+        "data-layout",
+        "desktop",
+        { timeout: 10_000 }
+      );
+
+      // The student live-board mic wrapper must be present.
+      const micWrap = studentPage.getByTestId("wb-topbar-mic");
+      await expect(micWrap).toBeVisible({ timeout: 10_000 });
+
+      // The inline meter DOM node must exist inside the mic control.
+      // Before fix (showInlineMeter not wired): .mynk-wb-mic-meter absent.
+      // After fix: .mynk-wb-mic-meter rendered inside wb-topbar-mic.
+      const meterEl = micWrap.locator(".mynk-wb-mic-meter");
+      await expect(meterEl).toBeAttached({ timeout: 5_000 });
+    } finally {
+      await pages.close();
+    }
   });
 });
