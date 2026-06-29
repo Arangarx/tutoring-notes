@@ -1411,8 +1411,19 @@ export function createWhiteboardSyncClient(
       ...(msg.label !== undefined ? { label: msg.label } : {}),
       ...(msg.identityKey !== undefined ? { identityKey: msg.identityKey } : {}),
       ...(msg.joinedAt !== undefined ? { joinedAt: msg.joinedAt } : {}),
-      ...(msg.camOn !== undefined ? { camOn: msg.camOn } : {}),
-      ...(msg.micOn !== undefined ? { micOn: msg.micOn } : {}),
+      // Preserve existing known camOn/micOn when the inbound frame omits them
+      // (e.g. heartbeats) — prevents a heartbeat from clearing a true value
+      // that was established by a prior frame.
+      ...(msg.camOn !== undefined
+        ? { camOn: msg.camOn }
+        : existing?.camOn !== undefined
+          ? { camOn: existing.camOn }
+          : {}),
+      ...(msg.micOn !== undefined
+        ? { micOn: msg.micOn }
+        : existing?.micOn !== undefined
+          ? { micOn: existing.micOn }
+          : {}),
       lastSeenMs: Date.now(),
     };
     presenceMap.set(msg.peerId, next);

@@ -2594,6 +2594,120 @@ test.describe(
 );
 
 // ---------------------------------------------------------------------------
+// 2nd-session: student tile shows video (not initials) and Start enables
+// ---------------------------------------------------------------------------
+
+test.describe(
+  "2nd-session: student tile video not initials, Start enables",
+  { tag: [TAG.WB_PRESENCE, TAG.WB_AV, TAG.WB_SYNC] },
+  () => {
+    test(
+      "second session in same context: student tile has no initials placeholder and Start enables",
+      async ({ browser }) => {
+        // PLAYWRIGHT-GAP: The true 2nd-session race (camera permission pre-cached
+        // from a completed first session) is approximated here by navigating two
+        // browser contexts through a first session (WebRTC established once), then
+        // seeding and navigating to a second session in the same contexts.
+        // Camera permission is pre-granted via context options so both sessions
+        // run with the same "already-approved" permission state. The hermetic
+        // relay can't easily simulate the timing difference of a returning user's
+        // camera resolution, but the presence-merge fix (never latch camOn:false
+        // prematurely) must hold regardless of camera resolution speed.
+        // docs/BACKLOG.md: wb-2nd-session-true-race — full navigation away from
+        // session 1 → session ends → navigate back in same contexts with camera
+        // cached from prior session (requires real session end-flow + re-navigate).
+        test.setTimeout(600_000);
+
+        const session1 = await seedWbPendingLiveSyncSession();
+        const session2 = await seedWbPendingLiveSyncSession();
+
+        const tutorCtx = await browser.newContext({
+          storageState: "tests/integration/.auth/tutor.json",
+          viewport: { width: 1280, height: 900 },
+          permissions: ["microphone", "camera"],
+        });
+        const studentCtx = await browser.newContext({
+          viewport: { width: 1280, height: 800 },
+          permissions: ["microphone", "camera"],
+        });
+
+        try {
+          // --- Session 1: establish WebRTC baseline (simulates first session) ---
+          const tutorPage1 = await tutorCtx.newPage();
+          await tutorPage1.goto(
+            `/admin/students/${session1.studentId}/whiteboard/${session1.whiteboardSessionId}/workspace`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            tutorPage1.getByTestId("tutor-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+          await waitForWbE2eBridge(tutorPage1, "tutor");
+          const encryptionKey1 = await readEncryptionKeyFromHash(tutorPage1);
+
+          await loginLearnerInContext(
+            studentCtx,
+            session1.learnerHandle,
+            session1.learnerPin
+          );
+          const studentPage1 = await studentCtx.newPage();
+          await studentPage1.goto(
+            `/join/${session1.whiteboardSessionId}#k=${encryptionKey1}`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            studentPage1.getByTestId("student-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+          // Confirm WebRTC connects in session 1
+          const tutorTiles1 = tutorPage1.getByTestId("wb-waiting-room-av-tiles");
+          await assertRemoteTilePresent(tutorTiles1, 120_000);
+
+          // --- Session 2: navigate same contexts to a new session ---
+          // (camera permission is already granted in both contexts from session 1)
+          const tutorPage2 = await tutorCtx.newPage();
+          await tutorPage2.goto(
+            `/admin/students/${session2.studentId}/whiteboard/${session2.whiteboardSessionId}/workspace`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            tutorPage2.getByTestId("tutor-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+          await waitForWbE2eBridge(tutorPage2, "tutor");
+          const encryptionKey2 = await readEncryptionKeyFromHash(tutorPage2);
+
+          const studentPage2 = await studentCtx.newPage();
+          await studentPage2.goto(
+            `/join/${session2.whiteboardSessionId}#k=${encryptionKey2}`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(
+            studentPage2.getByTestId("student-whiteboard-canvas-mount")
+          ).toBeVisible({ timeout: 90_000 });
+
+          // Oracle 1: student tile present in session 2
+          const tutorTiles2 = tutorPage2.getByTestId("wb-waiting-room-av-tiles");
+          await assertRemoteTilePresent(tutorTiles2, 120_000);
+          const remoteTile2 = tutorTiles2.locator('[data-is-local="false"]').first();
+          await expect(remoteTile2).toBeVisible();
+
+          // Oracle 2: student tile must NOT show initials — camera presence
+          // camOn:false must not be latched from a premature broadcast
+          await expect(
+            remoteTile2.locator('[data-placeholder-kind="initials"]')
+          ).not.toBeVisible({ timeout: 30_000 });
+
+          // Oracle 3: Start button must be enabled (studentHasConnectedOnce latches cleanly)
+          const startBtn2 = tutorPage2.getByTestId("wb-start-session");
+          await expect(startBtn2).toBeEnabled({ timeout: 60_000 });
+        } finally {
+          await tutorCtx.close();
+          await studentCtx.close();
+        }
+      }
+    );
+  }
+);
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 

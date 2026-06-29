@@ -1772,8 +1772,11 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         entry.label = label;
         entry.identityKey = identityKey;
         entry.joinedAt = joinedAt;
-        if (camOn !== undefined) entry.camOn = camOn;
-        if (micOn !== undefined) entry.micOn = micOn;
+        // Always assign, even when undefined: clears a stale false that was
+        // latched from a premature broadcast. A presence update omitting camOn
+        // means "unknown" — don't retain the old value.
+        entry.camOn = camOn;
+        entry.micOn = micOn;
       }
       return entry;
     }
@@ -2189,12 +2192,19 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
   // Broadcast coarse local A/V on/off via presence so remote tiles can
   // render cam-off initials without relying on inbound track state.
+  //
+  // Gate: omit camOn until hasCamPermission !== "unknown" — requestCam()
+  // hasn't settled yet, so broadcasting camOn:false would latch false on
+  // remote peers and show initials even when the camera is about to come on.
+  // This matters most on 2nd sessions where permission is already granted and
+  // requestCam() resolves almost immediately but AFTER this effect first fires.
   useEffect(() => {
     if (!syncClient) return;
-    const camOn = localVideoStream !== null && !isCamMuted;
+    const camKnown = hasCamPermission !== "unknown";
+    const camOn = camKnown ? (localVideoStream !== null && !isCamMuted) : undefined;
     const micOn = localAudioStream !== null && !isMicMuted;
     syncClient.setLocalAvMediaState({ camOn, micOn });
-  }, [syncClient, localAudioStream, localVideoStream, isMicMuted, isCamMuted]);
+  }, [syncClient, localAudioStream, localVideoStream, isMicMuted, isCamMuted, hasCamPermission]);
 
   // ---------------------------------------------------------------
   // Effect: sync late-arriving local tracks into the existing mesh

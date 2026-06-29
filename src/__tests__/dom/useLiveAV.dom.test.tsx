@@ -2265,3 +2265,135 @@ describe("useLiveAV — device enumeration single-flight + never-downgrade (inva
     unmount();
   });
 });
+
+// ---------------------------------------------------------------------------
+// camOn presence: sticky-latch fix + broadcast-gate
+// ---------------------------------------------------------------------------
+
+describe("useLiveAV — camOn presence (fix: no premature false latch)", () => {
+  const PEER_ID = "student-E";
+
+  /** Setup: active hook with mic acquired + one peer in presence. */
+  async function withCamPeer(): Promise<{
+    result: ReturnType<typeof renderHook<ReturnType<typeof useLiveAV>, unknown>>["result"];
+    unmount: () => void;
+    sync: ReturnType<typeof makeFakeSyncClient>;
+    meshHandles: MeshHandles;
+  }> {
+    const sync = makeFakeSyncClient();
+    const meshHandles = makeFakeMesh();
+    const sig = makeFakeSignaling();
+    const video = makeFakeStream(0, 1);
+    const props = makeBaseProps({
+      syncClient: sync.sync,
+      _createPeerMesh: meshHandles.factory,
+      _createSignaling: sig.factory,
+      _getUserMedia: jest.fn(async () => video.stream as unknown as MediaStream),
+    });
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    // Acquire cam so hasCamPermission → "granted" and mesh is active
+    await act(async () => {
+      await result.current.requestCam();
+    });
+    await waitFor(() => {
+      expect(result.current.isActive).toBe(true);
+    });
+    // Seed the peer into presence
+    act(() => {
+      sync.emitPeers([{ peerId: PEER_ID, role: "student" }]);
+    });
+    await waitFor(() => {
+      expect(result.current.participants.length).toBe(1);
+    });
+    return { result, unmount, sync, meshHandles };
+  }
+
+  test("camOn:false then camOn:true — videoStream not null and camOn===true after update", async () => {
+    const { result, unmount, sync, meshHandles } = await withCamPeer();
+
+    // Remote video track arrives
+    const remoteVideo = new FakeMediaStreamTrack("video");
+    act(() => {
+      meshHandles.emitTrack(PEER_ID, remoteVideo as unknown as MediaStreamTrack);
+    });
+
+    // Presence: camOn:false (premature latch scenario)
+    act(() => {
+      sync.emitPeers([{ peerId: PEER_ID, role: "student", camOn: false }]);
+    });
+    await waitFor(() => {
+      expect(result.current.participants[0]?.camOn).toBe(false);
+    });
+    // With camOn:false, videoStream must be null (initials shown)
+    expect(result.current.participants[0]?.videoStream).toBeNull();
+
+    // Presence update: camOn:true (camera actually ready)
+    act(() => {
+      sync.emitPeers([{ peerId: PEER_ID, role: "student", camOn: true }]);
+    });
+    await waitFor(() => {
+      expect(result.current.participants[0]?.camOn).toBe(true);
+    });
+    // Video stream must be exposed now — no initials
+    expect(result.current.participants[0]?.videoStream).not.toBeNull();
+
+    unmount();
+  });
+
+  test("camOn:undefined with live video track — videoStream exposed (fall back to track heuristic)", async () => {
+    const { result, unmount, sync, meshHandles } = await withCamPeer();
+
+    // Remote video track arrives
+    const remoteVideo = new FakeMediaStreamTrack("video");
+    act(() => {
+      meshHandles.emitTrack(PEER_ID, remoteVideo as unknown as MediaStreamTrack);
+    });
+    await waitFor(() => {
+      expect(result.current.participants[0]?.videoStream).not.toBeNull();
+    });
+
+    // Presence update omits camOn (unknown) — track heuristic must keep video shown
+    act(() => {
+      sync.emitPeers([{ peerId: PEER_ID, role: "student" }]);
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    // camOn must be undefined (unknown)
+    expect(result.current.participants[0]?.camOn).toBeUndefined();
+    // videoStream must still be exposed — unknown camOn does NOT force initials
+    expect(result.current.participants[0]?.videoStream).not.toBeNull();
+
+    unmount();
+  });
+
+  test("camOn:false then presence omits camOn — stale false cleared to undefined", async () => {
+    const { result, unmount, sync, meshHandles } = await withCamPeer();
+
+    // Remote video track
+    const remoteVideo = new FakeMediaStreamTrack("video");
+    act(() => {
+      meshHandles.emitTrack(PEER_ID, remoteVideo as unknown as MediaStreamTrack);
+    });
+
+    // Latch false first
+    act(() => {
+      sync.emitPeers([{ peerId: PEER_ID, role: "student", camOn: false }]);
+    });
+    await waitFor(() => {
+      expect(result.current.participants[0]?.camOn).toBe(false);
+    });
+
+    // Then omit camOn (unknown) — stale false must be cleared
+    act(() => {
+      sync.emitPeers([{ peerId: PEER_ID, role: "student" }]);
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    // useLiveAV fix #2: always assign entry.camOn = camOn, so stale false → undefined
+    expect(result.current.participants[0]?.camOn).toBeUndefined();
+    // With undefined camOn and a live track: videoStream exposed
+    expect(result.current.participants[0]?.videoStream).not.toBeNull();
+
+    unmount();
+  });
+});
