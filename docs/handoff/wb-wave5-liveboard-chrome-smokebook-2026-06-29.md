@@ -62,13 +62,15 @@ Thread A fixes for student LIVE-board (post-Start) narrow-desktop chrome + mic m
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Coverage:** `[automated: tests/integration/wb-chrome-interactions.spec.ts › 8c: student live-board mic control contains inline meter DOM node]`
 
-**Notes:**
+**Notes:**  
+**Passes on student view, but has regressed on tutor view.**  
+**Regression: Tutor bars no longer animate, whether muted or not on the live board.**
 
 ---
 
@@ -82,7 +84,7 @@ Thread A fixes for student LIVE-board (post-Start) narrow-desktop chrome + mic m
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
@@ -90,9 +92,11 @@ Thread A fixes for student LIVE-board (post-Start) narrow-desktop chrome + mic m
 
 **Notes:**
 
+**Passes for student. Same regression as noted for 3 for tutor.**
+
 ---
 
 ## Overall result
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
