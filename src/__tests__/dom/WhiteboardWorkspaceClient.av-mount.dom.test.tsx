@@ -506,9 +506,18 @@ const baseProps = {
   initialUserWantsRecording: false,
 };
 
+/** WbTopBarMicControl hidden meter host — sole consumer of workspaceAudio.meterBarRef. */
+function countMeterBarRefHosts(root: ParentNode = document): number {
+  return root.querySelectorAll(".mynk-wb-mic-meter-hidden").length;
+}
+
 async function renderWorkspace(
   overrides: Partial<
-    typeof baseProps & { role: "tutor" | "student"; joinToken: string }
+    typeof baseProps & {
+      role: "tutor" | "student";
+      joinToken: string;
+      initialSessionPhase: "PENDING" | "ACTIVE";
+    }
   > = {}
 ) {
   const mod = await import(
@@ -578,6 +587,24 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
     expect(screen.getByTestId("wb-topbar-mic")).toBeTruthy();
     expect(screen.getByTestId("av-tiles-panel")).toBeTruthy();
     expect(screen.getByTestId("av-controls")).toBeTruthy();
+  });
+
+  test("tutor waiting room: exactly one meterBarRef host (overlay chip, not duplicate WbTopBarMicControl)", async () => {
+    await renderWorkspace({ initialSessionPhase: "PENDING" });
+
+    expect(screen.getByTestId("wb-waiting-overlay")).toBeTruthy();
+    expect(countMeterBarRefHosts()).toBe(1);
+    expect(screen.getAllByTestId("wb-topbar-mic")).toHaveLength(1);
+    expect(screen.getByTestId("wb-overlay-mic-chip")).toBeTruthy();
+  });
+
+  test("tutor ACTIVE session: live top-bar mic control with meterBarRef host present", async () => {
+    await renderWorkspace({ initialSessionPhase: "ACTIVE" });
+
+    expect(screen.queryByTestId("wb-waiting-overlay")).toBeNull();
+    expect(screen.getByTestId("wb-topbar-mic")).toBeTruthy();
+    expect(screen.getByTestId("wb-topbar-mic-toggle")).toBeTruthy();
+    expect(countMeterBarRefHosts()).toBe(1);
   });
 
   test("3-peer canary: tutor + 2 students render distinct tiles AND each remote audioStream is attached to the tutor's recording mixdown", async () => {

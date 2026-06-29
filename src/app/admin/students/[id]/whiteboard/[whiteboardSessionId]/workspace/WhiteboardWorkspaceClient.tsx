@@ -5653,8 +5653,10 @@ export function WhiteboardWorkspaceClient({
     sessionMode === "LIVE" ? !overlayStudentConnected : false;
   const overlayCanStart = !overlayCantStart;
 
-  // Pre-built mic control for the overlay — reuse top-bar components so the
-  // inline volume meter matches tutor parity (Plan #1 smoke finding 2).
+  // Pre-built mic control for the overlay. Student uses WbTopBarMicControlLive
+  // (own inline meter stream). Tutor uses chip-toggle — NOT WbTopBarMicControl:
+  // that component binds workspaceAudio.meterBarRef; the live top bar also
+  // binds the same ref, so both mounted in waiting room breaks post-Start meter.
   const overlayMicNode =
     role === "student" ? (
       <WbTopBarMicControlLive
@@ -5676,16 +5678,23 @@ export function WhiteboardWorkspaceClient({
         disabled={studentAvPickerDisabled}
       />
     ) : (
-      <WbTopBarMicControl
-        audio={workspaceAudio}
-        isMicMuted={liveAv.isMicMuted}
-        onToggleMute={liveAv.toggleMic}
-        onAcquireMic={handleAcquireMic}
-        onPickMicSlot={(slot) =>
-          void liveAv.setMicDeviceBySlot(slot, { force: true })
-        }
-        disabled={endingBusy}
-      />
+      <label
+        className={`mynk-wb-follow-toggle mynk-wb-chip${!liveAv.isMicMuted && liveAv.localAudioStream !== null ? " mynk-wb-chip--active" : ""}`}
+        data-testid="wb-overlay-mic-chip"
+      >
+        <input
+          type="checkbox"
+          checked={!liveAv.isMicMuted && liveAv.localAudioStream !== null}
+          aria-label={liveAv.isMicMuted || liveAv.localAudioStream === null ? "Mic off" : "Mic on"}
+          onChange={() => void handleTopBarMic()}
+        />
+        <span className="mynk-wb-menu-item__icon" aria-hidden="true">
+          <WbIconMic size={12} />
+        </span>
+        <span className="mynk-wb-follow-toggle__label" data-testid="wb-overlay-mic-chip-label">
+          {liveAv.isMicMuted || liveAv.localAudioStream === null ? "Mic off" : "Mic on"}
+        </span>
+      </label>
     );
 
   // Pre-built cam control node for the overlay — chip-toggle pattern (same CSS
