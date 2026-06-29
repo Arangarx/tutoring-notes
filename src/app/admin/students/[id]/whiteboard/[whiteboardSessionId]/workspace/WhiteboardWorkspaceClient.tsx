@@ -2254,6 +2254,15 @@ export function WhiteboardWorkspaceClient({
     }
   }, [role, peerCount, liveAv, whiteboardSessionId]);
 
+  // Additive: reset per-session latches when whiteboardSessionId changes so
+  // a 2nd session starts with a clean slate. Writing refs directly is safe —
+  // both are idempotent latches that only ever move from false→true in normal
+  // flow; resetting to false here re-arms them for the new session.
+  useEffect(() => {
+    studentHasConnectedOnceRef.current = false;
+    prevSyncPeerCountRef.current = 0;
+  }, [whiteboardSessionId]);
+
   const lifecycleInputStreams = useMemo<
     ReadonlyMap<string, StreamHealth>
   >(() => {
