@@ -926,6 +926,9 @@ test.describe("WB-LIVEBOARD-STUDENT-CHROME @wb-chrome @wb-viewport @wb-av @wb-pr
       // Non-touch 700px-wide desktop: exactly the regression viewport.
       studentViewport: { width: 700, height: 700 },
       studentHasTouch: false,
+      // Follow toggle is desktop-only hidden at this width; chrome layout test
+      // does not need viewport sync.
+      ensureFollow: false,
     });
     const { studentPage } = pages;
 
@@ -979,6 +982,7 @@ test.describe("WB-LIVEBOARD-STUDENT-CHROME @wb-chrome @wb-viewport @wb-av @wb-pr
     const pages = await openTutorAndStudent(browser, session, {
       studentViewport: { width: 700, height: 700 },
       studentHasTouch: false,
+      ensureFollow: false,
     });
     const { studentPage } = pages;
 
