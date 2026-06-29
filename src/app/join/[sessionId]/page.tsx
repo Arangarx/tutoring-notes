@@ -176,21 +176,36 @@ export default async function JoinSessionPage({
   }
 
   // -------------------------------------------------------------------------
-  // No valid session: fail closed.
+  // No valid session: fail closed (role-aware).
   //
-  // If a learner cookie was present but not a participant AND Path B also failed
-  // to authorise → the user is authenticated but unauthorised for this session
-  // → 404 (fail closed; do not reveal the session exists to a non-participant).
+  // CHILD session + non-participant learner cookie (Path B also failed):
+  //   → 404 (fail closed; wrong-learner cross-session deny; do not reveal
+  //     the session exists to a non-participant).
   //
-  // If no cookie at all → render JoinAuthGate so they can log in.
+  // SELF-LEARNER session + stale non-participant learner cookie + no AH session:
+  //   → fall through to JoinAuthGate so isSelfLearner redirects to /account/login.
+  //   The stale cookie came from a prior wrong PIN-login attempt; the adult
+  //   just hasn't got their AH cookie yet. Sending them to account login is correct.
+  //   [WB-ADULT-JOIN-ENABLEMENT — stale-cookie self-learner fallthrough]
+  //
+  // No cookie at all → render JoinAuthGate so they can log in.
   // -------------------------------------------------------------------------
   if (!effectiveLearnerProfileId) {
-    if (learnerCookieNotParticipant) {
+    if (learnerCookieNotParticipant && !isSelfLearner) {
+      // Child session: non-participant cookie is a genuine cross-learner deny.
       console.error(
         `[wjg] wjg=${sessionId.slice(0, 8)} wbsid=${sessionId}` +
           ` action=join_denied_both_paths reason=not_participant`
       );
       notFound();
+    }
+    if (learnerCookieNotParticipant && isSelfLearner) {
+      // Self-learner session: stale learner cookie, no AH session present.
+      // Fall through to JoinAuthGate → redirects to /account/login.
+      console.info(
+        `[wjg] wjg=${sessionId.slice(0, 8)} wbsid=${sessionId}` +
+          ` action=self_learner_fallthrough_to_authgate reason=stale_cookie_not_participant`
+      );
     }
     return <JoinAuthGate sessionId={sessionId} isSelfLearner={isSelfLearner} />;
   }

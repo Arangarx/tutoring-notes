@@ -2556,8 +2556,16 @@ test.describe(
       }
     );
 
+    // -----------------------------------------------------------------------
+    // G5. REDIRECT (Bug A fix) — self-learner session + stale learner cookie
+    //     (non-participant) + NO AH session → JoinAuthGate → /account/login.
+    //
+    // Prior behaviour: unconditional notFound() when learnerCookieNotParticipant,
+    // regardless of session type. Fix: only notFound() for child sessions;
+    // self-learner sessions fall through to JoinAuthGate for /account/login.
+    // -----------------------------------------------------------------------
     test(
-      "stale learner cookie (non-participant) + NO AH session → 404 (fail closed)",
+      "stale learner cookie (non-participant) + NO AH session + self-learner session → /account/login (not 404)",
       async ({ browser }) => {
         test.setTimeout(30_000);
 
@@ -2577,13 +2585,56 @@ test.describe(
           );
 
           const page = await ctx.newPage();
-          const response = await page.goto(
+          await page.goto(
             `/join/${selfSession.whiteboardSessionId}`,
             { waitUntil: "domcontentloaded" }
           );
 
-          // Authenticated learner who is not a participant + no AH path
-          // → fail closed → 404 (not the board, not a login redirect).
+          // Self-learner session + stale non-participant learner cookie + no AH session
+          // → must NOT 404; JoinAuthGate must redirect to /account/login.
+          await page.waitForURL(
+            (url) => url.pathname === "/account/login",
+            { timeout: 15_000 }
+          );
+          expect(page.url()).toContain("/account/login");
+        } finally {
+          await ctx.close();
+        }
+      }
+    );
+
+    // -----------------------------------------------------------------------
+    // G6. SECURITY BOUNDARY — child session + stale learner cookie + NO AH
+    //     session → still 404 (wrong-learner cross-session deny preserved).
+    // -----------------------------------------------------------------------
+    test(
+      "stale learner cookie (non-participant) + NO AH session + CHILD session → still 404 (security boundary)",
+      async ({ browser }) => {
+        test.setTimeout(30_000);
+
+        // Seed TWO child sessions with different learner profiles so
+        // TEST_LEARNER_B is authenticated but NOT a participant of sessionA.
+        const sessionA = await seedWbLiveSyncSession();
+        const sessionB = await seedWbLiveSyncSession();
+
+        const ctx = await browser.newContext();
+        try {
+          // Log in as learner from sessionB — gets a cookie that is NOT a
+          // participant of sessionA (different student/learnerProfile).
+          await loginLearnerInContext(
+            ctx,
+            sessionB.learnerHandle,
+            sessionB.learnerPin
+          );
+
+          const page = await ctx.newPage();
+          const response = await page.goto(
+            `/join/${sessionA.whiteboardSessionId}`,
+            { waitUntil: "domcontentloaded" }
+          );
+
+          // Child session: non-participant learner cookie + no AH path
+          // → fail closed → 404 (security boundary must remain intact).
           expect(response?.status()).toBe(404);
         } finally {
           await ctx.close();
