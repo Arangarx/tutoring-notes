@@ -1,5 +1,7 @@
 "use client";
 
+import "./WbStudentConnectionStatus.css";
+
 export type WbStudentConnectionStatusProps = {
   connectionPillOk: boolean;
   connectionPillLabel: string;

@@ -1,0 +1,21 @@
+/**
+ * WbExitButton styles — co-located with WbExitButton.tsx.
+ *
+ * Student-only accent override for .mynk-wb-tb-btn--exit (base btn primitives stay in monolith).
+ * Tokens only — no raw hex; theme-agnostic.
+ * Relocated from whiteboard-chrome.css for component co-location.
+ */
+
+/* Wave 5 — student-only exit + follow/match polish */
+.mynk-wb-chrome[data-role="student"] .mynk-wb-tb-btn--exit {
+  background: var(--accent);
+  color: var(--accent-on);
+  font-weight: 600;
+  gap: 4px;
+  padding: 0 10px;
+}
+
+.mynk-wb-chrome[data-role="student"] .mynk-wb-tb-btn--exit:hover:not(:disabled) {
+  background: var(--accent-strong);
+  color: var(--accent-on);
+}

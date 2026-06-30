@@ -1,5 +1,7 @@
 "use client";
 
+import "./WbToolbarToggle.css";
+
 export type WbToolbarToggleProps = {
   testId: string;
   toolbarHidden: boolean;

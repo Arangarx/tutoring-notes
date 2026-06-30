@@ -1565,19 +1565,6 @@
   }
 }
 
-@media (max-width: 520px) {
-  .mynk-wb-chrome[data-layout="desktop"] .mynk-wb-toolbar-toggle {
-    padding: 0 8px;
-    max-width: 96px;
-  }
-
-  .mynk-wb-chrome[data-layout="desktop"] .mynk-wb-toolbar-toggle__label {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-}
-
 @media (max-width: 480px) {
   .mynk-wb-chrome[data-layout="desktop"] .mynk-wb-wordmark {
     font-size: 14px;
@@ -1656,21 +1643,6 @@
   font-size: 13px;
 }
 
-.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-toolbar-toggle,
-.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-toolbar-toggle,
-.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-toolbar-toggle {
-  padding: 0 8px;
-  max-width: 96px;
-}
-
-.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-toolbar-toggle__label,
-.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-toolbar-toggle__label,
-.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-toolbar-toggle__label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-mobile-btn,
 .mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-mobile-btn {
   gap: 6px;
@@ -1680,65 +1652,6 @@
 .mynk-wb-chrome[data-layout="narrow"] .mynk-wb-props-mobile-btn .mynk-wb-summary-stroke,
 .mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-props-mobile-btn .mynk-wb-summary-stroke {
   width: 22px;
-}
-
-/* TM-12 — persistent show/hide tools toggle (touch layouts only) */
-.mynk-wb-toolbar-toggle {
-  display: none;
-  align-items: center;
-  gap: 4px;
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid var(--accent-strong);
-  background: var(--card);
-  color: var(--foreground);
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  flex-shrink: 0;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-  transition: background 0.12s, box-shadow 0.2s, color 0.12s;
-}
-
-.mynk-wb-toolbar-toggle:hover {
-  background: var(--accent-soft);
-}
-
-.mynk-wb-toolbar-toggle__chev {
-  font-size: 9px;
-  color: var(--accent-text);
-  line-height: 1;
-  transition: color 0.12s;
-}
-
-.mynk-wb-chrome[data-layout="narrow"] .mynk-wb-toolbar-toggle,
-.mynk-wb-chrome[data-layout="tablet-portrait"] .mynk-wb-toolbar-toggle,
-.mynk-wb-chrome[data-layout="phone-landscape"] .mynk-wb-toolbar-toggle {
-  display: inline-flex;
-}
-
-.mynk-wb-chrome[data-toolbar-hidden="true"] .mynk-wb-toolbar-toggle {
-  background: var(--accent);
-  color: var(--accent-on);
-  border-color: var(--accent-strong);
-  animation: mynk-wb-toolbar-toggle-pulse 2.4s ease-in-out infinite;
-}
-
-.mynk-wb-chrome[data-toolbar-hidden="true"] .mynk-wb-toolbar-toggle__chev {
-  color: var(--accent-on);
-}
-
-@keyframes mynk-wb-toolbar-toggle-pulse {
-  0%,
-  100% {
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-  }
-  50% {
-    box-shadow:
-      0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent),
-      0 1px 2px rgba(0, 0, 0, 0.06);
-  }
 }
 
 /* Collapse bottom tool chrome when tools hidden — canvas regains vertical space */
@@ -2713,25 +2626,6 @@
   color: var(--muted-foreground);
 }
 
-.mynk-wb-status-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.mynk-wb-status-pill--ok {
-  background: var(--success-soft);
-  color: var(--success);
-}
-
-.mynk-wb-status-pill--warn {
-  background: var(--warning-soft);
-  color: var(--warning);
-}
-
 .mynk-wb-follow-toggle {
   display: inline-flex;
   align-items: center;
@@ -2955,20 +2849,6 @@
 .mynk-wb-action-sheet__body--scroll-affordance::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 3px;
-}
-
-/* Wave 5 — student-only exit + follow/match polish */
-.mynk-wb-chrome[data-role="student"] .mynk-wb-tb-btn--exit {
-  background: var(--accent);
-  color: var(--accent-on);
-  font-weight: 600;
-  gap: 4px;
-  padding: 0 10px;
-}
-
-.mynk-wb-chrome[data-role="student"] .mynk-wb-tb-btn--exit:hover:not(:disabled) {
-  background: var(--accent-strong);
-  color: var(--accent-on);
 }
 
 .mynk-wb-chrome[data-role="student"] .mynk-wb-tb-btn--match-view {

@@ -1,0 +1,26 @@
+/**
+ * WbStudentConnectionStatus styles — co-located with WbStudentConnectionStatus.tsx.
+ *
+ * Scoped to .mynk-wb-status-pill* (connection sync pill only; timer stays in monolith).
+ * Tokens only — no raw hex; theme-agnostic.
+ * Relocated from whiteboard-chrome.css for component co-location.
+ */
+
+.mynk-wb-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.mynk-wb-status-pill--ok {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.mynk-wb-status-pill--warn {
+  background: var(--warning-soft);
+  color: var(--warning);
+}

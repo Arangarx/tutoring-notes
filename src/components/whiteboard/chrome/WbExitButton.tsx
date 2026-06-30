@@ -1,5 +1,6 @@
 "use client";
 
+import "./WbExitButton.css";
 import { WbIconEndSession } from "@/components/whiteboard/chrome/wb-icons";
 
 export type WbExitButtonProps = {

@@ -59,6 +59,10 @@ All four "known layout bugs" from the wave5 smokebook were **validated already-f
 
 **Part 1C CSS-monolith refactor half — DEFERRED (tracked under WB-COMPONENTS-PASS).** The appearance-preserving refactor portion of Part 1C (co-locate styles with extracted chrome components; scope every selector under `.mynk-wb-chrome`; split the monolith into live/review/replay; move AV tile/cluster sizing into `AVTile`/`AVTilesPanel` and delete the `!important` reach-ins) is coupled to the **deferred** role-parameterized `WbTopBar` extraction (Part 1B) and is high-blast-radius surgery on the protected `WhiteboardWorkspaceClient` + chrome CSS — to be done in a supervised session, not autonomously. The discrete layout **bugs** are resolved above; the structural CSS cleanup remains tracked debt.
 
+### CSS / chrome monolith decomposition (wb-wave5-polish, 2026-06-30)
+
+**IN PROGRESS** — appearance-preserving co-location pass (Part 1C p1c): moved component-specific top-bar rules out of `whiteboard-chrome.css` into sibling stylesheets co-located with `WbStudentConnectionStatus` (`.mynk-wb-status-pill*`), `WbToolbarToggle` (`.mynk-wb-toolbar-toggle*` + pulse keyframe), and `WbExitButton` (student `[data-role="student"]` `.mynk-wb-tb-btn--exit` override). **Shared primitives remain single-sourced in the monolith** — `mynk-wb-tb-btn*`, `mynk-wb-topbar__desktop-only`, `mynk-wb-timer`, bottom-toolbar/props-bar `[data-toolbar-hidden]` collapse rules. `WbUndoRedoButtons` has no component-specific rules (shared primitives only). Remaining monolith is tracked debt; continue decomposing toward a wholly co-located/de-duped chrome layer (Andrew's standing direction).
+
 ### Part 1 checkpoint — hardware A/V smoke findings (Andrew, 2026-06-26)
 
 Smokebook [`docs/handoff/wb-wave5-polish-part1-checkpoint-smokebook.md`](handoff/wb-wave5-polish-part1-checkpoint-smokebook.md) — **Overall PASS** ("a massive win"). Item 2 (tutor hears student) and item 3 (drop/rejoin) PASS; item 1 PARTIAL. Follow-ups below; none block Part 1, but each needs a Playwright test or named gap when fixed ([`.cursor/rules/playwright-on-fix.mdc`](../.cursor/rules/playwright-on-fix.mdc)).
