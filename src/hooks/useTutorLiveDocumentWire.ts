@@ -7,6 +7,7 @@ import type {
   WhiteboardWirePage,
 } from "@/lib/whiteboard/sync-client";
 import type { ExcalidrawLikeElement } from "@/lib/whiteboard/excalidraw-adapter";
+import { isDegenerateLinearElement } from "@/lib/whiteboard/excalidraw-adapter";
 import type { PageViewState } from "@/lib/whiteboard/board-document-snapshot";
 
 const THROTTLE_MS = 50;
@@ -58,9 +59,12 @@ export function useTutorLiveDocumentWire(options: {
     const raw = getPagesSnapshot();
     const pages: Record<string, ExcalidrawLikeElement[]> = {};
     for (const [k, els] of Object.entries(raw)) {
-      pages[k] = (els as ReadonlyArray<ExcalidrawLikeElement>).map(
-        (e) => ({ ...e }) as ExcalidrawLikeElement
-      );
+      // Drop degenerate line/arrow elements (phantom strokes — 1 point, zero bbox)
+      // before they reach the student's canvas. The recorder path filters them via
+      // toCanonical/diffScenes; here we extend the same guard to the live-sync wire.
+      pages[k] = (els as ReadonlyArray<ExcalidrawLikeElement>)
+        .filter((e) => !isDegenerateLinearElement(e))
+        .map((e) => ({ ...e }) as ExcalidrawLikeElement);
     }
     const pageWireRows = pageList.map((p) => ({
       id: p.id,

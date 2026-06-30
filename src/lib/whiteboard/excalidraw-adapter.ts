@@ -386,7 +386,7 @@ function mapWBTypeToExcalidraw(type: WBElement["type"]): string {
  *
  * If any of {2+ distinct points, |width|>=1, |height|>=1} holds → KEEP.
  */
-function isDegenerateLinearElement(src: ExcalidrawLikeElement): boolean {
+export function isDegenerateLinearElement(src: ExcalidrawLikeElement): boolean {
   if (src.type !== "line" && src.type !== "arrow") return false;
   if (Math.abs(src.width) >= 1 || Math.abs(src.height) >= 1) return false;
   const pts = src.points;
