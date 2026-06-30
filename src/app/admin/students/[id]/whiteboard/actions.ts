@@ -1364,7 +1364,28 @@ export async function registerWhiteboardSessionAudioSegmentAction(
       };
     }
 
-    // B2: consent gate — flag-gated; throws ConsentError when flag ON + denied.
+    // Phase check — audio segments must only be registered during ACTIVE sessions.
+    // Reject quietly during PENDING so a stale client doesn't create orphaned rows.
+    const phaseRow = await withDbRetry(
+      () =>
+        db.whiteboardSession.findUnique({
+          where: { id: whiteboardSessionId },
+          select: { sessionPhase: true },
+        }),
+      { label: "registerWbAudio.phase" }
+    );
+    if (phaseRow?.sessionPhase !== "ACTIVE") {
+      console.log(
+        `[registerWhiteboardSessionAudioSegment] rid=${rid} wbsid=${whiteboardSessionId} skipped: sessionPhase=${phaseRow?.sessionPhase ?? "unknown"}`
+      );
+      return {
+        ok: false,
+        error: "Session is not yet active — audio cannot be registered.",
+        debugId: rid,
+      };
+    }
+
+    // B2: consent gate — throws ConsentError when consent denied.
     await assertEffectiveConsent(whiteboardSessionId, "allowAudioRecording");
 
     const last = await withDbRetry(
@@ -1456,7 +1477,24 @@ export async function enqueueChunkTranscriptionAction(
   // B1 cost gate: WAITLISTED tutors cannot enqueue transcription jobs.
   await assertTutorApproved(enqueueSession.adminUserId);
 
-  // 2. Blob host validation — reuse the same regex used by endWhiteboardSession.
+  // 2. Phase check — transcription chunks are only valid during ACTIVE sessions.
+  // A PENDING-phase ping from a stale client must not enqueue a transcription job.
+  const phaseRow = await withDbRetry(
+    () =>
+      db.whiteboardSession.findUnique({
+        where: { id: whiteboardSessionId },
+        select: { sessionPhase: true },
+      }),
+    { label: "enqueueChunkTranscription.phase" }
+  );
+  if (phaseRow?.sessionPhase !== "ACTIVE") {
+    console.log(
+      `[txc] wbsid=${whiteboardSessionId} action=enqueue_action_skipped reason=not_active_phase phase=${phaseRow?.sessionPhase ?? "unknown"}`
+    );
+    return;
+  }
+
+  // 3. Blob host validation — reuse the same regex used by endWhiteboardSession.
   if (
     typeof chunkBlobUrl !== "string" ||
     !/^https?:\/\//i.test(chunkBlobUrl) ||
@@ -1472,7 +1510,7 @@ export async function enqueueChunkTranscriptionAction(
     `[txc] wbsid=${whiteboardSessionId} action=enqueue_action_start offsetMs=${recordingTimeOffsetMs} chunkBlobUrlSuffix=${chunkBlobUrl.slice(-24)}`
   );
 
-  // 3. Enqueue — never throws (errors are logged and swallowed by enqueueChunkTranscribe).
+  // 4. Enqueue — never throws (errors are logged and swallowed by enqueueChunkTranscribe).
   await enqueueChunkTranscribe({
     sessionId: whiteboardSessionId,
     chunkBlobUrl,

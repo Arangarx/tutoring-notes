@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
+import { db, withDbRetry } from "@/lib/db";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import { createActionCorrelationId } from "@/lib/action-correlation";
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
@@ -91,6 +92,26 @@ export async function POST(
     );
     return NextResponse.json(
       { error: "Session already ended." },
+      { status: 409 }
+    );
+  }
+
+  // Checkpoint uploads are only meaningful during an ACTIVE session — the
+  // recorder hook must not flush state before the tutor has pressed Start.
+  const phaseRow = await withDbRetry(
+    () =>
+      db.whiteboardSession.findUnique({
+        where: { id: sessionId },
+        select: { sessionPhase: true },
+      }),
+    { label: "wbCheckpoint.phase" }
+  );
+  if (phaseRow?.sessionPhase !== "ACTIVE") {
+    console.log(
+      `[wbCheckpoint.route] rid=${rid} wbsid=${sessionId} skipping checkpoint: sessionPhase=${phaseRow?.sessionPhase ?? "unknown"}`
+    );
+    return NextResponse.json(
+      { error: "Session not yet active.", debugId: rid },
       { status: 409 }
     );
   }
