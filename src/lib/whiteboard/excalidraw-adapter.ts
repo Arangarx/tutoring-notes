@@ -372,10 +372,38 @@ function mapWBTypeToExcalidraw(type: WBElement["type"]): string {
  * Returns `null` for elements we don't persist (selection, frame,
  * magicframe, isDeleted=true).
  */
+/**
+ * A single click with the line/arrow tool + right-click finalize produces a
+ * degenerate element: 1 point (or N identical points), zero bounding box.
+ * These are phantom strokes — they enter the event log and sync wire but
+ * can never be undone on either side. Drop them early, before they reach
+ * the canonical layer.
+ *
+ * Conservative predicate: drop ONLY when ALL three hold:
+ *   1. type is "line" or "arrow" (NOT freedraw — a freedraw dot is legitimate)
+ *   2. fewer than 2 *distinct* points (length < 2 OR every point equals pts[0])
+ *   3. both |width| < 1 AND |height| < 1
+ *
+ * If any of {2+ distinct points, |width|>=1, |height|>=1} holds → KEEP.
+ */
+function isDegenerateLinearElement(src: ExcalidrawLikeElement): boolean {
+  if (src.type !== "line" && src.type !== "arrow") return false;
+  if (Math.abs(src.width) >= 1 || Math.abs(src.height) >= 1) return false;
+  const pts = src.points;
+  if (!pts || pts.length < 2) return true;
+  // If any point differs from the first, the element has spatial extent → keep.
+  const [x0, y0] = pts[0];
+  for (let i = 1; i < pts.length; i++) {
+    if (pts[i][0] !== x0 || pts[i][1] !== y0) return false;
+  }
+  return true; // all points identical, zero bbox → degenerate
+}
+
 export function toCanonical(
   src: ExcalidrawLikeElement
 ): WBElement | null {
   if (src.isDeleted) return null;
+  if (isDegenerateLinearElement(src)) return null;
   const wbType = mapExcalidrawTypeToWB(src);
   if (!wbType) return null;
 

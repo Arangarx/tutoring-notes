@@ -1,7 +1,10 @@
 /** @jest-environment jsdom */
 
 import { fireEvent, render, screen } from "@testing-library/react";
-import { WbActionSheet } from "@/components/whiteboard/chrome/WbActionSheet";
+import {
+  WbActionSheet,
+  WbActionSheetBackdrop,
+} from "@/components/whiteboard/chrome/WbActionSheet";
 
 describe("WbActionSheet close button", () => {
   it("calls onDismiss on mouse click even when handle row uses pointer capture", () => {
@@ -26,6 +29,53 @@ describe("WbActionSheet close button", () => {
     expect(setPointerCapture).toHaveBeenCalled();
 
     fireEvent.click(closeBtn);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("WbActionSheetBackdrop — pointer event guard", () => {
+  it("stopPropagation on pointerdown so Excalidraw canvas does not start a draw action", () => {
+    const onDismiss = jest.fn();
+    const { container } = render(
+      <WbActionSheetBackdrop open onDismiss={onDismiss} />
+    );
+    const backdrop = container.firstChild as HTMLElement;
+
+    // Attach a listener on a parent that would be hit if propagation wasn't stopped
+    const parentPointerDownSpy = jest.fn();
+    document.addEventListener("pointerdown", parentPointerDownSpy);
+
+    fireEvent.pointerDown(backdrop);
+    expect(parentPointerDownSpy).not.toHaveBeenCalled();
+
+    document.removeEventListener("pointerdown", parentPointerDownSpy);
+  });
+
+  it("stopPropagation on pointerup so Excalidraw canvas does not finalize a draw action", () => {
+    const onDismiss = jest.fn();
+    const { container } = render(
+      <WbActionSheetBackdrop open onDismiss={onDismiss} />
+    );
+    const backdrop = container.firstChild as HTMLElement;
+
+    const parentPointerUpSpy = jest.fn();
+    document.addEventListener("pointerup", parentPointerUpSpy);
+
+    fireEvent.pointerUp(backdrop);
+    expect(parentPointerUpSpy).not.toHaveBeenCalled();
+
+    document.removeEventListener("pointerup", parentPointerUpSpy);
+  });
+
+  it("onClick still calls onDismiss after pointerdown is stopped", () => {
+    const onDismiss = jest.fn();
+    const { container } = render(
+      <WbActionSheetBackdrop open onDismiss={onDismiss} />
+    );
+    const backdrop = container.firstChild as HTMLElement;
+
+    fireEvent.pointerDown(backdrop);
+    fireEvent.click(backdrop);
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });
