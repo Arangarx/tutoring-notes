@@ -1,7 +1,7 @@
 # wb-wave5-polish — combined confirm (waiting-polish quick-wins + join-timer fixes + liveboard-chrome chrome parity, integrated) — smoke runbook
 
 **Branch:** `wb-wave5-polish`
-**Tip commit:** [`f649c62`](https://github.com/Arangarx/tutoring-notes/commit/f649c62)
+**Tip commit:** `[f649c62](https://github.com/Arangarx/tutoring-notes/commit/f649c62)`
 **Preview:** [wb-wave5-polish combined preview](https://tutoring-notes-git-wb-wave5-polish-arangarx-5209s-projects.vercel.app)
 
 This wave integrates the quick-wins (A/V remote initials, mic meter, camera control style, waiting-room picker dedup, login convergence) plus newly-fixed join-timer bugs and the liveboard student-chrome parity + tutor mic-meter fix. Most behavior is Playwright-covered (jest 735/735, Playwright 105 passed / 0 failed on the integrated tip); this confirm targets the HUMAN/HARDWARE items Andrew specifically reported. **Confirm the preview deployment is READY (not BUILDING) before starting.**
@@ -16,7 +16,7 @@ This wave integrates the quick-wins (A/V remote initials, mic meter, camera cont
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -34,7 +34,7 @@ This wave integrates the quick-wins (A/V remote initials, mic meter, camera cont
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -52,13 +52,15 @@ This wave integrates the quick-wins (A/V remote initials, mic meter, camera cont
 
 **Ignore this run:** If your email provider's link scanner is not in play, the idempotent-replay path may not trigger — that's fine.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Notes:**
+
+**Pass, but.  Shouldn't there be a "successfully verified" style copy instead of no copy at all?**
 
 ---
 
@@ -70,13 +72,13 @@ This wave integrates the quick-wins (A/V remote initials, mic meter, camera cont
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:** Andrew already confirmed this on the liveboard branch (`afb3abf`). [automated: src/__tests__/dom/WhiteboardWorkspaceClient.av-mount.dom.test.tsx asserts single meterBarRef host] — mark **N/A with notes** (covered by Playwright + already confirmed) unless you want a quick re-glance.
+**Notes:** Andrew already confirmed this on the liveboard branch (`afb3abf`). [automated: src/**tests**/dom/WhiteboardWorkspaceClient.av-mount.dom.test.tsx asserts single meterBarRef host] — mark **N/A with notes** (covered by Playwright + already confirmed) unless you want a quick re-glance.
 
 ---
 
@@ -88,7 +90,7 @@ This wave integrates the quick-wins (A/V remote initials, mic meter, camera cont
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -102,5 +104,5 @@ This wave integrates the quick-wins (A/V remote initials, mic meter, camera cont
 
 Check **PASS** only if every in-scope test item is PASS (deliberate per-item SKIPs must be called out in Notes). Check **FAIL** if any in-scope item fails. Leave both unchecked until the run is complete. Overall verdict is PASS/FAIL only — no overall SKIP.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
