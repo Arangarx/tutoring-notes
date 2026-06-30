@@ -164,7 +164,7 @@ Corrects the item-6 FAIL — confirm the d0cd1b9 preview is **READY** before run
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** [automated: tests/integration/wb-session-lifecycle.spec.ts › bilateral parity (student no dropdown picker, tutor has dropdown picker)] + [automated: src/__tests__/dom/WhiteboardWorkspaceClient.av-mount.dom.test.tsx › tutor caret present, no on-page audio-device-select, single meterBarRef host]
+**Coverage:** [automated: tests/integration/wb-session-lifecycle.spec.ts › bilateral parity (student no dropdown picker, tutor has dropdown picker)] + [automated: src/**tests**/dom/WhiteboardWorkspaceClient.av-mount.dom.test.tsx › tutor caret present, no on-page audio-device-select, single meterBarRef host]
 
 **Notes:**
 
@@ -189,18 +189,18 @@ Corrects item 7 — confirm the e667c97 preview is **READY** before running.
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** [automated: tests/integration/wb-session-lifecycle.spec.ts › bilateral parity (tutor dropdown shows mic-gain-slider + recording-chime-enabled; student none)] + [automated: src/__tests__/dom/WhiteboardWorkspaceClient.av-mount.dom.test.tsx › tutor full MicControls panel in popover, single meterBarRef host]
+**Coverage:** [automated: tests/integration/wb-session-lifecycle.spec.ts › bilateral parity (tutor dropdown shows mic-gain-slider + recording-chime-enabled; student none)] + [automated: src/**tests**/dom/WhiteboardWorkspaceClient.av-mount.dom.test.tsx › tutor full MicControls panel in popover, single meterBarRef host]
 
 **Notes:**
 
 ---
 
 - [ ] Addendum 3 PASS
-- [ ] Addendum 3 FAIL
+- [x] Addendum 3 FAIL
 
 ---
 
@@ -216,17 +216,17 @@ Corrects item 8 dropdown contents — confirm the 70fb158 preview is **READY** b
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** [automated: tests/integration/wb-session-lifecycle.spec.ts › bilateral parity (tutor on-page picker + dropdown boost/chime, no in-dropdown device picker; student on-page picker, no dropdown)] + [automated: src/__tests__/dom/WhiteboardWorkspaceClient.av-mount.dom.test.tsx › tutor on-page picker present, dropdown has gain/chime not device select, single meterBarRef host]
+**Coverage:** [automated: tests/integration/wb-session-lifecycle.spec.ts › bilateral parity (tutor on-page picker + dropdown boost/chime, no in-dropdown device picker; student on-page picker, no dropdown)] + [automated: src/**tests**/dom/WhiteboardWorkspaceClient.av-mount.dom.test.tsx › tutor on-page picker present, dropdown has gain/chime not device select, single meterBarRef host]
 
 **Notes:**
 
 ---
 
-- [ ] Addendum 4 PASS
+- [x] Addendum 4 PASS
 - [ ] Addendum 4 FAIL
