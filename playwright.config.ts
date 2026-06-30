@@ -112,6 +112,7 @@ export default defineConfig({
       testIgnore: [
         "**/integration/auth.setup.ts",
         "**/integration/whiteboard-live-sync-regression.spec.ts",
+        "**/integration/wb-phantom-stroke-regression.spec.ts",
       ],
     },
     {
@@ -137,6 +138,7 @@ export default defineConfig({
         "**/integration/wb-av-mesh.spec.ts",
         "**/integration/wb-session-lifecycle.spec.ts",
         "**/integration/wb-chrome-interactions.spec.ts",
+        "**/integration/wb-phantom-stroke-regression.spec.ts",
       ],
     },
   ],

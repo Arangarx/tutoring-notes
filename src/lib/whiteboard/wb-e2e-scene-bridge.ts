@@ -22,6 +22,12 @@ export type WbE2eSceneBridge = {
   /** Freedraw-style line segment (triggers onChange + sync). */
   drawTestStroke: (strokeId: string, x1: number, y1: number, x2: number, y2: number) => void;
   /**
+   * Inject a degenerate line element (1 point, zero bbox) into the scene and fire
+   * the recorder's onChange — the adapter's degenerate-filter must drop it before sync.
+   * Used to gate-test the phantom-stroke fix (WB-DELAYED-STROKE-UNDO root cause).
+   */
+  injectDegenerateElement: (elementId: string, type?: "line" | "arrow") => void;
+  /**
    * Create-or-update the SAME element id with a higher version and a wider
    * extent — mimics a real freehand stroke growing across onChange ticks
    * (one id, version 1→2→…→N). This is the live-render path that the
@@ -229,6 +235,39 @@ export function registerWbE2eSceneBridge(
       const el = makeLine(strokeId, x1, y1, x2, y2);
       // IMMEDIATELY so the stroke enters the undo stack and Ctrl+Z can remove it.
       api.updateScene({ elements: [...existing, el], captureUpdate: "IMMEDIATELY" });
+      invokeSceneMutationHook(role);
+    },
+    injectDegenerateElement(elementId, type = "line") {
+      const now = Date.now();
+      const degenEl: ExcalidrawLikeElement = {
+        id: elementId,
+        type,
+        x: 100,
+        y: 100,
+        width: 0,
+        height: 0,
+        angle: 0,
+        strokeColor: "black",
+        backgroundColor: "transparent",
+        strokeWidth: 2,
+        opacity: 100,
+        seed: now % 2 ** 31,
+        version: 1,
+        versionNonce: now,
+        isDeleted: false,
+        groupIds: [],
+        frameId: null,
+        roundness: null,
+        boundElements: null,
+        updated: now,
+        link: null,
+        locked: false,
+        // Single point — the phantom-stroke shape (zero bbox, 1 point)
+        points: [[0, 0]],
+      } as ExcalidrawLikeElement;
+      const existing = api.getSceneElements() as ExcalidrawLikeElement[];
+      // Use NEVER so the phantom stroke cannot be Ctrl+Z'd (matches real repro)
+      api.updateScene({ elements: [...existing, degenEl], captureUpdate: "NEVER" });
       invokeSceneMutationHook(role);
     },
     growStroke(strokeId, width, version) {

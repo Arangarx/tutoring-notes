@@ -13,6 +13,11 @@ export function WbActionSheetBackdrop({ open, onDismiss }: WbActionSheetBackdrop
     <div
       className={`mynk-wb-action-sheet-backdrop${open ? " mynk-wb-action-sheet-backdrop--open" : ""}`}
       onClick={onDismiss}
+      // Stop pointer events from reaching Excalidraw's canvas pointerdown handler
+      // (which would start a draw action before the click-dismiss fires).
+      // Mirrors the guard on WbActionSheet itself (~L74).
+      onPointerDown={(e) => e.stopPropagation()}
+      onPointerUp={(e) => e.stopPropagation()}
       aria-hidden={!open}
     />
   );
