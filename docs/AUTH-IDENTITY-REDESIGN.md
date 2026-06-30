@@ -8,7 +8,7 @@
 
 ## 1. Problem
 
-Today the product exposes **three separate login surfaces** and **two disjoint signup flows**, with copy that centers "parent" even though the data model already distinguishes **account holders** (adults who own consent) from **learner profiles** (the people who take lessons).
+Today the product exposes **three separate login surfaces** and **two disjoint signup flows**, with copy that centers "parent" even though the data model already distinguishes **account holders** (people who own consent for themselves and/or dependents) from **learner profiles** (the people who take lessons).
 
 | Surface | Route | Backend | Credential |
 |---|---|---|---|
@@ -20,10 +20,10 @@ Sign-up is similarly split: tutors at [`/signup`](../src/app/signup/page.tsx) (s
 
 **Pain points this redesign addresses:**
 
-1. **"Parent" framing breaks for adult self-learners** — the schema already has `AccountHolder.isSelfLearner` and `LearnerProfile.isSelfLearner`, but UX/copy treats "parent" as a third account type alongside tutor and student.
+1. **"Parent" framing breaks for self-learners** — the schema already has `AccountHolder.isSelfLearner` and `LearnerProfile.isSelfLearner`, but UX/copy treats "parent" as a third account type alongside tutor and student.
 2. **Children are not account types** — a child is a `LearnerProfile` under an account holder; independent login is PIN-on-handle, not email signup.
 3. **Scattered entry points** — marketing header ([`MarketingHeader.tsx`](../src/components/marketing/MarketingHeader.tsx)), hero ([`LandingPageContent.tsx`](../src/app/LandingPageContent.tsx)), and deep links each send users to different URLs with inconsistent labels ("Parent sign in" vs "Sign in to your parent account").
-4. **Minor-data boundary is buried** — self-learner signup is a checkbox on the account-holder form, not a first-class signup path with an explicit "under 18 → ask a guardian" fork.
+4. **Minor-data boundary is buried** — self-learner signup is a checkbox on the account-holder form, not a first-class signup path with an explicit self-attestation fork (can I manage my own account vs I manage accounts for learners who cannot self-consent).
 
 ---
 
@@ -41,21 +41,21 @@ Tutor and account-holder both use **adult email + password**, but they are **dif
 
 ### 2.2 "Parent" → account holder (mental model, not necessarily immediate rename)
 
-- **Account holder** = the consenting adult who owns the legal/billing relationship (`AccountHolder` in [`prisma/schema.prisma`](../prisma/schema.prisma)).
-- **Self-learner** = an account holder whose learner profile is **themselves** (`isSelfLearner` on both `AccountHolder` and `LearnerProfile`). They consent for themselves.
-- **Parent** = an account holder whose learner profiles are **their children**. They consent on behalf of minors.
+- **Account holder** = the person who owns the legal/billing relationship and can consent for themselves and/or on behalf of dependent learners (`AccountHolder` in [`prisma/schema.prisma`](../prisma/schema.prisma)). Capacity is **self-attested at signup**, not inferred from a birthdate threshold.
+- **Self-learner** = an account holder whose learner profile is **themselves** (`isSelfLearner` on both `AccountHolder` and `LearnerProfile`). They self-attest that they can create and manage this account and consent for themselves.
+- **Guardian / family manager** = an account holder whose learner profiles are **dependents** (typically children) for whom they consent on behalf. They self-attest that role at signup.
 - **Child** = a `LearnerProfile` under an account holder — **not** an account type. Logs in with family handle + PIN when `accessMode` is `child_pin_required`.
 
 This removes the awkward "parent OR self-learner" special case from user-facing flows: both are **account holders**; the difference is *who the learner profiles represent*.
 
 ### 2.3 Consent alignment
 
-The account holder is always the consenting adult:
+The account holder is always the party who can consent for the learners on the account:
 
-- Self-learner adult → consents for themselves (B2 consent lattice applies per tutor link).
-- Parent account holder → consents for each child `LearnerProfile`.
+- Self-learner → consents for themselves (B2 consent lattice applies per tutor link).
+- Guardian / family manager → consents for each dependent `LearnerProfile` they manage.
 
-COPPA/minor-data boundary: **children cannot self-create accounts**; an adult account holder adds them (dashboard, claim flow, credential setup).
+**Dependent learners cannot self-create accounts** — a capable account holder adds them (dashboard, claim flow, credential setup). Who counts as "capable" for self-consent vs who requires a guardian is a **self-attestation + jurisdiction-aware** question, not a hardcoded age gate (see §7.9).
 
 ### 2.4 Ownership guard (existing — preserve)
 
@@ -120,17 +120,17 @@ One marketing-facing **"Create account"** entry with three explicit choices:
 | Choice | Routes to | Backend |
 |---|---|---|
 | **I'm a tutor** | Existing tutor signup (`/signup` flow → `AdminUser`) | Tutor |
-| **I'm a student** | Adult self-learner path (see §4.2) | Account holder + self `LearnerProfile` |
+| **I'm a student** | Self-learner path (see §4.2) | Account holder + self `LearnerProfile` |
 | **I'm the parent of a student** | Account-holder signup (no self-learner flag) | Account holder |
 
 **UX goal:** feel seamless — shared shell, shared progress language — even though two systems sit underneath.
 
-### 4.2 Minor-data boundary on "I'm a student"
+### 4.2 Self-attestation boundary on "I'm a student"
 
-The student choice must fork:
+The student choice must fork on **self-attested capacity/role**, not a birthdate threshold:
 
-- **Adult self-learner (may self-sign-up):** copy like *"I'm a student (I manage my own account)"* → account-holder signup with `isSelfLearner: true` (today's [`/account/signup`](../src/app/account/signup/page.tsx) checkbox, elevated to a primary path).
-- **Child (cannot self-create):** prominent secondary path — *"Under 18? Ask a parent or guardian to set you up"* — links to parent-oriented signup or help, **not** an account-creation form.
+- **Self-learner (may self-sign-up):** copy like *"I'm a student — I can create and manage my own account"* → account-holder signup with `isSelfLearner: true` (today's [`/account/signup`](../src/app/account/signup/page.tsx) checkbox, elevated to a primary path).
+- **Dependent learner (cannot self-create):** prominent secondary path — *"A parent or guardian manages my account — ask them to set you up"* (or equivalent) — links to guardian-oriented signup or help, **not** an account-creation form. **Do not** gate this fork with "18+", "under 18", or any absolute age claim in logic or copy (see §7.9).
 
 ### 4.3 CTA pre-selection + escape hatch
 
@@ -166,16 +166,26 @@ Tutor login stays at **`/login`** (NextAuth), separate from the non-tutor adapti
 |---|---|---|
 | Empty / incomplete `@` | Unknown | Both credential fields **disabled** |
 | `@` present, part after `@` has **no `.`** | Child learner handle (`username@familyid`) | **PIN** enabled, password disabled |
-| `@` present, part after `@` contains **`.`** (real TLD) | Adult email → account holder | **Password** enabled, PIN disabled |
+| `@` present, part after `@` contains **`.`** (real TLD) | Email → account holder | **Password** enabled, PIN disabled |
 
 **Helper text examples (ratified):**
 
 - `a@b` → *"Child student login"*
-- `a@b.c` → *"Student login"* (adult self-learner / account-holder email)
+- `a@b.c` → *"Student login"* (self-learner / account-holder email)
 
-### 5.4 Robustness — family id must never contain `.`
+### 5.4 Hard invariant — `familyId` MUST NOT contain `.`
 
-The dot discriminator only works if `familyId` cannot masquerade as an email domain. **Current code already enforces this** via slugify + `^[a-z0-9_]{3,24}$` on update. **Follow-up:** audit minting, admin override, and import paths to guarantee no `.` in `familyId` at creation time (not only on manual update).
+The dot discriminator (§5.3) **only works** if `familyId` cannot masquerade as an email domain. This is a **hard dependency / invariant**: **`familyId` MUST NOT contain a `.` (dot)** — the unified-login routing depends on it (`no dot after @` → child PIN; `dot in domain part` → email/password).
+
+**Enforce at all paths:**
+
+1. **Auto-generation / slugify minting** — never emit a dot.
+2. **Parent set/change validation** — reject any value containing `.` (today's `^[a-z0-9_]{3,24}$` satisfies this but is not documented as guarding the login discriminator).
+3. **All test fixtures / seed data** — never hand-write a dotted `familyId`.
+
+**Current code** already satisfies this via slugify + the update regex, but nothing guards it as an explicit invariant — a future grammar change or a hand-written fixture could silently break login routing.
+
+**Tracked:** BACKLOG **`AUTH-FAMILYID-NO-DOT-INVARIANT`** — guard tests + audit all mint/override/import paths.
 
 ### 5.5 Same-page layout — password-manager friendly
 
@@ -228,12 +238,28 @@ Do **not** decide here — track for implementation planning:
 
 1. **Rename scope** — "parent → account holder" across code (`parentEmail`, `parent_session_select` enum), UI, and marketing: full rename vs user-facing copy only vs phased.
 2. **Unified single-field login including tutors** — server-side identifier lookup (`AdminUser` vs `AccountHolder` vs learner handle) vs ratified separate-tutor-link approach. Latter is default; former is optional future optimization.
-3. **Handle-grammar hardening** — enforce no `.` in `familyId` at mint time; reject handles where family portion contains `.` at login parse time (defense in depth).
+3. **Handle-grammar hardening** — subsumed by §5.4 hard invariant + BACKLOG **`AUTH-FAMILYID-NO-DOT-INVARIANT`** (guard tests + audit all mint/override/import paths; defense-in-depth reject at login parse time).
 4. **Edge-case emails** — identifiers like `user@localhost` or `user@co.uk` (multiple dots): confirm discriminator rules and helper copy.
 5. **`account_holder_session` learners on unified page** — PIN login returns `access_mode_mismatch`; copy should steer to account-holder sign-in (already partially exists).
 6. **Route URLs** — keep `/students/login` as redirect to unified non-tutor page vs canonical new path (e.g. `/sign-in`); affects bookmarks and middleware redirects.
 7. **Google OAuth** — tutor-only today; no change ratified for account holders.
 8. **Component reuse** — unified flows should compose [`AuthShell`](../src/components/auth/AuthShell.tsx) / shared auth primitives per [component-reuse rule](../.cursor/rules/component-reuse.mdc); no fourth bespoke auth page.
+
+### 7.9 Age & consent — do NOT hardcode a cutoff (design constraint)
+
+**Rule (Andrew, 2026-06-30):** No hard age cutoff in logic; no absolute age claims in user-facing copy ("18+", "adults only", "under 18", etc.). The signup fork and account-holder framing turn on **self-attested capacity/role** — *"I can create and manage this account (and consent) for myself"* vs *"I manage accounts for learners who cannot self-consent"* — not a birthdate threshold.
+
+**Rationale — real-world edge cases:**
+
+- A person under 18 who already lives independently / on their own.
+- Jurisdictions outside the US where the age of majority is lower, or where someone is considered a self-consenting adult earlier.
+- An advanced minor, e.g. a 17-year-old already in college.
+
+**Legal framing is open — needs counsel, not product assertion:** Who can self-consent, COPPA/under-13 handling for genuine minors whose data we process, FERPA implications, and international age-of-majority variance all require **legal review before finalizing copy**. Do **not** assert legal conclusions in implementation or docs; mark as open / needs-counsel.
+
+**Separate axis:** COPPA/parental-consent obligations for **actual children's data** are distinct from the self-attestation account-creation gate and **still apply** when we process minor learners' data — guardian consent flows, claim/setup, and per-tutor consent lattice are unchanged by this constraint.
+
+**Tracked:** BACKLOG **`AUTH-AGE-NO-HARD-CUTOFF`**.
 
 **Backlog subsumption:** **WB-LABEL-PARENT-SIGNIN** (pick a new term for "Parent sign in") is resolved by this redesign's account-holder framing — close or redirect that item when implementation starts; do not one-off rename in isolation.
 
@@ -251,7 +277,7 @@ Do **not** decide here — track for implementation planning:
 **Suggested implementation order (when scheduled):**
 
 1. Unified non-tutor login page (adaptive discriminator + dual credential fields) — highest user-visible win; middleware/deep links can redirect old URLs.
-2. Unified signup role picker with minor-data fork.
+2. Unified signup role picker with self-attestation fork (§4.2, §7.9).
 3. Marketing/header copy + link order (Tutor → Student → Account holder).
 4. Optional rename pass (§7.1) — may be large; decouple from (1)–(3) if needed.
 
