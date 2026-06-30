@@ -2107,17 +2107,30 @@ test.describe(
               .getByTestId("wb-topbar-mic-settings")
           ).toHaveCount(0);
 
-          // Tutor: overlay also has WbTopBarMicControlLive with inline meter + in-dropdown mic picker.
+          // Tutor: overlay also has WbTopBarMicControlLive with inline meter + full recorder dropdown.
           const tutorMic = tutorPage
             .getByTestId("wb-waiting-overlay")
             .getByTestId("wb-topbar-mic-toggle");
           await expect(tutorMic).toBeVisible({ timeout: 10_000 });
           await expect(tutorMic.locator(".mynk-wb-mic-meter")).toBeVisible();
+          const tutorMicSettings = tutorPage
+            .getByTestId("wb-waiting-overlay")
+            .getByTestId("wb-topbar-mic-settings");
+          await expect(tutorMicSettings).toBeVisible({ timeout: 10_000 });
+          await tutorMicSettings.click();
+          const tutorPopover = tutorPage
+            .getByTestId("wb-waiting-overlay")
+            .locator(".mynk-wb-mic-popover");
+          await expect(tutorPopover.getByTestId("mic-gain-slider")).toBeVisible({
+            timeout: 5_000,
+          });
           await expect(
-            tutorPage
-              .getByTestId("wb-waiting-overlay")
-              .getByTestId("wb-topbar-mic-settings")
-          ).toBeVisible({ timeout: 10_000 });
+            tutorPopover.getByTestId("recording-chime-enabled")
+          ).toBeVisible({ timeout: 5_000 });
+          // Student dropdown absent — no gain/chime in overlay.
+          await expect(
+            studentPage.getByTestId("wb-waiting-overlay").getByTestId("mic-gain-slider")
+          ).toHaveCount(0);
 
           await tutorCtx.close();
         } finally {

@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import AudioControls from "@/components/av/AudioControls";
-
+import MicControls, { type MicControlsProps } from "@/components/recording/MicControls";
 import { WbInlineMicMeter } from "@/components/whiteboard/chrome/WbInlineMicMeter";
 
 import { WbIconMic } from "@/components/whiteboard/chrome/wb-icons";
@@ -77,6 +77,15 @@ type Props = {
   /** When false, hide the in-dropdown device picker (e.g. waiting-room overlay on-page pickers). Default true. */
   showDevicePickerInDropdown?: boolean;
 
+  /**
+   * Popover content: `live-av` = device picker only (`AudioControls`);
+   * `recorder` = full `MicControls` panel (boost/chime/volume + picker).
+   */
+  dropdownVariant?: "live-av" | "recorder";
+
+  /** Required when `dropdownVariant === 'recorder'`. Must set `hideLevelMeter: true`. */
+  recorderMicControls?: MicControlsProps;
+
   disabled?: boolean;
 
 };
@@ -110,6 +119,10 @@ export function WbTopBarMicControlLive({
   onRefreshDevices,
 
   showDevicePickerInDropdown = true,
+
+  dropdownVariant = "live-av",
+
+  recorderMicControls,
 
   disabled = false,
 
@@ -290,17 +303,17 @@ export function WbTopBarMicControlLive({
 
             >
 
-              <AudioControls
-
-                devices={audioDevices}
-
-                selectedPickerSlot={selectedPickerSlot}
-
-                onPickMicSlot={onPickMicSlot}
-
-                isLive={hasMicStream}
-                disabled={disabled}
-              />
+              {dropdownVariant === "recorder" && recorderMicControls ? (
+                <MicControls {...recorderMicControls} hideLevelMeter />
+              ) : (
+                <AudioControls
+                  devices={audioDevices}
+                  selectedPickerSlot={selectedPickerSlot}
+                  onPickMicSlot={onPickMicSlot}
+                  isLive={hasMicStream}
+                  disabled={disabled}
+                />
+              )}
 
             </div>
 

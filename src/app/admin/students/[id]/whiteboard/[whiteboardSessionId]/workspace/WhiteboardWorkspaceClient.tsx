@@ -5667,6 +5667,26 @@ export function WhiteboardWorkspaceClient({
   // metering — NOT WbTopBarMicControl, which binds workspaceAudio.meterBarRef.
   // The live top bar (WbTopBarMicControl, ~line 6143) remains the sole
   // meterBarRef host; the overlay's stream-based metering is independent.
+  // Tutor dropdown: full MicControls (recorder panel) via hideLevelMeter.
+  const overlayRecorderMicControls =
+    role === "tutor"
+      ? {
+          meterBarRef: workspaceAudio.meterBarRef,
+          devices: workspaceAudio.devices,
+          selectedPickerSlot: workspaceAudio.pickedMicSlot,
+          onPickMicSlot: (slot: number) =>
+            void liveAv.setMicDeviceBySlot(slot, { force: true }),
+          gainLinear: workspaceAudio.gainLinear,
+          onGainChange: workspaceAudio.setGainLinear,
+          isLive: workspaceAudio.isLive,
+          lockDevice: workspaceAudio.lockDevice,
+          chimeEnabled: workspaceAudio.chimeEnabled,
+          onChimeEnabledChange: workspaceAudio.setChimeEnabled,
+          chimeVolume: workspaceAudio.chimeVolume,
+          onChimeVolumeChange: workspaceAudio.setChimeVolume,
+          hideLevelMeter: true as const,
+        }
+      : undefined;
   const overlayMicNode = (
     <WbTopBarMicControlLive
       isMicMuted={liveAv.isMicMuted}
@@ -5678,6 +5698,8 @@ export function WhiteboardWorkspaceClient({
       showInlineMeter
       micStream={overlayMicMeterStream}
       showDevicePickerInDropdown={role !== "student"}
+      dropdownVariant={role === "tutor" ? "recorder" : "live-av"}
+      recorderMicControls={overlayRecorderMicControls}
       onToggleMute={liveAv.toggleMic}
       onAcquireMic={handleAcquireMic}
       onPickMicSlot={(slot) =>

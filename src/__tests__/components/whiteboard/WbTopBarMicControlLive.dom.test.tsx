@@ -117,4 +117,42 @@ describe("WbTopBarMicControlLive", () => {
     expect(screen.queryByTestId("audio-device-select")).toBeNull();
     expect(screen.getByTestId("wb-topbar-mic-toggle")).toBeTruthy();
   });
+
+  test("dropdownVariant=recorder renders full MicControls panel (gain + chime)", async () => {
+    const user = userEvent.setup();
+    const recorderMicControls = {
+      meterBarRef: { current: null },
+      devices: defaultDevices,
+      selectedPickerSlot: 0,
+      onPickMicSlot: jest.fn(),
+      gainLinear: 1,
+      onGainChange: jest.fn(),
+      isLive: true,
+      lockDevice: false,
+      chimeEnabled: false,
+      onChimeEnabledChange: jest.fn(),
+      chimeVolume: 0.5,
+      onChimeVolumeChange: jest.fn(),
+      hideLevelMeter: true as const,
+    };
+    render(
+      <WbTopBarMicControlLive
+        isMicMuted={false}
+        hasMicPermission="granted"
+        hasMicStream
+        audioDevices={defaultDevices}
+        selectedPickerSlot={0}
+        dropdownVariant="recorder"
+        recorderMicControls={recorderMicControls}
+        onToggleMute={jest.fn()}
+        onAcquireMic={jest.fn()}
+        onPickMicSlot={jest.fn()}
+      />
+    );
+
+    await user.click(screen.getByTestId("wb-topbar-mic-settings"));
+    expect(screen.getByTestId("mic-gain-slider")).toBeTruthy();
+    expect(screen.getByTestId("recording-chime-enabled")).toBeTruthy();
+    expect(screen.getByTestId("mic-device-select")).toBeTruthy();
+  });
 });

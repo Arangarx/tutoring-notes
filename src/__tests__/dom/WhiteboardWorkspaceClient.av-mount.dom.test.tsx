@@ -403,6 +403,17 @@ jest.mock("@/hooks/useAudioRecorder", () => {
       audioLevel: 0,
       elapsedMs: 0,
       refresh: jest.fn(),
+      meterBarRef: { current: null },
+      devices: [] as MediaDeviceInfo[],
+      pickedMicSlot: 0,
+      gainLinear: 1,
+      setGainLinear: jest.fn(),
+      isLive: false,
+      lockDevice: false,
+      chimeEnabled: false,
+      setChimeEnabled: jest.fn(),
+      chimeVolume: 0.5,
+      setChimeVolume: jest.fn(),
       // Mixdown contract — workspace gates the participants-reconcile
       // effect on localMicStream becoming non-null AND uses
       // addRemoteAudio to attach each remote participant's stream
@@ -589,7 +600,7 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
     expect(screen.getByTestId("av-controls")).toBeTruthy();
   });
 
-  test("tutor waiting room: overlay Live control present, exactly one meterBarRef host (not duplicate WbTopBarMicControl)", async () => {
+  test("tutor waiting room: overlay full MicControls in dropdown, exactly one meterBarRef host", async () => {
     await renderWorkspace({ initialSessionPhase: "PENDING" });
 
     expect(screen.getByTestId("wb-waiting-overlay")).toBeTruthy();
@@ -600,11 +611,35 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
     const overlay = screen.getByTestId("wb-waiting-overlay");
     expect(overlay.querySelector("[data-testid='wb-topbar-mic-toggle']")).toBeTruthy();
     expect(overlay.querySelector(".mynk-wb-mic-meter")).toBeTruthy();
-    // Tutor: in-dropdown mic device picker (caret); on-page mic picker is student-only.
-    expect(overlay.querySelector("[data-testid='wb-topbar-mic-settings']")).toBeTruthy();
+    // Tutor: full recorder MicControls in dropdown; no on-page mic picker.
+    const overlaySettings = within(overlay).getByTestId("wb-topbar-mic-settings");
+    expect(overlaySettings).toBeTruthy();
     expect(
       overlay.querySelector("[data-testid='wb-waiting-overlay-device-pickers'] [data-testid='audio-device-select']")
     ).toBeNull();
+    await act(async () => {
+      fireEvent.click(overlaySettings);
+    });
+    expect(within(overlay).getByTestId("mic-gain-slider")).toBeTruthy();
+    expect(within(overlay).getByTestId("recording-chime-enabled")).toBeTruthy();
+  });
+
+  test("student waiting room: on-page mic picker, no dropdown caret", async () => {
+    await renderWorkspace({
+      role: "student",
+      joinToken: "join-tok-1",
+      initialSessionPhase: "PENDING",
+    });
+
+    const overlay = screen.getByTestId("wb-waiting-overlay");
+    expect(within(overlay).queryByTestId("wb-topbar-mic-settings")).toBeNull();
+    expect(
+      overlay.querySelector(
+        "[data-testid='wb-waiting-overlay-device-pickers'] [data-testid='audio-device-select']"
+      )
+    ).toBeTruthy();
+    // Student has no WbTopBarMicControl — no meterBarRef hidden host.
+    expect(countMeterBarRefHosts()).toBe(0);
   });
 
   test("tutor ACTIVE session: live top-bar mic control with meterBarRef host present", async () => {
