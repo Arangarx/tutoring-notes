@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { hashToken } from "@/lib/crypto/session-tokens";
 import { db } from "@/lib/db";
 import { getAccountHolderSession } from "@/lib/account-holder-session";
-import { isConsentEnforcementEnabled } from "@/lib/consent-scope";
 import { MynkWordmark } from "@/components/auth/MynkWordmark";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { CredentialSetupForm } from "./CredentialSetupForm";
@@ -62,7 +61,6 @@ export default async function ClaimSetupPage({
   }
 
   const credentialAlreadySet = !!profile.credential;
-  const enforcementEnabled = isConsentEnforcementEnabled();
 
   // Check if a ConsentRecord already exists for this (learner, tutor) pair
   const existingConsent = await db.consentRecord.findFirst({
@@ -117,7 +115,7 @@ export default async function ClaimSetupPage({
               <ConsentSetupForm
                 rawToken={rawToken}
                 studentName={invite.student.name}
-                enforcementEnabled={enforcementEnabled}
+                enforcementEnabled={true}
               />
             )}
           </CardContent>

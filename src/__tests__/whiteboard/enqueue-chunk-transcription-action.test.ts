@@ -60,6 +60,10 @@ jest.mock("@/lib/db", () => ({
   db: {
     // B1: default APPROVED so existing tests are unaffected by the approval gate.
     adminUser: { findUnique: jest.fn().mockResolvedValue({ approvalStatus: "APPROVED" }) },
+    // Phase check (Concern 4): default ACTIVE so existing happy-path tests pass.
+    whiteboardSession: {
+      findUnique: jest.fn().mockResolvedValue({ sessionPhase: "ACTIVE" }),
+    },
   },
   withDbRetry: <T,>(fn: () => Promise<T>) => fn(),
 }));

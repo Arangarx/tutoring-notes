@@ -53,6 +53,9 @@ type DbMock = {
   student: {
     findUniqueOrThrow: jest.Mock;
   };
+  sessionConsentSnapshot: {
+    findUnique: jest.Mock;
+  };
 };
 
 let dbMock: DbMock;
@@ -80,6 +83,11 @@ jest.mock("@/lib/db", () => {
     },
     student: {
       findUniqueOrThrow: jest.fn(),
+    },
+    // assertEffectiveConsent (now unconditional) reads sessionConsentSnapshot.
+    // Default null → no-snapshot fallback (consent granted for unclaimed sessions).
+    sessionConsentSnapshot: {
+      findUnique: jest.fn().mockResolvedValue(null),
     },
   };
   (globalThis as unknown as DbMockSidechannel).__dbMock = mock;
@@ -211,6 +219,11 @@ beforeEach(() => {
   jest.clearAllMocks();
   requireStudentScopeMock.mockResolvedValue(adminScope);
   assertOwnsWhiteboardSessionMock.mockResolvedValue(mockSession);
+  // Phase check (Concern 4): default ACTIVE so existing happy-path tests pass.
+  dbMock.whiteboardSession.findUnique.mockResolvedValue({ sessionPhase: "ACTIVE" });
+  // Consent snapshot (Concern 2 — unconditional): default null → no-snapshot
+  // fallback (consent granted for unclaimed sessions).
+  dbMock.sessionConsentSnapshot.findUnique.mockResolvedValue(null);
 });
 
 // ─────────────────────────────────────────────────────────────────────

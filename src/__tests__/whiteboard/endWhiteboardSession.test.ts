@@ -58,6 +58,11 @@ jest.mock("@/lib/db", () => ({
     whiteboardSession: {
       findUnique: (...args: unknown[]) => dbWhiteboardFindUniqueMock(...args),
     },
+    // assertEffectiveConsent (now unconditional) reads sessionConsentSnapshot.
+    // Default null → no-snapshot fallback (consent granted for unclaimed sessions).
+    sessionConsentSnapshot: {
+      findUnique: jest.fn().mockResolvedValue(null),
+    },
     $transaction: (fn: (tx: unknown) => unknown) => dbTransactionMock(fn),
   },
   withDbRetry: <T,>(fn: () => Promise<T>) => fn(),
