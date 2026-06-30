@@ -112,6 +112,121 @@ describe("excalidraw-adapter -- toCanonical", () => {
     expect(toCanonical(rect({ type: "selection" }))).toBeNull();
   });
 
+  // ── Degenerate line/arrow filter (phantom-stroke fix) ──────────────────────
+  // A single click with the line tool + right-click finalize produces a
+  // degenerate element: 1 point (or N identical points), zero bounding box.
+  // These must be dropped before they reach the canonical layer.
+
+  test("degenerate line (1 point, zero bbox) is dropped", () => {
+    const el = freedraw({
+      id: "degen-line-1pt",
+      type: "line",
+      width: 0,
+      height: 0,
+      points: [[0, 0]],
+    });
+    expect(toCanonical(el)).toBeNull();
+  });
+
+  test("degenerate line (2 identical points, zero bbox) is dropped", () => {
+    const el = freedraw({
+      id: "degen-line-2pt-same",
+      type: "line",
+      width: 0,
+      height: 0,
+      points: [[0, 0], [0, 0]],
+    });
+    expect(toCanonical(el)).toBeNull();
+  });
+
+  test("degenerate arrow (1 point, zero bbox) is dropped", () => {
+    const el = freedraw({
+      id: "degen-arrow-1pt",
+      type: "arrow",
+      width: 0,
+      height: 0,
+      points: [[0, 0]],
+    });
+    expect(toCanonical(el)).toBeNull();
+  });
+
+  test("degenerate arrow (2 identical points, zero bbox) is dropped", () => {
+    const el = freedraw({
+      id: "degen-arrow-2pt-same",
+      type: "arrow",
+      width: 0,
+      height: 0,
+      points: [[5, 5], [5, 5]],
+    });
+    expect(toCanonical(el)).toBeNull();
+  });
+
+  // ── Over-drop guard: legitimate elements MUST be kept ─────────────────────
+
+  test("legitimate line (2 distinct points, real bbox) is KEPT", () => {
+    const el = freedraw({
+      id: "real-line",
+      type: "line",
+      width: 10,
+      height: 10,
+      points: [[0, 0], [10, 10]],
+    });
+    const wb = toCanonical(el);
+    expect(wb).not.toBeNull();
+    expect(wb!.type).toBe("line");
+  });
+
+  test("legitimate arrow (2 distinct points, real bbox) is KEPT", () => {
+    const el = freedraw({
+      id: "real-arrow",
+      type: "arrow",
+      width: 20,
+      height: 0,
+      points: [[0, 0], [20, 0]],
+    });
+    const wb = toCanonical(el);
+    expect(wb).not.toBeNull();
+    expect(wb!.type).toBe("arrow");
+  });
+
+  test("line with 2 distinct points but tiny bbox (near-zero) is KEPT — conservative guard", () => {
+    // |width|=0.5 < 1 AND |height|=0.5 < 1, but points ARE distinct → KEPT
+    const el = freedraw({
+      id: "near-zero-bbox-line",
+      type: "line",
+      width: 0.5,
+      height: 0.5,
+      points: [[0, 0], [0.5, 0.5]],
+    });
+    expect(toCanonical(el)).not.toBeNull();
+  });
+
+  test("line with zero bbox but 1pt + hasBbox via width>=1 is KEPT", () => {
+    // width ≥ 1 alone is enough to keep it
+    const el = freedraw({
+      id: "wide-zero-height-line",
+      type: "line",
+      width: 5,
+      height: 0,
+      points: [[0, 0]],
+    });
+    expect(toCanonical(el)).not.toBeNull();
+  });
+
+  test("freedraw single-point dot (type=freedraw, zero bbox) is KEPT — must NOT be dropped", () => {
+    // freedraw dots are legitimate (stroke radius gives them visual extent);
+    // the degenerate filter must NOT touch freedraw/freehand.
+    const el = freedraw({
+      id: "freedraw-dot",
+      type: "freedraw",
+      width: 0,
+      height: 0,
+      points: [[0, 0]],
+    });
+    expect(toCanonical(el)).not.toBeNull();
+    expect(toCanonical(el)!.type).toBe("freehand");
+  });
+
   test("unknown future element types are dropped without throwing", () => {
     expect(toCanonical(rect({ type: "future-shape" }))).toBeNull();
   });
@@ -600,5 +715,43 @@ describe("excalidraw-adapter -- canonicalizeScene", () => {
       rect({ id: "keep2" }),
     ]);
     expect(out.map((e) => e.id)).toEqual(["keep", "keep2"]);
+  });
+
+  test("canonicalizeScene drops degenerate line (1pt, zero bbox) — phantom-stroke gate", () => {
+    const degenLine = freedraw({
+      id: "phantom",
+      type: "line",
+      width: 0,
+      height: 0,
+      points: [[0, 0]],
+    });
+    const out = canonicalizeScene([
+      freedraw({ id: "real-stroke" }),
+      degenLine,
+      rect({ id: "real-rect" }),
+    ]);
+    expect(out.map((e) => e.id)).toEqual(["real-stroke", "real-rect"]);
+    expect(out).toHaveLength(2);
+  });
+
+  test("canonicalizeScene keeps a freedraw dot alongside a degenerate line drop", () => {
+    const degenArrow = freedraw({
+      id: "phantom-arrow",
+      type: "arrow",
+      width: 0,
+      height: 0,
+      points: [[3, 3], [3, 3]],
+    });
+    const freedrawDot = freedraw({
+      id: "dot",
+      type: "freedraw",
+      width: 0,
+      height: 0,
+      points: [[3, 3]],
+    });
+    const out = canonicalizeScene([degenArrow, freedrawDot]);
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe("dot");
+    expect(out[0].type).toBe("freehand");
   });
 });
