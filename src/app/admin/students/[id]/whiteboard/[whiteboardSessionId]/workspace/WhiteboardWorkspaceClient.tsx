@@ -84,6 +84,7 @@ import { WbThemeToggle } from "@/components/whiteboard/chrome/WbThemeToggle";
 import { WbExitButton } from "@/components/whiteboard/chrome/WbExitButton";
 import { WbStudentConnectionStatus } from "@/components/whiteboard/chrome/WbStudentConnectionStatus";
 import { WbUndoRedoButtons } from "@/components/whiteboard/chrome/WbUndoRedoButtons";
+import { WbToolbarToggle } from "@/components/whiteboard/chrome/WbToolbarToggle";
 import {
   useWhiteboardRecorder,
   type ResumeResult,
@@ -5625,24 +5626,14 @@ export function WhiteboardWorkspaceClient({
           </span>
         </div>
 
-        <button
-          type="button"
-          className="mynk-wb-toolbar-toggle"
-          data-testid="wb-student-toolbar-toggle"
-          aria-pressed={toolbarHidden}
-          title={toolbarHidden ? "Show tools" : "Hide tools"}
-          onClick={(e) => {
+        <WbToolbarToggle
+          testId="wb-student-toolbar-toggle"
+          toolbarHidden={toolbarHidden}
+          onToggle={(e) => {
             e.stopPropagation();
             setToolbarHidden((hidden) => !hidden);
           }}
-        >
-          <span className="mynk-wb-toolbar-toggle__label">
-            {toolbarHidden ? "Show tools" : "Hide tools"}
-          </span>
-          <span className="mynk-wb-toolbar-toggle__chev" aria-hidden>
-            {toolbarHidden ? "▴" : "▾"}
-          </span>
-        </button>
+        />
 
         <div style={{ flex: 1, minWidth: 0 }} />
 
@@ -5768,24 +5759,14 @@ export function WhiteboardWorkspaceClient({
           )}
         </div>
 
-        <button
-          type="button"
-          className="mynk-wb-toolbar-toggle"
-          data-testid="wb-toolbar-toggle"
-          aria-pressed={toolbarHidden}
-          title={toolbarHidden ? "Show tools" : "Hide tools"}
-          onClick={(e) => {
+        <WbToolbarToggle
+          testId="wb-toolbar-toggle"
+          toolbarHidden={toolbarHidden}
+          onToggle={(e) => {
             e.stopPropagation();
             setToolbarHidden((hidden) => !hidden);
           }}
-        >
-          <span className="mynk-wb-toolbar-toggle__label">
-            {toolbarHidden ? "Show tools" : "Hide tools"}
-          </span>
-          <span className="mynk-wb-toolbar-toggle__chev" aria-hidden>
-            {toolbarHidden ? "▴" : "▾"}
-          </span>
-        </button>
+        />
 
         <div style={{ flex: 1, minWidth: 0 }} />
 
