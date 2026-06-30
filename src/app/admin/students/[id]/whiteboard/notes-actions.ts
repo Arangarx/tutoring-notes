@@ -25,6 +25,7 @@ import { db, withDbRetry } from "@/lib/db";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import { enqueueNotesReduce } from "@/lib/recording/notes-enqueue";
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
+import { assertEffectiveConsent } from "@/lib/consent-scope";
 import { enqueueChunkTranscribe } from "@/lib/recording/chunk-transcribe-enqueue";
 import {
   getTutorNoteBySessionId,
@@ -119,6 +120,19 @@ export async function triggerNotesGenerationAction(
   if (!session?.endedAt) {
     console.warn(
       `[tnt] wbsid=${whiteboardSessionId} action=trigger_notes_skip reason=session_not_sealed`
+    );
+    return;
+  }
+
+  // B2: consent gate — do not generate or send notes if allowNoteSending=false.
+  // Uses the session-scoped snapshot (frozen at create time) as the source of truth.
+  // Reliability: if the snapshot is absent (unclaimed/pre-B2 session), consent defaults
+  // to granted (same fallback as assertEffectiveConsent no-snapshot path).
+  try {
+    await assertEffectiveConsent(whiteboardSessionId, "allowNoteSending");
+  } catch {
+    console.warn(
+      `[tnt] wbsid=${whiteboardSessionId} action=trigger_notes_skip reason=notes_consent_denied`
     );
     return;
   }
