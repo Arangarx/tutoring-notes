@@ -3036,6 +3036,103 @@ test.describe(
 );
 
 // ---------------------------------------------------------------------------
+// P2-H: allowLiveSession=false → learner denied at join with role-aware copy
+//        (Concern 3 — @wb-presence)
+// ---------------------------------------------------------------------------
+
+test.describe(
+  "allowLiveSession=false → join denied with clear copy (not generic 404)",
+  { tag: [TAG.WB_PRESENCE] },
+  () => {
+    test(
+      "learner with allowLiveSession=false sees denial page on /join/[sessionId]",
+      async ({ browser }) => {
+        /**
+         * RED-BEFORE / GREEN-AFTER (Concern 3):
+         * Before adding the allowLiveSession gate, the learner would reach the
+         * whiteboard shell even if allowLiveSession=false. After adding the gate,
+         * they see a clear "Session not available" denial page.
+         */
+        test.setTimeout(60_000);
+
+        // Seed a PENDING session (learner claims the student but consent says no live).
+        const session = await seedWbPendingLiveSyncSession();
+
+        const prisma = new PrismaClient();
+        try {
+          // Direct-seed: ConsentRecord with allowLiveSession=false + SessionConsentSnapshot.
+          const accountHolder = await prisma.learnerProfile.findUnique({
+            where: { id: session.learnerProfileId },
+            select: { accountHolderId: true },
+          });
+          await prisma.consentRecord.create({
+            data: {
+              learnerProfileId: session.learnerProfileId,
+              adminUserId: session.adminUserId,
+              version: 1,
+              allowLiveSession: false,
+              allowAudioRecording: false,
+              allowWhiteboardRecording: false,
+              allowNoteSending: false,
+              setByAccountHolderId: accountHolder!.accountHolderId,
+              captureMethod: "electronic",
+            },
+          });
+          const latestRecord = await prisma.consentRecord.findFirst({
+            where: {
+              learnerProfileId: session.learnerProfileId,
+              adminUserId: session.adminUserId,
+            },
+            orderBy: { version: "desc" },
+          });
+          await prisma.sessionConsentSnapshot.create({
+            data: {
+              whiteboardSessionId: session.whiteboardSessionId,
+              allowLiveSession: false,
+              allowAudioRecording: false,
+              allowWhiteboardRecording: false,
+              allowNoteSending: false,
+              consentRecordId: latestRecord!.id,
+              consentRecordVersion: latestRecord!.version,
+            },
+          });
+        } finally {
+          await prisma.$disconnect();
+        }
+
+        const studentCtx = await browser.newContext({
+          viewport: { width: 1280, height: 800 },
+        });
+        try {
+          await loginLearnerInContext(studentCtx, session.learnerHandle, session.learnerPin);
+          const studentPage = await studentCtx.newPage();
+          await studentPage.goto(`/join/${session.whiteboardSessionId}`, {
+            waitUntil: "domcontentloaded",
+          });
+
+          // Oracle: denial copy is shown (role-aware, not generic "link unusable").
+          await expect(
+            studentPage.getByText("Session not available")
+          ).toBeVisible({ timeout: 15_000 });
+
+          // Negative oracle: generic 404 copy must NOT appear.
+          await expect(
+            studentPage.getByText("This link isn't usable anymore")
+          ).not.toBeVisible();
+
+          // Negative oracle: whiteboard shell must NOT load.
+          await expect(
+            studentPage.getByTestId("student-whiteboard-canvas-mount")
+          ).not.toBeVisible();
+        } finally {
+          await studentCtx.close();
+        }
+      }
+    );
+  }
+);
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 

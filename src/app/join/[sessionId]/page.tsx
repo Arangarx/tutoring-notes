@@ -20,7 +20,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { createHash } from "crypto";
-import { db } from "@/lib/db";
+import { db, withDbRetry } from "@/lib/db";
 import { env } from "@/lib/env";
 import {
   getLearnerSessionFromHeaders,
@@ -208,6 +208,42 @@ export default async function JoinSessionPage({
       );
     }
     return <JoinAuthGate sessionId={sessionId} isSelfLearner={isSelfLearner} />;
+  }
+
+  // -------------------------------------------------------------------------
+  // B2: allowLiveSession consent check — deny entry if the snapshot says false.
+  //
+  // Applies to child learners only (self-learners auto-pass; unclaimed
+  // sessions have no snapshot and fall through to the normal flow).
+  // -------------------------------------------------------------------------
+  if (!isSelfLearner) {
+    const consentSnap = await withDbRetry(
+      () =>
+        db.sessionConsentSnapshot.findUnique({
+          where: { whiteboardSessionId: sessionId },
+          select: { allowLiveSession: true },
+        }),
+      { label: "joinSessionPage.consentSnapshot" }
+    );
+    if (consentSnap && consentSnap.allowLiveSession === false) {
+      console.info(
+        `[wjg] wjg=${sessionId.slice(0, 8)} wbsid=${sessionId}` +
+          ` action=join_denied_consent_live_session` +
+          ` lpr=${effectiveLearnerProfileId}`
+      );
+      return (
+        <main className="container" style={{ maxWidth: 720, padding: "2rem" }}>
+          <div className="card">
+            <h1 style={{ marginTop: 0 }}>Session not available</h1>
+            <p>
+              Your account does not have permission to join live whiteboard
+              sessions. Please ask your parent or guardian to update your
+              session preferences, then have your tutor start a new session.
+            </p>
+          </div>
+        </main>
+      );
+    }
   }
 
   // -------------------------------------------------------------------------
