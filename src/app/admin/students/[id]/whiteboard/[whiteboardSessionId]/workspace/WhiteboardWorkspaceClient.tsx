@@ -6645,7 +6645,7 @@ export function WhiteboardWorkspaceClient({
           </button>
         </div>
       ) : null}
-      bottomToolbar={
+      bottomToolbar={touchLayout ? (
       <nav
         className="mynk-wb-bottom-toolbar"
         aria-label="Drawing tools (mobile)"
@@ -6654,7 +6654,7 @@ export function WhiteboardWorkspaceClient({
       >
         {renderToolStripButtons(true)}
       </nav>
-      }
+      ) : undefined}
       boardTabStrip={
       <footer
         className="mynk-wb-pagestrip bg-card border-t border-border"
