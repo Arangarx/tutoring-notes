@@ -91,7 +91,7 @@ const PATH_RULES = [
     tags: [TAG.WB_PRESENCE, TAG.WB_SYNC],
   },
   {
-    re: /WhiteboardWorkspaceClient|StudentWhiteboardClient/i,
+    re: /WhiteboardWorkspaceClient/i,
     tags: [TAG.WB_SYNC],
   },
   {

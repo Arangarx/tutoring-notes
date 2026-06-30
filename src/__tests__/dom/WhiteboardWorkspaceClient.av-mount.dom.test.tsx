@@ -776,6 +776,40 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
     expect(calledIds).toEqual(["peer-A", "peer-B"]);
   });
 
+  test("student sync-reconnect → mesh.restart for every current peer", async () => {
+    liveAvState = {
+      ...liveAvState,
+      participants: [
+        makeParticipant("peer-A"),
+        makeParticipant("peer-B"),
+      ],
+    };
+
+    await renderWorkspace({
+      role: "student",
+      joinToken: "join-tok-1",
+    });
+    await waitFor(() => {
+      expect(createdSyncClients).toHaveLength(1);
+    });
+    const client = createdSyncClients[0];
+    act(() => {
+      client.__triggerConnect();
+    });
+    expect(reconnectPeerSpy).not.toHaveBeenCalled();
+
+    act(() => {
+      client.__triggerDisconnect();
+    });
+    act(() => {
+      client.__triggerConnect();
+    });
+
+    expect(reconnectPeerSpy).toHaveBeenCalledTimes(2);
+    const calledIds = reconnectPeerSpy.mock.calls.map((c) => c[0]).sort();
+    expect(calledIds).toEqual(["peer-A", "peer-B"]);
+  });
+
   test("first-mount onConnect does NOT trigger mesh.restart (only reconnect-after-disconnect does)", async () => {
     liveAvState = {
       ...liveAvState,
