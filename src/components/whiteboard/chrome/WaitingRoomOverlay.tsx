@@ -92,6 +92,11 @@ export type WaitingRoomOverlayProps = {
   copyStudentLinkState?: WtrCopyStudentLinkState;
   /** True when sync URL / key preconditions block copy (workspace-owned). */
   copyStudentLinkDisabled?: boolean;
+  /**
+   * Optional theme toggle (WbThemeToggle) — shown for both roles in the
+   * overlay header so light/dark is reachable before the session starts.
+   */
+  themeToggleNode?: ReactNode;
 };
 
 /**
@@ -119,6 +124,7 @@ export function WaitingRoomOverlay({
   onCopyStudentLink,
   copyStudentLinkState = "idle",
   copyStudentLinkDisabled = false,
+  themeToggleNode,
 }: WaitingRoomOverlayProps) {
   const isTutor = role === "tutor";
   const inPerson = sessionMode === "IN_PERSON";
@@ -151,6 +157,14 @@ export function WaitingRoomOverlay({
 
         {/* ── header ── */}
         <div className="mynk-wtr-header">
+          {themeToggleNode ? (
+            <div
+              className="mynk-wtr-theme"
+              data-testid="wb-waiting-overlay-theme"
+            >
+              {themeToggleNode}
+            </div>
+          ) : null}
           {isTutor ? (
             <h2 className="mynk-wtr-title">Ready to start?</h2>
           ) : (

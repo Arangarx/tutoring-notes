@@ -78,6 +78,7 @@ import { WbTopBarMicControl } from "@/components/whiteboard/chrome/WbTopBarMicCo
 import { WbTopBarMicControlLive } from "@/components/whiteboard/chrome/WbTopBarMicControlLive";
 import { WbToolBtn } from "@/components/whiteboard/chrome/WbToolBtn";
 import { WbTopBarCamControl } from "@/components/whiteboard/chrome/WbTopBarCamControl";
+import { WbTopBarCamControlLive } from "@/components/whiteboard/chrome/WbTopBarCamControlLive";
 import { WbThemeToggle } from "@/components/whiteboard/chrome/WbThemeToggle";
 import {
   useWhiteboardRecorder,
@@ -2252,6 +2253,15 @@ export function WhiteboardWorkspaceClient({
       }
     }
   }, [role, peerCount, liveAv, whiteboardSessionId]);
+
+  // Additive: reset per-session latches when whiteboardSessionId changes so
+  // a 2nd session starts with a clean slate. Writing refs directly is safe —
+  // both are idempotent latches that only ever move from false→true in normal
+  // flow; resetting to false here re-arms them for the new session.
+  useEffect(() => {
+    studentHasConnectedOnceRef.current = false;
+    prevSyncPeerCountRef.current = 0;
+  }, [whiteboardSessionId]);
 
   const lifecycleInputStreams = useMemo<
     ReadonlyMap<string, StreamHealth>
@@ -5507,6 +5517,18 @@ export function WhiteboardWorkspaceClient({
     boardSyncing,
   });
 
+  // Cloned mic stream for inline metering on the student overlay — never tap the
+  // publish stream (Web Audio on the WebRTC track can silence the peer).
+  const overlayMicMeterStream = useMemo(() => {
+    const track = liveAv.localAudioStream?.getAudioTracks()[0];
+    if (!track) return null;
+    try {
+      return new MediaStream([track.clone()]);
+    } catch {
+      return null;
+    }
+  }, [liveAv.localAudioStream]);
+
   // ---------------------------------------------------------------
   // Student early-return gates (Slice 5: join gate states)
   // Must be AFTER all hooks; conditional returns are only allowed here.
@@ -5612,49 +5634,43 @@ export function WhiteboardWorkspaceClient({
     sessionMode === "LIVE" ? !overlayStudentConnected : false;
   const overlayCanStart = !overlayCantStart;
 
-  // Pre-built mic control node for the overlay — role-specific chip-toggle.
-  // Reuses the `mynk-wb-follow-toggle mynk-wb-chip` pattern (same CSS class
-  // as the follow-toggle, no new styles) wired to the same state + handlers
-  // as the top-bar compact icon controls. The top-bar controls are unchanged.
+  // Pre-built mic control for the overlay — reuse top-bar components so the
+  // inline volume meter matches tutor parity (Plan #1 smoke finding 2).
   const overlayMicNode =
     role === "student" ? (
-      <label
-        className={`mynk-wb-follow-toggle mynk-wb-chip${!liveAv.isMicMuted && liveAv.localAudioStream !== null ? " mynk-wb-chip--active" : ""}`}
-        data-testid="wb-overlay-mic-chip"
-      >
-        <input
-          type="checkbox"
-          checked={!liveAv.isMicMuted && liveAv.localAudioStream !== null}
-          aria-label={liveAv.isMicMuted || liveAv.localAudioStream === null ? "Mic off" : "Mic on"}
-          onChange={() => void handleTopBarMic()}
-        />
-        <span className="mynk-wb-menu-item__icon" aria-hidden="true">
-          <WbIconMic size={12} />
-        </span>
-        <span className="mynk-wb-follow-toggle__label" data-testid="wb-overlay-mic-chip-label">
-          {liveAv.isMicMuted || liveAv.localAudioStream === null ? "Mic off" : "Mic on"}
-        </span>
-      </label>
+      <WbTopBarMicControlLive
+        isMicMuted={liveAv.isMicMuted}
+        hasMicPermission={liveAv.hasMicPermission}
+        hasMicStream={liveAv.localAudioStream !== null}
+        audioDevices={liveAv.audioDevices ?? []}
+        selectedPickerSlot={liveAv.pickedMicSlot}
+        isAcquiring={liveAv.isAcquiring}
+        showInlineMeter
+        micStream={overlayMicMeterStream}
+        showDevicePickerInDropdown={false}
+        onToggleMute={liveAv.toggleMic}
+        onAcquireMic={handleAcquireMic}
+        onPickMicSlot={(slot) =>
+          void liveAv.setMicDeviceBySlot(slot, { force: true })
+        }
+        onRefreshDevices={() => void liveAv.refreshAudioDeviceList()}
+        disabled={studentAvPickerDisabled}
+      />
     ) : (
-      <label
-        className={`mynk-wb-follow-toggle mynk-wb-chip${!liveAv.isMicMuted && liveAv.localAudioStream !== null ? " mynk-wb-chip--active" : ""}`}
-        data-testid="wb-overlay-mic-chip"
-      >
-        <input
-          type="checkbox"
-          checked={!liveAv.isMicMuted && liveAv.localAudioStream !== null}
-          aria-label={liveAv.isMicMuted || liveAv.localAudioStream === null ? "Mic off" : "Mic on"}
-          onChange={() => void handleTopBarMic()}
-        />
-        <span className="mynk-wb-menu-item__icon" aria-hidden="true">
-          <WbIconMic size={12} />
-        </span>
-        <span className="mynk-wb-follow-toggle__label" data-testid="wb-overlay-mic-chip-label">
-          {liveAv.isMicMuted || liveAv.localAudioStream === null ? "Mic off" : "Mic on"}
-        </span>
-      </label>
+      <WbTopBarMicControl
+        audio={workspaceAudio}
+        isMicMuted={liveAv.isMicMuted}
+        onToggleMute={liveAv.toggleMic}
+        onAcquireMic={handleAcquireMic}
+        onPickMicSlot={(slot) =>
+          void liveAv.setMicDeviceBySlot(slot, { force: true })
+        }
+        disabled={endingBusy}
+      />
     );
 
+  // Pre-built cam control node for the overlay — chip-toggle pattern (same CSS
+  // as follow-toggle). Top-bar cam controls are unchanged.
   const overlayAVTilesNode = (
     <AVTilesPanel
       participants={liveAv.participants}
@@ -5679,23 +5695,14 @@ export function WhiteboardWorkspaceClient({
   );
 
   const overlayCamNode = (
-    <label
-      className={`mynk-wb-follow-toggle mynk-wb-chip${liveAv.localVideoStream !== null && !liveAv.isCamMuted ? " mynk-wb-chip--active" : ""}`}
-      data-testid="wb-overlay-cam-chip"
-    >
-      <input
-        type="checkbox"
-        checked={liveAv.localVideoStream !== null && !liveAv.isCamMuted}
-        aria-label={liveAv.localVideoStream === null || liveAv.isCamMuted ? "Camera off" : "Camera on"}
-        onChange={() => void handleTopBarCam()}
-      />
-      <span className="mynk-wb-menu-item__icon" aria-hidden="true">
-        <WbIconCamera size={12} />
-      </span>
-      <span className="mynk-wb-follow-toggle__label" data-testid="wb-overlay-cam-chip-label">
-        {liveAv.localVideoStream === null || liveAv.isCamMuted ? "Camera off" : "Camera on"}
-      </span>
-    </label>
+    <WbTopBarCamControlLive
+      isCamMuted={liveAv.isCamMuted}
+      hasCamPermission={liveAv.hasCamPermission}
+      hasCamStream={liveAv.localVideoStream !== null}
+      onToggleCam={() => void handleTopBarCam()}
+      onAcquireCam={() => void handleTopBarCam()}
+      disabled={role === "student" ? studentAvPickerDisabled : endingBusy}
+    />
   );
 
   // Device pickers (AudioControls / VideoControls) surfaced in the overlay.
@@ -6693,6 +6700,7 @@ export function WhiteboardWorkspaceClient({
         onCopyStudentLink={role === "tutor" ? handleCopyStudentLink : undefined}
         copyStudentLinkState={copyState}
         copyStudentLinkDisabled={!syncUrl || copyState === "copying"}
+        themeToggleNode={<WbThemeToggle />}
       />
     )}
     </WbRoleProvider>

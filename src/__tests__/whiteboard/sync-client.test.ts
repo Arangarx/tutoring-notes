@@ -2092,6 +2092,193 @@ describe("sync-client presence envelope (Phase 4b)", () => {
     client.disconnect();
   });
 
+  test("camOn/micOn on presence frames surface via onRoomPeersChange", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const peersCb = jest.fn<void, [ReadonlyArray<RoomPeer>]>();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-av-media",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+    client.onRoomPeersChange(peersCb);
+
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    await injectPresence(sock, aes, {
+      v: 1,
+      kind: "presence",
+      peerId: "student-B",
+      role: "student",
+      camOn: true,
+      micOn: false,
+    });
+    await realTick(15);
+    await flushMicrotasks(15);
+    expect(peersCb).toHaveBeenCalledTimes(1);
+    expect(peersCb.mock.calls[0]![0]).toEqual([
+      expect.objectContaining({
+        peerId: "student-B",
+        camOn: true,
+        micOn: false,
+      }),
+    ]);
+
+    client.disconnect();
+  });
+
+  test("setLocalAvMediaState rebroadcasts camOn/micOn on presence send", async () => {
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-av-local",
+      encryptionKeyBase64Url: k,
+      role: "student",
+      peerId: "student-A",
+      _ioFactory: factory,
+    });
+
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+    const baseCount = (await readEmittedPresence(sock, aes)).length;
+
+    client.setLocalAvMediaState({ camOn: false, micOn: true });
+    await realTick(15);
+    await flushMicrotasks(15);
+
+    const frames = await readEmittedPresence(sock, aes);
+    expect(frames.length).toBeGreaterThan(baseCount);
+    const withMedia = frames.filter(
+      (f) => f.peerId === "student-A" && f.camOn === false && f.micOn === true
+    );
+    expect(withMedia.length).toBeGreaterThan(0);
+
+    client.disconnect();
+  });
+
+  test("omitted camOn in connect frame does not force camOn:false — stale latch prevention", async () => {
+    // Oracle: connect-frame omits camOn → false → true. Final camOn must be true.
+    // An omitted frame must never latch camOn:false on a peer that later reports true.
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const peersCb = jest.fn<void, [ReadonlyArray<RoomPeer>]>();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-camOn-latch",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+    client.onRoomPeersChange(peersCb);
+
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+
+    // Frame 1: connect presence — omits camOn (student hasn't settled cam yet)
+    await injectPresence(sock, aes, {
+      v: 1,
+      kind: "presence",
+      peerId: "student-C",
+      role: "student",
+    });
+    await realTick(10);
+    await flushMicrotasks(10);
+    const afterConnect = peersCb.mock.calls.at(-1)![0];
+    expect(afterConnect[0]?.camOn).toBeUndefined();
+
+    // Frame 2: explicit camOn:false (premature, should be transient)
+    await injectPresence(sock, aes, {
+      v: 1,
+      kind: "presence",
+      peerId: "student-C",
+      role: "student",
+      camOn: false,
+    });
+    await realTick(10);
+    await flushMicrotasks(10);
+    expect(peersCb.mock.calls.at(-1)![0][0]?.camOn).toBe(false);
+
+    // Frame 3: camOn:true (cam ready)
+    await injectPresence(sock, aes, {
+      v: 1,
+      kind: "presence",
+      peerId: "student-C",
+      role: "student",
+      camOn: true,
+    });
+    await realTick(10);
+    await flushMicrotasks(10);
+
+    const finalPeers = peersCb.mock.calls.at(-1)![0];
+    expect(finalPeers[0]?.camOn).toBe(true);
+
+    client.disconnect();
+  });
+
+  test("omitted camOn in heartbeat preserves existing known true value", async () => {
+    // Oracle: once camOn:true is established, a heartbeat that omits camOn
+    // must preserve true (not clobber it with undefined).
+    const { factory, sockets } = fakeIoFactory();
+    const k = generateEncryptionKeyBase64Url();
+    const peersCb = jest.fn<void, [ReadonlyArray<RoomPeer>]>();
+    const client = createWhiteboardSyncClient({
+      url: "wss://test",
+      roomId: "room-camOn-heartbeat",
+      encryptionKeyBase64Url: k,
+      role: "tutor",
+      peerId: "tutor-A",
+      _ioFactory: factory,
+    });
+    client.onRoomPeersChange(peersCb);
+
+    await realTick(20);
+    await flushMicrotasks(20);
+
+    const sock = sockets[0]!;
+    const aes = await _testing.importAesKey(_testing.decodeBase64Url(k));
+
+    // Establish camOn:true
+    await injectPresence(sock, aes, {
+      v: 1,
+      kind: "presence",
+      peerId: "student-D",
+      role: "student",
+      camOn: true,
+    });
+    await realTick(10);
+    await flushMicrotasks(10);
+    expect(peersCb.mock.calls.at(-1)![0][0]?.camOn).toBe(true);
+
+    // Heartbeat omits camOn — must preserve true
+    await injectPresence(sock, aes, {
+      v: 1,
+      kind: "presence",
+      peerId: "student-D",
+      role: "student",
+    });
+    await realTick(10);
+    await flushMicrotasks(10);
+    // No new callback since content didn't change (camOn preserved = same snapshot)
+    const afterHeartbeat = peersCb.mock.calls.at(-1)![0];
+    expect(afterHeartbeat[0]?.camOn).toBe(true);
+
+    client.disconnect();
+  });
+
   test("label change fires onRoomPeersChange with the new label", async () => {
     const { factory, sockets } = fakeIoFactory();
     const k = generateEncryptionKeyBase64Url();

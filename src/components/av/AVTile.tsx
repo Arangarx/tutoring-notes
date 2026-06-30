@@ -325,16 +325,28 @@ export function AVTile({
         ? "Tutor"
         : "Student";
 
-  const hasVideoTrack =
+  // A muted remote cam still carries a disabled video track — treat as cam-off
+  // so initials render instead of a black <video> frame. When the peer
+  // presence-signaled `camOn === false`, trust that over inbound track state
+  // (remote track enabled/muted does not propagate reliably to receivers).
+  const remoteParticipant = !isLocalTile ? (participant as AvParticipant) : null;
+  const remoteReportsCamOff = remoteParticipant?.camOn === false;
+  const hasActiveVideoTrack =
+    !remoteReportsCamOff &&
     !!participant.videoStream &&
-    participant.videoStream.getVideoTracks().length > 0;
+    participant.videoStream
+      .getVideoTracks()
+      .some((t) => t.enabled && !t.muted && t.readyState !== "ended");
   const showCamPlaceholder =
-    !hasVideoTrack || (isLocalTile && localCamMuted === true);
+    remoteReportsCamOff ||
+    !hasActiveVideoTrack ||
+    (isLocalTile && localCamMuted === true);
 
-  const remote = !isLocalTile ? (participant as AvParticipant) : null;
+  const remote = remoteParticipant;
   const remoteAwaitingVideo =
     !!remote &&
-    !hasVideoTrack &&
+    !hasActiveVideoTrack &&
+    remote.camOn !== false &&
     (remote.peerConnectionState === "connecting" ||
       remote.peerConnectionState === "new");
 

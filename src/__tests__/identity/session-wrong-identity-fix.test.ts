@@ -297,12 +297,52 @@ describe("Q1-A + Q2-A — verify-email route", () => {
     expect(mockRevoke).toHaveBeenCalledWith("ah-uuid-001");
   });
 
-  it("redirects to login with notice when token is already consumed", async () => {
+  it("redirects to login with notice when token is already consumed and account NOT verified", async () => {
+    // consumedAt set + emailVerifiedAt NOT set → genuinely invalid → link_already_used.
     (mockDb.accountHolderEmailToken.findUnique as jest.Mock).mockResolvedValue(
       makeTokenRow({ consumedAt: new Date() })
     );
     const response = await verifyEmailGET(makeVerifyRequest("used-token"));
     expect((response as { url: string }).url).toContain("/account/login");
+    expect((response as { url: string }).url).toContain("link_already_used");
+  });
+
+  it("idempotent success replay: consumed + emailVerified + within TTL → verify-done redirect (not link_already_used)", async () => {
+    // Bug B fix: link-scanner / email-client prefetch consumes the token before
+    // the human clicks. If the account is now verified AND within TTL, treat as
+    // a success replay — run the same success path, do NOT return link_already_used.
+    (mockDb.accountHolderEmailToken.findUnique as jest.Mock).mockResolvedValue(
+      makeTokenRow({
+        consumedAt: new Date(Date.now() - 60_000), // consumed ~1 min ago by scanner
+        accountHolder: {
+          id: "ah-uuid-001",
+          email: "parent@example.com",
+          emailVerifiedAt: new Date(Date.now() - 60_000),
+        },
+      })
+    );
+    const response = await verifyEmailGET(makeVerifyRequest("replay-token"));
+    // Must NOT be the error path.
+    expect((response as { url: string }).url).not.toContain("link_already_used");
+    // Must follow the same success path as a first-time verify.
+    expect((response as { url: string }).url).toMatch(/\/auth\/verify-done\?t=/);
+  });
+
+  it("consumed + emailVerified + EXPIRED → link_already_used (no replay for expired tokens)", async () => {
+    // Security boundary: even if account is verified, an expired token must not
+    // authenticate (replay window is TTL-bounded).
+    (mockDb.accountHolderEmailToken.findUnique as jest.Mock).mockResolvedValue(
+      makeTokenRow({
+        consumedAt: new Date(Date.now() - 7_200_000), // consumed 2h ago
+        expiresAt: new Date(Date.now() - 3_600_000),  // expired 1h ago
+        accountHolder: {
+          id: "ah-uuid-001",
+          email: "parent@example.com",
+          emailVerifiedAt: new Date(Date.now() - 7_200_000),
+        },
+      })
+    );
+    const response = await verifyEmailGET(makeVerifyRequest("old-token"));
     expect((response as { url: string }).url).toContain("link_already_used");
   });
 

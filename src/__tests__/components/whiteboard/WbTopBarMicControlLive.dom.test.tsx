@@ -36,6 +36,28 @@ describe("WbTopBarMicControlLive", () => {
     expect(toggle.querySelectorAll(".mynk-wb-mic-bar--active").length).toBeGreaterThan(0);
   });
 
+  test("inline meter still receives micStream when muted (local activity cue)", () => {
+    const fakeStream = { id: "meter-stream" } as MediaStream;
+    render(
+      <WbTopBarMicControlLive
+        isMicMuted
+        hasMicPermission="granted"
+        hasMicStream
+        audioDevices={defaultDevices}
+        selectedPickerSlot={0}
+        showInlineMeter
+        micStream={fakeStream}
+        onToggleMute={jest.fn()}
+        onAcquireMic={jest.fn()}
+        onPickMicSlot={jest.fn()}
+      />
+    );
+
+    const toggle = screen.getByTestId("wb-topbar-mic-toggle");
+    expect(toggle.querySelector(".mynk-wb-mic-meter")).toBeTruthy();
+    expect(toggle.className).toContain("mynk-wb-tb-btn--mic-off");
+  });
+
   test("student path: no inline meter by default; mic stays enabled before enumerate", () => {
     render(
       <WbTopBarMicControlLive
@@ -74,5 +96,25 @@ describe("WbTopBarMicControlLive", () => {
     await user.click(screen.getByTestId("wb-topbar-mic-settings"));
     const select = screen.getByTestId("audio-device-select");
     expect(select).toHaveTextContent("(allow microphone access to choose)");
+  });
+
+  test("showDevicePickerInDropdown=false hides settings caret (on-page picker owns device UI)", () => {
+    render(
+      <WbTopBarMicControlLive
+        isMicMuted={false}
+        hasMicPermission="granted"
+        hasMicStream
+        audioDevices={defaultDevices}
+        selectedPickerSlot={0}
+        showDevicePickerInDropdown={false}
+        onToggleMute={jest.fn()}
+        onAcquireMic={jest.fn()}
+        onPickMicSlot={jest.fn()}
+      />
+    );
+
+    expect(screen.queryByTestId("wb-topbar-mic-settings")).toBeNull();
+    expect(screen.queryByTestId("audio-device-select")).toBeNull();
+    expect(screen.getByTestId("wb-topbar-mic-toggle")).toBeTruthy();
   });
 });

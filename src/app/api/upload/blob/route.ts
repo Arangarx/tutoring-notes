@@ -8,8 +8,10 @@ import {
   assertOwnsWhiteboardSession,
 } from "@/lib/whiteboard-scope";
 import { getLearnerSession } from "@/lib/learner-session";
+import { getAccountHolderSession } from "@/lib/account-holder-session";
 import { createActionCorrelationId } from "@/lib/action-correlation";
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
+import { resolveAhJoinLearnerProfileId } from "@/lib/join-scope";
 
 /**
  * Generalized client-direct Vercel Blob upload route.
@@ -192,18 +194,31 @@ export async function POST(request: Request): Promise<Response> {
           );
         } else if (kind === "whiteboard-asset") {
           // Learner-session auth: authenticated /join/[sessionId] path.
-          // If a learner session is present, authorize via participant gate.
-          // Otherwise fall through to tutor ownership check.
+          // Accepts learner session OR account-holder session for a self-learner
+          // (WB-JOIN-ADULT-LEARNER). If either principal is present, authorize
+          // via the participant gate. Otherwise fall through to tutor ownership.
           const learnerSession = await getLearnerSession(request);
-          if (learnerSession) {
+          let learnerProfileIdForUpload: string | null =
+            learnerSession?.learnerProfileId ?? null;
+          if (!learnerProfileIdForUpload) {
+            const ahSession = await getAccountHolderSession(request);
+            if (ahSession) {
+              const resolved = await resolveAhJoinLearnerProfileId(
+                whiteboardSessionId,
+                ahSession.accountHolderId
+              );
+              if (resolved) learnerProfileIdForUpload = resolved.learnerProfileId;
+            }
+          }
+          if (learnerProfileIdForUpload) {
             const { studentId } = await assertLearnerSessionAllowsWhiteboardAssetUpload(
-              learnerSession.learnerProfileId,
+              learnerProfileIdForUpload,
               whiteboardSessionId,
               pathname
             );
             studentIdForToken = studentId;
             console.log(
-              `[uploadBlob.route] rid=${rid} kind=${kind} wbsid=${whiteboardSessionId} studentId=${studentIdForToken} learnerSession=1 assetTag=${payload?.assetTag ?? "-"} pathname=${pathname}`
+              `[uploadBlob.route] rid=${rid} kind=${kind} wbsid=${whiteboardSessionId} studentId=${studentIdForToken} learnerAuth=1 assetTag=${payload?.assetTag ?? "-"} pathname=${pathname}`
             );
           } else {
             // Tutor auth (no learner session, no joinToken).

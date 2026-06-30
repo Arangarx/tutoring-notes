@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { db, withDbRetry } from "@/lib/db";
 import { getLearnerSession } from "@/lib/learner-session";
-import { verifyIsSessionParticipant } from "@/lib/session-participant-scope";
+import { getAccountHolderSession } from "@/lib/account-holder-session";
+import { findSessionParticipantRow } from "@/lib/session-participant-scope";
+import { resolveAhJoinLearnerProfileId } from "@/lib/join-scope";
 
 /**
  * Read-only live timer for the student join page.
@@ -103,23 +105,87 @@ export async function GET(
 
   // -------------------------------------------------------------------------
   // Learner-session branch (/join/[sessionId] authenticated path)
+  //
+  // Auth resolution MIRRORS the join page (src/app/join/[sessionId]/page.tsx):
+  //   - A learner cookie is only honored if it is actually a participant of THIS
+  //     session. A stale child cookie (e.g. from a prior wrong-PIN attempt) must
+  //     NOT shadow the account-holder self-learner path — otherwise the poll binds
+  //     to the wrong profile and 404s a legitimate adult self-learner.
+  //   - Otherwise fall through to the account-holder self-learner path
+  //     (resolveAhJoinLearnerProfileId — the SAME helper the page's Path B relies
+  //     on, enforcing ownership + isSelfLearner).
+  //   - A principal who is genuinely not a participant of THIS session still 404s.
   // -------------------------------------------------------------------------
+
+  // Resolve which learnerProfileId has access: learner session OR account-holder
+  // session for a self-learner (WB-JOIN-ADULT-LEARNER).
+  let effectiveLearnerProfileId: string | null = null;
+  // Reuse the participant row resolved during the cookie-trust check so the AH
+  // path / step 1 below don't re-query it.
+  let participantRow: Awaited<ReturnType<typeof findSessionParticipantRow>> = null;
+  let learnerCookiePresent = false;
+
   const learnerSession = await getLearnerSession(req);
-  if (!learnerSession) {
+  if (learnerSession) {
+    learnerCookiePresent = true;
+    // Trust the learner cookie ONLY if its profile is a participant of this
+    // session. findSessionParticipantRow is leftAt-agnostic so a genuine
+    // participant whose session just ended (leftAt stamped by endWhiteboardSession)
+    // is still trusted and reaches the endedAt → session_ended branch below.
+    const row = await findSessionParticipantRow(
+      learnerSession.learnerProfileId,
+      sessionId
+    );
+    if (row) {
+      effectiveLearnerProfileId = learnerSession.learnerProfileId;
+      participantRow = row;
+    }
+    // else: stale / non-participant cookie → fall through to the AH path.
+  }
+
+  if (!effectiveLearnerProfileId) {
+    // Account-holder self-learner path (mirrors join page Path B).
+    const ahSession = await getAccountHolderSession(req);
+    if (ahSession) {
+      const resolved = await resolveAhJoinLearnerProfileId(
+        sessionId,
+        ahSession.accountHolderId
+      );
+      if (resolved) effectiveLearnerProfileId = resolved.learnerProfileId;
+    }
+  }
+
+  if (!effectiveLearnerProfileId) {
+    // No usable principal resolved. If a learner cookie WAS present but was not a
+    // participant (and the AH path didn't resolve), this is a stale/cross-learner
+    // deny → fail closed with 404, matching the page's cross-learner boundary.
+    // A genuinely unauthenticated poll (no cookie at all) gets 400.
+    if (learnerCookiePresent) {
+      return NextResponse.json({ error: "Not found." }, { status: 404 });
+    }
     return NextResponse.json(
-      { error: "Missing authentication. Provide ?token= or a learner session cookie." },
+      { error: "Missing authentication. Provide ?token= or a valid session cookie." },
       { status: 400 }
     );
   }
 
-  const isParticipant = await verifyIsSessionParticipant(
-    learnerSession.learnerProfileId,
-    sessionId
-  );
-  if (!isParticipant) {
+  // Step 1: Verify the resolved learner was EVER a participant (existence check,
+  // leftAt ignored). Already have the row when trusted via the cookie path; look
+  // it up for the AH path. Security boundary: never-a-participant → 404.
+  if (!participantRow) {
+    participantRow = await findSessionParticipantRow(
+      effectiveLearnerProfileId,
+      sessionId
+    );
+  }
+  if (!participantRow) {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
 
+  // Step 2: Load the session to check endedAt BEFORE consulting leftAt.
+  // This is the key fix: endWhiteboardSession atomically stamps leftAt on all
+  // participant rows AND sets endedAt. We must check endedAt first so that
+  // a just-ended session returns session_ended rather than 404 → link_invalid.
   const row = await withDbRetry(
     () =>
       db.whiteboardSession.findUnique({
@@ -138,6 +204,12 @@ export async function GET(
       { live: false as const, reason: "session_ended" as const },
       { status: 200, headers: { "Cache-Control": "no-store" } }
     );
+  }
+
+  // Step 3: Session is still live. If the participant left mid-session (leftAt
+  // set but endedAt not yet set), they are no longer in the room — deny.
+  if (participantRow.leftAt != null) {
+    return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
 
   return NextResponse.json(

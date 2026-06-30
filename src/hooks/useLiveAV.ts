@@ -145,6 +145,17 @@ export type AvParticipant = {
    * copy and the auto-pause banner.
    */
   iceConnectionState: RTCIceConnectionState;
+  /**
+   * Presence-signaled remote camera on/off. `false` means the peer
+   * reports camera off — render initials instead of relying on inbound
+   * track `enabled`/`muted` (unreliable across WebRTC). Undefined =
+   * legacy sender; fall back to track heuristics.
+   */
+  camOn?: boolean;
+  /**
+   * Presence-signaled remote microphone on/off. Undefined = legacy sender.
+   */
+  micOn?: boolean;
 };
 
 /**
@@ -1651,6 +1662,10 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       identityKey?: string;
       /** identity-peerid: epoch ms when this peer minted its session (optional). */
       joinedAt?: number;
+      /** Presence-signaled remote cam on/off (optional). */
+      camOn?: boolean;
+      /** Presence-signaled remote mic on/off (optional). */
+      micOn?: boolean;
       audioStream: MediaStream;
       hasAudioTrack: boolean;
       videoStream: MediaStream;
@@ -1668,6 +1683,12 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       Array<MediaStreamTrack>
     >();
 
+    function hasActiveVideoTracks(stream: MediaStream): boolean {
+      return stream
+        .getVideoTracks()
+        .some((t) => t.enabled && !t.muted && t.readyState !== "ended");
+    }
+
     function rebuild() {
       if (disposed) return;
       const out: AvParticipant[] = [];
@@ -1679,12 +1700,21 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           ...(entry.label !== undefined ? { label: entry.label } : {}),
           ...(entry.identityKey !== undefined ? { identityKey: entry.identityKey } : {}),
           ...(entry.joinedAt !== undefined ? { joinedAt: entry.joinedAt } : {}),
+          ...(entry.camOn !== undefined ? { camOn: entry.camOn } : {}),
+          ...(entry.micOn !== undefined ? { micOn: entry.micOn } : {}),
           audioStream: entry.hasAudioTrack ? entry.audioStream : null,
           // Null-guard is load-bearing: when a video track is added to an
           // existing MediaStream, hasVideoTrack flips false→true so
           // videoStream goes null→stream and AVTile's video effect re-fires.
           // Exposing entry.videoStream directly would skip that transition.
-          videoStream: entry.hasVideoTrack ? entry.videoStream : null,
+          // Also hide the stream when the peer reports cam off OR every video
+          // track is disabled/muted locally (legacy fallback when camOn absent).
+          videoStream:
+            entry.hasVideoTrack &&
+            entry.camOn !== false &&
+            hasActiveVideoTracks(entry.videoStream)
+              ? entry.videoStream
+              : null,
           peerConnectionState: entry.peerConnectionState,
           iceConnectionState: entry.iceConnectionState,
         };
@@ -1715,7 +1745,9 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       role: "tutor" | "student",
       label?: string,
       identityKey?: string,
-      joinedAt?: number
+      joinedAt?: number,
+      camOn?: boolean,
+      micOn?: boolean
     ): Internal {
       let entry = internal.get(peerId);
       if (!entry) {
@@ -1724,6 +1756,8 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           label,
           identityKey,
           joinedAt,
+          camOn,
+          micOn,
           audioStream: new MediaStream(),
           hasAudioTrack: false,
           videoStream: new MediaStream(),
@@ -1738,6 +1772,11 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         entry.label = label;
         entry.identityKey = identityKey;
         entry.joinedAt = joinedAt;
+        // Always assign, even when undefined: clears a stale false that was
+        // latched from a premature broadcast. A presence update omitting camOn
+        // means "unknown" — don't retain the old value.
+        entry.camOn = camOn;
+        entry.micOn = micOn;
       }
       return entry;
     }
@@ -1775,6 +1814,13 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       if (track.kind === "audio") entry.hasAudioTrack = true;
       else entry.hasVideoTrack = true;
       log.log(`track received peer=${peerId} kind=${track.kind}`);
+      if (track.kind === "video") {
+        const onVideoPresentationChange = () => {
+          if (!disposed) rebuild();
+        };
+        track.addEventListener("mute", onVideoPresentationChange);
+        track.addEventListener("unmute", onVideoPresentationChange);
+      }
       track.addEventListener("ended", () => {
         if (disposed) return;
         try {
@@ -1801,7 +1847,15 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       const incoming = new Set<string>();
       for (const p of peers) {
         incoming.add(p.peerId);
-        const entry = ensureEntry(p.peerId, p.role, p.label, p.identityKey, p.joinedAt);
+        const entry = ensureEntry(
+          p.peerId,
+          p.role,
+          p.label,
+          p.identityKey,
+          p.joinedAt,
+          p.camOn,
+          p.micOn
+        );
         // Graceful-leave rejoin detection (Fix 2.4): if addedToMesh is true but
         // the peer is no longer present in the mesh (they sent a leave signal
         // while the sync socket kept them in the roster briefly, or they
@@ -2135,6 +2189,22 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncClient, hasEverHadLocalMedia, localPeerId, sessionId]);
+
+  // Broadcast coarse local A/V on/off via presence so remote tiles can
+  // render cam-off initials without relying on inbound track state.
+  //
+  // Gate: omit camOn until hasCamPermission !== "unknown" — requestCam()
+  // hasn't settled yet, so broadcasting camOn:false would latch false on
+  // remote peers and show initials even when the camera is about to come on.
+  // This matters most on 2nd sessions where permission is already granted and
+  // requestCam() resolves almost immediately but AFTER this effect first fires.
+  useEffect(() => {
+    if (!syncClient) return;
+    const camKnown = hasCamPermission !== "unknown";
+    const camOn = camKnown ? (localVideoStream !== null && !isCamMuted) : undefined;
+    const micOn = localAudioStream !== null && !isMicMuted;
+    syncClient.setLocalAvMediaState({ camOn, micOn });
+  }, [syncClient, localAudioStream, localVideoStream, isMicMuted, isCamMuted, hasCamPermission]);
 
   // ---------------------------------------------------------------
   // Effect: sync late-arriving local tracks into the existing mesh

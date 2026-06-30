@@ -6,8 +6,10 @@ import {
   seedTestAdmin,
   seedTestStudent,
   seedTestLearner,
+  seedSelfLearner,
   seedOpenWhiteboardSession,
   TEST_LEARNER,
+  TEST_SELF_LEARNER,
 } from "../visual/helpers";
 import {
   followWireFromTutorAppState,
@@ -1012,6 +1014,93 @@ export async function loginLearnerInContext(
         "Ensure LEARNER_SESSION_HMAC_SECRET is set in the test environment."
     );
   }
+}
+
+/**
+ * Authenticate an AccountHolder in a browser context via /api/auth/account-holder/login.
+ *
+ * The context.request shares cookies with pages in the same context, so the
+ * mynk_ah_session HttpOnly cookie is available to subsequent page.goto() calls.
+ *
+ * [WB-JOIN-ADULT-LEARNER]
+ */
+export async function loginAccountHolderInContext(
+  context: import("@playwright/test").BrowserContext,
+  email: string,
+  password: string
+): Promise<void> {
+  const resp = await context.request.post("/api/auth/account-holder/login", {
+    data: { email, password },
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!resp.ok()) {
+    const body = await resp.text().catch(() => "<no body>");
+    throw new Error(
+      `AccountHolder login failed (${resp.status()}): ${body}\n` +
+        `email=${email} — ensure AH_SESSION_HMAC_SECRET is set and the account exists.`
+    );
+  }
+}
+
+export type SelfLearnerWbSession = {
+  adminUserId: string;
+  studentId: string;
+  whiteboardSessionId: string;
+  learnerProfileId: string;
+  accountHolderId: string;
+  /** AH email for /api/auth/account-holder/login */
+  ahEmail: string;
+  /** AH password for /api/auth/account-holder/login */
+  ahPassword: string;
+};
+
+/**
+ * Seed a whiteboard session for an adult self-learner.
+ *
+ * Creates:
+ *   - Admin + student (via existing seedTestAdmin/seedTestStudent)
+ *   - AccountHolder with isSelfLearner=true LearnerProfile (via seedSelfLearner)
+ *   - Open whiteboard session
+ *   - SessionParticipant row for the self-learner profile
+ *
+ * [WB-JOIN-ADULT-LEARNER]
+ */
+export async function seedSelfLearnerWbSession(opts?: {
+  sessionPhase?: "PENDING" | "ACTIVE";
+}): Promise<SelfLearnerWbSession> {
+  const adminUserId = await seedTestAdmin();
+  const { studentId } = await seedTestStudent(adminUserId);
+  const { learnerProfileId, accountHolderId } = await seedSelfLearner(studentId);
+
+  const whiteboardSessionId = await seedOpenWhiteboardSession({
+    adminUserId,
+    studentId,
+    sessionPhase: opts?.sessionPhase ?? "ACTIVE",
+  });
+
+  const { PrismaClient } = await import("@prisma/client");
+  const prisma = new PrismaClient();
+  try {
+    await prisma.sessionParticipant.upsert({
+      where: {
+        whiteboardSessionId_learnerProfileId: { whiteboardSessionId, learnerProfileId },
+      },
+      create: { whiteboardSessionId, learnerProfileId },
+      update: { leftAt: null },
+    });
+  } finally {
+    await prisma.$disconnect();
+  }
+
+  return {
+    adminUserId,
+    studentId,
+    whiteboardSessionId,
+    learnerProfileId,
+    accountHolderId,
+    ahEmail: TEST_SELF_LEARNER.email,
+    ahPassword: TEST_SELF_LEARNER.password,
+  };
 }
 
 /** Open tutor + student relay session (shared harness entry). */
