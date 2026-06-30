@@ -5049,6 +5049,34 @@ export function WhiteboardWorkspaceClient({
             <span>Match tutor&apos;s view</span>
           </button>
           <div className="mynk-wb-popover-sep" />
+          {/* 8b: device pickers always available in student overflow regardless of
+              touch/desktop, so narrow-desktop students can change mic/cam when
+              the inline controls are hidden by the responsive compaction CSS. */}
+          <div
+            className="mynk-wb-overflow-av-pickers"
+            data-testid="wb-student-overflow-av-pickers"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <AudioControls
+              devices={liveAv.audioDevices ?? []}
+              selectedPickerSlot={liveAv.pickedMicSlot}
+              onPickMicSlot={(slot) =>
+                void liveAv.setMicDeviceBySlot(slot, { force: true })
+              }
+              isLive={liveAv.localAudioStream !== null}
+              disabled={studentAvPickerDisabled}
+            />
+            <VideoControls
+              devices={liveAv.videoDevices ?? []}
+              selectedPickerSlot={liveAv.pickedVideoCameraSlot}
+              onPickCameraSlot={(slot) =>
+                void liveAv.setVideoCameraBySlot(slot, { force: true })
+              }
+              isLive={liveAv.localVideoStream !== null}
+              disabled={studentAvPickerDisabled}
+            />
+          </div>
+          <div className="mynk-wb-popover-sep" />
         </>
       )}
       {role === "tutor" && (
@@ -5634,8 +5662,10 @@ export function WhiteboardWorkspaceClient({
     sessionMode === "LIVE" ? !overlayStudentConnected : false;
   const overlayCanStart = !overlayCantStart;
 
-  // Pre-built mic control for the overlay — reuse top-bar components so the
-  // inline volume meter matches tutor parity (Plan #1 smoke finding 2).
+  // Pre-built mic control for the overlay. Student uses WbTopBarMicControlLive
+  // (own inline meter stream). Tutor uses chip-toggle — NOT WbTopBarMicControl:
+  // that component binds workspaceAudio.meterBarRef; the live top bar also
+  // binds the same ref, so both mounted in waiting room breaks post-Start meter.
   const overlayMicNode =
     role === "student" ? (
       <WbTopBarMicControlLive
@@ -5657,16 +5687,23 @@ export function WhiteboardWorkspaceClient({
         disabled={studentAvPickerDisabled}
       />
     ) : (
-      <WbTopBarMicControl
-        audio={workspaceAudio}
-        isMicMuted={liveAv.isMicMuted}
-        onToggleMute={liveAv.toggleMic}
-        onAcquireMic={handleAcquireMic}
-        onPickMicSlot={(slot) =>
-          void liveAv.setMicDeviceBySlot(slot, { force: true })
-        }
-        disabled={endingBusy}
-      />
+      <label
+        className={`mynk-wb-follow-toggle mynk-wb-chip${!liveAv.isMicMuted && liveAv.localAudioStream !== null ? " mynk-wb-chip--active" : ""}`}
+        data-testid="wb-overlay-mic-chip"
+      >
+        <input
+          type="checkbox"
+          checked={!liveAv.isMicMuted && liveAv.localAudioStream !== null}
+          aria-label={liveAv.isMicMuted || liveAv.localAudioStream === null ? "Mic off" : "Mic on"}
+          onChange={() => void handleTopBarMic()}
+        />
+        <span className="mynk-wb-menu-item__icon" aria-hidden="true">
+          <WbIconMic size={12} />
+        </span>
+        <span className="mynk-wb-follow-toggle__label" data-testid="wb-overlay-mic-chip-label">
+          {liveAv.isMicMuted || liveAv.localAudioStream === null ? "Mic off" : "Mic on"}
+        </span>
+      </label>
     );
 
   // Pre-built cam control node for the overlay — chip-toggle pattern (same CSS
@@ -5909,6 +5946,8 @@ export function WhiteboardWorkspaceClient({
             audioDevices={liveAv.audioDevices ?? []}
             selectedPickerSlot={liveAv.pickedMicSlot}
             isAcquiring={liveAv.isAcquiring}
+            showInlineMeter
+            micStream={overlayMicMeterStream}
             onToggleMute={liveAv.toggleMic}
             onAcquireMic={handleAcquireMic}
             onPickMicSlot={(slot) =>

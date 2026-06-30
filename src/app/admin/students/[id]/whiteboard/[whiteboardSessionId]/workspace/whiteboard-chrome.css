@@ -1590,6 +1590,40 @@
   }
 }
 
+/*
+ * Student narrow-desktop compaction — restore deleted 64108cf rules (8a).
+ *
+ * Non-touch windows stay data-layout="desktop" even at half-screen widths.
+ * The generic zone:has(wb-theme-toggle) rule already hides mic/cam/follow/
+ * undo/redo at <1100px. But the recording-disclosure text sits in a SEPARATE
+ * zone (pill + timer + disclosure) and stays visible, causing the bar to
+ * overflow at viewport widths below ~800px.
+ *
+ * Fix: hide the disclosure when the overflow-btn appears (1100px). Without
+ * the disclosure the remaining fixed elements (wordmark + name + pill + timer
+ * + overflow-btn + exit-btn) total <350px and fit at any reasonable width.
+ *
+ * wb-student-undo / wb-student-redo are inside the theme-toggle zone so they
+ * ARE already hidden by the zone rule — no separate rule needed for those.
+ */
+@media (max-width: 1100px) {
+  .mynk-wb-chrome[data-layout="desktop"][data-role="student"] .mynk-wb-student-disclosure {
+    display: none;
+  }
+}
+
+/* At very narrow desktop (<660px) also truncate the tutor-name so the pill
+ * and timer stay reachable without overflow. */
+@media (max-width: 660px) {
+  .mynk-wb-chrome[data-layout="desktop"][data-role="student"] .mynk-wb-student-tutor-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 72px;
+    flex-shrink: 1;
+  }
+}
+
 .mynk-wb-topbar-overflow-inserts {
   display: flex;
   flex-wrap: wrap;

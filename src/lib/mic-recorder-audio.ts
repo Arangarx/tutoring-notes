@@ -4,6 +4,36 @@
  * (e.g. tests with a stub MediaStream).
  */
 
+/**
+ * Noise-floor threshold: ambient-room RMS samples below this are treated as
+ * silence and map to 0 bars. Subtract before scaling so that quiet rooms
+ * don't keep bar-1 lit permanently (8d calibration fix 2026-06-29).
+ */
+export const METER_NOISE_FLOOR = 0.006;
+
+/**
+ * Post-floor scale factor: maps the speech band above the noise floor into
+ * the 0–1 level range. With NOISE_FLOOR=0.006 and SCALE=9:
+ *   quiet speech  RMS≈0.02 → (0.02-0.006)*9 = 0.126 → bar-1 (min 0.05)
+ *   normal speech RMS≈0.05 → (0.05-0.006)*9 = 0.396 → bar-2 (min 0.25)
+ *   louder speech RMS≈0.08 → (0.08-0.006)*9 = 0.666 → bar-3 (min 0.55)
+ *
+ * Old formula (rms * 4.5) required RMS≈0.122 for bar-3, making the meter
+ * appear stuck at 1–2 bars for typical laptop-mic speech levels.
+ */
+export const METER_SCALE = 9;
+
+/**
+ * Pure calibration transform — independent oracle for the level-mapping math.
+ * Exported so unit tests can verify the calibration without a real AudioContext.
+ *
+ * @param rms - raw RMS from AnalyserNode getFloatTimeDomainData (0–1)
+ * @returns calibrated level 0–1 for WbInlineMicMeter
+ */
+export function calibrateMicLevel(rms: number): number {
+  return Math.min(1, Math.max(0, rms - METER_NOISE_FLOOR) * METER_SCALE);
+}
+
 /** Map analyser time-domain RMS into the 0–1 meter range (tutor + student). */
 export function readAnalyserRmsLevel(
   analyser: AnalyserNode,
@@ -16,8 +46,7 @@ export function readAnalyserRmsLevel(
     sum += v * v;
   }
   const rms = Math.sqrt(sum / data.length);
-  // Map typical speech RMS (~0.01–0.2) into a visible 0–1 range.
-  return Math.min(1, rms * 4.5);
+  return calibrateMicLevel(rms);
 }
 
 export type MicLevelMonitor = {

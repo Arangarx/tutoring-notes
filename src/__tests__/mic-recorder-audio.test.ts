@@ -6,9 +6,10 @@
  *  - Returns the expected shape (recordingStream, dispose, getLevel, setGain).
  *  - setGain forwards to the GainNode without rebuilding the graph.
  *  - dispose stops the mic tracks and closes the AudioContext.
+ *  - calibrateMicLevel: noise-floor subtraction + bar-range coverage (8d).
  */
 
-import { createMicAudioGraph } from "@/lib/mic-recorder-audio";
+import { createMicAudioGraph, calibrateMicLevel, METER_NOISE_FLOOR, METER_SCALE } from "@/lib/mic-recorder-audio";
 
 type GainParam = { value: number };
 type FakeNode = { connect: jest.Mock };
@@ -491,5 +492,70 @@ describe("createMicAudioGraph", () => {
       warnSpy.mockRestore();
       graph!.dispose();
     }
+  });
+});
+
+/**
+ * 8d: Meter calibration — noise-floor subtraction + bar-range coverage.
+ *
+ * Independent oracle for the level-mapping math: test the pure
+ * `calibrateMicLevel` function directly (no AudioContext needed).
+ *
+ * The old formula (rms * 4.5) required RMS ≈ 0.122 to light bar-3, causing
+ * the meter to appear stuck at 1–2 bars during typical laptop-mic speech.
+ * The new formula applies a noise-floor subtraction then a higher scale factor
+ * so normal speech spans all three bars.
+ *
+ * Bar thresholds (from WbInlineMicMeter): bar-1 ≥ 0.05, bar-2 ≥ 0.25, bar-3 ≥ 0.55.
+ */
+describe("calibrateMicLevel — noise-floor calibration (8d)", () => {
+  test("silence (below noise floor) maps to 0", () => {
+    // RMS values well below the noise floor must clamp to 0 — no bars lit.
+    expect(calibrateMicLevel(0)).toBe(0);
+    expect(calibrateMicLevel(METER_NOISE_FLOOR * 0.5)).toBe(0);
+    expect(calibrateMicLevel(METER_NOISE_FLOOR)).toBe(0);
+  });
+
+  test("quiet speech lights bar-1 only", () => {
+    // Quiet mic: RMS ≈ 0.015 — above noise floor but below bar-2 threshold.
+    const level = calibrateMicLevel(0.015);
+    expect(level).toBeGreaterThanOrEqual(0.05); // bar-1 lit
+    expect(level).toBeLessThan(0.25);            // bar-2 not lit
+  });
+
+  test("normal speech lights bar-1 and bar-2", () => {
+    // Normal conversation: RMS ≈ 0.04.
+    const level = calibrateMicLevel(0.04);
+    expect(level).toBeGreaterThanOrEqual(0.25); // bar-2 lit
+    expect(level).toBeLessThan(0.55);            // bar-3 not lit
+  });
+
+  test("louder speech lights all three bars", () => {
+    // Moderately loud: RMS ≈ 0.075.
+    const level = calibrateMicLevel(0.075);
+    expect(level).toBeGreaterThanOrEqual(0.55); // bar-3 lit
+    expect(level).toBeLessThanOrEqual(1);
+  });
+
+  test("very loud audio clamps to 1", () => {
+    expect(calibrateMicLevel(1)).toBe(1);
+    expect(calibrateMicLevel(0.5)).toBe(1);
+  });
+
+  test("offset-invariance: noise-floor offsets do not change the bar when below threshold", () => {
+    // Any RMS ≤ METER_NOISE_FLOOR must yield exactly 0 regardless of value.
+    for (const rms of [0, 0.001, 0.003, METER_NOISE_FLOOR]) {
+      expect(calibrateMicLevel(rms)).toBe(0);
+    }
+  });
+
+  test("calibration constants satisfy bar-range coverage invariant", () => {
+    // Verify the constants are tuned so that:
+    //   (0.075 - NOISE_FLOOR) * SCALE >= 0.55  (louder speech lights bar-3)
+    //   (0.04  - NOISE_FLOOR) * SCALE >= 0.25  (normal speech lights bar-2)
+    //   (0.015 - NOISE_FLOOR) * SCALE >= 0.05  (quiet speech lights bar-1)
+    expect(Math.max(0, 0.075 - METER_NOISE_FLOOR) * METER_SCALE).toBeGreaterThanOrEqual(0.55);
+    expect(Math.max(0, 0.04  - METER_NOISE_FLOOR) * METER_SCALE).toBeGreaterThanOrEqual(0.25);
+    expect(Math.max(0, 0.015 - METER_NOISE_FLOOR) * METER_SCALE).toBeGreaterThanOrEqual(0.05);
   });
 });

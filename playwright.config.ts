@@ -136,6 +136,7 @@ export default defineConfig({
         "**/integration/wb-wave5-polish.spec.ts",
         "**/integration/wb-av-mesh.spec.ts",
         "**/integration/wb-session-lifecycle.spec.ts",
+        "**/integration/wb-chrome-interactions.spec.ts",
       ],
     },
   ],
