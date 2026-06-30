@@ -23,6 +23,7 @@ import { db, withDbRetry } from "@/lib/db";
 export type ConsentPermission =
   | "allowAudioRecording"
   | "allowWhiteboardRecording"
+  /** Dormant — schema retained; not enforced in product paths pending WB-NOTES-EMAIL-SUBSCRIPTION-REFRAME. */
   | "allowNoteSending"
   | "allowMessaging"
   | "allowVideoRecording"

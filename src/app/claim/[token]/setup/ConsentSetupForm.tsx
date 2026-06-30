@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 
 interface ConsentToggle {
-  key: "allowLiveSession" | "allowAudioRecording" | "allowWhiteboardRecording" | "allowNoteSending";
+  key: "allowLiveSession" | "allowAudioRecording" | "allowWhiteboardRecording";
   label: string;
   description: string;
 }
@@ -27,11 +27,6 @@ const TOGGLES: ConsentToggle[] = [
     label: "Allow whiteboard recording",
     description: "Whiteboard strokes are saved so sessions can be replayed.",
   },
-  {
-    key: "allowNoteSending",
-    label: "Allow notes email",
-    description: "Session summary notes can be emailed after each session.",
-  },
 ];
 
 export function ConsentSetupForm({
@@ -44,10 +39,11 @@ export function ConsentSetupForm({
   enforcementEnabled: boolean;
 }) {
   // D-4: always start all-OFF on every render (no carryover)
-  const [values, setValues] = useState<Record<ConsentToggle["key"], boolean>>({
+  const [values, setValues] = useState({
     allowLiveSession: false,
     allowAudioRecording: false,
     allowWhiteboardRecording: false,
+    // Dormant schema field — not surfaced in UI (WB-NOTES-EMAIL-SUBSCRIPTION-REFRAME).
     allowNoteSending: false,
   });
   const [saved, setSaved] = useState(false);

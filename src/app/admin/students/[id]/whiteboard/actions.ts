@@ -1068,9 +1068,6 @@ export async function generateNotesFromWhiteboardSessionAction(
   const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
   const studentId = session.studentId;
 
-  // B2: consent gate for notes sending (flag-gated).
-  await assertEffectiveConsent(whiteboardSessionId, "allowNoteSending");
-
   // Load all audio recordings for this whiteboard session.
   const audioRows = await withDbRetry(
     () =>

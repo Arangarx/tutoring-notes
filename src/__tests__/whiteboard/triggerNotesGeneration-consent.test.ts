@@ -1,18 +1,16 @@
 /**
  * @jest-environment node
  *
- * Concern 5: triggerNotesGenerationAction must assert allowNoteSending consent
- * before calling enqueueNotesReduce.
- *
- * RED-BEFORE / GREEN-AFTER:
- * Before adding the consent check, triggerNotesGenerationAction would call
- * enqueueNotesReduce even when allowNoteSending=false. After adding the check,
- * it skips enqueue and returns early.
+ * Notes generation must NOT be gated on allowNoteSending — audio capture is
+ * already gated upstream by allowAudioRecording; a "sending"-named permission
+ * silently killing AI notes is a footgun (Andrew 2026-06-30).
  */
 
 jest.mock("next/navigation", () => ({
   __esModule: true,
-  notFound: jest.fn(() => { throw new Error("NEXT_NOT_FOUND"); }),
+  notFound: jest.fn(() => {
+    throw new Error("NEXT_NOT_FOUND");
+  }),
 }));
 
 const assertOwnsWhiteboardSessionMock = jest.fn();
@@ -44,7 +42,7 @@ jest.mock("@/lib/recording/notes-enqueue", () => ({
   enqueueNotesReduce: (...args: unknown[]) => enqueueNotesReduceMock(...args),
 }));
 
-// Consent scope: configurable per test
+// Consent scope: configurable per test — must NOT block notes generation.
 let consentShouldDeny = false;
 jest.mock("@/lib/consent-scope", () => ({
   __esModule: true,
@@ -57,7 +55,10 @@ jest.mock("@/lib/consent-scope", () => ({
     }
   }),
   ConsentError: class ConsentError extends Error {
-    constructor(public permission: string, message?: string) {
+    constructor(
+      public permission: string,
+      message?: string
+    ) {
       super(message ?? permission);
       this.name = "ConsentError";
     }
@@ -79,25 +80,21 @@ beforeEach(() => {
   jest.clearAllMocks();
   consentShouldDeny = false;
   assertOwnsWhiteboardSessionMock.mockResolvedValue(defaultSession);
-  // Default: sealed session
   dbWbFindUniqueMock.mockResolvedValue({ endedAt: new Date("2026-06-30") });
   enqueueNotesReduceMock.mockResolvedValue(undefined);
 });
 
-describe("triggerNotesGenerationAction — allowNoteSending consent gate (Concern 5)", () => {
-  test(
-    "RED-BEFORE/GREEN-AFTER: allowNoteSending=false → skips enqueueNotesReduce",
-    async () => {
-      consentShouldDeny = true;
+describe("triggerNotesGenerationAction — allowNoteSending is not a gate", () => {
+  test("allowNoteSending=false does not block enqueueNotesReduce", async () => {
+    consentShouldDeny = true;
 
-      await triggerNotesGenerationAction("wb-1");
+    await triggerNotesGenerationAction("wb-1");
 
-      // Guard: enqueue must NOT be called when consent is denied
-      expect(enqueueNotesReduceMock).not.toHaveBeenCalled();
-    }
-  );
+    expect(enqueueNotesReduceMock).toHaveBeenCalledTimes(1);
+    expect(enqueueNotesReduceMock).toHaveBeenCalledWith("wb-1");
+  });
 
-  test("allowNoteSending=true (default) → calls enqueueNotesReduce", async () => {
+  test("sealed session with consent granted → calls enqueueNotesReduce", async () => {
     consentShouldDeny = false;
 
     await triggerNotesGenerationAction("wb-1");

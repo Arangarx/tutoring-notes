@@ -23,12 +23,14 @@ export type TutorConsentState = {
   allowLiveSession: boolean;
   allowAudioRecording: boolean;
   allowWhiteboardRecording: boolean;
+  /** Dormant — retained in schema; hidden from UI pending WB-NOTES-EMAIL-SUBSCRIPTION-REFRAME. */
   allowNoteSending: boolean;
 };
 
 export type ConsentRestrictionState = {
   restrictAudioRecording: boolean;
   restrictWhiteboardRecording: boolean;
+  /** Dormant — paired with allowNoteSending; hidden pending WB-NOTES-EMAIL-SUBSCRIPTION-REFRAME. */
   restrictNoteSending: boolean;
 };
 
@@ -66,13 +68,6 @@ const PERMISSION_TOGGLES: ReadonlyArray<PermissionToggleDef> = [
       "Saves every stroke so you and your child can revisit the work later — most families want this on.",
     emphasis: "recommended",
   },
-  {
-    key: "allowNoteSending",
-    label: "Allow session notes email",
-    description:
-      "Session summary notes can be emailed to you after each session.",
-    emphasis: "standard",
-  },
 ];
 
 const RESTRICTION_TOGGLES = [
@@ -87,12 +82,6 @@ const RESTRICTION_TOGGLES = [
     label: "Always block whiteboard replay",
     description:
       "Applies to every tutor. If checked, you cannot replay saved whiteboard sessions even when a tutor's setting above is on.",
-  },
-  {
-    key: "restrictNoteSending" as const,
-    label: "Always block session notes email",
-    description:
-      "Applies to every tutor. If checked, summary emails are not sent even when a tutor's setting above is on.",
   },
 ] satisfies ReadonlyArray<{
   key: keyof ConsentRestrictionState;
