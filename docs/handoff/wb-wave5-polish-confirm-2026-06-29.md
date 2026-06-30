@@ -114,3 +114,32 @@ Check **PASS** only if every in-scope test item is PASS (deliberate per-item SKI
 
 - [x] PASS
 - [ ] FAIL
+
+---
+
+## Addendum (2026-06-29, tip 2cabd94): tutor waiting-room mic parity
+
+Post-confirm fix at tip `2cabd94` — confirm the rebuilt preview is **READY** (not BUILDING) before running.
+
+### 6. Tutor waiting-room mic parity (activity-bar button + inline meter)
+
+**Action:** Start a session as **TUTOR**. In the **WAITING ROOM** (before Start Session), look at the mic control; acquire/unmute mic and speak.
+
+**Expect:** The tutor waiting-room mic is the **SAME** activity-bar button + dropdown as the student's (NOT an old checkbox/chip), and its inline meter animates while you speak. (Regression being guarded: chip-style revert from f6ca6b6.)
+
+**Ignore this run:** Nothing.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** [automated: tests/integration/wb-session-lifecycle.spec.ts › bilateral parity (student+tutor overlay mic toggle + meter)] + [automated: src/__tests__/dom/WhiteboardWorkspaceClient.av-mount.dom.test.tsx › single meterBarRef host]
+
+**Notes:**
+
+---
+
+- [ ] Addendum PASS
+- [ ] Addendum FAIL
