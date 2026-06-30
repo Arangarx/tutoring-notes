@@ -6,17 +6,17 @@
 
 ---
 
-## ⏩ HEAD — 2026-06-30 consent-batch decisions applied on `wb-wave5-polish`
+## ⏩ HEAD — 2026-06-30 consent-batch + Part 3 design-pass gate on `wb-wave5-polish`
 
-> **Active branch:** [`wb-wave5-polish`](https://github.com/Arangarx/tutoring-notes/tree/wb-wave5-polish) — code @ [`b082882`](https://github.com/Arangarx/tutoring-notes/commit/b082882) + consent-batch commit pending push. **All remaining Sarah-gate work lands here; single `merge --no-ff` to `v1-redesign` at final gate only (no interim merge, Andrew confirmed).** Integration base remains **`v1-redesign` @ [`7397abc`](https://github.com/Arangarx/tutoring-notes/commit/7397abc)**.
+> **Active branch:** [`wb-wave5-polish`](https://github.com/Arangarx/tutoring-notes/tree/wb-wave5-polish) — code @ [`8c9f68b`](https://github.com/Arangarx/tutoring-notes/commit/8c9f68b). **Worktree:** `tutoring-notes-polishwt` (default `tutoring-notes` checkout is on `v1-redesign` — NOT current). **All remaining Sarah-gate work lands here; single `merge --no-ff` to `v1-redesign` at final gate only (no interim merge, Andrew confirmed).** Integration base remains **`v1-redesign` @ [`7397abc`](https://github.com/Arangarx/tutoring-notes/commit/7397abc)**.
 
 | Field | Value |
 |---|---|
-| **Last action completed** | **Andrew consent-batch decisions applied:** (1) **`allowNoteSending` gate removed** from `triggerNotesGenerationAction` (+ legacy `generateNotesFromWhiteboardSessionAction` + `sendUpdateEmail`) — notes generation NOT gated by a "sending"-named permission; audio already gated by `allowAudioRecording`. (2) **Consent UI:** "Allow session notes email" toggle hidden from `ParentConsentEditor` + `ConsentSetupForm`; schema field dormant (`WB-NOTES-EMAIL-SUBSCRIPTION-REFRAME`). (3) **Plan open items resolved** — per-speaker ≤3–4 cap no mixdown fallback; t=0 = FSM recording entry + WB↔audio hardware sync oracle; eval harness post-Sarah; session-scoped consent override → BACKLOG won't-build. (4) **Thread B B1 WON'T-FIX** — adult join participant backfill moot (v1-redesign test-data only; resets at master cut). BACKLOG: `WB-NOTES-EMAIL-SUBSCRIPTION-REFRAME`, `WB-NOTES-DIVORCE-EMAIL-STATES`, `WB-SESSION-CONSENT-OVERRIDE`. |
-| **Next action(s)** | **(1) Part 1 residuals** on `wb-wave5-polish`: `useLiveAvCoordinator` + `useRecordingCoordinator` extraction, unified `WbTopBar`, CSS monolith split (touched surfaces), reconnect symmetry finish (`p1a-reconnect-finish`), `p1d-legacy-tests` cleanup. **(2) Part 2 residuals:** in-person consent projection (`p2a-inperson-consent`), `allowWhiteboardRecording` verify (`p2a-wb-recording-verify`). **(3) Part 1+2 checkpoint (NO merge):** `test:wb-sync` + surrogates + `npx next build` + hardware A/V smoke. **(4) Part 3 spine:** `p3-clock` **FIRST** (t=0 ratified) → `p3-perspeaker-capture` → `p3-vad-chunking` + `p3-consent-recording` → `p3-incremental-map` → `p3-model-abstraction` → `p3-finalize` → `p3-replay-scrub` → `p3-video-seam` (design-only). **(5) FINAL Sarah gate:** full-experience hardware smoke both themes → single `merge --no-ff` to `v1-redesign`. |
-| **Open Andrew-confirms** | **Plan open items — RESOLVED 2026-06-30:** (1) session-scoped consent override → **won't build for Sarah** (`WB-SESSION-CONSENT-OVERRIDE`). (2) 3+-peer per-speaker → **per-speaker all peers ≤3–4 cap, NO mixdown fallback**. (3) t=0 anchor → **FSM recording entry / `MediaRecorder.start()`** + WB↔audio hardware sync oracle in `p3-clock`. (4) minimal eval harness → **post-Sarah only**. **Notes gate reversal — RESOLVED:** `allowNoteSending` does NOT gate notes generation; hidden + backlogged. **Thread B B1 — WON'T-FIX/moot.** **Standing:** **WB-LABEL-PARENT-SIGNIN** new term; **Sarah primary device** (assumed Windows desktop Chromium — verify on next call, [`SARAH-CALL-PREP.md`](../SARAH-CALL-PREP.md)); **Ship-to-Sarah gate** (notes path, end/continue save discipline, single-segment seek); **iOS student WB/A/V** zero real-device coverage ([`BACKLOG.md`](../BACKLOG.md) **WB-STUDENT-MOBILE-VALIDATION**). |
+| **Last action completed** | **Consent/permission hardening DONE:** tutor consent modal removed; `CONSENT_ENFORCEMENT` deleted; `sessionPhase=ACTIVE` server guards; `allowLiveSession=false` blocks learner join; `allowNoteSending` ungated + UI hidden (`WB-NOTES-EMAIL-SUBSCRIPTION-REFRAME`). **Plan input decisions resolved 2026-06-30:** per-speaker ≤3–4 cap no mixdown fallback; **t=0 = FSM recording entry (RATIFIED INPUT)** + WB↔audio hardware sync oracle; eval harness post-Sarah; session-scoped consent override → BACKLOG won't-build. **Andrew ratified Part 3 design-pass gate:** no p3-* execution until design session with Andrew approves overall Part 3 architecture/sequencing. |
+| **Next action(s)** | **(1) Part 1 residuals** on `wb-wave5-polish`: `useLiveAvCoordinator` + `useRecordingCoordinator` extraction, unified `WbTopBar`, CSS monolith split (touched surfaces), `p1a-reconnect-finish` (VERIFY-FIRST — likely done), `p1d-legacy-tests` (VERIFY-FIRST — likely script cleanup). **(2) Part 2 residuals:** in-person consent projection (`p2a-inperson-consent`), `allowWhiteboardRecording` verify (`p2a-wb-recording-verify`). **(3) Part 1+2 checkpoint (NO merge):** `test:wb-sync` + surrogates + `npx next build` + hardware A/V smoke. **(4) Part 3 DESIGN PASS with Andrew (MANDATORY GATE — no p3-* before this).** **(5) Part 3 spine (only after design pass):** `p3-clock` FIRST (t=0 ratified input) → `p3-perspeaker-capture` → … → `p3-replay-scrub` → `p3-video-seam` (design-only). **(6) FINAL Sarah gate:** full-experience hardware smoke both themes → single `merge --no-ff` to `v1-redesign`. |
+| **Open Andrew-confirms** | **Part 3 design pass (LIVE GATE):** overall Part 3 architecture/sequencing must be reviewed and approved by Andrew in a design session before any p3-* execution. Ratified inputs (t=0, peer cap, eval timing, tap-before-mix) are NOT a substitute for this gate. **Standing:** **WB-LABEL-PARENT-SIGNIN** new term; **Sarah primary device** (assumed Windows desktop Chromium — verify on next call, [`SARAH-CALL-PREP.md`](../SARAH-CALL-PREP.md)); **Ship-to-Sarah gate** (notes path, end/continue save discipline, single-segment seek); **iOS student WB/A/V** zero real-device coverage ([`BACKLOG.md`](../BACKLOG.md) **WB-STUDENT-MOBILE-VALIDATION**). |
 | **In-flight subagents** | **None.** |
-| **Uncommitted / unmerged** | **`wb-wave5-polish`** — consent-batch commit pending push; **not merged** to `v1-redesign`. **`v1-redesign` @ `7397abc`** unchanged. |
+| **Uncommitted / unmerged** | **`wb-wave5-polish` @ `8c9f68b`** — pushed; **not merged** to `v1-redesign`. **`v1-redesign` @ `7397abc`** unchanged. |
 
 **Strategic posture (unchanged):** Experience-driven wedge — WB + reliability = **ground floor (GATE)**; the win = accreting honest tutor-first continuity. [`experience-driven_wedge_ae2776e1.plan.md`](../../../../.cursor/plans/experience-driven_wedge_ae2776e1.plan.md). **Ship-to-Sarah gate** still governs cut to `v1-redesign → master` — see condensed block below.
 
@@ -37,13 +37,13 @@ Pre-public pilot with one tutor (Sarah). North Star from [`AGENTS.md`](../../AGE
 ```
 master  ←  v1-redesign  (integration base @ 7397abc; Wave 4 merged; held for Sarah gate + master cut)
               ↑
-              └── wb-wave5-polish @ b082882  (ALL remaining work; NO interim merge)
+              └── wb-wave5-polish @ 8c9f68b  (ALL remaining work; worktree tutoring-notes-polishwt; NO interim merge)
 ```
 
 | Branch | Role | Tip |
 |---|---|---|
 | **`v1-redesign`** | Integration base; Wave 4 student responsive parity merged @ [`a166f6c`](https://github.com/Arangarx/tutoring-notes/commit/a166f6c); subsequent doc commits through [`7397abc`](https://github.com/Arangarx/tutoring-notes/commit/7397abc) | Not yet merged to `master` — held for Gate A + Ship-to-Sarah + comprehensive re-smoke |
-| **`wb-wave5-polish`** | **Active execution branch** — Wave 5 chrome/polish + reliability floor (Parts 1–3 of active plan) | [`b082882`](https://github.com/Arangarx/tutoring-notes/commit/b082882) |
+| **`wb-wave5-polish`** | **Active execution branch** — Wave 5 chrome/polish + reliability floor (Parts 1–3 of active plan); worktree `tutoring-notes-polishwt` | [`8c9f68b`](https://github.com/Arangarx/tutoring-notes/commit/8c9f68b) |
 
 **Merge discipline (ratified):** All remaining work stays on `wb-wave5-polish`. **Single `merge --no-ff` to `v1-redesign`** at the final Sarah gate only. No interim merge.
 
@@ -63,7 +63,8 @@ Decisions ledger: [`docs/handoff/v1-redesign-STATUS.md`](v1-redesign-STATUS.md).
 flowchart TD
   P1R["Part 1 residuals: coordinators + WbTopBar + CSS + reconnect"] --> P2R["Part 2 residuals: in-person consent + allowWbRecording verify"]
   P2R --> CP["Checkpoint NO merge: wb-sync + build + hardware A/V"]
-  CP --> P3["Part 3 spine: clock → per-speaker → VAD → map → finalize → replay"]
+  CP --> P3D["Part 3 DESIGN PASS with Andrew (GATE)"]
+  P3D --> P3["Part 3 spine: clock → per-speaker → VAD → map → finalize → replay"]
   P3 --> GATE["FINAL Sarah gate: both themes hardware smoke"]
   GATE --> MERGE["single merge --no-ff → v1-redesign"]
 ```
@@ -72,17 +73,19 @@ flowchart TD
 |---|---|---|
 | **Part 1 residuals** | `p1b-av-coordinator`, `p1b-recording-coordinator`, `p1b-chrome-wbtopbar`, `p1c-css-monolith-split`, `p1a-reconnect-finish`, `p1d-legacy-tests` | Behavior-preserving extractions; Playwright on every fix |
 | **Part 2 residuals** | `p2a-inperson-consent`, `p2a-wb-recording-verify` | Waiting room = single consent surface |
-| **Checkpoint** | `p1-checkpoint` | **NO merge** — quality gate before Part 3 |
-| **Part 3 spine** | `p3-clock` → `p3-perspeaker-capture` → `p3-vad-chunking` → `p3-consent-recording` → `p3-incremental-map` → `p3-model-abstraction` → `p3-finalize` → `p3-replay-scrub` → `p3-video-seam` | Bulk of remaining work; tap-before-mix architecture; 6 BLOCKERs in plan adversarial review |
+| **Checkpoint** | `p1-checkpoint` | **NO merge** — quality gate before Part 3 design pass |
+| **Part 3 design pass** | *(Andrew session — not a todo)* | **MANDATORY GATE** — no p3-* execution before Andrew approves overall Part 3 architecture/sequencing. Ratified inputs: t=0, peer cap ≤3–4, eval post-Sarah, tap-before-mix. |
+| **Part 3 spine** | `p3-clock` → `p3-perspeaker-capture` → `p3-vad-chunking` → `p3-consent-recording` → `p3-incremental-map` → `p3-model-abstraction` → `p3-finalize` → `p3-replay-scrub` → `p3-video-seam` | Bulk of remaining work; **only after design pass**; tap-before-mix architecture; 6 BLOCKERs in plan adversarial review |
 | **Final gate** | `p-final-gate`, `p-test-account-reset` | Both themes; then merge; then test data reset at master cut |
 
 ---
 
-## Latest committed state (`wb-wave5-polish` @ `b082882`)
+## Latest committed state (`wb-wave5-polish` @ `8c9f68b`)
 
 | Commit | Summary |
 |---|---|
-| [`b082882`](https://github.com/Arangarx/tutoring-notes/commit/b082882) | **Branch tip** — fix(tests): upsert ConsentRecord in allowLiveSession denial test (relay harness fix) |
+| [`8c9f68b`](https://github.com/Arangarx/tutoring-notes/commit/8c9f68b) | **Branch tip** — chore(repo): untrack accidentally-committed props-flyout debug screenshot |
+| [`b082882`](https://github.com/Arangarx/tutoring-notes/commit/b082882) | fix(tests): upsert ConsentRecord in allowLiveSession denial test (relay harness fix) |
 | [`c70e191`](https://github.com/Arangarx/tutoring-notes/commit/c70e191) | Quarantine 2nd-session AV-tile presence test as pre-existing flake |
 | [`f0a2b72`](https://github.com/Arangarx/tutoring-notes/commit/f0a2b72) | Phantom-stroke: extend degenerate filter to live-sync broadcast path |
 | [`29d9fe9`](https://github.com/Arangarx/tutoring-notes/commit/29d9fe9) | Merge phantom fix (adapter + action-sheet backdrop) |
@@ -103,14 +106,13 @@ Full history: `git log --oneline -25 wb-wave5-polish`.
 
 ## Queued dispatches (in order)
 
-1. **Andrew review** — new plan CHANGE OUTLINE before Part 3.
-2. **Part 1 residuals** — coordinator extractions, unified `WbTopBar`, CSS co-location, reconnect finish, legacy test cleanup.
-3. **Part 2 residuals** — in-person consent projection, `allowWhiteboardRecording` e2e verify.
-4. **`p1-checkpoint`** — full `test:wb-sync` + regression + build + hardware A/V (NO merge).
-5. **`p3-clock`** — after Andrew confirms t=0 anchor (Open #3).
-6. **Part 3 spine** — per-speaker capture through replay-scrub; video seam design-only.
-7. **`p-final-gate`** — both themes hardware smoke → **`merge --no-ff` `wb-wave5-polish` → `v1-redesign`**.
-8. **`p-test-account-reset`** — at master cut, preserve Andrew + Sarah admin accounts.
+1. **Part 1 residuals** — coordinator extractions, unified `WbTopBar`, CSS co-location, `p1a-reconnect-finish` (VERIFY-FIRST), `p1d-legacy-tests` (VERIFY-FIRST).
+2. **Part 2 residuals** — in-person consent projection, `allowWhiteboardRecording` e2e verify.
+3. **`p1-checkpoint`** — full `test:wb-sync` + regression + build + hardware A/V (NO merge).
+4. **Part 3 DESIGN PASS with Andrew** — mandatory gate; no p3-* execution before Andrew approves overall Part 3 architecture/sequencing.
+5. **Part 3 spine** — per-speaker capture through replay-scrub (only after design pass); video seam design-only.
+6. **`p-final-gate`** — both themes hardware smoke → **`merge --no-ff` `wb-wave5-polish` → `v1-redesign`**.
+7. **`p-test-account-reset`** — at master cut, preserve Andrew + Sarah admin accounts.
 
 ---
 
@@ -126,14 +128,13 @@ Andrew wants Sarah on the `v1-redesign` line once **waiting room → WB → end 
 
 ## Open decisions — Andrew confirms
 
-### From active plan (JIT — answer before relevant todo)
+### Live gate (Part 3)
 
-| # | Question | Gates |
+| # | Question | Status |
 |---|---|---|
-| 1 | Session-scoped consent override in waiting room? | `p2a-inperson-consent` |
-| 2 | 3+-peer per-speaker policy (N-cap vs mixdown fallback)? | `p3-perspeaker-capture` |
-| 3 | **t=0 clock anchor** — recommended = FSM `recording` / `MediaRecorder.start()`; **NOT ratified** | `p3-clock` |
-| 4 | Minimal eval harness now vs strictly post-Sarah? | `p3-model-abstraction` |
+| **Part 3 design pass** | Overall Part 3 architecture/sequencing — review and approve in design session with Andrew before any p3-* execution | **OPEN — mandatory gate** |
+
+Ratified **inputs** (not substitutes for the design pass): t=0 = FSM `recording` entry / `MediaRecorder.start()` + WB↔audio hardware sync oracle; 3+-peer per-speaker ≤3–4 cap NO mixdown fallback; minimal eval harness post-Sarah only; session-scoped consent override won't build for Sarah (`WB-SESSION-CONSENT-OVERRIDE`).
 
 ### Standing (from prior threads)
 
@@ -155,7 +156,7 @@ Andrew wants Sarah on the `v1-redesign` line once **waiting room → WB → end 
 | **Per-speaker tap-before-mix** | ✅ Design-around ratified — transcription lanes only; mixdown = sole replay source; merge by `recordingTimeOffsetMs` never `createdAt` |
 | **Reverses prior rollback [`89e0fe1`](https://github.com/Arangarx/tutoring-notes/commit/89e0fe1)** | ✅ With sync-metadata contract — document in LIVE-AV.md invariant #6 during `p3-perspeaker-capture` |
 | **No interim merge** | ✅ All work on `wb-wave5-polish`; single merge at Sarah gate |
-| **t=0 clock anchor** | ⚠️ Recommended default only — **await Andrew #3** |
+| **t=0 clock anchor** | ✅ **RATIFIED INPUT (2026-06-30)** — FSM `recording` / `MediaRecorder.start()`; WB↔audio hardware sync oracle in `p3-clock`. Part 3 **execution** still gated on design pass. |
 | **WB-MENU-CLICK-THROUGH** | Deferred post-Sarah → [`BACKLOG.md`](../BACKLOG.md) |
 | **Test data reset at master cut** | Preserve Andrew + Sarah admin; reset disposable learners (`p-test-account-reset`) |
 
@@ -267,12 +268,11 @@ Archived superseded plan (audit only): [`whiteboard_reliability_floor_9ba650d1.S
 
 | Question | Status |
 |---|---|
-| t=0 clock anchor | **Open for Andrew #3** — recommended FSM recording entry |
-| 3+-peer per-speaker cap | **Open for Andrew #2** — pilot is 1:1 |
-| Session-scoped consent override | **Open for Andrew #1** |
-| Minimal eval harness timing | **Open for Andrew #4** |
+| **Part 3 design pass** | **OPEN — mandatory gate before p3-* execution** |
 | Map/reduce notes accuracy | Poor today — model abstraction + post-Sarah eval |
 | Two-way calendar sync | Unresolved — [`scheduling-requirements-2026-06-11.md`](scheduling-requirements-2026-06-11.md) |
+
+Resolved 2026-06-30 (ratified inputs, not design-pass substitute): t=0 anchor; 3+-peer cap ≤3–4 no mixdown fallback; session-scoped consent override won't build; minimal eval post-Sarah only.
 
 ---
 
@@ -286,4 +286,4 @@ Deep history: `git log --oneline wb-wave5-polish`, `git log --oneline v1-redesig
 
 ## Overall result
 
-*(Orchestrator checkpoint — 2026-06-30 heavy restructure after overnight consent+phantom integration + new remaining-work plan.)*
+*(Orchestrator checkpoint — 2026-06-30 reconcile: Part 3 design-pass-gated; body↔HEAD consistent; tip 8c9f68b.)*
