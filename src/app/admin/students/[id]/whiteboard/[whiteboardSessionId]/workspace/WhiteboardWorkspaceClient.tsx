@@ -155,7 +155,7 @@ import {
   useWbLayoutMode,
 } from "@/components/whiteboard/chrome/useWbLayoutMode";
 import { LiveBoardChrome } from "@/components/whiteboard/chrome/LiveBoardChrome";
-import { WbRoleProvider, type WbParticipantRole } from "@/components/whiteboard/chrome/wb-role";
+import { WbRoleProvider, deriveWbCapabilities, type WbParticipantRole } from "@/components/whiteboard/chrome/wb-role";
 import {
   WaitingRoomOverlay,
   type WtrSessionMode,
@@ -5411,6 +5411,7 @@ export function WhiteboardWorkspaceClient({
     boardWaitElapsed && !dismissedBoardWaitNotice && !stuckLoading;
   const chromeLocalTileLabel = role === "student" ? "You" : localPeerLabel;
   const chromePageList = role === "student" ? studentPageList : pageList;
+  const wbCaps = deriveWbCapabilities(role);
 
   // ── Waiting-room overlay props ──────────────────────────────────────────
   // Latch: once student achieved real A/V reachability, keep Start enabled
@@ -5595,7 +5596,9 @@ export function WhiteboardWorkspaceClient({
               onClick={(e) => e.stopPropagation()}
             >
               {renderTopbarOverflowControl("wb-student-topbar-overflow")}
-              <WbExitButton onExit={handleStudentExit} />
+              {wbCaps.showLeaveInsteadOfEnd && (
+                <WbExitButton onExit={handleStudentExit} />
+              )}
             </div>
           </>
         ) : (
@@ -5639,6 +5642,7 @@ export function WhiteboardWorkspaceClient({
 
         <div className="mynk-wb-topbar__zone" onClick={(e) => e.stopPropagation()}>
           {/* Follow toggle — desktop-only (overflow sheet on touch via renderTopBarOverflowItems) */}
+          {wbCaps.showFollowControls && (
           <div className="mynk-wb-student-follow mynk-wb-topbar__desktop-only">
             <label
               className={`mynk-wb-follow-toggle mynk-wb-chip${!independentView ? " mynk-wb-follow-toggle--synced" : ""}`}
@@ -5667,6 +5671,7 @@ export function WhiteboardWorkspaceClient({
               <WbIconMatchView size={14} />
             </button>
           </div>
+          )}
 
           <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
 
@@ -5723,7 +5728,9 @@ export function WhiteboardWorkspaceClient({
 
         <div className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing">
           {renderTopbarOverflowControl("wb-student-topbar-overflow")}
-          <WbExitButton onExit={handleStudentExit} />
+          {wbCaps.showLeaveInsteadOfEnd && (
+            <WbExitButton onExit={handleStudentExit} />
+          )}
         </div>
         </>
         )}
@@ -5772,6 +5779,7 @@ export function WhiteboardWorkspaceClient({
 
         <div className="mynk-wb-topbar__zone" onClick={(e) => e.stopPropagation()}>
           {/* Share + Copied — desktop top bar; touch uses overflow sheet */}
+          {wbCaps.canShareLink && (
           <div className="mynk-wb-share-wrap mynk-wb-topbar__desktop-only">
             <button
               type="button"
@@ -5821,8 +5829,11 @@ export function WhiteboardWorkspaceClient({
               </div>
             )}
           </div>
+          )}
 
+          {wbCaps.canShareLink && (
           <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
+          )}
 
           <WbTopBarMicControl
             audio={workspaceAudio}
@@ -5856,6 +5867,8 @@ export function WhiteboardWorkspaceClient({
             onRedo={() => triggerRedo()}
           />
 
+          {wbCaps.canInsertAssets && (
+          <>
           <span
             className="mynk-wb-topbar__sep mynk-wb-topbar__inserts mynk-wb-topbar__desktop-only"
             aria-hidden
@@ -5885,6 +5898,8 @@ export function WhiteboardWorkspaceClient({
               chrome
             />
           </div>
+          </>
+          )}
 
           <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
 
@@ -5900,7 +5915,7 @@ export function WhiteboardWorkspaceClient({
 
         <div className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing">
           {renderTopbarOverflowControl("wb-topbar-overflow")}
-          {(() => {
+          {wbCaps.canEndSession && (() => {
             const endSessionLabel =
               endingState === "finalizing"
                 ? finalizingOutboxState === "uploading" &&
