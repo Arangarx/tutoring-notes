@@ -12,9 +12,6 @@ import { WhiteboardSessionShell } from "./WhiteboardSessionShell";
  * Trust posture (re-read before changing):
  *   - `assertOwnsWhiteboardSession` re-checks the logged-in tutor
  *     owns this session. Multi-tenant gate.
- *   - Re-validates `consentAcknowledged === true` belt-and-suspenders
- *     (the action enforces it on create; this re-check defends
- *     against a row mutated outside the action layer).
  *   - Ended sessions render the in-frame notes-hero review surface
  *     (SessionReviewMode) so End Session + any RSC refresh converge.
  *   - We bounce env-only logins to the admin home with an explanation
@@ -66,9 +63,6 @@ export default async function WhiteboardWorkspacePage({
   const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
 
   if (session.studentId !== studentId) {
-    notFound();
-  }
-  if (!session.consentAcknowledged) {
     notFound();
   }
 
