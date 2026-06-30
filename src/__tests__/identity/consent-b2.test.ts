@@ -29,7 +29,6 @@ import {
   assertEffectiveConsent,
   assertConsentFromLiveRecord,
   createSessionConsentSnapshot,
-  isConsentEnforcementEnabled,
   ConsentError,
 } from "@/lib/consent-scope";
 
@@ -346,65 +345,17 @@ describe("createSessionConsentSnapshot", () => {
 });
 
 // ---------------------------------------------------------------------------
-// assertEffectiveConsent
+// assertEffectiveConsent (unconditional — CONSENT_ENFORCEMENT flag removed)
 // ---------------------------------------------------------------------------
 
 describe("assertEffectiveConsent", () => {
-  const originalEnv = process.env.CONSENT_ENFORCEMENT;
-
-  afterEach(() => {
-    process.env.CONSENT_ENFORCEMENT = originalEnv ?? "";
-  });
-
-  it("flag OFF → always returns void (never throws)", async () => {
-    process.env.CONSENT_ENFORCEMENT = "";
-    const tutor = await createTutor();
-    const ah = await createAccountHolder();
-    const profile = await createLearnerProfile(ah.id);
-    const student = await createStudent(tutor.id, profile.id);
-    const session = await createWhiteboardSessionRow(tutor.id, student.id);
-
-    // Create a snapshot with all-false
-    await createConsentRecord(profile.id, tutor.id, 1, {
-      allowAudioRecording: false,
-      allowNoteSending: false,
-    });
-    await db.$transaction(async (tx) => {
-      await createSessionConsentSnapshot(tx, session.id, profile.id, tutor.id);
-    });
-
-    // Flag OFF → even denied permissions return void
-    await expect(assertEffectiveConsent(session.id, "allowAudioRecording")).resolves.toBeUndefined();
-    await expect(assertEffectiveConsent(session.id, "allowNoteSending")).resolves.toBeUndefined();
-  });
-
-  it("flag ON + no snapshot → void (unclaimed fallback)", async () => {
-    process.env.CONSENT_ENFORCEMENT = "true";
-    const tutor = await createTutor();
-    const student = await createStudent(tutor.id, undefined);
-    const session = await createWhiteboardSessionRow(tutor.id, student.id);
-
-    await expect(assertEffectiveConsent(session.id, "allowAudioRecording")).resolves.toBeUndefined();
-  });
-
-  it("flag ON + snapshot allowAudioRecording=true → void (granted)", async () => {
-    process.env.CONSENT_ENFORCEMENT = "true";
-    const tutor = await createTutor();
-    const ah = await createAccountHolder();
-    const profile = await createLearnerProfile(ah.id);
-    const student = await createStudent(tutor.id, profile.id);
-    const session = await createWhiteboardSessionRow(tutor.id, student.id);
-
-    await createConsentRecord(profile.id, tutor.id, 1, { allowAudioRecording: true });
-    await db.$transaction(async (tx) => {
-      await createSessionConsentSnapshot(tx, session.id, profile.id, tutor.id);
-    });
-
-    await expect(assertEffectiveConsent(session.id, "allowAudioRecording")).resolves.toBeUndefined();
-  });
-
-  it("flag ON + snapshot allowAudioRecording=false → throws ConsentError", async () => {
-    process.env.CONSENT_ENFORCEMENT = "true";
+  /**
+   * RED-BEFORE / GREEN-AFTER (Concern 2):
+   * Before removing the flag, assertEffectiveConsent would return void when
+   * CONSENT_ENFORCEMENT was unset. After removing, it enforces unconditionally.
+   */
+  it("enforces unconditionally — snapshot allowAudioRecording=false throws ConsentError (no flag needed)", async () => {
+    // No CONSENT_ENFORCEMENT env var set — enforcement is now always on
     const tutor = await createTutor();
     const ah = await createAccountHolder();
     const profile = await createLearnerProfile(ah.id);
@@ -420,8 +371,30 @@ describe("assertEffectiveConsent", () => {
       .rejects.toThrow(ConsentError);
   });
 
-  it("flag ON + snapshot allowNoteSending=false → throws ConsentError", async () => {
-    process.env.CONSENT_ENFORCEMENT = "true";
+  it("no snapshot → void (unclaimed fallback)", async () => {
+    const tutor = await createTutor();
+    const student = await createStudent(tutor.id, undefined);
+    const session = await createWhiteboardSessionRow(tutor.id, student.id);
+
+    await expect(assertEffectiveConsent(session.id, "allowAudioRecording")).resolves.toBeUndefined();
+  });
+
+  it("snapshot allowAudioRecording=true → void (granted)", async () => {
+    const tutor = await createTutor();
+    const ah = await createAccountHolder();
+    const profile = await createLearnerProfile(ah.id);
+    const student = await createStudent(tutor.id, profile.id);
+    const session = await createWhiteboardSessionRow(tutor.id, student.id);
+
+    await createConsentRecord(profile.id, tutor.id, 1, { allowAudioRecording: true });
+    await db.$transaction(async (tx) => {
+      await createSessionConsentSnapshot(tx, session.id, profile.id, tutor.id);
+    });
+
+    await expect(assertEffectiveConsent(session.id, "allowAudioRecording")).resolves.toBeUndefined();
+  });
+
+  it("snapshot allowNoteSending=false → throws ConsentError", async () => {
     const tutor = await createTutor();
     const ah = await createAccountHolder();
     const profile = await createLearnerProfile(ah.id);
@@ -437,15 +410,13 @@ describe("assertEffectiveConsent", () => {
       .rejects.toThrow(ConsentError);
   });
 
-  it("D-5: flag ON + self-learner → void (auto-pass)", async () => {
-    process.env.CONSENT_ENFORCEMENT = "true";
+  it("D-5: self-learner → void (auto-pass regardless of record values)", async () => {
     const tutor = await createTutor();
     const ah = await createAccountHolder({ isSelfLearner: true });
     const profile = await createLearnerProfile(ah.id, { isSelfLearner: true });
     const student = await createStudent(tutor.id, profile.id);
     const session = await createWhiteboardSessionRow(tutor.id, student.id);
 
-    // Record with all-false, but self-learner overrides
     await createConsentRecord(profile.id, tutor.id, 1, {
       allowAudioRecording: false,
       allowNoteSending: false,
@@ -458,17 +429,14 @@ describe("assertEffectiveConsent", () => {
     await expect(assertEffectiveConsent(session.id, "allowNoteSending")).resolves.toBeUndefined();
   });
 
-  it("flag ON + allowMessaging → void (not shipping in V1)", async () => {
-    process.env.CONSENT_ENFORCEMENT = "true";
+  it("allowMessaging → void (not shipping in V1)", async () => {
     const tutor = await createTutor();
     const student = await createStudent(tutor.id);
     const session = await createWhiteboardSessionRow(tutor.id, student.id);
-    // No snapshot — but allowMessaging is always void regardless
     await expect(assertEffectiveConsent(session.id, "allowMessaging")).resolves.toBeUndefined();
   });
 
-  it("flag ON + allowVideoRecording → void (not shipping in V1)", async () => {
-    process.env.CONSENT_ENFORCEMENT = "true";
+  it("allowVideoRecording → void (not shipping in V1)", async () => {
     const tutor = await createTutor();
     const student = await createStudent(tutor.id);
     const session = await createWhiteboardSessionRow(tutor.id, student.id);
@@ -477,27 +445,11 @@ describe("assertEffectiveConsent", () => {
 });
 
 // ---------------------------------------------------------------------------
-// assertConsentFromLiveRecord
+// assertConsentFromLiveRecord (unconditional — CONSENT_ENFORCEMENT flag removed)
 // ---------------------------------------------------------------------------
 
 describe("assertConsentFromLiveRecord", () => {
-  const originalEnv = process.env.CONSENT_ENFORCEMENT;
-
-  afterEach(() => {
-    process.env.CONSENT_ENFORCEMENT = originalEnv ?? "";
-  });
-
-  it("flag OFF → always returns void", async () => {
-    process.env.CONSENT_ENFORCEMENT = "";
-    const tutor = await createTutor();
-    const student = await createStudent(tutor.id);
-    await expect(
-      assertConsentFromLiveRecord(student.id, tutor.id, "allowNoteSending")
-    ).resolves.toBeUndefined();
-  });
-
-  it("flag ON + unclaimed student → void", async () => {
-    process.env.CONSENT_ENFORCEMENT = "true";
+  it("unclaimed student → void", async () => {
     const tutor = await createTutor();
     const student = await createStudent(tutor.id, undefined);
     await expect(
@@ -505,8 +457,7 @@ describe("assertConsentFromLiveRecord", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("flag ON + self-learner → void (D-5)", async () => {
-    process.env.CONSENT_ENFORCEMENT = "true";
+  it("self-learner → void (D-5)", async () => {
     const tutor = await createTutor();
     const ah = await createAccountHolder({ isSelfLearner: true });
     const profile = await createLearnerProfile(ah.id, { isSelfLearner: true });
@@ -516,8 +467,7 @@ describe("assertConsentFromLiveRecord", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("flag ON + claimed + no ConsentRecord → throws ConsentError", async () => {
-    process.env.CONSENT_ENFORCEMENT = "true";
+  it("claimed + no ConsentRecord → throws ConsentError", async () => {
     const tutor = await createTutor();
     const ah = await createAccountHolder();
     const profile = await createLearnerProfile(ah.id);
@@ -527,8 +477,7 @@ describe("assertConsentFromLiveRecord", () => {
     ).rejects.toThrow(ConsentError);
   });
 
-  it("flag ON + record with allowNoteSending=true → void (granted)", async () => {
-    process.env.CONSENT_ENFORCEMENT = "true";
+  it("record with allowNoteSending=true → void (granted)", async () => {
     const tutor = await createTutor();
     const ah = await createAccountHolder();
     const profile = await createLearnerProfile(ah.id);
@@ -539,8 +488,7 @@ describe("assertConsentFromLiveRecord", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("flag ON + record with allowNoteSending=false → throws ConsentError", async () => {
-    process.env.CONSENT_ENFORCEMENT = "true";
+  it("record with allowNoteSending=false → throws ConsentError", async () => {
     const tutor = await createTutor();
     const ah = await createAccountHolder();
     const profile = await createLearnerProfile(ah.id);
@@ -552,7 +500,6 @@ describe("assertConsentFromLiveRecord", () => {
   });
 
   it("uses latest version when multiple records exist", async () => {
-    process.env.CONSENT_ENFORCEMENT = "true";
     const tutor = await createTutor();
     const ah = await createAccountHolder();
     const profile = await createLearnerProfile(ah.id);
@@ -704,36 +651,3 @@ describe("D-4: Reconnect defaults all-OFF", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Flag helpers
-// ---------------------------------------------------------------------------
-
-describe("isConsentEnforcementEnabled()", () => {
-  const originalEnv = process.env.CONSENT_ENFORCEMENT;
-  afterEach(() => { process.env.CONSENT_ENFORCEMENT = originalEnv ?? ""; });
-
-  it("returns false when env is not set", () => {
-    delete process.env.CONSENT_ENFORCEMENT;
-    expect(isConsentEnforcementEnabled()).toBe(false);
-  });
-
-  it("returns false when env is empty string", () => {
-    process.env.CONSENT_ENFORCEMENT = "";
-    expect(isConsentEnforcementEnabled()).toBe(false);
-  });
-
-  it("returns true when env is 'true'", () => {
-    process.env.CONSENT_ENFORCEMENT = "true";
-    expect(isConsentEnforcementEnabled()).toBe(true);
-  });
-
-  it("returns true when env is '1'", () => {
-    process.env.CONSENT_ENFORCEMENT = "1";
-    expect(isConsentEnforcementEnabled()).toBe(true);
-  });
-
-  it("returns false when env is 'false'", () => {
-    process.env.CONSENT_ENFORCEMENT = "false";
-    expect(isConsentEnforcementEnabled()).toBe(false);
-  });
-});

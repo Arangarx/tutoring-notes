@@ -1,14 +1,12 @@
 /**
  * Consent enforcement guards — Gate B2 parent privacy consent.
  *
- * All BLOCKING logic is behind the `CONSENT_ENFORCEMENT` flag (default OFF).
- * When OFF: assertEffectiveConsent returns void (current stub behavior).
- * When ON: full enforcement — session-scoped snapshot read, self-learner pass,
- * permission check, ConsentError throw on denial.
+ * Enforcement is UNCONDITIONAL (the `CONSENT_ENFORCEMENT` flag has been
+ * removed). assertEffectiveConsent always enforces: session-scoped snapshot
+ * read, self-learner pass, permission check, ConsentError throw on denial.
  *
- * Schema writes (ConsentRecord, SessionConsentSnapshot) are NOT flag-gated:
- * we always collect consent data and freeze snapshots even when enforcement
- * is off, so the data exists when the flag is flipped.
+ * Schema writes (ConsentRecord, SessionConsentSnapshot) were never flag-gated:
+ * we always collect consent data and freeze snapshots at session creation.
  *
  * Log prefix: [cns] (see AGENTS.md § Conventions)
  *
@@ -45,20 +43,6 @@ export class ConsentError extends Error {
 }
 
 // ---------------------------------------------------------------------------
-// Flag helper
-// ---------------------------------------------------------------------------
-
-/**
- * Returns true when consent enforcement is active.
- * Read once per request; never memoize across requests.
- * Mirror of isNotesAuthWallEnabled() — same dormant-then-flip pattern.
- */
-export function isConsentEnforcementEnabled(): boolean {
-  const val = process.env.CONSENT_ENFORCEMENT;
-  return val === "true" || val === "1";
-}
-
-// ---------------------------------------------------------------------------
 // Permissions that are not shipping in V1 — always pass
 // ---------------------------------------------------------------------------
 
@@ -75,10 +59,9 @@ const NOT_SHIPPING_PERMISSIONS = new Set<ConsentPermission>([
  * Assert that the required consent permission is granted for the given session.
  *
  * Fast-path exits (return void without throwing):
- *   1. Flag OFF — dormant enforcement; identical to today's behavior.
- *   2. Permission is allowMessaging or allowVideoRecording — not shipping in V1.
- *   3. No snapshot (unclaimed learner / pre-B2 session) — tutor-acknowledged fallback.
- *   4. Self-learner (adult, outside COPPA) — auto-pass (D-5).
+ *   1. Permission is allowMessaging or allowVideoRecording — not shipping in V1.
+ *   2. No snapshot (unclaimed learner / pre-B2 session) — tutor-acknowledged fallback.
+ *   3. Self-learner (adult, outside COPPA) — auto-pass (D-5).
  *
  * Throw path:
  *   - Snapshot exists + relevant Boolean is false → ConsentError.
@@ -91,13 +74,6 @@ export async function assertEffectiveConsent(
   whiteboardSessionId: string,
   permission: ConsentPermission
 ): Promise<void> {
-  if (!isConsentEnforcementEnabled()) {
-    console.log(
-      `[cns] wbsid=${whiteboardSessionId} action=consent_check permission=${permission} result=flag_off`
-    );
-    return;
-  }
-
   if (NOT_SHIPPING_PERMISSIONS.has(permission)) {
     console.log(
       `[cns] wbsid=${whiteboardSessionId} action=consent_check permission=${permission} result=not_shipping`
@@ -267,26 +243,18 @@ export async function createSessionConsentSnapshot(
  * session to anchor against.
  *
  * Fast-path exits (return void):
- *   1. Flag OFF
- *   2. Unclaimed student (no learnerProfileId)
- *   3. Self-learner (D-5)
+ *   1. Unclaimed student (no learnerProfileId)
+ *   2. Self-learner (D-5)
  *
  * Throw path:
- *   - Flag ON + claimed + no record → ConsentError (explicit consent required)
- *   - Flag ON + record exists + permission false → ConsentError
+ *   - Claimed + no record → ConsentError (explicit consent required)
+ *   - Record exists + permission false → ConsentError
  */
 export async function assertConsentFromLiveRecord(
   studentId: string,
   adminUserId: string,
   permission: Extract<ConsentPermission, "allowNoteSending">
 ): Promise<void> {
-  if (!isConsentEnforcementEnabled()) {
-    console.log(
-      `[cns] studentId=${studentId} action=live_record_check permission=${permission} result=flag_off`
-    );
-    return;
-  }
-
   const student = await withDbRetry(
     () =>
       db.student.findUnique({

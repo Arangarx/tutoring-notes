@@ -22,7 +22,6 @@ import { revalidateStudentSharePages } from "@/lib/revalidateStudentSharePages";
 import { enqueueChunkTranscribe } from "@/lib/recording/chunk-transcribe-enqueue";
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
 import {
-  isConsentEnforcementEnabled,
   assertEffectiveConsent,
   createSessionConsentSnapshot,
   ConsentError,
@@ -71,32 +70,19 @@ function emptyEventsJson(startedAtIso: string): string {
 }
 
 export async function createWhiteboardSession(
-  studentId: string,
-  formData: FormData
+  studentId: string
 ): Promise<void> {
   const rid = createActionCorrelationId();
 
-  // Parse + sanity-check inputs BEFORE the auth round-trip so cheap
-  // failures don't burn DB / Blob writes. Order:
-  //   1. shape (consent checkbox present + truthy)
-  //   2. ownership (cheap DB call)
-  //   3. expensive Blob write
-  //   4. row insert
-  // If step 3 succeeds but step 4 fails, we leave behind one orphaned
+  // Order:
+  //   1. ownership (cheap DB call)
+  //   2. tutor approval check
+  //   3. B2 consent pre-check (allowLiveSession)
+  //   4. expensive Blob write
+  //   5. row insert
+  // If step 4 succeeds but step 5 fails, we leave behind one orphaned
   // empty events.json — non-fatal cost, kept this way for code
   // simplicity (a try/catch + Blob.delete would still race).
-  const consentRaw = formData.get("consentAcknowledged");
-  const consentAcknowledged =
-    consentRaw === "true" || consentRaw === "on" || consentRaw === "1";
-  if (!consentAcknowledged) {
-    console.warn(
-      `[createWhiteboardSession] rid=${rid} studentId=${studentId} REJECTED: consent not acknowledged`
-    );
-    throw new Error(
-      "You must acknowledge the recording consent before starting a whiteboard session."
-    );
-  }
-
   const scope = await requireStudentScope();
   if (scope.kind !== "admin") {
     // The whiteboard requires a real (DB-backed) admin row because
@@ -118,7 +104,7 @@ export async function createWhiteboardSession(
   await assertTutorApproved(scope.adminId);
 
   // B2: consent pre-check — load learnerProfileId and the latest ConsentRecord.
-  // Block ONLY when flag ON + claimed + allowLiveSession=false (D-3, D-1).
+  // Block claimed + allowLiveSession=false (D-3, D-1).
   // Runs after tutor-approval (cheap auth hierarchy) and BEFORE Blob write
   // so we fail fast without orphaning a Blob object.
   const studentForConsent = await withDbRetry(
@@ -131,7 +117,7 @@ export async function createWhiteboardSession(
   );
   const learnerProfileId = studentForConsent?.learnerProfileId ?? null;
 
-  if (learnerProfileId && isConsentEnforcementEnabled()) {
+  if (learnerProfileId) {
     const latestRecord = await withDbRetry(
       () =>
         db.consentRecord.findFirst({
