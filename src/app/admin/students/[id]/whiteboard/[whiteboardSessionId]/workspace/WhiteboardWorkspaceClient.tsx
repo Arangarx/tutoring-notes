@@ -1876,6 +1876,14 @@ export function WhiteboardWorkspaceClient({
       role === "tutor" ? workspaceAudio.swapMicDeviceBySlot : undefined,
   });
 
+  // Stable handle to the latest liveAv return so reconcile effects and A/V
+  // callbacks can read participants/methods without depending on the whole
+  // hook object (which changes identity each render). This removes listener
+  // re-subscription churn and is the stable-primitive seam the
+  // useLiveAvCoordinator extraction threads in.
+  const liveAvRef = useRef(liveAv);
+  liveAvRef.current = liveAv;
+
   // Student A/V bootstrap: run when sync connects (and on refresh reconnect), not
   // only when the client object exists — pickers must work before sync is up.
   useEffect(() => {
@@ -1939,9 +1947,9 @@ export function WhiteboardWorkspaceClient({
       const shouldRestart = sawStudentDisconnectRef.current;
       sawStudentDisconnectRef.current = false;
       if (!shouldRestart) return;
-      for (const p of liveAv.participants) {
+      for (const p of liveAvRef.current.participants) {
         try {
-          liveAv.reconnectPeer(p.peerId);
+          liveAvRef.current.reconnectPeer(p.peerId);
         } catch {
           //
         }
@@ -1954,7 +1962,7 @@ export function WhiteboardWorkspaceClient({
       offConnect();
       offDisconnect();
     };
-  }, [role, studentSyncClient, liveAv]);
+  }, [role, studentSyncClient]);
 
   // Fix 2 (A4 adversarial item): latch everBothPresentRef on first WebRTC
   // reachability rather than sync-join. This prevents the false
@@ -2203,14 +2211,14 @@ export function WhiteboardWorkspaceClient({
       const shouldRestart = sawDisconnectSinceLastConnectRef.current;
       sawDisconnectSinceLastConnectRef.current = false;
       if (!shouldRestart) return;
-      const current = liveAv.participants;
+      const current = liveAvRef.current.participants;
       if (current.length === 0) return;
       console.log(
         `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} avx=${whiteboardSessionId} sync-reconnect peers=${current.length}`
       );
       for (const p of current) {
         try {
-          liveAv.reconnectPeer(p.peerId);
+          liveAvRef.current.reconnectPeer(p.peerId);
         } catch (err) {
           console.warn(
             `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} mesh.restart threw peer=${p.peerId}`,
@@ -2226,7 +2234,7 @@ export function WhiteboardWorkspaceClient({
       offConnect();
       offDisconnect();
     };
-  }, [sync, liveAv, whiteboardSessionId]);
+  }, [sync, whiteboardSessionId]);
 
   // Tutor: when sync roster gains a student (0→≥1), restart mesh for stale PCs
   // (e.g. student exit→rejoin with same sessionStorage peerId).
@@ -2236,7 +2244,7 @@ export function WhiteboardWorkspaceClient({
     const prev = prevSyncPeerCountRef.current;
     prevSyncPeerCountRef.current = peerCount;
     if (prev !== 0 || peerCount < 1) return;
-    const current = liveAv.participants;
+    const current = liveAvRef.current.participants;
     if (current.length === 0) return;
     console.log(
       `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} avx=${whiteboardSessionId}` +
@@ -2244,7 +2252,7 @@ export function WhiteboardWorkspaceClient({
     );
     for (const p of current) {
       try {
-        liveAv.reconnectPeer(p.peerId);
+        liveAvRef.current.reconnectPeer(p.peerId);
       } catch (err) {
         console.warn(
           `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} sync-roster-rejoin threw peer=${p.peerId}`,
@@ -2252,7 +2260,7 @@ export function WhiteboardWorkspaceClient({
         );
       }
     }
-  }, [role, peerCount, liveAv, whiteboardSessionId]);
+  }, [role, peerCount, whiteboardSessionId]);
 
   // Additive: reset per-session latches when whiteboardSessionId changes so
   // a 2nd session starts with a clean slate. Writing refs directly is safe —
@@ -4620,28 +4628,28 @@ export function WhiteboardWorkspaceClient({
   }, []);
 
   const handleAcquireMic = useCallback(async () => {
-    if (!workspaceAudio.localMicStream && !liveAv.localAudioStream) {
-      await liveAv.requestMic();
+    if (!workspaceAudio.localMicStream && !liveAvRef.current.localAudioStream) {
+      await liveAvRef.current.requestMic();
     }
-  }, [workspaceAudio.localMicStream, liveAv]);
+  }, [workspaceAudio.localMicStream]);
 
   const handleTopBarCam = useCallback(async () => {
-    if (!liveAv.localVideoStream) {
+    if (!liveAvRef.current.localVideoStream) {
       // requestCam() already sets isCamMuted=false on success.
       // Do NOT call toggleCam() after — that would immediately re-mute.
-      await liveAv.requestCam();
+      await liveAvRef.current.requestCam();
       return;
     }
-    liveAv.toggleCam();
-  }, [liveAv]);
+    liveAvRef.current.toggleCam();
+  }, []);
 
   const handleTopBarMic = useCallback(async () => {
-    if (!liveAv.localAudioStream) {
-      await liveAv.requestMic();
+    if (!liveAvRef.current.localAudioStream) {
+      await liveAvRef.current.requestMic();
       return;
     }
-    liveAv.toggleMic();
-  }, [liveAv]);
+    liveAvRef.current.toggleMic();
+  }, []);
 
   // Camera-on-by-default: auto-enable the camera when the browser
   // Permissions API confirms it was already granted (e.g. on a
@@ -4650,11 +4658,10 @@ export function WhiteboardWorkspaceClient({
   const hasAutoRequestedCamRef = useRef(false);
   useEffect(() => {
     if (liveAv.hasCamPermission !== "granted") return;
-    if (liveAv.localVideoStream) return;
+    if (liveAvRef.current.localVideoStream) return;
     if (hasAutoRequestedCamRef.current) return;
     hasAutoRequestedCamRef.current = true;
-    void liveAv.requestCam();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void liveAvRef.current.requestCam();
   }, [liveAv.hasCamPermission]);
 
   const roughnessLabel =
