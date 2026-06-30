@@ -67,6 +67,8 @@ export type WbE2eSceneBridge = {
     bbox: [number, number, number, number] | null;
     link: string | null;
   } | null;
+  /** Trigger Excalidraw's undo via the imperative API (more reliable than Ctrl+Z in Playwright). */
+  historyUndo: () => void;
 };
 
 type WbE2eSceneMutationHook = () => void;
@@ -225,7 +227,8 @@ export function registerWbE2eSceneBridge(
     drawTestStroke(strokeId, x1, y1, x2, y2) {
       const existing = api.getSceneElements() as ExcalidrawLikeElement[];
       const el = makeLine(strokeId, x1, y1, x2, y2);
-      api.updateScene({ elements: [...existing, el] });
+      // IMMEDIATELY so the stroke enters the undo stack and Ctrl+Z can remove it.
+      api.updateScene({ elements: [...existing, el], captureUpdate: "IMMEDIATELY" });
       invokeSceneMutationHook(role);
     },
     growStroke(strokeId, width, version) {
@@ -403,6 +406,23 @@ export function registerWbE2eSceneBridge(
         bbox: parsed.bbox ?? null,
         link: typeof el.link === "string" ? el.link : null,
       };
+    },
+    historyUndo() {
+      // ExcalidrawImperativeAPI 0.18 only exposes history.clear(), not .undo().
+      // Dispatch Ctrl+Z to the Excalidraw container as the most reliable path.
+      const target =
+        document.querySelector(".excalidraw") ??
+        document.querySelector(".excalidraw-container") ??
+        document.documentElement;
+      target.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "z",
+          code: "KeyZ",
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
     },
   };
 

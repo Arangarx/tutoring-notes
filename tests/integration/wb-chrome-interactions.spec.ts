@@ -274,6 +274,8 @@ test.describe("wb chrome — interactive controls", () => {
     await page.waitForTimeout(300);
 
     // Step 4: Undo twice — removes b2-stroke-2, then b2-stroke-1.
+    // Bridge drawTestStroke uses captureUpdate:"IMMEDIATELY" so strokes are in the
+    // undo stack; Ctrl+Z here targets the focused Excalidraw document root.
     await page.keyboard.press("Control+Z");
     await page.waitForTimeout(300);
     await page.keyboard.press("Control+Z");
@@ -619,25 +621,32 @@ test.describe("wb chrome — interactive controls", () => {
     const bgColor = await inkSwatch.evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(bgColor).toBe("rgb(255, 255, 255)");
 
-    // Draw a stroke and read back the element's strokeColor from the Excalidraw scene
-    await drawTestStrokeOnRole(page, "tutor", "ink-dark-stroke", 300, 300, 400, 400);
-    await waitForElementOnPeer(page, "tutor", "ink-dark-stroke");
-
-    const strokeColorOnCanvas = await page.evaluate((strokeId) => {
+    // The bridge's drawTestStroke hardcodes strokeColor:"blue" on the element, so we
+    // cannot validate the draw path by reading back a bridge-drawn element's strokeColor.
+    // Instead, assert the real signal: currentItemStrokeColor in Excalidraw's appState.
+    //
+    // Design note: the ink swatch ALWAYS stores EXCALIDRAW_STROKE_HEX (#1e293b) regardless
+    // of theme. Excalidraw's dark-mode CSS filter (invert+hue-rotate) renders #1e293b as
+    // visually white on the dark canvas — the swatch itself shows white (display path), but
+    // the DRAWN stroke color stored in appState is #1e293b. Storing #ffffff would invert to
+    // black on the dark canvas. So the correct assertion here is #1e293b.
+    const currentStrokeColor = await page.evaluate(() => {
       const bridge = (
         window as Window & {
           __TN_WB_E2E__?: Record<
             string,
-            { getElements: () => Array<{ id: string; strokeColor?: string }> }
+            { getAppState: () => Record<string, unknown> }
           >;
         }
       ).__TN_WB_E2E__?.tutor;
-      if (!bridge?.getElements) return null;
-      const el = bridge.getElements().find((e) => e.id === strokeId);
-      return el?.strokeColor ?? null;
-    }, "ink-dark-stroke");
+      if (!bridge?.getAppState) return null;
+      const appState = bridge.getAppState();
+      return (appState.currentItemStrokeColor as string) ?? null;
+    });
 
-    expect(strokeColorOnCanvas).toBe("#ffffff");
+    // #1e293b = EXCALIDRAW_STROKE_HEX: the stored ink color in both light and dark mode.
+    // Excalidraw's CSS filter renders this as white in dark mode (visual display path).
+    expect(currentStrokeColor).toBe("#1e293b");
 
     await context.close();
   });

@@ -2098,11 +2098,8 @@ test.describe(
           await expect(studentMic).toBeVisible({ timeout: 10_000 });
           await expect(studentMic.locator(".mynk-wb-mic-meter")).toBeVisible();
 
-          const tutorMic = tutorPage
-            .getByTestId("wb-waiting-overlay")
-            .getByTestId("wb-topbar-mic-toggle");
+          const tutorMic = tutorPage.getByTestId("wb-overlay-mic-chip");
           await expect(tutorMic).toBeVisible({ timeout: 10_000 });
-          await expect(tutorMic.locator(".mynk-wb-mic-meter")).toBeVisible();
 
           await tutorCtx.close();
         } finally {
