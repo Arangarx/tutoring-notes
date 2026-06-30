@@ -1,9 +1,22 @@
-import { useEffect, useRef, type MutableRefObject } from "react";
+import {
+  useEffect,
+  useRef,
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction,
+} from "react";
 
 import type { WhiteboardSyncClient } from "@/lib/whiteboard/sync-client";
 import type { UseLiveAVReturn } from "@/hooks/useLiveAV";
 import type { WbParticipantRole } from "@/components/whiteboard/chrome/wb-role";
 import { isTouchPrimaryDevice } from "@/components/whiteboard/chrome/useWbLayoutMode";
+
+// Debounce window for reachability-loss transitions. Mirrors the value that
+// previously lived in WhiteboardWorkspaceClient — long enough to survive normal
+// ICE keepalive hysteresis (~8s), short enough that a true drop loses only
+// bounded audio. Drives both the lifecycle-participant removal debounce and the
+// bothPartiesInRoom loss debounce.
+const REACHABLE_LOSS_DEBOUNCE_MS = 8_000;
 
 /**
  * useLiveAvCoordinator — owns the post-`useLiveAV` A/V reconcile effects that
@@ -47,6 +60,26 @@ export type UseLiveAvCoordinatorArgs = {
   openMenu: string | null;
   /** Browser camera permission state (drives camera-on-by-default). */
   hasCamPermission: UseLiveAVReturn["hasCamPermission"];
+  /**
+   * Stable sorted key of reachable peerIds (memoized in the component from
+   * `liveAv.reachableParticipants`). Sole change-trigger for the
+   * lifecycle-participant debounce — the effect reads the participant objects
+   * via `liveAvRef.current`.
+   */
+  reachablePeerIdsKey: string;
+  /** `liveAv.reachableParticipants.length` (reactive primitive for the gate). */
+  reachableParticipantsCount: number;
+  /** Tutor's own sync socket connected (always false for students). */
+  tutorSyncConnected: boolean;
+  /** Student's own sync socket connected. */
+  studentConnected: boolean;
+  /**
+   * Setter for the debounced FSM-input participant set (state stays in the
+   * component so the FSM eval in the render body reads it).
+   */
+  setLifecycleParticipants: Dispatch<SetStateAction<ReadonlySet<string>>>;
+  /** Setter for the WebRTC-reachable both-parties gate (state in component). */
+  setBothPartiesInRoom: Dispatch<SetStateAction<boolean>>;
 };
 
 export function useLiveAvCoordinator({
@@ -61,6 +94,12 @@ export function useLiveAvCoordinator({
   hasLeft,
   openMenu,
   hasCamPermission,
+  reachablePeerIdsKey,
+  reachableParticipantsCount,
+  tutorSyncConnected,
+  studentConnected,
+  setLifecycleParticipants,
+  setBothPartiesInRoom,
 }: UseLiveAvCoordinatorArgs): void {
   // Student A/V bootstrap: run when sync connects (and on refresh reconnect),
   // not only when the client object exists — pickers must work before sync is up.
@@ -229,4 +268,111 @@ export function useLiveAvCoordinator({
     hasAutoRequestedCamRef.current = true;
     void liveAvRef.current.requestCam();
   }, [hasCamPermission, liveAvRef]);
+
+  // Lifecycle-participant debounce (FSM input): mirror reachable ADDs
+  // immediately (recovery is prompt) but debounce peer REMOVAL by
+  // REACHABLE_LOSS_DEBOUNCE_MS so a transient ICE blip doesn't pause recording.
+  // Output feeds the FSM via setLifecycleParticipants; the participant objects
+  // are read from liveAvRef.current (reachablePeerIdsKey is the change-trigger).
+  const lifecycleParticipantsRef = useRef<Set<string>>(new Set<string>());
+  const lcpRemovalTimersRef = useRef<
+    Map<string, ReturnType<typeof setTimeout>>
+  >(new Map());
+  const lcpDisposedRef = useRef(false);
+
+  useEffect(() => {
+    lcpDisposedRef.current = false;
+    const timers = lcpRemovalTimersRef.current;
+    return () => {
+      lcpDisposedRef.current = true;
+      for (const t of timers.values()) clearTimeout(t);
+      timers.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (lcpDisposedRef.current) return;
+    const timers = lcpRemovalTimersRef.current;
+    const nowReachableIds = new Set(
+      liveAvRef.current.reachableParticipants.map((p) => p.peerId)
+    );
+    for (const [id, timer] of [...timers]) {
+      if (nowReachableIds.has(id)) {
+        clearTimeout(timer);
+        timers.delete(id);
+      }
+    }
+    const current = lifecycleParticipantsRef.current;
+    const next = new Set(current);
+    let addedAny = false;
+    for (const id of nowReachableIds) {
+      if (!next.has(id)) {
+        next.add(id);
+        addedAny = true;
+        console.log(
+          `[WhiteboardWorkspaceClient] avx=${whiteboardSessionId} wbsid=${whiteboardSessionId}` +
+            ` event=lifecycle-participant-added peer=${id}`
+        );
+      }
+    }
+    if (addedAny) {
+      lifecycleParticipantsRef.current = next;
+      setLifecycleParticipants(next);
+    }
+    for (const id of next) {
+      if (!nowReachableIds.has(id) && !timers.has(id)) {
+        timers.set(
+          id,
+          setTimeout(() => {
+            if (lcpDisposedRef.current) return;
+            timers.delete(id);
+            lifecycleParticipantsRef.current.delete(id);
+            setLifecycleParticipants(new Set(lifecycleParticipantsRef.current));
+            console.log(
+              `[WhiteboardWorkspaceClient] avx=${whiteboardSessionId} wbsid=${whiteboardSessionId}` +
+                ` event=lifecycle-participant-drop-debounced peer=${id} windowMs=${REACHABLE_LOSS_DEBOUNCE_MS}`
+            );
+          }, REACHABLE_LOSS_DEBOUNCE_MS)
+        );
+        console.log(
+          `[WhiteboardWorkspaceClient] avx=${whiteboardSessionId} wbsid=${whiteboardSessionId}` +
+            ` event=lifecycle-participant-removal-scheduled peer=${id} delayMs=${REACHABLE_LOSS_DEBOUNCE_MS}`
+        );
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reachablePeerIdsKey is a stable useMemo of liveAv.reachableParticipants; whiteboardSessionId is session-lifetime stable
+  }, [reachablePeerIdsKey]);
+
+  // bothPartiesInRoom — WebRTC-reachable gate (split-brain fix). Sync-connected
+  // signal is role-specific: tutor uses tutorSyncConnected, student uses
+  // studentConnected (tutorSyncConnected is always false for students, which
+  // would otherwise lock the student overlay on "Connecting…").
+  const reachableLossTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  useEffect(() => {
+    const syncConnectedForRole =
+      role === "tutor" ? tutorSyncConnected : studentConnected;
+    const nowReachable = syncConnectedForRole && reachableParticipantsCount >= 1;
+    if (nowReachable) {
+      if (reachableLossTimerRef.current !== null) {
+        clearTimeout(reachableLossTimerRef.current);
+        reachableLossTimerRef.current = null;
+      }
+      setBothPartiesInRoom(true);
+    } else {
+      if (reachableLossTimerRef.current === null) {
+        reachableLossTimerRef.current = setTimeout(() => {
+          reachableLossTimerRef.current = null;
+          setBothPartiesInRoom(false);
+        }, REACHABLE_LOSS_DEBOUNCE_MS);
+      }
+    }
+    return () => {
+      if (reachableLossTimerRef.current !== null) {
+        clearTimeout(reachableLossTimerRef.current);
+        reachableLossTimerRef.current = null;
+      }
+    };
+  }, [role, tutorSyncConnected, studentConnected, reachableParticipantsCount]);
 }
