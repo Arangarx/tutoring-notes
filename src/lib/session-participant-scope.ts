@@ -75,3 +75,25 @@ export async function verifyIsSessionParticipant(
   });
   return !!(participant && participant.leftAt == null);
 }
+
+/**
+ * Look up a SessionParticipant row by (learnerProfileId, whiteboardSessionId),
+ * regardless of leftAt status.
+ *
+ * Use when you need to distinguish "never a participant" (row absent → 404)
+ * from "was a participant but has since left" (row present, leftAt set).
+ * Unlike verifyIsSessionParticipant this does NOT require leftAt == null.
+ */
+export async function findSessionParticipantRow(
+  learnerProfileId: string,
+  whiteboardSessionId: string
+): Promise<SessionParticipantRow | null> {
+  return db.sessionParticipant.findUnique({
+    where: {
+      whiteboardSessionId_learnerProfileId: {
+        whiteboardSessionId,
+        learnerProfileId,
+      },
+    },
+  });
+}

@@ -2759,6 +2759,102 @@ test.describe(
 );
 
 // ---------------------------------------------------------------------------
+// P2-G: Tutor-end-session → authed student sees "Session has ended"
+//        (@wb-presence @wb-sync)
+// ---------------------------------------------------------------------------
+
+test.describe(
+  "Tutor ends session → authed student on /join/[sessionId] sees session_ended copy",
+  { tag: [TAG.WB_PRESENCE, TAG.WB_SYNC] },
+  () => {
+    test(
+      'tutor ends session -> authed student on /join/[sessionId] sees "Session has ended" (not link_invalid)',
+      async ({ browser }) => {
+        /**
+         * Regression guard for the bug where endWhiteboardSession stamps leftAt
+         * on all SessionParticipant rows AND sets endedAt atomically — causing the
+         * /join/[sessionId] learner poll to get 404 (→ link_invalid) instead of
+         * 200 { live: false, reason: "session_ended" } (→ "Session has ended").
+         *
+         * Steps:
+         *   1. Seed a PENDING live-sync session; tutor + authed student join.
+         *   2. Tutor starts the session (PENDING → ACTIVE).
+         *   3. Tutor clicks wb-end-session.
+         *   4. Assert student page shows "Session has ended".
+         *   5. Assert student page does NOT show "This link isn't usable anymore".
+         */
+        test.setTimeout(180_000);
+
+        const session = await seedWbPendingLiveSyncSession();
+
+        const tutorCtx = await browser.newContext({
+          storageState: "tests/integration/.auth/tutor.json",
+          viewport: { width: 1280, height: 900 },
+          permissions: ["microphone", "camera"],
+        });
+        const studentCtx = await browser.newContext({
+          viewport: { width: 1280, height: 800 },
+          permissions: ["microphone", "camera"],
+        });
+
+        try {
+          // --- Tutor: open workspace ---
+          const tutorPage = await tutorCtx.newPage();
+          await tutorPage.goto(
+            `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
+            timeout: 90_000,
+          });
+          await waitForWbE2eBridge(tutorPage, "tutor");
+          const encryptionKey = await readEncryptionKeyFromHash(tutorPage);
+
+          // --- Student: login + join authenticated session ---
+          await loginLearnerInContext(studentCtx, session.learnerHandle, session.learnerPin);
+          const studentPage = await studentCtx.newPage();
+          await studentPage.goto(
+            `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+            { waitUntil: "domcontentloaded" }
+          );
+          await expect(studentPage.getByTestId("student-whiteboard-canvas-mount")).toBeVisible({
+            timeout: 90_000,
+          });
+
+          // --- Tutor: start session (waits for student WebRTC presence) ---
+          await startSessionAsTutor(tutorPage, 90_000);
+
+          // --- Tutor: end session ---
+          const endBtn = tutorPage.getByTestId("wb-end-session");
+          await expect(endBtn).toBeVisible({ timeout: 30_000 });
+          await endBtn.click();
+          // Confirm dialog if present (some variants show a confirmation modal).
+          const confirmBtn = tutorPage.getByRole("button", { name: /confirm|end session/i });
+          if (await confirmBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
+            await confirmBtn.click();
+          }
+
+          // --- Student oracle: poll resolves to session_ended copy ---
+          // The student page polls /api/whiteboard/[sessionId]/join-timer every 3.5s;
+          // allow up to 30s for the UI to update.
+          await expect(studentPage.getByText("Session has ended")).toBeVisible({
+            timeout: 30_000,
+          });
+
+          // Negative oracle: the generic link_invalid copy must NOT appear.
+          await expect(
+            studentPage.getByText("This link isn't usable anymore")
+          ).not.toBeVisible();
+        } finally {
+          await tutorCtx.close();
+          await studentCtx.close();
+        }
+      }
+    );
+  }
+);
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 

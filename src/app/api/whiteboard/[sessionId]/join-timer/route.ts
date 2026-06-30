@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db, withDbRetry } from "@/lib/db";
 import { getLearnerSession } from "@/lib/learner-session";
 import { getAccountHolderSession } from "@/lib/account-holder-session";
-import { verifyIsSessionParticipant } from "@/lib/session-participant-scope";
+import { findSessionParticipantRow } from "@/lib/session-participant-scope";
 import { resolveAhJoinLearnerProfileId } from "@/lib/join-scope";
 
 /**
@@ -133,14 +133,20 @@ export async function GET(
     );
   }
 
-  const isParticipant = await verifyIsSessionParticipant(
+  // Step 1: Verify the learner was EVER a participant (existence check, leftAt ignored).
+  // Security boundary: a learner who was NEVER a participant gets 404 — same as before.
+  const participantRow = await findSessionParticipantRow(
     effectiveLearnerProfileId,
     sessionId
   );
-  if (!isParticipant) {
+  if (!participantRow) {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
 
+  // Step 2: Load the session to check endedAt BEFORE consulting leftAt.
+  // This is the key fix: endWhiteboardSession atomically stamps leftAt on all
+  // participant rows AND sets endedAt. We must check endedAt first so that
+  // a just-ended session returns session_ended rather than 404 → link_invalid.
   const row = await withDbRetry(
     () =>
       db.whiteboardSession.findUnique({
@@ -159,6 +165,12 @@ export async function GET(
       { live: false as const, reason: "session_ended" as const },
       { status: 200, headers: { "Cache-Control": "no-store" } }
     );
+  }
+
+  // Step 3: Session is still live. If the participant left mid-session (leftAt
+  // set but endedAt not yet set), they are no longer in the room — deny.
+  if (participantRow.leftAt != null) {
+    return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
 
   return NextResponse.json(
