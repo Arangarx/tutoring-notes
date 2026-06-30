@@ -98,6 +98,20 @@ describe("MicControls", () => {
     render(<MicControls {...baseProps({ hint: "Mic is busy elsewhere" })} />);
     expect(screen.getByText("Mic is busy elsewhere")).toBeInTheDocument();
   });
+
+  test("hideDevicePicker omits device select but keeps boost and chime controls", () => {
+    const devices = [
+      { deviceId: "a", label: "Built-in Mic", kind: "audioinput", groupId: "g" },
+    ] as unknown as MediaDeviceInfo[];
+    render(
+      <MicControls
+        {...baseProps({ devices, selectedPickerSlot: 0, isLive: true, hideDevicePicker: true })}
+      />
+    );
+    expect(screen.queryByTestId("mic-device-select")).toBeNull();
+    expect(screen.getByTestId("mic-gain-slider")).toBeInTheDocument();
+    expect(screen.getByTestId("recording-chime-enabled")).toBeInTheDocument();
+  });
 });
 
 describe("meterColor", () => {

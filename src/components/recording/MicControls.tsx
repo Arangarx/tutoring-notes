@@ -46,6 +46,8 @@ export type MicControlsProps = {
   hint?: string;
   /** When true, omit the full-width level meter (host shows inline meter elsewhere). */
   hideLevelMeter?: boolean;
+  /** When true, omit the device picker (host shows on-page picker elsewhere). */
+  hideDevicePicker?: boolean;
   /** Play a short sound (and vibrate on mobile) when approaching max recording length. */
   chimeEnabled: boolean;
   onChimeEnabledChange: (enabled: boolean) => void;
@@ -69,6 +71,7 @@ export default function MicControls({
   chimeVolume,
   onChimeVolumeChange,
   hideLevelMeter,
+  hideDevicePicker,
 }: MicControlsProps) {
   const pickerDisabled = lockDevice || (!isLive && devices.length === 0);
   const sliderDisabled = !isLive;
@@ -96,63 +99,65 @@ export default function MicControls({
       }}
     >
       {/* Device picker */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <span
-          style={{
-            minWidth: 92,
-            fontSize: 13,
-            color: "var(--muted)",
-            fontWeight: 500,
-          }}
-        >
-          Mic:
-        </span>
-        <select
-          data-testid="mic-device-select"
-          className="mynk-wb-native-select"
-          aria-label="Microphone device"
-          value={devices.length === 0 ? "" : String(safeSlot)}
-          disabled={pickerDisabled}
-          onChange={(e) => {
-            const idx = Number(e.target.value);
-            if (Number.isFinite(idx)) onPickMicSlot(idx);
-          }}
-          title={selectedLabel || undefined}
-          style={{
-            flex: 1,
-            // `min-width: 0` lets a flex item shrink below its content size —
-            // without this, a long device name (e.g. "Microphone (Brio 101)
-            // (046d:094d)") forces the select wider than its slot and overflows
-            // the panel. The `max-width: 100%` is belt-and-suspenders for older
-            // engines that don't honour min-width: 0 on selects.
-            minWidth: 0,
-            maxWidth: "100%",
-            width: "auto", // override globals.css `select { width: 100% }`
-            padding: "6px 10px",
-            fontSize: 13,
-            margin: 0,
-            borderRadius: 6,
-            textOverflow: "ellipsis",
-            overflow: "hidden",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {devices.length === 0 ? (
-            <option value="">
-              {isLive ? "(default microphone)" : "(allow mic access to choose)"}
-            </option>
-          ) : (
-            devices.map((d, i) => (
-              <option
-                key={`${d.groupId}|${d.deviceId}|${i}`}
-                value={String(i)}
-              >
-                {d.label || `Microphone ${i + 1}`}
+      {!hideDevicePicker && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span
+            style={{
+              minWidth: 92,
+              fontSize: 13,
+              color: "var(--muted)",
+              fontWeight: 500,
+            }}
+          >
+            Mic:
+          </span>
+          <select
+            data-testid="mic-device-select"
+            className="mynk-wb-native-select"
+            aria-label="Microphone device"
+            value={devices.length === 0 ? "" : String(safeSlot)}
+            disabled={pickerDisabled}
+            onChange={(e) => {
+              const idx = Number(e.target.value);
+              if (Number.isFinite(idx)) onPickMicSlot(idx);
+            }}
+            title={selectedLabel || undefined}
+            style={{
+              flex: 1,
+              // `min-width: 0` lets a flex item shrink below its content size —
+              // without this, a long device name (e.g. "Microphone (Brio 101)
+              // (046d:094d)") forces the select wider than its slot and overflows
+              // the panel. The `max-width: 100%` is belt-and-suspenders for older
+              // engines that don't honour min-width: 0 on selects.
+              minWidth: 0,
+              maxWidth: "100%",
+              width: "auto", // override globals.css `select { width: 100% }`
+              padding: "6px 10px",
+              fontSize: 13,
+              margin: 0,
+              borderRadius: 6,
+              textOverflow: "ellipsis",
+              overflow: "hidden",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {devices.length === 0 ? (
+              <option value="">
+                {isLive ? "(default microphone)" : "(allow mic access to choose)"}
               </option>
-            ))
-          )}
-        </select>
-      </div>
+            ) : (
+              devices.map((d, i) => (
+                <option
+                  key={`${d.groupId}|${d.deviceId}|${i}`}
+                  value={String(i)}
+                >
+                  {d.label || `Microphone ${i + 1}`}
+                </option>
+              ))
+            )}
+          </select>
+        </div>
+      )}
 
       {/* Gain slider */}
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

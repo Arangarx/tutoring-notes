@@ -5685,6 +5685,7 @@ export function WhiteboardWorkspaceClient({
           chimeVolume: workspaceAudio.chimeVolume,
           onChimeVolumeChange: workspaceAudio.setChimeVolume,
           hideLevelMeter: true as const,
+          hideDevicePicker: true as const,
         }
       : undefined;
   const overlayMicNode = (
@@ -6737,7 +6738,7 @@ export function WhiteboardWorkspaceClient({
         onSessionModeChange={(m) => setSessionMode(m)}
         micControlNode={overlayMicNode}
         camControlNode={overlayCamNode}
-        micPickerNode={role === "student" ? overlayMicPickerNode : undefined}
+        micPickerNode={overlayMicPickerNode}
         camPickerNode={overlayCamPickerNode}
         avTilesNode={overlayAVTilesNode}
         onCopyStudentLink={role === "tutor" ? handleCopyStudentLink : undefined}

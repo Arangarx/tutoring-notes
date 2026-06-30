@@ -1612,20 +1612,35 @@ test.describe(
           await expect(tutorPage.getByTestId("wb-waiting-overlay")).toBeVisible({
             timeout: 10_000,
           });
+          await waitForWbE2eBridge(tutorPage, "tutor");
 
-          // Device pickers container is rendered inside the overlay (camera on-page; mic via dropdown).
+          // Device pickers container is rendered inside the overlay (mic + camera on-page).
           const devicePickers = tutorPage.getByTestId(
             "wb-waiting-overlay-device-pickers"
           );
           await expect(devicePickers).toBeVisible({ timeout: 10_000 });
 
-          // Tutor mic device: in-dropdown on activity-bar control, not on-page AudioControls.
+          // Tutor mic device: on-page AudioControls picker.
+          const micSelect = devicePickers.getByTestId("audio-device-select");
+          await expect(micSelect).toBeVisible({ timeout: 5_000 });
+
+          // Tutor dropdown: boost/chime only — no MicControls device picker.
+          const tutorMicSettings = tutorPage
+            .getByTestId("wb-waiting-overlay")
+            .getByTestId("wb-topbar-mic-settings");
+          await expect(tutorMicSettings).toBeVisible({ timeout: 5_000 });
+          await tutorMicSettings.click();
+          const tutorPopover = tutorPage
+            .getByTestId("wb-waiting-overlay")
+            .locator(".mynk-wb-mic-popover");
+          await expect(tutorPopover).toBeVisible({ timeout: 5_000 });
+          await expect(tutorPopover.getByTestId("mic-gain-slider")).toBeVisible({
+            timeout: 5_000,
+          });
           await expect(
-            tutorPage
-              .getByTestId("wb-waiting-overlay")
-              .getByTestId("wb-topbar-mic-settings")
+            tutorPopover.getByTestId("recording-chime-enabled")
           ).toBeVisible({ timeout: 5_000 });
-          await expect(devicePickers.getByTestId("audio-device-select")).toHaveCount(0);
+          await expect(tutorPopover.getByTestId("mic-device-select")).toHaveCount(0);
 
           // Camera picker (VideoControls) is present + interactable.
           const camSelect = devicePickers.getByTestId("video-device-select");
@@ -2126,6 +2141,13 @@ test.describe(
           });
           await expect(
             tutorPopover.getByTestId("recording-chime-enabled")
+          ).toBeVisible({ timeout: 5_000 });
+          await expect(tutorPopover.getByTestId("mic-device-select")).toHaveCount(0);
+          // Tutor on-page mic picker (AudioControls).
+          await expect(
+            tutorPage
+              .getByTestId("wb-waiting-overlay-device-pickers")
+              .getByTestId("audio-device-select")
           ).toBeVisible({ timeout: 5_000 });
           // Student dropdown absent — no gain/chime in overlay.
           await expect(
