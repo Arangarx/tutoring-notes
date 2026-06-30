@@ -2612,20 +2612,74 @@ test.describe(
       async ({ browser }) => {
         test.setTimeout(30_000);
 
-        // Seed TWO child sessions with different learner profiles so
-        // TEST_LEARNER_B is authenticated but NOT a participant of sessionA.
+        // Seed sessionA with the standard TEST_LEARNER as its participant.
         const sessionA = await seedWbLiveSyncSession();
-        const sessionB = await seedWbLiveSyncSession();
+
+        // Seed a GENUINELY SEPARATE learner B (distinct AccountHolder +
+        // LearnerProfile + LearnerCredential) who is NOT a participant of
+        // sessionA. NOTE: seedWbLiveSyncSession() is idempotent on the fixed
+        // TEST_LEARNER identity, so two calls would share the SAME profile and
+        // BOTH seed a SessionParticipant row for sessionA — making "learner B"
+        // an actual participant and defeating this boundary test. We must
+        // construct a distinct identity explicitly (mirrors the line-45 test).
+        const prisma = new PrismaClient();
+        const learnerBPin = "AltPin!789";
+        const learnerBHandle = "pwstudentb@pwfamilyb";
+        try {
+          const pinHash = await bcrypt.hash(learnerBPin, 10);
+          const ahB = await prisma.accountHolder.upsert({
+            where: { email: "pw-learner-b@test.local" },
+            create: {
+              email: "pw-learner-b@test.local",
+              displayName: "Playwright Parent B",
+              familyId: "pwfamilyb",
+              emailVerifiedAt: new Date("2026-01-01"),
+            },
+            update: { emailVerifiedAt: new Date("2026-01-01") },
+            select: { id: true },
+          });
+
+          const existingCredB = await prisma.learnerCredential.findUnique({
+            where: {
+              accountHolderId_username: { accountHolderId: ahB.id, username: "pwstudentb" },
+            },
+            select: { learnerProfileId: true },
+          });
+
+          if (existingCredB) {
+            await prisma.learnerCredential.update({
+              where: {
+                accountHolderId_username: { accountHolderId: ahB.id, username: "pwstudentb" },
+              },
+              data: { secretHash: pinHash },
+            });
+          } else {
+            const profileB = await prisma.learnerProfile.create({
+              data: {
+                accountHolderId: ahB.id,
+                displayName: "Playwright Learner B",
+                accessMode: "child_pin_required",
+              },
+              select: { id: true },
+            });
+            await prisma.learnerCredential.create({
+              data: {
+                learnerProfileId: profileB.id,
+                accountHolderId: ahB.id,
+                username: "pwstudentb",
+                secretHash: pinHash,
+              },
+            });
+          }
+          // Deliberately NO SessionParticipant for (sessionA, learnerB).
+        } finally {
+          await prisma.$disconnect();
+        }
 
         const ctx = await browser.newContext();
         try {
-          // Log in as learner from sessionB — gets a cookie that is NOT a
-          // participant of sessionA (different student/learnerProfile).
-          await loginLearnerInContext(
-            ctx,
-            sessionB.learnerHandle,
-            sessionB.learnerPin
-          );
+          // Log in as learner B — a cookie that is NOT a participant of sessionA.
+          await loginLearnerInContext(ctx, learnerBHandle, learnerBPin);
 
           const page = await ctx.newPage();
           const response = await page.goto(
@@ -2636,6 +2690,83 @@ test.describe(
           // Child session: non-participant learner cookie + no AH path
           // → fail closed → 404 (security boundary must remain intact).
           expect(response?.status()).toBe(404);
+        } finally {
+          await ctx.close();
+        }
+      }
+    );
+
+    // -----------------------------------------------------------------------
+    // G7. POLL AUTH-PARITY — adult self-learner with a STALE non-participant
+    //     child learner cookie + AH auth. The join PAGE already falls through
+    //     to the AH path, but the join-timer POLL used to bind the stale child
+    //     cookie unconditionally → findSessionParticipantRow(child) null → 404
+    //     → client maps 404 → link_invalid. Waiting room flashes then dies.
+    //
+    //     Fix mirrors the page: the poll honors the learner cookie only if it is
+    //     a participant of THIS session, else falls through to the AH self-learner
+    //     path. Expectation: room stays LIVE (no link_invalid).
+    //
+    //     RED on pre-fix code; GREEN after.
+    // -----------------------------------------------------------------------
+    test(
+      "adult self-learner with stale non-participant child cookie + AH auth → join-timer poll stays LIVE (no link_invalid)",
+      { tag: [TAG.WB_PRESENCE, TAG.WB_SYNC] },
+      async ({ browser }) => {
+        test.setTimeout(90_000);
+
+        // Seed a CHILD session to mint TEST_LEARNER credentials (the stale cookie).
+        const childSession = await seedWbLiveSyncSession();
+        // Seed a SELF-LEARNER session — self-learner IS a participant here, but
+        // TEST_LEARNER (the child) is NOT.
+        const selfSession = await seedSelfLearnerWbSession();
+
+        const ctx = await browser.newContext();
+        try {
+          // Stale child learner cookie (NOT a participant of selfSession).
+          await loginLearnerInContext(
+            ctx,
+            childSession.learnerHandle,
+            childSession.learnerPin
+          );
+          // Adult self-learner AH cookie (owns selfSession's self-learner profile).
+          await loginAccountHolderInContext(
+            ctx,
+            selfSession.ahEmail,
+            selfSession.ahPassword
+          );
+
+          // PRIMARY ORACLE — exercise the join-timer poll directly with BOTH
+          // cookies present (exactly what the client poll sends). This is the
+          // decisive red/green signal for the auth-parity fix, free of any
+          // canvas/sync/key confound.
+          //
+          // Pre-fix: the route bound the stale child cookie unconditionally →
+          //   findSessionParticipantRow(child) null → 404.
+          // Post-fix: child cookie non-participant → falls through to the AH
+          //   self-learner path → 200 { live: true }.
+          const pollResp = await ctx.request.get(
+            `/api/whiteboard/${selfSession.whiteboardSessionId}/join-timer`
+          );
+          expect(pollResp.status()).toBe(200);
+          const pollBody = (await pollResp.json()) as {
+            live?: boolean;
+            reason?: string;
+          };
+          expect(pollBody.live).toBe(true);
+          expect(pollBody.reason).toBeUndefined();
+
+          // SECONDARY — the student stays in the room: the link_invalid copy
+          // must never appear after the poll has had time to fire.
+          const page = await ctx.newPage();
+          await page.goto(
+            `/join/${selfSession.whiteboardSessionId}#k=TESTKEY`,
+            { waitUntil: "domcontentloaded" }
+          );
+          // join-timer poll fires immediately + every 3.5s; wait past two cycles.
+          await page.waitForTimeout(8_000);
+          await expect(page.getByText(/usable anymore/)).not.toBeVisible();
+          await expect(page.getByText("Session has ended")).not.toBeVisible();
         } finally {
           await ctx.close();
         }

@@ -261,4 +261,72 @@ describe("GET /api/whiteboard/[sessionId]/join-timer — learner-session branch"
     expect(j.activeMs).toBe(900_000);
     expect(j.sessionPhase).toBe("ACTIVE");
   });
+
+  /**
+   * CHANGE 1 — auth parity with the join page.
+   *
+   * A STALE child learner cookie (non-participant of THIS session) must NOT be
+   * trusted unconditionally. The poll must fall through to the account-holder
+   * self-learner path (resolveAhJoinLearnerProfileId) — mirroring the join page —
+   * and resolve the session's self-learner, which IS a participant → 200 live.
+   *
+   * Pre-fix: the route bound effectiveLearnerProfileId to the child cookie
+   * unconditionally → findSessionParticipantRow(child) null → 404 → link_invalid.
+   */
+  it("200 live:true when stale child cookie is non-participant but AH self-learner path resolves", async () => {
+    const childProfileId = "lpr_child_stale";
+    const selfProfileId = "lpr_self_learner";
+
+    getLearnerSessionMock.mockResolvedValue({ learnerProfileId: childProfileId });
+    // Participant lookup: child is NOT a participant; self-learner IS.
+    findUniqueParticipantMock.mockImplementation((args: {
+      where?: { whiteboardSessionId_learnerProfileId?: { learnerProfileId?: string } };
+    }) => {
+      const lp = args?.where?.whiteboardSessionId_learnerProfileId?.learnerProfileId;
+      if (lp === selfProfileId) {
+        return Promise.resolve({
+          id: "sp_self",
+          whiteboardSessionId: sessionId,
+          learnerProfileId: selfProfileId,
+          joinedAt: new Date("2026-06-01T10:00:00Z"),
+          leftAt: null,
+        });
+      }
+      return Promise.resolve(null);
+    });
+    // AH session present + resolves to the self-learner profile.
+    getAccountHolderSessionMock.mockResolvedValue({ accountHolderId: "ah_1" });
+    resolveAhJoinLearnerProfileIdMock.mockResolvedValue({
+      learnerProfileId: selfProfileId,
+    });
+    findUniqueSessionMock.mockResolvedValue({
+      activeMs: 120_000,
+      lastActiveAt: new Date("2026-06-01T10:02:00Z"),
+      sessionPhase: "ACTIVE",
+      endedAt: null,
+    });
+
+    const res = await GET(makeLearnerReq(sessionId), {
+      params: Promise.resolve({ sessionId }),
+    });
+    expect(res.status).toBe(200);
+    const j = (await res.json()) as { live?: boolean };
+    expect(j.live).toBe(true);
+  });
+
+  /**
+   * CHANGE 1 security boundary — a stale child cookie that is NOT a participant
+   * AND no account-holder fallback must still fail closed (404). Access is never
+   * broadened for a genuine non-participant principal.
+   */
+  it("404 when stale child cookie is non-participant and there is no AH fallback", async () => {
+    getLearnerSessionMock.mockResolvedValue({ learnerProfileId: "lpr_child_stale" });
+    findUniqueParticipantMock.mockResolvedValue(null); // not a participant
+    getAccountHolderSessionMock.mockResolvedValue(null); // no AH path
+
+    const res = await GET(makeLearnerReq(sessionId), {
+      params: Promise.resolve({ sessionId }),
+    });
+    expect(res.status).toBe(404);
+  });
 });
