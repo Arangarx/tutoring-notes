@@ -3,6 +3,7 @@ import { useEffect, useRef, type MutableRefObject } from "react";
 import type { WhiteboardSyncClient } from "@/lib/whiteboard/sync-client";
 import type { UseLiveAVReturn } from "@/hooks/useLiveAV";
 import type { WbParticipantRole } from "@/components/whiteboard/chrome/wb-role";
+import { isTouchPrimaryDevice } from "@/components/whiteboard/chrome/useWbLayoutMode";
 
 /**
  * useLiveAvCoordinator — owns the post-`useLiveAV` A/V reconcile effects that
@@ -38,6 +39,14 @@ export type UseLiveAvCoordinatorArgs = {
    * change here so a 2nd session re-arms cleanly.
    */
   studentHasConnectedOnceRef: MutableRefObject<boolean>;
+  /** Student join-gate reason (null = joinable); blocks A/V bootstrap. */
+  joinUnavailableReason: string | null;
+  /** Student has left the session (blocks A/V bootstrap). */
+  hasLeft: boolean;
+  /** Currently-open chrome menu (student overflow triggers device refresh). */
+  openMenu: string | null;
+  /** Browser camera permission state (drives camera-on-by-default). */
+  hasCamPermission: UseLiveAVReturn["hasCamPermission"];
 };
 
 export function useLiveAvCoordinator({
@@ -48,7 +57,65 @@ export function useLiveAvCoordinator({
   whiteboardSessionId,
   liveAvRef,
   studentHasConnectedOnceRef,
+  joinUnavailableReason,
+  hasLeft,
+  openMenu,
+  hasCamPermission,
 }: UseLiveAvCoordinatorArgs): void {
+  // Student A/V bootstrap: run when sync connects (and on refresh reconnect),
+  // not only when the client object exists — pickers must work before sync is up.
+  useEffect(() => {
+    if (role !== "student") return;
+    if (!studentSyncClient) return;
+    if (joinUnavailableReason !== null || hasLeft) return;
+
+    const bootstrapAv = () => {
+      void (async () => {
+        if (
+          !liveAvRef.current.localAudioStream &&
+          !liveAvRef.current.localVideoStream
+        ) {
+          // Bundled GUM is for touch only (facingMode + single negotiation).
+          // Desktop webcams fail OverconstrainedError on facingMode:user and
+          // break mic+cam entirely (Andrew 2026-06-24 wife desktop smoke).
+          if (isTouchPrimaryDevice()) {
+            await liveAvRef.current.requestMicAndCam();
+          } else {
+            await liveAvRef.current.requestMic();
+            await liveAvRef.current.requestCam();
+          }
+          return;
+        }
+        if (!liveAvRef.current.localAudioStream) {
+          await liveAvRef.current.requestMic();
+        }
+        if (!liveAvRef.current.localVideoStream) {
+          await liveAvRef.current.requestCam();
+        }
+      })();
+    };
+
+    if (studentSyncClient.isConnected()) {
+      bootstrapAv();
+    }
+
+    const offConnect = studentSyncClient.onConnect(() => {
+      bootstrapAv();
+    });
+    return () => {
+      offConnect();
+    };
+  }, [role, studentSyncClient, joinUnavailableReason, hasLeft, liveAvRef]);
+
+  // Refresh device lists when student opens overflow (touch has no top-bar
+  // ▾ popover).
+  useEffect(() => {
+    if (role !== "student") return;
+    if (openMenu !== "topbar-more" && openMenu !== "more") return;
+    void liveAvRef.current.refreshAudioDeviceList();
+    void liveAvRef.current.refreshVideoDeviceList();
+  }, [role, openMenu, liveAvRef]);
+
   // Student reconnect: replay ICE for all peers after sync reconnect.
   const sawStudentDisconnectRef = useRef(false);
   useEffect(() => {
@@ -150,4 +217,16 @@ export function useLiveAvCoordinator({
     studentHasConnectedOnceRef.current = false;
     prevSyncPeerCountRef.current = 0;
   }, [whiteboardSessionId, studentHasConnectedOnceRef]);
+
+  // Camera-on-by-default: auto-enable the camera when the browser Permissions
+  // API confirms it was already granted (e.g. a subsequent session in the same
+  // browser). Runs at most once per mount. Does NOT nag if denied or unknown.
+  const hasAutoRequestedCamRef = useRef(false);
+  useEffect(() => {
+    if (hasCamPermission !== "granted") return;
+    if (liveAvRef.current.localVideoStream) return;
+    if (hasAutoRequestedCamRef.current) return;
+    hasAutoRequestedCamRef.current = true;
+    void liveAvRef.current.requestCam();
+  }, [hasCamPermission, liveAvRef]);
 }

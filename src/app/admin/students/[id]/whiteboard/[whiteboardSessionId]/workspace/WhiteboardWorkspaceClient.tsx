@@ -148,7 +148,6 @@ import {
 } from "@/components/whiteboard/chrome/WbStrokePropsPanel";
 import {
   isTouchLayout,
-  isTouchPrimaryDevice,
   useWbLayoutMode,
 } from "@/components/whiteboard/chrome/useWbLayoutMode";
 import { LiveBoardChrome } from "@/components/whiteboard/chrome/LiveBoardChrome";
@@ -1885,61 +1884,10 @@ export function WhiteboardWorkspaceClient({
   const liveAvRef = useRef(liveAv);
   liveAvRef.current = liveAv;
 
-  // Student A/V bootstrap: run when sync connects (and on refresh reconnect), not
-  // only when the client object exists — pickers must work before sync is up.
-  useEffect(() => {
-    if (role !== "student") return;
-    if (!studentSyncClient) return;
-    if (joinUnavailableReason !== null || hasLeft) return;
-
-    const bootstrapAv = () => {
-      void (async () => {
-        if (!liveAv.localAudioStream && !liveAv.localVideoStream) {
-          // Bundled GUM is for touch only (facingMode + single negotiation).
-          // Desktop webcams fail OverconstrainedError on facingMode:user and
-          // break mic+cam entirely (Andrew 2026-06-24 wife desktop smoke).
-          if (isTouchPrimaryDevice()) {
-            await liveAv.requestMicAndCam();
-          } else {
-            await liveAv.requestMic();
-            await liveAv.requestCam();
-          }
-          return;
-        }
-        if (!liveAv.localAudioStream) {
-          await liveAv.requestMic();
-        }
-        if (!liveAv.localVideoStream) {
-          await liveAv.requestCam();
-        }
-      })();
-    };
-
-    if (studentSyncClient.isConnected()) {
-      bootstrapAv();
-    }
-
-    const offConnect = studentSyncClient.onConnect(() => {
-      bootstrapAv();
-    });
-    return () => {
-      offConnect();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role, studentSyncClient, joinUnavailableReason, hasLeft]);
-
-  // Refresh device lists when student opens overflow (touch has no top-bar ▾ popover).
-  useEffect(() => {
-    if (role !== "student") return;
-    if (openMenu !== "topbar-more" && openMenu !== "more") return;
-    void liveAv.refreshAudioDeviceList();
-    void liveAv.refreshVideoDeviceList();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role, openMenu]);
-
-  // A/V reconcile effects extracted into useLiveAvCoordinator (p1b): symmetric
-  // sync-reconnect mesh-restart (student + tutor), tutor roster-rejoin restart,
-  // and per-session latch reset. Behavior-preserving move — see the hook.
+  // A/V reconcile effects extracted into useLiveAvCoordinator (p1b): student
+  // bootstrap, device-list refresh, symmetric sync-reconnect mesh-restart
+  // (student + tutor), tutor roster-rejoin restart, per-session latch reset,
+  // and camera-on-by-default. Behavior-preserving move — see the hook.
   useLiveAvCoordinator({
     role,
     sync,
@@ -1948,6 +1896,10 @@ export function WhiteboardWorkspaceClient({
     whiteboardSessionId,
     liveAvRef,
     studentHasConnectedOnceRef,
+    joinUnavailableReason,
+    hasLeft,
+    openMenu,
+    hasCamPermission: liveAv.hasCamPermission,
   });
 
   // Fix 2 (A4 adversarial item): latch everBothPresentRef on first WebRTC
@@ -4554,19 +4506,6 @@ export function WhiteboardWorkspaceClient({
     }
     liveAvRef.current.toggleMic();
   }, []);
-
-  // Camera-on-by-default: auto-enable the camera when the browser
-  // Permissions API confirms it was already granted (e.g. on a
-  // subsequent session in the same browser). Runs at most once per
-  // mount. Does NOT nag if permission is denied or unknown.
-  const hasAutoRequestedCamRef = useRef(false);
-  useEffect(() => {
-    if (liveAv.hasCamPermission !== "granted") return;
-    if (liveAvRef.current.localVideoStream) return;
-    if (hasAutoRequestedCamRef.current) return;
-    hasAutoRequestedCamRef.current = true;
-    void liveAvRef.current.requestCam();
-  }, [liveAv.hasCamPermission]);
 
   const roughnessLabel =
     roughness === 0 ? "Architect" : roughness === 1 ? "Artist" : "Cartoon";
