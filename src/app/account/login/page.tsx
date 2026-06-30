@@ -19,7 +19,7 @@ function AccountLoginForm() {
       : notice === "reset_ok"
         ? "Your password was updated. Sign in with your new password."
         : notice === "link_already_used"
-          ? "That verification link has already been used — your account is active. Sign in below."
+          ? "Your email is already verified — sign in below."
           : null;
 
   // Messages for wall-redirect sources (notes auth wall + session state).
