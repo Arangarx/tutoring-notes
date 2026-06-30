@@ -172,3 +172,32 @@ Corrects the item-6 FAIL — confirm the d0cd1b9 preview is **READY** before run
 
 - [ ] Addendum 2 PASS
 - [ ] Addendum 2 FAIL
+
+---
+
+## Addendum 3 (2026-06-30, tip e667c97): tutor mic FULL dropdown panel re-confirm
+
+Corrects item 7 — confirm the e667c97 preview is **READY** before running.
+
+### 8. Tutor waiting-room mic — FULL MicControls dropdown restored
+
+**Action:** Start a session as TUTOR. In the WAITING ROOM, open the mic control's dropdown (caret next to the activity-bar mic button).
+
+**Expect:** The dropdown shows the FULL recorder panel — Mic device picker, "Browser boost" slider, "Time alert sound" checkbox + Volume, and helper text — i.e. the same panel as the live top-bar mic dropdown (matches the screenshot Andrew provided). Both tutor and student keep the activity-bar mic + camera toggles and the inline animating meter. Student waiting-room mic still has NO dropdown (its mic picker stays on-page). Tutor has no duplicate on-page mic picker.
+
+**Ignore this run:** Nothing.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** [automated: tests/integration/wb-session-lifecycle.spec.ts › bilateral parity (tutor dropdown shows mic-gain-slider + recording-chime-enabled; student none)] + [automated: src/__tests__/dom/WhiteboardWorkspaceClient.av-mount.dom.test.tsx › tutor full MicControls panel in popover, single meterBarRef host]
+
+**Notes:**
+
+---
+
+- [ ] Addendum 3 PASS
+- [ ] Addendum 3 FAIL
