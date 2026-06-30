@@ -589,13 +589,17 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
     expect(screen.getByTestId("av-controls")).toBeTruthy();
   });
 
-  test("tutor waiting room: exactly one meterBarRef host (overlay chip, not duplicate WbTopBarMicControl)", async () => {
+  test("tutor waiting room: overlay Live control present, exactly one meterBarRef host (not duplicate WbTopBarMicControl)", async () => {
     await renderWorkspace({ initialSessionPhase: "PENDING" });
 
     expect(screen.getByTestId("wb-waiting-overlay")).toBeTruthy();
     expect(countMeterBarRefHosts()).toBe(1);
-    expect(screen.getAllByTestId("wb-topbar-mic")).toHaveLength(1);
-    expect(screen.getByTestId("wb-overlay-mic-chip")).toBeTruthy();
+    // Both overlay WbTopBarMicControlLive and live top-bar WbTopBarMicControl
+    // render wb-topbar-mic during PENDING; exactly one meterBarRef host (the live top bar).
+    expect(screen.getAllByTestId("wb-topbar-mic")).toHaveLength(2);
+    const overlay = screen.getByTestId("wb-waiting-overlay");
+    expect(overlay.querySelector("[data-testid='wb-topbar-mic-toggle']")).toBeTruthy();
+    expect(overlay.querySelector(".mynk-wb-mic-meter")).toBeTruthy();
   });
 
   test("tutor ACTIVE session: live top-bar mic control with meterBarRef host present", async () => {

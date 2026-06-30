@@ -5662,49 +5662,31 @@ export function WhiteboardWorkspaceClient({
     sessionMode === "LIVE" ? !overlayStudentConnected : false;
   const overlayCanStart = !overlayCantStart;
 
-  // Pre-built mic control for the overlay. Student uses WbTopBarMicControlLive
-  // (own inline meter stream). Tutor uses chip-toggle — NOT WbTopBarMicControl:
-  // that component binds workspaceAudio.meterBarRef; the live top bar also
-  // binds the same ref, so both mounted in waiting room breaks post-Start meter.
-  const overlayMicNode =
-    role === "student" ? (
-      <WbTopBarMicControlLive
-        isMicMuted={liveAv.isMicMuted}
-        hasMicPermission={liveAv.hasMicPermission}
-        hasMicStream={liveAv.localAudioStream !== null}
-        audioDevices={liveAv.audioDevices ?? []}
-        selectedPickerSlot={liveAv.pickedMicSlot}
-        isAcquiring={liveAv.isAcquiring}
-        showInlineMeter
-        micStream={overlayMicMeterStream}
-        showDevicePickerInDropdown={false}
-        onToggleMute={liveAv.toggleMic}
-        onAcquireMic={handleAcquireMic}
-        onPickMicSlot={(slot) =>
-          void liveAv.setMicDeviceBySlot(slot, { force: true })
-        }
-        onRefreshDevices={() => void liveAv.refreshAudioDeviceList()}
-        disabled={studentAvPickerDisabled}
-      />
-    ) : (
-      <label
-        className={`mynk-wb-follow-toggle mynk-wb-chip${!liveAv.isMicMuted && liveAv.localAudioStream !== null ? " mynk-wb-chip--active" : ""}`}
-        data-testid="wb-overlay-mic-chip"
-      >
-        <input
-          type="checkbox"
-          checked={!liveAv.isMicMuted && liveAv.localAudioStream !== null}
-          aria-label={liveAv.isMicMuted || liveAv.localAudioStream === null ? "Mic off" : "Mic on"}
-          onChange={() => void handleTopBarMic()}
-        />
-        <span className="mynk-wb-menu-item__icon" aria-hidden="true">
-          <WbIconMic size={12} />
-        </span>
-        <span className="mynk-wb-follow-toggle__label" data-testid="wb-overlay-mic-chip-label">
-          {liveAv.isMicMuted || liveAv.localAudioStream === null ? "Mic off" : "Mic on"}
-        </span>
-      </label>
-    );
+  // Pre-built mic control for the overlay. Both tutor and student use
+  // WbTopBarMicControlLive with a cloned overlayMicMeterStream for inline
+  // metering — NOT WbTopBarMicControl, which binds workspaceAudio.meterBarRef.
+  // The live top bar (WbTopBarMicControl, ~line 6143) remains the sole
+  // meterBarRef host; the overlay's stream-based metering is independent.
+  const overlayMicNode = (
+    <WbTopBarMicControlLive
+      isMicMuted={liveAv.isMicMuted}
+      hasMicPermission={liveAv.hasMicPermission}
+      hasMicStream={liveAv.localAudioStream !== null}
+      audioDevices={liveAv.audioDevices ?? []}
+      selectedPickerSlot={liveAv.pickedMicSlot}
+      isAcquiring={liveAv.isAcquiring}
+      showInlineMeter
+      micStream={overlayMicMeterStream}
+      showDevicePickerInDropdown={false}
+      onToggleMute={liveAv.toggleMic}
+      onAcquireMic={handleAcquireMic}
+      onPickMicSlot={(slot) =>
+        void liveAv.setMicDeviceBySlot(slot, { force: true })
+      }
+      onRefreshDevices={() => void liveAv.refreshAudioDeviceList()}
+      disabled={role === "student" ? studentAvPickerDisabled : endingBusy}
+    />
+  );
 
   // Pre-built cam control node for the overlay — chip-toggle pattern (same CSS
   // as follow-toggle). Top-bar cam controls are unchanged.

@@ -56,9 +56,9 @@ export type WaitingRoomOverlayProps = {
   /** Called when the tutor changes the LIVE ↔ IN_PERSON toggle. */
   onSessionModeChange: (mode: WtrSessionMode) => void;
   /**
-   * Pre-built mic control node (tutor: WbTopBarMicControl;
-   * student: WbTopBarMicControlLive). Already wired to liveAv in the
-   * workspace — no A/V coupling needed here.
+   * Pre-built mic control node (both roles: WbTopBarMicControlLive with
+   * cloned-stream inline meter). Already wired to liveAv in the workspace —
+   * no A/V coupling needed here.
    */
   micControlNode: ReactNode;
   /**

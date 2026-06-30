@@ -2044,7 +2044,7 @@ test.describe(
     );
 
     test(
-      "student waiting-room mic control shows inline volume meter (parity with tutor)",
+      "both roles: waiting-room overlay shows inline volume meter (bilateral parity)",
       async ({ browser }) => {
         test.setTimeout(180_000);
         const session = await seedWbPendingLiveSyncSession();
@@ -2092,14 +2092,19 @@ test.describe(
             tutorPage.getByTestId("wb-waiting-overlay")
           ).toBeVisible({ timeout: 10_000 });
 
+          // Student: overlay has WbTopBarMicControlLive with inline meter.
           const studentMic = studentPage
             .getByTestId("wb-waiting-overlay")
             .getByTestId("wb-topbar-mic-toggle");
           await expect(studentMic).toBeVisible({ timeout: 10_000 });
           await expect(studentMic.locator(".mynk-wb-mic-meter")).toBeVisible();
 
-          const tutorMic = tutorPage.getByTestId("wb-overlay-mic-chip");
+          // Tutor: overlay also has WbTopBarMicControlLive with inline meter (not chip).
+          const tutorMic = tutorPage
+            .getByTestId("wb-waiting-overlay")
+            .getByTestId("wb-topbar-mic-toggle");
           await expect(tutorMic).toBeVisible({ timeout: 10_000 });
+          await expect(tutorMic.locator(".mynk-wb-mic-meter")).toBeVisible();
 
           await tutorCtx.close();
         } finally {
