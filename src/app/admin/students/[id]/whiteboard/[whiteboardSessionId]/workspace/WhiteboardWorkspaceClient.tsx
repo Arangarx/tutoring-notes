@@ -68,6 +68,7 @@ import {
 import { useAudioFlowConfirmation } from "@/hooks/useAudioFlowConfirmation";
 import { useCollaboratorPointers } from "@/hooks/useCollaboratorPointers";
 import { useLiveAV } from "@/hooks/useLiveAV";
+import { useLiveAvCoordinator } from "@/hooks/useLiveAvCoordinator";
 import AudioControls from "@/components/av/AudioControls";
 import VideoControls from "@/components/av/VideoControls";
 import { AVTilesPanel } from "@/components/av/AVTilesPanel";
@@ -1936,33 +1937,18 @@ export function WhiteboardWorkspaceClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role, openMenu]);
 
-  // Student reconnect: replay ICE for all peers after sync reconnect
-  const sawStudentDisconnectRef = useRef(false);
-  useEffect(() => {
-    if (role !== "student" || !studentSyncClient) {
-      sawStudentDisconnectRef.current = false;
-      return;
-    }
-    const offConnect = studentSyncClient.onConnect(() => {
-      const shouldRestart = sawStudentDisconnectRef.current;
-      sawStudentDisconnectRef.current = false;
-      if (!shouldRestart) return;
-      for (const p of liveAvRef.current.participants) {
-        try {
-          liveAvRef.current.reconnectPeer(p.peerId);
-        } catch {
-          //
-        }
-      }
-    });
-    const offDisconnect = studentSyncClient.onDisconnect(() => {
-      sawStudentDisconnectRef.current = true;
-    });
-    return () => {
-      offConnect();
-      offDisconnect();
-    };
-  }, [role, studentSyncClient]);
+  // A/V reconcile effects extracted into useLiveAvCoordinator (p1b): symmetric
+  // sync-reconnect mesh-restart (student + tutor), tutor roster-rejoin restart,
+  // and per-session latch reset. Behavior-preserving move — see the hook.
+  useLiveAvCoordinator({
+    role,
+    sync,
+    studentSyncClient,
+    peerCount,
+    whiteboardSessionId,
+    liveAvRef,
+    studentHasConnectedOnceRef,
+  });
 
   // Fix 2 (A4 adversarial item): latch everBothPresentRef on first WebRTC
   // reachability rather than sync-join. This prevents the false
@@ -2188,88 +2174,6 @@ export function WhiteboardWorkspaceClient({
     },
     [whiteboardSessionId]
   );
-
-  // Phase 4c: sync-reconnect → mesh.restart(peerId) for each current
-  // peer (the 4b deferral). Sync-client reconnects automatically on
-  // socket-level disconnects; peer-mesh's auto-restart only fires on
-  // ICE-failed (longer timeout). Restarting on sync re-connect
-  // recovers in-flight negotiations that lost their SDP mid-flight.
-  //
-  // We track "saw a disconnect since the last connect" rather than
-  // raw connected state because the FIRST `onConnect` after mount
-  // is the natural socket handshake — peer-mesh is being set up for
-  // the first time and there's no prior in-flight negotiation to
-  // recover. Only the disconnect→reconnect transition needs
-  // mesh.restart.
-  const sawDisconnectSinceLastConnectRef = useRef(false);
-  useEffect(() => {
-    if (!sync) {
-      sawDisconnectSinceLastConnectRef.current = false;
-      return;
-    }
-    const offConnect = sync.onConnect(() => {
-      const shouldRestart = sawDisconnectSinceLastConnectRef.current;
-      sawDisconnectSinceLastConnectRef.current = false;
-      if (!shouldRestart) return;
-      const current = liveAvRef.current.participants;
-      if (current.length === 0) return;
-      console.log(
-        `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} avx=${whiteboardSessionId} sync-reconnect peers=${current.length}`
-      );
-      for (const p of current) {
-        try {
-          liveAvRef.current.reconnectPeer(p.peerId);
-        } catch (err) {
-          console.warn(
-            `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} mesh.restart threw peer=${p.peerId}`,
-            err
-          );
-        }
-      }
-    });
-    const offDisconnect = sync.onDisconnect(() => {
-      sawDisconnectSinceLastConnectRef.current = true;
-    });
-    return () => {
-      offConnect();
-      offDisconnect();
-    };
-  }, [sync, whiteboardSessionId]);
-
-  // Tutor: when sync roster gains a student (0→≥1), restart mesh for stale PCs
-  // (e.g. student exit→rejoin with same sessionStorage peerId).
-  const prevSyncPeerCountRef = useRef(0);
-  useEffect(() => {
-    if (role !== "tutor") return;
-    const prev = prevSyncPeerCountRef.current;
-    prevSyncPeerCountRef.current = peerCount;
-    if (prev !== 0 || peerCount < 1) return;
-    const current = liveAvRef.current.participants;
-    if (current.length === 0) return;
-    console.log(
-      `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} avx=${whiteboardSessionId}` +
-        ` event=sync-roster-rejoin peers=${current.length}`
-    );
-    for (const p of current) {
-      try {
-        liveAvRef.current.reconnectPeer(p.peerId);
-      } catch (err) {
-        console.warn(
-          `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} sync-roster-rejoin threw peer=${p.peerId}`,
-          err
-        );
-      }
-    }
-  }, [role, peerCount, whiteboardSessionId]);
-
-  // Additive: reset per-session latches when whiteboardSessionId changes so
-  // a 2nd session starts with a clean slate. Writing refs directly is safe —
-  // both are idempotent latches that only ever move from false→true in normal
-  // flow; resetting to false here re-arms them for the new session.
-  useEffect(() => {
-    studentHasConnectedOnceRef.current = false;
-    prevSyncPeerCountRef.current = 0;
-  }, [whiteboardSessionId]);
 
   const lifecycleInputStreams = useMemo<
     ReadonlyMap<string, StreamHealth>
