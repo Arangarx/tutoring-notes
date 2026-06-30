@@ -83,6 +83,7 @@ import { WbTopBarCamControlLive } from "@/components/whiteboard/chrome/WbTopBarC
 import { WbThemeToggle } from "@/components/whiteboard/chrome/WbThemeToggle";
 import { WbExitButton } from "@/components/whiteboard/chrome/WbExitButton";
 import { WbStudentConnectionStatus } from "@/components/whiteboard/chrome/WbStudentConnectionStatus";
+import { WbUndoRedoButtons } from "@/components/whiteboard/chrome/WbUndoRedoButtons";
 import {
   useWhiteboardRecorder,
   type ResumeResult,
@@ -5709,28 +5710,13 @@ export function WhiteboardWorkspaceClient({
 
           <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
 
-          <button
-            type="button"
-            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__desktop-only"
-            title="Undo (Ctrl+Z)"
-            aria-label="Undo"
+          <WbUndoRedoButtons
+            undoTestId="wb-student-undo"
+            redoTestId="wb-student-redo"
             disabled={!studentConnected}
-            data-testid="wb-student-undo"
-            onClick={() => triggerUndo()}
-          >
-            <WbIconUndo />
-          </button>
-          <button
-            type="button"
-            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__desktop-only"
-            title="Redo (Ctrl+Shift+Z)"
-            aria-label="Redo"
-            disabled={!studentConnected}
-            data-testid="wb-student-redo"
-            onClick={() => triggerRedo()}
-          >
-            <WbIconRedo />
-          </button>
+            onUndo={() => triggerUndo()}
+            onRedo={() => triggerRedo()}
+          />
 
           <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
 
@@ -5881,28 +5867,13 @@ export function WhiteboardWorkspaceClient({
 
           <span className="mynk-wb-topbar__sep mynk-wb-topbar__desktop-only" aria-hidden />
 
-          <button
-            type="button"
-            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__desktop-only"
-            title="Undo (Ctrl+Z)"
-            aria-label="Undo"
+          <WbUndoRedoButtons
+            undoTestId="wb-undo"
+            redoTestId="wb-redo"
             disabled={endingBusy}
-            data-testid="wb-undo"
-            onClick={() => triggerUndo()}
-          >
-            <WbIconUndo />
-          </button>
-          <button
-            type="button"
-            className="mynk-wb-tb-btn mynk-wb-tb-btn--icon mynk-wb-topbar__desktop-only"
-            title="Redo (Ctrl+Shift+Z)"
-            aria-label="Redo"
-            disabled={endingBusy}
-            data-testid="wb-redo"
-            onClick={() => triggerRedo()}
-          >
-            <WbIconRedo />
-          </button>
+            onUndo={() => triggerUndo()}
+            onRedo={() => triggerRedo()}
+          />
 
           <span
             className="mynk-wb-topbar__sep mynk-wb-topbar__inserts mynk-wb-topbar__desktop-only"
