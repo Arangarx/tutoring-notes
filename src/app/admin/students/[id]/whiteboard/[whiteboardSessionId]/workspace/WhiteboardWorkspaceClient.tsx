@@ -81,6 +81,7 @@ import { WbToolBtn } from "@/components/whiteboard/chrome/WbToolBtn";
 import { WbTopBarCamControl } from "@/components/whiteboard/chrome/WbTopBarCamControl";
 import { WbTopBarCamControlLive } from "@/components/whiteboard/chrome/WbTopBarCamControlLive";
 import { WbThemeToggle } from "@/components/whiteboard/chrome/WbThemeToggle";
+import { WbExitButton } from "@/components/whiteboard/chrome/WbExitButton";
 import {
   useWhiteboardRecorder,
   type ResumeResult,
@@ -1872,6 +1873,20 @@ export function WhiteboardWorkspaceClient({
   // useLiveAvCoordinator extraction threads in.
   const liveAvRef = useRef(liveAv);
   liveAvRef.current = liveAv;
+
+  const handleStudentExit = useCallback(() => {
+    wjgLog("student_exit");
+    liveAv.leaveAllPeers();
+    try {
+      studentSyncClient?.disconnect();
+    } catch (err) {
+      console.warn(
+        `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} student_exit disconnect failed`,
+        err
+      );
+    }
+    setHasLeft(true);
+  }, [wjgLog, liveAv, studentSyncClient, whiteboardSessionId]);
 
   // Fix 2 (A4 adversarial item): latch everBothPresentRef on first WebRTC
   // reachability rather than sync-join. This prevents the false
@@ -5581,29 +5596,7 @@ export function WhiteboardWorkspaceClient({
               onClick={(e) => e.stopPropagation()}
             >
               {renderTopbarOverflowControl("wb-student-topbar-overflow")}
-              <button
-                type="button"
-                className="mynk-wb-tb-btn mynk-wb-tb-btn--exit"
-                data-testid="wb-student-exit"
-                aria-label="Exit"
-                title="Exit"
-                onClick={() => {
-                  wjgLog("student_exit");
-                  liveAv.leaveAllPeers();
-                  try {
-                    studentSyncClient?.disconnect();
-                  } catch (err) {
-                    console.warn(
-                      `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} student_exit disconnect failed`,
-                      err
-                    );
-                  }
-                  setHasLeft(true);
-                }}
-              >
-                <WbIconEndSession size={14} />
-                <span className="mynk-wb-sr-only">Exit</span>
-              </button>
+              <WbExitButton onExit={handleStudentExit} />
             </div>
           </>
         ) : (
@@ -5760,29 +5753,7 @@ export function WhiteboardWorkspaceClient({
 
         <div className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing">
           {renderTopbarOverflowControl("wb-student-topbar-overflow")}
-          <button
-            type="button"
-            className="mynk-wb-tb-btn mynk-wb-tb-btn--exit"
-            data-testid="wb-student-exit"
-            aria-label="Exit"
-            title="Exit"
-            onClick={() => {
-              wjgLog("student_exit");
-              liveAv.leaveAllPeers();
-              try {
-                studentSyncClient?.disconnect();
-              } catch (err) {
-                console.warn(
-                  `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} student_exit disconnect failed`,
-                  err
-                );
-              }
-              setHasLeft(true);
-            }}
-          >
-            <WbIconEndSession size={14} />
-            <span className="mynk-wb-sr-only">Exit</span>
-          </button>
+          <WbExitButton onExit={handleStudentExit} />
         </div>
         </>
         )}
