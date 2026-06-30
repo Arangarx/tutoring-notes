@@ -131,15 +131,15 @@ Post-confirm fix at tip `2cabd94` — confirm the rebuilt preview is **READY** (
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Coverage:** [automated: tests/integration/wb-session-lifecycle.spec.ts › bilateral parity (student+tutor overlay mic toggle + meter)] + [automated: src/__tests__/dom/WhiteboardWorkspaceClient.av-mount.dom.test.tsx › single meterBarRef host]
+**Coverage:** [automated: tests/integration/wb-session-lifecycle.spec.ts › bilateral parity (student+tutor overlay mic toggle + meter)] + [automated: src/**tests**/dom/WhiteboardWorkspaceClient.av-mount.dom.test.tsx › single meterBarRef host]
 
-**Notes:**
+**Notes: You didn't bring back the drop down on the mic control.  That was only supposed to be gone for the student.**
 
 ---
 
 - [ ] Addendum PASS
-- [ ] Addendum FAIL
+- [x] Addendum FAIL
