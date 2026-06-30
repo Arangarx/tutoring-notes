@@ -37,7 +37,8 @@ Fill **Preview** with a markdown link whose URL is the verified Vercel `branchAl
 | **N/A with notes** (per item) | Checked = the item **does not apply as written** for this run or configuration (e.g. the feature under test is absent in the current build, or the setup genuinely cannot exercise it). **A Note explaining why is required.** Distinct from **SKIP** (a valid test deliberately not run this pass) and from **leaving all boxes unchecked** (not-yet-run / missed). Example: a smoke item for "Recording Start/Pause" when those controls no longer exist in the UI — N/A with notes, not SKIP and not blank. |
 | **SKIP** (per item) | Checked = test deliberately skipped this run — **reason required in Notes** (e.g. blocked by env, out of scope this pass, dependency not ready). Distinct from N/A with notes (item does not apply as written). |
 | **None checked** (per item) | Not yet run / missed — **not** the same as a deliberate SKIP or N/A with notes. Check exactly one box per item when the run is complete; leave all unchecked if not yet reached. |
-| **Notes** | Freeform observations, screenshots paths, console errors worth filing. SKIP and N/A with notes items must state why here. |
+| **Coverage** | **Agent-authored only** — automated test citations and disposition guidance (e.g. `[automated: <spec-file> › <test-name>]`, or "mark N/A with notes unless…"). Format: `**Coverage:** [automated: <spec> › <test>]` (prefix `[human-only: …]` when no automated test exists). Place **immediately before** `**Notes:**`. Do **not** put coverage citations in Notes. |
+| **Notes** | **Reserved for Andrew** — agents MUST leave this blank at authoring time. Andrew types observations, PASS/FAIL rationale, screenshots paths, and console errors here during the smoke run. SKIP and N/A with notes items: Andrew states why here when he runs smoke. |
 
 Run order: top to bottom unless a block says otherwise. Re-run **Cross-branch / post-merge** after integration merges.
 
@@ -79,9 +80,13 @@ Each numbered item **must** include all fields below **in this order**. Do not c
 - [ ] N/A with notes
 - [ ] SKIP
 
+**Coverage:**
+
 **Notes:**
 
 ```
+
+Agent-authored smokebooks: fill **Coverage** when citing automated tests or disposition guidance; leave **Notes** blank for Andrew.
 
 ### Worked example (reference richness — delete when copying)
 
@@ -99,6 +104,8 @@ Each numbered item **must** include all fields below **in this order**. Do not c
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
+
+**Coverage:**
 
 **Notes:**
 
@@ -123,6 +130,8 @@ Each numbered item **must** include all fields below **in this order**. Do not c
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
+
+**Coverage:**
 
 **Notes:**
 

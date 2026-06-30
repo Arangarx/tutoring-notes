@@ -124,6 +124,18 @@ Reclassified from a pre-master gate → near-immediate post-master follow-up: th
 
 ---
 
+## wb-wave5-polish confirm smoke triage (2026-06-29)
+
+> **Source:** Andrew hardware smoke of `wb-wave5-polish` @ [`f649c62`](https://github.com/Arangarx/tutoring-notes/commit/f649c62) — [`docs/handoff/wb-wave5-polish-confirm-2026-06-29.md`](handoff/wb-wave5-polish-confirm-2026-06-29.md).
+
+| Item | Priority | Notes |
+|------|----------|-------|
+| **WB-DELAYED-STROKE-UNDO — aborted line appears ~10s late and cannot be undone** | **High (reliability — investigate before fix)** | **Repro (Andrew hardware, 2026-06-29):** tutor clicked away from an open menu, started drawing a line, then **right-clicked** to abort/end the line; **~10 seconds later** the line appeared on the canvas; **neither tutor nor student could undo it** (Ctrl+Z and on-screen undo both ineffective). **Hypotheses:** (1) aborted-line interaction created a malformed/late-committed Excalidraw element that never entered the local history stack (so undo can't remove it); (2) ~10s delayed appearance suggests deferred-commit or sync apply-path timing — apply path uses `captureUpdate:"NEVER"`, which would explain un-undoable persistent content. **North-star violation:** un-undoable canvas data the tutor cannot remove. **Next:** root-cause investigation + Playwright/repro harness before fix. **Area tags:** whiteboard strokes / sync apply-path / history. |
+| **WB-UNDO-REDO-DISABLE — undo/redo toolbar buttons should disable when stack empty** | Low (UX/chrome) | Disable the **Undo** button when there is nothing to undo; disable **Redo** when there is nothing to redo. Drive enabled state from Excalidraw history stack depth in each direction. **Requested by Andrew 2026-06-29** (wb-wave5-polish confirm). |
+| **BL-VERIFY-SUCCESS-COPY — no "successfully verified" affirmation after verify-done** | Low (UX gap) | After successful email verification + sign-in (`/auth/verify-done` → dashboard), the user sees **no** affirmative "your email was verified" confirmation. Add success affirmation (toast/notice e.g. "Your email is verified" on landing). From wb-wave5-polish confirm item 3 (2026-06-29): *"Pass, but. Shouldn't there be a 'successfully verified' style copy instead of no copy at all?"* |
+
+---
+
 ## WB A/V UX (2026-06-18)
 
 | Item | Priority | Notes |

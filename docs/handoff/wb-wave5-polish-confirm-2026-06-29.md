@@ -22,7 +22,9 @@ This wave integrates the quick-wins (A/V remote initials, mic meter, camera cont
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:** [automated: tests/integration/wb-session-lifecycle.spec.ts › adult self-learner stale non-participant child cookie + AH auth → join-timer poll stays LIVE] — **human item:** real stale cookie + real account-holder login flow; run and mark PASS/FAIL here.
+**Coverage:** [automated: tests/integration/wb-session-lifecycle.spec.ts › adult self-learner stale non-participant child cookie + AH auth → join-timer poll stays LIVE] — **human item:** real stale cookie + real account-holder login flow; run and mark PASS/FAIL here.
+
+**Notes:**
 
 ---
 
@@ -40,7 +42,9 @@ This wave integrates the quick-wins (A/V remote initials, mic meter, camera cont
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:** [automated: tests/integration/wb-session-lifecycle.spec.ts › tutor ends session → authed student sees 'Session has ended' (not link_invalid)] — mostly automated; quick human confirm.
+**Coverage:** [automated: tests/integration/wb-session-lifecycle.spec.ts › tutor ends session → authed student sees 'Session has ended' (not link_invalid)] — mostly automated; quick human confirm.
+
+**Notes:**
 
 ---
 
@@ -78,7 +82,9 @@ This wave integrates the quick-wins (A/V remote initials, mic meter, camera cont
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:** Andrew already confirmed this on the liveboard branch (`afb3abf`). [automated: src/**tests**/dom/WhiteboardWorkspaceClient.av-mount.dom.test.tsx asserts single meterBarRef host] — mark **N/A with notes** (covered by Playwright + already confirmed) unless you want a quick re-glance.
+**Coverage:** Andrew already confirmed this on the liveboard branch (`afb3abf`). [automated: src/**tests**/dom/WhiteboardWorkspaceClient.av-mount.dom.test.tsx asserts single meterBarRef host] — mark **N/A with notes** (covered by Playwright + already confirmed) unless you want a quick re-glance.
+
+**Notes:**
 
 ---
 
@@ -96,7 +102,9 @@ This wave integrates the quick-wins (A/V remote initials, mic meter, camera cont
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:** [automated: tests/integration/wb-chrome-interactions.spec.ts › shapes flyout / more menu / single-open] — fixed a pre-existing duplicate-portal bug; mark **N/A with notes** (covered by gate) unless you want a quick human glance.
+**Coverage:** [automated: tests/integration/wb-chrome-interactions.spec.ts › shapes flyout / more menu / single-open] — fixed a pre-existing duplicate-portal bug; mark **N/A with notes** (covered by gate) unless you want a quick human glance.
+
+**Notes:**
 
 ---
 
