@@ -8,6 +8,8 @@ Re-smoke covers ONLY the 6 quick-win fixes below — Andrew's round-5 FAIL/PARTI
 
 ---
 
+
+
 ### 1. Remote off-camera tile shows initials (2a — round-5 item 2 FAIL "still black on the other end")
 
 **Action:** On the branch **Preview** URL, sign in as tutor and start a whiteboard session. Have the student join so both parties are in the **waiting room** with mutual A/V connected. Have the **student** turn their camera **OFF** — on the **tutor's** screen, inspect the student's remote video tile. Then have the **tutor** turn their camera **OFF** — on the **student's** screen, inspect the tutor's remote video tile.
@@ -18,16 +20,18 @@ Re-smoke covers ONLY the 6 quick-win fixes below — Andrew's round-5 FAIL/PARTI
 
 - [x] PASS
 - [ ] FAIL
-- [x] PARTIAL
+- [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Coverage:** `[human-only: remote track-mute rendering on real hardware — relay cannot propagate remote mute]`
 
 **Notes:**  
-**I initially passed this but in the second session we started for testing, I am seeing initials for the student even though their camera is on and student sees self. Turning their camera off and on does not fix it.**
+
 
 ---
+
+
 
 ### 2. Student mic meter animates even when muted (1a/3a — round-5 item 3 FAIL "no lighting up of bars when muted")
 
@@ -47,6 +51,8 @@ Re-smoke covers ONLY the 6 quick-win fixes below — Andrew's round-5 FAIL/PARTI
 
 ---
 
+
+
 ### 3. Waiting-room camera control style matches the mic control (1b — round-5 item 3 note "make the camera match")
 
 **Action:** In the **waiting room**, join as the **student**. Compare the student waiting-room **mic** control and **camera** control visually side by side in the overlay.
@@ -64,6 +70,8 @@ Re-smoke covers ONLY the 6 quick-win fixes below — Andrew's round-5 FAIL/PARTI
 **Notes:**
 
 ---
+
+
 
 ### 4. Mic picker no longer duplicated in the waiting-room dropdown (3b/1c — round-5 item 3 note "redundant to have it on the student view")
 
@@ -88,6 +96,8 @@ Re-smoke covers ONLY the 6 quick-win fixes below — Andrew's round-5 FAIL/PARTI
 
 ---
 
+
+
 ### 5. Adult self-learner login shows the correct verify-email message (7b — round-5 item 7 note "something went wrong instead of Please verify your email first")
 
 **Action:** Create/sign up a **self-learner** account but **do not** verify the email. Attempt to log in via the **claim-flow** login form (adult self-learner session link → account-holder login). Separately, attempt to log in via `**/account/login`** with the same unverified credentials.
@@ -108,9 +118,11 @@ Re-smoke covers ONLY the 6 quick-win fixes below — Andrew's round-5 FAIL/PARTI
 
 ---
 
+
+
 ### 6. Adult self-learner join no longer 404s due to a stale child cookie (404 fallback — round-5 item 7 "self-learner 404's on sign in")
 
-**Action:** In a browser that has previously attempted a **wrong child PIN** on a session link (leaving a stale `mynk_learner_session` cookie), open the **adult self-learner** session link and sign in as the account holder. *(This re-smoke exercises the stale-cookie fallback path only — if the learner was claimed/created **after** the session already existed there may still be a separate 404 with no `SessionParticipant` row; that is tracked as WB-ADULT-JOIN-ENABLEMENT B1 and is OUT of scope here.)*
+**Action:** In a browser that has previously attempted a **wrong child PIN** on a session link (leaving a stale `mynk_learner_session` cookie), open the **adult self-learner** session link and sign in as the account holder. *(This re-smoke exercises the stale-cookie fallback path only — if the learner was claimed/created **after** the session already existed there may still be a separate 404 with no* `SessionParticipant` *row; that is tracked as WB-ADULT-JOIN-ENABLEMENT B1 and is OUT of scope here.)*
 
 **Expect:** You reach the **waiting room** for the session — the stale non-participant learner cookie falls through to the account-holder path instead of 404ing.
 
@@ -131,6 +143,8 @@ Re-smoke covers ONLY the 6 quick-win fixes below — Andrew's round-5 FAIL/PARTI
 **Still broken: I had him as student use an incorrect pin for the child's session.  Then I started a new session for the self learner, and he pasted the link into the same tab of the browser, and got the 404 "Page not found"**
 
 ---
+
+
 
 ## Overall result
 

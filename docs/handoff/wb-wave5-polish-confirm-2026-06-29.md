@@ -1,0 +1,106 @@
+# wb-wave5-polish — combined confirm (waiting-polish quick-wins + join-timer fixes + liveboard-chrome chrome parity, integrated) — smoke runbook
+
+**Branch:** `wb-wave5-polish`
+**Tip commit:** [`f649c62`](https://github.com/Arangarx/tutoring-notes/commit/f649c62)
+**Preview:** [wb-wave5-polish combined preview](https://tutoring-notes-git-wb-wave5-polish-arangarx-5209s-projects.vercel.app)
+
+This wave integrates the quick-wins (A/V remote initials, mic meter, camera control style, waiting-room picker dedup, login convergence) plus newly-fixed join-timer bugs and the liveboard student-chrome parity + tutor mic-meter fix. Most behavior is Playwright-covered (jest 735/735, Playwright 105 passed / 0 failed on the integrated tip); this confirm targets the HUMAN/HARDWARE items Andrew specifically reported. **Confirm the preview deployment is READY (not BUILDING) before starting.**
+
+---
+
+### 1. Adult self-learner stale-cookie join (the key fix)
+
+**Action:** In a browser that previously typed a **wrong child PIN** on a session link (leaving a stale `mynk_learner_session` cookie), open the **adult self-learner** session link on the branch **Preview** URL. Sign in as the account holder.
+
+**Expect:** You land in and **stay** in the waiting room — **no** brief "This link isn't usable anymore" flash. (Previously: waiting room flashed then died to `link_invalid`.)
+
+**Ignore this run:** Nothing.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:** [automated: tests/integration/wb-session-lifecycle.spec.ts › adult self-learner stale non-participant child cookie + AH auth → join-timer poll stays LIVE] — **human item:** real stale cookie + real account-holder login flow; run and mark PASS/FAIL here.
+
+---
+
+### 2. Tutor ends session → authed student sees friendly copy
+
+**Action:** With an **authed student** in the session (in the room or waiting room), have the **tutor END** the session.
+
+**Expect:** The student sees **"Session has ended"** (friendly), **not** "This link isn't usable anymore."
+
+**Ignore this run:** Nothing.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:** [automated: tests/integration/wb-session-lifecycle.spec.ts › tutor ends session → authed student sees 'Session has ended' (not link_invalid)] — mostly automated; quick human confirm.
+
+---
+
+### 3. verify-email on the CURRENT deploy
+
+**Action:** Create a **new self-learner signup** on **this preview deploy** (do **not** reuse a verification link minted on an older deploy; do **not** host-swap an old email link). Click the verification link from the email.
+
+**Expect:** You are verified and signed in (lands on dashboard via verify-done). If an email scanner pre-consumed the link, the human click should still verify-and-continue (idempotent replay), and any "already verified" message reads the softened **"Your email is already verified — sign in below."**
+
+**Ignore this run:** If your email provider's link scanner is not in play, the idempotent-replay path may not trigger — that's fine.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:**
+
+---
+
+### 4. Liveboard tutor mic-meter still animates (regression guard after merge)
+
+**Action:** Start a session as **tutor**; speak.
+
+**Expect:** The tutor live top-bar mic meter animates (**3 bars**).
+
+**Ignore this run:** Nothing.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:** Andrew already confirmed this on the liveboard branch (`afb3abf`). [automated: src/__tests__/dom/WhiteboardWorkspaceClient.av-mount.dom.test.tsx asserts single meterBarRef host] — mark **N/A with notes** (covered by Playwright + already confirmed) unless you want a quick re-glance.
+
+---
+
+### 5. Whiteboard chrome sanity (dual-toolbar fix)
+
+**Action:** On **desktop**, open the **shapes flyout** and the **left-rail more (3-dot) menu**.
+
+**Expect:** Each opens exactly once — no duplicate/ghost flyout; single-open behavior (opening one closes the other) works.
+
+**Ignore this run:** Nothing.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Notes:** [automated: tests/integration/wb-chrome-interactions.spec.ts › shapes flyout / more menu / single-open] — fixed a pre-existing duplicate-portal bug; mark **N/A with notes** (covered by gate) unless you want a quick human glance.
+
+---
+
+## Overall result
+
+Check **PASS** only if every in-scope test item is PASS (deliberate per-item SKIPs must be called out in Notes). Check **FAIL** if any in-scope item fails. Leave both unchecked until the run is complete. Overall verdict is PASS/FAIL only — no overall SKIP.
+
+- [ ] PASS
+- [ ] FAIL
