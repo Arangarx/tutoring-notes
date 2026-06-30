@@ -82,6 +82,7 @@ import { WbTopBarCamControl } from "@/components/whiteboard/chrome/WbTopBarCamCo
 import { WbTopBarCamControlLive } from "@/components/whiteboard/chrome/WbTopBarCamControlLive";
 import { WbThemeToggle } from "@/components/whiteboard/chrome/WbThemeToggle";
 import { WbExitButton } from "@/components/whiteboard/chrome/WbExitButton";
+import { WbStudentConnectionStatus } from "@/components/whiteboard/chrome/WbStudentConnectionStatus";
 import {
   useWhiteboardRecorder,
   type ResumeResult,
@@ -5578,17 +5579,13 @@ export function WhiteboardWorkspaceClient({
               Mynk<span className="mynk-wb-wordmark__dot">·</span>
             </span>
             <div className="mynk-wb-topbar__zone">
-              <span
-                className={`mynk-wb-status-pill${studentConnectionPillOk ? " mynk-wb-status-pill--ok" : " mynk-wb-status-pill--warn"}`}
-                data-testid="wb-student-sync-pill"
-              >
-                {studentConnectionPillLabel}
-              </span>
-              <span className="mynk-wb-timer" data-testid="wb-student-timer">
-                {studentShowWaitingForOther
-                  ? `${formatTimerMinutesOnly(studentLiveTimerMs)} (waiting)`
-                  : formatTimerMinutesOnly(studentLiveTimerMs)}
-              </span>
+              <WbStudentConnectionStatus
+                connectionPillOk={studentConnectionPillOk}
+                connectionPillLabel={studentConnectionPillLabel}
+                liveTimerMs={studentLiveTimerMs}
+                showWaitingForOther={studentShowWaitingForOther}
+                formatTimerMinutesOnly={formatTimerMinutesOnly}
+              />
             </div>
             <div className="mynk-wb-topbar__spacer" aria-hidden />
             <div
@@ -5611,17 +5608,13 @@ export function WhiteboardWorkspaceClient({
 
         {/* Zone 2: Connected pill + timer + disclosure (disclosure hides on touch via desktop-only) */}
         <div className="mynk-wb-topbar__zone">
-          <span
-            className={`mynk-wb-status-pill${studentConnectionPillOk ? " mynk-wb-status-pill--ok" : " mynk-wb-status-pill--warn"}`}
-            data-testid="wb-student-sync-pill"
-          >
-            {studentConnectionPillLabel}
-          </span>
-          <span className="mynk-wb-timer" data-testid="wb-student-timer">
-            {studentShowWaitingForOther
-              ? `${formatTimerMinutesOnly(studentLiveTimerMs)} (waiting)`
-              : formatTimerMinutesOnly(studentLiveTimerMs)}
-          </span>
+          <WbStudentConnectionStatus
+            connectionPillOk={studentConnectionPillOk}
+            connectionPillLabel={studentConnectionPillLabel}
+            liveTimerMs={studentLiveTimerMs}
+            showWaitingForOther={studentShowWaitingForOther}
+            formatTimerMinutesOnly={formatTimerMinutesOnly}
+          />
           <span
             className="mynk-wb-student-disclosure mynk-wb-topbar__desktop-only"
             data-testid="wb-student-recording-disclosure"
