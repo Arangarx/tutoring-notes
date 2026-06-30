@@ -159,8 +159,8 @@ Corrects the item-6 FAIL — confirm the d0cd1b9 preview is **READY** before run
 **Ignore this run:** Nothing.
 
 - [ ] PASS
-- [ ] FAIL
-- [ ] PARTIAL
+- [x] FAIL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
@@ -171,7 +171,7 @@ Corrects the item-6 FAIL — confirm the d0cd1b9 preview is **READY** before run
 ---
 
 - [ ] Addendum 2 PASS
-- [ ] Addendum 2 FAIL
+- [x] Addendum 2 FAIL
 
 ---
 
@@ -201,3 +201,32 @@ Corrects item 7 — confirm the e667c97 preview is **READY** before running.
 
 - [ ] Addendum 3 PASS
 - [ ] Addendum 3 FAIL
+
+---
+
+## Addendum 4 (2026-06-30, tip 70fb158): tutor mic final layout re-confirm
+
+Corrects item 8 dropdown contents — confirm the 70fb158 preview is **READY** before running.
+
+### 9. Tutor waiting-room mic — on-page picker + dropdown (boost/chime/volume, no device picker)
+
+**Action:** Start a session as TUTOR. In the WAITING ROOM, look at the on-page mic device picker, then open the mic control's dropdown caret.
+
+**Expect:** Tutor has an ON-PAGE mic device picker (like the student). The tutor dropdown contains Browser boost + Time alert sound + Volume + helper text, but NO mic device picker inside the dropdown. Both roles keep mic + camera activity-bar toggles + inline meter. Student is unchanged (on-page picker, no dropdown).
+
+**Ignore this run:** Nothing.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** [automated: tests/integration/wb-session-lifecycle.spec.ts › bilateral parity (tutor on-page picker + dropdown boost/chime, no in-dropdown device picker; student on-page picker, no dropdown)] + [automated: src/__tests__/dom/WhiteboardWorkspaceClient.av-mount.dom.test.tsx › tutor on-page picker present, dropdown has gain/chime not device select, single meterBarRef host]
+
+**Notes:**
+
+---
+
+- [ ] Addendum 4 PASS
+- [ ] Addendum 4 FAIL
