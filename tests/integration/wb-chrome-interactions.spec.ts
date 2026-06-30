@@ -849,17 +849,12 @@ test.describe("wb chrome — interactive controls", () => {
         "if it resolves to a canvas element the flyout is being overflow-clipped"
     ).toBe(true);
 
-    // --- Screenshot proof ---
-    const path = require("node:path");
-    const fs = require("node:fs");
-    const assetsDir = path.join(process.cwd(), "docs", "handoff", "assets");
-    fs.mkdirSync(assetsDir, { recursive: true });
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    const shotPath = path.join(assetsDir, `wb-props-flyout-open-${stamp}.png`);
+    // --- Screenshot proof (per-test output dir under gitignored test-results/) ---
+    const shotPath = test.info().outputPath("wb-props-flyout-open.png");
     await page.screenshot({ path: shotPath });
-    test.info().attach("props-flyout-screenshot", {
-      body: shotPath,
-      contentType: "text/plain",
+    await test.info().attach("props-flyout-screenshot", {
+      path: shotPath,
+      contentType: "image/png",
     });
     console.log(`[screenshot] saved: ${shotPath}`);
 
