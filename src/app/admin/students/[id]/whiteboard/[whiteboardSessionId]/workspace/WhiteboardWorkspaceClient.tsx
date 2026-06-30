@@ -5677,7 +5677,7 @@ export function WhiteboardWorkspaceClient({
       isAcquiring={liveAv.isAcquiring}
       showInlineMeter
       micStream={overlayMicMeterStream}
-      showDevicePickerInDropdown={false}
+      showDevicePickerInDropdown={role !== "student"}
       onToggleMute={liveAv.toggleMic}
       onAcquireMic={handleAcquireMic}
       onPickMicSlot={(slot) =>
@@ -6715,7 +6715,7 @@ export function WhiteboardWorkspaceClient({
         onSessionModeChange={(m) => setSessionMode(m)}
         micControlNode={overlayMicNode}
         camControlNode={overlayCamNode}
-        micPickerNode={overlayMicPickerNode}
+        micPickerNode={role === "student" ? overlayMicPickerNode : undefined}
         camPickerNode={overlayCamPickerNode}
         avTilesNode={overlayAVTilesNode}
         onCopyStudentLink={role === "tutor" ? handleCopyStudentLink : undefined}

@@ -1613,16 +1613,19 @@ test.describe(
             timeout: 10_000,
           });
 
-          // Device pickers container is rendered inside the overlay.
+          // Device pickers container is rendered inside the overlay (camera on-page; mic via dropdown).
           const devicePickers = tutorPage.getByTestId(
             "wb-waiting-overlay-device-pickers"
           );
           await expect(devicePickers).toBeVisible({ timeout: 10_000 });
 
-          // Mic picker (AudioControls) is present + interactable.
-          const micSelect = devicePickers.getByTestId("audio-device-select");
-          await expect(micSelect).toBeVisible({ timeout: 5_000 });
-          await expect(micSelect).not.toBeDisabled();
+          // Tutor mic device: in-dropdown on activity-bar control, not on-page AudioControls.
+          await expect(
+            tutorPage
+              .getByTestId("wb-waiting-overlay")
+              .getByTestId("wb-topbar-mic-settings")
+          ).toBeVisible({ timeout: 5_000 });
+          await expect(devicePickers.getByTestId("audio-device-select")).toHaveCount(0);
 
           // Camera picker (VideoControls) is present + interactable.
           const camSelect = devicePickers.getByTestId("video-device-select");
@@ -2092,19 +2095,29 @@ test.describe(
             tutorPage.getByTestId("wb-waiting-overlay")
           ).toBeVisible({ timeout: 10_000 });
 
-          // Student: overlay has WbTopBarMicControlLive with inline meter.
+          // Student: overlay has WbTopBarMicControlLive with inline meter; no in-dropdown mic picker.
           const studentMic = studentPage
             .getByTestId("wb-waiting-overlay")
             .getByTestId("wb-topbar-mic-toggle");
           await expect(studentMic).toBeVisible({ timeout: 10_000 });
           await expect(studentMic.locator(".mynk-wb-mic-meter")).toBeVisible();
+          await expect(
+            studentPage
+              .getByTestId("wb-waiting-overlay")
+              .getByTestId("wb-topbar-mic-settings")
+          ).toHaveCount(0);
 
-          // Tutor: overlay also has WbTopBarMicControlLive with inline meter (not chip).
+          // Tutor: overlay also has WbTopBarMicControlLive with inline meter + in-dropdown mic picker.
           const tutorMic = tutorPage
             .getByTestId("wb-waiting-overlay")
             .getByTestId("wb-topbar-mic-toggle");
           await expect(tutorMic).toBeVisible({ timeout: 10_000 });
           await expect(tutorMic.locator(".mynk-wb-mic-meter")).toBeVisible();
+          await expect(
+            tutorPage
+              .getByTestId("wb-waiting-overlay")
+              .getByTestId("wb-topbar-mic-settings")
+          ).toBeVisible({ timeout: 10_000 });
 
           await tutorCtx.close();
         } finally {

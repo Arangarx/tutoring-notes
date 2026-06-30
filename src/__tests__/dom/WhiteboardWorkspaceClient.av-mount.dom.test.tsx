@@ -600,6 +600,11 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
     const overlay = screen.getByTestId("wb-waiting-overlay");
     expect(overlay.querySelector("[data-testid='wb-topbar-mic-toggle']")).toBeTruthy();
     expect(overlay.querySelector(".mynk-wb-mic-meter")).toBeTruthy();
+    // Tutor: in-dropdown mic device picker (caret); on-page mic picker is student-only.
+    expect(overlay.querySelector("[data-testid='wb-topbar-mic-settings']")).toBeTruthy();
+    expect(
+      overlay.querySelector("[data-testid='wb-waiting-overlay-device-pickers'] [data-testid='audio-device-select']")
+    ).toBeNull();
   });
 
   test("tutor ACTIVE session: live top-bar mic control with meterBarRef host present", async () => {
