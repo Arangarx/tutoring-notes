@@ -143,3 +143,32 @@ Post-confirm fix at tip `2cabd94` — confirm the rebuilt preview is **READY** (
 
 - [ ] Addendum PASS
 - [x] Addendum FAIL
+
+---
+
+## Addendum 2 (2026-06-29, tip d0cd1b9): tutor mic dropdown re-confirm
+
+Corrects the item-6 FAIL — confirm the d0cd1b9 preview is **READY** before running.
+
+### 7. Tutor waiting-room mic — in-dropdown device picker restored (re-confirm of item 6)
+
+**Action:** Start a session as **TUTOR**. In the **WAITING ROOM**, open the mic control's dropdown (the caret next to the activity-bar mic button); acquire/unmute mic and speak.
+
+**Expect:** Tutor mic is the activity-bar button + inline animating meter (parity with student) **AND** its dropdown contains the mic **DEVICE PICKER**. Student waiting-room mic still has **NO** dropdown picker (its picker stays on-page). Tutor has no duplicate on-page mic picker.
+
+**Ignore this run:** Nothing.
+
+- [ ] PASS
+- [ ] FAIL
+- [ ] PARTIAL
+- [ ] N/A with notes
+- [ ] SKIP
+
+**Coverage:** [automated: tests/integration/wb-session-lifecycle.spec.ts › bilateral parity (student no dropdown picker, tutor has dropdown picker)] + [automated: src/__tests__/dom/WhiteboardWorkspaceClient.av-mount.dom.test.tsx › tutor caret present, no on-page audio-device-select, single meterBarRef host]
+
+**Notes:**
+
+---
+
+- [ ] Addendum 2 PASS
+- [ ] Addendum 2 FAIL
