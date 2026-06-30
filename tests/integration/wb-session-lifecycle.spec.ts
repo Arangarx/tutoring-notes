@@ -3073,8 +3073,20 @@ test.describe(
             where: { id: session.learnerProfileId },
             select: { accountHolderId: true },
           });
-          await prisma.consentRecord.create({
-            data: {
+          // Use upsert (not create) — TEST_LEARNER/TEST_ADMIN IDs are shared across
+          // all tests in this file; a prior test may have already created version=1
+          // for this (learnerProfileId, adminUserId) pair, causing a bare create()
+          // to fail with a unique-constraint violation. Upsert is idempotent and
+          // always leaves allowLiveSession=false as required by this test.
+          const consentRec = await prisma.consentRecord.upsert({
+            where: {
+              learnerProfileId_adminUserId_version: {
+                learnerProfileId: session.learnerProfileId,
+                adminUserId: session.adminUserId,
+                version: 1,
+              },
+            },
+            create: {
               learnerProfileId: session.learnerProfileId,
               adminUserId: session.adminUserId,
               version: 1,
@@ -3085,23 +3097,37 @@ test.describe(
               setByAccountHolderId: accountHolder!.accountHolderId,
               captureMethod: "electronic",
             },
-          });
-          const latestRecord = await prisma.consentRecord.findFirst({
-            where: {
-              learnerProfileId: session.learnerProfileId,
-              adminUserId: session.adminUserId,
+            update: {
+              allowLiveSession: false,
+              allowAudioRecording: false,
+              allowWhiteboardRecording: false,
+              allowNoteSending: false,
             },
-            orderBy: { version: "desc" },
+            select: { id: true, version: true },
           });
-          await prisma.sessionConsentSnapshot.create({
-            data: {
+          // /join/[sessionId] reads SessionConsentSnapshot.allowLiveSession (not the
+          // live ConsentRecord) — the snapshot is what drives the denial gate.
+          // seedOpenWhiteboardSession bypasses createWhiteboardSession so no snapshot
+          // exists yet for this fresh session; create it here with allowLiveSession=false
+          // so the gate genuinely fires. Use upsert for belt-and-suspenders safety.
+          await prisma.sessionConsentSnapshot.upsert({
+            where: { whiteboardSessionId: session.whiteboardSessionId },
+            create: {
               whiteboardSessionId: session.whiteboardSessionId,
               allowLiveSession: false,
               allowAudioRecording: false,
               allowWhiteboardRecording: false,
               allowNoteSending: false,
-              consentRecordId: latestRecord!.id,
-              consentRecordVersion: latestRecord!.version,
+              consentRecordId: consentRec.id,
+              consentRecordVersion: consentRec.version,
+            },
+            update: {
+              allowLiveSession: false,
+              allowAudioRecording: false,
+              allowWhiteboardRecording: false,
+              allowNoteSending: false,
+              consentRecordId: consentRec.id,
+              consentRecordVersion: consentRec.version,
             },
           });
         } finally {
