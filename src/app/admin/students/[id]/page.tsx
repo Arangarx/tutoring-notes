@@ -83,6 +83,7 @@ export default async function StudentDetailPage({
       learnerProfile: {
         select: {
           id: true,
+          isSelfLearner: true,
           displayName: true,
           accountHolder: {
             select: { id: true, email: true, displayName: true, emailVerifiedAt: true },
@@ -107,6 +108,17 @@ export default async function StudentDetailPage({
   if (!student) notFound();
   if (!canAccessStudentRow(scope, student)) notFound();
 
+  const learnerProfileId = student.learnerProfileId;
+  const isSelfLearner = student.learnerProfile?.isSelfLearner ?? false;
+  const consentRecordExists =
+    learnerProfileId && scopedAdminUserId
+      ? !!(await db.consentRecord.findFirst({
+          where: { learnerProfileId, adminUserId: scopedAdminUserId },
+          orderBy: { version: "desc" },
+          select: { id: true },
+        }))
+      : false;
+
   const activeShare = student.shareLinks[0] ?? null;
   const shareDisplayBaseUrl = activeShare ? await getRequestBaseUrl() : null;
 
@@ -129,7 +141,12 @@ export default async function StudentDetailPage({
 
   const stickyCta = (
     <div className="w-full md:w-auto [&_button]:h-12 [&_button]:w-full [&_button]:text-[15px] md:[&_button]:h-11 md:[&_button]:w-auto">
-      <StartWhiteboardSession studentId={student.id} />
+      <StartWhiteboardSession
+        studentId={student.id}
+        consentRecordExists={consentRecordExists}
+        isSelfLearner={isSelfLearner}
+        studentClaimed={!!student.learnerProfileId}
+      />
     </div>
   );
 

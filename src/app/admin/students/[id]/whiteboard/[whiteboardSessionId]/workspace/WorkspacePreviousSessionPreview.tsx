@@ -59,7 +59,10 @@ import {
   createScenePainter,
   type ScenePaintApi,
 } from "@/lib/whiteboard/scene-paint";
-import { StartWhiteboardSession } from "@/app/admin/students/[id]/whiteboard/StartWhiteboardSession";
+import {
+  StartWhiteboardSession,
+  type StartWhiteboardSessionProps,
+} from "@/app/admin/students/[id]/whiteboard/StartWhiteboardSession";
 
 type LoadState =
   | { kind: "loading" }
@@ -92,7 +95,10 @@ export type WorkspacePreviousSessionPreviewProps = {
    * via the back button.
    */
   reviewHref: string;
-};
+} & Pick<
+  StartWhiteboardSessionProps,
+  "consentRecordExists" | "isSelfLearner" | "studentClaimed"
+>;
 
 const PVW = (): string => Math.random().toString(36).slice(2, 7);
 
@@ -421,7 +427,12 @@ export function WorkspacePreviousSessionPreview(
           className="row"
           style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}
         >
-          <StartWhiteboardSession studentId={studentId} />
+          <StartWhiteboardSession
+            studentId={studentId}
+            consentRecordExists={props.consentRecordExists}
+            isSelfLearner={props.isSelfLearner}
+            studentClaimed={props.studentClaimed}
+          />
           <Link href={reviewHref} className="btn">
             Open full replay
           </Link>

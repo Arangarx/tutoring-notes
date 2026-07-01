@@ -1,8 +1,50 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  formatConsentActionError,
+  parseConsentActionError,
+} from "@/lib/consent-action-error";
 import { createWhiteboardSession } from "./actions";
+
+export type StartWhiteboardSessionProps = {
+  studentId: string;
+  consentRecordExists: boolean;
+  isSelfLearner: boolean;
+  studentClaimed: boolean;
+};
+
+function canStartSession(props: StartWhiteboardSessionProps): boolean {
+  if (props.isSelfLearner) return true;
+  return props.studentClaimed && props.consentRecordExists;
+}
+
+function ConsentRequiredCallout({ studentId }: { studentId: string }) {
+  return (
+    <div
+      className="rounded-2xl border border-border bg-muted/40 p-4 text-sm leading-relaxed text-muted-foreground"
+      data-testid="start-wb-consent-callout"
+      role="status"
+    >
+      <p className="m-0 text-foreground">
+        Before you can start a session, the student&apos;s parent must claim
+        this account and set privacy preferences.
+      </p>
+      <p className="mb-0 mt-2">
+        Open the{" "}
+        <Link
+          href={`/admin/students/${studentId}#student-section-parent`}
+          className="font-medium text-accent-text underline underline-offset-2"
+        >
+          Parent account
+        </Link>{" "}
+        section to send a claim invite or check whether a parent is connected.
+      </p>
+    </div>
+  );
+}
 
 /**
  * "Start whiteboard session" button.
@@ -17,13 +59,14 @@ import { createWhiteboardSession } from "./actions";
  * Legal guardrail: only the per-session in-app attestation gate is removed.
  * The canonical policy text (privacy/terms pages, consent records) is unchanged.
  */
-export function StartWhiteboardSession({
-  studentId,
-}: {
-  studentId: string;
-}) {
+export function StartWhiteboardSession(props: StartWhiteboardSessionProps) {
+  const { studentId } = props;
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  if (!canStartSession(props)) {
+    return <ConsentRequiredCallout studentId={studentId} />;
+  }
 
   const handleStart = async () => {
     setError(null);
@@ -44,6 +87,18 @@ export function StartWhiteboardSession({
       ) {
         throw err;
       }
+
+      const consentErr = parseConsentActionError(err);
+      if (consentErr) {
+        setError(formatConsentActionError(consentErr));
+        // eslint-disable-next-line no-console
+        console.error("[createWhiteboardSession] consent denied", {
+          permission: consentErr.permission,
+          err,
+        });
+        return;
+      }
+
       // In production, Next.js replaces server-action error messages with a
       // generic string and parks the real failure behind a `digest`. Surface
       // the digest so the tutor can give us a needle to grep Vercel logs by.

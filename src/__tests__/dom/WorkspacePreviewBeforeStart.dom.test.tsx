@@ -151,6 +151,9 @@ const baseProps = {
   eventsProxyUrl: "/api/whiteboard/wb_old_42/events",
   snapshotProxyUrl: "/api/whiteboard/wb_old_42/snapshot",
   reviewHref: "/admin/students/stu_99/whiteboard/wb_old_42",
+  consentRecordExists: true,
+  isSelfLearner: false,
+  studentClaimed: true,
 } as const;
 
 const NON_EMPTY_LOG = JSON.stringify({
