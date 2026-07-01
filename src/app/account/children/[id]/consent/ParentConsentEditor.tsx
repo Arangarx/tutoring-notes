@@ -61,13 +61,6 @@ const PERMISSION_TOGGLES: ReadonlyArray<PermissionToggleDef> = [
       "Captures what was said so session notes reflect the actual lesson, not just what appeared on the board.",
     emphasis: "recommended",
   },
-  {
-    key: "allowWhiteboardRecording",
-    label: "Allow whiteboard replay",
-    description:
-      "Saves every stroke so you and your child can revisit the work later — most families want this on.",
-    emphasis: "recommended",
-  },
 ];
 
 const RESTRICTION_TOGGLES = [

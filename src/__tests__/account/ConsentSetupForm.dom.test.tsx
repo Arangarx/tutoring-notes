@@ -1,15 +1,17 @@
 /**
  * @jest-environment jsdom
  *
- * allowNoteSending is dormant — hidden from claim-setup consent UI pending
- * WB-NOTES-EMAIL-SUBSCRIPTION-REFRAME (Andrew 2026-06-30).
+ * Dormant consent fields hidden from claim-setup UI:
+ * - allowNoteSending — WB-NOTES-EMAIL-SUBSCRIPTION-REFRAME (Andrew 2026-06-30)
+ * - allowWhiteboardRecording — WB-CONSENT-UNCONDITIONAL (Andrew 2026-06-30)
  */
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { ConsentSetupForm } from "@/app/claim/[token]/setup/ConsentSetupForm";
 
-describe("ConsentSetupForm — dormant allowNoteSending toggle", () => {
+describe("ConsentSetupForm — dormant consent toggles", () => {
   test("does not render notes email permission toggle", () => {
     render(
       <ConsentSetupForm
@@ -23,6 +25,23 @@ describe("ConsentSetupForm — dormant allowNoteSending toggle", () => {
     expect(screen.queryByText(/session summary notes can be emailed/i)).not.toBeInTheDocument();
   });
 
+  test("does not render whiteboard recording permission toggle", () => {
+    render(
+      <ConsentSetupForm
+        rawToken="token-abc"
+        studentName="Alex"
+        enforcementEnabled={true}
+      />
+    );
+
+    expect(
+      screen.queryByLabelText(/allow whiteboard recording/i)
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/whiteboard strokes are saved/i)
+    ).not.toBeInTheDocument();
+  });
+
   test("still renders active consent toggles", () => {
     render(
       <ConsentSetupForm
@@ -34,8 +53,37 @@ describe("ConsentSetupForm — dormant allowNoteSending toggle", () => {
 
     expect(screen.getByLabelText(/allow live sessions/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/allow audio recording/i)).toBeInTheDocument();
-    expect(
-      screen.getByLabelText(/allow whiteboard recording/i)
-    ).toBeInTheDocument();
+  });
+
+  test("save payload still includes allowWhiteboardRecording default", async () => {
+    const user = userEvent.setup();
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, version: 1 }),
+    });
+    global.fetch = fetchMock as typeof fetch;
+
+    render(
+      <ConsentSetupForm
+        rawToken="token-abc"
+        studentName="Alex"
+        enforcementEnabled={true}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /save preferences/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+
+    expect(body).toMatchObject({
+      action: "consent",
+      allowLiveSession: false,
+      allowAudioRecording: false,
+      allowWhiteboardRecording: false,
+      allowNoteSending: false,
+    });
   });
 });

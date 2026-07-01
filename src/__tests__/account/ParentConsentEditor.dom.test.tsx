@@ -1,8 +1,9 @@
 /**
  * @jest-environment jsdom
  *
- * allowNoteSending is dormant — hidden from parent consent UI pending
- * WB-NOTES-EMAIL-SUBSCRIPTION-REFRAME (Andrew 2026-06-30).
+ * Dormant consent fields hidden from parent consent UI:
+ * - allowNoteSending — WB-NOTES-EMAIL-SUBSCRIPTION-REFRAME (Andrew 2026-06-30)
+ * - allowWhiteboardRecording — WB-CONSENT-UNCONDITIONAL (Andrew 2026-06-30)
  */
 
 import { render, screen } from "@testing-library/react";
@@ -19,7 +20,7 @@ const sampleTutor = {
   allowNoteSending: true,
 };
 
-describe("ParentConsentEditor — dormant allowNoteSending toggle", () => {
+describe("ParentConsentEditor — dormant consent toggles", () => {
   test("does not render session notes email permission toggle", () => {
     render(
       <ParentConsentEditor
@@ -41,6 +42,27 @@ describe("ParentConsentEditor — dormant allowNoteSending toggle", () => {
     ).not.toBeInTheDocument();
   });
 
+  test("does not render whiteboard recording permission toggle", () => {
+    render(
+      <ParentConsentEditor
+        learnerName="Alex"
+        tutors={[sampleTutor]}
+        restrictions={{
+          restrictAudioRecording: false,
+          restrictWhiteboardRecording: false,
+          restrictNoteSending: false,
+        }}
+      />
+    );
+
+    expect(
+      screen.queryByLabelText(/allow whiteboard replay/i)
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/saves every stroke so you and your child/i)
+    ).not.toBeInTheDocument();
+  });
+
   test("still renders active consent toggles", () => {
     render(
       <ParentConsentEditor
@@ -56,8 +78,5 @@ describe("ParentConsentEditor — dormant allowNoteSending toggle", () => {
 
     expect(screen.getByLabelText(/allow live sessions/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/allow audio recording/i)).toBeInTheDocument();
-    expect(
-      screen.getByLabelText(/allow whiteboard replay/i)
-    ).toBeInTheDocument();
   });
 });

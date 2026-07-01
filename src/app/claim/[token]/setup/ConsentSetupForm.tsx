@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 
 interface ConsentToggle {
-  key: "allowLiveSession" | "allowAudioRecording" | "allowWhiteboardRecording";
+  key: "allowLiveSession" | "allowAudioRecording";
   label: string;
   description: string;
 }
@@ -21,11 +21,6 @@ const TOGGLES: ConsentToggle[] = [
     key: "allowAudioRecording",
     label: "Allow audio recording",
     description: "Session audio is recorded for note generation and tutor review.",
-  },
-  {
-    key: "allowWhiteboardRecording",
-    label: "Allow whiteboard recording",
-    description: "Whiteboard strokes are saved so sessions can be replayed.",
   },
 ];
 
