@@ -4,7 +4,8 @@
  * Post-claim onboarding: sets up the child's login credentials and consent.
  * Sub-actions via `action` body field:
  *   "credentials" — create LearnerCredential (username + PIN)
- *   "consent"     — create/update ConsentRecord for this (learner, tutor) pair (B2)
+ *   "consent"          — create/update ConsentRecord for this (learner, tutor) pair (B2)
+ *   "consent_decline"  — write an all-off ConsentRecord (CC-2 decline path)
  *
  * Requires: AccountHolder session + claim must be completed by this AccountHolder.
  */
@@ -20,6 +21,10 @@ import {
   validateLearnerUsername,
 } from "@/lib/learner-credential-validation";
 import { ensureFamilyId, formatLearnerLoginHandle } from "@/lib/family-id";
+
+function isPrismaUniqueViolation(err: unknown): boolean {
+  return (err as { code?: string })?.code === "P2002";
+}
 
 export async function POST(
   req: NextRequest,
@@ -105,22 +110,84 @@ export async function POST(
     });
     const nextVersion = (maxVersion._max.version ?? 0) + 1;
 
-    await db.consentRecord.create({
-      data: {
-        learnerProfileId,
-        adminUserId: invite.adminUserId,
-        version: nextVersion,
-        allowLiveSession,
-        allowAudioRecording,
-        allowWhiteboardRecording,
-        allowNoteSending,
-        setByAccountHolderId: ahSession.accountHolderId,
-        captureMethod: "electronic",
-      },
-    });
+    try {
+      await db.consentRecord.create({
+        data: {
+          learnerProfileId,
+          adminUserId: invite.adminUserId,
+          version: nextVersion,
+          allowLiveSession,
+          allowAudioRecording,
+          allowWhiteboardRecording,
+          allowNoteSending,
+          setByAccountHolderId: ahSession.accountHolderId,
+          captureMethod: "electronic",
+        },
+      });
+    } catch (err) {
+      if (isPrismaUniqueViolation(err)) {
+        return NextResponse.json(
+          { error: "consent_already_saved" },
+          { status: 409 }
+        );
+      }
+      throw err;
+    }
 
     console.log(
       `[cns] learnerProfileId=${learnerProfileId} adminUserId=${invite.adminUserId} action=consent_set version=${nextVersion} accountHolderId=${ahSession.accountHolderId}`
+    );
+
+    return NextResponse.json({ ok: true, version: nextVersion });
+  }
+
+  if (action === "consent_decline") {
+    const learnerProfile = await db.learnerProfile.findUnique({
+      where: { id: learnerProfileId },
+      select: { accountHolderId: true, isSelfLearner: true },
+    });
+    if (!learnerProfile) {
+      return NextResponse.json({ error: "profile_not_found" }, { status: 404 });
+    }
+    if (learnerProfile.accountHolderId !== ahSession.accountHolderId) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+    if (learnerProfile.isSelfLearner) {
+      return NextResponse.json({ ok: true, skipped: true });
+    }
+
+    const maxVersion = await db.consentRecord.aggregate({
+      where: { learnerProfileId, adminUserId: invite.adminUserId },
+      _max: { version: true },
+    });
+    const nextVersion = (maxVersion._max.version ?? 0) + 1;
+
+    try {
+      await db.consentRecord.create({
+        data: {
+          learnerProfileId,
+          adminUserId: invite.adminUserId,
+          version: nextVersion,
+          allowLiveSession: false,
+          allowAudioRecording: false,
+          allowWhiteboardRecording: false,
+          allowNoteSending: false,
+          setByAccountHolderId: ahSession.accountHolderId,
+          captureMethod: "electronic",
+        },
+      });
+    } catch (err) {
+      if (isPrismaUniqueViolation(err)) {
+        return NextResponse.json(
+          { error: "consent_already_saved" },
+          { status: 409 }
+        );
+      }
+      throw err;
+    }
+
+    console.log(
+      `[cns] learnerProfileId=${learnerProfileId} adminUserId=${invite.adminUserId} action=consent_declined version=${nextVersion} accountHolderId=${ahSession.accountHolderId}`
     );
 
     return NextResponse.json({ ok: true, version: nextVersion });
