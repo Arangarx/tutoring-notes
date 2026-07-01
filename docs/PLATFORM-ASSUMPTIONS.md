@@ -172,6 +172,12 @@
 - **What breaks if violated**: production data loss; old deployed code can't read renamed columns; outbox-in-flight rows reference dropped fields.
 - **Migration check**: this is a policy, not a platform constraint — preserve the policy across providers.
 
+### 2.4a ErasureJob grace window (E1)
+
+- **Assumption**: Learner/family right-to-erasure is orchestrated via durable `ErasureJob` rows. Blob purge and DB scrub phases must not run until `now() >= purgeEligibleAt` (`requestedAt` + 7 days). Tombstone + access denial in the `requested` phase is immediate (service code in E2+). Partial unique index `erasure_job_active_scope` allows at most one in-flight job per `(scopeKind, scopeId)`.
+- **Where baked in**: `prisma/schema.prisma` (`ErasureJob`, `Student.erasedAt`); migration `20260701000000_erasure_job_and_student_erased_at`.
+- **Deferred follow-ups (pilot scale):** `WhiteboardAsset` inventory table (H-3), `ErasureJobBlob` child rows (M-5) — not in E1.
+
 ### 2.5 The duplicate `_prisma_migrations` row (pre-existing issue)
 
 - **Assumption**: There's a known duplicate row for `20260418000000_multi_recording` in both prod and preview-dev `_prisma_migrations` tables (one with `finished_at` set, one with NULL). Currently harmless; flagged in Phase 2 task 14 as "investigate + clean up."

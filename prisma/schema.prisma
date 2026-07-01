@@ -79,6 +79,22 @@ enum SessionMode {
   IN_PERSON
 }
 
+/// Erasure job scope — learner profile or full account-holder family.
+enum ErasureScopeKind {
+  learner_profile
+  account_holder
+}
+
+/// Resumable erasure state machine phases (see docs/handoff/learner-erasure-plan.md §4.1).
+enum ErasureJobStatus {
+  requested
+  blobs_purging
+  db_scrubbing
+  completed
+  failed
+  canceled
+}
+
 model Student {
   id                      String              @id @default(uuid())
   name                    String
@@ -117,6 +133,8 @@ model Student {
   learnerProfileId String?
   learnerProfile   LearnerProfile?      @relation(fields: [learnerProfileId], references: [id], onDelete: SetNull)
   claimInvites     StudentClaimInvite[]
+  /// Set during erasure db_scrubbing; route guards check this (M-4).
+  erasedAt         DateTime?
 
   /// IAC-2: per-tutor uniqueness — a tutor cannot link the same learner profile twice;
   /// a second tutor can link the same profile under their own adminUserId.
@@ -1125,4 +1143,30 @@ model SessionConsentSnapshot {
   consentRecordId           String?
   consentRecordVersion      Int?
   frozenAt                  DateTime          @default(now())
+}
+
+/// Resumable learner/family right-to-erasure job (E1).
+/// Tombstone runs in `requested`; blob purge must not start until purgeEligibleAt (7-day grace).
+/// scopeId is a plain indexed string (LP or AH id) — no FK because targets are tombstoned, not deleted.
+/// Partial unique index erasure_job_active_scope (one active job per scope) is in migration SQL — Prisma cannot express WHERE.
+model ErasureJob {
+  id                   String            @id @default(uuid())
+  scopeKind            ErasureScopeKind
+  scopeId              String
+  status               ErasureJobStatus  @default(requested)
+  requestedAt          DateTime          @default(now())
+  /// Principal kind + opaque id, e.g. "admin:<uuid>" (v1 admin-only trigger).
+  requestedByPrincipal String
+  /// requestedAt + 7 days — worker must not advance past requested until now() >= this.
+  purgeEligibleAt      DateTime
+  blobInventoryJson    Json?
+  blobsDeletedJson     Json?
+  lastError            String?
+  completedAt          DateTime?
+  canceledAt           DateTime?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  @@index([scopeKind, scopeId])
+  @@index([status, purgeEligibleAt])
 }
