@@ -1,7 +1,7 @@
 # Learner/family right-to-erasure (E5 admin UI) — smoke runbook
 
 **Branch:** `wb-wave5-polish`
-**Tip commit:** [`9b59476`](https://github.com/Arangarx/tutoring-notes/commit/9b594769d80cf9f4a5a3461fb232abcb6ad5f77f)
+**Tip commit:** [`f6ad4bc`](https://github.com/Arangarx/tutoring-notes/commit/f6ad4bc7eeb55ed43dd53b9c8ef720cf0f7154c7)
 **Preview:** [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-arangarx-5209s-projects.vercel.app)
 
 Admin-only erasure surface: per-learner and full-family scopes, immediate tombstone, 7-day grace before blob+DB purge, cancel during `requested` only. Route guards 404 on `Student.erasedAt` (post-purge); tutors retain read-access during grace. Themes not required for this admin-only smokebook.
