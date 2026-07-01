@@ -35,6 +35,7 @@ function buildNavLinks(props: AdminSidebarNavProps) {
         ]
       : []),
     ...(props.showCostDashboard ? [{ href: "/admin/cost", label: "Cost" } as const] : []),
+    ...(props.showCostDashboard ? [{ href: "/admin/erasure", label: "Erasure" } as const] : []),
     { href: "/feedback", label: "Send feedback" },
     { href: "/admin/settings", label: "Settings" },
     ...(props.showDevTools ? [{ href: "/admin/dev-tools", label: "Dev tools" } as const] : []),

@@ -6,6 +6,7 @@
  */
 
 import { assertIsAdmin, ImpersonationForbiddenError } from "@/lib/impersonation";
+import { cancelErasureJob } from "@/lib/erasure/process-erasure-job";
 import {
   ErasureRequestError,
   requestErasureByAdmin,
@@ -40,6 +41,39 @@ export async function requestErasureByAdminAction(
     }
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[ers] action=request_by_admin_error error=${msg}`);
+    return { ok: false, error: msg };
+  }
+}
+
+export type CancelErasureByAdminResult =
+  | { ok: true; status: string }
+  | { ok: false; error: string };
+
+export async function cancelErasureByAdminAction(
+  jobId: string
+): Promise<CancelErasureByAdminResult> {
+  try {
+    await assertIsAdmin();
+  } catch (err) {
+    const msg =
+      err instanceof ImpersonationForbiddenError
+        ? err.message
+        : "Unauthorized — ADMIN role required.";
+    return { ok: false, error: msg };
+  }
+
+  try {
+    const { status } = await cancelErasureJob(jobId);
+    return { ok: true, status };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("Cannot cancel")) {
+      return { ok: false, error: msg };
+    }
+    if (msg.includes("not found")) {
+      return { ok: false, error: msg };
+    }
+    console.error(`[ers] action=cancel_by_admin_error ers=${jobId} error=${msg}`);
     return { ok: false, error: msg };
   }
 }
