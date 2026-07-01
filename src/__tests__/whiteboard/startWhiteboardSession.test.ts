@@ -3,12 +3,24 @@
  */
 
 const dbUpdateManyMock = jest.fn();
+const dbStudentFindUniqueMock = jest.fn();
+const dbConsentRecordFindFirstMock = jest.fn();
+const dbLearnerProfileFindUniqueMock = jest.fn();
 
 jest.mock("@/lib/db", () => ({
   __esModule: true,
   db: {
     whiteboardSession: {
       updateMany: (...args: unknown[]) => dbUpdateManyMock(...args),
+    },
+    student: {
+      findUnique: (...args: unknown[]) => dbStudentFindUniqueMock(...args),
+    },
+    consentRecord: {
+      findFirst: (...args: unknown[]) => dbConsentRecordFindFirstMock(...args),
+    },
+    learnerProfile: {
+      findUnique: (...args: unknown[]) => dbLearnerProfileFindUniqueMock(...args),
     },
   },
   withDbRetry: <T,>(fn: () => Promise<T>) => fn(),
@@ -21,22 +33,37 @@ jest.mock("@/lib/whiteboard-scope", () => ({
 }));
 
 import { startWhiteboardSession } from "@/app/admin/students/[id]/whiteboard/actions";
+import { ConsentError } from "@/lib/consent-scope";
+
+const ownedSession = {
+  id: "wb_42",
+  studentId: "stu_1",
+  adminUserId: "admin_1",
+  endedAt: null,
+  eventsBlobUrl: "https://blob.example.com/events.json",
+  consentAcknowledged: true,
+};
+
+function mockConsentRecordExists() {
+  dbStudentFindUniqueMock.mockResolvedValue({ learnerProfileId: "lp-1" });
+  dbConsentRecordFindFirstMock.mockResolvedValue({
+    id: "cr-1",
+    learnerProfile: { isSelfLearner: false },
+  });
+}
 
 beforeEach(() => {
   dbUpdateManyMock.mockReset();
   assertOwnsWhiteboardSessionMock.mockReset();
+  dbStudentFindUniqueMock.mockReset();
+  dbConsentRecordFindFirstMock.mockReset();
+  dbLearnerProfileFindUniqueMock.mockReset();
+  mockConsentRecordExists();
 });
 
 describe("startWhiteboardSession", () => {
   it("flips PENDING→ACTIVE for an owned session", async () => {
-    assertOwnsWhiteboardSessionMock.mockResolvedValue({
-      id: "wb_42",
-      studentId: "stu_1",
-      adminUserId: "admin_1",
-      endedAt: null,
-      eventsBlobUrl: "https://blob.example.com/events.json",
-      consentAcknowledged: true,
-    });
+    assertOwnsWhiteboardSessionMock.mockResolvedValue(ownedSession);
     dbUpdateManyMock.mockResolvedValue({ count: 1 });
 
     const result = await startWhiteboardSession("wb_42");
@@ -61,17 +88,22 @@ describe("startWhiteboardSession", () => {
 
   it("is idempotent when already active or ended", async () => {
     assertOwnsWhiteboardSessionMock.mockResolvedValue({
-      id: "wb_42",
-      studentId: "stu_1",
-      adminUserId: "admin_1",
+      ...ownedSession,
       endedAt: new Date("2026-04-24T11:00:00Z"),
-      eventsBlobUrl: "https://blob.example.com/events.json",
-      consentAcknowledged: true,
     });
     dbUpdateManyMock.mockResolvedValue({ count: 0 });
 
     const result = await startWhiteboardSession("wb_42");
 
     expect(result).toEqual({ ok: true, phase: "active" });
+  });
+
+  it("T-new-B / T4: legacy PENDING row, claimed, no record → ConsentError, phase stays PENDING", async () => {
+    assertOwnsWhiteboardSessionMock.mockResolvedValue(ownedSession);
+    dbConsentRecordFindFirstMock.mockResolvedValue(null);
+    dbLearnerProfileFindUniqueMock.mockResolvedValue({ isSelfLearner: false });
+
+    await expect(startWhiteboardSession("wb_42")).rejects.toThrow(ConsentError);
+    expect(dbUpdateManyMock).not.toHaveBeenCalled();
   });
 });

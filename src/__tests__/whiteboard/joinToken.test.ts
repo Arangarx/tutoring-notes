@@ -44,6 +44,9 @@ const tokenCountMock = jest.fn();
 const tokenCreateMock = jest.fn();
 const tokenFindFirstMock = jest.fn();
 const tokenUpdateManyMock = jest.fn();
+const dbStudentFindUniqueMock = jest.fn();
+const dbConsentRecordFindFirstMock = jest.fn();
+const dbLearnerProfileFindUniqueMock = jest.fn();
 jest.mock("@/lib/db", () => ({
   __esModule: true,
   db: {
@@ -56,6 +59,15 @@ jest.mock("@/lib/db", () => ({
     whiteboardSession: {
       create: jest.fn(),
     },
+    student: {
+      findUnique: (...args: unknown[]) => dbStudentFindUniqueMock(...args),
+    },
+    consentRecord: {
+      findFirst: (...args: unknown[]) => dbConsentRecordFindFirstMock(...args),
+    },
+    learnerProfile: {
+      findUnique: (...args: unknown[]) => dbLearnerProfileFindUniqueMock(...args),
+    },
   },
   withDbRetry: <T,>(fn: () => Promise<T>) => fn(),
 }));
@@ -64,6 +76,15 @@ import {
   issueJoinToken,
   revokeJoinTokensForSession,
 } from "@/app/admin/students/[id]/whiteboard/actions";
+import { ConsentError } from "@/lib/consent-scope";
+
+function mockConsentRecordExists() {
+  dbStudentFindUniqueMock.mockResolvedValue({ learnerProfileId: "lp-1" });
+  dbConsentRecordFindFirstMock.mockResolvedValue({
+    id: "cr-1",
+    learnerProfile: { isSelfLearner: false },
+  });
+}
 
 beforeEach(() => {
   assertOwnsWhiteboardSessionMock.mockReset();
@@ -71,6 +92,10 @@ beforeEach(() => {
   tokenCreateMock.mockReset();
   tokenFindFirstMock.mockReset();
   tokenUpdateManyMock.mockReset();
+  dbStudentFindUniqueMock.mockReset();
+  dbConsentRecordFindFirstMock.mockReset();
+  dbLearnerProfileFindUniqueMock.mockReset();
+  mockConsentRecordExists();
   // Default: no existing token. Tests that want idempotency to
   // return an existing row override this in-line.
   tokenFindFirstMock.mockResolvedValue(null);
@@ -240,6 +265,16 @@ describe("issueJoinToken", () => {
     await expect(issueJoinToken("wb-session-bad")).rejects.toThrow(
       /NEXT_NOT_FOUND/
     );
+    expect(tokenCountMock).not.toHaveBeenCalled();
+  });
+
+  test("M-2: claimed minor with no ConsentRecord → ConsentError, no token minted", async () => {
+    assertOwnsWhiteboardSessionMock.mockResolvedValue(liveSession);
+    dbConsentRecordFindFirstMock.mockResolvedValue(null);
+    dbLearnerProfileFindUniqueMock.mockResolvedValue({ isSelfLearner: false });
+
+    await expect(issueJoinToken("wb-session-1")).rejects.toThrow(ConsentError);
+    expect(tokenCreateMock).not.toHaveBeenCalled();
     expect(tokenCountMock).not.toHaveBeenCalled();
   });
 });

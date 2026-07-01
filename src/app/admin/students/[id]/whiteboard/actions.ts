@@ -254,6 +254,29 @@ export async function startWhiteboardSession(
 ): Promise<StartWhiteboardSessionResult> {
   const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
 
+  const studentForConsent = await withDbRetry(
+    () =>
+      db.student.findUnique({
+        where: { id: session.studentId },
+        select: { learnerProfileId: true },
+      }),
+    { label: "startWhiteboardSession.studentForConsent" }
+  );
+  const learnerProfileId = studentForConsent?.learnerProfileId ?? null;
+
+  try {
+    await assertConsentRecordExists(learnerProfileId, session.adminUserId, {
+      studentId: session.studentId,
+    });
+  } catch (err) {
+    if (err instanceof ConsentError && err.permission === "consentRecord") {
+      console.warn(
+        `[startWhiteboardSession] wbsid=${whiteboardSessionId} REJECTED: no_consent_record`
+      );
+    }
+    throw err;
+  }
+
   const result = await withDbRetry(
     () =>
       db.whiteboardSession.updateMany({
@@ -390,6 +413,29 @@ export async function issueJoinToken(
     throw new Error(
       "This whiteboard session has already ended; a new session is required to invite a student."
     );
+  }
+
+  const studentForConsent = await withDbRetry(
+    () =>
+      db.student.findUnique({
+        where: { id: session.studentId },
+        select: { learnerProfileId: true },
+      }),
+    { label: "issueJoinToken.studentForConsent" }
+  );
+  const learnerProfileId = studentForConsent?.learnerProfileId ?? null;
+
+  try {
+    await assertConsentRecordExists(learnerProfileId, session.adminUserId, {
+      studentId: session.studentId,
+    });
+  } catch (err) {
+    if (err instanceof ConsentError && err.permission === "consentRecord") {
+      console.log(
+        `[wjg] wbsid=${whiteboardSessionId} action=join_token_blocked reason=no_consent_record`
+      );
+    }
+    throw err;
   }
 
   const now = new Date();
