@@ -193,12 +193,20 @@ export async function revokeAccountHolderSession(sessionId: string): Promise<voi
   });
 }
 
+/** Prisma client or interactive-transaction client (E2 erasure tombstone). */
+export type AccountHolderSessionDbClient =
+  | typeof db
+  | Parameters<Parameters<typeof db.$transaction>[0]>[0];
+
 /**
  * Bulk-revoke all active sessions for an AccountHolder.
  * Called on password reset (BLOCKER-P2-S2) and tombstone.
  */
-export async function revokeAllAccountHolderSessions(accountHolderId: string): Promise<number> {
-  const result = await db.accountHolderSession.updateMany({
+export async function revokeAllAccountHolderSessions(
+  accountHolderId: string,
+  client: AccountHolderSessionDbClient = db
+): Promise<number> {
+  const result = await client.accountHolderSession.updateMany({
     where: { accountHolderId, revokedAt: null },
     data: { revokedAt: new Date() },
   });
