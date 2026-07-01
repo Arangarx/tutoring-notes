@@ -174,6 +174,7 @@ export default async function LearnerConsentPage({
           className="rounded-[10px] border-border bg-accent-soft/30"
         >
           <ParentConsentEditor
+            learnerProfileId={learnerId}
             learnerName={learnerName}
             tutors={tutors}
             restrictions={restrictions}

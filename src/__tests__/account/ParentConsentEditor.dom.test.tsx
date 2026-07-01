@@ -6,9 +6,20 @@
  * - allowWhiteboardRecording — WB-CONSENT-UNCONDITIONAL (Andrew 2026-06-30)
  */
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { ParentConsentEditor } from "@/app/account/children/[id]/consent/ParentConsentEditor";
+
+jest.mock("@/app/account/children/[id]/consent/actions", () => ({
+  saveParentConsentAction: jest.fn(),
+}));
+
+import { saveParentConsentAction } from "@/app/account/children/[id]/consent/actions";
+
+const saveParentConsentActionMock = saveParentConsentAction as jest.MockedFunction<
+  typeof saveParentConsentAction
+>;
 
 const sampleTutor = {
   adminUserId: "tutor-1",
@@ -20,19 +31,24 @@ const sampleTutor = {
   allowNoteSending: true,
 };
 
+const defaultProps = {
+  learnerProfileId: "learner-1",
+  learnerName: "Alex",
+  tutors: [sampleTutor],
+  restrictions: {
+    restrictAudioRecording: false,
+    restrictWhiteboardRecording: false,
+    restrictNoteSending: false,
+  },
+};
+
 describe("ParentConsentEditor — dormant consent toggles", () => {
+  beforeEach(() => {
+    saveParentConsentActionMock.mockReset();
+  });
+
   test("does not render session notes email permission toggle", () => {
-    render(
-      <ParentConsentEditor
-        learnerName="Alex"
-        tutors={[sampleTutor]}
-        restrictions={{
-          restrictAudioRecording: false,
-          restrictWhiteboardRecording: false,
-          restrictNoteSending: false,
-        }}
-      />
-    );
+    render(<ParentConsentEditor {...defaultProps} />);
 
     expect(
       screen.queryByLabelText(/allow session notes email/i)
@@ -43,17 +59,7 @@ describe("ParentConsentEditor — dormant consent toggles", () => {
   });
 
   test("does not render whiteboard recording permission toggle", () => {
-    render(
-      <ParentConsentEditor
-        learnerName="Alex"
-        tutors={[sampleTutor]}
-        restrictions={{
-          restrictAudioRecording: false,
-          restrictWhiteboardRecording: false,
-          restrictNoteSending: false,
-        }}
-      />
-    );
+    render(<ParentConsentEditor {...defaultProps} />);
 
     expect(
       screen.queryByLabelText(/allow whiteboard replay/i)
@@ -64,34 +70,14 @@ describe("ParentConsentEditor — dormant consent toggles", () => {
   });
 
   test("still renders active consent toggles", () => {
-    render(
-      <ParentConsentEditor
-        learnerName="Alex"
-        tutors={[sampleTutor]}
-        restrictions={{
-          restrictAudioRecording: false,
-          restrictWhiteboardRecording: false,
-          restrictNoteSending: false,
-        }}
-      />
-    );
+    render(<ParentConsentEditor {...defaultProps} />);
 
     expect(screen.getByLabelText(/allow live tutoring sessions/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/allow session audio recording/i)).toBeInTheDocument();
   });
 
   test("renders approved live-session and audio-recording descriptions", () => {
-    render(
-      <ParentConsentEditor
-        learnerName="Alex"
-        tutors={[sampleTutor]}
-        restrictions={{
-          restrictAudioRecording: false,
-          restrictWhiteboardRecording: false,
-          restrictNoteSending: false,
-        }}
-      />
-    );
+    render(<ParentConsentEditor {...defaultProps} />);
 
     expect(
       screen.getByText(
@@ -103,5 +89,37 @@ describe("ParentConsentEditor — dormant consent toggles", () => {
         /live conversation is always available when live sessions are allowed/i
       )
     ).toBeInTheDocument();
+  });
+
+  test("calls saveParentConsentAction when Save privacy preferences is clicked", async () => {
+    const user = userEvent.setup();
+    saveParentConsentActionMock.mockResolvedValue({
+      ok: true,
+      tutorVersions: { "tutor-1": 2 },
+    });
+
+    render(<ParentConsentEditor {...defaultProps} />);
+
+    await user.click(
+      screen.getByRole("button", { name: /save privacy preferences/i })
+    );
+
+    await waitFor(() => expect(saveParentConsentActionMock).toHaveBeenCalledTimes(1));
+
+    expect(saveParentConsentActionMock).toHaveBeenCalledWith("learner-1", {
+      tutors: [
+        {
+          adminUserId: "tutor-1",
+          allowLiveSession: true,
+          allowAudioRecording: true,
+          allowWhiteboardRecording: true,
+          allowNoteSending: true,
+        },
+      ],
+      restrictions: defaultProps.restrictions,
+    });
+
+    expect(screen.getByText(/preferences saved/i)).toBeInTheDocument();
+    expect(screen.getByText(/v2/i)).toBeInTheDocument();
   });
 });

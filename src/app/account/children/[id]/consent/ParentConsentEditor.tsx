@@ -20,6 +20,8 @@ import {
 } from "@/lib/consent-toggle-copy";
 import { cn } from "@/lib/utils";
 
+import { saveParentConsentAction } from "./actions";
+
 export type TutorConsentState = {
   adminUserId: string;
   tutorLabel: string;
@@ -83,19 +85,23 @@ const RESTRICTION_TOGGLES = [
 }>;
 
 type ParentConsentEditorProps = {
+  learnerProfileId: string;
   learnerName: string;
   tutors: TutorConsentState[];
   restrictions: ConsentRestrictionState;
 };
 
 export function ParentConsentEditor({
+  learnerProfileId,
   learnerName,
   tutors,
   restrictions: initialRestrictions,
 }: ParentConsentEditorProps) {
   const [tutorStates, setTutorStates] = useState(tutors);
   const [restrictions, setRestrictions] = useState(initialRestrictions);
-  const [previewSaved, setPreviewSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   function updateTutorToggle(
     adminUserId: string,
@@ -105,7 +111,7 @@ export function ParentConsentEditor({
     setTutorStates((prev) =>
       prev.map((t) => (t.adminUserId === adminUserId ? { ...t, [key]: checked } : t))
     );
-    setPreviewSaved(false);
+    setSaved(false);
   }
 
   function updateRestriction(
@@ -113,11 +119,51 @@ export function ParentConsentEditor({
     checked: boolean
   ) {
     setRestrictions((prev) => ({ ...prev, [key]: checked }));
-    setPreviewSaved(false);
+    setSaved(false);
   }
 
-  function handlePreviewSave() {
-    setPreviewSaved(true);
+  async function handleSave() {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await saveParentConsentAction(learnerProfileId, {
+        tutors: tutorStates.map(
+          ({
+            adminUserId,
+            allowLiveSession,
+            allowAudioRecording,
+            allowWhiteboardRecording,
+            allowNoteSending,
+          }) => ({
+            adminUserId,
+            allowLiveSession,
+            allowAudioRecording,
+            allowWhiteboardRecording,
+            allowNoteSending,
+          })
+        ),
+        restrictions,
+      });
+
+      if (!result.ok) {
+        setError(result.error ?? "save_failed");
+        return;
+      }
+
+      if (result.tutorVersions) {
+        setTutorStates((prev) =>
+          prev.map((tutor) => ({
+            ...tutor,
+            version: result.tutorVersions![tutor.adminUserId] ?? tutor.version,
+          }))
+        );
+      }
+      setSaved(true);
+    } catch {
+      setError("network");
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (tutors.length === 0) {
@@ -239,19 +285,35 @@ export function ParentConsentEditor({
           type="button"
           variant="accent"
           className="w-full min-h-11 sm:w-auto"
-          onClick={handlePreviewSave}
+          onClick={() => void handleSave()}
+          disabled={busy}
+          aria-busy={busy}
         >
-          Save privacy preferences
+          {busy ? "Saving…" : "Save privacy preferences"}
         </Button>
 
-        <Alert className="rounded-[10px] border-dashed">
-          <AlertTitle>Preview only</AlertTitle>
-          <AlertDescription>
-            {previewSaved
-              ? "Changes were not saved — this page is visual-first. Wire to POST /api/account/children/[id]/consent when ready."
-              : "Saving is not wired yet. Toggles reflect loaded data for review; backend route is deferred (B2 Step 6)."}
-          </AlertDescription>
-        </Alert>
+        {saved ? (
+          <Alert className="rounded-[10px] border-accent/30 bg-accent-soft">
+            <AlertTitle>Preferences saved</AlertTitle>
+            <AlertDescription>
+              Your privacy choices are saved. New tutoring sessions will use
+              these settings.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        {error ? (
+          <Alert className="rounded-[10px] border-destructive/30" role="alert">
+            <AlertTitle>Could not save</AlertTitle>
+            <AlertDescription>
+              {error === "network"
+                ? "Network error — please try again."
+                : error === "consent_already_saved"
+                  ? "Preferences were already saved. Refresh the page and try again."
+                  : "Something went wrong saving your preferences. Please try again."}
+            </AlertDescription>
+          </Alert>
+        ) : null}
       </div>
     </div>
   );
