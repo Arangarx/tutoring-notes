@@ -14,6 +14,10 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  AUDIO_RECORDING_CONSENT_COPY,
+  LIVE_SESSION_CONSENT_COPY,
+} from "@/lib/consent-toggle-copy";
 import { cn } from "@/lib/utils";
 
 export type TutorConsentState = {
@@ -49,16 +53,12 @@ type PermissionToggleDef = {
 const PERMISSION_TOGGLES: ReadonlyArray<PermissionToggleDef> = [
   {
     key: "allowLiveSession",
-    label: "Allow live sessions",
-    description:
-      "Your child joins real-time whiteboard tutoring with this tutor — the core reason you use Mynk.",
+    ...LIVE_SESSION_CONSENT_COPY,
     emphasis: "critical",
   },
   {
     key: "allowAudioRecording",
-    label: "Allow audio recording",
-    description:
-      "Captures what was said so session notes reflect the actual lesson, not just what appeared on the board.",
+    ...AUDIO_RECORDING_CONSENT_COPY,
     emphasis: "recommended",
   },
 ];

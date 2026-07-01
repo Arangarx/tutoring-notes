@@ -51,8 +51,29 @@ describe("ConsentSetupForm — dormant consent toggles", () => {
       />
     );
 
-    expect(screen.getByLabelText(/allow live sessions/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/allow audio recording/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/allow live tutoring sessions/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/allow session audio recording/i)).toBeInTheDocument();
+  });
+
+  test("renders approved live-session and audio-recording descriptions", () => {
+    render(
+      <ConsentSetupForm
+        rawToken="token-abc"
+        studentName="Alex"
+        enforcementEnabled={true}
+      />
+    );
+
+    expect(
+      screen.getByText(
+        /everything drawn on the shared whiteboard during the session is saved for later review/i
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /live conversation is always available when live sessions are allowed/i
+      )
+    ).toBeInTheDocument();
   });
 
   test("save payload still includes allowWhiteboardRecording default", async () => {

@@ -4,6 +4,10 @@ import { useState } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import {
+  AUDIO_RECORDING_CONSENT_COPY,
+  LIVE_SESSION_CONSENT_COPY,
+} from "@/lib/consent-toggle-copy";
 
 interface ConsentToggle {
   key: "allowLiveSession" | "allowAudioRecording";
@@ -12,16 +16,8 @@ interface ConsentToggle {
 }
 
 const TOGGLES: ConsentToggle[] = [
-  {
-    key: "allowLiveSession",
-    label: "Allow live sessions",
-    description: "Your child can join real-time whiteboard tutoring sessions.",
-  },
-  {
-    key: "allowAudioRecording",
-    label: "Allow audio recording",
-    description: "Session audio is recorded for note generation and tutor review.",
-  },
+  { key: "allowLiveSession", ...LIVE_SESSION_CONSENT_COPY },
+  { key: "allowAudioRecording", ...AUDIO_RECORDING_CONSENT_COPY },
 ];
 
 export function ConsentSetupForm({
