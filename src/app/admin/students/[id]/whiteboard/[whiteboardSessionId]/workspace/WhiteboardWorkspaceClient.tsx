@@ -289,6 +289,13 @@ type Props = {
   /** ISO timestamp of PENDING→ACTIVE flip, or null. */
   activatedAt?: string | null;
   /**
+   * Frozen session audio-recording consent from SessionConsentSnapshot.
+   * null = no snapshot (unclaimed / no ConsentRecord). Consumed in Block B Commit 2+.
+   */
+  initialAllowAudioRecording?: boolean | null;
+  /** True when SessionConsentSnapshot exists for this session. Consumed in Block B Commit 2+. */
+  initialHasConsentSnapshot?: boolean;
+  /**
    * A3 in-shell review: called in place of router.replace/refresh once
    * the atomic end-session pipeline completes. The shell's handler sets
    * mode="review", unmounting this client subtree (which fires all the
@@ -445,6 +452,8 @@ export function WhiteboardWorkspaceClient({
   initialSessionPhase = "ACTIVE",
   sessionMode: initialSessionMode,
   activatedAt: _activatedAt,
+  initialAllowAudioRecording: _initialAllowAudioRecording,
+  initialHasConsentSnapshot: _initialHasConsentSnapshot,
   identityKey,
 }: Props) {
   const router = useRouter();

@@ -35,6 +35,10 @@ export type TutorWhiteboardSessionShellProps = ShellBaseProps & {
   initialSessionPhase?: "PENDING" | "ACTIVE";
   sessionMode?: string;
   activatedAt?: string | null;
+  /** Frozen session consent: null = no snapshot (unclaimed / no ConsentRecord). */
+  initialAllowAudioRecording?: boolean | null;
+  /** True when SessionConsentSnapshot exists for this session. */
+  initialHasConsentSnapshot?: boolean;
 };
 
 export type StudentWhiteboardSessionShellProps = ShellBaseProps & {
@@ -102,6 +106,8 @@ function TutorWhiteboardSessionShell({
   initialSessionPhase,
   sessionMode,
   activatedAt,
+  initialAllowAudioRecording,
+  initialHasConsentSnapshot,
 }: TutorWhiteboardSessionShellProps) {
   const [mode, setMode] = useState<ShellMode>(initialMode);
 
@@ -142,6 +148,8 @@ function TutorWhiteboardSessionShell({
         initialSessionPhase={initialSessionPhase}
         sessionMode={sessionMode}
         activatedAt={activatedAt}
+        initialAllowAudioRecording={initialAllowAudioRecording}
+        initialHasConsentSnapshot={initialHasConsentSnapshot}
       />
     </WorkspaceResumeGate>
   );

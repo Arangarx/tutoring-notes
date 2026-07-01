@@ -86,6 +86,12 @@ export default async function WhiteboardWorkspacePage({
           student: {
             select: { id: true, name: true, recordingDefaultEnabled: true },
           },
+          consentSnapshot: {
+            select: {
+              allowAudioRecording: true,
+              consentRecordId: true,
+            },
+          },
         },
       }),
     { label: "WhiteboardWorkspacePage.detail" }
@@ -93,6 +99,10 @@ export default async function WhiteboardWorkspacePage({
   if (!detail) notFound();
 
   const syncEnabled = Boolean(env.WHITEBOARD_SYNC_URL);
+
+  const initialHasConsentSnapshot = detail.consentSnapshot != null;
+  const initialAllowAudioRecording =
+    detail.consentSnapshot?.allowAudioRecording ?? null;
 
   return (
     <WhiteboardSessionShell
@@ -112,6 +122,8 @@ export default async function WhiteboardWorkspacePage({
       activatedAt={detail.activatedAt?.toISOString() ?? null}
       syncEnabled={syncEnabled}
       initialMode={detail.endedAt ? "review" : "live"}
+      initialAllowAudioRecording={initialAllowAudioRecording}
+      initialHasConsentSnapshot={initialHasConsentSnapshot}
     />
   );
 }
