@@ -122,4 +122,54 @@ describe("ParentConsentEditor — dormant consent toggles", () => {
     expect(screen.getByText(/preferences saved/i)).toBeInTheDocument();
     expect(screen.getByText(/v2/i)).toBeInTheDocument();
   });
+
+  test("calls saveParentConsentAction with changed toggle values in payload", async () => {
+    const user = userEvent.setup();
+    saveParentConsentActionMock.mockResolvedValue({
+      ok: true,
+      tutorVersions: { "tutor-1": 2 },
+    });
+
+    render(<ParentConsentEditor {...defaultProps} />);
+
+    await user.click(screen.getByLabelText(/allow live tutoring sessions/i));
+    await user.click(
+      screen.getByRole("button", { name: /save privacy preferences/i })
+    );
+
+    await waitFor(() => expect(saveParentConsentActionMock).toHaveBeenCalledTimes(1));
+
+    expect(saveParentConsentActionMock).toHaveBeenCalledWith("learner-1", {
+      tutors: [
+        {
+          adminUserId: "tutor-1",
+          allowLiveSession: false,
+          allowAudioRecording: true,
+          allowWhiteboardRecording: true,
+          allowNoteSending: true,
+        },
+      ],
+      restrictions: defaultProps.restrictions,
+    });
+  });
+
+  test("renders error Alert when saveParentConsentAction returns ok:false", async () => {
+    const user = userEvent.setup();
+    saveParentConsentActionMock.mockResolvedValue({
+      ok: false,
+      error: "consent_already_saved",
+    });
+
+    render(<ParentConsentEditor {...defaultProps} />);
+
+    await user.click(
+      screen.getByRole("button", { name: /save privacy preferences/i })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Could not save")).toBeInTheDocument();
+    });
+    expect(screen.getByText(/preferences were already saved/i)).toBeInTheDocument();
+    expect(screen.queryByText(/preferences saved/i)).not.toBeInTheDocument();
+  });
 });
