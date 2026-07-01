@@ -62,7 +62,7 @@ consentSnapshot: {
 | Prop | Type | Meaning |
 |---|---|---|
 | `initialAllowAudioRecording` | `boolean \| null` | `null` = no snapshot (unclaimed / no ConsentRecord); `true` / `false` = frozen effective value |
-| `initialHasConsentSnapshot` | `boolean` | `consentSnapshot != null` — drives fail-open vs fail-closed fork (§7a) |
+| `initialHasConsentSnapshot` | `boolean` | `consentSnapshot != null` — when `false`, policy is fail-closed-universal (§7a RATIFIED) |
 
 Pass through [`WhiteboardSessionShell.tsx`](../../src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardSessionShell.tsx) (tutor branch, lines 130–145) into `WhiteboardWorkspaceClient` `Props` (currently ends ~line 288).
 
@@ -90,7 +90,7 @@ type AudioCapturePolicy =
 | `true` | any | `full` |
 | `false` | `IN_PERSON` | `none` |
 | `false` | `LIVE` | `tutor_only` |
-| `null` (no snapshot) | any | **Andrew decides** — §7a (`full` fail-open vs `none` fail-closed) |
+| `null` (no snapshot) | any | **`none` — fail-closed-universal** (§7a RATIFIED 2026-06-30) |
 
 `sessionMode` is already client state from SSR ([`WhiteboardWorkspaceClient.tsx:1387-1388`](../../src/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceClient.tsx)); use **activated** mode (persisted at Start). If tutor flips mode in waiting room before Start, activation writes final mode ([`actions.ts:257-281`](../../src/app/admin/students/[id]/whiteboard/actions.ts)).
 
@@ -182,7 +182,8 @@ Add a persistent `Banner` when `policy === "none"` OR (`policy === "tutor_only"`
 
 | Policy | Copy (draft — tune at implementation) |
 |---|---|
-| `none` | **Audio not recorded** — {studentName}'s parent has not allowed session audio. Whiteboard and live conversation continue. |
+| `none` (denied consent) | **Audio not recorded** — {studentName}'s parent has not allowed session audio. Whiteboard and live conversation continue. |
+| `none` (no snapshot — §7a) | **Recording & notes off** — no audio consent on file for this student. Whiteboard and live conversation continue. Parent setup may be required before audio can be saved. |
 | `tutor_only` | **Student audio not recorded** — only your microphone is included in the recording and notes. |
 
 - `data-testid="wb-audio-consent-banner"`
@@ -240,14 +241,30 @@ Add a persistent `Banner` when `policy === "none"` OR (`policy === "tutor_only"`
 
 ### 7a. Fail-open vs fail-closed when there is **no** `SessionConsentSnapshot`
 
-**Current behavior:** [`assertEffectiveConsent`](../../src/lib/consent-scope.ts) lines **93-97** — no snapshot → **void (allow)**. Snapshot skipped when unclaimed (`consent-scope.ts:159-163`) or no ConsentRecord (`175-179`).
+> **✅ RATIFIED (Andrew 2026-06-30): FAIL-CLOSED-UNIVERSAL on audio.** When a session has **no** `SessionConsentSnapshot` / no `ConsentRecord` (any cause), audio is **not** captured, uploaded, persisted, or transcribed — **"no consent record = assume no consent."** No minor-vs-adult classification is needed at capture time: properly-claimed adult self-learners receive an all-`true` snapshot (via `isSelfLearner`) so their audio still records; everyone without a record gets no audio. **Whiteboard stays unconditional**; the live session itself is **not** gated by this decision (see reachability finding below).
+
+**Current behavior (pre-Block B):** [`assertEffectiveConsent`](../../src/lib/consent-scope.ts) lines **93-97** — no snapshot → **void (allow)**. Snapshot skipped when unclaimed (`consent-scope.ts:159-163`) or no ConsentRecord (`175-179`).
 
 | Option | Client policy when `initialHasConsentSnapshot === false` | Pros | Cons |
 |---|---|---|---|
 | **Fail-open (status quo)** | Treat as `full` / allow capture | Unclaimed pilot students keep working; matches server `no_snapshot` pass | Minor audio may be captured before parent claims — COPPA risk; dishonest if we later enforce claim |
-| **Fail-closed** | Treat as `none` or `tutor_only` by mode | Honest; aligns with consent-gates-capture principle | **Many pilot sessions** with unclaimed students lose audio + notes; Sarah workflow break until claim |
+| **Fail-closed** | Treat as `none` (universal) | Honest; aligns with consent-gates-capture principle; closes all no-record paths uniformly | Unclaimed / no-record sessions lose audio + notes until consent is on file |
 
-**Recommendation (plan author):** **Fail-open for Sarah pilot merge**, with loud tutor banner: *"Audio consent not on file — recording may be limited after parent setup."* Revisit fail-closed at claim-or-quarantine milestone. **Andrew must confirm.**
+**Plan-author recommendation (superseded):** ~~Fail-open for Sarah pilot merge, with loud tutor banner.~~ **Overturned — Andrew ratified fail-closed-universal.**
+
+**Blocker scope (added):** Tutor must get an unmistakable **"no consent on file → recording & notes off"** affordance when `initialHasConsentSnapshot === false` (banner per §5; distinct from denied-consent copy).
+
+#### Reachability finding (2026-06-30)
+
+Investigation overturned the assumption that *"you can't create a child learner without saving privacy toggles."* A minor's whiteboard session **can** exist with **no** consent record via three reachable paths:
+
+1. **Claim completion without consent save** — claim links `Student`→`LearnerProfile` but does **not** write a `ConsentRecord`; consent save is a separate optional POST (`/api/claim/[token]/setup` `action="consent"`). A parent can finish claim without ever saving consent.
+2. **Parent-create-learner** — `createChildLearnerAction` writes **no** `ConsentRecord`; dashboard `ParentConsentEditor` is preview-only / not wired (B2 Step 6 deferred).
+3. **Highest pilot likelihood** — tutor creates a `Student` and runs a session **before** parent claims → no `learnerProfileId` → snapshot skipped (`consent-scope.ts:159-163`) → system **cannot** classify the student as a minor at session-create (no DOB/age on `Student`, no `isSelfLearner`). Unclaimed is indistinguishable from adult self-learner.
+
+**Additional exposure (live join, not audio capture):** join gate ([`join/[sessionId]/page.tsx:219-228`](../../src/app/join/[sessionId]/page.tsx)) only denies a minor's **live** join when a snapshot **exists** and `allowLiveSession=false`; a **missing** snapshot → join **allowed**. An unconsented minor can currently **join** a live session. Fail-closed (7a) protects **recording**, not live streaming.
+
+**Impact:** 7a fail-closed-universal closes the **audio-capture** exposure through all three holes. Remaining gaps: consent-**collection** completeness + ungated live session — **new open decisions** (see [`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md) HEAD; [`BACKLOG.md`](../BACKLOG.md) `CONSENT-COLLECTION-COMPLETENESS`).
 
 ### 7b. Other forks (confirm, do not assume)
 
