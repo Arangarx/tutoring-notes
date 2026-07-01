@@ -65,6 +65,7 @@ import {
   TUTOR_MIC_STREAM_ID,
   type StreamHealth,
 } from "@/lib/recording/lifecycle-machine";
+import { deriveAudioCapturePolicy } from "@/lib/recording/audio-capture-policy";
 import { useAudioFlowConfirmation } from "@/hooks/useAudioFlowConfirmation";
 import { useCollaboratorPointers } from "@/hooks/useCollaboratorPointers";
 import { useLiveAV } from "@/hooks/useLiveAV";
@@ -452,8 +453,8 @@ export function WhiteboardWorkspaceClient({
   initialSessionPhase = "ACTIVE",
   sessionMode: initialSessionMode,
   activatedAt: _activatedAt,
-  initialAllowAudioRecording: _initialAllowAudioRecording,
-  initialHasConsentSnapshot: _initialHasConsentSnapshot,
+  initialAllowAudioRecording = null,
+  initialHasConsentSnapshot = false,
   identityKey,
 }: Props) {
   const router = useRouter();
@@ -1397,6 +1398,20 @@ export function WhiteboardWorkspaceClient({
     initialSessionMode === "IN_PERSON" ? "IN_PERSON" : "LIVE"
   );
 
+  // M-3: derive policy from locally-selected mode (waiting-room flips) + frozen consent.
+  const audioCapturePolicy = useMemo(
+    () =>
+      deriveAudioCapturePolicy({
+        allowAudioRecording: initialAllowAudioRecording,
+        hasConsentSnapshot: initialHasConsentSnapshot,
+        sessionMode,
+      }),
+    [initialAllowAudioRecording, initialHasConsentSnapshot, sessionMode]
+  );
+
+  const [audioConsentDraftCleared, setAudioConsentDraftCleared] =
+    useState(false);
+
   // True while startWhiteboardSession is in-flight (prevents double-tap).
   const [isStarting, setIsStarting] = useState(false);
 
@@ -1760,10 +1775,13 @@ export function WhiteboardWorkspaceClient({
     studentId,
     onRecorded: onWorkspaceAudioRecorded,
     avLogSessionId: whiteboardSessionId,
-    recordingDraft: {
-      sessionId: whiteboardSessionId,
-      streamId: TUTOR_MIC_STREAM_ID,
-    },
+    recordingDraft:
+      audioCapturePolicy !== "none"
+        ? {
+            sessionId: whiteboardSessionId,
+            streamId: TUTOR_MIC_STREAM_ID,
+          }
+        : undefined,
     // Seed the displayed recording timer at the session's already-elapsed
     // time so a page refresh doesn't reset it to 0 while the session
     // timer stays at e.g. "12:34". Uses the server-truth value from SSR.
@@ -1774,6 +1792,30 @@ export function WhiteboardWorkspaceClient({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (audioCapturePolicy !== "none") return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const draftStore = getOrCreateRecordingDraftStore();
+        await draftStore.clear(whiteboardSessionId, TUTOR_MIC_STREAM_ID);
+        if (!cancelled) {
+          setAudioConsentDraftCleared(true);
+        }
+      } catch (err) {
+        console.warn(
+          `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} consent-denied draft clear failed`,
+          err
+        );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [audioCapturePolicy, whiteboardSessionId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (audioCapturePolicy === "none") return;
     let cancelled = false;
     void (async () => {
       try {
@@ -1795,7 +1837,7 @@ export function WhiteboardWorkspaceClient({
     return () => {
       cancelled = true;
     };
-  }, [whiteboardSessionId]);
+  }, [whiteboardSessionId, audioCapturePolicy]);
 
   const handleAudioDraftKeep = useCallback(async () => {
     if (!audioDraftRecovery) return;
@@ -2056,7 +2098,7 @@ export function WhiteboardWorkspaceClient({
     ReadonlyMap<string, StreamHealth>
   >(() => {
     const map = new Map<string, StreamHealth>();
-    if (userWantsRecording) {
+    if (userWantsRecording && audioCapturePolicy !== "none") {
       map.set(TUTOR_MIC_STREAM_ID, "ok");
     }
     // Phase 4c: one input-stream entry per live participant audio
@@ -2086,7 +2128,7 @@ export function WhiteboardWorkspaceClient({
       map.set(studentMicStreamId(p.peerId), health);
     }
     return map;
-  }, [userWantsRecording, liveAv.participants]);
+  }, [userWantsRecording, audioCapturePolicy, liveAv.participants]);
 
   // Phase 4d Commit 6: audio-flow gate. Detects per-peer whether the
   // remote audio track is actually carrying frames (not just
@@ -2244,7 +2286,8 @@ export function WhiteboardWorkspaceClient({
     gateTimeoutFired;
 
   const lifecycle = evaluateLifecycle({
-    tutorWantsRecording: userWantsRecording && phaseActive,
+    tutorWantsRecording:
+      userWantsRecording && phaseActive && audioCapturePolicy !== "none",
     participants: lifecycleParticipants,
     everHadParticipants: everBothPresentRef.current,
     soloEnabled: allowRecordSoloUntilStudentJoin,
@@ -5564,16 +5607,22 @@ export function WhiteboardWorkspaceClient({
         setOpenMenu(null);
       }}
       nonVisualMounts={
+      <>
       <WhiteboardWorkspaceAudioBridge
         ref={audioBridgeRef}
         audio={workspaceAudio}
         whiteboardSessionId={whiteboardSessionId}
         userWantsRecording={userWantsRecording}
         recordingActive={recordingActive}
+        audioCapturePolicy={audioCapturePolicy}
         panelDisabled={endingBusy || !userWantsRecording || audioDraftRecovery !== null}
         onMicDeviceChange={(deviceId) => void liveAv.setMicDevice(deviceId)}
         showPanel={false}
       />
+      {audioConsentDraftCleared ? (
+        <span data-testid="wb-audio-consent-draft-cleared" hidden aria-hidden />
+      ) : null}
+      </>
       }
       topBar={
       role === "student" ? (
