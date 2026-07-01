@@ -5,7 +5,18 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   AUDIO_RECORDING_CONSENT_COPY,
+  CONSENT_DECLINE_WARNING,
   LIVE_SESSION_CONSENT_COPY,
 } from "@/lib/consent-toggle-copy";
 
@@ -24,10 +35,12 @@ export function ConsentSetupForm({
   rawToken,
   studentName,
   enforcementEnabled,
+  hasPendingSessionInvite,
 }: {
   rawToken: string;
   studentName: string;
   enforcementEnabled: boolean;
+  hasPendingSessionInvite: boolean;
 }) {
   // D-4: always start all-OFF on every render (no carryover)
   const [values, setValues] = useState({
@@ -40,26 +53,53 @@ export function ConsentSetupForm({
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [declineDialogOpen, setDeclineDialogOpen] = useState(false);
 
   function toggle(key: ConsentToggle["key"]) {
     setValues((v) => ({ ...v, [key]: !v[key] }));
+  }
+
+  async function postSetupAction(action: "consent" | "consent_decline") {
+    const res = await fetch(`/api/claim/${rawToken}/setup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        action === "consent" ? { action, ...values } : { action }
+      ),
+    });
+    if (res.status === 409) {
+      const data = (await res.json()) as { error?: string };
+      if (data.error === "consent_already_saved") {
+        setSaved(true);
+        return;
+      }
+    }
+    if (!res.ok) {
+      const data = (await res.json()) as { error?: string };
+      setError(data.error ?? "save_failed");
+      return;
+    }
+    setSaved(true);
   }
 
   async function handleSave() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/claim/${rawToken}/setup`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "consent", ...values }),
-      });
-      if (!res.ok) {
-        const data = (await res.json()) as { error?: string };
-        setError(data.error ?? "save_failed");
-        return;
-      }
-      setSaved(true);
+      await postSetupAction("consent");
+    } catch {
+      setError("network");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeclineConfirm() {
+    setBusy(true);
+    setError(null);
+    try {
+      await postSetupAction("consent_decline");
+      setDeclineDialogOpen(false);
     } catch {
       setError("network");
     } finally {
@@ -79,6 +119,10 @@ export function ConsentSetupForm({
       </div>
     );
   }
+
+  const declineWarningBody = hasPendingSessionInvite
+    ? CONSENT_DECLINE_WARNING.pendingInvite
+    : CONSENT_DECLINE_WARNING.plain;
 
   return (
     <div className="space-y-4">
@@ -115,7 +159,9 @@ export function ConsentSetupForm({
         <p className="text-sm text-destructive" role="alert">
           {error === "network"
             ? "Network error — please try again."
-            : "Could not save preferences. Please try again."}
+            : error === "consent_already_saved"
+              ? "Preferences were already saved. Refresh the page to continue."
+              : "Could not save preferences. Please try again."}
         </p>
       ) : null}
 
@@ -128,6 +174,37 @@ export function ConsentSetupForm({
       >
         {busy ? "Saving…" : "Save preferences"}
       </Button>
+
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => setDeclineDialogOpen(true)}
+        disabled={busy}
+        className="w-full min-h-11"
+      >
+        No consent now, I&apos;ll review later
+      </Button>
+
+      <AlertDialog open={declineDialogOpen} onOpenChange={setDeclineDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{CONSENT_DECLINE_WARNING.title}</AlertDialogTitle>
+            <AlertDialogDescription>{declineWarningBody}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={busy}
+              onClick={(e) => {
+                e.preventDefault();
+                void handleDeclineConfirm();
+              }}
+            >
+              {busy ? "Saving…" : "Continue without enabling"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {!enforcementEnabled ? (
         <p className="text-xs text-center text-muted-foreground">
