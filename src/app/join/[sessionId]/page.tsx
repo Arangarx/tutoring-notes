@@ -213,8 +213,10 @@ export default async function JoinSessionPage({
   // -------------------------------------------------------------------------
   // B2: allowLiveSession consent check — deny entry if the snapshot says false.
   //
-  // Applies to child learners only (self-learners auto-pass; unclaimed
-  // sessions have no snapshot and fall through to the normal flow).
+  // Applies to child learners only (self-learners auto-pass). Unclaimed
+  // sessions (no learnerProfileId) keep existing behavior — no snapshot
+  // denial. Claimed minors without a snapshot (grandfathered pre-CC-1) are
+  // denied fail-closed (H-5).
   // -------------------------------------------------------------------------
   if (!isSelfLearner) {
     const consentSnap = await withDbRetry(
@@ -225,12 +227,23 @@ export default async function JoinSessionPage({
         }),
       { label: "joinSessionPage.consentSnapshot" }
     );
-    if (consentSnap && consentSnap.allowLiveSession === false) {
-      console.info(
-        `[wjg] wjg=${sessionId.slice(0, 8)} wbsid=${sessionId}` +
-          ` action=join_denied_consent_live_session` +
-          ` lpr=${effectiveLearnerProfileId}`
-      );
+    const noSnapshotForClaimedMinor = lpId !== null && consentSnap === null;
+    const liveSessionDenied =
+      consentSnap !== null && consentSnap.allowLiveSession === false;
+    if (noSnapshotForClaimedMinor || liveSessionDenied) {
+      if (noSnapshotForClaimedMinor) {
+        console.info(
+          `[wjg] wjg=${sessionId.slice(0, 8)} wbsid=${sessionId}` +
+            ` action=join_denied reason=no_consent_snapshot` +
+            ` lpr=${effectiveLearnerProfileId}`
+        );
+      } else {
+        console.info(
+          `[wjg] wjg=${sessionId.slice(0, 8)} wbsid=${sessionId}` +
+            ` action=join_denied_consent_live_session` +
+            ` lpr=${effectiveLearnerProfileId}`
+        );
+      }
       return (
         <main className="container" style={{ maxWidth: 720, padding: "2rem" }}>
           <div className="card">
