@@ -27,7 +27,9 @@ export type ConsentPermission =
   | "allowNoteSending"
   | "allowMessaging"
   | "allowVideoRecording"
-  | "allowLiveSession";
+  | "allowLiveSession"
+  /** CC-1 — a ConsentRecord must exist before session create/start (record existence, not permission value). */
+  | "consentRecord";
 
 /**
  * Thrown when a required consent is not present.
@@ -351,6 +353,79 @@ export async function createSessionConsentSnapshot(
 
   console.log(
     `[cns] wbsid=${whiteboardSessionId} action=consent_frozen consentRecordId=${latestRecord.id} version=${latestRecord.version} learnerProfileId=${learnerProfileId} allowLiveSession=${allowLiveSession} allowAudio=${allowAudioRecording} allowWB=${allowWhiteboardRecording} allowNotes=${allowNoteSending}`
+  );
+}
+
+const CONSENT_RECORD_REQUIRED_MESSAGE =
+  "Parent privacy preferences must be set before starting a session. Ask the parent to complete claim setup or update consent from their account.";
+
+// ---------------------------------------------------------------------------
+// assertConsentRecordExists (CC-1 — record existence gate)
+// ---------------------------------------------------------------------------
+
+/**
+ * Assert that a ConsentRecord exists for (learnerProfileId, adminUserId).
+ * CC-1 gate — record existence, not permission value.
+ *
+ * Fast-path (return void):
+ *   - isSelfLearner → return (D-5 exempt)
+ *
+ * Throw:
+ *   - learnerProfileId is null → ConsentError (unclaimed; no record possible)
+ *   - Claimed minor + no ConsentRecord → ConsentError
+ */
+export async function assertConsentRecordExists(
+  learnerProfileId: string | null,
+  adminUserId: string,
+  opts?: { studentId?: string }
+): Promise<void> {
+  if (learnerProfileId === null) {
+    console.log(
+      `[cns] learnerProfileId=null adminUserId=${adminUserId} action=record_exists_check result=unclaimed`
+    );
+    throw new ConsentError("consentRecord", CONSENT_RECORD_REQUIRED_MESSAGE);
+  }
+
+  const latestRecord = await withDbRetry(
+    () =>
+      db.consentRecord.findFirst({
+        where: { learnerProfileId, adminUserId },
+        orderBy: { version: "desc" },
+        include: { learnerProfile: { select: { isSelfLearner: true } } },
+      }),
+    { label: "assertConsentRecordExists.record" }
+  );
+
+  if (latestRecord?.learnerProfile?.isSelfLearner) {
+    console.log(
+      `[cns] learnerProfileId=${learnerProfileId} adminUserId=${adminUserId} action=record_exists_check result=self_learner`
+    );
+    return;
+  }
+
+  if (!latestRecord) {
+    const profile = await withDbRetry(
+      () =>
+        db.learnerProfile.findUnique({
+          where: { id: learnerProfileId },
+          select: { isSelfLearner: true },
+        }),
+      { label: "assertConsentRecordExists.profile" }
+    );
+    if (profile?.isSelfLearner) {
+      console.log(
+        `[cns] learnerProfileId=${learnerProfileId} adminUserId=${adminUserId} action=record_exists_check result=self_learner`
+      );
+      return;
+    }
+    console.log(
+      `[cns] learnerProfileId=${learnerProfileId} adminUserId=${adminUserId} action=record_exists_check result=denied`
+    );
+    throw new ConsentError("consentRecord", CONSENT_RECORD_REQUIRED_MESSAGE);
+  }
+
+  console.log(
+    `[cns] learnerProfileId=${learnerProfileId} adminUserId=${adminUserId} action=record_exists_check result=granted`
   );
 }
 
