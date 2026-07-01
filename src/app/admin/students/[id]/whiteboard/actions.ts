@@ -23,6 +23,7 @@ import { enqueueChunkTranscribe } from "@/lib/recording/chunk-transcribe-enqueue
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
 import {
   assertEffectiveConsent,
+  assertConsentRecordExists,
   createSessionConsentSnapshot,
   ConsentError,
   resolveModeAwareAudioRecordingConsent,
@@ -78,7 +79,7 @@ export async function createWhiteboardSession(
   // Order:
   //   1. ownership (cheap DB call)
   //   2. tutor approval check
-  //   3. B2 consent pre-check (allowLiveSession)
+  //   3. CC-1 consent record existence
   //   4. expensive Blob write
   //   5. row insert
   // If step 4 succeeds but step 5 fails, we leave behind one orphaned
@@ -104,10 +105,7 @@ export async function createWhiteboardSession(
   // until the tutor is confirmed approved to operate.
   await assertTutorApproved(scope.adminId);
 
-  // B2: consent pre-check — load learnerProfileId and the latest ConsentRecord.
-  // Block claimed + allowLiveSession=false (D-3, D-1).
-  // Runs after tutor-approval (cheap auth hierarchy) and BEFORE Blob write
-  // so we fail fast without orphaning a Blob object.
+  // CC-1: consent record must exist before Blob write (fail fast, no orphan Blob).
   const studentForConsent = await withDbRetry(
     () =>
       db.student.findUnique({
@@ -118,28 +116,17 @@ export async function createWhiteboardSession(
   );
   const learnerProfileId = studentForConsent?.learnerProfileId ?? null;
 
-  if (learnerProfileId) {
-    const latestRecord = await withDbRetry(
-      () =>
-        db.consentRecord.findFirst({
-          where: { learnerProfileId, adminUserId: scope.adminId },
-          orderBy: { version: "desc" },
-          include: { learnerProfile: { select: { isSelfLearner: true } } },
-        }),
-      { label: "createWhiteboardSession.consentRecord" }
-    );
-    // D-5: self-learners always pass
-    if (!latestRecord?.learnerProfile?.isSelfLearner) {
-      if (latestRecord && !latestRecord.allowLiveSession) {
-        console.warn(
-          `[createWhiteboardSession] rid=${rid} studentId=${studentId} REJECTED: allowLiveSession=false (B2)`
-        );
-        throw new ConsentError(
-          "allowLiveSession",
-          "Parental consent for live sessions has not been granted. Please update consent preferences from your account."
-        );
-      }
+  try {
+    await assertConsentRecordExists(learnerProfileId, scope.adminId, {
+      studentId,
+    });
+  } catch (err) {
+    if (err instanceof ConsentError && err.permission === "consentRecord") {
+      console.warn(
+        `[createWhiteboardSession] rid=${rid} studentId=${studentId} REJECTED: no_consent_record`
+      );
     }
+    throw err;
   }
 
   const startedAtIso = new Date().toISOString();
