@@ -29,7 +29,8 @@
     "test:wb-sync": "npm run ensure:docker && npm run test:wb-jest && npm run test:wb-playwright",
     "test:e2e:smoke": "playwright test tests/smoke",
     "test:visual:update": "playwright test tests/visual --update-snapshots",
-    "test:all": "npm run test && npm run test:e2e"
+    "test:all": "npm run test && npm run test:e2e",
+    "erasure:resume": "npx tsx scripts/erasure-resume.ts"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.1",

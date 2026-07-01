@@ -6,6 +6,10 @@
     {
       "path": "/api/cron/transcribe-sweep",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/internal/erasure/process",
+      "schedule": "0 */6 * * *"
     }
   ]
 }

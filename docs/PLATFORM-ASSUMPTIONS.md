@@ -94,6 +94,23 @@
 - **What breaks if violated**: orphaned `pending` chunks never transcribe if both the immediate attempt and cron are absent; cron without `CRON_SECRET` is a no-op (401). Migrating off Vercel requires replicating the schedule + authenticated HTTP trigger.
 - **Migration check**: provision EventBridge (or equivalent) on the same cadence; protect the sweep endpoint with a shared secret; confirm batch/time-budget fits the new platform's per-invocation ceiling (§1.1).
 
+### 1.9 Vercel Cron — erasure worker batch
+
+- **Capability provided**: Scheduled GA HTTP trigger (cron expression → GET to a serverless route).
+- **Why we depend on it**: Learner/family right-to-erasure (E5a) — `ErasureJob` rows in `requested` (past `purgeEligibleAt`), `blobs_purging`, or `db_scrubbing` are advanced by `processErasureBatch` at `/api/internal/erasure/process`. Tombstone is immediate at request time; cron drives blob + DB purge after the 7-day grace window and resumes partial jobs.
+- **Generic / AWS equivalent**: **Amazon EventBridge Scheduler** → HTTP/Lambda consumer with shared-secret auth.
+- **Where baked in**:
+  - `vercel.json` — `crons` entry: `0 */6 * * *` → `/api/internal/erasure/process` (every 6 hours on **Pro**).
+  - `src/app/api/internal/erasure/process/route.ts` — GET (cron) + POST (manual); auth via `ERASURE_WORKER_SECRET` or `CRON_SECRET` bearer (`src/lib/erasure/erasure-worker-auth.ts`).
+  - `src/lib/erasure/process-erasure-batch.ts` — bounded batch (`take: 10`) calling `processErasureJob` per row.
+  - `scripts/erasure-resume.ts` — CLI `npm run erasure:resume -- --jobId=<id>` for support/manual single-job resume.
+- **Env vars**:
+  - `ERASURE_WORKER_SECRET` — dedicated bearer for manual/support POST invocations. **Greenlight-gated** Vercel env setup (MCP write-safety).
+  - `CRON_SECRET` — Vercel Cron sends `Authorization: Bearer <CRON_SECRET>`; accepted as fallback when `ERASURE_WORKER_SECRET` is unset or for cron-only deploys (same pattern as §1.6).
+- **Blob API reliance**: `processErasureJob` enumerates and `deleteBlob`s per family scope; large families depend on Vercel Blob list/delete throughput and the route's `maxDuration = 300` (§1.1) to finish a batch within one invocation. Per-job progress is persisted on `ErasureJob.blobsDeletedJson`; transient Blob API errors leave the job resumable on the next cron tick.
+- **What breaks if violated**: jobs stuck in `requested` past grace never purge without cron or CLI resume; missing secrets → 401 on worker route; Blob rate limits → prolonged `blobs_purging` (access still denied via tombstone).
+- **Migration check**: replicate schedule + authenticated HTTP trigger; set `ERASURE_WORKER_SECRET` (or equivalent) for non-cron callers; confirm batch size × per-job blob count fits target platform timeout.
+
 ### 1.8 Next.js `after()` — deferred post-response work
 
 - **Capability provided**: `after(callback)` from `next/server` schedules an async callback that runs **after** the HTTP response is sent but **before** the serverless function terminates, keeping the function alive (up to `maxDuration`) until the callback resolves.
