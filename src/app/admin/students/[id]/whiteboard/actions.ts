@@ -28,6 +28,7 @@ import {
   ConsentError,
   resolveModeAwareAudioRecordingConsent,
 } from "@/lib/consent-scope";
+import { shouldShortCircuitEndSessionForErasure } from "@/lib/erasure/assert-student-not-erased";
 
 /**
  * Whiteboard session lifecycle server actions.
@@ -713,6 +714,17 @@ export async function endWhiteboardSession(
     }
   }
 
+  // E6 / H-2: skip segment registration + content blob persist when erasure
+  // is in-flight or the student is already erased — session still closes.
+  const erasureShortCircuit = await shouldShortCircuitEndSessionForErasure(
+    session.studentId
+  );
+  if (erasureShortCircuit) {
+    console.warn(
+      `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} erasure_short_circuit studentId=${session.studentId} — segments and content persist skipped; session close proceeds`
+    );
+  }
+
   const now = new Date();
   let updated: { id: string; endedAt: Date | null; durationSeconds: number | null };
   let registeredSegments = 0;
@@ -737,8 +749,12 @@ export async function endWhiteboardSession(
             where: { id: whiteboardSessionId },
             data: {
               endedAt: now,
-              eventsBlobUrl: resolvedEventsBlobUrl,
-              snapshotBlobUrl: opts?.snapshotBlobUrl ?? undefined,
+              eventsBlobUrl: erasureShortCircuit
+                ? session.eventsBlobUrl
+                : resolvedEventsBlobUrl,
+              ...(erasureShortCircuit
+                ? {}
+                : { snapshotBlobUrl: opts?.snapshotBlobUrl ?? undefined }),
               durationSeconds,
             },
             select: { id: true, endedAt: true, durationSeconds: true },
@@ -763,9 +779,10 @@ export async function endWhiteboardSession(
           //      with overlapping payloads — extremely unlikely in
           //      practice but cheap to defend).
           // B2: audioConsentGranted=false skips registration entirely;
+          // E6: erasureShortCircuit skips registration + content persist;
           // session close + token revocation still proceed.
           let newSegments = 0;
-          if (segments.length > 0 && audioConsentGranted) {
+          if (segments.length > 0 && audioConsentGranted && !erasureShortCircuit) {
             const existingRows = await tx.sessionRecording.findMany({
               where: {
                 whiteboardSessionId,

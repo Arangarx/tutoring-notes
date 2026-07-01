@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth-options";
 import { db, withDbRetry } from "@/lib/db";
+import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import WhiteboardReplay from "@/components/whiteboard/WhiteboardReplay";
 import TutorNotesSection from "@/components/whiteboard/TutorNotesSection";
@@ -100,6 +101,8 @@ export default async function WhiteboardReviewPage({
     );
     notFound();
   }
+
+  await assertStudentNotErased(session.studentId);
 
   // Fetch display columns.
   const detail = await withDbRetry(

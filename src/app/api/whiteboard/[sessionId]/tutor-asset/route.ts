@@ -1,5 +1,6 @@
 import { get } from "@vercel/blob";
 import { NextResponse } from "next/server";
+import { assertStudentNotErasedApi } from "@/lib/erasure/assert-student-not-erased";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import { env } from "@/lib/env";
 import { isBlobUrlForSession } from "@/lib/whiteboard/blob-asset-in-scope";
@@ -35,6 +36,10 @@ export async function GET(
   }
 
   const session = await assertOwnsWhiteboardSession(sessionId);
+
+  const erasureBlocked = await assertStudentNotErasedApi(session.studentId);
+  if (erasureBlocked) return erasureBlocked;
+
   if (
     !isBlobUrlForSession(publicUrl, {
       studentId: session.studentId,

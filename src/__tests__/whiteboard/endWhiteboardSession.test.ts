@@ -74,6 +74,13 @@ jest.mock("@/lib/whiteboard-scope", () => ({
   assertOwnsWhiteboardSession: (id: string) => assertOwnsWhiteboardSessionMock(id),
 }));
 
+const shouldShortCircuitEndSessionForErasureMock = jest.fn();
+jest.mock("@/lib/erasure/assert-student-not-erased", () => ({
+  __esModule: true,
+  shouldShortCircuitEndSessionForErasure: (studentId: string) =>
+    shouldShortCircuitEndSessionForErasureMock(studentId),
+}));
+
 jest.mock("@/lib/action-correlation", () => ({
   __esModule: true,
   createActionCorrelationId: () => "rid_test",
@@ -145,6 +152,8 @@ beforeEach(() => {
   dbTransactionMock.mockClear();
   assertOwnsWhiteboardSessionMock.mockReset();
   revalidatePathMock.mockReset();
+  shouldShortCircuitEndSessionForErasureMock.mockReset();
+  shouldShortCircuitEndSessionForErasureMock.mockResolvedValue(false);
 });
 
 describe("endWhiteboardSession — events-only end (no segments)", () => {
@@ -367,6 +376,60 @@ describe("endWhiteboardSession — payload validation", () => {
     await expect(
       endWhiteboardSession("wb_42", FINAL_EVENTS_URL, { segments })
     ).rejects.toThrow(/audioStartedAtMs/i);
+  });
+});
+
+describe("endWhiteboardSession — erasure short-circuit (E6 / H-2)", () => {
+  it("skips segment registration and content blob swap when erasure short-circuits", async () => {
+    setupActiveSession();
+    shouldShortCircuitEndSessionForErasureMock.mockResolvedValue(true);
+    const segments: EndSessionSegment[] = [
+      makeSegment({
+        blobUrl: `${SEG_BASE_URL}/seg-1.webm`,
+        audioStartedAtMs: 100,
+        segmentId: "seg-1",
+      }),
+    ];
+    const snapshotUrl =
+      "https://abc.blob.vercel-storage.com/whiteboard-snapshots/snap.png";
+
+    const result = await endWhiteboardSession("wb_42", FINAL_EVENTS_URL, {
+      segments,
+      snapshotBlobUrl: snapshotUrl,
+    });
+
+    expect(shouldShortCircuitEndSessionForErasureMock).toHaveBeenCalledWith(
+      "stu_1"
+    );
+    expect(txSessionRecordingCreateManyMock).not.toHaveBeenCalled();
+    expect(result.registeredSegments).toBe(0);
+
+    const updateArgs = txWhiteboardUpdateMock.mock.calls[0][0];
+    expect(updateArgs.data.endedAt).toBeInstanceOf(Date);
+    expect(updateArgs.data.eventsBlobUrl).toBe("placeholder");
+    expect(updateArgs.data.snapshotBlobUrl).toBeUndefined();
+    expect(txTokenUpdateManyMock).toHaveBeenCalled();
+  });
+
+  it("registers segments and swaps eventsBlobUrl when erasure short-circuit is false", async () => {
+    setupActiveSession();
+    shouldShortCircuitEndSessionForErasureMock.mockResolvedValue(false);
+    const segments: EndSessionSegment[] = [
+      makeSegment({
+        blobUrl: `${SEG_BASE_URL}/seg-ok.webm`,
+        audioStartedAtMs: 100,
+        segmentId: "seg-ok",
+      }),
+    ];
+
+    const result = await endWhiteboardSession("wb_42", FINAL_EVENTS_URL, {
+      segments,
+    });
+
+    expect(txSessionRecordingCreateManyMock).toHaveBeenCalledTimes(1);
+    expect(result.registeredSegments).toBe(1);
+    const updateArgs = txWhiteboardUpdateMock.mock.calls[0][0];
+    expect(updateArgs.data.eventsBlobUrl).toBe(FINAL_EVENTS_URL);
   });
 });
 

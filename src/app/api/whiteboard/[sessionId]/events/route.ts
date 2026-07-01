@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createActionCorrelationId } from "@/lib/action-correlation";
+import { assertStudentNotErasedApi } from "@/lib/erasure/assert-student-not-erased";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 
 /**
@@ -38,6 +39,9 @@ export async function GET(
 
   // Ownership check — calls notFound() on miss (doesn't leak existence).
   const session = await assertOwnsWhiteboardSession(sessionId);
+
+  const erasureBlocked = await assertStudentNotErasedApi(session.studentId);
+  if (erasureBlocked) return erasureBlocked;
 
   // A session that hasn't ended yet still has a valid eventsBlobUrl
   // if the tutor did an early Stop. Don't gate on endedAt — the admin
