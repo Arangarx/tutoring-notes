@@ -31,3 +31,23 @@ export function deriveAudioCapturePolicy(
 
   return "none";
 }
+
+/** Gate E: remote streams enter the recording mixdown only when policy is full. */
+export function shouldAttachRemoteStreamToRecordingMixdown(
+  policy: AudioCapturePolicy
+): boolean {
+  return policy === "full";
+}
+
+/**
+ * Gate F: per-peer recording gain — 0 when manually muted OR student audio
+ * consent denied (tutor_only). Live A/V playback is independent.
+ */
+export function resolveRemoteRecordingGainLinear(
+  policy: AudioCapturePolicy,
+  peerId: string,
+  mutedPeerIdsInRecording: ReadonlySet<string>
+): number {
+  if (policy === "tutor_only") return 0;
+  return mutedPeerIdsInRecording.has(peerId) ? 0 : 1;
+}

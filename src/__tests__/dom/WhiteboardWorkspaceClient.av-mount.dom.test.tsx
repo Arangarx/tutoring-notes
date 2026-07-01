@@ -380,6 +380,7 @@ jest.mock(
 
 const addRemoteAudioSpy = jest.fn();
 const addRemoteAudioUnsubs: jest.Mock[] = [];
+const setRemoteRecordingGainSpy = jest.fn();
 jest.mock("@/hooks/useAudioRecorder", () => {
   const fakeLocalMicStream = {
     id: "fake-local-mic-stream",
@@ -424,6 +425,9 @@ jest.mock("@/hooks/useAudioRecorder", () => {
         const unsub = jest.fn();
         addRemoteAudioUnsubs.push(unsub);
         return unsub;
+      },
+      setRemoteRecordingGain: (stream: MediaStream, gain: number) => {
+        setRemoteRecordingGainSpy(stream, gain);
       },
     }),
   };
@@ -528,6 +532,9 @@ async function renderWorkspace(
       role: "tutor" | "student";
       joinToken: string;
       initialSessionPhase: "PENDING" | "ACTIVE";
+      sessionMode: "LIVE" | "IN_PERSON";
+      initialHasConsentSnapshot: boolean;
+      initialAllowAudioRecording: boolean | null;
     }
   > = {}
 ) {
@@ -561,6 +568,7 @@ beforeEach(() => {
   liveAvVideoDevices = [];
   addRemoteAudioSpy.mockClear();
   addRemoteAudioUnsubs.length = 0;
+  setRemoteRecordingGainSpy.mockClear();
   evaluateLifecycleCalls.length = 0;
   receivedLocalPeerId = undefined;
   receivedLiveAvOpts = undefined;
@@ -671,7 +679,11 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
       ],
     };
 
-    await renderWorkspace();
+    await renderWorkspace({
+      initialHasConsentSnapshot: true,
+      initialAllowAudioRecording: true,
+      sessionMode: "LIVE",
+    });
 
     // (a) AVTilesPanel renders BOTH remote tiles + the local one.
     const panel = screen.getByTestId("av-tiles-panel");
@@ -692,6 +704,30 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
     const attachedStreams = addRemoteAudioSpy.mock.calls.map((c) => c[0]);
     expect(attachedStreams).toContain(streamA);
     expect(attachedStreams).toContain(streamB);
+  });
+
+  test("Gate E/F: tutor_only LIVE — remote streams skip mixdown attach; gain reconcile forces 0", async () => {
+    const streamA = makeFakeAudioStream("stream-peer-A");
+    liveAvState = {
+      ...liveAvState,
+      localAudioStream: makeFakeAudioStream("local"),
+      hasMicPermission: "granted",
+      participants: [
+        makeParticipant("peer-A", { label: "Alex", audioStream: streamA }),
+      ],
+    };
+
+    await renderWorkspace({
+      initialHasConsentSnapshot: true,
+      initialAllowAudioRecording: false,
+      sessionMode: "LIVE",
+    });
+
+    await waitFor(() => {
+      expect(setRemoteRecordingGainSpy).toHaveBeenCalled();
+    });
+    expect(addRemoteAudioSpy).not.toHaveBeenCalled();
+    expect(setRemoteRecordingGainSpy).toHaveBeenCalledWith(streamA, 0);
   });
 
   test("student role: publish path only — no externalAudioStream from recorder and no addRemoteAudio mixdown", async () => {

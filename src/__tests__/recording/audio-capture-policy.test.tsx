@@ -6,6 +6,8 @@ import React, { createRef } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import {
   deriveAudioCapturePolicy,
+  resolveRemoteRecordingGainLinear,
+  shouldAttachRemoteStreamToRecordingMixdown,
   type AudioCapturePolicy,
 } from "@/lib/recording/audio-capture-policy";
 import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
@@ -326,6 +328,42 @@ describe("deriveAudioCapturePolicy", () => {
     ],
   ])("%s", (_label, input, expected) => {
     expect(deriveAudioCapturePolicy(input)).toBe(expected);
+  });
+});
+
+describe("remote-surgical mixdown gates E/F (pure helpers)", () => {
+  test("Gate E: shouldAttachRemoteStreamToRecordingMixdown — only full attaches", () => {
+    expect(shouldAttachRemoteStreamToRecordingMixdown("full")).toBe(true);
+    expect(shouldAttachRemoteStreamToRecordingMixdown("tutor_only")).toBe(
+      false
+    );
+    expect(shouldAttachRemoteStreamToRecordingMixdown("none")).toBe(false);
+  });
+
+  test("Gate F: resolveRemoteRecordingGainLinear — tutor_only forces 0", () => {
+    const muted = new Set(["peer-muted"]);
+    expect(
+      resolveRemoteRecordingGainLinear("tutor_only", "peer-student", muted)
+    ).toBe(0);
+    expect(
+      resolveRemoteRecordingGainLinear("tutor_only", "peer-other", new Set())
+    ).toBe(0);
+  });
+
+  test("Gate F: resolveRemoteRecordingGainLinear — full respects moderation set", () => {
+    const muted = new Set(["peer-muted"]);
+    expect(
+      resolveRemoteRecordingGainLinear("full", "peer-muted", muted)
+    ).toBe(0);
+    expect(
+      resolveRemoteRecordingGainLinear("full", "peer-live", muted)
+    ).toBe(1);
+  });
+
+  test("Gate F: resolveRemoteRecordingGainLinear — none leaves gain at 1 (attach blocked upstream)", () => {
+    expect(
+      resolveRemoteRecordingGainLinear("none", "peer-student", new Set())
+    ).toBe(1);
   });
 });
 

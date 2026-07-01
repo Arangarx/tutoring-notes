@@ -65,7 +65,11 @@ import {
   TUTOR_MIC_STREAM_ID,
   type StreamHealth,
 } from "@/lib/recording/lifecycle-machine";
-import { deriveAudioCapturePolicy } from "@/lib/recording/audio-capture-policy";
+import {
+  deriveAudioCapturePolicy,
+  resolveRemoteRecordingGainLinear,
+  shouldAttachRemoteStreamToRecordingMixdown,
+} from "@/lib/recording/audio-capture-policy";
 import { useAudioFlowConfirmation } from "@/hooks/useAudioFlowConfirmation";
 import { useCollaboratorPointers } from "@/hooks/useCollaboratorPointers";
 import { useLiveAV } from "@/hooks/useLiveAV";
@@ -2365,9 +2369,11 @@ export function WhiteboardWorkspaceClient({
   const workspaceAudioAddRemoteAudio = workspaceAudio.addRemoteAudio;
   const workspaceAudioLocalMicStream = workspaceAudio.localMicStream;
   useEffect(() => {
-    // Tutor-only: student device never mixes into recordingDest (B2 gate
-    // allowAudioRecording is enforced server-side + here on tutor host).
+    // Gate E: remote streams attach to recordingDest only when policy is
+    // full. tutor_only/none skip attach — live A/V playback is separate.
     if (role !== "tutor") return;
+    const attachRemoteToMixdown =
+      shouldAttachRemoteStreamToRecordingMixdown(audioCapturePolicy);
     const subs = remoteAudioSubsRef.current;
     if (!workspaceAudioLocalMicStream) {
       // Graph not ready (mic not acquired yet) or graph just got
@@ -2389,7 +2395,7 @@ export function WhiteboardWorkspaceClient({
     for (const p of liveAv.participants) {
       if (!p.audioStream) continue;
       seen.add(p.audioStream);
-      if (subs.has(p.audioStream)) continue;
+      if (!attachRemoteToMixdown || subs.has(p.audioStream)) continue;
       try {
         const unsub = workspaceAudioAddRemoteAudio(p.audioStream);
         subs.set(p.audioStream, unsub);
@@ -2404,7 +2410,7 @@ export function WhiteboardWorkspaceClient({
       }
     }
     for (const [stream, unsub] of [...subs.entries()]) {
-      if (seen.has(stream)) continue;
+      if (attachRemoteToMixdown && seen.has(stream)) continue;
       try {
         unsub();
       } catch {
@@ -2414,16 +2420,17 @@ export function WhiteboardWorkspaceClient({
     }
   }, [
     role,
+    audioCapturePolicy,
     liveAv.participants,
     workspaceAudioAddRemoteAudio,
     workspaceAudioLocalMicStream,
     whiteboardSessionId,
   ]);
 
-  // Phase 4d Commit 7: per-peer recording-mute reconcile. After the
-  // attach effect above ensures every participant's audioStream is
-  // wired into the graph, this effect flips each stream's GainNode
-  // to 0 (muted) or 1 (live) based on `mutedPeerIdsInRecording`.
+  // Phase 4d Commit 7 + Gate F: per-peer recording-mute reconcile. After
+  // the attach effect above wires participant streams into the graph
+  // (when policy is full), this effect flips each stream's GainNode to
+  // 0 or 1 based on `mutedPeerIdsInRecording` OR tutor_only consent.
   // Replay sees a clean silence during the muted window (not a gap)
   // because the source stays connected — important for the single-
   // blob / single-row replay pipeline.
@@ -2439,9 +2446,13 @@ export function WhiteboardWorkspaceClient({
     if (!workspaceAudioLocalMicStream) return;
     for (const p of liveAv.participants) {
       if (!p.audioStream) continue;
-      const muted = mutedPeerIdsInRecording.has(p.peerId);
+      const gain = resolveRemoteRecordingGainLinear(
+        audioCapturePolicy,
+        p.peerId,
+        mutedPeerIdsInRecording
+      );
       try {
-        workspaceAudioSetRemoteGain(p.audioStream, muted ? 0 : 1);
+        workspaceAudioSetRemoteGain(p.audioStream, gain);
       } catch (err) {
         console.warn(
           `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} setRemoteRecordingGain failed peer=${p.peerId}`,
@@ -2451,6 +2462,7 @@ export function WhiteboardWorkspaceClient({
     }
   }, [
     role,
+    audioCapturePolicy,
     liveAv.participants,
     mutedPeerIdsInRecording,
     workspaceAudioSetRemoteGain,
