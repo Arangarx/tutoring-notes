@@ -25,6 +25,7 @@ import {
   assertEffectiveConsent,
   createSessionConsentSnapshot,
   ConsentError,
+  resolveModeAwareAudioRecordingConsent,
 } from "@/lib/consent-scope";
 
 /**
@@ -662,22 +663,20 @@ export async function endWhiteboardSession(
     }
   }
 
-  // B2: pre-check audio consent BEFORE the transaction.
-  // If audio consent is denied, we skip segment registration but the session
-  // ALWAYS closes successfully — no lost sessions (reliability invariant).
+  // B2 + Block B: mode-aware audio consent BEFORE the transaction.
+  // IN_PERSON+denied or no-snapshot claimed minor → skip segment registration.
+  // LIVE+denied → register tutor-only mixdown (client already excluded student).
+  // Session ALWAYS closes successfully — no lost sessions (reliability invariant).
   let audioConsentGranted = true;
   if (segments.length > 0) {
-    try {
-      await assertEffectiveConsent(whiteboardSessionId, "allowAudioRecording");
-    } catch (err) {
-      if (err instanceof ConsentError) {
-        audioConsentGranted = false;
-        console.warn(
-          `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} audio_consent_denied — segments will NOT be registered; session close proceeds`
-        );
-      } else {
-        throw err;
-      }
+    const audioConsent = await resolveModeAwareAudioRecordingConsent(
+      whiteboardSessionId
+    );
+    if (!audioConsent.allow) {
+      audioConsentGranted = false;
+      console.warn(
+        `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} audio_consent_denied reason=${audioConsent.reason} — segments will NOT be registered; session close proceeds`
+      );
     }
   }
 
@@ -1382,8 +1381,20 @@ export async function registerWhiteboardSessionAudioSegmentAction(
       };
     }
 
-    // B2: consent gate — throws ConsentError when consent denied.
-    await assertEffectiveConsent(whiteboardSessionId, "allowAudioRecording");
+    // B2 + Block B: mode-aware consent gate (same semantics as end-session).
+    const audioConsent = await resolveModeAwareAudioRecordingConsent(
+      whiteboardSessionId
+    );
+    if (!audioConsent.allow) {
+      console.log(
+        `[registerWhiteboardSessionAudioSegment] rid=${rid} wbsid=${whiteboardSessionId} rejected: consent reason=${audioConsent.reason}`
+      );
+      return {
+        ok: false,
+        error: "Audio recording consent is not granted for this session.",
+        debugId: rid,
+      };
+    }
 
     const last = await withDbRetry(
       () =>
@@ -1487,6 +1498,18 @@ export async function enqueueChunkTranscriptionAction(
   if (phaseRow?.sessionPhase !== "ACTIVE") {
     console.log(
       `[txc] wbsid=${whiteboardSessionId} action=enqueue_action_skipped reason=not_active_phase phase=${phaseRow?.sessionPhase ?? "unknown"}`
+    );
+    return;
+  }
+
+  // Block B: mode-aware consent — IN_PERSON+denied or no-snapshot claimed minor
+  // fail-closed; LIVE+denied allows tutor-only mixdown transcription.
+  const audioConsent = await resolveModeAwareAudioRecordingConsent(
+    whiteboardSessionId
+  );
+  if (!audioConsent.allow) {
+    console.log(
+      `[txc] wbsid=${whiteboardSessionId} action=enqueue_rejected reason=${audioConsent.reason}`
     );
     return;
   }

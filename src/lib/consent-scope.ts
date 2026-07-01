@@ -136,6 +136,128 @@ export async function assertEffectiveConsent(
 }
 
 // ---------------------------------------------------------------------------
+// resolveModeAwareAudioRecordingConsent (Block B server gates — B-5/B-6/H-6/M-6)
+// ---------------------------------------------------------------------------
+
+export type ModeAwareAudioConsentDenyReason =
+  | "consent_denied_inperson"
+  | "no_snapshot_fail_closed";
+
+export type ModeAwareAudioConsentDecision =
+  | { allow: true }
+  | { allow: false; reason: ModeAwareAudioConsentDenyReason };
+
+/**
+ * Mode-aware allow/deny for audio recording, transcription, and segment
+ * registration. Single source of truth for server-side Block B gates.
+ *
+ * Semantics (session's frozen snapshot + activated sessionMode):
+ *   - allowAudioRecording=true → allow (any mode)
+ *   - allowAudioRecording=false + IN_PERSON → deny (inseparable mic)
+ *   - allowAudioRecording=false + LIVE → allow (tutor-only mixdown)
+ *   - no snapshot + claimed non-self learner → deny (M-6 fail-closed)
+ *   - no snapshot + unclaimed or self-learner → allow (legacy compat)
+ *
+ * Does NOT throw ConsentError — callers log and skip/early-return.
+ * Generic assertEffectiveConsent no_snapshot→PASS is unchanged.
+ */
+export async function resolveModeAwareAudioRecordingConsent(
+  whiteboardSessionId: string
+): Promise<ModeAwareAudioConsentDecision> {
+  const row = await withDbRetry(
+    () =>
+      db.whiteboardSession.findUnique({
+        where: { id: whiteboardSessionId },
+        select: {
+          sessionMode: true,
+          consentSnapshot: {
+            select: {
+              allowAudioRecording: true,
+              consentRecordId: true,
+            },
+          },
+          student: {
+            select: {
+              learnerProfileId: true,
+              learnerProfile: { select: { isSelfLearner: true } },
+            },
+          },
+        },
+      }),
+    { label: "resolveModeAwareAudioRecordingConsent" }
+  );
+
+  if (!row) {
+    console.log(
+      `[cns] wbsid=${whiteboardSessionId} action=mode_aware_audio result=deny reason=no_snapshot_fail_closed detail=session_not_found`
+    );
+    return { allow: false, reason: "no_snapshot_fail_closed" };
+  }
+
+  const { sessionMode, consentSnapshot, student } = row;
+  const learnerProfileId = student?.learnerProfileId ?? null;
+
+  if (consentSnapshot) {
+    if (consentSnapshot.consentRecordId) {
+      const record = await withDbRetry(
+        () =>
+          db.consentRecord.findUnique({
+            where: { id: consentSnapshot.consentRecordId! },
+            include: {
+              learnerProfile: { select: { isSelfLearner: true } },
+            },
+          }),
+        { label: "resolveModeAwareAudioRecordingConsent.record" }
+      );
+      if (record?.learnerProfile?.isSelfLearner) {
+        console.log(
+          `[cns] wbsid=${whiteboardSessionId} action=mode_aware_audio result=allow reason=self_learner`
+        );
+        return { allow: true };
+      }
+    }
+
+    if (consentSnapshot.allowAudioRecording) {
+      console.log(
+        `[cns] wbsid=${whiteboardSessionId} action=mode_aware_audio result=allow reason=granted`
+      );
+      return { allow: true };
+    }
+
+    if (sessionMode === "IN_PERSON") {
+      console.log(
+        `[cns] wbsid=${whiteboardSessionId} action=mode_aware_audio result=deny reason=consent_denied_inperson mode=${sessionMode}`
+      );
+      return { allow: false, reason: "consent_denied_inperson" };
+    }
+
+    console.log(
+      `[cns] wbsid=${whiteboardSessionId} action=mode_aware_audio result=allow reason=live_tutor_only mode=${sessionMode}`
+    );
+    return { allow: true };
+  }
+
+  if (!learnerProfileId) {
+    console.log(
+      `[cns] wbsid=${whiteboardSessionId} action=mode_aware_audio result=allow reason=no_snapshot_unclaimed`
+    );
+    return { allow: true };
+  }
+
+  if (student?.learnerProfile?.isSelfLearner) {
+    console.log(
+      `[cns] wbsid=${whiteboardSessionId} action=mode_aware_audio result=allow reason=no_snapshot_self_learner`
+    );
+    return { allow: true };
+  }
+
+  console.log(
+    `[cns] wbsid=${whiteboardSessionId} action=mode_aware_audio result=deny reason=no_snapshot_fail_closed`
+  );
+  return { allow: false, reason: "no_snapshot_fail_closed" };
+}
+
+// ---------------------------------------------------------------------------
 // createSessionConsentSnapshot
 // ---------------------------------------------------------------------------
 
