@@ -8,6 +8,26 @@
 
 **Goal:** When a student has **not** consented to audio (`SessionConsentSnapshot.allowAudioRecording === false`), their audio is **never** captured, uploaded, persisted (IDB / Blob), or transcribed. **Off means off.** Build once so Part 3 `p3-consent-recording` (per-speaker per-modality gating) extends this spine cleanly.
 
+---
+
+## Scope expansion (2026-06-30): consent-honesty blocker
+
+Andrew ratified **CC-1** and **CC-2** (2026-06-30); consent-collection completeness is now a **Sarah-merge BLOCKER** alongside Block B. The expanded **consent-honesty blocker** has three parts:
+
+| Part | Decision | Surface (indicative) |
+|---|---|---|
+| **(a) Block B capture gate** | `CLIENT-AUDIO-CONSENT-GATE` + 7a fail-closed-universal | This plan — workspace SSR + client gates + server defense |
+| **(b) CC-1 session-start-requires-claimed** | No session without claimed `Student` | Session create/start in [`admin/students/[id]/whiteboard/actions.ts`](../../src/app/admin/students/[id]/whiteboard/actions.ts) |
+| **(c) CC-2 claim-consent-choice** | Claim requires explicit consent choice; always writes `ConsentRecord` + warning copy | Claim flow in [`app/claim/[token]/setup`](../../src/app/claim/[token]/setup) + complete route |
+
+**CC-1 + CC-2 auto-resolve** the previously-open live-minor-join gating question: once a snapshot always exists post-claim, the existing join gate enforces `allowLiveSession` (all-off → live join denied) — no separate mechanism needed.
+
+**Follow-up pass (not in this doc):** detailed hook-point planning for **(b)** and **(c)** is a short follow-up before execution. This plan remains scoped to **(a) Block B** only.
+
+Cross-ref: [`BACKLOG.md`](../BACKLOG.md) `CONSENT-COLLECTION-COMPLETENESS`; [`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md) CC-1/CC-2 rows.
+
+---
+
 **Prerequisite reads:** [`docs/RECORDER-LIFECYCLE.md`](../RECORDER-LIFECYCLE.md), [`src/lib/consent-scope.ts`](../../src/lib/consent-scope.ts), [`consent-gates-capture-design-2026-05-31.md`](consent-gates-capture-design-2026-05-31.md).
 
 ---
@@ -264,7 +284,7 @@ Investigation overturned the assumption that *"you can't create a child learner 
 
 **Additional exposure (live join, not audio capture):** join gate ([`join/[sessionId]/page.tsx:219-228`](../../src/app/join/[sessionId]/page.tsx)) only denies a minor's **live** join when a snapshot **exists** and `allowLiveSession=false`; a **missing** snapshot → join **allowed**. An unconsented minor can currently **join** a live session. Fail-closed (7a) protects **recording**, not live streaming.
 
-**Impact:** 7a fail-closed-universal closes the **audio-capture** exposure through all three holes. Remaining gaps: consent-**collection** completeness + ungated live session — **new open decisions** (see [`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md) HEAD; [`BACKLOG.md`](../BACKLOG.md) `CONSENT-COLLECTION-COMPLETENESS`).
+**Impact:** 7a fail-closed-universal closes the **audio-capture** exposure through all three holes. **CC-1 + CC-2 ratified 2026-06-30** — consent-collection completeness is now a Sarah-merge **BLOCKER** (holes (1)+(3) closed; live-minor-join auto-resolved). Remaining sub-item: parent-created-learner / B2 Step 6 scope — **PENDING Andrew** (see [`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md) HEAD; [`BACKLOG.md`](../BACKLOG.md) `CONSENT-COLLECTION-COMPLETENESS`).
 
 ### 7b. Other forks (confirm, do not assume)
 
