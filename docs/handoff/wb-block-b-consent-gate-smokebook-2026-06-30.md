@@ -1,7 +1,7 @@
 # Block B — client audio-consent gate — smoke runbook
 
 **Branch:** `wb-wave5-polish`
-**Tip commit:** [`bded52e`](https://github.com/Arangarx/tutoring-notes/commit/bded52e62ac20b64e2c2c38e828131c0d27d4246)
+**Tip commit:** [`5c59a37`](https://github.com/Arangarx/tutoring-notes/commit/5c59a371c58a6c4f7e021901bcefb787abd4d341)
 **Preview:** [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-arangarx-5209s-projects.vercel.app)
 
 Block B ships the client audio-consent projection (`audio-capture-policy`: `full` / `tutor_only` / `none`), server mode-aware consent gates, honest tutor banners, hidden dead WB toggle, and join-gate H-5. Automated gates: 13 jest suites / 146 tests green at tip.
@@ -12,7 +12,7 @@ Block B ships the client audio-consent projection (`audio-capture-policy`: `full
 
 **(a) Remote-surgical Web Audio isolation (item 3)** — jest cannot prove the mixdown graph excludes student audio while live hearing continues. This smoke item **requires hardware ears** (or future Playwright Web Audio harness). PARTIAL is acceptable if live hearing works but recording isolation is unverified.
 
-**(b) Parent-facing consent COPY (Commit 5b HELD)** — `allowLiveSession` / `allowAudioRecording` toggle descriptions are **not yet rewritten** per Block B plan §6 (`LIVE-SESSION-CONSENT-COPY`). Current `allowLiveSession` text may not mention whiteboard recording. **Do NOT smoke-fail on copy wording** — that rewrite is held for Andrew sign-off and blocks Sarah merge separately.
+**(b) Parent-facing consent COPY (Commit 5b SHIPPED — `ef11299`)** — Honest toggle labels and descriptions are **live** in `src/lib/consent-toggle-copy.ts` and single-sourced in parent consent editor + claim setup. **Verify** the shipped strings in item 5 (including `allowLiveSession` mentioning whiteboard recording saved for review).
 
 ---
 
@@ -96,13 +96,15 @@ Block B ships the client audio-consent projection (`audio-capture-policy`: `full
 
 ---
 
-### 5. Consent UI — dead WB toggle hidden; live + audio toggles still present
+### 5. Consent UI — dead WB toggle hidden; honest live + audio copy present
 
-**Action:** **(A)** Parent consent editor: navigate as parent/account-holder to edit consent for a learner (per-tutor consent editor route). **(B)** Claim setup: open a claim setup flow (`/claim/[token]/setup` or equivalent) that renders consent toggles. Inspect visible toggles in both surfaces.
+**Action:** **(A)** Parent consent editor: navigate as parent/account-holder to edit consent for a learner (per-tutor consent editor route). **(B)** Claim setup: open a claim setup flow (`/claim/[token]/setup` or equivalent) that renders consent toggles. Inspect visible toggles and description copy in both surfaces.
 
-**Expect:** **`allowWhiteboardRecording` toggle is NOT shown** on parent consent editor or claim setup. **`allowLiveSession`** and **`allowAudioRecording`** toggles **are still present** and save correctly. (Do not fail on `allowLiveSession` description copy — see global note 5b HELD.)
+**Expect:** **`allowWhiteboardRecording` toggle is NOT shown** on parent consent editor or claim setup. **`allowLiveSession`** and **`allowAudioRecording`** toggles **are still present** and save correctly. Shipped honest copy (from `consent-toggle-copy.ts`) is visible on both surfaces:
+- **Allow live tutoring sessions** — description includes that the child can join real-time video and audio and that **everything drawn on the shared whiteboard during the session is saved for later review**.
+- **Allow session audio recording** — description explains in-person vs online capture and that **live conversation is always available when live sessions are allowed** — the toggle only controls what is saved.
 
-**Ignore this run:** Literal `allowLiveSession` / `allowAudioRecording` description text (Commit 5b held). Hidden field still POSTed with default false — not user-visible.
+**Ignore this run:** Hidden `allowWhiteboardRecording` field still POSTed with default false — not user-visible. Minor punctuation/line-break nits only if meaning is intact.
 
 - [ ] PASS
 - [ ] FAIL
