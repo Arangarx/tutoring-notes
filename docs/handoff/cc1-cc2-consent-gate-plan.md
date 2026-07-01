@@ -413,3 +413,22 @@ Per [`session-lifecycle-consent-design-2026-05-31.md`](session-lifecycle-consent
 | `setup/page.tsx` skip L145–148 | **CredentialSetupForm L301–308** ("Set up later"); dashboard link `setup/page.tsx` L144–149 (post-credential, not consent skip) |
 | `StartWhiteboardSession` ~L36–64 | **L28–74** (expanded catch block) |
 | All other cited anchors | **Match** (actions B2 L106–142, start L263–298, setup consent API L83–127, schema, join gate L219–246, complete L85–191 / connect_self L104–134) |
+
+---
+
+## Phase-1 acceptance addendum — 5-axis review (2026-06-30)
+
+The following findings from the Sonnet 5-axis adversarial review are **folded into Phase-1 acceptance** for this plan. See [`consent-blocker-5axis-review-2026-06-30.md`](consent-blocker-5axis-review-2026-06-30.md) for full detail and remediations.
+
+- **B-1** — `assertConsentRecordExists` at `createWhiteboardSession` L104; replace the null-passthrough in the existing B2 guard; explicit `ConsentError`+log for unclaimed
+- **B-2** — `startWhiteboardSession` backstop check
+- **B-3 + B-4** — close BOTH claim-setup escape routes: add `isSelfLearner` to setup/page SSR query, add `enforcementEnabled` prop to `CredentialSetupForm`, hide "Set up later" + guard "Go to dashboard" until `consentAlreadySaved||isSelfLearner`
+- **H-1** — `ConsentRecord` version race — serialize or catch P2002→409; applies to `consent_decline` too
+- **H-5** — join page: deny claimed-minor + no-snapshot
+- **M-1** — `hasPendingSessionInvite` must require an active join token
+- **M-2** — `issueJoinToken` transition gate/error
+- **L-2** — self-learner setup UX — skip/informational
+- **L-4** — `isSelfLearner` audit/invariant note
+- **L-5** — CC-2 warning copy REQUIRES Andrew approval before Commit 6 ships
+
+**Required new tests:** T-new-A, T-new-B, T-new-C, T-new-F

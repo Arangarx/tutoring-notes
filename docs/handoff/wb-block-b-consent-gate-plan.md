@@ -412,3 +412,19 @@ A fail-closed negative test alone can hide a **wiring bug** on the success path.
 - [`ORCHESTRATOR-STATE.md`](ORCHESTRATOR-STATE.md) — Block B ratification 2026-06-30
 - [`docs/RECORDER-LIFECYCLE.md`](../RECORDER-LIFECYCLE.md) — three pillars
 - [`consent-gates-capture-design-2026-05-31.md`](consent-gates-capture-design-2026-05-31.md) — enforcement stack (UI + server + snapshot)
+
+---
+
+## Phase-1 acceptance addendum — 5-axis review (2026-06-30)
+
+The following findings from the Sonnet 5-axis adversarial review are **folded into Phase-1 acceptance** for this plan. See [`consent-blocker-5axis-review-2026-06-30.md`](consent-blocker-5axis-review-2026-06-30.md) for full detail and remediations.
+
+- **B-5** — `enqueueChunkTranscriptionAction` mode-aware consent check
+- **B-6** — `endWhiteboardSession` mode-aware — do NOT drop tutor's own audio on LIVE+student-denied
+- **H-6** — `registerWhiteboardSessionAudioSegmentAction` same mode-aware fix, same commit as B-6
+- **H-4** — IDB draft cleared not re-uploaded when policy=none
+- **M-3** — waiting-room policy re-derived from locally-selected mode
+- **M-6** — `endWhiteboardSession` fail-closed when no snapshot for claimed learner
+- **L-3** — BACKLOG: `allowWhiteboardRecording` frozen-false schema debt
+
+**Required new tests:** T-new-D, T-new-E, T-new-G

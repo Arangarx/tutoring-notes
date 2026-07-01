@@ -346,3 +346,23 @@ Per AGENTS.md convention, propose **`ers`** (erasure):
 | CostEvent SetNull migration | **`20260517120000_add_cost_events`** L28-31 | Not `cost-events.ts` alone |
 
 **Proposed log prefix:** `ers` (erasure job id in `ers=<jobId>`).
+
+---
+
+## Phase-1 acceptance addendum — 5-axis review (2026-06-30)
+
+The following findings from the Sonnet 5-axis adversarial review are **folded into Phase-1 acceptance** for this plan. See [`consent-blocker-5axis-review-2026-06-30.md`](consent-blocker-5axis-review-2026-06-30.md) for full detail and remediations.
+
+- **B-7** — `PasswordResetToken` swept by ORIGINAL email BEFORE redaction — fix tombstone-txn ordering
+- **B-8** — `ErasureJob` partial unique index on active scope / upsert
+- **H-2** — re-enumerate blobs after quiescence to catch in-flight uploads at tombstone time
+- **H-3** — events.json asset enumeration: `WhiteboardAsset` table at upload OR per-session checkpoint to avoid Vercel timeout at scale
+- **M-4** — add `Student.erasedAt` durable flag; route guards check it instead of heuristic
+- **M-5** — `ErasureJobBlob` child table or batched count for large families
+- **L-1** — `blob-cleanup.mjs` must include `chunkBlobUrl`
+
+**Cross-plan gap:** erasure vs an ACTIVE session — `endWhiteboardSession` must short-circuit segment registration when an `ErasureJob` is in-progress for the student (or `db_scrubbing` cleans post-inventory segments).
+
+**Additive migrations now expected:** `ErasureJob` + partial unique index, `Student.erasedAt`, optionally `WhiteboardAsset` / `ErasureJobBlob`.
+
+**Required new tests:** T-new-H, T-new-I
