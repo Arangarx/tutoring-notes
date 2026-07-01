@@ -1413,6 +1413,42 @@ export function WhiteboardWorkspaceClient({
     [initialAllowAudioRecording, initialHasConsentSnapshot, sessionMode]
   );
 
+  const audioConsentBannerMessage = useMemo(() => {
+    if (role !== "tutor") return null;
+    if (audioCapturePolicy === "full") return null;
+    if (audioCapturePolicy === "none") {
+      if (!initialHasConsentSnapshot) {
+        return (
+          <>
+            <strong>Recording &amp; notes off</strong> — no audio consent on
+            file for this student. Whiteboard and live conversation continue.
+            Parent setup may be required before audio can be saved.
+          </>
+        );
+      }
+      return (
+        <>
+          <strong>Audio not recorded</strong> — this student&apos;s parent has
+          not allowed session audio. Whiteboard and live conversation continue.
+        </>
+      );
+    }
+    if (audioCapturePolicy === "tutor_only" && phaseActive) {
+      return (
+        <>
+          <strong>Student audio not recorded</strong> — only your microphone is
+          included in the recording and notes.
+        </>
+      );
+    }
+    return null;
+  }, [
+    role,
+    audioCapturePolicy,
+    initialHasConsentSnapshot,
+    phaseActive,
+  ]);
+
   const [audioConsentDraftCleared, setAudioConsentDraftCleared] =
     useState(false);
 
@@ -6154,6 +6190,11 @@ export function WhiteboardWorkspaceClient({
                   </button>
                 </div>
               )}
+            {audioConsentBannerMessage && (
+              <Banner tone="warning" testId="wb-audio-consent-banner">
+                {audioConsentBannerMessage}
+              </Banner>
+            )}
             {audioDraftRecovery && (
               <Banner tone="warning" testId="wb-audio-draft-recovery-banner">
                 <span>

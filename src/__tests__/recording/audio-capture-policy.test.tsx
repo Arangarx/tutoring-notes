@@ -481,3 +481,112 @@ describe("WhiteboardWorkspaceClient consent gates D/K", () => {
     });
   });
 });
+
+describe("WhiteboardWorkspaceClient audio-consent banner", () => {
+  beforeEach(() => {
+    capturedRecorderOptions.length = 0;
+    mockDraftClear.mockClear();
+    mockDraftFindInProgress.mockClear();
+    mockDraftFindInProgress.mockResolvedValue(null);
+  });
+
+  test("policy=none + no snapshot shows recording-off copy", () => {
+    render(
+      <WhiteboardWorkspaceClient
+        {...baseWorkspaceProps}
+        initialSessionPhase="PENDING"
+        initialHasConsentSnapshot={false}
+        initialAllowAudioRecording={null}
+      />
+    );
+
+    const banner = screen.getByTestId("wb-audio-consent-banner");
+    expect(banner).toHaveTextContent("Recording & notes off");
+    expect(banner).toHaveTextContent(
+      "no audio consent on file for this student"
+    );
+    expect(banner).toHaveTextContent("Parent setup may be required");
+  });
+
+  test("policy=none + denied consent shows in-person denied copy", () => {
+    render(
+      <WhiteboardWorkspaceClient
+        {...baseWorkspaceProps}
+        initialSessionPhase="PENDING"
+        initialHasConsentSnapshot={true}
+        initialAllowAudioRecording={false}
+        sessionMode="IN_PERSON"
+      />
+    );
+
+    const banner = screen.getByTestId("wb-audio-consent-banner");
+    expect(banner).toHaveTextContent("Audio not recorded");
+    expect(banner).toHaveTextContent(
+      "parent has not allowed session audio"
+    );
+    expect(banner).not.toHaveTextContent("Recording & notes off");
+  });
+
+  test("policy=tutor_only + active session shows student-audio-off copy", () => {
+    render(
+      <WhiteboardWorkspaceClient
+        {...baseWorkspaceProps}
+        initialSessionPhase="ACTIVE"
+        initialHasConsentSnapshot={true}
+        initialAllowAudioRecording={false}
+        sessionMode="LIVE"
+      />
+    );
+
+    const banner = screen.getByTestId("wb-audio-consent-banner");
+    expect(banner).toHaveTextContent("Student audio not recorded");
+    expect(banner).toHaveTextContent(
+      "only your microphone is included in the recording and notes"
+    );
+  });
+
+  test("policy=tutor_only + waiting room hides banner", () => {
+    render(
+      <WhiteboardWorkspaceClient
+        {...baseWorkspaceProps}
+        initialSessionPhase="PENDING"
+        initialHasConsentSnapshot={true}
+        initialAllowAudioRecording={false}
+        sessionMode="LIVE"
+      />
+    );
+
+    expect(
+      screen.queryByTestId("wb-audio-consent-banner")
+    ).not.toBeInTheDocument();
+  });
+
+  test("policy=full does not render consent banner", () => {
+    render(
+      <WhiteboardWorkspaceClient
+        {...baseWorkspaceProps}
+        initialHasConsentSnapshot={true}
+        initialAllowAudioRecording={true}
+      />
+    );
+
+    expect(
+      screen.queryByTestId("wb-audio-consent-banner")
+    ).not.toBeInTheDocument();
+  });
+
+  test("student role never sees consent banner", () => {
+    render(
+      <WhiteboardWorkspaceClient
+        {...baseWorkspaceProps}
+        role="student"
+        initialHasConsentSnapshot={false}
+        initialAllowAudioRecording={null}
+      />
+    );
+
+    expect(
+      screen.queryByTestId("wb-audio-consent-banner")
+    ).not.toBeInTheDocument();
+  });
+});
