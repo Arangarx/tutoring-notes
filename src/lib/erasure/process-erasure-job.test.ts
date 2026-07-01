@@ -522,11 +522,60 @@ describe("processErasureJob — crash resume", () => {
 
     expect(mockDeleteBlob).toHaveBeenCalledWith(fixture.snapshotBlobUrl);
     expect(mockDeleteBlob).toHaveBeenCalledWith(fixture.chunkBlobUrl);
-    expect(mockDeleteBlob).not.toHaveBeenCalledWith(fixture.recordingBlobUrl);
-    expect(mockDeleteBlob).not.toHaveBeenCalledWith(fixture.eventsBlobUrl);
+
+    const callCount = (url: string) =>
+      mockDeleteBlob.mock.calls.filter((c) => c[0] === url).length;
+    // Inventory-1 URLs already in blobsDeletedJson — skipped in blobs_purging resume,
+    // then purged once in H-2 second pass (row still present for enumeration).
+    expect(callCount(fixture.recordingBlobUrl)).toBe(1);
+    expect(callCount(fixture.eventsBlobUrl)).toBe(1);
+    // Remaining inventory-1 URLs deleted in blobs_purging resume, then idempotently in H-2.
+    expect(callCount(fixture.snapshotBlobUrl)).toBe(2);
+    expect(callCount(fixture.chunkBlobUrl)).toBe(2);
 
     const student = await db.student.findUnique({ where: { id: fixture.student.id } });
     expect(student!.erasedAt).not.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// H-2 second pass ordering (in-flight upload straggler)
+// ---------------------------------------------------------------------------
+
+describe("processErasureJob — H-2 straggler purge before DB scrub", () => {
+  it("purges in-flight recording blob via H-2 second pass while DB row still exists", async () => {
+    const fixture = await createFullErasureFixture();
+    setupBlobMocks(fixture.session.id);
+
+    // Simulate blobs_purging completed for inventory-1 but missed an in-flight upload.
+    const job = await createErasureJob("learner_profile", fixture.lp.id, {
+      status: "db_scrubbing",
+      blobsDeletedJson: [
+        fixture.eventsBlobUrl,
+        fixture.snapshotBlobUrl,
+        fixture.chunkBlobUrl,
+      ],
+    });
+
+    const rowExistedAtH2Delete = new Map<string, boolean>();
+    mockDeleteBlob.mockImplementation(async (url: string) => {
+      if (url === fixture.recordingBlobUrl) {
+        const count = await db.sessionRecording.count({
+          where: { studentId: fixture.student.id, blobUrl: url },
+        });
+        rowExistedAtH2Delete.set(url, count > 0);
+      }
+    });
+
+    const result = await processErasureJob(job.id);
+    expect(result.status).toBe("completed");
+
+    expect(mockDeleteBlob).toHaveBeenCalledWith(fixture.recordingBlobUrl);
+    expect(rowExistedAtH2Delete.get(fixture.recordingBlobUrl)).toBe(true);
+
+    expect(
+      await db.sessionRecording.count({ where: { studentId: fixture.student.id } })
+    ).toBe(0);
   });
 });
 

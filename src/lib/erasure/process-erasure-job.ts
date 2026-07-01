@@ -241,8 +241,12 @@ export async function processErasureJob(
 
   if (job.status === "db_scrubbing") {
     const { studentIds, sessionIds } = await resolveErasureScopeStudents(scope);
-    await scrubDbContent(studentIds, sessionIds);
 
+    // H-2 second pass: re-enumerate and purge straggler blobs BEFORE scrubDbContent
+    // deletes the DB rows/columns that enumerateLearnerFamilyBlobs reads. A blob from
+    // an in-flight upload during blobs_purging is only discoverable while its row
+    // still exists. (A residual micro-window remains if an upload lands during the
+    // scrub transaction — closed separately by endWhiteboardSession erasure short-circuit.)
     const { urls: stragglerUrls } = await enumerateLearnerFamilyBlobs(scope);
     for (const url of stragglerUrls) {
       try {
@@ -259,6 +263,8 @@ export async function processErasureJob(
         return { status: "db_scrubbing" };
       }
     }
+
+    await scrubDbContent(studentIds, sessionIds);
 
     const completedAt = new Date();
     await advancePhase(jobId, "db_scrubbing", "completed", { completedAt });
