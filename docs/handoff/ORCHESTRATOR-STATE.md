@@ -18,7 +18,7 @@
 |---|---|
 | **Last action completed** | **Erasure 5-axis reliability review complete** — 9 BLOCKERs found + Option A ratified + folded into [`consent-honesty-safe-erasure-plan.md`](consent-honesty-safe-erasure-plan.md). Consent fixes **CF-1** ([`183f09b`](https://github.com/Arangarx/tutoring-notes/commit/183f09b)) + **CF-3** ([`7a9514f`](https://github.com/Arangarx/tutoring-notes/commit/7a9514f)) shipped. — — — **Prior:** Andrew pre-merge smoke NOT PASS (MB-1..MB-6); mini-phase plan authored; consent-honesty blocker CODE-COMPLETE @ [`e66c177`](https://github.com/Arangarx/tutoring-notes/commit/e66c177). |
 | **Next action(s)** | **1.** Execute erasure Workstream B per reviewed Step 0..8 order in plan (migration `LearnerCredential.disabled` first). **Remaining Workstream A:** CF-2 (replay/audio decouple, `test:wb-sync`-gated) + CF-4 (tutor_only notes). **2.** Workstream C Playwright e2e. **3.** Workstream D **checkpoint re-smoke** + gates (`npx next build`, `test:wb-jest`, full jest) — **NO merge**. **4.** Part 3 spine on **same branch** `wb-wave5-polish` (fresh chat OK): `p3-clock` → per-speaker capture → VAD → map → finalize → replay. **5.** Full-arc both-themes hardware smoke (FINAL gate). **6.** `test:wb-sync` on final tip → **`merge --no-ff wb-wave5-polish → v1-redesign`**. Clean orphan mis-scoped `ErasureJob` on preview DB. |
-| **Open Andrew-confirms** | **Resolved (2026-07-01):** remaining execution (Part 3 + erasure wave) runs in a **fresh chat on the same branch** `wb-wave5-polish`; Sarah merge gate = full live-session arc 100% reliable, then **single merge — no interim merge**. **Standing (unchanged):** debounced-disconnect pause trigger (confirm at `p3-clock`); **WB-LABEL-PARENT-SIGNIN**; **Sarah primary device** ([`SARAH-CALL-PREP.md`](../SARAH-CALL-PREP.md)); **Ship-to-Sarah gate**; **iOS student WB/A/V** ([`BACKLOG.md`](../BACKLOG.md) **WB-STUDENT-MOBILE-VALIDATION**). |
+| **Open Andrew-confirms** | **Resolved (2026-07-01):** remaining execution (Part 3 + erasure wave) runs in a **fresh chat on the same branch** `wb-wave5-polish`; Sarah merge gate = full live-session arc 100% reliable, then **single merge — no interim merge**. **Resolved (2026-07-01):** first-pass notes **quality** is a real Part 3 pre-merge acceptance bar (strong map/reduce leveraging per-speaker labeled transcripts + model abstraction); **only** the eval harness + flywheel iteration loop is deferred post-master. **Standing (unchanged):** debounced-disconnect pause trigger (confirm at `p3-clock`); **WB-LABEL-PARENT-SIGNIN**; **Sarah primary device** ([`SARAH-CALL-PREP.md`](../SARAH-CALL-PREP.md)); **Ship-to-Sarah gate**; **iOS student WB/A/V** ([`BACKLOG.md`](../BACKLOG.md) **WB-STUDENT-MOBILE-VALIDATION**). |
 | **In-flight subagents** | **None.** |
 | **Uncommitted / unmerged** | **`wb-wave5-polish` @ [`05a4b79`](https://github.com/Arangarx/tutoring-notes/commit/05a4b79)** — **NOT merged** to `v1-redesign`. **No interim merge** — single merge only after full-arc both-themes hardware smoke (FINAL gate). **`v1-redesign` @ `7397abc`** unchanged. **⚠️ THROWAWAY UNTRACKED COPIES in main `tutoring-notes` (v1-redesign) working tree:** `docs/handoff/{consent-honesty-premerge-smoke-index, wb-block-b-consent-gate-smokebook-2026-06-30, cc1-cc2-consent-gate-smokebook, erasure-smokebook}.md` — delete before merge. Tracked authoritative copies on `wb-wave5-polish`. |
 
@@ -77,7 +77,7 @@ flowchart TD
 |---|---|---|
 | **Consent-honesty + erasure (first)** | 9 BLOCKERs + CF-2 + CF-4 + Workstreams B/C/D | Block B + CC-1 + CC-2 shipped; erasure execution in flight. **Checkpoint re-smoke is NOT a merge trigger.** |
 | **Checkpoint** | Workstream D re-smoke + build/jest gates | **NO merge** — quality gate before Part 3 execution |
-| **Part 3 spine** | `p3-clock` → `p3-perspeaker-capture` → `p3-vad-chunking` → `p3-consent-recording` → `p3-incremental-map` → `p3-model-abstraction` → `p3-finalize` → `p3-replay-scrub` → `p3-video-seam` | **APPROVED (Andrew 2026-06-30)**; same branch `wb-wave5-polish`; fresh chat OK; tap-before-mix; disconnect pause/freeze in `p3-clock` |
+| **Part 3 spine** | `p3-clock` → `p3-perspeaker-capture` → `p3-vad-chunking` → `p3-consent-recording` → `p3-incremental-map` → `p3-model-abstraction` → `p3-finalize` → `p3-replay-scrub` → `p3-video-seam` | **APPROVED (Andrew 2026-06-30)**; same branch `wb-wave5-polish`; fresh chat OK; tap-before-mix; disconnect pause/freeze in `p3-clock`. **Acceptance (Andrew 2026-07-01):** first-pass notes **quality** is pre-merge — strong map/reduce on labeled transcripts + model abstraction; eval harness + flywheel only post-master |
 | **Final gate** | Full live-session arc both themes; `p-test-account-reset` | Auth join → waiting room → live A/V WB → end → per-speaker capture → transcription → map/reduce notes → review; then **single merge** |
 
 ---
@@ -90,7 +90,7 @@ So future chats do not treat shipped schema/pipeline as unbuilt or lost:
 |---|---|
 | **Schema (BUILT)** | `TranscriptChunk`, `TranscriptChunkExtraction`, `SessionRecording.streamId` in `prisma/schema.prisma` — chunked audio + per-chunk transcription + map-extraction + video-ready `streamId` |
 | **Partial pipeline (SHIPPED on branch)** | 50-min time-based segments; per-segment transcribe + incremental map; `SkeletonNotes` shimmer UI in `TutorNotesSection.tsx` |
-| **Part 3 (UNBUILT)** | VAD per-speaker continuous capture; model abstraction; near-100% accuracy eval harness |
+| **Part 3 (UNBUILT)** | VAD per-speaker continuous capture; model abstraction; **first-pass high-quality map/reduce** (labeled transcripts + strong initial prompt — Sarah bar: genuinely good notes, not "exists, needs editing"). **Deferred post-master:** eval harness + flywheel iteration toward near-100% |
 | **Spike branch (unmerged, flag OFF)** | [`spike/live-transcription` @ `7671a25`](https://github.com/Arangarx/tutoring-notes/tree/spike/live-transcription) — live transcription experiment; not lost, not Sarah-path |
 
 **Standing erasure coverage gaps** (also in [`BACKLOG.md`](../BACKLOG.md)): (a) **ERASURE-ORPHAN-AUDIO-BLOBS** — audio uploaded to Vercel Blob whose `TranscriptChunk` enqueue failed is not walked by erasure inventory; (b) **ERASURE-CLIENT-STORE-UNREACHABLE** — recording-draft / upload-outbox / whiteboard-checkpoint IndexedDB + sessionStorage scene drafts unreachable by server-side erasure — document limitation or add client-purge-on-erasure signal.
@@ -149,8 +149,9 @@ Andrew wants Sarah on the `v1-redesign` line once **waiting room → WB → end 
 | # | Question | Status |
 |---|---|---|
 | **Part 3 design pass** | Overall Part 3 architecture/sequencing — review and approve before any p3-* execution | **✅ APPROVED (Andrew 2026-06-30)** — p3-* execution unblocked on same branch |
+| **Notes quality vs merge scope** | Is first-pass map/reduce quality a pre-merge bar, or deferred? | **✅ RESOLVED (Andrew 2026-07-01)** — first-pass notes **quality** is Part 3 pre-merge acceptance; **only** eval harness + flywheel iteration deferred post-master |
 
-Ratified **inputs**: t=0 = FSM `recording` entry / `MediaRecorder.start()` + WB↔audio hardware sync oracle; 3+-peer per-speaker ≤3–4 cap NO mixdown fallback; minimal eval harness post-Sarah only; session-scoped consent override won't build for Sarah (`WB-SESSION-CONSENT-OVERRIDE`).
+Ratified **inputs**: t=0 = FSM `recording` entry / `MediaRecorder.start()` + WB↔audio hardware sync oracle; 3+-peer per-speaker ≤3–4 cap NO mixdown fallback; first-pass notes quality pre-merge (labeled transcripts + map/reduce); eval harness + flywheel post-master only; session-scoped consent override won't build for Sarah (`WB-SESSION-CONSENT-OVERRIDE`).
 
 ### Standing (from prior threads)
 
@@ -308,10 +309,10 @@ Archived superseded plan (audit only): [`whiteboard_reliability_floor_9ba650d1.S
 
 | Question | Status |
 |---|---|
-| Map/reduce notes accuracy | Poor today — model abstraction + post-Sarah eval (Part 3 `p3-model-abstraction`) |
+| Map/reduce notes accuracy | **✅ RESOLVED (2026-07-01)** — first-pass quality is Part 3 pre-merge bar (labeled transcripts + model abstraction); eval harness + flywheel deferred post-master. Baseline today still poor until Part 3 ships. |
 | Two-way calendar sync | Unresolved — [`scheduling-requirements-2026-06-11.md`](scheduling-requirements-2026-06-11.md) |
 
-Resolved 2026-06-30: **Part 3 design pass APPROVED**; t=0 anchor; 3+-peer cap ≤3–4 no mixdown fallback; session-scoped consent override won't build; minimal eval post-Sarah only. Resolved 2026-07-01: Sarah merge gate = full arc + single merge, no interim merge; remaining execution in fresh chat on same branch.
+Resolved 2026-06-30: **Part 3 design pass APPROVED**; t=0 anchor; 3+-peer cap ≤3–4 no mixdown fallback; session-scoped consent override won't build. Resolved 2026-07-01: Sarah merge gate = full arc + single merge, no interim merge; remaining execution in fresh chat on same branch. Resolved 2026-07-01: first-pass notes **quality** is pre-merge (Part 3); eval harness + flywheel only post-master.
 
 ---
 
