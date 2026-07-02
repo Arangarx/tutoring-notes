@@ -14,7 +14,7 @@ type StudentPageShellProps = {
 
 /**
  * Centered student-facing page chrome — wordmark header + full-height surface.
- * Used for /join waiting room and /join/preferences (Gate A2 learner surfaces).
+ * Used for bare /join (no active session landing).
  */
 export function StudentPageShell({
   children,
