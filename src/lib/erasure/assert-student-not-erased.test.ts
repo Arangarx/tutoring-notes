@@ -134,6 +134,48 @@ describe("assert-student-not-erased helper", () => {
     expect(body.error).toMatch(/not found/i);
   });
 
+  it("assertStudentNotErased calls notFound during active ErasureJob grace (ER-3)", async () => {
+    const tutor = await createTutor();
+    const ah = await createAccountHolder();
+    const lp = await createLearnerProfile(ah.id);
+    const student = await createStudent(tutor.id, lp.id);
+
+    await createErasureJob("learner_profile", lp.id, "requested");
+
+    await expect(assertStudentNotErased(student.id)).rejects.toThrow(
+      "NEXT_NOT_FOUND"
+    );
+    expect(notFound).toHaveBeenCalled();
+  });
+
+  it("assertStudentNotErasedApi returns 404 during active ErasureJob grace (ER-3)", async () => {
+    const tutor = await createTutor();
+    const ah = await createAccountHolder();
+    const lp = await createLearnerProfile(ah.id);
+    const student = await createStudent(tutor.id, lp.id);
+
+    await createErasureJob("learner_profile", lp.id, "requested");
+
+    const res = await assertStudentNotErasedApi(student.id);
+    expect(res).not.toBeNull();
+    expect(res!.status).toBe(404);
+  });
+
+  it("assertStudentNotErased allows access after cancel-restore", async () => {
+    const tutor = await createTutor();
+    const ah = await createAccountHolder();
+    const lp = await createLearnerProfile(ah.id);
+    const student = await createStudent(tutor.id, lp.id);
+
+    const job = await createErasureJob("learner_profile", lp.id, "requested");
+    await db.erasureJob.update({
+      where: { id: job.id },
+      data: { status: "canceled", canceledAt: new Date() },
+    });
+
+    await assertStudentNotErased(student.id);
+  });
+
   it("shouldShortCircuitEndSessionForErasure is true when erasedAt is set", async () => {
     const tutor = await createTutor();
     const ah = await createAccountHolder();

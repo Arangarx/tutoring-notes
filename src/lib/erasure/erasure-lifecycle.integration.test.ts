@@ -429,7 +429,10 @@ describe("E8 lifecycle — per-learner happy path", () => {
     expect(mockDeleteBlob).not.toHaveBeenCalled();
 
     expect(await isStudentErased(fixture.student.id)).toBe(false);
-    await assertStudentNotErased(fixture.student.id);
+    await expect(assertStudentNotErased(fixture.student.id)).rejects.toThrow(
+      "NEXT_NOT_FOUND"
+    );
+    expect(notFound).toHaveBeenCalled();
     expect(await shouldShortCircuitEndSessionForErasure(fixture.student.id)).toBe(
       true
     );

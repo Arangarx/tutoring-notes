@@ -29,6 +29,10 @@ import {
   resolveModeAwareAudioRecordingConsent,
 } from "@/lib/consent-scope";
 import { shouldShortCircuitEndSessionForErasure } from "@/lib/erasure/assert-student-not-erased";
+import {
+  ErasureAccessSuspendedError,
+  isWhiteboardSessionBlockedByErasure,
+} from "@/lib/erasure/active-erasure-scope";
 
 /**
  * Whiteboard session lifecycle server actions.
@@ -100,6 +104,17 @@ export async function createWhiteboardSession(
     );
   }
   await assertOwnsStudent(studentId);
+
+  const erasureBlock = await isWhiteboardSessionBlockedByErasure(studentId);
+  if (erasureBlock.blocked) {
+    const jobSuffix = erasureBlock.activeJobId
+      ? ` ers=${erasureBlock.activeJobId}`
+      : "";
+    console.warn(
+      `[ers] action=session_create_denied studentId=${studentId} rid=${rid}${jobSuffix}`
+    );
+    throw new ErasureAccessSuspendedError();
+  }
 
   // B1 cost gate: WAITLISTED tutors cannot start whiteboard sessions.
   // Runs BEFORE B2 consent check and BEFORE Blob write — no cost incurred
@@ -254,6 +269,17 @@ export async function startWhiteboardSession(
   sessionMode?: "LIVE" | "IN_PERSON"
 ): Promise<StartWhiteboardSessionResult> {
   const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
+
+  const erasureBlock = await isWhiteboardSessionBlockedByErasure(session.studentId);
+  if (erasureBlock.blocked) {
+    const jobSuffix = erasureBlock.activeJobId
+      ? ` ers=${erasureBlock.activeJobId}`
+      : "";
+    console.warn(
+      `[ers] action=session_start_denied wbsid=${whiteboardSessionId} studentId=${session.studentId}${jobSuffix}`
+    );
+    throw new ErasureAccessSuspendedError();
+  }
 
   const studentForConsent = await withDbRetry(
     () =>
