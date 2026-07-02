@@ -102,6 +102,7 @@ jest.mock("@/lib/whiteboard/sync-client", () => ({
     onDisconnect: () => () => {},
     onPeerCountChange: () => () => {},
     onRoomPeersChange: () => () => {},
+    onRemotePointer: () => () => {},
     isConnected: () => false,
     broadcastScene: jest.fn(),
     flushPendingBroadcast: jest.fn(),
@@ -486,7 +487,7 @@ describe("WhiteboardWorkspaceClient consent gates D/K", () => {
     });
   });
 
-  test("CF-2: policy=none still passes wbEventsActive to useWhiteboardRecorder", () => {
+  test("CF-2.1: wbSignal selects wbEventsActive when policy=none (IN_PERSON denied)", () => {
     render(
       <WhiteboardWorkspaceClient
         {...baseWorkspaceProps}
@@ -498,7 +499,27 @@ describe("WhiteboardWorkspaceClient consent gates D/K", () => {
     );
 
     const lastWbOpts = capturedWhiteboardRecorderOptions.at(-1);
+    // FSM recordingActive is false (audio policy gates tutorWantsRecording), but
+    // wbEventsActive stays true so stroke logs persist for IN_PERSON + denied.
     expect(lastWbOpts?.recordingActive).toBe(true);
+  });
+
+  test("CF-2.1: wbSignal selects FSM recordingActive when policy≠none (armed gate)", () => {
+    render(
+      <WhiteboardWorkspaceClient
+        {...baseWorkspaceProps}
+        syncUrl="wss://wb.example.com"
+        initialSessionPhase="ACTIVE"
+        initialHasConsentSnapshot={true}
+        initialAllowAudioRecording={false}
+        sessionMode="LIVE"
+      />
+    );
+
+    const lastWbOpts = capturedWhiteboardRecorderOptions.at(-1);
+    // policy=tutor_only: FSM is armed (no student yet) → recordingActive false;
+    // wbEventsActive is true but wbSignal must track audio FSM, not wbEventsActive.
+    expect(lastWbOpts?.recordingActive).toBe(false);
   });
 });
 
