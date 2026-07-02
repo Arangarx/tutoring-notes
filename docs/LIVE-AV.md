@@ -217,6 +217,25 @@ fix for a real pilot-blocking bug.
    tutor mic AND every participant's remote audio summed into
    the same `MediaStreamAudioDestinationNode`.
 
+   **6a. Tap-before-mix per-speaker transcription lanes (Part 3
+   `p3-perspeaker-capture`, ratified 2026-06-30).** The May-15
+   rollback (`89e0fe1`) removed per-peer recorders because they
+   drove replay. Part 3 reintroduces per-speaker `MediaRecorder`
+   lanes **for transcription ONLY** — the multi-track-sync
+   metadata that #6 called for now exists (the `p3-clock`
+   monotonic `recordingTimeOffsetMs`), so per-speaker blobs are
+   merged by that offset (NEVER `createdAt`) into labeled
+   transcripts. The invariant that makes this safe: **the single
+   `tutor:mic` mixdown remains the SOLE replay source.** Per-speaker
+   lanes tap each participant's RAW `p.audioStream` (pre-gain, so a
+   student muted in the mixdown is still transcribed) and enqueue
+   outbox rows flagged `transcriptionOnly: true`; `TranscriptChunk`
+   carries `streamId`/`speakerId`. `assembleEndSessionSegments`
+   EXCLUDES `transcriptionOnly` rows, so they can never become
+   `SessionRecording` replay rows — the exact `89e0fe1` failure mode
+   is structurally prevented, not merely avoided by convention. Cap
+   ≤3–4 peers; NO mixdown fallback for transcription lanes.
+
 7. **`publishStream` is tutor-mic ONLY** (4c). Routing remote
    audio back into publishStream would feed every peer's audio
    back to every other peer through the tutor as a relay,
