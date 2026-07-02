@@ -14,11 +14,29 @@ export type StartWhiteboardSessionProps = {
   consentRecordExists: boolean;
   isSelfLearner: boolean;
   studentClaimed: boolean;
+  /** ER-4 — block Start when learner is in erasure grace or post-purge. */
+  accessSuspended?: boolean;
 };
 
 function canStartSession(props: StartWhiteboardSessionProps): boolean {
+  if (props.accessSuspended) return false;
   if (props.isSelfLearner) return true;
   return props.studentClaimed && props.consentRecordExists;
+}
+
+function ErasureSuspendedCallout() {
+  return (
+    <div
+      className="rounded-2xl border border-warning/30 bg-warning/5 p-4 text-sm leading-relaxed text-muted-foreground"
+      data-testid="start-wb-erasure-callout"
+      role="status"
+    >
+      <p className="m-0 text-foreground">
+        This learner&apos;s account is deactivated pending erasure. You cannot
+        start new sessions until erasure is canceled or the grace period ends.
+      </p>
+    </div>
+  );
 }
 
 function ConsentRequiredCallout({ studentId }: { studentId: string }) {
@@ -65,6 +83,9 @@ export function StartWhiteboardSession(props: StartWhiteboardSessionProps) {
   const [error, setError] = useState<string | null>(null);
 
   if (!canStartSession(props)) {
+    if (props.accessSuspended) {
+      return <ErasureSuspendedCallout />;
+    }
     return <ConsentRequiredCallout studentId={studentId} />;
   }
 

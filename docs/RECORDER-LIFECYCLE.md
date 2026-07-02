@@ -371,7 +371,7 @@ explicit precedence, add tests in
 `src/__tests__/recording/lifecycle-machine.test.ts`. Then thread the
 input from the host. Do NOT introduce side effects in the FSM.
 
-**Q: Where do I see the rid / wbsid / obx / dft / pvw / snp / avx / pvs prefixes
+**Q: Where do I see the rid / wbsid / obx / dft / pvw / snp / avx / pvs / ers / sal prefixes
 documented?**
 A: AGENTS.md "Per-session ID logging is mandatory." section. The
 3-letter prefixes used in this stack are `wbsid` (whiteboard
@@ -399,6 +399,31 @@ events also carry a `peer=<remotePeerId>` subkey), `imp`
 `[lpr] lpr=<learnerProfileId> action=login device=<sessionId>`,
 `[lpr] lpr=unknown action=hard_lock_triggered handle=<familyId>:<username>`,
 `[lpr] lpr=<learnerProfileId> action=hard_lock_cleared_by_parent credKey=<familyId>:<username>`),
+`ers` (erasure lifecycle — `src/lib/erasure/`; every transition writes
+`[ers] ers=<jobId> action=<action> ...` or `[ers] action=<action> ...` when no job yet;
+key lines:
+`[ers] ers=<jobId> action=requested scope=<kind> scopeId=<id> principal=admin:<adminUserId>`,
+`[ers] action=tombstone_learner_profile scopeId=<lpId> sessions_revoked=<n>`,
+`[ers] action=tombstone_account_holder scopeId=<ahId> ...`,
+`[ers] action=soft_disable_credential scope=<kind> scopeId=<id> count=<n>`,
+`[ers] action=grace_gated ers=<jobId> eligibleInMs=<n>`,
+`[ers] action=phase_advance from=<status> to=<status> ers=<jobId>`,
+`[ers] action=cancel_restore_completed ers=<jobId>`,
+`[ers] action=cancel_restore_failed ers=<jobId> error=<msg>`,
+`[ers] action=untombstone_learner_profile scopeId=<lpId> ers=<jobId>`,
+`[ers] action=credential_reenabled count=<n> ers=<jobId>`,
+`[ers] action=content_access_denied studentId=<id> ers=<jobId>`,
+`[ers] action=session_create_denied studentId=<id> rid=<rid> ers=<jobId>`,
+`[ers] action=session_start_denied wbsid=<id> studentId=<id> ers=<jobId>`,
+`[ers] action=completed ers=<jobId>`),
+`sal` (share-link access — `src/lib/share-access-scope.ts`; emitted on every
+`/s/*` page and API access decision; writes
+`[sal] sal=<token:8> action=access_granted principal=account_holder|learner studentId=<id>`,
+`[sal] sal=<token:8> action=access_granted_anon_grace studentId=<id>`,
+`[sal] sal=<token:8> action=access_denied_redirect studentId=<id> reason=no_session`,
+`[sal] sal=<token:8> action=claim_required studentId=<id> reason=unclaimed`,
+`[sal] sal=<token:8> action=ownership_denied principal=<type> ...`,
+`[sal] sal=<token:8> action=erasure_suspended studentId=<id>` during active erasure grace),
 `alr` (AccountHolder-login durable rate limiter — IAC-11; Neon-backed `AuthThrottle` table;
 key is `ah-login:<normalizedEmail>`; key lines:
 `[alr] alr=ah-login:<email> action=rate-limited count=<n> retryAfterSec=<s>`,

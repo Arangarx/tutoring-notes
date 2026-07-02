@@ -23,7 +23,10 @@ import {
   StudentDetailShell,
   defaultIcons,
 } from "@/components/admin/StudentDetailShell";
+import { StudentErasurePendingBanner } from "@/components/admin/StudentErasureStatus";
 import { StudentOverflowActions } from "@/components/admin/StudentOverflowActions";
+import { deriveStudentErasureDisplayState } from "@/lib/erasure/student-erasure-display";
+import { lookupActiveErasurePurgeDates } from "@/lib/erasure/lookup-active-erasure-purge-dates";
 
 export const dynamic = "force-dynamic";
 
@@ -85,8 +88,15 @@ export default async function StudentDetailPage({
           id: true,
           isSelfLearner: true,
           displayName: true,
+          tombstonedAt: true,
           accountHolder: {
-            select: { id: true, email: true, displayName: true, emailVerifiedAt: true },
+            select: {
+              id: true,
+              email: true,
+              displayName: true,
+              emailVerifiedAt: true,
+              tombstonedAt: true,
+            },
           },
         },
       },
@@ -107,6 +117,26 @@ export default async function StudentDetailPage({
 
   if (!student) notFound();
   if (!canAccessStudentRow(scope, student)) notFound();
+
+  const lp = student.learnerProfile;
+  const lpId = lp?.id ?? null;
+  const ahId = lp?.accountHolder?.id ?? null;
+  const purgeDates = await lookupActiveErasurePurgeDates(
+    lpId ? [lpId] : [],
+    ahId ? [ahId] : []
+  );
+  const activeJobPurgeEligibleAt =
+    (lpId && purgeDates.byLearnerProfileId.get(lpId)) ??
+    (ahId && purgeDates.byAccountHolderId.get(ahId)) ??
+    null;
+  const erasureState = deriveStudentErasureDisplayState({
+    erasedAt: student.erasedAt,
+    lpTombstonedAt: lp?.tombstonedAt ?? null,
+    ahTombstonedAt: lp?.accountHolder?.tombstonedAt ?? null,
+    activeJobPurgeEligibleAt,
+  });
+  const accessSuspended =
+    erasureState.kind === "pending_grace" || erasureState.kind === "purged";
 
   const learnerProfileId = student.learnerProfileId;
   const isSelfLearner = student.learnerProfile?.isSelfLearner ?? false;
@@ -139,13 +169,18 @@ export default async function StudentDetailPage({
     </>
   );
 
-  const stickyCta = (
+  const stickyCta = accessSuspended ? (
+    <p className="text-sm text-muted-foreground" role="status">
+      Sessions unavailable while erasure is pending or complete.
+    </p>
+  ) : (
     <div className="w-full md:w-auto [&_button]:h-12 [&_button]:w-full [&_button]:text-[15px] md:[&_button]:h-11 md:[&_button]:w-auto">
       <StartWhiteboardSession
         studentId={student.id}
         consentRecordExists={consentRecordExists}
         isSelfLearner={isSelfLearner}
         studentClaimed={!!student.learnerProfileId}
+        accessSuspended={false}
       />
     </div>
   );
@@ -304,7 +339,9 @@ export default async function StudentDetailPage({
   ];
 
   return (
-    <StudentDetailShell
+    <div className="space-y-4">
+      <StudentErasurePendingBanner state={erasureState} />
+      <StudentDetailShell
       studentId={student.id}
       studentName={student.name}
       meta={meta}
@@ -321,6 +358,7 @@ export default async function StudentDetailPage({
       }
       stickyCta={stickyCta}
       sections={sections}
-    />
+      />
+    </div>
   );
 }

@@ -1,13 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import {
   cancelErasureByAdminAction,
   requestErasureByAdminAction,
 } from "./actions";
 import type { ErasureJobListRow } from "@/lib/erasure/list-erasure-jobs";
 import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
+import { ErasureGraceCountdown } from "@/components/admin/ErasureGraceCountdown";
 import { LocalDateTimeText } from "@/components/LocalDateTimeText";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -88,45 +89,6 @@ function statusClass(status: ErasureJobListRow["status"]): string {
   }
 }
 
-function GraceCountdown({ purgeEligibleAt }: { purgeEligibleAt: string }) {
-  const [text, setText] = useState("");
-
-  useEffect(() => {
-    function formatRemaining() {
-      const ms = new Date(purgeEligibleAt).getTime() - Date.now();
-      if (ms <= 0) {
-        return "Grace ended — purge eligible";
-      }
-      const totalMinutes = Math.floor(ms / 60_000);
-      const days = Math.floor(totalMinutes / (60 * 24));
-      const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
-      const minutes = totalMinutes % 60;
-      if (days > 0) {
-        return `${days}d ${hours}h remaining`;
-      }
-      if (hours > 0) {
-        return `${hours}h ${minutes}m remaining`;
-      }
-      return `${minutes}m remaining`;
-    }
-
-    setText(formatRemaining());
-    const id = window.setInterval(() => setText(formatRemaining()), 60_000);
-    return () => window.clearInterval(id);
-  }, [purgeEligibleAt]);
-
-  return (
-    <span className="text-xs text-muted-foreground">
-      {text || "…"}
-      <span className="sr-only">
-        {" "}
-        (purge eligible{" "}
-        <LocalDateTimeText dateTime={purgeEligibleAt} />)
-      </span>
-    </span>
-  );
-}
-
 function CancelJobButton({ jobId }: { jobId: string }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -151,16 +113,15 @@ function CancelJobButton({ jobId }: { jobId: string }) {
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogTrigger asChild>
           <Button size="sm" variant="outline" disabled={isPending}>
-            Cancel purge
+            Cancel erasure
           </Button>
         </AlertDialogTrigger>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancel pending purge?</AlertDialogTitle>
+            <AlertDialogTitle>Cancel erasure and restore account?</AlertDialogTitle>
             <AlertDialogDescription>
-              This stops blob and database purge for this job. Identity remains
-              tombstoned and access stays denied — this does not restore the
-              account or learner.
+              This cancels the pending deletion and fully restores login and
+              access. The learner&apos;s data and identity remain intact.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -172,7 +133,7 @@ function CancelJobButton({ jobId }: { jobId: string }) {
                 handleCancel();
               }}
             >
-              {isPending ? "Canceling…" : "Cancel purge"}
+              {isPending ? "Canceling…" : "Cancel erasure"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -230,24 +191,28 @@ export function ErasureAdminClient({ initialJobs }: ErasureAdminClientProps) {
         <AlertTitle>Permanent data destruction</AlertTitle>
         <AlertDescription>
           <p>
-            Requesting erasure <strong>tombstones identity immediately</strong>{" "}
-            (login and access denied). After a <strong>7-day grace period</strong>,
-            all learner/family content is permanently destroyed: session notes,
-            transcripts, tutor notes, audio recordings, whiteboard data, and
-            every associated blob.
+            Requesting erasure <strong>deactivates the account immediately</strong>{" "}
+            (login disabled; tutor and family access suspended). After a{" "}
+            <strong>7-day grace period</strong>, learner and family content is
+            permanently destroyed: session notes, transcripts, audio recordings,
+            whiteboard data, and every associated file.
           </p>
           <p className="mt-2">
-            De-identified billing metadata (session durations, cost events,
-            consent audit rows) is retained for compliance.{" "}
-            <strong>This cannot be fully undone</strong> — canceling during grace
-            only halts the pending purge; tombstone and access denial remain.
+            <strong>Canceling during grace fully restores the account</strong> —
+            login, access, and identity are recovered. De-identified billing
+            metadata (session durations, cost events, consent audit rows) is
+            retained for compliance even after a completed erasure.
+          </p>
+          <p className="mt-2 text-muted-foreground">
+            Tell the family: account deactivated immediately; permanently deleted
+            in 7 days; contact us to cancel within that window.
           </p>
         </AlertDescription>
       </Alert>
 
       <AdminSectionCard
         title="Request erasure"
-        description="Operator-only. Use for verified parental erasure requests. Tutors see a passive “[Deleted learner]” placeholder — no separate notification is sent."
+        description="Operator-only. Use for verified parental erasure requests. Tutors see a “Pending erasure” badge on the student roster during grace — not a deleted placeholder until purge completes."
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -281,6 +246,12 @@ export function ErasureAdminClient({ initialJobs }: ErasureAdminClientProps) {
                 autoComplete="off"
                 spellCheck={false}
               />
+              {scopeMode === "account_holder" ? (
+                <p className="text-xs text-muted-foreground">
+                  Full-family erasure: enter the parent&apos;s{" "}
+                  <strong>Account holder ID</strong>, not a learner profile ID.
+                </p>
+              ) : null}
             </div>
           </div>
 
@@ -295,7 +266,7 @@ export function ErasureAdminClient({ initialJobs }: ErasureAdminClientProps) {
               placeholder={
                 scopeMode === "learner_profile"
                   ? "Exact learner display name or DELETE"
-                  : "Exact family display name or DELETE"
+                  : "Exact account holder display name or DELETE"
               }
               autoComplete="off"
             />
@@ -358,7 +329,10 @@ export function ErasureAdminClient({ initialJobs }: ErasureAdminClientProps) {
                   <TableCell className="align-top text-sm">
                     {job.status === "requested" ? (
                       <div className="space-y-1">
-                        <GraceCountdown purgeEligibleAt={job.purgeEligibleAt.toISOString()} />
+                        <ErasureGraceCountdown
+                          purgeEligibleAt={job.purgeEligibleAt.toISOString()}
+                          className="text-xs text-muted-foreground"
+                        />
                         <p className="text-[11px] text-muted-foreground">
                           Purge after{" "}
                           <LocalDateTimeText dateTime={job.purgeEligibleAt.toISOString()} />

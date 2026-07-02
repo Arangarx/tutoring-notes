@@ -139,11 +139,11 @@ describe("ErasureAdminClient — cancel requested job", () => {
 
     render(<ErasureAdminClient initialJobs={[requestedJob]} />);
 
-    await user.click(screen.getByRole("button", { name: /^cancel purge$/i }));
+    await user.click(screen.getByRole("button", { name: /^cancel erasure$/i }));
 
     const dialog = await screen.findByRole("alertdialog");
     await user.click(
-      within(dialog).getByRole("button", { name: /^cancel purge$/i })
+      within(dialog).getByRole("button", { name: /^cancel erasure$/i })
     );
 
     await waitFor(() =>

@@ -101,6 +101,21 @@ describe("StartWhiteboardSession — T10 consent affordance", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("replaces Start with erasure callout when access is suspended (ER-4)", () => {
+    render(
+      <StartWhiteboardSession
+        {...baseProps}
+        accessSuspended={true}
+      />
+    );
+
+    expect(screen.getByTestId("start-wb-erasure-callout")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("start-whiteboard-session-btn")
+    ).not.toBeInTheDocument();
+    expect(createWhiteboardSessionMock).not.toHaveBeenCalled();
+  });
+
   it("maps ConsentError from the action to friendly copy without Error ID", async () => {
     const consentErr = Object.assign(
       new Error(
