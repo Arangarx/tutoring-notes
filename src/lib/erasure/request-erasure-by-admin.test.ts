@@ -199,6 +199,33 @@ describe("confirmation phrase enforcement", () => {
     );
     expect(byDelete.jobId).toBeTruthy();
   });
+
+  it("DELETE confirm against non-existent target throws and creates no job", async () => {
+    const missingLpId = "00000000-0000-4000-8000-00000000e5b1";
+    const missingAhId = "00000000-0000-4000-8000-00000000e5b2";
+
+    await expect(
+      requestErasureByAdmin(
+        ADMIN_ID,
+        { kind: "learner_profile", learnerProfileId: missingLpId },
+        "DELETE"
+      )
+    ).rejects.toThrow(ErasureRequestError);
+
+    await expect(
+      requestErasureByAdmin(
+        ADMIN_ID,
+        { kind: "account_holder", accountHolderId: missingAhId },
+        "DELETE"
+      )
+    ).rejects.toThrow(ErasureRequestError);
+
+    expect(
+      await db.erasureJob.count({
+        where: { scopeId: { in: [missingLpId, missingAhId] } },
+      })
+    ).toBe(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

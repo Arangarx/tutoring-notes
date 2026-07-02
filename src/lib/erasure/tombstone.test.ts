@@ -113,6 +113,32 @@ async function runInTransaction<T>(fn: (tx: Parameters<Parameters<typeof db.$tra
 }
 
 // ---------------------------------------------------------------------------
+// not_found — must throw (BLOCKER I)
+// ---------------------------------------------------------------------------
+
+describe("tombstone not_found", () => {
+  it("tombstoneAccountHolder throws ErasureTombstoneTargetNotFound for missing id", async () => {
+    const missingId = "00000000-0000-4000-8000-00000000dead";
+
+    await expect(
+      runInTransaction(async (tx) => {
+        await tombstoneAccountHolder(tx, missingId);
+      })
+    ).rejects.toThrow(`ErasureTombstoneTargetNotFound: account_holder ${missingId}`);
+  });
+
+  it("tombstoneLearnerProfile throws ErasureTombstoneTargetNotFound for missing id", async () => {
+    const missingId = "00000000-0000-4000-8000-00000000beef";
+
+    await expect(
+      runInTransaction(async (tx) => {
+        await tombstoneLearnerProfile(tx, missingId);
+      })
+    ).rejects.toThrow(`ErasureTombstoneTargetNotFound: learner_profile ${missingId}`);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // T-new-H (B-7): PasswordResetToken deleted by original email before redaction
 // ---------------------------------------------------------------------------
 

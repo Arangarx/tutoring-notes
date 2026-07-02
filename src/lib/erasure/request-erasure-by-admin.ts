@@ -65,10 +65,6 @@ async function validateConfirmation(
   scope: ErasureScopeInput,
   confirmPhrase: string
 ): Promise<void> {
-  if (confirmPhrase === "DELETE") {
-    return;
-  }
-
   if (scope.kind === "learner_profile") {
     const profile = await db.learnerProfile.findUnique({
       where: { id: scope.learnerProfileId },
@@ -77,7 +73,7 @@ async function validateConfirmation(
     if (!profile) {
       throw new ErasureRequestError("Learner profile not found", "not_found");
     }
-    if (confirmPhrase !== profile.displayName) {
+    if (confirmPhrase !== "DELETE" && confirmPhrase !== profile.displayName) {
       throw new ErasureRequestError(
         "Confirmation phrase does not match learner display name",
         "confirmation_mismatch"
@@ -93,7 +89,7 @@ async function validateConfirmation(
   if (!ah) {
     throw new ErasureRequestError("Account holder not found", "not_found");
   }
-  if (confirmPhrase !== ah.displayName) {
+  if (confirmPhrase !== "DELETE" && confirmPhrase !== ah.displayName) {
     throw new ErasureRequestError(
       "Confirmation phrase does not match family display name",
       "confirmation_mismatch"

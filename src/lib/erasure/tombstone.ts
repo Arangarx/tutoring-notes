@@ -46,7 +46,7 @@ export async function tombstoneAccountHolder(
     console.error(
       `[ers] action=tombstone_account_holder scopeId=${accountHolderId} result=not_found`
     );
-    return;
+    throw new Error(`ErasureTombstoneTargetNotFound: account_holder ${accountHolderId}`);
   }
 
   const sessionsRevoked = await revokeAllAccountHolderSessions(accountHolderId, tx);
@@ -131,7 +131,7 @@ export async function tombstoneLearnerProfile(
     console.error(
       `[ers] action=tombstone_learner_profile scopeId=${learnerProfileId} result=not_found`
     );
-    return;
+    throw new Error(`ErasureTombstoneTargetNotFound: learner_profile ${learnerProfileId}`);
   }
 
   const sessionsRevoked = await revokeAllLearnerDeviceSessions(learnerProfileId, tx);
