@@ -23,6 +23,17 @@ Not in priority order within sections — that comes when items move to a sprint
 
 ---
 
+## Pre-Sarah phone-smoke items (Andrew, 2026-07-02) — MUST fix before Sarah gate
+
+> Captured from Andrew's 2026-07-02 phone look at `preview.usemynk.com` (independent of the Part 3 notes-reliability smoke). All flagged **"pre Sarah."** Not yet built; to be fixed on a branch off `wb-wave5-polish` after the recording-default decision is confirmed.
+
+| Item | Priority | Notes |
+|------|----------|-------|
+| **PRESARAH-1 — remove the per-student "Start whiteboard recording on by default" checkbox; recording must be independent of it** | Pre-Sarah (must) | Andrew: *"Why is that block about recording still around… Recording should be completely independent of that check box which shouldn't even exist."* The checkbox is `StudentRecordingDefaultToggle` on the student-detail LIVE SESSION card (`src/app/admin/students/[id]/StudentRecordingDefaultToggle.tsx`, rendered in `page.tsx` ~L200). It was Sarah's **Apr-2026 pre-consent-system** ask (avoid un-ticking Start each session for students who declined) — now **superseded by the consent model** (unconditional consent enforcement + per-child consent gate the actual recording). Current wiring: toggle → `setStudentRecordingDefault` action (`[id]/actions.ts` ~L831) → `Student.recordingDefaultEnabled` (DB) → workspace `page.tsx` (~L119) `initialUserWantsRecording={detail.student.recordingDefaultEnabled}`. **Plan:** remove the toggle component + its render; stop reading `recordingDefaultEnabled` for `initialUserWantsRecording` (default recording ON, gated by consent as it already is); retire `setStudentRecordingDefault` + tests (`student-recording-default.test.ts`, `StudentRecordingDefaultToggle.dom.test.tsx`); **keep the DB column** (additive-migration rule — stop reading/writing, don't drop). **OPEN DECISION (Andrew):** after removal, does the in-workspace per-session recording toggle STAY (tutor can still stop recording mid/pre-session) or should recording be fully consent-driven with no manual toggle at all? |
+| **PRESARAH-2 — "Open whiteboard sessions" end-block copy needs a pass (+ End feedback)** | Pre-Sarah (must) | Andrew: *"The end copy needs fixed too pre Sarah."* Block = `ActiveWhiteboardSessionsList.tsx` (student-detail "Open whiteboard sessions" list); current paragraph is verbose/awkward (*"These rooms are still not ended from the whiteboard. Continue to pick up where you left off, or end a room to revoke its join link. You can also start a new room above — that creates an additional open session, so end ones you do not need."*). Needs tighter, clearer copy (**final wording Andrew-gated**). **Also observed:** *"Clicked end, both stuck on ending… when I went back to the tab they'd gone away."* Root cause (from code read): the End action `endStaleWhiteboardSession` is **DB-only and fast** (no blob/notes work) and the sessions **did end correctly**; `SubmitButton` uses per-form `useFormStatus`, so "both stuck on Ending…" = both rows' End tapped → Next.js dispatches server actions from one page **sequentially** (2nd queues behind 1st) + **mobile tab suspension** throttled the transition. Not a data bug — a feedback/queueing **perception** issue. Optional polish: optimistic row removal / allow parallel ends / clearer pending affordance. |
+
+---
+
 ## Login-friction thread follow-ups (2026-06-14)
 
 | Item | Priority | Notes |
