@@ -40,6 +40,73 @@ export type WbLiveSyncSession = {
   learnerPin: string;
 };
 
+/** H-5 join gate: claimed minors need ConsentRecord + SessionConsentSnapshot. */
+async function seedHarnessConsentForJoin(
+  prisma: PrismaClient,
+  params: {
+    learnerProfileId: string;
+    adminUserId: string;
+    whiteboardSessionId: string;
+  }
+): Promise<void> {
+  const accountHolder = await prisma.learnerProfile.findUnique({
+    where: { id: params.learnerProfileId },
+    select: { accountHolderId: true },
+  });
+  if (!accountHolder) {
+    throw new Error(`LearnerProfile not found: ${params.learnerProfileId}`);
+  }
+
+  const consentRec = await prisma.consentRecord.upsert({
+    where: {
+      learnerProfileId_adminUserId_version: {
+        learnerProfileId: params.learnerProfileId,
+        adminUserId: params.adminUserId,
+        version: 1,
+      },
+    },
+    create: {
+      learnerProfileId: params.learnerProfileId,
+      adminUserId: params.adminUserId,
+      version: 1,
+      allowLiveSession: true,
+      allowAudioRecording: true,
+      allowWhiteboardRecording: true,
+      allowNoteSending: true,
+      setByAccountHolderId: accountHolder.accountHolderId,
+      captureMethod: "electronic",
+    },
+    update: {
+      allowLiveSession: true,
+      allowAudioRecording: true,
+      allowWhiteboardRecording: true,
+      allowNoteSending: true,
+    },
+    select: { id: true, version: true },
+  });
+
+  await prisma.sessionConsentSnapshot.upsert({
+    where: { whiteboardSessionId: params.whiteboardSessionId },
+    create: {
+      whiteboardSessionId: params.whiteboardSessionId,
+      allowLiveSession: true,
+      allowAudioRecording: true,
+      allowWhiteboardRecording: true,
+      allowNoteSending: true,
+      consentRecordId: consentRec.id,
+      consentRecordVersion: consentRec.version,
+    },
+    update: {
+      allowLiveSession: true,
+      allowAudioRecording: true,
+      allowWhiteboardRecording: true,
+      allowNoteSending: true,
+      consentRecordId: consentRec.id,
+      consentRecordVersion: consentRec.version,
+    },
+  });
+}
+
 export async function seedWbLiveSyncSession(opts?: {
   /** Create session in PENDING phase (needed for waiting-room tests). Default: ACTIVE. */
   sessionPhase?: "PENDING" | "ACTIVE";
@@ -83,6 +150,12 @@ export async function seedWbLiveSyncSession(opts?: {
       },
       create: { whiteboardSessionId, learnerProfileId },
       update: { leftAt: null },
+    });
+
+    await seedHarnessConsentForJoin(prisma, {
+      learnerProfileId,
+      adminUserId,
+      whiteboardSessionId,
     });
   } finally {
     await prisma.$disconnect();
