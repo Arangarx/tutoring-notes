@@ -71,9 +71,14 @@ import {
 } from "@/lib/recording/lifecycle-machine";
 import {
   deriveAudioCapturePolicy,
+  deriveWbCaptureActive,
   resolveRemoteRecordingGainLinear,
   shouldAttachRemoteStreamToRecordingMixdown,
 } from "@/lib/recording/audio-capture-policy";
+import {
+  createSessionMsClock,
+  type SessionMsClock,
+} from "@/lib/recording/session-clock";
 import { useAudioFlowConfirmation } from "@/hooks/useAudioFlowConfirmation";
 import { useCollaboratorPointers } from "@/hooks/useCollaboratorPointers";
 import { useLiveAV } from "@/hooks/useLiveAV";
@@ -383,30 +388,35 @@ function CanvasPlaceholder({ label }: { label: string }) {
 // module docblock for full lifecycle + threat-model notes.
 
 /**
- * Audio-clock surrogate. The plan calls for `MediaRecorder.getElapsedAudioMs()`
- * (blocker #2) — the audio recorder doesn't expose that yet (tracked
- * in `docs/BACKLOG.md` "Reliability gaps"). Until it lands, we drive
- * `getAudioMs` off `performance.now()` deltas, accumulating across
- * pauses. ms precision; doesn't account for iOS background-tab clock
- * throttling (the BACKLOG item covers that follow-up).
+ * The single monotonic session clock (p3-clock). `active` is wired to the
+ * FSM recording gate (`wbSignal`): the clock accrues elapsed ms while
+ * recording and FREEZES while paused (stable student disconnect), resuming
+ * from the frozen value on reconnect. Its `getAudioMs()` is the ONE t=0
+ * epoch threaded into WB event `t`, the FSM `audioClockMs`, and the
+ * transcription `recordingTimeOffsetMs`.
+ *
+ * The accrual math lives in `createSessionMsClock` (pure + unit-tested in
+ * `session-clock.test.ts`); this hook is the thin React binding. iOS
+ * background-tab `performance.now()` throttling is a documented follow-up
+ * (`docs/BACKLOG.md` "Reliability gaps"); a refresh mid-session re-anchors
+ * t=0 (segment ordering stays refresh-durable via wall-clock
+ * `audioStartedAtMs`).
  */
 function useAudioMsClock(active: boolean): () => number {
-  const startedAtRef = useRef<number | null>(null);
-  const accruedMsRef = useRef(0);
+  const clockRef = useRef<SessionMsClock | null>(null);
+  if (clockRef.current === null) {
+    clockRef.current = createSessionMsClock();
+  }
   useEffect(() => {
+    const clock = clockRef.current;
+    if (!clock) return;
     if (active) {
-      startedAtRef.current = performance.now();
-    } else if (startedAtRef.current !== null) {
-      accruedMsRef.current += performance.now() - startedAtRef.current;
-      startedAtRef.current = null;
+      clock.start();
+    } else {
+      clock.pause();
     }
   }, [active]);
-  return useCallback(() => {
-    if (startedAtRef.current === null) return Math.floor(accruedMsRef.current);
-    return Math.floor(
-      accruedMsRef.current + (performance.now() - startedAtRef.current)
-    );
-  }, []);
+  return useCallback(() => clockRef.current?.readMs() ?? 0, []);
 }
 
 /**
@@ -1713,13 +1723,23 @@ export function WhiteboardWorkspaceClient({
   const [audioDraftRecoveryBusy, setAudioDraftRecoveryBusy] = useState(false);
 
   /**
-   * Wall-clock ms when the first audio segment was handed off to the outbox.
-   * Used to compute a Phase 1 approximate recording-time offset for the
-   * slice 2b transcription producer.
-   *
-   * // Phase 1 approx — D3/D4 monotonic clock supersedes
+   * p3-clock: monotonic-clock accessor, read by callbacks that are defined
+   * BEFORE the clock itself. `useAudioMsClock` depends on `wbSignal`, which
+   * depends on the FSM, which is declared far below `useAudioRecorder`; this
+   * ref breaks that ordering cycle (same pattern as
+   * `recorderRecordViewportRef`). Assigned once `getAudioMs` exists.
    */
-  const firstSegmentWallClockMsRef = useRef<number | null>(null);
+  const getAudioMsRef = useRef<() => number>(() => 0);
+
+  /**
+   * p3-clock: monotonic session-clock offset (ms) at the START of the
+   * audio segment currently being recorded. Carried forward as each
+   * segment finishes so the transcription producer stamps a real
+   * `recordingTimeOffsetMs` off the single session clock — superseding the
+   * Phase-1 wall-clock approximation (which advanced during pauses). Because
+   * the clock is pause-aware, a disconnect gap collapses to a single offset.
+   */
+  const audioSegmentStartOffsetMsRef = useRef(0);
 
   /**
    * Hand `useAudioRecorder` a callback that drops every finished
@@ -1749,6 +1769,20 @@ export function WhiteboardWorkspaceClient({
         typeof globalThis.crypto?.randomUUID === "function"
           ? globalThis.crypto.randomUUID()
           : `seg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+      // p3-clock: capture THIS segment's start offset and advance the
+      // carried-forward anchor SYNCHRONOUSLY at callback entry — before any
+      // `await`. Two callbacks can be in flight at once (an autoRollover
+      // segment and the final End-session segment), and doing the read +
+      // advance across an `await` boundary would let them interleave and
+      // invert their offsets. Reading here (segment END, pre-upload-latency)
+      // also gives a tighter end value than reading after enqueue. On enqueue
+      // failure the offset is still consumed, which is correct: the segment
+      // occupied real session time regardless of upload outcome, so the next
+      // segment's start is unaffected. First segment = 0.
+      const recordingTimeOffsetMs = audioSegmentStartOffsetMsRef.current;
+      audioSegmentStartOffsetMsRef.current = getAudioMsRef.current();
+
       try {
         const outbox = getOrCreateUploadOutbox();
         await outbox.enqueue({
@@ -1763,6 +1797,15 @@ export function WhiteboardWorkspaceClient({
           blobRemoteUrl: audioSeg.blobUrl,
           mimeType: audioSeg.mimeType,
           sizeBytes: audioSeg.sizeBytes,
+          // Outbox segment ordering key stays WALL-CLOCK on purpose: it is
+          // the sort key for the single mixdown replay stream (End-session
+          // orders by audioStartedAtMs), it must stay consistent with the
+          // draft-recovery path (which persists a wall-clock firstChunkMs and
+          // survives refresh), and per-speaker transcription lanes — not the
+          // mixdown — carry the monotonic offset (recordingTimeOffsetMs) that
+          // p3-finalize merges by. Switching this to the monotonic clock is
+          // deferred until cross-stream replay ordering needs it (would
+          // require converting the draft path in lockstep).
           audioStartedAtMs: Date.now(),
         });
         try {
@@ -1781,17 +1824,12 @@ export function WhiteboardWorkspaceClient({
         // MUST be fire-and-forget: a transcription-enqueue failure must
         // never block or disrupt the recording/upload UX.
         //
-        // Offset approximation (Phase 1 approx — D3/D4 monotonic clock supersedes):
-        // We track the wall-clock ms of the first segment and derive
-        // subsequent offsets as delta from that anchor. This is approximate
-        // because wall-clock advances during pauses (D4 collapses them);
-        // the worker's derived-from-durationMs fallback is equivalent quality.
-        const nowMs = Date.now();
-        if (firstSegmentWallClockMsRef.current === null) {
-          firstSegmentWallClockMsRef.current = nowMs;
-        }
-        // Phase 1 approx — D3/D4 monotonic clock supersedes
-        const recordingTimeOffsetMs = nowMs - firstSegmentWallClockMsRef.current;
+        // p3-clock: `recordingTimeOffsetMs` (captured synchronously at
+        // callback entry above) is the START offset of THIS segment on the
+        // single monotonic session clock (pause-aware — a disconnect gap does
+        // not inflate it, unlike the old wall-clock delta). This is the
+        // sync-metadata contract key p3-finalize merges per-speaker
+        // transcripts by (never createdAt).
         Promise.resolve(
           enqueueChunkTranscriptionAction(whiteboardSessionId, {
             chunkBlobUrl: audioSeg.blobUrl,
@@ -2339,7 +2377,11 @@ export function WhiteboardWorkspaceClient({
     syncEnabled: !!syncUrl,
     inputStreams: lifecycleInputStreams,
     networkOk: true,
-    audioClockMs: 0,
+    // p3-clock: thread the single session clock so the FSM's wbClockMs
+    // output reflects the real epoch (read via ref — the clock is declared
+    // below this call; see getAudioMsRef). Passthrough-only in the FSM
+    // today (no decision reads it), so a first-render 0 is harmless.
+    audioClockMs: getAudioMsRef.current(),
     participantsWithFlowingAudio,
     everHadAudioFlow: sessionGateReleased,
   });
@@ -2360,6 +2402,22 @@ export function WhiteboardWorkspaceClient({
     role !== "student" && phaseActive && userWantsRecording;
   const wbSignal =
     audioCapturePolicy !== "none" ? recordingActive : wbEventsActive;
+
+  // p3-clock (disconnect pause/freeze): the WB-recorder capture gate. It is
+  // BROADER than `wbSignal` during a pause — on a stable student disconnect
+  // (FSM `paused`) audio recording + the session clock freeze, but the tutor
+  // keeps drawing; those strokes stay captured and stamp at the FROZEN clock
+  // (getAudioMs is driven by wbSignal, which is false while paused), so they
+  // collapse to the pause instant on replay (ratified 2026-07-02). Armed /
+  // idle still gate WB capture OFF (CF-2.1 armed-gate preserved). Audio
+  // recording itself is unaffected — the AudioBridge keys off FSM
+  // recordingActive, not this.
+  const wbCaptureActive = deriveWbCaptureActive({
+    policy: audioCapturePolicy,
+    recordingActive,
+    isPaused: lifecycle.state === "paused",
+    wbEventsActive,
+  });
 
   // Split-brain detection: sync says the student is present (peerCount ≥ 1)
   // but WebRTC reachability is 0 (media path dead). After the first real
@@ -2549,6 +2607,56 @@ export function WhiteboardWorkspaceClient({
   }, [whiteboardSessionId, studentId]);
 
   const getAudioMs = useAudioMsClock(wbSignal);
+  // p3-clock: publish the clock to callbacks/FSM declared above this point.
+  getAudioMsRef.current = getAudioMs;
+
+  // p3-clock: emit the single-session-clock anchor once, when the clock
+  // first starts advancing (FSM enters recording / MediaRecorder.start() —
+  // same gate = same t=0 epoch for WB events, FSM, and transcription).
+  const clockStartLoggedRef = useRef(false);
+  useEffect(() => {
+    if (!wbSignal || clockStartLoggedRef.current) return;
+    clockStartLoggedRef.current = true;
+    console.log(
+      `[WhiteboardWorkspaceClient] rid=${whiteboardSessionId} wbsid=${whiteboardSessionId} action=clock_start t0=${getAudioMs()}`
+    );
+  }, [wbSignal, whiteboardSessionId, getAudioMs]);
+
+  // p3-clock: log the freeze/resume transitions of the single session clock.
+  // The clock freezes whenever `wbSignal` drops while the FSM is `paused`
+  // (the disconnect / network-gap window driven by
+  // REACHABLE_LOSS_DEBOUNCE_MS). Without these lines a "WB timestamps look
+  // wrong after a reconnect" prod ticket is un-debuggable: we log the frozen
+  // clock value + pause reason on freeze, and the resume clock value + the
+  // wall-clock gap that elapsed while frozen on resume. `gap_ms` is wall
+  // time (Date.now) because the whole point is to measure the real gap the
+  // monotonic clock deliberately did NOT count. Guarded on an actual state
+  // change so it fires once per transition, not every render.
+  const clockFrozenPrevRef = useRef(false);
+  const clockFreezeWallMsRef = useRef<number | null>(null);
+  useEffect(() => {
+    const frozen = !wbSignal && lifecycle.state === "paused";
+    if (frozen === clockFrozenPrevRef.current) return;
+    clockFrozenPrevRef.current = frozen;
+    if (frozen) {
+      clockFreezeWallMsRef.current = Date.now();
+      console.log(
+        `[WhiteboardWorkspaceClient] rid=${whiteboardSessionId} wbsid=${whiteboardSessionId} action=clock_paused t_frozen=${getAudioMs()} reason=${lifecycle.pausedReason ?? "unknown"}`
+      );
+    } else if (clockFreezeWallMsRef.current !== null) {
+      const gapMs = Date.now() - clockFreezeWallMsRef.current;
+      clockFreezeWallMsRef.current = null;
+      console.log(
+        `[WhiteboardWorkspaceClient] rid=${whiteboardSessionId} wbsid=${whiteboardSessionId} action=clock_resumed t_resume=${getAudioMs()} gap_ms=${gapMs}`
+      );
+    }
+  }, [
+    wbSignal,
+    lifecycle.state,
+    lifecycle.pausedReason,
+    whiteboardSessionId,
+    getAudioMs,
+  ]);
 
   const getWireBroadcastExtras = useCallback(():
     | WhiteboardWireBroadcastExtras
@@ -2870,8 +2978,10 @@ export function WhiteboardWorkspaceClient({
     studentId,
     startedAtIso,
     getAudioMs,
-    // Student role: recording is never active; sync-ingest is off (student uses useStudentWhiteboardCanvas)
-    recordingActive: role === "student" ? false : wbSignal,
+    // Student role: recording is never active; sync-ingest is off (student uses useStudentWhiteboardCanvas).
+    // Tutor: wbCaptureActive (not wbSignal) so WB strokes keep recording at
+    // the frozen clock through a disconnect pause (p3-clock).
+    recordingActive: role === "student" ? false : wbCaptureActive,
     sync: role === "student" ? null : sync,
     applyRemoteToCanvas,
     getScenePageIdForBroadcast: () => activePageIdRef.current,

@@ -487,7 +487,7 @@ describe("WhiteboardWorkspaceClient consent gates D/K", () => {
     });
   });
 
-  test("CF-2.1: wbSignal selects wbEventsActive when policy=none (IN_PERSON denied)", () => {
+  test("CF-2.1: wbCaptureActive selects wbEventsActive when policy=none (IN_PERSON denied)", () => {
     render(
       <WhiteboardWorkspaceClient
         {...baseWorkspaceProps}
@@ -501,10 +501,13 @@ describe("WhiteboardWorkspaceClient consent gates D/K", () => {
     const lastWbOpts = capturedWhiteboardRecorderOptions.at(-1);
     // FSM recordingActive is false (audio policy gates tutorWantsRecording), but
     // wbEventsActive stays true so stroke logs persist for IN_PERSON + denied.
+    // (p3-clock: the WB recorder prop is now wbCaptureActive, which in none-mode
+    // strictly follows wbEventsActive — isPaused only widens capture in audio
+    // modes. Not paused here, so the value is unchanged.)
     expect(lastWbOpts?.recordingActive).toBe(true);
   });
 
-  test("CF-2.1: wbSignal selects FSM recordingActive when policy≠none (armed gate)", () => {
+  test("CF-2.1: wbCaptureActive selects FSM recordingActive when policy≠none, not paused (armed gate)", () => {
     render(
       <WhiteboardWorkspaceClient
         {...baseWorkspaceProps}
@@ -518,7 +521,9 @@ describe("WhiteboardWorkspaceClient consent gates D/K", () => {
 
     const lastWbOpts = capturedWhiteboardRecorderOptions.at(-1);
     // policy=tutor_only: FSM is armed (no student yet) → recordingActive false;
-    // wbEventsActive is true but wbSignal must track audio FSM, not wbEventsActive.
+    // wbEventsActive is true but wbCaptureActive must track the audio FSM here,
+    // not wbEventsActive. Armed is NOT paused, so the p3-clock `|| isPaused`
+    // branch does not fire — the CF-2.1 armed gate is preserved.
     expect(lastWbOpts?.recordingActive).toBe(false);
   });
 });
