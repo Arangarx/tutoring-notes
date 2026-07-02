@@ -10,4 +10,4 @@
  */
 
 /** Prompt version for auto-generated structured notes. Increment when the reduce prompt changes. */
-export const REDUCE_PROMPT_VERSION = "2026-06-07-v1-structured";
+export const REDUCE_PROMPT_VERSION = "2026-07-02-v2-p3-proposed";

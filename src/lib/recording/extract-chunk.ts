@@ -26,17 +26,30 @@ import type { ChunkExtractionPayload } from "@/lib/recording/transcript-types";
 import { MAP_MODEL } from "@/lib/ai-models";
 
 const EXTRACT_SYSTEM_PROMPT = `You extract structured information from tutoring session audio transcripts.
+
 Given a transcript segment, identify:
-- topics: mathematics or other subject topics introduced or discussed
-- studentQuestions: questions the student asked (verbatim or paraphrased)
-- corrections: errors or misconceptions the tutor corrected
+- topics: subject topics introduced or discussed (math, science, etc.)
+- studentQuestions: questions the student asked (verbatim or tight paraphrase)
+- corrections: errors or misconceptions the tutor corrected, including those signaled by in-session reactions ("almost!" / "not quite" / "try again" imply wrestling; "yes!" / "got it" / "perfect" imply mastery on that point)
 - followUps: homework, practice problems, or next-session items mentioned
 
-Respond in JSON only. Use empty arrays when nothing was found.
-Format: {"topics":[],"studentQuestions":[],"corrections":[],"followUps":[]}`;
+STRICT RULES:
+(1) Only include information supported by the transcript — explicit statements or clear in-session reactions. Do not invent or fabricate content.
+(2) Be terse — short phrases, not full sentences.
+(3) Use empty arrays when nothing was found for a field.
+
+Respond in JSON only — no markdown fences, no commentary:
+{"topics":[],"studentQuestions":[],"corrections":[],"followUps":[]}`;
 
 function buildExtractPrompt(transcript: string): string {
-  return `Extract structured information from this tutoring session transcript segment:\n\n${transcript}\n\nRespond with JSON only.`;
+  return `Extract structured information from this tutoring session transcript segment.
+
+Rules: include only what the transcript supports; map tutor reactions to corrections when they signal misunderstanding or mastery; use terse phrases.
+
+Transcript:
+${transcript}
+
+Respond with JSON only.`;
 }
 
 /**

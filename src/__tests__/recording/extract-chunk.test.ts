@@ -201,6 +201,19 @@ describe("extractChunkMap — no API key", () => {
   });
 });
 
+describe("extractChunkMap — prompt shape", () => {
+  it("sends anti-fabrication and reaction-mapping rules in the system prompt", async () => {
+    mockOpenAISuccess(JSON.stringify({ topics: [], studentQuestions: [], corrections: [], followUps: [] }));
+
+    await extractChunkMap(SESSION_ID, CHUNK_ID, "Tutor: almost! try again.");
+
+    const callArgs = mockChatCreate.mock.calls[0][0];
+    const systemMsg = callArgs.messages.find((m: { role: string }) => m.role === "system").content as string;
+    expect(systemMsg).toContain("Do not invent");
+    expect(systemMsg).toContain("almost!");
+  });
+});
+
 describe("extractChunkMap — cost logging", () => {
   it("logs a cost event on success with response.model when present", async () => {
     mockChatCreate.mockResolvedValueOnce({

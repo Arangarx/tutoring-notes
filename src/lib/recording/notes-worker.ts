@@ -73,10 +73,10 @@ const NOTES_COMPLETION_TIMEOUT_MS = 5 * 60 * 1000;
 const REDUCE_SYSTEM_PROMPT = `You are an expert tutoring assistant. Given structured session data (per-segment extractions of topics, student questions, corrections, and follow-ups), synthesize a concise session note as JSON.
 
 STRICT RULES:
-(1) Be terse — short phrases or comma lists, not full sentences.
-(2) Only include information present in the source data — do not fabricate.
-(3) assessment synthesizes corrections + questions into a student-standing picture (strengths, struggles, mastery level).
-(4) nextSteps covers ALL follow-ups AND any assigned homework — this is the complete "Plan" including homework.
+(1) Be terse — short phrases or comma lists, not full sentences. A parent should scan in under 10 seconds.
+(2) Only include information present in the source data — do not fabricate or invent observations the session did not contain.
+(3) assessment synthesizes corrections, questions, and in-session reactions into a student-standing picture (strengths, struggles, mastery). Map reactions to meaning when present in source: "almost!" / "try again" / "not quite" → wrestling with that topic; "yes!" / "got it" / "perfect" / "right on" → has it. Empty string "" only if there is NEITHER explicit commentary NOR reaction signal on understanding.
+(4) nextSteps covers ALL follow-ups AND any assigned homework — the complete "Plan" including homework.
 (5) If a field has no information, return empty string "".
 
 Respond with JSON ONLY — no markdown fences, no commentary:
@@ -123,7 +123,9 @@ Corrections: ${e.corrections.join("; ") || "none"}
 Follow-ups: ${e.followUps.join("; ") || "none"}`
       )
       .join("\n\n");
-    return `Synthesize a structured session note from these per-segment extractions:\n\n${chunks}`;
+    return `Synthesize a structured session note from these per-segment extractions. Include only what the extractions support — do not fabricate. Map in-session reactions in corrections to assessment meaning when synthesizing.
+
+${chunks}`;
   }
 
   // Fallback: use raw transcripts
@@ -133,7 +135,9 @@ Follow-ups: ${e.followUps.join("; ") || "none"}`
         rawTranscripts.length > 1 ? `[Segment ${i + 1}]\n${t}` : t
       )
       .join("\n\n");
-    return `Synthesize a structured session note from this tutoring session transcript:\n\n${joined}`;
+    return `Synthesize a structured session note from this tutoring session transcript. Include only what the transcript supports — do not fabricate. Map tutor reactions ("almost!", "yes!", etc.) to assessment meaning when present.
+
+${joined}`;
   }
 
   return "Synthesize a structured session note. No audio transcript was available.";

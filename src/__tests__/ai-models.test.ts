@@ -6,7 +6,6 @@ describe("ai-models defaults", () => {
   it("uses historical literals when env overrides are absent", () => {
     jest.isolateModules(() => {
       jest.doMock("@/lib/env", () => ({ env: {} }));
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const models = require("@/lib/ai-models") as typeof import("@/lib/ai-models");
 
       expect(models.TRANSCRIBE_PRIMARY_MODEL).toBe("gpt-4o-mini-transcribe");
@@ -32,7 +31,6 @@ describe("ai-models env overrides", () => {
           OPENAI_LEGACY_NOTES_MODEL: "custom-legacy-notes",
         },
       }));
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const models = require("@/lib/ai-models") as typeof import("@/lib/ai-models");
 
       expect(models.TRANSCRIBE_PRIMARY_MODEL).toBe("custom-primary");
