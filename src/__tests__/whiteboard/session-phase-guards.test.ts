@@ -70,6 +70,7 @@ jest.mock("@/lib/tutor-approval-scope", () => ({
 jest.mock("@/lib/consent-scope", () => ({
   __esModule: true,
   assertEffectiveConsent: jest.fn().mockResolvedValue(undefined),
+  resolveModeAwareAudioRecordingConsent: jest.fn().mockResolvedValue({ allow: true }),
   ConsentError: class ConsentError extends Error {
     constructor(public permission: string, message?: string) {
       super(message ?? permission);
