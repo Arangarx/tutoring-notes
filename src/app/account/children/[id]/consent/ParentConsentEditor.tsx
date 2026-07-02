@@ -283,6 +283,7 @@ export function ParentConsentEditor({
       <div className="space-y-3 border-t border-border pt-4">
         <Button
           type="button"
+          data-testid="parent-consent-save-btn"
           variant="accent"
           className="w-full min-h-11 sm:w-auto"
           onClick={() => void handleSave()}
@@ -293,7 +294,10 @@ export function ParentConsentEditor({
         </Button>
 
         {saved ? (
-          <Alert className="rounded-[10px] border-accent/30 bg-accent-soft">
+          <Alert
+            data-testid="parent-consent-saved-alert"
+            className="rounded-[10px] border-accent/30 bg-accent-soft"
+          >
             <AlertTitle>Preferences saved</AlertTitle>
             <AlertDescription>
               Your privacy choices are saved. New tutoring sessions will use
@@ -392,6 +396,7 @@ function PermissionToggleRow({
         </div>
         <Switch
           id={inputId}
+          data-testid={`parent-consent-toggle-${tutor.adminUserId}-${perm.key}`}
           checked={tutor[perm.key]}
           onCheckedChange={onToggle}
           aria-label={perm.label}

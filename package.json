@@ -19,6 +19,7 @@
     "test:regression": "jest src/__tests__/regressions",
     "test:e2e": "playwright test",
     "test:integration": "playwright test --project=integration",
+    "test:identity-e2e": "playwright test --project=integration-setup && playwright test --project=identity-e2e",
     "relay:build": "npm run ensure:docker && docker build -t wb-relay-local ../whiteboard-sync",
     "test:wb-jest": "jest --testPathPatterns=whiteboard --testPathPatterns=sync-client --testPathPatterns=viewport-align",
     "test:wb-playwright": "playwright test --project=integration-setup && playwright test --project=wb-regression",

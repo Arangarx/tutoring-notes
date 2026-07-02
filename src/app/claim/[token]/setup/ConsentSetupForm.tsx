@@ -109,7 +109,10 @@ export function ConsentSetupForm({
 
   if (saved) {
     return (
-      <div className="rounded-md border border-border bg-muted/40 p-4 space-y-2">
+      <div
+        data-testid="consent-saved-indicator"
+        className="rounded-md border border-border bg-muted/40 p-4 space-y-2"
+      >
         <p className="text-sm font-medium text-foreground">
           ✓ Preferences saved
         </p>
@@ -147,6 +150,7 @@ export function ConsentSetupForm({
             </div>
             <Switch
               id={`consent-${t.key}`}
+              data-testid={`consent-toggle-${t.key}`}
               checked={values[t.key]}
               onCheckedChange={() => toggle(t.key)}
               aria-label={t.label}
@@ -167,6 +171,7 @@ export function ConsentSetupForm({
 
       <Button
         type="button"
+        data-testid="consent-save-btn"
         onClick={handleSave}
         disabled={busy}
         aria-busy={busy}
@@ -177,6 +182,7 @@ export function ConsentSetupForm({
 
       <Button
         type="button"
+        data-testid="consent-decline-btn"
         variant="outline"
         onClick={() => setDeclineDialogOpen(true)}
         disabled={busy}
@@ -194,6 +200,7 @@ export function ConsentSetupForm({
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              data-testid="consent-decline-confirm-btn"
               disabled={busy}
               onClick={(e) => {
                 e.preventDefault();

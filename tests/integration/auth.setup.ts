@@ -2,9 +2,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { test as setup, request } from "@playwright/test";
 import { TEST_ADMIN, TEST_LEARNER, seedTestAdmin, seedTestStudent, seedTestLearner } from "../visual/helpers";
+import {
+  TEST_PARENT,
+  seedParentAccountHolder,
+  seedTestAdminWithRole,
+} from "./identity/identity.helpers";
 
 const authFile = path.join(__dirname, ".auth", "tutor.json");
 const learnerAuthFile = path.join(__dirname, ".auth", "learner.json");
+const parentAuthFile = path.join(__dirname, ".auth", "parent.json");
 
 setup("authenticate tutor storageState + seed learner credentials", async ({ page }) => {
   const adminUserId = await seedTestAdmin();
@@ -13,6 +19,10 @@ setup("authenticate tutor storageState + seed learner credentials", async ({ pag
   // Seed the test learner (AccountHolder + LearnerProfile + LearnerCredential)
   // so that /api/auth/learner/login works for wb-regression tests.
   await seedTestLearner(adminUserId, studentId);
+
+  // Identity e2e: parent password login + ADMIN-role admin for erasure follow-on.
+  await seedParentAccountHolder();
+  await seedTestAdminWithRole("ADMIN");
 
   // --- Tutor: full NextAuth login → tutor.json storage state ---
   await page.goto("/login");
@@ -55,5 +65,23 @@ setup("authenticate tutor storageState + seed learner credentials", async ({ pag
     fs.writeFileSync(learnerAuthFile, JSON.stringify(cookies, null, 2), "utf-8");
   } finally {
     await apiCtx.dispose();
+  }
+
+  // --- Parent: account-holder login → parent.json storage state ---
+  const parentCtx = await request.newContext({ baseURL: "http://localhost:3100" });
+  try {
+    const resp = await parentCtx.post("/api/auth/account-holder/login", {
+      data: { email: TEST_PARENT.email, password: TEST_PARENT.password },
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!resp.ok()) {
+      const body = await resp.text().catch(() => "<no body>");
+      throw new Error(`Parent setup login failed (${resp.status()}): ${body}`);
+    }
+    const cookies = await parentCtx.storageState();
+    fs.mkdirSync(path.dirname(parentAuthFile), { recursive: true });
+    fs.writeFileSync(parentAuthFile, JSON.stringify(cookies, null, 2), "utf-8");
+  } finally {
+    await parentCtx.dispose();
   }
 });
