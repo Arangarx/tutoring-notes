@@ -51,6 +51,8 @@ export type WaitingRoomOverlayProps = {
   canStart: boolean;
   /** True while the Start server action is in-flight. */
   isStarting: boolean;
+  /** Tutor-only: consent or other start failure copy (mirrors StartWhiteboardSession). */
+  startError?: string | null;
   /** Called when the tutor clicks Start. */
   onStart: () => void | Promise<void>;
   /** Called when the tutor changes the LIVE ↔ IN_PERSON toggle. */
@@ -114,6 +116,7 @@ export function WaitingRoomOverlay({
   studentLabel,
   canStart,
   isStarting,
+  startError,
   onStart,
   onSessionModeChange,
   micControlNode,
@@ -261,6 +264,15 @@ export function WaitingRoomOverlay({
                   {startHintText}
                 </p>
               )}
+              {startError ? (
+                <p
+                  role="alert"
+                  className="mynk-wtr-start-error text-sm whitespace-pre-wrap text-destructive break-words"
+                  data-testid="wb-waiting-start-error"
+                >
+                  {startError}
+                </p>
+              ) : null}
               <button
                 type="button"
                 className="mynk-wtr-start-btn"

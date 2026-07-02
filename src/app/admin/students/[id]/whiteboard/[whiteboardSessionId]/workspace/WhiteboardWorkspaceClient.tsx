@@ -39,6 +39,10 @@
  */
 
 import { copyTextToClipboard } from "@/lib/copy-text-to-clipboard";
+import {
+  formatConsentActionError,
+  parseConsentActionError,
+} from "@/lib/consent-action-error";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useWindowScrollToTopOnMount } from "@/hooks/useWindowScrollToTopOnMount";
@@ -1454,6 +1458,7 @@ export function WhiteboardWorkspaceClient({
 
   // True while startWhiteboardSession is in-flight (prevents double-tap).
   const [isStarting, setIsStarting] = useState(false);
+  const [sessionStartError, setSessionStartError] = useState<string | null>(null);
 
   const sync = syncReady ? syncClientRef.current : null;
 
@@ -3600,6 +3605,7 @@ export function WhiteboardWorkspaceClient({
   const activateSessionLive = useCallback(async (mode: WtrSessionMode) => {
     if (isStarting) return;
     setIsStarting(true);
+    setSessionStartError(null);
     console.info(
       `[slc] wbsid=${whiteboardSessionId} action=session_activate_clicked phase=pending->active`
     );
@@ -3613,6 +3619,10 @@ export function WhiteboardWorkspaceClient({
         `[wtr] wbsid=${whiteboardSessionId} role=${role} action=live_entered mode=${mode.toLowerCase()}`
       );
     } catch (err) {
+      const consentErr = parseConsentActionError(err);
+      if (consentErr) {
+        setSessionStartError(formatConsentActionError(consentErr));
+      }
       // Log the failure so a future hardware repro is debuggable.
       // The button re-enables via the finally block — no stuck state.
       console.error(
@@ -6524,6 +6534,7 @@ export function WhiteboardWorkspaceClient({
         studentLabel={studentName || "your student"}
         canStart={overlayCanStart}
         isStarting={isStarting}
+        startError={sessionStartError}
         onStart={() => void activateSessionLive(sessionMode)}
         onSessionModeChange={(m) => setSessionMode(m)}
         micControlNode={overlayMicNode}

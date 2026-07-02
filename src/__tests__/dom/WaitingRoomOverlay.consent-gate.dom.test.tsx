@@ -338,9 +338,7 @@ describe("WhiteboardWorkspaceClient waiting room — startWhiteboardSession wiri
     );
   });
 
-  // TODO(batch4): RED — real defect: activateSessionLive catches ConsentError
-  // from startWhiteboardSession and only console.errors; no tutor-facing alert.
-  test.skip("surfaces friendly consent copy when startWhiteboardSession rejects ConsentError", async () => {
+  test("surfaces friendly consent copy when startWhiteboardSession rejects ConsentError", async () => {
     const consentErr = Object.assign(
       new Error(
         "Parent privacy preferences must be set before starting a session."
