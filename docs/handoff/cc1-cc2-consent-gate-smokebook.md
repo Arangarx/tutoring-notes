@@ -1,16 +1,18 @@
 # CC-1 / CC-2 — consent-record gate + mandatory claim consent — smoke runbook
 
 **Branch:** `wb-wave5-polish`
-**Tip commit:** [`5c59a37`](https://github.com/Arangarx/tutoring-notes/commit/5c59a371c58a6c4f7e021901bcefb787abd4d341)
+**Tip commit:** `[5c59a37](https://github.com/Arangarx/tutoring-notes/commit/5c59a371c58a6c4f7e021901bcefb787abd4d341)`
 **Preview:** [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-arangarx-5209s-projects.vercel.app)
 
 CC-1 gates whiteboard session **create**, **start**, and **join-token issue** on `ConsentRecord` existence for `(learnerProfileId, adminUserId)`. CC-2 forces an explicit consent choice at claim setup (save or decline — both write a record). Self-learners exempt. Shipped: `35147ef` (`assertConsentRecordExists`), `13afd66` (create gate), `12d4946` (start + `issueJoinToken` backstops), `476b9ee` (tutor UI callout + friendly `ConsentError`), `5d6d196` (decline API), `7a85d0a` (mandatory-choice UI).
 
 ---
 
+
+
 ### 1. CC-1 — no ConsentRecord blocks session create (claimed minor)
 
-**Action:** As tutor on the branch **Preview**, open a **claimed minor** learner who has **no `ConsentRecord`** for this tutor (test fixture or freshly claimed student before consent step). On the student detail page, observe the whiteboard Start affordance. If a Start button is still visible (legacy UI), click it. Otherwise note the inline callout.
+**Action:** As tutor on the branch **Preview**, open a **claimed minor** learner who has **no** `ConsentRecord` for this tutor (test fixture or freshly claimed student before consent step). On the student detail page, observe the whiteboard Start affordance. If a Start button is still visible (legacy UI), click it. Otherwise note the inline callout.
 
 **Expect:** **No session is created.** Tutor sees the **consent-required callout** instead of a bare Start button (or a friendly error if Start is clicked): parent must claim and set privacy preferences, with link hint to the **Parent account** section. Server returns `ConsentError` (not a generic 500 / digest). No redirect to whiteboard workspace.
 
@@ -19,14 +21,18 @@ CC-1 gates whiteboard session **create**, **start**, and **join-token issue** on
 - [ ] PASS
 - [ ] FAIL
 - [ ] PARTIAL
-- [ ] N/A with notes
-- [ ] SKIP
+- [x] N/A with notes
+- [x] SKIP
 
 **Coverage:** `[automated: createWhiteboardSession.test.ts › no ConsentRecord → ConsentError]` — `[human-only: tutor callout UX]`
 
 **Notes:**
 
+**I'm skipping all these consent-record ones.  Frankly...shouldn't playwright tests be able to smoke ALL of this????  Why am I being asked to smoke this kind of thing?**
+
 ---
+
+
 
 ### 2. CC-1 — unclaimed learner blocks session create
 
@@ -39,18 +45,20 @@ CC-1 gates whiteboard session **create**, **start**, and **join-token issue** on
 - [ ] PASS
 - [ ] FAIL
 - [ ] PARTIAL
-- [ ] N/A with notes
-- [ ] SKIP
+- [x] N/A with notes
+- [x] SKIP
 
 **Coverage:** `[automated: createWhiteboardSession.test.ts › unclaimed → ConsentError]`
 
-**Notes:**
+**Notes: See notes in step 1.**
 
 ---
 
+
+
 ### 3. CC-1 — ConsentRecord exists → session create proceeds (positive)
 
-**Action:** As tutor, use a **claimed minor** with a saved `ConsentRecord` where **`allowLiveSession=true`** (and audio per your test needs). Click **Start whiteboard session** from the student detail page (or workspace Continue flow).
+**Action:** As tutor, use a **claimed minor** with a saved `ConsentRecord` where `allowLiveSession=true` (and audio per your test needs). Click **Start whiteboard session** from the student detail page (or workspace Continue flow).
 
 **Expect:** Session **creates successfully** — redirect to whiteboard workspace (PENDING → workspace mounts). No consent-required callout. Friendly errors do **not** appear.
 
@@ -59,14 +67,16 @@ CC-1 gates whiteboard session **create**, **start**, and **join-token issue** on
 - [ ] PASS
 - [ ] FAIL
 - [ ] PARTIAL
-- [ ] N/A with notes
-- [ ] SKIP
+- [x] N/A with notes
+- [x] SKIP
 
 **Coverage:** `[automated: createWhiteboardSession.test.ts › record exists + allowLiveSession → creates]`
 
-**Notes:**
+**Notes: See notes in step 1.**
 
 ---
+
+
 
 ### 4. CC-1 — startWhiteboardSession backstop (legacy PENDING row, no record)
 
@@ -79,14 +89,16 @@ CC-1 gates whiteboard session **create**, **start**, and **join-token issue** on
 - [ ] PASS
 - [ ] FAIL
 - [ ] PARTIAL
-- [ ] N/A with notes
-- [ ] SKIP
+- [x] N/A with notes
+- [x] SKIP
 
 **Coverage:** `[automated: startWhiteboardSession.test.ts › no record → ConsentError]`
 
-**Notes:**
+**Notes: See notes in step 1.**
 
 ---
+
+
 
 ### 5. CC-2 — mandatory consent choice at claim setup (cannot skip)
 
@@ -99,14 +111,16 @@ CC-1 gates whiteboard session **create**, **start**, and **join-token issue** on
 - [ ] PASS
 - [ ] FAIL
 - [ ] PARTIAL
-- [ ] N/A with notes
-- [ ] SKIP
+- [x] N/A with notes
+- [x] SKIP
 
 **Coverage:** `[automated: ConsentSetupForm.dom.test.tsx › enforcement hides skip affordances]`
 
-**Notes:**
+**Notes: See notes in step 1.**
 
 ---
+
+
 
 ### 6. CC-2 — Decline path writes all-off ConsentRecord
 
@@ -119,18 +133,20 @@ CC-1 gates whiteboard session **create**, **start**, and **join-token issue** on
 - [ ] PASS
 - [ ] FAIL
 - [ ] PARTIAL
-- [ ] N/A with notes
-- [ ] SKIP
+- [x] N/A with notes
+- [x] SKIP
 
 **Coverage:** `[automated: claim-setup-consent-decline.test.ts › T5 consent_decline writes all-off record]`
 
-**Notes:**
+**Notes: See notes in step 1.**
 
 ---
 
+
+
 ### 7. CC-2 — self-learner exempt from mandatory consent
 
-**Action:** Complete claim setup via **`connect_self`** (adult self-learner declaration). Observe whether consent panel is skipped or informational-only. As tutor, **Start** a whiteboard session for that self-learner **without** any parental `ConsentRecord`.
+**Action:** Complete claim setup via `connect_self` (adult self-learner declaration). Observe whether consent panel is skipped or informational-only. As tutor, **Start** a whiteboard session for that self-learner **without** any parental `ConsentRecord`.
 
 **Expect:** Self-learner bypasses mandatory consent gate — setup completes without forced save/decline. Tutor can create/start sessions normally (D-5 exempt). Decline/save API returns skipped success if invoked.
 
@@ -139,14 +155,16 @@ CC-1 gates whiteboard session **create**, **start**, and **join-token issue** on
 - [ ] PASS
 - [ ] FAIL
 - [ ] PARTIAL
-- [ ] N/A with notes
-- [ ] SKIP
+- [x] N/A with notes
+- [x] SKIP
 
 **Coverage:** `[automated: claim-setup-consent-decline.test.ts › self-learner exemption]` — `[automated: createWhiteboardSession.test.ts › self-learner passes without record]`
 
-**Notes:**
+**Notes: See notes in step 1.**
 
 ---
+
+
 
 ### 8. CC-2 — re-submit already-saved consent → 409 `consent_already_saved` (H-1)
 
@@ -159,14 +177,16 @@ CC-1 gates whiteboard session **create**, **start**, and **join-token issue** on
 - [ ] PASS
 - [ ] FAIL
 - [ ] PARTIAL
-- [ ] N/A with notes
-- [ ] SKIP
+- [x] N/A with notes
+- [x] SKIP
 
 **Coverage:** `[automated: claim-setup-consent-decline.test.ts › H-1 P2002 → 409]` — `[automated: ConsentSetupForm.dom.test.tsx › 409 on decline treated as saved]`
 
-**Notes:**
+**Notes: See notes in step 1.**
 
 ---
+
+
 
 ### 9. All-off record satisfies CC-1 existence gate; join gate still blocks live entry
 
@@ -179,14 +199,16 @@ CC-1 gates whiteboard session **create**, **start**, and **join-token issue** on
 - [ ] PASS
 - [ ] FAIL
 - [ ] PARTIAL
-- [ ] N/A with notes
-- [ ] SKIP
+- [x] N/A with notes
+- [x] SKIP
 
 **Coverage:** `[automated: consent-b2.test.ts › all-off record → create ok, join denied]` — `[human-only: end-to-end join denial on preview]`
 
-**Notes:**
+**Notes: See notes in step 1.**
 
 ---
+
+
 
 ### 10. Theme parity — claim setup + parent consent editor (light + dark)
 
@@ -199,12 +221,14 @@ CC-1 gates whiteboard session **create**, **start**, and **join-token issue** on
 - [ ] PASS
 - [ ] FAIL
 - [ ] PARTIAL
-- [ ] N/A with notes
-- [ ] SKIP
+- [x] N/A with notes
+- [x] SKIP
 
-**Notes:**
+**Notes: See notes in step 1.**
 
 ---
+
+
 
 ## Cross-branch / post-merge
 
@@ -218,6 +242,8 @@ Run this section **after** `wb-wave5-polish` merges into `v1-redesign`. Use the 
 
 - [ ] PASS
 - [ ] FAIL
+
+
 
 ### 1. CC-1/CC-2 gates still hold post-merge
 
@@ -236,6 +262,8 @@ Run this section **after** `wb-wave5-polish` merges into `v1-redesign`. Use the 
 **Notes:**
 
 ---
+
+
 
 ## Overall result
 

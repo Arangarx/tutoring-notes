@@ -1,12 +1,14 @@
 # Learner/family right-to-erasure (E5 admin UI) — smoke runbook
 
 **Branch:** `wb-wave5-polish`
-**Tip commit:** [`f6ad4bc`](https://github.com/Arangarx/tutoring-notes/commit/f6ad4bc7eeb55ed43dd53b9c8ef720cf0f7154c7)
+**Tip commit:** `[f6ad4bc](https://github.com/Arangarx/tutoring-notes/commit/f6ad4bc7eeb55ed43dd53b9c8ef720cf0f7154c7)`
 **Preview:** [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-arangarx-5209s-projects.vercel.app)
 
 Admin-only erasure surface: per-learner and full-family scopes, immediate tombstone, 7-day grace before blob+DB purge, cancel during `requested` only. Route guards 404 on `Student.erasedAt` (post-purge); tutors retain read-access during grace. Themes not required for this admin-only smokebook.
 
 ---
+
+
 
 ### 1. Admin gate — non-admin cannot reach `/admin/erasure`
 
@@ -16,7 +18,7 @@ Admin-only erasure surface: per-learner and full-family scopes, immediate tombst
 
 **Ignore this run:** Impersonation flows unrelated to erasure.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -26,7 +28,11 @@ Admin-only erasure surface: per-learner and full-family scopes, immediate tombst
 
 **Notes:**
 
+**I feel the need to point out once again, just like the consentRecord smokebook... Why in the world am I smoking this stuff?  This is totally playwright testable things.**
+
 ---
+
+
 
 ### 2. Trigger per-learner erasure — confirmation phrase enforced
 
@@ -36,7 +42,7 @@ Admin-only erasure surface: per-learner and full-family scopes, immediate tombst
 
 **Ignore this run:** Copy nitpicks on button labels.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -46,17 +52,27 @@ Admin-only erasure surface: per-learner and full-family scopes, immediate tombst
 
 **Notes:**
 
+**"Request erasure" should be a step up operation that requires 2fa again.**
+
+**I know I approved immediate tombstone and no recovery to start...but...why don't we allow the account to come back within the grace period?  What's the point of the grace period for data but not the account, so the tutor can keep access but the account is still gone?**
+
+**Obviously, our copy that notifies parents of their right to delete should notify them of the tombstone/grace period.  We need to make sure the copy makes sense to non technical users, e.g. we probably can't just say blob, a lot of people won't have a clue what that means.  We might even have to clarify in the operator copy.  Now that I think about it, future operators might not know what a blob is either.**
+
+**Learner profile ID...is going to be kind of a pain to get, We'll need better ways to find the acounts later.**
+
 ---
+
+
 
 ### 3. Irreversible-warning copy present and honest
 
 **Action:** On `/admin/erasure`, open the per-learner and full-family trigger panels (do not submit yet). Read the warning copy around immediate tombstone, 7-day grace, irreversible purge, and cancel window.
 
-**Expect:** Copy states: identity redaction + login revoke are **immediate**; blob/DB purge happens after grace (~7 days); cancel only while status is `requested`; no dark-pattern “are you sure?” loops that hide consequences. Wording matches ratified semantics (no promise of instant full purge).
+**Expect:** Copy states: identity redaction + login revoke are **immediate**; blob/DB purge happens after grace (~7 days); cancel only while status is `requested`; no dark-pattern "are you sure?" loops that hide consequences. Wording matches ratified semantics (no promise of instant full purge).
 
 **Ignore this run:** Minor typography; theme colors.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -68,6 +84,8 @@ Admin-only erasure surface: per-learner and full-family scopes, immediate tombst
 
 ---
 
+
+
 ### 4. Immediate tombstone — learner cannot log in; identity redacted
 
 **Action:** Using a **fresh test learner** (child PIN login), note the display name. As **ADMIN**, trigger per-learner erasure with the correct confirmation phrase. Attempt **learner PIN login** again in an incognito window. Inspect the learner profile / family dashboard if accessible.
@@ -76,9 +94,9 @@ Admin-only erasure surface: per-learner and full-family scopes, immediate tombst
 
 **Ignore this run:** Parent AH session on a different browser tab (focus on learner login).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
@@ -86,7 +104,13 @@ Admin-only erasure surface: per-learner and full-family scopes, immediate tombst
 
 **Notes:**
 
+**Side Note: When learner is already configured, claim page where parent chooses privacy and child credentials, they have no way to navigate away.  It says login is already configured...etc but no links or navigation.**
+
+**Possible failure: I'm not sure where I'm looking for the redacted placeholder.  Tutor page still shows the student "Delete Test2" and I can even start a whiteboard session??? And it still shows connected to Bob Bobsley the parent...if we delete the learner, should it not disconnect the student?**
+
 ---
+
+
 
 ### 5. Trigger full-family erasure — AH + all children covered
 
@@ -97,7 +121,7 @@ Admin-only erasure surface: per-learner and full-family scopes, immediate tombst
 **Ignore this run:** `isTestFixture` learners (should be excluded from family tombstone sweep).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
@@ -106,7 +130,17 @@ Admin-only erasure surface: per-learner and full-family scopes, immediate tombst
 
 **Notes:**
 
+**Is any uuid in the family supposed to work or specifically the parent's uuid? If the parent is not a learner...where do I get a uuid from?**
+
+What even IS the family display name?  The last name? the family id that children have with child@family? I tried bobsley (the name after @) it errored with "Account holder not found".  I tried Bob Bobsley, "Account holder not found"  Finally just used DELETE
+
+Child manage page needs clearer navigation back to parent dashboard. Wife was getting confused by self learner leaner page vs account page.  Page maybe needs condense a little or better nav in general...she got lost twice in a row.  After creating another learner to test family deletion she already forgot how to get back.
+
+Failure: Full family erasure using uuid of parent self learner id, shows in erasure jobs, but my wife was able to continue operations on the family page and also log out AND log back in as the parent.
+
 ---
+
+
 
 ### 6. Jobs table shows grace countdown / `purgeEligibleAt`
 
@@ -116,7 +150,7 @@ Admin-only erasure surface: per-learner and full-family scopes, immediate tombst
 
 **Ignore this run:** Exact date format localization.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -128,9 +162,11 @@ Admin-only erasure surface: per-learner and full-family scopes, immediate tombst
 
 ---
 
+
+
 ### 7. Cancel during `requested` — halts purge; cancel absent after
 
-**Action:** Trigger a new per-learner erasure. While status is **`requested`**, click **Cancel** on the job row. Confirm job moves to `canceled`. Trigger another erasure, wait until worker would advance (or manually run resume CLI on a past-grace job — item 8) and confirm cancel control is **gone** once status is past `requested`.
+**Action:** Trigger a new per-learner erasure. While status is `requested`, click **Cancel** on the job row. Confirm job moves to `canceled`. Trigger another erasure, wait until worker would advance (or manually run resume CLI on a past-grace job — item 8) and confirm cancel control is **gone** once status is past `requested`.
 
 **Expect:** Cancel succeeds during grace → status `canceled`, no purge. Tombstone **remains** (Option A — no un-tombstone). Cancel button/control **not shown** for `blobs_purging`, `db_scrubbing`, or `completed`.
 
@@ -138,15 +174,21 @@ Admin-only erasure surface: per-learner and full-family scopes, immediate tombst
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
-- [ ] N/A with notes
-- [ ] SKIP
+- [x] PARTIAL
+- [x] N/A with notes
+- [x] SKIP
 
 **Coverage:** `[automated: src/lib/erasure/erasure-lifecycle.integration.test.ts › cancel during grace]` + `[automated: src/app/admin/erasure/cancel-erasure-by-admin.test.ts]`
 
 **Notes:**
 
+**By status is "requested", do you mean "Grace period"?**
+
+**Yes the copy shows up...those other things you want me to do sound like something you could playwright so I'm skipping that.**
+
 ---
+
+
 
 ### 8. Worker/cron processing — `erasure:resume` advances past-grace job
 
@@ -165,14 +207,16 @@ Admin-only erasure surface: per-learner and full-family scopes, immediate tombst
 - [ ] PASS
 - [ ] FAIL
 - [ ] PARTIAL
-- [ ] N/A with notes
-- [ ] SKIP
+- [x] N/A with notes
+- [x] SKIP
 
 **Coverage:** `[automated: src/lib/erasure/process-erasure-job.test.ts › happy path]` + `[automated: src/lib/erasure/erasure-lifecycle.integration.test.ts › per-learner happy path]`
 
 **Notes:**
 
 ---
+
+
 
 ### 9. Post-purge content 404 — replay + APIs for erased student
 
@@ -188,14 +232,16 @@ Admin-only erasure surface: per-learner and full-family scopes, immediate tombst
 - [ ] PASS
 - [ ] FAIL
 - [ ] PARTIAL
-- [ ] N/A with notes
-- [ ] SKIP
+- [x] N/A with notes
+- [x] SKIP
 
 **Coverage:** `[automated: src/lib/erasure/erasure-lifecycle.integration.test.ts › per-learner happy path (post-purge guards)]` + `[automated: src/lib/erasure/assert-student-not-erased.test.ts]`
 
 **Notes:**
 
 ---
+
+
 
 ### 10. Grace-window read-access nuance — tutor can still open content before purge
 
@@ -206,7 +252,7 @@ Admin-only erasure surface: per-learner and full-family scopes, immediate tombst
 **Ignore this run:** End-session button behavior during grace (covered by integration tests).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
@@ -215,27 +261,34 @@ Admin-only erasure surface: per-learner and full-family scopes, immediate tombst
 
 **Notes:**
 
+**I didn't actually test this but, I made notes above about some weirdness after deleting a learner.  I could still see the student's name, not redaction, and I could start a whiteboard session.** 
+
 ---
+
+
 
 ### 11. "[Deleted learner]" placeholder in student lists
 
 **Action:** After purge completes, view tutor **student list** / roster where the erased learner appeared.
 
-**Expect:** Student row shows **`[Deleted learner]`** placeholder — **not hidden**, not blank. Session aggregates may still show counts (billing preserved).
+**Expect:** Student row shows `[Deleted learner]` placeholder — **not hidden**, not blank. Session aggregates may still show counts (billing preserved).
 
 **Ignore this run:** Sort order of deleted vs active students.
 
 - [ ] PASS
 - [ ] FAIL
 - [ ] PARTIAL
-- [ ] N/A with notes
-- [ ] SKIP
+- [x] N/A with notes
+- [x] SKIP
 
 **Coverage:** `[automated: src/lib/erasure/process-erasure-job.test.ts › happy path (name placeholder)]`
 
-**Notes:**
+**Notes:**  
+**This is definitely playwright/database manipulation testing stuff.**
 
 ---
+
+
 
 ### 12. `blob-cleanup.mjs` L-1 — chunk blobs not treated as orphans
 
@@ -248,14 +301,16 @@ Admin-only erasure surface: per-learner and full-family scopes, immediate tombst
 - [ ] PASS
 - [ ] FAIL
 - [ ] PARTIAL
-- [ ] N/A with notes
-- [ ] SKIP
+- [x] N/A with notes
+- [x] SKIP
 
 **Coverage:** `[automated: src/lib/erasure/blob-inventory.test.ts › chunkBlobUrl inventory]` — confirm `scripts/blob-cleanup.mjs` grep for `chunkBlobUrl` in reference set.
 
 **Notes:**
 
 ---
+
+
 
 ## Overall result
 
