@@ -153,6 +153,8 @@ Smokebook [`docs/handoff/wb-wave5-polish-part1-checkpoint-smokebook.md`](handoff
 | **CH-SMOKE-DQ-MULTI-STUDENT-LIVE — multi-student live consent stacking** | Design Q (Andrew) | Block B #2: tutor marks WHO is live; least-permissive permission stacking; mid-session join consent switching. Detail: findings §DQ-5. |
 | **CH-SMOKE-DQ-CONSENT-CALLOUT-LIVE — live consent-satisfied notification on student page** | Design Q (Andrew) | Block B #1: ajax update of tutor "parent must set consent" callout when parent toggles consent. Detail: findings §DQ-6. |
 | **CH-SMOKE-PLAYWRIGHT-GAP-CONSENT-ERASURE — CC-1/CC-2 + erasure admin items → Playwright** | Process / test debt | Andrew 2026-07-01: skipped CC-1/CC-2 (all 10) and much of erasure as "totally playwright testable." Convert listed items to e2e so manual smoke narrows to hardware-only surfaces. Detail: findings §E. |
+| **ERASURE-ORPHAN-AUDIO-BLOBS — orphan Vercel audio not in erasure inventory** | Medium (erasure coverage) | Audio segments uploaded to Vercel Blob whose `TranscriptChunk` enqueue failed (fire-and-forget enqueue) are not walked by server-side erasure inventory — orphaned blobs may remain after erasure. Extend erasure walk or add blob orphan reconciliation. Cross-ref [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) § Session-experience build status. |
+| **ERASURE-CLIENT-STORE-UNREACHABLE — client-only stores not server-purgeable** | Medium (erasure coverage) | Recording-draft / upload-outbox / whiteboard-checkpoint IndexedDB + sessionStorage scene drafts are unreachable by server-side erasure. Document as known limitation for Sarah merge or add client-purge-on-erasure signal (e.g. tombstone poll + local wipe). Cross-ref [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md) § Session-experience build status. |
 
 ---
 
@@ -1066,7 +1068,7 @@ Items from the 2026-06-02 brand review (Andrew + wife) on landing + Features pag
 | Item | Priority | Notes |
 |------|----------|-------|
 | **WB-STYLE-MENU-CLOSE — style-options submenu should close on click-outside** | Low | Currently waits for a stroke to finish before closing the style-options submenu; should dismiss on click-outside like other popovers. Found during Phase 1 in-frame review smoke (2026-06-14). |
-| **WB-NOTES-SKELETON — polished blurred-line skeleton during transcribe+reduce** | Low | Inline "Generating notes…" shipped in unified review surface; replace with polished blurred-line skeleton when worth the polish pass. |
+| **WB-NOTES-SKELETON — sub-second streaming latency for auto-notes UI** | Medium (Part 3) | **Blurred/shimmer skeleton SHIPPED** — `SkeletonNotes` in `src/components/whiteboard/TutorNotesSection.tsx`. Remaining scope = **sub-second streaming latency bar** (Part 3 `p3-incremental-map` / live map updates), not building the skeleton. Cross-ref Part 3 spine in [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md). |
 | **WB-TRANSCRIBE-LATENCY — near-silent / short sessions** | Medium (backend) | A ~2-min near-zero-audio session took very long to transcribe. Backend watch item — recording re-arch / notes pipeline (currently parked). |
 | **WB-REVIEW-HEADER-POLISH — top review header feels basic** | Low | Visual polish pass on the session-review top bar after unified-surface correction lands. |
 
