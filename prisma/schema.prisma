@@ -252,7 +252,8 @@ model SessionRecording {
    * Capture-stream identifier (Phase 1b — Pillar 2). Today the only
    * value in production is `"tutor:mic"`; Phase 4 will add
    * `"student:peer-<id>:mic"` rows for live student audio capture and
-   * (later) `"tutor:cam"` / `"student:peer-<id>:cam"` for video.
+   * (post-Sarah design seam) `"tutor:video"` / `"student:peer-<id>:video"` —
+   * see `docs/RECORDER-LIFECYCLE.md` § Video capture — design seam (NOT built).
    * The default backfills every pre-Phase-1b row to `"tutor:mic"` so
    * existing recordings show up as a single tutor stream in replay,
    * which matches the pre-Phase-1b mental model exactly. Multi-stream

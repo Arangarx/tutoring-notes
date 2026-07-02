@@ -342,6 +342,113 @@ affordance. See the "Workspace preview-before-Start" section below.
 
 ---
 
+## Video capture — design seam (post-Sarah, NOT built)
+
+> **Ratified (Block C, C5 — Andrew 2026-06-30):** video is **designed-for**,
+> not built for Sarah. This section is the architecture seam only — no
+> `MediaRecorder`, no upload path, no replay UI, no consent gate, no
+> migration. If you find yourself adding executable logic or a Prisma field,
+> STOP — that's out of scope until a post-Sarah build wave.
+
+### Principle — video is another per-stream lane
+
+The recording stack already generalizes beyond a single tutor mic:
+
+* **`SessionRecording.streamId`** is a free-form string (not an enum) —
+  today's `tutor:mic` and `student:peer-<id>:mic` rows are just values.
+* **Pillar 2 (outbox)** is keyed by `(sessionId, streamId, segmentId)` —
+  serial-within-stream, parallel-across-streams.
+* **Pillar 1 (FSM)** gates capture via `inputStreams: ReadonlyMap<streamId, …>`
+  and `shouldCapture(streamId)`.
+* **Tap-before-mix** ([LIVE-AV.md](LIVE-AV.md) invariant **#6a**) already
+  separates per-speaker capture lanes from the single replay mixdown.
+  Video is the same pattern: another lane off a raw `MediaStream`, not a
+  second replay source unless explicitly chosen.
+
+### Stream-id convention (no migration)
+
+Future video lanes mirror the mic helpers in
+`src/lib/recording/remote-stream-recorder.ts` / `lifecycle-machine.ts`:
+
+| Lane | `streamId` | Helper (future) |
+|---|---|---|
+| Tutor camera | `tutor:video` | `TUTOR_VIDEO_STREAM_ID` (or equivalent) |
+| Student camera | `student:peer-<peerId>:video` | `studentVideoStreamId(peerId)` |
+
+These slot into the **same** `SessionRecording.streamId` column and the
+same outbox `streamId` field — no schema change required. Grep for
+`studentMicStreamId` when wiring the video helper so naming stays
+consistent.
+
+### What already supports video (zero schema work)
+
+* **`SessionRecording.streamId`** — free-form; indexed
+  `[whiteboardSessionId, streamId]` for end-session registration.
+* **Outbox row `streamId`** — any lane can enqueue segments; worker
+  scheduling is already per-stream.
+* **Outbox `transcriptionOnly` flag** — per-speaker mic lanes use
+  `transcriptionOnly: true` so they never become replay rows (see
+  `assembleEndSessionSegments`). **Video lanes would NOT set this flag**
+  — they are replay/archival candidates, not Whisper inputs.
+* **FSM `inputStreams` registry** — host adds `tutor:video` /
+  `student:peer-*:video` with health when capture engages; FSM contract
+  unchanged.
+* **`TranscriptChunk.streamId` / `speakerId`** — present for per-speaker
+  audio; video does not use the transcription path unless a future product
+  choice adds e.g. frame-captioning (out of Sarah scope).
+
+### Deferred — must be built explicitly later
+
+* **Video `MediaRecorder` lane(s)** — tap `localVideoStream` /
+  `participants[i].videoStream` from `useLiveAV` (pre-mix, analogous to
+  #6a's raw audio tap), segment via the same outbox contract.
+* **Replay surface** — today replay is **audio + whiteboard strokes only**
+  (`WhiteboardReplay`, scene-paint engine). Playing video requires a new
+  replay UI (sync to `recordingTimeOffsetMs` / session clock).
+* **Storage, bandwidth, cost** — video blobs are orders of magnitude
+  larger than audio; Vercel Blob limits, egress, and OpenAI-adjacent cost
+  models need a product decision before capture ships.
+* **Consent copy + gate** — video of minors is **more sensitive than audio**.
+  Must **not** reuse the audio consent gate or `allowAudioRecording`
+  toggle. Gate B2 in [BACKLOG.md](BACKLOG.md) already defers
+  `allowVideoRecording` until the feature exists — consent surface tracks
+  feature surface. Requires **legal consult** ([CONSENT-LEGAL-CONSULT](BACKLOG.md)).
+* **Retention / erasure** — video blobs must participate in erasure
+  inventory and orphan reconciliation (same class of gap as
+  **ERASURE-ORPHAN-AUDIO-BLOBS** in [BACKLOG.md](BACKLOG.md)).
+
+### Single-replay-source invariant still holds
+
+[LIVE-AV.md](LIVE-AV.md) invariant **#6**: one audio mixdown → one replay
+file. Invariant **#6a**: per-speaker mic lanes are transcription-only and
+structurally excluded from `SessionRecording` rows (fixes the
+[`89e0fe1`](https://github.com/Arangarx/tutoring-notes/commit/89e0fe1)
+non-deterministic multi-row replay bug).
+
+If/when video ships, **decide explicitly**:
+
+* **Replay source** — e.g. one composited or primary camera track becomes
+  the session replay video (like `tutor:mic` for audio), OR
+* **Archival-only** — video rows exist for compliance/download but replay
+  stays audio + WB.
+
+Do **not** let multiple uncoordinated `SessionRecording` video rows
+become replay candidates without sync metadata — that recreates the
+`createdAt`-race failure mode #6 documents.
+
+### Consent + legal flag
+
+* Video capture of minors requires a **distinct affirmative gate** — not
+  implied by live-session consent, whiteboard consent, or audio recording
+  consent.
+* **`allowVideoRecording`** parent toggle stays unbuilt until video ships
+  (Gate B2 scope rule).
+* Before any pilot capture: run **CONSENT-LEGAL-CONSULT** (counsel on
+  minor video retention, parent notice, and whether live A/V preview
+  differs from persisted video).
+
+---
+
 ## Cheat sheet — common questions
 
 **Q: I want to add a new audio source (e.g. `student:peer-7:mic`).
