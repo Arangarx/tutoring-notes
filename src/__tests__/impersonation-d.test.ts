@@ -222,7 +222,9 @@ describe("Bug B fix: AdminNav sign-out routes through exitImpersonation when imp
     const layoutPath = path.resolve(__dirname, "../app/admin/layout.tsx");
     const layoutSource = fs.readFileSync(layoutPath, "utf-8");
     // The layout must forward the isImpersonating state to AdminNav so it
-    // can pick the right sign-out path.
-    expect(layoutSource).toContain("isImpersonating={isImpersonating}");
+    // can pick the right sign-out path (via navProps spread).
+    expect(layoutSource).toContain("isImpersonating");
+    expect(layoutSource).toMatch(/<AdminNav\s+\{\.\.\.navProps\}/);
+    expect(layoutSource).toMatch(/isImpersonating[,\s]/);
   });
 });

@@ -120,39 +120,38 @@ export async function middleware(req: NextRequest) {
   // unexpectedly and redirect to its default /api/auth/error "Error" card
   // instead of returning an error object the form can display inline.
   if (
-    pathname === "/api/auth/callback/credentials" ||
-    pathname === "/api/auth/account-holder/login"
+    !isPlaywrightHarnessActive() &&
+    (pathname === "/api/auth/callback/credentials" ||
+      pathname === "/api/auth/account-holder/login")
   ) {
     const rl = rateLimit(`auth:${ip}`, AUTH_RATE_LIMIT.max, AUTH_RATE_LIMIT.windowMs);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);
   } else if (
-    pathname.startsWith("/admin/settings/2fa/verify") ||
-    pathname.startsWith("/admin/settings/2fa/setup") ||
-    pathname.startsWith("/admin/settings/2fa")
+    !isPlaywrightHarnessActive() &&
+    (pathname.startsWith("/admin/settings/2fa/verify") ||
+      pathname.startsWith("/admin/settings/2fa/setup") ||
+      pathname.startsWith("/admin/settings/2fa"))
   ) {
     const rl = rateLimit(`2fa:${ip}`, TOTP_RATE_LIMIT.max, TOTP_RATE_LIMIT.windowMs);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);
   } else if (pathname.startsWith("/api/")) {
     // TEST-ONLY bypass: when isPlaywrightHarnessActive() (WB_E2E_HARNESS=1 locally),
-    // skip the per-IP middleware rate limit for /api/auth/learner/login. The
-    // wb-regression suite runs 5 parallel Playwright workers that all share
-    // 127.0.0.1, exhausting the 30 req/min API_DEFAULT bucket when tests exercise
-    // the learner login flow directly (fragment-preservation, /w/ bridge). Most tests
-    // use pre-stored .auth/learner.json to avoid this; the tests that MUST call the
-    // endpoint live (no stored auth) need this bypass.
+    // skip all per-IP middleware API rate limits. The identity-e2e suite runs 16
+    // serial specs against one dev-server isolate (127.0.0.1) and exhausts shared
+    // buckets (share-link public-events, learner login, etc.) without this guard.
     // WB_E2E_HARNESS=1 is set ONLY by the Playwright webServer command in
     // playwright.config.ts; isPlaywrightHarnessActive() also requires !VERCEL so the
     // bypass stays inert on Vercel even if the env var were misconfigured. The
     // credential-based Neon-backed rate limits (LearnerLoginThrottle) still apply.
-    const isLearnerLoginHarnessRequest =
-      pathname === "/api/auth/learner/login" &&
-      isPlaywrightHarnessActive();
-    if (!isLearnerLoginHarnessRequest) {
+    if (!isPlaywrightHarnessActive()) {
       const bucket = apiRateBucketForPath(pathname);
       const rl = rateLimit(`${bucket.prefix}:${ip}`, bucket.max, bucket.windowMs);
       if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);
     }
-  } else if (pathname === "/setup") {
+  } else if (
+    !isPlaywrightHarnessActive() &&
+    pathname === "/setup"
+  ) {
     const rl = rateLimit(`setup:${ip}`, SETUP_RATE_LIMIT.max, SETUP_RATE_LIMIT.windowMs);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, pathname);
   }

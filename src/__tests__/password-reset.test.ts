@@ -12,10 +12,32 @@ import {
 const STRONG_PASS = "Sunrise-Kangaroo-Pluto-47!";
 const STRONG_PASS_2 = "Velvet-Octopus-Theorem-88!";
 
+/** Emails owned by this suite — scoped cleanup avoids nuking parallel workers' rows. */
+const FIXTURE_EMAILS = [
+  "tutor-reset@test.com",
+  "tutor-expired@test.com",
+  "anchor-user@test.com",
+  "anchor-expired@test.com",
+  "anchor-used@test.com",
+  "cascade-user@test.com",
+] as const;
+
+async function cleanupPasswordResetFixtures() {
+  for (const email of FIXTURE_EMAILS) {
+    await db.passwordResetToken.deleteMany({ where: { email } });
+    const admin = await db.adminUser.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+    if (!admin) continue;
+    await db.adminTrustedDevice.deleteMany({ where: { adminUserId: admin.id } });
+    await db.consentRecord.deleteMany({ where: { adminUserId: admin.id } });
+    await db.adminUser.delete({ where: { id: admin.id } });
+  }
+}
+
 beforeEach(async () => {
-  await db.passwordResetToken.deleteMany();
-  // adminUser cascade-deletes adminTrustedDevice rows (onDelete: Cascade in schema).
-  await db.adminUser.deleteMany();
+  await cleanupPasswordResetFixtures();
 });
 
 afterAll(async () => {

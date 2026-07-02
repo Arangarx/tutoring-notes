@@ -26,6 +26,7 @@ jest.mock("@vercel/blob", () => ({
 
 const dbCreateMock = jest.fn();
 const dbStudentFindUniqueMock = jest.fn();
+const dbErasureJobFindFirstMock = jest.fn();
 const dbConsentRecordFindFirstMock = jest.fn();
 const dbLearnerProfileFindUniqueMock = jest.fn();
 const dbSessionParticipantCreateManyMock = jest.fn();
@@ -56,6 +57,9 @@ jest.mock("@/lib/db", () => ({
     },
     learnerProfile: {
       findUnique: (...args: unknown[]) => dbLearnerProfileFindUniqueMock(...args),
+    },
+    erasureJob: {
+      findFirst: (...args: unknown[]) => dbErasureJobFindFirstMock(...args),
     },
     $transaction: (fn: (tx: unknown) => Promise<unknown>) => dbTransactionMock(fn),
   },
@@ -102,9 +106,20 @@ const defaultBlobResult = {
   downloadUrl: "x",
 } as Awaited<ReturnType<typeof put>>;
 
+/** Erasure guard happy path — no tombstone, no active job. */
+const erasureClearStudent = {
+  erasedAt: null,
+  learnerProfileId: "lp-1",
+  learnerProfile: {
+    tombstonedAt: null,
+    accountHolderId: null,
+    accountHolder: { tombstonedAt: null },
+  },
+};
+
 /** Claimed minor with a consent record — default happy path after CC-1. */
 function mockClaimedWithRecord() {
-  dbStudentFindUniqueMock.mockResolvedValue({ learnerProfileId: "lp-1" });
+  dbStudentFindUniqueMock.mockResolvedValue(erasureClearStudent);
   dbConsentRecordFindFirstMock.mockResolvedValue({
     id: "cr-1",
     version: 1,
@@ -121,6 +136,8 @@ beforeEach(() => {
   dbCreateMock.mockReset();
   dbTransactionMock.mockClear();
   dbStudentFindUniqueMock.mockReset();
+  dbErasureJobFindFirstMock.mockReset();
+  dbErasureJobFindFirstMock.mockResolvedValue(null);
   dbConsentRecordFindFirstMock.mockReset();
   dbLearnerProfileFindUniqueMock.mockReset();
   dbSessionParticipantCreateManyMock.mockReset();
@@ -161,7 +178,11 @@ describe("createWhiteboardSession — CC-1 consent record gate", () => {
 
   test("T2: unclaimed student → ConsentError, no Blob, no row", async () => {
     requireStudentScopeMock.mockResolvedValue(defaultAdminScope);
-    dbStudentFindUniqueMock.mockResolvedValue({ learnerProfileId: null });
+    dbStudentFindUniqueMock.mockResolvedValue({
+      erasedAt: null,
+      learnerProfileId: null,
+      learnerProfile: null,
+    });
 
     await expect(createWhiteboardSession("student-1")).rejects.toThrow(ConsentError);
     expect(putMock).not.toHaveBeenCalled();

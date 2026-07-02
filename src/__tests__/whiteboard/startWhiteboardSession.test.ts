@@ -4,6 +4,7 @@
 
 const dbUpdateManyMock = jest.fn();
 const dbStudentFindUniqueMock = jest.fn();
+const dbErasureJobFindFirstMock = jest.fn();
 const dbConsentRecordFindFirstMock = jest.fn();
 const dbLearnerProfileFindUniqueMock = jest.fn();
 
@@ -21,6 +22,9 @@ jest.mock("@/lib/db", () => ({
     },
     learnerProfile: {
       findUnique: (...args: unknown[]) => dbLearnerProfileFindUniqueMock(...args),
+    },
+    erasureJob: {
+      findFirst: (...args: unknown[]) => dbErasureJobFindFirstMock(...args),
     },
   },
   withDbRetry: <T,>(fn: () => Promise<T>) => fn(),
@@ -45,7 +49,15 @@ const ownedSession = {
 };
 
 function mockConsentRecordExists() {
-  dbStudentFindUniqueMock.mockResolvedValue({ learnerProfileId: "lp-1" });
+  dbStudentFindUniqueMock.mockResolvedValue({
+    erasedAt: null,
+    learnerProfileId: "lp-1",
+    learnerProfile: {
+      tombstonedAt: null,
+      accountHolderId: null,
+      accountHolder: { tombstonedAt: null },
+    },
+  });
   dbConsentRecordFindFirstMock.mockResolvedValue({
     id: "cr-1",
     learnerProfile: { isSelfLearner: false },
@@ -56,6 +68,8 @@ beforeEach(() => {
   dbUpdateManyMock.mockReset();
   assertOwnsWhiteboardSessionMock.mockReset();
   dbStudentFindUniqueMock.mockReset();
+  dbErasureJobFindFirstMock.mockReset();
+  dbErasureJobFindFirstMock.mockResolvedValue(null);
   dbConsentRecordFindFirstMock.mockReset();
   dbLearnerProfileFindUniqueMock.mockReset();
   mockConsentRecordExists();
