@@ -90,6 +90,7 @@ function statusClass(status: ErasureJobListRow["status"]): string {
 }
 
 function CancelJobButton({ jobId }: { jobId: string }) {
+  const cancelTestId = `erasure-job-cancel-${jobId}`;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -112,11 +113,16 @@ function CancelJobButton({ jobId }: { jobId: string }) {
     <div className="flex flex-col items-end gap-1">
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogTrigger asChild>
-          <Button size="sm" variant="outline" disabled={isPending}>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={isPending}
+            data-testid={cancelTestId}
+          >
             Cancel erasure
           </Button>
         </AlertDialogTrigger>
-        <AlertDialogContent>
+        <AlertDialogContent data-testid={`erasure-cancel-dialog-${jobId}`}>
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel erasure and restore account?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -125,9 +131,15 @@ function CancelJobButton({ jobId }: { jobId: string }) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isPending}>Keep erasure</AlertDialogCancel>
+            <AlertDialogCancel
+              disabled={isPending}
+              data-testid="erasure-cancel-dialog-dismiss"
+            >
+              Keep erasure
+            </AlertDialogCancel>
             <AlertDialogAction
               disabled={isPending}
+              data-testid="erasure-cancel-dialog-confirm"
               onClick={(e) => {
                 e.preventDefault();
                 handleCancel();
@@ -222,7 +234,11 @@ export function ErasureAdminClient({ initialJobs }: ErasureAdminClientProps) {
                 value={scopeMode}
                 onValueChange={(v) => setScopeMode(v as ScopeMode)}
               >
-                <SelectTrigger id="erasure-scope" className="w-full">
+                <SelectTrigger
+                  id="erasure-scope"
+                  className="w-full"
+                  data-testid="erasure-scope-select"
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -239,6 +255,7 @@ export function ErasureAdminClient({ initialJobs }: ErasureAdminClientProps) {
               </Label>
               <Input
                 id="erasure-target-id"
+                data-testid="erasure-target-input"
                 value={targetId}
                 onChange={(e) => setTargetId(e.target.value)}
                 placeholder="UUID"
@@ -261,6 +278,7 @@ export function ErasureAdminClient({ initialJobs }: ErasureAdminClientProps) {
             </Label>
             <Input
               id="erasure-confirm"
+              data-testid="erasure-confirm-input"
               value={confirmPhrase}
               onChange={(e) => setConfirmPhrase(e.target.value)}
               placeholder={
@@ -278,17 +296,30 @@ export function ErasureAdminClient({ initialJobs }: ErasureAdminClientProps) {
           </div>
 
           {triggerError ? (
-            <p className="text-sm text-destructive" role="alert">
+            <p
+              className="text-sm text-destructive"
+              role="alert"
+              data-testid="erasure-error-alert"
+            >
               {triggerError}
             </p>
           ) : null}
           {triggerSuccess ? (
-            <p className="text-sm text-green-600 dark:text-green-400" role="status">
+            <p
+              className="text-sm text-green-600 dark:text-green-400"
+              role="status"
+              data-testid="erasure-success-status"
+            >
               {triggerSuccess}
             </p>
           ) : null}
 
-          <Button type="submit" variant="destructive" disabled={isPending}>
+          <Button
+            type="submit"
+            variant="destructive"
+            disabled={isPending}
+            data-testid="erasure-submit-btn"
+          >
             {isPending ? "Requesting…" : "Request erasure"}
           </Button>
         </form>
@@ -310,7 +341,7 @@ export function ErasureAdminClient({ initialJobs }: ErasureAdminClientProps) {
             </TableHeader>
             <TableBody>
               {initialJobs.map((job) => (
-                <TableRow key={job.id}>
+                <TableRow key={job.id} data-testid={`erasure-job-row-${job.id}`}>
                   <TableCell className="align-top">
                     <p className="text-sm font-medium text-foreground">
                       {scopeKindLabel(job.scopeKind)}
@@ -320,7 +351,10 @@ export function ErasureAdminClient({ initialJobs }: ErasureAdminClientProps) {
                       {job.scopeId}
                     </p>
                   </TableCell>
-                  <TableCell className={cn("align-top text-sm font-medium", statusClass(job.status))}>
+                  <TableCell
+                    className={cn("align-top text-sm font-medium", statusClass(job.status))}
+                    data-testid={`erasure-job-status-${job.id}`}
+                  >
                     {statusLabel(job.status)}
                   </TableCell>
                   <TableCell className="align-top text-sm">

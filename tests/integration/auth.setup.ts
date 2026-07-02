@@ -4,6 +4,7 @@ import { test as setup, request } from "@playwright/test";
 import { TEST_ADMIN, TEST_LEARNER, seedTestAdmin, seedTestStudent, seedTestLearner } from "../visual/helpers";
 import {
   TEST_PARENT,
+  TEST_ERASURE_ADMIN,
   seedParentAccountHolder,
   seedTestAdminWithRole,
 } from "./identity/identity.helpers";
@@ -11,8 +12,12 @@ import {
 const authFile = path.join(__dirname, ".auth", "tutor.json");
 const learnerAuthFile = path.join(__dirname, ".auth", "learner.json");
 const parentAuthFile = path.join(__dirname, ".auth", "parent.json");
+const erasureAdminAuthFile = path.join(__dirname, ".auth", "erasure-admin.json");
 
-setup("authenticate tutor storageState + seed learner credentials", async ({ page }) => {
+setup("authenticate tutor storageState + seed learner credentials", async ({
+  page,
+}) => {
+  setup.setTimeout(120_000);
   const adminUserId = await seedTestAdmin();
   const { studentId } = await seedTestStudent(adminUserId);
 
@@ -84,4 +89,26 @@ setup("authenticate tutor storageState + seed learner credentials", async ({ pag
   } finally {
     await parentCtx.dispose();
   }
+
+  // --- Erasure ADMIN: sign out tutor, NextAuth login → erasure-admin.json ---
+  await page.getByRole("button", { name: /sign out/i }).click();
+  await page.waitForURL((url) => url.pathname === "/login" || url.pathname === "/", {
+    timeout: 15_000,
+  });
+  if (!page.url().includes("/login")) {
+    await page.goto("/login");
+  }
+  await page.locator("#email").waitFor({ state: "visible", timeout: 30_000 });
+  await page.locator("#email").fill(TEST_ERASURE_ADMIN.email);
+  await page.locator("#password").fill(TEST_ERASURE_ADMIN.password);
+  await page.getByRole("button", { name: /sign in|log in/i }).click();
+  await page.waitForURL(
+    (url) =>
+      url.pathname.startsWith("/admin") &&
+      !url.pathname.startsWith("/admin/settings/2fa") &&
+      url.pathname !== "/admin/pending-approval",
+    { timeout: 30_000 }
+  );
+  fs.mkdirSync(path.dirname(erasureAdminAuthFile), { recursive: true });
+  await page.context().storageState({ path: erasureAdminAuthFile });
 });
