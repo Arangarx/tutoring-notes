@@ -202,17 +202,32 @@ describe("extractChunkMap — no API key", () => {
 });
 
 describe("extractChunkMap — cost logging", () => {
-  it("logs a cost event on success", async () => {
-    mockOpenAISuccess(JSON.stringify({ topics: [], studentQuestions: [], corrections: [], followUps: [] }));
+  it("logs a cost event on success with response.model when present", async () => {
+    mockChatCreate.mockResolvedValueOnce({
+      model: "gpt-4o-mini-2024-07-18",
+      choices: [{ message: { content: JSON.stringify({ topics: [], studentQuestions: [], corrections: [], followUps: [] }) } }],
+      usage: { prompt_tokens: 50, completion_tokens: 80 },
+    });
+
     await extractChunkMap(SESSION_ID, CHUNK_ID, "A session.");
 
     expect(mockLogCostEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "GPT_NOTES_GENERATION",
-        model: "gpt-4o-mini",
+        model: "gpt-4o-mini-2024-07-18",
         whiteboardSessionId: SESSION_ID,
         metadata: expect.objectContaining({ phase: "map" }),
       })
+    );
+  });
+
+  it("calls OpenAI with MAP_MODEL from ai-models config", async () => {
+    mockOpenAISuccess(JSON.stringify({ topics: [], studentQuestions: [], corrections: [], followUps: [] }));
+
+    await extractChunkMap(SESSION_ID, CHUNK_ID, "A session.");
+
+    expect(mockChatCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "gpt-4o-mini" })
     );
   });
 });

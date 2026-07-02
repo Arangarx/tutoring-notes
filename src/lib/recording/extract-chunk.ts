@@ -23,8 +23,7 @@ import {
 } from "@/lib/recording/transcript-store";
 import { estimateCostUsd, logCostEvent } from "@/lib/observability/cost-events";
 import type { ChunkExtractionPayload } from "@/lib/recording/transcript-types";
-
-const EXTRACT_MODEL = "gpt-4o-mini";
+import { MAP_MODEL } from "@/lib/ai-models";
 
 const EXTRACT_SYSTEM_PROMPT = `You extract structured information from tutoring session audio transcripts.
 Given a transcript segment, identify:
@@ -126,7 +125,7 @@ export async function extractChunkMap(
   try {
     const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
     const response = await client.chat.completions.create({
-      model: EXTRACT_MODEL,
+      model: MAP_MODEL,
       messages: [
         { role: "system", content: EXTRACT_SYSTEM_PROMPT },
         { role: "user", content: buildExtractPrompt(transcript) },
@@ -138,17 +137,21 @@ export async function extractChunkMap(
     const text = response.choices[0]?.message?.content ?? "";
     const inputTokens = response.usage?.prompt_tokens;
     const outputTokens = response.usage?.completion_tokens;
+    const modelId =
+      typeof response.model === "string" && response.model.trim().length > 0
+        ? response.model.trim()
+        : MAP_MODEL;
 
     // Log cost event (best-effort — never blocks on failure).
     const est = estimateCostUsd({
       kind: "GPT_NOTES_GENERATION",
-      model: EXTRACT_MODEL,
+      model: modelId,
       inputTokens: inputTokens ?? 0,
       outputTokens: outputTokens ?? 0,
     });
     await logCostEvent({
       kind: "GPT_NOTES_GENERATION",
-      model: EXTRACT_MODEL,
+      model: modelId,
       inputTokens,
       outputTokens,
       estimatedCostUsd: est,

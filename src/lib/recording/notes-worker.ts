@@ -47,12 +47,11 @@ import {
   type ChunkExtractionPayload,
 } from "@/lib/recording/transcript-types";
 import { REDUCE_PROMPT_VERSION } from "@/lib/recording/notes-reduce-config";
+import { REDUCE_MODEL } from "@/lib/ai-models";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-const REDUCE_MODEL = "gpt-4o-mini";
 
 /** 5 minutes in ms — matches ratified Q5 answer. */
 const NOTES_COMPLETION_TIMEOUT_MS = 5 * 60 * 1000;
@@ -335,6 +334,10 @@ export async function processNotesReduceJob(
     const rawText = response.choices[0]?.message?.content?.trim() ?? "";
     const inputTokens = response.usage?.prompt_tokens;
     const outputTokens = response.usage?.completion_tokens;
+    const modelId =
+      typeof response.model === "string" && response.model.trim().length > 0
+        ? response.model.trim()
+        : REDUCE_MODEL;
     const latencyMs = Date.now() - reduceStartMs;
 
     // Parse structured JSON response
@@ -360,13 +363,13 @@ export async function processNotesReduceJob(
     // Log cost event (best-effort).
     const est = estimateCostUsd({
       kind: "GPT_NOTES_GENERATION",
-      model: REDUCE_MODEL,
+      model: modelId,
       inputTokens: inputTokens ?? 0,
       outputTokens: outputTokens ?? 0,
     });
     await logCostEvent({
       kind: "GPT_NOTES_GENERATION",
-      model: REDUCE_MODEL,
+      model: modelId,
       inputTokens,
       outputTokens,
       estimatedCostUsd: est,

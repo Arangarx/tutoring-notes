@@ -254,24 +254,38 @@
 
 ## 4. External APIs
 
-### 4.1 OpenAI Whisper
+### 4.1 OpenAI transcription models
 
-- **Assumption**: Whisper `whisper-1` model. Per-call file size limit **25 MB** (`WHISPER_MAX_BYTES` in `src/lib/transcribe-constants.ts`). Rate limit: ~50 RPM at Tier 1 paid.
+- **Assumption**: Primary chunk transcription uses `gpt-4o-mini-transcribe`; fallback (silence-hallucination guard) uses `whisper-1`. Legacy single-shot transcribe (`src/lib/transcribe.ts`) uses `whisper-1`. Per-call file size limit **25 MB** (`WHISPER_MAX_BYTES` in `src/lib/transcribe-constants.ts`). Rate limit: ~50 RPM at Tier 1 paid.
+- **Env overrides** (optional; defaults above when unset — resolved in `src/lib/ai-models.ts`):
+  - `OPENAI_TRANSCRIBE_PRIMARY_MODEL` — recording chunk pipeline primary model.
+  - `OPENAI_TRANSCRIBE_FALLBACK_MODEL` — fallback engaged by quality guard in `transcribe-chunk.ts` (response format is coupled to this value: fallback path uses `verbose_json`).
+  - `OPENAI_LEGACY_TRANSCRIBE_MODEL` — legacy `transcribe.ts` single-shot path.
 - **Where baked in**:
+  - `src/lib/ai-models.ts` — resolved model names from env + defaults.
+  - `src/lib/recording/transcribe-chunk.ts` — primary + fallback transcription.
   - `src/lib/transcribe.ts:transcribeSinglePart` — calls `client.audio.transcriptions.create`.
   - `src/lib/transcribe-ffmpeg.ts:splitAudioIntoWhisperParts` — splits files over 25 MB via ffmpeg.
   - `CHUNK_TARGET_BYTES = 22 MB` — ffmpeg-split target leaves 3 MB margin.
 - **What breaks if violated**:
   - Larger files than 25 MB → 413 from OpenAI.
   - Concurrency above rate limit → 429; current code does NOT retry (Tier 1 bootstrapper adds retry).
-- **Migration check**: if switching to AWS Transcribe, Whisper.cpp self-hosted, or any other STT — file size limits + concurrency limits differ. Re-validate splitter constants.
+  - Changing `OPENAI_TRANSCRIBE_FALLBACK_MODEL` away from `whisper-1` without validating `responseFormatForModel` coupling may break duration extraction on the fallback path.
+- **Migration check**: if switching to AWS Transcribe, Whisper.cpp self-hosted, or any other STT — file size limits + concurrency limits differ. Re-validate splitter constants and update `estimateCostUsd` rate-card if model family changes.
 
-### 4.2 OpenAI Chat Completions (gpt-4o-mini)
+### 4.2 OpenAI Chat Completions (gpt-4o-mini family)
 
-- **Assumption**: `gpt-4o-mini` model for AI notes + AI form-fill. Token limits per request: 128k input / 16k output.
+- **Assumption**: `gpt-4o-mini` model for map/reduce auto-notes, legacy single-shot notes, and AI form-fill. Token limits per request: 128k input / 16k output.
+- **Env overrides** (optional; default `gpt-4o-mini` when unset — resolved in `src/lib/ai-models.ts`):
+  - `OPENAI_MAP_MODEL` — per-chunk map extraction (`extract-chunk.ts`).
+  - `OPENAI_REDUCE_MODEL` — session reduce / TutorNote generation (`notes-worker.ts`).
+  - `OPENAI_LEGACY_NOTES_MODEL` — legacy single-shot notes (`ai.ts`).
 - **Where baked in**:
-  - `src/lib/ai.ts` — main GPT call sites.
-  - `src/lib/observability/cost-events.ts:estimateCostUsd` — pricing table baked in (captured 2026-05-17). **If OpenAI changes prices, this table is stale.**
+  - `src/lib/ai-models.ts` — resolved model names from env + defaults.
+  - `src/lib/ai.ts` — legacy GPT notes call site.
+  - `src/lib/recording/extract-chunk.ts` — map phase.
+  - `src/lib/recording/notes-worker.ts` — reduce phase.
+  - `src/lib/observability/cost-events.ts:estimateCostUsd` — pricing table baked in (captured 2026-05-17). **If OpenAI changes prices or a swapped model is outside the gpt-4o-mini / whisper families, cost rows still log but `estimatedCostUsd` may be `undefined`.**
 - **What breaks if violated**: cost estimates drift from actual OpenAI invoice; long transcripts (>128k tokens, ~100k words) silently truncate.
 - **Migration check**: model changes require updating the pricing table; provider changes (Anthropic, etc.) require new estimate logic + a new `CostEvent.model` enum entry.
 

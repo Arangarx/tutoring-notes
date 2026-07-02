@@ -37,6 +37,18 @@ const EnvSchema = z.object({
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
     z.string().optional()
   ),
+  /** Primary transcription model (recording chunk pipeline). Default: gpt-4o-mini-transcribe. */
+  OPENAI_TRANSCRIBE_PRIMARY_MODEL: z.string().optional(),
+  /** Fallback transcription model (silence-hallucination guard). Default: whisper-1. */
+  OPENAI_TRANSCRIBE_FALLBACK_MODEL: z.string().optional(),
+  /** Legacy single-shot transcribe model (src/lib/transcribe.ts). Default: whisper-1. */
+  OPENAI_LEGACY_TRANSCRIBE_MODEL: z.string().optional(),
+  /** Map-phase extraction model. Default: gpt-4o-mini. */
+  OPENAI_MAP_MODEL: z.string().optional(),
+  /** Reduce-phase notes model. Default: gpt-4o-mini. */
+  OPENAI_REDUCE_MODEL: z.string().optional(),
+  /** Legacy single-shot notes model (src/lib/ai.ts). Default: gpt-4o-mini. */
+  OPENAI_LEGACY_NOTES_MODEL: z.string().optional(),
   /** Vercel Blob read/write token. Optional — if absent, audio upload is disabled. */
   BLOB_READ_WRITE_TOKEN: z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
@@ -161,6 +173,12 @@ const parsed = EnvSchema.safeParse({
   GMAIL_CONNECT_ALLOWLIST: process.env.GMAIL_CONNECT_ALLOWLIST,
   OPERATOR_EMAILS: process.env.OPERATOR_EMAILS,
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+  OPENAI_TRANSCRIBE_PRIMARY_MODEL: process.env.OPENAI_TRANSCRIBE_PRIMARY_MODEL,
+  OPENAI_TRANSCRIBE_FALLBACK_MODEL: process.env.OPENAI_TRANSCRIBE_FALLBACK_MODEL,
+  OPENAI_LEGACY_TRANSCRIBE_MODEL: process.env.OPENAI_LEGACY_TRANSCRIBE_MODEL,
+  OPENAI_MAP_MODEL: process.env.OPENAI_MAP_MODEL,
+  OPENAI_REDUCE_MODEL: process.env.OPENAI_REDUCE_MODEL,
+  OPENAI_LEGACY_NOTES_MODEL: process.env.OPENAI_LEGACY_NOTES_MODEL,
   BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN,
   TOTP_ENCRYPTION_KEY: process.env.TOTP_ENCRYPTION_KEY,
   WHITEBOARD_SYNC_URL: process.env.WHITEBOARD_SYNC_URL,
