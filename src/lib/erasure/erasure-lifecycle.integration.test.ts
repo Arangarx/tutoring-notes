@@ -495,10 +495,18 @@ describe("E8 lifecycle — full-family erasure", () => {
       displayName: "Full Family Parent",
       familyId,
     });
+    const originalAhEmail = (
+      await db.accountHolder.findUnique({
+        where: { id: ah.id },
+        select: { email: true, passwordHash: true, displayName: true, familyId: true },
+      })
+    )!;
     const lp1 = await createLearnerProfile(ah.id, { displayName: "Child One" });
     const lp2 = await createLearnerProfile(ah.id, { displayName: "Child Two" });
     const student1 = await createStudent(tutor.id, lp1.id, { name: "Kid One" });
     const student2 = await createStudent(tutor.id, lp2.id, { name: "Kid Two" });
+    await createLearnerCredential(lp1.id, ah.id, `kid1_${uniq()}`);
+    await createLearnerCredential(lp2.id, ah.id, `kid2_${uniq()}`);
 
     await createAccountHolderSession(ah.id);
 
@@ -514,11 +522,20 @@ describe("E8 lifecycle — full-family erasure", () => {
 
     const updatedAh = await db.accountHolder.findUnique({ where: { id: ah.id } });
     expect(updatedAh!.tombstonedAt).not.toBeNull();
+    expect(updatedAh!.email).toBe(originalAhEmail.email);
+    expect(updatedAh!.displayName).toBe(originalAhEmail.displayName);
+    expect(updatedAh!.familyId).toBe(originalAhEmail.familyId);
 
     for (const lpId of [lp1.id, lp2.id]) {
       const lp = await db.learnerProfile.findUnique({ where: { id: lpId } });
       expect(lp!.tombstonedAt).not.toBeNull();
     }
+
+    const credsDuringGrace = await db.learnerCredential.findMany({
+      where: { accountHolderId: ah.id },
+    });
+    expect(credsDuringGrace.length).toBe(2);
+    expect(credsDuringGrace.every((c) => c.disabled)).toBe(true);
 
     const scope = await resolveErasureScopeStudents({
       kind: "account_holder",
@@ -536,6 +553,27 @@ describe("E8 lifecycle — full-family erasure", () => {
       expect(row!.erasedAt).not.toBeNull();
       expect(row!.name).toBe(DELETED_LEARNER_NAME);
     }
+
+    const ahAfterPurge = await db.accountHolder.findUnique({ where: { id: ah.id } });
+    expect(ahAfterPurge!.email).toMatch(/^deleted\+[0-9a-f-]+@erased\.invalid$/i);
+    expect(ahAfterPurge!.email).not.toBe(originalAhEmail.email);
+    expect(ahAfterPurge!.passwordHash).toBeNull();
+    expect(ahAfterPurge!.displayName).toBe("[deleted]");
+    expect(ahAfterPurge!.displayName).not.toBe(originalAhEmail.displayName);
+    expect(ahAfterPurge!.familyId).toBeNull();
+    expect(ahAfterPurge!.familyId).not.toBe(originalAhEmail.familyId);
+
+    for (const lpId of [lp1.id, lp2.id]) {
+      const lpAfter = await db.learnerProfile.findUnique({ where: { id: lpId } });
+      expect(lpAfter!.displayName).toBe("Deleted learner");
+      expect(lpAfter!.displayName).not.toBe(
+        lpId === lp1.id ? "Child One" : "Child Two"
+      );
+    }
+
+    expect(
+      await db.learnerCredential.count({ where: { accountHolderId: ah.id } })
+    ).toBe(0);
   });
 });
 
@@ -585,6 +623,83 @@ describe("E8 lifecycle — cancel during grace", () => {
     });
     expect(credAfter).not.toBeNull();
     expect(credAfter!.disabled).toBe(false);
+  });
+
+  it("account_holder scope: cancel restores full family tombstones, credentials, and PII", async () => {
+    const familyId = `fam_${uniq()}`;
+    const ah = await createAccountHolder({
+      displayName: "Cancel Family Parent",
+      familyId,
+    });
+    const originalAh = await db.accountHolder.findUnique({
+      where: { id: ah.id },
+      select: {
+        email: true,
+        passwordHash: true,
+        displayName: true,
+        familyId: true,
+      },
+    });
+    const lp = await createLearnerProfile(ah.id, { displayName: "Cancel Family Child" });
+    const username = `cancel_kid_${uniq()}`;
+    await createLearnerCredential(lp.id, ah.id, username);
+
+    const { jobId } = await requestErasureByAdmin(
+      ADMIN_ID,
+      { kind: "account_holder", accountHolderId: ah.id },
+      "Cancel Family Parent"
+    );
+
+    const ahTombstoned = await db.accountHolder.findUnique({ where: { id: ah.id } });
+    expect(ahTombstoned!.tombstonedAt).not.toBeNull();
+    expect(ahTombstoned!.email).toBe(originalAh!.email);
+    expect(ahTombstoned!.displayName).toBe(originalAh!.displayName);
+    expect(ahTombstoned!.familyId).toBe(originalAh!.familyId);
+
+    const lpTombstoned = await db.learnerProfile.findUnique({ where: { id: lp.id } });
+    expect(lpTombstoned!.tombstonedAt).not.toBeNull();
+    expect(lpTombstoned!.displayName).toBe("Cancel Family Child");
+
+    const credDisabled = await db.learnerCredential.findFirst({
+      where: { learnerProfileId: lp.id },
+    });
+    expect(credDisabled!.disabled).toBe(true);
+
+    const canceled = await cancelErasureJob(jobId);
+    expect(canceled.status).toBe("canceled");
+
+    const jobRow = await db.erasureJob.findUnique({ where: { id: jobId } });
+    expect(jobRow!.status).toBe("canceled");
+
+    const ahRestored = await db.accountHolder.findUnique({ where: { id: ah.id } });
+    expect(ahRestored!.tombstonedAt).toBeNull();
+    expect(ahRestored!.email).toBe(originalAh!.email);
+    expect(ahRestored!.displayName).toBe(originalAh!.displayName);
+    expect(ahRestored!.familyId).toBe(originalAh!.familyId);
+
+    const lpRestored = await db.learnerProfile.findUnique({ where: { id: lp.id } });
+    expect(lpRestored!.tombstonedAt).toBeNull();
+    expect(lpRestored!.displayName).toBe("Cancel Family Child");
+
+    const credRestored = await db.learnerCredential.findFirst({
+      where: { learnerProfileId: lp.id },
+    });
+    expect(credRestored!.disabled).toBe(false);
+
+    const { POST: learnerLoginPost } = await import(
+      "@/app/api/auth/learner/login/route"
+    );
+    const { NextRequest } = await import("next/server");
+    const loginReq = new NextRequest("http://localhost/api/auth/learner/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        username: `${username}@${familyId}`,
+        pin: "123456",
+      }),
+    });
+    const loginRes = await learnerLoginPost(loginReq);
+    expect(loginRes.status).toBe(200);
   });
 });
 

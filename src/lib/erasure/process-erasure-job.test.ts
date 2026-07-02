@@ -589,6 +589,41 @@ describe("processErasureJob — H-2 straggler purge before DB scrub", () => {
 });
 
 // ---------------------------------------------------------------------------
+// advancePhase TOCTOU abort (BLOCKER D/F)
+// ---------------------------------------------------------------------------
+
+describe("processErasureJob — advancePhase TOCTOU abort", () => {
+  it("aborts phase advance when job status changes concurrently (does not overwrite cancel)", async () => {
+    const fixture = await createFullErasureFixture();
+    setupBlobMocks(fixture.session.id);
+
+    const job = await createErasureJob("learner_profile", fixture.lp.id, {
+      status: "blobs_purging",
+      blobsDeletedJson: [],
+    });
+
+    let cancelInjected = false;
+    mockDeleteBlob.mockImplementation(async () => {
+      if (!cancelInjected) {
+        cancelInjected = true;
+        await db.erasureJob.update({
+          where: { id: job.id },
+          data: { status: "canceled", canceledAt: new Date() },
+        });
+      }
+    });
+
+    await expect(processErasureJob(job.id)).rejects.toThrow(
+      /phase advance aborted/i
+    );
+
+    const row = await db.erasureJob.findUnique({ where: { id: job.id } });
+    expect(row!.status).toBe("canceled");
+    expect(row!.status).not.toBe("db_scrubbing");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Cancel
 // ---------------------------------------------------------------------------
 
