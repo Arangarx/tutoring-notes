@@ -83,6 +83,54 @@ describe("transcript-store", () => {
             chunkBlobUrl: "https://blob/chunk.webm",
           },
         },
+        create: expect.objectContaining({
+          streamId: "tutor:mic",
+          speakerId: null,
+        }),
+        update: expect.objectContaining({
+          streamId: "tutor:mic",
+          speakerId: null,
+        }),
+      })
+    );
+  });
+
+  test("upsertTranscriptChunk persists explicit streamId and speakerId", async () => {
+    const row = {
+      id: "tc-2",
+      sessionId: "wbs-1",
+      chunkBlobUrl: "https://blob/student-chunk.webm",
+      recordingTimeOffsetMs: 5000,
+      status: "pending",
+      streamId: "student:peer-abc:mic",
+      speakerId: "peer-abc",
+      transcript: "",
+      durationMs: null,
+      transcribedAt: null,
+      error: null,
+      createdAt: new Date(),
+    };
+    mockUpsert.mockResolvedValue(row);
+
+    await upsertTranscriptChunk({
+      sessionId: "wbs-1",
+      chunkBlobUrl: "https://blob/student-chunk.webm",
+      recordingTimeOffsetMs: 5000,
+      status: "pending",
+      streamId: "student:peer-abc:mic",
+      speakerId: "peer-abc",
+    });
+
+    expect(mockUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          streamId: "student:peer-abc:mic",
+          speakerId: "peer-abc",
+        }),
+        update: expect.objectContaining({
+          streamId: "student:peer-abc:mic",
+          speakerId: "peer-abc",
+        }),
       })
     );
   });

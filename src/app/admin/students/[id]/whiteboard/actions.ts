@@ -20,6 +20,7 @@ import { looksLikeSilenceHallucination } from "@/lib/whisper-guardrails";
 import { parseDateOnlyInput } from "@/lib/date-only";
 import { revalidateStudentSharePages } from "@/lib/revalidateStudentSharePages";
 import { enqueueChunkTranscribe } from "@/lib/recording/chunk-transcribe-enqueue";
+import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
 import { assertTutorApproved } from "@/lib/tutor-approval-scope";
 import {
   assertEffectiveConsent,
@@ -1551,9 +1552,15 @@ export async function registerWhiteboardSessionAudioSegmentAction(
  */
 export async function enqueueChunkTranscriptionAction(
   whiteboardSessionId: string,
-  payload: { chunkBlobUrl: string; recordingTimeOffsetMs: number }
+  payload: {
+    chunkBlobUrl: string;
+    recordingTimeOffsetMs: number;
+    streamId?: string;
+    speakerId?: string | null;
+  }
 ): Promise<void> {
-  const { chunkBlobUrl, recordingTimeOffsetMs } = payload;
+  const { chunkBlobUrl, recordingTimeOffsetMs, speakerId = null } = payload;
+  const streamId = payload.streamId ?? TUTOR_MIC_STREAM_ID;
 
   // 1. Ownership check — multi-tenant gate, must be first.
   const enqueueSession = await assertOwnsWhiteboardSession(whiteboardSessionId);
@@ -1603,7 +1610,7 @@ export async function enqueueChunkTranscriptionAction(
   }
 
   console.log(
-    `[txc] wbsid=${whiteboardSessionId} action=enqueue_action_start offsetMs=${recordingTimeOffsetMs} chunkBlobUrlSuffix=${chunkBlobUrl.slice(-24)}`
+    `[txc] wbsid=${whiteboardSessionId} action=enqueue_action_start offsetMs=${recordingTimeOffsetMs} streamId=${streamId} chunkBlobUrlSuffix=${chunkBlobUrl.slice(-24)}`
   );
 
   // 4. Enqueue — never throws (errors are logged and swallowed by enqueueChunkTranscribe).
@@ -1611,6 +1618,8 @@ export async function enqueueChunkTranscriptionAction(
     sessionId: whiteboardSessionId,
     chunkBlobUrl,
     recordingTimeOffsetMs,
+    streamId,
+    speakerId,
   });
 }
 

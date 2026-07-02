@@ -225,6 +225,8 @@ describe("enqueueChunkTranscriptionAction — happy path", () => {
       sessionId: WBSID,
       chunkBlobUrl: VALID_BLOB_URL,
       recordingTimeOffsetMs: VALID_OFFSET_MS,
+      streamId: "tutor:mic",
+      speakerId: null,
     });
   });
 
@@ -248,7 +250,39 @@ describe("enqueueChunkTranscriptionAction — happy path", () => {
     });
 
     expect(enqueueChunkTranscribeMock).toHaveBeenCalledWith(
-      expect.objectContaining({ recordingTimeOffsetMs: 0 })
+      expect.objectContaining({ recordingTimeOffsetMs: 0, streamId: "tutor:mic", speakerId: null })
+    );
+  });
+
+  it("passes explicit streamId and speakerId through to enqueueChunkTranscribe", async () => {
+    setupOwnerSession();
+
+    await enqueueChunkTranscriptionAction(WBSID, {
+      chunkBlobUrl: VALID_BLOB_URL,
+      recordingTimeOffsetMs: VALID_OFFSET_MS,
+      streamId: "student:peer-abc:mic",
+      speakerId: "peer-abc",
+    });
+
+    expect(enqueueChunkTranscribeMock).toHaveBeenCalledWith({
+      sessionId: WBSID,
+      chunkBlobUrl: VALID_BLOB_URL,
+      recordingTimeOffsetMs: VALID_OFFSET_MS,
+      streamId: "student:peer-abc:mic",
+      speakerId: "peer-abc",
+    });
+  });
+
+  it("defaults streamId to tutor:mic and speakerId to null when omitted", async () => {
+    setupOwnerSession();
+
+    await enqueueChunkTranscriptionAction(WBSID, {
+      chunkBlobUrl: VALID_BLOB_URL,
+      recordingTimeOffsetMs: VALID_OFFSET_MS,
+    });
+
+    expect(enqueueChunkTranscribeMock).toHaveBeenCalledWith(
+      expect.objectContaining({ streamId: "tutor:mic", speakerId: null })
     );
   });
 });
@@ -285,11 +319,15 @@ describe("enqueueChunkTranscriptionAction — repeat calls", () => {
       sessionId: WBSID,
       chunkBlobUrl: VALID_BLOB_URL,
       recordingTimeOffsetMs: VALID_OFFSET_MS,
+      streamId: "tutor:mic",
+      speakerId: null,
     });
     expect(enqueueChunkTranscribeMock).toHaveBeenNthCalledWith(2, {
       sessionId: WBSID,
       chunkBlobUrl: VALID_BLOB_URL,
       recordingTimeOffsetMs: VALID_OFFSET_MS,
+      streamId: "tutor:mic",
+      speakerId: null,
     });
   });
 

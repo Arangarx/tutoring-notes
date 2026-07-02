@@ -37,6 +37,7 @@ import { transcribeChunk } from "@/lib/recording/transcribe-chunk";
 import { extractChunkMap } from "@/lib/recording/extract-chunk";
 import { db } from "@/lib/db";
 import { isTutorApproved } from "@/lib/tutor-approval-scope";
+import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -51,6 +52,10 @@ export type ChunkTranscribeInput = {
    * sum of prior completed TranscriptChunk.durationMs for this session.
    */
   recordingTimeOffsetMs?: number;
+  /** Capture stream id — defaults to tutor:mic when omitted. */
+  streamId?: string;
+  /** Optional per-speaker label for future per-lane transcription. */
+  speakerId?: string | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -93,9 +98,11 @@ export async function processChunkTranscribeJob(
   input: ChunkTranscribeInput
 ): Promise<"done" | "failed" | "skipped"> {
   const { sessionId, chunkBlobUrl } = input;
+  const streamId = input.streamId ?? TUTOR_MIC_STREAM_ID;
+  const speakerId = input.speakerId ?? null;
 
   console.log(
-    `[txc] wbsid=${sessionId} action=worker_start chunkBlobUrl=${chunkBlobUrl}`
+    `[txc] wbsid=${sessionId} action=worker_start chunkBlobUrl=${chunkBlobUrl} streamId=${streamId}`
   );
 
   // --- 0. B1 cost gate — skip WAITLISTED tutor sessions ----------------------
@@ -142,6 +149,8 @@ export async function processChunkTranscribeJob(
     chunkBlobUrl,
     recordingTimeOffsetMs,
     status: "transcribing",
+    streamId,
+    speakerId,
   });
 
   // --- 4. Fetch the blob -------------------------------------------------------
@@ -174,6 +183,8 @@ export async function processChunkTranscribeJob(
       status: "failed",
       error: `Blob fetch failed: ${errMsg}`,
       attempts: priorAttempts + 1,
+      streamId,
+      speakerId,
     });
     return "failed";
   }
@@ -192,6 +203,8 @@ export async function processChunkTranscribeJob(
       status: "failed",
       error: result.error,
       attempts: priorAttempts + 1,
+      streamId,
+      speakerId,
     });
     return "failed";
   }
@@ -205,6 +218,8 @@ export async function processChunkTranscribeJob(
     transcript: result.transcript,
     durationMs: result.durationMs,
     transcribedAt: new Date(),
+    streamId,
+    speakerId,
   });
 
   console.log(

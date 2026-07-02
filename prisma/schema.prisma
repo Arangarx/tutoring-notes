@@ -456,6 +456,15 @@ model TranscriptChunk {
    * pending | transcribing | done | failed — see TranscriptChunkStatus in transcript-types.ts
    */
   status                String
+  /**
+   * Capture-stream identifier — mirrors SessionRecording.streamId.
+   * Defaults to tutor mic for backward compatibility with pre-per-speaker rows.
+   */
+  streamId              String    @default("tutor:mic")
+  /**
+   * Optional per-speaker label (e.g. peer id) for future per-lane transcription.
+   */
+  speakerId             String?
   transcribedAt         DateTime?
   error                 String?
   /**
@@ -471,6 +480,7 @@ model TranscriptChunk {
 
   @@unique([sessionId, chunkBlobUrl])
   @@index([sessionId, recordingTimeOffsetMs])
+  @@index([sessionId, streamId])
   @@index([status, updatedAt])
 }
 

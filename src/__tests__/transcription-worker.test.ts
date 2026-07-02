@@ -41,6 +41,7 @@ jest.mock("@/lib/blob", () => ({
 // ---------------------------------------------------------------------------
 
 import { processChunkTranscribeJob } from "@/lib/recording/transcription-worker";
+import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -375,5 +376,45 @@ describe("processChunkTranscribeJob", () => {
 
     expect(mockFetchPrivateBlobBytes).toHaveBeenCalledTimes(1);
     expect(mockFetchPrivateBlobBytes).toHaveBeenCalledWith(CHUNK_URL);
+  });
+
+  // -------------------------------------------------------------------------
+  // 10. Per-speaker labels — streamId / speakerId threading
+  // -------------------------------------------------------------------------
+  test("passes explicit streamId and speakerId to upsertTranscriptChunk", async () => {
+    setupHappyPath();
+
+    await processChunkTranscribeJob({
+      sessionId: SESSION_ID,
+      chunkBlobUrl: CHUNK_URL,
+      recordingTimeOffsetMs: 0,
+      streamId: "student:peer-xyz:mic",
+      speakerId: "peer-xyz",
+    });
+
+    for (const call of mockUpsertTranscriptChunk.mock.calls) {
+      expect(call[0]).toMatchObject({
+        streamId: "student:peer-xyz:mic",
+        speakerId: "peer-xyz",
+      });
+    }
+  });
+
+  test("defaults streamId to tutor:mic and speakerId to null when omitted", async () => {
+    setupHappyPath();
+
+    await processChunkTranscribeJob({
+      sessionId: SESSION_ID,
+      chunkBlobUrl: CHUNK_URL,
+      recordingTimeOffsetMs: 0,
+    });
+
+    const transcribingCall = mockUpsertTranscriptChunk.mock.calls.find(
+      (c) => c[0].status === "transcribing"
+    );
+    expect(transcribingCall![0]).toMatchObject({
+      streamId: TUTOR_MIC_STREAM_ID,
+      speakerId: null,
+    });
   });
 });
