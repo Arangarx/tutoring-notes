@@ -127,6 +127,35 @@ Smokebook [`docs/handoff/wb-wave5-polish-part1-checkpoint-smokebook.md`](handoff
 
 ---
 
+## Consent-honesty pre-merge smoke follow-ups (2026-07-01)
+
+> **Source:** Andrew hardware smoke of `wb-wave5-polish` @ [`docs/handoff/consent-honesty-smoke-findings-2026-07-01.md`](handoff/consent-honesty-smoke-findings-2026-07-01.md). Merge-blocking items (MB-*) are triaged in that doc §A — not duplicated here. Rows below = bugs (§B), UX/post-Sarah (§C), design questions (§D).
+
+| Item | Priority | Notes |
+|------|----------|-------|
+| **CH-SMOKE-STUDENT-MIC-PERSIST — student microphone choice not remembered** | P2 (bug) | Andrew 2026-07-01 consent-honesty smoke (Block B #1): "Student microphone is still not being remembered." Cross-ref **WB-P1SMOKE-3** / **WB-JOIN-LEARNER-SESSION-PERSISTENCE** (device persistence family). Detail: findings §B-1. |
+| **CH-SMOKE-PARENT-INTERSTITIAL — interstitial absent when parent logged in** | P2 (bug; possible regression) | Block B #5: "Why do we NEVER get the interstitial anymore even when the parent is logged in?" Confirm intended behavior vs regression. Detail: findings §B-2. |
+| **CH-SMOKE-SAVE-PREFS-FEEDBACK — Save preferences click feedback on privacy manage** | P3 (bug; verify post-fix) | Block B #1: save preferences on privacy manage page gives no click feedback. Smoke ran POST `d7be4b3` — verify inadequate feedback vs pre-build test. Detail: findings §B-3. |
+| **CH-SMOKE-REPLAY-PLAYPAUSE-OVERLAP — Play/Pause overlaps Board tab on replay** | **POST SARAH PRE RELEASE** | Replay chrome layout: Play/Pause control overlaps Board tab (screenshot in smoke). Detail: findings §C-1. |
+| **CH-SMOKE-STUDENT-MIC-BOOST — student mic-boost controls like tutor** | **POST SARAH PRE RELEASE** | Block B #1: student should have mic boost controls just like the tutor. Distinct from **WB-AV-PER-STREAM-VOLUME** (per-remote-stream). Detail: findings §C-2. |
+| **CH-SMOKE-SETTINGS-SAVE-ON-TOGGLE — save-on-toggle for non-gated settings** | P3 (UX) | Block B #1: privacy manage (and similar) should save when toggle clicked — no hunt for "Save preferences" unless an "are you sure?" gate applies. Detail: findings §C-3. |
+| **CH-SMOKE-FOLLOW-MATCH-COPY — Follow vs Match tutor view copy + disable** | P3 (UX) | Block B #1: clarify "Match tutor's view" as one-time action; disable Match when "Follow tutor view" is on (consider "tutor's" rename). Cross-ref **WB-FOLLOW-TUTOR-TOGGLE-STYLE** (styling only). Detail: findings §C-4. |
+| **CH-SMOKE-SAVE-TO-NOTES-NAV — Save to notes should navigate away** | P3 (UX) | Block B #1: after Save to notes, tutor gets toast only — navigate to student detail (or equivalent) so next step is obvious. Detail: findings §C-5. |
+| **CH-SMOKE-LIGHT-CONSENT-CONTRAST — light-mode Always-off checkboxes/toggles** | P3 (UX) | Block B #2: "Always off" checkboxes and off-state toggles too light in light mode — discoverability boost. Detail: findings §C-6. |
+| **CH-SMOKE-NO-NOTES-COPY — explain why no auto-notes (in-person / no-audio)** | P3 (UX) | Block B #2: session-notes page + whiteboard should pre-warn tutor why no auto-notes (in-person / no-audio-consent) so it doesn't read as product failure. Detail: findings §C-7. |
+| **CH-SMOKE-PARENT-NAV-CONFUSION — child manage vs self-learner vs account nav** | P3 (UX) | Erasure #5: wife lost twice navigating child manage / self-learner learner page vs account page — clearer back-to-dashboard nav, possible condense. Detail: findings §C-8. |
+| **CH-SMOKE-CLAIM-CONFIGURED-DEADEND — claim page no nav when login configured** | P3 (UX) | Erasure #4: claim setup says login already configured but offers no links/nav away. Detail: findings §C-9. |
+| **CH-SMOKE-INPERSON-DISABLE-JOIN-LINK — disable Copy student link in in-person + single student** | P3 (UX) | Block B #2: when in-person mode on and only one student, disable Copy student link. Detail: findings §C-10. |
+| **CH-SMOKE-DQ-GRACE-ACCOUNT-RECOVERY — grace-period account recovery vs data grace** | Design Q (Andrew) | Erasure #2: why data grace but no account recovery within grace window? Detail: findings §DQ-1. |
+| **CH-SMOKE-DQ-ERASURE-2FA — Request erasure requires 2FA step-up** | Design Q (Andrew) | Erasure #2: admin erasure trigger should require TOTP step-up. Detail: findings §DQ-2. |
+| **CH-SMOKE-DQ-ERASURE-COPY-JARGON — tombstone/grace copy without "blob" jargon** | Design Q (Andrew) | Erasure #2: parent + operator deletion-right copy must explain tombstone/grace in non-technical terms. Detail: findings §DQ-3. |
+| **CH-SMOKE-DQ-ERASURE-ACCOUNT-LOOKUP — find-account UX for erasure targeting** | Design Q (Andrew) | Erasure #2/#5: learner profile ID hard to obtain; "family display name" semantics unclear. Detail: findings §DQ-4. |
+| **CH-SMOKE-DQ-MULTI-STUDENT-LIVE — multi-student live consent stacking** | Design Q (Andrew) | Block B #2: tutor marks WHO is live; least-permissive permission stacking; mid-session join consent switching. Detail: findings §DQ-5. |
+| **CH-SMOKE-DQ-CONSENT-CALLOUT-LIVE — live consent-satisfied notification on student page** | Design Q (Andrew) | Block B #1: ajax update of tutor "parent must set consent" callout when parent toggles consent. Detail: findings §DQ-6. |
+| **CH-SMOKE-PLAYWRIGHT-GAP-CONSENT-ERASURE — CC-1/CC-2 + erasure admin items → Playwright** | Process / test debt | Andrew 2026-07-01: skipped CC-1/CC-2 (all 10) and much of erasure as "totally playwright testable." Convert listed items to e2e so manual smoke narrows to hardware-only surfaces. Detail: findings §E. |
+
+---
+
 ## Ship-to-Sarah gate — pilot feedback 2026-06-16
 
 > **Strategic trigger (Andrew):** swap Sarah off `master`/prod onto the `v1-redesign` / Phase 1 line once waiting room → whiteboard → end session is stable both sides (P2 + P3). **Proposed gate checklist** (pending Andrew confirmation) in [`docs/handoff/sarah-pilot-feedback-2026-06-16-orchestrator-report.md`](handoff/sarah-pilot-feedback-2026-06-16-orchestrator-report.md) §2. Rows below are the **durable BACKLOG hooks** for bugs she hit on prod 2026-06-16.
