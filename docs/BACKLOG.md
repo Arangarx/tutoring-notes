@@ -34,6 +34,66 @@ Not in priority order within sections — that comes when items move to a sprint
 
 ---
 
+## Part 3 hardware-smoke findings (Andrew, 2026-07-02) — full triage
+
+> From Andrew's real-hardware smoke of the Part 3 notes-reliability spine ([`part3-notes-reliability-spine-smokebook.md`](handoff/part3-notes-reliability-spine-smokebook.md)). **Overall verdict: PASS** — the Part 3 spine itself (monotonic clock, disconnect freeze/resume, no wall-clock inflation, end-finalize, tutor-mic regression) all passed on hardware. The items below are the surrounding findings. Three deep ones were code-investigated 2026-07-02 (agent reports linked inline). **Severity/priority tags are proposed; Andrew confirms pre-Sarah vs defer.**
+
+### 🔴 Pre-Sarah reliability blockers
+
+| Item | Notes |
+|------|-------|
+| **SMOKE-BLOCK-1 — tutor "Start Session" stays DEAD when a (mobile) student is present but A/V hasn't fully negotiated** | **Most serious finding.** In LIVE mode, Start is hard-gated on **WebRTC reachability** (`overlayCanStart = studentHasConnectedOnceRef \|\| bothPartiesInRoom`, where `bothPartiesInRoom` needs `peerConnectionState==="connected"` AND `iceConnectionState ∈ {connected,completed}` — `WhiteboardWorkspaceClient.tsx` ~5661-5675, `useLiveAvCoordinator.ts` ~346-377). But the tutor **sync pill uses sync PRESENCE** (`bothPartiesInRoomSync`, ~5550-5557) — so the tutor sees green **"Student connected"** while Start is still disabled. If mobile A/V never fully negotiates, the latch never sets and **Start is dead indefinitely** (the 10s `gateTimeoutFired` only releases the recording gate, NOT Start). Matches Andrew's report exactly (student in waiting room, Start not enabled, toggling type didn't help, had to start a new session). Bundled mobile-join wonkiness: student stuck "waiting for video" ~30s, didn't see tutor video, only unblocked by a tab-switch (mobile Safari WebRTC background throttling; no `visibilitychange → mesh.restart` handler in waiting-room path). **Fix directions (ranked):** (1) gate Start on **sync presence** (`bothPartiesInRoomSync`) to match the pill, keep WebRTC reachability for recording/timer/FSM; (2) presence + timed fallback (enable Start after N s present with "video still connecting" hint); (3) fix the misleading pill (amber "connecting video…" when sync-present but not reachable); (4) "Start anyway" manual override; (5) mobile A/V hardening (`visibilitychange`→reconnect, iOS validation). **Immediate tutor workaround:** switch session type to **In-person** (bypasses the WebRTC gate). Investigation: [dead-Start-button report](45dbfbdb-ae0b-4418-99f3-74928001e8cc). Cross-ref `start-button-ice-flap-latch`, `wb-2nd-session-true-race`, `WB-STUDENT-MOBILE-VALIDATION`. |
+| **SMOKE-BLOCK-2 — session-note → whiteboard-replay links must point to the UPDATED replay surface, not the old one** | Andrew: *"Note links to white board replays must go to the updated replay surface, not the old busted shit."* Pre-Sarah gate. Find where a `SessionNote`/review surface links to a replay and repoint to the current replay route. (Not yet code-located — needs a quick trace of the note→replay link.) |
+| **SMOKE-BLOCK-3 — tutor cannot navigate away after saving notes** | Andrew (repeat, items 4 + 5): after Save (or on the review surface) there's **no way to navigate away** — tutor is stranded. Pre-Sarah. Also (5b) leaving a live session mid-way DOES surface it in the WB session list, but leaving the **review/notes** surface without Save/Delete may not — see SMOKE-BUG-6. |
+| **SMOKE-BLOCK-4 — logged-in child (learner) has no logout and no navigation** | Andrew: *"Logged in child needs to be able to log out. They have no logout and no navigation."* Pre-Sarah. Learner shell needs at least a logout affordance (+ minimal nav). |
+
+### 🟠 Notes experience — skeleton / live-notes (the "skeleton within seconds" expectation)
+
+> **Reality check (2026-07-02 investigation — [live-notes report](32ac6f36-972c-46d6-b537-6aaea3503d29)):** During a live session the tutor sees **NO notes UI**. Backend **map** runs incrementally per chunk (silent — writes `TranscriptChunkExtraction`), but **reduce runs ONLY at end-session** (hard-requires `endedAt`). After End Session the review surface shows **"Generating notes…"** text + empty form, then fills **one-shot** when reduce completes. The `SkeletonNotes` blur/shimmer component is **dead code**. So Andrew's "skeleton within seconds as the session goes" is **not implemented**. Two separable gaps:
+
+| Item | Notes |
+|------|-------|
+| **SMOKE-NOTES-1 — wire the existing `SkeletonNotes` into the post-End loading state (SMALL)** | Replace the "Generating notes…" text with the already-built `SkeletonNotes` blur/shimmer while reduce runs (`TutorNotesSection.tsx`). Low-risk UI wire-up of dead code; delivers the blur-skeleton feel Andrew expected, at least for the post-End generation window. **Andrew to confirm pre-Sarah.** |
+| **SMOKE-NOTES-2 — live/progressive notes DURING the session (BIG — `p3-incremental-map`)** | The "notes update as the session goes" experience needs incremental reduce mid-session + a live notes surface in the workspace. This is the **deferred `p3-incremental-map` wave** (sequenced behind perspeaker C). **DECISION (Andrew): is live-during-session notes a pre-Sarah requirement, or acceptable to ship notes-at-end (with SMOKE-NOTES-1 skeleton) for Sarah and defer live?** Andrew's original vision wanted live; scope is a real wave. |
+| **SMOKE-NOTES-3 — notes still fabricate slightly on non-teaching talk** | Andrew (item 6): notes were accurate for the real teaching test, but *"invent slightly … based on our non-teaching conversations."* Same grounding/faithfulness problem as the 2026-06-16 hallucination example — folds into the **notes-quality workstream** (map/reduce accuracy + abstain-on-low-content path). The PROPOSED prompt wording (`cefc5cd`, smokebook item 6) passed as "good enough to keep" but refinement is flagged. Cross-ref the "Recording re-architecture — Phase 1 follow-ups" notes-quality entry. |
+
+### 🟡 Bugs (triage pre-Sarah vs backlog)
+
+| Item | Notes |
+|------|-------|
+| **SMOKE-BUG-1 — recurring `POST /login 405 ERR_ABORTED` on the STUDENT console** | Screenshot in chat. Root cause ([405 report](f3d02fb1-6494-40ea-af58-a0c77ad06941)): the student's `WhiteboardWorkspaceClient` fires **tutor-only** billable-timer heartbeats (`POST /api/whiteboard/[id]/active-ping`, ~every 10s once active + `pagehide` beacon) with **no `role === "tutor"` guard** (~3507-3587). The route's auth (`assertOwnsWhiteboardSession → requireStudentScope`) `redirect("/login")`s a non-tutor; the browser replays the POST to GET-only `/login` → 405. **Harmless-but-noisy** (errors swallowed; student timer correctly uses `GET /join-timer`), but it contradicts the route's own comment and spams the console. **Fix:** gate `pingActive`/beacon/`timer-anchor` effects with `role === "tutor"`; API should return **401 JSON** (not redirect) for fetch callers. Low-risk, small. |
+| **SMOKE-BUG-2 — stale "Call Reconnecting" pill after the student reconnects timely** | Item 4: student reconnected fine but the upper-left pill stayed "Call reconnecting…". Same class as the known `wb-student-exit-rejoin` A/V-reconnect pill flake. Confusing to a tutor — pill should clear once reachable. |
+| **SMOKE-BUG-3 — student in-progress TEXT carries across a tutor page-switch then disappears/reappears** | Item 1: student typing text; tutor switched page mid-typing; text carried to the new page, vanished for the student after Enter (not on page 3), still visible to tutor on page 2; student regained it after changing text color + clicking away. Text-element sync/edit-state bug across page switch. Low priority, track. |
+| **SMOKE-BUG-4 — pencil stuck on full roughness** | Item 1: changing the roughness style does not change how the pencil draws. Likely pre-existing (not this work). |
+| **SMOKE-BUG-5 — replay doesn't indicate WHICH board it's showing when it switches boards** | Item 1: in replay, board-tab context isn't shown as the replay switches boards; it should surface the active board. Likely pre-existing. |
+| **SMOKE-BUG-6 — a session left without Save/Delete may not appear in the WB session list** | Item 5: Andrew expected an un-saved/un-deleted session to still show in the whiteboard session list. He's seen ended sessions there (incl. under impersonation) and leaving **mid-live** does show it — so the gap seems to be the **review/notes-abandon** path. Confirm expected behavior + fix if it's dropping sessions. (Prior agent guess of "impersonation-related" is likely wrong.) |
+| **SMOKE-BUG-7 — student must re-pick the correct mic every new session** | Item 1: student mic selection isn't persisted across sessions. Confirm whether this was a known deferral; if not, persist last-used mic for the learner/device. |
+
+### 🔵 UX / design suggestions
+
+| Item | Notes |
+|------|-------|
+| **SMOKE-UX-1 — replay play/copy affordance** | Item 3: if the button stays "Replay session", the replay should **auto-start** on open (mental model = it plays when you click Replay). Keep pause-on-hide. Consider "Hide replay" → **"Pause and hide replay"** when active. |
+| **SMOKE-UX-2 — replay Play/Pause button overlaps the Board tab** | Item 1 + screenshot ("Pause" over "Board 1"). **Duplicate of existing `C-1`** (post-Sarah cleanup) — confirmed still present on hardware. |
+| **SMOKE-UX-3 — replay ±10-second back/forward buttons** | Item 1: scrubbing convenience. Future enhancement. |
+| **SMOKE-UX-4 — many wordmarks don't navigate** | Item 1: *"Why do so many of the wordmarks not navigate?"* Audit the Mynk wordmark across surfaces; it should route home/dashboard consistently. Ties to SMOKE-BLOCK-4 (learner nav). |
+
+### ⚪ Post-Sarah / future
+
+| Item | Notes |
+|------|-------|
+| **SMOKE-POST-1 — ghost overlay of what the other person sees** | Item 6: Andrew recalls it was mocked; unsure if implemented. Post-Sarah fast-follow. |
+
+### 📋 Process note (smokebook design)
+
+Andrew is **not** executing the *"look through the console for `clock_*` logs"* steps — the console has thousands of messages and filtering is too much friction ("the main point is it seems to be working"). **Implication:** future smokebooks should not rely on console-log inspection as a primary check; prefer a visible on-screen affordance (debug HUD, a surfaced clock/pause indicator) or an automated log-assertion. The clock observability logs are still valuable for prod debugging, just not as a manual smoke step.
+
+### ✅ Confirmed working on hardware (Part 3 spine — the reason this was an overall PASS)
+
+- Full live-session arc felt seamless (item 1 PASS). Clock↔stroke/audio replay alignment held early/mid/late incl. after page switches (item 3 PASS). Disconnect→freeze→resume worked as designed — banner ~6s, recording stopped ~2s later, jump to reconnect, **first-8s strokes came through at their proper time, not jumbled** (item 4 PASS). No wall-clock inflation: ~36s outage, replay/live-clock difference matched (item 5 PASS). End-finalize + mixdown replay intact (item 7 PASS). Tutor-mic transcription unregressed by the schema labels (item 8 PASS). Notes accurate to the real teaching content (item 6 PASS).
+
+---
+
 ## Login-friction thread follow-ups (2026-06-14)
 
 | Item | Priority | Notes |
@@ -1081,7 +1141,7 @@ Items from the 2026-06-02 brand review (Andrew + wife) on landing + Features pag
 | Item | Priority | Notes |
 |------|----------|-------|
 | **WB-STYLE-MENU-CLOSE — style-options submenu should close on click-outside** | Low | Currently waits for a stroke to finish before closing the style-options submenu; should dismiss on click-outside like other popovers. Found during Phase 1 in-frame review smoke (2026-06-14). |
-| **WB-NOTES-SKELETON — sub-second streaming latency for auto-notes UI** | Medium (Part 3) | **Blurred/shimmer skeleton SHIPPED** — `SkeletonNotes` in `src/components/whiteboard/TutorNotesSection.tsx`. Remaining scope = **sub-second streaming latency bar** (Part 3 `p3-incremental-map` / live map updates), not building the skeleton. Cross-ref Part 3 spine in [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md). |
+| **WB-NOTES-SKELETON — auto-notes skeleton is BUILT-BUT-NOT-WIRED (correction 2026-07-02)** | **Pre-Sarah? (Andrew to decide — see SMOKE-NOTES-1/2)** | **⚠️ CORRECTION — the earlier "skeleton SHIPPED" claim was WRONG.** `SkeletonNotes` exists in `src/components/whiteboard/TutorNotesSection.tsx` (~L690) but has **ZERO call sites** — it is **dead code, never rendered** (confirmed by 2026-07-02 investigation). What actually renders after End Session is a muted **"Generating notes…"** text line above an empty form; fields fill in **one-shot** when reduce completes (~2–4s, 3s poll). During the LIVE session there is **no notes UI at all**. Two distinct gaps → see the 2026-07-02 smoke-findings section: **SMOKE-NOTES-1** (wire the existing `SkeletonNotes` into the post-End loading state — small) and **SMOKE-NOTES-2** (live/progressive notes DURING the session = `p3-incremental-map`, deferred behind perspeaker C — bigger). Cross-ref Part 3 spine in [`ORCHESTRATOR-STATE.md`](handoff/ORCHESTRATOR-STATE.md). |
 | **WB-TRANSCRIBE-LATENCY — near-silent / short sessions** | Medium (backend) | A ~2-min near-zero-audio session took very long to transcribe. Backend watch item — recording re-arch / notes pipeline (currently parked). |
 | **WB-REVIEW-HEADER-POLISH — top review header feels basic** | Low | Visual polish pass on the session-review top bar after unified-surface correction lands. |
 

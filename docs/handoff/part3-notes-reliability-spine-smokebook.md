@@ -1,21 +1,21 @@
 # Part 3 — notes-reliability spine — smoke runbook
 
 **Branch:** `wb-wave5-polish`
-**Tip commit:** [`d299a6c`](https://github.com/Arangarx/tutoring-notes/commit/d299a6c92b7c9dc7bd6ce731e8acd7188c385bfe)
+**Tip commit:** `[d299a6c](https://github.com/Arangarx/tutoring-notes/commit/d299a6c92b7c9dc7bd6ce731e8acd7188c385bfe)`
 **Preview:** [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-arangarx-5209s-projects.vercel.app)
 
 ---
 
 ## Scope + what changed (read before running)
 
-This smokebook covers the **hardware-only / subjective residual** of Part 3 (the notes-reliability spine). Everything mechanically testable is already covered by jest + Playwright and is **green** (see automated-gate summary below) — those items are cited on a `**Coverage:**` line so you can mark them **N/A with notes** unless you want to eyeball them. The items that genuinely **need real hardware** are the geometry/timing and subjective-quality ones (the jsdom + relay blind spots): audio↔stroke replay alignment, real-WebRTC disconnect→freeze→resume timing, transcription latency on real speech, and notes-quality judgment.
+This smokebook covers the **hardware-only / subjective residual** of Part 3 (the notes-reliability spine). Everything mechanically testable is already covered by jest + Playwright and is **green** (see automated-gate summary below) — those items are cited on a `**Coverage:`** line so you can mark them **N/A with notes** unless you want to eyeball them. The items that genuinely **need real hardware** are the geometry/timing and subjective-quality ones (the jsdom + relay blind spots): audio↔stroke replay alignment, real-WebRTC disconnect→freeze→resume timing, transcription latency on real speech, and notes-quality judgment.
 
 **What landed on this branch (Part 3):**
 
-- **`p3-clock`** ([`1572983`](https://github.com/Arangarx/tutoring-notes/commit/1572983)) — one **monotonic, pause-aware** session clock (`createSessionMsClock`). Threaded into WB event timestamps (`t`), FSM `audioClockMs` (was hardcoded `0`), and transcription `recordingTimeOffsetMs` (segment-start offset). Disconnect freeze rides the existing **8s `REACHABLE_LOSS_DEBOUNCE_MS` → FSM `paused`** trigger (the one you confirmed — not the 6s peer-eviction timer). `deriveWbCaptureActive` keeps WB capture running through the pause so gap strokes stamp at the frozen clock. New observability logs: `clock_start` / `clock_paused` / `clock_resumed`.
-- **`p3-perspeaker-capture` A + B** ([`e92c9ac`](https://github.com/Arangarx/tutoring-notes/commit/e92c9ac), [`8638c86`](https://github.com/Arangarx/tutoring-notes/commit/8638c86)) — **pure additive foundation, no live-session runtime change.** Schema labels (`TranscriptChunk.streamId`/`speakerId`) + replay-isolation (`transcriptionOnly` outbox rows excluded from `SessionRecording` replay). **No per-speaker recorder is wired yet** (sub-step C is deferred pending your `PERSPEAKER-C-TRANSCRIPTION-TRIGGER` confirm), so there is nothing per-speaker to *see* this run — item 8 just guards that the tutor mic path is unregressed.
-- **`p3-model-abstraction`** ([`f4cd9cb`](https://github.com/Arangarx/tutoring-notes/commit/f4cd9cb), [`cefc5cd`](https://github.com/Arangarx/tutoring-notes/commit/cefc5cd)) — models are now config-swappable via `OPENAI_*_MODEL` env vars (defaults = **current** models, so no behavior change unless you set them), **plus stronger map/reduce prompts** (anti-fabrication, reaction→meaning inference, terseness). **⚠️ The prompt WORDING is PROPOSED and Andrew-gated** — item 6 is your wording review.
-- **`p3-video-seam`** ([`d299a6c`](https://github.com/Arangarx/tutoring-notes/commit/d299a6c)) — docs-only design seam. Nothing to smoke.
+- `p3-clock` (`[1572983](https://github.com/Arangarx/tutoring-notes/commit/1572983)`) — one **monotonic, pause-aware** session clock (`createSessionMsClock`). Threaded into WB event timestamps (`t`), FSM `audioClockMs` (was hardcoded `0`), and transcription `recordingTimeOffsetMs` (segment-start offset). Disconnect freeze rides the existing **8s** `REACHABLE_LOSS_DEBOUNCE_MS` **→ FSM** `paused` trigger (the one you confirmed — not the 6s peer-eviction timer). `deriveWbCaptureActive` keeps WB capture running through the pause so gap strokes stamp at the frozen clock. New observability logs: `clock_start` / `clock_paused` / `clock_resumed`.
+- `p3-perspeaker-capture` **A + B** (`[e92c9ac](https://github.com/Arangarx/tutoring-notes/commit/e92c9ac)`, `[8638c86](https://github.com/Arangarx/tutoring-notes/commit/8638c86)`) — **pure additive foundation, no live-session runtime change.** Schema labels (`TranscriptChunk.streamId`/`speakerId`) + replay-isolation (`transcriptionOnly` outbox rows excluded from `SessionRecording` replay). **No per-speaker recorder is wired yet** (sub-step C is deferred pending your `PERSPEAKER-C-TRANSCRIPTION-TRIGGER` confirm), so there is nothing per-speaker to *see* this run — item 8 just guards that the tutor mic path is unregressed.
+- `p3-model-abstraction` (`[f4cd9cb](https://github.com/Arangarx/tutoring-notes/commit/f4cd9cb)`, `[cefc5cd](https://github.com/Arangarx/tutoring-notes/commit/cefc5cd)`) — models are now config-swappable via `OPENAI_*_MODEL` env vars (defaults = **current** models, so no behavior change unless you set them), **plus stronger map/reduce prompts** (anti-fabrication, reaction→meaning inference, terseness). **⚠️ The prompt WORDING is PROPOSED and Andrew-gated** — item 6 is your wording review.
+- `p3-video-seam` (`[d299a6c](https://github.com/Arangarx/tutoring-notes/commit/d299a6c)`) — docs-only design seam. Nothing to smoke.
 
 **Automated-gate summary (all green on tip):** full `npx jest` **2742 pass** (only the 3 known pre-existing flaky suites — `upload-outbox` timing race + 2 shared-DB FK races — all pass in isolation); `npx next build` **exit 0**; `test:wb-sync` (relay Playwright) **107 passed / 2 skipped / 1 flaky** — the flake is the known `wb-session-lifecycle:1095` `ECONNRESET`-on-learner-login network flake (passed on retry #1, tracked in BACKLOG), **not** a Part 3 regression.
 
@@ -23,13 +23,19 @@ This smokebook covers the **hardware-only / subjective residual** of Part 3 (the
 
 ---
 
+
+
 ## When Andrew runs this (policy)
 
 This is the **Part 3 feature smoke** — the one-pass hardware run of the notes-reliability spine + the seamless WB flow. It is **not** the comprehensive pre-master both-themes MASTER-CUT smoke (that remains a separate, later run — the FINAL Sarah gate before `merge --no-ff → v1-redesign`). Run this in your **primary theme**; theme parity is out of scope here.
 
 ---
 
+
+
 ## Feature smoke items
+
+
 
 ### 1. Full live-session arc — seamless start to end (tutor + student, real hardware)
 
@@ -39,7 +45,7 @@ This is the **Part 3 feature smoke** — the one-pass hardware run of the notes-
 
 **Ignore this run:** Per-speaker audio (not wired — sub-step C deferred). Any both-theme parity check (separate MASTER-CUT smoke). Marketing-site chrome.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -48,6 +54,26 @@ This is the **Part 3 feature smoke** — the one-pass hardware run of the notes-
 **Coverage:** `[automated: tests/integration/wb-session-lifecycle.spec.ts › full PENDING→ACTIVE transition; whiteboard-live-sync-regression.spec.ts › sync invariants]` — `[human-only: subjective "seamless / confidence" feel across the full arc on real hardware]`
 
 **Notes:**
+
+**Side Note: don't know if this is still something deferred, but student still has to pick the right mic every new session.**
+
+**Weird Bug: Student was typing text onto WB and I changed page in the middle, his typing carried over to the next page but after he hit enter it disappeared for him (it wasn't on page 3).  When I went back to page 2 where he'd started typing the text, I can see his text, he couldn't for a bit but had the text area selected.  He was able to change the color of the text and after he clicked away from the text box, the text reappeared for him.  Probably low priority, but something to track.**
+
+**Possible bug: Not likely related to this work, but it appears pencil is stuck on full roughness.  Changing the roughness style does not change how my pencil draws.**
+
+**I'm not seeing errors in my tutor log but student did see one that seems to be recurring error.  Screenshot is in the chat window itself. ERR_ABORTED 405**
+
+**Should the blur skeleton load already be in? Because it's not.**
+
+**Bug: (not because of this work but needs fixed) In the replay it does not show the other board tabs when the replay is switching boards.  It should show which board the replay is showing.**
+
+**Side Note: Logged in child needs to be able to log out.  They have no logout and no navigation.**
+
+**Side Note: Why do so many of the wordmarks not navigate?**
+
+**Future enhancement idea: back/forward 10 second buttons on replays.**
+
+**Cleanup: I think this is already noted, but replay Play/Pause button overlaps Board tab in replay. (screenshot provided)**
 
 ### 2. Skeleton-within-seconds — live transcription latency
 
@@ -60,12 +86,14 @@ This is the **Part 3 feature smoke** — the one-pass hardware run of the notes-
 - [ ] PASS
 - [ ] FAIL
 - [ ] PARTIAL
-- [ ] N/A with notes
-- [ ] SKIP
+- [x] N/A with notes
+- [x] SKIP
 
 **Coverage:** `[human-only: real-speech transcription latency + skeleton-render cadence — depends on live OpenAI/network, not hermeticizable in Playwright]`
 
 **Notes:**
+
+**There is no notes skeleton during live whiteboard.  Is it updating as the session goes in the notes UI??**
 
 ### 3. Clock ↔ stroke/audio replay alignment (jsdom-blind geometry/timing)
 
@@ -75,7 +103,7 @@ This is the **Part 3 feature smoke** — the one-pass hardware run of the notes-
 
 **Ignore this run:** Sub-second jitter. Any per-speaker separation (not wired). Replay Play/Pause-over-Board-tab overlap (known `C-1` post-Sarah backlog item, not this).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -85,6 +113,8 @@ This is the **Part 3 feature smoke** — the one-pass hardware run of the notes-
 
 **Notes:**
 
+**Side Note:  If our copy on the replay button is going to stay "Replay session" then maybe the replay should auto start when it opens back up to it? My instinct each time is that my mental expectation is that it plays when I click "Replay session".  It should pause when you hide replay, like it does now, that's fine.  Maybe we should even change the copy on "Hide replay" to "Pause and hide replay" if it's active.**
+
 ### 4. Disconnect → freeze → resume (8s debounce, real WebRTC)
 
 **Action:** In a live recording session with tutor + student connected, **cut the student's network** (disable Wi-Fi / airplane mode) and hold it for **~15–20s**, then restore it. Keep the tutor drawing a stroke or two *during* the outage. Watch the tutor console for the clock logs (`action=clock_paused …` then `action=clock_resumed … gap_ms=…`). After reconnect, continue the session briefly and end it; check the replay.
@@ -93,7 +123,7 @@ This is the **Part 3 feature smoke** — the one-pass hardware run of the notes-
 
 **Ignore this run:** Exact debounce to the millisecond. Transient A/V "reconnecting…" pill flicker on rejoin (known A/V-reconnect flake, BACKLOG). Whether video re-negotiates instantly.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -103,15 +133,27 @@ This is the **Part 3 feature smoke** — the one-pass hardware run of the notes-
 
 **Notes:**
 
+**General notes: I watched the replay and basically saw what I expected. And I saw the division you talked about.  There was a banner at 6 seconds or so that their audio was not coming and the recording stopped a couple seconds later, then it jumped to when he was back and a bunch of the strokes showed up.  The strokes in the first 8 seconds of his disconnect came through at their proper time, not jumbled with the rest.**
+
+**Side note: I noted this previously, but tutor should navigate after saving notes, right now there's now way for them to nav away.**
+
+**Pre-Sarah Additional gate: Note links to white board replays must go to the updated replay surface, not the old busted shit.**
+
+**Bug: Student re-connected fairly timely, but their pill still says "Call Reconnecting" in the upper left.**
+
+**Some of the tests seem to indicate that the skeleton blur loading should already be in place, but it is not.  It's still just a "Generating notes..." message up top above and empty form, and then the form fills in.  This was a temporary way to do it until the skeleton was in place.  But if it should be in place now, it is in fact, not.**  
+  
+**Btw...I'm not doing any of these "look through the console for..." steps.  I just don't have the energy to dig through the console's thousands of messages.  I suppose I could filter, but the main point is that it seems to be working.**
+
 ### 5. Clock monotonicity across a pause (no wall-clock inflation)
 
-**Action:** Run a session of at least ~5 minutes that includes the item-4 disconnect pause somewhere in the middle. End it and open the replay + (if convenient) skim the console `clock_*` logs. Sanity-check the total replay/session duration against the *active* time you spent, excluding the outage.
+**Action:** Run a session of at least ~5 minutes that includes the item-4 disconnect pause somewhere in the middle. End it and open the replay + (if convenient) skim the console `clock_`* logs. Sanity-check the total replay/session duration against the *active* time you spent, excluding the outage.
 
 **Expect:** The session clock reflects **active recorded time**, not wall-clock — the ~15–20s outage should **not** inflate the timeline (the pre-`p3-clock` wall-clock offset would have counted it). Offsets are monotonic (never negative, never jump backward). Replay length ≈ active session length.
 
 **Ignore this run:** A few seconds of tolerance around the pause boundary. Absolute wall-clock timestamps in logs (those are intentionally still wall-clock for the outbox sort key).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -121,15 +163,23 @@ This is the **Part 3 feature smoke** — the one-pass hardware run of the notes-
 
 **Notes:**
 
+**Pretty sure I saw this pass in step 5 but I'll run a stopwatch this time.**
+
+**General notes: Studen was disconnect approximately 36 seconds.  Live clock and replay were about the same time difference.  46 seconds on replay, minute 20 ish live clock.**
+
+**Side Note: If I navigate away from the replay page without clickign save or delete, shouldn't I see the session in my whiteboard session list?  Last time the agent thought it was impersonation related, but I've seen plenty of ended sessions end up there even under impersonation.  Yeah, if I leave mid live session it shows up.**
+
+**Interesting note: Student when reconnecting could see strokes before video/audio had fully reconnected.  The time skip in the replay recording went all the way to when AV was back up.  Probably what was expected but an interesting case.**
+
 ### 6. Notes quality — PROPOSED map/reduce prompt wording (Andrew-gated review)
 
 **Action:** Using the notes generated by item 1/2's session (ideally one with a real teaching moment — a correction, a student question, an "almost! / got it" reaction, and a homework/next-step mention), read the final **assessment**, **topics**, **nextSteps**, **links** fields. Judge them as a parent would.
 
-**Expect:** Notes are **terse** (scannable in <10s, phrases not paragraphs), **accurate to what was said** (no fabricated observations), and the **assessment synthesizes reactions into a standing picture** ("almost/try again" → wrestling; "yes/got it/perfect" → has it). `nextSteps` should include **all** follow-ups AND any assigned homework. Empty fields only when the session genuinely lacked that signal. **This is your call on whether the PROPOSED wording ([`cefc5cd`](https://github.com/Arangarx/tutoring-notes/commit/cefc5cd)) is good enough to keep, or needs edits** — the wording is not locked.
+**Expect:** Notes are **terse** (scannable in <10s, phrases not paragraphs), **accurate to what was said** (no fabricated observations), and the **assessment synthesizes reactions into a standing picture** ("almost/try again" → wrestling; "yes/got it/perfect" → has it). `nextSteps` should include **all** follow-ups AND any assigned homework. Empty fields only when the session genuinely lacked that signal. **This is your call on whether the PROPOSED wording (**`[cefc5cd](https://github.com/Arangarx/tutoring-notes/commit/cefc5cd)`**) is good enough to keep, or needs edits** — the wording is not locked.
 
 **Ignore this run:** Transcription word-errors from the ASR itself (that's model/mic quality, not the prompt). Skeleton/loading states (item 2). The eval-harness/flywheel loop (explicitly deferred post-master).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -139,6 +189,14 @@ This is the **Part 3 feature smoke** — the one-pass hardware run of the notes-
 
 **Notes:**
 
+**General Notes: For what I did with my kid for THIS test, I would say the notes are pretty accurate to what was said.  You could even go look in neon for the exact transcription of this one and see what you think.  It'll be one of the latest ones for Fixture Child (mq2prq9d).  It'll be the one about drawing a shape.**
+
+**Before even replicating this, I can say that the notes do seem to invent slightly at least based on our non teaching conversations during tests.  So some refinement might be needed.**
+
+**Possible remaining bug: In trying to test this I had my son (as student) join from his phone again.  It stayed on waiting for video for his video for at least 30 seconds.  He also didn't see my video.  Nothing changed until he switched tabs, and I saw him reconnecting and then when he went back he saw his video frozen, he saw my video live, but I didn't see him yet.  5 to 10 seconds ish later. we were both in the same waiting room.  That's a lot of wonkiness right there.  Oh yes and after I typed these notes and went to start, "Start Session" is not enabled even though he's in the waiting room.  Toggling session type didn't help.  Starting a new session to move forward.**
+
+Side note while I remember -> Post Sarah fast follow up: Ghost overlay showing what the other person sees.  I know it was mocked I don't know if it was ever implemented.
+
 ### 7. End-session finalize + replay integrity (mixdown is sole replay)
 
 **Action:** End a recorded session and let it fully process. Open the replay and confirm the recorded audio + whiteboard play back together. Confirm the session note transitions from DRAFT (skeleton) to a finalized READY note.
@@ -147,7 +205,7 @@ This is the **Part 3 feature smoke** — the one-pass hardware run of the notes-
 
 **Ignore this run:** Per-speaker replay lanes (not a feature yet). Any notes-*wording* judgment (item 6). Replay Play/Pause-over-Board-tab overlap (`C-1` backlog).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -165,7 +223,7 @@ This is the **Part 3 feature smoke** — the one-pass hardware run of the notes-
 
 **Ignore this run:** Anything per-speaker (not wired). If you don't check the DB directly, PASS on "notes generated normally" is sufficient.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -177,9 +235,11 @@ This is the **Part 3 feature smoke** — the one-pass hardware run of the notes-
 
 ---
 
+
+
 ## Overall result
 
 Check **PASS** only if every in-scope test item is PASS (deliberate per-item SKIPs must be called out in Notes). Check **FAIL** if any in-scope item fails. Leave both unchecked until the run is complete. Overall verdict is PASS/FAIL only — no overall SKIP.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
