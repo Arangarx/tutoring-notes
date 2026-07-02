@@ -123,8 +123,30 @@ export async function hasActiveErasureJobForStudent(
 export async function isStudentContentAccessSuspended(
   studentId: string
 ): Promise<boolean> {
-  if (await isStudentErased(studentId)) return true;
-  return hasActiveErasureJobForStudent(studentId);
+  const details = await getStudentContentAccessSuspensionDetails(studentId);
+  return details.suspended;
+}
+
+export type ContentAccessSuspensionDetails = {
+  suspended: boolean;
+  jobId: string | null;
+};
+
+/**
+ * Suspension details for content-route guards — includes active job id for
+ * `[ers]` denial logs.
+ */
+export async function getStudentContentAccessSuspensionDetails(
+  studentId: string
+): Promise<ContentAccessSuspensionDetails> {
+  const ctx = await loadStudentErasureContext(studentId);
+  if (!ctx) return { suspended: false, jobId: null };
+  if (ctx.erasedAt != null) return { suspended: true, jobId: null };
+  const jobId = await findActiveErasureJobId(
+    ctx.learnerProfileId,
+    ctx.accountHolderId
+  );
+  return { suspended: jobId != null, jobId };
 }
 
 /**

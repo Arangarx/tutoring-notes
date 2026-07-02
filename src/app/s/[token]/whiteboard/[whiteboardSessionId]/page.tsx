@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { db, withDbRetry } from "@/lib/db";
 import WhiteboardReplay from "@/components/whiteboard/WhiteboardReplay";
 import { assertCanAccessShareLink } from "@/lib/share-access-scope";
+import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
 
 export const dynamic = "force-dynamic";
 
@@ -63,10 +64,11 @@ export default async function ShareWhiteboardPage({
     `[wbShareReplay.page] wbsid=${whiteboardSessionId} token=${token.slice(0, 8)}…`
   );
 
-  await assertCanAccessShareLink(
+  const access = await assertCanAccessShareLink(
     token,
     `/s/${token}/whiteboard/${whiteboardSessionId}`
   );
+  await assertStudentNotErased(access.studentId, { salToken: token });
 
   // Validate share link.
   const link = await withDbRetry(

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { db } from "@/lib/db";
 import { assertCanAccessShareLink } from "@/lib/share-access-scope";
+import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
 import { formatDateOnlyDisplay } from "@/lib/date-only";
 import { NotesSearchBar } from "@/components/notes/NotesSearchBar";
 import { PageSizeSelect } from "@/components/notes/PageSizeSelect";
@@ -40,7 +41,8 @@ export default async function ShareAllPage({ params, searchParams }: PageProps) 
   const { token } = await params;
   const { q = "", page = "1", size = String(DEFAULT_PAGE_SIZE) } = await searchParams;
 
-  await assertCanAccessShareLink(token, `/s/${token}/all`);
+  const access = await assertCanAccessShareLink(token, `/s/${token}/all`);
+  await assertStudentNotErased(access.studentId, { salToken: token });
 
   const link = await db.shareLink.findUnique({
     where: { token },

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { streamBlobWithRangeSupport } from "@/lib/audio/proxy-stream";
 import { logBlobEgressEvent } from "@/lib/observability/cost-events";
+import { assertStudentNotErasedApi } from "@/lib/erasure/assert-student-not-erased";
 import { checkApiShareAccess } from "@/lib/share-access-scope";
 
 /**
@@ -45,6 +46,11 @@ export async function GET(
   if (!access.allowed) {
     return NextResponse.json({ error: "Access denied." }, { status: access.status });
   }
+
+  const erasureBlocked = await assertStudentNotErasedApi(access.studentId, {
+    salToken: shareToken,
+  });
+  if (erasureBlocked) return erasureBlocked;
 
   const recording = await db.sessionRecording.findFirst({
     where: {

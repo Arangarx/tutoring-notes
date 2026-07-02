@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db, withDbRetry } from "@/lib/db";
 import { createActionCorrelationId } from "@/lib/action-correlation";
+import { assertStudentNotErasedApi } from "@/lib/erasure/assert-student-not-erased";
 import { checkApiShareAccess } from "@/lib/share-access-scope";
 
 /**
@@ -39,6 +40,11 @@ export async function GET(
       { status: access.status }
     );
   }
+
+  const erasureBlocked = await assertStudentNotErasedApi(access.studentId, {
+    salToken: shareToken,
+  });
+  if (erasureBlocked) return erasureBlocked;
 
   const session = await withDbRetry(
     () =>
