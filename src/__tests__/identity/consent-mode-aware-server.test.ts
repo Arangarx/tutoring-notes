@@ -24,6 +24,12 @@ jest.mock("next/cache", () => ({
   __esModule: true,
   revalidatePath: jest.fn(),
 }));
+jest.mock("next/server", () => ({
+  __esModule: true,
+  after: (fn: () => unknown) => {
+    void fn();
+  },
+}));
 
 jest.mock("@/lib/action-correlation", () => ({
   __esModule: true,
@@ -80,6 +86,27 @@ jest.mock("@/lib/revalidateStudentSharePages", () => ({
   __esModule: true,
   revalidateStudentSharePages: jest.fn(),
 }));
+jest.mock("@/lib/env", () => ({
+  __esModule: true,
+  env: { OPENAI_API_KEY: "test-key" },
+}));
+const mockNotesChatCreate = jest.fn();
+jest.mock("openai", () => ({
+  __esModule: true,
+  default: jest.fn().mockImplementation(() => ({
+    chat: { completions: { create: mockNotesChatCreate } },
+  })),
+}));
+jest.mock("@/lib/observability/cost-events", () => ({
+  __esModule: true,
+  estimateCostUsd: jest.fn().mockReturnValue(0.001),
+  logCostEvent: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock("@/lib/tutor-approval-scope", () => ({
+  __esModule: true,
+  assertTutorApproved: jest.fn().mockResolvedValue(undefined),
+  isTutorApproved: jest.fn().mockResolvedValue(true),
+}));
 
 import { db } from "@/lib/db";
 import {
@@ -91,6 +118,7 @@ import {
   enqueueChunkTranscriptionAction,
   type EndSessionSegment,
 } from "@/app/admin/students/[id]/whiteboard/actions";
+import { triggerNotesGenerationAction } from "@/app/admin/students/[id]/whiteboard/notes-actions";
 
 // ---------------------------------------------------------------------------
 // Helpers (mirrors consent-b2.test.ts)
@@ -477,5 +505,93 @@ describe("T-new-E — endWhiteboardSession mode-aware segment registration", () 
     });
 
     expect(result.registeredSegments).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CF-4/MB-5 — tutor_only LIVE notes pipeline (local DB + mocked OpenAI)
+// ---------------------------------------------------------------------------
+
+describe("CF-4 — tutor_only LIVE notes reduce pipeline", () => {
+  beforeEach(() => {
+    mockNotesChatCreate.mockReset();
+  });
+
+  it("LIVE + allowAudioRecording=false → enqueue → reduce → TutorNote done", async () => {
+    const { session, tutor, eventsUrl } = await setupActiveSession({
+      sessionMode: "LIVE",
+      allowAudioRecording: false,
+      withSnapshot: true,
+    });
+    const chunkUrl = `https://abc.blob.vercel-storage.com/wb-audio/${session.id}-chunk.webm`;
+
+    await enqueueChunkTranscriptionAction(session.id, {
+      chunkBlobUrl: chunkUrl,
+      recordingTimeOffsetMs: 5000,
+    });
+    expect(enqueueChunkTranscribeMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: session.id,
+        chunkBlobUrl: chunkUrl,
+      })
+    );
+
+    const segment = makeSegment(session.id);
+    await endWhiteboardSession(session.id, eventsUrl, { segments: [segment] });
+
+    const sealed = await db.whiteboardSession.findUniqueOrThrow({
+      where: { id: session.id },
+      select: { endedAt: true },
+    });
+    expect(sealed.endedAt).not.toBeNull();
+
+    await db.transcriptChunk.create({
+      data: {
+        sessionId: session.id,
+        chunkBlobUrl: chunkUrl,
+        recordingTimeOffsetMs: 5000,
+        durationMs: 30_000,
+        transcript: "Tutor explained quadratic equations.",
+        status: "done",
+        transcribedAt: new Date(),
+      },
+    });
+
+    assertOwnsWhiteboardSessionMock.mockResolvedValue({
+      id: session.id,
+      adminUserId: tutor.id,
+      studentId: session.studentId,
+      consentAcknowledged: true,
+      eventsBlobUrl: eventsUrl,
+      endedAt: sealed.endedAt,
+    });
+
+    mockNotesChatCreate.mockResolvedValueOnce({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              topics: "Quadratic equations",
+              assessment: "Solid progress",
+              nextSteps: "Practice factoring",
+              links: "",
+            }),
+          },
+        },
+      ],
+      usage: { prompt_tokens: 100, completion_tokens: 50 },
+    });
+
+    const triggerResult = await triggerNotesGenerationAction(session.id);
+    expect(triggerResult).toEqual({ ok: true });
+
+    // Mocked `after()` runs reduce inline — brief yield for async completion.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const note = await db.tutorNote.findUnique({
+      where: { sessionId: session.id },
+    });
+    expect(note?.status).toBe("done");
+    expect(note?.content).toBeTruthy();
   });
 });

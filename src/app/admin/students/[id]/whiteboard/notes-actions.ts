@@ -95,35 +95,48 @@ export async function kickSessionChunksAction(
  *
  * Trust: assertOwnsWhiteboardSession before enqueue.
  */
+export type TriggerNotesGenerationResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
 export async function triggerNotesGenerationAction(
   whiteboardSessionId: string
-): Promise<void> {
-  const triggerSession = await assertOwnsWhiteboardSession(whiteboardSessionId);
-  // B1 cost gate: WAITLISTED tutors cannot trigger notes generation (OpenAI spend).
-  await assertTutorApproved(triggerSession.adminUserId);
+): Promise<TriggerNotesGenerationResult> {
+  try {
+    const triggerSession = await assertOwnsWhiteboardSession(whiteboardSessionId);
+    // B1 cost gate: WAITLISTED tutors cannot trigger notes generation (OpenAI spend).
+    await assertTutorApproved(triggerSession.adminUserId);
 
-  console.log(
-    `[tnt] wbsid=${whiteboardSessionId} action=trigger_notes_generation`
-  );
-
-  // Validate session is sealed — the worker also checks, but fail fast here.
-  const session = await withDbRetry(
-    () =>
-      db.whiteboardSession.findUnique({
-        where: { id: whiteboardSessionId },
-        select: { endedAt: true },
-      }),
-    { label: "triggerNotesGenerationAction.session" }
-  );
-
-  if (!session?.endedAt) {
-    console.warn(
-      `[tnt] wbsid=${whiteboardSessionId} action=trigger_notes_skip reason=session_not_sealed`
+    console.log(
+      `[tnt] wbsid=${whiteboardSessionId} action=trigger_notes_generation`
     );
-    return;
-  }
 
-  await enqueueNotesReduce(whiteboardSessionId);
+    // Validate session is sealed — the worker also checks, but fail fast here.
+    const session = await withDbRetry(
+      () =>
+        db.whiteboardSession.findUnique({
+          where: { id: whiteboardSessionId },
+          select: { endedAt: true },
+        }),
+      { label: "triggerNotesGenerationAction.session" }
+    );
+
+    if (!session?.endedAt) {
+      console.warn(
+        `[tnt] wbsid=${whiteboardSessionId} action=trigger_notes_skip reason=session_not_sealed`
+      );
+      return { ok: false, error: "Session is not sealed yet" };
+    }
+
+    await enqueueNotesReduce(whiteboardSessionId);
+    return { ok: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(
+      `[tnt] wbsid=${whiteboardSessionId} action=trigger_notes_failed err=${msg}`
+    );
+    return { ok: false, error: msg };
+  }
 }
 
 // ---------------------------------------------------------------------------

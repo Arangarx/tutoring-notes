@@ -88,8 +88,9 @@ describe("triggerNotesGenerationAction — allowNoteSending is not a gate", () =
   test("allowNoteSending=false does not block enqueueNotesReduce", async () => {
     consentShouldDeny = true;
 
-    await triggerNotesGenerationAction("wb-1");
+    const result = await triggerNotesGenerationAction("wb-1");
 
+    expect(result).toEqual({ ok: true });
     expect(enqueueNotesReduceMock).toHaveBeenCalledTimes(1);
     expect(enqueueNotesReduceMock).toHaveBeenCalledWith("wb-1");
   });
@@ -97,8 +98,9 @@ describe("triggerNotesGenerationAction — allowNoteSending is not a gate", () =
   test("sealed session with consent granted → calls enqueueNotesReduce", async () => {
     consentShouldDeny = false;
 
-    await triggerNotesGenerationAction("wb-1");
+    const result = await triggerNotesGenerationAction("wb-1");
 
+    expect(result).toEqual({ ok: true });
     expect(enqueueNotesReduceMock).toHaveBeenCalledTimes(1);
     expect(enqueueNotesReduceMock).toHaveBeenCalledWith("wb-1");
   });
@@ -106,8 +108,23 @@ describe("triggerNotesGenerationAction — allowNoteSending is not a gate", () =
   test("session not yet sealed → skips enqueue (regardless of consent)", async () => {
     dbWbFindUniqueMock.mockResolvedValue({ endedAt: null });
 
-    await triggerNotesGenerationAction("wb-1");
+    const result = await triggerNotesGenerationAction("wb-1");
 
+    expect(result).toEqual({ ok: false, error: "Session is not sealed yet" });
+    expect(enqueueNotesReduceMock).not.toHaveBeenCalled();
+  });
+
+  test("ownership denial returns ok:false instead of throwing", async () => {
+    assertOwnsWhiteboardSessionMock.mockRejectedValue(
+      new Error("You do not own this whiteboard session")
+    );
+
+    const result = await triggerNotesGenerationAction("wb-1");
+
+    expect(result).toEqual({
+      ok: false,
+      error: "You do not own this whiteboard session",
+    });
     expect(enqueueNotesReduceMock).not.toHaveBeenCalled();
   });
 });

@@ -3820,11 +3820,13 @@ export function WhiteboardWorkspaceClient({
         );
       });
       // (c) Trigger notes generation — upserts pending TutorNote + fires reduce.
-      void triggerNotesGenerationAction(whiteboardSessionId).catch((notesErr: unknown) => {
-        console.warn(
-          `[tnt] wbsid=${whiteboardSessionId} action=trigger_fire_error err=${(notesErr as Error)?.message ?? notesErr}`
+      const notesResult = await triggerNotesGenerationAction(whiteboardSessionId);
+      if (!notesResult.ok) {
+        setEndingState("error");
+        setEndingError(
+          `Session saved, but notes could not be started: ${notesResult.error}. You can regenerate notes from the review page.`
         );
-      });
+      }
 
       // Revoke is idempotent with the transaction above; don't block navigation.
       await revokeJoinTokensForSession(whiteboardSessionId).catch(() => undefined);

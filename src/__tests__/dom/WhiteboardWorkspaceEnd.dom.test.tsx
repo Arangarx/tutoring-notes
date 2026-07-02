@@ -131,9 +131,13 @@ jest.mock("@/app/admin/students/[id]/whiteboard/actions", () => ({
 
 // notes-actions imports next/cache (revalidatePath) which requires TextEncoder
 // (not available in jsdom). Mock the whole module at the boundary.
+const mockTriggerNotesGenerationAction = jest.fn(() =>
+  Promise.resolve({ ok: true as const })
+);
 jest.mock("@/app/admin/students/[id]/whiteboard/notes-actions", () => ({
   kickSessionChunksAction: jest.fn(() => Promise.resolve({ kicked: 0 })),
-  triggerNotesGenerationAction: jest.fn(() => Promise.resolve()),
+  triggerNotesGenerationAction: (...args: unknown[]) =>
+    mockTriggerNotesGenerationAction(...args),
   // loadSessionReviewPayload is called by SessionReviewMode on mount.
   // The shell-integration tests below provide per-test overrides; this
   // default ensures the module resolves cleanly in all tests.
@@ -1253,5 +1257,38 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
       "endWhiteboardSession",
       "onSessionEnded",
     ]);
+  });
+
+  test("CF-4: notes trigger failure surfaces tutor-visible error after session seals", async () => {
+    mockTriggerNotesGenerationAction.mockResolvedValueOnce({
+      ok: false,
+      error: "You do not own this whiteboard session",
+    });
+
+    render(
+      <WhiteboardWorkspaceClient
+        whiteboardSessionId="ws-end-notes-fail"
+        studentId="stu-1"
+        studentName="Test Student"
+        adminUserId="admin-1"
+        startedAtIso="2026-05-09T10:00:00.000Z"
+        bothConnectedAtIso={null}
+        initialActiveMs={0}
+        initialLastActiveAtIso={null}
+        syncUrl={null}
+        initialUserWantsRecording
+      />
+    );
+
+    await screen.findByTestId("wb-mock-excalidraw-canvas");
+    await userEvent.click(screen.getByTestId("wb-end-session"));
+
+    await waitFor(() => {
+      expect(mockEnd).toHaveBeenCalled();
+    });
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/notes could not be started/i);
+    expect(alert.textContent).toMatch(/You do not own this whiteboard session/i);
   });
 });
