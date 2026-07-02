@@ -179,4 +179,38 @@ describe("useWhiteboardRecorder lifecycle (Phase 0c)", () => {
       expect.objectContaining({ type: "snapshot", elements: [] })
     );
   });
+
+  test("CF-2: decoupled recordingActive (policy=none path) still captures stroke diffs", () => {
+    jest.useFakeTimers();
+    const bag: Bag = { now: 0 };
+    const { result, rerender } = renderHook(
+      (active: boolean) =>
+        useWhiteboardRecorder(props(bag, { recordingActive: active })),
+      { initialProps: false }
+    );
+
+    // Simulates wbEventsActive=true while FSM recordingActive=false (audio policy none).
+    act(() => rerender(true));
+    bag.now = 120;
+    act(() => {
+      result.current.onCanvasChange([makeRect("in-person-stroke", 5, 5)]);
+    });
+    act(() => jest.advanceTimersByTime(120));
+
+    const log = JSON.parse(result.current.buildFinalEventsJson()) as WBEventLog;
+    expect(log.events.length).toBeGreaterThan(0);
+    const hasStroke =
+      log.events.some(
+        (e) =>
+          e.type === "add" &&
+          "element" in e &&
+          e.element.id === "in-person-stroke"
+      ) ||
+      log.events.some(
+        (e) =>
+          e.type === "snapshot" &&
+          e.elements.some((el) => el.id === "in-person-stroke")
+      );
+    expect(hasStroke).toBe(true);
+  });
 });

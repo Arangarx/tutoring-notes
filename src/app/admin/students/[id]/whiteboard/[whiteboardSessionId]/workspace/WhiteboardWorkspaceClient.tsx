@@ -2353,6 +2353,12 @@ export function WhiteboardWorkspaceClient({
   });
   const recordingActive = presence.recordingActive;
 
+  // CF-2/MB-4: whiteboard event capture is decoupled from audio-capture policy.
+  // FSM `tutorWantsRecording` still gates audio (`audioCapturePolicy !== "none"`);
+  // replayable stroke logs must persist for IN_PERSON + denied (policy=none).
+  const wbEventsActive =
+    role !== "student" && phaseActive && userWantsRecording;
+
   // Split-brain detection: sync says the student is present (peerCount ≥ 1)
   // but WebRTC reachability is 0 (media path dead). After the first real
   // session connection this is a reliability issue requiring a banner.
@@ -2540,7 +2546,7 @@ export function WhiteboardWorkspaceClient({
     registerSessionStudentId(whiteboardSessionId, studentId);
   }, [whiteboardSessionId, studentId]);
 
-  const getAudioMs = useAudioMsClock(recordingActive);
+  const getAudioMs = useAudioMsClock(wbEventsActive);
 
   const getWireBroadcastExtras = useCallback(():
     | WhiteboardWireBroadcastExtras
@@ -2863,7 +2869,7 @@ export function WhiteboardWorkspaceClient({
     startedAtIso,
     getAudioMs,
     // Student role: recording is never active; sync-ingest is off (student uses useStudentWhiteboardCanvas)
-    recordingActive: role === "student" ? false : recordingActive,
+    recordingActive: role === "student" ? false : wbEventsActive,
     sync: role === "student" ? null : sync,
     applyRemoteToCanvas,
     getScenePageIdForBroadcast: () => activePageIdRef.current,
@@ -2912,7 +2918,7 @@ export function WhiteboardWorkspaceClient({
   // first frames have no viewport event ≤ currentTime and fall back to
   // camera-fit, which would jump on the first tutor pan/zoom afterwards.
   useEffect(() => {
-    if (!recordingActive) return;
+    if (!wbEventsActive) return;
     const api = excalidrawAPIRef.current;
     if (!api) return;
     try {
@@ -2937,7 +2943,7 @@ export function WhiteboardWorkspaceClient({
         (err as Error)?.message ?? err
       );
     }
-  }, [recordingActive, recorder, whiteboardSessionId]);
+  }, [wbEventsActive, recorder, whiteboardSessionId]);
 
   const selectTutorPage = useCallback(
     async (nextId: string) => {

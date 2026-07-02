@@ -33,6 +33,7 @@ const mockOutboxEnqueue = jest.fn<Promise<void>, [unknown]>(
   async () => undefined
 );
 const capturedRecorderOptions: Array<Record<string, unknown>> = [];
+const capturedWhiteboardRecorderOptions: Array<Record<string, unknown>> = [];
 
 jest.mock("@/lib/recording/upload-outbox-instance", () => ({
   drainOutboxOrTimeout: jest.fn(),
@@ -131,7 +132,9 @@ jest.mock("@/app/admin/students/[id]/whiteboard/notes-actions", () => ({
   triggerNotesGenerationAction: jest.fn(),
 }));
 jest.mock("@/hooks/useWhiteboardRecorder", () => ({
-  useWhiteboardRecorder: () => ({
+  useWhiteboardRecorder: (opts: Record<string, unknown>) => {
+    capturedWhiteboardRecorderOptions.push(opts);
+    return {
     onCanvasChange: jest.fn(),
     ingestRemote: jest.fn(),
     eventCount: 0,
@@ -150,7 +153,8 @@ jest.mock("@/hooks/useWhiteboardRecorder", () => ({
     acknowledgePostGateAutoCanvas: jest.fn(),
     flushThrottledFrameNow: jest.fn(),
     broadcastScenePageSnapshot: jest.fn(),
-  }),
+  };
+  },
 }));
 jest.mock("@/hooks/useLiveAV", () => ({
   useLiveAV: () => ({
@@ -426,6 +430,7 @@ const baseWorkspaceProps = {
 describe("WhiteboardWorkspaceClient consent gates D/K", () => {
   beforeEach(() => {
     capturedRecorderOptions.length = 0;
+    capturedWhiteboardRecorderOptions.length = 0;
     mockDraftClear.mockClear();
     mockDraftFindInProgress.mockClear();
     mockOutboxEnqueue.mockClear();
@@ -479,6 +484,21 @@ describe("WhiteboardWorkspaceClient consent gates D/K", () => {
       sessionId: "wbs-consent-test",
       streamId: TUTOR_MIC_STREAM_ID,
     });
+  });
+
+  test("CF-2: policy=none still passes wbEventsActive to useWhiteboardRecorder", () => {
+    render(
+      <WhiteboardWorkspaceClient
+        {...baseWorkspaceProps}
+        initialSessionPhase="ACTIVE"
+        initialHasConsentSnapshot={true}
+        initialAllowAudioRecording={false}
+        sessionMode="IN_PERSON"
+      />
+    );
+
+    const lastWbOpts = capturedWhiteboardRecorderOptions.at(-1);
+    expect(lastWbOpts?.recordingActive).toBe(true);
   });
 });
 
