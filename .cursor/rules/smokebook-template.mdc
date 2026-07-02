@@ -28,6 +28,7 @@ Every **smokebook** or **smoke-runbook** produced in this repo (typically under 
    **Coverage:** ...
 
    **Notes:**
+
    ```
 
 3. **Cross-branch / post-merge** section stub when the smoke spans merges.

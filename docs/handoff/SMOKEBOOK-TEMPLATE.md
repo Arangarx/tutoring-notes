@@ -57,7 +57,7 @@ Smokebooks are **not** mid-wave bug hunts. See [`.cursor/rules/smoke-when-done.m
 | **SKIP** (per item) | Checked = test deliberately skipped this run — **reason required in Notes** (e.g. blocked by env, out of scope this pass, dependency not ready). Distinct from N/A with notes (item does not apply as written). |
 | **None checked** (per item) | Not yet run / missed — **not** the same as a deliberate SKIP or N/A with notes. Check exactly one box per item when the run is complete; leave all unchecked if not yet reached. |
 | **Coverage** | **Agent-authored only** (optional — omit the field entirely if nothing applies). `[automated: <spec-file> › <test title>]` and/or `[human-only: <reason>]` citations for Playwright overlap or human-only justification. Never put smoke results or pass/fail commentary here. |
-| **Notes** | **Andrew's field — agents leave it blank.** Freeform observations he types during the run: screenshots paths, console errors worth filing, what worked vs didn't for PARTIAL, and why for SKIP / N/A with notes. |
+| **Notes** | **Andrew's field — agents leave it blank.** Freeform observations he types during the run: screenshots paths, console errors worth filing, what worked vs didn't for PARTIAL, and why for SKIP / N/A with notes. **Always put a blank line immediately after `**Notes:**`** so Andrew's typed notes render as a normal unbolded paragraph (not inside the bold marker). |
 
 Run order: top to bottom unless a block says otherwise. Re-run **Cross-branch / post-merge** after integration merges.
 
