@@ -365,4 +365,56 @@ describe("WhiteboardWorkspaceClient waiting room — startWhiteboardSession wiri
     );
     expect(screen.getByTestId("wb-waiting-overlay")).toBeInTheDocument();
   });
+
+  test("surfaces generic failure copy when startWhiteboardSession rejects non-Consent notFound (CF-1 / MB-1)", async () => {
+    const notFoundErr = Object.assign(new Error("NEXT_NOT_FOUND"), {
+      digest: "NEXT_NOT_FOUND",
+    });
+    mockStartWhiteboardSession.mockRejectedValueOnce(notFoundErr);
+
+    const user = userEvent.setup();
+    render(<WhiteboardWorkspaceClient {...workspaceBaseProps} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await user.click(screen.getByTestId("wb-start-session"));
+
+    const startError = await screen.findByTestId("wb-waiting-start-error");
+    expect(startError).toHaveTextContent(/couldn't start the session/i);
+    expect(startError).toHaveTextContent(
+      /if you recently switched or exited an impersonated account in another tab/i
+    );
+    expect(startError).toHaveTextContent(/reload this page first/i);
+    expect(startError).toHaveTextContent(/Error ID:\s*NEXT_NOT_FOUND/i);
+    expect(startError).toHaveTextContent(
+      /copy this and send it back so we can find the failure in the server logs/i
+    );
+
+    expect(screen.getByTestId("wb-waiting-overlay")).toBeInTheDocument();
+    const startBtn = screen.getByTestId("wb-start-session");
+    expect(startBtn).not.toBeDisabled();
+    expect(startBtn).toHaveTextContent("Start session");
+  });
+
+  test("surfaces Error ID digest line for generic Start failures without impersonation-specific fields (CF-1)", async () => {
+    const genericErr = Object.assign(new Error("Server action failed"), {
+      digest: "abc123",
+    });
+    mockStartWhiteboardSession.mockRejectedValueOnce(genericErr);
+
+    const user = userEvent.setup();
+    render(<WhiteboardWorkspaceClient {...workspaceBaseProps} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await user.click(screen.getByTestId("wb-start-session"));
+
+    const startError = await screen.findByTestId("wb-waiting-start-error");
+    expect(startError).toHaveTextContent(/Error ID:\s*abc123/i);
+    expect(startError).toHaveTextContent(
+      /copy this and send it back so we can find the failure in the server logs/i
+    );
+  });
 });
