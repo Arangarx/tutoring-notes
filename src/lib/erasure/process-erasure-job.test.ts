@@ -403,6 +403,12 @@ describe("processErasureJob — happy path", () => {
     expect(student!.parentEmail).toBeNull();
     expect(student!.erasedAt).not.toBeNull();
 
+    const lp = await db.learnerProfile.findUnique({ where: { id: fixture.lp.id } });
+    expect(lp!.displayName).toBe("Deleted learner");
+    expect(
+      await db.learnerCredential.count({ where: { learnerProfileId: fixture.lp.id } })
+    ).toBe(0);
+
     const shareLink = await db.shareLink.findFirst({ where: { studentId: fixture.student.id } });
     expect(shareLink!.revokedAt).not.toBeNull();
 
@@ -429,6 +435,9 @@ describe("processErasureJob — happy path", () => {
     expect(student!.name).not.toContain("Alice");
     expect(student!.name).not.toContain("Secret");
     expect(student!.parentEmail).toBeNull();
+
+    const lp = await db.learnerProfile.findUnique({ where: { id: fixture.lp.id } });
+    expect(lp!.displayName).toBe("Deleted learner");
   });
 });
 
@@ -584,8 +593,22 @@ describe("processErasureJob — H-2 straggler purge before DB scrub", () => {
 // ---------------------------------------------------------------------------
 
 describe("cancelErasureJob", () => {
-  it("cancels a requested job during grace window", async () => {
+  it("cancels a requested job during grace window and restores tombstone + credentials", async () => {
     const fixture = await createFullErasureFixture();
+    await db.learnerCredential.create({
+      data: {
+        learnerProfileId: fixture.lp.id,
+        accountHolderId: fixture.ah.id,
+        username: `cancel_${uniq()}`,
+        secretHash: "not-used",
+        disabled: true,
+      },
+    });
+    await db.learnerProfile.update({
+      where: { id: fixture.lp.id },
+      data: { tombstonedAt: new Date() },
+    });
+
     const futureEligible = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     const job = await createErasureJob("learner_profile", fixture.lp.id, {
       purgeEligibleAt: futureEligible,
@@ -597,6 +620,14 @@ describe("cancelErasureJob", () => {
     const row = await db.erasureJob.findUnique({ where: { id: job.id } });
     expect(row!.status).toBe("canceled");
     expect(row!.canceledAt).not.toBeNull();
+
+    const lp = await db.learnerProfile.findUnique({ where: { id: fixture.lp.id } });
+    expect(lp!.tombstonedAt).toBeNull();
+
+    const cred = await db.learnerCredential.findFirst({
+      where: { learnerProfileId: fixture.lp.id },
+    });
+    expect(cred!.disabled).toBe(false);
   });
 
   it("rejects cancel for blobs_purging job", async () => {

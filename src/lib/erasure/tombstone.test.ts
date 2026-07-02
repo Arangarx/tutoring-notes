@@ -5,8 +5,8 @@
  *
  * Coverage:
  *   T-new-H (B-7) — PasswordResetToken swept by original email before AH redaction
- *   AH post-state — redacted email, null passwordHash, sessions revoked, throttles swept
- *   LP post-state — redacted displayName, credential deleted, device sessions revoked
+ *   AH post-state — tombstonedAt set, sessions revoked, throttles swept, PII preserved
+ *   LP post-state — tombstonedAt set, credential soft-disabled, device sessions revoked
  *   Idempotency — second call does not throw; end-state unchanged
  *   Read-gate — assertOwnsLearnerProfile denies tombstoned profile
  *
@@ -167,8 +167,8 @@ describe("T-new-H (B-7): PasswordResetToken sweep ordering", () => {
     expect(remainingTokens).toHaveLength(0);
 
     const updatedAh = await db.accountHolder.findUnique({ where: { id: ah.id } });
-    expect(updatedAh!.email).toMatch(/@erased\.invalid$/);
-    expect(updatedAh!.email).not.toBe(originalEmail);
+    expect(updatedAh!.email).toBe(originalEmail);
+    expect(updatedAh!.tombstonedAt).not.toBeNull();
   });
 
   it("sweeps AuthThrottle ah-login row and LearnerLoginThrottle soft/hard rows before redaction", async () => {
@@ -228,21 +228,29 @@ describe("T-new-H (B-7): PasswordResetToken sweep ordering", () => {
 // ---------------------------------------------------------------------------
 
 describe("tombstoneAccountHolder post-state", () => {
-  it("redacts AH fields and revokes all active sessions", async () => {
+  it("sets tombstonedAt, preserves PII, revokes sessions, and soft-disables credentials", async () => {
     const ah = await createTestAccountHolder({ familyId: `fam_${Date.now()}` });
+    const lp = await createTestLearnerProfile(ah.id);
+    await createTestLearnerCredential(lp.id, ah.id, `u_${Math.random().toString(36).slice(2, 8)}`);
     const s1 = await createAccountHolderSession(ah.id);
     const s2 = await createAccountHolderSession(ah.id);
+    const originalEmail = ah.email;
 
     await runInTransaction(async (tx) => {
       await tombstoneAccountHolder(tx, ah.id);
     });
 
     const updated = await db.accountHolder.findUnique({ where: { id: ah.id } });
-    expect(updated!.email).toMatch(/@erased\.invalid$/);
-    expect(updated!.passwordHash).toBeNull();
-    expect(updated!.displayName).toBe("Deleted account");
-    expect(updated!.familyId).toBeNull();
+    expect(updated!.email).toBe(originalEmail);
+    expect(updated!.passwordHash).not.toBeNull();
+    expect(updated!.displayName).toBe("Parent Test");
+    expect(updated!.familyId).not.toBeNull();
     expect(updated!.tombstonedAt).not.toBeNull();
+
+    const cred = await db.learnerCredential.findFirst({
+      where: { learnerProfileId: lp.id },
+    });
+    expect(cred!.disabled).toBe(true);
 
     const row1 = await db.accountHolderSession.findUnique({ where: { id: s1.sessionId } });
     const row2 = await db.accountHolderSession.findUnique({ where: { id: s2.sessionId } });
@@ -256,7 +264,7 @@ describe("tombstoneAccountHolder post-state", () => {
 // ---------------------------------------------------------------------------
 
 describe("tombstoneLearnerProfile post-state", () => {
-  it("redacts LP, deletes credential, and revokes device sessions", async () => {
+  it("sets tombstonedAt, preserves displayName, soft-disables credential, revokes device sessions", async () => {
     const ah = await createTestAccountHolder();
     const lp = await createTestLearnerProfile(ah.id);
     await createTestLearnerCredential(lp.id, ah.id, `u_${Math.random().toString(36).slice(2, 8)}`);
@@ -271,13 +279,14 @@ describe("tombstoneLearnerProfile post-state", () => {
     });
 
     const updated = await db.learnerProfile.findUnique({ where: { id: lp.id } });
-    expect(updated!.displayName).toBe("Deleted learner");
+    expect(updated!.displayName).toBe("Child Test");
     expect(updated!.tombstonedAt).not.toBeNull();
 
-    const credCount = await db.learnerCredential.count({
+    const cred = await db.learnerCredential.findFirst({
       where: { learnerProfileId: lp.id },
     });
-    expect(credCount).toBe(0);
+    expect(cred).not.toBeNull();
+    expect(cred!.disabled).toBe(true);
 
     const dsRow1 = await db.learnerDeviceSession.findUnique({ where: { id: ds1.id } });
     const dsRow2 = await db.learnerDeviceSession.findUnique({ where: { id: ds2.id } });
@@ -308,7 +317,7 @@ describe("tombstone idempotency", () => {
 
     const afterSecond = await db.accountHolder.findUnique({ where: { id: ah.id } });
     expect(afterSecond!.email).toBe(afterFirst!.email);
-    expect(afterSecond!.displayName).toBe("Deleted account");
+    expect(afterSecond!.displayName).toBe(afterFirst!.displayName);
     expect(afterSecond!.tombstonedAt).not.toBeNull();
   });
 

@@ -107,9 +107,22 @@ describe("cancelErasureByAdminAction", () => {
     expect(refreshed!.status).toBe("requested");
   });
 
-  it("cancels a requested job", async () => {
+  it("cancels a requested job and restores tombstone state", async () => {
     const ah = await createAccountHolder();
     const lp = await createLearnerProfile(ah.id);
+    await db.learnerProfile.update({
+      where: { id: lp.id },
+      data: { tombstonedAt: new Date() },
+    });
+    await db.learnerCredential.create({
+      data: {
+        learnerProfileId: lp.id,
+        accountHolderId: ah.id,
+        username: `cancel_${uniq()}`,
+        secretHash: "not-used",
+        disabled: true,
+      },
+    });
     const job = await createErasureJob("learner_profile", lp.id);
 
     jest.resetModules();
@@ -123,6 +136,14 @@ describe("cancelErasureByAdminAction", () => {
     const refreshed = await db.erasureJob.findUnique({ where: { id: job.id } });
     expect(refreshed!.status).toBe("canceled");
     expect(refreshed!.canceledAt).not.toBeNull();
+
+    const lpAfter = await db.learnerProfile.findUnique({ where: { id: lp.id } });
+    expect(lpAfter!.tombstonedAt).toBeNull();
+
+    const cred = await db.learnerCredential.findFirst({
+      where: { learnerProfileId: lp.id },
+    });
+    expect(cred!.disabled).toBe(false);
   });
 
   it("rejects cancel for non-requested job", async () => {

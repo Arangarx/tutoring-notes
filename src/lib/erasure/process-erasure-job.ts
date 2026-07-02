@@ -4,11 +4,12 @@
  * Phase machine: requested → blobs_purging → db_scrubbing → completed
  * Grace gate: worker stays in `requested` until now() >= purgeEligibleAt.
  * Tombstone (E2) runs at request time (E5), not here.
+ * Identity PII hard-redaction runs in db_scrubbing (Option A — not at tombstone).
  *
  * Log prefix: ers (opaque ids only — never email, name, transcript, or blob URLs).
  */
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { ErasureJobStatus, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { deleteBlob } from "@/lib/blob";
@@ -17,8 +18,11 @@ import {
   resolveErasureScopeStudents,
   type ErasureScope,
 } from "@/lib/erasure/blob-inventory";
+import { acquireErasureScopeAdvisoryLock } from "@/lib/erasure/erasure-scope-lock";
 
 const DELETED_LEARNER_NAME = "[Deleted learner]";
+const TOMBSTONE_AH_DISPLAY_NAME = "[deleted]";
+const TOMBSTONE_LP_DISPLAY_NAME = "Deleted learner";
 /** eventsBlobUrl is NOT NULL in schema — empty string removes the blob reference after purge. */
 const SCRUBBED_EVENTS_BLOB_URL = "";
 
@@ -64,10 +68,18 @@ async function advancePhase(
   extra?: Prisma.ErasureJobUpdateInput
 ): Promise<void> {
   console.log(`[ers] action=phase_advance from=${from} to=${to} ers=${jobId}`);
-  await db.erasureJob.update({
-    where: { id: jobId },
+  const result = await db.erasureJob.updateMany({
+    where: { id: jobId, status: from },
     data: { status: to, lastError: null, ...extra },
   });
+  if (result.count === 0) {
+    console.log(
+      `[ers] action=phase_advance_aborted from=${from} to=${to} ers=${jobId} reason=status_mismatch`
+    );
+    throw new Error(
+      `ErasureJob phase advance aborted: job ${jobId} is no longer in status "${from}"`
+    );
+  }
 }
 
 async function purgeBlobs(
@@ -103,11 +115,57 @@ async function purgeBlobs(
   return { allDone: true, deleted };
 }
 
+async function scrubIdentityPii(
+  tx: Parameters<Parameters<typeof db.$transaction>[0]>[0],
+  scope: ErasureScope,
+  jobId: string
+): Promise<void> {
+  if (scope.kind === "account_holder") {
+    const tombstoneEmail = `deleted+${randomUUID()}@erased.invalid`;
+    await tx.accountHolder.update({
+      where: { id: scope.id },
+      data: {
+        email: tombstoneEmail,
+        passwordHash: null,
+        displayName: TOMBSTONE_AH_DISPLAY_NAME,
+        familyId: null,
+      },
+    });
+
+    await tx.learnerProfile.updateMany({
+      where: { accountHolderId: scope.id, isTestFixture: false },
+      data: { displayName: TOMBSTONE_LP_DISPLAY_NAME },
+    });
+
+    await tx.learnerCredential.deleteMany({
+      where: { accountHolderId: scope.id },
+    });
+  } else {
+    await tx.learnerProfile.update({
+      where: { id: scope.id },
+      data: { displayName: TOMBSTONE_LP_DISPLAY_NAME },
+    });
+
+    await tx.learnerCredential.deleteMany({
+      where: { learnerProfileId: scope.id },
+    });
+  }
+
+  console.log(
+    `[ers] action=scrub_identity_pii scope=${scope.kind} ers=${jobId}`
+  );
+}
+
 async function scrubDbContent(
+  scope: ErasureScope,
+  jobId: string,
   studentIds: string[],
   sessionIds: string[]
 ): Promise<void> {
   if (studentIds.length === 0 && sessionIds.length === 0) {
+    await db.$transaction(async (tx) => {
+      await scrubIdentityPii(tx, scope, jobId);
+    });
     return;
   }
 
@@ -181,6 +239,8 @@ async function scrubDbContent(
         },
       });
     }
+
+    await scrubIdentityPii(tx, scope, jobId);
   });
 }
 
@@ -264,7 +324,7 @@ export async function processErasureJob(
       }
     }
 
-    await scrubDbContent(studentIds, sessionIds);
+    await scrubDbContent(scope, jobId, studentIds, sessionIds);
 
     const completedAt = new Date();
     await advancePhase(jobId, "db_scrubbing", "completed", { completedAt });
@@ -277,7 +337,7 @@ export async function processErasureJob(
 
 /**
  * Cancel an erasure job during the grace window (status === requested only).
- * Does not un-tombstone or restore access.
+ * True restore: clears tombstones and re-enables credentials in one transaction.
  */
 export async function cancelErasureJob(
   jobId: string
@@ -296,11 +356,78 @@ export async function cancelErasureJob(
     );
   }
 
-  const canceledAt = new Date();
-  await db.erasureJob.update({
-    where: { id: jobId },
-    data: { status: "canceled", canceledAt },
-  });
+  try {
+    await db.$transaction(async (tx) => {
+      await acquireErasureScopeAdvisoryLock(tx, job.scopeKind, job.scopeId);
+
+      const canceledAt = new Date();
+      const statusUpdate = await tx.erasureJob.updateMany({
+        where: { id: jobId, status: "requested" },
+        data: { status: "canceled", canceledAt },
+      });
+
+      if (statusUpdate.count === 0) {
+        throw new Error(
+          `Cannot cancel erasure job in status other than "requested" — concurrent status change`
+        );
+      }
+
+      if (job.scopeKind === "account_holder") {
+        await tx.accountHolder.update({
+          where: { id: job.scopeId },
+          data: { tombstonedAt: null },
+        });
+        console.log(
+          `[ers] action=untombstone_account_holder scopeId=${job.scopeId} ers=${jobId}`
+        );
+
+        const childProfiles = await tx.learnerProfile.findMany({
+          where: { accountHolderId: job.scopeId, isTestFixture: false },
+          select: { id: true },
+        });
+
+        for (const child of childProfiles) {
+          await tx.learnerProfile.update({
+            where: { id: child.id },
+            data: { tombstonedAt: null },
+          });
+          console.log(
+            `[ers] action=untombstone_learner_profile scopeId=${child.id} ers=${jobId}`
+          );
+        }
+
+        const credResult = await tx.learnerCredential.updateMany({
+          where: { accountHolderId: job.scopeId },
+          data: { disabled: false },
+        });
+        console.log(
+          `[ers] action=credential_reenabled count=${credResult.count} ers=${jobId}`
+        );
+      } else {
+        await tx.learnerProfile.update({
+          where: { id: job.scopeId },
+          data: { tombstonedAt: null },
+        });
+        console.log(
+          `[ers] action=untombstone_learner_profile scopeId=${job.scopeId} ers=${jobId}`
+        );
+
+        const credResult = await tx.learnerCredential.updateMany({
+          where: { learnerProfileId: job.scopeId },
+          data: { disabled: false },
+        });
+        console.log(
+          `[ers] action=credential_reenabled count=${credResult.count} ers=${jobId}`
+        );
+      }
+
+      console.log(`[ers] action=cancel_restore_completed ers=${jobId}`);
+    });
+  } catch (err) {
+    const msg = sanitizeError(err);
+    console.error(`[ers] action=cancel_restore_failed ers=${jobId} error=${msg}`);
+    throw err;
+  }
 
   return { status: "canceled" };
 }

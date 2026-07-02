@@ -261,7 +261,7 @@ describe("job creation shape", () => {
 // ---------------------------------------------------------------------------
 
 describe("full-family erasure ordering", () => {
-  it("tombstones AH then child LPs, deletes credentials, sweeps family throttles", async () => {
+  it("tombstones AH then child LPs, soft-disables credentials, sweeps family throttles", async () => {
     const familyId = `fam_${uniq()}`;
     const username = `kid_${Math.random().toString(36).slice(2, 8)}`;
     const ah = await createAccountHolder({
@@ -290,16 +290,17 @@ describe("full-family erasure ordering", () => {
 
     const updatedAh = await db.accountHolder.findUnique({ where: { id: ah.id } });
     expect(updatedAh!.tombstonedAt).not.toBeNull();
-    expect(updatedAh!.displayName).toBe("Deleted account");
+    expect(updatedAh!.displayName).toBe("Full Family Parent");
 
     for (const lpId of [lp1.id, lp2.id]) {
       const lp = await db.learnerProfile.findUnique({ where: { id: lpId } });
       expect(lp!.tombstonedAt).not.toBeNull();
-      expect(lp!.displayName).toBe("Deleted learner");
-      const creds = await db.learnerCredential.count({
+      expect(lp!.displayName).toBe(lpId === lp1.id ? "Child One" : "Child Two");
+      const cred = await db.learnerCredential.findFirst({
         where: { learnerProfileId: lpId },
       });
-      expect(creds).toBe(0);
+      expect(cred).not.toBeNull();
+      expect(cred!.disabled).toBe(true);
     }
 
     expect(

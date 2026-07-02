@@ -9,6 +9,7 @@
 
 import type { ErasureScopeKind } from "@prisma/client";
 import { db } from "@/lib/db";
+import { acquireErasureScopeAdvisoryLock } from "@/lib/erasure/erasure-scope-lock";
 import {
   tombstoneAccountHolder,
   tombstoneLearnerProfile,
@@ -189,6 +190,8 @@ export async function requestErasureByAdmin(
 
   try {
     const jobId = await db.$transaction(async (tx) => {
+      await acquireErasureScopeAdvisoryLock(tx, scopeKind, scopeId);
+
       const job = await tx.erasureJob.create({
         data: {
           scopeKind,

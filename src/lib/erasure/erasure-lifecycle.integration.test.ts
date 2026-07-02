@@ -412,10 +412,12 @@ describe("E8 lifecycle — per-learner happy path", () => {
 
     const lpRow = await db.learnerProfile.findUnique({ where: { id: fixture.lp.id } });
     expect(lpRow!.tombstonedAt).not.toBeNull();
-    expect(lpRow!.displayName).toBe("Deleted learner");
-    expect(
-      await db.learnerCredential.count({ where: { learnerProfileId: fixture.lp.id } })
-    ).toBe(0);
+    expect(lpRow!.displayName).toBe("Alice Lifecycle");
+    const cred = await db.learnerCredential.findFirst({
+      where: { learnerProfileId: fixture.lp.id },
+    });
+    expect(cred).not.toBeNull();
+    expect(cred!.disabled).toBe(true);
     const deviceSessions = await db.learnerDeviceSession.findMany({
       where: { learnerProfileId: fixture.lp.id },
     });
@@ -450,6 +452,14 @@ describe("E8 lifecycle — per-learner happy path", () => {
     expect(student!.name).toBe(DELETED_LEARNER_NAME);
     expect(student!.parentEmail).toBeNull();
     expect(student!.erasedAt).not.toBeNull();
+
+    const lpAfterPurge = await db.learnerProfile.findUnique({
+      where: { id: fixture.lp.id },
+    });
+    expect(lpAfterPurge!.displayName).toBe("Deleted learner");
+    expect(
+      await db.learnerCredential.count({ where: { learnerProfileId: fixture.lp.id } })
+    ).toBe(0);
 
     const note = await db.sessionNote.findUnique({ where: { id: fixture.note.id } });
     expect(note!.topics).toBe("");
@@ -534,7 +544,7 @@ describe("E8 lifecycle — full-family erasure", () => {
 // ---------------------------------------------------------------------------
 
 describe("E8 lifecycle — cancel during grace", () => {
-  it("cancels job; tombstone remains; erasedAt never set; content not 404", async () => {
+  it("cancels job; restores tombstone + credentials; erasedAt never set; content not 404", async () => {
     const fixture = await createFullErasureFixture({
       learnerDisplayName: "Cancel Child",
     });
@@ -567,7 +577,14 @@ describe("E8 lifecycle — cancel during grace", () => {
     const lpAfter = await db.learnerProfile.findUnique({
       where: { id: fixture.lp.id },
     });
-    expect(lpAfter!.tombstonedAt).not.toBeNull();
+    expect(lpAfter!.tombstonedAt).toBeNull();
+    expect(lpAfter!.displayName).toBe("Cancel Child");
+
+    const credAfter = await db.learnerCredential.findFirst({
+      where: { learnerProfileId: fixture.lp.id },
+    });
+    expect(credAfter).not.toBeNull();
+    expect(credAfter!.disabled).toBe(false);
   });
 });
 
