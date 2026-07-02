@@ -133,20 +133,65 @@ Design questions DQ-1..DQ-6 in findings — **DQ-1 resolved** by reversible tomb
 
 ## Workstream B — Erasure legally-safe reversible redesign
 
-**Risk:** **FRAGILE, high blast radius** — auth/credentials, irreversible-adjacent, legal. **REQUIRES 5-axis reliability review of ER plan BEFORE execution** (dispatch Sonnet).
+**Risk:** **FRAGILE, high blast radius** — auth/credentials, irreversible-adjacent, legal. **5-axis reliability review COMPLETE (2026-07-01)** — see §5-axis review outcome below; **9 BLOCKERs are mandatory acceptance criteria** before merge.
 
 Supersedes grace read-access semantics from [`learner-erasure-plan.md`](learner-erasure-plan.md) §2 and erasure smokebook item #10.
 
+### 5-axis review outcome (2026-07-01)
+
+**Ratified design decision — ER-2/ER-5 = Option A**
+
+- **Tombstone (at request time):** set `tombstonedAt` + revoke sessions + **soft-disable** the credential via a NEW `LearnerCredential.disabled` column. **DO NOT** redact AH/LP PII at tombstone time.
+- **Login blocked by:** EXISTING `tombstonedAt` gates (`account-holder-session.ts:128`, `api/auth/learner/login/route.ts:150`) **PLUS** a new `LearnerCredential.disabled` check in the learner login route.
+- **Cancel-restore:** a SINGLE `db.$transaction` — clear `LP.tombstonedAt`, set `LearnerCredential.disabled=false`, (full-family) also clear `AH.tombstonedAt` + all child LP tombstones, mark job `canceled`.
+- **Hard-purge (`db_scrubbing`, at grace expiry):** MUST hard-redact AH (`email → deleted+uuid@erased.invalid`, `passwordHash → null`, `displayName → sentinel`, `familyId → null`) and LP (`displayName → sentinel`). **This is where PII actually dies.**
+- **Rejected Option B** (snapshot PII into `ErasureJob`) — puts plaintext credentials in the erasure row; more attack surface, more complex.
+
+#### 9 BLOCKERs — mandatory acceptance criteria (all must pass before merge)
+
+| ID | Requirement |
+|---|---|
+| **A** | `scrubDbContent`/`db_scrubbing` hard-redacts AH + LP PII at grace expiry (legal hole otherwise). |
+| **B** | Additive migration adds `LearnerCredential.disabled` and lands **BEFORE** any tombstone code change; learner login route checks it. |
+| **C** | Cancel-restore runs in a single `db.$transaction` (no half-alive partial-restore state). |
+| **D** | `advancePhase` uses a conditional update `WHERE status='requested'` and checks affected-count > 0 before proceeding (TOCTOU: concurrent cancel-restore must not be overwritten and purged). |
+| **E** | Re-request-after-cancel race handled: serializable isolation / advisory lock around cancel-then-re-request, **OR** documented operator guidance ("wait N seconds"). Note explicitly in implementation. |
+| **F** | (Covered by D's fix; two-admins cancel+process race.) |
+| **G** | `createWhiteboardSession` **AND** `startWhiteboardSession` gain erasure guards (check `LP.tombstonedAt` OR active `ErasureJob` on the student's `learnerProfileId`). Confirmed MB-3 root cause. |
+| **H** | `assertStudentNotErased`/`assertStudentNotErasedApi` also check active `ErasureJob` coverage (not just `Student.erasedAt`, which is null during grace); refactor `shouldShortCircuitEndSessionForErasure` lookup into a shared util; apply to **ALL** tutor content routes — enumerate: events, snapshot, audio, tutor-asset. |
+| **I** | `tombstoneAccountHolder` **AND** `tombstoneLearnerProfile` **THROW** on `not_found` (so the caller transaction rolls back). Confirmed MB-2 root cause (silent `return`). |
+
+#### SHOULD-FIX (fold into acceptance where cheap)
+
+- New `ers` log events: `soft_disable_credential`, `credential_reenabled`, `untombstone_learner_profile`, `untombstone_account_holder`, `cancel_restore_completed`, `cancel_restore_failed`; plus a cancel-success log entry.
+- Rewrite integration tests asserting **OLD** semantics: `erasure-lifecycle.integration.test.ts` lines ~429-430 (`assertStudentNotErased` must now **FAIL** during grace) and ~537-571 (`tombstonedAt` must now be **NULL** after cancel), and the `LearnerCredential count===0` assertion (~416-418) which contradicts soft-disable.
+- ER-4 pending-erasure UI: specify data flow — tutor roster joins `Student → LP.tombstonedAt` to render the "pending erasure / login disabled" state.
+- **Perf note:** added active-`ErasureJob` lookups add 2-3 queries per guarded route call; the `ErasureJob` active-scope partial unique index makes this acceptable.
+
+#### Execution order (serialize as noted — do NOT parallelize Steps 2&3 or 3&4)
+
+| Step | Scope | Notes |
+|---|---|---|
+| **0** | Design decision | **DONE** — Option A above. |
+| **1** | Additive migration `LearnerCredential.disabled` (+ `PLATFORM-ASSUMPTIONS` if load-bearing) | **BEFORE** all tombstone code. |
+| **2** | ER-1: both tombstone helpers throw on `not_found` | Independently shippable. |
+| **3** | ER-2 + ER-5 as **ONE atomic unit** (5 interdependent changes) | Soft-disable credential; preserve AH PII; atomic cancel-restore; `advancePhase` conditional update (D); extend `scrubDbContent` to hard-redact at expiry (A). **NOT** independently shippable. Test rewrite (ER-7) **MUST** land in the **same commit** as Step 3. |
+| **4** | ER-3: guards on `createWhiteboardSession`/`startWhiteboardSession` + extend `assertStudentNotErased`(+Api) to active-`ErasureJob` + apply to all content routes | Depends on Step 3 sentinel. |
+| **5** | ER-4: tutor pending-erasure UI | Parallel-safe with Step 4 (different files). |
+| **6** | ER-6 + ER-7: copy + test rewrite | Test rewrite in Step 3 commit; copy can follow or bundle. |
+| **7** | Playwright specs (cancel-restore, access-suspension) | Author parallel; **run** after Steps 3-5. |
+| **8** | `npx next build` + full jest + `test:wb-sync` → re-smoke | Final gate. |
+
 ### ER-1 — No false-success
 
-**Maps:** MB-2 (DELETE bypass, job without effective tombstone)
+**Maps:** MB-2 (DELETE bypass, job without effective tombstone); **5-axis BLOCKER I** — Step 2 (independently shippable)
 
 **Problem:** `requestErasureByAdminAction` resolves+validates target for display-name confirm but `DELETE` path may skip existence checks. Tombstone helpers may not throw — job can exist without effective tombstone. Full-family erasure showed in jobs table but parent could still operate.
 
 **Fix:**
 
 - `requestErasureByAdminAction` must resolve+validate target for **both** display-name confirm **and** `DELETE` path (`DELETE` must NOT skip existence checks).
-- Tombstone helpers must **THROW** and roll back the job (same transaction) if target isn't found.
+- `tombstoneAccountHolder` **AND** `tombstoneLearnerProfile` must **THROW** on `not_found` so the caller transaction rolls back (**BLOCKER I** — confirmed MB-2 root cause: silent `return`).
 - Invariant: **a job can never exist without an effective tombstone.**
 
 **Files:** `request-erasure-by-admin.ts`, `tombstone.ts`
@@ -155,34 +200,36 @@ Supersedes grace read-access semantics from [`learner-erasure-plan.md`](learner-
 
 ### ER-2 — Reversible tombstone
 
-**Maps:** MB-2, MB-3, DQ-1 (resolved)
+**Maps:** MB-2, MB-3, DQ-1 (resolved); **5-axis BLOCKERs A, B**
 
 **Problem:** Current design hard-deletes `LearnerCredential`, nulls PII immediately — cancel cannot restore account.
 
-**Fix — during grace, DISABLE rather than destroy:**
+**Fix — Option A (ratified): during grace, DISABLE rather than destroy:**
 
-- Soft-disable login/credentials + mark tombstoned (`disabled` flag / `tombstonedAt` gate) instead of hard-deleting `LearnerCredential` and nulling PII.
-- Preserve enough state to fully restore: name, email, credentials.
+- Tombstone at request time: set `tombstonedAt` + revoke sessions + **soft-disable** via `LearnerCredential.disabled` (new column). **DO NOT** redact AH/LP PII at tombstone time.
+- Login blocked by existing `tombstonedAt` gates **plus** new `LearnerCredential.disabled` check in learner login route.
+- Preserve AH/LP PII through grace so cancel can restore identity.
 - Session revocation stays **immediate** (security).
-- **HARD destroy** still happens at grace expiry in `process-erasure-job.ts` `db_scrubbing` phase (existing purge path).
+- **HARD destroy** at grace expiry in `process-erasure-job.ts` `db_scrubbing`: hard-redact AH (`email → deleted+uuid@erased.invalid`, `passwordHash → null`, `displayName → sentinel`, `familyId → null`) and LP (`displayName → sentinel`). **PII dies here, not at tombstone.**
 
-**Schema:** May need **additive** column (e.g. `disabled` flag on `LearnerCredential` or equivalent) — additive migrations only per repo convention.
+**Schema:** Additive `LearnerCredential.disabled` — migration **Step 1**, before any tombstone code (**BLOCKER B**).
 
-**Files:** `tombstone.ts`, `process-erasure-job.ts`, schema migration if needed, login routes.
+**Files:** `tombstone.ts`, `process-erasure-job.ts`, schema migration, `api/auth/learner/login/route.ts`.
 
 ---
 
 ### ER-3 — Suspend ALL access during grace
 
-**Maps:** MB-3, MB-10 (erasure smokebook grace-window read-access FAIL)
+**Maps:** MB-3, MB-10 (erasure smokebook grace-window read-access FAIL); **5-axis BLOCKERs G, H**
 
 **Problem:** Previously ratified "tutor retains read access during grace" — **REVERSED**. Tutor could see student name, start new whiteboard sessions for tombstoned learner.
 
-**Fix:**
+**Fix (Step 4 — depends on Step 3):**
 
-- Extend `assert-student-not-erased.ts` to block when an **ACTIVE** `ErasureJob` or tombstone covers the student — not just `Student.erasedAt` (purge-time).
-- Apply to tutor content routes: replay, events, snapshot, audio, tutor-asset.
-- Apply to `createWhiteboardSession` / `startWhiteboardSession` — block new sessions for tombstoned/pending-erasure learners.
+- `createWhiteboardSession` **AND** `startWhiteboardSession`: erasure guards checking `LP.tombstonedAt` OR active `ErasureJob` on the student's `learnerProfileId` (**BLOCKER G**).
+- Extend `assertStudentNotErased`/`assertStudentNotErasedApi` to check active `ErasureJob` coverage (not just `Student.erasedAt`, which is null during grace). Refactor `shouldShortCircuitEndSessionForErasure` lookup into a shared util (**BLOCKER H**).
+- Apply to **ALL** tutor content routes — enumerate: events, snapshot, audio, tutor-asset.
+- **Perf:** 2-3 added queries per guarded route; acceptable via `ErasureJob` active-scope partial unique index.
 
 **This REVERSES** the previously-ratified "tutor retains read access during grace."
 
@@ -190,28 +237,30 @@ Supersedes grace read-access semantics from [`learner-erasure-plan.md`](learner-
 
 ### ER-4 — Immediate tutor-visible redaction
 
-**Maps:** MB-3 (display name not redacted)
+**Maps:** MB-3 (display name not redacted); Step 5 (parallel-safe with ER-3)
 
 **Fix:**
 
 - Tutor roster/detail show clear **"pending erasure / login disabled"** state immediately on tombstone.
-- Redacted name shown immediately — not deferred to purge-time `Student.erasedAt`.
+- **Data flow:** tutor roster joins `Student → LP.tombstonedAt` to render pending-erasure state (not deferred to purge-time `Student.erasedAt`).
 
 ---
 
 ### ER-5 — Cancel = true restore
 
-**Maps:** MB-2, erasure #7 PARTIAL, DQ-1
+**Maps:** MB-2, erasure #7 PARTIAL, DQ-1; **5-axis BLOCKERs C, D, E, F** — shipped atomically with ER-2 (Step 3)
 
 **Problem:** Cancel halts purge but account already dead — incoherent state.
 
-**Fix:** `cancelErasureByAdminAction` within grace:
+**Fix:** `cancelErasureByAdminAction` within grace — **single `db.$transaction`** (**BLOCKER C**):
 
-- Un-tombstone — re-enable credentials, restore name/email.
-- Clear the `ErasureJob`.
-- Restore tutor access (depends on ER-2 reversible state).
+- Clear `LP.tombstonedAt`, set `LearnerCredential.disabled=false`.
+- Full-family: also clear `AH.tombstonedAt` + all child LP tombstones.
+- Mark job `canceled`.
+- `advancePhase`: conditional update `WHERE status='requested'`, check affected-count > 0 (**BLOCKER D/F** — TOCTOU / two-admin race).
+- Re-request-after-cancel race: serializable isolation / advisory lock, **OR** documented operator guidance ("wait N seconds") (**BLOCKER E**).
 
-Removes "cancel halts purge but account already dead."
+Removes "cancel halts purge but account already dead." PII was never redacted at tombstone (Option A), so restore is true identity recovery.
 
 ---
 
@@ -240,10 +289,13 @@ NON-technical — no "blob" jargon.
 
 ### ER-7 — Tests + docs
 
-**Rewrite** erasure integration tests asserting **OLD** grace semantics:
+**Rewrite** erasure integration tests asserting **OLD** grace semantics — **MUST land in same commit as Step 3** (ER-2+ER-5), else old assertions fail against new code:
 
-| Old assertion | New assertion |
+| Location / old assertion | New assertion |
 |---|---|
+| `erasure-lifecycle.integration.test.ts` ~429-430: `assertStudentNotErased` passes during grace | `assertStudentNotErased` must **FAIL** during grace |
+| ~537-571: `tombstonedAt` non-null after cancel | `tombstonedAt` must be **NULL** after cancel |
+| ~416-418: `LearnerCredential count===0` | Contradicts soft-disable — assert `disabled=true` instead |
 | Tutor retains read access during grace | Access **suspended** during grace |
 | `shouldShortCircuitEndSessionForErasure` grace behavior | Cancel **restores** full access |
 
@@ -339,29 +391,35 @@ Then Part 3 reliability spine (`p3-clock` → per-speaker capture → transcript
 
 | Surface | Requirement |
 |---|---|
-| Workstream B (all ER items) | **5-axis reliability review BEFORE execution** — dispatch Sonnet; auth/credential + irreversible-adjacent + legal |
+| Workstream B (all ER items) | **5-axis review DONE (2026-07-01)** — Option A ratified; **9 BLOCKERs (A–I)** mandatory before merge (see Workstream B §5-axis review outcome) |
 | CF-2 + any whiteboard change | `npm run test:wb-sync` merge gate |
-| ER-2 schema change | Additive migration only; update `PLATFORM-ASSUMPTIONS.md` if load-bearing |
+| ER-2 schema change | Additive migration only (`LearnerCredential.disabled` — **Step 1, before tombstone code**); update `PLATFORM-ASSUMPTIONS.md` if load-bearing |
 
 ---
 
 ## Sequencing recommendation
 
-Workstreams A and B are largely file-disjoint but both contain fragile pieces — **serialize the fragile work.**
+Workstreams A and B are largely file-disjoint but both contain fragile pieces — **serialize the fragile work.** Workstream B execution order is **authoritative** in Workstream B §5-axis review outcome (Steps 0–8). Summary:
 
 ```text
-1. 5-axis review of Workstream B (Sonnet dispatch) — BEFORE any ER code
-2. ER-1 (quick correctness — no false-success)
-3. ER-2 + ER-5 (reversible tombstone + restore — the core)
-4. ER-3 + ER-4 (access suspension + immediate redaction)
-5. ER-6 + ER-7 (copy + tests/docs)
+Step 0: Design decision — DONE (Option A)
+Step 1: Migration LearnerCredential.disabled — BEFORE all tombstone code
+Step 2: ER-1 (tombstone helpers throw on not_found) — independently shippable
+Step 3: ER-2 + ER-5 ONE atomic unit (+ ER-7 test rewrite in SAME commit)
+Step 4: ER-3 (guards + assertStudentNotErased extension) — depends on Step 3
+Step 5: ER-4 (pending-erasure UI) — parallel-safe with Step 4
+Step 6: ER-6 + ER-7 copy
+Step 7: Playwright (author parallel; run after Steps 3–5)
+Step 8: build + full jest + test:wb-sync → re-smoke
 
-Parallel-safe windows:
-  - CF-1 + CF-3 (low risk) — anytime alongside ER-1/2
-  - CF-2 + CF-4 (recorder) — serialize vs other whiteboard work; CF-2 needs wb-sync gate
+DO NOT parallelize Steps 2&3 (Step 3 subsumes tombstone helpers) or Steps 3&4.
 
-6. Workstream C (Playwright e2e) — after CF + ER stabilize
-7. Workstream D (re-smoke + merge)
+Workstream A (parallel-safe windows):
+  - CF-1 + CF-3 — shipped (183f09b, 7a9514f); CF-2 + CF-4 remain
+  - CF-2 (wb-sync-gated) + CF-4 — serialize vs other whiteboard work
+
+Workstream C — after CF + ER Steps 3–5 stabilize
+Workstream D — re-smoke + merge
 ```
 
 **Housekeeping:** Cancel/clean the orphan mis-scoped `ErasureJob` on the preview DB from Andrew's smoke session.
@@ -371,9 +429,10 @@ Parallel-safe windows:
 ## Acceptance criteria (mini-phase complete)
 
 - [ ] All MB-1..MB-6 findings resolved or explicitly accepted with documented rationale
-- [ ] Erasure grace = suspended access + reversible tombstone + true cancel restore
+- [ ] **9 BLOCKERs (A–I) all pass** — see Workstream B §5-axis review outcome
+- [ ] Erasure grace = suspended access + reversible tombstone (Option A) + true cancel restore
 - [ ] No erasure job without effective tombstone; DELETE path validates existence
-- [ ] Playwright covers CC-1/CC-2 + erasure-admin deterministic gates
+- [ ] Playwright covers CC-1/CC-2 + erasure-admin deterministic gates (cancel-restore, access-suspension)
 - [ ] `test:wb-sync` green (CF-2)
 - [ ] `npx next build` + full jest green
 - [ ] Andrew re-smoke PASS (hardware-only items + both themes)
