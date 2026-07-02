@@ -3614,6 +3614,7 @@ export function WhiteboardWorkspaceClient({
     );
     try {
       await startWhiteboardSession(whiteboardSessionId, mode);
+      setSessionStartError(null);
       setSessionPhase("ACTIVE");
       console.info(
         `[wtr] wbsid=${whiteboardSessionId} role=${role} action=live_entered mode=${mode.toLowerCase()}`
@@ -3622,6 +3623,20 @@ export function WhiteboardWorkspaceClient({
       const consentErr = parseConsentActionError(err);
       if (consentErr) {
         setSessionStartError(formatConsentActionError(consentErr));
+      } else {
+        // Mirror StartWhiteboardSession.tsx — generic tutor copy + digest for
+        // log correlation (ownership/notFound, redacted prod errors, etc.).
+        const digest =
+          err && typeof err === "object" && "digest" in err
+            ? String((err as { digest?: unknown }).digest ?? "")
+            : "";
+        const friendlyBase =
+          "Couldn't start the session. Please refresh and try again — if you recently switched or exited an impersonated account in another tab, reload this page first.";
+        setSessionStartError(
+          digest
+            ? `${friendlyBase}\n\nError ID: ${digest}\n(copy this and send it back so we can find the failure in the server logs).`
+            : friendlyBase
+        );
       }
       // Log the failure so a future hardware repro is debuggable.
       // The button re-enables via the finally block — no stuck state.
