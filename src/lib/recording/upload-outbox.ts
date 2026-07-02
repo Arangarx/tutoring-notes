@@ -117,6 +117,12 @@ export type OutboxRow = {
   lastError: string | null;
   /** ms epoch when the row was first enqueued — for ordering + logging. */
   createdAt: number;
+  /**
+   * When true, the blob is uploaded for Whisper transcription only and
+   * must NOT become a `SessionRecording` replay row at end-session.
+   * Absent/false = normal replay lane (default). See commit 89e0fe1.
+   */
+  transcriptionOnly?: boolean;
 };
 
 // ----------------------------------------------------------------
@@ -801,6 +807,7 @@ export function createUploadOutbox(config: OutboxConfig): UploadOutbox {
       attempts: 0,
       lastError: null,
       createdAt: Date.now(),
+      ...(input.transcriptionOnly === true && { transcriptionOnly: true }),
     };
     await writeRow(row);
     logger.log?.(

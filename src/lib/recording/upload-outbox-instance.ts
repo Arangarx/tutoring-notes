@@ -186,6 +186,10 @@ export async function drainOutboxOrTimeout(
  * Rows without a `blobRemoteUrl` (i.e. uploads that never landed) are
  * skipped — drainOutboxOrTimeout's caller already decided whether to
  * abort or proceed in that case.
+ *
+ * Rows with `transcriptionOnly === true` are also skipped — per-speaker
+ * transcription blobs must never become replay `SessionRecording` rows
+ * (see commit 89e0fe1; tutor:mic mixdown remains the sole replay source).
  */
 export async function assembleEndSessionSegments(
   whiteboardSessionId: string
@@ -194,6 +198,15 @@ export async function assembleEndSessionSegments(
   const outbox = getOrCreateUploadOutbox();
   const rows = await outbox.listUploadedSegments(whiteboardSessionId);
   return rows
+    .filter((r) => {
+      if (r.transcriptionOnly === true) {
+        console.log(
+          `[upload-outbox-instance] obx action=skip_transcription_only_at_end wbsid=${whiteboardSessionId} streamId=${r.streamId} segmentId=${r.segmentId}`
+        );
+        return false;
+      }
+      return true;
+    })
     .filter((r): r is OutboxRow & { blobRemoteUrl: string } =>
       typeof r.blobRemoteUrl === "string" && r.blobRemoteUrl.length > 0
     )

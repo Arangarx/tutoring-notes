@@ -179,6 +179,53 @@ describe("assembleEndSessionSegments", () => {
     expect(byId.get("tutor-1")?.streamId).toBe("tutor:mic");
     expect(byId.get("student-1")?.streamId).toBe("student:peer-1:mic");
   });
+
+  test("excludes transcriptionOnly rows from replay assembly while keeping unflagged rows", async () => {
+    const outbox = createUploadOutbox({
+      upload: NEVER_CALLED_UPLOADER,
+      dbName: `outbox-helpers-${Math.random().toString(36).slice(2)}`,
+    });
+    setUploadOutboxForTests(outbox);
+
+    await outbox.enqueue({
+      sessionId: "wbs-tx-only",
+      streamId: "tutor:mic",
+      segmentId: "tutor-1",
+      blobLocalRef: null,
+      blobRemoteUrl: "https://abc.blob.vercel-storage.com/tutor-1.webm",
+      mimeType: "audio/webm",
+      sizeBytes: 100,
+      audioStartedAtMs: 1_000,
+    });
+    await outbox.enqueue({
+      sessionId: "wbs-tx-only",
+      streamId: "student:peer-1:mic",
+      segmentId: "student-1",
+      blobLocalRef: null,
+      blobRemoteUrl: "https://abc.blob.vercel-storage.com/student-1.webm",
+      mimeType: "audio/webm",
+      sizeBytes: 200,
+      audioStartedAtMs: 1_100,
+    });
+    await outbox.enqueue({
+      sessionId: "wbs-tx-only",
+      streamId: "student:peer-2:mic",
+      segmentId: "student-2-tx",
+      blobLocalRef: null,
+      blobRemoteUrl: "https://abc.blob.vercel-storage.com/student-2-tx.webm",
+      mimeType: "audio/webm",
+      sizeBytes: 300,
+      audioStartedAtMs: 1_200,
+      transcriptionOnly: true,
+    });
+
+    const segs = await assembleEndSessionSegments("wbs-tx-only");
+    expect(segs).toHaveLength(2);
+    const byId = new Map(segs.map((s) => [s.segmentId, s]));
+    expect(byId.get("tutor-1")?.streamId).toBe("tutor:mic");
+    expect(byId.get("student-1")?.streamId).toBe("student:peer-1:mic");
+    expect(byId.has("student-2-tx")).toBe(false);
+  });
 });
 
 describe("drainOutboxOrTimeout", () => {

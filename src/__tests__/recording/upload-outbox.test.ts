@@ -577,6 +577,43 @@ describe("upload-outbox — drainAndAwait timeout", () => {
 // finalize
 // ----------------------------------------------------------------
 
+describe("upload-outbox — transcriptionOnly flag", () => {
+  test("transcriptionOnly persists in IndexedDB and round-trips on reload", async () => {
+    const dbName = uniqueDbName();
+    const outboxA = createUploadOutbox({
+      upload: async () => ({ ok: true, blobUrl: "https://blob.example/tx.webm" }),
+      dbName,
+      logger: SILENT_LOGGER,
+      backoffMsByAttempt: [0],
+    });
+    await outboxA.enqueue({
+      sessionId: "ws-tx-flag",
+      streamId: studentMicStreamId("peer-2"),
+      segmentId: "seg-tx",
+      blobLocalRef: makeBlob(),
+      mimeType: "audio/webm",
+      sizeBytes: 12,
+      audioStartedAtMs: 42,
+      transcriptionOnly: true,
+    });
+    const rowsBeforeClose = await outboxA.listAllRows("ws-tx-flag");
+    expect(rowsBeforeClose).toHaveLength(1);
+    expect(rowsBeforeClose[0].transcriptionOnly).toBe(true);
+    await outboxA.close();
+
+    const outboxB = createUploadOutbox({
+      upload: async () => ({ ok: true, blobUrl: "https://blob.example/tx.webm" }),
+      dbName,
+      logger: SILENT_LOGGER,
+      backoffMsByAttempt: [0],
+    });
+    const rowsAfterReload = await outboxB.listAllRows("ws-tx-flag");
+    expect(rowsAfterReload).toHaveLength(1);
+    expect(rowsAfterReload[0].transcriptionOnly).toBe(true);
+    await outboxB.close();
+  });
+});
+
 describe("upload-outbox — finalize", () => {
   test("finalize clears rows; observer drops to idle", async () => {
     const h = makeHarness({});
