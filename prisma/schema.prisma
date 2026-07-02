@@ -936,6 +936,8 @@ model LearnerCredential {
   username         String
   /// bcrypt hash of the learner's PIN or password.
   secretHash       String
+  /// Soft-disable during erasure grace (Option A reversible tombstone); login fail-closed when true.
+  disabled         Boolean        @default(false)
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 

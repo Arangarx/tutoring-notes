@@ -121,6 +121,7 @@ export async function POST(req: NextRequest) {
     id: string;
     learnerProfileId: string;
     secretHash: string;
+    disabled: boolean;
     learnerProfile: { id: string; tombstonedAt: Date | null; accountHolderId: string; accessMode: import("@prisma/client").LearnerAccessMode };
   } | null = null;
 
@@ -136,6 +137,7 @@ export async function POST(req: NextRequest) {
         id: true,
         learnerProfileId: true,
         secretHash: true,
+        disabled: true,
         learnerProfile: {
           select: {
             id: true,
@@ -148,9 +150,16 @@ export async function POST(req: NextRequest) {
     });
 
     if (cred && !cred.learnerProfile.tombstonedAt) {
-      // IAC-6: reject account_holder_session learners at PIN login
-      if (cred.learnerProfile.accessMode === "account_holder_session" ||
-          cred.learnerProfile.accessMode === "parent_session_select") {
+      if (cred.disabled) {
+        console.log(
+          `[lpr] lpr=${cred.learnerProfileId} action=login_denied reason=credential_disabled`
+        );
+        await dummyLearnerHashCompare();
+      } else if (
+        // IAC-6: reject account_holder_session learners at PIN login
+        cred.learnerProfile.accessMode === "account_holder_session" ||
+        cred.learnerProfile.accessMode === "parent_session_select"
+      ) {
         // This learner authenticates via parent's session, not independent PIN
         console.log(
           `[lpr] lpr=${cred.learnerProfileId} action=login_rejected reason=wrong_access_mode accessMode=${cred.learnerProfile.accessMode}`
@@ -160,11 +169,11 @@ export async function POST(req: NextRequest) {
           { error: "access_mode_mismatch", message: "This account does not use PIN login. Ask your parent/guardian to sign in." },
           { status: 403 }
         );
-      }
-
-      matched = await verifyLearnerPin(pin, cred.secretHash);
-      if (matched) {
-        credentialResult = cred;
+      } else {
+        matched = await verifyLearnerPin(pin, cred.secretHash);
+        if (matched) {
+          credentialResult = cred;
+        }
       }
     } else {
       await dummyLearnerHashCompare();
