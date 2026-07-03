@@ -1,7 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
-import { PrismaClient } from "@prisma/client";
 import { readLocalEnv } from "../utils/read-dotenv";
 import {
   assertControlFullyInViewport,
@@ -848,15 +847,6 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     );
 
     const session = await seedWbLiveSyncSession();
-    const prisma = new PrismaClient();
-    try {
-      await prisma.student.update({
-        where: { id: session.studentId },
-        data: { recordingDefaultEnabled: true },
-      });
-    } finally {
-      await prisma.$disconnect();
-    }
 
     const context = await browser.newContext({
       storageState: "tests/integration/.auth/tutor.json",
