@@ -47,6 +47,7 @@ import type {
   WhiteboardSyncClient,
   RoomPeer,
 } from "@/lib/whiteboard/sync-client";
+import { isPeerReachable } from "@/lib/av/reachability";
 
 // -----------------------------------------------------------------
 // Fakes
@@ -1362,6 +1363,119 @@ describe("useLiveAV — peer membership reconciliation", () => {
 
     expect(meshHandles.addPeer).toHaveBeenCalledTimes(1);
     expect(result.current.participants[0]?.label).toBe("Alex");
+
+    unmount();
+  });
+});
+
+// -----------------------------------------------------------------
+// Fix A — stale-snapshot re-sync (wb-av-reachability-detection-fix)
+//
+// When peer-mesh fires connectionstatechange / iceconnectionstatechange
+// before useLiveAV's internal entry exists, those events are dropped and
+// the entry stays at peer/ice "new". syncConnectionStateFromMesh reads
+// mesh.getPeerConnectionSnapshot on ensureEntry + onRoomPeersChange add
+// so a genuinely-connected PC still lands in reachableParticipants.
+// -----------------------------------------------------------------
+describe("useLiveAV — Fix A: stale-snapshot re-sync from mesh (reachability)", () => {
+  async function withActiveHookAndSnapshot(
+    snapshotForPeer: (
+      peerId: string
+    ) => {
+      connectionState: RTCPeerConnectionState;
+      iceConnectionState: RTCIceConnectionState;
+    } | null
+  ): Promise<{
+    result: ReturnType<
+      typeof renderHook<ReturnType<typeof useLiveAV>, unknown>
+    >["result"];
+    unmount: () => void;
+    sync: ReturnType<typeof makeFakeSyncClient>;
+    meshHandles: MeshHandles;
+  }> {
+    const sync = makeFakeSyncClient();
+    const meshHandles = makeFakeMesh();
+    meshHandles.mesh.getPeerConnectionSnapshot = (peerId) =>
+      snapshotForPeer(peerId);
+    const sig = makeFakeSignaling();
+    const props = makeBaseProps({
+      syncClient: sync.sync,
+      _createPeerMesh: meshHandles.factory,
+      _createSignaling: sig.factory,
+    });
+
+    const { result, unmount } = renderHook(() => useLiveAV(props));
+    await act(async () => {
+      await result.current.requestMic();
+    });
+    await waitFor(() => {
+      expect(result.current.isActive).toBe(true);
+    });
+    return { result, unmount, sync, meshHandles };
+  }
+
+  test("presence add re-syncs live mesh snapshot — ICE connected + PC connecting → reachable (dropped early events)", async () => {
+    const { result, unmount, sync } = await withActiveHookAndSnapshot(
+      (peerId) =>
+        peerId === "student-B"
+          ? {
+              connectionState: "connecting",
+              iceConnectionState: "connected",
+            }
+          : null
+    );
+
+    act(() => {
+      sync.emitPeers([{ peerId: "student-B", role: "student" }]);
+    });
+    // Deliberately omit emitPcState / emitIceState — early callbacks were lost.
+
+    await waitFor(() => {
+      expect(result.current.reachableParticipants.length).toBe(1);
+    });
+    const participant = result.current.participants[0]!;
+    expect(participant.peerId).toBe("student-B");
+    expect(participant.peerConnectionState).toBe("connecting");
+    expect(participant.iceConnectionState).toBe("connected");
+    expect(
+      isPeerReachable({
+        peerConnectionState: participant.peerConnectionState,
+        iceConnectionState: participant.iceConnectionState,
+      })
+    ).toBe(true);
+    expect(result.current.reachableParticipants[0]?.peerId).toBe("student-B");
+
+    unmount();
+  });
+
+  test("presence add re-sync does NOT mark peer reachable when ICE still checking", async () => {
+    const { result, unmount, sync } = await withActiveHookAndSnapshot(
+      (peerId) =>
+        peerId === "student-B"
+          ? {
+              connectionState: "connecting",
+              iceConnectionState: "checking",
+            }
+          : null
+    );
+
+    act(() => {
+      sync.emitPeers([{ peerId: "student-B", role: "student" }]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.participants.length).toBe(1);
+    });
+    const participant = result.current.participants[0]!;
+    expect(participant.peerConnectionState).toBe("connecting");
+    expect(participant.iceConnectionState).toBe("checking");
+    expect(
+      isPeerReachable({
+        peerConnectionState: participant.peerConnectionState,
+        iceConnectionState: participant.iceConnectionState,
+      })
+    ).toBe(false);
+    expect(result.current.reachableParticipants).toEqual([]);
 
     unmount();
   });
