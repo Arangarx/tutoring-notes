@@ -84,7 +84,7 @@ export default async function WhiteboardWorkspacePage({
           sessionMode: true,
           activatedAt: true,
           student: {
-            select: { id: true, name: true, recordingDefaultEnabled: true },
+            select: { id: true, name: true },
           },
           consentSnapshot: {
             select: {
@@ -116,7 +116,7 @@ export default async function WhiteboardWorkspacePage({
       initialActiveMs={detail.activeMs}
       initialLastActiveAtIso={detail.lastActiveAt?.toISOString() ?? null}
       syncUrl={syncEnabled ? env.WHITEBOARD_SYNC_URL! : null}
-      initialUserWantsRecording={detail.student.recordingDefaultEnabled}
+      initialUserWantsRecording={true} // PRESARAH-1: always-on recording intent
       initialSessionPhase={detail.sessionPhase}
       sessionMode={detail.sessionMode}
       activatedAt={detail.activatedAt?.toISOString() ?? null}

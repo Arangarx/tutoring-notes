@@ -107,12 +107,9 @@ model Student {
   adminUser               AdminUser?          @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
   /**
    * Per-student default for the whiteboard "Start recording" toggle
-   * (Sarah, Apr 2026 pilot ask): some students decline recording, so
-   * the workspace should remember that and show Start unticked for
-   * them next time. The tutor can still flip it per session — this is
-   * just the initial state. Defaults to true so the existing behavior
-   * is unchanged for current students until a tutor explicitly opts
-   * one out.
+   * DEPRECATED (PRESARAH-1, 2026-07): per-student "start recording by
+   * default" toggle removed — recording intent is always armed from
+   * session activation. Column retained for additive-migration rule.
    */
   recordingDefaultEnabled Boolean             @default(true)
   /// When true: this student was created by the dev-tools fixture dashboard

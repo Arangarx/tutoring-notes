@@ -282,12 +282,9 @@ type Props = {
   initialLastActiveAtIso: string | null;
   syncUrl: string | null;
   /**
-   * Per-student "Start whiteboard recording on by default" preference.
-   * Sarah's pilot ask (Apr 2026): the workspace toggle should ship in
-   * the right initial position for each student so she's not unticking
-   * Start every time for students who declined recording. The tutor
-   * can still flip mid-session — this is the initial state only.
-   * Not required for student role.
+   * Recording intent at mount (PRESARAH-1: always true for tutor path;
+   * SSR passes true; prop kept for testability). Consent still gates
+   * actual audio capture — this is intent only. Not used on student role.
    */
   initialUserWantsRecording?: boolean;
   /**
@@ -464,7 +461,7 @@ export function WhiteboardWorkspaceClient({
   initialActiveMs,
   initialLastActiveAtIso,
   syncUrl,
-  initialUserWantsRecording = false,
+  initialUserWantsRecording = true,
   onSessionEnded,
   role = "tutor",
   joinToken,
@@ -1374,28 +1371,10 @@ export function WhiteboardWorkspaceClient({
   // Recording lifecycle (audio + whiteboard composed)
   // ---------------------------------------------------------------
   //
-  // The workspace "Start recording" / "Pause recording" buttons gate BOTH
-  // `WhiteboardWorkspaceAudioBridge` (real mic → Blob → SessionRecording rows)
-  // and `useWhiteboardRecorder` via the same `recordingActive` presence gate.
-  //
-  // What's wired:
-  //   - `recordingActive` → useWhiteboardRecorder + audio pause/resume ✔
-  //   - `getAudioMs`      → performance.now()-based surrogate (clock tracks
-  //                         the same pauses as strokes; optional refinement:
-  //                         read live elapsed from the audio hook).
-  //   - Mic picker / meter / timer → `RecordingControlPanel` in the bridge ✔
+  // `userWantsRecording` is recording intent (PRESARAH-1: always armed at
+  // session activation; cleared only on end-session). Actual `recordingActive`
+  // is the AND of intent + phase + consent + presence — see derivations below.
 
-  // `userWantsRecording` is the tutor's explicit intent (Start / Pause
-  // button). The actual `recordingActive` we hand to the recorder hook
-  // is the AND of intent + presence so the recorder pauses itself
-  // when the student drops — see `deriveRecordingPresence` below.
-  // Sarah's pilot ask (Apr 2026): "I don't think the recording needs
-  // to keep going if the student isn't connected."
-  //
-  // The initial value comes from `Student.recordingDefaultEnabled`
-  // (also Sarah's ask): students who declined recording ship the
-  // toggle off so the tutor doesn't have to untick Start every time.
-  // The tutor can still flip mid-session.
   const [userWantsRecording, setUserWantsRecording] = useState(
     initialUserWantsRecording
   );

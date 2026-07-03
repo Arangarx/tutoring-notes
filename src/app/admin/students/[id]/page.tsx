@@ -12,7 +12,6 @@ import { SubmitButton } from "@/components/SubmitButton";
 import NoteEntrySection from "./NoteEntrySection";
 import { ActiveWhiteboardSessionsList } from "./whiteboard/ActiveWhiteboardSessionsList";
 import { StartWhiteboardSession } from "./whiteboard/StartWhiteboardSession";
-import { StudentRecordingDefaultToggle } from "./StudentRecordingDefaultToggle";
 import { env } from "@/lib/env";
 import { formatDateOnlyDisplay } from "@/lib/date-only";
 import { getRequestBaseUrl } from "@/lib/public-url";
@@ -196,12 +195,6 @@ export default async function StudentDetailPage({
         studentId={student.id}
         sessions={student.whiteboardSessions}
       />
-      <div className="mt-4 border-t border-border pt-4">
-        <StudentRecordingDefaultToggle
-          studentId={student.id}
-          initialEnabled={student.recordingDefaultEnabled}
-        />
-      </div>
     </>
   );
 
