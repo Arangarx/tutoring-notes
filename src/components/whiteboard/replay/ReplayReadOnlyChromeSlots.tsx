@@ -212,10 +212,10 @@ export function buildReplayReadOnlyChromeSlots({
     canvas: canvasSlot,
     bottomToolbar,
     boardTabStrip: (
-      <>
+      <div className="mynk-wb-replay-footer" data-testid="wb-replay-footer">
         {timelineStrip}
         {boardTabStrip}
-      </>
+      </div>
     ),
   };
 }
