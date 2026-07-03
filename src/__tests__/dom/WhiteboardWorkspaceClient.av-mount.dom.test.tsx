@@ -1115,3 +1115,64 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
     }
   });
 });
+
+describe("WhiteboardWorkspaceClient active-ping role guard (SMOKE-BUG-1)", () => {
+  const originalFetch = globalThis.fetch;
+  let fetchMock: jest.Mock;
+
+  function activePingCalls(): unknown[][] {
+    return fetchMock.mock.calls.filter(
+      (call) => typeof call[0] === "string" && call[0].includes("/active-ping")
+    );
+  }
+
+  beforeEach(() => {
+    fetchMock = jest.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/active-ping")) {
+        return {
+          ok: true,
+          json: async () => ({ activeMs: 0, lastActiveAt: null }),
+        } as Response;
+      }
+      if (url.includes("/timer-anchor") || url.includes("/join-timer")) {
+        return {
+          ok: true,
+          json: async () => ({ activeMs: 0, lastActiveAt: null, live: true }),
+        } as Response;
+      }
+      return { ok: false, json: async () => ({}) } as Response;
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  test("student does NOT POST /active-ping (uses join-timer instead)", async () => {
+    await renderWorkspace({
+      role: "student",
+      joinToken: "join-tok-1",
+      initialSessionPhase: "ACTIVE",
+    });
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          (call) => typeof call[0] === "string" && call[0].includes("/join-timer")
+        )
+      ).toBe(true);
+    });
+
+    expect(activePingCalls()).toHaveLength(0);
+  });
+
+  test("tutor POSTs /active-ping on mount", async () => {
+    await renderWorkspace({ initialSessionPhase: "ACTIVE" });
+
+    await waitFor(() => {
+      expect(activePingCalls().length).toBeGreaterThan(0);
+    });
+  });
+});

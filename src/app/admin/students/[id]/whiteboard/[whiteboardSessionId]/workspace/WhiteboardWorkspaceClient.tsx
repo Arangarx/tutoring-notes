@@ -3538,6 +3538,7 @@ export function WhiteboardWorkspaceClient({
   // Fire a ping immediately whenever overlap flips, and run a
   // ~10s heartbeat while it stays true.
   useEffect(() => {
+    if (role !== "tutor") return; // billable timer is tutor-only; student uses join-timer
     if (!syncUrl) return; // tutor-solo mode — no billable timer
     const billingActive = bothPartiesInRoom && phaseActive;
     void pingActive(billingActive);
@@ -3547,12 +3548,13 @@ export function WhiteboardWorkspaceClient({
       void pingActive(true);
     }, HEARTBEAT_MS);
     return () => clearInterval(id);
-  }, [bothPartiesInRoom, phaseActive, pingActive, syncUrl]);
+  }, [role, bothPartiesInRoom, phaseActive, pingActive, syncUrl]);
 
   // Best-effort "I'm leaving" beacon. sendBeacon is the only way to
   // get a reliable POST off during pagehide on most browsers; we fall
   // back to fetch with keepalive when sendBeacon is unavailable.
   useEffect(() => {
+    if (role !== "tutor") return; // billable timer is tutor-only; student uses join-timer
     if (!syncUrl) return;
     const url = `/api/whiteboard/${whiteboardSessionId}/active-ping`;
     const beacon = () => {
@@ -3587,7 +3589,7 @@ export function WhiteboardWorkspaceClient({
       window.removeEventListener("pagehide", beacon);
       window.removeEventListener("beforeunload", beacon);
     };
-  }, [syncUrl, whiteboardSessionId]);
+  }, [role, syncUrl, whiteboardSessionId]);
 
   // Periodic refetch of the server-truth state. Catches: another
   // device for the same tutor wrote (cross-device sessions are
