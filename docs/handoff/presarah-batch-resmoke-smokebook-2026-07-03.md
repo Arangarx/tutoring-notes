@@ -2,14 +2,16 @@
 
 **This smokebook uses TWO separate branch previews.** The reachability fix is on its own isolated branch and is **not** merged into the batch branch. Use the correct preview for each part.
 
-| Part | Branch | Tip commit | Preview |
-|------|--------|------------|---------|
-| **A — batch fixes** | `wb-wave5-polish` | [`189fdb0`](https://github.com/Arangarx/tutoring-notes/commit/189fdb0991f57bdcbbefe8e82bba3fcf2fc1891b) | [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-arangarx-5209s-projects.vercel.app) |
-| **B — A/V reachability Fix A** | `wb-av-reachability-detection-fix` | [`a962171`](https://github.com/Arangarx/tutoring-notes/commit/a962171) | [wb-av-reachability-detection-fix preview](https://tutoring-notes-git-wb-av-reachab-bde990-arangarx-5209s-projects.vercel.app) |
 
-**Preview 1 — batch (`wb-wave5-polish` @ `189fdb0`):** [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-arangarx-5209s-projects.vercel.app) — the `ef61c91` docs commit on top is docs-only; this preview serves current batch code.
+| Part                           | Branch                             | Tip commit                                                                                              | Preview                                                                                                                        |
+| ------------------------------ | ---------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **A — batch fixes**            | `wb-wave5-polish`                  | `[189fdb0](https://github.com/Arangarx/tutoring-notes/commit/189fdb0991f57bdcbbefe8e82bba3fcf2fc1891b)` | [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-arangarx-5209s-projects.vercel.app)                       |
+| **B — A/V reachability Fix A** | `wb-av-reachability-detection-fix` | `[a962171](https://github.com/Arangarx/tutoring-notes/commit/a962171)`                                  | [wb-av-reachability-detection-fix preview](https://tutoring-notes-git-wb-av-reachab-bde990-arangarx-5209s-projects.vercel.app) |
 
-**Preview 2 — reachability Fix A (`wb-av-reachability-detection-fix` @ `a962171`):** [wb-av-reachability-detection-fix preview](https://tutoring-notes-git-wb-av-reachab-bde990-arangarx-5209s-projects.vercel.app) — smoke **Part B on Android only**.
+
+**Preview 1 — batch (**`wb-wave5-polish` **@** `189fdb0`**):** [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-arangarx-5209s-projects.vercel.app) — the `ef61c91` docs commit on top is docs-only; this preview serves current batch code.
+
+**Preview 2 — reachability Fix A (**`wb-av-reachability-detection-fix` **@** `a962171`**):** [wb-av-reachability-detection-fix preview](https://tutoring-notes-git-wb-av-reachab-bde990-arangarx-5209s-projects.vercel.app) — smoke **Part B on Android only**.
 
 **Convenience domain:** [preview.usemynk.com](https://preview.usemynk.com) works once repointed to a single branch under test. When smoking **both** previews in one pass, use the per-branch aliases above (always-work fallback); repointing the convenience domain to one branch hides the other.
 
@@ -18,6 +20,8 @@
 **Scope note:** This is a **per-branch feature re-smoke**, not the pre-master comprehensive both-themes gate. The separate FINAL full-arc both-themes smoke still runs before merge to `v1-redesign`. Items **A8**, **A9**, and **A10** require **light + dark** passes; all other items are single-theme.
 
 ---
+
+
 
 ## Part A — batch fixes (use Preview 1: `wb-wave5-polish`)
 
@@ -31,7 +35,7 @@ Open [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-aranga
 
 **Ignore this run:** Unrelated pre-existing console warnings (CSP font preload, third-party extensions, benign React dev warnings).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -39,7 +43,11 @@ Open [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-aranga
 
 **Notes:**
 
+**Visual Clarity: There is a list of "Ended-needs review" but....how do I open them?  Oh, it wasn't clear the text itself was a link.**
+
 ---
+
+
 
 ### A2. SMOKE-NOTES-1 — notes skeleton shimmer during post-End generation
 
@@ -50,14 +58,18 @@ Open [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-aranga
 **Ignore this run:** Notes **content quality** (wording, map/reduce accuracy) — only shimmer presence and transition behavior are under test.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Notes:**
 
+**Failure: No shimmer/blur, just a large blank section.  Form fields just show suggestion text.  Perhaps the suggestion text blocks the shimmer/blur? Should probably have the shimmer blur for all fields and then the suggestion text only if still empty.  The suggestion text should probably be a smidge dimmer too.**
+
 ---
+
+
 
 ### A3. SMOKE-BLOCK-2 — note → in-shell replay
 
@@ -67,15 +79,25 @@ Open [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-aranga
 
 **Ignore this run:** Replay playback quality or sync timing (separate UX items).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Notes:**
 
+**I feel like maybe we need to promote access to student notes.  scrolling all the way down is a lot but then again, I have no idea how often tutors will actually do it...I suspect more than doing live recordings though?**
+
+Should the notes have "cancel and delete session data" when I go to it from a notes link? (we DEFINITELY shouldn't have any edit ability when studen goes to this page.  I haven't checked it, but we should make sure)
+
+Bug: When I got to the replay screen itself, I heard a quick burst of my voice (which is not a bug...I was saying something right at the end) and then saw the scrubber at the end of the timeline.  I had not even watched the replay from end session so I don't know if this is regressed from that route too or not, but this hurts my heart duuuuuuude :D No but seriously...get it under test ;p
+
+I noticed you got the play button not overlapping with the tabs which is nice, but the button text seems left aligned instead of center.  Pause looks okay, play looks off center.
+
 ---
+
+
 
 ### A4. SMOKE-BLOCK-3 — review top bar back-nav (no stranding)
 
@@ -85,7 +107,7 @@ Open [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-aranga
 
 **Ignore this run:** Exact label punctuation; student-name truncation in narrow viewports.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -93,7 +115,11 @@ Open [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-aranga
 
 **Notes:**
 
+
+
 ---
+
+
 
 ### A5. PRESARAH-2 — open-sessions block copy
 
@@ -104,32 +130,42 @@ Open [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-aranga
 **Ignore this run:** Cosmetic typography nits filed in BACKLOG.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Notes:**
 
+**So, yes there is a big wall of text there, but while blocks of text explaining what the buttons mean is cool and all.  In modern UX expecting people to read it is....not particularly reasonable.  The buttons should be self evident.  If "End" is going to end and delete, it should be clear it's destructive.  If it doesn't delete...what even is the point of it?  It might as well be called "Create orphan records".**
+
 ---
+
+
 
 ### A6. SMOKE-BLOCK-4 — learner sign-out affordance
 
 **Action:** On **Preview 1**, sign in as a **learner** (family login → join flow). Check (1) the **join landing page** shell and (2) the **in-session student top bar** during an active whiteboard session. Confirm a **sign-out control** is visible in **both** places. Click sign-out from each location (two separate checks or one thorough pass).
 
-**Expect:** Sign-out control is **visible** on join shell and in-session student top bar. Clicking signs the learner out via `POST /api/auth/learner/logout` and lands on **`/students/login`**. Fix: `194bb40`.
+**Expect:** Sign-out control is **visible** on join shell and in-session student top bar. Clicking signs the learner out via `POST /api/auth/learner/logout` and lands on `/students/login`. Fix: `194bb40`.
 
 **Ignore this run:** Tutor/admin sign-out paths (out of scope).
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Notes:**
 
+**Tutor session has ended needs some navigation/logout affordance as well.**
+
+**I partialied this because...why is the top bar so much larger than for everything else....are you telling me the top bar isn't a single freaking component?**
+
 ---
+
+
 
 ### A7. PRESARAH-1 — always-on recording (no per-student toggle)
 
@@ -139,7 +175,7 @@ Open [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-aranga
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -147,7 +183,13 @@ Open [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-aranga
 
 **Notes:**
 
+**Audio was captured in previous steps, so yes the audio arms.**
+
+**Side note: I had to remind myself what a share link is even for.  We definitely need to update the copy there or get rid of this section altogether at some point, at most this should be a link to the same page parents and learners access to see their own session recordings, which will be gated by login.  Not sure how much this section adds anymore, at least as a high accessibility affordance.**
+
 ---
+
+
 
 ### A8. SMOKE-UX-1 — replay auto-plays + "Pause and hide replay" label
 
@@ -158,14 +200,24 @@ Open [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-aranga
 **Ignore this run:** Replay sync drift vs live board (not this item's scope).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Notes:**
 
+**Bug: Same as mentioned above.  Starts JUST before the end of the scrubber, plays a split second of sound and then stops at the end.**
+
+**Possible bug: I say possible because when I saved the session I didn't specifically notice if notes were empty, but at least in this test, there are no notes in the session notes block.**
+
+**Hard to say if replay stars automatically after I click "Replay session" but maybe since there is the last second sound before it hits the end of the scrubber.  It definitely doesn't start automatically on followup clicks of "replay session".**
+
+**The label does say "Pause and hide replay" which is better than just hide, but it is static right now.  When the video is paused I  still wonder if it shouldn't just be "hide replay" but let's mark it for follow up.**
+
 ---
+
+
 
 ### A9. SMOKE-UX-2 — replay Play/Pause no longer overlaps Board tab
 
@@ -175,7 +227,7 @@ Open [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-aranga
 
 **Ignore this run:** Other footer chrome nits unrelated to Play/Pause vs Board tab stacking.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -184,28 +236,33 @@ Open [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-aranga
 **Notes:**
 
 ---
+
+
 
 ### A10. SMOKE-UX-4 — wordmark navigation
 
 **Action:** On **Preview 1**, **repeat in light, then dark.** Exercise all three wordmark behaviors:
 
-1. **Non-live shells:** Click the wordmark from **admin (tutor)**, **account (parent)**, **marketing** (logged out), and **student-join** shells. Each should navigate to **`/`** and role-redirect to the correct home (tutor → students list, parent → account dashboard, learner → join, logged-out → marketing).
+1. **Non-live shells:** Click the wordmark from **admin (tutor)**, **account (parent)**, **marketing** (logged out), and **student-join** shells. Each should navigate to `/` and role-redirect to the correct home (tutor → students list, parent → account dashboard, learner → join, logged-out → marketing).
 2. **Live WB session:** **During** an active live whiteboard session, click the wordmark — it must do **nothing** (inert; accidental-recorder-loss guard).
-3. **Review / read-only replay:** In review mode or read-only replay, click the wordmark — it navigates to **`/`** (role home).
+3. **Review / read-only replay:** In review mode or read-only replay, click the wordmark — it navigates to `/` (role home).
 
 **Expect:** All three behavior groups match above. Fix: `37cff6b`. **PASS only if both light and dark pass.**
 
 **Ignore this run:** A learner's harmless `/` → `/join` round-trip; operator account landing on `/admin` — both pre-existing role-redirect behavior.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
-**Notes:**
+**Notes:**  
+**I'm gonna say pass...BUT....this wordmark better freaking be a single component or I'm gonna flip.  I didn't actually hit every single page, but I've seen enough of them work so far. And because you totes made these all ONE component...right?....there's not need to validate they work the same >.>**
 
 ---
+
+
 
 ### A11. SMOKE-BUG-6 — "Ended — needs review" group
 
@@ -215,7 +272,7 @@ Open [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-aranga
 
 **Ignore this run:** A stale-ended session may lack fully-flushed audio (known SSG-2) — under test is **reachability for review**, not audio completeness.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -224,6 +281,8 @@ Open [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-aranga
 **Notes:**
 
 ---
+
+
 
 ## Part B — A/V reachability Fix A (use Preview 2: Android)
 
@@ -240,18 +299,28 @@ Open [wb-av-reachability-detection-fix preview](https://tutoring-notes-git-wb-av
 **Ignore this run:** Safari-only Fix B1 ICE predicate belt (no Apple device available). Intermittent race means a clean run is **reassuring, not proof** — the deterministic DOM test is the real guard.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Notes:**
 
+**Haven't replicated the bug you're looking for.  But did replicated the default/front camera showing black to student and initials to tutor. Student switched to front camera which works, but then switched back and it's black for tutor AND student (no initials for tutor).**
+
+**I don't know how to replicated the issue that led to the start button not enabling.**
+
+**Regression: It's even worse than before now.  Student reconnected and can make changes to the canvas, but their audio and video is not recovering at all.  I can see what they draw, I can see their laser pointer, but student doesn't see or hear tutor and tutor doesn't see or hear student...... why hell the fuck did we break the fucking recovery just to fix pill text....I guess you tried to fix connection detection...which I guess you kind of did because student IS connected, but the session is worthless without the audio and video.  Timer does appear to still be paused.**
+
+
+
 ---
+
+
 
 ## Overall result
 
 Check **PASS** only if every in-scope test item is PASS (deliberate per-item SKIPs must be called out in Notes). Check **FAIL** if any in-scope item fails. Leave both unchecked until the run is complete. Overall verdict is PASS/FAIL only — no overall SKIP.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
