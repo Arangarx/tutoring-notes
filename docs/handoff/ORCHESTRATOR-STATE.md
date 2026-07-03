@@ -14,7 +14,7 @@
 
 **Top reliability finding + fix (SMOKE-BLOCK-1):** dead-Start-button + student-stuck-"Connecting…" was **reachability DETECTION under-reporting a genuinely-connected peer** (NOT the gate). Two mechanisms: (A) stale-`"new"` snapshot from early PC/ICE events dropped before the useLiveAV entry exists; (B) predicate hard-required the Safari-flaky aggregate `connectionState==="connected"`. **Fix built + Sonnet-reviewed (no blockers) on isolated branch [`wb-av-reachability-detection-fix`](https://github.com/Arangarx/tutoring-notes/tree/wb-av-reachability-detection-fix) @ [`a962171`](https://github.com/Arangarx/tutoring-notes/commit/a962171)** (off `wb-wave5-polish`): (A) `peer-mesh.getPeerConnectionSnapshot` re-read on entry-ensure; (B1) pure `isPeerReachable` (ICE connected/completed && pc ∉ {failed,closed}). Full `npx jest` green (2751). Fix-A has red/green dom coverage in `useLiveAV.dom.test.tsx`. **Reframe (Andrew 2026-07-02): smoke repro was on Andrew's ANDROID phone, not Safari** — culprit was almost certainly browser-agnostic Fix A (stale-snapshot race), NOT Safari aggregate B. ⇒ **Fix A re-smokeable on Andrew's Android/desktop now**; B1 waits for Safari device (Sarah — Andrew has no Apple device). Race is intermittent — dom test is the deterministic guard. Preview: [wb-av-reachability-detection-fix](https://tutoring-notes-git-wb-av-reachab-bde990-arangarx-5209s-projects.vercel.app). Merges into `wb-wave5-polish` after clean re-smoke.
 
-**Pre-Sarah smoke-fix queue — ✅ ENTIRE QUEUE CLEARED on `wb-wave5-polish` @ [`db63552`](https://github.com/Arangarx/tutoring-notes/commit/db63552)** (all pushed, NOT merged, awaiting Andrew's **one consolidated hardware re-smoke** — he wanted more landed before smoking):
+**Pre-Sarah smoke-fix queue — ✅ ENTIRE QUEUE CLEARED on `wb-wave5-polish` @ [`189fdb0`](https://github.com/Arangarx/tutoring-notes/commit/189fdb0)** (all pushed, NOT merged, awaiting Andrew's **one consolidated hardware re-smoke** — he wanted more landed before smoking):
 
 | Id | Summary | Commit |
 |---|---|---|
@@ -28,14 +28,16 @@
 | PRESARAH-1 | Always-on recording (5-axis PASS) | [`6a8b6dc`](https://github.com/Arangarx/tutoring-notes/commit/6a8b6dc) + [`4c75aab`](https://github.com/Arangarx/tutoring-notes/commit/4c75aab) |
 | SMOKE-UX-1 | Replay auto-plays on open | [`a6fa9b5`](https://github.com/Arangarx/tutoring-notes/commit/a6fa9b5)/[`254f2bf`](https://github.com/Arangarx/tutoring-notes/commit/254f2bf) |
 | SMOKE-UX-2 | Replay Play/Pause no longer overlaps Board tab | [`f0a14d8`](https://github.com/Arangarx/tutoring-notes/commit/f0a14d8) |
+| SMOKE-UX-4 | Wordmark nav standardized (non-live → `/`; WB review/replay → `/`; live WB inert) | [`37cff6b`](https://github.com/Arangarx/tutoring-notes/commit/37cff6b) |
+| SMOKE-BUG-6 | "Ended — needs review" group on student-detail (`endedAt` set, no `noteId`) | [`189fdb0`](https://github.com/Arangarx/tutoring-notes/commit/189fdb0) |
 
 | Field | Value |
 |---|---|
-| **Last action completed** | Part 3 hardware smoke **overall PASS** (2026-07-02 evening). Entire pre-Sarah smoke-fix batch landed on `wb-wave5-polish` @ [`db63552`](https://github.com/Arangarx/tutoring-notes/commit/db63552). Reachability-detection fix built on isolated branch [`a962171`](https://github.com/Arangarx/tutoring-notes/commit/a962171). Smokebook results committed [`bf1a2c3`](https://github.com/Arangarx/tutoring-notes/commit/bf1a2c3) (v1-redesign) + [`b468502`](https://github.com/Arangarx/tutoring-notes/commit/b468502) (wb-wave5-polish). Findings triaged to [`BACKLOG.md`](../BACKLOG.md). |
-| **Next action(s)** | **Andrew (priority order):** (1) **Consolidated hardware re-smoke** of the full pre-Sarah fix batch on `wb-wave5-polish` preview (both themes at final gate). (2) **Reachability branch re-smoke** — Fix A on Android/desktop now; B1 when Safari device available; then `merge --no-ff wb-av-reachability-detection-fix → wb-wave5-polish`. (3) Sign off or edit **map/reduce prompt wording** ([`cefc5cd`](https://github.com/Arangarx/tutoring-notes/commit/cefc5cd)). (4) Decide open items: `SMOKE-BUG-6`, `SMOKE-UX-3`, `SMOKE-UX-4`. **Orchestrator:** after Andrew re-smoke PASS → run `test:wb-sync` once on final integrated tip → single `merge --no-ff wb-wave5-polish → v1-redesign` only at **full-arc both-themes hardware smoke** (FINAL Sarah gate). **Do NOT** interim-merge. |
-| **Open Andrew-confirms** | **Needs decision before coding:** `SMOKE-BUG-6` (ended-without-Save session excluded from open-list — bug vs review shortcut); `SMOKE-UX-3` (replay ±10s scrub — pre-Sarah or later?); `SMOKE-UX-4` (wordmark nav — per-role destination table); map/reduce prompt **WORDING** ([`cefc5cd`](https://github.com/Arangarx/tutoring-notes/commit/cefc5cd)). **Resolved:** `PERSPEAKER-C-TRANSCRIPTION-TRIGGER` → option (a) worker-driven (2-party + defensive cap ≤3; N>2 deferred; hybrid = reduce-stage "prefer student, degrade to tutor"; dual-capture deferred). **Standing:** erasure UX defaults (cancel operator-only, no parent self-delete, "Deleted" badge); **WB-LABEL-PARENT-SIGNIN**; **Sarah primary device** ([`SARAH-CALL-PREP.md`](../SARAH-CALL-PREP.md)); **Ship-to-Sarah gate**; **iOS student WB/A/V** ([`BACKLOG.md`](../BACKLOG.md) **WB-STUDENT-MOBILE-VALIDATION**). |
+| **Last action completed** | **SMOKE-UX-4** @ [`37cff6b`](https://github.com/Arangarx/tutoring-notes/commit/37cff6b) (wordmark nav) + **SMOKE-BUG-6** @ [`189fdb0`](https://github.com/Arangarx/tutoring-notes/commit/189fdb0) ("Ended — needs review" group). Branch tip advanced `db63552` → [`189fdb0`](https://github.com/Arangarx/tutoring-notes/commit/189fdb0). Gates: `test:wb-jest` 772 green, full `npx jest` 2741 pass (238 suites), `next build` exit 0. Prior: Part 3 hardware smoke **overall PASS** (2026-07-02 evening); entire pre-Sarah batch on `wb-wave5-polish`; reachability fix on isolated branch [`a962171`](https://github.com/Arangarx/tutoring-notes/commit/a962171). |
+| **Next action(s)** | **Andrew (priority order):** (1) **Consolidated hardware re-smoke** of the full pre-Sarah fix batch on `wb-wave5-polish` @ [`189fdb0`](https://github.com/Arangarx/tutoring-notes/commit/189fdb0) preview (both themes at final gate) — UX-4 + BUG-6 now included. (2) **Reachability branch re-smoke** — Fix A on Android/desktop now; B1 when Safari device available; then `merge --no-ff wb-av-reachability-detection-fix → wb-wave5-polish`. (3) Sign off or edit **map/reduce prompt wording** ([`cefc5cd`](https://github.com/Arangarx/tutoring-notes/commit/cefc5cd)). **Orchestrator:** after Andrew re-smoke PASS → run `test:wb-sync` once on final integrated tip → single `merge --no-ff wb-wave5-polish → v1-redesign` only at **full-arc both-themes hardware smoke** (FINAL Sarah gate). **Do NOT** interim-merge. |
+| **Open Andrew-confirms** | **Needs decision:** map/reduce prompt **WORDING** ([`cefc5cd`](https://github.com/Arangarx/tutoring-notes/commit/cefc5cd)). **Resolved:** `SMOKE-BUG-6` → treat as bug, surface "Ended — needs review" @ [`189fdb0`](https://github.com/Arangarx/tutoring-notes/commit/189fdb0); `SMOKE-UX-4` → shipped @ [`37cff6b`](https://github.com/Arangarx/tutoring-notes/commit/37cff6b); `SMOKE-UX-3` → **DEFERRED post-Sarah** (Andrew 2026-07-02); `PERSPEAKER-C-TRANSCRIPTION-TRIGGER` → option (a) worker-driven. **Standing:** erasure UX defaults (cancel operator-only, no parent self-delete, "Deleted" badge); **WB-LABEL-PARENT-SIGNIN**; **Sarah primary device** ([`SARAH-CALL-PREP.md`](../SARAH-CALL-PREP.md)); **Ship-to-Sarah gate**; **iOS student WB/A/V** ([`BACKLOG.md`](../BACKLOG.md) **WB-STUDENT-MOBILE-VALIDATION**). |
 | **In-flight subagents** | **None.** Bootstrappers: [`part3-execution-bootstrapper.md`](part3-execution-bootstrapper.md), [`session-experience-arc-continuation-bootstrapper.md`](session-experience-arc-continuation-bootstrapper.md). Latest handoff: [`part3-overnight-2026-07-02-orchestrator-report.md`](part3-overnight-2026-07-02-orchestrator-report.md). |
-| **Uncommitted / unmerged** | **`wb-wave5-polish` @ [`db63552`](https://github.com/Arangarx/tutoring-notes/commit/db63552)** — worktree `tutoring-notes-polishwt`; entire pre-Sarah batch pushed, NOT merged. **`v1-redesign` @ [`bf1a2c3`](https://github.com/Arangarx/tutoring-notes/commit/bf1a2c3)** — integration base; NOT merged to master. **`wb-av-reachability-detection-fix` @ [`a962171`](https://github.com/Arangarx/tutoring-notes/commit/a962171)** — pushed, awaits mobile re-smoke, then merge into wb-wave5-polish. **`wb-wave5-perspeaker-c-core` @ [`b6b7181`](https://github.com/Arangarx/tutoring-notes/commit/b6b7181)** — pure C-core + 16 tests, NOT wired, NOT merged (off smoke tree). Migration `20260702120000_transcript_chunk_speaker_labels` auto-applies preview-dev; production Andrew-gated. **Merge-boundary:** batch touched `src/components/whiteboard/` → run full `test:wb-sync` (~38 min, Docker) once on final tip before v1-redesign merge. **Housekeeping:** 4 throwaway untracked smokebook copies in main `tutoring-notes` (v1-redesign) working tree — delete before merge (tracked copies on wb-wave5-polish). Pre-existing tsc errors in `WhiteboardWorkspaceEnd.dom.test.tsx` (unrelated cleanup). |
+| **Uncommitted / unmerged** | **`wb-wave5-polish` @ [`189fdb0`](https://github.com/Arangarx/tutoring-notes/commit/189fdb0)** — worktree `tutoring-notes-polishwt`; entire pre-Sarah batch pushed (incl. UX-4 + BUG-6), NOT merged. **`v1-redesign` @ [`bf1a2c3`](https://github.com/Arangarx/tutoring-notes/commit/bf1a2c3)** — integration base; NOT merged to master. **`wb-av-reachability-detection-fix` @ [`a962171`](https://github.com/Arangarx/tutoring-notes/commit/a962171)** — pushed, awaits mobile re-smoke, then merge into wb-wave5-polish. **`wb-wave5-perspeaker-c-core` @ [`b6b7181`](https://github.com/Arangarx/tutoring-notes/commit/b6b7181)** — pure C-core + 16 tests, NOT wired, NOT merged (off smoke tree). Migration `20260702120000_transcript_chunk_speaker_labels` auto-applies preview-dev; production Andrew-gated. **Merge-boundary:** batch touched `src/components/whiteboard/` → run full `test:wb-sync` (~38 min, Docker) once on final tip before v1-redesign merge. **Housekeeping:** 4 throwaway untracked smokebook copies in main `tutoring-notes` (v1-redesign) working tree — delete before merge (tracked copies on wb-wave5-polish). Pre-existing tsc errors in `WhiteboardWorkspaceEnd.dom.test.tsx` (unrelated cleanup). |
 
 **Strategic posture (unchanged):** Experience-driven wedge — WB + reliability = **ground floor (GATE)**; the win = accreting honest tutor-first continuity. [`experience-driven_wedge_ae2776e1.plan.md`](../../../../.cursor/plans/experience-driven_wedge_ae2776e1.plan.md). **Ship-to-Sarah gate** governs cut to `v1-redesign → master` — see § Ship-to-Sarah gate below.
 
@@ -56,7 +58,7 @@ Pre-public pilot with one tutor (Sarah). North Star from [`AGENTS.md`](../../AGE
 ```
 master  ←  v1-redesign  (integration base @ bf1a2c3; Wave 4 merged; held for Sarah gate + master cut)
               ↑
-              └── wb-wave5-polish @ db63552  (ALL remaining work; worktree tutoring-notes-polishwt; NO interim merge)
+              └── wb-wave5-polish @ 189fdb0  (ALL remaining work; worktree tutoring-notes-polishwt; NO interim merge)
                     ├── wb-av-reachability-detection-fix @ a962171  (isolated; merges after re-smoke)
                     └── wb-wave5-perspeaker-c-core @ b6b7181  (isolated C-core; merges when C wired)
 ```
@@ -64,7 +66,7 @@ master  ←  v1-redesign  (integration base @ bf1a2c3; Wave 4 merged; held for S
 | Branch | Role | Tip |
 |---|---|---|
 | **`v1-redesign`** | Integration base; Wave 4 student responsive parity merged @ [`a166f6c`](https://github.com/Arangarx/tutoring-notes/commit/a166f6c); doc commits through [`bf1a2c3`](https://github.com/Arangarx/tutoring-notes/commit/bf1a2c3) | Not yet merged to `master` — held for Gate A + Ship-to-Sarah + comprehensive re-smoke |
-| **`wb-wave5-polish`** | **Active execution branch** — Wave 5 + Part 3 spine + pre-Sarah smoke fixes; worktree `tutoring-notes-polishwt` | [`db63552`](https://github.com/Arangarx/tutoring-notes/commit/db63552) |
+| **`wb-wave5-polish`** | **Active execution branch** — Wave 5 + Part 3 spine + pre-Sarah smoke fixes; worktree `tutoring-notes-polishwt` | [`189fdb0`](https://github.com/Arangarx/tutoring-notes/commit/189fdb0) |
 | **`wb-av-reachability-detection-fix`** | SMOKE-BLOCK-1 reachability detection (Fix A + B1); off wb-wave5-polish | [`a962171`](https://github.com/Arangarx/tutoring-notes/commit/a962171) |
 | **`wb-wave5-perspeaker-c-core`** | Pure `perspeaker-identity.ts` C-core; NOT wired to runtime | [`b6b7181`](https://github.com/Arangarx/tutoring-notes/commit/b6b7181) |
 
@@ -108,10 +110,10 @@ Full triage: [`BACKLOG.md`](../BACKLOG.md) § "Part 3 hardware-smoke findings (A
 
 | Class | Items | Action |
 |---|---|---|
-| **✅ CLEARED (landed)** | SMOKE-BLOCK-1..4, SMOKE-BUG-1, SMOKE-NOTES-1, PRESARAH-1/2, SMOKE-UX-1/2 | On `wb-wave5-polish`; awaiting consolidated re-smoke |
-| **NEEDS DECISION (Andrew)** | `SMOKE-BUG-6` ended-but-unsaved not in open-list; `SMOKE-UX-3` ±10s scrub; `SMOKE-UX-4` wordmark-nav per-role routing; map/reduce prompt WORDING | Decide before coding |
+| **✅ CLEARED (landed)** | SMOKE-BLOCK-1..4, SMOKE-BUG-1/6, SMOKE-NOTES-1, PRESARAH-1/2, SMOKE-UX-1/2/4 | On `wb-wave5-polish` @ [`189fdb0`](https://github.com/Arangarx/tutoring-notes/commit/189fdb0); awaiting consolidated re-smoke |
+| **NEEDS DECISION (Andrew)** | map/reduce prompt WORDING | Sign-off before tuning |
 | **FRAGILE (plan + hardware; do NOT auto-fix)** | `SMOKE-BUG-2` stale "Call reconnecting…" pill; `SMOKE-BUG-3` student text across tutor page-switch (WB sync, L); `SMOKE-BUG-4` pencil stuck roughness (S–M); `SMOKE-BUG-5` replay missing active board (M–L); `SMOKE-BUG-7` student re-picks mic each session (S–M) | Andrew lacks Safari hardware until Sarah |
-| **DEFERRED post-Sarah** | `SMOKE-NOTES-2` live/progressive notes (= `p3-incremental-map`); `SMOKE-POST-1..3` (incl. text chat); perspeaker-C runtime build | Design-unblocked; C-core ready |
+| **DEFERRED post-Sarah** | `SMOKE-UX-3` replay ±10s scrub (Andrew 2026-07-02); `SMOKE-NOTES-2` live/progressive notes (= `p3-incremental-map`); `SMOKE-POST-1..3` (incl. text chat); perspeaker-C runtime build | Design-unblocked; C-core ready |
 
 ---
 
@@ -132,6 +134,8 @@ Full triage: [`BACKLOG.md`](../BACKLOG.md) § "Part 3 hardware-smoke findings (A
 
 ## Recently completed (landed)
 
+- **SMOKE-BUG-6 @ [`189fdb0`](https://github.com/Arangarx/tutoring-notes/commit/189fdb0)** — ended-but-unsaved sessions (`endedAt != null`, `noteId` null) surface as **"Ended — needs review"** on student-detail (last 30 days, cap 20); row → in-shell `/workspace` review; `EndedUnsavedSessionsList.dom.test.tsx` (3 tests). Andrew: treat as bug.
+- **SMOKE-UX-4 @ [`37cff6b`](https://github.com/Arangarx/tutoring-notes/commit/37cff6b)** — wordmark nav standardized: non-live shells → canonical `/` role-redirect; WB review + read-only replay → `/`; live-session WB wordmark stays inert (`BL-WB-WORDMARK-NAV` guarded-leave still deferred).
 - **Part 3 overnight run @ [`d299a6c`](https://github.com/Arangarx/tutoring-notes/commit/d299a6c)** — all p3-* waves landed; jest 2742, build exit 0, `test:wb-sync` 107 pass/2 skip/1 known flake. Smokebook [`part3-notes-reliability-spine-smokebook.md`](part3-notes-reliability-spine-smokebook.md) + report [`part3-overnight-2026-07-02-orchestrator-report.md`](part3-overnight-2026-07-02-orchestrator-report.md).
 - **Checkpoint fully green @ [`5dd1793`](https://github.com/Arangarx/tutoring-notes/commit/5dd1793)** — wb-sync seed-gap fix (consent harness); identity-e2e 16/16.
 - **Consent/erasure arc** — CF-1 [`183f09b`](https://github.com/Arangarx/tutoring-notes/commit/183f09b), CF-3 [`7a9514f`](https://github.com/Arangarx/tutoring-notes/commit/7a9514f), CF-2.1 [`b7c88ac`](https://github.com/Arangarx/tutoring-notes/commit/b7c88ac), erasure Steps 1–6, Workstream C e2e (consent `faebbfc` + erasure `cf20015` + routing `5402e04`).
@@ -140,17 +144,20 @@ Full triage: [`BACKLOG.md`](../BACKLOG.md) § "Part 3 hardware-smoke findings (A
 
 ---
 
-## Latest committed state (`wb-wave5-polish` @ `db63552`)
+## Latest committed state (`wb-wave5-polish` @ `189fdb0`)
 
 | Commit | Summary |
 |---|---|
-| [`db63552`](https://github.com/Arangarx/tutoring-notes/commit/db63552) | **Branch tip** — pre-Sarah smoke-fix batch complete |
+| [`189fdb0`](https://github.com/Arangarx/tutoring-notes/commit/189fdb0) | **Branch tip** — SMOKE-BUG-6 "Ended — needs review" group |
+| [`37cff6b`](https://github.com/Arangarx/tutoring-notes/commit/37cff6b) | SMOKE-UX-4 wordmark nav standardized |
+| [`09fd07b`](https://github.com/Arangarx/tutoring-notes/commit/09fd07b) | ORCHESTRATOR-STATE heavy restructure |
+| [`db63552`](https://github.com/Arangarx/tutoring-notes/commit/db63552) | Pre-Sarah smoke-fix batch complete (prior tip) |
 | [`f0a14d8`](https://github.com/Arangarx/tutoring-notes/commit/f0a14d8) | SMOKE-UX-2 replay Play/Pause footer stack |
 | [`6a8b6dc`](https://github.com/Arangarx/tutoring-notes/commit/6a8b6dc) | PRESARAH-1 always-on recording |
 | [`d299a6c`](https://github.com/Arangarx/tutoring-notes/commit/d299a6c) | p3-video-seam docs-only |
 | [`1572983`](https://github.com/Arangarx/tutoring-notes/commit/1572983) | p3-clock monotonic pause-aware session clock |
 
-`test:wb-jest` **772** green throughout batch. Full history: `git log --oneline -25 wb-wave5-polish`.
+`test:wb-jest` **772** green; full `npx jest` **2741** pass (238 suites; known pre-existing shared-DB FK-race / upload-outbox noise only); `next build` exit 0. Full history: `git log --oneline -25 wb-wave5-polish`.
 
 **Smokebooks (recent):** [`part3-notes-reliability-spine-smokebook.md`](part3-notes-reliability-spine-smokebook.md), [`wb-wave5-consent-perms-2026-06-30.md`](wb-wave5-consent-perms-2026-06-30.md), [`wb-wave5-liveboard-chrome-smokebook-2026-06-29.md`](wb-wave5-liveboard-chrome-smokebook-2026-06-29.md).
 
@@ -160,7 +167,7 @@ Full triage: [`BACKLOG.md`](../BACKLOG.md) § "Part 3 hardware-smoke findings (A
 
 1. **Andrew consolidated hardware re-smoke** — full pre-Sarah fix batch on `wb-wave5-polish` preview (both themes at final gate).
 2. **Reachability branch** — mobile re-smoke Fix A (+ B1 when Safari available) → `merge --no-ff wb-av-reachability-detection-fix → wb-wave5-polish`.
-3. **Andrew decisions** — SMOKE-BUG-6, SMOKE-UX-3/4, map/reduce wording sign-off.
+3. **Map/reduce wording** — Andrew sign-off on [`cefc5cd`](https://github.com/Arangarx/tutoring-notes/commit/cefc5cd).
 4. **`test:wb-sync`** — once on final integrated tip (~38 min, Docker) before merge.
 5. **`p-final-gate`** — **full live-session arc** both themes hardware smoke (FINAL Sarah gate).
 6. **`merge --no-ff` `wb-wave5-polish` → `v1-redesign`** — after step 5 PASS only.
@@ -188,9 +195,9 @@ Andrew wants Sarah on the `v1-redesign` line once **waiting room → WB → end 
 | **Part 3 design pass** | Overall Part 3 architecture/sequencing | **✅ APPROVED (2026-06-30)** |
 | **Notes quality vs merge scope** | First-pass map/reduce quality pre-merge? | **✅ RESOLVED (2026-07-01)** — quality is pre-merge bar; eval harness + flywheel post-master |
 | **PERSPEAKER-C trigger** | Worker-driven vs client-driven transcription enqueue | **✅ RESOLVED (2026-07-02)** — option (a) worker-driven |
-| **SMOKE-BUG-6** | Ended-without-Save excluded from open-list | **⬜ OPEN** — bug vs review shortcut |
-| **SMOKE-UX-3** | Replay ±10s scrub buttons | **⬜ OPEN** — pre-Sarah or later? |
-| **SMOKE-UX-4** | Wordmark navigation per-role | **⬜ OPEN** — destination table needed |
+| **SMOKE-BUG-6** | Ended-without-Save excluded from open-list | **✅ RESOLVED (2026-07-02)** — bug; "Ended — needs review" group @ [`189fdb0`](https://github.com/Arangarx/tutoring-notes/commit/189fdb0) |
+| **SMOKE-UX-3** | Replay ±10s scrub buttons | **DEFERRED post-Sarah** (Andrew 2026-07-02) |
+| **SMOKE-UX-4** | Wordmark navigation per-role | **✅ SHIPPED @ [`37cff6b`](https://github.com/Arangarx/tutoring-notes/commit/37cff6b)** — non-live → `/`; review/replay → `/`; live WB inert |
 | **Map/reduce wording** | Prompt text in [`cefc5cd`](https://github.com/Arangarx/tutoring-notes/commit/cefc5cd) | **⬜ PROPOSED** — Andrew sign-off |
 
 Ratified **inputs**: t=0 = FSM `recording` entry / `MediaRecorder.start()` + WB↔audio hardware sync oracle; 3+-peer per-speaker ≤3–4 cap NO mixdown fallback; first-pass notes quality pre-merge; eval harness + flywheel post-master only; session-scoped consent override won't build for Sarah (`WB-SESSION-CONSENT-OVERRIDE`).
@@ -348,7 +355,8 @@ Archived superseded plan (audit only): [`whiteboard_reliability_floor_9ba650d1.S
 |---|---|
 | Map/reduce notes accuracy | **✅ RESOLVED (2026-07-01)** — first-pass quality is Part 3 pre-merge bar; eval harness + flywheel deferred post-master |
 | Two-way calendar sync | Unresolved — [`scheduling-requirements-2026-06-11.md`](scheduling-requirements-2026-06-11.md) |
-| SMOKE-BUG-6 / UX-3 / UX-4 | **⬜ OPEN** — Andrew decision needed (see classified queue) |
+| SMOKE-BUG-6 / UX-4 | **✅ RESOLVED** — shipped @ [`189fdb0`](https://github.com/Arangarx/tutoring-notes/commit/189fdb0) / [`37cff6b`](https://github.com/Arangarx/tutoring-notes/commit/37cff6b) |
+| SMOKE-UX-3 | **DEFERRED post-Sarah** (Andrew 2026-07-02) |
 
 ---
 
