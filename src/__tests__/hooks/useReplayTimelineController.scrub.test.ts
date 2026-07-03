@@ -1422,3 +1422,155 @@ describe("Loaded recording seek — storedTotal=0, measuredTotal=0, el.duration=
     global.fetch = savedFetch;
   });
 });
+
+// ---------------------------------------------------------------------------
+// SMOKE-UX-1 follow-up — entry auto-play (seek 0 + play:true) vs WebM scan race
+// ---------------------------------------------------------------------------
+describe("Entry auto-play — seek(0, play:true) survives in-flight WebM 1e101 scan", () => {
+  /**
+   * RED-BEFORE / GREEN-AFTER
+   *
+   * Opening in-shell replay calls seek(0, { paint: true, play: true }) on mount.
+   * That races the WebM duration-fix 1e101 hack: applySeek cancels the pending
+   * fix and calls play() while Chrome's async scan seek is still completing.
+   * When the scan lands at the measured end (~94.741 s), play() fires onEnded
+   * immediately and globalMs snaps to end.
+   *
+   * Fix: defer autoplay until currentTime is confirmed at the target (not seeking,
+   * not parked at end when targeting 0).
+   */
+  it("starts playback at ~0 ms, not at end, when play:true races WebM scan completion", async () => {
+    const savedFetch = global.fetch;
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          schemaVersion: 1,
+          startedAt: "2026-01-01T00:00:00.000Z",
+          durationMs: 0,
+          events: [],
+        }),
+    }) as unknown as typeof fetch;
+
+    let mockDuration: number = Infinity;
+    let currentTime = 0;
+    let isSeeking = false;
+    let isPaused = true;
+    const MEASURED_END_SEC = 94.741;
+    const audio = document.createElement("audio");
+    document.body.appendChild(audio);
+    let srcAttr = "";
+
+    Object.defineProperty(audio, "duration", {
+      configurable: true,
+      get: () => mockDuration,
+    });
+    Object.defineProperty(audio, "seeking", {
+      configurable: true,
+      get: () => isSeeking,
+    });
+    Object.defineProperty(audio, "currentTime", {
+      configurable: true,
+      get: () => currentTime,
+      set: (v: number) => {
+        if (v === 1e101) {
+          isSeeking = true;
+          currentTime = v;
+          queueMicrotask(() => {
+            currentTime = MEASURED_END_SEC;
+            isSeeking = false;
+            mockDuration = MEASURED_END_SEC;
+            audio.dispatchEvent(new Event("durationchange"));
+            audio.dispatchEvent(new Event("seeked"));
+          });
+          return;
+        }
+        currentTime = v;
+        isSeeking = false;
+      },
+    });
+    Object.defineProperty(audio, "src", {
+      configurable: true,
+      get: () => (srcAttr ? new URL(srcAttr, "http://localhost").href : ""),
+      set: (v: string) => {
+        srcAttr = v;
+      },
+    });
+    audio.getAttribute = jest.fn((name: string) =>
+      name === "src" ? srcAttr : null
+    ) as typeof audio.getAttribute;
+    audio.load = jest.fn();
+    audio.play = jest.fn().mockImplementation(() => {
+      isPaused = false;
+      return Promise.resolve();
+    });
+    audio.pause = jest.fn(() => {
+      isPaused = true;
+    });
+    Object.defineProperty(audio, "paused", {
+      configurable: true,
+      get: () => isPaused,
+    });
+    Object.defineProperty(audio, "ended", {
+      configurable: true,
+      get: () =>
+        Number.isFinite(currentTime) &&
+        Number.isFinite(mockDuration) &&
+        currentTime >= mockDuration - 0.01,
+    });
+
+    const applySceneAtRef = { current: jest.fn() };
+    const { result, unmount } = renderHook(() => {
+      const ref = useRef(applySceneAtRef.current);
+      const segments = useMemo(
+        () => [
+          {
+            url: "/api/audio/admin/rec-1",
+            mimeType: "audio/webm;codecs=opus",
+            durationSeconds: 0,
+          },
+        ],
+        []
+      );
+      return useReplayTimelineController({
+        eventsBlobUrl: "/api/whiteboard/wbs-test/events",
+        audioSegments: segments,
+        applySceneAtRef: ref,
+      });
+    });
+
+    act(() => {
+      result.current.audioRef.current = audio;
+      audio.src = "/api/audio/admin/rec-1";
+    });
+
+    await waitFor(() => {
+      expect(result.current.loadState.kind).toBe("ready");
+      expect(result.current.replayExcaliRestoreReady).toBe(true);
+    });
+
+    act(() => {
+      audio.dispatchEvent(new Event("loadedmetadata"));
+    });
+
+    act(() => {
+      result.current.seek(0, { paint: true, play: true });
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(currentTime).toBeLessThan(1);
+    expect(result.current.globalMs).toBeLessThan(1000);
+    expect(result.current.isAtEnd).toBe(false);
+    expect(result.current.playing).toBe(true);
+    expect(audio.play).toHaveBeenCalled();
+
+    unmount();
+    audio.remove();
+    global.fetch = savedFetch;
+  });
+});

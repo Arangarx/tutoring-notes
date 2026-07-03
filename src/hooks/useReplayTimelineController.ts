@@ -300,6 +300,81 @@ export function useReplayTimelineController(
     [whiteboardSessionId]
   );
 
+  /**
+   * Defer el.play() until currentTime is confirmed at targetSec.
+   * Entry auto-play (seek 0 + play:true) races the WebM 1e101 scan: applySeek
+   * cancels the pending fix and may call play() while Chrome's async scan seek
+   * is still completing, parking currentTime at the measured end.
+   */
+  const startPlayWhenPositionReady = useCallback(
+    (el: HTMLAudioElement, targetSec: number, reason: string) => {
+      const toleranceSec = 0.05;
+
+      const needsCorrection = () => {
+        const ct = el.currentTime;
+        if (!Number.isFinite(ct)) return true;
+        if (
+          targetSec < 0.5 &&
+          Number.isFinite(el.duration) &&
+          el.duration > 0 &&
+          ct >= el.duration - 0.5
+        ) {
+          return true;
+        }
+        return false;
+      };
+
+      const isReady = () => {
+        if (el.seeking) return false;
+        const ct = el.currentTime;
+        if (!Number.isFinite(ct)) return false;
+        if (
+          targetSec < 0.5 &&
+          Number.isFinite(el.duration) &&
+          el.duration > 0 &&
+          ct >= el.duration - 0.5
+        ) {
+          return false;
+        }
+        return Math.abs(ct - targetSec) <= toleranceSec;
+      };
+
+      const attempt = () => {
+        if (needsCorrection()) {
+          try {
+            el.currentTime = targetSec;
+          } catch {
+            // best-effort
+          }
+        }
+        if (isReady()) {
+          startPlay(el, reason);
+          return true;
+        }
+        return false;
+      };
+
+      // While WebM duration is still unresolved, an in-flight 1e101 scan may
+      // complete asynchronously and park currentTime at the measured end.
+      // Entry auto-play (seek 0 + play:true) must wait for that to settle.
+      const mayHavePendingWebmScan =
+        targetSec < 0.5 &&
+        (!Number.isFinite(el.duration) || el.duration <= 0);
+
+      if (!mayHavePendingWebmScan && attempt()) return;
+
+      const onSettled = () => {
+        if (attempt()) {
+          el.removeEventListener("seeked", onSettled);
+          el.removeEventListener("durationchange", onSettled);
+        }
+      };
+      el.addEventListener("seeked", onSettled);
+      el.addEventListener("durationchange", onSettled);
+    },
+    [startPlay]
+  );
+
   const loadSegmentAt = useCallback(
     (segmentIndex: number, localMs: number, autoplay: boolean) => {
       const el = audioRef.current;
@@ -335,7 +410,7 @@ export function useReplayTimelineController(
             el.removeEventListener("loadedmetadata", onReady);
             cancelWebmFixRef.current?.();
             try { el.currentTime = seekSec; } catch { /* best-effort */ }
-            if (autoplay) startPlay(el, "applySeek_retry");
+            if (autoplay) startPlayWhenPositionReady(el, seekSec, "applySeek_retry");
           };
           el.addEventListener("canplay", onReady);
           el.addEventListener("loadedmetadata", onReady);
@@ -345,7 +420,7 @@ export function useReplayTimelineController(
           `[avx] wbsid=${whiteboardSessionId ?? "?"} seek_after_currentTime value=${el.currentTime}`
         );
         playLoopRef.current?.seek();
-        if (autoplay) startPlay(el, "applySeek");
+        if (autoplay) startPlayWhenPositionReady(el, seekSec, "applySeek");
       };
 
       if (needsSrcSwap) {
@@ -369,7 +444,7 @@ export function useReplayTimelineController(
         applySeek();
       }
     },
-    [audioSrcMatches, effectiveSegments, startPlay, whiteboardSessionId]
+    [audioSrcMatches, effectiveSegments, startPlayWhenPositionReady, whiteboardSessionId]
   );
 
   const seek = useCallback(

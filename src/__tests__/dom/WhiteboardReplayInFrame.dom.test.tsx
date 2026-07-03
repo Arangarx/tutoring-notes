@@ -3,7 +3,7 @@
  */
 
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, act } from "@testing-library/react";
 import { WhiteboardReplayInFrame } from "@/components/whiteboard/replay/WhiteboardReplayInFrame";
 
 jest.mock("@/components/ThemeProvider", () => ({
@@ -104,5 +104,90 @@ describe("WhiteboardReplayInFrame", () => {
     expect(
       screen.queryByLabelText(/Camera \(disabled during replay\)/i)
     ).not.toBeInTheDocument();
+  });
+
+  /**
+   * RED-BEFORE / GREEN-AFTER — in-shell replay stays mounted; hero↔replay toggles
+   * via CSS. entryPaintDoneRef must reset when leaving replay so a second
+   * "Replay session" click auto-starts from 0 again.
+   */
+  it("re-enters replay with auto-play from 0 after hide and second activate", async () => {
+    const { rerender } = render(
+      <WhiteboardReplayInFrame
+        embedded
+        isReviewActive
+        eventsBlobUrl="/api/whiteboard/wbs-test/events"
+        audioSegments={[
+          {
+            url: "/api/audio/admin/rec-1",
+            mimeType: "audio/webm",
+            durationSeconds: 10,
+          },
+        ]}
+        whiteboardSessionId="wbs-test"
+        studentName="Test Student"
+        onHideReplay={() => undefined}
+      />
+    );
+
+    await screen.findByTestId("wb-replay-in-frame");
+    await waitFor(() => {
+      expect(screen.getByTestId("wb-replay-play-toggle")).toHaveTextContent(
+        "Pause"
+      );
+    });
+
+    // Simulate return-to-hero (replay pane hidden, component stays mounted).
+    await act(async () => {
+      rerender(
+        <WhiteboardReplayInFrame
+          embedded
+          isReviewActive={false}
+          eventsBlobUrl="/api/whiteboard/wbs-test/events"
+          audioSegments={[
+            {
+              url: "/api/audio/admin/rec-1",
+              mimeType: "audio/webm",
+              durationSeconds: 10,
+            },
+          ]}
+          whiteboardSessionId="wbs-test"
+          studentName="Test Student"
+          onHideReplay={() => undefined}
+        />
+      );
+    });
+
+    expect(screen.getByTestId("wb-replay-play-toggle")).toHaveTextContent(
+      "Play"
+    );
+
+    // Second "Replay session" click — isReviewActive true again.
+    await act(async () => {
+      rerender(
+        <WhiteboardReplayInFrame
+          embedded
+          isReviewActive
+          eventsBlobUrl="/api/whiteboard/wbs-test/events"
+          audioSegments={[
+            {
+              url: "/api/audio/admin/rec-1",
+              mimeType: "audio/webm",
+              durationSeconds: 10,
+            },
+          ]}
+          whiteboardSessionId="wbs-test"
+          studentName="Test Student"
+          onHideReplay={() => undefined}
+        />
+      );
+    });
+
+    // BUG (unfixed): entryPaintDoneRef still true → stays paused at Play.
+    await waitFor(() => {
+      expect(screen.getByTestId("wb-replay-play-toggle")).toHaveTextContent(
+        "Pause"
+      );
+    });
   });
 });

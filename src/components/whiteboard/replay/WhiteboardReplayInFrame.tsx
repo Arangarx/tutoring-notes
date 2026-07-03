@@ -24,6 +24,11 @@ export type WhiteboardReplayInFrameProps = {
   embedded?: boolean;
   /** Collapse in-frame replay back to notes-prominent layout. */
   onHideReplay?: () => void;
+  /**
+   * In-shell review toggles hero↔replay via CSS while keeping this component
+   * mounted. When false, entry auto-play is suppressed and state resets.
+   */
+  isReviewActive?: boolean;
 };
 
 export function WhiteboardReplayInFrame({
@@ -35,6 +40,7 @@ export function WhiteboardReplayInFrame({
   studentName,
   embedded = false,
   onHideReplay,
+  isReviewActive = true,
 }: WhiteboardReplayInFrameProps) {
   const applySceneAtRef = useRef<(timeMs: number) => void>(() => {});
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
@@ -104,11 +110,24 @@ export function WhiteboardReplayInFrame({
     // entry paint effect runs). This prevents any edge-case crash during mount
     // from inadvertently triggering the hero↔replay loop (FIX 2).
     if (!replaySettledRef.current) return;
+    entryPaintDoneRef.current = false;
+    replaySettledRef.current = false;
     pause();
+    seek(0, { paint: false, play: false });
     onHideReplay?.();
-  }, [pause, onHideReplay]);
+  }, [pause, seek, onHideReplay]);
+
+  // Reset entry auto-play when replay is hidden (hero↔replay CSS toggle).
+  useEffect(() => {
+    if (isReviewActive) return;
+    entryPaintDoneRef.current = false;
+    replaySettledRef.current = false;
+    pause();
+    seek(0, { paint: false, play: false });
+  }, [isReviewActive, pause, seek]);
 
   useEffect(() => {
+    if (!isReviewActive) return;
     if (loadState.kind !== "ready" || !log) return;
     if (entryPaintDoneRef.current) return;
     if (!replayExcaliRestoreReady) return;
@@ -129,6 +148,7 @@ export function WhiteboardReplayInFrame({
     replayExcaliRestoreReady,
     seek,
     setPaintReady,
+    isReviewActive,
   ]);
 
   if (loadState.kind === "loading") {
