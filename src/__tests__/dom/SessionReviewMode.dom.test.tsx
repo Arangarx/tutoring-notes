@@ -97,6 +97,13 @@ describe("SessionReviewMode unified surface", () => {
     );
     expect(await screen.findByTestId("wb-session-review-mode")).toBeInTheDocument();
     expect(screen.getByTestId("wb-review-wb-topbar")).toBeInTheDocument();
+    const backLink = screen.getByTestId("review-back-to-student");
+    expect(backLink).toHaveAttribute("href", "/admin/students/stu-1");
+    expect(backLink).toHaveTextContent(/Back to Alex/i);
+    expect(screen.getByTestId("review-all-notes")).toHaveAttribute(
+      "href",
+      "/admin/students/stu-1/notes"
+    );
     expect(screen.getByTestId("wb-theme-toggle")).toBeInTheDocument();
     expect(screen.getByTestId("wb-review-notes-prominent")).toBeInTheDocument();
     expect(screen.getByTestId("wb-review-hero-layout")).toBeInTheDocument();

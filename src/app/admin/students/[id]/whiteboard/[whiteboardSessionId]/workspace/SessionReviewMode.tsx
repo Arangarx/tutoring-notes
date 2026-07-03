@@ -159,6 +159,7 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
       data-review-surface={reviewSurface}
     >
       <ReviewWbTopBar
+        studentId={studentId}
         studentName={payload?.studentName}
         durationLabel={(() => {
           if (!payload) return undefined;
