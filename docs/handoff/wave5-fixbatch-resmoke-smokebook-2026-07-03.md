@@ -1,7 +1,7 @@
 # Wave5 fix-batch re-smoke — resolves 2026-07-03 FAIL findings — smoke runbook
 
 **Branch:** `wb-wave5-polish`
-**Tip commit:** [`f412767`](https://github.com/Arangarx/tutoring-notes/commit/f41276738b948a15683f5796e882877981f0a13d) — the `3955980` docs commit on top is docs-only.
+**Tip commit:** `[f412767](https://github.com/Arangarx/tutoring-notes/commit/f41276738b948a15683f5796e882877981f0a13d)` — the `3955980` docs commit on top is docs-only.
 **Preview:** [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-arangarx-5209s-projects.vercel.app)
 
 Branch alias verified via Vercel MCP (short branch name → non-truncated stable alias); serves current batch code.
@@ -12,7 +12,11 @@ Branch alias verified via Vercel MCP (short branch name → non-truncated stable
 
 ---
 
+
+
 ## Feature smoke items
+
+
 
 ### 1. SMOKE-UX-1 — replay auto-play position (fix `3bc7a8e`)
 
@@ -23,7 +27,7 @@ Branch alias verified via Vercel MCP (short branch name → non-truncated stable
 **Ignore this run:** Exact first-frame paint timing.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
@@ -32,7 +36,13 @@ Branch alias verified via Vercel MCP (short branch name → non-truncated stable
 
 **Notes:**
 
+**scrubber started at beginning for a second then jumped to the end. (I went from a review link from the sessions that ended list)**
+
+**for test two I ended a fresh session and this bug is actually always there now...It jumps to the end...whtf**
+
 ---
+
+
 
 ### 2. SMOKE-NOTES-1 — notes shimmer either/or (fix `f412767`)
 
@@ -43,7 +53,7 @@ Branch alias verified via Vercel MCP (short branch name → non-truncated stable
 **Ignore this run:** Nothing.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
@@ -52,7 +62,13 @@ Branch alias verified via Vercel MCP (short branch name → non-truncated stable
 
 **Notes:**
 
+Major Regression:  The whole form disappears again.  Nothing shows in the block until notes load, not even the form.  This is the state it was in before I had it do the placeholder loading text in the first place.  You've actually somehow managed to regress to a state from several weeks ago...congratulations.
+
+what the fuck is going on with this branch???
+
 ---
+
+
 
 ### 3. A5 End → "Finish & save" + confirm (fix `f412767`)
 
@@ -64,15 +80,17 @@ Branch alias verified via Vercel MCP (short branch name → non-truncated stable
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
 **Coverage:**
 
-**Notes:**
+**Notes: The confirm is probably a nice addition, but as I already told you in chat...the copy is dishonest now and it's not even the button I asked to be fixed.**
 
 ---
+
+
 
 ### 4. SMOKE-BUG-6 — "Review" affordance (fix `f412767`)
 
@@ -82,7 +100,7 @@ Branch alias verified via Vercel MCP (short branch name → non-truncated stable
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -93,6 +111,8 @@ Branch alias verified via Vercel MCP (short branch name → non-truncated stable
 **Notes:**
 
 ---
+
+
 
 ### 5. In-session top-bar size (fix `f412767`)
 
@@ -106,13 +126,17 @@ Branch alias verified via Vercel MCP (short branch name → non-truncated stable
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
-- [ ] SKIP
+- [x] SKIP
 
 **Coverage:**
 
 **Notes:**
 
+**Why the fuck am I looking at the height of the top bar in the live session....did you change it?  My comment was on the test about the learner logged in page.  What in the fuck are you guys doing with the fucking live session top bar.**
+
 ---
+
+
 
 ### 6. Tutor post-end nav (fix `f412767`)
 
@@ -122,7 +146,7 @@ Branch alias verified via Vercel MCP (short branch name → non-truncated stable
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -133,6 +157,8 @@ Branch alias verified via Vercel MCP (short branch name → non-truncated stable
 **Notes:**
 
 ---
+
+
 
 ### 7. SMOKE-UX-2 — Play button centering (fix `f412767`)
 
@@ -142,7 +168,7 @@ Branch alias verified via Vercel MCP (short branch name → non-truncated stable
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -153,6 +179,8 @@ Branch alias verified via Vercel MCP (short branch name → non-truncated stable
 **Notes:**
 
 ---
+
+
 
 ### 8. Empty-notes guard (fix `f412767`)
 
@@ -162,7 +190,7 @@ Branch alias verified via Vercel MCP (short branch name → non-truncated stable
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -174,9 +202,11 @@ Branch alias verified via Vercel MCP (short branch name → non-truncated stable
 
 ---
 
+
+
 ## Overall result
 
 Check **PASS** only if every in-scope test item is PASS (deliberate per-item SKIPs must be called out in Notes). Check **FAIL** if any in-scope item fails. Leave both unchecked until the run is complete. Overall verdict is PASS/FAIL only — no overall SKIP.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL - Not just fail...massive fail. Major regressions.
