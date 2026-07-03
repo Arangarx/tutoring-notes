@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useId, useState } from "react";
 import { MynkWordmark } from "@/components/auth/MynkWordmark";
@@ -108,7 +109,9 @@ function StudentLoginForm() {
       <ThemeToggle className="absolute right-4 top-4 z-10" />
       <div className="w-full max-w-[360px]">
         <div className="mb-8 flex justify-center">
-          <MynkWordmark />
+          <Link href="/" aria-label="Mynk home">
+            <MynkWordmark />
+          </Link>
         </div>
 
         <Card className="rounded-[10px] border-border shadow-sm">

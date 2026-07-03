@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { BoardTabStrip } from "@/components/whiteboard/chrome/BoardTabStrip";
 import { WbThemeToggle } from "@/components/whiteboard/chrome/WbThemeToggle";
@@ -94,9 +95,9 @@ export function buildReplayReadOnlyChromeSlots({
       aria-label="Replay controls"
       onClick={(e) => e.stopPropagation()}
     >
-      <span className="mynk-wb-wordmark" aria-label="Mynk">
+      <Link href="/" className="mynk-wb-wordmark" aria-label="Mynk">
         Mynk<span className="mynk-wb-wordmark__dot">·</span>
-      </span>
+      </Link>
       <span className="mynk-wb-topbar__sep" aria-hidden />
 
       <div className="mynk-wb-topbar__zone">

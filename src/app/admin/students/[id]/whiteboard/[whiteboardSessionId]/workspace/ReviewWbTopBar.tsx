@@ -24,9 +24,9 @@ export function ReviewWbTopBar({
       aria-label="Session review"
       data-testid="wb-review-wb-topbar"
     >
-      <span className="mynk-wb-wordmark" aria-label="Mynk">
+      <Link href="/" className="mynk-wb-wordmark" aria-label="Mynk">
         Mynk<span className="mynk-wb-wordmark__dot">·</span>
-      </span>
+      </Link>
       <span className="mynk-wb-topbar__sep" aria-hidden />
 
       <div className="mynk-wb-topbar__zone">

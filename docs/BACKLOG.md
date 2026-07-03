@@ -75,8 +75,8 @@ Not in priority order within sections — that comes when items move to a sprint
 |------|-------|
 | **SMOKE-UX-1 — replay play/copy affordance** | Item 3: if the button stays "Replay session", the replay should **auto-start** on open (mental model = it plays when you click Replay). Keep pause-on-hide. Consider "Hide replay" → **"Pause and hide replay"** when active. |
 | **SMOKE-UX-2 — replay Play/Pause button overlaps the Board tab** | Item 1 + screenshot ("Pause" over "Board 1"). **Duplicate of existing `C-1`** (post-Sarah cleanup) — confirmed still present on hardware. |
-| **SMOKE-UX-3 — replay ±10-second back/forward buttons** | Item 1: scrubbing convenience. Future enhancement. |
-| **SMOKE-UX-4 — many wordmarks don't navigate** | Item 1: *"Why do so many of the wordmarks not navigate?"* Audit the Mynk wordmark across surfaces; it should route home/dashboard consistently. Ties to SMOKE-BLOCK-4 (learner nav). |
+| **SMOKE-UX-3 — replay ±10-second back/forward buttons** | **DEFERRED post-Sarah (Andrew 2026-07-02).** Item 1: scrubbing convenience. Future enhancement. |
+| **SMOKE-UX-4 — many wordmarks don't navigate** | ✅ **ADDRESSED** (SMOKE-UX-4, commit 1 on `wb-wave5-polish`): non-live shells → canonical `/` role-redirect; WB review + read-only replay wordmarks → `/`; live-session WB wordmark intentionally inert (accidental-recorder-loss guard). Ties to SMOKE-BLOCK-4 (learner nav). |
 
 ### ⚪ Post-Sarah / future
 
