@@ -119,7 +119,7 @@ export function WhiteboardReplayInFrame({
       replaySettledRef.current = true;
       return;
     }
-    seek(0, { paint: true, play: false });
+    seek(0, { paint: true, play: true });
     entryPaintDoneRef.current = true;
     replaySettledRef.current = true;
   }, [

@@ -139,7 +139,7 @@ export function buildReplayReadOnlyChromeSlots({
             type="button"
             className="mynk-wb-tb-btn"
             data-testid="wb-replay-hide"
-            title="Hide replay"
+            title="Pause and hide replay"
             onClick={(e) => {
               e.stopPropagation();
               onHideReplay();
@@ -148,7 +148,7 @@ export function buildReplayReadOnlyChromeSlots({
             <span aria-hidden style={{ fontSize: 14, lineHeight: 1 }}>
               ‹
             </span>
-            Hide replay
+            Pause and hide replay
           </button>
         ) : null}
       </div>
