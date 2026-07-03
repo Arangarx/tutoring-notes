@@ -95,6 +95,15 @@ const SKELETON_TIMEOUT_MS = 5 * 60 * 1_000;
  * Parse TutorNote.content as structured JSON.
  * Falls back gracefully for legacy markdown content (pre-bridge rows).
  */
+export function noteFieldsAreEmpty(fields: StructuredFields): boolean {
+  return (
+    !fields.topics.trim() &&
+    !fields.assessment.trim() &&
+    !fields.nextSteps.trim() &&
+    !fields.links.trim()
+  );
+}
+
 export function parseNoteContent(content: string | null): StructuredFields {
   if (!content) return { topics: "", assessment: "", nextSteps: "", links: "" };
   try {
@@ -267,6 +276,10 @@ export default function TutorNotesSection({
   }, [whiteboardSessionId]);
 
   const handleSave = useCallback(async () => {
+    if (noteFieldsAreEmpty(fields)) {
+      setSaveError("Add at least one note field before saving.");
+      return;
+    }
     setSaving(true);
     setSaveError(null);
     setSavedInShell(false);
@@ -366,8 +379,8 @@ export default function TutorNotesSection({
         {timedOut && "Note generation timed out."}
       </div>
 
-      {/* Generating — keep form visible; skeleton shimmer above fields */}
-      {(isActive || (isNotStarted && hasAudio)) && !timedOut && <SkeletonNotes />}
+      {/* Generating — skeleton only; editable form appears when done */}
+      {isActive && !timedOut && <SkeletonNotes />}
 
       {/* Timeout defeat state */}
       {timedOut && (
@@ -387,8 +400,8 @@ export default function TutorNotesSection({
         </div>
       )}
 
-      {/* Editable structured form — visible during generation and when done */}
-      {(isActive || isDone) && !timedOut && (
+      {/* Editable structured form — only after generation completes */}
+      {isDone && !timedOut && note.content && (
         <div data-testid="tutor-notes-content">
           {isDone && note.found && note.isPartial && (
             <div
@@ -495,7 +508,9 @@ export default function TutorNotesSection({
                 type="button"
                 className="btn primary"
                 onClick={handleSave}
-                disabled={saving || deleting || regenerating}
+                disabled={
+                  saving || deleting || regenerating || noteFieldsAreEmpty(fields)
+                }
                 data-testid="wb-save-note"
               >
                 {saving ? "Saving…" : "Save to notes"}

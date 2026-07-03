@@ -3673,6 +3673,7 @@ export function WhiteboardWorkspaceClient({
     "idle" | "uploading" | "registering" | "failed"
   >("idle");
   const [endingError, setEndingError] = useState<string | null>(null);
+  const [showEndConfirm, setShowEndConfirm] = useState(false);
   const audioBridgeRef = useRef<WhiteboardWorkspaceAudioBridgeHandle | null>(
     null
   );
@@ -3750,6 +3751,7 @@ export function WhiteboardWorkspaceClient({
   }, [whiteboardSessionId, role, isStarting]);
 
   const handleEndSession = useCallback(async () => {
+    setShowEndConfirm(false);
     setEndingState("finalizing");
     setEndingError(null);
     setFinalizingSegmentCount(0);
@@ -3949,7 +3951,7 @@ export function WhiteboardWorkspaceClient({
       if (onSessionEnded) {
         onSessionEnded();
       } else {
-        const reviewHref = `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}`;
+        const reviewHref = `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace`;
         router.replace(reviewHref);
         router.refresh();
       }
@@ -3974,7 +3976,7 @@ export function WhiteboardWorkspaceClient({
       setEndingState("error");
       const msg = (err as Error)?.message ?? "Could not end the session.";
       setEndingError(
-        `Could not end session: ${msg}. Your work is still in progress — retry "End session".`
+        `Could not finish session: ${msg}. Your work is still in progress — retry "Finish & save".`
       );
       // Don't auto-retry — the tutor decides whether to retry End or
       // keep the session open and try again.
@@ -5778,7 +5780,11 @@ export function WhiteboardWorkspaceClient({
       role={role}
       toolbarHidden={toolbarHidden}
       onChromeClick={(e) => {
-        if ((e.target as HTMLElement).closest?.(".mynk-wb-topbar")) return;
+        const target = e.target as HTMLElement;
+        if (!target.closest?.(".mynk-wb-end-confirm-wrap")) {
+          setShowEndConfirm(false);
+        }
+        if (target.closest?.(".mynk-wb-topbar")) return;
         setOpenMenu(null);
       }}
       nonVisualMounts={
@@ -6151,6 +6157,7 @@ export function WhiteboardWorkspaceClient({
         <div className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing">
           {renderTopbarOverflowControl("wb-topbar-overflow")}
           {wbCaps.canEndSession && (() => {
+            const endSessionIdleLabel = "Finish & save";
             const endSessionLabel =
               endingState === "finalizing"
                 ? finalizingOutboxState === "uploading" &&
@@ -6158,27 +6165,69 @@ export function WhiteboardWorkspaceClient({
                   ? `Saving ${finalizingSegmentCount} segment${finalizingSegmentCount === 1 ? "" : "s"}…`
                   : "Finalizing…"
                 : endingState === "ending"
-                  ? "Finalizing…"
-                  : "End session";
+                  ? "Saving…"
+                  : endSessionIdleLabel;
             return (
-              <button
-                type="button"
-                className={`mynk-wb-tb-btn mynk-wb-tb-btn--primary${touchLayout ? " mynk-wb-tb-btn--end-touch" : ""}`}
-                onClick={handleEndSession}
-                disabled={endingBusy}
-                data-testid="wb-end-session"
-                aria-label={endSessionLabel}
-                title={endSessionLabel}
-              >
-                {touchLayout ? (
-                  <>
-                    <WbIconEndSession size={14} />
-                    <span className="mynk-wb-sr-only">{endSessionLabel}</span>
-                  </>
-                ) : (
-                  endSessionLabel
+              <div className="mynk-wb-end-confirm-wrap">
+                <button
+                  type="button"
+                  className={`mynk-wb-tb-btn mynk-wb-tb-btn--primary${touchLayout ? " mynk-wb-tb-btn--end-touch" : ""}`}
+                  onClick={() => {
+                    if (endingBusy) return;
+                    setShowEndConfirm(true);
+                  }}
+                  disabled={endingBusy}
+                  data-testid="wb-end-session"
+                  aria-label={endSessionLabel}
+                  title={endSessionLabel}
+                  aria-expanded={showEndConfirm}
+                  aria-haspopup="dialog"
+                >
+                  {touchLayout ? (
+                    <>
+                      <WbIconEndSession size={14} />
+                      <span className="mynk-wb-sr-only">{endSessionLabel}</span>
+                    </>
+                  ) : (
+                    endSessionLabel
+                  )}
+                </button>
+                {showEndConfirm && !endingBusy && (
+                  <div
+                    role="alertdialog"
+                    aria-labelledby="wb-end-confirm-title"
+                    aria-describedby="wb-end-confirm-body"
+                    className="mynk-wb-end-confirm"
+                    data-testid="wb-end-session-confirm"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <p id="wb-end-confirm-title" className="mynk-wb-end-confirm__title">
+                      Finish this session?
+                    </p>
+                    <p id="wb-end-confirm-body" className="mynk-wb-end-confirm__body">
+                      Saves your recording and generates notes.
+                    </p>
+                    <div className="mynk-wb-end-confirm__actions">
+                      <button
+                        type="button"
+                        className="mynk-wb-tb-btn mynk-wb-tb-btn--primary"
+                        data-testid="wb-end-session-confirm-yes"
+                        onClick={() => void handleEndSession()}
+                      >
+                        Finish & save
+                      </button>
+                      <button
+                        type="button"
+                        className="mynk-wb-tb-btn"
+                        data-testid="wb-end-session-confirm-cancel"
+                        onClick={() => setShowEndConfirm(false)}
+                      >
+                        Keep going
+                      </button>
+                    </div>
+                  </div>
                 )}
-              </button>
+              </div>
             );
           })()}
         </div>

@@ -29,6 +29,11 @@ import React from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+async function confirmFinishAndSave() {
+  await userEvent.click(screen.getByTestId("wb-end-session"));
+  await userEvent.click(screen.getByTestId("wb-end-session-confirm-yes"));
+}
+
 jest.mock("@/components/ThemeProvider", () => ({
   ThemeProvider: ({ children }: { children: React.ReactNode }) => children,
   useTheme: () => ({
@@ -464,6 +469,30 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     );
   });
 
+  test("shows inline confirm before starting the end-session pipeline", async () => {
+    render(
+      <WhiteboardWorkspaceClient
+        whiteboardSessionId="ws-end-confirm"
+        studentId="stu-1"
+        studentName="Test Student"
+        adminUserId="admin-1"
+        startedAtIso="2026-05-09T10:00:00.000Z"
+        bothConnectedAtIso={null}
+        initialActiveMs={0}
+        initialLastActiveAtIso={null}
+        syncUrl={null}
+        initialUserWantsRecording
+      />
+    );
+
+    await screen.findByTestId("wb-mock-excalidraw-canvas");
+    await userEvent.click(screen.getByTestId("wb-end-session"));
+
+    expect(screen.getByTestId("wb-end-session-confirm")).toBeInTheDocument();
+    expect(screen.getByText("Finish this session?")).toBeInTheDocument();
+    expect(mockDrainOutboxOrTimeout).not.toHaveBeenCalled();
+  });
+
   test("happy path: drains outbox, uploads events, calls atomic end action with segments, finalizes outbox", async () => {
     const segments = [
       {
@@ -493,7 +522,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     );
 
     await screen.findByTestId("wb-mock-excalidraw-canvas");
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     await waitFor(() => {
       expect(mockDrainOutboxOrTimeout).toHaveBeenCalledWith("ws-end-happy");
@@ -550,7 +579,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
       });
     });
 
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     expect(
       await screen.findByRole("button", { name: /Finalizing/i })
@@ -611,7 +640,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
       });
     });
 
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     expect(
       await screen.findByRole("button", { name: /Saving 2 segments/i })
@@ -668,7 +697,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     );
 
     await screen.findByTestId("wb-mock-excalidraw-canvas");
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toMatch(/Couldn't finalize/i);
@@ -755,7 +784,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     );
 
     await screen.findByTestId("wb-mock-excalidraw-canvas");
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     await waitFor(() => {
       expect(mockEnd).toHaveBeenCalled();
@@ -819,7 +848,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     );
 
     await screen.findByTestId("wb-mock-excalidraw-canvas");
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     await waitFor(() => {
       expect(mockEnd).toHaveBeenCalled();
@@ -857,7 +886,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     );
 
     await screen.findByTestId("wb-mock-excalidraw-canvas");
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     await waitFor(() => {
       expect(mockSnapshotUpload).toHaveBeenCalledWith({
@@ -908,7 +937,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     );
 
     await screen.findByTestId("wb-mock-excalidraw-canvas");
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     await waitFor(() => {
       expect(mockEnd).toHaveBeenCalledWith(
@@ -943,7 +972,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     );
 
     await screen.findByTestId("wb-mock-excalidraw-canvas");
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     await waitFor(() => {
       expect(mockEnd).toHaveBeenCalled();
@@ -975,7 +1004,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     );
 
     await screen.findByTestId("wb-mock-excalidraw-canvas");
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toMatch(/Vercel Blob 500/);
@@ -1008,7 +1037,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     );
 
     await screen.findByTestId("wb-mock-excalidraw-canvas");
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     // Pipeline must still complete (atomic action called).
     await waitFor(() => {
@@ -1049,7 +1078,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     );
 
     await screen.findByTestId("wb-mock-excalidraw-canvas");
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     await waitFor(() => {
       expect(mockEnd).toHaveBeenCalled();
@@ -1058,7 +1087,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     // Legacy path: router.replace must be called with the review href.
     await waitFor(() => {
       expect(mockRouterReplace).toHaveBeenCalledWith(
-        "/admin/students/stu-1/whiteboard/ws-a3-legacy-nav"
+        "/admin/students/stu-1/whiteboard/ws-a3-legacy-nav/workspace"
       );
     });
     expect(mockRouterRefresh).toHaveBeenCalled();
@@ -1126,7 +1155,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     expect(screen.queryByTestId("wb-session-review-mode")).not.toBeInTheDocument();
 
     // Click End session.
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     // Pipeline must complete (endWhiteboardSession called).
     await waitFor(() => {
@@ -1176,7 +1205,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     );
 
     await screen.findByTestId("wb-mock-excalidraw-canvas");
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     await waitFor(() => {
       expect(mockEnd).toHaveBeenCalled();
@@ -1185,7 +1214,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     // router.replace IS called (legacy nav-away fires when prop is absent).
     await waitFor(() => {
       expect(mockRouterReplace).toHaveBeenCalledWith(
-        "/admin/students/stu-1/whiteboard/ws-no-shell"
+        "/admin/students/stu-1/whiteboard/ws-no-shell/workspace"
       );
     });
     // SessionReviewMode does NOT mount (client-side flip never happens).
@@ -1242,7 +1271,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     );
 
     await screen.findByTestId("wb-mock-excalidraw-canvas");
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     await waitFor(() => {
       expect(onSessionEnded).toHaveBeenCalled();
@@ -1281,7 +1310,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     );
 
     await screen.findByTestId("wb-mock-excalidraw-canvas");
-    await userEvent.click(screen.getByTestId("wb-end-session"));
+    await confirmFinishAndSave();
 
     await waitFor(() => {
       expect(mockEnd).toHaveBeenCalled();

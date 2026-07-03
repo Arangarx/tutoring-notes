@@ -81,7 +81,9 @@ describe("WhiteboardReplayInFrame", () => {
     );
 
     expect(await screen.findByTestId("wb-replay-in-frame")).toBeInTheDocument();
-    expect(screen.getByTestId("wb-replay-play-toggle")).toBeInTheDocument();
+    const playToggle = screen.getByTestId("wb-replay-play-toggle");
+    expect(playToggle).toBeInTheDocument();
+    expect(playToggle).toHaveClass("mynk-wb-replay-play-btn");
     expect(screen.getByTestId("wb-replay-global-seek")).toBeInTheDocument();
     expect(screen.getByTestId("wb-replay-global-seek-thumb")).toBeInTheDocument();
     expect(screen.getByTestId("mynk-wb-chrome-replay")).toBeInTheDocument();
