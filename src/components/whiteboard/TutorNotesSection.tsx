@@ -366,16 +366,8 @@ export default function TutorNotesSection({
         {timedOut && "Note generation timed out."}
       </div>
 
-      {/* Generating — keep form visible; inline status only */}
-      {(isActive || (isNotStarted && hasAudio)) && !timedOut && (
-        <p
-          className="muted"
-          data-testid="tutor-notes-generating"
-          style={{ margin: 0, fontSize: 13 }}
-        >
-          Generating notes…
-        </p>
-      )}
+      {/* Generating — keep form visible; skeleton shimmer above fields */}
+      {(isActive || (isNotStarted && hasAudio)) && !timedOut && <SkeletonNotes />}
 
       {/* Timeout defeat state */}
       {timedOut && (
