@@ -1930,7 +1930,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           entry.peerConnectionState = "new";
           entry.iceConnectionState = "new";
           entry.addedToMesh = false;
-          syncConnectionStateFromMesh(p.peerId, entry);
+          // No mesh sync here — peer is not yet re-added to the mesh; the sync after addPeer (below) is the operative one.
           log.log(
             `peer=${p.peerId} event=rejoin-detected action=reset-streams-and-eviction role=${p.role}`
           );
