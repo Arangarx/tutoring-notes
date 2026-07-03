@@ -3,7 +3,7 @@
  */
 
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { WhiteboardReplayInFrame } from "@/components/whiteboard/replay/WhiteboardReplayInFrame";
 
 jest.mock("@/components/ThemeProvider", () => ({
@@ -89,7 +89,9 @@ describe("WhiteboardReplayInFrame", () => {
     expect(screen.getByTestId("wb-replay-hide")).toHaveTextContent(
       "Pause and hide replay"
     );
-    expect(screen.getByTestId("wb-replay-play-toggle")).toHaveTextContent("Pause");
+    await waitFor(() => {
+      expect(screen.getByTestId("wb-replay-play-toggle")).toHaveTextContent("Pause");
+    });
 
     // Replay records audio + whiteboard only — no live A/V cluster on review surface.
     expect(screen.queryByTestId("av-controls")).not.toBeInTheDocument();
