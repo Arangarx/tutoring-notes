@@ -12,7 +12,9 @@
  */
 
 import { redirect } from "next/navigation";
+import type { ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { LearnerSignOutButton } from "@/components/student/LearnerSignOutButton";
 import { StudentPageShell } from "@/components/student/StudentPageShell";
 import {
   getLearnerSessionFromHeaders,
@@ -28,7 +30,12 @@ export default async function JoinPage() {
       where: { id: learnerSession.learnerProfileId },
       select: { displayName: true },
     });
-    return <JoinNoSessionCard displayName={profile?.displayName ?? "Student"} />;
+    return (
+      <JoinNoSessionCard
+        displayName={profile?.displayName ?? "Student"}
+        actions={<LearnerSignOutButton />}
+      />
+    );
   }
 
   // Path B: account-holder session (self-learner path — [WB-JOIN-ADULT-LEARNER]).
@@ -51,9 +58,15 @@ export default async function JoinPage() {
   redirect("/students/login?returnTo=/join");
 }
 
-function JoinNoSessionCard({ displayName }: { displayName: string }) {
+function JoinNoSessionCard({
+  displayName,
+  actions,
+}: {
+  displayName: string;
+  actions?: ReactNode;
+}) {
   return (
-    <StudentPageShell>
+    <StudentPageShell actions={actions}>
       <div className="mx-auto flex w-full max-w-sm flex-1 flex-col items-center justify-center gap-4 px-4 py-8">
         <Card className="w-full rounded-[10px] border-border">
           <CardContent className="px-6 py-6 text-center space-y-2">

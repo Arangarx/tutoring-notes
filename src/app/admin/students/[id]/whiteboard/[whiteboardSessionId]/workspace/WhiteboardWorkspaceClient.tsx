@@ -96,6 +96,7 @@ import { WbTopBarCamControl } from "@/components/whiteboard/chrome/WbTopBarCamCo
 import { WbTopBarCamControlLive } from "@/components/whiteboard/chrome/WbTopBarCamControlLive";
 import { WbThemeToggle } from "@/components/whiteboard/chrome/WbThemeToggle";
 import { WbExitButton } from "@/components/whiteboard/chrome/WbExitButton";
+import { LearnerSignOutButton } from "@/components/student/LearnerSignOutButton";
 import { WbStudentConnectionStatus } from "@/components/whiteboard/chrome/WbStudentConnectionStatus";
 import { WbUndoRedoButtons } from "@/components/whiteboard/chrome/WbUndoRedoButtons";
 import { WbToolbarToggle } from "@/components/whiteboard/chrome/WbToolbarToggle";
@@ -5848,6 +5849,7 @@ export function WhiteboardWorkspaceClient({
               className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing"
               onClick={(e) => e.stopPropagation()}
             >
+              <LearnerSignOutButton />
               {renderTopbarOverflowControl("wb-student-topbar-overflow")}
               {wbCaps.showLeaveInsteadOfEnd && (
                 <WbExitButton onExit={handleStudentExit} />
@@ -5980,6 +5982,7 @@ export function WhiteboardWorkspaceClient({
         </div>
 
         <div className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing">
+          <LearnerSignOutButton />
           {renderTopbarOverflowControl("wb-student-topbar-overflow")}
           {wbCaps.showLeaveInsteadOfEnd && (
             <WbExitButton onExit={handleStudentExit} />
