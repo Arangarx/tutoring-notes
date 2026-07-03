@@ -29,9 +29,9 @@ export function ActiveWhiteboardSessionsList({
     <div className="mt-4 rounded-lg border border-border bg-muted/20 p-4">
       <h4 className="m-0 text-sm font-semibold text-foreground">Open whiteboard sessions</h4>
       <p className="mt-1 mb-3 text-xs leading-relaxed text-muted-foreground">
-        These rooms are still not ended from the whiteboard. Continue to pick up where you left
-        off, or end a room to revoke its join link. You can also start a new room above — that
-        creates an additional open session, so end ones you do not need.
+        These whiteboard rooms are still open — they haven&apos;t been ended yet. Continue one to
+        pick up where you left off, or end it to close the room and revoke its join link. Starting
+        a new room adds another open session, so end any you&apos;re no longer using.
       </p>
       <ul className="m-0 list-none divide-y divide-border p-0">
         {sessions.map((s) => {

@@ -97,7 +97,7 @@ describe("SessionReviewMode unified surface", () => {
     );
     expect(await screen.findByTestId("wb-session-review-mode")).toBeInTheDocument();
     expect(screen.getByTestId("wb-review-wb-topbar")).toBeInTheDocument();
-    const backLink = screen.getByTestId("review-back-to-student");
+    const backLink = await screen.findByTestId("review-back-to-student");
     expect(backLink).toHaveAttribute("href", "/admin/students/stu-1");
     expect(backLink).toHaveTextContent(/Back to Alex/i);
     expect(screen.getByTestId("review-all-notes")).toHaveAttribute(
