@@ -11,6 +11,7 @@ import { ShareLinkRow } from "./ShareLinkRow";
 import { SubmitButton } from "@/components/SubmitButton";
 import NoteEntrySection from "./NoteEntrySection";
 import { ActiveWhiteboardSessionsList } from "./whiteboard/ActiveWhiteboardSessionsList";
+import { EndedUnsavedSessionsList } from "./whiteboard/EndedUnsavedSessionsList";
 import { StartWhiteboardSession } from "./whiteboard/StartWhiteboardSession";
 import { env } from "@/lib/env";
 import { formatDateOnlyDisplay } from "@/lib/date-only";
@@ -117,6 +118,27 @@ export default async function StudentDetailPage({
   if (!student) notFound();
   if (!canAccessStudentRow(scope, student)) notFound();
 
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const [endedUnsavedSessions, endedUnsavedTotalCount] = await Promise.all([
+    db.whiteboardSession.findMany({
+      where: {
+        studentId: id,
+        endedAt: { gte: thirtyDaysAgo },
+        noteId: null,
+      },
+      orderBy: { endedAt: "desc" },
+      take: 20,
+      select: { id: true, startedAt: true, endedAt: true },
+    }),
+    db.whiteboardSession.count({
+      where: {
+        studentId: id,
+        endedAt: { not: null },
+        noteId: null,
+      },
+    }),
+  ]);
+
   const lp = student.learnerProfile;
   const lpId = lp?.id ?? null;
   const ahId = lp?.accountHolder?.id ?? null;
@@ -194,6 +216,13 @@ export default async function StudentDetailPage({
       <ActiveWhiteboardSessionsList
         studentId={student.id}
         sessions={student.whiteboardSessions}
+      />
+      <EndedUnsavedSessionsList
+        studentId={student.id}
+        sessions={endedUnsavedSessions.flatMap((s) =>
+          s.endedAt != null ? [{ ...s, endedAt: s.endedAt }] : []
+        )}
+        totalCount={endedUnsavedTotalCount}
       />
     </>
   );

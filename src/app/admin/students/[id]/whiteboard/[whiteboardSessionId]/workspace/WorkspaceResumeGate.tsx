@@ -18,7 +18,7 @@
  * required) and redirects to the student detail page. We use a
  * router push — the workspace's own server component re-renders the
  * student page next, so the now-ended session shows up in the
- * history list.
+ * "Ended — needs review" group on student detail.
  */
 
 import { useRouter } from "next/navigation";
