@@ -223,6 +223,7 @@ function makeFakeMesh(): MeshHandles {
     addPeer,
     removePeer,
     peers: () => peerSet,
+    getPeerConnectionSnapshot: () => null,
     restart,
     addLocalTrackToAllPeers,
     replaceLocalTrackOnAllPeers,

@@ -141,6 +141,18 @@ export type PeerMesh = {
   /** Current peer set (snapshot — does not auto-update). */
   peers: () => ReadonlySet<string>;
   /**
+   * Read-only snapshot of a peer's live `RTCPeerConnection` states.
+   * Returns `null` when the peer is unknown or its PC has been closed.
+   * No side effects — safe to call from `useLiveAV` when reconciling
+   * internal entry state against an implicitly-created PC.
+   */
+  getPeerConnectionSnapshot: (
+    peerId: string
+  ) => {
+    connectionState: RTCPeerConnectionState;
+    iceConnectionState: RTCIceConnectionState;
+  } | null;
+  /**
    * Manually trigger an ICE restart for `peerId`. Used by the
    * `iceConnectionState === "failed"` auto-restart for the polite
    * side, AND exposed publicly so a host can force-restart on a
@@ -1012,6 +1024,14 @@ export function createPeerMesh(opts: PeerMeshOptions): PeerMesh {
       closePeerEntryLocal(entry);
     },
     peers: () => new Set(peers.keys()),
+    getPeerConnectionSnapshot: (peerId: string) => {
+      const entry = lifeOf(peerId);
+      if (!entry) return null;
+      return {
+        connectionState: entry.pc.connectionState,
+        iceConnectionState: entry.pc.iceConnectionState,
+      };
+    },
     restart: (peerId: string) => {
       if (disposed) return;
       const entry = lifeOf(peerId);

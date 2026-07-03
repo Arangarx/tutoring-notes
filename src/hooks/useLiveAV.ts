@@ -64,6 +64,7 @@ import {
   type PeerMesh,
   type PeerMeshOptions,
 } from "@/lib/av/peer-mesh";
+import { isPeerReachable } from "@/lib/av/reachability";
 import { getIceServersForBrowser } from "@/lib/av/webrtc-ice-from-env";
 import {
   createSignaling,
@@ -295,8 +296,11 @@ export type UseLiveAVReturn = {
   participants: ReadonlyArray<AvParticipant>;
   /**
    * Subset of `participants` where WebRTC is confirmed healthy:
-   * `peerConnectionState === "connected"` AND
-   * `iceConnectionState ∈ {connected, completed}`.
+   * `iceConnectionState ∈ {connected, completed}` AND aggregate
+   * `peerConnectionState` is not terminal (`failed`/`closed`). ICE
+   * connected/completed is the media-path signal; aggregate
+   * `connectionState` may stay `"connecting"` on Safari while media
+   * flows.
    *
    * Use this — not raw `participants` — for: the recording gate
    * (FSM `participants` input), the session timer gate, and any
@@ -1689,6 +1693,35 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         .some((t) => t.enabled && !t.muted && t.readyState !== "ended");
     }
 
+    /**
+     * Re-read live PC/ICE state from peer-mesh when the internal entry
+     * was created or reset after the mesh already had a PC (implicit-add
+     * on inbound offer). Closes the stale-snapshot race where early
+     * connectionstatechange events were dropped before the entry existed.
+     */
+    function syncConnectionStateFromMesh(
+      peerId: string,
+      entry: Internal
+    ): boolean {
+      const snapshot = mesh.getPeerConnectionSnapshot(peerId);
+      if (!snapshot) return false;
+      let changed = false;
+      if (entry.peerConnectionState !== snapshot.connectionState) {
+        entry.peerConnectionState = snapshot.connectionState;
+        changed = true;
+      }
+      if (entry.iceConnectionState !== snapshot.iceConnectionState) {
+        entry.iceConnectionState = snapshot.iceConnectionState;
+        changed = true;
+      }
+      if (changed) {
+        log.log(
+          `peer=${peerId} event=conn-state-synced-from-mesh pc=${snapshot.connectionState} ice=${snapshot.iceConnectionState}`
+        );
+      }
+      return changed;
+    }
+
     function rebuild() {
       if (disposed) return;
       const out: AvParticipant[] = [];
@@ -1719,14 +1752,9 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           iceConnectionState: entry.iceConnectionState,
         };
         out.push(p);
-        // A peer is reachable when WebRTC is fully connected at both
-        // the PC layer and the ICE layer. Sync-presence alone is not
-        // sufficient — this is the split-brain guard.
-        if (
-          entry.peerConnectionState === "connected" &&
-          (entry.iceConnectionState === "connected" ||
-            entry.iceConnectionState === "completed")
-        ) {
+        // Reachable when ICE confirms media path and PC is not terminal.
+        // Sync-presence alone is not sufficient — split-brain guard.
+        if (isPeerReachable(entry)) {
           reachable.push(p);
         }
       }
@@ -1767,6 +1795,9 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           addedToMesh: false,
         };
         internal.set(peerId, entry);
+        if (syncConnectionStateFromMesh(peerId, entry)) {
+          rebuild();
+        }
       } else {
         entry.role = role;
         entry.label = label;
@@ -1899,6 +1930,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           entry.peerConnectionState = "new";
           entry.iceConnectionState = "new";
           entry.addedToMesh = false;
+          syncConnectionStateFromMesh(p.peerId, entry);
           log.log(
             `peer=${p.peerId} event=rejoin-detected action=reset-streams-and-eviction role=${p.role}`
           );
@@ -1915,6 +1947,9 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
               }`
             );
           }
+        }
+        if (syncConnectionStateFromMesh(p.peerId, entry)) {
+          rebuild();
         }
         // Drain tracks that arrived before this peer's presence event.
         const buffered = pendingRemoteTracks.get(p.peerId);

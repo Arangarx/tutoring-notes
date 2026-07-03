@@ -521,6 +521,33 @@ describe("createPeerMesh — addPeer/removePeer lifecycle", () => {
     expect(m.peers().has("C")).toBe(true);
     m.dispose();
   });
+
+  test("getPeerConnectionSnapshot returns live PC/ICE states for a known peer; null for unknown", () => {
+    const sig = makeFakeSignaling();
+    const { factory, instances } = makePcFactory();
+    const m = createPeerMesh({
+      signaling: sig,
+      localPeerId: "A",
+      _pcFactory: factory,
+    });
+    expect(m.getPeerConnectionSnapshot("B")).toBeNull();
+
+    m.addPeer("B");
+    const pc = instances[0]!;
+    pc.connectionState = "connecting";
+    pc.iceConnectionState = "connected";
+
+    expect(m.getPeerConnectionSnapshot("B")).toEqual({
+      connectionState: "connecting",
+      iceConnectionState: "connected",
+    });
+    expect(m.getPeerConnectionSnapshot("never-added")).toBeNull();
+
+    m.removePeer("B");
+    expect(m.getPeerConnectionSnapshot("B")).toBeNull();
+
+    m.dispose();
+  });
 });
 
 // =================================================================
