@@ -6,9 +6,26 @@
 
 ---
 
-## ⏩ HEAD — 2026-07-04: **go-to-Sarah master-cut plan FINALIZED + 5-axis-hardened** — ready to execute from a FRESH chat (Opus conducts durability pillars) @ [`go-to-sarah-master-cut-plan.md`](go-to-sarah-master-cut-plan.md)
+## ⏩ HEAD — 2026-07-04: **EXECUTING go-to-Sarah master-cut plan (overnight autonomous run)** @ [`go-to-sarah-master-cut-plan.md`](go-to-sarah-master-cut-plan.md)
 
-> **FRESH EXECUTION CHAT — start here.** Work in worktree **`tutoring-notes-polishwt`** (a subagent got lost on this once — do NOT use the default `tutoring-notes` checkout, which is on `v1-redesign`), branch **`wb-wave5-polish`** @ tip **`affc1e1`**. Reading list: THIS head → [`go-to-sarah-master-cut-plan.md`](go-to-sarah-master-cut-plan.md) (the executor spec) → [`go-to-sarah-plan-5axis-review.md`](go-to-sarah-plan-5axis-review.md) (BLOCKERs/SHOULD-FIXes, all folded into the plan) → `AGENTS.md` + [`.cursor/rules/orchestrator-discipline.mdc`](../../.cursor/rules/orchestrator-discipline.mdc). **Conductor tier (Andrew 2026-07-04):** **Opus for the durability pillars WS-A/B/C/D** (they change the most fragile surfaces — recorder FSM, `upload-outbox`, `useWhiteboardRecorder`, `peer-mesh`, apply-path — + concurrency/ordering); drop to Sonnet/Composer for the WS-E bug bundle. Code itself still dispatches to Composer subagents. **First action:** a quick final 5-axis validation-pass sanity check on the folded plan, then **Wave 0** (Prisma migration) — see execution order in Next action(s).
+> **FRESH EXECUTION CHAT — start here.** Work in worktree **`tutoring-notes-polishwt`** (a subagent got lost on this once — do NOT use the default `tutoring-notes` checkout, which is on `v1-redesign`), branch **`wb-wave5-polish`**. Reading list: THIS head → [`go-to-sarah-master-cut-plan.md`](go-to-sarah-master-cut-plan.md) (the executor spec) → [`go-to-sarah-plan-5axis-review.md`](go-to-sarah-plan-5axis-review.md) (BLOCKERs/SHOULD-FIXes, all folded into the plan) → `AGENTS.md` + [`.cursor/rules/orchestrator-discipline.mdc`](../../.cursor/rules/orchestrator-discipline.mdc). **Conductor tier:** Opus conducts durability pillars WS-A/B/C/D (fragile surfaces); Composer 2.5 subagents write code/tests; Sonnet 5-axis review of fragile diffs. Execution is **fragile-serial** in the one shared worktree (no parallel code-writers → clobber risk); WS-E disjoint bugs run serially too for overnight reliability.
+
+### 🔴 LIVE EXECUTION LOG (overnight 2026-07-04) — resume from the first ⬜
+
+Final 5-axis sanity pass: **no new fragile-surface BLOCKER**; plan execution-ready. Two refinements folded into dispatch prompts (WS-A pin `VAD_MIN_SEGMENT_SECONDS`; Wave 0 dup-orderIndex pre-check).
+
+| Step | Status | Commit / note |
+|---|---|---|
+| Wave 0 — migration + OutboxRow TS fields | ✅ | [`34d2a34`](https://github.com/Arangarx/tutoring-notes/commit/34d2a34) — `WhiteboardEventBatch` + `SessionRecording` orderIndex `@@unique` + `lastPersistedBatchSeq/ToIndex` cols; OutboxRow `recordingTimeOffsetMs?`/`speakerId?` (no IDB bump). Additive-only (68 ins/0 del); local dup-check zero; validate + test:wb-jest 774 green. **NOTE for cut:** local test DB has no `_prisma_migrations` history (P3005) → migration applied via `db execute`; folder well-formed for Neon `migrate deploy` at cut, but re-run dup-orderIndex check on prod before applying. |
+| WS-A — audio durability (VAD + register + per-speaker) | ⬜ IN PROGRESS | fragile-serial |
+| WS-B — WB ~1s persist sidecar | ⬜ | after WS-A |
+| E2 dup-stroke PDF · E3 reconnect pill | ⬜ | fragile-serial |
+| WS-C finalize-from-backend · WS-D resume | ⬜ | after A2+B2 |
+| WS-E E1/E4/E5/E6 bugs | ⬜ | serial (shared worktree) |
+| Integrated gate (test:wb-sync + next build) | ⬜ | final tip |
+| Both-theme master-cut smokebook | ⬜ | PARK at merge gate for Andrew hardware smoke |
+
+**HARD STOPS (park for Andrew):** merge to v1-redesign/master; Neon/prod migrations; account reset; force-push. Build up to these, write smokebook, STOP.
 
 **Rebuild after the fix-batch re-smoke FAIL (4 pass, 2 regressions, 2 mis-scopes).** New discipline (per Andrew + `AGENTS.md` lesson): smoke finding = note + the test it lived under; verify ambiguous notes; **Playwright-to-spec for every touched surface, real-browser-verified, tests written to SPEC not to code.** Progress:
 
