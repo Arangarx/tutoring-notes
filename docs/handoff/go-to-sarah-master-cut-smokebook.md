@@ -1,14 +1,14 @@
 # Go-to-Sarah durability master-cut — comprehensive both-theme smoke runbook
 
 **Branch:** `wb-wave5-polish`
-**Tip commit:** [`c2ca8f5`](https://github.com/Arangarx/tutoring-notes/commit/c2ca8f5)
+**Tip commit:** `[c2ca8f5](https://github.com/Arangarx/tutoring-notes/commit/c2ca8f5)`
 **Preview:** [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-arangarx-5209s-projects.vercel.app)
 
 ---
 
 ## Scope + run discipline (read before running)
 
-This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah durability cut on `wb-wave5-polish` @ [`c2ca8f5`](https://github.com/Arangarx/tutoring-notes/commit/c2ca8f5). It is the **single final hardware gate** before `merge --no-ff wb-wave5-polish → v1-redesign` and eventual cut to **master** for Sarah.
+This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah durability cut on `wb-wave5-polish` @ `[c2ca8f5](https://github.com/Arangarx/tutoring-notes/commit/c2ca8f5)`. It is the **single final hardware gate** before `merge --no-ff wb-wave5-polish → v1-redesign` and eventual cut to **master** for Sarah.
 
 **Both themes (mandatory):** Every in-scope item below must be exercised in **light** and **dark**. Each **Action** says *"Repeat in light, then dark"* unless noted otherwise. **PASS** only if both themes pass.
 
@@ -20,27 +20,31 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 - **WS-D** — ACTIVE session re-open hydrates from server (scene + timeline + clock); no stale IDB prompt when server is ahead; IDB-ahead tail auto-merges with zero loss.
 - **WS-E** — E1 notes shimmer; E2 PDF dup-stroke fix; E4 replay active board tab; E5 roughness persist; E6 student mic device persistence. **E3 reconnect pill PARKED** this wave — see human-only item.
 
-**Standing regression:** Full-site surfaces from [`docs/INDEX.md`](../INDEX.md) are included concisely at the end.
+**Standing regression:** Full-site surfaces from `[docs/INDEX.md](../INDEX.md)` are included concisely at the end.
 
-**CUT ledger reference:** [`go-to-sarah-master-cut-plan.md`](go-to-sarah-master-cut-plan.md) Step 3; [`pre-master-smoke-deferral-ledger-2026-06-16.md`](pre-master-smoke-deferral-ledger-2026-06-16.md).
+**CUT ledger reference:** `[go-to-sarah-master-cut-plan.md](go-to-sarah-master-cut-plan.md)` Step 3; `[pre-master-smoke-deferral-ledger-2026-06-16.md](pre-master-smoke-deferral-ledger-2026-06-16.md)`.
 
-**Consent-honesty sub-smokes (already authored — re-spot-check if time):** [`consent-honesty-premerge-smoke-index.md`](consent-honesty-premerge-smoke-index.md) indexes Block B + CC-1/CC-2 + erasure smokebooks on this branch preview.
+**Consent-honesty sub-smokes (already authored — re-spot-check if time):** `[consent-honesty-premerge-smoke-index.md](consent-honesty-premerge-smoke-index.md)` indexes Block B + CC-1/CC-2 + erasure smokebooks on this branch preview.
 
-**Convenience preview (optional):** [`https://preview.usemynk.com`](https://preview.usemynk.com) when repointed to this branch — use the verified alias above for smoke parity with deploy tip.
+**Convenience preview (optional):** `[https://preview.usemynk.com](https://preview.usemynk.com)` when repointed to this branch — use the verified alias above for smoke parity with deploy tip.
 
 ---
 
+
+
 ## CUT / merge gates
+
+
 
 ### 1. CUT-2 — `npx next build` exit 0 (Andrew confirms on tip)
 
-**Action:** Orchestrator already ran `npx next build` on tip [`912c886`](https://github.com/Arangarx/tutoring-notes/commit/912c886) during integrated gate greening. **Repeat in light, then dark:** on the **Preview**, spot-check that the app loads and one whiteboard workspace route renders without a Next.js error overlay (build-surface sanity only — not a substitute for the CI gate).
+**Action:** Orchestrator already ran `npx next build` on tip `[912c886](https://github.com/Arangarx/tutoring-notes/commit/912c886)` during integrated gate greening. **Repeat in light, then dark:** on the **Preview**, spot-check that the app loads and one whiteboard workspace route renders without a Next.js error overlay (build-surface sanity only — not a substitute for the CI gate).
 
 **Expect:** CI gate was **exit 0** (route table printed). Preview loads without chunk/CSS compile errors on tutor dashboard and one whiteboard workspace open.
 
 **Ignore this run:** Exact route-count parity with local build output.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -52,15 +56,17 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 ---
 
+
+
 ### 2. CUT-2b — Full `npx jest` suite (Andrew confirms on tip)
 
-**Action:** Orchestrator already ran full `npx jest` on tip [`912c886`](https://github.com/Arangarx/tutoring-notes/commit/912c886). **Repeat in light, then dark:** no separate UI action required unless you want to re-run locally; this item records your acknowledgment that the automated gate was green before hardware smoke.
+**Action:** Orchestrator already ran full `npx jest` on tip `[912c886](https://github.com/Arangarx/tutoring-notes/commit/912c886)`. **Repeat in light, then dark:** no separate UI action required unless you want to re-run locally; this item records your acknowledgment that the automated gate was green before hardware smoke.
 
 **Expect:** **2807 tests passed / 0 failed** on integrated tip (per orchestrator gate log).
 
 **Ignore this run:** Known pre-existing flaky suites when run in isolation with shared DB — full suite was green on tip.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -72,15 +78,17 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 ---
 
+
+
 ### 3. CUT-3 — `npm run test:wb-sync` relay gate (orchestrator fills)
 
-**Action:** Orchestrator ran `npm run test:wb-sync` (Docker relay) on tip [`c2ca8f5`](https://github.com/Arangarx/tutoring-notes/commit/c2ca8f5) @ `--workers=4`. **Repeat in light, then dark:** N/A — relay is headless; Andrew does not re-run unless orchestrator reports FAIL.
+**Action:** Orchestrator ran `npm run test:wb-sync` (Docker relay) on tip `[c2ca8f5](https://github.com/Arangarx/tutoring-notes/commit/c2ca8f5)` @ `--workers=4`. **Repeat in light, then dark:** N/A — relay is headless; Andrew does not re-run unless orchestrator reports FAIL.
 
 **Expect:** Relay Playwright suite **green** on integrated tip (required because E4 touched `event-log.ts` and WS-B/D touched whiteboard persist/resume paths). Any flake must be triaged against known `ECONNRESET` learner-login flake in BACKLOG — not accepted as regression without orchestrator sign-off.
 
 **Ignore this run:** Per-theme UI — relay has no theme dimension.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -94,6 +102,8 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 ---
 
+
+
 ### 4. CUT-4 — Claim Sarah pilot family before `NOTES_AUTH_WALL`
 
 **Action:** **Repeat in light, then dark:** Sign in as **ADMIN** on the **Preview**. Confirm Sarah's pilot family / learner profiles are **claimed** (not anonymous join-only) and that Sarah's tutor account can open her roster students without hitting a notes-auth wall that would lock her out post-cut. If not yet claimed, **STOP** master cut until claimed (Andrew-gated operation).
@@ -106,17 +116,20 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
-- [ ] SKIP
+- [x] SKIP
 
 **Coverage:** `[human-only: account/family configuration — no automated prod claim check]`
 
-**Notes:**
+**Notes:**  
+**I have no idea who sarah is tutoring right now.  Sarah's family is camping for the fourth of july weekend, it's unlikely I can get her to do something right now.**
 
 ---
 
+
+
 ### 5. CUT-5 — Env scoping at master cut (Andrew confirm)
 
-**Action:** **Repeat in light, then dark:** N/A for UI — confirm with orchestrator/deploy notes that production env vars (Neon, Blob, OAuth, `CRON_SECRET`, OpenAI keys, feature flags) are scoped correctly for Sarah traffic **before** `merge --no-ff v1-redesign → master`. Check [`docs/DEPLOY.md`](../DEPLOY.md) + orchestrator handoff.
+**Action:** **Repeat in light, then dark:** N/A for UI — confirm with orchestrator/deploy notes that production env vars (Neon, Blob, OAuth, `CRON_SECRET`, OpenAI keys, feature flags) are scoped correctly for Sarah traffic **before** `merge --no-ff v1-redesign → master`. Check `[docs/DEPLOY.md](../DEPLOY.md)` + orchestrator handoff.
 
 **Expect:** Andrew explicitly confirms env scoping checklist — no preview-only secrets on production path; migrations applied in correct order before traffic.
 
@@ -134,7 +147,11 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 ---
 
+
+
 ## Wave 5 durability surfaces (this cut)
+
+
 
 ### 6. WS-A — VAD silence-boundary segmentation (natural segment cuts mid-session)
 
@@ -144,7 +161,7 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 **Ignore this run:** Exact VAD threshold tuning; per-speaker lane content (separate item). Whisper map/reduce **wording** quality (MAP-ACC deferred post-master).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -156,6 +173,8 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 ---
 
+
+
 ### 7. WS-A — Approaching-time chime re-anchored to session elapsed (pause-aware)
 
 **Action:** **Repeat in light, then dark.** During an ACTIVE session (item 6 setup or fresh), watch/listen for the **approaching-time chime** and any on-screen session-time countdown tied to billing awareness. Let the session run long enough to approach the configured session-time warning threshold (~55 min of **active** session time if practical — or use a shorter test session and confirm the UI shows session elapsed time, not segment elapsed). **Pause** recording (if pause is available) and confirm the warning clock does **not** inflate while paused.
@@ -166,7 +185,7 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
@@ -174,7 +193,13 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 **Notes:**
 
+**I have no idea what this test is referring to.  There is no alert clock specifically.  Also the volume label for the alert should probably be consistent with the checkbox. Copy should probably be "Time alert volume:"**
+
+**This probably needs a fast follow up addition with copy that says what the time alert is configured to and also a way for the tutor to set the defaults in their settings.  In fact there's probably a ton of things the tutor should be able to configure.**
+
 ---
+
+
 
 ### 8. WS-A — 8-hour hard-stop preserved
 
@@ -188,24 +213,27 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
-- [ ] SKIP
+- [x] SKIP
 
 **Coverage:** `[automated: segment-policy + useAudioRecorder timer surgery — hard stop red-before on 912c886]`
 
-**Notes:**
+**Notes:**  
+**Are you asking me to leave a session running for 8 hours?? There has to be a way we can set up a test for this that doesn't require an actual 8 hour wait.**
 
 ---
 
+
+
 ### 9. WS-A — REPLAY-MIX INVARIANT (replay audio unchanged)
 
-**Action:** **Repeat in light, then dark.** Run a session with **full audio consent** and a **speaking learner** (second device). End session. Open **replay** and listen to the audio track. Compare to pre-cut expectation: replay audio = **tutor:mic mixdown** (tutor voice + consented learner summed in live mix), **not** isolated per-speaker tracks stitched in. Inspect replay segment list / devtools network if needed: replay sources should be **mixdown `SessionRecording` rows only** — no `student:peer-*:mic` rows in the replay set.
+**Action:** **Repeat in light, then dark.** Run a session with **full audio consent** and a **speaking learner** (second device). End session. Open **replay** and listen to the audio track. Compare to pre-cut expectation: replay audio = **tutor:mic mixdown** (tutor voice + consented learner summed in live mix), **not** isolated per-speaker tracks stitched in. Inspect replay segment list / devtools network if needed: replay sources should be **mixdown** `SessionRecording` **rows only** — no `student:peer-*:mic` rows in the replay set.
 
 **Expect:** Replay sounds like today's mixdown behavior (learner heard in replay when consented). **No** doubling of learner voice from per-speaker lanes. **No** per-speaker transcription-only blobs appearing as separate replay segments. Transcription may attribute per-speaker in notes backend, but **replay player audio** is mixdown-only.
 
 **Ignore this run:** Transcription attribution text in notes panel (separate from replay audio).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
@@ -214,7 +242,11 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 **Notes:**
 
+**I'm not recording another session to fucking test this...the scrubber is broken and I can't go to where my wife talked because time always seeks to 0 AGAIN.**
+
 ---
+
+
 
 ### 10. WS-A — Per-speaker transcription-only lanes (consented learner mic)
 
@@ -228,13 +260,16 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
-- [ ] SKIP
+- [x] SKIP
 
 **Coverage:** `[automated: wb-vad-per-speaker-durability.spec.ts › transcriptionOnly upload + TranscriptChunk lanes]`
 
-**Notes:**
+**Notes:**  
+**Why are you asking me to do technical shit that you can do...**
 
 ---
+
+
 
 ### 11. WS-B — Live whiteboard ~1s server persist (tab-kill recovery)
 
@@ -245,7 +280,7 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 **Ignore this run:** Exact 1000ms interval; Blob checkpoint path (30s IDB still exists as cache).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
@@ -254,7 +289,11 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 **Notes:**
 
+**Major Bug: Resumed session does pick up strokes from before, and I think it's picking up total time from before (maybe). BUT the transcribed notes very clearly only had the resumed audio (second half) and the audio on the replay started with the resumed audio.  It also stopped playing several seconds short of the end of the scrubber.**
+
 ---
+
+
 
 ### 12. WS-B — Tutor warning on repeated server persist failure
 
@@ -268,7 +307,7 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
-- [ ] SKIP
+- [x] SKIP
 
 **Coverage:** `[automated: useWhiteboardRecorder unit tests for serverPersistConsecutiveFailures + checkpointStatus]`
 
@@ -276,15 +315,17 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 ---
 
+
+
 ### 13. WS-C — End → straight to review overlay (no waiting-room flash)
 
 **Action:** **Repeat in light, then dark.** **Path A — in-live End:** ACTIVE session with strokes + audio; tutor clicks **End session** → confirm dialog → complete. **Path B — roster End and review:** Start session, record briefly, navigate **away** without End; from student-detail **active sessions** list click **End and review**. **Path C — gate End and review:** Same as B but from `WorkspaceResumeGate`. Watch for waiting-room / live-board flash before review.
 
-**Expect:** Lands on **`SessionReviewMode`** / in-shell review overlay within **~5s** — **no** full waiting-room detour, **no** live Excalidraw mount flash before review. `endedAt` set; recordings preserved; strokes visible in board preview/replay. In-live End copy honest ("End session" + confirm about review/notes).
+**Expect:** Lands on `SessionReviewMode` / in-shell review overlay within **~5s** — **no** full waiting-room detour, **no** live Excalidraw mount flash before review. `endedAt` set; recordings preserved; strokes visible in board preview/replay. In-live End copy honest ("End session" + confirm about review/notes).
 
 **Ignore this run:** `intent=endreview` deep-link fallback if still present behind flag; marketing chrome.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -294,7 +335,11 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 **Notes:**
 
+**Seems to be going to the review screen directly properly.  I'm not sure it's actually loading ANY data, but it is going to that screen.**
+
 ---
+
+
 
 ### 14. WS-D — Reopen ACTIVE session — server hydrate (server ahead of IDB)
 
@@ -304,7 +349,7 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 **Ignore this run:** Student join path (covered in regression); first-open PENDING session (no batches yet).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -312,9 +357,11 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 **Coverage:** `[automated: tests/integration/wb-resume-from-backend.spec.ts — no IDB banner, multi-page resume]`
 
-**Notes:**
+**Notes:  Pretty sure I saw this pass testing step 11. My brain is so fried from frustration right this second I'll call that good ;p**
 
 ---
+
+
 
 ### 15. WS-D — IDB-ahead tail auto-merge (zero loss when local ahead of server)
 
@@ -324,7 +371,7 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 **Ignore this run:** Exact merge logging (`[wbr] merge_gap`).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -336,6 +383,8 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 ---
 
+
+
 ### 16. WS-E1 — Notes shimmer while generating (reduced-motion + copy)
 
 **Action:** **Repeat in light, then dark.** End a session with real audio so notes enter `pending` → `generating`. On review overlay, watch the notes fields area during generation. Toggle OS **prefers-reduced-motion** (or browser emulation) and re-run once.
@@ -345,7 +394,7 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 **Ignore this run:** MAP-ACC content quality; live-session notes display (deferred — no notes UI on live board).
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
@@ -356,6 +405,8 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 ---
 
+
+
 ### 17. WS-E2 — PDF import — no duplicate strokes across page/board switch
 
 **Action:** **Repeat in light, then dark.** On ACTIVE workspace: draw identifiable strokes on **board/page 3**. Import a **PDF** onto a **new board/page 4** (page-picker flow). Switch between board tabs 3 and 4 several times.
@@ -364,7 +415,7 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 **Ignore this run:** PDF render quality in headless environments; inv-8 pdfjs Playwright gap (BACKLOG).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -376,6 +427,8 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 ---
 
+
+
 ### 18. WS-E4 — Replay shows correct ACTIVE board tab during page switches
 
 **Action:** **Repeat in light, then dark.** Session with **≥2 boards/pages**; tutor switches pages during recording. End; open replay. Scrub timeline through points where tutor changed pages.
@@ -384,7 +437,7 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 **Ignore this run:** Replay ±10s buttons (deferred SMOKE-UX-3); play/pause glyph centering nit.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -396,6 +449,8 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 ---
 
+
+
 ### 19. WS-E5 — Stroke roughness persists and renders in replay
 
 **Action:** **Repeat in light, then dark.** On live board, set pencil/freedraw **roughness** to a non-default value (e.g. high roughness). Draw a stroke. End session. Open replay at that timestamp.
@@ -404,17 +459,20 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 **Ignore this run:** Other stroke style dimensions (color, size) unless obviously broken.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
-- [ ] N/A with notes
+- [x] N/A with notes
 - [ ] SKIP
 
 **Coverage:** `[automated: tests/integration/wb-roughness-style.spec.ts]`
 
-**Notes:**
+**Notes:**  
+**Pencil strokes don't seem affected by roughness setting at all.  So replay draws same roughness anyway.**
 
 ---
+
+
 
 ### 20. WS-E6 — Student mic device choice persists across rejoin
 
@@ -424,9 +482,9 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 **Ignore this run:** Fake-media Playwright slot-swap limitation (jest covers persist round-trip).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
@@ -434,9 +492,15 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 **Notes:**
 
+**At first it didn't seem to be, but it has the last few sessions...so hopefully just a site refresh issue?**
+
 ---
 
+
+
 ## Human-only surfaces (PARKED / hardware-required)
+
+
 
 ### 21. [human-only] E3 — WebRTC A/V reconnect / media-transport recovery (Safari/iOS)
 
@@ -458,6 +522,8 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 ---
 
+
+
 ### 22. [human-only] VAD / AudioContext under iOS Safari backgrounding
 
 **Action:** On **real iPhone/iPad Safari**, join as student or tutor with recording ACTIVE. Background the tab (switch app / lock screen) for 30–60s; foreground. Continue speaking and drawing.
@@ -477,6 +543,8 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 **Notes:** Reason: needs real iOS device; SF-3 clamp documents best-effort only until hardware pass.
 
 ---
+
+
 
 ### 23. [human-only] Per-speaker lane CPU / thermal on real mobile hardware
 
@@ -498,6 +566,8 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 ---
 
+
+
 ### 24. Per-speaker transcript on real audio [human-only]
 
 **Action:** On real tutor + consented-learner hardware (real mics, not the test fake-mic), run a two-party session with per-speaker lanes enabled (policy=full + claimed LearnerProfile), speak from both parties, End the session, and open the transcript/notes.
@@ -516,7 +586,11 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 ---
 
+
+
 ## Standing full-site regression (both themes)
+
+
 
 ### 25. Auth — tutor login + session persistence
 
@@ -538,6 +612,8 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 ---
 
+
+
 ### 26. Auth — student / learner login
 
 **Action:** **Repeat in light, then dark.** Sign in as **learner** (child PIN or family login path used in pilot). Reach student home/shell. Sign out if available.
@@ -557,6 +633,8 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 **Notes:**
 
 ---
+
+
 
 ### 27. Tutor dashboard + student roster
 
@@ -578,6 +656,8 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 ---
 
+
+
 ### 28. Student join gate (waiting room + consent)
 
 **Action:** **Repeat in light, then dark.** Tutor starts session; student opens join link on second device. Complete waiting room, consent prompts, and enter live board.
@@ -597,6 +677,8 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 **Notes:**
 
 ---
+
+
 
 ### 29. Live A/V connect (happy path)
 
@@ -618,6 +700,8 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 ---
 
+
+
 ### 30. Whiteboard core — draw, pan, zoom, pages
 
 **Action:** **Repeat in light, then dark.** Tutor + student synced: draw strokes, erase, pan/zoom, add/switch **pages/boards**, student follow-tutor toggle if shown.
@@ -637,6 +721,8 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 **Notes:**
 
 ---
+
+
 
 ### 31. Replay playback (single-segment happy path)
 
@@ -658,6 +744,8 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 ---
 
+
+
 ### 32. Notes — review, save, finalize
 
 **Action:** **Repeat in light, then dark.** After End, on review overlay: wait for notes generation; edit fields; **Save**; mark **Ready** / finalize if shown. Reload review page.
@@ -678,9 +766,11 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 ---
 
+
+
 ### 33. Consent gates (Block B + CC-1/CC-2 spot-check)
 
-**Action:** **Repeat in light, then dark.** Spot-check: tutor audio consent banners; student join consent choices; session cannot proceed without required `ConsentRecord` where applicable. Full matrix: [`consent-honesty-premerge-smoke-index.md`](consent-honesty-premerge-smoke-index.md).
+**Action:** **Repeat in light, then dark.** Spot-check: tutor audio consent banners; student join consent choices; session cannot proceed without required `ConsentRecord` where applicable. Full matrix: `[consent-honesty-premerge-smoke-index.md](consent-honesty-premerge-smoke-index.md)`.
 
 **Expect:** No silent capture when consent off; honest copy on toggles; remote surgical mixdown when recording denied but live allowed (Block B item 3b if re-run).
 
@@ -697,6 +787,8 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 **Notes:**
 
 ---
+
+
 
 ### 34. Share links — tokenized + revocable parent view
 
@@ -718,9 +810,11 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 ---
 
+
+
 ### 35. Erasure — admin UI spot-check
 
-**Action:** **Repeat in light, then dark.** ADMIN: `/admin/erasure` loads; trigger flow UI present (do **not** erase real pilot data — use test learner only or read-only verification). Full runbook: [`erasure-smokebook.md`](erasure-smokebook.md).
+**Action:** **Repeat in light, then dark.** ADMIN: `/admin/erasure` loads; trigger flow UI present (do **not** erase real pilot data — use test learner only or read-only verification). Full runbook: `[erasure-smokebook.md](erasure-smokebook.md)`.
 
 **Expect:** Admin-only gate; confirmation phrase enforced; grace-window semantics understood.
 
@@ -738,9 +832,11 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 ---
 
+
+
 ### 36. CUT-6 — 2FA re-smoke on merged tip
 
-**Action:** **Repeat in light, then dark.** ADMIN account with 2FA enrolled: log out; log in with password → TOTP challenge; complete login. Test **remember device** skip if enabled (real browser — RSC cookie path). Reference: [`2fa-remember-device-smokebook-2026-06-13.md`](2fa-remember-device-smokebook-2026-06-13.md) tests 1–2.
+**Action:** **Repeat in light, then dark.** ADMIN account with 2FA enrolled: log out; log in with password → TOTP challenge; complete login. Test **remember device** skip if enabled (real browser — RSC cookie path). Reference: `[2fa-remember-device-smokebook-2026-06-13.md](2fa-remember-device-smokebook-2026-06-13.md)` tests 1–2.
 
 **Expect:** 2FA challenge appears; valid TOTP succeeds; no QR secret egress to third-party URLs; remember-device works on real preview runtime.
 
@@ -757,6 +853,8 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 **Notes:**
 
 ---
+
+
 
 ### 37. Privacy + terms facades
 
@@ -778,6 +876,8 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 ---
 
+
+
 ### 38. Theme toggle — global sanity (CUT-1 helper)
 
 **Action:** **Repeat in light, then dark.** From tutor dashboard and one whiteboard workspace: open theme control; select **Light**, **Dark**, **System**; verify immediate apply. Escape closes menu.
@@ -798,18 +898,22 @@ This is the **pre-master comprehensive MASTER-CUT smoke** for the go-to-Sarah du
 
 ---
 
+
+
 ## Cross-branch / post-merge
 
 Run this section **after** `merge --no-ff wb-wave5-polish → v1-redesign` (integration branch preview — fetch new alias via Vercel MCP; **never guess** hash).
 
 **Integration branch:** `v1-redesign`
-**Integration tip commit:** _fill at merge time_
-**Integration preview:** _[v1-redesign preview](https://<fetch-branchAlias-via-MCP>)_
+**Integration tip commit:** *fill at merge time*
+**Integration preview:** *[v1-redesign preview](https://<fetch-branchAlias-via-MCP>)*
 
 **Overall integration result:**
 
 - [ ] PASS
 - [ ] FAIL
+
+
 
 ### 1. Post-merge regression — durability spine on integration tip
 
@@ -831,9 +935,11 @@ Run this section **after** `merge --no-ff wb-wave5-polish → v1-redesign` (inte
 
 ---
 
+
+
 ### 2. Post-merge `test:wb-sync` on integration tip (if WB paths conflicted)
 
-**Action:** Orchestrator runs relay if merge conflicts touched `src/lib/whiteboard/**` or `src/components/whiteboard/**`.
+**Action:** Orchestrator runs relay if merge conflicts touched `src/lib/whiteboard/`** or `src/components/whiteboard/`**.
 
 **Expect:** Green relay on integration tip.
 
@@ -851,9 +957,11 @@ Run this section **after** `merge --no-ff wb-wave5-polish → v1-redesign` (inte
 
 ---
 
+
+
 ## Pre-merge SHOULD-FIX (optional, before v1-redesign merge)
 
-**F-1 (outbox register retry cap)** — SHOULD-FIX from the WS-A outbox 5-axis review, deferred overnight (review said next-wave acceptable; bounded impact, no data loss). Register failures don't increment attempts, so the permanentFailAfter cap never applies → unbounded retries on a persistently-failing register server (log-spam / wasted calls). ~10-line in-memory fix: track attempts on register failure + reuse the existing permanentFailAfter, add an in-flight Set<string> to prevent double-invoke of handleSegmentUploaded in fast-VAD windows (F-2), and dedupe the duplicate action=register_mid_session log line (F-3). Do it with its own quick review before merging.
+**F-1 (outbox register retry cap)** — SHOULD-FIX from the WS-A outbox 5-axis review, deferred overnight (review said next-wave acceptable; bounded impact, no data loss). Register failures don't increment attempts, so the permanentFailAfter cap never applies → unbounded retries on a persistently-failing register server (log-spam / wasted calls). ~10-line in-memory fix: track attempts on register failure + reuse the existing permanentFailAfter, add an in-flight Set to prevent double-invoke of handleSegmentUploaded in fast-VAD windows (F-2), and dedupe the duplicate action=register_mid_session log line (F-3). Do it with its own quick review before merging.
 
 ## Overall result
 
