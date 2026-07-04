@@ -276,6 +276,7 @@ model SessionRecording {
    * compatibility (queries that don't filter by streamId).
    */
   @@index([whiteboardSessionId, streamId])
+  @@unique([whiteboardSessionId, orderIndex])
 }
 
 /**
@@ -407,12 +408,37 @@ model WhiteboardSession {
 
   sessionParticipants SessionParticipant[]
 
+  /// WS-B: cursor for ~1s live event-batch persistence (wave 0).
+  lastPersistedBatchSeq Int @default(0)
+  lastPersistedToIndex  Int @default(-1)
+
+  whiteboardEventBatches WhiteboardEventBatch[]
+
   createdAt  DateTime    @default(now())
   costEvents CostEvent[]
 
   @@index([adminUserId])
   @@index([studentId])
   @@index([noteId])
+}
+
+/// ~1s batched whiteboard event persistence (WS-B, wave 0).
+model WhiteboardEventBatch {
+  id                  String            @id @default(cuid())
+  whiteboardSessionId String
+  whiteboardSession   WhiteboardSession @relation(fields: [whiteboardSessionId], references: [id], onDelete: Cascade)
+  batchSeq            Int
+  fromEventIndex      Int
+  toEventIndex        Int
+  eventsJson          Json
+  /// Required on every batch for multi-page recovery.
+  boardDocumentJson   Json
+  schemaVersion       Int
+  createdAt           DateTime          @default(now())
+
+  @@unique([whiteboardSessionId, batchSeq])
+  @@index([whiteboardSessionId, createdAt])
+  @@index([whiteboardSessionId, toEventIndex])
 }
 
 model SessionParticipant {

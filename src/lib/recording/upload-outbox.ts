@@ -105,6 +105,15 @@ export type OutboxRow = {
    */
   audioStartedAtMs: number;
   /**
+   * Start offset in the monotonic recording-time clock (ms). Optional
+   * until multi-stream capture populates it (SF-5; no IDB bump).
+   */
+  recordingTimeOffsetMs?: number;
+  /**
+   * Optional per-speaker label (e.g. peer id) for multi-stream capture.
+   */
+  speakerId?: string;
+  /**
    * True after the atomic endWhiteboardSession action confirms this
    * segment was persisted server-side. In practice we delete the row
    * via `finalize` in the same step, so this field is mostly a
