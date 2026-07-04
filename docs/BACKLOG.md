@@ -107,6 +107,31 @@ Andrew is **not** executing the *"look through the console for `clock_*` logs"* 
 
 ---
 
+## wb-wave5-polish hardware-smoke findings (Andrew, 2026-07-04)
+
+> From Andrew's real-hardware smoke of `wb-wave5-polish` (in-person + solo paths; wife drew strokes with no remote student joined). **2026-07-04 smoke — test coverage gap:** wb-wave5-polish Playwright teeth overwhelmingly join a **REMOTE** student and usually seed a recording; the **in-person / solo / no-audio / tutor-device** quadrant had **zero Playwright coverage**, which is why Entries 1–3 below reached hardware smoke only. New teeth for that quadrant are **required before the Sarah cut**.
+
+### 🔴 Pre-Sarah reliability blockers
+
+| Item | Notes |
+|------|-------|
+| **SMOKE-BLOCK-5 — in-person & solo (no-remote-student) sessions don't capture strokes → no replay** | **P1 / pre-Sarah.** Symptom (real HW smoke, Andrew's wife): drew whiteboard strokes with no student joined / in-person; at end **"Replay session"** did not appear and review showed **"No board strokes recorded"** / **"No recording available"**. Root cause: Replay is correctly gated on `hasAudio \|\| eventCount > 0` (`SessionReviewMode.tsx` ~L111), but the persisted event log is empty (`events: []`). In a LIVE, audio-allowed session with no student joined, the recording FSM stays in `armed / awaiting_first_participant` (`lifecycle-machine.ts` ~L636–644), and while armed the whiteboard stroke-capture gate `wbCaptureActive` is false for audio-policy modes (`audio-capture-policy.ts` `deriveWbCaptureActive`; `useWhiteboardRecorder.ts` ~L703 skips appending diffs when `recordingActive` is false) → strokes never enter the log → empty finalize. Also: WS-B `runServerPersist` aborts without a `boardDocument` (`useWhiteboardRecorder.ts` ~L1162), and roster **"End and review"** has no client-log upload fallback. Partly pre-existing (armed gate is Phase-4d), surfaced by **PRESARAH-1** always-on recording; WS-B/WS-C finalize+assembly are new this wave. **HAPPY path** (student joins → recording starts) **DOES** capture strokes. Scope: no-remote-participant case (in-person + solo-before-student). **No Playwright coverage** exists for strokes-only/no-audio end-to-review. **Fix requires touching the fragile recorder FSM + a design decision** on how in-person/solo should record — plan-mode pass required, likely escalate tier. **Playwright teeth requirement:** in-person/solo session, draw strokes, end, assert Replay affordance + non-empty events + strokes counted. |
+
+### 🟡 Bugs / gaps (triage pre-Sarah vs backlog)
+
+| Item | Notes |
+|------|-------|
+| **SMOKE-BUG-10 — "Waiting for your student to join…" banner shows in in-person mode** | **P2.** Root cause: in-person `sessionMode=IN_PERSON` (prisma `SessionMode` enum) is wired only to the waiting-room Start-button bypass (`WhiteboardWorkspaceClient` ~L5760–5763), **NOT** to the recording FSM or banner. Banner is driven by FSM `armed/awaiting_first_participant` via `syncEnabled: !!syncUrl` + zero WebRTC participants (`lifecycle-machine.ts` ~L642; `WhiteboardWorkspaceClient` ~L2389, L2401–2407, L6508) — `sessionMode` is never consulted. Same underlying condition as **SMOKE-BLOCK-5**. Pre-existing when IN_PERSON landed; not created by wave5 polish UI. Only in-person Playwright test asserts Start-enabled, not banner-absent. **Test gap:** assert banner absent in in-person. |
+| **SMOKE-BUG-11 — tutor mic device not remembered in the picker (present-but-broken)** | **P2.** Root cause: tutor mic **IS** persisted (global `tn-mic-device-id`) and the recorder (`useAudioRecorder`) restores it for capture, but the whiteboard picker UI reads `useLiveAV.pickedMicSlot`, which is **never initialized** from `tn-mic-device-id` or from the external recorder stream on mount (`useLiveAV.ts` ~L1686–1730, comment L269–273) — so the waiting-room/overflow picker defaults to slot 0. E6 (`3a8572f`) wired the **LEARNER** mic end-to-end in `useLiveAV` (`tn-mic-device-id:<learnerProfileId>`) but left the tutor on the recorder path unbridged. Also `localStorage` is per-browser (won't sync across machines), and stale stored ids fall back to OS default (explains "only works when the right device is default"). **Enum of what persists today:** tutor cam YES, tutor mic PARTIAL (capture yes / picker no), learner cam YES, learner mic YES. Logic layer is jest-testable; picker pre-select is DOM/Playwright testable. **No tutor-mic pre-select test exists.** |
+
+### 🔵 Privacy / shared-device UX
+
+| Item | Notes |
+|------|-------|
+| **SMOKE-PRIV-1 — learner sign-out leaves parent (account-holder) session live on a shared device** | **P2 / privacy.** By-design dual-cookie coexistence (`mynk_ah_session` + `mynk_learner_session`, identity-phase2-auth-session-design §5.1); learner logout (`/api/auth/learner/logout`) clears **ONLY** the learner layer, so navigating to `/` or `/account/*` reveals the still-authenticated parent account. There is also **no shipped learner sign-out UI** (cross-ref **SMOKE-BLOCK-4** resolved the affordance gap on a prior pass — this row is the shared-device privacy consequence). **Andrew's decision (2026-07-04):** sign-out must **NOT** leave someone else's session going; revisit the exact UX when learner-switching-for-sessions is added. Options to consider: a real learner sign-out that lands on the learner login page; and/or a **"lock this device"** that clears both cookies. Cross-realm privilege separation still holds (learner cookie can't reach `/admin`) — this is a **shared-device privacy/UX gap**, not an auth-boundary breach. |
+
+---
+
 ## Login-friction thread follow-ups (2026-06-14)
 
 | Item | Priority | Notes |
