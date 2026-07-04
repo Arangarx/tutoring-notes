@@ -86,6 +86,8 @@ Every touched surface gets a **Playwright** test written **to the user-observabl
 
 `npm run test:wb-jest` (~5s) is **inner-loop only** — not merge proof for sync/geometry/audio cadence.
 
+**Acceptance bar (Andrew, 2026-07-04):** the smoke bar is that Andrew catches **ZERO mechanical bugs a test could have caught**. The ONLY surface allowed to ship without an automated test is one **explicitly annotated `[human-only]` in the smokebook, with a stated reason** (e.g. WebRTC media-transport reconnect needs real Safari/iOS hardware — see E3). Everything mechanically exercisable gets a **red-before / green-after** Playwright-to-spec test as part of its workstream acceptance — **a workstream is NOT done until its teeth-test is green**. If a touched surface seems "untestable," first prove it can't be exercised in the relay/real-browser harness before falling back to `[human-only]`; do not use `[human-only]` to dodge a writable test.
+
 ### 2. Merge-boundary gates
 
 | Gate | When |
@@ -278,6 +280,7 @@ Replace 50-min rollover with **VAD silence-boundary** segments; register each se
 3. Student speaks while unmuted; assert **≥1** `transcriptionOnly` upload with `streamId` matching `student:peer-*:mic`.
 4. **Before End click:** call test helper route `GET /api/test/whiteboard/[sessionId]/recording-count` (Bearer `$PLAYWRIGHT_TEST_SECRET`; compiled only when `NODE_ENV === 'test'` or `PLAYWRIGHT_TEST=1`) — assert `count ≥ 2` for `wbsid`. **No direct Prisma in test setup.**
 5. End via UI; assert `TranscriptChunk` rows for both `tutor:mic` and per-speaker stream; `TutorNote` reaches `done` within timeout.
+5b. **Replay-mix invariant (teeth — guards Andrew's replay concern):** after End, assert the session's `SessionRecording` set (the replay source) contains **only** `tutor:mic` mixdown segments and **excludes every** `transcriptionOnly` per-speaker row — i.e. assert **no** `SessionRecording` row has a `student:peer-*:mic` `streamId`, and the replay segment count equals the mixdown upload count from step 2. **Red-before:** enqueue a per-speaker row **without** `transcriptionOnly: true` (or break the `assembleEndSessionSegments` skip) → the test MUST fail because the per-speaker audio leaked into the replay set. This is the mechanical guard against learner audio doubling into replay.
 6. **Red-before:** temporarily disable VAD cut → test fails on segment count.
 7. **Red-before (hard stop):** drive `SESSION_SAFETY_MAX_SECONDS` override → assert hard stop still fires after timer surgery.
 
@@ -287,7 +290,7 @@ Replace 50-min rollover with **VAD silence-boundary** segments; register each se
 - [ ] `SESSION_SAFETY_MAX_SECONDS` hard stop still fires (timer surgery preserved L628–635).
 - [ ] VAD cuts anchored to p3-clock via meter RAF; pause freezes clock (no inflation).
 - [ ] `SessionRecording` rows exist mid-session for mixdown segments.
-- [ ] Per-speaker lanes produce `TranscriptChunk` + map rows; replay audio is mixdown-only.
+- [ ] Per-speaker lanes produce `TranscriptChunk` + map rows; **replay audio is mixdown-only — asserted by test step 5b (per-speaker rows excluded from `SessionRecording`/replay set), red-before proven.**
 - [ ] `vad` / `psc` logs grep-clean on happy path.
 - [ ] Consent denied → no per-speaker lanes; mixdown policy per Block B mode rules.
 
