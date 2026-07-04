@@ -466,7 +466,6 @@ describe("useAudioRecorder — VAD segment cut", () => {
 
 describe("useAudioRecorder — auto-rollover at SEGMENT_MAX_SECONDS (removed)", () => {
   test("50-min timer rollover is gone — SEGMENT_MAX_SECONDS export removed", () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const hookMod = require("@/hooks/useAudioRecorder") as Record<string, unknown>;
     expect(hookMod.SEGMENT_MAX_SECONDS).toBeUndefined();
   });

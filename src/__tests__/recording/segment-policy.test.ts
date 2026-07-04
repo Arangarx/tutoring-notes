@@ -24,7 +24,6 @@ import {
 
 describe("segment-policy — 50-min rollover removed (red-before)", () => {
   test("SEGMENT_MAX_SECONDS symbol is gone from exports", () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const mod = require("@/lib/recording/segment-policy") as Record<string, unknown>;
     expect(mod.SEGMENT_MAX_SECONDS).toBeUndefined();
     expect(mod.shouldRolloverSegment).toBeUndefined();

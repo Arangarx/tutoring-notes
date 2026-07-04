@@ -131,10 +131,11 @@ async function loadPdfJs(): Promise<typeof import("pdfjs-dist")> {
       // webpackIgnore: load the pre-built ESM from public/ (see
       // scripts/copy-pdfjs-worker.mjs). Bundling pdfjs-dist through
       // Next.js dev eval-source-map breaks its nested __webpack_exports__.
-      const mod = await import(
+      const PDFJS_PUBLIC_MODULE = "/pdfjs/pdf.min.mjs";
+      const mod = (await import(
         /* webpackIgnore: true */
-        "/pdfjs/pdf.min.mjs"
-      );
+        PDFJS_PUBLIC_MODULE
+      )) as typeof import("pdfjs-dist");
       mod.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.mjs";
       return mod;
     })();
