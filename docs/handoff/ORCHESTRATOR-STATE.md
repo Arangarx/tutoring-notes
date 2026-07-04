@@ -17,13 +17,16 @@ Final 5-axis sanity pass: **no new fragile-surface BLOCKER**; plan execution-rea
 | Step | Status | Commit / note |
 |---|---|---|
 | Wave 0 — migration + OutboxRow TS fields | ✅ | [`34d2a34`](https://github.com/Arangarx/tutoring-notes/commit/34d2a34) — `WhiteboardEventBatch` + `SessionRecording` orderIndex `@@unique` + `lastPersistedBatchSeq/ToIndex` cols; OutboxRow `recordingTimeOffsetMs?`/`speakerId?` (no IDB bump). Additive-only (68 ins/0 del); local dup-check zero; validate + test:wb-jest 774 green. **NOTE for cut:** local test DB has no `_prisma_migrations` history (P3005) → migration applied via `db execute`; folder well-formed for Neon `migrate deploy` at cut, but re-run dup-orderIndex check on prod before applying. |
-| WS-A — audio durability (VAD + register + per-speaker) | ⬜ IN PROGRESS | fragile-serial |
-| WS-B — WB ~1s persist sidecar | ⬜ | after WS-A |
+| WS-A — audio durability (VAD + register + per-speaker) | ✅ code+unit | P1 [`23c11a5`](https://github.com/Arangarx/tutoring-notes/commit/23c11a5) (VAD in meter RAF; timer surgery: hard-stop KEPT / chime re-anchored to session time / 50-min deleted; atomic-orderIndex register; onSegmentUploaded hook) + P2 [`05d2a65`](https://github.com/Arangarx/tutoring-notes/commit/05d2a65) (per-speaker lanes consent-gated on policy==full + claimed LearnerProfile; C-core folded; A4 merge). Mixdown/consent/gain UNTOUCHED. Replay-mix exclusion RED-BEFORE proven (unit). jest 777. |
+| WS-B — WB ~1s persist sidecar | ✅ code+unit | [`578f350`](https://github.com/Arangarx/tutoring-notes/commit/578f350) — `runServerPersist` sidecar (mutex `persistInProgressRef`, 409-safe cursor, retry×3, boardDocumentJson every batch, ≥3-fail tutor warning); checkpoint route batch upsert (BLOCKER-2); erasure walk + db-state test route; no 1s Blob. Section A/`runCheckpoint`/apply paths UNTOUCHED. Policy unit 10/10 + route 5/5; jest 790. |
+| Sonnet 5-axis review of WS-A+WS-B fragile diff | ⬜ NEXT | before WS-C/D build on top |
 | E2 dup-stroke PDF · E3 reconnect pill | ⬜ | fragile-serial |
-| WS-C finalize-from-backend · WS-D resume | ⬜ | after A2+B2 |
+| WS-C finalize-from-backend · WS-D resume | ⬜ | after A2+B2 + 5-axis |
 | WS-E E1/E4/E5/E6 bugs | ⬜ | serial (shared worktree) |
 | Integrated gate (test:wb-sync + next build) | ⬜ | final tip |
 | Both-theme master-cut smokebook | ⬜ | PARK at merge gate for Andrew hardware smoke |
+| **⚠️ GATE PREREQ** — Playwright test webServer `prisma db push` wants `--accept-data-loss` → blocks ALL wb relay/teeth specs (WS-A/B/C/D + E2/E4 authored-not-run). Resolve before/at integrated gate. | ⬜ | shared blocker |
+| **⚠️ git-safety note** — WS-B subagent `git restore`d an uncommitted STATE edit (clobbered, reconstructed). COMMIT state edits immediately, never leave uncommitted across a dispatch. | — | lesson |
 
 **HARD STOPS (park for Andrew):** merge to v1-redesign/master; Neon/prod migrations; account reset; force-push. Build up to these, write smokebook, STOP.
 
