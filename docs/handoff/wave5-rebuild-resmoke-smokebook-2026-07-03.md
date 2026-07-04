@@ -1,7 +1,7 @@
 # Wave 5 rebuild — corrected-targets re-smoke — smoke runbook
 
 **Branch:** `wb-wave5-polish`
-**Tip commit:** [`37189fe`](https://github.com/Arangarx/tutoring-notes/commit/37189fe)
+**Tip commit:** `[37189fe](https://github.com/Arangarx/tutoring-notes/commit/37189fe)`
 **Preview (branch alias):** [wb-wave5-polish preview](https://tutoring-notes-git-wb-wave5-polish-arangarx-5209s-projects.vercel.app) — confirmed READY serving tip `37189fe`.
 **Preview (stable domain):** [preview.usemynk.com](https://preview.usemynk.com) — lands logged-in once repointed to this branch.
 
@@ -9,7 +9,11 @@
 
 ---
 
+
+
 ## Feature smoke items
+
+
 
 ### 1. Replay auto-play from start (in-shell review)
 
@@ -21,7 +25,7 @@
 
 - [ ] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
@@ -29,7 +33,17 @@
 
 **Notes:**
 
+**It starts at the beginning and auto plays, this is good.**
+
+**The bad is -> after pause and hide then replay session again it starts from the beginning again instead of where it paused.**
+
+**Also, and I'm fine with this being post sarah, if I paused the video myself before hitting pause and hide replay and then hit replay session again, I would probably expect it to still be paused.**
+
+**No notes generated at all, but that could possibly make sense since we didn't really say anything of substance. However, I already noted it didn't do the shimmer even with the copy at the bottom saying it was generating notes.**
+
 ---
+
+
 
 ### 2. Notes generation shimmer (post-End)
 
@@ -40,7 +54,7 @@
 **Ignore this run:** Exact shimmer color, animation speed, or minor timing before first shimmer frame.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
@@ -49,7 +63,11 @@
 
 **Notes:**
 
+**How is this one so hard? Do you maybe think I'm talking about something I'm not?  I'm really confused how this is so hard for you.  Not one single attempt from an agent has produced the effect yet.**
+
 ---
+
+
 
 ### 3. Learner / student logged-in top bar size
 
@@ -59,7 +77,7 @@
 
 **Ignore this run:** Sub-pixel height differences; in-session whiteboard top bar (out of scope for this item).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -71,6 +89,8 @@
 
 ---
 
+
+
 ### 4. In-session "End session" button + honest confirm
 
 **Action:** On the **Preview**, sign in as tutor and open a **live** whiteboard session (Start if needed; student join optional for this item). In the **in-session top bar**, locate the End control and read its label. Click it once. Read the **confirmation dialog** title, body, and both action buttons. Click **Keep going** (dismiss) and confirm you remain in the live session unchanged. Start a **separate** live session (or reuse after dismiss). Click End again and this time confirm with **End session**.
@@ -79,7 +99,7 @@
 
 **Ignore this run:** Exact button placement in the top bar; student-side End affordance (tutor-only item).
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
@@ -89,7 +109,11 @@
 
 **Notes:**
 
+**Future enhancement idea.  Audio only replay can probably just be right there on the notes screen without revealing canvas.**
+
 ---
+
+
 
 ### 5. End-and-review from the student-detail roster (SSG-2)
 
@@ -99,9 +123,9 @@
 
 **Ignore this run:** Nothing.
 
-- [ ] PASS
+- [x] PASS
 - [ ] FAIL
-- [ ] PARTIAL
+- [x] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
 
@@ -109,7 +133,13 @@
 
 **Notes:**
 
+**Partial reason: End and review went through the waiting room first, should go straight to review page.**
+
+**Everything seems to be working as intended. I'll also pay attention as I'm using it going forward to try to make sure notes always appear so future clicks into things I don't have to wonder if no notes = regression.**
+
 ---
+
+
 
 ### 6. End-and-review from the resume gate (reopen stale session directly)
 
@@ -120,7 +150,7 @@
 **Ignore this run:** Nothing.
 
 - [ ] PASS
-- [ ] FAIL
+- [x] FAIL
 - [ ] PARTIAL
 - [ ] N/A with notes
 - [ ] SKIP
@@ -129,7 +159,11 @@
 
 **Notes:**
 
+**The link I copied from when the session was first live is what I used for this test, and it took me straight into the session.  Honestly...I don't know that it's even worth the effort of having the gate in between.  So technically fail, but...also...I don't know that I care.  I think if you use the same link you're just trying to get back in.**
+
 ---
+
+
 
 ### 7. SSG-2 data-preservation spot-check (the core value)
 
@@ -151,6 +185,8 @@
 
 ---
 
+
+
 ## Cross-branch / post-merge
 
 Run this section **after** `wb-wave5-polish` merges into the integration branch (`v1-redesign`). Use the **integration branch preview** (fetch alias via Vercel MCP — do not guess).
@@ -159,12 +195,14 @@ Run this section **after** `wb-wave5-polish` merges into the integration branch 
 **Integration tip commit:** *(fill at merge time)*
 **Integration preview:** *(fetch branchAlias at merge time)*
 
-**Merge gate reminder:** Before `merge --no-ff` into `v1-redesign`, run **`npm run test:wb-sync`** on the integrated tip (relay Playwright gate — merge-boundary, not per-commit).
+**Merge gate reminder:** Before `merge --no-ff` into `v1-redesign`, run `npm run test:wb-sync` on the integrated tip (relay Playwright gate — merge-boundary, not per-commit).
 
 **Overall integration result:**
 
 - [ ] PASS
 - [ ] FAIL
+
+
 
 ### 1. Wave 5 rebuild regressions — spot-check on integration preview
 
@@ -183,6 +221,8 @@ Run this section **after** `wb-wave5-polish` merges into the integration branch 
 **Notes:**
 
 ---
+
+
 
 ## Overall result
 

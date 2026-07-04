@@ -6,7 +6,9 @@
 
 ---
 
-## ⏩ HEAD — 2026-07-03 (late): **corrected rebuild COMPLETE** (all 6 surfaces landed + Playwright-to-spec @ tip `37189fe`); consolidated re-smoke smokebook being authored, then Andrew hardware re-smoke
+## ⏩ HEAD — 2026-07-04: **go-to-Sarah master-cut plan FINALIZED + 5-axis-hardened** — ready to execute from a FRESH chat (Opus conducts durability pillars) @ [`go-to-sarah-master-cut-plan.md`](go-to-sarah-master-cut-plan.md)
+
+> **FRESH EXECUTION CHAT — start here.** Work in worktree **`tutoring-notes-polishwt`** (a subagent got lost on this once — do NOT use the default `tutoring-notes` checkout, which is on `v1-redesign`), branch **`wb-wave5-polish`** @ tip **`affc1e1`**. Reading list: THIS head → [`go-to-sarah-master-cut-plan.md`](go-to-sarah-master-cut-plan.md) (the executor spec) → [`go-to-sarah-plan-5axis-review.md`](go-to-sarah-plan-5axis-review.md) (BLOCKERs/SHOULD-FIXes, all folded into the plan) → `AGENTS.md` + [`.cursor/rules/orchestrator-discipline.mdc`](../../.cursor/rules/orchestrator-discipline.mdc). **Conductor tier (Andrew 2026-07-04):** **Opus for the durability pillars WS-A/B/C/D** (they change the most fragile surfaces — recorder FSM, `upload-outbox`, `useWhiteboardRecorder`, `peer-mesh`, apply-path — + concurrency/ordering); drop to Sonnet/Composer for the WS-E bug bundle. Code itself still dispatches to Composer subagents. **First action:** a quick final 5-axis validation-pass sanity check on the folded plan, then **Wave 0** (Prisma migration) — see execution order in Next action(s).
 
 **Rebuild after the fix-batch re-smoke FAIL (4 pass, 2 regressions, 2 mis-scopes).** New discipline (per Andrew + `AGENTS.md` lesson): smoke finding = note + the test it lived under; verify ambiguous notes; **Playwright-to-spec for every touched surface, real-browser-verified, tests written to SPEC not to code.** Progress:
 
@@ -20,7 +22,7 @@
 | 5b GATE | `WorkspaceResumeGate` gets the same three actions; silent `endStaleWhiteboardSession` button removed (now called from **no production site**; dead-code removal deferred). End-and-review routes via `router.push(?intent=endreview)` → `useEffect([autoConsent])` mounts workspace → same `handleEndSession` once. | ✅ landed | [`57ebf46`](https://github.com/Arangarx/tutoring-notes/commit/57ebf46) |
 | 5b test-harden | Gate anti-orphan test now proves **`recordings=1`** — a real Vercel-Blob-backed outbox row present at gate-entry is drained + registered by `handleEndSession`. The `recordings=0` was a **Playwright IDB-across-hard-nav artifact** (Chromium per-context IDB partitioning + 30s timeslice), NOT a product bug (production End-and-review is a soft nav; outbox never lost). No production code changed. | ✅ landed | [`37189fe`](https://github.com/Arangarx/tutoring-notes/commit/37189fe) |
 
-**Part 3 spine (2026-07-02):** overall PASS on hardware — clock↔stroke alignment, disconnect→freeze→resume, no wall-clock inflation, end-finalize, tutor-mic regression. **Full findings triage → [`BACKLOG.md`](../BACKLOG.md) § "Part 3 hardware-smoke findings".**
+**Part 3 spine (2026-07-02):** hardware smoke **PASS for exercised surfaces** — clock↔stroke alignment, disconnect→freeze→resume, no wall-clock inflation, end-finalize, tutor-mic regression. **Does NOT cover** VAD chunking, live WB event persistence, per-speaker C runtime, or finalize-from-persisted — those surfaces were not exercised (and are **UNBUILT**). **Full findings triage → [`BACKLOG.md`](../BACKLOG.md) § "Part 3 hardware-smoke findings".**
 
 **Consolidated re-smoke (2026-07-03):** overall **FAIL** on live A/V — student reconnect did not recover media transport (tested on `wb-av-reachability-detection-fix` Preview 2). Andrew's results committed [`8e0df0d`](https://github.com/Arangarx/tutoring-notes/commit/8e0df0d) → [`presarah-batch-resmoke-smokebook-2026-07-03.md`](presarah-batch-resmoke-smokebook-2026-07-03.md). **Security PASS** — students/share read-only as intended. **Root cause (investigated):** **pre-existing latent media-transport-recovery gap on BOTH branches** — `onPeerLeave` does track-only cleanup; implicit-add race prevents full `rejoin-detected` peer-connection reset, so media transport isn't rebuilt on reconnect. Reachability branch did NOT introduce it — only exposed it by reporting connection state honestly. [`ed83d47`](https://github.com/Arangarx/tutoring-notes/commit/ed83d47) exonerated. **New deferred hardening:** **BUG-8** (reconnect media-transport recovery) + **BUG-9** (camera hotswap) — fragile surface (`peer-mesh.ts` / `useLiveAV.ts`); plan + hardware/Sarah validation required.
 
@@ -43,11 +45,11 @@
 
 | Field | Value |
 |---|---|
-| **Last action completed** | **Corrected rebuild COMPLETE @ tip [`37189fe`](https://github.com/Arangarx/tutoring-notes/commit/37189fe)** — all 6 surfaces landed, each Playwright-to-spec: step 1 [`acb4f87`](https://github.com/Arangarx/tutoring-notes/commit/acb4f87), step 2 learner top-bar [`620890e`](https://github.com/Arangarx/tutoring-notes/commit/620890e), step 3 notes shimmer [`22ebf3e`](https://github.com/Arangarx/tutoring-notes/commit/22ebf3e), step 4 replay real-fix [`f311431`](https://github.com/Arangarx/tutoring-notes/commit/f311431), step 5a roster End-and-review [`ed5e05d`](https://github.com/Arangarx/tutoring-notes/commit/ed5e05d), step 5b gate End-and-review [`57ebf46`](https://github.com/Arangarx/tutoring-notes/commit/57ebf46), gate anti-orphan test hardened [`37189fe`](https://github.com/Arangarx/tutoring-notes/commit/37189fe). `endStaleWhiteboardSession` unreferenced in production. **Vercel tip READY** (verified via MCP; the `57ebf46` ERROR deploy was transient infra — identical code built clean on `37189fe`). See step table above. |
-| **Next action(s)** | **Consolidated re-smoke smokebook being authored** (Composer → `docs/handoff/wave5-rebuild-resmoke-smokebook-2026-07-03.md`; verified alias) covering replay auto-play, notes shimmer, learner top-bar (light+dark), in-session End copy, End-and-review from roster + gate, Cancel-and-delete, SSG-2 preservation. Then **Andrew hardware re-smoke**. If PASS → merge-boundary `test:wb-sync` once on integrated tip → `merge --no-ff wb-wave5-polish → v1-redesign`. Map/reduce wording ([`cefc5cd`](https://github.com/Arangarx/tutoring-notes/commit/cefc5cd)) still open. |
-| **Open Andrew-confirms** | **Needs decision:** map/reduce prompt **WORDING** ([`cefc5cd`](https://github.com/Arangarx/tutoring-notes/commit/cefc5cd)). **Resolved (2026-07-03):** reachability branch **PARKED** @ [`a962171`](https://github.com/Arangarx/tutoring-notes/commit/a962171); rebuild corrected-targets + Playwright-to-spec discipline confirmed; End-and-review three-action model + auto-end mechanism approved; learner top-bar size fix (consolidation deferred). **Deferred:** BUG-8/BUG-9 A/V hardening (fragile; hardware validation). **Standing:** erasure UX defaults; **WB-LABEL-PARENT-SIGNIN**; **Sarah primary device** ([`SARAH-CALL-PREP.md`](../SARAH-CALL-PREP.md)); **Ship-to-Sarah gate**; **iOS student WB/A/V** ([`BACKLOG.md`](../BACKLOG.md) **WB-STUDENT-MOBILE-VALIDATION**). |
-| **In-flight subagents** | **Re-smoke smokebook authoring** (Composer, `generalPurpose`) — `docs/handoff/wave5-rebuild-resmoke-smokebook-2026-07-03.md` per template, verified alias, 7 items (6 surfaces + SSG-2 preservation). Latest handoff: [`part3-overnight-2026-07-02-orchestrator-report.md`](part3-overnight-2026-07-02-orchestrator-report.md). |
-| **Uncommitted / unmerged** | **`wb-wave5-polish` @ [`37189fe`](https://github.com/Arangarx/tutoring-notes/commit/37189fe)** — worktree `tutoring-notes-polishwt`; full rebuild pushed, **NOT merged** (awaiting Andrew hardware re-smoke → merge-boundary `test:wb-sync` → merge to v1-redesign). **`wb-av-reachability-detection-fix` @ [`a962171`](https://github.com/Arangarx/tutoring-notes/commit/a962171)** — **PARKED**, **NOT merged**. **`v1-redesign` @ [`bf1a2c3`](https://github.com/Arangarx/tutoring-notes/commit/bf1a2c3)** — integration base; NOT merged to master. **`wb-wave5-perspeaker-c-core` @ [`b6b7181`](https://github.com/Arangarx/tutoring-notes/commit/b6b7181)** — NOT wired, NOT merged. **Merge-boundary:** `test:wb-sync` once on final tip before v1-redesign merge. |
+| **Last action completed** | **Go-to-Sarah master-cut plan FINALIZED** @ [`go-to-sarah-master-cut-plan.md`](go-to-sarah-master-cut-plan.md) (built on 8 read-only durability-stack investigations). **5-axis adversarial review complete** @ [`go-to-sarah-plan-5axis-review.md`](go-to-sarah-plan-5axis-review.md) — **5 BLOCKERs + 9 SHOULD-FIXes** all folded into the plan (atomic `orderIndex` txn + `@@unique`; WS-B `409` upsert/cursor-hold + mutex; `onSegmentUploaded` outbox hook; C1 calls `endWhiteboardSession` not a copy; etc.). **Andrew corrections folded 2026-07-04:** (1) **replay-mix INVARIANT** — mixdown/consent gates untouched, consented learner audio still reaches replay, VAD changes segment *timing* not *content*, per-speaker lanes are transcription-only/excluded from replay; (2) **chime PRESERVED** — re-anchored to session elapsed time as a tutor billing/time-awareness warning (NOT Whisper-size), only the 50-min segment rollover is removed; (3) sequencing diagram gantt→flowchart fix. Prior: corrected rebuild COMPLETE @ tip [`37189fe`](https://github.com/Arangarx/tutoring-notes/commit/37189fe). |
+| **Next action(s)** | **EXECUTE the plan** (fresh Opus chat). **Execution order:** **Wave 0** Prisma migration (`WhiteboardEventBatch` + `SessionRecording @@unique([whiteboardSessionId, orderIndex])`, no IDB `DB_VERSION` bump; apply on preview first) → **WS-A** live audio durability (fragile-serial) → **WS-B** ~1s WB event-batch persist (fragile-serial) → **E2/E3** bugs (fragile-serial) → **WS-C** server finalize + straight-to-overlay (after A2+B2) → **WS-D** resume from backend → **WS-E** parallel-safe bugs (E1/E4/E5/E6, file-disjoint) → **integrated gate** (`npm run test:wb-sync` relay ~38min + `npx next build` exit 0 on final tip). **Then cut (needs Andrew smoke + greenlight):** `merge --no-ff` to `v1-redesign` → **comprehensive both-theme MASTER-CUT smoke** (CUT-1..6) → apply Neon migrations → `merge --no-ff` to **master** → account reset preserving Andrew + Sarah. Map/reduce wording ([`cefc5cd`](https://github.com/Arangarx/tutoring-notes/commit/cefc5cd)) ships **as-is** (Andrew). |
+| **Open Andrew-confirms** | **Sizing of "Sarah tomorrow"** pending plan + 5-axis review (endpoint = **master**; comprehensive both-theme smoke is the **single final gate**). **Attribution (2026-07-04):** **LearnerProfile-only** — no anonymous speakers (login required); "quick-create learner mid-session" is **privacy-gated future work**. **Needs decision:** map/reduce prompt **WORDING** ([`cefc5cd`](https://github.com/Arangarx/tutoring-notes/commit/cefc5cd)). **Resolved (2026-07-03):** reachability branch **PARKED** @ [`a962171`](https://github.com/Arangarx/tutoring-notes/commit/a962171); rebuild corrected-targets + Playwright-to-spec discipline confirmed; End-and-review three-action model + auto-end mechanism approved; learner top-bar size fix (consolidation deferred); **Andrew re-baselined (2026-07-03):** durable live persistence (VAD + live WB persist + finalize-from-backend) **IS** pre-Sarah/pre-master blocker; live-notes **DISPLAY** stays deferred. **Deferred:** BUG-8/BUG-9 A/V hardening (fragile; hardware validation). **Standing:** erasure UX defaults; **WB-LABEL-PARENT-SIGNIN**; **Sarah primary device** ([`SARAH-CALL-PREP.md`](../SARAH-CALL-PREP.md)); **iOS student WB/A/V** ([`BACKLOG.md`](../BACKLOG.md) **WB-STUDENT-MOBILE-VALIDATION**). |
+| **In-flight subagents** | **None** — plan authoring + 5-axis review both COMPLETE and folded. Ready for a fresh execution chat. Latest handoff: [`part3-overnight-2026-07-02-orchestrator-report.md`](part3-overnight-2026-07-02-orchestrator-report.md). |
+| **Uncommitted / unmerged** | **PENDING COMMIT (swap-prep, 2026-07-04):** 4 docs uncommitted in `tutoring-notes-polishwt` — this **`ORCHESTRATOR-STATE.md`** refresh, **`go-to-sarah-master-cut-plan.md`** (untracked), **`go-to-sarah-plan-5axis-review.md`** (untracked), and **`wave5-rebuild-resmoke-smokebook-2026-07-03.md`** (Andrew's inline smoke notes — commit promptly, clobber risk). Commit these before/at the chat swap. **`wb-wave5-polish` @ [`affc1e1`](https://github.com/Arangarx/tutoring-notes/commit/affc1e1)** — worktree `tutoring-notes-polishwt`; polish batch pushed, **NOT merged** (awaiting live-durability pillar + comprehensive both-theme master-cut smoke → merge-boundary `test:wb-sync` → merge to v1-redesign). **`wb-av-reachability-detection-fix` @ [`a962171`](https://github.com/Arangarx/tutoring-notes/commit/a962171)** — **PARKED**, **NOT merged**. **`v1-redesign` @ [`bf1a2c3`](https://github.com/Arangarx/tutoring-notes/commit/bf1a2c3)** — integration base; NOT merged to master. **`wb-wave5-perspeaker-c-core` @ [`b6b7181`](https://github.com/Arangarx/tutoring-notes/commit/b6b7181)** — NOT wired, NOT merged. **Merge-boundary:** `test:wb-sync` once on final tip before v1-redesign merge. |
 
 **Strategic posture (unchanged):** Experience-driven wedge — WB + reliability = **ground floor (GATE)**; the win = accreting honest tutor-first continuity. [`experience-driven_wedge_ae2776e1.plan.md`](../../../../.cursor/plans/experience-driven_wedge_ae2776e1.plan.md). **Ship-to-Sarah gate** governs cut to `v1-redesign → master` — see § Ship-to-Sarah gate below.
 
@@ -59,7 +61,7 @@
 
 Pre-public pilot with one tutor (Sarah). North Star from [`AGENTS.md`](../../AGENTS.md): *"People need to use the app with confidence. Sarah is being patient, but that won't last forever."* Reliability bar: [`../../agenticPipeline/.cursor/rules/reliability-bar.mdc`](../../agenticPipeline/.cursor/rules/reliability-bar.mdc).
 
-**Current program:** Complete the **live-session arc** (auth join → waiting room → live A/V whiteboard → end → per-speaker capture → transcription → review) as one reliable unit on `wb-wave5-polish`, then **single merge** to `v1-redesign` (the Sarah merge).
+**Target program (not yet shipped end-to-end):** Complete the **live-session arc** (auth join → waiting room → live A/V whiteboard → end → per-speaker capture → transcription → review) as one reliable unit. **Shipped today on `wb-wave5-polish`:** p3-clock, per-speaker A+B **schema**, model abstraction, 50-min time-based segments with transcribe-on-arrival + map per completed segment + reduce at End, End-and-review three-action UX ([`ed5e05d`](https://github.com/Arangarx/tutoring-notes/commit/ed5e05d)/[`57ebf46`](https://github.com/Arangarx/tutoring-notes/commit/57ebf46)), pre-Sarah polish batch. **Unbuilt (pre-merge blockers):** VAD chunking, per-speaker C runtime, live WB event persistence, finalize-from-persisted, gapless continuous replay. **Single merge** to `v1-redesign` only after durability pillar + comprehensive both-theme master-cut smoke.
 
 ---
 
@@ -76,11 +78,11 @@ master  ←  v1-redesign  (integration base @ bf1a2c3; Wave 4 merged; held for S
 | Branch | Role | Tip |
 |---|---|---|
 | **`v1-redesign`** | Integration base; Wave 4 student responsive parity merged @ [`a166f6c`](https://github.com/Arangarx/tutoring-notes/commit/a166f6c); doc commits through [`bf1a2c3`](https://github.com/Arangarx/tutoring-notes/commit/bf1a2c3) | Not yet merged to `master` — held for Gate A + Ship-to-Sarah + comprehensive re-smoke |
-| **`wb-wave5-polish`** | **Active execution branch** — Wave 5 + Part 3 spine + pre-Sarah smoke fixes; worktree `tutoring-notes-polishwt` | [`189fdb0`](https://github.com/Arangarx/tutoring-notes/commit/189fdb0) |
+| **`wb-wave5-polish`** | **Active execution branch** — Wave 5 + Part 3 spine (**partial**) + pre-Sarah smoke fixes; worktree `tutoring-notes-polishwt` | [`37189fe`](https://github.com/Arangarx/tutoring-notes/commit/37189fe) |
 | **`wb-av-reachability-detection-fix`** | SMOKE-BLOCK-1 reachability detection (Fix A + B1); off wb-wave5-polish | [`a962171`](https://github.com/Arangarx/tutoring-notes/commit/a962171) |
 | **`wb-wave5-perspeaker-c-core`** | Pure `perspeaker-identity.ts` C-core; NOT wired to runtime | [`b6b7181`](https://github.com/Arangarx/tutoring-notes/commit/b6b7181) |
 
-**Merge discipline (Andrew reaffirmed 2026-07-01):** All remaining work stays on `wb-wave5-polish`. **Single `merge --no-ff` to `v1-redesign`** at the **final full-arc both-themes hardware smoke** only. No interim merge.
+**Merge discipline (Andrew reaffirmed 2026-07-01; re-baselined 2026-07-03):** All remaining work stays on `wb-wave5-polish`. **Single `merge --no-ff` to `v1-redesign`** only after **live-durability pillar** landed + **comprehensive both-theme master-cut smoke**. No interim merge.
 
 Decisions ledger: [`docs/handoff/v1-redesign-STATUS.md`](v1-redesign-STATUS.md).
 
@@ -94,23 +96,24 @@ Decisions ledger: [`docs/handoff/v1-redesign-STATUS.md`](v1-redesign-STATUS.md).
 
 ```mermaid
 flowchart TD
-  P3SMOKE["✅ Part 3 hardware smoke — overall PASS"]
+  P3SMOKE["🟡 Part 3 hardware smoke — PASS (clock/disconnect/replay/notes-at-end only)"]
   FIXBATCH["✅ Pre-Sarah smoke-fix batch — all landed"]
-  RESMOKE["⬜ Andrew consolidated hardware re-smoke"]
+  RESMOKE["⬜ Polish-pass re-smoke (in front of durability)"]
+  DURABILITY["⬜ Live-durability pillar (VAD + live WB persist + finalize-from-backend)"]
   REACH["⬜ Reachability branch re-smoke + merge"]
-  GATE["FINAL Sarah gate: full arc both themes"]
+  GATE["FINAL gate: comprehensive both-theme master-cut smoke"]
   MERGE["single merge --no-ff → v1-redesign"]
-  P3SMOKE --> FIXBATCH --> RESMOKE --> REACH --> GATE --> MERGE
+  P3SMOKE --> FIXBATCH --> RESMOKE --> DURABILITY --> REACH --> GATE --> MERGE
 ```
 
 | Phase | Status | Notes |
 |---|---|---|
 | **Consent/erasure** | ✅ Done | 9 BLOCKERs + CF-1..CF-4 + Workstreams B/C/D; identity-e2e 16/16 |
-| **Part 3 spine** | ✅ Landed + hardware-smoked | `p3-clock`, perspeaker A+B foundation, model abstraction, video-seam docs; gates green |
+| **Part 3 spine** | 🟡 **PARTIAL** — subset landed + hardware-smoked | **Landed:** `p3-clock`, per-speaker A+B **schema**, model abstraction, video-seam docs. **UNBUILT (pre-merge blockers):** VAD chunking, per-speaker C runtime, live WB persistence, finalize-from-persisted, gapless continuous replay |
 | **Pre-Sarah smoke fixes** | ✅ Landed on branch | Full queue cleared — awaiting consolidated re-smoke |
 | **Reachability fix** | ✅ Built, ⬜ re-smoke | Isolated branch; merge after clean mobile pass |
-| **perspeaker C runtime** | ⬜ Deferred | C-core built @ `b6b7181`; wiring needs own hardware pass |
-| **Final gate** | ⬜ Pending | Full live-session arc both themes → single merge |
+| **perspeaker C runtime** | ⬜ **UNBUILT** (pre-merge blocker) | `useRemoteMicRecorders` exists but **NOT mounted**; C-core @ `b6b7181` unwired |
+| **Final gate** | ⬜ Pending | Live-durability pillar + comprehensive both-theme master-cut smoke → single merge |
 
 ---
 
@@ -133,10 +136,11 @@ Full triage: [`BACKLOG.md`](../BACKLOG.md) § "Part 3 hardware-smoke findings".
 | Layer | Status |
 |---|---|
 | **Schema (BUILT)** | `TranscriptChunk`, `TranscriptChunkExtraction`, `SessionRecording.streamId` — chunked audio + per-chunk transcription + map-extraction + video-ready `streamId` |
-| **Part 3 spine (LANDED)** | `p3-clock` [`1572983`](https://github.com/Arangarx/tutoring-notes/commit/1572983); perspeaker A+B [`e92c9ac`](https://github.com/Arangarx/tutoring-notes/commit/e92c9ac)/[`8638c86`](https://github.com/Arangarx/tutoring-notes/commit/8638c86)/[`1df3258`](https://github.com/Arangarx/tutoring-notes/commit/1df3258); model abstraction [`f4cd9cb`](https://github.com/Arangarx/tutoring-notes/commit/f4cd9cb)/[`cefc5cd`](https://github.com/Arangarx/tutoring-notes/commit/cefc5cd); video-seam docs [`d299a6c`](https://github.com/Arangarx/tutoring-notes/commit/d299a6c). Hardware-smoked overall PASS. |
-| **Partial pipeline (SHIPPED)** | 50-min time-based segments; per-segment transcribe + incremental map; `SkeletonNotes` shimmer wired (`SMOKE-NOTES-1`) |
-| **perspeaker C runtime (UNBUILT)** | C-core deterministic module @ `b6b7181`; wiring = outbox fields → `useRemoteMicRecorders` → worker-driven transcription; needs Sonnet 5-axis on fragile diff + hardware pass |
-| **Deferred post-master** | VAD chunking, consent-recording gates, incremental-map live notes, eval harness + flywheel |
+| **Part 3 spine (PARTIAL)** | **Landed:** `p3-clock` [`1572983`](https://github.com/Arangarx/tutoring-notes/commit/1572983); per-speaker A+B **schema** [`e92c9ac`](https://github.com/Arangarx/tutoring-notes/commit/e92c9ac)/[`8638c86`](https://github.com/Arangarx/tutoring-notes/commit/8638c86)/[`1df3258`](https://github.com/Arangarx/tutoring-notes/commit/1df3258); model abstraction [`f4cd9cb`](https://github.com/Arangarx/tutoring-notes/commit/f4cd9cb)/[`cefc5cd`](https://github.com/Arangarx/tutoring-notes/commit/cefc5cd); video-seam docs [`d299a6c`](https://github.com/Arangarx/tutoring-notes/commit/d299a6c). Hardware smoke PASS for clock/disconnect/replay-alignment/notes-at-end only — **does NOT cover** VAD/live-persistence (UNBUILT). |
+| **Partial pipeline (SHIPPED)** | 50-min time-based segments (`SEGMENT_MAX_SECONDS`); per-segment transcribe-on-arrival + incremental map; reduce at End; `SkeletonNotes` shimmer wired (`SMOKE-NOTES-1`); finalize is **client-only** (IndexedDB outbox + in-memory log; `endStaleWhiteboardSession` stamps `endedAt` only) |
+| **perspeaker C runtime (UNBUILT)** | `useRemoteMicRecorders` exists but **NOT mounted** in workspace; C-core deterministic module @ `b6b7181` unwired; only **tutor:mic mixdown** transcribed today |
+| **Live-durability pillar (UNBUILT — pre-merge blocker)** | VAD chunking; live WB event persistence (in-memory `logRef` + 30s IDB checkpoint; server checkpoint API unwired; canonical `events.json` at End only); finalize-from-persisted (no server-side assemble) |
+| **Deferred post-master** | consent-recording gates, incremental-map **live notes display** (`SMOKE-NOTES-2` / `p3-incremental-map`), eval harness + flywheel |
 | **Spike (unmerged, flag OFF)** | [`spike/live-transcription` @ `7671a25`](https://github.com/Arangarx/tutoring-notes/tree/spike/live-transcription) — not Sarah-path |
 
 **Standing erasure coverage gaps** ([`BACKLOG.md`](../BACKLOG.md)): (a) **ERASURE-ORPHAN-AUDIO-BLOBS**; (b) **ERASURE-CLIENT-STORE-UNREACHABLE** (IDB/sessionStorage drafts).
@@ -147,11 +151,11 @@ Full triage: [`BACKLOG.md`](../BACKLOG.md) § "Part 3 hardware-smoke findings".
 
 - **SMOKE-BUG-6 @ [`189fdb0`](https://github.com/Arangarx/tutoring-notes/commit/189fdb0)** — ended-but-unsaved sessions (`endedAt != null`, `noteId` null) surface as **"Ended — needs review"** on student-detail (last 30 days, cap 20); row → in-shell `/workspace` review; `EndedUnsavedSessionsList.dom.test.tsx` (3 tests). Andrew: treat as bug.
 - **SMOKE-UX-4 @ [`37cff6b`](https://github.com/Arangarx/tutoring-notes/commit/37cff6b)** — wordmark nav standardized: non-live shells → canonical `/` role-redirect; WB review + read-only replay → `/`; live-session WB wordmark stays inert (`BL-WB-WORDMARK-NAV` guarded-leave still deferred).
-- **Part 3 overnight run @ [`d299a6c`](https://github.com/Arangarx/tutoring-notes/commit/d299a6c)** — all p3-* waves landed; jest 2742, build exit 0, `test:wb-sync` 107 pass/2 skip/1 known flake. Smokebook [`part3-notes-reliability-spine-smokebook.md`](part3-notes-reliability-spine-smokebook.md) + report [`part3-overnight-2026-07-02-orchestrator-report.md`](part3-overnight-2026-07-02-orchestrator-report.md).
+- **Part 3 overnight run @ [`d299a6c`](https://github.com/Arangarx/tutoring-notes/commit/d299a6c)** — **subset** landed: p3-clock, per-speaker A+B schema, p3-model-abstraction, p3-video-seam (docs only); jest 2742, build exit 0, `test:wb-sync` 107 pass/2 skip/1 known flake. **NOT landed:** p3-vad-chunking, per-speaker C runtime, live WB persistence, finalize-from-persisted. Smokebook [`part3-notes-reliability-spine-smokebook.md`](part3-notes-reliability-spine-smokebook.md) + report [`part3-overnight-2026-07-02-orchestrator-report.md`](part3-overnight-2026-07-02-orchestrator-report.md). Hardware smoke PASS covered clock/disconnect/replay-alignment/notes-at-end only.
 - **Checkpoint fully green @ [`5dd1793`](https://github.com/Arangarx/tutoring-notes/commit/5dd1793)** — wb-sync seed-gap fix (consent harness); identity-e2e 16/16.
 - **Consent/erasure arc** — CF-1 [`183f09b`](https://github.com/Arangarx/tutoring-notes/commit/183f09b), CF-3 [`7a9514f`](https://github.com/Arangarx/tutoring-notes/commit/7a9514f), CF-2.1 [`b7c88ac`](https://github.com/Arangarx/tutoring-notes/commit/b7c88ac), erasure Steps 1–6, Workstream C e2e (consent `faebbfc` + erasure `cf20015` + routing `5402e04`).
 - **Pre-merge smoke (2026-07-01)** — NOT PASS @ `8e38935`; six merge-blockers MB-1..MB-6 triaged [`consent-honesty-smoke-findings-2026-07-01.md`](consent-honesty-smoke-findings-2026-07-01.md); safe-then-merge + reversible tombstone (Option A) ratified.
-- **PERSPEAKER-C-TRANSCRIPTION-TRIGGER** resolved 2026-07-02 — worker-driven option (a); identity keyed on `identityKey` not `peerId`; both-streams co-equal (no prefer-one hierarchy); VAD at chunking layer.
+- **PERSPEAKER-C-TRANSCRIPTION-TRIGGER** resolved 2026-07-02 — worker-driven option (a); identity keyed on `identityKey` not `peerId`; **schema** supports both-streams co-equal (no prefer-one hierarchy); **runtime + VAD UNBUILT** — only tutor:mic mixdown transcribed today.
 
 ---
 
@@ -176,14 +180,19 @@ Full triage: [`BACKLOG.md`](../BACKLOG.md) § "Part 3 hardware-smoke findings".
 
 ## Queued dispatches (in order)
 
-1. **Andrew consolidated hardware re-smoke** — full pre-Sarah fix batch on `wb-wave5-polish` preview (both themes at final gate).
-2. **Reachability branch** — mobile re-smoke Fix A (+ B1 when Safari available) → `merge --no-ff wb-av-reachability-detection-fix → wb-wave5-polish`.
-3. **Map/reduce wording** — Andrew sign-off on [`cefc5cd`](https://github.com/Arangarx/tutoring-notes/commit/cefc5cd).
-4. **`test:wb-sync`** — once on final integrated tip (~38 min, Docker) before merge.
-5. **`p-final-gate`** — **full live-session arc** both themes hardware smoke (FINAL Sarah gate).
-6. **`merge --no-ff` `wb-wave5-polish` → `v1-redesign`** — after step 5 PASS only.
-7. **`p-test-account-reset`** — at master cut, preserve Andrew + Sarah admin accounts.
-8. **perspeaker-C runtime** (when ready) — wire C-core, Sonnet 5-axis, own hardware pass; then `p3-vad-chunking` → `p3-consent-recording` → `p3-incremental-map` → `p3-finalize` → `p3-replay-scrub`.
+> **⚠️ Doc-internal sequencing contradiction (flagged 2026-07-04):** this queue historically listed `p3-vad-chunking` **after** the v1-redesign merge (old item 8), while [`part3-execution-bootstrapper.md`](part3-execution-bootstrapper.md) + [`RELEASE-ROADMAP.md`](../RELEASE-ROADMAP.md) require durable live persistence **before** Sarah/master. **Andrew re-baselined (2026-07-03):** VAD + live WB persist + finalize-from-backend **IS** a pre-Sarah/pre-master blocker; live-notes **display** stays deferred. Queue below reflects re-baseline.
+
+1. **5-axis adversarial pass** on [`go-to-sarah-master-cut-plan.md`](go-to-sarah-master-cut-plan.md).
+2. **Live-durability pillar** — VAD chunking + live WB event persistence + finalize-from-persisted (+ wire per-speaker C runtime).
+3. **Resolve-all A/V bugs** — BUG-8/BUG-9 et al. (fragile surfaces; plan + hardware validation).
+4. **Polish-pass re-smoke** (if still pending) — pre-Sarah fix batch on `wb-wave5-polish` preview; **in front of** durability, not the final gate.
+5. **Reachability branch** — mobile re-smoke Fix A (+ B1 when Safari available) → `merge --no-ff wb-av-reachability-detection-fix → wb-wave5-polish` (if still warranted).
+6. **Map/reduce wording** — Andrew sign-off on [`cefc5cd`](https://github.com/Arangarx/tutoring-notes/commit/cefc5cd).
+7. **`test:wb-sync`** — once on final integrated tip (~38 min, Docker) before merge.
+8. **`p-final-gate`** — **comprehensive both-theme master-cut smoke** (FINAL gate).
+9. **`merge --no-ff` `wb-wave5-polish` → `v1-redesign`** — after step 8 PASS only.
+10. **`p-test-account-reset`** — at master cut, preserve Andrew + Sarah admin accounts.
+11. **Post-master deferred** — `p3-consent-recording` → `p3-incremental-map` (live display) → `p3-replay-scrub`; eval harness + flywheel.
 
 ---
 
@@ -233,7 +242,7 @@ Ratified **inputs**: t=0 = FSM `recording` entry / `MediaRecorder.start()` + WB�
 | **Block B EXECUTED** | ✅ 7 commits `d180ef1`→`bded52e`, 13 suites/146 tests |
 | **5-axis adversarial review (consent-honesty)** | ✅ 8 BLOCKER / 6 HIGH / 6 MEDIUM / 5 LOW — [`consent-blocker-5axis-review-2026-06-30.md`](consent-blocker-5axis-review-2026-06-30.md) |
 | **Consent enforcement unconditional** | ✅ `CONSENT_ENFORCEMENT` deleted; always-on |
-| **Per-speaker tap-before-mix** | ✅ Transcription lanes only; mixdown = sole replay source; merge by `recordingTimeOffsetMs` |
+| **Per-speaker tap-before-mix** | 🟡 **Design ratified** — transcription lanes only; mixdown = sole replay source; merge by `recordingTimeOffsetMs`; **runtime UNBUILT** (only tutor:mic mixdown today) |
 | **Reverses prior rollback [`89e0fe1`](https://github.com/Arangarx/tutoring-notes/commit/89e0fe1)** | ✅ With sync-metadata contract — LIVE-AV.md invariant #6 |
 | **No interim merge** | ✅ Single merge at Sarah gate |
 | **t=0 clock anchor** | ✅ FSM `recording` / `MediaRecorder.start()`; disconnect pause/freeze in `p3-clock` |
@@ -243,7 +252,7 @@ Ratified **inputs**: t=0 = FSM `recording` entry / `MediaRecorder.start()` + WB�
 | **CC-2 mandatory consent choice** | ✅ Save OR explicit decline on claim setup |
 | **Self-learner parental-consent exemption** | ✅ All-true snapshot via `isSelfLearner` |
 | **Data erasure path** | ✅ Option A + headless-preserve — [`learner-erasure-plan.md`](learner-erasure-plan.md) |
-| **Part 3 C1–C5** | ✅ Transcription-only lanes, VAD chunking, ffmpeg continuous replay, video designed-for |
+| **Part 3 C1–C5** | 🟡 PARTIAL — transcription-only replay guard + per-speaker **schema** landed; **VAD chunking, per-speaker C runtime, ffmpeg gapless continuous replay UNBUILT**; video designed-for (docs) |
 | **Disconnect/pause** | ✅ Audio pauses + clock freezes on disconnect; WB continues at frozen timestamp; ~8s debounce trigger |
 | **WB-CONSENT-UNCONDITIONAL** | ✅ WB recording unconditional for Sarah; `allowWhiteboardRecording` hidden; fields retained |
 | **LIVE-SESSION-CONSENT-COPY** | ✅ Copy must state live A/V + WB recording; literal string Andrew-gated |
@@ -252,7 +261,7 @@ Ratified **inputs**: t=0 = FSM `recording` entry / `MediaRecorder.start()` + WB�
 | **Start-on-A/V-reachability gate** | ✅ **STAYS** (Andrew 2026-07-02) — override only `SMOKE-POST-3` |
 | **Notes-at-end only for Sarah** | ✅ Live notes deferred (`SMOKE-NOTES-2`); SkeletonNotes wired post-End |
 | **PERSPEAKER identity on identityKey** | ✅ NOT peerId — device-switch continuity; cap on identityKeys ≤3 |
-| **Both-streams co-equal** | ✅ Tutor + student audio both feed map/reduce; VAD gates chunk quality |
+| **Both-streams co-equal** | 🟡 **SCHEMA ONLY** — `TranscriptChunk`/`SessionRecording` `streamId`+`speakerId` support per-speaker lanes; **runtime + VAD UNBUILT**; only tutor:mic mixdown transcribed today |
 
 Full locked decisions: active plan § "Resolved (Andrew)".
 
@@ -318,7 +327,7 @@ Sarah remains on production `master` ("old & busted") until Ship-to-Sarah gate p
 | **WB-MENU-CLICK-THROUGH** | Desktop popover click-through |
 | **iOS per-speaker MediaRecorder** | Documented untested for Sarah merge |
 | **`docs/phase3-consent-model` @ `4f9dbcd`** | Awaits union-merge to `v1-redesign` |
-| **A6-1 multi-segment replay** | Obviated by continuous-stream finalization in Part 3 |
+| **A6-1 multi-segment replay** | Deferred until gapless continuous replay lands (UNBUILT) |
 
 ---
 
