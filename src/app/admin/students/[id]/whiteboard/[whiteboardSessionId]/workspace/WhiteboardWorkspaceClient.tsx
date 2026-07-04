@@ -1769,6 +1769,7 @@ export function WhiteboardWorkspaceClient({
         mimeType: string;
         sizeBytes: number;
         blob?: Blob;
+        durationSeconds?: number;
       },
       _meta?: { autoRollover?: boolean }
     ) => {
@@ -1805,6 +1806,10 @@ export function WhiteboardWorkspaceClient({
           mimeType: audioSeg.mimeType,
           sizeBytes: audioSeg.sizeBytes,
           recordingTimeOffsetMs,
+          ...(typeof audioSeg.durationSeconds === "number" &&
+            audioSeg.durationSeconds > 0 && {
+              durationSeconds: audioSeg.durationSeconds,
+            }),
           // Outbox segment ordering key stays WALL-CLOCK on purpose: it is
           // the sort key for the single mixdown replay stream (End-session
           // orders by audioStartedAtMs), it must stay consistent with the

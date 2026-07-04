@@ -117,6 +117,11 @@ export type RecordedAudio = {
    * truth). Optional + backward-compatible.
    */
   blob?: Blob;
+  /**
+   * Pause-aware segment duration in whole seconds at cut/stop time.
+   * Workspace outbox persists this as `SessionRecording.durationSeconds`.
+   */
+  durationSeconds?: number;
 };
 
 export type UseAudioRecorderOptions = {
@@ -715,7 +720,10 @@ export function useAudioRecorder({
     }
 
     const oldChunks: Blob[] = chunksRef.current;
-    const oldSegmentSeconds = elapsedRef.current;
+    const segmentDurationSeconds = Math.max(
+      1,
+      Math.round(getSegmentElapsedS())
+    );
     const oldPartIndex = segmentNumberRef.current;
     const oldMimeType = oldRecorder.mimeType || chooseMimeType();
 
@@ -824,6 +832,7 @@ export function useAudioRecorder({
                 filename,
                 previewUrl,
                 blob,
+                durationSeconds: segmentDurationSeconds,
               },
               { autoRollover: true }
             );
@@ -834,11 +843,8 @@ export function useAudioRecorder({
             setError(msg);
             rolloverInProgressRef.current = false;
           }
-          // oldSegmentSeconds is captured for parity with the legacy path's
-          // doneSegmentSeconds; auto-rollover doesn't surface it in the UI
-          // (state never goes to "done"), but keeping the snapshot makes
-          // future telemetry trivial.
-          void oldSegmentSeconds;
+          // segmentDurationSeconds captured for parity with legacy telemetry.
+          void segmentDurationSeconds;
         } finally {
           rolloverTracking.settle();
         }
@@ -1481,7 +1487,10 @@ export function useAudioRecorder({
           const mimeType = recorder.mimeType || chooseMimeType();
           const blob = new Blob(chunksRef.current, { type: mimeType });
           chunksRef.current = [];
-          const segmentSeconds = elapsedRef.current;
+          const segmentDurationSeconds = Math.max(
+            1,
+            Math.round(getSegmentElapsedS())
+          );
           // Read the live segment number via ref; the closure captured at
           // setInterval-creation time would otherwise see the stale value
           // from the render where startTimer() was first called.
@@ -1514,6 +1523,7 @@ export function useAudioRecorder({
                   filename,
                   previewUrl,
                   blob,
+                  durationSeconds: segmentDurationSeconds,
                 },
                 { autoRollover: true }
               );
@@ -1543,7 +1553,7 @@ export function useAudioRecorder({
               return;
             }
 
-            setDoneSegmentSeconds(segmentSeconds);
+            setDoneSegmentSeconds(segmentDurationSeconds);
             setUploadMode(null);
             setRecordState("done");
             await onRecorded({
@@ -1553,6 +1563,7 @@ export function useAudioRecorder({
               filename,
               previewUrl,
               blob,
+              durationSeconds: segmentDurationSeconds,
             });
             rolloverInProgressRef.current = false;
           } catch (err) {

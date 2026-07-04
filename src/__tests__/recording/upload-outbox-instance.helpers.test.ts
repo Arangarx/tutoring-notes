@@ -38,6 +38,7 @@ import {
   createUploadOutbox,
   type OutboxUploadResult,
   type OutboxUploadFn,
+  type UploadOutbox,
 } from "@/lib/recording/upload-outbox";
 
 const NEVER_CALLED_UPLOADER: OutboxUploadFn = async () => {
@@ -47,6 +48,23 @@ const NEVER_CALLED_UPLOADER: OutboxUploadFn = async () => {
 afterEach(() => {
   resetUploadOutboxForTests();
 });
+
+/** Mirrors upload-outbox.test.ts — drain the register path before finalize. */
+async function waitForRegisterOk(
+  outbox: UploadOutbox,
+  sessionId: string,
+  opts: { timeoutMs?: number } = {}
+): Promise<void> {
+  const deadline = Date.now() + (opts.timeoutMs ?? 2_000);
+  while (Date.now() < deadline) {
+    const rows = await outbox.listAllRows(sessionId);
+    if (rows.some((r) => r.registerOk)) return;
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  throw new Error(
+    `waitForRegisterOk: no row marked registerOk within ${opts.timeoutMs ?? 2_000}ms for ${sessionId}`
+  );
+}
 
 describe("assembleEndSessionSegments", () => {
   test("returns empty array when the outbox has no rows for the session", async () => {
@@ -309,6 +327,10 @@ describe("finalizeOutboxAfterEnd", () => {
   test("deletes every row for the session so the next mount starts empty", async () => {
     const outbox = createUploadOutbox({
       upload: NEVER_CALLED_UPLOADER,
+      // Production singleton always wires onSegmentUploaded; mirror that
+      // so enqueue→register completes before finalize (see upload-outbox
+      // finalize test + drain-before-seal in the real End-session flow).
+      onSegmentUploaded: jest.fn(async () => {}),
       dbName: `outbox-helpers-${Math.random().toString(36).slice(2)}`,
     });
     setUploadOutboxForTests(outbox);
@@ -324,6 +346,7 @@ describe("finalizeOutboxAfterEnd", () => {
       audioStartedAtMs: 1,
     });
     expect(await outbox.listAllRows("wbs-fin")).toHaveLength(1);
+    await waitForRegisterOk(outbox, "wbs-fin");
 
     await finalizeOutboxAfterEnd("wbs-fin");
 

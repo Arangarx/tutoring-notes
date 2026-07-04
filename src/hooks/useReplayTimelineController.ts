@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { maxEventTimestampMs, deriveReplayPageListFromLog, findActiveReplayPageIdAt } from "@/lib/whiteboard/event-log";
 import { parseEventLogBySchema } from "@/lib/whiteboard/replay-parse";
-import { globalMsToSegmentLocal } from "@/lib/whiteboard/replay-audio-timeline";
+import { globalMsToSegmentLocal, buildEffectiveReplayTimeline } from "@/lib/whiteboard/replay-audio-timeline";
 import { attachWebmDurationFix } from "@/lib/audio/webm-duration-fix";
 import { createThrottledPlayLoop } from "@/lib/whiteboard/scene-paint";
 import { resolveWhiteboardAssetReadUrl } from "@/lib/whiteboard/resolve-asset-read-url";
@@ -182,6 +182,32 @@ export function useReplayTimelineController(
   // stale closure (avoids adding resolvedMaxMs to seek's dep array).
   const resolvedMaxMsRef = useRef(resolvedMaxMs);
   resolvedMaxMsRef.current = resolvedMaxMs;
+
+  /** Per-segment measured durations (ms) from loadedmetadata / WebM scan. */
+  const measuredSegmentDurationsMsRef = useRef<(number | undefined)[]>([]);
+
+  const recordMeasuredSegmentDuration = useCallback(
+    (segmentIndex: number, durationMs: number) => {
+      if (segmentIndex < 0 || !Number.isFinite(durationMs) || durationMs <= 0) {
+        return;
+      }
+      const arr = measuredSegmentDurationsMsRef.current;
+      while (arr.length <= segmentIndex) arr.push(undefined);
+      arr[segmentIndex] = Math.max(arr[segmentIndex] ?? 0, durationMs);
+      const effective = buildEffectiveReplayTimeline(
+        audioTimeline,
+        measuredSegmentDurationsMsRef.current
+      );
+      if (effective.totalMs > 0) {
+        resolvedMaxMsRef.current = Math.max(
+          resolvedMaxMsRef.current,
+          effective.totalMs
+        );
+        setResolvedMaxMs((prev) => Math.max(prev, effective.totalMs));
+      }
+    },
+    [audioTimeline]
+  );
 
   /**
    * True once it is safe to call seek(0, {play:true}) for entry auto-play.
@@ -533,7 +559,8 @@ export function useReplayTimelineController(
         const { segmentIndex, localMs } = globalMsToSegmentLocal(
           clamped,
           audioTimeline,
-          measured > 0 ? measured : undefined
+          measured > 0 ? measured : undefined,
+          measuredSegmentDurationsMsRef.current
         );
         // Log when both stored and measured durations are 0 so the passthrough
         // path in globalMsToSegmentLocal is visible in prod logs for diagnosis.
@@ -675,7 +702,8 @@ export function useReplayTimelineController(
         const { localMs } = globalMsToSegmentLocal(
           atMs,
           audioTimeline,
-          measured > 0 ? measured : undefined
+          measured > 0 ? measured : undefined,
+          measuredSegmentDurationsMsRef.current
         );
         const intendedSec = Math.max(0, localMs / 1000);
         const delta = Number.isFinite(el.currentTime)
@@ -773,8 +801,10 @@ export function useReplayTimelineController(
       onMetadataLoaded: () => {
         setAudioReady(true);
         if (Number.isFinite(el.duration) && el.duration > 0) {
+          const segDurMs = Math.round(el.duration * 1000);
+          recordMeasuredSegmentDuration(activeSegmentIndexRef.current, segDurMs);
           const knownEnd =
-            globalSegmentOffsetMsRef.current + Math.round(el.duration * 1000);
+            globalSegmentOffsetMsRef.current + segDurMs;
           setResolvedMaxMs((prev) => Math.max(prev, knownEnd));
         }
       },
@@ -783,8 +813,10 @@ export function useReplayTimelineController(
       // scrubberMax can be updated to reflect the actual audio length so
       // subsequent scrubs map proportionally rather than collapsing to 0.
       onDurationResolved: (durationSec: number) => {
+        const segDurMs = Math.round(durationSec * 1000);
+        recordMeasuredSegmentDuration(activeSegmentIndexRef.current, segDurMs);
         const knownEnd =
-          globalSegmentOffsetMsRef.current + Math.round(durationSec * 1000);
+          globalSegmentOffsetMsRef.current + segDurMs;
         console.log(
           `[avx] wbsid=${whiteboardSessionId ?? "?"} duration_resolved measuredTotal=${knownEnd}`
         );
@@ -801,21 +833,38 @@ export function useReplayTimelineController(
       cleanup();
       cancelWebmFixRef.current = null;
     };
-  }, [hasAudio, replayAudioMime, replayExcaliRestoreReady, whiteboardSessionId]);
+  }, [hasAudio, replayAudioMime, replayExcaliRestoreReady, recordMeasuredSegmentDuration, whiteboardSessionId]);
 
-  // Preload next segments
+  // Preload next segments + capture measured durations for seek fallback
   useEffect(() => {
     if (!hasAudio || effectiveSegments.length <= 1) return;
-    const preloads = effectiveSegments.slice(1).map((seg) => {
+    const preloads: HTMLAudioElement[] = [];
+    const cleanups: Array<() => void> = [];
+    effectiveSegments.slice(1).forEach((seg, offset) => {
+      const segmentIndex = offset + 1;
       const a = new Audio();
       a.preload = "auto";
       a.src = seg.url;
-      return a;
+      const onMeta = () => {
+        if (Number.isFinite(a.duration) && a.duration > 0) {
+          recordMeasuredSegmentDuration(
+            segmentIndex,
+            Math.round(a.duration * 1000)
+          );
+        }
+      };
+      a.addEventListener("loadedmetadata", onMeta);
+      if (a.readyState >= 1) onMeta();
+      preloads.push(a);
+      cleanups.push(() => {
+        a.removeEventListener("loadedmetadata", onMeta);
+        a.src = "";
+      });
     });
     return () => {
-      for (const a of preloads) a.src = "";
+      for (const cleanup of cleanups) cleanup();
     };
-  }, [effectiveSegments, hasAudio]);
+  }, [effectiveSegments, hasAudio, recordMeasuredSegmentDuration]);
 
   // Audio-driven play loop
   useEffect(() => {
@@ -912,6 +961,10 @@ export function useReplayTimelineController(
           ? Math.round(el.duration * 1000)
           : (audioTimeline.segmentDurationsMs[activeSegmentIndexRef.current] ??
             0);
+      recordMeasuredSegmentDuration(
+        activeSegmentIndexRef.current,
+        actualDurationMs
+      );
       globalSegmentOffsetMsRef.current += actualDurationMs;
       setResolvedMaxMs((prev) =>
         Math.max(prev, globalSegmentOffsetMsRef.current)
@@ -956,6 +1009,7 @@ export function useReplayTimelineController(
     hasAudio,
     loadSegmentAt,
     loadState,
+    recordMeasuredSegmentDuration,
     replayExcaliRestoreReady,
     whiteboardSessionId,
   ]);

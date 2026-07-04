@@ -172,6 +172,8 @@ async function handleSegmentUploaded(row: OutboxRow): Promise<void> {
     streamId: row.streamId,
     speakerId: row.speakerId,
     audioStartedAtMs: row.audioStartedAtMs,
+    ...(typeof row.durationSeconds === "number" &&
+      row.durationSeconds > 0 && { durationSeconds: row.durationSeconds }),
   });
 
   if (result.ok) {
@@ -304,6 +306,8 @@ export async function assembleEndSessionSegments(
       audioStartedAtMs: r.audioStartedAtMs,
       streamId: r.streamId,
       segmentId: r.segmentId,
+      ...(typeof r.durationSeconds === "number" &&
+        r.durationSeconds > 0 && { durationSeconds: r.durationSeconds }),
     }));
 }
 

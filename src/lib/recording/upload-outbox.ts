@@ -110,6 +110,11 @@ export type OutboxRow = {
    */
   recordingTimeOffsetMs?: number;
   /**
+   * Pause-aware segment duration in whole seconds at cut/stop time.
+   * Persisted on `SessionRecording.durationSeconds` at register/end-session.
+   */
+  durationSeconds?: number;
+  /**
    * Optional per-speaker label (e.g. peer id) for multi-stream capture.
    */
   speakerId?: string;
@@ -686,7 +691,9 @@ export function createUploadOutbox(config: OutboxConfig): UploadOutbox {
       // skip re-upload and go straight to onSegmentUploaded registration.
       if (fresh.blobRemoteUrl && !fresh.registerOk) {
         if (!config.onSegmentUploaded) {
-          await writeRow({ ...fresh, registerOk: true });
+          const stillThere = await getRowById(fresh.id);
+          if (!stillThere) continue;
+          await writeRow({ ...stillThere, registerOk: true });
           await refreshStateAndNotify(sessionId);
           continue;
         }
@@ -894,6 +901,10 @@ export function createUploadOutbox(config: OutboxConfig): UploadOutbox {
       ...(typeof input.recordingTimeOffsetMs === "number" && {
         recordingTimeOffsetMs: input.recordingTimeOffsetMs,
       }),
+      ...(typeof input.durationSeconds === "number" &&
+        input.durationSeconds > 0 && {
+          durationSeconds: input.durationSeconds,
+        }),
       ...(input.speakerId && { speakerId: input.speakerId }),
       ...(input.transcriptionOnly === true && { transcriptionOnly: true }),
     };
@@ -1021,14 +1032,27 @@ export function createUploadOutbox(config: OutboxConfig): UploadOutbox {
     if (rows.length === 0) {
       return;
     }
+    // WS-N: enqueue kicks an async registerOk flip for rows that
+    // already have blobRemoteUrl. Await per-stream drain chains so a
+    // late writeRow cannot resurrect rows we delete below.
+    const streams = Array.from(new Set(rows.map((r) => r.streamId)));
+    await Promise.all(
+      streams.map(
+        (s) => drainChainByStream.get(streamKey(sessionId, s)) ?? Promise.resolve()
+      )
+    );
+    const rowsToDelete = await listAllRowsInternal(sessionId);
+    if (rowsToDelete.length === 0) {
+      return;
+    }
     await withStore("readwrite", async (store) => {
-      for (const r of rows) {
+      for (const r of rowsToDelete) {
         await reqAsPromise(store.delete(r.id));
       }
     });
     // Drop any timers tied to the removed rows so they can't kick
     // a worker for a session that no longer exists.
-    for (const r of rows) {
+    for (const r of rowsToDelete) {
       const timer = pendingRetryTimerByRow.get(r.id);
       if (timer !== undefined) {
         clearTimeoutFn(timer);
@@ -1041,7 +1065,7 @@ export function createUploadOutbox(config: OutboxConfig): UploadOutbox {
     lastStateBySession.delete(sessionId);
     await refreshStateAndNotify(sessionId);
     logger.log?.(
-      `[upload-outbox] obx=${shortObx} finalized sessionId=${sessionId} rowsDeleted=${rows.length}`
+      `[upload-outbox] obx=${shortObx} finalized sessionId=${sessionId} rowsDeleted=${rowsToDelete.length}`
     );
   }
 

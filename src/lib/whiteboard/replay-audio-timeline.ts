@@ -51,21 +51,50 @@ export function buildReplayAudioTimeline(
 }
 
 /**
+ * Merge stored DB durations with per-segment measured durations from
+ * HTMLAudioElement metadata. Stored values win when present; measured
+ * fills gaps for legacy rows where `durationSeconds` was never persisted.
+ */
+export function buildEffectiveReplayTimeline(
+  storedTimeline: ReplayAudioTimeline,
+  measuredSegmentDurationsMs?: readonly (number | null | undefined)[]
+): ReplayAudioTimeline {
+  if (!measuredSegmentDurationsMs?.length) {
+    return storedTimeline;
+  }
+  const mergedSeconds = storedTimeline.segmentDurationsMs.map((storedMs, i) => {
+    if (storedMs > 0) return storedMs / MS_PER_SEC;
+    const measured = measuredSegmentDurationsMs[i];
+    if (measured != null && measured > 0) return measured / MS_PER_SEC;
+    return null;
+  });
+  return buildReplayAudioTimeline(mergedSeconds);
+}
+
+/**
  * Map a global replay clock (ms) to segment index + offset within segment.
  * Clamps to [0, totalMs]; past-the-end maps to the final segment at its end.
  *
  * @param measuredTotalMs - Measured total audio duration (ms) from
- *   HTMLAudioElement.duration, used as a fallback ONLY for the single-segment
+ *   HTMLAudioElement.duration, used as a fallback for the single-segment
  *   case when the stored segment duration is 0 (e.g. durationSeconds=null in
- *   the DB before transcription persists it). Multi-segment sessions are
- *   unaffected — they use their stored per-segment durations.
+ *   the DB before capture persisted it).
+ * @param measuredSegmentDurationsMs - Per-segment measured durations (ms) from
+ *   `loadedmetadata` / WebM scan. Fills gaps when stored per-segment
+ *   `durationSeconds` is null/zero (legacy multi-segment sessions).
  */
 export function globalMsToSegmentLocal(
   globalMs: number,
   timeline: ReplayAudioTimeline,
-  measuredTotalMs?: number
+  measuredTotalMs?: number,
+  measuredSegmentDurationsMs?: readonly (number | null | undefined)[]
 ): { segmentIndex: number; localMs: number } {
-  const { segmentDurationsMs, segmentStartsMs, totalMs } = timeline;
+  const effectiveTimeline = buildEffectiveReplayTimeline(
+    timeline,
+    measuredSegmentDurationsMs
+  );
+  const { segmentDurationsMs, totalMs } = effectiveTimeline;
+
   if (segmentDurationsMs.length === 0) {
     return { segmentIndex: 0, localMs: 0 };
   }
@@ -88,6 +117,13 @@ export function globalMsToSegmentLocal(
       // position-correction in play().
       localMs: cap > 0 ? Math.max(0, Math.min(globalMs, cap)) : Math.max(0, globalMs),
     };
+  }
+
+  // Multi-segment: when stored total is 0 but measured per-segment durations
+  // supply a real timeline, effectiveTimeline.totalMs > 0 and mapping works.
+  // If still unknown, pass globalMs through on segment 0 (not clamp to 0).
+  if (totalMs <= 0) {
+    return { segmentIndex: 0, localMs: Math.max(0, globalMs) };
   }
 
   const clamped = Math.max(0, Math.min(globalMs, totalMs));

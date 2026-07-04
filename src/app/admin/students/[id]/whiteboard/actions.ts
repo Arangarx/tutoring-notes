@@ -597,6 +597,8 @@ export type EndSessionSegment = {
   audioStartedAtMs: number;
   streamId: string;
   segmentId: string;
+  /** Pause-aware segment duration in whole seconds at cut/stop time. */
+  durationSeconds?: number;
 };
 
 /**
@@ -1044,6 +1046,10 @@ export async function endWhiteboardSession(
                   sizeBytes: s.sizeBytes,
                   streamId: s.streamId,
                   orderIndex: nextOrder++,
+                  ...(typeof s.durationSeconds === "number" &&
+                    s.durationSeconds > 0 && {
+                      durationSeconds: s.durationSeconds,
+                    }),
                 })),
                 skipDuplicates: true,
               });
@@ -1619,6 +1625,7 @@ export async function registerWhiteboardSessionAudioSegmentAction(
     streamId?: string;
     speakerId?: string;
     audioStartedAtMs?: number;
+    durationSeconds?: number;
   }
 ): Promise<RegisterWhiteboardSessionAudioSegmentResult> {
   const rid = createActionCorrelationId();
@@ -1726,6 +1733,10 @@ export async function registerWhiteboardSessionAudioSegmentAction(
                   sizeBytes: segment.sizeBytes,
                   orderIndex,
                   streamId,
+                  ...(typeof segment.durationSeconds === "number" &&
+                    segment.durationSeconds > 0 && {
+                      durationSeconds: segment.durationSeconds,
+                    }),
                 },
                 select: { id: true, orderIndex: true },
               });
