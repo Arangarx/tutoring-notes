@@ -4,49 +4,37 @@
  * Per-participant remote-mic recorder orchestrator — Phase 4c host
  * glue between `useLiveAV` and `remote-stream-recorder`.
  *
+ * WS-A A3: taps each reconciled peer's RAW `audioStream` (tap-before-mix)
+ * into a dedicated `transcriptionOnly` MediaRecorder lane. Replay audio
+ * stays on the `tutor:mic` mixdown — these rows never reach
+ * `assembleEndSessionSegments`.
+ *
  * Architecture (deliberately layered):
  *
  *   useLiveAV (4b)            → participants[] with audioStream + peerConnectionState
  *           │
  *           ▼
  *   useRemoteMicRecorders     ← THIS HOOK
- *     - Creates one RemoteStreamRecorder per active participant
+ *     - reconcileSpeakers() caps distinct identities (newest device wins)
+ *     - Creates one RemoteStreamRecorder per active student peer
  *     - Watches `shouldCapture(streamId)` + per-peer moderation
  *       overrides, calls start() / stop() accordingly
  *     - On participant removal: stop() + dispose() and forget
  *           │
  *           ▼
- *   remote-stream-recorder (4b) → outbox row writes
+ *   remote-stream-recorder (4b) → outbox row writes (transcriptionOnly)
  *           │
  *           ▼
- *   upload-outbox (1b)
- *
- * Why a separate hook (not inline in WhiteboardWorkspaceClient):
- *
- *   - The workspace already pushes >1700 lines; another 60 of
- *     recorder-bookkeeping noise hurts review.
- *   - Easier to test in isolation: hand the hook synthetic
- *     participants + a moving `shouldCapture` and assert that
- *     start/stop fire on the right transitions.
- *
- * What this hook is NOT responsible for:
- *
- *   - End-session drain: the workspace already awaits
- *     `drainOutboxOrTimeout`. Recorder `.stop()` resolves once its
- *     trailing `outbox.enqueue` lands, so a tear-down before drain
- *     is safe — the row exists in the outbox before drain reads.
- *   - Tutor-mic capture: the existing `useAudioRecorder` +
- *     `WhiteboardWorkspaceAudioBridge` path handles that. This hook
- *     ONLY touches remote-mic streams.
+ *   upload-outbox (1b) → onSegmentUploaded → enqueueChunkTranscriptionAction
  *
  * Per-session ID logging: every transition logs with
- * `wbsid=<id> avx=<id> peer=<peerId>` so prod debugging can grep
- * the same scrollback as the existing 4a + 4b logs.
+ * `[psc] psc=<streamId> action=<start|stop|segment|enqueue> wbsid=… peer=… speakerId=…`
  */
 
 import { useEffect, useRef } from "react";
 
 import type { AvParticipant } from "@/hooks/useLiveAV";
+import { reconcileSpeakers } from "@/lib/recording/perspeaker-identity";
 import {
   createRemoteStreamRecorder,
   studentMicStreamId,
@@ -73,8 +61,7 @@ export type UseRemoteMicRecordersOptions = {
   /**
    * Host-side moderation overrides. Peer ids in this set are
    * EXCLUDED from recording even when `shouldCapture` would
-   * otherwise return true. Used for the tutor "Don't record this
-   * student" toggle. Wire-level mute is post-v1 and out of scope.
+   * otherwise return true.
    */
   mutedPeerIdsInRecording: ReadonlySet<string>;
   /**
@@ -82,29 +69,54 @@ export type UseRemoteMicRecordersOptions = {
    * tutor mic uses; the recorder writes per-participant rows
    * keyed by `studentMicStreamId(peerId)`.
    */
-  outbox: UploadOutbox;
+  outbox: UploadOutbox | null;
+  /**
+   * Master enable — false when consent policy blocks student audio capture
+   * (e.g. `audioCapturePolicy !== "full"`). Disposes all recorders when off.
+   */
+  enabled?: boolean;
+  /**
+   * Max distinct speaker identities (defensive cap). Default 4.
+   */
+  maxSpeakers?: number;
+  /**
+   * Resolve stable speaker id (LearnerProfile id) for a peer.
+   * Return undefined to skip lane creation (unclaimed / anonymous).
+   */
+  resolveSpeakerIdForPeer?: (peer: AvParticipant) => string | undefined;
+  /**
+   * Monotonic p3-clock reader for `recordingTimeOffsetMs` on each segment.
+   */
+  getRecordingTimeOffsetMs?: () => number;
   /**
    * Test-only factory override. Production omits.
    */
   _createRecorder?: typeof createRemoteStreamRecorder;
   /**
-   * Optional logger override. Defaults to `console` with a
-   * `[useRemoteMicRecorders] wbsid=… avx=…` prefix.
+   * Optional logger override. Defaults to `console` with a `[psc]` prefix.
    */
   log?: Pick<Console, "log" | "warn" | "error">;
 };
 
+function reconcileActiveParticipants(
+  participants: ReadonlyArray<AvParticipant>,
+  maxSpeakers: number
+): AvParticipant[] {
+  const students = participants.filter((p) => p.role === "student");
+  if (students.length === 0) return [];
+  const livePeers = students.map((p) => ({
+    peerId: p.peerId,
+    joinedAt: p.joinedAt,
+  }));
+  const { active } = reconcileSpeakers(livePeers, { maxSpeakers });
+  const activeIds = new Set(active.map((p) => p.peerId));
+  return students.filter((p) => activeIds.has(p.peerId));
+}
+
 /**
  * Side-effect-only React hook. Maintains a `Map<peerId,
  * RemoteStreamRecorder>` in a ref and reconciles it against
- * `participants[]`. The recorder's `start()` / `stop()` calls are
- * fired from a separate effect that re-runs when the
- * shouldCapture-derived per-peer decision flips.
- *
- * The hook returns nothing — it's all internal lifecycle. Hosts
- * who need to observe whether a recorder is currently active for
- * a peer can read `participants[i].peerConnectionState` and apply
- * the same predicate themselves.
+ * capped/reconciled `participants[]`.
  */
 export function useRemoteMicRecorders(
   opts: UseRemoteMicRecordersOptions
@@ -115,6 +127,10 @@ export function useRemoteMicRecorders(
     shouldCapture,
     mutedPeerIdsInRecording,
     outbox,
+    enabled = true,
+    maxSpeakers = 4,
+    resolveSpeakerIdForPeer,
+    getRecordingTimeOffsetMs,
     _createRecorder,
     log: logOpt,
   } = opts;
@@ -122,39 +138,54 @@ export function useRemoteMicRecorders(
   const log =
     logOpt ?? {
       log: (msg: string, ...rest: unknown[]) =>
-        console.log(
-          `[useRemoteMicRecorders] avx=${sessionId} ${msg}`,
-          ...rest
-        ),
+        console.log(`[psc] wbsid=${sessionId} ${msg}`, ...rest),
       warn: (msg: string, ...rest: unknown[]) =>
-        console.warn(
-          `[useRemoteMicRecorders] avx=${sessionId} ${msg}`,
-          ...rest
-        ),
+        console.warn(`[psc] wbsid=${sessionId} ${msg}`, ...rest),
       error: (msg: string, ...rest: unknown[]) =>
-        console.error(
-          `[useRemoteMicRecorders] avx=${sessionId} ${msg}`,
-          ...rest
-        ),
+        console.error(`[psc] wbsid=${sessionId} ${msg}`, ...rest),
     };
 
   const recordersRef = useRef<Map<string, RemoteStreamRecorder>>(new Map());
   const factoryRef = useRef(_createRecorder ?? createRemoteStreamRecorder);
   factoryRef.current = _createRecorder ?? createRemoteStreamRecorder;
 
+  const activeParticipants = enabled
+    ? reconcileActiveParticipants(participants, maxSpeakers)
+    : [];
+
   // Effect 1: instantiate/dispose recorders as participants arrive/leave.
-  // Re-keyed strictly on the participant set + audioStream identity so
-  // a re-render with the same participant + same stream doesn't churn.
   useEffect(() => {
     const map = recordersRef.current;
+    if (!enabled || !outbox) {
+      for (const [peerId, rec] of [...map.entries()]) {
+        try {
+          void rec.stop().catch(() => undefined);
+        } finally {
+          try {
+            rec.dispose();
+          } catch {
+            /* ignore */
+          }
+          map.delete(peerId);
+          log.log(`action=dispose peer=${peerId} reason=disabled`);
+        }
+      }
+      return;
+    }
+
     const currentIds = new Set<string>();
-    for (const p of participants) {
+    for (const p of activeParticipants) {
       currentIds.add(p.peerId);
       const existing = map.get(p.peerId);
       if (existing) continue;
       if (!p.audioStream) {
-        // Audio track hasn't landed yet — skip and try again on the
-        // next render when participants[] updates.
+        continue;
+      }
+      const speakerId = resolveSpeakerIdForPeer?.(p);
+      if (!speakerId) {
+        log.log(
+          `action=skip peer=${p.peerId} reason=no_speaker_id (unclaimed or unresolved)`
+        );
         continue;
       }
       const streamId = studentMicStreamId(p.peerId);
@@ -164,26 +195,46 @@ export function useRemoteMicRecorders(
           streamId,
           sessionId,
           outbox,
+          transcriptionOnly: true,
+          speakerId,
+          getRecordingTimeOffsetMs,
+          log: {
+            log: (msg, ...rest) =>
+              log.log(
+                `psc=${streamId} peer=${p.peerId} speakerId=${speakerId} ${msg}`,
+                ...rest
+              ),
+            warn: (msg, ...rest) =>
+              log.warn(
+                `psc=${streamId} peer=${p.peerId} speakerId=${speakerId} ${msg}`,
+                ...rest
+              ),
+            error: (msg, ...rest) =>
+              log.error(
+                `psc=${streamId} peer=${p.peerId} speakerId=${speakerId} ${msg}`,
+                ...rest
+              ),
+          },
         });
         map.set(p.peerId, rec);
         log.log(
-          `recorder created peer=${p.peerId} streamId=${streamId}`
+          `psc=${streamId} action=create peer=${p.peerId} speakerId=${speakerId}`
         );
       } catch (err) {
         log.error(
-          `recorder ctor threw peer=${p.peerId} err=${
+          `psc=${streamId} action=create_failed peer=${p.peerId} err=${
             (err as Error)?.message ?? String(err)
           }`
         );
       }
     }
-    // Dispose recorders for peers that have left.
     for (const [peerId, rec] of [...map.entries()]) {
       if (currentIds.has(peerId)) continue;
+      const streamId = studentMicStreamId(peerId);
       try {
         void rec.stop().catch((err) => {
           log.warn(
-            `recorder.stop threw peer=${peerId} err=${
+            `psc=${streamId} action=stop_failed peer=${peerId} err=${
               (err as Error)?.message ?? String(err)
             }`
           );
@@ -193,23 +244,30 @@ export function useRemoteMicRecorders(
           rec.dispose();
         } catch (err) {
           log.warn(
-            `recorder.dispose threw peer=${peerId} err=${
+            `psc=${streamId} action=dispose_failed peer=${peerId} err=${
               (err as Error)?.message ?? String(err)
             }`
           );
         }
         map.delete(peerId);
-        log.log(`recorder disposed peer=${peerId} (peer left)`);
+        log.log(`psc=${streamId} action=dispose peer=${peerId} reason=peer_left`);
       }
     }
-  }, [participants, sessionId, outbox, log]);
+  }, [
+    activeParticipants,
+    sessionId,
+    outbox,
+    enabled,
+    resolveSpeakerIdForPeer,
+    getRecordingTimeOffsetMs,
+    log,
+  ]);
 
-  // Effect 2: gate each existing recorder by shouldCapture +
-  // moderation overrides. Re-runs whenever shouldCapture or the
-  // mute set or the participants update.
+  // Effect 2: gate each existing recorder by shouldCapture + moderation.
   useEffect(() => {
+    if (!enabled) return;
     const map = recordersRef.current;
-    for (const p of participants) {
+    for (const p of activeParticipants) {
       const rec = map.get(p.peerId);
       if (!rec) continue;
       const streamId = studentMicStreamId(p.peerId);
@@ -219,42 +277,39 @@ export function useRemoteMicRecorders(
       if (allowed && !recording) {
         try {
           rec.start();
-          log.log(`recorder start peer=${p.peerId} streamId=${streamId}`);
+          log.log(`psc=${streamId} action=start peer=${p.peerId}`);
         } catch (err) {
           log.error(
-            `recorder.start threw peer=${p.peerId} err=${
+            `psc=${streamId} action=start_failed peer=${p.peerId} err=${
               (err as Error)?.message ?? String(err)
             }`
           );
         }
       } else if (!allowed && recording) {
-        log.log(`recorder stop peer=${p.peerId} streamId=${streamId}`);
+        log.log(`psc=${streamId} action=stop peer=${p.peerId}`);
         void rec.stop().catch((err) => {
           log.warn(
-            `recorder.stop threw peer=${p.peerId} err=${
+            `psc=${streamId} action=stop_failed peer=${p.peerId} err=${
               (err as Error)?.message ?? String(err)
             }`
           );
         });
       }
     }
-  }, [participants, shouldCapture, mutedPeerIdsInRecording, log]);
+  }, [activeParticipants, shouldCapture, mutedPeerIdsInRecording, enabled, log]);
 
-  // Effect 3: full teardown on hook unmount (workspace navigates
-  // away mid-session, or HMR replaces the host). Synchronously
-  // dispose every recorder so devices are freed; pending outbox
-  // writes from the trailing dataavailable still complete in the
-  // background.
+  // Effect 3: full teardown on unmount.
   useEffect(() => {
     return () => {
       const map = recordersRef.current;
       for (const [peerId, rec] of map.entries()) {
+        const streamId = studentMicStreamId(peerId);
         try {
           rec.dispose();
-          log.log(`recorder disposed peer=${peerId} (unmount)`);
+          log.log(`psc=${streamId} action=dispose peer=${peerId} reason=unmount`);
         } catch (err) {
           log.warn(
-            `recorder.dispose threw peer=${peerId} err=${
+            `psc=${streamId} action=dispose_failed peer=${peerId} err=${
               (err as Error)?.message ?? String(err)
             }`
           );

@@ -110,20 +110,24 @@ export type StructuredNoteFields = {
 // ---------------------------------------------------------------------------
 
 function buildReducePrompt(
-  extractions: ChunkExtractionPayload[],
-  rawTranscripts?: string[]
+  extractions: Array<ChunkExtractionPayload & { speakerLabel?: string | null }>,
+  rawTranscripts?: Array<{ text: string; speakerLabel?: string | null }>
 ): string {
   if (extractions.length > 0) {
     const chunks = extractions
-      .map(
-        (e, i) => `### Chunk ${i + 1}
-Topics: ${e.topics.join(", ") || "none"}
+      .map((e, i) => {
+        const speakerLine =
+          e.speakerLabel && e.speakerLabel.length > 0
+            ? `Speaker: ${e.speakerLabel}\n`
+            : "";
+        return `### Chunk ${i + 1}
+${speakerLine}Topics: ${e.topics.join(", ") || "none"}
 Student Questions: ${e.studentQuestions.join("; ") || "none"}
 Corrections: ${e.corrections.join("; ") || "none"}
-Follow-ups: ${e.followUps.join("; ") || "none"}`
-      )
+Follow-ups: ${e.followUps.join("; ") || "none"}`;
+      })
       .join("\n\n");
-    return `Synthesize a structured session note from these per-segment extractions. Include only what the extractions support — do not fabricate. Map in-session reactions in corrections to assessment meaning when synthesizing.
+    return `Synthesize a structured session note from these per-segment extractions (ordered by recording time; speaker labels identify who spoke). Include only what the extractions support — do not fabricate. Map in-session reactions in corrections to assessment meaning when synthesizing.
 
 ${chunks}`;
   }
@@ -131,11 +135,19 @@ ${chunks}`;
   // Fallback: use raw transcripts
   if (rawTranscripts && rawTranscripts.length > 0) {
     const joined = rawTranscripts
-      .map((t, i) =>
-        rawTranscripts.length > 1 ? `[Segment ${i + 1}]\n${t}` : t
-      )
+      .map((t, i) => {
+        const speakerLine =
+          t.speakerLabel && t.speakerLabel.length > 0
+            ? `[${t.speakerLabel}] `
+            : "";
+        const body =
+          rawTranscripts.length > 1
+            ? `[Segment ${i + 1}]\n${speakerLine}${t.text}`
+            : `${speakerLine}${t.text}`;
+        return body;
+      })
       .join("\n\n");
-    return `Synthesize a structured session note from this tutoring session transcript. Include only what the transcript supports — do not fabricate. Map tutor reactions ("almost!", "yes!", etc.) to assessment meaning when present.
+    return `Synthesize a structured session note from this tutoring session transcript (ordered by recording time; speaker prefixes identify who spoke). Include only what the transcript supports — do not fabricate. Map tutor reactions ("almost!", "yes!", etc.) to assessment meaning when present.
 
 ${joined}`;
   }
@@ -282,25 +294,46 @@ export async function processNotesReduceJob(
   // --- 5. Gather inputs (map extractions preferred, fallback to raw transcripts) ---
   const extractionRows = await getChunkExtractionsBySessionId(sessionId);
 
+  const chunkById = new Map(chunks.map((c) => [c.id, c]));
+
+  const speakerLabelForChunk = (chunkId: string): string | null => {
+    const chunk = chunkById.get(chunkId);
+    if (!chunk) return null;
+    if (chunk.speakerId) return `learner:${chunk.speakerId}`;
+    if (chunk.streamId === "tutor:mic") return "tutor";
+    if (chunk.streamId.startsWith("speaker:")) {
+      return chunk.streamId.replace(/^speaker:/, "").replace(/:transcript$/, "");
+    }
+    return chunk.streamId;
+  };
+
   // Build ordered extraction list (by chunkId matching done chunks ordered by recordingTimeOffsetMs)
   const doneChunkIds = new Set(
     chunks.filter((c) => c.status === "done").map((c) => c.id)
   );
-  const orderedExtractions: ChunkExtractionPayload[] = extractionRows
+  const orderedExtractions: Array<
+    ChunkExtractionPayload & { speakerLabel: string | null }
+  > = extractionRows
     .filter((e) => doneChunkIds.has(e.chunkId))
-    // Sort by chunk's recordingTimeOffsetMs
+    // Sort by chunk's recordingTimeOffsetMs (monotonic session clock)
     .sort((a, b) => {
-      const ca = chunks.find((c) => c.id === a.chunkId);
-      const cb = chunks.find((c) => c.id === b.chunkId);
+      const ca = chunkById.get(a.chunkId);
+      const cb = chunkById.get(b.chunkId);
       return (ca?.recordingTimeOffsetMs ?? 0) - (cb?.recordingTimeOffsetMs ?? 0);
     })
-    .map((e) => parseChunkExtraction(e));
+    .map((e) => ({
+      ...parseChunkExtraction(e),
+      speakerLabel: speakerLabelForChunk(e.chunkId),
+    }));
 
   // Fallback: use raw transcripts from done chunks ordered by recordingTimeOffsetMs
   const rawTranscripts = chunks
     .filter((c) => c.status === "done" && c.transcript)
     .sort((a, b) => a.recordingTimeOffsetMs - b.recordingTimeOffsetMs)
-    .map((c) => c.transcript);
+    .map((c) => ({
+      text: c.transcript as string,
+      speakerLabel: speakerLabelForChunk(c.id),
+    }));
 
   console.log(
     `[tnt] wbsid=${sessionId} action=reduce_inputs extractions=${orderedExtractions.length} rawTranscripts=${rawTranscripts.length} isPartial=${isPartial}`
@@ -322,7 +355,10 @@ export async function processNotesReduceJob(
 
   try {
     const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
-    const prompt = buildReducePrompt(orderedExtractions, rawTranscripts.length > 0 ? rawTranscripts : undefined);
+    const prompt = buildReducePrompt(
+      orderedExtractions,
+      rawTranscripts.length > 0 ? rawTranscripts : undefined
+    );
 
     const response = await client.chat.completions.create({
       model: REDUCE_MODEL,

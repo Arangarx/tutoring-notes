@@ -1,14 +1,14 @@
 import { test, expect } from "./fixtures";
 import { readLocalEnv } from "../utils/read-dotenv";
-import { seedWbLiveSyncSession } from "./whiteboard-live-sync.helpers";
+import {
+  openTutorAndStudent,
+  seedWbLiveSyncSession,
+} from "./whiteboard-live-sync.helpers";
 
 /**
- * WS-A Part 1 (A1+A2) — VAD silence-boundary segmentation + incremental
- * SessionRecording register. Steps 3, 5, 5b deferred to WS-A Part 2 (A3).
- *
- * Primary path uses solo tutor workspace (same harness as recording-end-to-end)
- * so VAD init-script overrides apply before first paint. Relay two-party
- * coverage remains in the full `test:wb-sync` gate.
+ * WS-A — VAD + per-speaker transcription lanes + replay-mix invariant.
+ * Steps 1–2 + red-before cases: solo tutor path (Part 1).
+ * Steps 3, 5, 5b: hermetic relay two-party (Part 2 A3+A4).
  */
 
 const TEST_SECRET = process.env.PLAYWRIGHT_TEST_SECRET ?? "playwright-test-secret";
@@ -40,6 +40,53 @@ async function fetchRecordingCount(
   );
   expect(res.ok(), await res.text()).toBeTruthy();
   return (await res.json()) as { count: number; byStream: Record<string, number> };
+}
+
+async function fetchTranscriptChunks(
+  page: import("@playwright/test").Page,
+  sessionId: string
+) {
+  const res = await page.request.get(
+    `/api/test/whiteboard/${sessionId}/transcript-chunks`,
+    { headers: { Authorization: `Bearer ${TEST_SECRET}` } }
+  );
+  expect(res.ok(), await res.text()).toBeTruthy();
+  return (await res.json()) as {
+    count: number;
+    byStream: Record<string, number>;
+    rows: Array<{ streamId: string; speakerId: string | null; status: string }>;
+    tutorNoteStatus: string | null;
+  };
+}
+
+type OutboxRowSnapshot = {
+  streamId: string;
+  transcriptionOnly?: boolean;
+  blobRemoteUrl: string | null;
+};
+
+async function listOutboxRowsForSession(
+  page: import("@playwright/test").Page,
+  sessionId: string
+): Promise<OutboxRowSnapshot[]> {
+  return page.evaluate(async (wbsid) => {
+    const DB_NAME = "tutoring-notes-upload-outbox";
+    const STORE = "rows";
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    const tx = db.transaction(STORE, "readonly");
+    const store = tx.objectStore(STORE);
+    const all = await new Promise<OutboxRowSnapshot[]>((resolve, reject) => {
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result as OutboxRowSnapshot[]);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return all.filter((r) => (r as { sessionId?: string }).sessionId === wbsid);
+  }, sessionId);
 }
 
 test.describe("wb VAD + incremental SessionRecording (WS-A A1+A2)", () => {
@@ -76,15 +123,6 @@ test.describe("wb VAD + incremental SessionRecording (WS-A A1+A2)", () => {
     expect(mid.count).toBeGreaterThanOrEqual(2);
     expect(mid.byStream["tutor:mic"] ?? 0).toBeGreaterThanOrEqual(2);
   });
-
-  test.fixme("student transcriptionOnly upload — WS-A Part 2 (A3)", async () => {});
-
-  test.fixme("TranscriptChunk rows for tutor:mic + per-speaker — WS-A Part 2 (A3)", async () => {});
-
-  test.fixme(
-    "replay mix excludes transcriptionOnly rows — WS-A Part 2 (A3) step 5b",
-    async () => {}
-  );
 
   test("red-before: VAD cut disabled → recording count stays below 2", async ({ page }) => {
     test.setTimeout(180_000);
@@ -162,5 +200,100 @@ test.describe("wb VAD + incremental SessionRecording (WS-A A1+A2)", () => {
       .isVisible()
       .catch(() => false);
     expect(panelHidden || reviewVisible).toBeTruthy();
+  });
+});
+
+test.describe("wb per-speaker transcription + replay-mix (WS-A A3+A4)", () => {
+  test("student speaks → transcriptionOnly upload; End → chunks + replay is mixdown-only", async ({
+    browser,
+  }) => {
+    test.setTimeout(420_000);
+
+    const env = readLocalEnv();
+    test.skip(
+      !env.BLOB_READ_WRITE_TOKEN?.trim(),
+      "Set BLOB_READ_WRITE_TOKEN in .env for per-speaker durability integration."
+    );
+
+    const session = await seedWbLiveSyncSession();
+    const peers = await openTutorAndStudent(browser, session);
+    try {
+      await injectVadOverrides(peers.tutorPage);
+      await injectVadOverrides(peers.studentPage);
+
+      await peers.tutorPage.waitForTimeout(3_000);
+      await peers.tutorPage.waitForTimeout(3_500);
+      await peers.tutorPage.waitForTimeout(2_500);
+      await peers.tutorPage.waitForTimeout(3_500);
+
+      const midMixdown = await fetchRecordingCount(
+        peers.tutorPage,
+        session.whiteboardSessionId
+      );
+      expect(midMixdown.byStream["tutor:mic"] ?? 0).toBeGreaterThanOrEqual(1);
+
+      await peers.studentPage.waitForTimeout(5_000);
+      await peers.tutorPage.waitForTimeout(8_000);
+
+      const outboxRows = await listOutboxRowsForSession(
+        peers.tutorPage,
+        session.whiteboardSessionId
+      );
+      const studentTxRows = outboxRows.filter(
+        (r) =>
+          r.transcriptionOnly === true &&
+          /^student:peer-.+:mic$/.test(r.streamId) &&
+          typeof r.blobRemoteUrl === "string" &&
+          r.blobRemoteUrl.length > 0
+      );
+      expect(studentTxRows.length).toBeGreaterThanOrEqual(1);
+
+      const mixdownUploadCount = midMixdown.byStream["tutor:mic"] ?? 0;
+
+      await peers.tutorPage.getByTestId("wb-end-session").click();
+      const confirmBtn = peers.tutorPage.getByTestId("wb-end-session-confirm-yes");
+      if (await confirmBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
+        await confirmBtn.click();
+      }
+
+      await expect(peers.tutorPage.getByTestId("wb-session-review-mode")).toBeVisible({
+        timeout: 180_000,
+      });
+
+      await expect
+        .poll(
+          async () => {
+            const tx = await fetchTranscriptChunks(
+              peers.tutorPage,
+              session.whiteboardSessionId
+            );
+            return tx.tutorNoteStatus;
+          },
+          { timeout: 240_000 }
+        )
+        .toMatch(/^(done|partial)$/);
+
+      const tx = await fetchTranscriptChunks(
+        peers.tutorPage,
+        session.whiteboardSessionId
+      );
+      expect(tx.byStream["tutor:mic"] ?? 0).toBeGreaterThanOrEqual(1);
+      const perSpeakerStreamIds = Object.keys(tx.byStream).filter((id) =>
+        id.startsWith("speaker:")
+      );
+      expect(perSpeakerStreamIds.length).toBeGreaterThanOrEqual(1);
+
+      const replay = await fetchRecordingCount(
+        peers.tutorPage,
+        session.whiteboardSessionId
+      );
+      expect(replay.count).toBe(mixdownUploadCount);
+      expect(replay.byStream["tutor:mic"] ?? 0).toBe(mixdownUploadCount);
+      for (const streamId of Object.keys(replay.byStream)) {
+        expect(streamId).toBe("tutor:mic");
+      }
+    } finally {
+      await peers.close();
+    }
   });
 });

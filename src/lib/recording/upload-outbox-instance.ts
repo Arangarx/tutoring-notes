@@ -44,8 +44,13 @@ import {
 import { uploadAudioDirect, uploadAudioWithRetry } from "@/lib/recording/upload";
 import {
   registerWhiteboardSessionAudioSegmentAction,
+  enqueueChunkTranscriptionAction,
   type EndSessionSegment,
 } from "@/app/admin/students/[id]/whiteboard/actions";
+import {
+  resolveSpeakerId,
+  speakerTranscriptStreamId,
+} from "@/lib/recording/perspeaker-identity";
 
 export type { OutboxObserverState };
 
@@ -127,9 +132,33 @@ function extForMime(mimeType: string): string {
   return base.split("/")[1] ?? "bin";
 }
 
+function peerIdFromStudentMicStreamId(streamId: string): string | null {
+  const match = /^student:peer-(.+):mic$/.exec(streamId);
+  return match ? match[1] : null;
+}
+
 async function handleSegmentUploaded(row: OutboxRow): Promise<void> {
   if (row.transcriptionOnly === true) {
-    // A3: per-speaker transcription enqueue (next dispatch)
+    if (!row.blobRemoteUrl) return;
+    const shortObx = row.id.slice(0, 8);
+    const peerId = peerIdFromStudentMicStreamId(row.streamId);
+    const identityKey = peerId ? resolveSpeakerId(peerId) : row.speakerId ?? "unknown";
+    const transcriptStreamId = speakerTranscriptStreamId(identityKey);
+    try {
+      await enqueueChunkTranscriptionAction(row.sessionId, {
+        chunkBlobUrl: row.blobRemoteUrl,
+        recordingTimeOffsetMs: row.recordingTimeOffsetMs ?? 0,
+        streamId: transcriptStreamId,
+        speakerId: row.speakerId ?? null,
+      });
+      console.log(
+        `[psc] psc=${row.streamId} action=enqueue wbsid=${row.sessionId} obx=${shortObx} transcriptStreamId=${transcriptStreamId} speakerId=${row.speakerId ?? "null"} offsetMs=${row.recordingTimeOffsetMs ?? 0}`
+      );
+    } catch (err) {
+      console.warn(
+        `[psc] psc=${row.streamId} action=enqueue_failed wbsid=${row.sessionId} obx=${shortObx} err=${(err as Error)?.message ?? String(err)}`
+      );
+    }
     return;
   }
   if (!row.blobRemoteUrl) return;

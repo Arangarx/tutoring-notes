@@ -535,6 +535,9 @@ key lines:
 `[vad] vad=<segmentId> action=open wbsid=<id> offsetMs=<ms>`,
 `[vad] vad=<segmentId> action=cut wbsid=<id> offsetMs=<ms>`,
 `[vad] vad=<segmentId> action=cap_force wbsid=<id> offsetMs=<ms>`),
+`psc` (per-speaker transcription lane lifecycle in `useRemoteMicRecorders` +
+`remote-stream-recorder` + `upload-outbox-instance` transcription enqueue — key lines:
+`[psc] psc=<streamId> action=<create|start|stop|dispose|enqueue> wbsid=<id> peer=<peerId> speakerId=<learnerProfileId>`),
 `alr` (AccountHolder-login durable rate limiter — IAC-11; Neon-backed `AuthThrottle` table;
 key is `ah-login:<normalizedEmail>`; key lines:
 `[alr] alr=ah-login:<email> action=rate-limited count=<n> retryAfterSec=<s>`,

@@ -90,7 +90,7 @@ export default async function WhiteboardWorkspacePage({
           sessionMode: true,
           activatedAt: true,
           student: {
-            select: { id: true, name: true },
+            select: { id: true, name: true, learnerProfileId: true },
           },
           consentSnapshot: {
             select: {
@@ -130,6 +130,7 @@ export default async function WhiteboardWorkspacePage({
       initialMode={detail.endedAt ? "review" : "live"}
       initialAllowAudioRecording={initialAllowAudioRecording}
       initialHasConsentSnapshot={initialHasConsentSnapshot}
+      studentLearnerProfileId={detail.student.learnerProfileId}
       initialIntent={initialIntent}
     />
   );

@@ -39,6 +39,8 @@ export type TutorWhiteboardSessionShellProps = ShellBaseProps & {
   initialAllowAudioRecording?: boolean | null;
   /** True when SessionConsentSnapshot exists for this session. */
   initialHasConsentSnapshot?: boolean;
+  /** Claimed student's LearnerProfile id — per-speaker lane attribution. */
+  studentLearnerProfileId?: string | null;
   /**
    * When "endreview": auto-bypass the resume gate and fire handleEndSession
    * once on mount. Used by the roster "End and review" button (SSG-2 fix).
@@ -113,6 +115,7 @@ function TutorWhiteboardSessionShell({
   activatedAt,
   initialAllowAudioRecording,
   initialHasConsentSnapshot,
+  studentLearnerProfileId,
   initialIntent,
 }: TutorWhiteboardSessionShellProps) {
   const [mode, setMode] = useState<ShellMode>(initialMode);
@@ -157,6 +160,7 @@ function TutorWhiteboardSessionShell({
         activatedAt={activatedAt}
         initialAllowAudioRecording={initialAllowAudioRecording}
         initialHasConsentSnapshot={initialHasConsentSnapshot}
+        studentLearnerProfileId={studentLearnerProfileId}
         initialIntent={initialIntent}
       />
     </WorkspaceResumeGate>

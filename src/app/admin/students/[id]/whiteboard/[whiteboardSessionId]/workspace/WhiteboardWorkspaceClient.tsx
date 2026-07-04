@@ -81,7 +81,7 @@ import {
 } from "@/lib/recording/session-clock";
 import { useAudioFlowConfirmation } from "@/hooks/useAudioFlowConfirmation";
 import { useCollaboratorPointers } from "@/hooks/useCollaboratorPointers";
-import { useLiveAV } from "@/hooks/useLiveAV";
+import { useLiveAV, type AvParticipant } from "@/hooks/useLiveAV";
 import { useLiveAvCoordinator } from "@/hooks/useLiveAvCoordinator";
 import AudioControls from "@/components/av/AudioControls";
 import VideoControls from "@/components/av/VideoControls";
@@ -128,6 +128,7 @@ import {
   triggerNotesGenerationAction,
 } from "@/app/admin/students/[id]/whiteboard/notes-actions";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
+import { useRemoteMicRecorders } from "@/hooks/useRemoteMicRecorders";
 import {
   assembleEndSessionSegments,
   drainOutboxOrTimeout,
@@ -308,6 +309,11 @@ type Props = {
   /** True when SessionConsentSnapshot exists for this session. Consumed in Block B Commit 2+. */
   initialHasConsentSnapshot?: boolean;
   /**
+   * Claimed student's LearnerProfile id (tutor path). Required for per-speaker
+   * transcription lane attribution — omitted when student is unclaimed.
+   */
+  studentLearnerProfileId?: string | null;
+  /**
    * A3 in-shell review: called in place of router.replace/refresh once
    * the atomic end-session pipeline completes. The shell's handler sets
    * mode="review", unmounting this client subtree (which fires all the
@@ -478,6 +484,7 @@ export function WhiteboardWorkspaceClient({
   activatedAt: _activatedAt,
   initialAllowAudioRecording = null,
   initialHasConsentSnapshot = false,
+  studentLearnerProfileId = null,
   identityKey,
   initialIntent,
 }: Props) {
@@ -2598,6 +2605,39 @@ export function WhiteboardWorkspaceClient({
   const getAudioMs = useAudioMsClock(wbSignal);
   // p3-clock: publish the clock to callbacks/FSM declared above this point.
   getAudioMsRef.current = getAudioMs;
+
+  // WS-A A3: per-speaker transcription lanes (tap-before-mix, transcriptionOnly).
+  // Gated on full consent policy + claimed LearnerProfile — replay stays tutor:mic mixdown.
+  const uploadOutboxForPerSpeaker = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      return getOrCreateUploadOutbox();
+    } catch {
+      return null;
+    }
+  }, []);
+  const perSpeakerLanesEnabled =
+    role === "tutor" &&
+    audioCapturePolicy === "full" &&
+    studentLearnerProfileId != null &&
+    studentLearnerProfileId.length > 0;
+  const resolveSpeakerIdForPeer = useCallback(
+    (p: AvParticipant) => {
+      if (!studentLearnerProfileId || p.role !== "student") return undefined;
+      return studentLearnerProfileId;
+    },
+    [studentLearnerProfileId]
+  );
+  useRemoteMicRecorders({
+    participants: liveAv.participants,
+    sessionId: whiteboardSessionId,
+    shouldCapture: lifecycle.shouldCapture,
+    mutedPeerIdsInRecording,
+    outbox: uploadOutboxForPerSpeaker,
+    enabled: perSpeakerLanesEnabled && uploadOutboxForPerSpeaker != null,
+    resolveSpeakerIdForPeer,
+    getRecordingTimeOffsetMs: getAudioMs,
+  });
 
   // p3-clock: emit the single-session-clock anchor once, when the clock
   // first starts advancing (FSM enters recording / MediaRecorder.start() —
