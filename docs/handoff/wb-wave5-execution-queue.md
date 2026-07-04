@@ -133,6 +133,14 @@ Map of every smokebook item → coverage action. **BUILD** = write/strengthen a 
 - **Items 25-30, 33-38 standing regression** — HAVE via existing suites (auth, identity-e2e, consent projection, sal share-access, erasure, tfa, wb-sync). Verify green; no per-theme automation (theme visual = HUMAN spot-check).
 - **HUMAN-only (→ slimmed smokebook):** 21 (WebRTC A/V reconnect real network), 22 (iOS AudioContext backgrounding), 23 (mobile thermal), 24 (Whisper on real audio), 37 (legal copy accuracy), theme/visual/copy spot-checks, subjective audio quality, real multi-device mic UX.
 
+## GATE / HARNESS FINDINGS (2026-07-04, discovered during WS-I)
+
+- **(a) MERGE GATE = `wb-regression` project ONLY** — explicit allowlist in `playwright.config.ts` `projects[].testMatch`. **STANDING RULE:** every new teeth spec MUST be (1) added to `wb-regression.testMatch`, (2) tagged `@wb-*` from `tests/test-tags.ts`, (3) verified enrolled via `npx playwright test --project=wb-regression --list <file>`. A spec merely under `tests/integration/` runs only in the broad `integration` project (NOT the gate) and silently protects nothing. Reference: prior overnight bug where 9 teeth specs weren't wired in.
+
+- **(b) BLOB-TOKEN SELF-SKIP (HIGH — 'looks tested, isn't')** — several `wb-regression` specs (`wb-vad-per-speaker-durability`, `wb-notes-shimmer`, replay, PDF upload, `wb-end-from-gate`/`roster`) `test.skip` when `BLOB_READ_WRITE_TOKEN` is unset, and the gate webServer does NOT set it. Risk: the 'green' gate may be silently SKIPPING real durability coverage. **ACTION owed (WS-T/coverage audit):** quantify how many gate specs skip without the token; determine whether the harness should provide a token or a blob mock so durability specs actually RUN at the gate.
+
+- **(c) HARNESS HEALTH** — `integration-setup` (`auth.setup.ts`) failed once during WS-I verify — `/login` returned `Unexpected end of JSON input`, `#email` never rendered (likely transient dev-server startup race; the same spec had passed minutes earlier under the `integration` project). **MUST** confirm `integration-setup` passes (harness healthy) before the final merge-gate relay run.
+
 ## Deferred / tracked (not this pass)
 
 - **WS-A F-1** (outbox register-failure has no attempt cap → unbounded retries on persistently-failing register server; log-spam only, NO data loss). 5-axis rated SHOULD-FIX / next-wave-acceptable. **~10-line in-flight-Set fix + reuse `permanentFailAfter` + dedupe log, with its own 5-axis, before the v1-redesign merge.** F-2/F-3 fold in.
