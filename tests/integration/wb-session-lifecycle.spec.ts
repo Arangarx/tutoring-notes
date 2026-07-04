@@ -3013,21 +3013,20 @@ test.describe(
           // --- Tutor: start session (waits for student WebRTC presence) ---
           await startSessionAsTutor(tutorPage, 90_000);
 
-          // --- Tutor: end session ---
+          // --- Tutor: end session (two-step: open confirm, then confirm-yes) ---
           const endBtn = tutorPage.getByTestId("wb-end-session");
           await expect(endBtn).toBeVisible({ timeout: 30_000 });
           await endBtn.click();
-          // Confirm dialog if present (some variants show a confirmation modal).
-          const confirmBtn = tutorPage.getByRole("button", { name: /confirm|end session/i });
-          if (await confirmBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
-            await confirmBtn.click();
-          }
+          await tutorPage.getByTestId("wb-end-session-confirm-yes").click();
+          await expect(tutorPage.getByRole("toolbar", { name: "Session review" })).toBeVisible({
+            timeout: 180_000,
+          });
 
           // --- Student oracle: poll resolves to session_ended copy ---
           // The student page polls /api/whiteboard/[sessionId]/join-timer every 3.5s;
-          // allow up to 30s for the UI to update.
+          // allow up to 45s for the UI to update (WS-C finalize may push tutor end past 30s).
           await expect(studentPage.getByText("Session has ended")).toBeVisible({
-            timeout: 30_000,
+            timeout: 45_000,
           });
 
           // Negative oracle: the generic link_invalid copy must NOT appear.
