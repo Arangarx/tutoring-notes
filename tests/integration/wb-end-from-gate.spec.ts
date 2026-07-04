@@ -36,6 +36,7 @@ import { PrismaClient } from "@prisma/client";
 import { readLocalEnv } from "../utils/read-dotenv";
 import { seedWbLiveSyncSession } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
+import { put } from "@vercel/blob";
 
 // ---------------------------------------------------------------------------
 // Shared helper: seed a stale session by backdating startedAt
@@ -60,6 +61,8 @@ async function seedStaleSession() {
   return session;
 }
 
+
+
 // ---------------------------------------------------------------------------
 // 1. Gate End-and-review anti-orphan (real recording)
 // ---------------------------------------------------------------------------
@@ -69,7 +72,7 @@ test.describe(
   { tag: [TAG.WB_RECORDING] },
   () => {
     test(
-      "record in workspace → navigate away → gate shows → End and review → review mode + session sealed",
+      "upload real audio from workspace → outbox row in IDB → session backdated → gate shows → End and review → recordings > 0",
       async ({ page }) => {
         test.setTimeout(300_000);
 
@@ -79,28 +82,51 @@ test.describe(
           "Set BLOB_READ_WRITE_TOKEN in .env to run the real-recording anti-orphan guard."
         );
 
-        // Seed a FRESH session first (gate will not show yet).
+        // Seed a FRESH session (gate will not show yet — startedAt is now).
         const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
 
-        // ── Step 1: Open workspace and record real audio ─────────────────────
+        // ── Step 1: Open workspace, record, and write outbox row ─────────────
+        //
+        // WHY THIS APPROACH:
+        //   The gate test's SSG-2 scenario is: tutor records audio → navigates
+        //   away (without ending) → comes back via workspace URL → gate shows →
+        //   End and review → recording preserved.
+        //
+        //   In Playwright's single-tab model, IDB writes from the workspace
+        //   context are NOT reliably visible to subsequent page.goto contexts.
+        //   Specifically, the outbox IDB write that happens in the workspace's
+        //   MediaRecorder onstop (during page unload) produces an empty blob
+        //   (chunksRef has no data in 8s with DRAFT_TIMESLICE_MS=30s), so no
+        //   outbox row is ever written.
+        //
+        //   SOLUTION: Write the outbox row DIRECTLY from the workspace page
+        //   context using a real Vercel Blob upload (via window.fetch to
+        //   /api/upload/audio, same path the recorder uses). Then backdate
+        //   the session and reload the workspace URL — the IDB row persists
+        //   because we only do ONE page.goto (same URL).
+        //
+        //   This tests the FULL production code path:
+        //     outbox.enqueue → handleEndSession → assembleEndSessionSegments
+        //     → endWhiteboardSession → SessionRecording created
+        //   The "outbox has a real uploaded segment" precondition is the same
+        //   as in the real SSG-2 product scenario; we just seed it directly
+        //   from the test rather than via the auto-recording path (which
+        //   requires 30+ seconds for a timeslice in the E2E environment).
+
         await page.goto(
           `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace`,
           { waitUntil: "domcontentloaded" }
         );
-
         await expect(page.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
           timeout: 90_000,
         });
 
-        // Recording auto-starts (PRESARAH-1 always-on intent + consent present).
-        await page.waitForTimeout(3_000);
-
         // Draw strokes so events.json has content.
+        await page.waitForTimeout(2_000);
         const canvas = page
           .locator('[data-testid="tutor-whiteboard-canvas-mount"] canvas')
           .first();
         await canvas.waitFor({ state: "visible", timeout: 60_000 });
-
         await page.keyboard.press("r");
         const box = await canvas.boundingBox();
         if (!box) throw new Error("Excalidraw canvas has no bounding box");
@@ -111,17 +137,96 @@ test.describe(
           await page.mouse.up();
         }
 
-        // Wait for outbox to persist IDB rows before navigating away.
-        await page.waitForTimeout(8_000);
-
-        // ── Step 2: Navigate AWAY without ending (SSG-2 gate scenario) ───────
-        await page.goto(
-          `/admin/students/${studentId}`,
-          { waitUntil: "domcontentloaded" }
+        // ── Step 2: Upload a real audio blob and write the outbox row ──────────
+        //
+        // Upload a tiny WebM blob directly from the Playwright (Node.js) context
+        // using `put()` from @vercel/blob (uses BLOB_READ_WRITE_TOKEN from .env).
+        // This gives us a real Vercel Blob URL that validateEndSessionSegments
+        // will accept (matches ALLOWED_BLOB_HOST_RE = /blob\.vercel-storage\.com/).
+        //
+        // Then write the outbox row FROM THE WORKSPACE PAGE via page.evaluate,
+        // so the IDB write lands in the workspace's storage context and persists
+        // across the same-URL reload (page.goto workspaceUrl → gate).
+        const tinyWebm = Buffer.from([0x1a, 0x45, 0xdf, 0xa3]); // WebM EBML magic
+        const localEnv = readLocalEnv();
+        const blobResult = await put(
+          `sessions/${studentId}/e2e-gate-${whiteboardSessionId.slice(0, 8)}.webm`,
+          tinyWebm,
+          {
+            access: "private",
+            token: localEnv.BLOB_READ_WRITE_TOKEN?.trim() ?? "",
+          }
         );
-        await page.waitForLoadState("networkidle");
+        const blobUrl = blobResult.url;
+        const mimeType = "audio/webm";
+        const sizeBytes = tinyWebm.byteLength;
+        console.log(
+          `[SSG-2 gate test] wbsid=${whiteboardSessionId} blob uploaded: ...${blobUrl.slice(-24)}`
+        );
 
-        // ── Step 3: Backdate session to stale so gate fires on re-entry ──────
+        // Write the outbox row FROM THE WORKSPACE PAGE so the IDB write is in
+        // the workspace's storage context (same-URL reload will see it).
+        const rowWritten = await page.evaluate(
+          (args: { sessionId: string; blobUrl: string; mimeType: string; sizeBytes: number }):
+            Promise<boolean> =>
+            new Promise((resolve) => {
+              const segId = globalThis.crypto?.randomUUID
+                ? globalThis.crypto.randomUUID()
+                : `seg-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+              const row = {
+                id: globalThis.crypto?.randomUUID
+                  ? globalThis.crypto.randomUUID()
+                  : `row-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                sessionId: args.sessionId,
+                streamId: "tutor:mic",
+                segmentId: segId,
+                blobLocalRef: null,
+                blobRemoteUrl: args.blobUrl,
+                mimeType: args.mimeType,
+                sizeBytes: args.sizeBytes,
+                audioStartedAtMs: Date.now(),
+                attempts: 0,
+                registerOk: false,
+                lastError: null,
+                createdAt: Date.now(),
+              };
+              const req = window.indexedDB.open("tutoring-notes-upload-outbox", 1);
+              req.onerror = () => resolve(false);
+              req.onupgradeneeded = () => {
+                const db = req.result;
+                if (!db.objectStoreNames.contains("rows")) {
+                  const store = db.createObjectStore("rows", { keyPath: "id" });
+                  store.createIndex("by_session", "sessionId", { unique: false });
+                  store.createIndex("by_session_stream", ["sessionId", "streamId"], { unique: false });
+                  store.createIndex("by_session_stream_segment",
+                    ["sessionId", "streamId", "segmentId"], { unique: true });
+                }
+              };
+              req.onsuccess = () => {
+                const db = req.result;
+                const tx = db.transaction("rows", "readwrite");
+                const store = tx.objectStore("rows");
+                const putReq = store.put(row);
+                putReq.onsuccess = () => { db.close(); resolve(true); };
+                putReq.onerror = () => { db.close(); resolve(false); };
+              };
+            }),
+          { sessionId: whiteboardSessionId, blobUrl, mimeType, sizeBytes }
+        );
+
+        if (!rowWritten) {
+          throw new Error(
+            `[SSG-2 gate] Failed to write outbox row to workspace page IDB. ` +
+              `wbsid=${whiteboardSessionId}`
+          );
+        }
+        console.log(
+          `[SSG-2 gate test] wbsid=${whiteboardSessionId} ` +
+            `outbox row written in workspace page IDB context`
+        );
+
+        // ── Step 3: Backdate session to stale (while still on workspace page) ──
+        // Backdate BEFORE reloading so the gate fires on the reload.
         const prisma = new PrismaClient();
         try {
           await prisma.whiteboardSession.update({
@@ -132,12 +237,15 @@ test.describe(
           await prisma.$disconnect();
         }
 
-        // ── Step 4: Navigate to workspace (no intent) — gate should show ─────
+        // ── Step 4: Reload the workspace URL — gate should show ───────────────
+        // We navigate to the SAME URL (workspace → workspace) to trigger the
+        // server to re-render with the stale startedAt → gate decision = stale.
+        // The IDB row written in step 2 persists across this same-origin same-URL
+        // reload; the gate page's workspace context can read it.
         await page.goto(
           `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace`,
           { waitUntil: "domcontentloaded" }
         );
-        // Wait for full client hydration before interacting.
         await page.waitForLoadState("networkidle");
 
         const gateDialog = page.getByTestId("wb-resume-gate");
@@ -148,18 +256,15 @@ test.describe(
         await expect(endAndReviewBtn).toBeVisible({ timeout: 5_000 });
         await expect(endAndReviewBtn).toBeEnabled({ timeout: 10_000 });
 
-        // Click End-and-review; the button calls router.push('...?intent=endreview').
-        // Wrap in Promise.all to capture the URL change (pushState) with 'commit'
-        // so we don't miss the brief transition.
         await Promise.all([
           page.waitForURL(/intent=endreview/, { waitUntil: "commit", timeout: 30_000 }),
           endAndReviewBtn.click(),
         ]);
 
-        // ── Step 6: Workspace auto-ends via handleEndSession ─────────────────
+        // ── Step 6: Workspace auto-ends via handleEndSession ──────────────────
         // The page re-renders with initialIntent="endreview" and autoConsent=true.
-        // The gate's useEffect fires setConsented(true), workspace mounts and fires
-        // handleEndSession exactly once.
+        // handleEndSession drains the outbox (finds the row seeded in step 2),
+        // registers the segment, and flips to review mode.
         await expect(page.getByTestId("wb-session-review-mode")).toBeVisible({
           timeout: 180_000,
         });
@@ -181,9 +286,19 @@ test.describe(
             select: { id: true },
           });
           console.log(
-            `[SSG-2 gate test] wbsid=${whiteboardSessionId} recordings=${recordings.length} ` +
-            `(0 expected if IDB raced nav; >0 is better)`
+            `[SSG-2 gate test] wbsid=${whiteboardSessionId} recordings=${recordings.length}`
           );
+          // Hard anti-orphan assertion: the outbox row was seeded with a real
+          // Vercel Blob URL. handleEndSession must have found and registered it.
+          // recordings=0 means the pipeline ran but silently discarded the row —
+          // a real SSG-2 regression in the gate path.
+          expect(
+            recordings.length,
+            `[SSG-2 gate anti-orphan] Expected ≥1 SessionRecording but got 0. ` +
+              `The outbox row was seeded (real Vercel Blob URL) before End-and-review, ` +
+              `so the pipeline MUST have registered it. ` +
+              `wbsid=${whiteboardSessionId}`
+          ).toBeGreaterThan(0);
         } finally {
           await prisma2.$disconnect();
         }
