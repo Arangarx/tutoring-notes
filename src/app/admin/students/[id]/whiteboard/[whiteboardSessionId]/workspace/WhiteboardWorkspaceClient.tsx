@@ -339,6 +339,10 @@ type Props = {
    */
   identityKey?: string;
   /**
+   * Authenticated student path: joining learner's profile id for mic persistence.
+   */
+  learnerProfileId?: string;
+  /**
    * When "endreview": auto-invoke handleEndSession exactly once on mount.
    * Used by the roster "End and review" button (SSG-2 anti-orphan fix).
    * The ref guard ensures it never fires twice, and only fires for
@@ -486,6 +490,7 @@ export function WhiteboardWorkspaceClient({
   initialHasConsentSnapshot = false,
   studentLearnerProfileId = null,
   identityKey,
+  learnerProfileId,
   initialIntent,
   initialPersistedState = null,
 }: Props) {
@@ -732,6 +737,7 @@ export function WhiteboardWorkspaceClient({
   const [studentEncryptionKey, setStudentEncryptionKey] = useState<string | null>(null);
   const [studentKeyMissing, setStudentKeyMissing] = useState(false);
   const [hasLeft, setHasLeft] = useState(false);
+  const [studentAvGeneration, setStudentAvGeneration] = useState(0);
   const [joinUnavailableReason, setJoinUnavailableReason] =
     useState<JoinUnavailableReason | null>(null);
   const [studentSyncClient, setStudentSyncClient] =
@@ -2005,6 +2011,8 @@ export function WhiteboardWorkspaceClient({
     swapMicDevice: role === "tutor" ? workspaceAudio.swapMicDevice : undefined,
     swapMicDeviceBySlot:
       role === "tutor" ? workspaceAudio.swapMicDeviceBySlot : undefined,
+    learnerProfileId: role === "student" ? learnerProfileId : undefined,
+    learnerAvGeneration: role === "student" ? studentAvGeneration : undefined,
   });
 
   // Stable handle to the latest liveAv return so reconcile effects and A/V
@@ -5660,7 +5668,10 @@ export function WhiteboardWorkspaceClient({
               type="button"
               className="btn btn-primary"
               data-testid="wb-student-rejoin"
-              onClick={() => setHasLeft(false)}
+              onClick={() => {
+                setHasLeft(false);
+                setStudentAvGeneration((g) => g + 1);
+              }}
             >
               Rejoin session
             </button>

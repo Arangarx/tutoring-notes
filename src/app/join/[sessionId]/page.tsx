@@ -322,6 +322,7 @@ export default async function JoinSessionPage({
           (session.sessionPhase as "PENDING" | "ACTIVE" | undefined) ?? "ACTIVE"
         }
         identityKey={identityKey}
+        learnerProfileId={effectiveLearnerProfileId}
       />
     </JoinHashRestorer>
   );

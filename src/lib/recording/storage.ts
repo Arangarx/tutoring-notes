@@ -16,6 +16,10 @@ export const CHIME_VOL_MAX = 1;
 export const CHIME_VOL_DEFAULT = 0.75;
 
 export const STORAGE_DEVICE_KEY = "tn-mic-device-id";
+/** Learner-scoped mic device id — suffix is `LearnerProfile.id` (student live-A/V). */
+export const STORAGE_LEARNER_MIC_DEVICE_KEY_PREFIX = "tn-mic-device-id:";
+/** Optional group correlate for learner mic when OEM rows share a `deviceId`. */
+export const STORAGE_LEARNER_MIC_GROUP_KEY_PREFIX = "tn-mic-group-id:";
 /** Stored preferred camera (same semantics as mic device id). */
 export const STORAGE_VIDEO_DEVICE_KEY = "tn-cam-device-id";
 /** Optional correlate when OEMs reuse `deviceId` across multiple lenses. */
@@ -66,6 +70,70 @@ export function saveStoredDeviceId(id: string): void {
   if (!s) return;
   try {
     s.setItem(STORAGE_DEVICE_KEY, id);
+  } catch {
+    /* ignore */
+  }
+}
+
+function learnerMicDeviceStorageKey(learnerProfileId: string): string {
+  return `${STORAGE_LEARNER_MIC_DEVICE_KEY_PREFIX}${learnerProfileId}`;
+}
+
+function learnerMicGroupStorageKey(learnerProfileId: string): string {
+  return `${STORAGE_LEARNER_MIC_GROUP_KEY_PREFIX}${learnerProfileId}`;
+}
+
+export function loadStoredLearnerMicDeviceId(learnerProfileId: string): string {
+  const s = getStorage();
+  if (!s || !learnerProfileId) return "";
+  return s.getItem(learnerMicDeviceStorageKey(learnerProfileId)) ?? "";
+}
+
+export function saveStoredLearnerMicDeviceId(
+  learnerProfileId: string,
+  id: string
+): void {
+  const s = getStorage();
+  if (!s || !learnerProfileId) return;
+  const key = learnerMicDeviceStorageKey(learnerProfileId);
+  if (!id) {
+    try {
+      s.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+  try {
+    s.setItem(key, id);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function loadStoredLearnerMicGroupId(learnerProfileId: string): string {
+  const s = getStorage();
+  if (!s || !learnerProfileId) return "";
+  return s.getItem(learnerMicGroupStorageKey(learnerProfileId)) ?? "";
+}
+
+export function saveStoredLearnerMicGroupId(
+  learnerProfileId: string,
+  id: string
+): void {
+  const s = getStorage();
+  if (!s || !learnerProfileId) return;
+  const key = learnerMicGroupStorageKey(learnerProfileId);
+  if (!id) {
+    try {
+      s.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+  try {
+    s.setItem(key, id);
   } catch {
     /* ignore */
   }

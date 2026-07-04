@@ -14,10 +14,16 @@ import {
   STORAGE_GAIN_KEY,
   STORAGE_CHIME_ENABLED_KEY,
   STORAGE_CHIME_VOLUME_KEY,
+  STORAGE_LEARNER_MIC_DEVICE_KEY_PREFIX,
+  STORAGE_LEARNER_MIC_GROUP_KEY_PREFIX,
   loadStoredGain,
   saveStoredGain,
   loadStoredDeviceId,
   saveStoredDeviceId,
+  loadStoredLearnerMicDeviceId,
+  saveStoredLearnerMicDeviceId,
+  loadStoredLearnerMicGroupId,
+  saveStoredLearnerMicGroupId,
   loadStoredChimeEnabled,
   saveStoredChimeEnabled,
   loadStoredChimeVolume,
@@ -100,6 +106,56 @@ describe("loadStoredDeviceId / saveStoredDeviceId", () => {
   });
 });
 
+describe("loadStoredLearnerMicDeviceId / saveStoredLearnerMicDeviceId", () => {
+  const learnerId = "lp_e6_persist_test";
+
+  test("default empty string when nothing stored", () => {
+    expect(loadStoredLearnerMicDeviceId(learnerId)).toBe("");
+  });
+
+  test("round-trips a learner-scoped mic device id", () => {
+    saveStoredLearnerMicDeviceId(learnerId, "e6-mic-b");
+    expect(loadStoredLearnerMicDeviceId(learnerId)).toBe("e6-mic-b");
+    expect(getStored(`${STORAGE_LEARNER_MIC_DEVICE_KEY_PREFIX}${learnerId}`)).toBe(
+      "e6-mic-b"
+    );
+  });
+
+  test("empty id clears the stored key (missing device fallback path)", () => {
+    saveStoredLearnerMicDeviceId(learnerId, "stale-mic");
+    saveStoredLearnerMicDeviceId(learnerId, "");
+    expect(loadStoredLearnerMicDeviceId(learnerId)).toBe("");
+    expect(
+      getStored(`${STORAGE_LEARNER_MIC_DEVICE_KEY_PREFIX}${learnerId}`)
+    ).toBeNull();
+  });
+
+  test("scopes storage per learner profile id", () => {
+    saveStoredLearnerMicDeviceId("learner-a", "mic-a");
+    saveStoredLearnerMicDeviceId("learner-b", "mic-b");
+    expect(loadStoredLearnerMicDeviceId("learner-a")).toBe("mic-a");
+    expect(loadStoredLearnerMicDeviceId("learner-b")).toBe("mic-b");
+  });
+});
+
+describe("loadStoredLearnerMicGroupId / saveStoredLearnerMicGroupId", () => {
+  const learnerId = "lp_e6_group_test";
+
+  test("round-trips group id alongside device id", () => {
+    saveStoredLearnerMicGroupId(learnerId, "grp-b");
+    expect(loadStoredLearnerMicGroupId(learnerId)).toBe("grp-b");
+    expect(getStored(`${STORAGE_LEARNER_MIC_GROUP_KEY_PREFIX}${learnerId}`)).toBe(
+      "grp-b"
+    );
+  });
+
+  test("empty group id removes the key", () => {
+    saveStoredLearnerMicGroupId(learnerId, "grp-x");
+    saveStoredLearnerMicGroupId(learnerId, "");
+    expect(loadStoredLearnerMicGroupId(learnerId)).toBe("");
+  });
+});
+
 describe("loadStoredChimeEnabled / saveStoredChimeEnabled", () => {
   test("default true (chime on for new tutors)", () => {
     expect(loadStoredChimeEnabled()).toBe(true);
@@ -154,6 +210,8 @@ describe("SSR / no-window safety", () => {
   test("loaders return defaults when window is undefined", () => {
     expect(loadStoredGain()).toBe(GAIN_DEFAULT);
     expect(loadStoredDeviceId()).toBe("");
+    expect(loadStoredLearnerMicDeviceId("lp")).toBe("");
+    expect(loadStoredLearnerMicGroupId("lp")).toBe("");
     expect(loadStoredChimeEnabled()).toBe(true);
     expect(loadStoredChimeVolume()).toBe(CHIME_VOL_DEFAULT);
   });
@@ -161,6 +219,8 @@ describe("SSR / no-window safety", () => {
   test("savers no-op without throwing when window is undefined", () => {
     expect(() => saveStoredGain(1)).not.toThrow();
     expect(() => saveStoredDeviceId("x")).not.toThrow();
+    expect(() => saveStoredLearnerMicDeviceId("lp", "x")).not.toThrow();
+    expect(() => saveStoredLearnerMicGroupId("lp", "g")).not.toThrow();
     expect(() => saveStoredChimeEnabled(true)).not.toThrow();
     expect(() => saveStoredChimeVolume(0.5)).not.toThrow();
   });
@@ -179,6 +239,8 @@ describe("quota / write failures", () => {
     };
     expect(() => saveStoredGain(1)).not.toThrow();
     expect(() => saveStoredDeviceId("x")).not.toThrow();
+    expect(() => saveStoredLearnerMicDeviceId("lp", "x")).not.toThrow();
+    expect(() => saveStoredLearnerMicGroupId("lp", "g")).not.toThrow();
     expect(() => saveStoredChimeEnabled(true)).not.toThrow();
     expect(() => saveStoredChimeVolume(0.5)).not.toThrow();
   });

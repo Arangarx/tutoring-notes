@@ -53,8 +53,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  loadStoredLearnerMicDeviceId,
+  loadStoredLearnerMicGroupId,
   loadStoredVideoDeviceId,
   loadStoredVideoGroupId,
+  saveStoredLearnerMicDeviceId,
+  saveStoredLearnerMicGroupId,
   saveStoredVideoDeviceId,
   saveStoredVideoGroupId,
 } from "@/lib/recording/storage";
@@ -262,6 +266,17 @@ export type UseLiveAVOptions = {
    * (duplicate `deviceId` rows). Preferred over {@link swapMicDevice}.
    */
   swapMicDeviceBySlot?: (slotIndex: number) => Promise<void>;
+  /**
+   * Student live-A/V: persist mic device choice under a learner-scoped
+   * localStorage key (`tn-mic-device-id:<learnerProfileId>`). Omit for
+   * tutor (recorder graph uses the global tutor mic key instead).
+   */
+  learnerProfileId?: string;
+  /**
+   * Student-only: bump when the learner rejoins after exit so persisted mic
+   * preference is re-applied without remounting the hook.
+   */
+  learnerAvGeneration?: number;
   /** Test-only override of `navigator.mediaDevices.getUserMedia`. */
   _getUserMedia?: (
     constraints: MediaStreamConstraints
@@ -755,6 +770,8 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     externalAudioStream,
     swapMicDevice: swapMicFromRecorder,
     swapMicDeviceBySlot: swapMicBySlotFromRecorder,
+    learnerProfileId,
+    learnerAvGeneration,
     _getUserMedia,
     _createPeerMesh,
     _createSignaling,
@@ -861,6 +878,23 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
   const selectedMicDeviceIdRef = useRef<string | null>(null);
   const pickedMicSlotRef = useRef(0);
   const pinnedMicEnumerateGroupRef = useRef("");
+
+  const persistLearnerMicChoice = useCallback(
+    (deviceId: string, groupId?: string) => {
+      if (!learnerProfileId || !deviceId) return;
+      saveStoredLearnerMicDeviceId(learnerProfileId, deviceId);
+      if (groupId) {
+        saveStoredLearnerMicGroupId(learnerProfileId, groupId);
+      }
+    },
+    [learnerProfileId]
+  );
+
+  const clearPersistedLearnerMicChoice = useCallback(() => {
+    if (!learnerProfileId) return;
+    saveStoredLearnerMicDeviceId(learnerProfileId, "");
+    saveStoredLearnerMicGroupId(learnerProfileId, "");
+  }, [learnerProfileId]);
 
   videoDevicesRef.current = videoDevices;
   selectedVideoDeviceIdRef.current = selectedVideoDeviceId;
@@ -995,10 +1029,79 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
       const inFlight = chainDeviceAcquire(deviceAcquireMutexRef, async () => {
         try {
-          const stream = await getUM({
-            audio: audioConstraints,
-            video: false,
-          });
+          await enumerateDevicesCore();
+          const siblings = audioDevicesRef.current;
+          let stream: MediaStream | null = null;
+
+          if (siblings.length > 0) {
+            const slot = Math.min(
+              Math.max(0, pickedMicSlotRef.current),
+              siblings.length - 1
+            );
+            try {
+              const picked = await getUserMediaAudioForEnumerateEntry(
+                getUM,
+                siblings[slot]!,
+                siblings,
+                null,
+                { userPickedSlot: false }
+              );
+              stream = picked.stream;
+              log.log(`requestMic acquired via picker slot=${slot}`);
+            } catch (slotErr) {
+              log.warn(
+                `requestMic picker slot=${slot} failed: ${
+                  (slotErr as Error)?.message ?? String(slotErr)
+                }`
+              );
+            }
+          }
+
+          if (!stream) {
+            const storedMic = learnerProfileId
+              ? loadStoredLearnerMicDeviceId(learnerProfileId)
+              : "";
+            const storedGrp = learnerProfileId
+              ? loadStoredLearnerMicGroupId(learnerProfileId)
+              : "";
+            let effectiveAudio: MediaTrackConstraints | boolean =
+              audioConstraints;
+            if (audioConstraints === true) {
+              effectiveAudio = storedMic
+                ? {
+                    deviceId: { exact: storedMic },
+                    ...(storedGrp ? { groupId: { ideal: storedGrp } } : {}),
+                  }
+                : true;
+            } else if (
+              typeof audioConstraints === "object" &&
+              audioConstraints !== null &&
+              storedMic &&
+              !(audioConstraints as MediaTrackConstraints).deviceId
+            ) {
+              effectiveAudio = {
+                ...(audioConstraints as MediaTrackConstraints),
+                deviceId: { exact: storedMic },
+                ...(storedGrp ? { groupId: { ideal: storedGrp } } : {}),
+              };
+            }
+            try {
+              stream = await getUM({
+                audio: effectiveAudio,
+                video: false,
+              });
+            } catch (storedErr) {
+              if (storedMic && audioConstraints === true) {
+                clearPersistedLearnerMicChoice();
+                log.warn(
+                  `requestMic stored deviceId failed — cleared stale id and retrying default`
+                );
+                stream = await getUM({ audio: true, video: false });
+              } else {
+                throw storedErr;
+              }
+            }
+          }
           if (unmountedRef.current) {
             for (const t of stream.getTracks()) {
               try {
@@ -1024,6 +1127,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           if (devId) {
             setSelectedMicDeviceId(devId);
             selectedMicDeviceIdRef.current = devId;
+            persistLearnerMicChoice(devId, gst?.groupId);
           }
           if (gst?.groupId) {
             pinnedMicEnumerateGroupRef.current = gst.groupId;
@@ -1050,7 +1154,14 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       return inFlight;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- log + resolveGetUserMedia stable per session
-    [audioConstraints, externalAudioStream, enumerateDevicesCore]
+    [
+      audioConstraints,
+      externalAudioStream,
+      enumerateDevicesCore,
+      learnerProfileId,
+      persistLearnerMicChoice,
+      clearPersistedLearnerMicChoice,
+    ]
   );
 
   const requestCam = useCallback(
@@ -1313,6 +1424,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         if (gstA?.deviceId) {
           setSelectedMicDeviceId(gstA.deviceId);
           selectedMicDeviceIdRef.current = gstA.deviceId;
+          persistLearnerMicChoice(gstA.deviceId, gstA.groupId);
         }
         if (gstA?.groupId) {
           pinnedMicEnumerateGroupRef.current = gstA.groupId;
@@ -1351,7 +1463,20 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
     });
     avBundleInFlightRef.current = inFlight;
     return inFlight;
-  }, [audioConstraints, externalAudioStream, enumerateDevicesCore, requestCam, videoConstraints]);
+  }, [audioConstraints, externalAudioStream, enumerateDevicesCore, requestCam, videoConstraints, learnerProfileId, persistLearnerMicChoice]);
+
+  // ---------------------------------------------------------------
+  // Effect: pre-select learner's persisted mic device on mount / rejoin
+  // ---------------------------------------------------------------
+  useEffect(() => {
+    if (!learnerProfileId) return;
+    const stored = loadStoredLearnerMicDeviceId(learnerProfileId);
+    if (!stored) return;
+    const storedGrp = loadStoredLearnerMicGroupId(learnerProfileId);
+    selectedMicDeviceIdRef.current = stored;
+    setSelectedMicDeviceId(stored);
+    pinnedMicEnumerateGroupRef.current = storedGrp;
+  }, [learnerProfileId, learnerAvGeneration]);
 
   // ---------------------------------------------------------------
   // Effect: query Permissions API on mount (best-effort)
@@ -2631,6 +2756,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           pinnedMicEnumerateGroupRef.current = entry.groupId ?? "";
           if (entry.deviceId) {
             setSelectedMicDeviceId(entry.deviceId);
+            persistLearnerMicChoice(entry.deviceId, entry.groupId);
           }
           await enumerateDevicesCore();
           log.log(
@@ -2720,6 +2846,10 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
           devIdPersist.length > 0 ? devIdPersist : null;
         if (devIdPersist) {
           setSelectedMicDeviceId(devIdPersist);
+          persistLearnerMicChoice(
+            devIdPersist,
+            gst?.groupId ?? entry.groupId
+          );
         }
 
         setPickedMicSlot(slotIndex);
@@ -2760,6 +2890,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       swapMicBySlotFromRecorder,
       log,
       enumerateDevicesCore,
+      persistLearnerMicChoice,
     ]
   );
 
@@ -2839,6 +2970,15 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
         }
         localAudioStreamRef.current = stream;
         setLocalAudioStream(stream);
+        const gst = newTrack.getSettings?.();
+        if (gst?.deviceId) {
+          setSelectedMicDeviceId(gst.deviceId);
+          selectedMicDeviceIdRef.current = gst.deviceId;
+          persistLearnerMicChoice(gst.deviceId, gst.groupId);
+        }
+        if (gst?.groupId) {
+          pinnedMicEnumerateGroupRef.current = gst.groupId;
+        }
         const mesh = meshRef.current;
         if (mesh && !mesh.isDisposed()) {
           mesh.replaceLocalTrackOnAllPeers("audio", newTrack);
@@ -2857,6 +2997,7 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
       swapMicFromRecorder,
       log,
       setMicDeviceBySlot,
+      persistLearnerMicChoice,
     ]
   );
 

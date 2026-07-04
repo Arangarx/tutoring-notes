@@ -73,6 +73,11 @@ export type StudentWhiteboardSessionShellProps = ShellBaseProps & {
    * /w/[joinToken] path (unauthenticated).
    */
   identityKey?: string;
+  /**
+   * Authenticated student path: the joining learner's profile id — used for
+   * learner-scoped mic device persistence in live-A/V.
+   */
+  learnerProfileId?: string;
 };
 
 export type WhiteboardSessionShellProps =
@@ -93,6 +98,7 @@ export function WhiteboardSessionShell(props: WhiteboardSessionShellProps) {
         initialLastActiveAtIso={props.initialLastActiveAtIso}
         initialSessionPhase={props.initialSessionPhase}
         identityKey={props.identityKey}
+        learnerProfileId={props.learnerProfileId}
       />
     );
   }
