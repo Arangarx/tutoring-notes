@@ -3409,6 +3409,13 @@ export function WhiteboardWorkspaceClient({
         firstPageId,
       }) => {
         if (rows.length === 0) return;
+        // E2 (BUG-3): abandon any in-flight selectTutorPage hydrate and
+        // suppress handleExcalidrawChange BEFORE bucket writes — the step-7
+        // guard alone left a window where stale onChange from the anchor
+        // tab could stamp board-3 strokes into the new PDF page buckets.
+        tutorSwitchTokenRef.current += 1;
+        pageSwitchProgrammaticRef.current += 1;
+        flushThrottledFrameNow();
         // 1. Freeze the anchor page's scene so its drawings can't be
         // overwritten by any onChange that arrives during the commit.
         const api = excalidrawAPIRef.current;
@@ -3460,15 +3467,10 @@ export function WhiteboardWorkspaceClient({
           );
         }
         // 7. Navigate to first imported page IF tutor still on anchor.
-        // Hold the bleed guard from entry through the full tail of
-        // selectTutorPage (including its 2×rAF+timeout release) so any
-        // remote apply arriving between commitPdfBatch steps and
-        // selectTutorPage's own guard increment cannot write to the
-        // live scene mid-switch. selectTutorPage adds its own +1 on
-        // top; total is 2 during hydrate, drops to 1 after selectTutorPage
-        // inner release, then to 0 after our outer release.
-        pageSwitchProgrammaticRef.current += 1;
-        flushThrottledFrameNow();
+        // Entry guard (+1 above) covers steps 1–6; selectTutorPage adds
+        // its own +1 during hydrate. Release the entry guard after
+        // selectTutorPage's 2×rAF+timeout tail (or immediately if we
+        // skip navigation).
         const releasePdfBatchGuard = () => {
           pageSwitchProgrammaticRef.current = Math.max(
             0,
