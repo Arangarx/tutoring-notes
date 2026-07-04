@@ -888,6 +888,10 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     await page.waitForTimeout(3_000);
 
     await page.getByTestId("wb-end-session").click();
+    const confirmBtn = page.getByTestId("wb-end-session-confirm-yes");
+    if (await confirmBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      await confirmBtn.click();
+    }
     await expect(page.getByRole("toolbar", { name: "Session review" })).toBeVisible({
       timeout: 180_000,
     });

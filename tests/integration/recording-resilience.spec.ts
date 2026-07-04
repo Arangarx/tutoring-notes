@@ -111,6 +111,10 @@ test.describe("recording resilience (Phase 1c)", () => {
       });
 
       await page.getByTestId("wb-end-session").click();
+      const confirmBtn = page.getByTestId("wb-end-session-confirm-yes");
+      if (await confirmBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
+        await confirmBtn.click();
+      }
 
       // End-session navigates to the review page (the destination
       // hasn't changed — Phase 1c briefly tried staying on
