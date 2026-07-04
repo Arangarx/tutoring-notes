@@ -33,6 +33,7 @@ jest.mock("@vercel/blob", () => ({ __esModule: true, put: jest.fn() }));
 const dbWbFindUniqueMock = jest.fn();
 const dbSessionRecordingFindFirstMock = jest.fn();
 const dbSessionRecordingCreateMock = jest.fn();
+const dbTransactionMock = jest.fn();
 
 jest.mock("@/lib/db", () => ({
   __esModule: true,
@@ -45,6 +46,7 @@ jest.mock("@/lib/db", () => ({
       findFirst: (...args: unknown[]) => dbSessionRecordingFindFirstMock(...args),
       create: (...args: unknown[]) => dbSessionRecordingCreateMock(...args),
     },
+    $transaction: (fn: (tx: unknown) => Promise<unknown>) => dbTransactionMock(fn),
   },
   withDbRetry: <T,>(fn: () => Promise<T>) => fn(),
 }));
@@ -112,7 +114,16 @@ beforeEach(() => {
   });
   assertOwnsWhiteboardSessionMock.mockResolvedValue(defaultSession);
   dbSessionRecordingFindFirstMock.mockResolvedValue(null);
-  dbSessionRecordingCreateMock.mockResolvedValue({ id: "rec-1" });
+  dbSessionRecordingCreateMock.mockResolvedValue({ id: "rec-1", orderIndex: 0 });
+  dbTransactionMock.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
+    const tx = {
+      sessionRecording: {
+        findFirst: dbSessionRecordingFindFirstMock,
+        create: dbSessionRecordingCreateMock,
+      },
+    };
+    return fn(tx);
+  });
 });
 
 // ---------------------------------------------------------------------------

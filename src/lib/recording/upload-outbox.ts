@@ -266,6 +266,11 @@ export type OutboxConfig = {
    * Optional clearTimeout override (matched with `setTimeout`).
    */
   clearTimeout?: (id: unknown) => void;
+  /**
+   * Called after a row's blob upload succeeds and `blobRemoteUrl` is written.
+   * Fire-and-forget from the drain loop — errors must not crash the worker.
+   */
+  onSegmentUploaded?: (row: OutboxRow) => Promise<void>;
 };
 
 export type UploadOutbox = {
@@ -666,6 +671,23 @@ export function createUploadOutbox(config: OutboxConfig): UploadOutbox {
         logger.log?.(
           `[upload-outbox] obx=${shortObx} uploaded sessionId=${sessionId} streamId=${streamId} segmentId=${fresh.segmentId} attempts=${fresh.attempts + 1}`
         );
+        if (config.onSegmentUploaded) {
+          const rowForCallback = (await getRowById(fresh.id)) ?? post;
+          void config
+            .onSegmentUploaded(rowForCallback)
+            .then(async () => {
+              const after = await getRowById(fresh.id);
+              if (after?.blobRemoteUrl) {
+                await writeRow({ ...after, registerOk: true });
+              }
+            })
+            .catch((err) => {
+              const msg = err instanceof Error ? err.message : String(err);
+              logger.warn?.(
+                `[upload-outbox] obx=${shortObx} onSegmentUploaded failed sessionId=${sessionId} streamId=${streamId} segmentId=${fresh.segmentId} error=${msg}`
+              );
+            });
+        }
       } else {
         // If a concurrent enqueue sideloaded the URL, the row is
         // effectively done — don't keep retrying. Otherwise record

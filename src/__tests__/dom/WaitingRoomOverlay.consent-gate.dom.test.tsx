@@ -138,6 +138,7 @@ jest.mock("@/hooks/useAudioRecorder", () => ({
     state: "ready",
     uploadMode: null,
     elapsed: 0,
+    sessionElapsed: 0,
     segmentNumber: 1,
     doneSegmentSeconds: 0,
     localMicStream: null,

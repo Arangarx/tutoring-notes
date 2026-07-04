@@ -102,6 +102,7 @@ export default function RecordingControlPanel({
       segmentNumber={r.segmentNumber}
       segmentDisplayBase={segmentDisplayBase}
       elapsed={r.elapsed}
+      sessionElapsed={r.sessionElapsed}
       isWarning={r.isWarning}
       micControls={{ ...micControls, hint }}
       onStart={r.handleStartRecording}

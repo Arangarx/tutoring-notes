@@ -531,6 +531,10 @@ key lines:
 `[sal] sal=<token:8> action=claim_required studentId=<id> reason=unclaimed`,
 `[sal] sal=<token:8> action=ownership_denied principal=<type> ...`,
 `[sal] sal=<token:8> action=erasure_suspended studentId=<id>` during active erasure grace),
+`vad` (VAD segment-cut lifecycle in `useAudioRecorder` meter RAF — key lines:
+`[vad] vad=<segmentId> action=open wbsid=<id> offsetMs=<ms>`,
+`[vad] vad=<segmentId> action=cut wbsid=<id> offsetMs=<ms>`,
+`[vad] vad=<segmentId> action=cap_force wbsid=<id> offsetMs=<ms>`),
 `alr` (AccountHolder-login durable rate limiter — IAC-11; Neon-backed `AuthThrottle` table;
 key is `ah-login:<normalizedEmail>`; key lines:
 `[alr] alr=ah-login:<email> action=rate-limited count=<n> retryAfterSec=<s>`,

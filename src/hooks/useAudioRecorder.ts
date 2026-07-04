@@ -44,17 +44,20 @@ import { formatUserFacingActionError } from "@/lib/action-correlation";
 import { createMicAudioGraph, type MicAudioGraph } from "@/lib/mic-recorder-audio";
 import { chooseMimeType, fileExtension } from "@/lib/recording/mime";
 import {
-  SEGMENT_MAX_SECONDS,
+  SESSION_BILLING_HOUR_SECONDS,
   SESSION_SAFETY_MAX_SECONDS,
-  WARN_SEGMENT_SECONDS,
-  effectiveWarnSegmentSeconds,
-  shouldFireApproachingChime,
+  SESSION_TIME_WARN_SECONDS,
+  VAD_MAX_SEGMENT_SECONDS,
+  effectiveVadSilenceRmsThreshold,
+  isSessionTimeWarning,
+  sessionChimeMilestoneIndex,
+  shouldCutOnSilence,
+  shouldFireSessionTimeChime,
+  shouldForceVadCap,
   shouldHardStopSession,
-  shouldRolloverSegment,
 } from "@/lib/recording/segment-policy";
 import {
   playApproachingMaxTimeChime,
-  playSegmentRolloverChime,
 } from "@/lib/recording/chimes";
 import {
   CHIME_VOL_DEFAULT,
@@ -153,6 +156,11 @@ export type UseAudioRecorderOptions = {
     sessionId: string;
     streamId: string;
   };
+  /**
+   * Pause-aware p3-clock (`getAudioMs` from workspace). When provided, VAD
+   * segment boundaries anchor to this clock instead of wall-clock segment timer.
+   */
+  getAudioMs?: () => number;
 };
 
 export type UseAudioRecorderReturn = {
@@ -162,6 +170,8 @@ export type UseAudioRecorderReturn = {
 
   // Timer / segment info
   elapsed: number;
+  /** Pause-aware session elapsed seconds (billing chime + warning UI). */
+  sessionElapsed: number;
   segmentNumber: number;
   doneSegmentSeconds: number;
   /**
@@ -227,7 +237,7 @@ export type UseAudioRecorderReturn = {
   isLive: boolean;
   /** Mic device picker locked only during mid-rollover segment upload. */
   lockDevice: boolean;
-  /** Show the "approaching segment cap" warning copy + colour. */
+  /** Show the approaching session billing-milestone warning copy + colour. */
   isWarning: boolean;
 
   // Refs
@@ -286,6 +296,7 @@ export function useAudioRecorder({
   initialElapsedSeconds = 0,
   avLogSessionId,
   recordingDraft,
+  getAudioMs,
 }: UseAudioRecorderOptions): UseAudioRecorderReturn {
   const [recordState, setRecordState] = useState<RecordState>("idle");
   const [elapsed, setElapsed] = useState(initialElapsedSeconds);
@@ -325,10 +336,17 @@ export function useAudioRecorder({
   const meterBarRef = useRef<HTMLDivElement | null>(null);
   /** Tracks the latest meter colour so we don't thrash style.background every frame. */
   const meterColorRef = useRef<string>(meterColor(0));
-  /** One audible "approaching max time" cue per recording (not on pause/resume timer restarts). */
-  const approachingCapSoundPlayedRef = useRef(false);
-  /** Wall-clock session length across auto-rollovers (for safety cap). */
-  const totalSessionElapsedRef = useRef(0);
+  /** Last hourly billing milestone index that fired the session-time chime. */
+  const sessionChimeMilestoneIndexRef = useRef(-1);
+  /** Wall-clock session length across segments (for safety cap + billing chime). */
+  const totalSessionElapsedRef = useRef(initialElapsedSeconds);
+  const [sessionElapsed, setSessionElapsed] = useState(initialElapsedSeconds);
+  const getAudioMsRef = useRef(getAudioMs);
+  getAudioMsRef.current = getAudioMs;
+  /** p3-clock offset at current segment start (ms). */
+  const segmentStartOffsetMsRef = useRef(0);
+  const vadSilenceHeldMsRef = useRef(0);
+  const vadLastRafMsRef = useRef<number | null>(null);
   /** Prevents double-firing auto-rollover from the 1s timer. */
   const rolloverInProgressRef = useRef(false);
   const chimeEnabledRef = useRef(chimeEnabled);
@@ -363,6 +381,8 @@ export function useAudioRecorder({
   const timesliceDataReceivedRef = useRef(false);
   const draftPagehideHandlerRef = useRef<(() => void) | null>(null);
   const draftVisibilityHandlerRef = useRef<(() => void) | null>(null);
+  const recordStateRef = useRef<RecordState>("idle");
+  recordStateRef.current = recordState;
 
   /**
    * Synchronously add a deferred Promise to `pendingUploadsRef` and
@@ -612,14 +632,16 @@ export function useAudioRecorder({
       elapsedRef.current += 1;
       totalSessionElapsedRef.current += 1;
       setElapsed(elapsedRef.current);
+      setSessionElapsed(totalSessionElapsedRef.current);
 
+      const milestone = sessionChimeMilestoneIndex(totalSessionElapsedRef.current);
       if (
-        shouldFireApproachingChime(
-          elapsedRef.current,
-          approachingCapSoundPlayedRef.current
+        shouldFireSessionTimeChime(
+          totalSessionElapsedRef.current,
+          sessionChimeMilestoneIndexRef.current
         )
       ) {
-        approachingCapSoundPlayedRef.current = true;
+        sessionChimeMilestoneIndexRef.current = milestone;
         const vol = chimeEnabledRef.current ? chimeVolumeRef.current : 0;
         playApproachingMaxTimeChime(vol);
       }
@@ -632,16 +654,6 @@ export function useAudioRecorder({
         rolloverInProgressRef.current = true;
         stopAndUpload("final");
         return;
-      }
-
-      if (
-        shouldRolloverSegment(elapsedRef.current) &&
-        !rolloverInProgressRef.current
-      ) {
-        rolloverInProgressRef.current = true;
-        const vol = chimeEnabledRef.current ? chimeVolumeRef.current : 0;
-        playSegmentRolloverChime(vol);
-        rolloverSegmentGapless();
       }
     }, 1000);
   }
@@ -727,7 +739,10 @@ export function useAudioRecorder({
     chunksRef.current = [];
     elapsedRef.current = 0;
     setElapsed(0);
-    approachingCapSoundPlayedRef.current = false;
+    vadSilenceHeldMsRef.current = 0;
+    vadLastRafMsRef.current = null;
+    segmentStartOffsetMsRef.current = getAudioMsRef.current?.() ?? 0;
+    resetVadState("open");
     segmentNumberRef.current = oldPartIndex + 1;
     setSegmentNumber(oldPartIndex + 1);
 
@@ -845,15 +860,49 @@ export function useAudioRecorder({
     }
   }
 
+  function getSegmentElapsedS(): number {
+    const getMs = getAudioMsRef.current;
+    if (getMs) {
+      return Math.max(0, (getMs() - segmentStartOffsetMsRef.current) / 1000);
+    }
+    return elapsedRef.current;
+  }
+
+  function resetVadState(action: "open" | "cut" | "cap_force") {
+    vadSilenceHeldMsRef.current = 0;
+    vadLastRafMsRef.current = null;
+    const segmentId = segmentIdForDraftRef.current ?? `seg-${segmentNumberRef.current}`;
+    const wbsid = avLogSessionId ?? recordingDraft?.sessionId ?? "unknown";
+    const offsetMs = getAudioMsRef.current?.() ?? elapsedRef.current * 1000;
+    console.log(
+      `[vad] vad=${segmentId} action=${action} wbsid=${wbsid} offsetMs=${Math.round(offsetMs)}`
+    );
+  }
+
+  function triggerVadSegmentCut(reason: "cut" | "cap_force") {
+    if (rolloverInProgressRef.current) return;
+    if (recordStateRef.current !== "recording") return;
+    if (
+      typeof window !== "undefined" &&
+      process.env.NODE_ENV !== "production" &&
+      (window as unknown as { __VAD_CUT_DISABLED?: boolean }).__VAD_CUT_DISABLED ===
+        true
+    ) {
+      return;
+    }
+    rolloverInProgressRef.current = true;
+    resetVadState(reason);
+    rolloverSegmentGapless();
+  }
+
   /**
-   * Drive the meter bar via DOM ref — never via setState. A meter that ticks
    * 60 times/sec via state would re-render the entire panel every frame; the
    * slider's drag gesture would get cancelled by the unmount, and CPU usage
    * would be embarrassing.
    */
   function startMeter(graph: MicAudioGraph) {
     stopMeter();
-    const tick = () => {
+    const tick = (rafNow: number) => {
       const level = graph.getLevel();
       const bar = meterBarRef.current;
       if (bar) {
@@ -864,6 +913,39 @@ export function useAudioRecorder({
           meterColorRef.current = next;
         }
       }
+
+      if (
+        recordStateRef.current === "recording" &&
+        !rolloverInProgressRef.current
+      ) {
+        const deltaMs =
+          vadLastRafMsRef.current === null ? 0 : rafNow - vadLastRafMsRef.current;
+        vadLastRafMsRef.current = rafNow;
+        const rmsLevel = level;
+        const segmentElapsedS = getSegmentElapsedS();
+        const silenceThreshold = effectiveVadSilenceRmsThreshold();
+
+        if (rmsLevel < silenceThreshold) {
+          vadSilenceHeldMsRef.current += deltaMs;
+        } else {
+          vadSilenceHeldMsRef.current = 0;
+        }
+
+        if (
+          shouldCutOnSilence({
+            segmentElapsedS,
+            silenceHeldMs: vadSilenceHeldMsRef.current,
+            rmsLevel,
+          })
+        ) {
+          triggerVadSegmentCut("cut");
+        } else if (shouldForceVadCap(segmentElapsedS)) {
+          triggerVadSegmentCut("cap_force");
+        }
+      } else {
+        vadLastRafMsRef.current = null;
+      }
+
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
@@ -1205,12 +1287,19 @@ export function useAudioRecorder({
     chunksRef.current = [];
     elapsedRef.current = 0;
     setElapsed(0);
-    approachingCapSoundPlayedRef.current = false;
-    rolloverInProgressRef.current = false;
+    vadSilenceHeldMsRef.current = 0;
+    vadLastRafMsRef.current = null;
     if (!continuation) {
       setSegmentNumber(1);
       segmentNumberRef.current = 1;
-      totalSessionElapsedRef.current = 0;
+      totalSessionElapsedRef.current = initialElapsedSeconds;
+      setSessionElapsed(initialElapsedSeconds);
+      sessionChimeMilestoneIndexRef.current = -1;
+      segmentStartOffsetMsRef.current = getAudioMsRef.current?.() ?? 0;
+      resetVadState("open");
+    } else {
+      segmentStartOffsetMsRef.current = getAudioMsRef.current?.() ?? 0;
+      resetVadState("open");
     }
     if (recordingDraft) {
       segmentIdForDraftRef.current = mintDraftSegmentId();
@@ -1503,7 +1592,11 @@ export function useAudioRecorder({
     elapsedRef.current = 0;
     setElapsed(0);
     totalSessionElapsedRef.current = 0;
-    approachingCapSoundPlayedRef.current = false;
+    setSessionElapsed(0);
+    sessionChimeMilestoneIndexRef.current = -1;
+    vadSilenceHeldMsRef.current = 0;
+    vadLastRafMsRef.current = null;
+    segmentStartOffsetMsRef.current = 0;
     rolloverInProgressRef.current = false;
     segmentNumberRef.current = 1;
     setSegmentNumber(1);
@@ -1527,7 +1620,7 @@ export function useAudioRecorder({
     })();
   }
 
-  const isWarning = elapsed >= effectiveWarnSegmentSeconds();
+  const isWarning = isSessionTimeWarning(sessionElapsed);
   const isLive =
     recordState === "ready" ||
     recordState === "recording" ||
@@ -1582,6 +1675,7 @@ export function useAudioRecorder({
     state: recordState,
     uploadMode,
     elapsed,
+    sessionElapsed,
     segmentNumber,
     doneSegmentSeconds,
     localMicStream,
@@ -1616,4 +1710,9 @@ export function useAudioRecorder({
 }
 
 // Re-export segment policy constants the shell still needs for copy.
-export { SEGMENT_MAX_SECONDS, SESSION_SAFETY_MAX_SECONDS, WARN_SEGMENT_SECONDS };
+export {
+  SESSION_BILLING_HOUR_SECONDS,
+  SESSION_SAFETY_MAX_SECONDS,
+  SESSION_TIME_WARN_SECONDS,
+  VAD_MAX_SEGMENT_SECONDS,
+};

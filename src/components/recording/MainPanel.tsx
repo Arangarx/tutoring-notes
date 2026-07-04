@@ -1,8 +1,8 @@
 "use client";
 
 import {
-  effectiveSegmentMaxSeconds,
-  formatSegmentTimeLeft,
+  formatSessionTimeLeft,
+  secondsUntilSessionBillingMilestone,
 } from "@/lib/recording/segment-policy";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -23,7 +23,9 @@ export type MainPanelProps = {
   segmentDisplayBase?: number;
   /** Elapsed seconds of the current segment. */
   elapsed: number;
-  /** True when within the warning window before auto-rollover. */
+  /** Session elapsed seconds (pause-aware) for billing-milestone warning. */
+  sessionElapsed?: number;
+  /** True when approaching an hourly session billing milestone. */
   isWarning: boolean;
 
   /** All MicControls props passed straight through. */
@@ -48,6 +50,7 @@ export default function MainPanel({
   segmentNumber,
   segmentDisplayBase = 0,
   elapsed,
+  sessionElapsed = 0,
   isWarning,
   micControls,
   onStart,
@@ -57,6 +60,7 @@ export default function MainPanel({
   onReset,
 }: MainPanelProps) {
   const displayPart = segmentNumber + segmentDisplayBase;
+  const sessionTimeLeft = secondsUntilSessionBillingMilestone(sessionElapsed);
   return (
     <div data-testid="audio-record-panel">
       <MicControls {...micControls} />
@@ -77,7 +81,7 @@ export default function MainPanel({
           <span className="text-xs leading-relaxed text-muted-foreground sm:ml-auto">
             {state === "ready"
               ? "Speak — watch the level bar — then click Start."
-              : `Long sessions auto-save every ~${Math.round(effectiveSegmentMaxSeconds() / 60)} min so you can keep recording. Speak at least 15–20 seconds per segment when possible.`}
+              : "Long sessions save automatically at natural pauses so you can keep recording. Speak at least 15–20 seconds per segment when possible."}
           </span>
         </div>
       )}
@@ -104,8 +108,8 @@ export default function MainPanel({
             </span>
             {isWarning ? (
               <span role="alert" className="text-xs text-destructive">
-                {formatSegmentTimeLeft(effectiveSegmentMaxSeconds() - elapsed)} in this segment —
-                will save &amp; continue automatically
+                {formatSessionTimeLeft(sessionTimeLeft)} until session hour mark — billing
+                reminder
               </span>
             ) : null}
             <span aria-live="polite" className="ml-auto text-xs text-muted-foreground">

@@ -1399,8 +1399,8 @@ export async function generateNotesFromWhiteboardSessionAction(
 }
 
 export type RegisterWhiteboardSessionAudioSegmentResult =
-  | { ok: true; recordingId: string; orderIndex: number }
-  | { ok: false; error: string; debugId?: string };
+  | { ok: true; recordingId: string; orderIndex: number; deduped?: boolean }
+  | { ok: false; error: string; debugId?: string; sessionEnded?: true };
 
 /**
  * After `uploadAudioDirect` stores a segment in Blob, the workspace calls this
@@ -1411,7 +1411,14 @@ export type RegisterWhiteboardSessionAudioSegmentResult =
  */
 export async function registerWhiteboardSessionAudioSegmentAction(
   whiteboardSessionId: string,
-  segment: { blobUrl: string; mimeType: string; sizeBytes: number }
+  segment: {
+    blobUrl: string;
+    mimeType: string;
+    sizeBytes: number;
+    streamId?: string;
+    speakerId?: string;
+    audioStartedAtMs?: number;
+  }
 ): Promise<RegisterWhiteboardSessionAudioSegmentResult> {
   const rid = createActionCorrelationId();
   try {
@@ -1434,6 +1441,7 @@ export async function registerWhiteboardSessionAudioSegmentAction(
         ok: false,
         error: "This whiteboard session has already ended.",
         debugId: rid,
+        sessionEnded: true,
       };
     }
 
@@ -1473,39 +1481,79 @@ export async function registerWhiteboardSessionAudioSegmentAction(
       };
     }
 
-    const last = await withDbRetry(
+    const existing = await withDbRetry(
       () =>
         db.sessionRecording.findFirst({
-          where: { whiteboardSessionId },
-          orderBy: { orderIndex: "desc" },
-          select: { orderIndex: true },
+          where: { whiteboardSessionId, blobUrl: segment.blobUrl },
+          select: { id: true, orderIndex: true },
         }),
-      { label: "registerWbAudio.findLastOrder" }
+      { label: "registerWbAudio.dedupe" }
     );
-    const orderIndex = (last?.orderIndex ?? -1) + 1;
+    if (existing) {
+      console.log(
+        `[obx] obx action=register_mid_session rid=${rid} wbsid=${whiteboardSessionId} deduped blobUrl recordingId=${existing.id} orderIndex=${existing.orderIndex}`
+      );
+      return {
+        ok: true,
+        recordingId: existing.id,
+        orderIndex: existing.orderIndex,
+        deduped: true,
+      };
+    }
 
-    const row = await withDbRetry(
-      () =>
-        db.sessionRecording.create({
-          data: {
-            adminUserId: session.adminUserId,
-            studentId: session.studentId,
-            whiteboardSessionId,
-            blobUrl: segment.blobUrl,
-            mimeType: segment.mimeType.split(";")[0].trim(),
-            sizeBytes: segment.sizeBytes,
-            orderIndex,
-          },
-          select: { id: true },
-        }),
-      { label: "registerWbAudio.create" }
-    );
+    const streamId = segment.streamId ?? TUTOR_MIC_STREAM_ID;
+
+    let row: { id: string; orderIndex: number } | null = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        row = await withDbRetry(
+          () =>
+            db.$transaction(async (tx) => {
+              const last = await tx.sessionRecording.findFirst({
+                where: { whiteboardSessionId },
+                orderBy: { orderIndex: "desc" },
+                select: { orderIndex: true },
+              });
+              const orderIndex = (last?.orderIndex ?? -1) + 1;
+              return tx.sessionRecording.create({
+                data: {
+                  adminUserId: session.adminUserId,
+                  studentId: session.studentId,
+                  whiteboardSessionId,
+                  blobUrl: segment.blobUrl,
+                  mimeType: segment.mimeType.split(";")[0].trim(),
+                  sizeBytes: segment.sizeBytes,
+                  orderIndex,
+                  streamId,
+                },
+                select: { id: true, orderIndex: true },
+              });
+            }),
+          { label: "registerWbAudio.create" }
+        );
+        break;
+      } catch (err) {
+        const code = (err as { code?: string }).code;
+        if (code === "P2002" && attempt < 1) {
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    if (!row) {
+      return {
+        ok: false,
+        error: "Could not save recording metadata after retry.",
+        debugId: rid,
+      };
+    }
 
     console.log(
-      `[registerWhiteboardSessionAudioSegment] rid=${rid} wbsid=${whiteboardSessionId} recordingId=${row.id} orderIndex=${orderIndex}`
+      `[obx] obx action=register_mid_session rid=${rid} wbsid=${whiteboardSessionId} recordingId=${row.id} orderIndex=${row.orderIndex} streamId=${streamId}`
     );
 
-    return { ok: true, recordingId: row.id, orderIndex };
+    return { ok: true, recordingId: row.id, orderIndex: row.orderIndex };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(

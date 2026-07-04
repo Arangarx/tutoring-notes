@@ -42,7 +42,10 @@ import {
   type UploadOutbox,
 } from "@/lib/recording/upload-outbox";
 import { uploadAudioDirect, uploadAudioWithRetry } from "@/lib/recording/upload";
-import type { EndSessionSegment } from "@/app/admin/students/[id]/whiteboard/actions";
+import {
+  registerWhiteboardSessionAudioSegmentAction,
+  type EndSessionSegment,
+} from "@/app/admin/students/[id]/whiteboard/actions";
 
 export type { OutboxObserverState };
 
@@ -77,6 +80,7 @@ export function getOrCreateUploadOutbox(): UploadOutbox {
   }
   singleton = createUploadOutbox({
     upload: defaultUploader,
+    onSegmentUploaded: handleSegmentUploaded,
   });
   return singleton;
 }
@@ -121,6 +125,42 @@ function extForMime(mimeType: string): string {
   if (base === "audio/mpeg") return "mp3";
   if (base === "audio/wav") return "wav";
   return base.split("/")[1] ?? "bin";
+}
+
+async function handleSegmentUploaded(row: OutboxRow): Promise<void> {
+  if (row.transcriptionOnly === true) {
+    // A3: per-speaker transcription enqueue (next dispatch)
+    return;
+  }
+  if (!row.blobRemoteUrl) return;
+
+  const shortObx = row.id.slice(0, 8);
+  const result = await registerWhiteboardSessionAudioSegmentAction(row.sessionId, {
+    blobUrl: row.blobRemoteUrl,
+    mimeType: row.mimeType,
+    sizeBytes: row.sizeBytes,
+    streamId: row.streamId,
+    speakerId: row.speakerId,
+    audioStartedAtMs: row.audioStartedAtMs,
+  });
+
+  if (result.ok) {
+    console.log(
+      `[obx] obx=${shortObx} action=register_mid_session wbsid=${row.sessionId} streamId=${row.streamId} segmentId=${row.segmentId} recordingId=${result.recordingId} orderIndex=${result.orderIndex}`
+    );
+    return;
+  }
+
+  if (result.sessionEnded) {
+    console.log(
+      `[obx] obx=${shortObx} action=register_mid_session_skipped_ended wbsid=${row.sessionId} streamId=${row.streamId} segmentId=${row.segmentId}`
+    );
+    return;
+  }
+
+  console.warn(
+    `[obx] obx=${shortObx} action=register_mid_session_failed wbsid=${row.sessionId} streamId=${row.streamId} segmentId=${row.segmentId} error=${result.error}`
+  );
 }
 
 // ----------------------------------------------------------------

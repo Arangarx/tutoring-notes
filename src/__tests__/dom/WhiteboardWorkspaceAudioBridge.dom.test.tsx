@@ -43,6 +43,7 @@ function mockWorkspaceAudio(
     state: "recording",
     uploadMode: null,
     elapsed: 42,
+    sessionElapsed: 42,
     segmentNumber: 2,
     doneSegmentSeconds: 0,
     localMicStream: null,

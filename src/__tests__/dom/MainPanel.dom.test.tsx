@@ -50,7 +50,7 @@ describe("MainPanel idle/acquiring/ready", () => {
     const start = screen.getByRole("button", { name: /start recording/i });
     expect(start).toBeInTheDocument();
     expect(start).not.toBeDisabled();
-    expect(screen.getByText(/auto-save every/i)).toBeInTheDocument();
+    expect(screen.getByText(/natural pauses/i)).toBeInTheDocument();
   });
 
   test("acquiring: shows 'Connecting…' label and disables start", () => {
@@ -126,7 +126,7 @@ describe("MainPanel recording/paused", () => {
     );
     // role=alert is on the warning span
     const alerts = screen.getAllByRole("alert");
-    expect(alerts.some((el) => /save & continue automatically/i.test(el.textContent || ""))).toBe(true);
+    expect(alerts.some((el) => /billing reminder/i.test(el.textContent || ""))).toBe(true);
   });
 
   test("Pause/Resume/Stop/Discard each fire their handlers", async () => {
