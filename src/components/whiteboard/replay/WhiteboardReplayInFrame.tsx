@@ -100,6 +100,7 @@ export function WhiteboardReplayInFrame({
     muted,
     handleVolumeChange,
     toggleMute,
+    audioDurationSettled,
   } = controller;
 
   // Pause audio before collapsing back to notes-hero so the audio doesn't
@@ -131,6 +132,13 @@ export function WhiteboardReplayInFrame({
     if (loadState.kind !== "ready" || !log) return;
     if (entryPaintDoneRef.current) return;
     if (!replayExcaliRestoreReady) return;
+    // Wait for the WebM duration scan to complete before starting auto-play.
+    // Without this guard, seek(0,{play:true}) races the in-flight 1e101 scan:
+    // Chrome parks currentTime at the measured end and play() fires from there,
+    // snapping the scrubber to "done" instantly. audioDurationSettled becomes
+    // true once onDurationResolved fires (scan complete, currentTime=0 already
+    // reset by onDurationChange) — or immediately when stored duration > 0.
+    if (hasAudio && !audioDurationSettled) return;
     const needsCanvas = log.events.length > 0 || hasAudio;
     if (!needsCanvas) {
       setPaintReady(true);
@@ -149,6 +157,7 @@ export function WhiteboardReplayInFrame({
     seek,
     setPaintReady,
     isReviewActive,
+    audioDurationSettled,
   ]);
 
   if (loadState.kind === "loading") {

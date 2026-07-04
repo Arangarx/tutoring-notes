@@ -87,6 +87,19 @@ export function useReplayTimelineController(
   const [replayExcaliRestoreReady, setReplayExcaliRestoreReady] = useState(false);
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
+  /**
+   * Becomes true once the WebM duration scan resolves to a finite value (via
+   * `onDurationResolved`). Used by `WhiteboardReplayInFrame`'s entry effect to
+   * gate auto-play: we must not call `seek(0, {play:true})` while the 1e101
+   * hack-seek is still in-flight, otherwise Chrome parks currentTime at the
+   * measured end and playback snaps to "done" immediately.
+   *
+   * Shortcut: if the stored duration is already known (`audioTimeline.totalMs >
+   * 0`) we treat it as settled immediately — the `startPlayWhenPositionReady`
+   * helper handles any residual race for that case.  This keeps jsdom tests
+   * working without mocking the WebM fix (they always supply durationSeconds).
+   */
+  const [audioDurationResolvedByWebm, setAudioDurationResolvedByWebm] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cancelWebmFixRef = useRef<(() => void) | null>(null);
@@ -158,6 +171,27 @@ export function useReplayTimelineController(
   // stale closure (avoids adding resolvedMaxMs to seek's dep array).
   const resolvedMaxMsRef = useRef(resolvedMaxMs);
   resolvedMaxMsRef.current = resolvedMaxMs;
+
+  /**
+   * True once it is safe to call seek(0, {play:true}) for entry auto-play.
+   *
+   * Without this gate the entry effect in WhiteboardReplayInFrame would call
+   * seek(0,{play:true}) while the WebM 1e101 hack-seek is still scanning the
+   * file.  cancelPendingFix() is called inside applySeek, but if loadedmetadata
+   * hasn't fired yet the cancel is a noop — onLoadedMetadata fires afterwards,
+   * sets needsFix=true, and starts the scan anyway.  When the scan completes
+   * Chrome parks currentTime at the measured end (~94 s) BEFORE onDurationChange
+   * can reset it, so play() fires from the end and onEnded fires immediately.
+   *
+   * By waiting for this flag the entry effect only runs AFTER onDurationChange
+   * has already reset currentTime=savedCurrentTime=0 and set needsFix=false.
+   *
+   * Shortcut: stored duration > 0 means the scrubber already has a reasonable
+   * max and startPlayWhenPositionReady handles any residual race; that path
+   * does not need to wait for the WebM scan to complete first.
+   */
+  const audioDurationSettled =
+    !hasAudio || audioTimeline.totalMs > 0 || audioDurationResolvedByWebm;
 
   const activeSegment =
     effectiveSegments[activeSegmentIndex] ?? effectiveSegments[0] ?? null;
@@ -744,6 +778,11 @@ export function useReplayTimelineController(
           `[avx] wbsid=${whiteboardSessionId ?? "?"} duration_resolved measuredTotal=${knownEnd}`
         );
         setResolvedMaxMs((prev) => Math.max(prev, knownEnd));
+        // Signal that the WebM scan finished and currentTime has been reset to
+        // savedCurrentTime (=0). From this point the entry auto-play gate in
+        // WhiteboardReplayInFrame will allow seek(0,{play:true}) to proceed
+        // without racing a still-in-flight 1e101 scan.
+        setAudioDurationResolvedByWebm(true);
       },
     });
     cancelWebmFixRef.current = cancelPendingFix;
@@ -1053,6 +1092,7 @@ export function useReplayTimelineController(
     muted,
     handleVolumeChange,
     toggleMute,
+    audioDurationSettled,
   };
 }
 
