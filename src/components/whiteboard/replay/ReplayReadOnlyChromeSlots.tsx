@@ -62,10 +62,10 @@ function DisabledTbBtn({
   );
 }
 
-const REPLAY_BOARD_TAB = {
+const REPLAY_BOARD_TAB_FALLBACK = {
   id: "replay-board-1",
   title: "Board 1",
-  section: "board",
+  section: "board" as const,
   isPdf: false,
 };
 
@@ -75,6 +75,14 @@ export type ReplayReadOnlyChromeSlotsProps = {
   onHideReplay?: () => void;
   canvas: ReactNode;
   timelineStrip: ReactNode;
+  /** Board tabs derived from page-switch events (E4). */
+  replayPageList?: Array<{
+    id: string;
+    title: string;
+    section?: string;
+    isPdf?: boolean;
+  }>;
+  activeReplayPageId?: string | null;
   drawerSlot?: ReactNode;
   nonVisualMounts?: ReactNode;
 };
@@ -86,6 +94,8 @@ export function buildReplayReadOnlyChromeSlots({
   onHideReplay,
   canvas,
   timelineStrip,
+  replayPageList,
+  activeReplayPageId,
   nonVisualMounts,
 }: Omit<ReplayReadOnlyChromeSlotsProps, "drawerSlot">) {
   const topBar = (
@@ -195,11 +205,20 @@ export function buildReplayReadOnlyChromeSlots({
     </div>
   );
 
+  const pageList =
+    replayPageList && replayPageList.length > 0
+      ? replayPageList
+      : [REPLAY_BOARD_TAB_FALLBACK];
+  const activePageId =
+    activeReplayPageId && pageList.some((p) => p.id === activeReplayPageId)
+      ? activeReplayPageId
+      : pageList[0]!.id;
+
   const boardTabStrip = (
   <div className="mynk-wb-pagestrip">
       <BoardTabStrip
-        pageList={[REPLAY_BOARD_TAB]}
-        activePageId={REPLAY_BOARD_TAB.id}
+        pageList={pageList}
+        activePageId={activePageId}
         disabled
         testId="wb-replay-board-tabs"
       />

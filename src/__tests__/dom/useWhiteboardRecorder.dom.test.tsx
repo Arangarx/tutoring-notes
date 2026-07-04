@@ -284,6 +284,32 @@ describe("useWhiteboardRecorder", () => {
     expect(secondExtras?.page?.activePageId).toBe("p2");
   });
 
+  test("recordPageSwitch appends page-switch WBEvent with pageId (selectTutorPage contract)", () => {
+    jest.useFakeTimers();
+    const bag: Bag = { now: 0 };
+    const { result, rerender } = renderHook((p: { active: boolean }) =>
+      useWhiteboardRecorder(defaultProps(bag, { recordingActive: p.active }))
+    , { initialProps: { active: false } });
+
+    act(() => {
+      rerender({ active: true });
+    });
+
+    bag.now = 2500;
+    act(() => {
+      result.current.recordPageSwitch("p2", "Page 2");
+    });
+
+    const log = JSON.parse(result.current.buildFinalEventsJson()) as WBEventLog;
+    const sw = log.events.find((e) => e.type === "page-switch");
+    expect(sw).toEqual({
+      t: 2500,
+      type: "page-switch",
+      pageId: "p2",
+      title: "Page 2",
+    });
+  });
+
   test("on→off transition emits a pause marker and flushes pending diff at the right t", () => {
     jest.useFakeTimers();
     const bag: Bag = { now: 0 };

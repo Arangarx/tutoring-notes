@@ -659,6 +659,9 @@ export function WhiteboardWorkspaceClient({
   const recorderRecordViewportRef = useRef<
     ((panX: number, panY: number, zoom: number) => void) | null
   >(null);
+  const recorderRecordPageSwitchRef = useRef<
+    ((pageId: string, title: string) => void) | null
+  >(null);
   /** `flushViewportPersistNow` is declared before `useTutorLiveDocumentWire`. */
   const scheduleDocumentBroadcastRef = useRef<() => void>(() => undefined);
   /**
@@ -3033,6 +3036,7 @@ export function WhiteboardWorkspaceClient({
   // (flushViewportPersistNow, selectTutorPage) can append viewport
   // events without circular hook-ordering.
   recorderRecordViewportRef.current = recorder.recordViewport;
+  recorderRecordPageSwitchRef.current = recorder.recordPageSwitch;
   tutorResyncOnNewRemotePeerRef.current = async () => {
     flushThrottledFrameNow();
     flushDocumentBroadcastNow();
@@ -3262,6 +3266,11 @@ export function WhiteboardWorkspaceClient({
         }
       }
       if (!committed) return;
+      const pageMeta = pageListRef.current.find((p) => p.id === nextId);
+      recorderRecordPageSwitchRef.current?.(
+        nextId,
+        pageMeta?.title ?? `Page ${pageListRef.current.findIndex((p) => p.id === nextId) + 1}`
+      );
       setActivePageId(nextId);
       flushDocumentBroadcastNow();
     },
@@ -3351,6 +3360,7 @@ export function WhiteboardWorkspaceClient({
       activePageIdRef.current = newId;
     }
     setActivePageId(newId);
+    recorderRecordPageSwitchRef.current?.(newId, `Page ${nextN}`);
     if (api) {
       flushDocumentBroadcastNow();
     }

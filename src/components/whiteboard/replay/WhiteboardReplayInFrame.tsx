@@ -101,6 +101,8 @@ export function WhiteboardReplayInFrame({
     handleVolumeChange,
     toggleMute,
     audioDurationSettled,
+    replayPageList,
+    activeReplayPageId,
   } = controller;
 
   // Pause audio before collapsing back to notes-hero so the audio doesn't
@@ -246,6 +248,8 @@ export function WhiteboardReplayInFrame({
     onHideReplay: handleHideReplay,
     canvas: replayCanvas,
     timelineStrip,
+    replayPageList,
+    activeReplayPageId,
     nonVisualMounts:
       hasAudio ? (
         <audio

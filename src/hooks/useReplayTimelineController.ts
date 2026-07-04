@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { maxEventTimestampMs } from "@/lib/whiteboard/event-log";
+import { maxEventTimestampMs, deriveReplayPageListFromLog, findActiveReplayPageIdAt } from "@/lib/whiteboard/event-log";
 import { parseEventLogBySchema } from "@/lib/whiteboard/replay-parse";
 import { globalMsToSegmentLocal } from "@/lib/whiteboard/replay-audio-timeline";
 import { attachWebmDurationFix } from "@/lib/audio/webm-duration-fix";
@@ -146,6 +146,17 @@ export function useReplayTimelineController(
   const synthStartElapsedMsRef = useRef(0);
 
   const log = loadState.kind === "ready" ? loadState.log : null;
+
+  const replayPageList = useMemo(
+    () => (log ? deriveReplayPageListFromLog(log) : []),
+    [log]
+  );
+
+  const activeReplayPageId = useMemo(() => {
+    if (!log || replayPageList.length === 0) return null;
+    const switched = findActiveReplayPageIdAt(log, globalMs);
+    return switched ?? replayPageList[0]!.id;
+  }, [log, globalMs, replayPageList]);
 
   const totalMs = useMemo(
     () =>
@@ -1093,6 +1104,8 @@ export function useReplayTimelineController(
     handleVolumeChange,
     toggleMute,
     audioDurationSettled,
+    replayPageList,
+    activeReplayPageId,
   };
 }
 

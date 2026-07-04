@@ -393,6 +393,8 @@ export type UseWhiteboardRecorderReturn = {
     viewportWidth?: number,
     viewportHeight?: number
   ) => void;
+  /** Record a tutor board-tab switch for replay active-tab tracking (E4). */
+  recordPageSwitch: (pageId: string, title: string) => void;
 };
 
 export type ResumeAvailability = {
@@ -827,6 +829,24 @@ export function useWhiteboardRecorder(
         : "";
       console.info(
         `[pvs] action=record-viewport append t=${t} panX=${panX} panY=${panY} zoom=${zoom}${dimTag} totalEvents=${logRef.current.events.length}`
+      );
+    },
+    [pushEvent]
+  );
+
+  const recordPageSwitch = useCallback(
+    (pageId: string, title: string) => {
+      if (!recordingActiveRef.current) return;
+      if (!pageId) return;
+      const t = Math.max(0, Math.floor(getAudioMsRef.current()));
+      pushEvent({
+        t,
+        type: "page-switch",
+        pageId,
+        title: title || "Board",
+      });
+      console.info(
+        `[pvs] action=record-page-switch append t=${t} pageId=${pageId} title=${title} totalEvents=${logRef.current.events.length}`
       );
     },
     [pushEvent]
@@ -1485,5 +1505,6 @@ export function useWhiteboardRecorder(
     flushThrottledFrameNow,
     broadcastScenePageSnapshot,
     recordViewport,
+    recordPageSwitch,
   };
 }
