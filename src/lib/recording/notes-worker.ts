@@ -300,11 +300,12 @@ export async function processNotesReduceJob(
     const chunk = chunkById.get(chunkId);
     if (!chunk) return null;
     if (chunk.speakerId) return `learner:${chunk.speakerId}`;
-    if (chunk.streamId === "tutor:mic") return "tutor";
-    if (chunk.streamId.startsWith("speaker:")) {
-      return chunk.streamId.replace(/^speaker:/, "").replace(/:transcript$/, "");
+    const streamId = chunk.streamId ?? "tutor:mic";
+    if (streamId === "tutor:mic") return "tutor";
+    if (streamId.startsWith("speaker:")) {
+      return streamId.replace(/^speaker:/, "").replace(/:transcript$/, "");
     }
-    return chunk.streamId;
+    return streamId;
   };
 
   // Build ordered extraction list (by chunkId matching done chunks ordered by recordingTimeOffsetMs)

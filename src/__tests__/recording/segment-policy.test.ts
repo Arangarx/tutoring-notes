@@ -76,7 +76,7 @@ describe("VAD helpers", () => {
 
   test("clampVadSilenceAccumulationMs — huge RAF gap does not exceed hold window (SF-3)", () => {
     const hold = VAD_SILENCE_HOLD_MS;
-    expect(clampVadSilenceAccumulationMs(120_000)).toBe(hold);
+    expect(clampVadSilenceAccumulationMs(120_000)).toBe(hold - 1);
     expect(clampVadSilenceAccumulationMs(hold - 1)).toBe(hold - 1);
     expect(clampVadSilenceAccumulationMs(0)).toBe(0);
     expect(clampVadSilenceAccumulationMs(-5)).toBe(0);

@@ -1029,11 +1029,12 @@ export function useLiveAV(opts: UseLiveAVOptions): UseLiveAVReturn {
 
       const inFlight = chainDeviceAcquire(deviceAcquireMutexRef, async () => {
         try {
-          await enumerateDevicesCore();
-          const siblings = audioDevicesRef.current;
+          let siblings = audioDevicesRef.current;
           let stream: MediaStream | null = null;
 
           if (siblings.length > 0) {
+            await enumerateDevicesCore();
+            siblings = audioDevicesRef.current;
             const slot = Math.min(
               Math.max(0, pickedMicSlotRef.current),
               siblings.length - 1

@@ -4710,7 +4710,10 @@ export function WhiteboardWorkspaceClient({
       appState.currentItemRoughness = updates.roughness;
       setRoughness(updates.roughness);
     }
-    api.updateScene?.({ appState, captureUpdate: "IMMEDIATELY" });
+    api.updateScene?.({
+      appState,
+      captureUpdate: "IMMEDIATELY",
+    } as Parameters<NonNullable<typeof api.updateScene>>[0]);
   }, []);
 
   const updateRoundness = useCallback((value: "sharp" | "round") => {

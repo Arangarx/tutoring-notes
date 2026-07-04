@@ -68,7 +68,10 @@ export function effectiveVadSilenceHoldMs(): number {
  */
 export function clampVadSilenceAccumulationMs(deltaMs: number): number {
   if (!Number.isFinite(deltaMs) || deltaMs <= 0) return 0;
-  return Math.min(deltaMs, effectiveVadSilenceHoldMs());
+  const hold = effectiveVadSilenceHoldMs();
+  // A single RAF tick must not add enough silence to satisfy the hold
+  // threshold (SF-3 — backgrounded-tab gap protection).
+  return Math.min(deltaMs, Math.max(0, hold - 1));
 }
 
 export function effectiveSessionSafetyMaxSeconds(): number {

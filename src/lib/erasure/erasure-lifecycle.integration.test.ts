@@ -773,6 +773,7 @@ describe("E8 lifecycle — H-2 straggler and end-session short-circuit", () => {
         studentId: fixture.student.id,
         noteId: fixture.note.id,
         whiteboardSessionId: fixture.session.id,
+        orderIndex: 1,
         blobUrl: stragglerUrl,
         mimeType: "audio/webm",
         sizeBytes: 1024,

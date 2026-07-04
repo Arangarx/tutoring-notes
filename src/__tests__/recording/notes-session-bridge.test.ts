@@ -38,6 +38,9 @@ jest.mock("@/lib/db", () => ({
     sessionRecording: {
       deleteMany: jest.fn(),
     },
+    sessionConsentSnapshot: {
+      deleteMany: jest.fn(),
+    },
     $transaction: jest.fn(),
   },
   withDbRetry: jest.fn((fn: () => unknown) => fn()),
@@ -110,6 +113,8 @@ const mockNoteUpdate = db.sessionNote.update as jest.Mock;
 const mockNoteFindUnique = db.sessionNote.findUnique as jest.Mock;
 const mockNoteDelete = db.sessionNote.delete as jest.Mock;
 const mockRecordingDeleteMany = db.sessionRecording.deleteMany as jest.Mock;
+const mockConsentSnapshotDeleteMany = db.sessionConsentSnapshot
+  .deleteMany as jest.Mock;
 const mockTransaction = db.$transaction as jest.Mock;
 const mockAssertOwns = assertOwnsWhiteboardSession as jest.Mock;
 
@@ -440,6 +445,7 @@ describe("(iv) deleteWhiteboardSessionAndDataAction: allowed on READY note", () 
     });
     mockNoteDelete.mockResolvedValue({});
     mockRecordingDeleteMany.mockResolvedValue({ count: 2 });
+    mockConsentSnapshotDeleteMany.mockResolvedValue({ count: 0 });
     (db.whiteboardSession.delete as jest.Mock) = jest.fn().mockResolvedValue({});
   });
 
