@@ -75,8 +75,16 @@ test.describe("WS-B live persist — tab kill", { tag: [TAG.WB_RECORDING] }, () 
 
     await drawStrokes(page, 5);
 
-    // Allow ~1s persist sidecar to flush at least one batch.
-    await page.waitForTimeout(2_500);
+    // Allow ~1s persist sidecar to flush at least one batch (poll — fixed sleep is flaky on slow CI).
+    await expect
+      .poll(
+        async () => {
+          const state = await fetchDbState(page, whiteboardSessionId);
+          return state.batchCount;
+        },
+        { timeout: 60_000 }
+      )
+      .toBeGreaterThanOrEqual(1);
 
     const preKill = await fetchDbState(page, whiteboardSessionId);
     await context.close();

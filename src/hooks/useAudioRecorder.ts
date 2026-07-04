@@ -49,6 +49,7 @@ import {
   SESSION_TIME_WARN_SECONDS,
   VAD_MAX_SEGMENT_SECONDS,
   effectiveVadSilenceRmsThreshold,
+  clampVadSilenceAccumulationMs,
   isSessionTimeWarning,
   sessionChimeMilestoneIndex,
   shouldCutOnSilence,
@@ -924,9 +925,12 @@ export function useAudioRecorder({
         const rmsLevel = level;
         const segmentElapsedS = getSegmentElapsedS();
         const silenceThreshold = effectiveVadSilenceRmsThreshold();
+        // SF-3: iOS/tab backgrounding pauses RAF; on resume deltaMs can span
+        // minutes — clamp so one tick cannot satisfy the silence-hold threshold.
+        const silenceDeltaMs = clampVadSilenceAccumulationMs(deltaMs);
 
         if (rmsLevel < silenceThreshold) {
-          vadSilenceHeldMsRef.current += deltaMs;
+          vadSilenceHeldMsRef.current += silenceDeltaMs;
         } else {
           vadSilenceHeldMsRef.current = 0;
         }

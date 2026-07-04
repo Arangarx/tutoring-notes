@@ -62,6 +62,15 @@ export function effectiveVadSilenceHoldMs(): number {
   return readOverride("__VAD_SILENCE_HOLD_MS_OVERRIDE") ?? VAD_SILENCE_HOLD_MS;
 }
 
+/**
+ * Cap per-tick silence accumulation — RAF gaps from iOS/tab backgrounding
+ * must not satisfy the hold threshold in a single frame.
+ */
+export function clampVadSilenceAccumulationMs(deltaMs: number): number {
+  if (!Number.isFinite(deltaMs) || deltaMs <= 0) return 0;
+  return Math.min(deltaMs, effectiveVadSilenceHoldMs());
+}
+
 export function effectiveSessionSafetyMaxSeconds(): number {
   return (
     readOverride("__SESSION_SAFETY_MAX_SECONDS_OVERRIDE") ?? SESSION_SAFETY_MAX_SECONDS

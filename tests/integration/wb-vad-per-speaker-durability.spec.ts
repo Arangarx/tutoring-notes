@@ -287,8 +287,9 @@ test.describe("wb per-speaker transcription + replay-mix (WS-A A3+A4)", () => {
         peers.tutorPage,
         session.whiteboardSessionId
       );
-      expect(replay.count).toBe(mixdownUploadCount);
-      expect(replay.byStream["tutor:mic"] ?? 0).toBe(mixdownUploadCount);
+      // Replay set is mixdown-only; count may grow between mid-session snapshot and End.
+      expect(replay.count).toBeGreaterThanOrEqual(mixdownUploadCount);
+      expect(replay.byStream["tutor:mic"] ?? 0).toBeGreaterThanOrEqual(mixdownUploadCount);
       for (const streamId of Object.keys(replay.byStream)) {
         expect(streamId).toBe("tutor:mic");
       }

@@ -19,6 +19,7 @@ jest.mock("@vercel/blob", () => ({
 const dbWhiteboardSessionFindUnique = jest.fn();
 const dbWhiteboardEventBatchFindUnique = jest.fn();
 const dbWhiteboardEventBatchUpsert = jest.fn();
+const dbExecuteRaw = jest.fn();
 const dbTransaction = jest.fn();
 
 jest.mock("@/lib/db", () => ({
@@ -33,6 +34,7 @@ jest.mock("@/lib/db", () => ({
       upsert: (...args: unknown[]) => dbWhiteboardEventBatchUpsert(...args),
     },
     $transaction: (fn: (tx: unknown) => Promise<unknown>) => dbTransaction(fn),
+    $executeRaw: (...args: unknown[]) => dbExecuteRaw(...args),
   },
   withDbRetry: <T,>(fn: () => Promise<T>) => fn(),
 }));
@@ -100,8 +102,9 @@ beforeEach(() => {
   dbTransaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
     const tx = {
       whiteboardEventBatch: { upsert: dbWhiteboardEventBatchUpsert },
-      whiteboardSession: { update: jest.fn().mockResolvedValue({}) },
+      $executeRaw: dbExecuteRaw,
     };
+    dbExecuteRaw.mockResolvedValue(1);
     return fn(tx);
   });
   dbWhiteboardEventBatchUpsert.mockResolvedValue({ id: "batch-1" });
@@ -176,5 +179,6 @@ describe("POST /api/whiteboard/[sessionId]/checkpoint — WS-B batch persist", (
     });
     expect(res.status).toBe(200);
     expect(dbWhiteboardEventBatchUpsert).toHaveBeenCalledTimes(1);
+    expect(dbExecuteRaw).toHaveBeenCalledTimes(1);
   });
 });

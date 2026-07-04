@@ -19,6 +19,7 @@ import {
   formatSessionTimeLeft,
   sessionChimeMilestoneIndex,
   effectiveSessionSafetyMaxSeconds,
+  clampVadSilenceAccumulationMs,
 } from "@/lib/recording/segment-policy";
 
 describe("segment-policy — 50-min rollover removed (red-before)", () => {
@@ -72,6 +73,33 @@ describe("VAD helpers", () => {
     expect(shouldForceVadCap(VAD_MAX_SEGMENT_SECONDS - 1)).toBe(false);
     expect(shouldForceVadCap(VAD_MAX_SEGMENT_SECONDS)).toBe(true);
     expect(shouldForceVadCap(VAD_MAX_SEGMENT_SECONDS + 10)).toBe(true);
+  });
+
+  test("clampVadSilenceAccumulationMs — huge RAF gap does not exceed hold window (SF-3)", () => {
+    const hold = VAD_SILENCE_HOLD_MS;
+    expect(clampVadSilenceAccumulationMs(120_000)).toBe(hold);
+    expect(clampVadSilenceAccumulationMs(hold - 1)).toBe(hold - 1);
+    expect(clampVadSilenceAccumulationMs(0)).toBe(0);
+    expect(clampVadSilenceAccumulationMs(-5)).toBe(0);
+
+    let silenceHeldMs = 0;
+    silenceHeldMs += clampVadSilenceAccumulationMs(60_000);
+    expect(
+      shouldCutOnSilence({
+        segmentElapsedS: VAD_MIN_SEGMENT_SECONDS,
+        silenceHeldMs,
+        rmsLevel: 0,
+      })
+    ).toBe(false);
+
+    silenceHeldMs += clampVadSilenceAccumulationMs(hold);
+    expect(
+      shouldCutOnSilence({
+        segmentElapsedS: VAD_MIN_SEGMENT_SECONDS,
+        silenceHeldMs,
+        rmsLevel: 0,
+      })
+    ).toBe(true);
   });
 });
 

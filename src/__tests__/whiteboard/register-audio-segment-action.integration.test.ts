@@ -166,6 +166,71 @@ describe("registerWhiteboardSessionAudioSegmentAction — atomic orderIndex", ()
     expect(count).toBe(1);
   });
 
+  it("concurrent duplicate blobUrl registers stay idempotent (P2002 race)", async () => {
+    const { tutor, session } = await seedActiveSession();
+    requireStudentScopeMock.mockResolvedValue({
+      kind: "db",
+      adminUserId: tutor.id,
+      email: tutor.email,
+    });
+    assertOwnsWhiteboardSessionMock.mockImplementation(async (wbsid: string) => {
+      return db.whiteboardSession.findUniqueOrThrow({ where: { id: wbsid } });
+    });
+
+    const url = blobUrl(200);
+    const [a, b] = await Promise.all([
+      registerWhiteboardSessionAudioSegmentAction(session.id, {
+        blobUrl: url,
+        mimeType: "audio/webm",
+        sizeBytes: 100,
+      }),
+      registerWhiteboardSessionAudioSegmentAction(session.id, {
+        blobUrl: url,
+        mimeType: "audio/webm",
+        sizeBytes: 100,
+      }),
+    ]);
+
+    expect(a.ok).toBe(true);
+    expect(b.ok).toBe(true);
+    if (!a.ok || !b.ok) return;
+    expect(a.recordingId).toBe(b.recordingId);
+    expect(a.orderIndex).toBe(b.orderIndex);
+
+    const count = await db.sessionRecording.count({
+      where: { whiteboardSessionId: session.id, blobUrl: url },
+    });
+    expect(count).toBe(1);
+  });
+
+  it("schema enforces @@unique([whiteboardSessionId, blobUrl])", async () => {
+    const { tutor, student, session } = await seedActiveSession();
+    await db.sessionRecording.create({
+      data: {
+        adminUserId: tutor.id,
+        studentId: student.id,
+        whiteboardSessionId: session.id,
+        blobUrl: blobUrl(301),
+        mimeType: "audio/webm",
+        sizeBytes: 1,
+        orderIndex: 0,
+      },
+    });
+    await expect(
+      db.sessionRecording.create({
+        data: {
+          adminUserId: tutor.id,
+          studentId: student.id,
+          whiteboardSessionId: session.id,
+          blobUrl: blobUrl(301),
+          mimeType: "audio/webm",
+          sizeBytes: 2,
+          orderIndex: 1,
+        },
+      })
+    ).rejects.toMatchObject({ code: "P2002" });
+  });
+
   it("returns sessionEnded when session already ended (worker no-op)", async () => {
     const { tutor, session } = await seedActiveSession();
     await db.whiteboardSession.update({

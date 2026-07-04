@@ -1534,8 +1534,27 @@ export async function registerWhiteboardSessionAudioSegmentAction(
         break;
       } catch (err) {
         const code = (err as { code?: string }).code;
-        if (code === "P2002" && attempt < 1) {
-          continue;
+        if (code === "P2002") {
+          const raced = await withDbRetry(
+            () =>
+              db.sessionRecording.findFirst({
+                where: { whiteboardSessionId, blobUrl: segment.blobUrl },
+                select: { id: true, orderIndex: true },
+              }),
+            { label: "registerWbAudio.p2002Dedupe" }
+          );
+          if (raced) {
+            console.log(
+              `[obx] obx action=register_mid_session rid=${rid} wbsid=${whiteboardSessionId} deduped=p2002 blobUrl recordingId=${raced.id} orderIndex=${raced.orderIndex}`
+            );
+            return {
+              ok: true,
+              recordingId: raced.id,
+              orderIndex: raced.orderIndex,
+              deduped: true,
+            };
+          }
+          if (attempt < 1) continue;
         }
         throw err;
       }

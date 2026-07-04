@@ -198,19 +198,14 @@ async function handleBatchPersist(
           },
         });
 
-        await tx.whiteboardSession.update({
-          where: { id: sessionId },
-          data: {
-            lastPersistedBatchSeq: Math.max(
-              sessionRow.lastPersistedBatchSeq,
-              parsed.batchSeq
-            ),
-            lastPersistedToIndex: Math.max(
-              sessionRow.lastPersistedToIndex,
-              parsed.toEventIndex
-            ),
-          },
-        });
+        // SF-2: monotonic cursor at DB — GREATEST avoids lost updates when WS-C
+        // also writes the cursor concurrently.
+        await tx.$executeRaw`
+          UPDATE "WhiteboardSession"
+          SET "lastPersistedBatchSeq" = GREATEST("lastPersistedBatchSeq", ${parsed.batchSeq}),
+              "lastPersistedToIndex" = GREATEST("lastPersistedToIndex", ${parsed.toEventIndex})
+          WHERE "id" = ${sessionId}
+        `;
       }),
     { label: "wbCheckpoint.batchUpsert" }
   );

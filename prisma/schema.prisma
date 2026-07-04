@@ -277,6 +277,8 @@ model SessionRecording {
    */
   @@index([whiteboardSessionId, streamId])
   @@unique([whiteboardSessionId, orderIndex])
+  /// WS-A SF-1: close dup-row race between onSegmentUploaded and end-session createMany.
+  @@unique([whiteboardSessionId, blobUrl])
 }
 
 /**
