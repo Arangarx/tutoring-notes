@@ -162,6 +162,7 @@ export default defineConfig({
         "**/integration/wb-roughness-style.spec.ts",
         "**/integration/wb-replay-active-board-tab.spec.ts",
         "**/integration/wb-replay-scrub-seek.spec.ts",
+        "**/integration/wb-board-tab-overflow.spec.ts",
       ],
     },
   ],
