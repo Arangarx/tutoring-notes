@@ -20,7 +20,7 @@
  */
 
 import "fake-indexeddb/auto";
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 
 import {
   useWhiteboardRecorder,
@@ -311,8 +311,7 @@ describe("useWhiteboardRecorder", () => {
     expect(types[types.length - 1]).toBe("pause");
   });
 
-  test("ingestRemote tags peerId on add events (replay attribution)", () => {
-    jest.useFakeTimers();
+  test("ingestRemote tags peerId on add events (replay attribution)", async () => {
     const bag: Bag = { now: 0 };
     const { result, rerender } = renderHook((p: { active: boolean }) =>
       useWhiteboardRecorder(defaultProps(bag, { recordingActive: p.active }))
@@ -321,6 +320,11 @@ describe("useWhiteboardRecorder", () => {
       rerender({ active: true });
     });
 
+    await waitFor(() => {
+      expect(result.current.checkpointMountResolved).toBe(true);
+    });
+
+    jest.useFakeTimers();
     bag.now = 1000;
     act(() => {
       result.current.ingestRemote("student-peer", [makeRect("s1", 0, 0)]);
@@ -538,5 +542,62 @@ describe("useWhiteboardRecorder", () => {
       whiteboardOwnerKey(ADMIN, STUDENT, SESSION)
     );
     expect(after).toBeNull();
+  });
+
+  test("defers remote ingest until Section F completes (hydrate/sync ordering guard)", async () => {
+    const bag: Bag = { now: 0 };
+    let remoteCb:
+      | ((
+          peerId: string,
+          elements: ReadonlyArray<ExcalidrawLikeElement>
+        ) => void)
+      | null = null;
+    const sync: WhiteboardSyncClientLike = {
+      isConnected: () => true,
+      onConnect: (cb) => {
+        cb();
+        return () => {};
+      },
+      onDisconnect: () => () => {},
+      onRemoteScene: (cb) => {
+        remoteCb = cb;
+        return () => {
+          remoteCb = null;
+        };
+      },
+      broadcastScene: () => {},
+    };
+
+    const { result } = renderHook(() =>
+      useWhiteboardRecorder(
+        defaultProps(bag, { recordingActive: true, sync })
+      )
+    );
+
+    expect(result.current.checkpointMountResolved).toBe(false);
+    act(() => {
+      remoteCb?.("student-peer", [makeRect("deferred-s1", 0, 0)]);
+    });
+
+    let log = JSON.parse(result.current.buildFinalEventsJson()) as WBEventLog;
+    const addBeforeMount = log.events.find(
+      (e) => e.type === "add" && e.element.id === "deferred-s1"
+    );
+    expect(addBeforeMount).toBeUndefined();
+
+    await waitFor(() => {
+      expect(result.current.checkpointMountResolved).toBe(true);
+    });
+
+    jest.useFakeTimers();
+    act(() => {
+      jest.advanceTimersByTime(120);
+    });
+    log = JSON.parse(result.current.buildFinalEventsJson()) as WBEventLog;
+    const addAfterMount = log.events.find(
+      (e) => e.type === "add" && e.element.id === "deferred-s1"
+    );
+    expect(addAfterMount).toBeDefined();
+    jest.useRealTimers();
   });
 });

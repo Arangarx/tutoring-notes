@@ -18,6 +18,7 @@ import {
   isWhiteboardBoardDocumentV1,
   type WhiteboardBoardDocumentV1,
 } from "@/lib/whiteboard/board-document-snapshot";
+import { mergeBatchRows } from "@/lib/whiteboard/merge-event-batches";
 
 /** Serializable SSR → client hydrate payload (WS-D). */
 export type InitialPersistedWhiteboardState = {
@@ -35,11 +36,6 @@ export type AssembledBackendEvents = {
   maxToEventIndex: number;
   source: "batches" | "checkpoint" | "empty";
 };
-
-function parseEventSlice(raw: unknown): WBEvent[] {
-  if (!Array.isArray(raw)) return [];
-  return raw as WBEvent[];
-}
 
 function finalizeLog(log: WBEventLog): WBEventLog {
   const last = log.events[log.events.length - 1];
@@ -79,24 +75,29 @@ export async function mergeEventBatchesFromDb(
     };
   }
 
-  const allEvents: WBEvent[] = [];
-  let maxTo = -1;
-  for (const batch of batches) {
-    allEvents.push(...parseEventSlice(batch.eventsJson));
-    if (batch.toEventIndex > maxTo) {
-      maxTo = batch.toEventIndex;
-    }
+  const merged = mergeBatchRows(batches);
+
+  if (merged.hasIntegrityIssue && merged.integrityIssue === "gap") {
+    console.warn(
+      `[wbr] wbr=${whiteboardSessionId} action=merge_gap from=${merged.gapFrom} to=${merged.gapTo}`
+    );
+    return {
+      log: createEmptyEventLog(startedAtIso),
+      batchCount: 0,
+      maxToEventIndex: -1,
+      source: "empty",
+    };
   }
 
   const log = finalizeLog({
     ...createEmptyEventLog(startedAtIso),
-    events: allEvents,
+    events: merged.events,
   });
 
   return {
     log,
     batchCount: batches.length,
-    maxToEventIndex: maxTo,
+    maxToEventIndex: merged.maxToEventIndex,
     source: "batches",
   };
 }

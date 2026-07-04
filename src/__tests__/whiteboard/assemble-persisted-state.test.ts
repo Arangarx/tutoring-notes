@@ -31,7 +31,10 @@ jest.mock("@vercel/blob", () => ({
   list: jest.fn().mockResolvedValue({ blobs: [], hasMore: false }),
 }));
 
-import { assembleInitialPersistedState } from "@/lib/whiteboard/assemble-persisted-state";
+import {
+  assembleInitialPersistedState,
+  mergeEventBatchesFromDb,
+} from "@/lib/whiteboard/assemble-persisted-state";
 
 const WBSID = "wb_resume_test";
 const STARTED = "2026-07-04T12:00:00.000Z";
@@ -90,5 +93,32 @@ describe("assembleInitialPersistedState", () => {
     expect(result?.lastPersistedToIndex).toBe(4);
     expect(result?.lastPersistedBatchSeq).toBe(2);
     expect(result?.recordingSegmentCount).toBe(1);
+  });
+
+  it("returns null when batches have a gap (unsafe merge — IDB fallback)", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    dbWhiteboardEventBatchFindMany.mockResolvedValue([
+      {
+        fromEventIndex: 0,
+        toEventIndex: 1,
+        eventsJson: [{ t: 0, type: "snapshot", elements: [] }],
+      },
+      {
+        fromEventIndex: 4,
+        toEventIndex: 5,
+        eventsJson: [{ t: 100, type: "add", element: { id: "x" } }],
+      },
+    ]);
+
+    const merged = await mergeEventBatchesFromDb(WBSID, STARTED);
+    expect(merged.source).toBe("empty");
+    expect(merged.batchCount).toBe(0);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("action=merge_gap from=2 to=3")
+    );
+
+    const result = await assembleInitialPersistedState(WBSID, STARTED);
+    expect(result).toBeNull();
+    warnSpy.mockRestore();
   });
 });

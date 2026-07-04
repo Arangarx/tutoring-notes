@@ -115,6 +115,10 @@ import {
 } from "@/lib/whiteboard/board-document-snapshot";
 import type { InitialPersistedWhiteboardState } from "@/lib/whiteboard/assemble-persisted-state";
 import {
+  mergeServerStateWithIdbTail,
+  shouldSuppressIdbPrompt,
+} from "@/lib/whiteboard/idb-recovery-predicate";
+import {
   computeBackoffMs,
   nextConsecutiveFailures,
   SERVER_PERSIST_MAX_RETRIES,
@@ -545,6 +549,21 @@ export function useWhiteboardRecorder(
   const serverPersistWarningActiveRef = useRef(false);
 
   /**
+   * WS-D ordering guard: remote scene ingest is deferred until Section F
+   * (server hydrate / IDB scan) finishes seeding `logRef`. Prevents a
+   * live-sync packet from racing ahead of backend hydrate and clobbering
+   * or duplicating recovered state. Released in Section F `finally`.
+   */
+  const mountHydrateCompleteRef = useRef(false);
+  const deferredRemoteIngestsRef = useRef<
+    Array<{
+      peerId: string;
+      elements: ReadonlyArray<ExcalidrawLikeElement>;
+      details?: WhiteboardWireRemoteDetails;
+    }>
+  >([]);
+
+  /**
    * Loads `cachedResumeRef` into `logRef` / `prevElementsRef` and returns the
    * same shape as `acceptResume`. Used by the manual "Load draft" control and
    * the stale-room "Resume session" auto-path (the latter skips a second
@@ -582,19 +601,28 @@ export function useWhiteboardRecorder(
 
   /**
    * WS-D: apply backend-assembled log + board document into memory.
-   * Server wins over IDB when both exist for ACTIVE sessions.
+   * Server wins over IDB when both exist for ACTIVE sessions (unless IDB
+   * tail extends beyond `lastPersistedToIndex` — see Section F merge).
    */
   const hydrateFromServer = useCallback(
-    (state: InitialPersistedWhiteboardState): ResumeResult => {
-      logRef.current = state.log;
-      setEventCount(state.log.events.length);
-      setDurationMs(state.log.durationMs);
+    (
+      state: InitialPersistedWhiteboardState,
+      mergedLog?: WBEventLog,
+      mergedBoardDocument?: WhiteboardBoardDocumentV1
+    ): ResumeResult => {
+      const log = mergedLog ?? state.log;
+      logRef.current = log;
+      setEventCount(log.events.length);
+      setDurationMs(log.durationMs);
       lastPersistedIndexRef.current = Math.max(0, state.lastPersistedToIndex);
       nextBatchSeqRef.current = Math.max(1, state.lastPersistedBatchSeq + 1);
 
       const bd =
-        state.boardDocument && isWhiteboardBoardDocumentV1(state.boardDocument)
-          ? state.boardDocument
+        (mergedBoardDocument ?? state.boardDocument) &&
+        isWhiteboardBoardDocumentV1(
+          mergedBoardDocument ?? state.boardDocument
+        )
+          ? (mergedBoardDocument ?? state.boardDocument)!
           : undefined;
 
       let elements: WBElement[];
@@ -604,16 +632,18 @@ export function useWhiteboardRecorder(
           [];
         elements = canonicalizeScene(raw);
       } else {
-        const sceneMap = reconstructSceneAt(state.log, state.log.durationMs);
+        const sceneMap = reconstructSceneAt(log, log.durationMs);
         elements = Array.from(sceneMap.values());
       }
       prevElementsRef.current = elements;
 
+      const mergedTail =
+        mergedLog && mergedLog.events.length > state.log.events.length;
       console.log(
-        `[wbr] wbr=${whiteboardSessionId} action=hydrate_server events=${state.log.events.length} boardPages=${bd ? bd.pageList.length : 1} lastPersistedTo=${state.lastPersistedToIndex} batchSeq=${state.lastPersistedBatchSeq}`
+        `[wbr] wbr=${whiteboardSessionId} action=hydrate_server events=${log.events.length} boardPages=${bd ? bd.pageList.length : 1} lastPersistedTo=${state.lastPersistedToIndex} batchSeq=${state.lastPersistedBatchSeq}${mergedTail ? " idb_tail_merged=true" : ""}`
       );
 
-      return { log: state.log, elements, boardDocument: bd };
+      return { log, elements, boardDocument: bd };
     },
     [whiteboardSessionId]
   );
@@ -813,7 +843,7 @@ export function useWhiteboardRecorder(
     }
   }, [recordingActive]);
 
-  const ingestRemote = useCallback(
+  const ingestRemoteImpl = useCallback(
     async (
       peerId: string,
       elements: ReadonlyArray<ExcalidrawLikeElement>,
@@ -876,6 +906,29 @@ export function useWhiteboardRecorder(
       }
     },
     [flushPendingDiff, whiteboardSessionId]
+  );
+
+  const flushDeferredRemoteIngests = useCallback(() => {
+    const queue = deferredRemoteIngestsRef.current;
+    deferredRemoteIngestsRef.current = [];
+    for (const item of queue) {
+      void ingestRemoteImpl(item.peerId, item.elements, item.details);
+    }
+  }, [ingestRemoteImpl]);
+
+  const ingestRemote = useCallback(
+    (
+      peerId: string,
+      elements: ReadonlyArray<ExcalidrawLikeElement>,
+      details?: WhiteboardWireRemoteDetails
+    ) => {
+      if (!mountHydrateCompleteRef.current) {
+        deferredRemoteIngestsRef.current.push({ peerId, elements, details });
+        return;
+      }
+      void ingestRemoteImpl(peerId, elements, details);
+    },
+    [ingestRemoteImpl]
   );
 
   // ---------------------------------------------------------------
@@ -1220,13 +1273,55 @@ export function useWhiteboardRecorder(
         const serverState = initialPersistedStateRef.current;
         const phase = sessionPhaseRef.current;
 
-        // WS-D: ACTIVE sessions with server batches hydrate from backend;
-        // IDB prompt is demoted (server wins on conflict).
+        // Fetch IDB checkpoint up front — needed for server-vs-IDB coverage
+        // comparison (WS-D BLOCKER) and for the IDB-only recovery path.
+        const exact = await findCheckpoint<CheckpointPayload>(
+          "whiteboard",
+          ownerKey
+        );
+        if (cancelled) return;
+
+        // WS-D: ACTIVE sessions with server batches hydrate from backend when
+        // server coverage ≥ IDB; when IDB is ahead, merge the unpersisted tail.
         if (
           phase === "ACTIVE" &&
           serverState?.source === "batches" &&
           serverState.log.events.length > 0
         ) {
+          const idbEventCount = exact?.payload.log.events.length ?? 0;
+          const suppress = shouldSuppressIdbPrompt({
+            serverLastPersistedToIndex: serverState.lastPersistedToIndex,
+            idbEventCount,
+          });
+
+          if (suppress) {
+            const hydrated = hydrateFromServer(serverState);
+            if (!cancelled) {
+              setPostGateAutoCanvas(hydrated);
+            }
+            return;
+          }
+
+          if (exact && exact.sessionId === whiteboardSessionId) {
+            const { mergedLog, boardDocument } = mergeServerStateWithIdbTail(
+              serverState,
+              exact.payload
+            );
+            const hydrated = hydrateFromServer(
+              serverState,
+              mergedLog,
+              boardDocument ?? undefined
+            );
+            if (!cancelled) {
+              setPostGateAutoCanvas(hydrated);
+            }
+            console.log(
+              `[wbr] wbr=${whiteboardSessionId} action=hydrate_idb_tail serverEvents=${serverState.log.events.length} idbEvents=${idbEventCount} mergedEvents=${mergedLog.events.length}`
+            );
+            return;
+          }
+
+          // IDB ahead but no same-session checkpoint — hydrate server only.
           const hydrated = hydrateFromServer(serverState);
           if (!cancelled) {
             setPostGateAutoCanvas(hydrated);
@@ -1236,11 +1331,6 @@ export function useWhiteboardRecorder(
 
         // Try the exact session id first (workspace re-mount on the
         // same session url) — that's the highest-fidelity recovery.
-        const exact = await findCheckpoint<CheckpointPayload>(
-          "whiteboard",
-          ownerKey
-        );
-        if (cancelled) return;
         if (exact) {
           // Server may have ended this session from another tab / the
           // student-page list; IndexedDB still holds a local checkpoint
@@ -1303,6 +1393,8 @@ export function useWhiteboardRecorder(
         }
       } finally {
         if (!cancelled) {
+          mountHydrateCompleteRef.current = true;
+          flushDeferredRemoteIngests();
           setCheckpointMountResolved(true);
         }
       }
@@ -1310,7 +1402,7 @@ export function useWhiteboardRecorder(
     return () => {
       cancelled = true;
     };
-  }, [adminUserId, ownerKey, studentId, applyResumeFromCachedCheckpoint, hydrateFromServer, whiteboardSessionId]);
+  }, [adminUserId, ownerKey, studentId, applyResumeFromCachedCheckpoint, flushDeferredRemoteIngests, hydrateFromServer, whiteboardSessionId]);
 
   const acceptResume = useCallback(async (): Promise<ResumeResult | null> => {
     if (!cachedResumeRef.current) return null;
