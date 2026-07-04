@@ -59,8 +59,6 @@
 /* ── Top bar (44px) ── */
 .mynk-wb-topbar {
   height: 44px;
-  max-height: 44px;
-  box-sizing: border-box;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -308,7 +306,7 @@
   font-family: var(--font-display, var(--font-sans));
   font-variation-settings: "opsz" 144, "SOFT" 60, "wght" 700;
   color: var(--brand, var(--primary));
-  font-size: 14px;
+  font-size: 16px;
   letter-spacing: -0.025em;
   line-height: 1;
   padding: 0 8px;
@@ -323,13 +321,13 @@
 .mynk-wb-live-badge {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   background: var(--accent-soft);
   color: var(--accent-text);
   border-radius: 999px;
-  padding: 2px 7px 2px 5px;
+  padding: 3px 8px 3px 6px;
   font-family: var(--font-mono, monospace);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -352,7 +350,7 @@
 
 .mynk-wb-timer {
   font-family: var(--font-mono, monospace);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--foreground);
   letter-spacing: 0.02em;

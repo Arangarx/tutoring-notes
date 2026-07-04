@@ -489,7 +489,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     await userEvent.click(screen.getByTestId("wb-end-session"));
 
     expect(screen.getByTestId("wb-end-session-confirm")).toBeInTheDocument();
-    expect(screen.getByText("Finish this session?")).toBeInTheDocument();
+    expect(screen.getByText("End this session?")).toBeInTheDocument();
     expect(mockDrainOutboxOrTimeout).not.toHaveBeenCalled();
   });
 

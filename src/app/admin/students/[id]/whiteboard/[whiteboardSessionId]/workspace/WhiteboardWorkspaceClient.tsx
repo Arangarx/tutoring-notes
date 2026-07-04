@@ -3976,7 +3976,7 @@ export function WhiteboardWorkspaceClient({
       setEndingState("error");
       const msg = (err as Error)?.message ?? "Could not end the session.";
       setEndingError(
-        `Could not finish session: ${msg}. Your work is still in progress — retry "Finish & save".`
+        `Could not end session: ${msg}. Your work is still in progress — retry "End session".`
       );
       // Don't auto-retry — the tutor decides whether to retry End or
       // keep the session open and try again.
@@ -6157,7 +6157,6 @@ export function WhiteboardWorkspaceClient({
         <div className="mynk-wb-topbar__zone mynk-wb-topbar__zone--trailing">
           {renderTopbarOverflowControl("wb-topbar-overflow")}
           {wbCaps.canEndSession && (() => {
-            const endSessionIdleLabel = "Finish & save";
             const endSessionLabel =
               endingState === "finalizing"
                 ? finalizingOutboxState === "uploading" &&
@@ -6165,8 +6164,8 @@ export function WhiteboardWorkspaceClient({
                   ? `Saving ${finalizingSegmentCount} segment${finalizingSegmentCount === 1 ? "" : "s"}…`
                   : "Finalizing…"
                 : endingState === "ending"
-                  ? "Saving…"
-                  : endSessionIdleLabel;
+                  ? "Finalizing…"
+                  : "End session";
             return (
               <div className="mynk-wb-end-confirm-wrap">
                 <button
@@ -6202,10 +6201,10 @@ export function WhiteboardWorkspaceClient({
                     onClick={(e) => e.stopPropagation()}
                   >
                     <p id="wb-end-confirm-title" className="mynk-wb-end-confirm__title">
-                      Finish this session?
+                      End this session?
                     </p>
                     <p id="wb-end-confirm-body" className="mynk-wb-end-confirm__body">
-                      Saves your recording and generates notes.
+                      You&apos;ll go to review to save your notes.
                     </p>
                     <div className="mynk-wb-end-confirm__actions">
                       <button
@@ -6214,7 +6213,7 @@ export function WhiteboardWorkspaceClient({
                         data-testid="wb-end-session-confirm-yes"
                         onClick={() => void handleEndSession()}
                       >
-                        Finish & save
+                        End session
                       </button>
                       <button
                         type="button"
