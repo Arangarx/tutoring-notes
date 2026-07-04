@@ -612,16 +612,42 @@ export function createUploadOutbox(config: OutboxConfig): UploadOutbox {
     })();
   }
 
+  function invokeOnSegmentUploaded(
+    row: OutboxRow,
+    sessionId: string,
+    streamId: string
+  ): void {
+    if (!config.onSegmentUploaded) return;
+    void config
+      .onSegmentUploaded(row)
+      .then(async () => {
+        const after = await getRowById(row.id);
+        if (after?.blobRemoteUrl) {
+          await writeRow({ ...after, registerOk: true });
+          logger.log?.(
+            `[upload-outbox] obx=${shortObx} action=register_mid_session_ok sessionId=${sessionId} streamId=${streamId} segmentId=${row.segmentId}`
+          );
+        }
+      })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.warn?.(
+          `[upload-outbox] obx=${shortObx} action=register_mid_session_failed sessionId=${sessionId} streamId=${streamId} segmentId=${row.segmentId} error=${msg}`
+        );
+      });
+  }
+
   async function drainStreamOnce(
     sessionId: string,
     streamId: string
   ): Promise<void> {
-    // Pull all rows for this session+stream that need work.
+    // Pull all rows for this session+stream that need upload or mid-session
+    // registration (workspace path enqueues with blobRemoteUrl already set).
     const rows = (await listAllRowsInternal(sessionId)).filter(
       (r) =>
         r.streamId === streamId &&
-        !r.blobRemoteUrl &&
-        r.attempts < permanentFailAfter
+        r.attempts < permanentFailAfter &&
+        (!r.blobRemoteUrl || !r.registerOk)
     );
     rows.sort((a, b) => a.createdAt - b.createdAt);
 
@@ -635,7 +661,21 @@ export function createUploadOutbox(config: OutboxConfig): UploadOutbox {
       }
 
       const fresh = await getRowById(row.id);
-      if (!fresh || fresh.blobRemoteUrl) continue;
+      if (!fresh) continue;
+      if (fresh.registerOk && fresh.blobRemoteUrl) continue;
+
+      // Uploaded-but-unregistered (Phase 1b workspace inline-upload path):
+      // skip re-upload and go straight to onSegmentUploaded registration.
+      if (fresh.blobRemoteUrl && !fresh.registerOk) {
+        logger.log?.(
+          `[upload-outbox] obx=${shortObx} action=register_mid_session sessionId=${sessionId} streamId=${streamId} segmentId=${fresh.segmentId}`
+        );
+        invokeOnSegmentUploaded(fresh, sessionId, streamId);
+        await refreshStateAndNotify(sessionId);
+        continue;
+      }
+
+      if (fresh.blobRemoteUrl) continue;
       if (!fresh.blobLocalRef) {
         // Row has no local blob (likely test corruption or future
         // code path that lost the blob). Mark as failed-permanent so
@@ -673,20 +713,7 @@ export function createUploadOutbox(config: OutboxConfig): UploadOutbox {
         );
         if (config.onSegmentUploaded) {
           const rowForCallback = (await getRowById(fresh.id)) ?? post;
-          void config
-            .onSegmentUploaded(rowForCallback)
-            .then(async () => {
-              const after = await getRowById(fresh.id);
-              if (after?.blobRemoteUrl) {
-                await writeRow({ ...after, registerOk: true });
-              }
-            })
-            .catch((err) => {
-              const msg = err instanceof Error ? err.message : String(err);
-              logger.warn?.(
-                `[upload-outbox] obx=${shortObx} onSegmentUploaded failed sessionId=${sessionId} streamId=${streamId} segmentId=${fresh.segmentId} error=${msg}`
-              );
-            });
+          invokeOnSegmentUploaded(rowForCallback, sessionId, streamId);
         }
       } else {
         // If a concurrent enqueue sideloaded the URL, the row is
@@ -817,6 +844,9 @@ export function createUploadOutbox(config: OutboxConfig): UploadOutbox {
         };
         await writeRow(merged);
         await refreshStateAndNotify(input.sessionId);
+        if (!merged.registerOk) {
+          kickWorker(input.sessionId, input.streamId);
+        }
         return merged;
       }
       logger.log?.(
@@ -845,7 +875,7 @@ export function createUploadOutbox(config: OutboxConfig): UploadOutbox {
       `[upload-outbox] obx=${shortObx} enqueued sessionId=${input.sessionId} streamId=${input.streamId} segmentId=${input.segmentId} hasRemoteUrl=${row.blobRemoteUrl !== null}`
     );
     await refreshStateAndNotify(input.sessionId);
-    if (!row.blobRemoteUrl) {
+    if (!row.blobRemoteUrl || !row.registerOk) {
       kickWorker(input.sessionId, input.streamId);
     }
     return row;

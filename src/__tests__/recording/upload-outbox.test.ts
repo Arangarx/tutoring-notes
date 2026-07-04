@@ -82,6 +82,7 @@ function makeHarness(opts: {
   setTimeout?: typeof globalThis.setTimeout;
   clearTimeout?: typeof globalThis.clearTimeout;
   defaultResult?: OutboxUploadResult;
+  onSegmentUploaded?: (row: OutboxRow) => Promise<void>;
 }): Harness {
   const queue: OutboxUploadResult[] = [];
   let defaultResult: OutboxUploadResult =
@@ -99,6 +100,7 @@ function makeHarness(opts: {
     permanentFailAfter: opts.permanentFailAfter ?? 5,
     indexedDB: new IDBFactory(),
     logger: SILENT_LOGGER,
+    onSegmentUploaded: opts.onSegmentUploaded,
     setTimeout: (cb, ms) =>
       (opts.setTimeout ?? globalThis.setTimeout)(cb, ms) as unknown as number,
     clearTimeout: (id) =>
@@ -120,6 +122,22 @@ function makeHarness(opts: {
  * reaches 0 OR `state` is "failed" (permanent), bounded by a deadline
  * so a stalled worker doesn't hang the test runner indefinitely.
  */
+async function waitForRegisterOk(
+  outbox: UploadOutbox,
+  sessionId: string,
+  opts: { timeoutMs?: number } = {}
+): Promise<void> {
+  const deadline = Date.now() + (opts.timeoutMs ?? 2_000);
+  while (Date.now() < deadline) {
+    const rows = await outbox.listAllRows(sessionId);
+    if (rows.some((r) => r.registerOk)) return;
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  throw new Error(
+    `waitForRegisterOk: no row marked registerOk within ${opts.timeoutMs ?? 2_000}ms for ${sessionId}`
+  );
+}
+
 async function waitForSettled(
   outbox: UploadOutbox,
   sessionId: string,
@@ -611,6 +629,64 @@ describe("upload-outbox — transcriptionOnly flag", () => {
     expect(rowsAfterReload).toHaveLength(1);
     expect(rowsAfterReload[0].transcriptionOnly).toBe(true);
     await outboxB.close();
+  });
+});
+
+describe("upload-outbox — onSegmentUploaded (WS-A mid-session register)", () => {
+  test("enqueue with blobRemoteUrl pre-set → worker invokes onSegmentUploaded and marks registerOk", async () => {
+    const onSegmentUploaded = jest.fn(async (_row: OutboxRow) => {});
+    const h = makeHarness({ onSegmentUploaded });
+
+    await h.outbox.enqueue({
+      sessionId: "ws-mid",
+      streamId: TUTOR_MIC_STREAM_ID,
+      segmentId: "seg-mid-1",
+      blobLocalRef: makeBlob(),
+      blobRemoteUrl: "https://blob.example/preuploaded",
+      mimeType: "audio/webm",
+      sizeBytes: 11,
+      audioStartedAtMs: 3_000,
+    });
+
+    await waitForRegisterOk(h.outbox, "ws-mid", { timeoutMs: 2_000 });
+
+    expect(h.upload).not.toHaveBeenCalled();
+    expect(onSegmentUploaded).toHaveBeenCalledTimes(1);
+    expect(onSegmentUploaded.mock.calls[0][0].blobRemoteUrl).toBe(
+      "https://blob.example/preuploaded"
+    );
+    expect(onSegmentUploaded.mock.calls[0][0].segmentId).toBe("seg-mid-1");
+
+    const rows = await h.outbox.listAllRows("ws-mid");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].registerOk).toBe(true);
+    await h.outbox.close();
+  });
+
+  test("onSegmentUploaded failure leaves row retryable (registerOk stays false)", async () => {
+    const onSegmentUploaded = jest.fn(async () => {
+      throw new Error("register transient 503");
+    });
+    const h = makeHarness({ onSegmentUploaded });
+
+    await h.outbox.enqueue({
+      sessionId: "ws-mid-fail",
+      streamId: TUTOR_MIC_STREAM_ID,
+      segmentId: "seg-mid-fail",
+      blobLocalRef: null,
+      blobRemoteUrl: "https://blob.example/preuploaded",
+      mimeType: "audio/webm",
+      sizeBytes: 11,
+      audioStartedAtMs: 4_000,
+    });
+
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(onSegmentUploaded).toHaveBeenCalledTimes(1);
+    const rows = await h.outbox.listAllRows("ws-mid-fail");
+    expect(rows[0].registerOk).toBe(false);
+    expect(h.upload).not.toHaveBeenCalled();
+    await h.outbox.close();
   });
 });
 

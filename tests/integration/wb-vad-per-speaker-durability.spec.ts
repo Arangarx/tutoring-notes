@@ -13,6 +13,11 @@ import {
 
 const TEST_SECRET = process.env.PLAYWRIGHT_TEST_SECRET ?? "playwright-test-secret";
 
+/** Above injectVadOverrides threshold (0.15) — forces "speech" in VAD tick. */
+const VAD_METER_HIGH = 0.5;
+/** Below threshold — forces silence accumulation toward a boundary cut. */
+const VAD_METER_LOW = 0;
+
 async function injectVadOverrides(page: import("@playwright/test").Page) {
   await page.addInitScript(() => {
     const w = window as unknown as {
@@ -22,12 +27,39 @@ async function injectVadOverrides(page: import("@playwright/test").Page) {
       __VAD_SILENCE_RMS_THRESHOLD_OVERRIDE?: number;
       __SESSION_SAFETY_MAX_SECONDS_OVERRIDE?: number;
       __VAD_CUT_DISABLED?: boolean;
+      __VAD_TEST_METER_LEVEL__?: number;
     };
     w.__VAD_MIN_SEGMENT_SECONDS_OVERRIDE = 1;
     w.__VAD_SILENCE_HOLD_MS_OVERRIDE = 800;
     w.__VAD_SILENCE_RMS_THRESHOLD_OVERRIDE = 0.15;
     w.__VAD_MAX_SEGMENT_SECONDS_OVERRIDE = 120;
+    w.__VAD_TEST_METER_LEVEL__ = 0.5;
   });
+}
+
+async function setVadTestMeterLevel(
+  page: import("@playwright/test").Page,
+  level: number
+) {
+  await page.evaluate((lvl) => {
+    (window as unknown as { __VAD_TEST_METER_LEVEL__?: number }).__VAD_TEST_METER_LEVEL__ =
+      lvl;
+  }, level);
+}
+
+/**
+ * Drive speak → silence → speak → silence via the test-only meter seam so
+ * ≥2 VAD boundary cuts fire (VAD_MIN=1s, SILENCE_HOLD=800ms in overrides).
+ */
+async function driveTwoVadSilenceCuts(page: import("@playwright/test").Page) {
+  await setVadTestMeterLevel(page, VAD_METER_HIGH);
+  await page.waitForTimeout(1_200);
+  await setVadTestMeterLevel(page, VAD_METER_LOW);
+  await page.waitForTimeout(1_000);
+  await setVadTestMeterLevel(page, VAD_METER_HIGH);
+  await page.waitForTimeout(1_200);
+  await setVadTestMeterLevel(page, VAD_METER_LOW);
+  await page.waitForTimeout(1_000);
 }
 
 async function fetchRecordingCount(
@@ -113,14 +145,21 @@ test.describe("wb VAD + incremental SessionRecording (WS-A A1+A2)", () => {
       timeout: 90_000,
     });
 
-    await page.waitForTimeout(3_000);
-    await page.waitForTimeout(3_500);
-    await page.waitForTimeout(2_500);
-    await page.waitForTimeout(3_500);
-    await page.waitForTimeout(8_000);
+    // Let recording + meter RAF start, then drive two silence-boundary cuts.
+    await page.waitForTimeout(2_000);
+    await driveTwoVadSilenceCuts(page);
+
+    await expect
+      .poll(
+        async () => {
+          const mid = await fetchRecordingCount(page, whiteboardSessionId);
+          return mid.count;
+        },
+        { timeout: 120_000, intervals: [500, 1000, 2000] }
+      )
+      .toBeGreaterThanOrEqual(2);
 
     const mid = await fetchRecordingCount(page, whiteboardSessionId);
-    expect(mid.count).toBeGreaterThanOrEqual(2);
     expect(mid.byStream["tutor:mic"] ?? 0).toBeGreaterThanOrEqual(2);
   });
 
@@ -138,9 +177,11 @@ test.describe("wb VAD + incremental SessionRecording (WS-A A1+A2)", () => {
       const w = window as unknown as {
         __VAD_CUT_DISABLED?: boolean;
         __VAD_MAX_SEGMENT_SECONDS_OVERRIDE?: number;
+        __VAD_TEST_METER_LEVEL__?: number;
       };
       w.__VAD_CUT_DISABLED = true;
       w.__VAD_MAX_SEGMENT_SECONDS_OVERRIDE = 9999;
+      w.__VAD_TEST_METER_LEVEL__ = 0.5;
     });
 
     await page.goto(
@@ -152,11 +193,9 @@ test.describe("wb VAD + incremental SessionRecording (WS-A A1+A2)", () => {
       timeout: 90_000,
     });
 
-    await page.waitForTimeout(3_000);
-    await page.waitForTimeout(3_500);
-    await page.waitForTimeout(2_500);
-    await page.waitForTimeout(3_500);
-    await page.waitForTimeout(8_000);
+    await page.waitForTimeout(2_000);
+    await driveTwoVadSilenceCuts(page);
+    await page.waitForTimeout(5_000);
 
     const mid = await fetchRecordingCount(page, whiteboardSessionId);
     expect(mid.count).toBeLessThan(2);
@@ -221,19 +260,29 @@ test.describe("wb per-speaker transcription + replay-mix (WS-A A3+A4)", () => {
       await injectVadOverrides(peers.tutorPage);
       await injectVadOverrides(peers.studentPage);
 
-      await peers.tutorPage.waitForTimeout(3_000);
-      await peers.tutorPage.waitForTimeout(3_500);
-      await peers.tutorPage.waitForTimeout(2_500);
-      await peers.tutorPage.waitForTimeout(3_500);
+      await peers.tutorPage.waitForTimeout(2_000);
+      await driveTwoVadSilenceCuts(peers.tutorPage);
+
+      await expect
+        .poll(
+          async () => {
+            const mid = await fetchRecordingCount(
+              peers.tutorPage,
+              session.whiteboardSessionId
+            );
+            return mid.byStream["tutor:mic"] ?? 0;
+          },
+          { timeout: 120_000, intervals: [500, 1000, 2000] }
+        )
+        .toBeGreaterThanOrEqual(1);
 
       const midMixdown = await fetchRecordingCount(
         peers.tutorPage,
         session.whiteboardSessionId
       );
-      expect(midMixdown.byStream["tutor:mic"] ?? 0).toBeGreaterThanOrEqual(1);
 
       await peers.studentPage.waitForTimeout(5_000);
-      await peers.tutorPage.waitForTimeout(8_000);
+      await peers.tutorPage.waitForTimeout(3_000);
 
       const outboxRows = await listOutboxRowsForSession(
         peers.tutorPage,

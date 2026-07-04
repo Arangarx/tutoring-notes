@@ -39,6 +39,9 @@ export function readAnalyserRmsLevel(
   analyser: AnalyserNode,
   data: Float32Array<ArrayBuffer>
 ): number {
+  const override = readVadTestMeterLevelOverride();
+  if (override !== null) return override;
+
   analyser.getFloatTimeDomainData(data);
   let sum = 0;
   for (let i = 0; i < data.length; i++) {
@@ -47,6 +50,22 @@ export function readAnalyserRmsLevel(
   }
   const rms = Math.sqrt(sum / data.length);
   return calibrateMicLevel(rms);
+}
+
+type VadTestMeterWindow = {
+  __VAD_TEST_METER_LEVEL__?: number;
+};
+
+/**
+ * Playwright / jest dom harness: drive VAD silence-boundary cuts without
+ * real mic dynamics. Strict no-op in production (NODE_ENV gate).
+ */
+function readVadTestMeterLevelOverride(): number | null {
+  if (typeof window === "undefined") return null;
+  if (process.env.NODE_ENV === "production") return null;
+  const v = (window as unknown as VadTestMeterWindow).__VAD_TEST_METER_LEVEL__;
+  if (typeof v === "number" && Number.isFinite(v) && v >= 0) return v;
+  return null;
 }
 
 export type MicLevelMonitor = {
