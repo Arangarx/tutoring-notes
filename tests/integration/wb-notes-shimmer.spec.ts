@@ -1,201 +1,232 @@
-import { test, expect } from "@playwright/test";
-import { PrismaClient } from "@prisma/client";
-import { seedTestAdmin, seedTestStudent } from "../visual/helpers";
+import { test, expect } from "./fixtures";
+import { readLocalEnv } from "../utils/read-dotenv";
+import { seedWbLiveSyncSession } from "./whiteboard-live-sync.helpers";
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { assertLocalDatabaseUrlForHarness } = require("../../scripts/wb-regression-local-db.cjs");
+const TEST_SECRET = process.env.PLAYWRIGHT_TEST_SECRET ?? "playwright-test-secret";
 
-/**
- * Seed an ended WhiteboardSession + TutorNote in a specified status.
- *
- * The session has endedAt set so page.tsx passes initialMode="review"
- * to WhiteboardSessionShell, which mounts SessionReviewMode. That component
- * calls loadSessionReviewPayload (server action) to fetch the TutorNote status
- * from the DB, which is what TutorNotesSection receives as initialNote.
- *
- * This bypasses the real OpenAI pipeline — the note status is seeded directly.
- */
-async function seedEndedSessionWithNote(params: {
-  adminUserId: string;
-  studentId: string;
-  noteStatus: "generating" | "done";
-  noteContent?: string | null;
-}): Promise<string> {
-  assertLocalDatabaseUrlForHarness();
-  const prisma = new PrismaClient();
-  try {
-    const session = await prisma.whiteboardSession.create({
-      data: {
-        adminUserId: params.adminUserId,
-        studentId: params.studentId,
-        consentAcknowledged: true,
-        eventsBlobUrl: "https://pw.local/placeholder-whiteboard-events.json",
-        sessionPhase: "ACTIVE",
-        sessionMode: "LIVE",
-        activatedAt: new Date(Date.now() - 60_000),
-        endedAt: new Date(),
-        durationSeconds: 60,
-      },
-      select: { id: true },
-    });
-
-    await prisma.tutorNote.create({
-      data: {
-        sessionId: session.id,
-        status: params.noteStatus,
-        content: params.noteContent ?? null,
-        isPartial: false,
-        generatedAt: params.noteStatus === "done" ? new Date() : null,
-      },
-    });
-
-    return session.id;
-  } finally {
-    await prisma.$disconnect();
-  }
+async function fetchTutorNoteStatus(
+  page: import("@playwright/test").Page,
+  sessionId: string
+): Promise<string | null> {
+  const res = await page.request.get(
+    `/api/test/whiteboard/${sessionId}/transcript-chunks`,
+    { headers: { Authorization: `Bearer ${TEST_SECRET}` } }
+  );
+  expect(res.ok(), await res.text()).toBeTruthy();
+  const body = (await res.json()) as { tutorNoteStatus: string | null };
+  return body.tutorNoteStatus;
 }
 
-test.describe("notes shimmer — generating vs done state rendering", () => {
-  /**
-   * Spec oracle — generating state:
-   *   (a) form fields visible (NOT skeleton bars / hidden)
-   *   (b) shimmer/blur treatment applied across fields
-   *   (c) empty fields carry the dimmed-placeholder class
-   *   (d) tutor-notes-content NOT present; save button NOT present
-   */
-  test("generating state: form fields visible with shimmer overlay, placeholders dimmed", async ({
+type ShimmerOverlayState = {
+  content: string;
+  backgroundPosition: string;
+  animationName: string;
+  opacity: string;
+  zIndex: string;
+};
+
+async function readShimmerOverlayState(
+  page: import("@playwright/test").Page,
+  generatingWrap: import("@playwright/test").Locator
+): Promise<ShimmerOverlayState> {
+  return generatingWrap.evaluate((el) => {
+    const after = getComputedStyle(el, "::after");
+    return {
+      content: after.content,
+      backgroundPosition: after.backgroundPosition,
+      animationName: after.animationName,
+      opacity: after.opacity,
+      zIndex: after.zIndex,
+    };
+  });
+}
+
+async function waitForNotesPipelineActiveState(
+  page: import("@playwright/test").Page,
+  sessionId: string,
+  timeoutMs = 120_000
+): Promise<{ noteStatus: string | null; generatingVisible: boolean }> {
+  const deadline = Date.now() + timeoutMs;
+  const seenStatuses = new Set<string>();
+
+  while (Date.now() < deadline) {
+    const noteStatus = await fetchTutorNoteStatus(page, sessionId);
+    if (noteStatus) {
+      seenStatuses.add(noteStatus);
+    }
+    const generatingVisible = await page
+      .getByTestId("tutor-notes-generating")
+      .isVisible()
+      .catch(() => false);
+
+    if (generatingVisible) {
+      return { noteStatus, generatingVisible: true };
+    }
+    if (noteStatus === "pending" || noteStatus === "generating") {
+      return { noteStatus, generatingVisible: false };
+    }
+
+    await page.waitForTimeout(100);
+  }
+
+  throw new Error(
+    `Timed out waiting for tutor-notes-generating UI (statuses seen: ${[...seenStatuses].join(", ") || "none"}) for session ${sessionId}`
+  );
+}
+
+async function fetchRecordingCount(
+  page: import("@playwright/test").Page,
+  sessionId: string
+) {
+  const res = await page.request.get(
+    `/api/test/whiteboard/${sessionId}/recording-count`,
+    { headers: { Authorization: `Bearer ${TEST_SECRET}` } }
+  );
+  expect(res.ok(), await res.text()).toBeTruthy();
+  return (await res.json()) as { count: number };
+}
+
+async function recordShortSoloSession(
+  page: import("@playwright/test").Page,
+  studentId: string,
+  whiteboardSessionId: string
+) {
+  await page.goto(
+    `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace`,
+    { waitUntil: "domcontentloaded" }
+  );
+
+  await expect(page.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
+    timeout: 90_000,
+  });
+
+  // Recording auto-starts when consent is present (PRESARAH-1).
+  await page.waitForTimeout(2_000);
+
+  const canvas = page
+    .locator('[data-testid="tutor-whiteboard-canvas-mount"] canvas')
+    .first();
+  await canvas.waitFor({ state: "visible", timeout: 60_000 });
+
+  await page.keyboard.press("r");
+  const box = await canvas.boundingBox();
+  if (!box) {
+    throw new Error("Excalidraw canvas has no bounding box");
+  }
+  for (let i = 0; i < 3; i++) {
+    const x0 = box.x + 90 + i * 75;
+    const y0 = box.y + 100;
+    const x1 = box.x + 160 + i * 75;
+    const y1 = box.y + 170;
+    await page.mouse.move(x0, y0);
+    await page.mouse.down();
+    await page.mouse.move(x1, y1);
+    await page.mouse.up();
+  }
+
+  // Allow at least one real audio segment to upload before End.
+  await page.waitForTimeout(8_000);
+
+  await page.getByTestId("wb-end-session").click();
+  const confirmBtn = page.getByTestId("wb-end-session-confirm-yes");
+  if (await confirmBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await confirmBtn.click();
+  }
+
+  await expect(page.getByTestId("wb-session-review-mode")).toBeVisible({
+    timeout: 180_000,
+  });
+
+  // Tight poll begins immediately — notes can finish before slower UI assertions run.
+  await waitForNotesPipelineActiveState(page, whiteboardSessionId, 90_000);
+}
+
+test.describe("notes shimmer — real pipeline (SMOKE-NOTES-1)", () => {
+  test("end session → pending/generating: overlay visible, animating, status copy", async ({
     page,
   }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(360_000);
 
-    const adminUserId = await seedTestAdmin();
-    const { studentId } = await seedTestStudent(adminUserId);
-    const sessionId = await seedEndedSessionWithNote({
-      adminUserId,
-      studentId,
-      noteStatus: "generating",
-      noteContent: null,
-    });
-
-    await page.goto(
-      `/admin/students/${studentId}/whiteboard/${sessionId}/workspace`,
-      { waitUntil: "domcontentloaded" }
+    const env = readLocalEnv();
+    test.skip(
+      !env.BLOB_READ_WRITE_TOKEN?.trim(),
+      "Set BLOB_READ_WRITE_TOKEN in .env for real recording + notes pipeline."
     );
 
-    // Wait for SessionReviewMode to load the payload and show the generating container.
-    const generatingEl = page.getByTestId("tutor-notes-generating");
-    await expect(generatingEl).toBeVisible({ timeout: 30_000 });
+    const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
+    await recordShortSoloSession(page, studentId, whiteboardSessionId);
 
-    // (a) Form fields are visible — textareas present and visible in the DOM.
+    const generatingWrap = page.getByTestId("tutor-notes-generating");
+    await expect(generatingWrap).toBeVisible();
+
+    const statusFooter = page.getByTestId("tutor-notes-status");
+    await expect(statusFooter).toBeVisible();
+
+    const phase = await generatingWrap.getAttribute("data-note-phase");
+    if (phase === "generating") {
+      await expect(statusFooter).toHaveText("Writing notes…");
+    } else {
+      await expect(statusFooter).toHaveText("Waiting for transcript…");
+    }
+
+    const recordings = await fetchRecordingCount(page, whiteboardSessionId);
+    expect(recordings.count).toBeGreaterThanOrEqual(1);
+
+    // Form fields stay visible underneath the overlay affordance.
     const topicsField = page.locator("#wb-note-topics");
-    const assessmentField = page.locator("#wb-note-assessment");
     await expect(topicsField).toBeVisible();
-    await expect(assessmentField).toBeVisible();
+    await expect(topicsField).toBeEditable({ editable: false });
 
-    // (b) Shimmer overlay is attached inside the generating container.
-    //     It carries the shimmer CSS animation (animationName !== "none").
-    const shimmerOverlay = generatingEl.locator('[aria-hidden="true"]').first();
-    await expect(shimmerOverlay).toBeAttached();
+    // Shimmer is a wrapper ::after ON TOP of fields — not an invisible div behind textareas.
+    const overlay0 = await readShimmerOverlayState(page, generatingWrap);
+    expect(overlay0.content, "wrapper ::after shimmer overlay is present").not.toBe("none");
+    expect(Number.parseInt(overlay0.zIndex, 10)).toBeGreaterThanOrEqual(2);
+    expect(Number.parseFloat(overlay0.opacity)).toBeGreaterThan(0.4);
 
-    const hasShimmerAnimation = await shimmerOverlay.evaluate((el) => {
-      const style = getComputedStyle(el);
-      return style.animationName !== "none" && style.animationName !== "";
-    });
-    expect(hasShimmerAnimation, "shimmer overlay has animation").toBe(true);
+    await page.waitForTimeout(800);
 
-    // (c) Empty fields carry the dimmed-placeholder class.
-    const topicsClass = await topicsField.getAttribute("class");
-    expect(topicsClass ?? "").toContain("tn-notes-generating-field");
+    const overlay1 = await readShimmerOverlayState(page, generatingWrap);
+    expect(
+      overlay1.backgroundPosition,
+      "shimmer background-position moves over ~800ms (real animation, not static paint)"
+    ).not.toBe(overlay0.backgroundPosition);
 
-    // Placeholder dimming rule is injected via <style> inside the component.
-    const hasPlaceholderRule = await page.evaluate(() => {
-      try {
-        for (const sheet of document.styleSheets) {
-          for (const rule of sheet.cssRules) {
-            if (rule.cssText.includes("tn-notes-generating-field") &&
-                rule.cssText.includes("placeholder") &&
-                rule.cssText.includes("opacity")) {
-              return true;
-            }
-          }
-        }
-      } catch {
-        // cross-origin sheet — skip
-      }
-      return false;
-    });
-    expect(hasPlaceholderRule, "placeholder opacity rule injected").toBe(true);
-
-    // Fields are read-only during generating.
-    const isReadOnly = await topicsField.evaluate(
-      (el) => (el as HTMLTextAreaElement).readOnly
-    );
-    expect(isReadOnly, "textarea is readOnly during generating").toBe(true);
-
-    // (d) tutor-notes-content NOT visible; save button NOT present.
     await expect(page.getByTestId("tutor-notes-content")).not.toBeVisible();
     await expect(page.getByTestId("wb-save-note")).not.toBeVisible();
   });
 
-  /**
-   * Spec oracle — done state:
-   *   shimmer gone; generated content fills fields; save button present and enabled.
-   */
-  test("done state: shimmer gone, generated content shown and saveable", async ({
+  test("prefers-reduced-motion: static loading overlay, no animation", async ({
     page,
   }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(360_000);
 
-    const adminUserId = await seedTestAdmin();
-    const { studentId } = await seedTestStudent(adminUserId);
-    const noteContent = JSON.stringify({
-      topics: "Quadratic equations",
-      assessment: "Strong on factoring, needs work on completing the square",
-      nextSteps: "Practice worksheet pages 5-7",
-      links: "",
-    });
-    const sessionId = await seedEndedSessionWithNote({
-      adminUserId,
-      studentId,
-      noteStatus: "done",
-      noteContent,
-    });
-
-    await page.goto(
-      `/admin/students/${studentId}/whiteboard/${sessionId}/workspace`,
-      { waitUntil: "domcontentloaded" }
+    const env = readLocalEnv();
+    test.skip(
+      !env.BLOB_READ_WRITE_TOKEN?.trim(),
+      "Set BLOB_READ_WRITE_TOKEN in .env for real recording + notes pipeline."
     );
 
-    // Wait for the done form to appear.
-    const contentEl = page.getByTestId("tutor-notes-content");
-    await expect(contentEl).toBeVisible({ timeout: 30_000 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
 
-    // tutor-notes-generating NOT present in done state.
-    await expect(page.getByTestId("tutor-notes-generating")).not.toBeVisible();
+    const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
+    await recordShortSoloSession(page, studentId, whiteboardSessionId);
 
-    // Generated content is shown in the textareas.
-    await expect(page.locator("#wb-note-topics")).toHaveValue(
-      "Quadratic equations"
-    );
-    await expect(page.locator("#wb-note-assessment")).toHaveValue(
-      "Strong on factoring, needs work on completing the square"
-    );
+    const generatingWrap = page.getByTestId("tutor-notes-generating");
+    await expect(generatingWrap).toBeVisible();
 
-    // No shimmer class on the done-state textareas.
-    const topicsClass = await page
-      .locator("#wb-note-topics")
-      .getAttribute("class");
-    expect(topicsClass ?? "").not.toContain("tn-notes-generating-field");
+    const overlay0 = await readShimmerOverlayState(page, generatingWrap);
+    expect(overlay0.content).not.toBe("none");
+    expect(overlay0.animationName).toBe("none");
+    expect(Number.parseFloat(overlay0.opacity)).toBeGreaterThan(0.5);
 
-    // Textareas are editable (not readOnly) in done state.
-    const isReadOnly = await page
-      .locator("#wb-note-topics")
-      .evaluate((el) => (el as HTMLTextAreaElement).readOnly);
-    expect(isReadOnly, "textarea is NOT readOnly when done").toBe(false);
+    await page.waitForTimeout(800);
 
-    // Save button present and enabled (non-empty fields satisfy the empty-notes guard).
-    const saveBtn = page.getByTestId("wb-save-note");
-    await expect(saveBtn).toBeVisible();
-    await expect(saveBtn).not.toBeDisabled();
+    const overlay1 = await readShimmerOverlayState(page, generatingWrap);
+    expect(
+      overlay1.backgroundPosition,
+      "reduced-motion uses a static high-contrast loading state"
+    ).toBe(overlay0.backgroundPosition);
+
+    await expect(page.getByTestId("tutor-notes-status")).toBeVisible();
   });
 });

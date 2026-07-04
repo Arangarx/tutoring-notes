@@ -1,0 +1,60 @@
+/**
+ * TutorNotesSection — post-End notes generating shimmer overlay.
+ * ::after sits ON TOP of visible form fields (not behind opaque textareas).
+ */
+
+@keyframes tn-notes-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.tn-notes-generating-wrap {
+  position: relative;
+  isolation: isolate;
+}
+
+.tn-notes-generating-wrap::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  pointer-events: none;
+  z-index: 10;
+  background: linear-gradient(
+    90deg,
+    var(--surface-muted) 0%,
+    var(--accent-soft) 35%,
+    var(--surface-hover) 50%,
+    var(--accent-soft) 65%,
+    var(--surface-muted) 100%
+  );
+  background-size: 200% 100%;
+  animation: tn-notes-shimmer 1.5s ease-in-out infinite;
+  opacity: 0.72;
+}
+
+.tn-notes-generating-wrap .tn-notes-fields {
+  position: relative;
+  z-index: 1;
+}
+
+.tn-notes-generating-field::placeholder {
+  opacity: 0.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tn-notes-generating-wrap::after {
+    animation: none;
+    background: linear-gradient(
+      180deg,
+      var(--accent-soft) 0%,
+      var(--surface-hover) 100%
+    );
+    background-size: 100% 100%;
+    opacity: 0.88;
+  }
+}

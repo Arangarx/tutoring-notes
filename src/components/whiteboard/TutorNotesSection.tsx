@@ -37,6 +37,8 @@ import {
   type TutorNoteStatusResult,
 } from "@/app/admin/students/[id]/whiteboard/notes-actions";
 
+import "@/styles/tutor-notes-shimmer.css";
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -184,6 +186,14 @@ export default function TutorNotesSection({
   const isActive =
     (note.found && (note.status === "pending" || note.status === "generating")) ||
     (!note.found && hasAudio);
+  const isPendingPhase =
+    isActive &&
+    (!note.found || note.status === "pending");
+  const isGeneratingPhase =
+    isActive && note.found && note.status === "generating";
+  const activeStatusCopy = isGeneratingPhase
+    ? "Writing notes…"
+    : "Waiting for transcript…";
   const isDone = note.found && (note.status === "done" || note.status === "partial");
   const isFailed = note.found && note.status === "failed";
   const isNotStarted = !note.found;
@@ -373,7 +383,7 @@ export default function TutorNotesSection({
 
       {/* Aria-live region for screen readers */}
       <div aria-live="polite" aria-atomic="true" className="sr-only">
-        {isActive && "Generating session notes…"}
+        {isActive && activeStatusCopy}
         {isDone && "Session notes are ready."}
         {isFailed && "Note generation failed."}
         {timedOut && "Note generation timed out."}
@@ -405,34 +415,11 @@ export default function TutorNotesSection({
         <div
           data-testid={isActive ? "tutor-notes-generating" : "tutor-notes-content"}
           aria-busy={isActive || undefined}
-          style={isActive ? { position: "relative" } : undefined}
+          className={isActive ? "tn-notes-generating-wrap" : undefined}
+          data-note-phase={
+            isGeneratingPhase ? "generating" : isPendingPhase ? "pending" : undefined
+          }
         >
-          {isActive && (
-            <>
-              {/* Shimmer wave overlay — same gradient as SkeletonNotes, semi-transparent
-                  so the visible form fields show through underneath. */}
-              <div
-                aria-hidden="true"
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  borderRadius: 6,
-                  background:
-                    "linear-gradient(90deg, var(--surface-muted) 25%, var(--surface-hover) 50%, var(--surface-muted) 75%)",
-                  backgroundSize: "200% 100%",
-                  animation: "shimmer 1.5s infinite",
-                  pointerEvents: "none",
-                  zIndex: 1,
-                  opacity: 0.5,
-                }}
-              />
-              <style>{`
-                @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-                .tn-notes-generating-field::placeholder { opacity: 0.45; }
-              `}</style>
-            </>
-          )}
-
           {/* Partial transcript badge — done only */}
           {isDone && note.isPartial && (
             <div
@@ -455,7 +442,7 @@ export default function TutorNotesSection({
             </div>
           )}
 
-          <div style={{ display: "grid", gap: 12 }}>
+          <div className="tn-notes-fields" style={{ display: "grid", gap: 12 }}>
             <NoteField
               label="Topics covered"
               id="wb-note-topics"
@@ -493,8 +480,12 @@ export default function TutorNotesSection({
 
           {/* Generating status footer */}
           {isActive && (
-            <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-              Generating session notes — this usually takes under a minute.
+            <div
+              className="muted tn-notes-status-footer"
+              style={{ fontSize: 11, marginTop: 2, position: "relative", zIndex: 11 }}
+              data-testid="tutor-notes-status"
+            >
+              {activeStatusCopy}
             </div>
           )}
 
