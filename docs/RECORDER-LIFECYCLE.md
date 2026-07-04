@@ -538,6 +538,12 @@ key lines:
 `psc` (per-speaker transcription lane lifecycle in `useRemoteMicRecorders` +
 `remote-stream-recorder` + `upload-outbox-instance` transcription enqueue — key lines:
 `[psc] psc=<streamId> action=<create|start|stop|dispose|enqueue> wbsid=<id> peer=<peerId> speakerId=<learnerProfileId>`),
+`wbp` (WS-B ~1s whiteboard event-batch server persist in `useWhiteboardRecorder` —
+key lines:
+`[wbp] wbp=<batchSeq> action=append wbsid=<id> from=<n> to=<n>`,
+`[wbp] wbp=<batchSeq> action=skip_empty wbsid=<id> from=<n> to=<n>`,
+`[wbp] wbp=<batchSeq> action=skip_inflight wbsid=<id>`,
+`[wbp] wbp=<batchSeq> action=error wbsid=<id> from=<n> to=<n> status=<code>`),
 `alr` (AccountHolder-login durable rate limiter — IAC-11; Neon-backed `AuthThrottle` table;
 key is `ah-login:<normalizedEmail>`; key lines:
 `[alr] alr=ah-login:<email> action=rate-limited count=<n> retryAfterSec=<s>`,

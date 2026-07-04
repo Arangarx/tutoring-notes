@@ -212,6 +212,18 @@ async function createFullErasureFixture(): Promise<FullFixture> {
     },
   });
 
+  await db.whiteboardEventBatch.create({
+    data: {
+      whiteboardSessionId: session.id,
+      batchSeq: 1,
+      fromEventIndex: 0,
+      toEventIndex: 2,
+      eventsJson: [{ t: 0, type: "snapshot", elements: [] }],
+      boardDocumentJson: { schemaVersion: 1, activePageId: "p1", pageList: [], pages: {} },
+      schemaVersion: WB_EVENT_LOG_SCHEMA_VERSION,
+    },
+  });
+
   const shareLink = await db.shareLink.create({
     data: {
       studentId: student.id,
@@ -389,6 +401,11 @@ describe("processErasureJob — happy path", () => {
     expect(await db.tutorNote.count({ where: { sessionId: fixture.session.id } })).toBe(0);
     expect(await db.sessionParticipant.count({ where: { whiteboardSessionId: fixture.session.id } })).toBe(0);
     expect(await db.whiteboardJoinToken.count({ where: { whiteboardSessionId: fixture.session.id } })).toBe(0);
+    expect(
+      await db.whiteboardEventBatch.count({
+        where: { whiteboardSessionId: fixture.session.id },
+      })
+    ).toBe(0);
     expect(await db.noteView.count({ where: { noteId: fixture.note.id } })).toBe(0);
 
     const session = await db.whiteboardSession.findUnique({ where: { id: fixture.session.id } });

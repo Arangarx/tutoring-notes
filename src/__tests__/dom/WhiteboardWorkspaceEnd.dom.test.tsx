@@ -181,6 +181,7 @@ jest.mock("@/hooks/useWhiteboardRecorder", () => ({
     acceptResume: jest.fn(),
     declineResume: jest.fn(),
     buildFinalEventsJson: mockBuildFinalEventsJson,
+    flushServerPersist: jest.fn().mockResolvedValue(undefined),
     markPersisted: jest.fn(),
     checkpointMountResolved: true,
     postGateAutoCanvas: null,

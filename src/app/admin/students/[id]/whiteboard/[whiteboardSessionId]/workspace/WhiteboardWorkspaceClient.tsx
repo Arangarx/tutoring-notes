@@ -3880,6 +3880,7 @@ export function WhiteboardWorkspaceClient({
       // and so a flaky events upload doesn't double-bill the tutor's
       // patience clock.
       setEndingState("ending");
+      await recorder.flushServerPersist();
       const eventsJson = recorder.buildFinalEventsJson();
       const upload = await uploadWhiteboardEvents({
         whiteboardSessionId,

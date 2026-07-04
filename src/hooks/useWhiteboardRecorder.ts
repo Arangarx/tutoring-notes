@@ -112,6 +112,17 @@ import {
   isWhiteboardBoardDocumentV1,
   type WhiteboardBoardDocumentV1,
 } from "@/lib/whiteboard/board-document-snapshot";
+import {
+  computeBackoffMs,
+  nextConsecutiveFailures,
+  SERVER_PERSIST_MAX_RETRIES,
+  SERVER_PERSIST_WARNING_MESSAGE,
+  shouldAdvanceCursorOnResponse,
+  shouldRetryPersist,
+  shouldShowPersistWarning,
+  shouldSkipPersistTick,
+  shouldStopPersistOnResponse,
+} from "@/lib/whiteboard/server-persist-policy";
 
 void _audioOwnerKey;
 
@@ -148,6 +159,9 @@ const DIFF_INTERVAL_MS = 100;
 
 /** IndexedDB checkpoint cadence. */
 const IDB_CHECKPOINT_INTERVAL_MS = 30_000;
+
+/** WS-B: ~1s server-side event-batch persist cadence. */
+const SERVER_PERSIST_INTERVAL_MS = 1_000;
 
 /**
  * Minimal contract the recorder needs from the live-sync client.
@@ -308,6 +322,11 @@ export type UseWhiteboardRecorderReturn = {
    * (kind="whiteboard-events"). Does NOT clear local state.
    */
   buildFinalEventsJson: () => string;
+  /**
+   * Await server-side event-batch persist catch-up before End finalization.
+   * Waits for any in-flight persist, then flushes remaining events.
+   */
+  flushServerPersist: () => Promise<void>;
   /**
    * Call AFTER the workspace component successfully persists the
    * events.json to Vercel Blob and updates `WhiteboardSession.eventsBlobUrl`.
@@ -506,6 +525,15 @@ export function useWhiteboardRecorder(
     sessionId: string;
     boardDocument?: WhiteboardBoardDocumentV1;
   } | null>(null);
+
+  /** WS-B: monotonic event index cursor for server persist (never advance on error). */
+  const lastPersistedIndexRef = useRef(0);
+  /** Next batchSeq to assign; incremented only after a successful 2xx persist. */
+  const nextBatchSeqRef = useRef(1);
+  const persistInProgressRef = useRef(false);
+  const persistCompletionRef = useRef<Promise<void> | null>(null);
+  const serverPersistConsecutiveFailuresRef = useRef(0);
+  const serverPersistWarningActiveRef = useRef(false);
 
   /**
    * Loads `cachedResumeRef` into `logRef` / `prevElementsRef` and returns the
@@ -865,6 +893,7 @@ export function useWhiteboardRecorder(
         // Immediate checkpoint flush — the tab might never come back
         // (iOS can kill backgrounded tabs aggressively).
         void runCheckpoint();
+        void runServerPersist();
       } else {
         pushEvent({ t, type: "tab-visible" });
       }
@@ -976,6 +1005,153 @@ export function useWhiteboardRecorder(
     }, IDB_CHECKPOINT_INTERVAL_MS);
     return () => clearInterval(id);
   }, [runCheckpoint]);
+
+  const runServerPersist = useCallback(
+    async (options?: { waitIfInFlight?: boolean }) => {
+      if (persistInProgressRef.current) {
+        if (options?.waitIfInFlight && persistCompletionRef.current) {
+          await persistCompletionRef.current;
+        } else if (shouldSkipPersistTick(persistInProgressRef.current)) {
+          console.log(
+            `[wbp] wbp=0 action=skip_inflight wbsid=${whiteboardSessionId}`
+          );
+          return;
+        }
+      }
+
+      const events = logRef.current.events;
+      const fromIndex = lastPersistedIndexRef.current;
+      const toIndex = events.length;
+
+      if (fromIndex >= toIndex) {
+        console.log(
+          `[wbp] wbp=0 action=skip_empty wbsid=${whiteboardSessionId} from=${fromIndex} to=${toIndex}`
+        );
+        return;
+      }
+
+      const boardDocument = getBoardDocumentForCheckpointRef.current?.();
+      if (!boardDocument) {
+        console.warn(
+          `[wbp] wbp=0 action=error wbsid=${whiteboardSessionId} from=${fromIndex} to=${toIndex} reason=missing_board_document`
+        );
+        return;
+      }
+
+      const batchSeq = nextBatchSeqRef.current;
+      const slice = events.slice(fromIndex, toIndex);
+      const eventsJson = JSON.stringify(slice);
+
+      persistInProgressRef.current = true;
+
+      const doPersist = async () => {
+        let attempt = 0;
+        let lastStatus = 0;
+        try {
+          while (true) {
+            try {
+              const res = await fetch(
+                `/api/whiteboard/${encodeURIComponent(whiteboardSessionId)}/checkpoint`,
+                {
+                  method: "POST",
+                  credentials: "same-origin",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    batchSeq,
+                    fromEventIndex: fromIndex,
+                    toEventIndex: toIndex,
+                    eventsJson,
+                    boardDocumentJson: boardDocument,
+                    schemaVersion: WB_EVENT_LOG_SCHEMA_VERSION,
+                  }),
+                }
+              );
+              lastStatus = res.status;
+
+              if (shouldAdvanceCursorOnResponse(res.status)) {
+                lastPersistedIndexRef.current = toIndex;
+                nextBatchSeqRef.current = batchSeq + 1;
+                serverPersistConsecutiveFailuresRef.current =
+                  nextConsecutiveFailures(
+                    serverPersistConsecutiveFailuresRef.current,
+                    true
+                  );
+                if (serverPersistWarningActiveRef.current) {
+                  serverPersistWarningActiveRef.current = false;
+                  setCheckpointStatus("saved");
+                  setCheckpointError(null);
+                }
+                console.log(
+                  `[wbp] wbp=${batchSeq} action=append wbsid=${whiteboardSessionId} from=${fromIndex} to=${toIndex}`
+                );
+                return;
+              }
+
+              if (shouldStopPersistOnResponse(res.status)) {
+                console.warn(
+                  `[wbp] wbp=${batchSeq} action=error wbsid=${whiteboardSessionId} from=${fromIndex} to=${toIndex} status=409`
+                );
+                return;
+              }
+
+              if (!shouldRetryPersist(res.status, attempt, SERVER_PERSIST_MAX_RETRIES)) {
+                break;
+              }
+            } catch {
+              lastStatus = 0;
+              if (!shouldRetryPersist(0, attempt, SERVER_PERSIST_MAX_RETRIES)) {
+                break;
+              }
+            }
+
+            await new Promise((resolve) =>
+              setTimeout(resolve, computeBackoffMs(attempt))
+            );
+            attempt += 1;
+          }
+
+          serverPersistConsecutiveFailuresRef.current = nextConsecutiveFailures(
+            serverPersistConsecutiveFailuresRef.current,
+            false
+          );
+          if (
+            shouldShowPersistWarning(serverPersistConsecutiveFailuresRef.current)
+          ) {
+            serverPersistWarningActiveRef.current = true;
+            setCheckpointStatus("error");
+            setCheckpointError(SERVER_PERSIST_WARNING_MESSAGE);
+          }
+          console.warn(
+            `[wbp] wbp=${batchSeq} action=error wbsid=${whiteboardSessionId} from=${fromIndex} to=${toIndex} status=${lastStatus}`
+          );
+        } finally {
+          persistInProgressRef.current = false;
+          persistCompletionRef.current = null;
+        }
+      };
+
+      persistCompletionRef.current = doPersist();
+      await persistCompletionRef.current;
+    },
+    [whiteboardSessionId]
+  );
+
+  const flushServerPersist = useCallback(async () => {
+    for (let i = 0; i < 5; i++) {
+      const before = lastPersistedIndexRef.current;
+      await runServerPersist({ waitIfInFlight: true });
+      const after = lastPersistedIndexRef.current;
+      if (after >= logRef.current.events.length) break;
+      if (after === before && !persistInProgressRef.current) break;
+    }
+  }, [runServerPersist]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      void runServerPersist();
+    }, SERVER_PERSIST_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [runServerPersist]);
 
   // ---------------------------------------------------------------
   // Section F — Resume-from-crash detection on mount
@@ -1136,6 +1312,7 @@ export function useWhiteboardRecorder(
     acceptResume,
     declineResume,
     buildFinalEventsJson,
+    flushServerPersist,
     markPersisted,
     checkpointMountResolved,
     postGateAutoCanvas,

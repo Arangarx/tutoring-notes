@@ -208,3 +208,20 @@ export async function enumerateLearnerFamilyBlobs(
 
   return { urls, eventsFetchFailures };
 }
+
+/**
+ * WS-B: `WhiteboardEventBatch` rows are DB-only (no blob URLs in inventory).
+ * Called from `process-erasure-job` `scrubDbContent` during db_scrubbing.
+ */
+export async function deleteWhiteboardEventBatchesForSessions(
+  sessionIds: string[]
+): Promise<number> {
+  if (sessionIds.length === 0) return 0;
+  const result = await db.whiteboardEventBatch.deleteMany({
+    where: { whiteboardSessionId: { in: sessionIds } },
+  });
+  console.log(
+    `[ers] action=delete_event_batches sessions=${sessionIds.length} rows=${result.count}`
+  );
+  return result.count;
+}

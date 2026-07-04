@@ -570,7 +570,14 @@
 
 - **Assumption**: Every state transition logs a 3-letter prefix + session-scoped ID per AGENTS.md. Registry: `rid` (audio), `wbsid` (whiteboard), `obx` (outbox), `snp` (snapshot), `pvw` (preview), `pvs` (per-page view state), `avx` (live A/V), `cev` (cost event), `blb` (blob cleanup CLI), `brs` (branch sweep CLI).
 - **What breaks if violated**: prod debugging becomes impossible. Sarah-reported bug ("my session lost audio") can't be traced without per-session IDs.
-- **Migration check**: this is a code-discipline assumption; preserve across phases. Each new feature with a state machine MUST register a prefix.
+- **Migration check**: this is a code-discipline assumption; preserve across phases. Each new feature with a state machine MUST register a prefix. WS-B adds `wbp` (live whiteboard event-batch persist).
+
+### 10.3a WS-B live whiteboard batch persist (~1s cadence)
+
+- **Assumption**: During ACTIVE sessions, the tutor client POSTs incremental event slices to `POST /api/whiteboard/[sessionId]/checkpoint` about once per second (plus on `visibilitychange` → hidden and before End). Each batch includes `boardDocumentJson` (~2–5 KB) plus a bounded event slice. Batches upsert into `WhiteboardEventBatch` — no per-second Vercel Blob writes (SF-3).
+- **Body-size / rate**: Typical batch fits comfortably under the 4.5 MB Vercel serverless body cap; sustained ~1 write/s per active session is acceptable at pilot scale on Neon + Vercel Pro.
+- **Where baked in**: `src/hooks/useWhiteboardRecorder.ts` (`runServerPersist`), `src/app/api/whiteboard/[sessionId]/checkpoint/route.ts`.
+- **What breaks if violated**: tab-kill loses strokes server-side; End-and-review finalize has nothing to assemble (WS-C). Tutor sees `checkpointStatus` warning after ≥3 consecutive persist failures.
 
 ### 10.4 TOTP_ENCRYPTION_KEY — AES-256-GCM key for 2FA secrets (Identity Phase 1)
 

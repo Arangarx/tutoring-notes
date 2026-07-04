@@ -359,6 +359,7 @@ jest.mock("@/hooks/useWhiteboardRecorder", () => ({
     postGateAutoCanvas: null,
     acknowledgePostGateAutoCanvas: jest.fn(),
     buildFinalEventsJson: jest.fn(),
+    flushServerPersist: jest.fn().mockResolvedValue(undefined),
     setUiContext: jest.fn(),
   }),
 }));

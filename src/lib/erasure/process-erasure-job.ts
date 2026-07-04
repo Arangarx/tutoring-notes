@@ -171,6 +171,9 @@ async function scrubDbContent(
 
   await db.$transaction(async (tx) => {
     if (sessionIds.length > 0) {
+      await tx.whiteboardEventBatch.deleteMany({
+        where: { whiteboardSessionId: { in: sessionIds } },
+      });
       await tx.transcriptChunkExtraction.deleteMany({
         where: { sessionId: { in: sessionIds } },
       });
