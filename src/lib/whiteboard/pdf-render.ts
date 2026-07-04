@@ -4,9 +4,11 @@
  * Browser-side PDF -> PNG renderer for the whiteboard "Insert PDF"
  * flow.
  *
- * Uses pdfjs-dist with the worker hosted at `/pdfjs/pdf.worker.min.mjs`
+ * Uses pdfjs-dist with the main bundle + worker hosted under `/pdfjs/`
  * (copied from `node_modules/pdfjs-dist/build` by
- * `scripts/copy-pdfjs-worker.mjs` at install time).
+ * `scripts/copy-pdfjs-worker.mjs` at install time). Both are loaded as
+ * native ESM from `public/` — not through the Next.js bundler — so dev
+ * `eval-source-map` cannot corrupt pdfjs's internal webpack runtime.
  *
  * Render policy (driven by the whiteboard plan's "PDF/image upload"
  * section):
@@ -126,9 +128,13 @@ async function loadPdfJs(): Promise<typeof import("pdfjs-dist")> {
   }
   if (!pdfjsModulePromise) {
     pdfjsModulePromise = (async () => {
-      const mod = await import("pdfjs-dist");
-      // The worker file is copied by scripts/copy-pdfjs-worker.mjs at
-      // install time. See public/pdfjs/.gitignore'd folder.
+      // webpackIgnore: load the pre-built ESM from public/ (see
+      // scripts/copy-pdfjs-worker.mjs). Bundling pdfjs-dist through
+      // Next.js dev eval-source-map breaks its nested __webpack_exports__.
+      const mod = await import(
+        /* webpackIgnore: true */
+        "/pdfjs/pdf.min.mjs"
+      );
       mod.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.mjs";
       return mod;
     })();

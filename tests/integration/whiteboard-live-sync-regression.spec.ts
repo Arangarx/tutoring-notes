@@ -563,10 +563,11 @@ test.describe("whiteboard live-sync regression", { tag: [TAG.WB_SYNC] }, () => {
   test("invariant 8 ΓÇö PDF page opens centered+fit on student viewport", { tag: [TAG.WB_ASSETS] }, async ({
     browser,
   }) => {
-    // QUARANTINED: pdfjs-dist does not load in headless Playwright ΓÇö gate/env prerequisite, not prod PDF centering.
+    // pdfjs headless load fixed (static ESM from /pdfjs/pdf.min.mjs). Remaining
+    // gate gap: findFirstImageElementId races live sync — needs waitForFunction.
     test.skip(
       true,
-      "QUARANTINED: pdfjs-dist does not load in headless Playwright (Object.defineProperty called on non-object) ΓÇö this is a gate/env prerequisite, NOT a production PDF-centering regression. PDF centering is verified by manual smoke. Re-enable once pdfjs headless loading is fixed (worker copy / postinstall)."
+      "pdfjs headless fixed; inv-8 still races student image sync (findFirstImageElementId null). Re-enable after sync wait."
     );
 
     test.setTimeout(300_000);
@@ -595,7 +596,11 @@ test.describe("whiteboard live-sync regression", { tag: [TAG.WB_SYNC] }, () => {
         timeout: 120_000,
       });
 
-      await expect(peers.studentPage.getByRole("button", { name: /page 1/i })).toBeVisible({
+      await expect(
+        peers.studentPage
+          .getByTestId("wb-student-page-strip")
+          .getByRole("tab", { name: "Board 2" })
+      ).toBeVisible({
         timeout: 60_000,
       });
 

@@ -124,9 +124,9 @@ test.describe("E2 PDF import — no anchor stroke leak onto new PDF board", () =
 
         const pdfTab = peers.tutorPage
           .getByTestId("wb-tutor-page-strip")
-          .getByRole("tab", { name: /e2e-two-pages p\.1/i });
+          .getByRole("tab", { name: "Board 4" });
         await expect(pdfTab).toBeVisible({ timeout: 60_000 });
-        await expect(pdfTab).toHaveAttribute("aria-current", "page", {
+        await expect(pdfTab).toHaveAttribute("aria-selected", "true", {
           timeout: 15_000,
         });
 

@@ -35,8 +35,11 @@ const sourceDir = join(repoRoot, "node_modules", "pdfjs-dist", "build");
 const destDir = join(repoRoot, "public", "pdfjs");
 
 const filesToCopy = [
-  // The worker is the only file we strictly need; the readable mjs
-  // copy is useful when debugging in dev.
+  // Main library — loaded via `import(/* webpackIgnore: true */ …)` so
+  // Next.js dev `eval-source-map` does not double-bundle pdfjs's internal
+  // webpack runtime (Object.defineProperty called on non-object).
+  "pdf.min.mjs",
+  // Worker — `new Worker(url, { type: "module" })` from GlobalWorkerOptions.
   "pdf.worker.min.mjs",
 ];
 
