@@ -544,6 +544,9 @@ key lines:
 `[wbp] wbp=<batchSeq> action=skip_empty wbsid=<id> from=<n> to=<n>`,
 `[wbp] wbp=<batchSeq> action=skip_inflight wbsid=<id>`,
 `[wbp] wbp=<batchSeq> action=error wbsid=<id> from=<n> to=<n> status=<code>`),
+`wbr` (WS-D ACTIVE session resume hydrate from backend in `useWhiteboardRecorder` —
+key line:
+`[wbr] wbr=<wbsid> action=hydrate_server events=<n> boardPages=<n> lastPersistedTo=<n> batchSeq=<n>`),
 `fzb` (WS-C server-side finalize assembly in `finalizeWhiteboardSessionFromBackend` —
 key lines:
 `[fzb] fzb=<wbsid> action=assemble batches=<n> segments=<m>`,

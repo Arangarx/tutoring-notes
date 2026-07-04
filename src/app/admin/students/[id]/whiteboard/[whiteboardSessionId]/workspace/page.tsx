@@ -4,6 +4,7 @@ import { db, withDbRetry } from "@/lib/db";
 import { env } from "@/lib/env";
 import { assertOwnsWhiteboardSession } from "@/lib/whiteboard-scope";
 import { requireStudentScope } from "@/lib/student-scope";
+import { assembleInitialPersistedState } from "@/lib/whiteboard/assemble-persisted-state";
 import { WhiteboardSessionShell } from "./WhiteboardSessionShell";
 
 /**
@@ -110,6 +111,14 @@ export default async function WhiteboardWorkspacePage({
   const initialAllowAudioRecording =
     detail.consentSnapshot?.allowAudioRecording ?? null;
 
+  const initialPersistedState =
+    detail.sessionPhase === "ACTIVE" && !detail.endedAt
+      ? await assembleInitialPersistedState(
+          detail.id,
+          detail.startedAt.toISOString()
+        )
+      : null;
+
   return (
     <WhiteboardSessionShell
       role="tutor"
@@ -132,6 +141,7 @@ export default async function WhiteboardWorkspacePage({
       initialHasConsentSnapshot={initialHasConsentSnapshot}
       studentLearnerProfileId={detail.student.learnerProfileId}
       initialIntent={initialIntent}
+      initialPersistedState={initialPersistedState}
     />
   );
 }

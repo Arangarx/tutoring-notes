@@ -14,6 +14,20 @@ import {
   type WBEvent,
   type WBEventLog,
 } from "@/lib/whiteboard/event-log";
+import {
+  isWhiteboardBoardDocumentV1,
+  type WhiteboardBoardDocumentV1,
+} from "@/lib/whiteboard/board-document-snapshot";
+
+/** Serializable SSR → client hydrate payload (WS-D). */
+export type InitialPersistedWhiteboardState = {
+  source: "batches";
+  log: WBEventLog;
+  boardDocument: WhiteboardBoardDocumentV1 | null;
+  lastPersistedToIndex: number;
+  lastPersistedBatchSeq: number;
+  recordingSegmentCount: number;
+};
 
 export type AssembledBackendEvents = {
   log: WBEventLog;
@@ -176,6 +190,71 @@ export async function assembleBackendEventLog(
   );
   if (fromCheckpoint) return fromCheckpoint;
   return fromBatches;
+}
+
+/**
+ * WS-D — load backend truth for ACTIVE session resume.
+ * Returns null when no server batches exist (caller falls back to IDB Section F).
+ */
+export async function assembleInitialPersistedState(
+  whiteboardSessionId: string,
+  startedAtIso: string
+): Promise<InitialPersistedWhiteboardState | null> {
+  const assembled = await mergeEventBatchesFromDb(
+    whiteboardSessionId,
+    startedAtIso
+  );
+  if (assembled.batchCount === 0 || assembled.log.events.length === 0) {
+    return null;
+  }
+
+  const [sessionRow, latestBatch, recordingCount] = await Promise.all([
+    withDbRetry(
+      () =>
+        db.whiteboardSession.findUnique({
+          where: { id: whiteboardSessionId },
+          select: {
+            lastPersistedBatchSeq: true,
+            lastPersistedToIndex: true,
+          },
+        }),
+      { label: "assembleInitialPersistedState.session" }
+    ),
+    withDbRetry(
+      () =>
+        db.whiteboardEventBatch.findFirst({
+          where: { whiteboardSessionId },
+          orderBy: [{ batchSeq: "desc" }],
+          select: { boardDocumentJson: true },
+        }),
+      { label: "assembleInitialPersistedState.latestBatch" }
+    ),
+    withDbRetry(
+      () =>
+        db.sessionRecording.count({
+          where: { whiteboardSessionId },
+        }),
+      { label: "assembleInitialPersistedState.recordingCount" }
+    ),
+  ]);
+
+  let boardDocument: WhiteboardBoardDocumentV1 | null = null;
+  if (
+    latestBatch?.boardDocumentJson &&
+    isWhiteboardBoardDocumentV1(latestBatch.boardDocumentJson)
+  ) {
+    boardDocument = latestBatch.boardDocumentJson;
+  }
+
+  return {
+    source: "batches",
+    log: assembled.log,
+    boardDocument,
+    lastPersistedToIndex:
+      sessionRow?.lastPersistedToIndex ?? assembled.maxToEventIndex,
+    lastPersistedBatchSeq: sessionRow?.lastPersistedBatchSeq ?? 0,
+    recordingSegmentCount: recordingCount,
+  };
 }
 
 /** Count replay events in a remote events.json blob (best-effort). */

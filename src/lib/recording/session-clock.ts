@@ -44,9 +44,13 @@ function defaultNow(): number {
  * high-resolution source (`performance.now()`); tests inject a controllable
  * one to assert the freeze/resume math deterministically.
  */
-export function createSessionMsClock(now: () => number = defaultNow): SessionMsClock {
+export function createSessionMsClock(
+  now: () => number = defaultNow,
+  /** WS-D: seed pause-aware elapsed ms on resume so event `t` stays monotonic. */
+  initialAccruedMs = 0
+): SessionMsClock {
   let startedAt: number | null = null;
-  let accruedMs = 0;
+  let accruedMs = Math.max(0, Math.floor(initialAccruedMs));
 
   return {
     start() {

@@ -253,6 +253,7 @@ import {
   restoreAndSanitizeForPaint,
 } from "@/lib/whiteboard/scene-paint";
 import type { PageViewState, WhiteboardBoardDocumentV1 } from "@/lib/whiteboard/board-document-snapshot";
+import type { InitialPersistedWhiteboardState } from "@/lib/whiteboard/assemble-persisted-state";
 import { enrichPageStripRow } from "@/lib/whiteboard/page-strip-pdf";
 import {
   clearSessionSceneDraft,
@@ -344,6 +345,8 @@ type Props = {
    * the tutor role (student path never sets this).
    */
   initialIntent?: "endreview";
+  /** WS-D: server-assembled log + board document for ACTIVE resume. */
+  initialPersistedState?: InitialPersistedWhiteboardState | null;
 };
 
 // Phase 4d Commit 6: stable empty Set so the FSM's
@@ -410,10 +413,10 @@ function CanvasPlaceholder({ label }: { label: string }) {
  * t=0 (segment ordering stays refresh-durable via wall-clock
  * `audioStartedAtMs`).
  */
-function useAudioMsClock(active: boolean): () => number {
+function useAudioMsClock(active: boolean, initialMs = 0): () => number {
   const clockRef = useRef<SessionMsClock | null>(null);
   if (clockRef.current === null) {
-    clockRef.current = createSessionMsClock();
+    clockRef.current = createSessionMsClock(undefined, initialMs);
   }
   useEffect(() => {
     const clock = clockRef.current;
@@ -484,6 +487,7 @@ export function WhiteboardWorkspaceClient({
   studentLearnerProfileId = null,
   identityKey,
   initialIntent,
+  initialPersistedState = null,
 }: Props) {
   const router = useRouter();
   // TU-12: Excalidraw theme follows app-selected theme (not OS-only)
@@ -1731,7 +1735,11 @@ export function WhiteboardWorkspaceClient({
    * Phase-1 wall-clock approximation (which advanced during pauses). Because
    * the clock is pause-aware, a disconnect gap collapses to a single offset.
    */
-  const audioSegmentStartOffsetMsRef = useRef(0);
+  const audioSegmentStartOffsetMsRef = useRef(
+    initialPersistedState && initialPersistedState.recordingSegmentCount > 0
+      ? Math.max(0, initialActiveMs)
+      : 0
+  );
 
   /**
    * Hand `useAudioRecorder` a callback that drops every finished
@@ -2599,7 +2607,7 @@ export function WhiteboardWorkspaceClient({
     registerSessionStudentId(whiteboardSessionId, studentId);
   }, [whiteboardSessionId, studentId]);
 
-  const getAudioMs = useAudioMsClock(wbSignal);
+  const getAudioMs = useAudioMsClock(wbSignal, initialActiveMs);
   // p3-clock: publish the clock to callbacks/FSM declared above this point.
   getAudioMsRef.current = getAudioMs;
 
@@ -3015,6 +3023,8 @@ export function WhiteboardWorkspaceClient({
     /** v3 full-document path owns tutor → student live bytes; v2 from recorder is off. */
     includeLiveSyncBroadcast: !sync,
     getBoardDocumentForCheckpoint: buildBoardDocumentForCheckpoint,
+    initialPersistedState,
+    sessionPhase: initialSessionPhase,
   });
   const { flushThrottledFrameNow, onCanvasChange: recorderOnCanvasChange } =
     recorder;
@@ -6523,7 +6533,9 @@ export function WhiteboardWorkspaceClient({
                 Checkpoint save failed: {recorder.checkpointError}. Still recording in memory; retrying.
               </Banner>
             )}
-            {role === "tutor" && recorder.resumePrompt && (
+            {role === "tutor" &&
+              recorder.resumePrompt &&
+              !initialPersistedState && (
               <Banner tone="info">
                 <strong>Browser recovery (IndexedDB):</strong> a whiteboard
                 event draft from{" "}

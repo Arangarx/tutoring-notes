@@ -82,6 +82,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   appendEvent,
   createEmptyEventLog,
+  reconstructSceneAt,
   WB_EVENT_LOG_SCHEMA_VERSION,
   type WBElement,
   type WBEvent,
@@ -112,6 +113,7 @@ import {
   isWhiteboardBoardDocumentV1,
   type WhiteboardBoardDocumentV1,
 } from "@/lib/whiteboard/board-document-snapshot";
+import type { InitialPersistedWhiteboardState } from "@/lib/whiteboard/assemble-persisted-state";
 import {
   computeBackoffMs,
   nextConsecutiveFailures,
@@ -283,6 +285,13 @@ export type UseWhiteboardRecorderOptions = {
    * in each IndexedDB checkpoint so "Resume" restores multiple pages.
    */
   getBoardDocumentForCheckpoint?: () => WhiteboardBoardDocumentV1 | null;
+  /**
+   * WS-D: server-assembled state for ACTIVE session resume. When batches
+   * exist, Section F hydrates from here and skips the IDB prompt.
+   */
+  initialPersistedState?: InitialPersistedWhiteboardState | null;
+  /** Session phase at mount — gates server hydrate vs IDB Section F. */
+  sessionPhase?: "PENDING" | "ACTIVE";
   /**
    * Local client id — broadcast on every `add` event so replay can
    * colour-tag strokes by author. Defaults to a random uuid.
@@ -570,6 +579,53 @@ export function useWhiteboardRecorder(
       );
       return { log: cached.log, elements, boardDocument: bd };
     }, [whiteboardSessionId]);
+
+  /**
+   * WS-D: apply backend-assembled log + board document into memory.
+   * Server wins over IDB when both exist for ACTIVE sessions.
+   */
+  const hydrateFromServer = useCallback(
+    (state: InitialPersistedWhiteboardState): ResumeResult => {
+      logRef.current = state.log;
+      setEventCount(state.log.events.length);
+      setDurationMs(state.log.durationMs);
+      lastPersistedIndexRef.current = Math.max(0, state.lastPersistedToIndex);
+      nextBatchSeqRef.current = Math.max(1, state.lastPersistedBatchSeq + 1);
+
+      const bd =
+        state.boardDocument && isWhiteboardBoardDocumentV1(state.boardDocument)
+          ? state.boardDocument
+          : undefined;
+
+      let elements: WBElement[];
+      if (bd) {
+        const raw =
+          (bd.pages[bd.activePageId] as ExcalidrawLikeElement[] | undefined) ??
+          [];
+        elements = canonicalizeScene(raw);
+      } else {
+        const sceneMap = reconstructSceneAt(state.log, state.log.durationMs);
+        elements = Array.from(sceneMap.values());
+      }
+      prevElementsRef.current = elements;
+
+      console.log(
+        `[wbr] wbr=${whiteboardSessionId} action=hydrate_server events=${state.log.events.length} boardPages=${bd ? bd.pageList.length : 1} lastPersistedTo=${state.lastPersistedToIndex} batchSeq=${state.lastPersistedBatchSeq}`
+      );
+
+      return { log: state.log, elements, boardDocument: bd };
+    },
+    [whiteboardSessionId]
+  );
+
+  const initialPersistedStateRef = useRef(opts.initialPersistedState);
+  useEffect(() => {
+    initialPersistedStateRef.current = opts.initialPersistedState;
+  }, [opts.initialPersistedState]);
+  const sessionPhaseRef = useRef(opts.sessionPhase ?? "ACTIVE");
+  useEffect(() => {
+    sessionPhaseRef.current = opts.sessionPhase ?? "ACTIVE";
+  }, [opts.sessionPhase]);
 
   /** Push an event, refresh derived UI state. Single point of mutation. */
   const pushEvent = useCallback((ev: WBEvent) => {
@@ -1161,6 +1217,23 @@ export function useWhiteboardRecorder(
     let cancelled = false;
     void (async () => {
       try {
+        const serverState = initialPersistedStateRef.current;
+        const phase = sessionPhaseRef.current;
+
+        // WS-D: ACTIVE sessions with server batches hydrate from backend;
+        // IDB prompt is demoted (server wins on conflict).
+        if (
+          phase === "ACTIVE" &&
+          serverState?.source === "batches" &&
+          serverState.log.events.length > 0
+        ) {
+          const hydrated = hydrateFromServer(serverState);
+          if (!cancelled) {
+            setPostGateAutoCanvas(hydrated);
+          }
+          return;
+        }
+
         // Try the exact session id first (workspace re-mount on the
         // same session url) — that's the highest-fidelity recovery.
         const exact = await findCheckpoint<CheckpointPayload>(
@@ -1237,7 +1310,7 @@ export function useWhiteboardRecorder(
     return () => {
       cancelled = true;
     };
-  }, [adminUserId, ownerKey, studentId, applyResumeFromCachedCheckpoint, whiteboardSessionId]);
+  }, [adminUserId, ownerKey, studentId, applyResumeFromCachedCheckpoint, hydrateFromServer, whiteboardSessionId]);
 
   const acceptResume = useCallback(async (): Promise<ResumeResult | null> => {
     if (!cachedResumeRef.current) return null;

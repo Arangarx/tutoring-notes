@@ -8,6 +8,7 @@
  */
 
 import { useCallback, useState } from "react";
+import type { InitialPersistedWhiteboardState } from "@/lib/whiteboard/assemble-persisted-state";
 import { WhiteboardWorkspaceClient } from "./WhiteboardWorkspaceClient";
 import { WorkspaceResumeGate } from "./WorkspaceResumeGate";
 import { SessionReviewMode } from "./SessionReviewMode";
@@ -46,6 +47,8 @@ export type TutorWhiteboardSessionShellProps = ShellBaseProps & {
    * once on mount. Used by the roster "End and review" button (SSG-2 fix).
    */
   initialIntent?: "endreview";
+  /** WS-D: backend-persisted event log + board document for ACTIVE resume. */
+  initialPersistedState?: InitialPersistedWhiteboardState | null;
 };
 
 export type StudentWhiteboardSessionShellProps = ShellBaseProps & {
@@ -117,6 +120,7 @@ function TutorWhiteboardSessionShell({
   initialHasConsentSnapshot,
   studentLearnerProfileId,
   initialIntent,
+  initialPersistedState,
 }: TutorWhiteboardSessionShellProps) {
   const [mode, setMode] = useState<ShellMode>(initialMode);
 
@@ -162,6 +166,7 @@ function TutorWhiteboardSessionShell({
         initialHasConsentSnapshot={initialHasConsentSnapshot}
         studentLearnerProfileId={studentLearnerProfileId}
         initialIntent={initialIntent}
+        initialPersistedState={initialPersistedState}
       />
     </WorkspaceResumeGate>
   );
