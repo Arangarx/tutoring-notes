@@ -334,6 +334,13 @@ type Props = {
    * across devices for dual-device takeover). Tutor callers omit.
    */
   identityKey?: string;
+  /**
+   * When "endreview": auto-invoke handleEndSession exactly once on mount.
+   * Used by the roster "End and review" button (SSG-2 anti-orphan fix).
+   * The ref guard ensures it never fires twice, and only fires for
+   * the tutor role (student path never sets this).
+   */
+  initialIntent?: "endreview";
 };
 
 // Phase 4d Commit 6: stable empty Set so the FSM's
@@ -472,6 +479,7 @@ export function WhiteboardWorkspaceClient({
   initialAllowAudioRecording = null,
   initialHasConsentSnapshot = false,
   identityKey,
+  initialIntent,
 }: Props) {
   const router = useRouter();
   // TU-12: Excalidraw theme follows app-selected theme (not OS-only)
@@ -3982,6 +3990,35 @@ export function WhiteboardWorkspaceClient({
       // keep the session open and try again.
     }
   }, [onSessionEnded, recorder, router, studentId, whiteboardSessionId]);
+
+  // ---------------------------------------------------------------
+  // SSG-2 anti-orphan: auto-end-once when intent=endreview.
+  //
+  // When the tutor clicks "End and review" from the student-detail roster,
+  // the workspace URL carries ?intent=endreview. The WorkspaceResumeGate
+  // auto-consents so this component mounts. We then fire handleEndSession
+  // exactly ONCE — the ref guard prevents double-fire on strict-mode
+  // double-mount and on any subsequent re-renders.
+  //
+  // This is intentionally NOT in handleEndSession's deps because we want
+  // it to fire at mount using the then-current handleEndSession. The
+  // handleEndSessionRef keeps the closure fresh.
+  // ---------------------------------------------------------------
+  const autoEndFiredRef = useRef(false);
+  const handleEndSessionRef = useRef(handleEndSession);
+  handleEndSessionRef.current = handleEndSession;
+
+  useEffect(() => {
+    if (initialIntent !== "endreview" || role !== "tutor") return;
+    if (autoEndFiredRef.current) return;
+    autoEndFiredRef.current = true;
+    console.log(
+      `[wjg] wbsid=${whiteboardSessionId} action=auto_end_fired intent=endreview`
+    );
+    void handleEndSessionRef.current();
+    // initialIntent and role are stable (from props, never changed after mount).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialIntent, role]);
 
   // ---------------------------------------------------------------
   // After refresh: (1) auto-paint after stale-room "Resume session" when

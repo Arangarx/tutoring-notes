@@ -450,8 +450,14 @@ export async function deleteWhiteboardSessionAndDataAction(
             where: { whiteboardSessionId },
           });
 
-          // 3. Delete WhiteboardSession (cascades: TutorNote, TranscriptChunks,
-          //    TranscriptChunkExtractions, WhiteboardJoinTokens)
+          // 3. Delete SessionConsentSnapshot (onDelete: Restrict — must delete
+          //    explicitly before the parent WhiteboardSession row).
+          await tx.sessionConsentSnapshot.deleteMany({
+            where: { whiteboardSessionId },
+          });
+
+          // 4. Delete WhiteboardSession (cascades: TutorNote, TranscriptChunks,
+          //    TranscriptChunkExtractions, WhiteboardJoinTokens, SessionParticipants)
           await tx.whiteboardSession.delete({
             where: { id: whiteboardSessionId },
           });

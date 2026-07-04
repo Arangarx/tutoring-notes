@@ -39,6 +39,11 @@ export type TutorWhiteboardSessionShellProps = ShellBaseProps & {
   initialAllowAudioRecording?: boolean | null;
   /** True when SessionConsentSnapshot exists for this session. */
   initialHasConsentSnapshot?: boolean;
+  /**
+   * When "endreview": auto-bypass the resume gate and fire handleEndSession
+   * once on mount. Used by the roster "End and review" button (SSG-2 fix).
+   */
+  initialIntent?: "endreview";
 };
 
 export type StudentWhiteboardSessionShellProps = ShellBaseProps & {
@@ -108,6 +113,7 @@ function TutorWhiteboardSessionShell({
   activatedAt,
   initialAllowAudioRecording,
   initialHasConsentSnapshot,
+  initialIntent,
 }: TutorWhiteboardSessionShellProps) {
   const [mode, setMode] = useState<ShellMode>(initialMode);
 
@@ -132,6 +138,7 @@ function TutorWhiteboardSessionShell({
       startedAtIso={startedAtIso}
       initialLastActiveAtIso={initialLastActiveAtIso}
       syncEnabled={syncEnabled}
+      autoConsent={initialIntent === "endreview"}
     >
       <WhiteboardWorkspaceClient
         whiteboardSessionId={whiteboardSessionId}
@@ -150,6 +157,7 @@ function TutorWhiteboardSessionShell({
         activatedAt={activatedAt}
         initialAllowAudioRecording={initialAllowAudioRecording}
         initialHasConsentSnapshot={initialHasConsentSnapshot}
+        initialIntent={initialIntent}
       />
     </WorkspaceResumeGate>
   );

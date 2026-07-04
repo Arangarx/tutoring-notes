@@ -43,6 +43,12 @@ export type WorkspaceResumeGateProps = {
   /** The actual workspace UI to render once consent is granted. */
   children: React.ReactNode;
   /**
+   * When true, bypass the stale-session prompt and render children immediately.
+   * Used by the "End and review" roster action so the workspace mounts and the
+   * auto-end effect can fire without the tutor having to click "Resume session".
+   */
+  autoConsent?: boolean;
+  /**
    * Inject a Date.now() override + auto-consent skip for tests.
    * Production callers should leave both undefined.
    */
@@ -58,6 +64,7 @@ export function WorkspaceResumeGate({
   initialLastActiveAtIso,
   syncEnabled,
   children,
+  autoConsent,
   __testOverrides,
 }: WorkspaceResumeGateProps) {
   const router = useRouter();
@@ -75,10 +82,12 @@ export function WorkspaceResumeGate({
     [startedAtIso, initialLastActiveAtIso, syncEnabled, __testOverrides?.nowMs]
   );
 
-  // Once the tutor clicks Resume, we never re-evaluate — we don't
-  // want a second `useMemo` tick to drag them back into the gate
-  // mid-session.
-  const [consented, setConsented] = useState(decision.kind === "fresh");
+  // Once the tutor clicks Resume (or autoConsent is set), we never
+  // re-evaluate — we don't want a second `useMemo` tick to drag them
+  // back into the gate mid-session.
+  const [consented, setConsented] = useState(
+    decision.kind === "fresh" || Boolean(autoConsent)
+  );
   const [endError, setEndError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 

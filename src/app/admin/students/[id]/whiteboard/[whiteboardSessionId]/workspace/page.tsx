@@ -43,13 +43,19 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 type RouteParams = { id: string; whiteboardSessionId: string };
+type SearchParams = Record<string, string | string[] | undefined>;
 
 export default async function WhiteboardWorkspacePage({
   params,
+  searchParams,
 }: {
   params: Promise<RouteParams>;
+  searchParams?: Promise<SearchParams>;
 }) {
   const { id: studentId, whiteboardSessionId } = await params;
+  const sp = searchParams ? await searchParams : {};
+  const rawIntent = typeof sp.intent === "string" ? sp.intent : undefined;
+  const initialIntent = rawIntent === "endreview" ? ("endreview" as const) : undefined;
 
   const scope = await requireStudentScope();
   if (scope.kind !== "admin") {
@@ -124,6 +130,7 @@ export default async function WhiteboardWorkspacePage({
       initialMode={detail.endedAt ? "review" : "live"}
       initialAllowAudioRecording={initialAllowAudioRecording}
       initialHasConsentSnapshot={initialHasConsentSnapshot}
+      initialIntent={initialIntent}
     />
   );
 }
