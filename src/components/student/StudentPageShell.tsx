@@ -23,7 +23,7 @@ export function StudentPageShell({
 }: StudentPageShellProps) {
   return (
     <div className={cn("flex min-h-[100dvh] flex-col bg-background", className)}>
-      <header className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-card px-4 py-3 sm:px-6">
+      <header data-testid="student-page-shell-header" className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-card px-4 py-1.5 sm:px-6">
         <Link
           href="/"
           className="rounded-[10px] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
