@@ -54,6 +54,8 @@ export function readAnalyserRmsLevel(
 
 type VadTestMeterWindow = {
   __VAD_TEST_METER_LEVEL__?: number;
+  __VAD_TEST_TUTOR_RECORDING_MUTE_GAIN__?: number;
+  __VAD_TEST_REMOTE_RECORDING_GAINS__?: Record<string, number>;
 };
 
 /**
@@ -66,6 +68,28 @@ function readVadTestMeterLevelOverride(): number | null {
   const v = (window as unknown as VadTestMeterWindow).__VAD_TEST_METER_LEVEL__;
   if (typeof v === "number" && Number.isFinite(v) && v >= 0) return v;
   return null;
+}
+
+/** Playwright harness: readback of tutor recording-branch mute gain (prod NO-OP). */
+function writeTutorRecordingMuteGainTestSeam(value: number): void {
+  if (typeof window === "undefined") return;
+  if (process.env.NODE_ENV === "production") return;
+  (window as unknown as VadTestMeterWindow).__VAD_TEST_TUTOR_RECORDING_MUTE_GAIN__ =
+    value;
+}
+
+/** Playwright harness: readback of per-remote recording gain (prod NO-OP). */
+function writeRemoteRecordingGainTestSeam(
+  streamId: string,
+  value: number
+): void {
+  if (typeof window === "undefined") return;
+  if (process.env.NODE_ENV === "production") return;
+  const w = window as unknown as VadTestMeterWindow;
+  if (!w.__VAD_TEST_REMOTE_RECORDING_GAINS__) {
+    w.__VAD_TEST_REMOTE_RECORDING_GAINS__ = {};
+  }
+  w.__VAD_TEST_REMOTE_RECORDING_GAINS__[streamId] = value;
 }
 
 export type MicLevelMonitor = {
@@ -209,6 +233,12 @@ export type MicAudioGraph = {
    * destinations (MediaRecorder continues on the same mixed graph).
    */
   swapLocalMicSource: (newMicStream: MediaStream) => void;
+  /**
+   * Gate ONLY the tutor's own mic contribution to `recordingStream`.
+   * Live publish + meter analyser are unaffected; remote/learner inputs
+   * mixed via {@link addRemoteAudio} are on a separate branch.
+   */
+  setTutorRecordingMute: (muted: boolean) => void;
 };
 
 /**
@@ -230,6 +260,13 @@ export async function createMicAudioGraph(
     const gainNode = audioContext.createGain();
     gainNode.gain.value = gainLinear;
 
+    // WS-I: recording-branch-only mute — must NOT reuse boost gainNode (also
+    // feeds publish + analyser). Remote/learner audio enters recordingDest via
+    // separate per-remote GainNodes in addRemoteAudio.
+    const recordingMuteGainNode = audioContext.createGain();
+    recordingMuteGainNode.gain.value = 1;
+    writeTutorRecordingMuteGainTestSeam(1);
+
     const recordingDest = audioContext.createMediaStreamDestination();
     const publishDest = audioContext.createMediaStreamDestination();
     const analyser = audioContext.createAnalyser();
@@ -239,7 +276,8 @@ export async function createMicAudioGraph(
     const data = new Float32Array(analyser.fftSize);
 
     mediaStreamSource.connect(gainNode);
-    gainNode.connect(recordingDest);
+    gainNode.connect(recordingMuteGainNode);
+    recordingMuteGainNode.connect(recordingDest);
     gainNode.connect(publishDest);
     gainNode.connect(analyser);
 
@@ -292,6 +330,18 @@ export async function createMicAudioGraph(
       setGain: (g: number) => {
         gainNode.gain.value = Math.max(0, g);
       },
+      setTutorRecordingMute: (muted: boolean) => {
+        const target = muted ? 0 : 1;
+        try {
+          recordingMuteGainNode.gain.value = target;
+        } catch {
+          // AudioContext closed under us mid-flight.
+        }
+        writeTutorRecordingMuteGainTestSeam(target);
+        console.log(
+          `[avx] avx=${sid} action=tutor_recording_mute muted=${muted}`
+        );
+      },
       addRemoteAudio: (remoteStream: MediaStream) => {
         if (disposed) {
           return () => {};
@@ -320,6 +370,7 @@ export async function createMicAudioGraph(
         }
         const remoteGain = audioContext.createGain();
         remoteGain.gain.value = 1;
+        writeRemoteRecordingGainTestSeam(remoteStream.id, 1);
         const entry: RemoteEntry = {
           stream: remoteStream,
           source: remoteSource,
@@ -366,6 +417,7 @@ export async function createMicAudioGraph(
           // AudioContext closed under us mid-flight. The detach
           // path will clean the entry; nothing to do here.
         }
+        writeRemoteRecordingGainTestSeam(entry.stream.id, clamped);
       },
       swapLocalMicSource: (newMicStream: MediaStream) => {
         if (disposed) return;

@@ -2560,6 +2560,28 @@ export function WhiteboardWorkspaceClient({
   // AVTile is independent of the recording graph). Only the
   // recording mixdown is affected.
   const workspaceAudioSetRemoteGain = workspaceAudio.setRemoteRecordingGain;
+  const workspaceAudioSetTutorRecordingMute =
+    workspaceAudio.setTutorRecordingMute;
+  useEffect(() => {
+    if (role !== "tutor") return;
+    try {
+      // Always sync mute intent — even before localMicStream/graph exist — so
+      // useAudioRecorder can apply it at graph-build time (WS-I pre-start mute).
+      workspaceAudioSetTutorRecordingMute(liveAv.isMicMuted);
+    } catch (err) {
+      console.warn(
+        `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} setTutorRecordingMute failed`,
+        (err as Error)?.message ?? String(err)
+      );
+    }
+  }, [
+    role,
+    liveAv.isMicMuted,
+    workspaceAudioSetTutorRecordingMute,
+    workspaceAudioLocalMicStream,
+    whiteboardSessionId,
+  ]);
+
   useEffect(() => {
     if (role !== "tutor") return;
     if (!workspaceAudioLocalMicStream) return;

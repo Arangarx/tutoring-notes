@@ -217,6 +217,12 @@ export type UseAudioRecorderReturn = {
    */
   setRemoteRecordingGain: (stream: MediaStream, gainLinear: number) => void;
 
+  /**
+   * Gate ONLY the tutor's own mic in the recording mixdown (WS-I). Live
+   * publish + meter are unaffected; remote/learner audio stays in the mix.
+   */
+  setTutorRecordingMute: (muted: boolean) => void;
+
   // Mic + prefs
   devices: MediaDeviceInfo[];
   selectedDeviceId: string;
@@ -328,6 +334,8 @@ export function useAudioRecorder({
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const graphRef = useRef<MicAudioGraph | null>(null);
+  /** WS-I: mute intent survives graph (re)build when set before the graph exists. */
+  const tutorRecordingMutedRef = useRef(false);
   const devicesRef = useRef<MediaDeviceInfo[]>([]);
   const pinnedMicEnumerateGroupRef = useRef("");
   devicesRef.current = devices;
@@ -1065,6 +1073,9 @@ export function useAudioRecorder({
       avLogSessionId ? { sessionId: avLogSessionId } : undefined
     );
     graphRef.current = graph;
+    if (graph) {
+      graph.setTutorRecordingMute(tutorRecordingMutedRef.current);
+    }
 
     // Expose the stream that downstream consumers (useLiveAV) should use.
     // Prefer the graph's publishStream (independent destination, fans out
@@ -1660,6 +1671,13 @@ export function useAudioRecorder({
     []
   );
 
+  const setTutorRecordingMute = useCallback((muted: boolean) => {
+    tutorRecordingMutedRef.current = muted;
+    const g = graphRef.current;
+    if (!g || typeof g.setTutorRecordingMute !== "function") return;
+    g.setTutorRecordingMute(muted);
+  }, []);
+
   useEffect(() => {
     if (devices.length === 0) {
       setPickedMicSlot(0);
@@ -1685,6 +1703,7 @@ export function useAudioRecorder({
     localMicStream,
     addRemoteAudio,
     setRemoteRecordingGain,
+    setTutorRecordingMute,
     devices,
     selectedDeviceId,
     pickedMicSlot,

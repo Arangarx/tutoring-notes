@@ -58,8 +58,10 @@ jest.mock("@/lib/mic-recorder-audio", () => ({
     recordingStream: stream,
     getLevel: () => mockMeterLevel,
     dispose: jest.fn(),
+    setGain: jest.fn(),
     addRemoteAudio: jest.fn(() => () => {}),
     setRemoteGain: jest.fn(),
+    setTutorRecordingMute: jest.fn(),
   })),
 }));
 
@@ -84,6 +86,7 @@ jest.mock("@/lib/action-correlation", () => ({
 }));
 
 import { uploadAudioDirect } from "@/lib/recording/upload";
+import { createMicAudioGraph } from "@/lib/mic-recorder-audio";
 
 // ---- Fake MediaRecorder --------------------------------------------------
 
@@ -682,5 +685,62 @@ describe("useAudioRecorder — upload failures", () => {
     // Surfaced through formatUserFacingActionError mock.
     expect(result.current.error).toBe("network down [debug=rid-42]");
     expect(onRecorded).not.toHaveBeenCalled();
+  });
+
+  test("setTutorRecordingMute forwards to the mic audio graph when built", async () => {
+    const { result } = renderRecorder();
+    await act(async () => {
+      await result.current.handleStartRecording();
+    });
+    await flushAsync();
+
+    expect(createMicAudioGraph).toHaveBeenCalled();
+    const graph = await (createMicAudioGraph as jest.Mock).mock.results.at(-1)!
+      .value;
+
+    act(() => {
+      result.current.setTutorRecordingMute(true);
+    });
+    expect(graph.setTutorRecordingMute).toHaveBeenCalledWith(true);
+
+    act(() => {
+      result.current.setTutorRecordingMute(false);
+    });
+    expect(graph.setTutorRecordingMute).toHaveBeenCalledWith(false);
+  });
+
+  test("setTutorRecordingMute before graph exists applies when graph is built", async () => {
+    const { result } = renderRecorder();
+
+    act(() => {
+      result.current.setTutorRecordingMute(true);
+    });
+
+    await act(async () => {
+      await result.current.handleStartRecording();
+    });
+    await flushAsync();
+
+    const graph = await (createMicAudioGraph as jest.Mock).mock.results.at(-1)!
+      .value;
+    expect(graph.setTutorRecordingMute).toHaveBeenCalledWith(true);
+  });
+
+  test("setTutorRecordingMute mute then unmute before graph applies unmuted at build", async () => {
+    const { result } = renderRecorder();
+
+    act(() => {
+      result.current.setTutorRecordingMute(true);
+      result.current.setTutorRecordingMute(false);
+    });
+
+    await act(async () => {
+      await result.current.handleStartRecording();
+    });
+    await flushAsync();
+
+    const graph = await (createMicAudioGraph as jest.Mock).mock.results.at(-1)!
+      .value;
+    expect(graph.setTutorRecordingMute).toHaveBeenLastCalledWith(false);
   });
 });

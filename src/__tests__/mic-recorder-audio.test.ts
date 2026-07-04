@@ -52,8 +52,13 @@ describe("createMicAudioGraph", () => {
 
   test("happy path: builds graph, exposes setGain/getLevel/dispose, cleans up", async () => {
     const gainParam: GainParam = { value: 0 };
+    const recordingMuteGainParam: GainParam = { value: 1 };
     const sourceNode: FakeNode = { connect: jest.fn() };
     const gainNode = { gain: gainParam, connect: jest.fn() };
+    const recordingMuteGainNode = {
+      gain: recordingMuteGainParam,
+      connect: jest.fn(),
+    };
     const analyserNode = {
       fftSize: 0,
       smoothingTimeConstant: 0,
@@ -69,12 +74,16 @@ describe("createMicAudioGraph", () => {
       { stream: publishStream },
     ];
     let destIdx = 0;
+    let gainCall = 0;
     const close = jest.fn().mockResolvedValue(undefined);
     const resume = jest.fn().mockResolvedValue(undefined);
 
     const ctx = {
       createMediaStreamSource: jest.fn(() => sourceNode),
-      createGain: jest.fn(() => gainNode),
+      createGain: jest.fn(() => {
+        gainCall += 1;
+        return gainCall === 1 ? gainNode : recordingMuteGainNode;
+      }),
       createAnalyser: jest.fn(() => analyserNode),
       createMediaStreamDestination: jest.fn(() => destinations[destIdx++]),
       resume,
@@ -90,9 +99,12 @@ describe("createMicAudioGraph", () => {
     expect(resume).toHaveBeenCalled();
     expect(ctx.createMediaStreamSource).toHaveBeenCalledWith(stream);
     expect(gainParam.value).toBe(1.5);
-    // source -> gain, gain -> recordingDest, gain -> publishDest, gain -> analyser
+    expect(recordingMuteGainParam.value).toBe(1);
+    // source -> boost gain; boost -> recordingMute + publish + analyser
     expect(sourceNode.connect).toHaveBeenCalledWith(gainNode);
     expect(gainNode.connect).toHaveBeenCalledTimes(3);
+    expect(gainNode.connect).toHaveBeenCalledWith(recordingMuteGainNode);
+    expect(recordingMuteGainNode.connect).toHaveBeenCalledWith(destinations[0]);
     // Two destinations created (recording + publish).
     expect(ctx.createMediaStreamDestination).toHaveBeenCalledTimes(2);
 
@@ -118,6 +130,56 @@ describe("createMicAudioGraph", () => {
     graph!.dispose();
     expect(stream.track.stop).toHaveBeenCalled();
     expect(close).toHaveBeenCalled();
+  });
+
+  test("setTutorRecordingMute gates only the recording branch (not boost/publish)", async () => {
+    const gainParam: GainParam = { value: 1 };
+    const recordingMuteGainParam: GainParam = { value: 1 };
+    const sourceNode: FakeNode = { connect: jest.fn() };
+    const gainNode = { gain: gainParam, connect: jest.fn() };
+    const recordingMuteGainNode = {
+      gain: recordingMuteGainParam,
+      connect: jest.fn(),
+    };
+    const analyserNode = {
+      fftSize: 0,
+      smoothingTimeConstant: 0,
+      getFloatTimeDomainData: jest.fn(),
+    };
+    const destinations = [{ stream: { id: "r" } }, { stream: { id: "p" } }];
+    let destIdx = 0;
+    let gainCall = 0;
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const ctx = {
+      createMediaStreamSource: jest.fn(() => sourceNode),
+      createGain: jest.fn(() => {
+        gainCall += 1;
+        return gainCall === 1 ? gainNode : recordingMuteGainNode;
+      }),
+      createAnalyser: jest.fn(() => analyserNode),
+      createMediaStreamDestination: jest.fn(() => destinations[destIdx++]),
+      resume: jest.fn().mockResolvedValue(undefined),
+      close: jest.fn().mockResolvedValue(undefined),
+    };
+    (globalThis as { AudioContext?: unknown }).AudioContext = jest.fn(() => ctx);
+
+    const stream = fakeMicStream();
+    const graph = await createMicAudioGraph(stream as unknown as MediaStream, 1, {
+      sessionId: "sess-ws-i",
+    });
+
+    graph!.setTutorRecordingMute(true);
+    expect(recordingMuteGainParam.value).toBe(0);
+    expect(gainParam.value).toBe(1);
+    expect(logSpy).toHaveBeenCalledWith(
+      "[avx] avx=sess-ws-i action=tutor_recording_mute muted=true"
+    );
+
+    graph!.setTutorRecordingMute(false);
+    expect(recordingMuteGainParam.value).toBe(1);
+
+    logSpy.mockRestore();
+    graph!.dispose();
   });
 
   test("swapLocalMicSource rewires the local mic without recreating destinations (MediaRecorder path stable)", async () => {
@@ -189,6 +251,11 @@ describe("createMicAudioGraph", () => {
     // instead of a gap).
     const sourceNode = { connect: jest.fn(), disconnect: jest.fn() };
     const micGain = { gain: { value: 0 }, connect: jest.fn(), disconnect: jest.fn() };
+    const recordingMuteGain = {
+      gain: { value: 1 },
+      connect: jest.fn(),
+      disconnect: jest.fn(),
+    };
     const remoteGains: Array<{
       gain: { value: number };
       connect: jest.Mock;
@@ -223,6 +290,10 @@ describe("createMicAudioGraph", () => {
         if (gainIdx === 0) {
           gainIdx += 1;
           return micGain;
+        }
+        if (gainIdx === 1) {
+          gainIdx += 1;
+          return recordingMuteGain;
         }
         const g = {
           gain: { value: 1 },
@@ -293,6 +364,11 @@ describe("createMicAudioGraph", () => {
     // source stays connected.
     const sourceNode = { connect: jest.fn(), disconnect: jest.fn() };
     const micGain = { gain: { value: 0 }, connect: jest.fn(), disconnect: jest.fn() };
+    const recordingMuteGain = {
+      gain: { value: 1 },
+      connect: jest.fn(),
+      disconnect: jest.fn(),
+    };
     const remoteGains: Array<{
       gain: { value: number };
       connect: jest.Mock;
@@ -315,6 +391,10 @@ describe("createMicAudioGraph", () => {
         if (gainIdx === 0) {
           gainIdx += 1;
           return micGain;
+        }
+        if (gainIdx === 1) {
+          gainIdx += 1;
+          return recordingMuteGain;
         }
         const g = {
           gain: { value: 1 },
