@@ -117,16 +117,13 @@ import {
   parseStudentPeerId,
 } from "@/lib/whiteboard/local-peer-id";
 import {
-  endWhiteboardSession,
+  finalizeWhiteboardSessionFromBackend,
   enqueueChunkTranscriptionAction,
   issueJoinToken,
   revokeJoinTokensForSession,
   startWhiteboardSession,
 } from "@/app/admin/students/[id]/whiteboard/actions";
-import {
-  kickSessionChunksAction,
-  triggerNotesGenerationAction,
-} from "@/app/admin/students/[id]/whiteboard/notes-actions";
+import { LEGACY_INTENT_ENDREVIEW_AUTO_END } from "@/lib/whiteboard/finalize-flags";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { useRemoteMicRecorders } from "@/hooks/useRemoteMicRecorders";
 import {
@@ -3934,16 +3931,19 @@ export function WhiteboardWorkspaceClient({
         );
       }
 
-      // Step 6 — one atomic server transaction: stamp endedAt, swap
-      // eventsBlobUrl, register every outbox segment, revoke join
-      // tokens. Plan Pillar 3. Phase 1c: now also persists
-      // `snapshotBlobUrl` when the snapshot pipeline above produced
-      // one — the action treats it as optional so a null value is
-      // a no-op on the column.
-      await endWhiteboardSession(whiteboardSessionId, upload.blobUrl, {
-        segments,
-        snapshotBlobUrl,
-      });
+      // Step 6 — WS-C server finalize: assemble from backend + delegate to
+      // endWhiteboardSession (consent/erasure/token revoke inherited).
+      const finalizeResult = await finalizeWhiteboardSessionFromBackend(
+        whiteboardSessionId,
+        {
+          finalEventsBlobUrl: upload.ok ? upload.blobUrl : undefined,
+          snapshotBlobUrl,
+          extraSegments: segments,
+        }
+      );
+      if (!finalizeResult.ok) {
+        throw new Error(finalizeResult.error);
+      }
 
       // Step 7 — drop the persisted outbox rows. Server has them; we
       // don't want the next mount of this workspace to find them
@@ -3960,21 +3960,9 @@ export function WhiteboardWorkspaceClient({
         );
       }
 
-      // Slice 3 — post-end notes pipeline (fire-and-forget, never blocks navigation).
-      // (a) Kick any straggler non-done chunks so transcription completes before reduce.
-      void kickSessionChunksAction(whiteboardSessionId).catch((sweepErr: unknown) => {
-        console.warn(
-          `[txc] wbsid=${whiteboardSessionId} action=session_sweep_fire_error err=${(sweepErr as Error)?.message ?? sweepErr}`
-        );
-      });
-      // (c) Trigger notes generation — upserts pending TutorNote + fires reduce.
-      const notesResult = await triggerNotesGenerationAction(whiteboardSessionId);
-      if (!notesResult.ok) {
-        setEndingState("error");
-        setEndingError(
-          `Session saved, but notes could not be started: ${notesResult.error}. You can regenerate notes from the review page.`
-        );
-      }
+      // Slice 3 — post-end notes pipeline is triggered server-side by C1
+      // (`finalizeWhiteboardSessionFromBackend`). Surface only if C1 reported
+      // a notes failure via logs; client no longer duplicates the fire.
 
       // Revoke is idempotent with the transaction above; don't block navigation.
       await revokeJoinTokensForSession(whiteboardSessionId).catch(() => undefined);
@@ -4053,6 +4041,7 @@ export function WhiteboardWorkspaceClient({
   handleEndSessionRef.current = handleEndSession;
 
   useEffect(() => {
+    if (!LEGACY_INTENT_ENDREVIEW_AUTO_END) return;
     if (initialIntent !== "endreview" || role !== "tutor") return;
     if (autoEndFiredRef.current) return;
     autoEndFiredRef.current = true;

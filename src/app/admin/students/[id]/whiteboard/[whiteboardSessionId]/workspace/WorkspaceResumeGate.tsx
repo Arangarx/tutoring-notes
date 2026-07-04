@@ -16,19 +16,16 @@
  *
  * Actions:
  *   - Resume → sets consented=true, workspace mounts and reconnects.
- *   - End and review → navigates to ?intent=endreview; the workspace
- *     auto-fires handleEndSession (full pipeline: drain outbox →
- *     register audio → atomic end → flip to review). Does NOT call
- *     endStaleWhiteboardSession (which only stamps endedAt, orphaning
- *     any recording still in the outbox).
+ *   - End and review → server-side finalize (WS-C) then navigate to review
+ *     overlay — no live workspace mount / waiting-room flash.
  *   - Cancel and delete → confirm-guarded destructive delete via
  *     deleteWhiteboardSessionAndDataAction; returns to student detail.
  */
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { deleteWhiteboardSessionAndDataAction } from "@/app/admin/students/[id]/whiteboard/notes-actions";
-import { Button } from "@/components/ui/button";
+import { finalizeWhiteboardSessionFromBackend } from "@/app/admin/students/[id]/whiteboard/actions";
+import { deleteWhiteboardSessionAndDataAction } from "@/app/admin/students/[id]/whiteboard/notes-actions";import { Button } from "@/components/ui/button";
 import {
   deriveResumeGateState,
   describeResumeGate,
@@ -106,8 +103,9 @@ export function WorkspaceResumeGate({
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [finalizeError, setFinalizeError] = useState<string | null>(null);
   const [deleting, startDeleteTransition] = useTransition();
-
+  const [finalizing, startFinalizeTransition] = useTransition();
   if (consented) {
     return <>{children}</>;
   }
@@ -118,17 +116,24 @@ export function WorkspaceResumeGate({
   );
 
   const handleEndAndReview = () => {
-    // Navigate to ?intent=endreview so the server re-renders with initialIntent="endreview"
-    // and autoConsent={true}. The useEffect above responds to the autoConsent prop change
-    // and sets consented=true, mounting the workspace so the auto-end effect can fire.
-    const url = `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace?intent=endreview`;
-    if (__testOverrides?.onEndAndReview) {
-      __testOverrides.onEndAndReview(url);
-    } else {
-      router.push(url);
-    }
+    setFinalizeError(null);
+    startFinalizeTransition(async () => {
+      const result = await finalizeWhiteboardSessionFromBackend(whiteboardSessionId);
+      if (!result.ok) {
+        setFinalizeError(result.error);
+        return;
+      }
+      const url = `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace`;
+      if (__testOverrides?.onEndAndReview) {
+        __testOverrides.onEndAndReview(url);
+      } else if (typeof window !== "undefined" && window.location.pathname.endsWith("/workspace")) {
+        // Already on workspace (gate visible) — soft router.push is a no-op for same URL.
+        window.location.assign(url);
+      } else {
+        router.push(url);
+      }
+    });
   };
-
   const handleDelete = () => {
     setShowDeleteConfirm(false);
     setDeleteError(null);
@@ -177,12 +182,11 @@ export function WorkspaceResumeGate({
           type="button"
           variant="outline"
           onClick={handleEndAndReview}
-          disabled={deleting}
+          disabled={deleting || finalizing || showDeleteConfirm}
           data-testid="wb-resume-gate-end-and-review"
         >
-          End and review
+          {finalizing ? "Finalizing…" : "End and review"}
         </Button>
-
         <Button
           type="button"
           variant="outline"
@@ -241,8 +245,17 @@ export function WorkspaceResumeGate({
         </div>
       )}
 
-      {deleteError && (
+      {finalizeError && (
         <p
+          role="alert"
+          style={{ color: "var(--color-error)", marginTop: 12, fontSize: 13 }}
+          data-testid="wb-resume-gate-finalize-error"
+        >
+          {finalizeError}
+        </p>
+      )}
+
+      {deleteError && (        <p
           role="alert"
           style={{ color: "var(--color-error)", marginTop: 12, fontSize: 13 }}
         >

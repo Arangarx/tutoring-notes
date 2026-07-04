@@ -544,6 +544,11 @@ key lines:
 `[wbp] wbp=<batchSeq> action=skip_empty wbsid=<id> from=<n> to=<n>`,
 `[wbp] wbp=<batchSeq> action=skip_inflight wbsid=<id>`,
 `[wbp] wbp=<batchSeq> action=error wbsid=<id> from=<n> to=<n> status=<code>`),
+`fzb` (WS-C server-side finalize assembly in `finalizeWhiteboardSessionFromBackend` —
+key lines:
+`[fzb] fzb=<wbsid> action=assemble batches=<n> segments=<m>`,
+`[fzb] fzb=<wbsid> action=end batches=<n> segments=<m> newSegments=<k>`,
+`[fzb] fzb=<wbsid> action=idempotent_skip batches=0 segments=0`),
 `alr` (AccountHolder-login durable rate limiter — IAC-11; Neon-backed `AuthThrottle` table;
 key is `ah-login:<normalizedEmail>`; key lines:
 `[alr] alr=ah-login:<email> action=rate-limited count=<n> retryAfterSec=<s>`,
@@ -563,6 +568,25 @@ capture), **~200ms debounce** after interactive viewport/`onChange`, **tab hide 
 pagehide / beforeunload** (best-effort). Live sync uses an immediate encrypted
 `kind: "pageViewState"` envelope in parallel with v3 full-document broadcasts;
 students apply tutor patches only.
+
+### WS-C — two-path finalize (server vs in-live client flush)
+
+| Entry | Path |
+|---|---|
+| Roster / gate **End and review** | `finalizeWhiteboardSessionFromBackend` assembles `WhiteboardEventBatch` + `SessionRecording` rows → delegates to `endWhiteboardSession` → navigate with `initialMode=review` (no live workspace mount) |
+| In-live **End session** | Client flush (outbox drain + optional events upload + snapshot) → `finalizeWhiteboardSessionFromBackend` with overrides → shell `onSessionEnded()` → review |
+| Legacy deep link `?intent=endreview` | Feature-flagged off (`LEGACY_INTENT_ENDREVIEW_AUTO_END`); was client auto-end on mount |
+
+```
+[Backend batches + SessionRecording] ──► finalizeWhiteboardSessionFromBackend (fzb)
+                                              │
+                                              ▼
+                                    endWhiteboardSession (transaction)
+                                              │
+                    ┌─────────────────────────┴─────────────────────────┐
+                    ▼                                                   ▼
+         Roster/gate: router → review SSR              In-live: onSessionEnded → review overlay
+```
 
 ---
 

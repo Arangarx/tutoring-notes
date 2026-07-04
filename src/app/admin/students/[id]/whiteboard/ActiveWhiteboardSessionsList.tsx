@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { useTransition, useState } from "react";
 import { LocalDateTimeText } from "@/components/LocalDateTimeText";
 import { Button } from "@/components/ui/button";
+import { finalizeWhiteboardSessionFromBackend } from "./actions";
 import { deleteWhiteboardSessionAndDataAction } from "./notes-actions";
-
 export type ActiveWbListItem = {
   id: string;
   startedAt: Date;
@@ -57,7 +57,22 @@ function RosterRow({
   const router = useRouter();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, startDeleteTransition] = useTransition();
+  const [finalizing, startFinalizeTransition] = useTransition();
+  const [finalizeError, setFinalizeError] = useState<string | null>(null);
 
+  const handleEndAndReview = () => {
+    setFinalizeError(null);
+    startFinalizeTransition(async () => {
+      const result = await finalizeWhiteboardSessionFromBackend(session.id);
+      if (!result.ok) {
+        setFinalizeError(result.error);
+        return;
+      }
+      router.push(
+        `/admin/students/${studentId}/whiteboard/${session.id}/workspace`
+      );
+    });
+  };
   const handleDelete = () => {
     setShowDeleteConfirm(false);
     startDeleteTransition(async () => {
@@ -95,21 +110,17 @@ function RosterRow({
             </Link>
           </Button>
 
-          {/* End and review — navigates to workspace with intent=endreview;
-              the workspace auto-fires handleEndSession then flips to review */}
+          {/* End and review — WS-C server finalize, then straight to review overlay */}
           <Button
-            asChild
+            type="button"
             variant="outline"
             className="min-h-11 whitespace-nowrap"
+            onClick={handleEndAndReview}
+            disabled={finalizing || deleting || showDeleteConfirm}
+            data-testid="roster-end-and-review"
           >
-            <Link
-              href={`/admin/students/${studentId}/whiteboard/${session.id}/workspace?intent=endreview`}
-              data-testid="roster-end-and-review"
-            >
-              End and review
-            </Link>
+            {finalizing ? "Finalizing…" : "End and review"}
           </Button>
-
           {/* Cancel and delete — destructive, confirm-guarded */}
           <Button
             type="button"
@@ -124,8 +135,17 @@ function RosterRow({
           </Button>
         </div>
 
-        {/* Inline confirm dialog for destructive delete */}
-        {showDeleteConfirm && (
+        {finalizeError && (
+          <p
+            role="alert"
+            className="text-xs text-destructive"
+            data-testid="roster-end-and-review-error"
+          >
+            {finalizeError}
+          </p>
+        )}
+
+        {/* Inline confirm dialog for destructive delete */}        {showDeleteConfirm && (
           <div
             role="alertdialog"
             aria-label="Confirm cancel and delete"

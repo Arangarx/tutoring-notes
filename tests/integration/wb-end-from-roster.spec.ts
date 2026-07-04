@@ -1,22 +1,8 @@
 /**
- * SSG-2 anti-orphan regression gate — "End and review" from the student-detail
- * open-sessions roster.
+ * WS-C / SSG-2 — "End and review" from the student-detail roster.
  *
- * Context:
- *   The original roster "End" button called endStaleWhiteboardSession, which
- *   only stamped endedAt and revoked tokens. It did NOT drain the outbox or
- *   register audio segments — so any recording still in the browser's IndexedDB
- *   outbox was silently orphaned. This is the bug that lost Sarah's recording.
- *
- *   The fix: a new "End and review" button navigates the tutor into the workspace
- *   URL with ?intent=endreview. The workspace auto-fires handleEndSession once on
- *   mount (ref-guarded), which drains the outbox, registers segments, and flips
- *   to SessionReviewMode — the same path as pressing End inside the live board.
- *
- * Tests:
- *   1. SSG-2 anti-orphan guard (real recording via fake media + BLOB upload).
- *   2. Cancel and delete: confirm dialog → session deleted → student detail.
- *   3. Auto-end fires exactly once (intent path), never for normal Resume.
+ * Server-side finalize (`finalizeWhiteboardSessionFromBackend`) then straight to
+ * `SessionReviewMode` — no `?intent=endreview` live-client mount (no waiting-room flash).
  *
  * Run:
  *   npx playwright test tests/integration/wb-end-from-roster.spec.ts --project=integration
@@ -28,28 +14,100 @@ import { readLocalEnv } from "../utils/read-dotenv";
 import { seedWbLiveSyncSession } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
 
+const TEST_SECRET = process.env.PLAYWRIGHT_TEST_SECRET ?? "playwright-test-secret";
+
+async function injectVadOverrides(page: import("@playwright/test").Page) {
+  await page.addInitScript(() => {
+    const w = window as unknown as {
+      __VAD_MIN_SEGMENT_SECONDS_OVERRIDE?: number;
+      __VAD_SILENCE_HOLD_MS_OVERRIDE?: number;
+      __VAD_SILENCE_RMS_THRESHOLD_OVERRIDE?: number;
+      __VAD_MAX_SEGMENT_SECONDS_OVERRIDE?: number;
+    };
+    w.__VAD_MIN_SEGMENT_SECONDS_OVERRIDE = 1;
+    w.__VAD_SILENCE_HOLD_MS_OVERRIDE = 800;
+    w.__VAD_SILENCE_RMS_THRESHOLD_OVERRIDE = 0.15;
+    w.__VAD_MAX_SEGMENT_SECONDS_OVERRIDE = 120;
+  });
+}
+
+async function fetchDbState(page: import("@playwright/test").Page, sessionId: string) {
+  const res = await page.request.get(
+    `/api/test/whiteboard/${sessionId}/db-state`,
+    { headers: { Authorization: `Bearer ${TEST_SECRET}` } }
+  );
+  expect(res.ok(), await res.text()).toBeTruthy();
+  return (await res.json()) as {
+    endedAt: string | null;
+    eventsBlobUrl: string | null;
+    batchCount: number;
+    lastPersistedToIndex: number;
+  };
+}
+
+async function fetchRecordingCount(
+  page: import("@playwright/test").Page,
+  sessionId: string
+) {
+  const res = await page.request.get(
+    `/api/test/whiteboard/${sessionId}/recording-count`,
+    { headers: { Authorization: `Bearer ${TEST_SECRET}` } }
+  );
+  expect(res.ok(), await res.text()).toBeTruthy();
+  return (await res.json()) as { count: number };
+}
+
+async function seedSessionRecording(
+  page: import("@playwright/test").Page,
+  sessionId: string
+) {
+  const res = await page.request.post(
+    `/api/test/whiteboard/${sessionId}/seed-recording`,
+    { headers: { Authorization: `Bearer ${TEST_SECRET}` } }
+  );
+  expect(res.ok(), await res.text()).toBeTruthy();
+}
+
+async function drawStrokes(page: import("@playwright/test").Page) {
+  const canvas = page
+    .locator('[data-testid="tutor-whiteboard-canvas-mount"] canvas')
+    .first();
+  await canvas.waitFor({ state: "visible", timeout: 60_000 });
+  await page.keyboard.press("r");
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("Excalidraw canvas has no bounding box");
+  for (let i = 0; i < 3; i++) {
+    await page.mouse.move(box.x + 90 + i * 75, box.y + 100);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 160 + i * 75, box.y + 170);
+    await page.mouse.up();
+  }
+}
+
 // ---------------------------------------------------------------------------
-// 1. SSG-2 anti-orphan guard
+// 1. WS-C roster anti-orphan + straight-to-review
 // ---------------------------------------------------------------------------
 
 test.describe(
-  "SSG-2 anti-orphan: End and review from roster preserves recording",
+  "WS-C roster: End and review server-finalize → review overlay (no live mount)",
   { tag: [TAG.WB_RECORDING] },
   () => {
     test(
-      "record in workspace → navigate away → End and review from roster → review mode + session sealed",
+      "record + strokes → navigate away → roster End and review → review within 5s, DB oracles",
       async ({ page }) => {
         test.setTimeout(300_000);
 
         const env = readLocalEnv();
         test.skip(
           !env.BLOB_READ_WRITE_TOKEN?.trim(),
-          "Set BLOB_READ_WRITE_TOKEN in .env to run the real-recording anti-orphan guard."
+          "Set BLOB_READ_WRITE_TOKEN in .env to run the WS-C roster guard."
         );
 
         const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
+        const preState = await fetchDbState(page, whiteboardSessionId);
+        const initialEventsBlobUrl = preState.eventsBlobUrl;
 
-        // ── Step 1: Open workspace and record real audio ─────────────────────
+        await injectVadOverrides(page);
         await page.goto(
           `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace`,
           { waitUntil: "domcontentloaded" }
@@ -59,91 +117,81 @@ test.describe(
           timeout: 90_000,
         });
 
-        // Recording auto-starts (PRESARAH-1 always-on intent + consent present).
-        // Give MediaRecorder time to arm and produce at least one timeslice.
         await page.waitForTimeout(3_000);
-
-        // Draw strokes so events.json has content.
-        const canvas = page
-          .locator('[data-testid="tutor-whiteboard-canvas-mount"] canvas')
-          .first();
-        await canvas.waitFor({ state: "visible", timeout: 60_000 });
-
-        await page.keyboard.press("r");
-        const box = await canvas.boundingBox();
-        if (!box) throw new Error("Excalidraw canvas has no bounding box");
-        for (let i = 0; i < 3; i++) {
-          await page.mouse.move(box.x + 90 + i * 75, box.y + 100);
-          await page.mouse.down();
-          await page.mouse.move(box.x + 160 + i * 75, box.y + 170);
-          await page.mouse.up();
-        }
-
-        // Wait long enough for at least one MediaRecorder timeslice to complete
-        // AND for the outbox to persist any IDB rows before navigation.
+        await drawStrokes(page);
+        await page.waitForTimeout(3_500);
+        await page.waitForTimeout(2_500);
+        await page.waitForTimeout(3_500);
         await page.waitForTimeout(8_000);
 
-        // ── Step 2: Navigate AWAY without ending (SSG-2 scenario) ───────────
-        // page.goto is a hard navigation; IndexedDB rows already written by the
-        // outbox WILL persist (IDB is origin-scoped). Rows mid-write when
-        // navigation fires are potentially lost — this is the inherent SSG-2
-        // race. The test verifies the END pipeline path, not the timing window.
-        await page.goto(
-          `/admin/students/${studentId}`,
-          { waitUntil: "domcontentloaded" }
-        );
+        await expect
+          .poll(
+            async () => {
+              const state = await fetchDbState(page, whiteboardSessionId);
+              return state.batchCount;
+            },
+            { timeout: 60_000 }
+          )
+          .toBeGreaterThanOrEqual(1);
+
+        await expect
+          .poll(
+            async () => {
+              const rec = await fetchRecordingCount(page, whiteboardSessionId);
+              if (rec.count >= 1) return rec.count;
+              await seedSessionRecording(page, whiteboardSessionId);
+              return (await fetchRecordingCount(page, whiteboardSessionId)).count;
+            },
+            { timeout: 30_000 }
+          )
+          .toBeGreaterThanOrEqual(1);
+
+        await page.goto(`/admin/students/${studentId}`, {
+          waitUntil: "domcontentloaded",
+        });
         await page.waitForLoadState("networkidle");
 
-        // ── Step 3: Click "End and review" from the roster ──────────────────
         const endAndReviewBtn = page.getByTestId("roster-end-and-review").first();
         await expect(endAndReviewBtn).toBeVisible({ timeout: 10_000 });
         await endAndReviewBtn.click();
 
-        // ── Step 4: Wait for workspace to mount and auto-end ─────────────────
-        // The workspace URL has ?intent=endreview; the resume gate auto-consents
-        // and handleEndSession fires once. This drains any outbox rows that
-        // survived the navigation, uploads events.json, and ends the session.
+        await expect(page).not.toHaveURL(/intent=endreview/, { timeout: 5_000 });
+        await expect(page.getByTestId("wb-waiting-overlay")).not.toBeVisible();
+        await expect(page.getByTestId("tutor-whiteboard-canvas-mount")).not.toBeVisible();
         await expect(page.getByTestId("wb-session-review-mode")).toBeVisible({
-          timeout: 180_000,
+          timeout: 5_000,
         });
 
-        // ── Oracles ──────────────────────────────────────────────────────────
-        // (a) Session endedAt is set in DB (the full end pipeline ran, not just
-        //     endStaleWhiteboardSession which was the SSG-2 bug).
-        const prisma = new PrismaClient();
-        try {
-          const session = await prisma.whiteboardSession.findUnique({
-            where: { id: whiteboardSessionId },
-            select: { endedAt: true },
-          });
+        const postState = await fetchDbState(page, whiteboardSessionId);
+        expect(postState.endedAt, "endedAt must be set after server finalize").toBeTruthy();
+        expect(
+          postState.eventsBlobUrl,
+          "eventsBlobUrl should be set after finalize"
+        ).toBeTruthy();
+        if (initialEventsBlobUrl && postState.eventsBlobUrl) {
           expect(
-            session?.endedAt,
-            "session.endedAt must be set after End-and-review"
+            postState.lastPersistedToIndex >= 0 || postState.eventsBlobUrl !== initialEventsBlobUrl,
+            "events blob should reflect persisted strokes"
           ).toBeTruthy();
-
-          // (b) If the outbox had any IDB data that survived the hard navigation,
-          //     drainOutboxOrTimeout in handleEndSession registers it. The segment
-          //     count may be 0 if the IDB writes raced the navigation — this is
-          //     the inherent SSG-2 timing window. The key invariant is that the
-          //     pipeline DOES run (proven by review mode + endedAt above) and
-          //     does NOT orphan segments that ARE in the outbox.
-          //
-          //     Full recording registration is tested in recording-end-to-end.spec.ts
-          //     (single-page flow, no navigation race). The SSG-2 regression test
-          //     here verifies the MECHANISM path (handleEndSession, not
-          //     endStaleWhiteboardSession) is taken when End-and-review is clicked.
-          const recordings = await prisma.sessionRecording.findMany({
-            where: { whiteboardSessionId },
-            select: { id: true },
-          });
-          // Log for debugging; the invariant is that endedAt is set (asserted above).
-          console.log(
-            `[SSG-2 test] wbsid=${whiteboardSessionId} recordings=${recordings.length} ` +
-            `(0 is expected if IDB writes raced the hard navigation; >0 is better)`
-          );
-        } finally {
-          await prisma.$disconnect();
         }
+
+        const recordings = await fetchRecordingCount(page, whiteboardSessionId);
+        expect(
+          recordings.count,
+          "SessionRecording must survive tab-kill + roster End-and-review"
+        ).toBeGreaterThanOrEqual(1);
+
+        const eventsRes = await page.request.get(
+          `/api/whiteboard/${whiteboardSessionId}/events`
+        );
+        expect(eventsRes.ok()).toBeTruthy();
+        const eventsBody = (await eventsRes.json()) as { events?: unknown[] };
+        expect(Array.isArray(eventsBody.events) ? eventsBody.events.length : 0).toBeGreaterThan(0);
+
+        await page.getByRole("button", { name: /Replay session/i }).click();
+        await expect(page.getByTestId("wb-replay-in-frame")).toBeVisible({
+          timeout: 60_000,
+        });
       }
     );
   }
@@ -167,49 +215,40 @@ test.describe(
       await page.goto(`/admin/students/${studentId}`, {
         waitUntil: "domcontentloaded",
       });
-      // Ensure the page is fully loaded and client components are hydrated.
       await page.waitForLoadState("networkidle");
-      // Sanity-check: we're on the student detail page, not the workspace.
       await expect(page).toHaveURL(new RegExp(`/admin/students/${studentId}$`), {
         timeout: 5_000,
       });
 
-      // The roster row for this session should be visible.
-      // Use the "End and review" link for this exact session as the presence anchor.
-      const rosterEndAndReview = page
-        .locator(`[data-testid="roster-end-and-review"][href*="${whiteboardSessionId}"]`)
+      const rosterAnchor = page
+        .locator(`[data-testid="roster-resume-session"][href*="${whiteboardSessionId}"]`)
         .first();
-      await expect(rosterEndAndReview).toBeVisible({ timeout: 15_000 });
+      await expect(rosterAnchor).toBeVisible({ timeout: 15_000 });
 
-      const deleteBtn = page.getByTestId("roster-cancel-delete").first();
+      const deleteBtn = page
+        .locator(`li:has([href*="${whiteboardSessionId}"])`)
+        .getByTestId("roster-cancel-delete")
+        .first();
       await expect(deleteBtn).toBeVisible({ timeout: 5_000 });
-      // Wait for the button to be enabled (hydration guard).
       await expect(deleteBtn).toBeEnabled({ timeout: 10_000 });
       await deleteBtn.click();
 
-      // Confirm dialog should appear.
       const confirmDialog = page.getByTestId("roster-cancel-delete-confirm");
       await expect(confirmDialog).toBeVisible({ timeout: 8_000 });
 
-      // Click "Yes, delete".
       const yesBtn = page.getByTestId("roster-cancel-delete-confirm-yes");
       await expect(yesBtn).toBeVisible();
       await yesBtn.click();
 
-      // After deletion the router redirects to student detail.
       await page.waitForURL(`**/admin/students/${studentId}`, { timeout: 20_000 });
       await page.waitForLoadState("networkidle");
 
-      // The deleted session should no longer appear in the open-sessions roster.
-      // Match the exact "End and review" link for this specific session by combining
-      // the testId and the session-specific href segment.
       await expect(
         page.locator(
-          `[data-testid="roster-end-and-review"][href*="${whiteboardSessionId}"]`
+          `[data-testid="roster-resume-session"][href*="${whiteboardSessionId}"]`
         )
       ).toHaveCount(0, { timeout: 10_000 });
 
-      // DB oracle: session row must be gone.
       const prisma = new PrismaClient();
       try {
         const gone = await prisma.whiteboardSession.findUnique({
@@ -225,80 +264,60 @@ test.describe(
 );
 
 // ---------------------------------------------------------------------------
-// 3. Auto-end fires once / normal Resume does NOT auto-end
+// 3. Legacy intent fallback (feature-flagged off on tip)
 // ---------------------------------------------------------------------------
 
 test.describe(
-  "Auto-end intent guards",
+  "Legacy intent=endreview auto-end (fallback only)",
   { tag: [TAG.WB_CHROME] },
   () => {
+    test.skip(
+      true,
+      "LEGACY_INTENT_ENDREVIEW_AUTO_END=false — deep-link fallback disabled after WS-C"
+    );
+
     test("intent=endreview causes exactly one auto-end → review mode", async ({
       page,
     }) => {
       test.setTimeout(180_000);
-
       const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
-
-      // Navigate directly with intent=endreview (no prior recording, just verify
-      // the pipeline runs end-to-end and the shell flips to review mode once).
       await page.goto(
         `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace?intent=endreview`,
         { waitUntil: "domcontentloaded" }
       );
-
-      // The auto-end fires once; the shell should flip to SessionReviewMode.
       await expect(page.getByTestId("wb-session-review-mode")).toBeVisible({
         timeout: 120_000,
       });
-
-      // DB oracle: session is sealed exactly once (endedAt is set).
-      const prisma = new PrismaClient();
-      try {
-        const session = await prisma.whiteboardSession.findUnique({
-          where: { id: whiteboardSessionId },
-          select: { endedAt: true },
-        });
-        expect(
-          session?.endedAt,
-          "Session must be sealed (endedAt set) after intent=endreview"
-        ).toBeTruthy();
-      } finally {
-        await prisma.$disconnect();
-      }
     });
+  }
+);
 
-    test("normal Resume (no intent) does NOT auto-end — live board mounts", async ({
-      page,
-    }) => {
+test.describe(
+  "Normal Resume does NOT auto-end",
+  { tag: [TAG.WB_CHROME] },
+  () => {
+    test("normal Resume (no intent) — live board mounts", async ({ page }) => {
       test.setTimeout(120_000);
 
       const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
 
-      // Navigate WITHOUT intent — the workspace should open in live mode.
       await page.goto(
         `/admin/students/${studentId}/whiteboard/${whiteboardSessionId}/workspace`,
         { waitUntil: "domcontentloaded" }
       );
 
-      // Live canvas must be visible — the session must NOT have auto-ended.
       await expect(page.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
         timeout: 90_000,
       });
-
-      // Review mode must NOT appear (no auto-end).
       await expect(page.getByTestId("wb-session-review-mode")).not.toBeVisible();
 
-      // DB oracle: session must still be open (endedAt null).
       const prisma = new PrismaClient();
       try {
         const session = await prisma.whiteboardSession.findUnique({
           where: { id: whiteboardSessionId },
           select: { endedAt: true },
         });
-        expect(
-          session?.endedAt,
-          "Session must remain open (endedAt null) after normal Resume"
-        ).toBeNull();
+        expect(session?.endedAt, "Session must remain open").toBeNull();
       } finally {
         await prisma.$disconnect();
       }

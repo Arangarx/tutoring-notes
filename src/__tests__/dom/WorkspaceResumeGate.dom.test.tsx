@@ -45,11 +45,18 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const deleteWhiteboardSessionAndDataActionMock = jest.fn();
+const finalizeWhiteboardSessionFromBackendMock = jest.fn();
 const routerPushMock = jest.fn();
 
 jest.mock("next/navigation", () => ({
   __esModule: true,
   useRouter: () => ({ push: routerPushMock }),
+}));
+
+jest.mock("@/app/admin/students/[id]/whiteboard/actions", () => ({
+  __esModule: true,
+  finalizeWhiteboardSessionFromBackend: (...args: unknown[]) =>
+    finalizeWhiteboardSessionFromBackendMock(...args),
 }));
 
 jest.mock("@/app/admin/students/[id]/whiteboard/notes-actions", () => ({
@@ -64,6 +71,14 @@ const NOW = 1_750_000_000_000;
 
 beforeEach(() => {
   deleteWhiteboardSessionAndDataActionMock.mockReset();
+  finalizeWhiteboardSessionFromBackendMock.mockReset();
+  finalizeWhiteboardSessionFromBackendMock.mockResolvedValue({
+    ok: true,
+    idempotent: false,
+    endedAt: new Date().toISOString(),
+    durationSeconds: 60,
+    registeredSegments: 0,
+  });
   routerPushMock.mockReset();
 });
 
@@ -160,7 +175,7 @@ describe("WorkspaceResumeGate", () => {
     expect(screen.queryByTestId("wb-resume-gate")).not.toBeInTheDocument();
   });
 
-  it("clicking End and review navigates to ?intent=endreview (does NOT call delete action)", async () => {
+  it("clicking End and review calls server finalize then navigates to review URL", async () => {
     const onEndAndReview = jest.fn();
     const user = userEvent.setup();
     render(
@@ -178,11 +193,12 @@ describe("WorkspaceResumeGate", () => {
 
     await user.click(screen.getByTestId("wb-resume-gate-end-and-review"));
 
-    // Navigates to ?intent=endreview so the server re-renders with autoConsent=true.
+    await waitFor(() => {
+      expect(finalizeWhiteboardSessionFromBackendMock).toHaveBeenCalledWith("wb_42");
+    });
     expect(onEndAndReview).toHaveBeenCalledWith(
-      "/admin/students/stu_99/whiteboard/wb_42/workspace?intent=endreview"
+      "/admin/students/stu_99/whiteboard/wb_42/workspace"
     );
-    // Must not have called the delete action.
     expect(deleteWhiteboardSessionAndDataActionMock).not.toHaveBeenCalled();
   });
 

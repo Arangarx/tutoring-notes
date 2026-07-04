@@ -34,6 +34,14 @@ import {
   ErasureAccessSuspendedError,
   isWhiteboardSessionBlockedByErasure,
 } from "@/lib/erasure/active-erasure-scope";
+import {
+  assembleBackendEventLog,
+  countEventsInBlobUrl,
+} from "@/lib/whiteboard/assemble-persisted-state";
+import {
+  kickSessionChunksAction,
+  triggerNotesGenerationAction,
+} from "@/app/admin/students/[id]/whiteboard/notes-actions";
 
 /**
  * Whiteboard session lifecycle server actions.
@@ -633,6 +641,199 @@ function validateEndSessionSegments(
     }
   }
   return { ok: true };
+}
+
+export type FinalizeWhiteboardSessionFromBackendResult =
+  | { ok: true; idempotent: true }
+  | {
+      ok: true;
+      idempotent: false;
+      endedAt: string;
+      durationSeconds: number;
+      registeredSegments: number;
+    }
+  | { ok: false; error: string };
+
+/**
+ * WS-C — Server-side finalize assembly layer (BLOCKER-5).
+ *
+ * Assembles events + audio from backend-persisted state, then delegates
+ * the atomic commit to `endWhiteboardSession`. Does NOT duplicate
+ * transaction / consent / erasure / token-revoke logic.
+ */
+export async function finalizeWhiteboardSessionFromBackend(
+  whiteboardSessionId: string,
+  opts?: {
+    /** Client-uploaded events.json when server batches may lag the live log. */
+    finalEventsBlobUrl?: string;
+    snapshotBlobUrl?: string | null;
+    /** Outbox segments not yet visible in SessionRecording (in-live End). */
+    extraSegments?: ReadonlyArray<EndSessionSegment>;
+  }
+): Promise<FinalizeWhiteboardSessionFromBackendResult> {
+  const session = await assertOwnsWhiteboardSession(whiteboardSessionId);
+
+  if (session.endedAt) {
+    console.log(
+      `[fzb] fzb=${whiteboardSessionId} action=idempotent_skip batches=0 segments=0`
+    );
+    return { ok: true, idempotent: true };
+  }
+
+  const startedAtRow = await withDbRetry(
+    () =>
+      db.whiteboardSession.findUnique({
+        where: { id: whiteboardSessionId },
+        select: { startedAt: true },
+      }),
+    { label: "finalizeFromBackend.startedAt" }
+  );
+  const startedAtIso =
+    startedAtRow?.startedAt.toISOString() ?? new Date().toISOString();
+
+  const assembled = await assembleBackendEventLog(
+    whiteboardSessionId,
+    startedAtIso
+  );
+
+  const recordingRows = await withDbRetry(
+    () =>
+      db.sessionRecording.findMany({
+        where: { whiteboardSessionId },
+        orderBy: [{ orderIndex: "asc" }, { createdAt: "asc" }],
+        select: {
+          id: true,
+          blobUrl: true,
+          mimeType: true,
+          sizeBytes: true,
+          streamId: true,
+          createdAt: true,
+        },
+      }),
+    { label: "finalizeFromBackend.recordings" }
+  );
+
+  const segmentByUrl = new Map<string, EndSessionSegment>();
+  for (const row of recordingRows) {
+    segmentByUrl.set(row.blobUrl, {
+      blobUrl: row.blobUrl,
+      mimeType: row.mimeType,
+      sizeBytes: row.sizeBytes,
+      streamId: row.streamId,
+      segmentId: row.id,
+      audioStartedAtMs: row.createdAt.getTime(),
+    });
+  }
+  for (const extra of opts?.extraSegments ?? []) {
+    if (!segmentByUrl.has(extra.blobUrl)) {
+      segmentByUrl.set(extra.blobUrl, extra);
+    }
+  }
+  const segments = [...segmentByUrl.values()];
+
+  console.log(
+    `[fzb] fzb=${whiteboardSessionId} action=assemble batches=${assembled.batchCount} segments=${segments.length}`
+  );
+
+  const candidateScores: Array<{ url: string; score: number }> = [];
+  const assembledScore = assembled.log.events.length;
+  if (assembledScore > 0) {
+    candidateScores.push({ url: "__assembled__", score: assembledScore });
+  }
+  if (session.eventsBlobUrl) {
+    const existingScore = await countEventsInBlobUrl(session.eventsBlobUrl);
+    candidateScores.push({ url: session.eventsBlobUrl, score: existingScore });
+  }
+  if (opts?.finalEventsBlobUrl) {
+    const clientScore = await countEventsInBlobUrl(opts.finalEventsBlobUrl);
+    candidateScores.push({ url: opts.finalEventsBlobUrl, score: clientScore });
+  }
+
+  let finalEventsBlobUrl = session.eventsBlobUrl;
+  const best = candidateScores.reduce(
+    (acc, cur) => (cur.score > acc.score ? cur : acc),
+    { url: session.eventsBlobUrl, score: 0 }
+  );
+
+  if (best.url === "__assembled__" && assembledScore > 0) {
+    try {
+      const eventsBody = JSON.stringify(assembled.log);
+      const putResult = await put(
+        `whiteboard-sessions/${session.adminUserId}/${session.studentId}/${Date.now()}-events.json`,
+        eventsBody,
+        {
+          access: "private",
+          contentType: "application/json",
+          addRandomSuffix: true,
+        }
+      );
+      finalEventsBlobUrl = putResult.url;
+    } catch (err) {
+      console.error(
+        `[fzb] fzb=${whiteboardSessionId} action=assemble_blob_put_failed`,
+        err
+      );
+      return {
+        ok: false,
+        error: "Could not upload final whiteboard events. Please try again.",
+      };
+    }
+  } else if (best.url !== "__assembled__" && best.score > 0) {
+    finalEventsBlobUrl = best.url;
+  }
+
+  if (!finalEventsBlobUrl || !/^https?:\/\//i.test(finalEventsBlobUrl)) {
+    return {
+      ok: false,
+      error: "No final events URL available for this session.",
+    };
+  }
+
+  if (segments.length > 0) {
+    const valid = validateEndSessionSegments(segments);
+    if (!valid.ok) {
+      return { ok: false, error: valid.error };
+    }
+  }
+
+  let endResult: {
+    endedAt: string;
+    durationSeconds: number;
+    registeredSegments: number;
+  };
+  try {
+    endResult = await endWhiteboardSession(whiteboardSessionId, finalEventsBlobUrl, {
+      snapshotBlobUrl: opts?.snapshotBlobUrl ?? undefined,
+      segments,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: msg };
+  }
+
+  console.log(
+    `[fzb] fzb=${whiteboardSessionId} action=end batches=${assembled.batchCount} segments=${segments.length} newSegments=${endResult.registeredSegments}`
+  );
+
+  void kickSessionChunksAction(whiteboardSessionId).catch((sweepErr: unknown) => {
+    console.warn(
+      `[fzb] fzb=${whiteboardSessionId} action=session_sweep_fire_error err=${(sweepErr as Error)?.message ?? sweepErr}`
+    );
+  });
+  const notesResult = await triggerNotesGenerationAction(whiteboardSessionId);
+  if (!notesResult.ok) {
+    console.warn(
+      `[fzb] fzb=${whiteboardSessionId} action=notes_trigger_failed err=${notesResult.error}`
+    );
+  }
+
+  return {
+    ok: true,
+    idempotent: false,
+    endedAt: endResult.endedAt,
+    durationSeconds: endResult.durationSeconds,
+    registeredSegments: endResult.registeredSegments,
+  };
 }
 
 /**

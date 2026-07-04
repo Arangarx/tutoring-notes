@@ -15,7 +15,7 @@
  *      (15s budget; failed/timeout surfaces a tutor-facing error).
  *   3. `assembleEndSessionSegments(wbsid)` — read uploaded rows.
  *   4. `uploadWhiteboardEvents(...)`
- *   5. `endWhiteboardSession(wbsid, eventsUrl, { segments })` — one
+ *   5. `finalizeWhiteboardSessionFromBackend(wbsid, eventsUrl, { segments })` — one
  *      atomic transaction.
  *   6. `finalizeOutboxAfterEnd(wbsid)` — drop the persisted rows.
  *
@@ -118,9 +118,18 @@ jest.mock("@/lib/whiteboard/snapshot-png", () => ({
     mockGenerateSnapshot(...args),
 }));
 
-const mockEnd = jest.fn(() => Promise.resolve({ endedAt: "2026-05-10T00:00:00Z", durationSeconds: 100, registeredSegments: 0 }));
+const mockFinalize = jest.fn(() =>
+  Promise.resolve({
+    ok: true as const,
+    idempotent: false as const,
+    endedAt: "2026-05-10T00:00:00Z",
+    durationSeconds: 100,
+    registeredSegments: 0,
+  })
+);
 jest.mock("@/app/admin/students/[id]/whiteboard/actions", () => ({
-  endWhiteboardSession: (...args: unknown[]) => mockEnd.apply(null, args),
+  finalizeWhiteboardSessionFromBackend: (...args: unknown[]) =>
+    mockFinalize.apply(null, args),
   issueJoinToken: jest.fn(() => Promise.resolve({ token: "tok" })),
   registerWhiteboardSessionAudioSegmentAction: jest.fn(() =>
     Promise.resolve({ ok: true as const, recordingId: "rec1", orderIndex: 0 })
@@ -432,7 +441,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     window.scrollTo = jest.fn();
     mockRouterReplace.mockClear();
     mockRouterRefresh.mockClear();
-    mockEnd.mockClear();
+    mockFinalize.mockClear();
     mockUpload.mockClear();
     mockSnapshotUpload.mockClear();
     mockGenerateSnapshot.mockReset();
@@ -535,10 +544,13 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
       );
     });
     await waitFor(() => {
-      expect(mockEnd).toHaveBeenCalledWith(
+      expect(mockFinalize).toHaveBeenCalledWith(
         "ws-end-happy",
-        "https://abc.blob.vercel-storage.com/blob-events",
-        { segments }
+        {
+          finalEventsBlobUrl: "https://abc.blob.vercel-storage.com/blob-events",
+          snapshotBlobUrl: undefined,
+          extraSegments: segments,
+        }
       );
     });
     await waitFor(() => {
@@ -599,7 +611,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
       });
     });
     await waitFor(() => {
-      expect(mockEnd).toHaveBeenCalled();
+      expect(mockFinalize).toHaveBeenCalled();
     });
   });
 
@@ -671,7 +683,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
       });
     });
     await waitFor(() => {
-      expect(mockEnd).toHaveBeenCalled();
+      expect(mockFinalize).toHaveBeenCalled();
     });
   });
 
@@ -704,7 +716,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toMatch(/Couldn't finalize/i);
     expect(alert.textContent).toMatch(/1 audio segment still saving/i);
-    expect(mockEnd).not.toHaveBeenCalled();
+    expect(mockFinalize).not.toHaveBeenCalled();
     expect(mockFinalizeOutboxAfterEnd).not.toHaveBeenCalled();
   });
 
@@ -761,9 +773,11 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
         },
       ];
     });
-    mockEnd.mockImplementation(async () => {
-      callLog.push("endWhiteboardSession");
+    mockFinalize.mockImplementation(async () => {
+      callLog.push("finalizeWhiteboardSessionFromBackend");
       return {
+        ok: true as const,
+        idempotent: false as const,
         endedAt: "2026-05-10T00:00:00Z",
         durationSeconds: 100,
         registeredSegments: 1,
@@ -789,12 +803,12 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     await confirmFinishAndSave();
 
     await waitFor(() => {
-      expect(mockEnd).toHaveBeenCalled();
+      expect(mockFinalize).toHaveBeenCalled();
     });
 
     // The pre-fix order would have been:
     //   ["drainOutboxOrTimeout", "assembleEndSessionSegments",
-    //    "endWhiteboardSession", "stopAndUpload:final",
+    //    "finalizeWhiteboardSessionFromBackend", "stopAndUpload:final",
     //    "flushPendingUploads"]
     // Post-fix order must be:
     expect(callLog).toEqual([
@@ -802,17 +816,18 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
       "flushPendingUploads",
       "drainOutboxOrTimeout",
       "assembleEndSessionSegments",
-      "endWhiteboardSession",
+      "finalizeWhiteboardSessionFromBackend",
     ]);
 
     // Specifically the segment from the in-flight recorder lands in
     // the atomic action payload — i.e. the trailing segment is no
     // longer dropped.
-    expect(mockEnd).toHaveBeenCalledWith(
+    expect(mockFinalize).toHaveBeenCalledWith(
       "ws-end-ordering",
-      "https://abc.blob.vercel-storage.com/blob-events",
       {
-        segments: [
+        finalEventsBlobUrl: "https://abc.blob.vercel-storage.com/blob-events",
+        snapshotBlobUrl: undefined,
+        extraSegments: [
           {
             blobUrl: "https://abc.blob.vercel-storage.com/seg-final.webm",
             mimeType: "audio/webm",
@@ -853,14 +868,14 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     await confirmFinishAndSave();
 
     await waitFor(() => {
-      expect(mockEnd).toHaveBeenCalled();
+      expect(mockFinalize).toHaveBeenCalled();
     });
 
     expect(audioCtl.stopAndUpload).not.toHaveBeenCalled();
     expect(audioCtl.flushPendingUploads).toHaveBeenCalledTimes(1);
   });
 
-  test("snapshot wiring: generated blob is uploaded and snapshotBlobUrl is forwarded to endWhiteboardSession", async () => {
+  test("snapshot wiring: generated blob is uploaded and snapshotBlobUrl is forwarded to finalizeWhiteboardSessionFromBackend", async () => {
     // Phase 1c contract — when the snapshot pipeline succeeds, the
     // blob URL must reach the atomic end-session action so the
     // SessionRecording row can render thumbnails on the parent share
@@ -898,12 +913,12 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
       });
     });
     await waitFor(() => {
-      expect(mockEnd).toHaveBeenCalledWith(
+      expect(mockFinalize).toHaveBeenCalledWith(
         "ws-end-snap",
-        "https://abc.blob.vercel-storage.com/blob-events",
         {
-          segments: [],
+          finalEventsBlobUrl: "https://abc.blob.vercel-storage.com/blob-events",
           snapshotBlobUrl: "https://abc.blob.vercel-storage.com/blob-snapshot.png",
+          extraSegments: [],
         }
       );
     });
@@ -942,10 +957,13 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     await confirmFinishAndSave();
 
     await waitFor(() => {
-      expect(mockEnd).toHaveBeenCalledWith(
+      expect(mockFinalize).toHaveBeenCalledWith(
         "ws-end-snap-fail",
-        "https://abc.blob.vercel-storage.com/blob-events",
-        { segments: [], snapshotBlobUrl: undefined }
+        {
+          finalEventsBlobUrl: "https://abc.blob.vercel-storage.com/blob-events",
+          snapshotBlobUrl: undefined,
+          extraSegments: [],
+        }
       );
     });
   });
@@ -977,7 +995,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     await confirmFinishAndSave();
 
     await waitFor(() => {
-      expect(mockEnd).toHaveBeenCalled();
+      expect(mockFinalize).toHaveBeenCalled();
     });
     expect(mockSnapshotUpload).not.toHaveBeenCalled();
   });
@@ -1011,7 +1029,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toMatch(/Vercel Blob 500/);
     expect(alert.textContent).toMatch(/2 audio segments still saving/i);
-    expect(mockEnd).not.toHaveBeenCalled();
+    expect(mockFinalize).not.toHaveBeenCalled();
   });
 
   // ---- A3 in-shell mode flip (Phase A) ----------------------------------------
@@ -1043,10 +1061,13 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
 
     // Pipeline must still complete (atomic action called).
     await waitFor(() => {
-      expect(mockEnd).toHaveBeenCalledWith(
+      expect(mockFinalize).toHaveBeenCalledWith(
         "ws-a3-shell-flip",
-        "https://abc.blob.vercel-storage.com/blob-events",
-        { segments: [] }
+        {
+          finalEventsBlobUrl: "https://abc.blob.vercel-storage.com/blob-events",
+          snapshotBlobUrl: undefined,
+          extraSegments: [],
+        }
       );
     });
 
@@ -1083,7 +1104,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     await confirmFinishAndSave();
 
     await waitFor(() => {
-      expect(mockEnd).toHaveBeenCalled();
+      expect(mockFinalize).toHaveBeenCalled();
     });
 
     // Legacy path: router.replace must be called with the review href.
@@ -1120,7 +1141,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
   //               mounts. The test PASSES.
   //
   // Note: the root cause of the real-browser failure was
-  // `revalidatePath(...workspace)` inside `endWhiteboardSession` triggering an
+  // `revalidatePath(...workspace)` inside `finalizeWhiteboardSessionFromBackend` triggering an
   // RSC replacement that clobbered the shell's mode="review" state. That
   // server-side behavior cannot be reproduced in jsdom (server actions are
   // fully mocked here). The fix (removing that revalidatePath call) is
@@ -1159,12 +1180,15 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     // Click End session.
     await confirmFinishAndSave();
 
-    // Pipeline must complete (endWhiteboardSession called).
+    // Pipeline must complete (finalizeWhiteboardSessionFromBackend called).
     await waitFor(() => {
-      expect(mockEnd).toHaveBeenCalledWith(
+      expect(mockFinalize).toHaveBeenCalledWith(
         "ws-shell-1",
-        "https://abc.blob.vercel-storage.com/blob-events",
-        { segments: [] }
+        {
+          finalEventsBlobUrl: "https://abc.blob.vercel-storage.com/blob-events",
+          snapshotBlobUrl: undefined,
+          extraSegments: [],
+        }
       );
     });
 
@@ -1210,7 +1234,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     await confirmFinishAndSave();
 
     await waitFor(() => {
-      expect(mockEnd).toHaveBeenCalled();
+      expect(mockFinalize).toHaveBeenCalled();
     });
 
     // router.replace IS called (legacy nav-away fires when prop is absent).
@@ -1226,7 +1250,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
   test("A3: step ordering with onSessionEnded — atomic pipeline still completes before flip", async () => {
     // Verify that even with the in-shell flip, the ordering contract
     // (stop→flush→drain→assemble→end) is preserved and onSessionEnded
-    // fires AFTER endWhiteboardSession completes (not before).
+    // fires AFTER finalizeWhiteboardSessionFromBackend completes (not before).
     const callLog: string[] = [];
     const onSessionEnded = jest.fn(() => {
       callLog.push("onSessionEnded");
@@ -1251,9 +1275,15 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
       callLog.push("assembleEndSessionSegments");
       return [];
     });
-    mockEnd.mockImplementation(async () => {
-      callLog.push("endWhiteboardSession");
-      return { endedAt: "2026-05-10T00:00:00Z", durationSeconds: 100, registeredSegments: 0 };
+    mockFinalize.mockImplementation(async () => {
+      callLog.push("finalizeWhiteboardSessionFromBackend");
+      return {
+        ok: true as const,
+        idempotent: false as const,
+        endedAt: "2026-05-10T00:00:00Z",
+        durationSeconds: 100,
+        registeredSegments: 0,
+      };
     });
 
     render(
@@ -1279,23 +1309,24 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
       expect(onSessionEnded).toHaveBeenCalled();
     });
 
-    // onSessionEnded fires AFTER endWhiteboardSession, not before.
+    // onSessionEnded fires AFTER finalizeWhiteboardSessionFromBackend, not before.
     expect(callLog).toEqual([
       "stopAndUpload:final",
       "flushPendingUploads",
       "drainOutboxOrTimeout",
       "assembleEndSessionSegments",
-      "endWhiteboardSession",
+      "finalizeWhiteboardSessionFromBackend",
       "onSessionEnded",
     ]);
   });
 
-  test("CF-4: notes trigger failure surfaces tutor-visible error after session seals", async () => {
+  test("WS-C: notes trigger failure is server-side only (client end still succeeds)", async () => {
     mockTriggerNotesGenerationAction.mockResolvedValueOnce({
       ok: false,
       error: "You do not own this whiteboard session",
     });
 
+    const onSessionEnded = jest.fn();
     render(
       <WhiteboardWorkspaceClient
         whiteboardSessionId="ws-end-notes-fail"
@@ -1308,6 +1339,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
         initialLastActiveAtIso={null}
         syncUrl={null}
         initialUserWantsRecording
+        onSessionEnded={onSessionEnded}
       />
     );
 
@@ -1315,11 +1347,11 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     await confirmFinishAndSave();
 
     await waitFor(() => {
-      expect(mockEnd).toHaveBeenCalled();
+      expect(mockFinalize).toHaveBeenCalled();
     });
-
-    const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(/notes could not be started/i);
-    expect(alert.textContent).toMatch(/You do not own this whiteboard session/i);
+    await waitFor(() => {
+      expect(onSessionEnded).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

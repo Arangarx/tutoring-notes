@@ -39,6 +39,8 @@ export async function GET(
       select: {
         lastPersistedBatchSeq: true,
         lastPersistedToIndex: true,
+        endedAt: true,
+        eventsBlobUrl: true,
       },
     }),
     db.whiteboardEventBatch.findFirst({
@@ -53,5 +55,7 @@ export async function GET(
     lastPersistedBatchSeq: session?.lastPersistedBatchSeq ?? 0,
     lastPersistedToIndex: session?.lastPersistedToIndex ?? -1,
     latestToEventIndex: latestBatch?.toEventIndex ?? null,
+    endedAt: session?.endedAt?.toISOString() ?? null,
+    eventsBlobUrl: session?.eventsBlobUrl ?? null,
   });
 }
