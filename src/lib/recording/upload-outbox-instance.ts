@@ -51,6 +51,7 @@ import {
   resolveSpeakerId,
   speakerTranscriptStreamId,
 } from "@/lib/recording/perspeaker-identity";
+import { TUTOR_MIC_STREAM_ID } from "@/lib/recording/lifecycle-machine";
 
 export type { OutboxObserverState };
 
@@ -177,6 +178,23 @@ async function handleSegmentUploaded(row: OutboxRow): Promise<void> {
     console.log(
       `[obx] obx=${shortObx} action=register_mid_session wbsid=${row.sessionId} streamId=${row.streamId} segmentId=${row.segmentId} recordingId=${result.recordingId} orderIndex=${result.orderIndex}`
     );
+    // Tutor:mic transcription — fires once the worker has a remote URL
+    // (enqueue-at-cut path) or after inline-upload register-only drain.
+    if (row.streamId === TUTOR_MIC_STREAM_ID) {
+      try {
+        await enqueueChunkTranscriptionAction(row.sessionId, {
+          chunkBlobUrl: row.blobRemoteUrl,
+          recordingTimeOffsetMs: row.recordingTimeOffsetMs ?? 0,
+        });
+        console.log(
+          `[obx] obx=${shortObx} action=txc_enqueue wbsid=${row.sessionId} streamId=${row.streamId} segmentId=${row.segmentId} offsetMs=${row.recordingTimeOffsetMs ?? 0}`
+        );
+      } catch (err) {
+        console.warn(
+          `[obx] obx=${shortObx} action=txc_enqueue_failed wbsid=${row.sessionId} streamId=${row.streamId} segmentId=${row.segmentId} err=${(err as Error)?.message ?? String(err)}`
+        );
+      }
+    }
     return;
   }
 

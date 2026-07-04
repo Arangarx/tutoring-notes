@@ -143,6 +143,49 @@ describe("processChunkTranscribeJob", () => {
     expect(mockTranscribeChunk).not.toHaveBeenCalled();
   });
 
+  test("idempotency: chunk already transcribing → returns skipped without Whisper call", async () => {
+    mockGetTranscriptChunkByBlobUrl.mockResolvedValue({
+      id: "in-flight-chunk",
+      status: "transcribing",
+      recordingTimeOffsetMs: 0,
+    });
+
+    const outcome = await processChunkTranscribeJob({
+      sessionId: SESSION_ID,
+      chunkBlobUrl: CHUNK_URL,
+      recordingTimeOffsetMs: 0,
+    });
+
+    expect(outcome).toBe("skipped");
+    expect(mockUpsertTranscriptChunk).not.toHaveBeenCalled();
+    expect(mockFetchPrivateBlobBytes).not.toHaveBeenCalled();
+    expect(mockTranscribeChunk).not.toHaveBeenCalled();
+  });
+
+  test("pending and failed chunks still proceed to transcription", async () => {
+    for (const status of ["pending", "failed"] as const) {
+      jest.clearAllMocks();
+      mockGetTranscriptChunkByBlobUrl.mockResolvedValue({
+        id: `chunk-${status}`,
+        status,
+        attempts: status === "failed" ? 1 : 0,
+      });
+      mockGetTranscriptChunksBySessionId.mockResolvedValue([]);
+      mockUpsertTranscriptChunk.mockResolvedValue({ id: "chunk-row", status: "done" });
+      mockTranscribeChunk.mockResolvedValue(okTranscribeResult);
+      mockFetchPrivateBlobBytes.mockResolvedValue(okBlobFetch);
+
+      const outcome = await processChunkTranscribeJob({
+        sessionId: SESSION_ID,
+        chunkBlobUrl: CHUNK_URL,
+        recordingTimeOffsetMs: 0,
+      });
+
+      expect(outcome).toBe("done");
+      expect(mockTranscribeChunk).toHaveBeenCalledTimes(1);
+    }
+  });
+
   test("idempotency: processing same chunk twice in sequence → one done row, no corruption", async () => {
     // First call: no existing row → processes normally.
     setupHappyPath();

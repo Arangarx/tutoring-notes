@@ -355,7 +355,7 @@ export type NewOutboxRow = Omit<
 export type DrainResult = {
   /** True if `timeoutMs` elapsed before the outbox emptied. */
   timedOut: boolean;
-  /** Count of rows still missing `blobRemoteUrl` at return time. */
+  /** Count of rows still missing upload or mid-session register at return. */
   remainingCount: number;
   /** Per-stream remaining count, mirrors observer state. */
   remainingByStream: ReadonlyMap<string, number>;
@@ -526,28 +526,34 @@ export function createUploadOutbox(config: OutboxConfig): UploadOutbox {
   async function recomputeState(sessionId: string): Promise<OutboxObserverState> {
     const rows = await listAllRowsInternal(sessionId);
     const byStream = new Map<string, number>();
-    let pending = 0;
+    let pendingUpload = 0;
+    let pendingRegister = 0;
     let permanentlyFailed = 0;
     let lastError: string | null = null;
     for (const row of rows) {
-      if (row.blobRemoteUrl) continue;
       if (row.attempts >= permanentFailAfter) {
         permanentlyFailed += 1;
         if (row.lastError) lastError = row.lastError;
         continue;
       }
-      pending += 1;
+      const needsUpload = !row.blobRemoteUrl;
+      const needsRegister = Boolean(
+        row.blobRemoteUrl && !row.registerOk && config.onSegmentUploaded
+      );
+      if (!needsUpload && !needsRegister) continue;
+      if (needsUpload) pendingUpload += 1;
+      else pendingRegister += 1;
       byStream.set(row.streamId, (byStream.get(row.streamId) ?? 0) + 1);
       if (row.lastError) lastError = row.lastError;
     }
+    const pending = pendingUpload + pendingRegister;
     const totalRows = rows.length;
-    const uploadedRows = rows.filter((r) => r.blobRemoteUrl !== null).length;
     let state: OutboxObserverState["state"];
     if (permanentlyFailed > 0 && pending === 0) {
       state = "failed";
-    } else if (pending > 0) {
+    } else if (pendingUpload > 0) {
       state = "uploading";
-    } else if (totalRows > 0 && uploadedRows === totalRows) {
+    } else if (pendingRegister > 0) {
       state = "registering";
     } else {
       state = "idle";
@@ -575,6 +581,8 @@ export function createUploadOutbox(config: OutboxConfig): UploadOutbox {
   // (sessionId|streamId) key delivers that.
   const drainChainByStream = new Map<string, Promise<void>>();
   const pendingRetryTimerByRow = new Map<string, unknown>();
+  /** Rows with an in-flight `onSegmentUploaded` (registerOk not yet flipped). */
+  const segmentUploadedInFlight = new Set<string>();
 
   function streamKey(sessionId: string, streamId: string): string {
     return `${sessionId}|${streamId}`;
@@ -618,6 +626,13 @@ export function createUploadOutbox(config: OutboxConfig): UploadOutbox {
     streamId: string
   ): void {
     if (!config.onSegmentUploaded) return;
+    if (segmentUploadedInFlight.has(row.id)) {
+      logger.log?.(
+        `[upload-outbox] obx=${shortObx} action=segment_uploaded_inflight_skip sessionId=${sessionId} streamId=${streamId} segmentId=${row.segmentId}`
+      );
+      return;
+    }
+    segmentUploadedInFlight.add(row.id);
     void config
       .onSegmentUploaded(row)
       .then(async () => {
@@ -634,6 +649,9 @@ export function createUploadOutbox(config: OutboxConfig): UploadOutbox {
         logger.warn?.(
           `[upload-outbox] obx=${shortObx} action=register_mid_session_failed sessionId=${sessionId} streamId=${streamId} segmentId=${row.segmentId} error=${msg}`
         );
+      })
+      .finally(() => {
+        segmentUploadedInFlight.delete(row.id);
       });
   }
 
@@ -667,6 +685,11 @@ export function createUploadOutbox(config: OutboxConfig): UploadOutbox {
       // Uploaded-but-unregistered (Phase 1b workspace inline-upload path):
       // skip re-upload and go straight to onSegmentUploaded registration.
       if (fresh.blobRemoteUrl && !fresh.registerOk) {
+        if (!config.onSegmentUploaded) {
+          await writeRow({ ...fresh, registerOk: true });
+          await refreshStateAndNotify(sessionId);
+          continue;
+        }
         logger.log?.(
           `[upload-outbox] obx=${shortObx} action=register_mid_session sessionId=${sessionId} streamId=${streamId} segmentId=${fresh.segmentId}`
         );
@@ -868,11 +891,15 @@ export function createUploadOutbox(config: OutboxConfig): UploadOutbox {
       attempts: 0,
       lastError: null,
       createdAt: Date.now(),
+      ...(typeof input.recordingTimeOffsetMs === "number" && {
+        recordingTimeOffsetMs: input.recordingTimeOffsetMs,
+      }),
+      ...(input.speakerId && { speakerId: input.speakerId }),
       ...(input.transcriptionOnly === true && { transcriptionOnly: true }),
     };
     await writeRow(row);
     logger.log?.(
-      `[upload-outbox] obx=${shortObx} enqueued sessionId=${input.sessionId} streamId=${input.streamId} segmentId=${input.segmentId} hasRemoteUrl=${row.blobRemoteUrl !== null}`
+      `[upload-outbox] obx=${shortObx} action=enqueue_at_cut sessionId=${input.sessionId} streamId=${input.streamId} segmentId=${input.segmentId} hasRemoteUrl=${row.blobRemoteUrl !== null} hasLocalBlob=${row.blobLocalRef !== null}`
     );
     await refreshStateAndNotify(input.sessionId);
     if (!row.blobRemoteUrl || !row.registerOk) {
@@ -895,7 +922,16 @@ export function createUploadOutbox(config: OutboxConfig): UploadOutbox {
         lastStateBySession.get(sessionId) ?? IDLE_STATE_FROZEN,
       subscribe: (listener) => {
         const set = listenersBySession.get(sessionId)!;
+        const isFirstSubscriber = set.size === 0;
         set.add(listener);
+        if (isFirstSubscriber) {
+          // WS-N: resume drain — upload/register durable-but-incomplete rows
+          // after tab-kill or refresh when the workspace subscribes.
+          logger.log?.(
+            `[upload-outbox] obx=${shortObx} action=resume_drain_kick sessionId=${sessionId}`
+          );
+          kickWorker(sessionId);
+        }
         // Fire the current snapshot synchronously so the caller can
         // populate its initial UI state.
         const initial = lastStateBySession.get(sessionId);

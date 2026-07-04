@@ -133,6 +133,13 @@ export async function processChunkTranscribeJob(
     return "skipped";
   }
 
+  if (existing?.status === "transcribing") {
+    console.log(
+      `[txc] wbsid=${sessionId} action=worker_skip reason=already_transcribing chunkId=${existing.id}`
+    );
+    return "skipped";
+  }
+
   // --- 2. Resolve recording-time offset ---------------------------------------
   const recordingTimeOffsetMs =
     typeof input.recordingTimeOffsetMs === "number"

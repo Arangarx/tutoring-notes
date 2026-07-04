@@ -98,7 +98,12 @@ const DRAFT_CHECKPOINT_INTERVAL_MS = 30_000;
 const DRAFT_TIMESLICE_MS = 30_000;
 
 export type RecordedAudio = {
-  blobUrl: string;
+  /**
+   * Remote Vercel Blob URL after inline upload (final/tail segment).
+   * Omitted on auto-rollover segments — workspace enqueues bytes to the
+   * outbox at cut and the worker uploads later (WS-N).
+   */
+  blobUrl?: string;
   mimeType: string;
   sizeBytes: number;
   filename: string;
@@ -806,31 +811,14 @@ export function useAudioRecorder({
 
           const ext = fileExtension(oldMimeType);
           const filename = `session-${Date.now()}-part${oldPartIndex}.${ext}`;
+          const previewUrl = URL.createObjectURL(blob);
 
           try {
-            const result = await uploadAudioWithRetry(
-              uploadAudioDirect,
-              studentId,
-              blob,
-              filename,
-              oldMimeType
-            );
-
-            if (!result.ok) {
-              // Surface but keep the live recorder running. Tutor can read the
-              // error and decide whether to stop; in the meantime we don't lose
-              // the current capture.
-              setError(formatUserFacingActionError(result.error, result.debugId));
-              rolloverInProgressRef.current = false;
-              return;
-            }
-
-            const previewUrl = URL.createObjectURL(blob);
-            // `await` so flushPendingUploads truly waits for the consumer
-            // (workspace outbox enqueue) to land before returning.
+            // WS-N: durable-at-cut — pass local bytes to the workspace
+            // outbox without inline upload; the worker uploads from IDB.
+            // `await` so flushPendingUploads waits for enqueue to land.
             await onRecorded(
               {
-                blobUrl: result.blobUrl,
                 mimeType: oldMimeType,
                 sizeBytes: blob.size,
                 filename,
@@ -841,8 +829,8 @@ export function useAudioRecorder({
             );
             rolloverInProgressRef.current = false;
           } catch (err) {
-            const msg = err instanceof Error ? err.message : "Upload failed";
-            console.error("[useAudioRecorder] rollover upload failed:", err);
+            const msg = err instanceof Error ? err.message : "Enqueue failed";
+            console.error("[useAudioRecorder] rollover enqueue-at-cut failed:", err);
             setError(msg);
             rolloverInProgressRef.current = false;
           }
@@ -1515,6 +1503,28 @@ export function useAudioRecorder({
 
             const ext = fileExtension(mimeType);
             const filename = `session-${Date.now()}-part${partIndex}.${ext}`;
+            const previewUrl = URL.createObjectURL(blob);
+
+            if (isRollover) {
+              // Legacy rollover fallback — durable-at-cut (WS-N).
+              await onRecorded(
+                {
+                  mimeType,
+                  sizeBytes: blob.size,
+                  filename,
+                  previewUrl,
+                  blob,
+                },
+                { autoRollover: true }
+              );
+              setUploadMode(null);
+              mediaRecorderRef.current = null;
+              segmentNumberRef.current = partIndex + 1;
+              setSegmentNumber(partIndex + 1);
+              startMediaRecorder({ continuation: true });
+              rolloverInProgressRef.current = false;
+              return;
+            }
 
             const result = await uploadAudioWithRetry(
               uploadAudioDirect,
@@ -1533,38 +1543,9 @@ export function useAudioRecorder({
               return;
             }
 
-            const previewUrl = URL.createObjectURL(blob);
-
-            if (isRollover) {
-              // `await` so flushPendingUploads waits for the consumer to
-              // finish enqueueing this segment before signalling drained.
-              await onRecorded(
-                {
-                  blobUrl: result.blobUrl,
-                  mimeType,
-                  sizeBytes: blob.size,
-                  filename,
-                  previewUrl,
-                  blob,
-                },
-                { autoRollover: true }
-              );
-              setUploadMode(null);
-              mediaRecorderRef.current = null;
-              // Update both state (for UI) and ref (for the next rollover's onstop closure).
-              segmentNumberRef.current = partIndex + 1;
-              setSegmentNumber(partIndex + 1);
-              startMediaRecorder({ continuation: true });
-              rolloverInProgressRef.current = false;
-              return;
-            }
-
             setDoneSegmentSeconds(segmentSeconds);
             setUploadMode(null);
             setRecordState("done");
-            // `await` so flushPendingUploads correctly blocks End-session
-            // until the trailing segment is in the outbox. This is the
-            // root-cause fix for the Phase 1b smoke regression.
             await onRecorded({
               blobUrl: result.blobUrl,
               mimeType,

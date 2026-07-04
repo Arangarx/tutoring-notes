@@ -118,7 +118,6 @@ import {
 } from "@/lib/whiteboard/local-peer-id";
 import {
   finalizeWhiteboardSessionFromBackend,
-  enqueueChunkTranscriptionAction,
   issueJoinToken,
   revokeJoinTokensForSession,
   startWhiteboardSession,
@@ -1757,17 +1756,16 @@ export function WhiteboardWorkspaceClient({
    * outbox owns the segment lifecycle and the audio bridge observes
    * outbox state directly to drive End-session UI copy.
    *
-   * The hook already uploaded the Blob to Vercel Blob by the time it
-   * calls us (see `useAudioRecorder.onstop`), so we pass `blobRemoteUrl`
-   * through on enqueue. The local Blob still gets stored in IDB as
-   * the recovery anchor — if the tab refreshes after the outbox row
-   * lands but before End-session, the worker can re-upload from the
-   * persisted Blob rather than losing the segment.
+   * On auto-rollover (VAD cuts), the hook passes local bytes only — the
+   * outbox persists them at cut (`blobRemoteUrl: null`) and the worker
+   * uploads from IndexedDB (WS-N, mirrors remote-stream-recorder). On the
+   * final/tail segment the hook still uploads inline and passes
+   * `blobRemoteUrl` through on enqueue.
    */
   const onWorkspaceAudioRecorded = useCallback(
     async (
       audioSeg: {
-        blobUrl: string;
+        blobUrl?: string;
         mimeType: string;
         sizeBytes: number;
         blob?: Blob;
@@ -1803,9 +1801,10 @@ export function WhiteboardWorkspaceClient({
           streamId: TUTOR_MIC_STREAM_ID,
           segmentId,
           blobLocalRef: audioSeg.blob ?? null,
-          blobRemoteUrl: audioSeg.blobUrl,
+          blobRemoteUrl: audioSeg.blobUrl ?? null,
           mimeType: audioSeg.mimeType,
           sizeBytes: audioSeg.sizeBytes,
+          recordingTimeOffsetMs,
           // Outbox segment ordering key stays WALL-CLOCK on purpose: it is
           // the sort key for the single mixdown replay stream (End-session
           // orders by audioStartedAtMs), it must stay consistent with the
@@ -1826,30 +1825,6 @@ export function WhiteboardWorkspaceClient({
             clearErr
           );
         }
-
-        // Slice 2b — producer wedge: trigger the backend transcription
-        // pipeline now that the segment blob is confirmed uploaded.
-        //
-        // MUST be fire-and-forget: a transcription-enqueue failure must
-        // never block or disrupt the recording/upload UX.
-        //
-        // p3-clock: `recordingTimeOffsetMs` (captured synchronously at
-        // callback entry above) is the START offset of THIS segment on the
-        // single monotonic session clock (pause-aware — a disconnect gap does
-        // not inflate it, unlike the old wall-clock delta). This is the
-        // sync-metadata contract key p3-finalize merges per-speaker
-        // transcripts by (never createdAt).
-        Promise.resolve(
-          enqueueChunkTranscriptionAction(whiteboardSessionId, {
-            chunkBlobUrl: audioSeg.blobUrl,
-            recordingTimeOffsetMs,
-          })
-        ).catch((txcErr: unknown) => {
-          console.warn(
-            `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} txc enqueue failed (non-blocking)`,
-            txcErr
-          );
-        });
       } catch (err) {
         // Never throw — useAudioRecorder.onRecorded swallows the
         // return value; surfacing this as a banner would race with
