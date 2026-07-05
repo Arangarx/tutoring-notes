@@ -6,11 +6,23 @@
  * handleExcalidrawChange from the anchor board could stamp board-3 strokes
  * into the new PDF page bucket / live scene.
  *
+ * WS-X fix (2nd attempt): content-identity fingerprint. After selectTutorPage
+ * calls updateScene with the PDF page elements, the anchor element IDs are
+ * recorded in pageSceneSetFingerprintRef. An incoming onChange that does NOT
+ * contain all anchor IDs is dropped as a stale foreign scene. The fingerprint
+ * is cleared on the first confirmed legitimate onChange so steady-state editing
+ * (including deletes of anchor elements) is unaffected.
+ *
  * Oracle (offset-invariant): after PDF import, the first PDF board's scene
  * contains ONLY its PDF image element(s) — none of the anchor board's stroke ids.
  *
- * Red-before: without the entry guard, board-3 stroke ids appear on the PDF board.
- * Green-after: entry guard + tutorSwitchTokenRef bump closes the race.
+ * Deterministic race injection: the spec uses window.__WBX_INJECT_STALE_ONCHANGE__
+ * to force-inject board-3 elements as a stale onChange at the exact moment
+ * pageSwitchProgrammaticRef drops to 0 (the vulnerable window).
+ *
+ * Red-before: without the fingerprint fix, the injection stamps board-3 strokes
+ *   into the PDF page bucket deterministically.
+ * Green-after: the fingerprint guard rejects the stale onChange 3/3.
  *
  * Tags: @wb-strokes @wb-sync @wb-assets
  * Gate: npm run test:wb-sync (relay) or targeted:
@@ -54,6 +66,26 @@ async function readSceneElementSummary(
   }, role);
 }
 
+/**
+ * Force-inject `elements` as a stale onChange into the tutor's
+ * handleExcalidrawChange, waiting for pageSwitchProgrammaticRef to drop
+ * to 0 first (the vulnerable window). Requires NEXT_PUBLIC_WB_E2E_SCENE_HOOK=1.
+ */
+async function injectStaleOnChange(
+  page: import("@playwright/test").Page,
+  elements: Array<{ id: string; type?: string }>
+): Promise<void> {
+  await page.evaluate((els) => {
+    const win = window as Window & {
+      __WBX_INJECT_STALE_ONCHANGE__?: (els: unknown) => void;
+    };
+    if (!win.__WBX_INJECT_STALE_ONCHANGE__) {
+      throw new Error("__WBX_INJECT_STALE_ONCHANGE__ seam not registered");
+    }
+    win.__WBX_INJECT_STALE_ONCHANGE__(els);
+  }, elements);
+}
+
 async function addBoardsUntilCount(
   tutorPage: import("@playwright/test").Page,
   targetCount: number
@@ -72,7 +104,7 @@ test.describe("E2 PDF import — no anchor stroke leak onto new PDF board", () =
   test.setTimeout(300_000);
 
   test(
-    "board-3 strokes stay on board-3 after PDF import creates board-4+",
+    "board-3 strokes stay on board-3 after PDF import creates board-4+ (deterministic)",
     { tag: [TAG.WB_STROKES, TAG.WB_ASSETS] },
     async ({ browser }) => {
       test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
@@ -104,6 +136,24 @@ test.describe("E2 PDF import — no anchor stroke leak onto new PDF board", () =
           15_000
         );
 
+        // Capture board-3 elements NOW (before PDF import) so we can
+        // inject them deterministically as a stale onChange later.
+        const board3ElementsSnapshot = await readSceneElementSummary(
+          peers.tutorPage,
+          "tutor"
+        );
+        // Sanity: board-3 snapshot must include our stroke.
+        expect(board3ElementsSnapshot.map((e) => e.id)).toContain(board3StrokeId);
+
+        // PRE-CONFIGURE the stale injection BEFORE the PDF import begins.
+        // window.__WBX_INJECT_STALE_ONCHANGE__ stores the elements in
+        // pendingStaleInjectionRef. The component's releaseGuard consumes it
+        // synchronously when pageSwitchProgrammaticRef drops to 0 (inside
+        // selectTutorPage triggered by commitPdfBatch). This eliminates the
+        // IPC-timing race where a post-switch page.evaluate call might arrive
+        // after Excalidraw's own onChange has already cleared the fingerprint.
+        await injectStaleOnChange(peers.tutorPage, board3ElementsSnapshot);
+
         await peers.tutorPage.getByTestId("wb-insert-asset-btn").click();
         await expect(peers.tutorPage.getByTestId("wb-insert-dialog")).toBeVisible();
         await peers.tutorPage.getByTestId("wb-insert-pick-file").click();
@@ -129,6 +179,14 @@ test.describe("E2 PDF import — no anchor stroke leak onto new PDF board", () =
           timeout: 15_000,
         });
 
+        // Allow the guard-release injection (fired inside releaseGuard) and
+        // any async sync paths to settle.
+        await peers.tutorPage.waitForTimeout(200);
+
+        // --- Oracle: live Excalidraw scene (what the tutor actually sees) --
+        // api.getSceneElements() returns only non-deleted elements; this is
+        // the correct observable: after PDF import, the tutor should see ONLY
+        // PDF image elements on the PDF board (no strokes from other boards).
         const pdfBoardSummary = await readSceneElementSummary(
           peers.tutorPage,
           "tutor"

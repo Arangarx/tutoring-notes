@@ -821,6 +821,38 @@ export function WhiteboardWorkspaceClient({
    * from writing old-page elements into the newly-active same-named page.
    */
   const boardGenerationRef = useRef(0);
+  /**
+   * BUG-3 / WS-X content-identity guard.
+   *
+   * Maps pageId → Set of anchor element IDs placed by the most recent
+   * programmatic `updateScene` in `selectTutorPage`. In
+   * `handleExcalidrawChange`, any incoming onChange that lacks ALL anchor
+   * IDs is treated as a stale foreign scene (from a different board that
+   * fired its debounced onChange after the guard released) and dropped.
+   * The fingerprint is cleared on the first confirmed legitimate onChange
+   * (one whose element set contains all anchors), so steady-state editing
+   * — including deleting anchor elements — is unaffected after the first
+   * clean event. Not set for blank-page switches (`next.length === 0`).
+   */
+  const pageSceneSetFingerprintRef = useRef<Map<string, Set<string>>>(new Map());
+  /**
+   * TEST SEAM — BUG-3 / WS-X deterministic injection.
+   * Holds a thin wrapper that calls the current `handleExcalidrawChange`
+   * so `window.__WBX_INJECT_STALE_ONCHANGE__` can invoke it without
+   * capturing a stale `useCallback` closure.
+   * Only written when `NEXT_PUBLIC_WB_E2E_SCENE_HOOK === "1"`.
+   */
+  const e2eOnChangeInvokerRef = useRef<
+    ((elements: ReadonlyArray<unknown>) => void) | null
+  >(null);
+  /**
+   * TEST SEAM — holds stale elements pending injection via
+   * `window.__WBX_INJECT_STALE_ONCHANGE__`. Set by the window hook; consumed
+   * (and cleared) synchronously inside `releaseGuard` the moment
+   * `pageSwitchProgrammaticRef` drops to 0, ensuring the injection fires
+   * before Excalidraw's own debounced onChange (a separate macrotask).
+   */
+  const pendingStaleInjectionRef = useRef<ReadonlyArray<unknown> | null>(null);
   /** In-memory per-tab scene (Excalidraw only shows one at a time). */
   const pageDataRef = useRef<Record<string, ReadonlyArray<ExcalidrawLikeElement>>>(
     Object.create(null)
@@ -3073,6 +3105,24 @@ export function WhiteboardWorkspaceClient({
         api.getSceneElements() as ReadonlyArray<ExcalidrawLikeElement>
       );
     });
+    // BUG-3 / WS-X — deterministic race injection seam.
+    // Playwright calls `window.__WBX_INJECT_STALE_ONCHANGE__(elements)` to
+    // pre-configure a stale scene to be injected into handleExcalidrawChange
+    // the NEXT time pageSwitchProgrammaticRef drops to 0. The call should be
+    // made BEFORE the page switch so that when releaseGuard fires, the pending
+    // injection is already registered. This avoids the IPC-timing race where
+    // a post-switch page.evaluate call might arrive after Excalidraw's own
+    // legitimate onChange has cleared the fingerprint.
+    const win = window as Window & {
+      __WBX_INJECT_STALE_ONCHANGE__?: (els: unknown) => void;
+    };
+    win.__WBX_INJECT_STALE_ONCHANGE__ = (elsRaw) => {
+      // Always store — consumed by the next releaseGuard when count drops to 0.
+      pendingStaleInjectionRef.current = elsRaw as ReadonlyArray<unknown>;
+    };
+    return () => {
+      delete win.__WBX_INJECT_STALE_ONCHANGE__;
+    };
   }, [role, scheduleDocumentBroadcast, recorderOnCanvasChange, studentOnCanvasChange]);
 
   // Phase 5 task 8 — anchor replay's camera at t≈0 by emitting one
@@ -3249,6 +3299,21 @@ export function WhiteboardWorkspaceClient({
             `[pvs] pvs=${nextId} action=restore source=page-switch viewState=absent`
           );
         }
+        // BUG-3 / WS-X: record anchor element IDs for the content-identity guard.
+        // `handleExcalidrawChange` uses this to reject stale foreign onChanges
+        // (carrying elements from the page we just LEFT) that fire after the
+        // pageSwitchProgrammaticRef guard drops to 0. Blank-page switches are
+        // excluded (next.length === 0 → no anchors to validate against).
+        if (next.length > 0) {
+          pageSceneSetFingerprintRef.current.set(
+            nextId,
+            new Set(
+              (next as ReadonlyArray<{ id?: string }>)
+                .map((e) => e.id ?? "")
+                .filter(Boolean)
+            )
+          );
+        }
         // Scope undo/redo history to the current board. Excalidraw's history
         // stack is global to the single instance — without clearing it on every
         // board switch, undo on Board 2 can replay Board 1 operations and inject
@@ -3264,6 +3329,19 @@ export function WhiteboardWorkspaceClient({
             0,
             pageSwitchProgrammaticRef.current - 1
           );
+          // BUG-3 seam: when the guard hits 0, fire any pending stale injection
+          // synchronously so it arrives BEFORE Excalidraw's own debounced
+          // onChange (a separate macrotask). This makes the race deterministic.
+          if (
+            process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK === "1" &&
+            pageSwitchProgrammaticRef.current === 0
+          ) {
+            const pending = pendingStaleInjectionRef.current;
+            if (pending) {
+              pendingStaleInjectionRef.current = null;
+              e2eOnChangeInvokerRef.current?.(pending);
+            }
+          }
         };
         if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
           window.requestAnimationFrame(() =>
@@ -3355,6 +3433,17 @@ export function WhiteboardWorkspaceClient({
             0,
             pageSwitchProgrammaticRef.current - 1
           );
+          // BUG-3 seam: mirror of selectTutorPage's releaseGuard hook.
+          if (
+            process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK === "1" &&
+            pageSwitchProgrammaticRef.current === 0
+          ) {
+            const pending = pendingStaleInjectionRef.current;
+            if (pending) {
+              pendingStaleInjectionRef.current = null;
+              e2eOnChangeInvokerRef.current?.(pending);
+            }
+          }
         };
         if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
           window.requestAnimationFrame(() =>
@@ -4480,6 +4569,39 @@ export function WhiteboardWorkspaceClient({
       if (pageSwitchProgrammaticRef.current > 0) return;
       const els = elements as ReadonlyArray<ExcalidrawLikeElement>;
       const pageId = activePageIdRef.current;
+      // BUG-3 / WS-X content-identity guard.
+      // After a programmatic page switch the pageSwitchProgrammaticRef guard
+      // keeps most stale onChanges out, but Excalidraw's debounced onChange
+      // can fire a beat AFTER the guard drops to 0 still carrying the
+      // previous board's elements. The fingerprint detects this: if a
+      // fingerprint exists for the active page, any incoming onChange that
+      // does NOT contain all the anchor IDs set by the most recent
+      // updateScene is a stale foreign scene and must be dropped.
+      // The fingerprint is cleared on the first confirmed legitimate onChange
+      // (one that includes all anchor IDs) so steady-state editing — including
+      // deleting an anchor element — is unaffected after that first event.
+      const fingerprint = pageSceneSetFingerprintRef.current.get(pageId);
+      if (fingerprint && fingerprint.size > 0) {
+        const incomingIds = new Set(
+          (els as ReadonlyArray<{ id?: string }>)
+            .map((e) => e.id ?? "")
+            .filter(Boolean)
+        );
+        const allAnchorsPresent = Array.from(fingerprint).every((anchorId) =>
+          incomingIds.has(anchorId)
+        );
+        if (!allAnchorsPresent) {
+          const anchorIds = Array.from(fingerprint);
+          console.info(
+            `[wba] wbsid=${whiteboardSessionId} action=stale_foreign_scene_rejected pageId=${pageId} anchors=${anchorIds.join(",")}`
+          );
+          return;
+        }
+        // First confirmed legitimate onChange — clear the fingerprint so
+        // subsequent edits (including deletes of anchor elements) are
+        // never gated.
+        pageSceneSetFingerprintRef.current.delete(pageId);
+      }
       // PR-01 Option A: store raw elements ref — no per-move clone.
       // preserveImageAssetUrlsOnSceneWrite now runs only at wire/checkpoint build time.
       pageDataRef.current[pageId] = els as ExcalidrawLikeElement[];
@@ -4619,6 +4741,15 @@ export function WhiteboardWorkspaceClient({
       whiteboardSessionId,
     ]
   );
+
+  // BUG-3 / WS-X test seam: keep e2eOnChangeInvokerRef current so the
+  // window.__WBX_INJECT_STALE_ONCHANGE__ hook always calls the latest
+  // handleExcalidrawChange closure (useCallback deps change over time).
+  useEffect(() => {
+    if (process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK !== "1" || role !== "tutor") return;
+    e2eOnChangeInvokerRef.current = (elements) =>
+      handleExcalidrawChange(elements as ReadonlyArray<unknown>);
+  }, [handleExcalidrawChange, role]);
 
   const handleGraphPersisted = useCallback(() => {
     const api = excalidrawAPIRef.current;
