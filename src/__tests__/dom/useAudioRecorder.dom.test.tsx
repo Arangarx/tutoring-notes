@@ -87,6 +87,10 @@ jest.mock("@/lib/action-correlation", () => ({
 
 import { uploadAudioDirect } from "@/lib/recording/upload";
 import { createMicAudioGraph } from "@/lib/mic-recorder-audio";
+import {
+  STORAGE_DEVICE_KEY,
+  STORAGE_MIC_GROUP_KEY,
+} from "@/lib/recording/storage";
 
 // ---- Fake MediaRecorder --------------------------------------------------
 
@@ -202,6 +206,41 @@ function installMediaDevicesMock() {
   return { fakeStream, fakeTrack, getUserMedia, enumerateDevices };
 }
 
+function makeMicStream(deviceId: string, groupId: string) {
+  const fakeTrack = {
+    stop: jest.fn(),
+    getSettings: () => ({ deviceId, groupId }),
+  };
+  const fakeStream = {
+    getTracks: () => [fakeTrack],
+    getAudioTracks: () => [fakeTrack],
+  } as unknown as MediaStream;
+  return { fakeStream, fakeTrack };
+}
+
+function overconstrainedError(): DOMException {
+  const err = new DOMException("Overconstrained", "OverconstrainedError");
+  return err;
+}
+
+function hasExactDeviceId(
+  constraints: MediaStreamConstraints,
+  deviceId: string
+): boolean {
+  const audio = constraints.audio;
+  if (typeof audio !== "object" || audio === null) return false;
+  const dev = (audio as MediaTrackConstraints).deviceId;
+  if (!dev || typeof dev !== "object") return false;
+  return "exact" in dev && dev.exact === deviceId;
+}
+
+function hasAnyExactDeviceId(constraints: MediaStreamConstraints): boolean {
+  const audio = constraints.audio;
+  if (typeof audio !== "object" || audio === null) return false;
+  const dev = (audio as MediaTrackConstraints).deviceId;
+  return Boolean(dev && typeof dev === "object" && "exact" in dev);
+}
+
 // jsdom provides URL.createObjectURL only sometimes; pin it so blob previews
 // don't blow up.
 const originalCreateObjectURL = URL.createObjectURL;
@@ -255,6 +294,7 @@ async function flushAsync() {
 
 beforeEach(() => {
   mockMeterLevel = 0.5;
+  localStorage.clear();
   delete (window as unknown as { __VAD_MAX_SEGMENT_SECONDS_OVERRIDE?: number })
     .__VAD_MAX_SEGMENT_SECONDS_OVERRIDE;
   delete (window as unknown as { __SESSION_SAFETY_MAX_SECONDS_OVERRIDE?: number })
@@ -742,5 +782,143 @@ describe("useAudioRecorder — upload failures", () => {
     const graph = await (createMicAudioGraph as jest.Mock).mock.results.at(-1)!
       .value;
     expect(graph.setTutorRecordingMute).toHaveBeenLastCalledWith(false);
+  });
+});
+
+describe("useAudioRecorder — mic persistence (WS-H)", () => {
+  test("acquire persists deviceId and groupId to localStorage", async () => {
+    const { fakeStream } = makeMicStream("wife-mic-id", "grp-wife");
+    const getUserMedia = jest.fn(async () => fakeStream);
+    const enumerateDevices = jest.fn(async () => [
+      {
+        kind: "audioinput",
+        deviceId: "wife-mic-id",
+        label: "Wife USB Mic",
+        groupId: "grp-wife",
+      },
+    ] as MediaDeviceInfo[]);
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia, enumerateDevices },
+    });
+
+    renderRecorder();
+    await flushAsync();
+
+    expect(localStorage.getItem(STORAGE_DEVICE_KEY)).toBe("wife-mic-id");
+    expect(localStorage.getItem(STORAGE_MIC_GROUP_KEY)).toBe("grp-wife");
+  });
+
+  test("deviceId drift with same groupId re-selects via groupId without wiping preference", async () => {
+    localStorage.setItem(STORAGE_DEVICE_KEY, "stale-device-id");
+    localStorage.setItem(STORAGE_MIC_GROUP_KEY, "grp-wife");
+
+    const { fakeStream: resolvedStream } = makeMicStream(
+      "new-device-id",
+      "grp-wife"
+    );
+    const getUserMedia = jest.fn(async (constraints: MediaStreamConstraints) => {
+      if (hasExactDeviceId(constraints, "stale-device-id")) {
+        throw overconstrainedError();
+      }
+      return resolvedStream;
+    });
+    const enumerateDevices = jest.fn(async () => [
+      {
+        kind: "audioinput",
+        deviceId: "new-device-id",
+        label: "Wife USB Mic",
+        groupId: "grp-wife",
+      },
+      {
+        kind: "audioinput",
+        deviceId: "builtin-mic",
+        label: "Built-in",
+        groupId: "grp-builtin",
+      },
+    ] as MediaDeviceInfo[]);
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia, enumerateDevices },
+    });
+
+    const { result } = renderRecorder();
+    await flushAsync();
+
+    expect(result.current.state).toBe("ready");
+    expect(localStorage.getItem(STORAGE_DEVICE_KEY)).toBe("new-device-id");
+    expect(localStorage.getItem(STORAGE_MIC_GROUP_KEY)).toBe("grp-wife");
+    expect(getUserMedia.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  test("transient OverconstrainedError: relaxed retry succeeds and preference is retained", async () => {
+    localStorage.setItem(STORAGE_DEVICE_KEY, "wife-mic-id");
+    localStorage.setItem(STORAGE_MIC_GROUP_KEY, "grp-wife");
+
+    const { fakeStream } = makeMicStream("wife-mic-id", "grp-wife");
+    let exactAttempts = 0;
+    const getUserMedia = jest.fn(async (constraints: MediaStreamConstraints) => {
+      if (hasAnyExactDeviceId(constraints)) {
+        exactAttempts += 1;
+        if (exactAttempts === 1) {
+          throw overconstrainedError();
+        }
+      }
+      return fakeStream;
+    });
+    const enumerateDevices = jest.fn(async () => [
+      {
+        kind: "audioinput",
+        deviceId: "wife-mic-id",
+        label: "Wife USB Mic",
+        groupId: "grp-wife",
+      },
+    ] as MediaDeviceInfo[]);
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia, enumerateDevices },
+    });
+
+    const { result } = renderRecorder();
+    await flushAsync();
+
+    expect(result.current.state).toBe("ready");
+    expect(localStorage.getItem(STORAGE_DEVICE_KEY)).toBe("wife-mic-id");
+    expect(localStorage.getItem(STORAGE_MIC_GROUP_KEY)).toBe("grp-wife");
+    expect(getUserMedia.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  test("persistent failure: relaxed retry fails then preference is cleared and default mic used", async () => {
+    localStorage.setItem(STORAGE_DEVICE_KEY, "gone-mic-id");
+    localStorage.setItem(STORAGE_MIC_GROUP_KEY, "grp-gone");
+
+    const { fakeStream: defaultStream } = makeMicStream(
+      "default-mic-id",
+      "grp-default"
+    );
+    const getUserMedia = jest.fn(async (constraints: MediaStreamConstraints) => {
+      const audio = constraints.audio;
+      if (audio === true) {
+        return defaultStream;
+      }
+      throw overconstrainedError();
+    });
+    const enumerateDevices = jest.fn(async () => [] as MediaDeviceInfo[]);
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia, enumerateDevices },
+    });
+    const warnSpy = jest.spyOn(console, "warn");
+
+    const { result } = renderRecorder();
+    await flushAsync();
+
+    expect(result.current.state).toBe("ready");
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("clearing preference and using default input"),
+      expect.anything()
+    );
+    expect(localStorage.getItem(STORAGE_DEVICE_KEY)).toBe("default-mic-id");
+    expect(localStorage.getItem(STORAGE_MIC_GROUP_KEY)).toBe("grp-default");
   });
 });

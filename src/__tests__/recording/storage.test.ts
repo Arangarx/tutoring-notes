@@ -11,6 +11,7 @@ import {
   CHIME_VOL_MAX,
   CHIME_VOL_MIN,
   STORAGE_DEVICE_KEY,
+  STORAGE_MIC_GROUP_KEY,
   STORAGE_GAIN_KEY,
   STORAGE_CHIME_ENABLED_KEY,
   STORAGE_CHIME_VOLUME_KEY,
@@ -20,6 +21,8 @@ import {
   saveStoredGain,
   loadStoredDeviceId,
   saveStoredDeviceId,
+  loadStoredMicGroupId,
+  saveStoredMicGroupId,
   loadStoredLearnerMicDeviceId,
   saveStoredLearnerMicDeviceId,
   loadStoredLearnerMicGroupId,
@@ -103,6 +106,21 @@ describe("loadStoredDeviceId / saveStoredDeviceId", () => {
     saveStoredDeviceId("usb-mic-42");
     expect(loadStoredDeviceId()).toBe("usb-mic-42");
     expect(getStored(STORAGE_DEVICE_KEY)).toBe("usb-mic-42");
+  });
+});
+
+describe("loadStoredMicGroupId / saveStoredMicGroupId", () => {
+  test("round-trips group id alongside device id", () => {
+    saveStoredMicGroupId("grp-wife-mic");
+    expect(loadStoredMicGroupId()).toBe("grp-wife-mic");
+    expect(getStored(STORAGE_MIC_GROUP_KEY)).toBe("grp-wife-mic");
+  });
+
+  test("empty group id removes the key", () => {
+    saveStoredMicGroupId("grp-x");
+    saveStoredMicGroupId("");
+    expect(loadStoredMicGroupId()).toBe("");
+    expect(getStored(STORAGE_MIC_GROUP_KEY)).toBeNull();
   });
 });
 
@@ -210,6 +228,7 @@ describe("SSR / no-window safety", () => {
   test("loaders return defaults when window is undefined", () => {
     expect(loadStoredGain()).toBe(GAIN_DEFAULT);
     expect(loadStoredDeviceId()).toBe("");
+    expect(loadStoredMicGroupId()).toBe("");
     expect(loadStoredLearnerMicDeviceId("lp")).toBe("");
     expect(loadStoredLearnerMicGroupId("lp")).toBe("");
     expect(loadStoredChimeEnabled()).toBe(true);
@@ -219,6 +238,7 @@ describe("SSR / no-window safety", () => {
   test("savers no-op without throwing when window is undefined", () => {
     expect(() => saveStoredGain(1)).not.toThrow();
     expect(() => saveStoredDeviceId("x")).not.toThrow();
+    expect(() => saveStoredMicGroupId("g")).not.toThrow();
     expect(() => saveStoredLearnerMicDeviceId("lp", "x")).not.toThrow();
     expect(() => saveStoredLearnerMicGroupId("lp", "g")).not.toThrow();
     expect(() => saveStoredChimeEnabled(true)).not.toThrow();
@@ -239,6 +259,7 @@ describe("quota / write failures", () => {
     };
     expect(() => saveStoredGain(1)).not.toThrow();
     expect(() => saveStoredDeviceId("x")).not.toThrow();
+    expect(() => saveStoredMicGroupId("g")).not.toThrow();
     expect(() => saveStoredLearnerMicDeviceId("lp", "x")).not.toThrow();
     expect(() => saveStoredLearnerMicGroupId("lp", "g")).not.toThrow();
     expect(() => saveStoredChimeEnabled(true)).not.toThrow();

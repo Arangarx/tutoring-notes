@@ -16,6 +16,8 @@ export const CHIME_VOL_MAX = 1;
 export const CHIME_VOL_DEFAULT = 0.75;
 
 export const STORAGE_DEVICE_KEY = "tn-mic-device-id";
+/** Optional correlate when OEMs reuse `deviceId` across reconnects. */
+export const STORAGE_MIC_GROUP_KEY = "tn-mic-group-id";
 /** Learner-scoped mic device id — suffix is `LearnerProfile.id` (student live-A/V). */
 export const STORAGE_LEARNER_MIC_DEVICE_KEY_PREFIX = "tn-mic-device-id:";
 /** Optional group correlate for learner mic when OEM rows share a `deviceId`. */
@@ -70,6 +72,30 @@ export function saveStoredDeviceId(id: string): void {
   if (!s) return;
   try {
     s.setItem(STORAGE_DEVICE_KEY, id);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function loadStoredMicGroupId(): string {
+  const s = getStorage();
+  if (!s) return "";
+  return s.getItem(STORAGE_MIC_GROUP_KEY) ?? "";
+}
+
+export function saveStoredMicGroupId(id: string): void {
+  const s = getStorage();
+  if (!s) return;
+  if (!id) {
+    try {
+      s.removeItem(STORAGE_MIC_GROUP_KEY);
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+  try {
+    s.setItem(STORAGE_MIC_GROUP_KEY, id);
   } catch {
     /* ignore */
   }

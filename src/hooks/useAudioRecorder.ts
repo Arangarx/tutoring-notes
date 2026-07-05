@@ -67,10 +67,12 @@ import {
   loadStoredChimeVolume,
   loadStoredDeviceId,
   loadStoredGain,
+  loadStoredMicGroupId,
   saveStoredChimeEnabled,
   saveStoredChimeVolume,
   saveStoredDeviceId,
   saveStoredGain,
+  saveStoredMicGroupId,
 } from "@/lib/recording/storage";
 import {
   queryMicPermission,
@@ -306,6 +308,50 @@ function meterColor(level: number): string {
   return "var(--color-muted)";
 }
 
+/**
+ * When `deviceId: { exact }` fails (stale id or transient unplug), retry with
+ * softer constraints before clearing the tutor's saved preference.
+ */
+async function attemptRelaxedMicAcquire(
+  storedDeviceId: string
+): Promise<MediaStream | null> {
+  const storedGroupId = loadStoredMicGroupId();
+  const attempts: MediaTrackConstraints[] = [];
+
+  if (storedGroupId) {
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      const byGroup = all.find(
+        (d) => d.kind === "audioinput" && d.groupId === storedGroupId
+      );
+      if (byGroup?.deviceId) {
+        attempts.push({
+          deviceId: { exact: byGroup.deviceId },
+          groupId: { ideal: storedGroupId },
+        });
+        attempts.push({ deviceId: { ideal: byGroup.deviceId } });
+      }
+      attempts.push({ groupId: { ideal: storedGroupId } });
+    } catch {
+      /* enumerate best-effort */
+    }
+  }
+
+  attempts.push({
+    deviceId: { ideal: storedDeviceId },
+    ...(storedGroupId ? { groupId: { ideal: storedGroupId } } : {}),
+  });
+
+  for (const audio of attempts) {
+    try {
+      return await navigator.mediaDevices.getUserMedia({ audio });
+    } catch {
+      /* try next relaxed constraint set */
+    }
+  }
+  return null;
+}
+
 export function useAudioRecorder({
   studentId,
   onRecorded,
@@ -472,6 +518,7 @@ export function useAudioRecorder({
   useEffect(() => {
     setGainLinear(loadStoredGain());
     setSelectedDeviceId(loadStoredDeviceId());
+    pinnedMicEnumerateGroupRef.current = loadStoredMicGroupId();
     setChimeEnabled(loadStoredChimeEnabled());
     setChimeVolume(loadStoredChimeVolume());
   }, []);
@@ -982,6 +1029,7 @@ export function useAudioRecorder({
       } else if (name === "OverconstrainedError" || name === "ConstraintNotSatisfiedError") {
         if (exactDeviceId) {
           saveStoredDeviceId("");
+          saveStoredMicGroupId("");
           setSelectedDeviceId("");
           msg =
             "The previously selected microphone is no longer available. Try clicking Start recording again to use the default mic.";
@@ -997,8 +1045,14 @@ export function useAudioRecorder({
 
     let stream: MediaStream;
     try {
+      const storedGrp = loadStoredMicGroupId();
       const constraints: MediaStreamConstraints = {
-        audio: opts.deviceId ? { deviceId: { exact: opts.deviceId } } : true,
+        audio: opts.deviceId
+          ? {
+              deviceId: { exact: opts.deviceId },
+              ...(storedGrp ? { groupId: { ideal: storedGrp } } : {}),
+            }
+          : true,
       };
       stream = await navigator.mediaDevices.getUserMedia(constraints);
     } catch (err) {
@@ -1009,21 +1063,31 @@ export function useAudioRecorder({
 
       // `deviceId: { exact }` + a stale id from localStorage (USB unplugged,
       // Bluetooth profile change, OS default swap) yields OverconstrainedError
-      // before any audio reaches the graph. Clear the preference and acquire
-      // the default mic in one step so the meter/recorder works without an
-      // extra Start click and without a scary console.error on the happy path.
+      // before any audio reaches the graph. Retry with relaxed constraints
+      // (ideal deviceId / groupId re-resolve) before clearing the preference;
+      // only fall back to default mic + wipe when the retry also fails.
       if (stalePreferredDevice) {
-        console.warn(
-          "[useAudioRecorder] stored mic device unavailable; clearing preference and using default input",
-          err
-        );
-        saveStoredDeviceId("");
-        setSelectedDeviceId("");
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        } catch (err2) {
-          applyGetUserMediaFailure(err2, undefined);
-          return;
+        const relaxedStream = await attemptRelaxedMicAcquire(opts.deviceId!);
+        if (relaxedStream) {
+          console.warn(
+            "[useAudioRecorder] stored mic device exact match failed; relaxed retry succeeded",
+            err
+          );
+          stream = relaxedStream;
+        } else {
+          console.warn(
+            "[useAudioRecorder] stored mic device unavailable; clearing preference and using default input",
+            err
+          );
+          saveStoredDeviceId("");
+          saveStoredMicGroupId("");
+          setSelectedDeviceId("");
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          } catch (err2) {
+            applyGetUserMediaFailure(err2, undefined);
+            return;
+          }
         }
       } else {
         applyGetUserMediaFailure(err, opts.deviceId);
@@ -1047,6 +1111,7 @@ export function useAudioRecorder({
       setSelectedDeviceId(settings.deviceId);
     }
     if (settings?.groupId) {
+      saveStoredMicGroupId(settings.groupId);
       pinnedMicEnumerateGroupRef.current = settings.groupId;
     }
 
@@ -1163,6 +1228,10 @@ export function useAudioRecorder({
         saveStoredDeviceId(settings.deviceId);
         setSelectedDeviceId(settings.deviceId);
       }
+      if (settings?.groupId) {
+        saveStoredMicGroupId(settings.groupId);
+        pinnedMicEnumerateGroupRef.current = settings.groupId;
+      }
 
       setLocalMicStream(graph.publishStream);
       setError(null);
@@ -1266,8 +1335,11 @@ export function useAudioRecorder({
         saveStoredDeviceId(settings.deviceId);
         setSelectedDeviceId(settings.deviceId);
       }
-      pinnedMicEnumerateGroupRef.current =
-        settings?.groupId ?? entry.groupId ?? "";
+      const resolvedGroupId = settings?.groupId ?? entry.groupId ?? "";
+      if (resolvedGroupId) {
+        saveStoredMicGroupId(resolvedGroupId);
+      }
+      pinnedMicEnumerateGroupRef.current = resolvedGroupId;
       setPickedMicSlot(slotIndex);
 
       setLocalMicStream(graph.publishStream);
@@ -1400,6 +1472,7 @@ export function useAudioRecorder({
     }
     setPickedMicSlot(slotIndex);
     if (entry?.groupId) {
+      saveStoredMicGroupId(entry.groupId);
       pinnedMicEnumerateGroupRef.current = entry.groupId;
     }
     if (recordState === "ready") {
@@ -1428,6 +1501,11 @@ export function useAudioRecorder({
     }
     setSelectedDeviceId(newDeviceId);
     saveStoredDeviceId(newDeviceId);
+    const picked = devicesRef.current.find((d) => d.deviceId === newDeviceId);
+    if (picked?.groupId) {
+      saveStoredMicGroupId(picked.groupId);
+      pinnedMicEnumerateGroupRef.current = picked.groupId;
+    }
     if (recordState === "ready") {
       await acquireMic({ deviceId: newDeviceId || undefined, forRecording: false });
     }
