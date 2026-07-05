@@ -101,4 +101,7 @@ P3-J1 marketing landing smoke; P3-J2 multitutor handle display (4 surfaces); P3-
 **Total: 24 batches** (14 disjoint jest/DOM authorable + 10 serial relay/identity execution groups). Floor from the ~85-surface WS-V audit; excludes HUMAN-only + Andrew-gated fragile fixes, but writes RED specs where a bug is confirmed (in-person audio P1-WB-10, WS-X).
 
 ## Execution status (orchestrator-maintained)
-- **2026-07-05:** plan captured. Executing SERIALLY (dispatch-safety note). First batch: **P1-J1** (share-access API contracts, no production touch).
+- **2026-07-05:** plan captured. Executing SERIALLY (dispatch-safety note).
+  - **P1-J1** ✅ DONE — `1a60d5a` ([impl](5c1f0db1-91f0-400c-a5d8-b13a7b6afdfe)). share mark-seen (200+`noteView` upsert / revoked→403 / wrong-note→404 / missing→400) + share audio proxy (200+`Accept-Ranges` / Range→206 / revoked→403 / missing→401 / out-of-scope→404). Red-before proven; 10/10 jest; tsc clean; contract-level oracles (blob stream mocked at boundary).
+  - **P1-J2** ⏳ IN FLIGHT ([impl](714e2896-9f97-48a8-8597-d488d6a21296)) — timer-anchor + `w/[joinToken]/wb-asset` + `sessions/[sessionId]/wb-asset` route contracts.
+  - NEXT (serial): P1-J3 roster CRUD ownership → P1-J4 review payload → P1-J5 replay-mixdown/concat route auth → P1-J6/J7/J8 (throttle/hard-stop/shimmer). Then the SERIAL-ONLY relay + identity-e2e groups (one at a time).
