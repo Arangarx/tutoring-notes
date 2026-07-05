@@ -20,7 +20,7 @@
  */
 
 import "./waiting-room-overlay.css";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { WbIconShare } from "./wb-icons";
 
 export type WtrSessionMode = "LIVE" | "IN_PERSON";
@@ -99,6 +99,14 @@ export type WaitingRoomOverlayProps = {
    * overlay header so light/dark is reachable before the session starts.
    */
   themeToggleNode?: ReactNode;
+  /** Tutor-only: deletes the un-started session (two-step confirm in-overlay). */
+  onCancel?: () => void | Promise<void>;
+  /** Student-only: leaves without deleting the session. */
+  onLeave?: () => void;
+  /** Tutor cancel failure copy (mirrors WorkspaceResumeGate delete error). */
+  cancelError?: string | null;
+  /** True while deleteWhiteboardSessionAndDataAction is in-flight. */
+  isCancelling?: boolean;
 };
 
 /**
@@ -128,9 +136,14 @@ export function WaitingRoomOverlay({
   copyStudentLinkState = "idle",
   copyStudentLinkDisabled = false,
   themeToggleNode,
+  onCancel,
+  onLeave,
+  cancelError,
+  isCancelling = false,
 }: WaitingRoomOverlayProps) {
   const isTutor = role === "tutor";
   const inPerson = sessionMode === "IN_PERSON";
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   const copyLinkLabel =
     copyStudentLinkState === "copying"
@@ -284,8 +297,78 @@ export function WaitingRoomOverlay({
                 {isStarting ? "Starting…" : "Start session"}
               </button>
             </div>
+
+            {onCancel ? (
+              <div className="mynk-wtr-footer">
+                {cancelError ? (
+                  <p
+                    role="alert"
+                    className="mynk-wtr-cancel-error text-sm whitespace-pre-wrap text-destructive break-words"
+                    data-testid="wb-waiting-cancel-error"
+                  >
+                    {cancelError}
+                  </p>
+                ) : null}
+                {!showCancelConfirm ? (
+                  <button
+                    type="button"
+                    className="mynk-wtr-cancel-btn"
+                    onClick={() => setShowCancelConfirm(true)}
+                    disabled={isCancelling || isStarting}
+                    data-testid="wb-waiting-cancel"
+                  >
+                    Cancel session
+                  </button>
+                ) : (
+                  <div
+                    className="mynk-wtr-cancel-confirm"
+                    role="alertdialog"
+                    aria-label="Confirm cancel session"
+                  >
+                    <p className="mynk-wtr-cancel-confirm-copy">
+                      This deletes the session — Confirm cancel
+                    </p>
+                    <div className="mynk-wtr-cancel-confirm-actions">
+                      <button
+                        type="button"
+                        className="mynk-wtr-cancel-btn"
+                        onClick={() => {
+                          void onCancel();
+                        }}
+                        disabled={isCancelling}
+                        data-testid="wb-waiting-cancel-confirm"
+                      >
+                        {isCancelling ? "Cancelling…" : "Confirm cancel"}
+                      </button>
+                      <button
+                        type="button"
+                        className="mynk-wtr-leave-btn"
+                        onClick={() => setShowCancelConfirm(false)}
+                        disabled={isCancelling}
+                        data-testid="wb-waiting-cancel-back"
+                      >
+                        Go back
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : null}
           </>
         )}
+
+        {!isTutor && onLeave ? (
+          <div className="mynk-wtr-footer">
+            <button
+              type="button"
+              className="mynk-wtr-leave-btn"
+              onClick={onLeave}
+              data-testid="wb-waiting-leave"
+            >
+              Leave session
+            </button>
+          </div>
+        ) : null}
 
       </div>
     </div>

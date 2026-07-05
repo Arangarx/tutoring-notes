@@ -753,6 +753,120 @@ test.describe("Waiting-room overlay + Start gating", { tag: [TAG.WB_CHROME, TAG.
 });
 
 // ---------------------------------------------------------------------------
+// WS-F: Waiting-room exit affordance (Escapability)
+// ---------------------------------------------------------------------------
+
+test.describe(
+  "WS-F — waiting-room exit affordance",
+  { tag: [TAG.WB_CHROME] },
+  () => {
+    test("PENDING tutor Cancel → confirm → redirect to student roster; session row gone", async ({
+      browser,
+    }) => {
+      test.setTimeout(120_000);
+      const session = await seedWbPendingLiveSyncSession({ sessionMode: "IN_PERSON" });
+
+      const tutorCtx = await browser.newContext({
+        storageState: "tests/integration/.auth/tutor.json",
+        viewport: { width: 1280, height: 900 },
+        permissions: ["microphone"],
+      });
+      try {
+        const tutorPage = await tutorCtx.newPage();
+        await tutorPage.goto(
+          `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+          { waitUntil: "domcontentloaded" }
+        );
+        await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
+          timeout: 90_000,
+        });
+        await expect(tutorPage.getByTestId("wb-waiting-overlay")).toBeVisible({
+          timeout: 10_000,
+        });
+
+        await tutorPage.getByTestId("wb-waiting-cancel").click();
+        await expect(tutorPage.getByTestId("wb-waiting-cancel-confirm")).toBeVisible({
+          timeout: 8_000,
+        });
+        await tutorPage.getByTestId("wb-waiting-cancel-confirm").click();
+
+        await tutorPage.waitForURL(`**/admin/students/${session.studentId}`, {
+          timeout: 20_000,
+        });
+
+        const prisma = new PrismaClient();
+        try {
+          const gone = await prisma.whiteboardSession.findUnique({
+            where: { id: session.whiteboardSessionId },
+          });
+          expect(gone).toBeNull();
+        } finally {
+          await prisma.$disconnect();
+        }
+      } finally {
+        await tutorCtx.close();
+      }
+    });
+
+    test('PENDING student Leave → "You left" card shown', async ({ browser }) => {
+      test.setTimeout(180_000);
+      const session = await seedWbPendingLiveSyncSession();
+
+      const tutorCtx = await browser.newContext({
+        storageState: "tests/integration/.auth/tutor.json",
+        viewport: { width: 1280, height: 900 },
+        permissions: ["microphone"],
+      });
+      const studentCtx = await browser.newContext({
+        viewport: { width: 1280, height: 800 },
+        permissions: ["microphone"],
+      });
+      try {
+        await loginLearnerInContext(studentCtx, session.learnerHandle, session.learnerPin);
+
+        const tutorPage = await tutorCtx.newPage();
+        await tutorPage.goto(
+          `/admin/students/${session.studentId}/whiteboard/${session.whiteboardSessionId}/workspace`,
+          { waitUntil: "domcontentloaded" }
+        );
+        await expect(tutorPage.getByTestId("tutor-whiteboard-canvas-mount")).toBeVisible({
+          timeout: 90_000,
+        });
+        await waitForWbE2eBridge(tutorPage, "tutor");
+
+        const encryptionKey = await tutorPage.evaluate(() => {
+          const m = window.location.hash.match(/[#&]k=([^&]+)/);
+          return m?.[1] ? decodeURIComponent(m[1]) : "";
+        });
+        const studentPage = await studentCtx.newPage();
+        await studentPage.goto(
+          `/join/${session.whiteboardSessionId}#k=${encryptionKey}`,
+          { waitUntil: "domcontentloaded" }
+        );
+        await expect(studentPage.getByTestId("student-whiteboard-canvas-mount")).toBeVisible({
+          timeout: 90_000,
+        });
+        await waitForWbE2eBridge(studentPage, "student");
+
+        await expect(studentPage.getByTestId("wb-waiting-overlay")).toBeVisible({
+          timeout: 10_000,
+        });
+
+        await studentPage.getByTestId("wb-waiting-leave").click();
+
+        await expect(
+          studentPage.getByRole("heading", { name: /you left the session/i })
+        ).toBeVisible({ timeout: 10_000 });
+        await expect(studentPage.getByTestId("wb-waiting-overlay")).not.toBeVisible();
+      } finally {
+        await tutorCtx.close();
+        await studentCtx.close();
+      }
+    });
+  }
+);
+
+// ---------------------------------------------------------------------------
 // P2-E: Dual-device takeover
 // ---------------------------------------------------------------------------
 

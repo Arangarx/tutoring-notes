@@ -122,6 +122,7 @@ import {
   revokeJoinTokensForSession,
   startWhiteboardSession,
 } from "@/app/admin/students/[id]/whiteboard/actions";
+import { deleteWhiteboardSessionAndDataAction } from "@/app/admin/students/[id]/whiteboard/notes-actions";
 import { LEGACY_INTENT_ENDREVIEW_AUTO_END } from "@/lib/whiteboard/finalize-flags";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { useRemoteMicRecorders } from "@/hooks/useRemoteMicRecorders";
@@ -1473,6 +1474,8 @@ export function WhiteboardWorkspaceClient({
   // True while startWhiteboardSession is in-flight (prevents double-tap).
   const [isStarting, setIsStarting] = useState(false);
   const [sessionStartError, setSessionStartError] = useState<string | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   const sync = syncReady ? syncClientRef.current : null;
 
@@ -3846,6 +3849,35 @@ export function WhiteboardWorkspaceClient({
       setIsStarting(false);
     }
   }, [whiteboardSessionId, role, isStarting]);
+
+  const handleCancelPendingSession = useCallback(async () => {
+    if (isCancelling) return;
+    setIsCancelling(true);
+    setCancelError(null);
+    console.log(
+      `[nsi] wbsid=${whiteboardSessionId} action=cancel_pending`
+    );
+    try {
+      const result = await deleteWhiteboardSessionAndDataAction(
+        whiteboardSessionId
+      );
+      if (!result.ok) {
+        setCancelError(
+          result.error ?? "Could not cancel the session. Please try again."
+        );
+        return;
+      }
+      router.push(`/admin/students/${studentId}`);
+    } catch (err) {
+      console.error(
+        `[nsi] wbsid=${whiteboardSessionId} action=cancel_pending_failed`,
+        err
+      );
+      setCancelError("Could not cancel the session. Please try again.");
+    } finally {
+      setIsCancelling(false);
+    }
+  }, [whiteboardSessionId, studentId, router, isCancelling]);
 
   const handleEndSession = useCallback(async () => {
     setShowEndConfirm(false);
@@ -6909,6 +6941,10 @@ export function WhiteboardWorkspaceClient({
         copyStudentLinkState={copyState}
         copyStudentLinkDisabled={!syncUrl || copyState === "copying"}
         themeToggleNode={<WbThemeToggle />}
+        onCancel={role === "tutor" ? handleCancelPendingSession : undefined}
+        onLeave={role === "student" ? handleStudentExit : undefined}
+        cancelError={cancelError}
+        isCancelling={isCancelling}
       />
     )}
     </WbRoleProvider>
