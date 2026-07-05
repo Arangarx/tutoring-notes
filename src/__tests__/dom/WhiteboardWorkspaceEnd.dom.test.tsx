@@ -617,7 +617,7 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     });
   });
 
-  test("'Saving N segments' copy reflects live outbox count during drain", async () => {
+  test("'Saving your recording…' copy during outbox drain (not segment count)", async () => {
     // Deferred drain so we can inspect the intermediate UI.
     let resolveDrain!: (r: DrainResult) => void;
     mockDrainOutboxOrTimeout.mockImplementation(
@@ -659,10 +659,10 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     await confirmFinishAndSave();
 
     expect(
-      await screen.findByRole("button", { name: /Saving 2 segments/i })
+      await screen.findByRole("button", { name: /Saving your recording/i })
     ).toBeInTheDocument();
 
-    // Push count down to 1; copy should update live.
+    // Count may change internally; label stays friendly (not "Saving N segments").
     act(() => {
       setObserverState({
         state: "uploading",
@@ -672,8 +672,11 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
       });
     });
     expect(
-      await screen.findByRole("button", { name: /Saving 1 segment/i })
+      await screen.findByRole("button", { name: /Saving your recording/i })
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Saving \d+ segment/i })
+    ).not.toBeInTheDocument();
 
     // Resolve drain so the rest of the flow runs.
     await act(async () => {
@@ -716,8 +719,9 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     await confirmFinishAndSave();
 
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(/Couldn't finalize/i);
-    expect(alert.textContent).toMatch(/1 audio segment still saving/i);
+    expect(alert.textContent).toMatch(/Still saving audio — your work is safe/i);
+    expect(alert.textContent).not.toMatch(/Couldn't finalize/i);
+    expect(alert.textContent).not.toMatch(/audio segment/i);
     expect(mockFinalize).not.toHaveBeenCalled();
     expect(mockFinalizeOutboxAfterEnd).not.toHaveBeenCalled();
   });
@@ -1029,8 +1033,9 @@ describe("WhiteboardWorkspaceClient end session (Phase 1b)", () => {
     await confirmFinishAndSave();
 
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(/Vercel Blob 500/);
-    expect(alert.textContent).toMatch(/2 audio segments still saving/i);
+    expect(alert.textContent).toMatch(/Still saving audio — your work is safe/i);
+    expect(alert.textContent).not.toMatch(/Vercel Blob 500/);
+    expect(alert.textContent).not.toMatch(/audio segment/i);
     expect(mockFinalize).not.toHaveBeenCalled();
   });
 

@@ -1725,6 +1725,8 @@ export function WhiteboardWorkspaceClient({
   const [audioDraftRecovery, setAudioDraftRecovery] =
     useState<DraftSegmentRow | null>(null);
   const [audioDraftRecoveryBusy, setAudioDraftRecoveryBusy] = useState(false);
+  const [audioDraftDiscardConfirmOpen, setAudioDraftDiscardConfirmOpen] =
+    useState(false);
 
   /**
    * p3-clock: monotonic-clock accessor, read by callbacks that are defined
@@ -1956,6 +1958,7 @@ export function WhiteboardWorkspaceClient({
         `[WhiteboardWorkspaceClient] dft=${dft} discard wbsid=${whiteboardSessionId} streamId=${TUTOR_MIC_STREAM_ID}`
       );
       setAudioDraftRecovery(null);
+      setAudioDraftDiscardConfirmOpen(false);
     } catch (err) {
       console.error(
         `[WhiteboardWorkspaceClient] dft=${dft} discard failed wbsid=${whiteboardSessionId}`,
@@ -2941,8 +2944,14 @@ export function WhiteboardWorkspaceClient({
     const onPageHide = () => {
       flushViewportPersistNow("visibility");
     };
-    const onBeforeUnload = () => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
       flushViewportPersistNow("visibility");
+      if (phaseActive && recordingActive) {
+        e.preventDefault();
+        e.returnValue =
+          "You have an active recording. Leaving now may interrupt your session.";
+        return e.returnValue;
+      }
     };
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", onPageHide);
@@ -2952,7 +2961,7 @@ export function WhiteboardWorkspaceClient({
       window.removeEventListener("pagehide", onPageHide);
       window.removeEventListener("beforeunload", onBeforeUnload);
     };
-  }, [flushViewportPersistNow]);
+  }, [flushViewportPersistNow, phaseActive, recordingActive]);
 
   useEffect(() => {
     return () => clearViewportPersistTimer();
@@ -3051,6 +3060,16 @@ export function WhiteboardWorkspaceClient({
     flushThrottledFrameNow();
     flushDocumentBroadcastNow();
   };
+
+  useEffect(() => {
+    if (recorder.checkpointStatus !== "error" || !recorder.checkpointError) {
+      return;
+    }
+    console.warn(
+      `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} checkpoint_save_failed`,
+      recorder.checkpointError
+    );
+  }, [recorder.checkpointStatus, recorder.checkpointError, whiteboardSessionId]);
 
   useEffect(() => {
     if (process.env.NEXT_PUBLIC_WB_E2E_SCENE_HOOK !== "1") return;
@@ -3890,9 +3909,7 @@ export function WhiteboardWorkspaceClient({
         );
         setEndingState("error");
         setEndingError(
-          drainResult.lastError
-            ? `Couldn't finalize — ${remaining} audio segment${remaining === 1 ? "" : "s"} still saving. Last error: ${drainResult.lastError}. Try again once your connection is healthy — your data isn't lost.`
-            : `Couldn't finalize — ${remaining} audio segment${remaining === 1 ? "" : "s"} still saving. Try again in a moment, your data isn't lost.`
+          "Still saving audio — your work is safe. Try again once your connection is healthy."
         );
         return;
       }
@@ -4045,8 +4062,12 @@ export function WhiteboardWorkspaceClient({
     } catch (err) {
       setEndingState("error");
       const msg = (err as Error)?.message ?? "Could not end the session.";
+      console.error(
+        `[WhiteboardWorkspaceClient] wbsid=${whiteboardSessionId} end-session failed:`,
+        msg
+      );
       setEndingError(
-        `Could not end session: ${msg}. Your work is still in progress — retry "End session".`
+        "Still saving audio — your work is safe. Try \"End session\" again in a moment."
       );
       // Don't auto-retry — the tutor decides whether to retry End or
       // keep the session open and try again.
@@ -5722,6 +5743,20 @@ export function WhiteboardWorkspaceClient({
               This link is missing the encryption key. Please ask {tutorName} for
               a fresh link.
             </p>
+            <button
+              type="button"
+              className="button button--primary"
+              data-testid="wb-student-key-missing-close"
+              onClick={() => {
+                try {
+                  window.close();
+                } catch {
+                  // Browsers may block close for tabs not opened by script.
+                }
+              }}
+            >
+              Close this page
+            </button>
           </div>
         </div>
       </WbRoleProvider>
@@ -5735,7 +5770,21 @@ export function WhiteboardWorkspaceClient({
         <div className="container" style={{ maxWidth: 720, padding: 24 }}>
           <div className="card" role="status">
             <h1 style={{ marginTop: 0 }}>{title}</h1>
-            <p style={{ marginBottom: 0 }}>{body}</p>
+            <p>{body}</p>
+            <button
+              type="button"
+              className="button button--primary"
+              data-testid="wb-student-join-unavailable-close"
+              onClick={() => {
+                try {
+                  window.close();
+                } catch {
+                  // Browsers may block close for tabs not opened by script.
+                }
+              }}
+            >
+              Close this page
+            </button>
           </div>
         </div>
       </WbRoleProvider>
@@ -6267,7 +6316,7 @@ export function WhiteboardWorkspaceClient({
               endingState === "finalizing"
                 ? finalizingOutboxState === "uploading" &&
                   finalizingSegmentCount > 0
-                  ? `Saving ${finalizingSegmentCount} segment${finalizingSegmentCount === 1 ? "" : "s"}…`
+                  ? "Saving your recording…"
                   : "Finalizing…"
                 : endingState === "ending"
                   ? "Finalizing…"
@@ -6500,11 +6549,50 @@ export function WhiteboardWorkspaceClient({
                     className="btn"
                     disabled={audioDraftRecoveryBusy}
                     data-testid="wb-audio-draft-discard"
-                    onClick={() => void handleAudioDraftDiscard()}
+                    onClick={() => setAudioDraftDiscardConfirmOpen(true)}
                   >
                     Discard
                   </button>
                 </span>
+                {audioDraftDiscardConfirmOpen && (
+                  <div
+                    role="alertdialog"
+                    aria-label="Confirm discard recovered audio"
+                    data-testid="wb-audio-draft-discard-confirm"
+                    style={{
+                      marginTop: 8,
+                      padding: "8px 10px",
+                      borderRadius: 6,
+                      border: "1px solid var(--error-border)",
+                      background: "var(--error-soft)",
+                      fontSize: 13,
+                    }}
+                  >
+                    <p style={{ margin: "0 0 8px" }}>
+                      Discard this recovered recording? This cannot be undone.
+                    </p>
+                    <span style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        className="btn"
+                        disabled={audioDraftRecoveryBusy}
+                        data-testid="wb-audio-draft-discard-confirm-yes"
+                        onClick={() => void handleAudioDraftDiscard()}
+                      >
+                        Yes, discard
+                      </button>
+                      <button
+                        type="button"
+                        className="btn"
+                        disabled={audioDraftRecoveryBusy}
+                        data-testid="wb-audio-draft-discard-confirm-cancel"
+                        onClick={() => setAudioDraftDiscardConfirmOpen(false)}
+                      >
+                        Cancel
+                      </button>
+                    </span>
+                  </div>
+                )}
               </Banner>
             )}
             {presence.bannerMessage && (
@@ -6516,7 +6604,7 @@ export function WhiteboardWorkspaceClient({
               <Banner tone="warning" testId="wb-split-brain-banner">
                 {recordingActive
                   ? "Student's video connection lost — recording paused until the call reconnects."
-                  : "Student's video connection lost — waiting for WebRTC to reconnect."}
+                  : "Student's video connection lost — Waiting for your student's connection to come back."}
               </Banner>
             )}
             {copyState === "error" && copyError && (
@@ -6556,17 +6644,17 @@ export function WhiteboardWorkspaceClient({
             )}
             {recorder.checkpointStatus === "error" && recorder.checkpointError && (
               <Banner tone="warning">
-                Checkpoint save failed: {recorder.checkpointError}. Still recording in memory; retrying.
+                We couldn&apos;t save a backup of your board — still recording in
+                this tab. We&apos;ll try again automatically.
               </Banner>
             )}
             {role === "tutor" &&
               recorder.resumePrompt &&
               !initialPersistedState && (
-              <Banner tone="info">
-                <strong>Browser recovery (IndexedDB):</strong> a whiteboard
-                event draft from{" "}
+              <Banner tone="info" testId="wb-board-draft-recovery-banner">
+                We found an unsaved draft of your board from{" "}
                 {new Date(recorder.resumePrompt.startedAt).toLocaleString()} (~
-                {formatDuration(recorder.resumePrompt.durationMs)} of logged time).{" "}
+                {formatDuration(recorder.resumePrompt.durationMs)} of work).{" "}
                 <button
                   type="button"
                   className="btn"

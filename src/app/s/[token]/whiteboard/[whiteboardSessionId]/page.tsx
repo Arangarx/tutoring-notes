@@ -153,6 +153,10 @@ export default async function ShareWhiteboardPage({
     shareToken: token,
   });
 
+  console.log(
+    `[wbShareReplay.page] wbsid=${whiteboardSessionId} schema v${session.eventsSchemaVersion}`
+  );
+
   return (
     <main className="min-h-dvh bg-background">
       <div className="mx-auto w-full max-w-[1280px] px-4 py-4 md:px-5 md:py-6">
@@ -184,9 +188,6 @@ export default async function ShareWhiteboardPage({
           title={sessionLabel}
         />
 
-        <p className="mt-2 text-right font-mono text-[11px] text-muted-foreground">
-          schema v{session.eventsSchemaVersion}
-        </p>
       </div>
     </main>
   );

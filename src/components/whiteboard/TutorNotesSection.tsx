@@ -198,6 +198,15 @@ export default function TutorNotesSection({
   const isFailed = note.found && note.status === "failed";
   const isNotStarted = !note.found;
 
+  useEffect(() => {
+    if (isFailed && note.found && note.error) {
+      console.error(
+        `[TutorNotesSection] wbsid=${whiteboardSessionId} note_generation_failed`,
+        note.error
+      );
+    }
+  }, [isFailed, note, whiteboardSessionId]);
+
   // Sync fields whenever a fresh note arrives from polling (S4 guard)
   useEffect(() => {
     if (!pollSyncAllowed) return;
@@ -633,9 +642,7 @@ export default function TutorNotesSection({
           data-testid="tutor-notes-error"
         >
           <strong>Note generation failed.</strong>{" "}
-          {note.found && note.error
-            ? note.error
-            : "An unexpected error occurred."}{" "}
+          We couldn&apos;t finish your notes — you can retry.{" "}
           Click <strong>Regenerate notes</strong> above to retry.
         </div>
       )}

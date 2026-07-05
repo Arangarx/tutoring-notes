@@ -7,6 +7,7 @@
  * Replay mounts once (persist-once) without unmounting notes or lossy transitions.
  */
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import TutorNotesSection, {
   parseNoteContent,
@@ -40,6 +41,7 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
     useState<ReviewSurfaceState>("hero");
   const [hasMountedReplay, setHasMountedReplay] = useState(false);
   const [noteSaved, setNoteSaved] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   const initialParsedFieldsRef = useRef<StructuredNoteFields | null>(null);
   const [notesFields, setNotesFields] = useState<StructuredNoteFields>({
@@ -82,7 +84,11 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [whiteboardSessionId]);
+  }, [whiteboardSessionId, loadAttempt]);
+
+  const handleRetryLoad = useCallback(() => {
+    setLoadAttempt((n) => n + 1);
+  }, []);
 
   const handleNoteSaved = useCallback(() => {
     setNoteSaved(true);
@@ -147,6 +153,30 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
           }}
         >
           <strong>Could not load review data.</strong> {loadState.message}
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              marginTop: 12,
+            }}
+          >
+            <Link
+              href={`/admin/students/${studentId}`}
+              className="btn"
+              data-testid="wb-review-error-back"
+            >
+              ← Back to student
+            </Link>
+            <button
+              type="button"
+              className="btn"
+              data-testid="wb-review-error-retry"
+              onClick={handleRetryLoad}
+            >
+              Try again
+            </button>
+          </div>
         </div>
       </div>
     );
