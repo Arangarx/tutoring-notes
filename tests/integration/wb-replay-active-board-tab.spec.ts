@@ -13,7 +13,10 @@ import {
   seedWbLiveSyncSession,
   waitForWbE2eBridge,
 } from "./whiteboard-live-sync.helpers";
-import { readLocalEnv } from "../utils/read-dotenv";
+import {
+  blobIntegrationEnabled,
+  blobIntegrationSkipMessage,
+} from "../helpers/blob-gate";
 import { TAG } from "../test-tags";
 
 type EventsBody = {
@@ -42,11 +45,7 @@ test.describe("WS-E E4 replay active board tab", { tag: [TAG.WB_RECORDING] }, ()
   }) => {
     test.setTimeout(300_000);
 
-    const env = readLocalEnv();
-    test.skip(
-      !env.BLOB_READ_WRITE_TOKEN?.trim(),
-      "Set BLOB_READ_WRITE_TOKEN in .env for integration recording."
-    );
+    test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
 
     const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
 

@@ -2,7 +2,6 @@ import { test, expect } from "./fixtures";
 import type { Browser } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
-import { readLocalEnv } from "../utils/read-dotenv";
 import {
   blobIntegrationEnabled,
   blobIntegrationSkipMessage,
@@ -572,11 +571,7 @@ test.describe("whiteboard live-sync regression", { tag: [TAG.WB_SYNC] }, () => {
     );
 
     test.setTimeout(300_000);
-    const env = readLocalEnv();
-    test.skip(
-      !env.BLOB_READ_WRITE_TOKEN?.trim(),
-      "Set BLOB_READ_WRITE_TOKEN in .env for PDF upload in this harness."
-    );
+    test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
 
     const pdfPath = path.join(__dirname, "../fixtures/e2e-two-pages.pdf");
     const session = await seedWbLiveSyncSession();

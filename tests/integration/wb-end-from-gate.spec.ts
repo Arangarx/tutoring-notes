@@ -9,7 +9,10 @@
 
 import { test, expect } from "./fixtures";
 import { PrismaClient } from "@prisma/client";
-import { readLocalEnv } from "../utils/read-dotenv";
+import {
+  blobIntegrationEnabled,
+  blobIntegrationSkipMessage,
+} from "../helpers/blob-gate";
 import { seedWbLiveSyncSession } from "./whiteboard-live-sync.helpers";
 import { TAG } from "../test-tags";
 
@@ -110,11 +113,7 @@ test.describe(
       async ({ page }) => {
         test.setTimeout(300_000);
 
-        const env = readLocalEnv();
-        test.skip(
-          !env.BLOB_READ_WRITE_TOKEN?.trim(),
-          "Set BLOB_READ_WRITE_TOKEN in .env to run the WS-C gate guard."
-        );
+        test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
 
         const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
         const preState = await fetchDbState(page, whiteboardSessionId);

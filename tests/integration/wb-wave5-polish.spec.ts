@@ -1,7 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
-import { readLocalEnv } from "../utils/read-dotenv";
+import {
+  blobIntegrationEnabled,
+  blobIntegrationSkipMessage,
+} from "../helpers/blob-gate";
 import {
   assertControlFullyInViewport,
   assertEqualVerticalInsetInParent,
@@ -840,11 +843,7 @@ test.describe("Wave 5 polish smokebook", { tag: [TAG.WB_CHROME] }, () => {
     browser,
   }) => {
     test.setTimeout(360_000);
-    const env = readLocalEnv();
-    test.skip(
-      !env.BLOB_READ_WRITE_TOKEN?.trim(),
-      "Set BLOB_READ_WRITE_TOKEN in .env for end-session review thumbnail test."
-    );
+    test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
 
     const session = await seedWbLiveSyncSession();
 

@@ -17,10 +17,13 @@
  *   npm run test:wb-playwright -- tests/integration/wb-e2-pdf-stroke-leak.spec.ts
  */
 
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 import fs from "node:fs";
 import path from "node:path";
-import { readLocalEnv } from "../utils/read-dotenv";
+import {
+  blobIntegrationEnabled,
+  blobIntegrationSkipMessage,
+} from "../helpers/blob-gate";
 import {
   clickBoardPageTab,
   drawTestStrokeOnRole,
@@ -72,11 +75,7 @@ test.describe("E2 PDF import — no anchor stroke leak onto new PDF board", () =
     "board-3 strokes stay on board-3 after PDF import creates board-4+",
     { tag: [TAG.WB_STROKES, TAG.WB_ASSETS] },
     async ({ browser }) => {
-      const env = readLocalEnv();
-      test.skip(
-        !env.BLOB_READ_WRITE_TOKEN?.trim(),
-        "Set BLOB_READ_WRITE_TOKEN in .env for PDF upload in this harness."
-      );
+      test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
 
       const pdfPath = path.join(__dirname, "../fixtures/e2e-two-pages.pdf");
       test.skip(!fs.existsSync(pdfPath), `Missing PDF fixture: ${pdfPath}`);

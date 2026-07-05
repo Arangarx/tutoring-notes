@@ -1,6 +1,10 @@
 import { test, expect } from "./fixtures";
-import { readLocalEnv } from "../utils/read-dotenv";
+import {
+  blobIntegrationEnabled,
+  blobIntegrationSkipMessage,
+} from "../helpers/blob-gate";
 import { seedWbLiveSyncSession } from "./whiteboard-live-sync.helpers";
+import { TAG } from "../test-tags";
 
 const TEST_SECRET = process.env.PLAYWRIGHT_TEST_SECRET ?? "playwright-test-secret";
 
@@ -141,17 +145,13 @@ async function recordShortSoloSession(
   await waitForNotesPipelineActiveState(page, whiteboardSessionId, 90_000);
 }
 
-test.describe("notes shimmer — real pipeline (SMOKE-NOTES-1)", () => {
+test.describe("notes shimmer — real pipeline (SMOKE-NOTES-1)", { tag: [TAG.WB_RECORDING] }, () => {
   test("end session → pending/generating: overlay visible, animating, status copy", async ({
     page,
   }) => {
     test.setTimeout(360_000);
 
-    const env = readLocalEnv();
-    test.skip(
-      !env.BLOB_READ_WRITE_TOKEN?.trim(),
-      "Set BLOB_READ_WRITE_TOKEN in .env for real recording + notes pipeline."
-    );
+    test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
 
     const { studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
     await recordShortSoloSession(page, studentId, whiteboardSessionId);
@@ -200,11 +200,7 @@ test.describe("notes shimmer — real pipeline (SMOKE-NOTES-1)", () => {
   }) => {
     test.setTimeout(360_000);
 
-    const env = readLocalEnv();
-    test.skip(
-      !env.BLOB_READ_WRITE_TOKEN?.trim(),
-      "Set BLOB_READ_WRITE_TOKEN in .env for real recording + notes pipeline."
-    );
+    test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
 
     await page.emulateMedia({ reducedMotion: "reduce" });
 

@@ -1,29 +1,29 @@
 import { test, expect } from "./fixtures";
-import { readLocalEnv } from "../utils/read-dotenv";
+import {
+  blobIntegrationEnabled,
+  blobIntegrationSkipMessage,
+} from "../helpers/blob-gate";
 import {
   seedWbLiveSyncSession,
 } from "./whiteboard-live-sync.helpers";
+import { TAG } from "../test-tags";
 
 /**
  * Phase 0c acceptance — full stack (workspace → Blob upload → admin replay).
- * Requires `BLOB_READ_WRITE_TOKEN` in `.env` (same as Blob-dependent smokes).
+ * Requires `blobIntegrationEnabled()` (hermetic harness or real Blob token).
  *
  * Uses `seedWbLiveSyncSession` (not bare seedOpenWhiteboardSession) because it
  * creates the SessionConsentSnapshot row required for auto-start recording
  * (PRESARAH-1 always-on intent: recording starts automatically when consent is
  * present — there is no manual wb-start-recording button).
  */
-test.describe("whiteboard recording integration", () => {
+test.describe("whiteboard recording integration", { tag: [TAG.WB_RECORDING] }, () => {
   test("tutor records solo session → ends → in-shell review shows stroke events and replay capability", async ({
     page,
   }) => {
     test.setTimeout(240_000);
 
-    const env = readLocalEnv();
-    test.skip(
-      !env.BLOB_READ_WRITE_TOKEN?.trim(),
-      "Set BLOB_READ_WRITE_TOKEN in .env for integration recording (Vercel Blob upload + register)."
-    );
+    test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
 
     const { adminUserId, studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
 
@@ -105,18 +105,14 @@ test.describe("whiteboard recording integration", () => {
    * wb-replay-in-frame) which is the primary review surface used by tutors.
    * Exercises BOTH first open AND re-open (hide → Replay session again).
    *
-   * Requires BLOB_READ_WRITE_TOKEN for the Blob upload step.
+   * Requires blobIntegrationEnabled() for the Blob upload step.
    */
   test("in-shell SessionReviewMode replay auto-starts from position 0 (first open and re-open)", async ({
     page,
   }) => {
     test.setTimeout(300_000);
 
-    const env = readLocalEnv();
-    test.skip(
-      !env.BLOB_READ_WRITE_TOKEN?.trim(),
-      "Set BLOB_READ_WRITE_TOKEN in .env for integration recording (Vercel Blob upload + register)."
-    );
+    test.skip(!blobIntegrationEnabled(), blobIntegrationSkipMessage());
 
     const { adminUserId, studentId, whiteboardSessionId } = await seedWbLiveSyncSession();
 
