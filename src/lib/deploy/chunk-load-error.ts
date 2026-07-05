@@ -9,7 +9,8 @@ const CHUNK_RECOVERY_STORAGE_KEY = "deploy-chunk-recovery-reload";
 let chunkRecoveryDeferUnsub: (() => void) | null = null;
 let chunkRecoveryDeferredPending = false;
 
-function performChunkRecoveryReload(): void {
+function performChunkRecoveryReload(wasDeferred: boolean): void {
+  console.info(`[dfr] action=reload_commit source=chunk deferred=${wasDeferred}`);
   sessionStorage.setItem(CHUNK_RECOVERY_STORAGE_KEY, "1");
   triggerDeployReload();
 }
@@ -26,9 +27,16 @@ function scheduleDeferredChunkRecoveryReload(): void {
       chunkRecoveryDeferUnsub?.();
       chunkRecoveryDeferUnsub = null;
       chunkRecoveryDeferredPending = false;
-      performChunkRecoveryReload();
+      performChunkRecoveryReload(true);
     }
   });
+}
+
+/** Clear a latched deferred chunk-recovery subscription (SPA nav safety). */
+export function clearDeferredChunkRecovery(): void {
+  chunkRecoveryDeferUnsub?.();
+  chunkRecoveryDeferUnsub = null;
+  chunkRecoveryDeferredPending = false;
 }
 
 function getErrorMessage(error: unknown): string | null {
@@ -82,7 +90,7 @@ export function attemptChunkRecoveryReload(): boolean {
     return true;
   }
 
-  performChunkRecoveryReload();
+  performChunkRecoveryReload(false);
   return true;
 }
 

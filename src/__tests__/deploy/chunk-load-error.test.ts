@@ -51,11 +51,14 @@ describe("isChunkLoadError()", () => {
 
 describe("attemptChunkRecoveryReload()", () => {
   it("sets sessionStorage flag and reloads on first call", async () => {
+    const consoleSpy = jest.spyOn(console, "info").mockImplementation(() => {});
     const { attemptChunkRecoveryReload } = await import("@/lib/deploy/chunk-load-error");
 
     expect(attemptChunkRecoveryReload()).toBe(true);
     expect(sessionStorage.getItem("deploy-chunk-recovery-reload")).toBe("1");
     expect(reloadMock).toHaveBeenCalledTimes(1);
+    expect(consoleSpy).toHaveBeenCalledWith("[dfr] action=reload_commit source=chunk deferred=false");
+    consoleSpy.mockRestore();
   });
 
   it("returns false and does not reload again (loop guard)", async () => {
@@ -69,6 +72,7 @@ describe("attemptChunkRecoveryReload()", () => {
   });
 
   it("defers reload while capture is active and reloads when defer clears", async () => {
+    const consoleSpy = jest.spyOn(console, "info").mockImplementation(() => {});
     const { setCaptureDeferActive } = await import("@/lib/deploy/capture-defer-registry");
     const { attemptChunkRecoveryReload } = await import("@/lib/deploy/chunk-load-error");
 
@@ -81,6 +85,49 @@ describe("attemptChunkRecoveryReload()", () => {
 
     expect(reloadMock).toHaveBeenCalledTimes(1);
     expect(sessionStorage.getItem("deploy-chunk-recovery-reload")).toBe("1");
+    expect(consoleSpy).toHaveBeenCalledWith("[dfr] action=reload_commit source=chunk deferred=true");
+    consoleSpy.mockRestore();
+  });
+});
+
+describe("clearDeferredChunkRecovery()", () => {
+  it("clears pending latch and unsubscribes so defer-clear does not reload", async () => {
+    const { setCaptureDeferActive } = await import("@/lib/deploy/capture-defer-registry");
+    const { attemptChunkRecoveryReload, clearDeferredChunkRecovery } = await import(
+      "@/lib/deploy/chunk-load-error"
+    );
+
+    setCaptureDeferActive("wwc", true);
+    expect(attemptChunkRecoveryReload()).toBe(true);
+    expect(reloadMock).not.toHaveBeenCalled();
+
+    clearDeferredChunkRecovery();
+    reloadMock.mockClear();
+
+    setCaptureDeferActive("wwc", false);
+    expect(reloadMock).not.toHaveBeenCalled();
+  });
+
+  it("allows a fresh deferred attempt after clear on simulated remount", async () => {
+    const { setCaptureDeferActive } = await import("@/lib/deploy/capture-defer-registry");
+    const {
+      attemptChunkRecoveryReload,
+      clearDeferredChunkRecovery,
+      clearChunkRecoveryFlag,
+    } = await import("@/lib/deploy/chunk-load-error");
+
+    setCaptureDeferActive("wwc", true);
+    attemptChunkRecoveryReload();
+    clearDeferredChunkRecovery();
+    clearChunkRecoveryFlag();
+
+    setCaptureDeferActive("wwc", true);
+    reloadMock.mockClear();
+    expect(attemptChunkRecoveryReload()).toBe(true);
+    expect(reloadMock).not.toHaveBeenCalled();
+
+    setCaptureDeferActive("wwc", false);
+    expect(reloadMock).toHaveBeenCalledTimes(1);
   });
 });
 

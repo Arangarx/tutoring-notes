@@ -36,6 +36,7 @@ beforeEach(() => {
   delete (window as Window & { __TN_PW_CLIENT_SHA__?: string }).__TN_PW_CLIENT_SHA__;
   setCaptureDeferActive("wwc", false);
   setCaptureDeferActive("note-recording", false);
+  jest.spyOn(console, "info").mockImplementation(() => {});
 
   process.env.NEXT_PUBLIC_BUILD_SHA = "abc123fullsha0000000000000000000000";
   process.env.NEXT_PUBLIC_PLAYWRIGHT_TEST = undefined;
@@ -44,6 +45,7 @@ beforeEach(() => {
 afterEach(() => {
   setCaptureDeferActive("wwc", false);
   setCaptureDeferActive("note-recording", false);
+  jest.restoreAllMocks();
 });
 
 describe("useDeployFreshness", () => {
@@ -71,7 +73,7 @@ describe("useDeployFreshness", () => {
     await waitFor(() => {
       expect(reloadMock).toHaveBeenCalledTimes(1);
     });
-    expect(toastMock).not.toHaveBeenCalled();
+    expect(console.info).toHaveBeenCalledWith("[dfr] action=reload_commit source=poll deferred=false");
     unmount();
   });
 
@@ -102,6 +104,7 @@ describe("useDeployFreshness", () => {
     await waitFor(() => {
       expect(reloadMock).toHaveBeenCalledTimes(1);
     });
+    expect(console.info).toHaveBeenCalledWith("[dfr] action=reload_commit source=poll deferred=true");
     unmount();
   });
 

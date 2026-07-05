@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import {
   attemptChunkRecoveryReload,
   clearChunkRecoveryFlag,
+  clearDeferredChunkRecovery,
   isChunkLoadError,
 } from "@/lib/deploy/chunk-load-error";
 import { useDeployFreshness } from "@/hooks/useDeployFreshness";
@@ -15,6 +16,7 @@ import { useDeployFreshness } from "@/hooks/useDeployFreshness";
 export function DeployClientGuards() {
   useDeployFreshness();
   useEffect(() => {
+    clearDeferredChunkRecovery();
     clearChunkRecoveryFlag();
 
     const handleError = (event: ErrorEvent) => {

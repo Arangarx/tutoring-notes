@@ -67,13 +67,14 @@ export function useDeployFreshness(): void {
       deferUnsubRef.current = null;
     }
 
-    function commitReload(): void {
+    function commitReload(wasDeferred: boolean): void {
       if (reloadCommittedRef.current) {
         return;
       }
       reloadCommittedRef.current = true;
       pendingReloadRef.current = false;
       clearDeferSubscription();
+      console.info(`[dfr] action=reload_commit source=poll deferred=${wasDeferred}`);
       triggerDeployReload();
     }
 
@@ -84,7 +85,7 @@ export function useDeployFreshness(): void {
 
       deferUnsubRef.current = subscribeCaptureDefer(() => {
         if (pendingReloadRef.current && !isCaptureDeferred()) {
-          commitReload();
+          commitReload(true);
         }
       });
     }
@@ -103,7 +104,7 @@ export function useDeployFreshness(): void {
       }
 
       if (!isCaptureDeferred()) {
-        commitReload();
+        commitReload(false);
         return;
       }
 
