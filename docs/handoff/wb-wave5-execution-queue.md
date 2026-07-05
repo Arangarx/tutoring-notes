@@ -165,6 +165,8 @@ Map of every smokebook item → coverage action. **BUILD** = write/strengthen a 
 
 - **WS-A F-1** (outbox register-failure has no attempt cap → unbounded retries on persistently-failing register server; log-spam only, NO data loss). 5-axis rated SHOULD-FIX / next-wave-acceptable. **~10-line in-flight-Set fix + reuse `permanentFailAfter` + dedupe log, with its own 5-axis, before the v1-redesign merge.** F-2/F-3 fold in.
 
+- **SEC — `tutor-asset/route.ts` any-origin blob URL (PRE-EXISTING, security-adjacent)** — the keystone [5-axis review](8b43c131-d9c7-4e97-aa23-ad546813f996) flagged that `isBlobUrlForSession`/`PATH_RE` in `tutor-asset/route.ts` accepts URLs of any origin (SSRF-adjacent). **NOT introduced by the harness diff** — pre-existing. Explicitly OUT of scope for the harness pass. **→ PROMOTE to `docs/BACKLOG.md` security section** on the next docs pass; fix = pin the allowed blob origin (Vercel store host, + harness host only when `isBlobHarnessActive()`).
+
 ## Cleanup debt
 
 - **DUPLICATE plan files:** `solo_recording_always-on_f2f0970e.plan.md` and `solo_recording_always-on_5ba5984e.plan.md` are identical — delete one when out of plan mode. Solo/in-person stroke capture appears LANDED (Andrew "strokes recover now") — verify + close.
