@@ -1,3 +1,5 @@
+import { getBuildIdentity } from "@/lib/build-identity";
+
 export type PreviewBranchBadgeData = {
   branch: string;
   shortSha: string;
@@ -9,19 +11,15 @@ export type PreviewBranchBadgeData = {
  * receive badge props.
  */
 export function getPreviewBranchBadgeData(): PreviewBranchBadgeData | null {
-  if (process.env.VERCEL_ENV !== "preview") {
+  const { sha, shortSha, branch, vercelEnv } = getBuildIdentity();
+
+  if (vercelEnv !== "preview") {
     return null;
   }
 
-  const branch = process.env.VERCEL_GIT_COMMIT_REF;
-  const sha = process.env.VERCEL_GIT_COMMIT_SHA;
-
-  if (!branch || !sha) {
+  if (!branch || sha === "development") {
     return null;
   }
 
-  return {
-    branch,
-    shortSha: sha.slice(0, 7),
-  };
+  return { branch, shortSha };
 }

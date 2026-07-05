@@ -684,6 +684,21 @@
 - **Hard deletion guard**: the delete path includes `isTestFixture: true` in every `WHERE` clause. This guard lives in the business logic (`dev-fixtures.ts`), not just the UI — physically incapable of deleting a real user.
 - **Migration check**: confirm `VERCEL_ENV` is NOT overridden in any production Vercel env var. The dashboard must remain inert there.
 
+### 10.11 Deploy build identity — `VERCEL_GIT_COMMIT_SHA`, client bake, `/api/version`
+
+- **Assumption**: Vercel injects `VERCEL_GIT_COMMIT_SHA` (full git commit) on **all** deployments (Production, Preview, and branch previews). Local `next dev` / `next build` without Vercel has it **unset** — code falls back to the literal `"development"`.
+- **Where baked in**:
+  - `src/lib/build-identity.ts` — `getBuildIdentity()` reads `VERCEL_GIT_COMMIT_SHA`, `VERCEL_GIT_COMMIT_REF`, `VERCEL_ENV`; single source for server deploy metadata.
+  - `next.config.ts` — `env.NEXT_PUBLIC_BUILD_SHA` bakes `VERCEL_GIT_COMMIT_SHA ?? "development"` at **build time** into the client bundle (no new secret env var; same Vercel-injected SHA).
+  - `src/app/api/version/route.ts` — public `GET` returns `{ sha, shortSha }` with `export const dynamic = "force-dynamic"` and `Cache-Control: no-store, max-age=0` (future client poll compares baked vs live).
+  - `src/app/layout.tsx` + `src/components/SiteFooter.tsx` — prod footer shows `shortSha` in all envs.
+  - `src/lib/preview-branch-badge.ts` — thin wrapper over `getBuildIdentity()`; preview pill unchanged (still `VERCEL_ENV === 'preview'` only).
+  - `src/lib/deploy/chunk-load-error.ts` + `src/components/DeployClientGuards.tsx` — global `ChunkLoadError` one-shot reload (orthogonal to version poll).
+- **Capability provided (Vercel)**: automatic per-deploy git SHA in the build environment without operator configuration.
+- **Generic / AWS equivalent**: CI injects `GIT_COMMIT` / `SOURCE_VERSION` at build time; expose the same via a no-store `/api/version` and bake into client at compile time.
+- **What breaks if violated**: client deploy-freshness poll (deliverable 2) and footer SHA show `"development"` or stale baked values; `/api/version` misreports the running deploy; chunk-recovery still works but users stay on skewed bundles longer without the poll.
+- **Migration check**: confirm the new platform exposes an immutable deploy commit SHA at build **and** runtime for the version endpoint; re-bake client env at compile; keep `/api/version` public and no-store.
+
 ---
 
 ## 11. Planned platform dependencies — recording re-architecture (**DESIGN-STAGE / NOT-YET-BUILT**)

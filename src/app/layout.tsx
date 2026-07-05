@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { PreviewBranchBadge } from "@/components/PreviewBranchBadge";
 import { Providers } from "@/components/Providers";
 import { SiteFooter } from "@/components/SiteFooter";
+import { getBuildIdentity } from "@/lib/build-identity";
 import { getPreviewBranchBadgeData } from "@/lib/preview-branch-badge";
 import { getThemeBootstrapScript } from "@/lib/theme";
 import { fraunces, inter, jetbrainsMono } from "./fonts";
@@ -15,6 +16,7 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const { shortSha: buildShortSha } = getBuildIdentity();
   const previewBranchBadge = getPreviewBranchBadgeData();
 
   return (
@@ -31,7 +33,7 @@ export default function RootLayout({
       <body style={{ minHeight: "100%", display: "flex", flexDirection: "column", margin: 0 }}>
         <Providers>
           <div style={{ flex: 1 }}>{children}</div>
-          <SiteFooter />
+          <SiteFooter buildShortSha={buildShortSha} />
           {previewBranchBadge ? (
             <PreviewBranchBadge
               branch={previewBranchBadge.branch}
