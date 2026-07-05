@@ -67,6 +67,21 @@ describe("attemptChunkRecoveryReload()", () => {
     expect(attemptChunkRecoveryReload()).toBe(false);
     expect(reloadMock).not.toHaveBeenCalled();
   });
+
+  it("defers reload while capture is active and reloads when defer clears", async () => {
+    const { setCaptureDeferActive } = await import("@/lib/deploy/capture-defer-registry");
+    const { attemptChunkRecoveryReload } = await import("@/lib/deploy/chunk-load-error");
+
+    setCaptureDeferActive("wwc", true);
+    expect(attemptChunkRecoveryReload()).toBe(true);
+    expect(reloadMock).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem("deploy-chunk-recovery-reload")).toBeNull();
+
+    setCaptureDeferActive("wwc", false);
+
+    expect(reloadMock).toHaveBeenCalledTimes(1);
+    expect(sessionStorage.getItem("deploy-chunk-recovery-reload")).toBe("1");
+  });
 });
 
 describe("clearChunkRecoveryFlag()", () => {

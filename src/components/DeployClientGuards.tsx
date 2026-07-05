@@ -7,11 +7,13 @@ import {
   clearChunkRecoveryFlag,
   isChunkLoadError,
 } from "@/lib/deploy/chunk-load-error";
+import { useDeployFreshness } from "@/hooks/useDeployFreshness";
 
 /**
- * Global deploy-freshness client guards (chunk recovery today; version poll in deliverable 2).
+ * Global deploy-freshness client guards (chunk recovery + version poll).
  */
 export function DeployClientGuards() {
+  useDeployFreshness();
   useEffect(() => {
     clearChunkRecoveryFlag();
 

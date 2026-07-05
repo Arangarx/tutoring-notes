@@ -1,4 +1,35 @@
+import {
+  isCaptureDeferred,
+  subscribeCaptureDefer,
+  triggerDeployReload,
+} from "@/lib/deploy/capture-defer-registry";
+
 const CHUNK_RECOVERY_STORAGE_KEY = "deploy-chunk-recovery-reload";
+
+let chunkRecoveryDeferUnsub: (() => void) | null = null;
+let chunkRecoveryDeferredPending = false;
+
+function performChunkRecoveryReload(): void {
+  sessionStorage.setItem(CHUNK_RECOVERY_STORAGE_KEY, "1");
+  triggerDeployReload();
+}
+
+function scheduleDeferredChunkRecoveryReload(): void {
+  if (chunkRecoveryDeferredPending) {
+    return;
+  }
+
+  chunkRecoveryDeferredPending = true;
+  chunkRecoveryDeferUnsub?.();
+  chunkRecoveryDeferUnsub = subscribeCaptureDefer(() => {
+    if (!isCaptureDeferred()) {
+      chunkRecoveryDeferUnsub?.();
+      chunkRecoveryDeferUnsub = null;
+      chunkRecoveryDeferredPending = false;
+      performChunkRecoveryReload();
+    }
+  });
+}
 
 function getErrorMessage(error: unknown): string | null {
   if (error instanceof Error) {
@@ -46,8 +77,12 @@ export function attemptChunkRecoveryReload(): boolean {
     return false;
   }
 
-  sessionStorage.setItem(CHUNK_RECOVERY_STORAGE_KEY, "1");
-  location.reload();
+  if (isCaptureDeferred()) {
+    scheduleDeferredChunkRecoveryReload();
+    return true;
+  }
+
+  performChunkRecoveryReload();
   return true;
 }
 

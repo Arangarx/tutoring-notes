@@ -39,6 +39,7 @@
  */
 
 import { copyTextToClipboard } from "@/lib/copy-text-to-clipboard";
+import { setCaptureDeferActive } from "@/lib/deploy/capture-defer-registry";
 import {
   formatConsentActionError,
   parseConsentActionError,
@@ -3901,6 +3902,17 @@ export function WhiteboardWorkspaceClient({
       setFinalizingOutboxState(next.state);
     });
   }, [endingState, whiteboardSessionId]);
+
+  useEffect(() => {
+    if (role !== "tutor") return;
+    const shouldDefer =
+      ["recording", "paused", "stopping", "uploading"].includes(lifecycle.state) ||
+      endingState === "finalizing" ||
+      endingState === "ending" ||
+      endingState === "error";
+    setCaptureDeferActive("wwc", shouldDefer);
+    return () => setCaptureDeferActive("wwc", false);
+  }, [role, lifecycle.state, endingState]);
 
   // Tutor Start affordance — transitions the session from PENDING to ACTIVE.
   // Called from the WaitingRoomOverlay Start button with the chosen mode.

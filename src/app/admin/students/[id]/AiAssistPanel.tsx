@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { formatUserFacingActionError } from "@/lib/action-correlation";
 import { generateNoteFromTextAction, transcribeAndGenerateAction } from "./actions";
 import AiGeneratedNoteReviewGate from "@/components/notes/AiGeneratedNoteReviewGate";
@@ -11,6 +11,7 @@ import { AdminSectionCard } from "@/components/admin/AdminSectionCard";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { setCaptureDeferActive } from "@/lib/deploy/capture-defer-registry";
 
 type Tab = "text" | "upload" | "record";
 
@@ -197,6 +198,11 @@ export default function AiAssistPanel({ studentId, formRef, enabled, blobEnabled
       setSegmentDisplayBase(pendingAudiosRef.current.length);
     }
     setIsRecordingActive(active);
+    setCaptureDeferActive("note-recording", active);
+  }, []);
+
+  useEffect(() => {
+    return () => setCaptureDeferActive("note-recording", false);
   }, []);
 
   if (!enabled) {

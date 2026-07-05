@@ -693,7 +693,9 @@
   - `src/app/api/version/route.ts` — public `GET` returns `{ sha, shortSha }` with `export const dynamic = "force-dynamic"` and `Cache-Control: no-store, max-age=0` (future client poll compares baked vs live).
   - `src/app/layout.tsx` + `src/components/SiteFooter.tsx` — prod footer shows `shortSha` in all envs.
   - `src/lib/preview-branch-badge.ts` — thin wrapper over `getBuildIdentity()`; preview pill unchanged (still `VERCEL_ENV === 'preview'` only).
-  - `src/lib/deploy/chunk-load-error.ts` + `src/components/DeployClientGuards.tsx` — global `ChunkLoadError` one-shot reload (orthogonal to version poll).
+  - `src/lib/deploy/chunk-load-error.ts` + `src/components/DeployClientGuards.tsx` — global `ChunkLoadError` one-shot reload (respects capture defer via `capture-defer-registry.ts`).
+  - `src/lib/deploy/capture-defer-registry.ts` — ref-counted module-level defer registry; whiteboard workspace + standalone note recording call `setCaptureDeferActive` while live capture/end-session is in flight; poller and chunk recovery read `isCaptureDeferred()` and latch reload until all sources clear. Observability: `[dfr] source=<id> active=<bool> deferred=<bool>`.
+  - `src/hooks/useDeployFreshness.ts` — event-driven client poll of `/api/version` on `document.visibilitychange` (tab visible) and `usePathname()` change only (no background interval); compares remote `sha` to baked `NEXT_PUBLIC_BUILD_SHA`; mismatch + safe → `location.reload()`; mismatch + deferred → single `sonner` toast + reload on defer clear. Local dev guard: skips when baked SHA is `"development"` or falsy.
 - **Capability provided (Vercel)**: automatic per-deploy git SHA in the build environment without operator configuration.
 - **Generic / AWS equivalent**: CI injects `GIT_COMMIT` / `SOURCE_VERSION` at build time; expose the same via a no-store `/api/version` and bake into client at compile time.
 - **What breaks if violated**: client deploy-freshness poll (deliverable 2) and footer SHA show `"development"` or stale baked values; `/api/version` misreports the running deploy; chunk-recovery still works but users stay on skewed bundles longer without the poll.
