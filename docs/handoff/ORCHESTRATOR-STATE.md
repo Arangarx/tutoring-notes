@@ -10,11 +10,11 @@
 
 | Field | Value |
 |---|---|
-| **Last action completed** | **Fragile-fix train milestone (2026-07-05):** WS-X BUG-3 fix [`ef5fb1a`](https://github.com/Arangarx/tutoring-notes/commit/ef5fb1a) — fingerprint-guard on `applyRemoteToCanvas` on-target condition; Sonnet 5-axis **CLEAN**. In-person audio fix [`3bf3a7e`](https://github.com/Arangarx/tutoring-notes/commit/3bf3a7e) (FSM `inPersonMode` step-3b + pill; `wb-in-person-unmasked` Playwright project; 5-axis SHIP-WITH-FIXES → folded). State refresh committed [`606bb31`](https://github.com/Arangarx/tutoring-notes/commit/606bb31). **Both wave-5 fragile fixes done + reviewed.** |
-| **Next action(s)** | Awaiting Andrew's next-tranche steer among: **WS-P deliverable 2** (version poll + defer-during-live-session — WS-P-A/B acks given; fragile-adjacent WWC `useEffect`); **WS-G-A** "preparing seamless replay…" poll UX; **jest-isolation pass** (attended-preferred; `--workers=1` green today); **PART-2 relay/identity serial burndown** (attended + Docker — incl. WS-X + in-person + `wb-in-person-unmasked` relay proofs). |
-| **Open Andrew-confirms** | Known-issues in-app page [`89d8d02`](https://github.com/Arangarx/tutoring-notes/commit/89d8d02) — **tone/copy sign-off** + **3 content calls** (WS-I/WS-N inclusion, WS-G concat-lag omission, WS-O minor-ness framing). Prior standing: map/reduce wording sign-off; SMOKE-PRIV-2; VERIFY-ACCT-1. |
+| **Last action completed** | **WS-P deliverable 2 done (2026-07-05):** deploy-freshness version poll + live-session capture-defer. Impl [`9ca410e`](https://github.com/Arangarx/tutoring-notes/commit/9ca410e) (ref-counted `capture-defer-registry`, `useDeployFreshness`, read-only tutor `useEffect` in WWC, `note-recording` writer, chunk-recovery defer parity). Sonnet 5-axis → SHIP-WITH-FIXES; fixes folded [`2c7a7bd`](https://github.com/Arangarx/tutoring-notes/commit/2c7a7bd) (F1 defer-flicker effect-split w/ red-before/green-after, F2 chunk-recovery SPA-nav clear, O1 reload-commit logging). 25/25 deploy jest; `lifecycle-machine.ts` untouched; WWC effect read-only. **Preceded by fragile-fix train** (in-person `3bf3a7e`, WS-X `ef5fb1a`, both 5-axis'd) + heavy state restructure [`fb2a7f1`](https://github.com/Arangarx/tutoring-notes/commit/fb2a7f1). |
+| **Next action(s)** | Awaiting Andrew's next-tranche steer among: **WS-G-A** "preparing seamless replay…" poll UX; **jest-isolation pass** (attended-preferred; `--workers=1` green today); **PART-2 relay/identity serial burndown** (attended + Docker — incl. WS-X + in-person + `wb-in-person-unmasked` relay proofs + WS-P Playwright spec). |
+| **Open Andrew-confirms** | Known-issues in-app page [`89d8d02`](https://github.com/Arangarx/tutoring-notes/commit/89d8d02) — **tone/copy sign-off** + **3 content calls** (WS-I/WS-N inclusion, WS-G concat-lag omission, WS-O minor-ness framing). **WS-P O3 (FYI, not blocking):** `endingState==="error"` keeps deferring reload (retry-End-with-IDB-data rationale); unmount clears so never permanently stuck — flag if Andrew disagrees. Prior standing: map/reduce wording sign-off; SMOKE-PRIV-2; VERIFY-ACCT-1. |
 | **In-flight subagents** | None. |
-| **Uncommitted / unmerged** | Branch **`wb-wave5-polish`** @ [`606bb31`](https://github.com/Arangarx/tutoring-notes/commit/606bb31) (worktree **`tutoring-notes-polishwt`**). Two fragile fixes + full wave-5 train committed + pushed; **NOT merged** to `v1-redesign`/`master` (Andrew hard stop). **Relay red/green Playwright proofs** for in-person + WS-X fixes are **authored but OWED** — run `npm run test:wb-sync` at attended merge boundary (Docker unavailable in this worktree). |
+| **Uncommitted / unmerged** | Branch **`wb-wave5-polish`** @ [`2c7a7bd`](https://github.com/Arangarx/tutoring-notes/commit/2c7a7bd) (worktree **`tutoring-notes-polishwt`**). Two fragile fixes + WS-P del-2 + full wave-5 train committed + pushed; **NOT merged** to `v1-redesign`/`master` (Andrew hard stop). **OWED at attended merge gate:** (a) relay red/green Playwright proofs for in-person + WS-X — `npm run test:wb-sync` (Docker unavailable here); (b) WS-P `tests/integration/deploy-freshness-defer.spec.ts` run (needs dev server, not relay); (c) `next build` re-run on `2c7a7bd` (was exit 0 at `9ca410e`, trivial). |
 
 **Autonomy posture (2026-07-05):** **LIMITED** — proceed unattended only on safe non-fragile work (jest-isolation, state/docs, pure-jest batches). **Park** anything fragile/gated for Andrew.
 
@@ -39,7 +39,7 @@ Pre-public pilot with one tutor (Sarah). North Star from [`AGENTS.md`](../../AGE
 ```
 master  ←  v1-redesign  (integration base; Wave 4 merged; held for Sarah gate)
               ↑
-              └── wb-wave5-polish @ 606bb31  (active; worktree tutoring-notes-polishwt)
+              └── wb-wave5-polish @ 2c7a7bd  (active; worktree tutoring-notes-polishwt)
                     ├── wb-av-reachability-detection-fix @ a962171  (isolated; PARKED)
                     └── wb-wave5-ws-x-wip @ 5d80ea8  (WIP seam preserved; superseded by ef5fb1a on polish)
 ```
@@ -47,7 +47,7 @@ master  ←  v1-redesign  (integration base; Wave 4 merged; held for Sarah gate)
 | Branch | Role | Tip |
 |---|---|---|
 | **`v1-redesign`** | Integration base; not yet merged to `master` | [`bf1a2c3`](https://github.com/Arangarx/tutoring-notes/commit/bf1a2c3) |
-| **`wb-wave5-polish`** | **Active** — Wave 5 + master-cut plan + Part-2 test buildout | [`606bb31`](https://github.com/Arangarx/tutoring-notes/commit/606bb31) |
+| **`wb-wave5-polish`** | **Active** — Wave 5 + master-cut plan + Part-2 test buildout | [`2c7a7bd`](https://github.com/Arangarx/tutoring-notes/commit/2c7a7bd) |
 | **`wb-av-reachability-detection-fix`** | SMOKE-BLOCK-1 reachability; Andrew parked 2026-07-03 | [`a962171`](https://github.com/Arangarx/tutoring-notes/commit/a962171) |
 
 **Merge discipline:** single `merge --no-ff` to `v1-redesign` only after comprehensive both-theme master-cut smoke PASS. No interim merge. Ledger: [`v1-redesign-STATUS.md`](v1-redesign-STATUS.md).
@@ -61,7 +61,7 @@ master  ←  v1-redesign  (integration base; Wave 4 merged; held for Sarah gate)
 | Area | Status | Tip / note |
 |---|---|---|
 | **Durability pillars** | ✅ WS-A (VAD + per-speaker + outbox mid-session register `234c6d7`), WS-B (~1s persist), WS-C (end→review), WS-D (resume-from-backend) | Overnight wave; relay @ `c2ca8f5` workers=4 honest |
-| **P1 fix train** | ✅ WS-I, WS-N/N4, WS-L, WS-G (`d20ea9a`), WS-K (`859f695`), WS-W (`610ee90`), WS-P 1/3/4 (`b386ef6`) | Each fragile item 5-axis reviewed |
+| **P1 fix train** | ✅ WS-I, WS-N/N4, WS-L, WS-G (`d20ea9a`), WS-K (`859f695`), WS-W (`610ee90`), WS-P 1/3/4 (`b386ef6`), **WS-P 2** (`9ca410e`→`2c7a7bd`, 5-axis'd) | Each fragile item 5-axis reviewed |
 | **P2 UX train** | ✅ WS-F, WS-H, WS-J (`1d23fc6`), WS-M, WS-Q copy, WS-R, WS-U-COPY (`dfe1bf4`), WS-U-FRAGILE 2.4+2.5 (`65f6a93`) | P2 train **COMPLETE** |
 | **Fragile-fix train** | ✅ In-person audio `3bf3a7e`; WS-X BUG-3 `ef5fb1a` | See § Fragile-fix outcomes |
 | **Known-issues page** | ✅ In-app `/admin/settings/known-issues` | `89d8d02`; FOR ANDREW: copy/tone |
