@@ -165,6 +165,37 @@ describe("shouldHardStopSession", () => {
       configurable: true,
     });
   });
+
+  /**
+   * P1-J7 / smokebook item 8 — independent-oracle threshold contract.
+   * Cap is chosen in-test (25s), not derived from SESSION_SAFETY_MAX_SECONDS
+   * or implementation literals, so the suite cannot false-green if the prod
+   * constant changes without the override seam still honoring the boundary.
+   */
+  test("FALSE→TRUE across overridden safety cap (independent oracle, P1-J7)", () => {
+    const INDEPENDENT_CAP_SECONDS = 25;
+    const prevEnv = process.env.NODE_ENV;
+    Object.defineProperty(process.env, "NODE_ENV", {
+      value: "development",
+      writable: true,
+      configurable: true,
+    });
+    (global as unknown as { window?: { __SESSION_SAFETY_MAX_SECONDS_OVERRIDE?: number } }).window =
+      { __SESSION_SAFETY_MAX_SECONDS_OVERRIDE: INDEPENDENT_CAP_SECONDS };
+
+    expect(effectiveSessionSafetyMaxSeconds()).toBe(INDEPENDENT_CAP_SECONDS);
+    expect(shouldHardStopSession(INDEPENDENT_CAP_SECONDS - 1)).toBe(false);
+    expect(shouldHardStopSession(INDEPENDENT_CAP_SECONDS)).toBe(true);
+    expect(shouldHardStopSession(INDEPENDENT_CAP_SECONDS + 60)).toBe(true);
+
+    delete (global as unknown as { window?: { __SESSION_SAFETY_MAX_SECONDS_OVERRIDE?: number } })
+      .window?.__SESSION_SAFETY_MAX_SECONDS_OVERRIDE;
+    Object.defineProperty(process.env, "NODE_ENV", {
+      value: prevEnv,
+      writable: true,
+      configurable: true,
+    });
+  });
 });
 
 describe("getTimeAlertHintParts + formatTimeAlertHint", () => {
