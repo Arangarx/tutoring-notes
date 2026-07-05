@@ -1117,6 +1117,62 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
   });
 });
 
+describe("WS-U-FRAGILE 2.4/2.5 — tutor top-bar presentation", () => {
+  test("recording pill reflects FSM pillLabel when awaiting student (not hardcoded LIVE)", async () => {
+    await renderWorkspace({
+      initialSessionPhase: "ACTIVE",
+      initialUserWantsRecording: true,
+      initialHasConsentSnapshot: true,
+      initialAllowAudioRecording: true,
+      sessionMode: "LIVE",
+    });
+
+    const syncClient = createdSyncClients[0]!;
+    await act(async () => {
+      syncClient.__triggerConnect();
+      await Promise.resolve();
+    });
+
+    const pill = screen.getByTestId("wb-recording-pill");
+    expect(pill).toHaveTextContent("Waiting for student");
+    expect(pill.textContent?.trim()).not.toBe("LIVE");
+    expect(pill.classList.contains("mynk-wb-live-badge--amber")).toBe(true);
+  });
+
+  test("recording pill shows Recording when actively capturing (no-sync path)", async () => {
+    await renderWorkspace({
+      initialSessionPhase: "ACTIVE",
+      initialUserWantsRecording: true,
+      initialHasConsentSnapshot: true,
+      initialAllowAudioRecording: true,
+      sessionMode: "IN_PERSON",
+      syncUrl: "",
+    });
+
+    const pill = screen.getByTestId("wb-recording-pill");
+    expect(pill).toHaveTextContent("Recording");
+    expect(pill.textContent?.trim()).not.toBe("LIVE");
+    expect(pill.classList.contains("mynk-wb-live-badge--amber")).toBe(false);
+    expect(pill.classList.contains("mynk-wb-live-badge--grey")).toBe(false);
+  });
+
+  test("sync pill is visually visible when sync transport is connecting", async () => {
+    await renderWorkspace({
+      initialSessionPhase: "ACTIVE",
+      initialUserWantsRecording: true,
+      initialHasConsentSnapshot: true,
+      initialAllowAudioRecording: true,
+      sessionMode: "LIVE",
+    });
+
+    const syncPill = screen.getByTestId("wb-sync-pill");
+    expect(syncPill).toHaveTextContent("Sync connecting…");
+    expect(syncPill.classList.contains("mynk-wb-sr-only")).toBe(false);
+    expect(syncPill.classList.contains("mynk-wb-sync-pill")).toBe(true);
+    expect(syncPill.classList.contains("mynk-wb-sync-pill--grey")).toBe(true);
+  });
+});
+
 describe("WhiteboardWorkspaceClient active-ping role guard (SMOKE-BUG-1)", () => {
   const originalFetch = globalThis.fetch;
   let fetchMock: jest.Mock;

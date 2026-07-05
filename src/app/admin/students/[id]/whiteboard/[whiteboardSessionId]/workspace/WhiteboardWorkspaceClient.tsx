@@ -6220,16 +6220,30 @@ export function WhiteboardWorkspaceClient({
         <span className="mynk-wb-topbar__sep" aria-hidden />
 
         <div className="mynk-wb-topbar__zone">
-          <div className="mynk-wb-live-badge" data-testid="wb-recording-pill">
-            <span className="mynk-wb-live-badge__dot" aria-hidden />
-            LIVE
+          <div
+            className={`mynk-wb-live-badge${
+              presence.pillColor === "red"
+                ? ""
+                : ` mynk-wb-live-badge--${presence.pillColor}`
+            }`}
+            data-testid="wb-recording-pill"
+          >
+            <span
+              className={`mynk-wb-live-badge__dot${
+                presence.pillColor === "red"
+                  ? ""
+                  : ` mynk-wb-live-badge__dot--${presence.pillColor}`
+              }`}
+              aria-hidden
+            />
+            {presence.pillLabel}
           </div>
           <span className="mynk-wb-timer" data-testid="wb-timer">
             {formatTimerMinutesOnly(liveTimerMs)}
           </span>
           {syncPill.show && (
             <span
-              className="mynk-wb-sr-only"
+              className={`mynk-wb-sync-pill mynk-wb-sync-pill--${syncPill.color}`}
               data-testid="wb-sync-pill"
               aria-live="polite"
             >
