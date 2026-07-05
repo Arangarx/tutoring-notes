@@ -196,7 +196,7 @@ The WS-G implementer ran `npx prisma migrate deploy`, which reads `.env`'s `DATA
 
 ## "Known issues & roadmap" page (Andrew request)
 
-Andrew wants a Sarah/pilot-facing "Known issues and roadmap" page. Not yet planned — track here so it isn't lost. Populate from this queue's P1/P2 items once they're finalized. **READY TO POPULATE (2026-07-05): the P1 fix train (WS-K/WS-G/WS-N4/WS-W) and the P2 UX train (WS-F/WS-H/WS-J/WS-M/WS-Q/WS-R + WS-U-COPY) are all landed on `wb-wave5-polish`; remaining knowns = WS-X (parked, intermittent PDF stroke leak), WS-P deliverable 2 (deferred version-poll), WS-S (review-hydrate verify), and the WS-U-FRAGILE/BATCH items.** Content source = the shipped-vs-open split in this queue.
+Andrew wants a Sarah/pilot-facing "Known issues and roadmap" page. Not yet planned — track here so it isn't lost. Populate from this queue's P1/P2 items once they're finalized. **✅ DRAFT CONTENT AUTHORED (2026-07-05, `6815c4f`) — [`known-issues-and-roadmap-DRAFT.md`](known-issues-and-roadmap-DRAFT.md) ([draft author](bdc2a6c2-16ad-4e87-b827-17f775106b49)).** Sarah-facing "Recently improved" (16 plain-language bullets) + honest "Known issues" (6 low-alarm) + vague roadmap + internal WS-*→commit appendix (incl. an "intentionally omitted" table). **STILL FOR ANDREW:** (a) PLACEMENT — in-app page (Help/Settings) vs internal doc vs email to Sarah; (b) tone/accuracy review; (c) content calls flagged in the draft author's report (WS-I/WS-N inclusion, WS-G concat-lag omission, WS-O minor-ness). Content source = the shipped-vs-open split in this queue.
 
 ## FOR ANDREW — overnight batch (answer when back; NOT blocking — proceeding with safe defaults + flagged)
 
