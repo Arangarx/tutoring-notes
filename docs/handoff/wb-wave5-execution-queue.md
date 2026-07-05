@@ -199,3 +199,27 @@ Accumulated during the 2026-07-05 overnight autonomous run. Each is proceeding w
 - **WS-G-E (erasure) — NOT a question, a BLOCKER:** `concatBlobUrl` will be wired into the erasure/blob-purge pipeline as part of WS-G before it can go to master. Noting here for visibility.
 
 - **WS-X (BUG-3 PDF stroke leak) — PARKED; needs your call + a plan-mode design (2nd attempt exhausted, no 3rd blind attempt taken):** the fingerprint fix blocks the direct path but is INSUFFICIENT — the real leak is the `applyRemoteToCanvas` tombstone → **v3-broadcast-doesn't-filter-`isDeleted`** → rebroadcast loop (fragile sync surface; 2026-06-18 tombstone-resurrection class). WIP + deterministic test seam preserved on **`wb-wave5-ws-x-wip` (`5d80ea8`)**. **My recommendation:** fix the v3 broadcast to filter `isDeleted` (align with the WBElement adapter — the truer root cause) via a Sonnet plan-mode pass + 5-axis, since it touches the broadcast/sync path. The bug is intermittent (a race) → lower urgency than the P1 product train, so I moved on to WS-K/WS-G/etc. overnight rather than risk a weeks-costing loop on a fragile sync fix without you.
+
+## WS-U FINDINGS (2026-07-05 read-only pass — full file:line detail in the WS-U review subagent)
+
+Triaged. **Already covered by existing WS items:** 1.1 waiting-room trap → **WS-F** (root cause added: `waiting-room-overlay.css:13-16` `position:fixed;inset:0;z-index:51` covers the top-bar Exit/Sign-out at `WhiteboardWorkspaceClient.tsx:5945/6078`; fix = confirm-gated Leave (student→`handleStudentExit` 2006-2018) + Cancel (tutor) INSIDE `WaitingRoomOverlay.tsx`); 2.1 "Waiting for transcript…" → **WS-K** (in progress); 2.13 multi-part drift copy → **WS-G** (warning removed).
+
+### WS-U-COPY — non-fragile auto-fix wave (batch into ONE dispatch after WS-K; copy/UX only, each gets a behavior teeth-test)
+- **1.4** Session-review load-error dead-end → render back link + retry on error branch (`SessionReviewMode.tsx:131-152`; success path `161-177` has `ReviewWbTopBar`). Not fragile.
+- **1.5** Recovered-audio "Discard" one-click, no confirm → inline confirm before `draftStore.clear` (`WhiteboardWorkspaceClient.tsx:6481-6506` UI / `1948-1967` handler). Low-fragile (confirm UI only).
+- **1.6** No `beforeunload` warning during active recording → set warning string when `phaseActive && recordingActive` (`WhiteboardWorkspaceClient.tsx:2944-2949`, currently viewport-flush only). Low-fragile.
+- **2.2** "Saving N segments…" + raw `lastError` → "Saving your recording…" / "Still saving audio — your work is safe." (`6268-6270`, `3892-3895`, `4047-4049`; End-path copy only).
+- **2.3** "waiting for WebRTC to reconnect" → "Waiting for your student's connection to come back." (`6517-6519`).
+- **2.6** Checkpoint/IndexedDB jargon banners → friendly copy (`6557-6560`, `6566-6586`).
+- **2.7** Student error walls (link-incomplete / join-unavailable) with no action → add Close / next-step link (`5715-5727`, `5731-5742`).
+- **2.10** Parent replay "schema vN" footer → remove from UI, keep in logs (`s/[token]/whiteboard/[whiteboardSessionId]/page.tsx:178-180`).
+- **2.11** Raw `note.error` surfaced → map to friendly copy, log raw server-side (`TutorNotesSection.tsx:635-638`).
+
+### WS-U-FRAGILE — objective but fragile-surface (Sonnet + gating; do NOT batch with copy wave)
+- **1.2** Dead **Start** when reachability under-reports (works A/V but Start stays disabled) = BACKLOG **SMOKE-BLOCK-1**. FRAGILE: `useLiveAV.ts`/`peer-mesh.ts`/WB-sync presence. Fix reachability oracle (presence/cam/mic latch + stale-snapshot race); keep A/V-required gate. Relay+presence teeth-test.
+- **1.3** **In-person** mode still shows "Waiting for your student to join — recording will start automatically…" (`lifecycle-machine.ts:636-645` `awaiting_first_participant`; FSM has no `sessionMode`/IN_PERSON branch). FRAGILE: recorder FSM. Fix = pass `sessionMode==="IN_PERSON"` into `derivePresentation`. Unit + Playwright in-person Start.
+- **2.4** Tutor top bar hardcoded **"LIVE"** even in waiting/paused/not-recording (`WhiteboardWorkspaceClient.tsx:6098-6100`; FSM `pillLabel`/`pillColor` at `lifecycle-machine.ts:620-713` never shown). FRAGILE: FSM presentation wiring. Bind badge to `presence.pillLabel`.
+- **2.5** Sync status only in `mynk-wb-sr-only` span → invisible to sighted tutor when sync down (`6105-6112`; `sync-pill-presentation.ts:20-22`). Show sync pill visually. (Adjacent to 2.4 — do together.)
+
+### WS-U-BATCH — taste/judgment/IA for Andrew (no auto-fix)
+2.8 student "Exit" one-tap no confirm (mobile mis-tap); 2.9 admin nav "Outbox" = sent emails, not upload queue (rename/split); 2.12 notes-list "N segments" wording; 2.14 consent-denied page no next step (`join/[sessionId]/page.tsx:247-258`); 2.15 pending-approval no ETA/contact; + tier-3 polish (waiting-room picker layout, live-top-bar wordmark non-clickable / no "Back to student", resume-gate no passive back, claim verify-email detour, student-login placeholder). Full list in the WS-U review.
