@@ -6,6 +6,93 @@ import React from "react";
 import { render, screen, waitFor, act } from "@testing-library/react";
 import { WhiteboardReplayInFrame } from "@/components/whiteboard/replay/WhiteboardReplayInFrame";
 
+const MEASURED_END_SEC = 10;
+
+/**
+ * WS-W: entry auto-play waits for WebM 1e101 duration scan. jsdom never
+ * completes the scan natively — drive loadedmetadata → scan completion so
+ * audioDurationSettled opens the entry gate (mirrors scrub.test.ts WS-W).
+ */
+function setupWebmDurationScanMocks(audio: HTMLAudioElement) {
+  let mockDuration: number = Infinity;
+  let currentTime = 0;
+  let isSeeking = false;
+  let completeScan: (() => void) | null = null;
+  let isPaused = true;
+
+  Object.defineProperty(audio, "duration", {
+    configurable: true,
+    get: () => mockDuration,
+  });
+  Object.defineProperty(audio, "seeking", {
+    configurable: true,
+    get: () => isSeeking,
+  });
+  Object.defineProperty(audio, "currentTime", {
+    configurable: true,
+    get: () => currentTime,
+    set: (v: number) => {
+      if (v === 1e101) {
+        isSeeking = true;
+        currentTime = v;
+        completeScan = () => {
+          currentTime = 0;
+          isSeeking = false;
+          mockDuration = MEASURED_END_SEC;
+          audio.dispatchEvent(new Event("durationchange"));
+          audio.dispatchEvent(new Event("seeked"));
+        };
+        return;
+      }
+      currentTime = v;
+      isSeeking = false;
+    },
+  });
+  Object.defineProperty(audio, "paused", {
+    configurable: true,
+    get: () => isPaused,
+  });
+  audio.play = jest.fn().mockImplementation(() => {
+    isPaused = false;
+    audio.dispatchEvent(new Event("play"));
+    return Promise.resolve();
+  });
+  audio.pause = jest.fn().mockImplementation(() => {
+    isPaused = true;
+    audio.dispatchEvent(new Event("pause"));
+  });
+
+  return {
+    triggerLoadedMetadata: () => {
+      act(() => {
+        audio.dispatchEvent(new Event("loadedmetadata"));
+      });
+    },
+    completeScanIfPending: () => {
+      if (completeScan) {
+        act(() => {
+          completeScan?.();
+        });
+      }
+    },
+  };
+}
+
+async function completeWebmDurationScanForReplayTest() {
+  const audio = (await screen.findByTestId(
+    "wb-replay-audio"
+  )) as HTMLAudioElement;
+  const scan = setupWebmDurationScanMocks(audio);
+
+  await waitFor(() => {
+    scan.triggerLoadedMetadata();
+    scan.completeScanIfPending();
+    expect(screen.getByTestId("wb-replay-play-toggle")).toHaveTextContent(
+      "Pause"
+    );
+  });
+}
+
 jest.mock("@/components/ThemeProvider", () => ({
   ThemeProvider: ({ children }: { children: React.ReactNode }) => children,
   useTheme: () => ({
@@ -91,9 +178,7 @@ describe("WhiteboardReplayInFrame", () => {
     expect(screen.getByTestId("wb-replay-hide")).toHaveTextContent(
       "Pause and hide replay"
     );
-    await waitFor(() => {
-      expect(screen.getByTestId("wb-replay-play-toggle")).toHaveTextContent("Pause");
-    });
+    await completeWebmDurationScanForReplayTest();
 
     // Replay records audio + whiteboard only — no live A/V cluster on review surface.
     expect(screen.queryByTestId("av-controls")).not.toBeInTheDocument();
@@ -133,11 +218,7 @@ describe("WhiteboardReplayInFrame", () => {
     );
 
     await screen.findByTestId("wb-replay-in-frame");
-    await waitFor(() => {
-      expect(screen.getByTestId("wb-replay-play-toggle")).toHaveTextContent(
-        "Pause"
-      );
-    });
+    await completeWebmDurationScanForReplayTest();
 
     // Simulate return-to-hero (replay pane hidden, component stays mounted).
     await act(async () => {
@@ -165,6 +246,7 @@ describe("WhiteboardReplayInFrame", () => {
     );
 
     // Second "Replay session" click — isReviewActive true again.
+    // audioDurationResolvedByWebm is monotonic; no second WebM scan needed.
     await act(async () => {
       rerender(
         <WhiteboardReplayInFrame
@@ -185,7 +267,6 @@ describe("WhiteboardReplayInFrame", () => {
       );
     });
 
-    // BUG (unfixed): entryPaintDoneRef still true → stays paused at Play.
     await waitFor(() => {
       expect(screen.getByTestId("wb-replay-play-toggle")).toHaveTextContent(
         "Pause"

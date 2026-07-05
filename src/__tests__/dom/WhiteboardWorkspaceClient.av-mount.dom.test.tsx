@@ -275,6 +275,8 @@ jest.mock("@/hooks/useLiveAV", () => ({
       setMicDevice: jest.fn().mockResolvedValue(undefined),
       setMicDeviceBySlot: jest.fn().mockResolvedValue(undefined),
       selectedVideoDeviceId: null,
+      gainLinear: 1,
+      setGainLinear: jest.fn(),
     };
   },
 }));
@@ -634,7 +636,7 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
     expect(within(overlay).queryByTestId("mic-device-select")).toBeNull();
   });
 
-  test("student waiting room: on-page mic picker, no dropdown caret", async () => {
+  test("student waiting room: on-page mic picker + boost caret (no chime)", async () => {
     await renderWorkspace({
       role: "student",
       joinToken: "join-tok-1",
@@ -642,12 +644,19 @@ describe("WhiteboardWorkspaceClient Γåö live A/V mount", () => {
     });
 
     const overlay = screen.getByTestId("wb-waiting-overlay");
-    expect(within(overlay).queryByTestId("wb-topbar-mic-settings")).toBeNull();
     expect(
       overlay.querySelector(
         "[data-testid='wb-waiting-overlay-device-pickers'] [data-testid='audio-device-select']"
       )
     ).toBeTruthy();
+    const overlaySettings = within(overlay).getByTestId("wb-topbar-mic-settings");
+    expect(overlaySettings).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(overlaySettings);
+    });
+    expect(within(overlay).getByTestId("mic-gain-slider")).toBeTruthy();
+    expect(within(overlay).queryByTestId("recording-chime-enabled")).toBeNull();
+    expect(within(overlay).queryByTestId("mic-device-select")).toBeNull();
     // Student has no WbTopBarMicControl — no meterBarRef hidden host.
     expect(countMeterBarRefHosts()).toBe(0);
   });
