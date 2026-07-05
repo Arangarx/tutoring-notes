@@ -28,6 +28,12 @@ const settingsLinks = [
       "Connect Apple Calendar or Google Calendar to mirror scheduled sessions outward.",
   },
   {
+    href: "/admin/settings/known-issues",
+    label: "Known issues & roadmap",
+    description:
+      "Recent improvements, honest known issues, and what's coming next.",
+  },
+  {
     href: "/admin/settings/2fa",
     label: "Two-Factor Authentication",
     description: "Set up or rotate your TOTP authenticator for mandatory 2FA.",

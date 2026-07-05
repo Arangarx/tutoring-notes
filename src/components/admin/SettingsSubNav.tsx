@@ -9,6 +9,7 @@ const settingsLinks = [
   { href: "/admin/settings/profile", label: "Profile" },
   { href: "/admin/settings/billing", label: "Billing" },
   { href: "/admin/settings/email", label: "Email" },
+  { href: "/admin/settings/known-issues", label: "Known issues & roadmap" },
   { href: "/admin/settings/2fa", label: "Two-factor auth" },
 ] as const;
 
