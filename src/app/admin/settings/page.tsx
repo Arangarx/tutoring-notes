@@ -11,6 +11,11 @@ const settingsLinks = [
     description: "Your name, password, and account email.",
   },
   {
+    href: "/admin/settings/billing",
+    label: "Billing",
+    description: "Time rounding increment, direction, and timezone for new sessions.",
+  },
+  {
     href: "/admin/settings/email",
     label: "Email",
     description:

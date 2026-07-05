@@ -48,6 +48,11 @@ import {
   triggerNotesGenerationAction,
 } from "@/app/admin/students/[id]/whiteboard/notes-actions";
 import { enqueueReplayConcatAfterFinalize } from "@/lib/recording/concat-audio-enqueue";
+import {
+  DEFAULT_ROUNDING_INCREMENT_MIN,
+  DEFAULT_ROUNDING_MODE,
+} from "@/lib/billing/defaults";
+import { computeBillingFreezeFields } from "@/lib/billing/freeze-at-close";
 
 /**
  * Whiteboard session lifecycle server actions.
@@ -330,6 +335,19 @@ export async function startWhiteboardSession(
     throw err;
   }
 
+  const adminBillingDefaults = await withDbRetry(
+    () =>
+      db.adminUser.findUnique({
+        where: { id: session.adminUserId },
+        select: {
+          defaultRoundingIncrementMin: true,
+          defaultRoundingMode: true,
+          tutorTimezone: true,
+        },
+      }),
+    { label: "startWhiteboardSession.adminBillingDefaults" }
+  );
+
   const result = await withDbRetry(
     () =>
       db.whiteboardSession.updateMany({
@@ -343,6 +361,12 @@ export async function startWhiteboardSession(
           sessionPhase: "ACTIVE",
           activatedAt: new Date(),
           ...(sessionMode ? { sessionMode } : {}),
+          roundingIncrementMin:
+            adminBillingDefaults?.defaultRoundingIncrementMin ??
+            DEFAULT_ROUNDING_INCREMENT_MIN,
+          roundingMode:
+            adminBillingDefaults?.defaultRoundingMode ?? DEFAULT_ROUNDING_MODE,
+          tutorTimezone: adminBillingDefaults?.tutorTimezone ?? null,
         },
       }),
     { label: "startWhiteboardSession" }
@@ -988,18 +1012,35 @@ export async function endWhiteboardSession(
   }
 
   const now = new Date();
+  const adminTutorTimezone = await withDbRetry(
+    () =>
+      db.adminUser.findUnique({
+        where: { id: session.adminUserId },
+        select: { tutorTimezone: true },
+      }),
+    { label: "endWhiteboardSession.adminTimezone" }
+  );
   let updated: { id: string; endedAt: Date | null; durationSeconds: number | null };
   let registeredSegments = 0;
+  let billingFreeze: ReturnType<typeof computeBillingFreezeFields> = null;
   try {
     const txResult = await withDbRetry(
       () =>
         db.$transaction(async (tx) => {
-          // Read startedAt first so we can compute durationSeconds in
-          // a single update. We can't compute it from `assertOwns…`
-          // because that scope helper doesn't load `startedAt`.
           const existing = await tx.whiteboardSession.findUnique({
             where: { id: whiteboardSessionId },
-            select: { startedAt: true },
+            select: {
+              startedAt: true,
+              activatedAt: true,
+              sessionMode: true,
+              activeMs: true,
+              lastActiveAt: true,
+              bothConnectedAt: true,
+              roundingIncrementMin: true,
+              roundingMode: true,
+              tutorTimezone: true,
+              billedDurationMin: true,
+            },
           });
           const durationSeconds = existing
             ? Math.max(
@@ -1007,6 +1048,33 @@ export async function endWhiteboardSession(
                 Math.floor((now.getTime() - existing.startedAt.getTime()) / 1000)
               )
             : 0;
+
+          let billingFreeze: ReturnType<typeof computeBillingFreezeFields> = null;
+          if (existing) {
+            try {
+              billingFreeze = computeBillingFreezeFields({
+                sessionMode:
+                  existing.sessionMode === "IN_PERSON" ? "IN_PERSON" : "LIVE",
+                activeMs: existing.activeMs,
+                lastActiveAtMs: existing.lastActiveAt?.getTime() ?? null,
+                endedAtMs: now.getTime(),
+                bothConnectedAtMs: existing.bothConnectedAt?.getTime() ?? null,
+                activatedAtMs: existing.activatedAt?.getTime() ?? null,
+                startedAtMs: existing.startedAt.getTime(),
+                roundingIncrementMin: existing.roundingIncrementMin,
+                roundingMode: existing.roundingMode,
+                tutorTimezone: existing.tutorTimezone,
+                adminTutorTimezone: adminTutorTimezone?.tutorTimezone ?? null,
+                existingBilledDurationMin: existing.billedDurationMin,
+              });
+            } catch (err) {
+              console.error(
+                `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} billing_freeze_failed:`,
+                err
+              );
+            }
+          }
+
           const row = await tx.whiteboardSession.update({
             where: { id: whiteboardSessionId },
             data: {
@@ -1018,6 +1086,17 @@ export async function endWhiteboardSession(
                 ? {}
                 : { snapshotBlobUrl: opts?.snapshotBlobUrl ?? undefined }),
               durationSeconds,
+              ...(billingFreeze
+                ? {
+                    billedDurationMin: billingFreeze.billedDurationMin,
+                    billedStartLocal: billingFreeze.billedStartLocal,
+                    billedEndLocal: billingFreeze.billedEndLocal,
+                    sessionDateLocal: billingFreeze.sessionDateLocal,
+                    tutorTimezone: billingFreeze.tutorTimezone,
+                    roundingIncrementMin: billingFreeze.roundingIncrementMin,
+                    roundingMode: billingFreeze.roundingMode,
+                  }
+                : {}),
             },
             select: { id: true, endedAt: true, durationSeconds: true },
           });
@@ -1096,12 +1175,13 @@ export async function endWhiteboardSession(
             },
             data: { revokedAt: now },
           });
-          return { row, newSegments };
+          return { row, newSegments, billingFreeze };
         }),
       { label: "endWhiteboardSession" }
     );
     updated = txResult.row;
     registeredSegments = txResult.newSegments;
+    billingFreeze = txResult.billingFreeze;
   } catch (err) {
     console.error(
       `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} db.transaction failed:`,
@@ -1116,6 +1196,11 @@ export async function endWhiteboardSession(
   console.log(
     `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} endedAt=${updated.endedAt?.toISOString()} duration=${updated.durationSeconds}s segmentsInPayload=${segments.length} newSegments=${registeredSegments}`
   );
+  if (billingFreeze) {
+    console.log(
+      `[endWhiteboardSession] rid=${rid} wbsid=${whiteboardSessionId} billing_frozen billedDurationMin=${billingFreeze.billedDurationMin} mode=${billingFreeze.roundingMode} increment=${billingFreeze.roundingIncrementMin} tz=${billingFreeze.tutorTimezone} sessionDateLocal=${billingFreeze.sessionDateLocal}`
+    );
+  }
   // Per-segment log line so a future ops grep can correlate an outbox
   // segmentId to its persisted SessionRecording by blobUrl.
   for (const s of segments) {

@@ -423,6 +423,18 @@ model WhiteboardSession {
   /// B2: frozen consent snapshot at session start (legal record).
   consentSnapshot SessionConsentSnapshot?
 
+  /// WS-J — rounding rule locked at session start (copied from AdminUser defaults).
+  roundingIncrementMin Int?
+  roundingMode         String?
+
+  /// WS-J — frozen billable display at session close (immutable once set).
+  billedDurationMin Int?
+  billedStartLocal  String?
+  billedEndLocal    String?
+  sessionDateLocal  String?
+  /// IANA timezone frozen at close (copied at start, resolved with fallback at close).
+  tutorTimezone     String?
+
   sessionParticipants SessionParticipant[]
 
   /// WS-B: cursor for ~1s live event-batch persistence (wave 0).
@@ -704,6 +716,12 @@ model AdminUser {
   consentRecords          ConsentRecord[]        @relation("TutorConsentRecords")
   /// Trusted-browser records for 30-day 2FA login skip. ADDITIVE ONLY.
   trustedDevices          AdminTrustedDevice[]
+
+  /// WS-J — tutor billing defaults for new sessions (copied onto session at start).
+  defaultRoundingIncrementMin Int?
+  defaultRoundingMode         String?
+  /// IANA timezone for billing local-time display (e.g. America/Denver).
+  tutorTimezone               String?
 }
 
 /// TOTP 2FA enrollment for AdminUser accounts (Identity Phase 1).

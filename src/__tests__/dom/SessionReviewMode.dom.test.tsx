@@ -59,6 +59,9 @@ const basePayload = {
   startedAtIso: "2026-06-01T10:00:00.000Z",
   endedAtIso: "2026-06-01T10:30:00.000Z",
   durationSeconds: 1800,
+  billedDurationMin: null as number | null,
+  billedStartLocal: null as string | null,
+  billedEndLocal: null as string | null,
   hasAudio: true,
   eventCount: 5,
   eventsProxyUrl: "/api/whiteboard/wbs-1/events",
@@ -189,5 +192,41 @@ describe("SessionReviewMode unified surface", () => {
     expect(await screen.findByTestId("wb-review-no-recording")).toHaveTextContent(
       "No recording available"
     );
+  });
+
+  it("shows billedDurationMin minutes-only when frozen billing is present", async () => {
+    loadSessionReviewPayload.mockResolvedValue({
+      ...basePayload,
+      billedDurationMin: 55,
+      billedStartLocal: "10:00 AM",
+      billedEndLocal: "10:55 AM",
+    });
+    render(
+      <SessionReviewMode whiteboardSessionId="wbs-1" studentId="stu-1" />
+    );
+    const duration = await screen.findByTestId("wb-review-duration");
+    expect(duration).toHaveTextContent("55 min");
+    expect(duration).toHaveTextContent("10:00 AM");
+    expect(duration).not.toHaveTextContent(":00:");
+  });
+
+  it("falls back to audio duration label when billedDurationMin is null", async () => {
+    loadSessionReviewPayload.mockResolvedValue({
+      ...basePayload,
+      billedDurationMin: null,
+      audioSegments: [
+        {
+          url: "/api/audio/admin/a1",
+          mimeType: "audio/webm",
+          durationSeconds: 60,
+        },
+      ],
+    });
+    render(
+      <SessionReviewMode whiteboardSessionId="wbs-1" studentId="stu-1" />
+    );
+    const duration = await screen.findByTestId("wb-review-duration");
+    expect(duration).toHaveTextContent("1:00");
+    expect(duration).not.toHaveTextContent("min ·");
   });
 });

@@ -6,6 +6,7 @@ import WhiteboardReplay from "@/components/whiteboard/WhiteboardReplay";
 import { assertCanAccessShareLink } from "@/lib/share-access-scope";
 import { assertStudentNotErased } from "@/lib/erasure/assert-student-not-erased";
 import { buildReplayAudioPayload } from "@/lib/whiteboard/replay-audio-payload";
+import { formatBilledDurationLabel } from "@/lib/billing/display";
 
 export const dynamic = "force-dynamic";
 
@@ -98,6 +99,9 @@ export default async function ShareWhiteboardPage({
           startedAt: true,
           endedAt: true,
           durationSeconds: true,
+          billedDurationMin: true,
+          billedStartLocal: true,
+          billedEndLocal: true,
           eventsSchemaVersion: true,
           snapshotBlobUrl: true,
           concatBlobUrl: true,
@@ -136,6 +140,11 @@ export default async function ShareWhiteboardPage({
 
   const studentName = link.student.name;
   const sessionLabel = `Whiteboard with ${studentName} — ${formatDate(session.startedAt)}`;
+  const billedLabel = formatBilledDurationLabel({
+    billedDurationMin: session.billedDurationMin,
+    billedStartLocal: session.billedStartLocal,
+    billedEndLocal: session.billedEndLocal,
+  });
 
   // Build proxy URLs with the share token in the query string so the
   // client-side fetch includes the credential (same pattern as
@@ -173,6 +182,13 @@ export default async function ShareWhiteboardPage({
             </h1>
             <p className="mt-1 text-[13px] text-muted-foreground">
               Whiteboard recording shared by your tutor
+              {billedLabel ? (
+                <>
+                  {" "}
+                  ·{" "}
+                  <span data-testid="wb-share-billed-duration">{billedLabel}</span>
+                </>
+              ) : null}
             </p>
           </div>
         </header>

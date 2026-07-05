@@ -23,6 +23,7 @@ import {
   type SessionReviewPayload,
 } from "@/app/admin/students/[id]/whiteboard/notes-actions";
 import { formatReplayDurationMs } from "@/lib/whiteboard/replay-helpers";
+import { formatBilledDurationLabel } from "@/lib/billing/display";
 import "./whiteboard-chrome.css";
 
 type Props = {
@@ -193,15 +194,18 @@ export function SessionReviewMode({ whiteboardSessionId, studentId }: Props) {
         studentName={payload?.studentName}
         durationLabel={(() => {
           if (!payload) return undefined;
-          // Sum stored per-segment audio durations for the recording length.
-          // Falls back to omitting the label when all durations are unknown
-          // (null/0) — better than showing the wall-clock session duration
-          // which includes idle time and disagrees with the replay scrubber.
           const storedAudioMs = (payload.audioSegments ?? []).reduce<number>(
             (sum, s) => sum + Math.round((s.durationSeconds ?? 0) * 1000),
             0
           );
-          return storedAudioMs > 0 ? formatReplayDurationMs(storedAudioMs) : undefined;
+          const fallback =
+            storedAudioMs > 0 ? formatReplayDurationMs(storedAudioMs) : undefined;
+          return formatBilledDurationLabel({
+            billedDurationMin: payload.billedDurationMin,
+            billedStartLocal: payload.billedStartLocal,
+            billedEndLocal: payload.billedEndLocal,
+            fallbackLabel: fallback,
+          });
         })()}
         noteSaved={noteSaved}
       />

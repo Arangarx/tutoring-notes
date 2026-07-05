@@ -32,6 +32,7 @@ const txSessionRecordingFindManyMock = jest.fn();
 const txSessionRecordingAggregateMock = jest.fn();
 const txSessionRecordingCreateManyMock = jest.fn();
 const dbWhiteboardFindUniqueMock = jest.fn();
+const dbAdminUserFindUniqueMock = jest.fn();
 const dbTransactionMock = jest.fn(async (fn: (tx: unknown) => unknown) =>
   fn({
     whiteboardSession: {
@@ -57,6 +58,9 @@ jest.mock("@/lib/db", () => ({
   db: {
     whiteboardSession: {
       findUnique: (...args: unknown[]) => dbWhiteboardFindUniqueMock(...args),
+    },
+    adminUser: {
+      findUnique: (...args: unknown[]) => dbAdminUserFindUniqueMock(...args),
     },
     // assertEffectiveConsent (now unconditional) reads sessionConsentSnapshot.
     // Default null → no-snapshot fallback (consent granted for unclaimed sessions).
@@ -92,10 +96,26 @@ jest.mock("next/cache", () => ({
   revalidatePath: (...args: unknown[]) => revalidatePathMock(...args),
 }));
 
+jest.mock("@/lib/billing/freeze-at-close", () => {
+  const actual = jest.requireActual<typeof import("@/lib/billing/freeze-at-close")>(
+    "@/lib/billing/freeze-at-close"
+  );
+  return {
+    __esModule: true,
+    computeBillingFreezeFields: jest.fn(actual.computeBillingFreezeFields),
+  };
+});
+
 import {
   endWhiteboardSession,
   type EndSessionSegment,
 } from "@/app/admin/students/[id]/whiteboard/actions";
+import { computeBillingFreezeFields } from "@/lib/billing/freeze-at-close";
+
+const computeBillingFreezeFieldsMock =
+  computeBillingFreezeFields as jest.MockedFunction<
+    typeof computeBillingFreezeFields
+  >;
 
 const FINAL_EVENTS_URL =
   "https://abc.blob.vercel-storage.com/whiteboard-sessions/admin_1/stu_1/123-events.json";
@@ -113,8 +133,25 @@ function makeSegment(overrides: Partial<EndSessionSegment> = {}): EndSessionSegm
   };
 }
 
-function setupActiveSession(opts: { startedAtAgoMs?: number } = {}) {
+function setupActiveSession(
+  opts: {
+    startedAtAgoMs?: number;
+    billing?: Partial<{
+      sessionMode: "LIVE" | "IN_PERSON";
+      activeMs: number;
+      lastActiveAt: Date | null;
+      bothConnectedAt: Date | null;
+      activatedAt: Date | null;
+      roundingIncrementMin: number | null;
+      roundingMode: string | null;
+      tutorTimezone: string | null;
+      billedDurationMin: number | null;
+    }>;
+  } = {}
+) {
   const startedAt = new Date(Date.now() - (opts.startedAtAgoMs ?? 30 * 60_000));
+  const activatedAt = new Date(startedAt.getTime() + 5 * 60_000);
+  const billing = opts.billing ?? {};
   assertOwnsWhiteboardSessionMock.mockResolvedValue({
     id: "wb_42",
     studentId: "stu_1",
@@ -124,7 +161,19 @@ function setupActiveSession(opts: { startedAtAgoMs?: number } = {}) {
     consentAcknowledged: true,
   });
   dbWhiteboardFindUniqueMock.mockResolvedValue({ sessionPhase: "ACTIVE" });
-  txWhiteboardFindUniqueMock.mockResolvedValue({ startedAt });
+  dbAdminUserFindUniqueMock.mockResolvedValue({ tutorTimezone: "America/Denver" });
+  txWhiteboardFindUniqueMock.mockResolvedValue({
+    startedAt,
+    activatedAt: billing.activatedAt ?? activatedAt,
+    sessionMode: billing.sessionMode ?? "LIVE",
+    activeMs: billing.activeMs ?? 0,
+    lastActiveAt: billing.lastActiveAt ?? null,
+    bothConnectedAt: billing.bothConnectedAt ?? null,
+    roundingIncrementMin: billing.roundingIncrementMin ?? 5,
+    roundingMode: billing.roundingMode ?? "nearest",
+    tutorTimezone: billing.tutorTimezone ?? null,
+    billedDurationMin: billing.billedDurationMin ?? null,
+  });
   txWhiteboardUpdateMock.mockImplementation(
     async (args: { data: { endedAt: Date } }) => ({
       id: "wb_42",
@@ -149,11 +198,17 @@ beforeEach(() => {
   txSessionRecordingAggregateMock.mockReset();
   txSessionRecordingCreateManyMock.mockReset();
   dbWhiteboardFindUniqueMock.mockReset();
+  dbAdminUserFindUniqueMock.mockReset();
   dbTransactionMock.mockClear();
   assertOwnsWhiteboardSessionMock.mockReset();
   revalidatePathMock.mockReset();
   shouldShortCircuitEndSessionForErasureMock.mockReset();
   shouldShortCircuitEndSessionForErasureMock.mockResolvedValue(false);
+  computeBillingFreezeFieldsMock.mockImplementation(
+    jest.requireActual<typeof import("@/lib/billing/freeze-at-close")>(
+      "@/lib/billing/freeze-at-close"
+    ).computeBillingFreezeFields
+  );
 });
 
 describe("endWhiteboardSession — events-only end (no segments)", () => {
@@ -457,5 +512,90 @@ describe("endWhiteboardSession — idempotency safeguards", () => {
 
     expect(txSessionRecordingCreateManyMock).not.toHaveBeenCalled();
     expect(result.registeredSegments).toBe(0);
+  });
+});
+
+describe("endWhiteboardSession — WS-J billing freeze", () => {
+  it("freezes billed* fields from LIVE activeMs in the close transaction", async () => {
+    const bothConnectedAt = new Date(Date.now() - 50 * 60_000);
+    setupActiveSession({
+      billing: {
+        sessionMode: "LIVE",
+        activeMs: 55 * 60_000,
+        bothConnectedAt,
+        roundingIncrementMin: 5,
+        roundingMode: "nearest",
+      },
+    });
+
+    await endWhiteboardSession("wb_42", FINAL_EVENTS_URL);
+
+    const updateArgs = txWhiteboardUpdateMock.mock.calls[0][0];
+    expect(updateArgs.data.billedDurationMin).toBe(55);
+    expect(updateArgs.data.billedStartLocal).toEqual(expect.any(String));
+    expect(updateArgs.data.billedEndLocal).toEqual(expect.any(String));
+    expect(updateArgs.data.sessionDateLocal).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(updateArgs.data.tutorTimezone).toBe("America/Denver");
+    expect(updateArgs.data.activeMs).toBeUndefined();
+  });
+
+  it("IN_PERSON uses ACTIVE-phase elapsed when activeMs is ~0", async () => {
+    setupActiveSession({
+      startedAtAgoMs: 40 * 60_000,
+      billing: {
+        sessionMode: "IN_PERSON",
+        activeMs: 0,
+        bothConnectedAt: null,
+        roundingIncrementMin: 5,
+        roundingMode: "nearest",
+      },
+    });
+
+    await endWhiteboardSession("wb_42", FINAL_EVENTS_URL);
+
+    const updateArgs = txWhiteboardUpdateMock.mock.calls[0][0];
+    expect(updateArgs.data.billedDurationMin).toBeGreaterThan(0);
+    expect(updateArgs.data.activeMs).toBeUndefined();
+  });
+
+  it("skips billing recompute when billedDurationMin is already set", async () => {
+    setupActiveSession({
+      billing: {
+        billedDurationMin: 60,
+        sessionMode: "LIVE",
+        activeMs: 10 * 60_000,
+        bothConnectedAt: new Date(),
+      },
+    });
+
+    await endWhiteboardSession("wb_42", FINAL_EVENTS_URL);
+
+    const updateArgs = txWhiteboardUpdateMock.mock.calls[0][0];
+    expect(updateArgs.data.billedDurationMin).toBeUndefined();
+    expect(updateArgs.data.billedStartLocal).toBeUndefined();
+  });
+
+  it("finalizes when billing freeze throws (billing failure is non-fatal)", async () => {
+    setupActiveSession({
+      billing: {
+        sessionMode: "LIVE",
+        activeMs: 30 * 60_000,
+        bothConnectedAt: new Date(Date.now() - 35 * 60_000),
+      },
+    });
+    computeBillingFreezeFieldsMock.mockImplementation(() => {
+      throw new RangeError("Invalid time zone specified: Not/AZone");
+    });
+
+    await expect(
+      endWhiteboardSession("wb_42", FINAL_EVENTS_URL)
+    ).resolves.toBeDefined();
+
+    expect(dbTransactionMock).toHaveBeenCalledTimes(1);
+    const updateArgs = txWhiteboardUpdateMock.mock.calls[0][0];
+    expect(updateArgs.data.endedAt).toBeInstanceOf(Date);
+    expect(updateArgs.data.billedDurationMin).toBeUndefined();
+    expect(updateArgs.data.billedStartLocal).toBeUndefined();
+    expect(txTokenUpdateManyMock).toHaveBeenCalled();
   });
 });

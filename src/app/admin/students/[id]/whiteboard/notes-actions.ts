@@ -492,6 +492,9 @@ export type SessionReviewPayload = {
   startedAtIso: string;
   endedAtIso: string | null;
   durationSeconds: number | null;
+  billedDurationMin: number | null;
+  billedStartLocal: string | null;
+  billedEndLocal: string | null;
   hasAudio: boolean;
   /** Whiteboard event count from events.json (NOTE-1 replay gate). */
   eventCount: number;
@@ -534,6 +537,9 @@ export async function loadSessionReviewPayload(
           startedAt: true,
           endedAt: true,
           durationSeconds: true,
+          billedDurationMin: true,
+          billedStartLocal: true,
+          billedEndLocal: true,
           snapshotBlobUrl: true,
           eventsBlobUrl: true,
           concatBlobUrl: true,
@@ -603,6 +609,9 @@ export async function loadSessionReviewPayload(
     startedAtIso: detail.startedAt.toISOString(),
     endedAtIso: detail.endedAt?.toISOString() ?? null,
     durationSeconds: detail.durationSeconds,
+    billedDurationMin: detail.billedDurationMin,
+    billedStartLocal: detail.billedStartLocal,
+    billedEndLocal: detail.billedEndLocal,
     hasAudio: replayAudio.hasAudio,
     eventCount,
     eventsProxyUrl: `/api/whiteboard/${whiteboardSessionId}/events`,

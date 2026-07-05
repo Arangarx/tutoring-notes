@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 
 const settingsLinks = [
   { href: "/admin/settings/profile", label: "Profile" },
+  { href: "/admin/settings/billing", label: "Billing" },
   { href: "/admin/settings/email", label: "Email" },
   { href: "/admin/settings/2fa", label: "Two-factor auth" },
 ] as const;

@@ -4,6 +4,7 @@
 
 const dbUpdateManyMock = jest.fn();
 const dbStudentFindUniqueMock = jest.fn();
+const dbAdminUserFindUniqueMock = jest.fn();
 const dbErasureJobFindFirstMock = jest.fn();
 const dbConsentRecordFindFirstMock = jest.fn();
 const dbLearnerProfileFindUniqueMock = jest.fn();
@@ -25,6 +26,9 @@ jest.mock("@/lib/db", () => ({
     },
     erasureJob: {
       findFirst: (...args: unknown[]) => dbErasureJobFindFirstMock(...args),
+    },
+    adminUser: {
+      findUnique: (...args: unknown[]) => dbAdminUserFindUniqueMock(...args),
     },
   },
   withDbRetry: <T,>(fn: () => Promise<T>) => fn(),
@@ -72,6 +76,12 @@ beforeEach(() => {
   dbErasureJobFindFirstMock.mockResolvedValue(null);
   dbConsentRecordFindFirstMock.mockReset();
   dbLearnerProfileFindUniqueMock.mockReset();
+  dbAdminUserFindUniqueMock.mockReset();
+  dbAdminUserFindUniqueMock.mockResolvedValue({
+    defaultRoundingIncrementMin: 5,
+    defaultRoundingMode: "nearest",
+    tutorTimezone: "America/Denver",
+  });
   mockConsentRecordExists();
 });
 
@@ -91,10 +101,13 @@ describe("startWhiteboardSession", () => {
           sessionPhase: "PENDING",
           endedAt: null,
         },
-        data: {
+        data: expect.objectContaining({
           sessionPhase: "ACTIVE",
           activatedAt: expect.any(Date),
-        },
+          roundingIncrementMin: 5,
+          roundingMode: "nearest",
+          tutorTimezone: "America/Denver",
+        }),
       })
     );
     expect(result).toEqual({ ok: true, phase: "active" });
