@@ -56,6 +56,13 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
     },
+    {
+      command:
+        `cmd /c "set DATABASE_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set DIRECT_URL=${WB_REGRESSION_LOCAL_DATABASE_URL}&& set WHITEBOARD_SYNC_URL=ws://localhost:3002&& set NEXT_PUBLIC_WB_E2E_SCENE_HOOK=1&& set WB_E2E_HARNESS=1&& set PLAYWRIGHT_TEST=1&& set PLAYWRIGHT_TEST_SECRET=playwright-test-secret&& set BLOB_HARNESS_LOCAL=1&& set BLOB_READ_WRITE_TOKEN=playwright-harness&& set NEXT_PUBLIC_PLAYWRIGHT_TEST=1&& set NEXT_PUBLIC_BLOB_HARNESS_LOCAL=1&& set NEXTAUTH_URL=http://localhost:3101&& set LEARNER_SESSION_HMAC_SECRET=pw-wb-test-hmac-secret-regression-2026&& set AH_SESSION_HMAC_SECRET=pw-wb-test-ah-hmac-secret-regression-2026&& node scripts/wb-regression-assert-local-db.cjs&& npx prisma db push --skip-generate --accept-data-loss&& npm run dev -- --port 3101"`,
+      url: "http://localhost:3101",
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
   ],
 
   projects: [
@@ -163,11 +170,31 @@ export default defineConfig({
         "**/integration/wb-replay-active-board-tab.spec.ts",
         "**/integration/wb-replay-scrub-seek.spec.ts",
         "**/integration/wb-board-tab-overflow.spec.ts",
+        "**/integration/wb-in-person-audio-start.spec.ts",
         "**/integration/recording-resilience.spec.ts",
         "**/integration/recording-end-to-end.spec.ts",
         "**/audio-upload.spec.ts",
         "**/smoke/whiteboard-workspace.spec.ts",
       ],
+    },
+    {
+      name: "wb-in-person-unmasked",
+      dependencies: ["integration-setup"],
+      retries: 1,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1280, height: 900 },
+        baseURL: "http://localhost:3101",
+        storageState: "tests/integration/.auth/tutor.json",
+        permissions: ["microphone"],
+        launchOptions: {
+          args: [
+            "--use-fake-ui-for-media-stream",
+            "--use-fake-device-for-media-stream",
+          ],
+        },
+      },
+      testMatch: ["**/integration/wb-in-person-audio-start.spec.ts"],
     },
   ],
 });

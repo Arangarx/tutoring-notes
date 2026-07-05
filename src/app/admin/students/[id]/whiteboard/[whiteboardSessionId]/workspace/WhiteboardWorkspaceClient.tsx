@@ -2382,6 +2382,7 @@ export function WhiteboardWorkspaceClient({
     audioClockMs: getAudioMsRef.current(),
     participantsWithFlowingAudio,
     everHadAudioFlow: sessionGateReleased,
+    inPersonMode: sessionMode === "IN_PERSON",
   });
 
   const presence = derivePresentation(lifecycle, {
@@ -2390,6 +2391,7 @@ export function WhiteboardWorkspaceClient({
     everHadParticipants: everBothPresentRef.current,
     syncEnabled: !!syncUrl,
     syncRosterHasStudent: bothPartiesInRoomSync,
+    inPersonMode: sessionMode === "IN_PERSON",
   });
   const recordingActive = presence.recordingActive;
 
