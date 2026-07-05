@@ -399,6 +399,54 @@ describe("WhiteboardWorkspaceClient waiting room — startWhiteboardSession wiri
     expect(startBtn).toHaveTextContent("Start session");
   });
 
+  test("P2-J3 consent denied: Start does not enter live — waiting overlay remains", async () => {
+    const consentErr = Object.assign(
+      new Error(
+        "Parent privacy preferences must be set before starting a session."
+      ),
+      { name: "ConsentError", permission: "consentRecord" }
+    );
+    mockStartWhiteboardSession.mockRejectedValueOnce(consentErr);
+
+    const user = userEvent.setup();
+    render(<WhiteboardWorkspaceClient {...workspaceBaseProps} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await user.click(screen.getByTestId("wb-start-session"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        CONSENT_RECORD_TUTOR_MESSAGE
+      );
+    });
+    expect(screen.getByTestId("wb-waiting-overlay")).toBeInTheDocument();
+    expect(screen.getByTestId("wb-start-session")).toBeInTheDocument();
+    expect(mockStartWhiteboardSession).toHaveBeenCalledTimes(1);
+  });
+
+  test("P2-J3 consent allowed: Start enters live — waiting overlay dismissed", async () => {
+    const user = userEvent.setup();
+    render(<WhiteboardWorkspaceClient {...workspaceBaseProps} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId("wb-waiting-overlay")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("wb-start-session"));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("wb-waiting-overlay")).not.toBeInTheDocument();
+    });
+    expect(mockStartWhiteboardSession).toHaveBeenCalledWith(
+      "wb-wtr-consent-1",
+      "IN_PERSON"
+    );
+    expect(screen.getByTestId("tutor-whiteboard-canvas-mount")).toBeInTheDocument();
+  });
+
   test("surfaces Error ID digest line for generic Start failures without impersonation-specific fields (CF-1)", async () => {
     const genericErr = Object.assign(new Error("Server action failed"), {
       digest: "abc123",

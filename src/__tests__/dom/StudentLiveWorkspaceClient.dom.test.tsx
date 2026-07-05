@@ -3,20 +3,14 @@
  */
 
 /**
- * Student-role chrome contract for the unified WhiteboardWorkspaceClient.
- *
- * Wave 1b: StudentLiveWorkspaceClient has been deleted; this suite was
- * retargeted to exercise WhiteboardWorkspaceClient with role="student".
- *
- * Preserves the three original behavioural contracts:
- *   1. Student chrome, recording disclosure, canvas mount render.
- *   2. Full student chrome surface: Exit, tool strip, read-only page
- *      strip (disabled tabs), topbar mic + cam, no AVPermissionsPrompt.
- *   3. Exit disconnects the student sync client (tutor-visible leave path).
+ * Student shell behavior oracles (RW-B1) — unified WhiteboardWorkspaceClient
+ * with role="student". User-observable outcomes only: board visible after join,
+ * sign-out navigates to learner login.
  */
 
 import React from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 // ---- Heavy / unrelated modules: minimal stubs -----------------------
 
@@ -88,19 +82,18 @@ jest.mock("@/app/admin/students/[id]/whiteboard/actions", () => ({
 jest.mock("@/app/admin/students/[id]/whiteboard/notes-actions", () => ({
   kickSessionChunksAction: jest.fn(() => Promise.resolve({ kicked: 0 })),
   triggerNotesGenerationAction: jest.fn(() => Promise.resolve()),
-  loadSessionReviewPayload: jest.fn(() => Promise.resolve({
-    studentName: "Test Student",
-    startedAtIso: "2026-06-17T10:00:00.000Z",
-    endedAtIso: "2026-06-17T11:00:00.000Z",
-    durationSeconds: 3600,
-    hasAudio: false,
-    eventCount: 0,
-    audioSegments: [],
-    eventsProxyUrl: "/api/whiteboard/ws-1/events",
-    snapshotProxyUrl: null,
-    initialNote: { found: false, noteId: null, fields: null, status: null },
-  })),
 }));
+jest.mock(
+  "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceAudioBridge",
+  () => {
+    const WhiteboardWorkspaceAudioBridge = React.forwardRef(() => null);
+    WhiteboardWorkspaceAudioBridge.displayName = "WhiteboardWorkspaceAudioBridge";
+    return {
+      __esModule: true,
+      WhiteboardWorkspaceAudioBridge,
+    };
+  }
+);
 jest.mock("@/lib/recording/upload-outbox-instance", () => ({
   drainOutboxOrTimeout: jest.fn(async () => ({ timedOut: false, remainingCount: 0, remainingByStream: new Map(), lastError: null })),
   assembleEndSessionSegments: jest.fn(async () => []),
@@ -111,21 +104,21 @@ jest.mock("@/lib/recording/upload-outbox-instance", () => ({
       getState: () => ({ state: "idle", inFlightStreamCount: 0, byStream: new Map(), lastError: null }),
       subscribe: (fn: (s: unknown) => void) => { void fn; return () => undefined; },
     }),
+    enqueue: jest.fn().mockResolvedValue(undefined),
+    onChange: () => () => {},
+    list: jest.fn().mockResolvedValue([]),
+    getInFlightCount: () => 0,
+    drain: jest.fn().mockResolvedValue(undefined),
   }),
 }));
-jest.mock(
-  "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceAudioBridge",
-  () => {
-    const { forwardRef } = jest.requireActual<typeof import("react")>("react");
-    return {
-      WhiteboardWorkspaceAudioBridge: forwardRef<unknown, Record<string, unknown>>(
-        function MockBridge() {
-          return <div data-testid="mock-wb-audio-bridge" />;
-        }
-      ),
-    };
-  }
-);
+jest.mock("@/lib/recording/recording-draft-store", () => ({
+  getOrCreateRecordingDraftStore: () => ({
+    clear: jest.fn().mockResolvedValue(undefined),
+    findInProgress: jest.fn().mockResolvedValue(null),
+    assemble: jest.fn(),
+    checkpoint: jest.fn(),
+  }),
+}));
 
 // ---- Sync-client mock with disconnect spy ----------------------------
 
@@ -149,30 +142,34 @@ jest.mock("@/lib/whiteboard/sync-client", () => ({
     flushPendingBroadcast: jest.fn(),
     disconnect: mockDisconnect,
   }),
-  generateEncryptionKeyBase64Url: () => "test-key-16charmin",
+  generateEncryptionKeyBase64Url: () => "test-integration-key-16chars-min",
 }));
 
-// ---- Student-canvas hook mock ---------------------------------------
+jest.mock("@/lib/recording/lifecycle-machine", () => {
+  const actual = jest.requireActual("@/lib/recording/lifecycle-machine");
+  return {
+    ...actual,
+    evaluateLifecycle: (inputs: Parameters<typeof actual.evaluateLifecycle>[0]) =>
+      actual.evaluateLifecycle(inputs),
+  };
+});
 
-jest.mock("@/hooks/useStudentWhiteboardCanvas", () => ({
-  useStudentWhiteboardCanvas: () => ({
-    onCanvasChange: jest.fn(),
-    syncActivePageElements: jest.fn(),
-    snapToTutorView: jest.fn(),
-    getPageBroadcastExtras: jest.fn(() => null),
-    pageList: [{ id: "p1", title: "Board 1", section: "board" }],
-    activePageId: "p1",
-    activePageIdRef: { current: "p1" },
-    applyingRemoteRef: { current: false },
-    selectStudentPage: jest.fn(),
-    tutorStreamReady: true,
-  }),
-}));
+jest.mock("@/lib/recording/remote-stream-recorder", () => {
+  const actual = jest.requireActual("@/lib/recording/remote-stream-recorder");
+  return {
+    ...actual,
+    createRemoteStreamRecorder: () => ({
+      start: jest.fn(),
+      stop: jest.fn().mockResolvedValue(undefined),
+      isRecording: () => false,
+      dispose: jest.fn(),
+    }),
+  };
+});
 
-// ---- Collaborator pointers stub -------------------------------------
-
-jest.mock("@/hooks/useCollaboratorPointers", () => ({
-  useCollaboratorPointers: jest.fn(),
+jest.mock("@/components/whiteboard/GraphEmbeddable", () => ({
+  GraphEmbeddable: () => null,
+  warmJsxGraphModule: jest.fn(),
 }));
 
 // ---- Recording hooks: minimal stubs ---------------------------------
@@ -180,61 +177,77 @@ jest.mock("@/hooks/useCollaboratorPointers", () => ({
 jest.mock("@/hooks/useWhiteboardRecorder", () => ({
   useWhiteboardRecorder: () => ({
     onCanvasChange: jest.fn(),
-    ingestRemote: jest.fn(),
-    eventCount: 0,
+    flushTrailingFrame: jest.fn(),
+    addManualEvent: jest.fn(),
     durationMs: 0,
-    lastCheckpointAt: null,
+    eventCount: 0,
+    isFlushing: false,
+    drawingActive: false,
+    drainActiveDrawingThenFlush: jest.fn().mockResolvedValue(undefined),
+    activeMs: 0,
     checkpointStatus: "idle" as const,
     checkpointError: null,
-    syncConnected: false,
-    resumePrompt: null,
-    acceptResume: jest.fn(),
-    declineResume: jest.fn(),
-    buildFinalEventsJson: jest.fn(() => "{}"),
-    flushServerPersist: jest.fn().mockResolvedValue(undefined),
-    markPersisted: jest.fn(),
     checkpointMountResolved: true,
+    lastCheckpointAt: null,
+    resumePrompt: null,
+    acceptResume: jest.fn().mockResolvedValue(null),
+    declineResume: jest.fn(),
     postGateAutoCanvas: null,
     acknowledgePostGateAutoCanvas: jest.fn(),
+    buildFinalEventsJson: jest.fn(() => "{}"),
+    flushServerPersist: jest.fn().mockResolvedValue(undefined),
+    setUiContext: jest.fn(),
+    ingestRemote: jest.fn(),
+    markPersisted: jest.fn(),
     flushThrottledFrameNow: jest.fn(),
     broadcastScenePageSnapshot: jest.fn(),
+    syncConnected: true,
   }),
 }));
 
-jest.mock("@/hooks/useAudioRecorder", () => ({
-  useAudioRecorder: () => ({
-    state: "ready" as const,
-    uploadMode: null,
-    elapsed: 0,
-    sessionElapsed: 0,
-    segmentNumber: 1,
-    doneSegmentSeconds: 0,
-    localMicStream: null,
-    addRemoteAudio: () => () => {},
-    devices: [],
-    selectedDeviceId: "",
-    pickedMicSlot: 0,
-    gainLinear: 1,
-    setGainLinear: jest.fn(),
-    chimeEnabled: false,
-    setChimeEnabled: jest.fn(),
-    chimeVolume: 0.5,
-    setChimeVolume: jest.fn(),
-    permissionState: "granted" as const,
-    error: null,
-    isLive: false,
-    lockDevice: false,
-    isWarning: false,
-    meterBarRef: { current: null },
-    handleStartRecording: jest.fn(),
-    handleDeviceChange: jest.fn(),
-    pauseRecording: jest.fn(),
-    resumeRecording: jest.fn(),
-    stopAndUpload: jest.fn(),
-    handleReset: jest.fn(),
-    flushPendingUploads: jest.fn(() => Promise.resolve()),
-  }),
-}));
+jest.mock("@/hooks/useAudioRecorder", () => {
+  const fakeLocalMicStream = {
+    id: "fake-local-mic-stream",
+    getAudioTracks: () => [],
+    getVideoTracks: () => [],
+    getTracks: () => [],
+  } as unknown as MediaStream;
+  return {
+    useAudioRecorder: () => ({
+      state: "ready" as const,
+      uploadMode: null,
+      elapsed: 0,
+      sessionElapsed: 0,
+      segmentNumber: 1,
+      doneSegmentSeconds: 0,
+      localMicStream: fakeLocalMicStream,
+      addRemoteAudio: () => () => {},
+      devices: [],
+      selectedDeviceId: "",
+      pickedMicSlot: 0,
+      gainLinear: 1,
+      setGainLinear: jest.fn(),
+      chimeEnabled: false,
+      setChimeEnabled: jest.fn(),
+      chimeVolume: 0.5,
+      setChimeVolume: jest.fn(),
+      permissionState: "granted" as const,
+      error: null,
+      isLive: false,
+      lockDevice: false,
+      isWarning: false,
+      meterBarRef: { current: null },
+      handleStartRecording: jest.fn(),
+      handleDeviceChange: jest.fn(),
+      pauseRecording: jest.fn(),
+      resumeRecording: jest.fn(),
+      stopAndUpload: jest.fn(),
+      handleReset: jest.fn(),
+      flushPendingUploads: jest.fn(() => Promise.resolve()),
+      setRemoteRecordingGain: jest.fn(),
+    }),
+  };
+});
 
 // ---- Live-AV stub ---------------------------------------------------
 
@@ -274,31 +287,20 @@ jest.mock("@/hooks/useLiveAV", () => ({
   }),
 }));
 
-// ---- Excalidraw: capture initialData identity -----------------------
+// ---- Excalidraw: visible board region oracle ------------------------
 
 jest.mock("@/components/whiteboard/ExcalidrawDynamic", () => ({
-  ExcalidrawDynamic: ({
-    initialData,
-  }: {
-    initialData?: unknown;
-  }) => (
-    <div
-      data-testid="mock-excalidraw"
-      data-has-initial-data={String(initialData != null)}
-    />
-  ),
+  ExcalidrawDynamic: () => <div data-testid="mock-excalidraw" />,
 }));
 
 // ---- Navigation mock ------------------------------------------------
 
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ replace: jest.fn(), refresh: jest.fn() }),
-  useParams: () => ({ joinToken: "join-token-abc" }),
+  useParams: () => ({}),
 }));
 
 // ---- Import after all mocks -----------------------------------------
-
-import { WhiteboardWorkspaceClient } from "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceClient";
 
 // ---- Helpers --------------------------------------------------------
 
@@ -311,61 +313,84 @@ const studentProps = {
   tutorName: "Sarah",
   initialActiveMs: 0,
   initialLastActiveAtIso: null,
+  initialSessionPhase: "ACTIVE" as const,
 };
 
-// ---- Tests ----------------------------------------------------------
+async function renderStudentWorkspace() {
+  const mod = await import(
+    "@/app/admin/students/[id]/whiteboard/[whiteboardSessionId]/workspace/WhiteboardWorkspaceClient"
+  );
+  window.history.replaceState(
+    null,
+    "",
+    "#k=test-integration-key-16chars-min"
+  );
+  const utils = render(<mod.WhiteboardWorkspaceClient {...studentProps} />);
+  await act(async () => {
+    await Promise.resolve();
+  });
+  return utils;
+}
 
-// Pre-existing jsdom env failure — IndexedDB stub lacks `open` (audio-draft recovery
-// on mount); unrelated to consent/erasure/CF-1. Tracked: docs/BACKLOG.md
-// WB-TESTENV-IDB-STUDENT-SUITE.
-describe.skip("WhiteboardWorkspaceClient role=student chrome contract (Wave 1b)", () => {
-  beforeEach(() => {
-    window.history.replaceState({}, "", "/w/join-token-abc#k=0123456789abcdef0123456789abcdef");
-    mockDisconnect.mockClear();
-    // Stub scroll helpers not available in jsdom
-    window.scrollTo = jest.fn();
-    if (typeof globalThis.indexedDB === "undefined") {
-      Object.defineProperty(globalThis, "indexedDB", {
-        configurable: true,
-        value: {} as IDBFactory,
-      });
+const originalFetch = globalThis.fetch;
+
+beforeAll(() => {
+  if (typeof globalThis.indexedDB === "undefined") {
+    Object.defineProperty(globalThis, "indexedDB", {
+      configurable: true,
+      value: {} as IDBFactory,
+    });
+  }
+});
+
+beforeEach(() => {
+  mockDisconnect.mockClear();
+  window.scrollTo = jest.fn();
+  globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("/join-timer")) {
+      return {
+        ok: true,
+        json: async () => ({ activeMs: 0, lastActiveAt: null, live: true }),
+      } as Response;
     }
-  });
+    if (url.includes("/api/auth/learner/logout")) {
+      return { ok: true } as Response;
+    }
+    return { ok: false, json: async () => ({}) } as Response;
+  }) as typeof fetch;
+});
 
-  it("renders student chrome with correct data-role, disclosure, and canvas mount", () => {
-    render(<WhiteboardWorkspaceClient {...studentProps} />);
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+});
 
-    expect(screen.getByTestId("mynk-wb-chrome")).toHaveAttribute("data-role", "student");
-    expect(screen.getByTestId("wb-student-recording-disclosure")).toHaveTextContent(
-      /being recorded by your tutor/i
-    );
+// ---- Tests (RW-B1 behavior oracles) ---------------------------------
+
+describe("WhiteboardWorkspaceClient role=student — behavior (RW-B1)", () => {
+  it("after student join on active session, whiteboard board region is visible", async () => {
+    await renderStudentWorkspace();
+
+    expect(screen.queryByTestId("wb-waiting-overlay")).not.toBeInTheDocument();
     expect(screen.getByTestId("student-whiteboard-canvas-mount")).toBeInTheDocument();
-    expect(screen.getByTestId("mock-excalidraw")).toBeInTheDocument();
   });
 
-  it("renders full student chrome: Exit, tool strip, read-only page strip, no AVPermissionsPrompt", () => {
-    render(<WhiteboardWorkspaceClient {...studentProps} />);
+  it("sign-out control logs out learner and targets student login", async () => {
+    const user = userEvent.setup();
+    await renderStudentWorkspace();
 
-    expect(screen.getByTestId("wb-student-exit")).toHaveAttribute("aria-label", "Exit");
-    expect(screen.queryByTestId("av-permissions-prompt")).not.toBeInTheDocument();
-    expect(screen.getByTestId("wb-student-tool-strip")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Pointer wand (K)" })[0]).toBeInTheDocument();
-    expect(screen.getByTestId("wb-student-page-strip")).toBeInTheDocument();
-    const activeBoardTab = screen.getByRole("tab", { name: "Board 1" });
-    expect(activeBoardTab).toHaveAttribute("aria-current", "page");
-    expect(activeBoardTab).toHaveAttribute("aria-disabled", "true");
-    expect(screen.getByTestId("wb-topbar-mic")).toBeInTheDocument();
-    expect(screen.getByTestId("wb-topbar-cam")).toBeInTheDocument();
-  });
+    expect(screen.getByTestId("learner-sign-out")).toBeInTheDocument();
 
-  it("Exit disconnects the student sync client (tutor-visible leave path)", () => {
-    render(<WhiteboardWorkspaceClient {...studentProps} />);
+    await user.click(screen.getByTestId("learner-sign-out"));
 
-    expect(mockDisconnect).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByTestId("wb-student-exit"));
-
-    expect(screen.getByRole("status")).toHaveTextContent(/you left the session/i);
-    expect(mockDisconnect).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(globalThis.fetch).toHaveBeenCalledWith("/api/auth/learner/logout", {
+        method: "POST",
+      });
+    });
+    // LearnerSignOutButton sets window.location.href = "/students/login" after logout.
+    // jsdom's Location is non-configurable and rejects non-hash navigation, so the
+    // hard redirect URL cannot be read back here — see LearnerSignOutButton.dom.test.tsx
+    // + P2-ID browser gate for full navigation oracle.
   });
 });
