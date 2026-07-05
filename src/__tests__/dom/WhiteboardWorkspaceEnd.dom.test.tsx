@@ -28,6 +28,7 @@
 import React from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { TriggerNotesGenerationResult } from "@/app/admin/students/[id]/whiteboard/notes-actions";
 
 async function confirmFinishAndSave() {
   await userEvent.click(screen.getByTestId("wb-end-session"));
@@ -145,13 +146,14 @@ jest.mock("@/app/admin/students/[id]/whiteboard/actions", () => ({
 
 // notes-actions imports next/cache (revalidatePath) which requires TextEncoder
 // (not available in jsdom). Mock the whole module at the boundary.
-const mockTriggerNotesGenerationAction = jest.fn(() =>
-  Promise.resolve({ ok: true as const })
-);
+const mockTriggerNotesGenerationAction = jest.fn<
+  Promise<TriggerNotesGenerationResult>,
+  [string]
+>(() => Promise.resolve({ ok: true }));
 jest.mock("@/app/admin/students/[id]/whiteboard/notes-actions", () => ({
   kickSessionChunksAction: jest.fn(() => Promise.resolve({ kicked: 0 })),
-  triggerNotesGenerationAction: (...args: unknown[]) =>
-    mockTriggerNotesGenerationAction(...args),
+  triggerNotesGenerationAction: (whiteboardSessionId: string) =>
+    mockTriggerNotesGenerationAction(whiteboardSessionId),
   // loadSessionReviewPayload is called by SessionReviewMode on mount.
   // The shell-integration tests below provide per-test overrides; this
   // default ensures the module resolves cleanly in all tests.

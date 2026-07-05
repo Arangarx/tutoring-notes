@@ -90,7 +90,7 @@ export async function GET(
     console.log(
       `[wbEvents.route] wbsid=${sessionId} rid=${rid} bytes=${stored.bytes.byteLength} harness ok`
     );
-    return new Response(stored.bytes, {
+    return new Response(new Uint8Array(stored.bytes), {
       status: 200,
       headers: {
         "Content-Type": "application/json",

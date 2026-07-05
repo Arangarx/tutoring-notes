@@ -47,6 +47,28 @@ describe("blob harness active guard", () => {
     ).toBe(true);
   });
 
+  test("isBlobHarnessActive is false in production even with both sentinels", async () => {
+    const env = process.env as NodeJS.ProcessEnv & { NODE_ENV?: string };
+    const prev = env.NODE_ENV;
+    env.NODE_ENV = "production";
+    process.env.PLAYWRIGHT_TEST = "1";
+    process.env.BLOB_HARNESS_LOCAL = "1";
+    const { isBlobHarnessActive } = await import("@/lib/blob-harness");
+    expect(isBlobHarnessActive()).toBe(false);
+    env.NODE_ENV = prev;
+  });
+
+  test("isAllowedBlobUrl rejects harness URLs on foreign origin when harness active", async () => {
+    process.env.PLAYWRIGHT_TEST = "1";
+    process.env.BLOB_HARNESS_LOCAL = "1";
+    const { isAllowedBlobUrl } = await import("@/lib/blob-harness");
+    expect(
+      isAllowedBlobUrl(
+        "https://evil.example/api/test/blob/object/sessions/stu1/a.webm"
+      )
+    ).toBe(false);
+  });
+
   test("isAllowedBlobUrl rejects harness URLs when harness inactive", async () => {
     delete process.env.PLAYWRIGHT_TEST;
     delete process.env.BLOB_HARNESS_LOCAL;

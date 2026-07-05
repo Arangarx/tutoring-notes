@@ -5,6 +5,9 @@
  */
 
 function isBlobHarnessClientActive(): boolean {
+  if (process.env.NODE_ENV === "production") {
+    return false;
+  }
   return (
     process.env.NEXT_PUBLIC_PLAYWRIGHT_TEST === "1" &&
     process.env.NEXT_PUBLIC_BLOB_HARNESS_LOCAL === "1"
@@ -21,6 +24,7 @@ type HarnessMintJson = {
   blobUrl?: string;
   pathname?: string;
   clientToken?: string;
+  putToken?: string;
 };
 
 export async function uploadViaBlobHarness(args: {
@@ -47,12 +51,15 @@ export async function uploadViaBlobHarness(args: {
     throw new Error(`Harness mint failed (${mintRes.status}): ${text}`);
   }
   const mint = (await mintRes.json()) as HarnessMintJson;
-  if (!mint.harness || !mint.putUrl || !mint.blobUrl) {
-    throw new Error("Harness mint response missing putUrl/blobUrl");
+  if (!mint.harness || !mint.putUrl || !mint.blobUrl || !mint.putToken) {
+    throw new Error("Harness mint response missing putUrl/blobUrl/putToken");
   }
   const putRes = await fetch(mint.putUrl, {
     method: "PUT",
-    headers: { "content-type": args.contentType },
+    headers: {
+      "content-type": args.contentType,
+      "x-blob-harness-put-token": mint.putToken,
+    },
     body: args.blob,
   });
   if (!putRes.ok) {

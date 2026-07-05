@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import {
+  consumeHarnessPutToken,
   harnessStorePut,
   isBlobHarnessActive,
   serveHarnessObject,
 } from "@/lib/blob-harness";
 
+const HARNESS_PUT_TOKEN_HEADER = "x-blob-harness-put-token";
 function isHarnessRoute(): boolean {
   return isBlobHarnessActive();
 }
@@ -40,6 +42,10 @@ export async function PUT(
   const key = objectKeyFromParams(path);
   if (!key) {
     return NextResponse.json({ error: "Missing object key" }, { status: 400 });
+  }
+  const putToken = req.headers.get(HARNESS_PUT_TOKEN_HEADER);
+  if (!consumeHarnessPutToken(key, putToken)) {
+    return NextResponse.json({ error: "Harness PUT requires mint token" }, { status: 403 });
   }
   const buf = Buffer.from(await req.arrayBuffer());
   const contentType =

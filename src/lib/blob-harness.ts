@@ -21,8 +21,11 @@ type StoredObject = {
 
 const HARNESS_STORE_KEY = Symbol.for("tutoring-notes.blob.harness.store");
 
+const HARNESS_PENDING_PUT_KEY = Symbol.for("tutoring-notes.blob.harness.pendingPut");
+
 type HarnessGlobal = typeof globalThis & {
   [HARNESS_STORE_KEY]?: Map<string, StoredObject>;
+  [HARNESS_PENDING_PUT_KEY]?: Map<string, string>;
 };
 
 function harnessStore(): Map<string, StoredObject> {
@@ -33,17 +36,69 @@ function harnessStore(): Map<string, StoredObject> {
   return g[HARNESS_STORE_KEY];
 }
 
+function pendingPutTokens(): Map<string, string> {
+  const g = globalThis as HarnessGlobal;
+  if (!g[HARNESS_PENDING_PUT_KEY]) {
+    g[HARNESS_PENDING_PUT_KEY] = new Map();
+  }
+  return g[HARNESS_PENDING_PUT_KEY];
+}
+
+/** Clear in-memory harness state (Playwright per-test isolation). */
+export function resetHarnessStore(): void {
+  harnessStore().clear();
+  pendingPutTokens().clear();
+}
+
+export function issueHarnessPutToken(pathname: string): string {
+  const key = pathname.replace(/^\/+/, "");
+  const token = randomBytes(16).toString("hex");
+  pendingPutTokens().set(key, token);
+  return token;
+}
+
+export function consumeHarnessPutToken(pathname: string, token: string | null): boolean {
+  if (!token) return false;
+  const key = pathname.replace(/^\/+/, "");
+  const expected = pendingPutTokens().get(key);
+  if (!expected || expected !== token) return false;
+  pendingPutTokens().delete(key);
+  return true;
+}
+
 export function isBlobHarnessActive(): boolean {
+  if (process.env.NODE_ENV === "production") {
+    return false;
+  }
   return (
     process.env.PLAYWRIGHT_TEST === "1" &&
     process.env.BLOB_HARNESS_LOCAL === "1"
   );
 }
 
+/** Allowed origins for harness blob URLs (same-origin + local dev). */
+function isHarnessBlobOrigin(origin: string): boolean {
+  if (origin === "null") return false;
+  try {
+    const host = new URL(origin).hostname;
+    if (host === "localhost" || host === "127.0.0.1") return true;
+    const nextAuth = process.env.NEXTAUTH_URL?.trim();
+    if (nextAuth) {
+      return new URL(nextAuth).origin === origin;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
 export function isHarnessBlobUrl(url: string): boolean {
   try {
     const u = new URL(url);
-    return u.pathname.startsWith(HARNESS_OBJECT_PREFIX);
+    return (
+      u.pathname.startsWith(HARNESS_OBJECT_PREFIX) &&
+      isHarnessBlobOrigin(u.origin)
+    );
   } catch {
     return false;
   }
@@ -110,6 +165,7 @@ export type HarnessMintResponse = {
   putUrl: string;
   blobUrl: string;
   pathname: string;
+  putToken: string;
 };
 
 type GenerateClientTokenBody = {
@@ -174,12 +230,14 @@ export async function handleHarnessBlobGenerateClientToken(
   }
   const origin = new URL(request.url).origin;
   const blobUrl = harnessBlobUrl(origin, finalPathname);
+  const putToken = issueHarnessPutToken(finalPathname);
   return {
     type: "blob.generate-client-token",
     harness: true,
     putUrl: blobUrl,
     blobUrl,
     pathname: finalPathname,
+    putToken,
   };
 }
 
@@ -217,7 +275,7 @@ export function serveHarnessObject(
   const contentType = stored.contentType || fallbackContentType;
 
   if (!range) {
-    return new Response(stored.bytes, {
+    return new Response(new Uint8Array(stored.bytes), {
       status: 200,
       headers: {
         "Content-Type": contentType,
@@ -229,7 +287,7 @@ export function serveHarnessObject(
   }
 
   const slice = stored.bytes.subarray(range.start, range.end + 1);
-  return new Response(slice, {
+  return new Response(new Uint8Array(slice), {
     status: 206,
     headers: {
       "Content-Type": contentType,

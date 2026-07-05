@@ -62,7 +62,7 @@ export async function GET(
       return new NextResponse("Not found.", { status: 404 });
     }
     const ct = stored.contentType ?? "application/octet-stream";
-    return new NextResponse(stored.bytes, {
+    return new NextResponse(new Uint8Array(stored.bytes), {
       status: 200,
       headers: {
         "Content-Type": ct,

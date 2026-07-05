@@ -1,4 +1,5 @@
-import { test, expect, type Browser } from "@playwright/test";
+import { test, expect } from "./fixtures";
+import type { Browser } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 import { readLocalEnv } from "../utils/read-dotenv";

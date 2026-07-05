@@ -85,18 +85,19 @@ export function installDualMicHarness(
       const origGUM = md.getUserMedia.bind(md);
       const origEnum = md.enumerateDevices.bind(md);
 
-      md.getUserMedia = async (constraints) => {
+      md.getUserMedia = async (constraints?: MediaStreamConstraints) => {
+        const c = constraints ?? { audio: true };
         const wantsAudio =
-          constraints.audio === true ||
-          (typeof constraints.audio === "object" && constraints.audio !== null);
+          c.audio === true ||
+          (typeof c.audio === "object" && c.audio !== null);
         const wantsVideo =
-          constraints.video === true ||
-          (typeof constraints.video === "object" && constraints.video !== null);
+          c.video === true ||
+          (typeof c.video === "object" && c.video !== null);
 
         if (wantsAudio && !wantsVideo) {
-          return makeAudioStream(pickMicId(constraints)) as MediaStream;
+          return makeAudioStream(pickMicId(c)) as unknown as MediaStream;
         }
-        return origGUM(constraints);
+        return origGUM(c);
       };
 
       md.enumerateDevices = async () => {

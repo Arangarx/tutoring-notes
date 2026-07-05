@@ -8,10 +8,21 @@ import {
   mergeServerStateWithIdbTail,
   shouldSuppressIdbPrompt,
 } from "@/lib/whiteboard/idb-recovery-predicate";
-import { createEmptyEventLog } from "@/lib/whiteboard/event-log";
+import { createEmptyEventLog, type WBElement } from "@/lib/whiteboard/event-log";
 import type { InitialPersistedWhiteboardState } from "@/lib/whiteboard/assemble-persisted-state";
 
 const STARTED = "2026-07-04T12:00:00.000Z";
+
+function stubElement(id: string): WBElement {
+  return {
+    id,
+    type: "rectangle",
+    x: 0,
+    y: 0,
+    width: 10,
+    height: 10,
+  };
+}
 
 function makeServerState(
   serverEventCount: number,
@@ -20,7 +31,7 @@ function makeServerState(
   const events = Array.from({ length: serverEventCount }, (_, i) => ({
     t: i * 100,
     type: "add" as const,
-    element: { id: `srv-${i}` },
+    element: stubElement(`srv-${i}`),
   }));
   return {
     source: "batches",
@@ -91,8 +102,8 @@ describe("mergeServerStateWithIdbTail", () => {
       ...createEmptyEventLog(STARTED),
       events: [
         ...server.log.events,
-        { t: 400, type: "add" as const, element: { id: "idb-4" } },
-        { t: 500, type: "add" as const, element: { id: "idb-5" } },
+        { t: 400, type: "add" as const, element: stubElement("idb-4") },
+        { t: 500, type: "add" as const, element: stubElement("idb-5") },
       ],
       durationMs: 500,
     };

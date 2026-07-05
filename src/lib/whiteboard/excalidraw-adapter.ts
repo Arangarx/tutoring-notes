@@ -69,6 +69,8 @@ export type ExcalidrawLikeElement = {
   fileId?: string | null;
   /** image elements: Excalidraw expects `saved` after BinaryFiles are registered */
   status?: string;
+  /** Excalidraw stroke style — persisted on element even when not rendered for freedraw */
+  roughness?: number;
   /** customData carries our extension fields for non-native types (latex, graph state) */
   customData?: {
     wbType?: WBElement["type"] | "embed";
